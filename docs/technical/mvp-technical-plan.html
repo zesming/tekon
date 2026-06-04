@@ -120,17 +120,17 @@
     <div class="doc-meta">本 HTML 由 <code>docs/technical/mvp-technical-plan.md</code> 生成，用于人类审阅；源稿仍以 Markdown 文件为准。生成日期：2026-06-04。</div>
 <h1 id="donkey-mvp-技术方案">Donkey MVP 技术方案</h1>
 <h2 id="0-结论">0. 结论</h2>
-<p>Donkey MVP 建议定位为“目标阶段驱动的 AI 自动交付运行时”，而不是固定从需求跑到 PR 的单一路径。</p>
+<p>Donkey MVP 建议定位为“目标阶段驱动的 AI 自动交付运行时”，而不是固定从需求跑到 PR 的单一路径。本文中的“PR 交付”是后续 Phase 2+ 能力；当前 0.1.0 本地 MVP 只实现目标阶段判断、文档草案、本地测试验收、风险报告和证据包。</p>
 <p>核心判断：</p>
 <ul>
 <li><strong>系统主框架</strong>采用 Donkey Server + Donkey Runner + Donkey CLI + Donkey Console。Server 管状态、策略和审计；Runner 管真实执行；CLI 作为 MVP 低成本入口；Console 用于人审、验收和高危确认。</li>
-<li><strong>工作流</strong>采用可裁剪 Workflow。系统先判断用户输入的上下文成熟度和目标阶段，再自动推进到最合适的终点，例如需求文档、技术方案、任务拆解、测试验收、PR 或风险报告。</li>
+<li><strong>工作流</strong>采用可裁剪 Workflow。系统先判断用户输入的上下文成熟度和目标阶段，再自动推进到最合适的终点，例如需求文档、技术方案、任务拆解、测试验收、风险报告；PR 交付属于 Phase 2+。</li>
 <li><strong>工具协作</strong>不优先 MCP。MVP 优先使用 CLI、Skill、Direct API、SDK；MCP 只作为通用外部工具标准化接入的可选路径。</li>
 <li><strong>角色 Agent</strong>必须通过 Agent Registry 管理自身描述、职责、工具、技能、权限、模型、输出契约和版本，并通过评测数据持续迭代。</li>
 <li><strong>交付边界</strong>不是“所有需求都到 PR”，而是“所有需求都尽量自动推进到安全且有价值的目标阶段”。涉及生产、高危权限、不可逆操作时，自动推进到方案、清单或风险报告，不自动执行危险动作。</li>
 <li><strong>Donkey 自身质量</strong>必须从 MVP 开始建设测试、E2E、验收和效果评测体系，否则无法判断 Agent、Workflow 和工具策略是否真的提升交付效率。</li>
 </ul>
-<p>推荐 MVP 架构：</p>
+<p>推荐产品化目标架构。当前 0.1.0 只落地 CLI、Local Runner、规则化 Gate、本地测试验收和证据包子集；图中的 Coding Agent Adapter、Console、持久化服务和 PR 联动均为后续阶段能力。</p>
 <div class="diagram"><div class="mermaid">
 flowchart TB
   U[用户入口\nCLI / Web Console / 飞书] --&gt; I[Intent &amp; Context Analyzer\n输入意图与上下文完整度判断]
@@ -139,7 +139,7 @@ flowchart TB
   W --&gt; AR[Agent Registry\n角色定义 / 工具 / 技能 / 版本]
   W --&gt; R[Donkey Runner\n本地 / CI / 容器 / 内部执行集群]
   R --&gt; TG[Tool Gateway\nCLI / Skill / API / SDK / MCP 可选]
-  R --&gt; CA[Coding Agent Adapter\nCodex / Claude Code / Cursor / Devin]
+  R -. Phase 2+ .-&gt; CA[Coding Agent Adapter\nCodex / Claude Code / Cursor / Devin]
   TG --&gt; V[Validation &amp; Evidence\nCI / 单测 / E2E / Trace / 日志]
   CA --&gt; V
   W --&gt; S[(Product State\nPostgreSQL + Object Storage)]
@@ -150,25 +150,25 @@ flowchart TB
 <hr>
 <h2 id="1-mvp-目标与边界">1. MVP 目标与边界</h2>
 <h3 id="1-1-技术目标">1.1 技术目标</h3>
-<p>Donkey MVP 要支撑 2-3 个相似技术基建仓库，覆盖 B/D 类需求的多种输入形态，并自动推进到合理目标阶段。</p>
+<p>Donkey 的目标 MVP 要支撑 2-3 个相似技术基建仓库，覆盖 B/D 类需求的多种输入形态，并自动推进到合理目标阶段。本文后续凡涉及 Coding Agent、开发执行、真实 PR 读取、CI 联动和自动修复的内容，均为 Phase 2+ 或产品化目标，不代表当前 0.1.0 已实现。</p>
 <p>阶段口径：</p>
 <ul>
 <li>Phase 1 先做单仓库、多目标阶段闭环。</li>
 <li>Phase 2 验证 2-3 个相似仓库复用，不把系统做成单仓库脚本。</li>
-<li>MVP 成功不只看“是否创建 PR”，还要看“是否按输入成熟度推进到了正确阶段，并提供可验收证据”。</li>
+<li>MVP 成功不以“是否创建 PR”为唯一标准，而是看“是否按输入成熟度推进到了正确阶段，并提供可验收证据”；创建 PR 是 Phase 2+ 的增量目标。</li>
 </ul>
 <p>关键能力：</p>
 <table>
 <thead><tr><th>能力</th><th>MVP 要求</th></tr></thead>
 <tbody>
 <tr><td>意图识别</td><td>判断用户是从想法开始、已有需求、已有技术方案、已有任务、已有 PR，还是只需要测试验收</td></tr>
-<tr><td>目标阶段选择</td><td>自动决定推进到需求文档、技术方案、任务拆解、执行开发、测试验收、PR 或风险报告</td></tr>
+<tr><td>目标阶段选择</td><td>当前 0.1.0 自动决定推进到需求文档、技术方案、任务拆解、测试验收或风险报告；执行开发和 PR 交付为 Phase 2+ 能力</td></tr>
 <tr><td>上下文完整度检查</td><td>已有产物不重复生成，只校验缺口并补齐必要信息</td></tr>
 <tr><td>仓库适配</td><td>每个试点仓库具备 Repo Profile，记录 SOP、测试命令、CI、E2E、风险边界</td></tr>
 <tr><td>Workflow Runtime</td><td>可持久化、可恢复、可暂停、可重试、可插入人工确认，支持阶段裁剪</td></tr>
 <tr><td>Agent Registry</td><td>角色 Agent 的职责、工具、技能、权限、模型、输出契约和版本可管理</td></tr>
-<tr><td>自动执行</td><td>通过 Runner 调用 CLI、Skill、API、SDK 和外部 Coding Agent Adapter</td></tr>
-<tr><td>自动验证</td><td>消费 CI、单测、E2E、静态检查结果，生成验收证据</td></tr>
+<tr><td>自动执行</td><td>当前 0.1.0 通过 Local Runner 调用 allowlist 内的本地命令；外部 Coding Agent Adapter 为 Phase 2+ 能力</td></tr>
+<tr><td>自动验证</td><td>当前 0.1.0 消费本地测试命令结果并生成验收证据；CI、E2E 和静态检查联动逐步接入</td></tr>
 <tr><td>风险控制</td><td>高危动作自动降级为方案、清单或人工确认，不自动合入、不自动上线</td></tr>
 <tr><td>效果评测</td><td>用历史任务 replay 和真实任务指标评估效率、质量、成本和安全</td></tr>
 </tbody>
@@ -220,7 +220,7 @@ flowchart TB
 <tr><td>Factory Droids</td><td><a href="https://factory.ai/product/droids">Factory Droids</a></td><td>计划、编码、测试、交付代码</td><td>验证行业趋势：任务级交付正在产品化</td></tr>
 </tbody>
 </table>
-<p>判断：Donkey 不应在 MVP 阶段复制 Coding Agent 的能力，而应提供统一 Adapter，把“目标阶段、上下文、仓库画像、验收标准、风险边界、证据要求”稳定交给外部执行者，并把执行结果归一成 Donkey 能管理的证据和状态。</p>
+<p>判断：Donkey 不应在当前 0.1.0 复制或直接接入 Coding Agent。Phase 2+ 再提供统一 Adapter，把“目标阶段、上下文、仓库画像、验收标准、风险边界、证据要求”稳定交给外部执行者，并把执行结果归一成 Donkey 能管理的证据和状态。</p>
 <h3 id="2-4-持久化工作流">2.4 持久化工作流</h3>
 <table>
 <thead><tr><th>技术</th><th>资料</th><th>优势</th><th>风险</th></tr></thead>
@@ -260,12 +260,12 @@ flowchart TB
 <h2 id="3-系统主框架与运行形态">3. 系统主框架与运行形态</h2>
 <h3 id="3-1-组件划分">3.1 组件划分</h3>
 <table>
-<thead><tr><th>组件</th><th>职责</th><th>MVP 形态</th></tr></thead>
+<thead><tr><th>组件</th><th>职责</th><th>阶段口径</th></tr></thead>
 <tbody>
-<tr><td>Donkey CLI</td><td>创建运行、传入已有文档/方案/PR、查看状态、触发测试、导出证据包</td><td>优先实现，作为 MVP 最小入口</td></tr>
+<tr><td>Donkey CLI</td><td>创建运行、传入已有文档/方案/PR 内容或变更说明、查看状态、触发测试、导出证据包</td><td>当前 0.1.0 已实现最小入口</td></tr>
 <tr><td>Donkey Server</td><td>管理需求、Run、Workflow、Agent Profile、Repo Profile、策略、证据和指标</td><td>内部服务，TypeScript/Go 均可；推荐 TypeScript 起步</td></tr>
 <tr><td>Donkey Runner</td><td>执行 Workflow 节点，调用 Agent、CLI、Skill、API、SDK、测试命令</td><td>可本地运行，也可部署到 CI runner、容器或内部执行集群</td></tr>
-<tr><td>Donkey Console</td><td>展示运行状态、证据包、风险确认、最终验收和退回</td><td>MVP 可先做轻量 Web 页面，后续接飞书通知</td></tr>
+<tr><td>Donkey Console</td><td>展示运行状态、证据包、风险确认、最终验收和退回</td><td>Phase 1 后续可先做轻量 Web 页面，再接飞书通知</td></tr>
 <tr><td>State Store</td><td>保存产品状态、运行状态、AgentRun、ToolRun、Evidence、指标</td><td>PostgreSQL + JSONB</td></tr>
 <tr><td>Artifact Store</td><td>保存日志、截图、trace、HTML 报告、diff、评测结果</td><td>S3 兼容存储或内部文件服务</td></tr>
 </tbody>
@@ -317,10 +317,10 @@ flowchart TB
 <tbody>
 <tr><td>只有想法</td><td>“我想提升某工具的配置体验”</td><td>需求澄清</td><td>需求文档或技术方案</td></tr>
 <tr><td>已有需求</td><td>“这是 PRD，帮我出技术方案”</td><td>上下文检查</td><td>技术方案</td></tr>
-<tr><td>已有技术方案</td><td>“按这个方案执行”</td><td>方案校验</td><td>开发执行、测试验收或 PR</td></tr>
-<tr><td>已有任务列表</td><td>“这些任务帮我分派执行”</td><td>任务校验</td><td>开发执行或测试验收</td></tr>
-<tr><td>已有代码变更</td><td>“帮我测试验收”</td><td>Diff/PR 分析</td><td>验收证据包</td></tr>
-<tr><td>已有 PR</td><td>“审一下这个 PR”</td><td>PR 上下文读取</td><td>Review 报告或验收结论</td></tr>
+<tr><td>已有技术方案</td><td>“按这个方案执行”</td><td>方案校验</td><td>当前 0.1.0：测试验收或任务拆解；后续：开发执行或 PR</td></tr>
+<tr><td>已有任务列表</td><td>“这些任务帮我分派执行”</td><td>任务校验</td><td>当前 0.1.0：任务拆解或测试验收；Phase 2+：开发执行</td></tr>
+<tr><td>已有代码变更</td><td>“帮我测试验收”</td><td>Diff/变更说明分析</td><td>验收证据包</td></tr>
+<tr><td>已有 PR</td><td>“审一下这个 PR”</td><td>当前 0.1.0：基于用户提供内容生成验收判断；Phase 2+：真实 PR 上下文读取</td><td>Review 报告或验收结论</td></tr>
 <tr><td>只需评审</td><td>“这个方案风险如何”</td><td>资料读取</td><td>风险评审报告</td></tr>
 </tbody>
 </table>
@@ -332,9 +332,9 @@ flowchart TB
 <tr><td>需求文档</td><td>目标模糊、业务/产品边界不清、尚不适合技术拆解</td><td>自动补齐背景、目标、用户路径、验收标准、信息缺口</td></tr>
 <tr><td>技术方案</td><td>需求清楚但影响面较大，或涉及架构、权限、迁移、流程调整</td><td>自动产出技术方案、风险、依赖、分步计划，不执行高危动作</td></tr>
 <tr><td>任务拆解</td><td>方案已明确，需要拆成可执行任务</td><td>自动拆任务、依赖、优先级、角色分派和验收方式</td></tr>
-<tr><td>开发执行</td><td>Bugfix、小优化、研发效能工具增强、技术平台普通增强</td><td>自动调用 Coding Agent 或 Runner 修改代码</td></tr>
-<tr><td>测试验收</td><td>已有代码、已有 PR 或已有执行结果</td><td>自动运行测试、E2E、静态检查，生成证据包</td></tr>
-<tr><td>PR 交付</td><td>代码变更安全、测试可执行、无高危动作</td><td>自动创建 PR 和交付证据包</td></tr>
+<tr><td>开发执行</td><td>Phase 2+：Bugfix、小优化、研发效能工具增强、技术平台普通增强</td><td>自动调用 Coding Agent 或 Runner 修改代码</td></tr>
+<tr><td>测试验收</td><td>当前 0.1.0：已有技术方案、代码变更说明或已有执行结果；Phase 2+：真实 PR 和 CI 上下文</td><td>自动运行测试、E2E、静态检查，生成证据包</td></tr>
+<tr><td>PR 交付</td><td>Phase 2+：代码变更安全、测试可执行、无高危动作</td><td>自动创建 PR 和交付证据包</td></tr>
 <tr><td>风险报告</td><td>生产、权限、密钥、不可逆迁移、发布链路</td><td>自动输出风险评审、操作清单和人工确认点，不自动执行危险动作</td></tr>
 </tbody>
 </table>
@@ -377,7 +377,7 @@ supportedInputTypes:
   - existing_tech_plan
 targetStages:
   - validation_report
-  - pull_request
+  # pull_request 属于 Phase 2+，当前 0.1.0 不创建 PR。
 stages:
   - id: context_check
     nodes:
@@ -388,7 +388,8 @@ stages:
       - type: missing_required_context
         onTrigger: ask_or_generate_assumption
   - id: execution
-    skipWhen: targetStage == &quot;validation_report&quot; and noCodeChangeRequired
+    phase: Phase 2+
+    skipWhen: currentVersion == &quot;0.1.0&quot; or (targetStage == &quot;validation_report&quot; and noCodeChangeRequired)
     nodes:
       - id: implement_changes
         agentProfile: rd-agent@0.1.0
@@ -464,10 +465,10 @@ exitCriteria:
 <pre><code>name: test-agent
 version: 0.1.0
 role: Test
-description: 在已有需求、技术方案、代码变更或 PR 基础上，选择并运行必要测试，生成可验收证据。
+description: 当前 0.1.0 在已有需求、技术方案、代码变更说明基础上选择并运行必要测试；Phase 2+ 可读取真实 PR 与 CI 上下文，生成可验收证据。
 responsibilities:
   - 根据 Repo Profile 选择单测、lint、类型检查、E2E 或 CI 查询
-  - 对失败进行分类，判断是否适合自动修复
+  - 当前 0.1.0 对失败进行分类并报告；Phase 2+ 判断是否适合自动修复
   - 把测试结果、日志、trace、截图和未覆盖项绑定到验收标准
 notResponsibilities:
   - 不修改生产配置
@@ -501,7 +502,7 @@ modelPolicy:
   default: fast-capable
   highReasoningWhen: [failure_triage, flaky_test_analysis]
 failurePolicy:
-  maxAutoFixAttempts: 2
+  maxAutoFixAttempts: 0 # 当前 0.1.0 只分类并报告失败；Phase 2+ 可提升为 2-3。
   onBudgetExceeded: deliver_blocked_report
 evalMetrics:
   - testCommandAccuracy
@@ -514,10 +515,10 @@ evalMetrics:
 <tr><td>Intent Agent</td><td>判断输入类型、上下文完整度、目标阶段</td><td>读需求、读文档、读 Repo Profile</td></tr>
 <tr><td>PM Agent</td><td>生成或补齐需求文档、验收标准和信息缺口</td><td>读写文档</td></tr>
 <tr><td>Tech Agent</td><td>生成技术方案、影响面、任务拆解和风险</td><td>读仓库、读文档、读历史样例</td></tr>
-<tr><td>RD Agent</td><td>调用 Coding Agent 或 Runner 执行代码修改</td><td>隔离分支写代码、运行限定命令</td></tr>
+<tr><td>RD Agent</td><td>Phase 2+ 调用 Coding Agent 或 Runner 执行代码修改；当前 0.1.0 仅保留角色画像</td><td>隔离分支写代码、运行限定命令</td></tr>
 <tr><td>Test Agent</td><td>运行单测、CI、E2E、静态检查，归档证据</td><td>运行测试命令、读取日志、写证据</td></tr>
 <tr><td>Review Agent</td><td>审阅 diff、方案、风险和测试证据</td><td>默认只读，不直接改代码</td></tr>
-<tr><td>Evidence Agent</td><td>汇总 PR 描述、验收页、风险和未覆盖项</td><td>读运行记录、写报告</td></tr>
+<tr><td>Evidence Agent</td><td>当前汇总验收页、风险和未覆盖项；Phase 2+ 汇总 PR 描述</td><td>读运行记录、写报告</td></tr>
 </tbody>
 </table>
 <h3 id="5-3-迭代提升机制">5.3 迭代提升机制</h3>
@@ -630,19 +631,19 @@ sequenceDiagram
   WF-&gt;&gt;Agent: 执行必要阶段，不重复前置产物
   Agent--&gt;&gt;WF: 结构化产物 / 风险 / 任务 / 证据要求
   WF-&gt;&gt;Runner: 执行需要落地的节点
-  Runner-&gt;&gt;Tool: 调用 CLI / Skill / API / SDK / 外部 Coding Agent
+  Runner-&gt;&gt;Tool: 当前调用 CLI / Skill / API / SDK；Phase 2+ 调用外部 Coding Agent
   Tool--&gt;&gt;Runner: 结果 / 日志 / diff / 测试产物
   Runner--&gt;&gt;Evidence: 归档日志、trace、截图、报告
   Evidence--&gt;&gt;Donkey: 生成目标阶段交付物
-  Donkey--&gt;&gt;User: 需求文档 / 技术方案 / 测试验收 / PR / 风险报告
+  Donkey--&gt;&gt;User: 需求文档 / 技术方案 / 测试验收 / 风险报告 / Phase 2+ PR
 </div></div>
 <p>示例路径：</p>
 <table>
 <thead><tr><th>用户输入</th><th>Donkey 行为</th></tr></thead>
 <tbody>
 <tr><td>“我想做一个配置优化”</td><td>自动澄清、生成需求文档和验收标准；信息足够时继续生成技术方案</td></tr>
-<tr><td>“这是技术方案，直接执行”</td><td>校验方案缺口和风险；若安全，直接任务拆解、开发、测试；无需重做需求评审</td></tr>
-<tr><td>“这个 PR 帮我验收”</td><td>读取 PR、diff、CI、Repo Profile；直接运行测试验收和 Review Agent</td></tr>
+<tr><td>“这是技术方案，直接执行”</td><td>当前 0.1.0 校验方案缺口和风险，直接进入任务拆解或本地测试验收；Phase 2+ 才进入开发执行</td></tr>
+<tr><td>“这个 PR 帮我验收”</td><td>当前 0.1.0 可基于用户提供的变更说明运行本地验收；真实 PR、diff 和 CI 读取归入 Phase 2+</td></tr>
 <tr><td>“这个发布链路改造能不能做”</td><td>输出技术方案、风险、操作清单和人工确认点，不自动改生产链路</td></tr>
 </tbody>
 </table>
@@ -659,17 +660,17 @@ sequenceDiagram
 <tr><td>权限扩大</td><td>必须人工确认</td></tr>
 <tr><td>数据库迁移</td><td>必须人工确认，且需要回滚说明</td></tr>
 <tr><td>密钥/凭证变更</td><td>禁止 Agent 直接处理明文密钥</td></tr>
-<tr><td>测试 workflow / lint / 非发布类 CI 优化</td><td>中风险，可自动到 PR，但必须在交付包突出风险</td></tr>
+<tr><td>测试 workflow / lint / 非发布类 CI 优化</td><td>中风险；当前 0.1.0 先输出测试验收或风险说明，Phase 2+ 可自动到 PR 并在交付包突出风险</td></tr>
 <tr><td>发布链路 / 生产部署 / secret / 权限相关 CI/CD 变更</td><td>高风险，只生成方案或强人工确认</td></tr>
 </tbody>
 </table>
 <h3 id="9-2-最低执行隔离边界">9.2 最低执行隔离边界</h3>
 <table>
-<thead><tr><th>边界</th><th>MVP 要求</th></tr></thead>
+<thead><tr><th>边界</th><th>要求</th></tr></thead>
 <tbody>
-<tr><td>执行环境</td><td>外部 Coding Agent 或自托管 Runner 必须运行在临时沙箱、容器或隔离 worktree 中</td></tr>
+<tr><td>执行环境</td><td>当前 0.1.0 只运行 allowlist 内本地命令；Phase 2+ 外部 Coding Agent 或自托管 Runner 必须运行在临时沙箱、容器或隔离 worktree 中</td></tr>
 <tr><td>生产凭证</td><td>Agent 阶段不得注入生产凭证、生产数据库连接串或高权限 token</td></tr>
-<tr><td>Token 权限</td><td>代码仓库 token 使用最小权限，优先只允许创建分支、提交 PR、读取 CI 状态</td></tr>
+<tr><td>Token 权限</td><td>当前 0.1.0 不需要代码仓库写 token；Phase 2+ 使用最小权限，优先只允许创建分支、提交 PR、读取 CI 状态</td></tr>
 <tr><td>Secret 暴露</td><td>setup 阶段凭证不得进入 Agent 可见上下文；日志与证据包必须脱敏</td></tr>
 <tr><td>网络访问</td><td>默认限制 egress；确需访问包管理器、代码托管、内部测试环境时使用 allowlist</td></tr>
 <tr><td>依赖安装</td><td>依赖安装日志必须保留；新增依赖需在交付包中披露</td></tr>
@@ -679,12 +680,12 @@ sequenceDiagram
 </table>
 <h3 id="9-3-成本与预算-gate">9.3 成本与预算 Gate</h3>
 <table>
-<thead><tr><th>Gate</th><th>MVP 建议</th></tr></thead>
+<thead><tr><th>Gate</th><th>建议</th></tr></thead>
 <tbody>
 <tr><td>单次 Run 预算</td><td>每个 ProjectRun 配置最大模型调用成本、外部 Agent 成本或执行时长</td></tr>
 <tr><td>阶段预算</td><td>需求、方案、执行、测试、review 分别记录成本，避免某阶段失控</td></tr>
-<tr><td>重试上限</td><td>同一验证失败最多自动修复 2-3 轮，超过后升级为阻塞报告</td></tr>
-<tr><td>外部 Agent 超时</td><td>Coding Agent 执行超过阈值后取消或转人工确认</td></tr>
+<tr><td>重试上限</td><td>当前 0.1.0 只报告失败；Phase 2+ 同一验证失败最多自动修复 2-3 轮，超过后升级为阻塞报告</td></tr>
+<tr><td>外部 Agent 超时</td><td>Phase 2+：Coding Agent 执行超过阈值后取消或转人工确认</td></tr>
 <tr><td>并发上限</td><td>每个仓库限制同时运行的 ProjectRun 数，避免 CI 和 runner 被打满</td></tr>
 <tr><td>人工升级</td><td>达到预算、重试或超时阈值后，不继续自动消耗资源，输出下一步建议</td></tr>
 </tbody>
@@ -703,16 +704,17 @@ sequenceDiagram
 </tbody>
 </table>
 <h3 id="10-2-e2e-场景">10.2 E2E 场景</h3>
-<p>MVP 至少需要维护 fixture repos 和真实试点仓库两类 E2E。</p>
+<p>当前 0.1.0 至少需要维护 fixture repos 和真实试点仓库两类 E2E；涉及自动代码修改、真实 PR 读取和自动修复的场景归入 Phase 2+。</p>
 <table>
-<thead><tr><th>场景</th><th>期望</th></tr></thead>
+<thead><tr><th>场景</th><th>阶段</th><th>期望</th></tr></thead>
 <tbody>
-<tr><td>从想法到需求文档</td><td>自动生成需求文档、验收标准、缺口列表</td></tr>
-<tr><td>从需求到技术方案</td><td>自动生成技术方案、风险、任务拆解</td></tr>
-<tr><td>从技术方案到代码变更</td><td>跳过需求阶段，直接执行开发和测试</td></tr>
-<tr><td>从 PR 到验收报告</td><td>读取 PR、运行测试、输出证据包和 reviewer 关注点</td></tr>
-<tr><td>测试失败自动修复</td><td>失败分类、自动修复、重跑测试，超过上限后升级</td></tr>
-<tr><td>高危需求降级</td><td>生产/权限/密钥类需求不执行危险动作，只输出方案和清单</td></tr>
+<tr><td>从想法到需求文档</td><td>当前 0.1.0</td><td>自动生成需求文档、验收标准、缺口列表</td></tr>
+<tr><td>从需求到技术方案</td><td>当前 0.1.0</td><td>自动生成技术方案、风险、任务拆解</td></tr>
+<tr><td>从技术方案到测试验收</td><td>当前 0.1.0</td><td>跳过需求阶段，运行本地测试命令，输出证据包</td></tr>
+<tr><td>从已有代码变更说明到验收报告</td><td>当前 0.1.0 扩展</td><td>基于用户提供的变更说明运行测试，输出证据包和 reviewer 关注点</td></tr>
+<tr><td>从真实 PR 到验收报告</td><td>Phase 2+</td><td>读取 PR、diff、CI，运行测试，输出证据包和 reviewer 关注点</td></tr>
+<tr><td>测试失败自动修复</td><td>Phase 2+</td><td>失败分类、自动修复、重跑测试，超过上限后升级</td></tr>
+<tr><td>高危需求降级</td><td>当前 0.1.0</td><td>生产/权限/密钥类需求不执行危险动作，只输出方案和清单</td></tr>
 </tbody>
 </table>
 <h3 id="10-3-效果评测体系">10.3 效果评测体系</h3>
@@ -723,7 +725,7 @@ sequenceDiagram
 <tr><td>Intent / Gate</td><td>目标阶段判断准确率、误推进率、误拦截率</td></tr>
 <tr><td>PM Agent</td><td>需求文档可用率、验收标准可判定率、人工补充率</td></tr>
 <tr><td>Tech Agent</td><td>方案可执行率、风险覆盖率、任务拆解可执行率</td></tr>
-<tr><td>RD Agent</td><td>代码变更成功率、测试通过率、人工返工率</td></tr>
+<tr><td>RD Agent</td><td>Phase 2+ 指标：代码变更成功率、测试通过率、人工返工率</td></tr>
 <tr><td>Test Agent</td><td>测试命令选择准确率、失败分类准确率、证据完整率</td></tr>
 <tr><td>Review Agent</td><td>有效问题检出率、误报率、漏报率</td></tr>
 <tr><td>Workflow</td><td>阶段成功率、平均耗时、恢复成功率、成本</td></tr>
@@ -732,7 +734,7 @@ sequenceDiagram
 <p>MVP 评测集建议：</p>
 <ul>
 <li>10-20 个历史 B/D 类任务。</li>
-<li>覆盖需求文档、技术方案、执行、测试验收、PR review、高危降级。</li>
+<li>当前 0.1.0 覆盖需求文档、技术方案、任务拆解、本地测试验收和高危降级；Phase 2+ 扩展开发执行和 PR review。</li>
 <li>每个样本记录输入、期望目标阶段、期望产物、验收标准、人工基线耗时。</li>
 <li>每次 Agent Profile、Workflow、Repo Profile 改动后跑 replay，检查是否回归。</li>
 </ul>
@@ -756,10 +758,10 @@ sequenceDiagram
 <tr><td>仓库范围</td><td>2-3 个相似技术基建仓库</td></tr>
 <tr><td>目标阶段判断准确率</td><td>85%+</td></tr>
 <tr><td>自动推进成功率</td><td>60%+ 需求能推进到目标阶段</td></tr>
-<tr><td>自动到 PR 比例</td><td>对适合 PR 的需求，50%+ 无中途人工介入跑到 PR</td></tr>
+<tr><td>自动到 PR 比例</td><td>Phase 2+ 指标：对适合 PR 的需求，50%+ 无中途人工介入跑到 PR</td></tr>
 <tr><td>交付周期</td><td>较同类人工流程中位数下降 30%+</td></tr>
 <tr><td>验收标准可判定率</td><td>90%+</td></tr>
-<tr><td>PR 一次审查通过率</td><td>60%+</td></tr>
+<tr><td>PR 一次审查通过率</td><td>Phase 2+ 指标：60%+</td></tr>
 <tr><td>高危动作误执行</td><td>0</td></tr>
 <tr><td>自动合入/自动上线</td><td>0</td></tr>
 <tr><td>最终验收决策效率</td><td>80%+ 用户能在 5 分钟内判断接受或退回</td></tr>
@@ -774,7 +776,7 @@ sequenceDiagram
 <li>哪个 Agent 使用哪个 Profile 版本做了什么。</li>
 <li>哪个工具被调用过，权限策略是什么。</li>
 <li>哪些测试跑过，结果是什么。</li>
-<li>哪些失败被自动修复了。</li>
+<li>当前 0.1.0 哪些失败被报告和阻断；Phase 2+ 哪些失败被自动修复了。</li>
 <li>为什么建议接受、退回或停止在当前阶段。</li>
 </ul>
 <p>推荐事件模型：</p>
@@ -791,7 +793,7 @@ sequenceDiagram
 <tr><td>GateTriggered</td><td>风险、预算或人工确认触发</td></tr>
 <tr><td>EvidenceAttached</td><td>证据挂载</td></tr>
 <tr><td>TargetStageDelivered</td><td>目标阶段产物交付</td></tr>
-<tr><td>PRCreated</td><td>PR 创建</td></tr>
+<tr><td>PRCreated</td><td>Phase 2+：PR 创建</td></tr>
 <tr><td>UserAccepted / UserRejected</td><td>用户验收结果</td></tr>
 <tr><td>EvalRunCompleted</td><td>评测运行完成</td></tr>
 </tbody>
@@ -814,7 +816,7 @@ sequenceDiagram
 <ul>
 <li>至少 2 个 Repo Profile 达到最小可用标准。</li>
 <li>至少 5 个 EvalCase 可 replay。</li>
-<li>Local Runner 能完成“已有技术方案 -&gt; 测试验收报告”或“已有 PR -&gt; 验收报告”。</li>
+<li>Local Runner 能完成“已有技术方案 -&gt; 测试验收报告”或“已有代码变更说明 -&gt; 验收报告”；真实 PR 读取与联动归入 Phase 2+。</li>
 <li>高危动作策略能在测试中稳定拦截。</li>
 </ul>
 <h3 id="phase-1-单仓库多目标阶段闭环">Phase 1：单仓库多目标阶段闭环</h3>
@@ -823,11 +825,11 @@ sequenceDiagram
 <ul>
 <li>从想法到需求文档。</li>
 <li>从需求到技术方案。</li>
-<li>从技术方案到执行和测试。</li>
-<li>从 PR 到验收证据包。</li>
+<li>从技术方案到任务拆解或本地测试验收；开发执行归入 Phase 2+。</li>
+<li>从已有代码变更说明到验收证据包；真实 PR 验收作为 Phase 2+ 扩展路径。</li>
 <li>高危需求降级为方案和风险报告。</li>
 </ul>
-<p>范围口径：Phase 1 至少跑通前三条路径；“从 PR 到验收证据包”和“高危需求降级”作为扩展验收项，可以在 Phase 1 后半或 Phase 2 前置补齐。</p>
+<p>范围口径：Phase 1 至少跑通前三条路径；“已有代码变更说明到验收证据包”和“高危需求降级”作为扩展验收项。真实 PR 读取、CI 状态联动和 PR 验收归入 Phase 2+。</p>
 <p>退出标准：</p>
 <ul>
 <li>至少 5 个真实 B/D 类需求进入单仓库试点。</li>
@@ -849,7 +851,7 @@ sequenceDiagram
 <ul>
 <li>至少 10 个真实 B/D 类需求进入试点。</li>
 <li>2-3 个仓库均有成功推进到目标阶段的样例。</li>
-<li>对适合 PR 的需求，50%+ 无中途人工介入跑到 PR。</li>
+<li>Phase 2+：对适合 PR 的需求，50%+ 无中途人工介入跑到 PR。</li>
 <li>交付周期较同类人工流程中位数下降 30%+。</li>
 </ul>
 <h3 id="phase-3-agent-迭代与证据质量增强">Phase 3：Agent 迭代与证据质量增强</h3>
@@ -866,7 +868,7 @@ sequenceDiagram
 <p>退出标准：</p>
 <ul>
 <li>验收标准可判定率达到 90%+。</li>
-<li>PR 一次审查通过率达到 60%+。</li>
+<li>Phase 2+：PR 一次审查通过率达到 60%+。</li>
 <li>80%+ 的最终验收能在 5 分钟内完成接受或退回判断。</li>
 <li>replay 评测能发现 Agent/Profile/Workflow 的明显回归。</li>
 </ul>
@@ -876,16 +878,16 @@ sequenceDiagram
 <thead><tr><th>决策</th><th>推荐</th><th>原因</th></tr></thead>
 <tbody>
 <tr><td>主框架</td><td>Donkey Server + Runner + CLI + Console</td><td>状态、执行、入口、人审体验分离</td></tr>
-<tr><td>MVP 入口</td><td>CLI 优先，Console 辅助</td><td>最快接入真实仓库和研发流程</td></tr>
+<tr><td>MVP 入口</td><td>当前 0.1.0 CLI 优先；Console 为 Phase 1 后续辅助</td><td>最快接入真实仓库和研发流程</td></tr>
 <tr><td>执行形态</td><td>Local Runner -&gt; CI Runner -&gt; Container Runner</td><td>从低成本验证到正式隔离逐步增强</td></tr>
 <tr><td>Workflow</td><td>Target Stage 驱动的可裁剪 Workflow</td><td>支持跳过前置阶段和按目标阶段结束</td></tr>
 <tr><td>主干编排</td><td>Durable Workflow，优先 Temporal</td><td>长任务、暂停、重试、恢复和人工确认是核心复杂度</td></tr>
 <tr><td>Dynamic Workflows</td><td>可作为专项节点后端</td><td>适合高并发审计、迁移和交叉验证，不承载 Donkey 全局状态</td></tr>
-<tr><td>Coding Agent</td><td>Adapter 接外部 Agent</td><td>行业已有成熟代码执行者，Donkey 不应重复造轮子</td></tr>
+<tr><td>Coding Agent</td><td>Phase 2+ 通过 Adapter 接外部 Agent</td><td>行业已有成熟代码执行者，Donkey 不应重复造轮子</td></tr>
 <tr><td>Agent 管理</td><td>Agent Registry + Agent Profile 版本化</td><td>角色、工具、技能、权限、模型和评测可迭代</td></tr>
 <tr><td>工具连接</td><td>CLI &gt; Skill &gt; Direct API &gt; SDK &gt; MCP</td><td>最简洁、最贴近已有 SOP，MCP 可选</td></tr>
 <tr><td>数据状态</td><td>PostgreSQL 持久化产品对象</td><td>不能依赖聊天上下文保存业务状态</td></tr>
-<tr><td>执行隔离</td><td>临时沙箱/容器/隔离 runner + 分支隔离</td><td>降低代码修改、工具调用、网络访问和 secret 外泄风险</td></tr>
+<tr><td>执行隔离</td><td>当前 0.1.0 使用本地 allowlist 命令；Phase 2+ 使用临时沙箱/容器/隔离 runner + 分支隔离</td><td>降低代码修改、工具调用、网络访问和 secret 外泄风险</td></tr>
 <tr><td>验收方式</td><td>证据包驱动</td><td>让用户只关注交付结果和风险项</td></tr>
 <tr><td>效果评测</td><td>donkey-eval + 历史任务 replay</td><td>防止 Agent/Profile/Workflow 迭代后体感提升但真实退化</td></tr>
 </tbody>
@@ -898,9 +900,9 @@ sequenceDiagram
 <li>建立 10-20 个历史任务 EvalCase，覆盖不同目标阶段。</li>
 <li>设计 Intent / Target Stage Gate 的初版规则。</li>
 <li>设计 Agent Profile schema 和首批角色 Agent。</li>
-<li>设计 Workflow Definition schema，先支持 3 条核心路径：已有技术方案执行、从想法到需求文档、从需求到技术方案；已有 PR 验收作为扩展路径补齐。</li>
+<li>设计 Workflow Definition schema，先支持 3 条核心路径：已有技术方案到本地测试验收、从想法到需求文档、从需求到技术方案；已有代码变更说明验收作为扩展路径补齐，真实 PR 验收放到 Phase 2+。</li>
 <li>实现 CLI + Local Runner，优先调用 CLI/Skill/API，不依赖 MCP。</li>
-<li>选定第一批 Coding Agent Adapter：建议 Codex + Claude Code 二选一或并行验证。</li>
+<li>Phase 2+ 前置调研第一批 Coding Agent Adapter：建议 Codex + Claude Code 二选一或并行验证。</li>
 <li>做 Temporal/Hatchet spike，验证暂停、恢复、人工确认和事件查询成本。</li>
 <li>用历史任务 replay，再进入真实需求试点。</li>
 </ol>

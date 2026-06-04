@@ -3,82 +3,177 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Donkey 仓库指令审阅版</title>
+  <title>Donkey 仓库指令</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; margin: 40px auto; max-width: 980px; padding: 0 24px; color: #172033; }
-    h1, h2 { line-height: 1.25; }
-    h1 { border-bottom: 2px solid #e6e8ef; padding-bottom: 12px; }
-    h2 { margin-top: 32px; border-left: 4px solid #3366ff; padding-left: 10px; }
-    code { background: #f4f6fb; padding: 1px 5px; border-radius: 4px; }
-    ul { padding-left: 24px; }
-    li { margin: 6px 0; }
-    .note { background: #f2f7ff; border: 1px solid #cfe0ff; padding: 14px 16px; border-radius: 8px; }
+    :root {
+      color-scheme: light;
+      --text: #172033;
+      --muted: #586174;
+      --line: #dfe5f2;
+      --panel: #f7f9fd;
+      --accent: #2457e6;
+      --accent-soft: #eef4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 44px 28px 72px;
+    }
+    .doc-meta {
+      margin: 0 0 28px;
+      padding: 14px 16px;
+      border: 1px solid #cfddff;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: #23365f;
+      font-size: 14px;
+    }
+    h1, h2, h3, h4 {
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+    h1 {
+      margin: 0 0 18px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--line);
+      font-size: 32px;
+    }
+    h2 {
+      margin: 38px 0 14px;
+      padding-left: 12px;
+      border-left: 4px solid var(--accent);
+      font-size: 24px;
+    }
+    h3 { margin: 28px 0 10px; font-size: 19px; }
+    h4 { margin: 22px 0 8px; font-size: 16px; }
+    p { margin: 10px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2f8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      padding: 16px;
+      border-radius: 8px;
+      background: #101827;
+      color: #edf3ff;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    ul, ol { padding-left: 26px; }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      margin: 16px 0 22px;
+      border-collapse: collapse;
+      table-layout: auto;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--panel);
+      text-align: left;
+      font-weight: 650;
+    }
+    tr:nth-child(even) td { background: #fbfcff; }
+    hr {
+      margin: 30px 0;
+      border: 0;
+      border-top: 1px solid var(--line);
+    }
+    .diagram {
+      margin: 18px 0 24px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      overflow: auto;
+    }
+    .mermaid { min-width: 720px; }
+    @media (max-width: 760px) {
+      main { padding: 28px 18px 52px; }
+      h1 { font-size: 26px; }
+      h2 { font-size: 21px; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .mermaid { min-width: 620px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Donkey 仓库指令</h1>
-  <p class="note">本 HTML 是 <code>AGENTS.md</code> 的人类审阅版。正式执行指令以仓库根目录 <code>AGENTS.md</code> 为准。</p>
+  <main>
+    <div class="doc-meta">本 HTML 由 <code>AGENTS.md</code> 生成，用于人类审阅；源稿仍以 Markdown 文件为准。生成日期：2026-06-04。</div>
+<h1 id="donkey-仓库指令">Donkey 仓库指令</h1>
+<p>项目背景（飞书文档）：https://bytedance.larkoffice.com/docx/ANrCdZCv4oH81sx756HcAUKCnkc</p>
+<p>本仓库存放 Donkey 的产品方案、技术方案、调研材料、审阅记录和后续实现计划。除非用户明确要求英文，所有描述性文字、文档正文、评审意见和结论输出均以中文为主；代码标识、协议名、产品名、命令、错误信息和引用标题可保留英文。</p>
+<h2 id="目录约定">目录约定</h2>
+<ul>
+<li>产品方案放在 <code>docs/product/</code>。</li>
+<li>技术方案放在 <code>docs/technical/</code>。</li>
+<li>使用手册放在 <code>docs/manual/</code>。</li>
+<li>外部调研和资料摘录放在 <code>docs/research/</code>。</li>
+<li>审阅记录放在 <code>docs/reviews/</code>。</li>
+<li>实施计划放在 <code>docs/superpowers/plans/</code>。</li>
+<li>需要人类审阅的正式文档必须以 HTML 方式呈现；可同时保留 Markdown 或 XML 源稿，但交付给人审阅的版本应提供 <code>.html</code>。</li>
+</ul>
+<h2 id="写作原则">写作原则</h2>
+<ul>
+<li>中文优先，表达直接、可验证、少空话。</li>
+<li>产品文档聚焦用户、价值、场景、边界、指标和风险，不写代码级实现细节。</li>
+<li>技术文档聚焦架构、技术选型、权衡、风险、验证和演进路径，不把方案写成零散工具清单。</li>
+<li>用户手册必须面向工具使用者，讲清楚“用户怎么发起、会得到什么、如何判断结果、当前不能做什么”，不要写成 Donkey 研发手册或内部实现说明。</li>
+<li>涉及当前行业产品、框架、协议、模型、标准或安全风险时，必须配资料链接，并说明“资料内容”和“对 Donkey 的判断依据”。</li>
+<li>所有结论要区分事实、推断和建议；推断要说明依据，不把主观判断写成事实。</li>
+<li>不提交密钥、token、生产凭证、内部高权限 URL 或任何敏感信息。</li>
+</ul>
+<h2 id="工程原则">工程原则</h2>
+<p>本仓库吸收 <code>karpathy-skill</code> 的核心工程思维，但不做角色扮演，也不完整复刻其全部心智模型。结合 Donkey 场景，选取以下工程原则：</p>
+<ul>
+<li><strong>先看事实再判断</strong>：涉及模型、工具、框架、协议、公司或最新能力时，先查资料、看文档、看 benchmark、看代码或官方说明，再输出判断。</li>
+<li><strong>Demo 到部署有 March of Nines 差距</strong>：能演示不代表能生产可用。评估 AI/Agent 能力时必须看尾部失败、可靠性、恢复能力、权限边界和真实工作流闭环。</li>
+<li><strong>构建即理解</strong>：关键技术判断不能只停留在概念层，要能说明最小可行机制、输入输出、状态边界和验证方式。</li>
+<li><strong>锯齿状智能</strong>：不要假设模型能力均匀可靠。方案必须标注适用场景、失败模式、人工兜底和测试缺口。</li>
+<li><strong>Iron Man suit 优先于 robot</strong>：Donkey 的自动化应增强人类交付能力，而不是在高风险场景移除人的控制权。默认自动推进到 PR 是长期产品原则，不代表当前 MVP 已实现；合入、上线和高危动作必须受控。</li>
+<li><strong>不要当英雄</strong>：复杂问题先用最简单、最可验证的方案，不为展示技术复杂度而引入框架或平台。</li>
+<li><strong>数据飞轮优先</strong>：每次执行、失败、返工、审阅意见和测试缺口都应沉淀为仓库画像、规则、模板或评估数据。</li>
+</ul>
+<h2 id="subagent-使用规则">Subagent 使用规则</h2>
+<ul>
+<li>复杂类任务应尽量拆给 subagents 执行，包括但不限于：大文档撰写、复杂调研、方案审阅、架构评估、代码审查、跨文件改动和验收验证。</li>
+<li>plan 类和 review 类 subagent 必须使用最高思考等级。</li>
+<li>所有最终文档输出之前，包括但不限于文档、技术方案、产品方案、代码，均必须先使用最高思考等级 subagent review。</li>
+<li>若当前 runtime 不支持 subagent 或无法设置思考等级，必须明确说明限制，并执行保守人工自检后再交付。</li>
+<li>review 若检出必须修复项，必须先修复，再启动新一轮最高思考等级 subagent 复查；除非用户明确要求“只审阅不修改”。</li>
+<li>复查循环持续到 reviewer 明确未检出必须修复项或未检出问题；建议修复项可记录后交给用户决策，不强制无限循环。</li>
+<li>如果 reviewer 的意见不正确，不要盲修；应记录反驳依据，并在下一轮复查中说明。</li>
+</ul>
+<h2 id="审阅与交付要求">审阅与交付要求</h2>
+<ul>
+<li>任何需要人审阅的文档，都应生成 HTML 审阅版，并在最终回复中给出本地路径。</li>
+<li>修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。</li>
+<li>重要文档的审阅记录应保存到 <code>docs/reviews/</code>，包含 reviewer 结论、必须修复项、修复摘要和复查结果。</li>
+<li>交付前必须做本地验证：文件存在、关键内容非空、无 <code>TBD/TODO/FIXME/placeholder</code> 等占位符、链接和章节结构可读。</li>
+<li>提交代码、行为或 CLI 命令变更前，必须检查并按需同步更新 <code>README.md</code>、<code>CHANGELOG.md</code>、<code>docs/manual/donkey-mvp-user-manual.html</code>、相关产品/技术/验收 HTML 文档和本指令文件。</li>
+<li>若运行产物位于 <code>.donkey/</code> 且不会随 git 提交归档，必须把关键验收结论、run id、风险 Gate 结果和 eval 指标摘要写入 <code>docs/reviews/</code> 或其他可提交文档。</li>
+<li>提交前检查文档更新时，若判断“不需要更新”，应在最终回复或提交说明中简要说明理由。</li>
+<li>修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。</li>
+</ul>
+  </main>
 
-  <p>本仓库存放 Donkey 的产品方案、技术方案、调研材料、审阅记录和后续实现计划。除非用户明确要求英文，所有描述性文字、文档正文、评审意见和结论输出均以中文为主；代码标识、协议名、产品名、命令、错误信息和引用标题可保留英文。</p>
-
-  <h2>目录约定</h2>
-  <ul>
-    <li>产品方案放在 <code>docs/product/</code>。</li>
-    <li>技术方案放在 <code>docs/technical/</code>。</li>
-    <li>外部调研和资料摘录放在 <code>docs/research/</code>。</li>
-    <li>审阅记录放在 <code>docs/reviews/</code>。</li>
-    <li>实施计划放在 <code>docs/superpowers/plans/</code>。</li>
-    <li>需要人类审阅的正式文档必须以 HTML 方式呈现；可同时保留 Markdown 或 XML 源稿，但交付给人审阅的版本应提供 <code>.html</code>。</li>
-  </ul>
-
-  <h2>写作原则</h2>
-  <ul>
-    <li>中文优先，表达直接、可验证、少空话。</li>
-    <li>产品文档聚焦用户、价值、场景、边界、指标和风险，不写代码级实现细节。</li>
-    <li>技术文档聚焦架构、技术选型、权衡、风险、验证和演进路径，不把方案写成零散工具清单。</li>
-    <li>涉及当前行业产品、框架、协议、模型、标准或安全风险时，必须配资料链接，并说明“资料内容”和“对 Donkey 的判断依据”。</li>
-    <li>所有结论要区分事实、推断和建议；推断要说明依据，不把主观判断写成事实。</li>
-    <li>不提交密钥、token、生产凭证、内部高权限 URL 或任何敏感信息。</li>
-  </ul>
-
-  <h2>Karpathy-style 工程原则</h2>
-  <p>本仓库吸收 <code>karpathy-skill</code> 的核心工程思维，但不做角色扮演，也不完整复刻其全部心智模型。结合 Donkey 场景，选取以下工程原则：</p>
-  <ul>
-    <li><strong>先看事实再判断</strong>：涉及模型、工具、框架、协议、公司或最新能力时，先查资料、看文档、看 benchmark、看代码或官方说明，再输出判断。</li>
-    <li><strong>Demo 到部署有 March of Nines 差距</strong>：能演示不代表能生产可用。评估 AI/Agent 能力时必须看尾部失败、可靠性、恢复能力、权限边界和真实工作流闭环。</li>
-    <li><strong>构建即理解</strong>：关键技术判断不能只停留在概念层，要能说明最小可行机制、输入输出、状态边界和验证方式。</li>
-    <li><strong>锯齿状智能</strong>：不要假设模型能力均匀可靠。方案必须标注适用场景、失败模式、人工兜底和测试缺口。</li>
-    <li><strong>Iron Man suit 优先于 robot</strong>：Donkey 的自动化应增强人类交付能力，而不是在高风险场景移除人的控制权。默认自动推进到 PR，但合入、上线和高危动作必须受控。</li>
-    <li><strong>不要当英雄</strong>：复杂问题先用最简单、最可验证的方案，不为展示技术复杂度而引入框架或平台。</li>
-    <li><strong>数据飞轮优先</strong>：每次执行、失败、返工、审阅意见和测试缺口都应沉淀为仓库画像、规则、模板或评估数据。</li>
-  </ul>
-
-  <h2>Subagent 使用规则</h2>
-  <ul>
-    <li>复杂类任务应尽量拆给 subagents 执行，包括但不限于：大文档撰写、复杂调研、方案审阅、架构评估、代码审查、跨文件改动和验收验证。</li>
-    <li>plan 类和 review 类 subagent 必须使用 <code>xhigh</code> 思考等级。</li>
-    <li>所有最终结论输出之前，包括但不限于文档、技术方案、产品方案、代码、提交说明和对用户的最终结论，均必须先使用 <code>xhigh</code> subagent review。</li>
-    <li>若当前 runtime 不支持 subagent 或无法设置 <code>xhigh</code>，必须明确说明限制，并执行保守人工自检后再交付。</li>
-    <li>review 若检出必须修复项，必须先修复，再启动新一轮 <code>xhigh</code> subagent 复查；除非用户明确要求“只审阅不修改”。</li>
-    <li>复查循环持续到 reviewer 明确未检出必须修复项或未检出问题；建议修复项可记录后交给用户决策，不强制无限循环。</li>
-    <li>如果 reviewer 的意见不正确，不要盲修；应记录反驳依据，并在下一轮复查中说明。</li>
-  </ul>
-
-  <h2>审阅与交付要求</h2>
-  <ul>
-    <li>任何需要人审阅的文档，都应生成 HTML 审阅版，并在最终回复中给出本地路径。</li>
-    <li>修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。</li>
-    <li>重要文档的审阅记录应保存到 <code>docs/reviews/</code>，包含 reviewer 结论、必须修复项、修复摘要和复查结果。</li>
-    <li>交付前必须做本地验证：文件存在、关键内容非空、无 <code>TBD/TODO/FIXME/placeholder</code> 等占位符、链接和章节结构可读。</li>
-    <li>修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。</li>
-  </ul>
-
-  <h2>Donkey 项目边界</h2>
-  <ul>
-    <li>Donkey 的当前目标是面向技术基建团队，优先支持 B/D 类需求：研发效能工具功能迭代、技术平台增强、Bugfix 和小优化。</li>
-    <li>MVP 默认自动交付到 PR 和交付证据包，不自动合入主干，不自动上线生产。</li>
-    <li>高危动作包括但不限于：生产写操作、删除数据、权限扩大、密钥变更、不可逆迁移、自动合入、自动上线。</li>
-    <li>技术方案必须维护“自动化效率”和“风险可控”之间的平衡。</li>
-  </ul>
 </body>
 </html>
