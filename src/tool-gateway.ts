@@ -13,6 +13,7 @@ export interface RunCommandOptions {
   repoProfile: RepoProfile;
   outputDir: string;
   timeoutMs?: number;
+  env?: Record<string, string>;
 }
 
 export async function runCommand(options: RunCommandOptions): Promise<ToolRun> {
@@ -56,7 +57,7 @@ export async function runCommand(options: RunCommandOptions): Promise<ToolRun> {
     };
   }
 
-  const result = await spawnCommand(argv, options.cwd, options.timeoutMs ?? 120_000);
+  const result = await spawnCommand(argv, options.cwd, options.timeoutMs ?? 120_000, options.env);
   await writeFile(stdoutFile, redact(result.stdout), "utf8");
   await writeFile(stderrFile, redact(result.stderr), "utf8");
 
@@ -77,10 +78,12 @@ function spawnCommand(
   argv: string[],
   cwd: string,
   timeoutMs: number,
+  env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> {
   return new Promise((resolve) => {
     const child = spawn(argv[0] ?? "", argv.slice(1), {
       cwd,
+      env: env ? { ...process.env, ...env } : process.env,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });

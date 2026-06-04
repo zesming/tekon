@@ -11,6 +11,8 @@
 - 新增短命令和 TUI 入口：`npm run d -- "<需求>"` 与 `npm start`。
 - 新增可配置 Coding Agent Adapter：支持通过 `commands.develop` 调用 Codex、Claude 或自定义命令进行本地代码修改，再自动运行测试验收。
 - 新增内置 `adapter codex|claude` 包装器，把 Donkey 生成的 prompt 文件转成外部 Coding Agent 的非交互 prompt。
+- 开发链路新增自动 Git 分支和本地 commit：开发前检查工作区干净状态并创建 `donkey/<runId>` 分支，测试后提交本地 commit；仍不 push、不创建 PR。
+- 修复开发链路 commit gate：缺少真实测试命令或测试未通过时不创建 commit；已 staged 的 `.donkey` 产物会阻断，包含带空格路径；Adapter 内部常规 commit/push 会被临时 Git wrapper 和 hook 拦截，Runner-owned git 写操作使用 Donkey 控制的 hooksPath，绕过 commit hook 导致 HEAD/分支变化时会被不变量阻断；HTML 证据包基于实际测试报告识别自定义测试命令。
 - Repo Profile 加载时会合并新的默认安全规则，避免旧配置缺少 Adapter allowlist。
 - 调整技术方案类输入的目标阶段判断：明确“按方案执行”进入开发链路，“直接执行测试验收”才只进入验收链路。
 - 修复开发目标的 Workflow 展示，代码修改和测试验收会在 HTML 证据包中显示为已执行。
@@ -54,8 +56,7 @@
 ### Verified
 
 - `npm run build` 通过。
-- `npm test` 通过，28/28 pass。
+- `npm test` 通过，44/44 pass。
 - Validation smoke 通过，生成测试验收证据包。
 - Risk Gate smoke 通过，`.env` 高危路径降级为 `risk_report` 且 `toolRuns=[]`。
 - Eval smoke 通过，6/6 pass，高危误放行 0。
-- Reviewer 最终复审 PASS，Must Fix / Should Fix 均无。

@@ -17,7 +17,7 @@ Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经
 - Agent Registry：内置角色 Agent Profile 与版本化 ID
 - Tool Gateway：统一执行测试命令，带 allow/deny 风险拦截、日志和脱敏
 - Local Runner：执行本地开发命令和测试命令并归档 ToolRun
-- Coding Agent Adapter：可配置 Codex / Claude / 自定义命令写代码，随后自动测试验收
+- Coding Agent Adapter：可配置 Codex / Claude / 自定义命令写代码，Donkey Runner 负责创建本地分支、测试验收后创建本地 commit
 - TUI：`npm start` 进入交互式菜单
 - Evidence：生成 Markdown 证据和 HTML 人审报告
 - donkey-eval：内置历史样本 replay，输出 JSON 与 HTML 评测报告
@@ -26,7 +26,7 @@ Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经
 
 - 不自动合入、上线或执行高危生产动作。
 - 不包含正式 Server、Web Console、CI Runner、Container Runner 或自动 PR。
-- 当前可以通过配置的本地 Coding Agent Adapter 进入代码修改；Donkey 自身不 commit、不 push、不创建 PR。
+- 当前可以通过配置的本地 Coding Agent Adapter 进入代码修改；Donkey 会自动创建本地 `donkey/<runId>` 分支和 commit，但不 push、不创建 PR。
 - Intent/Gate 是规则化 MVP，需要继续用真实 B/D 类需求样本扩充评测集。
 
 ## 当前能力状态
@@ -40,7 +40,8 @@ Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经
 | 高危请求降级 | 已实现 MVP | 命中生产、secret、token、删除、`.env`、deploy、infra 等风险时停止执行。 |
 | 自动开发代码 | 已实现 Adapter 版 | 通过 `commands.develop` 调用本地 Codex / Claude / 自定义命令修改工作区。 |
 | 自动调用 Coding Agent | 已实现可配置版 | 内置 `adapter codex/claude` 包装器，会把 Donkey prompt 交给外部 CLI。 |
-| 自动创建 PR | 未完成 | 当前不会提交代码、push 分支或创建 PR。 |
+| 自动创建本地分支和 commit | 已实现 MVP | 开发前创建 `donkey/<runId>` 分支，测试后提交本地 commit。 |
+| 自动创建 PR | 未完成 | 当前不会 push 分支或创建 PR。 |
 | TUI | 已实现基础版 | `npm start` 可发起运行、查看最近运行、配置命令和跑 eval。 |
 | 飞书入口 / Web Console | 未完成 | 当前主要通过 CLI/TUI 使用。 |
 
@@ -149,12 +150,12 @@ npm run donkey -- eval --repo . --json
 当前 MVP 已通过本地验收：
 
 - `npm run build` 通过
-- `npm test` 通过，28/28 pass
+- `npm test` 通过，44/44 pass
 - Development Adapter smoke：配置开发命令后能实际改工作区文件，再运行测试并生成代码变更报告
+- Git branch/commit smoke：开发链路会创建 `donkey/<runId>` 分支并生成本地 commit；脏工作区、已 staged 的 `.donkey` 产物会阻断；Adapter 内部常规 git commit/push 有执行期 guardrail
 - Validation smoke：技术方案直接进入测试验收，生成 HTML 证据包
 - Risk Gate smoke：`.env` 高危路径降级到 `risk_report`，未执行工具命令
 - Eval smoke：6/6 pass，高危误放行 0
-- Reviewer 复审：PASS，Must Fix / Should Fix 均无
 
 验收报告见：`docs/reviews/2026-06-04-mvp-acceptance-report.html`
 

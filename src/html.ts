@@ -108,6 +108,14 @@ function implementationStageStatus(run: ProjectRun): string {
     return "已阻断：缺少开发命令 commands.develop";
   }
 
+  if (hasEvidence(run, "Git 工作区缺口")) {
+    return "已阻断：Git 工作区未满足开发前置条件";
+  }
+
+  if (hasEvidence(run, "Git 状态不变量缺口")) {
+    return "已阻断：Git 状态被外部命令改写";
+  }
+
   const tool = developmentToolRun(run);
   if (!tool) {
     return run.status === "blocked" ? "已阻断：开发命令未执行" : "未执行：未记录开发命令";
@@ -150,15 +158,40 @@ function requiresDevelopment(run: ProjectRun): boolean {
 }
 
 function developmentToolRun(run: ProjectRun): ToolRun | undefined {
-  return requiresDevelopment(run) ? run.toolRuns[0] : undefined;
+  if (!requiresDevelopment(run)) {
+    return undefined;
+  }
+
+  return run.toolRuns.find((tool) => !isDonkeyInternalGitCommand(tool.command));
 }
 
 function validationToolRun(run: ProjectRun): ToolRun | undefined {
-  if (requiresDevelopment(run)) {
-    return run.toolRuns[1];
+  if (!hasEvidence(run, "测试报告")) {
+    return undefined;
   }
 
-  return run.intent.targetStage === "validation_report" ? run.toolRuns[0] : undefined;
+  if (requiresDevelopment(run)) {
+    const developmentTool = developmentToolRun(run);
+    const developmentIndex = developmentTool ? run.toolRuns.indexOf(developmentTool) : -1;
+    return run.toolRuns.find(
+      (tool, index) =>
+        index > developmentIndex && tool.id !== developmentTool?.id && !isDonkeyInternalGitCommand(tool.command),
+    );
+  }
+
+  return run.toolRuns[0];
+}
+
+function isDonkeyInternalGitCommand(command: string): boolean {
+  return (
+    command === "git status --porcelain --untracked-files=all" ||
+    command === "git rev-parse HEAD" ||
+    command === "git branch --show-current" ||
+    command === "git diff --cached --name-only -z -- .donkey" ||
+    command === "git add --all -- . :(exclude).donkey" ||
+    /^git checkout -b donkey\/run-[0-9T-]+Z$/.test(command) ||
+    /^git commit -m "donkey: run-[0-9T-]+Z"$/.test(command)
+  );
 }
 
 function hasEvidence(run: ProjectRun, title: string): boolean {

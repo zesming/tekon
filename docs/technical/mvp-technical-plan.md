@@ -2,7 +2,7 @@
 
 ## 0. 结论
 
-Donkey MVP 建议定位为“目标阶段驱动的 AI 自动交付运行时”，而不是固定从需求跑到 PR 的单一路径。本文中的“PR 交付”仍是后续 Phase 2+ 能力；当前本地版本已支持目标阶段判断、文档草案、可配置 Coding Agent Adapter、本地测试验收、风险报告和证据包。
+Donkey MVP 建议定位为“目标阶段驱动的 AI 自动交付运行时”，而不是固定从需求跑到 PR 的单一路径。本文中的“PR 交付”仍是后续 Phase 2+ 能力；当前本地版本已支持目标阶段判断、文档草案、可配置 Coding Agent Adapter、本地分支与 commit、本地测试验收、风险报告和证据包。
 
 核心判断：
 
@@ -38,7 +38,7 @@ flowchart TB
 
 ### 1.1 技术目标
 
-Donkey 的目标 MVP 要支撑 2-3 个相似技术基建仓库，覆盖 B/D 类需求的多种输入形态，并自动推进到合理目标阶段。当前版本已经支持“本地 Coding Agent Adapter 写代码 -> 本地测试 -> 证据包”；真实 PR 读取、CI 联动、团队级队列和稳定自动修复仍为 Phase 2+ 或产品化目标。
+Donkey 的目标 MVP 要支撑 2-3 个相似技术基建仓库，覆盖 B/D 类需求的多种输入形态，并自动推进到合理目标阶段。当前版本已经支持“创建本地分支 -> Coding Agent Adapter 写代码 -> 本地测试 -> 本地 commit -> 证据包”；真实 PR 读取、CI 联动、团队级队列和稳定自动修复仍为 Phase 2+ 或产品化目标。
 
 阶段口径：
 
@@ -422,7 +422,7 @@ evalMetrics:
 | Intent Agent | 判断输入类型、上下文完整度、目标阶段 | 读需求、读文档、读 Repo Profile |
 | PM Agent | 生成或补齐需求文档、验收标准和信息缺口 | 读写文档 |
 | Tech Agent | 生成技术方案、影响面、任务拆解和风险 | 读仓库、读文档、读历史样例 |
-| RD Agent | 调用 Coding Agent Adapter 或 Runner 执行代码修改 | 本地工作区写代码、运行限定命令；不 commit、不 push |
+| RD Agent | 调用 Coding Agent Adapter 执行代码修改 | 本地工作区写代码、运行限定命令；本地分支与 commit 由 Donkey Runner 统一管理，不 push、不创建 PR |
 | Test Agent | 运行单测、CI、E2E、静态检查，归档证据 | 运行测试命令、读取日志、写证据 |
 | Review Agent | 审阅 diff、方案、风险和测试证据 | 默认只读，不直接改代码 |
 | Evidence Agent | 当前汇总验收页、风险和未覆盖项；Phase 2+ 汇总 PR 描述 | 读运行记录、写报告 |
@@ -580,7 +580,7 @@ sequenceDiagram
 
 | 边界 | 要求 |
 |-|-|
-| 执行环境 | 当前只运行 allowlist 内本地命令和本地 Coding Agent Adapter；Phase 2+ 增强临时沙箱、容器或隔离 worktree |
+| 执行环境 | 当前只运行 allowlist 内本地命令和本地 Coding Agent Adapter，并提供 commit/push guardrail；这不是安全沙箱，未信任 Adapter 的硬隔离需要 Phase 2+ 的容器、无网络或系统级 sandbox Runner |
 | 生产凭证 | Agent 阶段不得注入生产凭证、生产数据库连接串或高权限 token |
 | Token 权限 | 当前 0.1.0 不需要代码仓库写 token；Phase 2+ 使用最小权限，优先只允许创建分支、提交 PR、读取 CI 状态 |
 | Secret 暴露 | setup 阶段凭证不得进入 Agent 可见上下文；日志与证据包必须脱敏 |
@@ -623,7 +623,7 @@ sequenceDiagram
 | 从想法到需求文档 | 当前 0.1.0 | 自动生成需求文档、验收标准、缺口列表 |
 | 从需求到技术方案 | 当前 0.1.0 | 自动生成技术方案、风险、任务拆解 |
 | 从技术方案到测试验收 | 当前 | 跳过需求阶段，运行本地测试命令，输出证据包 |
-| 从需求到代码变更和验收 | 当前 | 调用 Coding Agent Adapter 修改代码，运行测试，输出代码变更报告和证据包 |
+| 从需求到代码变更和验收 | 当前 | Donkey Runner 创建本地分支，调用 Coding Agent Adapter 修改代码，运行测试，通过后创建本地 commit，输出代码变更报告、Git 提交报告和证据包 |
 | 从已有代码变更说明到验收报告 | 当前扩展 | 基于用户提供的变更说明运行测试，输出证据包和 reviewer 关注点 |
 | 从真实 PR 到验收报告 | Phase 2+ | 读取 PR、diff、CI，运行测试，输出证据包和 reviewer 关注点 |
 | 测试失败自动修复 | Phase 2+ | 失败分类、自动修复、重跑测试，超过上限后升级 |

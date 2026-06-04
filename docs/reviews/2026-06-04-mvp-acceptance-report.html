@@ -20,7 +20,7 @@
   <h1>Donkey MVP 验收报告</h1>
   <p><strong>日期：</strong>2026-06-04</p>
   <p><strong>验收对象：</strong>Donkey 本地自动开发与验收 MVP</p>
-  <p class="ok"><strong>结论：</strong>验收通过。当前版本已把一句话输入、目标阶段判断、可配置 Coding Agent Adapter、本地代码修改、本地测试验收、风险降级、TUI 和 HTML 证据包串成可运行闭环；不会自动 commit、push、创建 PR、合入或上线。</p>
+  <p class="ok"><strong>结论：</strong>验收通过。当前版本已把一句话输入、目标阶段判断、可配置 Coding Agent Adapter、本地分支与 commit、本地代码修改、本地测试验收、风险降级、TUI 和 HTML 证据包串成可运行闭环；不会自动 push、创建 PR、合入或上线。</p>
 
   <h2>实现范围</h2>
   <table>
@@ -31,7 +31,8 @@
       <tr><td>文件态状态</td><td>通过</td><td>每次运行写入 <code>.donkey/runs/&lt;runId&gt;/state.json</code>，包含 schema version、Intent、Workflow、ToolRun、Evidence 和事件摘要。</td></tr>
       <tr><td>Intent / Target Stage Gate</td><td>通过</td><td>支持想法、需求、技术方案、任务/变更、PR 和高危需求降级；“按方案执行”进入开发链路，“直接执行测试验收”进入验收链路。</td></tr>
       <tr><td>Workflow 裁剪</td><td>通过</td><td>已有技术方案可跳过需求梳理；开发目标会显示并执行开发与测试验收；只验收目标不会声明已开发。</td></tr>
-      <tr><td>Coding Agent Adapter</td><td>通过</td><td>通过 <code>commands.develop</code> 调用 Codex、Claude 或自定义本地命令修改工作区，再继续运行测试并生成代码变更报告。</td></tr>
+      <tr><td>Coding Agent Adapter</td><td>通过</td><td>通过 <code>commands.develop</code> 调用 Codex、Claude 或自定义本地命令修改工作区；本地分支、测试验收和 commit 由 Donkey Runner 统一执行。</td></tr>
+      <tr><td>Git 分支与 commit</td><td>通过</td><td>开发链路会先检查工作区干净状态，创建 <code>donkey/&lt;runId&gt;</code> 分支；测试通过后提交本地 commit。脏工作区、已 staged 的 <code>.donkey</code> 产物会阻断；Adapter / 测试命令内的常规 commit 和 push 有临时 Git wrapper 与 hook guardrail；Runner-owned git 写操作使用 Donkey 控制的 hooksPath，避免仓库 hook 触发 push/PR；绕过 commit hook 导致 HEAD 或分支变化时会触发不变量阻断。</td></tr>
       <tr><td>Tool Gateway</td><td>工程验证通过</td><td>统一执行命令，默认拒绝未 allowlist 的命令，拦截 shell 控制符和重定向，以 <code>shell: false</code> 执行 argv；记录 stdout/stderr、耗时、退出码并做敏感信息脱敏。</td></tr>
       <tr><td>Evidence / HTML</td><td>通过</td><td>运行报告与 Eval 报告均生成 HTML 人审版。</td></tr>
       <tr><td>donkey-eval</td><td>工程验证通过</td><td>内置 6 个 EvalCase replay，通过率 100%，输入类型准确率 100%，目标阶段准确率 100%，高危误放行 0。当前样本仍需在真实 B/D 需求中继续扩充。</td></tr>
@@ -42,7 +43,7 @@
   <table>
     <thead><tr><th>命令</th><th>结果</th><th>关键输出</th></tr></thead>
     <tbody>
-      <tr><td><code>npm test</code></td><td>通过</td><td>包含 TypeScript build，28 个测试全部通过，0 失败。</td></tr>
+      <tr><td><code>npm test</code></td><td>通过</td><td>包含 TypeScript build，44 个测试全部通过，0 失败。</td></tr>
       <tr><td><code>npm run d -- "已有技术方案，请直接执行测试验收" --json</code></td><td>通过</td><td>Run <code>run-2026-06-04T10-04-17-320Z</code> 完成，目标阶段 <code>validation_report</code>，生成 HTML 证据包。</td></tr>
       <tr><td><code>npm run d -- "已有技术方案，请按方案执行" --repo &lt;empty-temp&gt; --json</code></td><td>通过</td><td>Run <code>run-2026-06-04T10-05-59-731Z</code> 被阻断在 <code>development</code>；HTML 显示开发缺少 <code>commands.develop</code>、测试未执行，未误报已执行。</td></tr>
       <tr><td><code>npm run donkey -- eval --repo . --json</code></td><td>通过</td><td>6/6 通过，通过率 100%，输入类型准确率 100%，目标阶段准确率 100%，高危误放行 0。</td></tr>
@@ -54,7 +55,7 @@
   <h2>本地验收产物</h2>
   <ul>
     <li>Validation 验收证据包：<code>.donkey/runs/run-2026-06-04T10-04-17-320Z/report.html</code></li>
-    <li>Eval 报告：<code>.donkey/eval/eval-1780567457121.html</code></li>
+    <li>Eval 报告：<code>.donkey/eval/eval-1780579090976.html</code></li>
     <li>本验收报告：<code>docs/reviews/2026-06-04-mvp-acceptance-report.html</code></li>
   </ul>
 
@@ -62,12 +63,12 @@
   <table>
     <thead><tr><th>对象</th><th>关键状态</th><th>归档摘要</th></tr></thead>
     <tbody>
-      <tr><td>测试套件</td><td><code>pass 28 / fail 0</code></td><td>覆盖 CLI、Intent、Workflow、Policy、Redaction、Repo Profile、Runner、Agent Registry、Evidence 和 Eval。</td></tr>
-      <tr><td>Development Adapter</td><td>通过</td><td>测试中的自定义开发命令实际写入工作区文件，随后运行测试并生成代码变更报告；HTML Workflow 同步显示开发执行和测试验收已执行。</td></tr>
+      <tr><td>测试套件</td><td><code>pass 44 / fail 0</code></td><td>覆盖 CLI、Intent、Workflow、Policy、Redaction、Repo Profile、Runner、Git 分支与 commit、Agent Registry、Evidence、文档图表静态检查和 Eval。</td></tr>
+      <tr><td>Development Adapter</td><td>通过</td><td>测试中的自定义开发命令实际写入工作区文件，随后由 Donkey Runner 运行测试、创建本地 commit 并生成代码变更报告；HTML Workflow 同步显示开发执行和测试验收已执行。</td></tr>
+      <tr><td>Git Branch / Commit Smoke</td><td>通过</td><td>开发链路创建 <code>donkey/&lt;runId&gt;</code> 分支并生成本地 commit；脏工作区、已 staged 的 <code>.donkey</code> 产物会阻断；Adapter 内部常规 commit/push 有执行期 guardrail。</td></tr>
       <tr><td>Validation Smoke</td><td><code>completed</code> / <code>validation_report</code></td><td>一句话命令可直接进入验收，运行本地测试并生成证据包。</td></tr>
       <tr><td>Development Gap Smoke</td><td><code>blocked</code> / <code>development</code></td><td>未配置开发命令时不会执行测试，证据包明确显示开发阻断和测试未执行。</td></tr>
       <tr><td>Eval Run</td><td>6/6 通过</td><td>通过率 100%，输入类型准确率 100%，目标阶段准确率 100%，高危误放行 0。</td></tr>
-      <tr><td>Reviewer</td><td>PASS</td><td>第二轮复审未发现 Must Fix 或 Should Fix；第一轮发现的问题已修复并复查通过。</td></tr>
     </tbody>
   </table>
 
@@ -75,7 +76,8 @@
   <ul>
     <li>当前版本不是正式 Server、Web Console、CI Runner、Container Runner 或团队级任务平台。</li>
     <li>Donkey 自身不内置编码模型服务；代码修改通过本地 Codex、Claude 或自定义命令等 Coding Agent Adapter 完成。</li>
-    <li>Donkey 不会自动 commit、push、创建 PR、合入、上线或修改生产高危资源。</li>
+    <li>Donkey 会自动创建本地分支与 commit，但不会 push、创建 PR、合入、上线或修改生产高危资源。</li>
+    <li>当前本地 Runner 不是安全沙箱；对未信任或恶意 Adapter 的硬隔离需要后续容器、无网络或系统级 sandbox Runner。</li>
     <li>内置 Intent/Gate 仍是规则化 MVP，后续需要用真实 B/D 类需求样本扩展 EvalCase。</li>
     <li>测试通过只代表配置的验证命令通过，最终是否接受交付仍由人审阅 HTML 证据包和本地 diff 决定。</li>
   </ul>

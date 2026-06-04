@@ -16,6 +16,23 @@ test("allows ordinary test commands", () => {
   assert.equal(result.allowed, true);
 });
 
+test("allows local git branch and commit commands but blocks push", () => {
+  const profile = defaultRepoProfile(".");
+
+  assert.equal(evaluateCommandPolicy("git status --porcelain --untracked-files=all", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git checkout -b donkey/run-2026-06-04T10-00-00-000Z", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git checkout -b donkey/manual", profile).allowed, false);
+  assert.equal(evaluateCommandPolicy("git rev-parse HEAD", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git branch --show-current", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git diff --cached --name-only -z -- .donkey", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git add --all -- . :(exclude).donkey", profile).allowed, true);
+  assert.equal(evaluateCommandPolicy('git commit -m "donkey: run-2026-06-04T10-00-00-000Z"', profile).allowed, true);
+  assert.equal(evaluateCommandPolicy("git commit -m x --amend", profile).allowed, false);
+  assert.equal(evaluateCommandPolicy('git commit -m "donkey: run-2026-06-04T10-00-00-000Z" --all', profile).allowed, false);
+  assert.equal(evaluateCommandPolicy('git commit -m "donkey: run-2026-06-04T10-00-00-000Z" --allow-empty', profile).allowed, false);
+  assert.equal(evaluateCommandPolicy("git push origin main", profile).allowed, false);
+});
+
 test("denies commands by default when not allowlisted", () => {
   const result = evaluateCommandPolicy("echo hello", defaultRepoProfile("."));
 
