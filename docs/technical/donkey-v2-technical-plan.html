@@ -2,30 +2,43 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Donkey V2 技术方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1a1a1a; }
-  h1 { font-size: 1.8em; border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 40px; }
-  h2 { font-size: 1.4em; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-top: 32px; }
-  h3 { font-size: 1.15em; margin-top: 24px; }
-  h4 { font-size: 1.05em; margin-top: 20px; }
-  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
-  pre { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; overflow-x: auto; font-size: 0.85em; line-height: 1.5; }
-  pre code { background: none; padding: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
-  th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }
-  th { background: #f5f5f5; font-weight: 600; }
-  strong { color: #222; }
-  hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
-  li { margin: 4px 0; }
-  blockquote { border-left: 4px solid #ddd; margin: 16px 0; padding: 8px 16px; color: #555; background: #fafafa; }
+  body{font-family:'Noto Serif SC',Georgia,serif;background:#faf9f6;color:#2c2416;line-height:1.8;-webkit-font-smoothing:antialiased;max-width:900px;margin:0 auto;padding:40px 20px;font-size:17px}
+  h1{font-size:2.2rem;font-weight:700;color:#3d2e1a;letter-spacing:-0.02em;line-height:1.3;margin-bottom:0.5rem}
+  h1+p{color:#6b5e4a;border-left:3px solid #d4764b;padding:0.5rem 0 0.5rem 1.25rem;margin-bottom:2.5rem;font-size:1rem}
+  h2{font-size:1.45rem;font-weight:700;color:#3d2e1a;margin:3rem 0 1rem;padding-top:1.5rem;border-top:1px solid #e8e0d5}
+  h3{font-size:1.1rem;font-weight:600;color:#3d2e1a;margin:2rem 0 0.75rem}
+  h4{font-size:.95rem;font-weight:600;margin:1.5rem 0 .5rem}
+  p{margin:.75rem 0}
+  strong{color:#3d2e1a;font-weight:600}
+  a{color:#b85c3a;text-decoration:none;border-bottom:1px solid transparent;transition:border-color .2s}
+  a:hover{border-bottom-color:#d4764b}
+  blockquote{border-left:3px solid #e8e0d5;padding:.35rem 0 .35rem 1rem;margin:1rem 0;color:#6b5e4a;font-size:.92rem;font-style:italic}
+  ul,ol{margin:.75rem 0;padding-left:1.5rem}
+  li{margin:.3rem 0}
+  ul>li::marker{color:#d4764b}
+  hr{border:none;border-top:1px solid #e8e0d5;margin:2.5rem 0}
+  code{font-family:'JetBrains Mono',monospace;font-size:.82em;background:#f5f0e8;padding:.15em .4em;border-radius:3px;color:#5c4a32;font-weight:500}
+  pre{background:#faf7f2;border:1px solid #e8e0d5;border-radius:6px;padding:1.25rem 1.5rem;overflow-x:auto;margin:1rem 0;line-height:1.6;font-size:.8rem;box-shadow:0 1px 3px rgba(44,36,22,.04)}
+  pre code{background:none;padding:0;font-size:inherit;color:#3d2e1a;font-weight:400}
+  table{width:100%;border-collapse:collapse;margin:1.25rem 0;font-size:.88rem;box-shadow:0 1px 3px rgba(44,36,22,.04);border-radius:6px;overflow:hidden}
+  th{padding:.7rem 1rem;text-align:left;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#3d2e1a;background:#f5f0e8;border-bottom:2px solid #e8e0d5}
+  td{padding:.6rem 1rem;border-bottom:1px solid #e8e0d5;vertical-align:top}
+  tbody tr:nth-child(even){background:#faf7f2}
+  tbody tr:hover{background:#fdf5ed}
+  @media(max-width:768px){body{font-size:15px;padding:20px 16px}h1{font-size:1.6rem}h2{font-size:1.2rem}pre{padding:1rem;font-size:.75rem}table{font-size:.78rem}th,td{padding:.45rem .6rem}}
+  @media print{body{font-size:12pt;background:white}pre{break-inside:avoid;background:#f8f8f8;border:1px solid #ddd}h2{break-before:page}}
 </style>
 </head>
 <body>
 <h1>Donkey V2 技术方案</h1>
 
-<blockquote><p>本文档是 Donkey 重构版本（V2）的完整技术方案。V2 保留 V1 的核心定位（面向技术基建团队的 AI 自动交付系统），在架构上进行了根本性重构：从单块 CLI 工具演进为基于角色文件系统 + 可编排 Workflow 引擎的 AI 原生产研流程执行系统。</p></blockquote>
+<blockquote>本文档是 Donkey 重构版本（V2）的完整技术方案。V2 保留 V1 的核心定位（面向技术基建团队的 AI 自动交付系统），在架构上进行了根本性重构：从单块 CLI 工具演进为基于角色文件系统 + 可编排 Workflow 引擎的 AI 原生产研流程执行系统。</blockquote>
 
 <h2>一、产品定位与核心思路</h2>
 
@@ -70,7 +83,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h3>2.1 总体架构图</h3>
 
-<pre><code class="language-">┌──────────────────────────────────────────────────────────────┐
+<pre><code>┌──────────────────────────────────────────────────────────────┐
 │                      Donkey System                            │
 ├──────────────────────────────────────────────────────────────┤
 │                                                               │
@@ -147,7 +160,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h3>3.1 对象关系</h3>
 
-<pre><code class="language-">Demand ──────→ Project ──────→ WorkflowInstance
+<pre><code>Demand ──────→ Project ──────→ WorkflowInstance
 （需求卡）      （项目实例）     （流程实例）
                                     │
                           ┌─────────┼─────────┐
@@ -171,7 +184,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>Demand（需求卡）</h4>
 
-<pre><code class="language-typescript">interface Demand {
+<pre><code>interface Demand {
   id: string;
   title: string;
   description: string;            // 原始需求描述
@@ -187,7 +200,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>Project（项目实例）</h4>
 
-<pre><code class="language-typescript">interface Project {
+<pre><code>interface Project {
   id: string;
   demandId: string;
   name: string;
@@ -204,7 +217,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>WorkflowInstance（流程实例）</h4>
 
-<pre><code class="language-typescript">interface WorkflowInstance {
+<pre><code>interface WorkflowInstance {
   id: string;
   templateRef: string;           // 模板引用或 'dynamic' 标记
   projectId: string;
@@ -216,7 +229,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>Phase（阶段）</h4>
 
-<pre><code class="language-typescript">interface Phase {
+<pre><code>interface Phase {
   id: string;
   title: string;
   nodes: Node[];
@@ -232,7 +245,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>Node（最小执行单元）</h4>
 
-<pre><code class="language-typescript">interface Node {
+<pre><code>interface Node {
   id: string;
   role: string;
   task: {
@@ -255,7 +268,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>RoleRun（角色执行记录）</h4>
 
-<pre><code class="language-typescript">interface RoleRun {
+<pre><code>interface RoleRun {
   id: string;
   nodeId: string;
   role: string;
@@ -270,7 +283,7 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 <h4>Gate（门禁）</h4>
 
-<pre><code class="language-typescript">type GateType =
+<pre><code>type GateType =
   | 'build' | 'test' | 'lint' | 'e2e-pass'
   | 'schema' | 'security-scan' | 'human';
 
@@ -306,7 +319,7 @@ interface GateResult {
   retriesUsed: number;
   fixedByAgent: boolean;
 }
-<pre><code class="language-">
+<pre><code>
 <h4>ArtifactRef（产物引用）</h4>
 
 </code></pre>typescript
@@ -323,7 +336,7 @@ interface ArtifactRef {
 // 2. 若有 phaseIndex → 限定在该 phase 及之前的所有产物中找最近匹配
 // 3. 若仅 type → 在所有已完成 Node 的产物中找最近匹配
 // 4. 若找不到 → Node 进入 blocked 状态，等待人工指定
-<pre><code class="language-">
+<pre><code>
 <h4>Artifact（产物）</h4>
 
 </code></pre>typescript
@@ -353,7 +366,7 @@ interface Artifact {
 // Reviewer 角色报告通过 → approved
 // 被驳回 → needs-revision
 // 项目归档 → archived
-<pre><code class="language-">
+<pre><code>
 <h4>AuditEvent（审计日志事件）</h4>
 
 </code></pre>typescript
@@ -368,7 +381,7 @@ interface AuditEvent {
   payload: Record&lt;string, unknown&gt;;  // 事件相关的结构化数据
   roleSource?: string;               // 角色配置的实际来源路径（用于审计追溯）
 }
-<pre><code class="language-">
+<pre><code>
 <h3>3.3 Node 状态流转</h3>
 
 </code></pre>
@@ -405,7 +418,7 @@ interface AuditEvent {
            │   │         │          │               │
            ▼   ▼         ▼          ▼               │
        passed needs-revision blocked failed          │
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>四、角色系统</h2>
@@ -455,7 +468,7 @@ roles/
     ├── system.md
     └── skills/
         └── delivery-summary.md
-<pre><code class="language-">
+<pre><code>
 <h3>4.2 agent.yaml 定义</h3>
 
 </code></pre>yaml
@@ -491,7 +504,7 @@ context:
   includeHistory: true
   knowledgeFiles:             # 指定要注入的知识文件名
 <li>prd-template.md         # 显式设置时仅注入列表中的文件；不设/空数组时注入全部 .md</li>
-<pre><code class="language-">
+<pre><code>
 <h4>tools.yaml 格式</h4>
 
 </code></pre>yaml
@@ -506,7 +519,7 @@ tools:
 <li>name: playwright</li>
     description: 浏览器 E2E 测试
     allowedCommands: [test]
-<pre><code class="language-">
+<pre><code>
 <code>tools.yaml</code> 定义该角色可调用的外部工具及允许的命令白名单。Engine 在 spawn Agent 子进程时将 <code>tools.yaml</code> 内容渲染为人类可读的 Markdown 片段，注入到 system prompt 的 <code>{{loaded_tools}}</code> 变量位置。危险命令（如 <code>rm -rf</code>、<code>git push --force</code>）不在白名单中时，Agent 运行时会被 Donkey 的 Tool Gateway 拦截。
 
 <h4>system.md 模板变量完整列表</h4>
@@ -539,7 +552,7 @@ agent:
   promptMode: arg-append       # prompt 注入方式（见下文）
   env:
     CLAUDE_CODE_API_KEY: ${CC_API_KEY}
-<pre><code class="language-">
+<pre><code>
 <h4>promptMode：Prompt 注入协议</h4>
 
 | 模式 | 行为 | 适用场景 |
@@ -588,7 +601,7 @@ agent:
 <h2>上下文</h2>
 上游产物：{{input_artifacts}}
 项目背景：{{project_context}}
-<pre><code class="language-">
+<pre><code>
 <h3>4.4 角色加载优先级</h3>
 
 </code></pre>
@@ -596,7 +609,7 @@ agent:
 <li>用户级：~/.donkey/roles/&lt;roleName&gt;/            ← 使用者全局自定义</li>
 <li>内置：  &lt;donkey-pkg&gt;/roles/&lt;roleName&gt;/         ← 开发者预置</li>
 （找到第一个存在的目录即停止，不合并文件。定制角色时需完整复制角色文件夹后修改。Phase 2 将支持文件级 deep merge 覆盖策略，降低定制成本）
-<pre><code class="language-">
+<pre><code>
 <h3>4.5 Role Runner 执行流程</h3>
 
 <h4>Skill 解析规范</h4>
@@ -618,7 +631,7 @@ priority: required       # required: 强制执行; optional: 按匹配度选择
 <li>具体场景和触发条件？</li>
 <li>边界和约束？</li>
 ...
-<pre><code class="language-">
+<pre><code>
 <strong>映射规则</strong>：
 <li>文件名（去掉 <code>.md</code> 后缀）= skill ID（如 <code>clarify.md</code> → id=<code>clarify</code>）</li>
 <li>Workflow 模板中 <code>skills: [clarify, acceptance]</code> 直接按 ID 匹配</li>
@@ -649,7 +662,7 @@ priority: required       # required: 强制执行; optional: 按匹配度选择
 <li>stdout 收集 → 解析为结构化产物</li>
 <li>产物写入 Artifact Store</li>
 <li>触发 Gate 检查</li>
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>五、Workflow 引擎</h2>
@@ -729,7 +742,7 @@ phases:
           instruction: "汇总所有产物，生成交付证据包和 PR"
           input: [demand-card, code-changes, test-report, review-report]
           output: [delivery-package]
-<pre><code class="language-">
+<pre><code>
 <h3>5.2 input/output 简写规则</h3>
 
 YAML 模板中 <code>input</code> 和 <code>output</code> 支持简写，Engine 解析时自动展开：
@@ -744,7 +757,7 @@ input:
 <li>{ type: code-changes, nodeId: node-002 }   # 精确指定来源 Node</li>
 <li>{ type: tech-design }                       # 按类型匹配最近产物</li>
 output: [code-changes]
-<pre><code class="language-">
+<pre><code>
 <strong>转换规则</strong>：若元素为字符串 → 展开为 <code>{ type: <string> }</code>；若元素为对象 → 保持原样，必须包含 <code>type</code> 字段。
 
 <h3>5.3 Engine 原语</h3>
@@ -766,7 +779,7 @@ pipeline&lt;T&gt;(
 parallel(
   thunks: Array&lt;() =&gt; Promise&lt;Result&gt;&gt;
 ): Promise&lt;Result[]&gt;
-<pre><code class="language-">
+<pre><code>
 参考 Claude Code Dynamic Workflow 的模式——pipeline 是默认模式，parallel 只在必要时使用。
 
 <h3>5.4 Engine 执行流程</h3>
@@ -786,7 +799,7 @@ parallel(
    c. 阶段完成 → 进入下一个 phase
 <li>所有 phase 完成 → 项目标记为 completed</li>
 <li>生成交付证据包</li>
-<pre><code class="language-">
+<pre><code>
 <h3>5.5 状态持久化</h3>
 
 每个 Node 执行前后写 SQLite，支持中断恢复：
@@ -795,14 +808,14 @@ parallel(
 场景：
 donkey run → PM 完成 → RD 执行中 → Ctrl+C
 donkey run → Engine 读 SQLite → 从 RD 的 Node 继续
-<pre><code class="language-">
+<pre><code>
 <h3>5.6 动态 Workflow 模式</h3>
 
 不依赖预定义模板，由 PM Agent 动态生成 workflow spec。引擎不关心来源。
 
 </code></pre>bash
 donkey run --dynamic "给任务平台加批量重试"
-<pre><code class="language-">
+<pre><code>
 执行流程：
 
 </code></pre>
@@ -816,7 +829,7 @@ donkey run --dynamic "给任务平台加批量重试"
 
 --save-as flag: 保存为模板供后续复用
 donkey run --dynamic --save-as batch-retry "给任务平台加批量重试"
-<pre><code class="language-">
+<pre><code>
 <h3>5.7 脚手架命令</h3>
 
 </code></pre>bash
@@ -828,7 +841,7 @@ donkey workflow create --from standard-feature --name my-custom
 
 <h1>快速生成骨架</h1>
 donkey workflow create --name api-dev --roles pm,rd,qa --preset api
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>六、Gate Engine</h2>
@@ -867,7 +880,7 @@ Gate Engine 不调 LLM。需要智能判断时委托给 Reviewer Agent。
 </code></pre>
 build → test → lint → e2e → security → schema → human
  快     快      快     慢      慢         快      阻塞
-<pre><code class="language-">
+<pre><code>
 先跑快的，快速失败；慢的后面跑；阻塞的 human gate 总是最后。
 
 <h3>6.5 Gate Chain 执行流程</h3>
@@ -901,7 +914,7 @@ Node 完成 → Artifact 保存
       └──────┬────────────┘
              │
         Gate 通过 → 下一个 Gate
-<pre><code class="language-">
+<pre><code>
 <h3>6.6 产物 Schema Gate</h3>
 
 每个 ArtifactType 有对应的 JSON Schema：
@@ -927,7 +940,7 @@ const DEMAND_CARD_SCHEMA = {
     }
   }
 };
-<pre><code class="language-">
+<pre><code>
 失败处理：解析 Artifact 内容 → ajv.validate(schema, content) → fail 则 spawn 对应角色 Agent 补全。
 
 <hr>
@@ -985,7 +998,7 @@ constraints:
 
 <li>rule: "建议为 E2E 测试预留独立阶段"</li>
       suggest: { separateE2EPhase: true }
-<pre><code class="language-">
+<pre><code>
 <h3>7.2 Gate 注入位置语义</h3>
 
 <code>injectGate.at</code> 指定 gate 插入到 workflow 中的位置：
@@ -1006,7 +1019,7 @@ constraints:
 defaultNodeTemplate:
   retry: 1
   source: constraint     # 标记为约束注入，在 UI 中显示 [AUTO]
-<pre><code class="language-">
+<pre><code>
 每个角色的默认 task instruction 在角色 <code>agent.yaml</code> 中定义：
 
 </code></pre>yaml
@@ -1015,7 +1028,7 @@ constraintTask:
   instruction: "基于安全审查 skill 对代码变更进行安全分析"
   skills: [security]
   output: [security-report]
-<pre><code class="language-">
+<pre><code>
 <h3>7.4 动态模式注入示例</h3>
 
 </code></pre>
@@ -1028,7 +1041,7 @@ constraintTask:
   → conditional: tags=[data] → 注入 rollback-plan 产物要求
   → soft: 提示可考虑并行开发
 → 最终 Workflow: 5 phases → 6 phases（注入 1 个安全审查阶段）
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>八、Agent Runtime</h2>
@@ -1053,7 +1066,7 @@ async function runAgent(run: AgentRun): Promise&lt;AgentResult&gt; {
   // 4. 等待完成
   // 5. 返回结果
 }
-<pre><code class="language-">
+<pre><code>
 <h3>8.2 Git Worktree 隔离</h3>
 
 </code></pre>
@@ -1066,7 +1079,7 @@ async function runAgent(run: AgentRun): Promise&lt;AgentResult&gt; {
 每个 worktree：
 ├── &lt;原仓库代码&gt;
 └── .donkey-output/             # Agent 写入产物的目录
-<pre><code class="language-">
+<pre><code>
 执行完后 Engine 从 <code>.donkey-output/</code> 读取产物，worktree 可清理或保留审计。
 
 <h3>8.3 支持自定义命令</h3>
@@ -1088,7 +1101,7 @@ defaults:
     args:
       - --permission-mode
       - bypassPermissions
-<pre><code class="language-">
+<pre><code>
 内置 preset（<code>claude-code</code> / <code>codex</code>）是预设的 command + args 组合，用户可完全替换。只要符合"stdin prompt → stdout 产物"协议即可。
 
 <hr>
@@ -1129,7 +1142,7 @@ donkey log [--project &lt;id&gt;]    # 查看审计日志
 
 <h1>── 清理 ──</h1>
 donkey clean                   # 清理 worktree
-<pre><code class="language-">
+<pre><code>
 <h3>9.2 status 输出示例</h3>
 
 </code></pre>
@@ -1147,7 +1160,7 @@ Status:  executing
 
 Gates: 4 passed, 0 failed, 1 pending
 Risk: low · Agent: claude-code
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>十、Web Dashboard</h2>
@@ -1169,7 +1182,7 @@ Next.js + shadcn/ui + tRPC（共享 core types）。React Query 做缓存层，S
 /roles                    角色管理 · 列表/查看
 /workflows                Workflow 模板管理
 /settings                 项目设置 · 约束规则 · 关联仓库
-<pre><code class="language-">
+<pre><code>
 <h3>10.3 驾驶舱布局</h3>
 
 </code></pre>
@@ -1193,7 +1206,7 @@ Next.js + shadcn/ui + tRPC（共享 core types）。React Query 做缓存层，S
 │                                                          │
 │  [Pause] [Cancel] [View Audit]                           │
 └─────────────────────────────────────────────────────────┘
-<pre><code class="language-">
+<pre><code>
 <hr>
 
 <h2>十一、测试与效果评估</h2>
@@ -1211,7 +1224,7 @@ Next.js + shadcn/ui + tRPC（共享 core types）。React Query 做缓存层，S
      │   单元    │  每个模块独立：template parser / constraint validator
      │   60+    │
      └──────────┘
-<pre><code class="language-">
+<pre><code>
 <h3>11.2 E2E Fixture 设计</h3>
 
 </code></pre>
