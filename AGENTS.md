@@ -1,21 +1,58 @@
-# Donkey Repository Instructions
+# Donkey 仓库指令
 
-This repository stores product, technical, and research documents for Donkey.
+本仓库存放 Donkey 的产品方案、技术方案、调研材料、审阅记录和后续实现计划。除非用户明确要求英文，所有描述性文字、文档正文、评审意见和结论输出均以中文为主；代码标识、协议名、产品名、命令、错误信息和引用标题可保留英文。
 
-## Working Rules
+## 目录约定
 
-- Keep product plans in `docs/product/`.
-- Keep technical plans in `docs/technical/`.
-- Keep source research notes in `docs/research/`.
-- Keep review records in `docs/reviews/`.
-- Prefer concise Markdown with tables and decision records.
-- For claims about current industry products, frameworks, or standards, include source links.
-- Product documents should describe user value and scope; technical documents may describe architecture and tradeoffs, but should avoid premature implementation details.
-- Do not commit secrets, API keys, tokens, internal credentials, or production URLs.
+- 产品方案放在 `docs/product/`。
+- 技术方案放在 `docs/technical/`。
+- 外部调研和资料摘录放在 `docs/research/`。
+- 审阅记录放在 `docs/reviews/`。
+- 实施计划放在 `docs/superpowers/plans/`。
+- 需要人类审阅的正式文档必须以 HTML 方式呈现；可同时保留 Markdown 或 XML 源稿，但交付给人审阅的版本应提供 `.html`。
 
-## Review Expectations
+## 写作原则
 
-- Major documents should be reviewed by a subagent reviewer before being considered ready for user review.
-- Address all `must fix` findings before asking the user to review.
-- If reviewer feedback is technically incorrect, document the reasoning instead of blindly applying it.
+- 中文优先，表达直接、可验证、少空话。
+- 产品文档聚焦用户、价值、场景、边界、指标和风险，不写代码级实现细节。
+- 技术文档聚焦架构、技术选型、权衡、风险、验证和演进路径，不把方案写成零散工具清单。
+- 涉及当前行业产品、框架、协议、模型、标准或安全风险时，必须配资料链接，并说明“资料内容”和“对 Donkey 的判断依据”。
+- 所有结论要区分事实、推断和建议；推断要说明依据，不把主观判断写成事实。
+- 不提交密钥、token、生产凭证、内部高权限 URL 或任何敏感信息。
 
+## Karpathy-style 工程原则
+
+本仓库吸收 `karpathy-skill` 的核心工程思维，但不做角色扮演，也不完整复刻其全部心智模型。结合 Donkey 场景，选取以下工程原则：
+
+- **先看事实再判断**：涉及模型、工具、框架、协议、公司或最新能力时，先查资料、看文档、看 benchmark、看代码或官方说明，再输出判断。
+- **Demo 到部署有 March of Nines 差距**：能演示不代表能生产可用。评估 AI/Agent 能力时必须看尾部失败、可靠性、恢复能力、权限边界和真实工作流闭环。
+- **构建即理解**：关键技术判断不能只停留在概念层，要能说明最小可行机制、输入输出、状态边界和验证方式。
+- **锯齿状智能**：不要假设模型能力均匀可靠。方案必须标注适用场景、失败模式、人工兜底和测试缺口。
+- **Iron Man suit 优先于 robot**：Donkey 的自动化应增强人类交付能力，而不是在高风险场景移除人的控制权。默认自动推进到 PR，但合入、上线和高危动作必须受控。
+- **不要当英雄**：复杂问题先用最简单、最可验证的方案，不为展示技术复杂度而引入框架或平台。
+- **数据飞轮优先**：每次执行、失败、返工、审阅意见和测试缺口都应沉淀为仓库画像、规则、模板或评估数据。
+
+## Subagent 使用规则
+
+- 复杂类任务应尽量拆给 subagents 执行，包括但不限于：大文档撰写、复杂调研、方案审阅、架构评估、代码审查、跨文件改动和验收验证。
+- plan 类和 review 类 subagent 必须使用 `xhigh` 思考等级。
+- 所有最终结论输出之前，包括但不限于文档、技术方案、产品方案、代码、提交说明和对用户的最终结论，均必须先使用 `xhigh` subagent review。
+- 若当前 runtime 不支持 subagent 或无法设置 `xhigh`，必须明确说明限制，并执行保守人工自检后再交付。
+- review 若检出必须修复项，必须先修复，再启动新一轮 `xhigh` subagent 复查；除非用户明确要求“只审阅不修改”。
+- 复查循环持续到 reviewer 明确未检出必须修复项或未检出问题；建议修复项可记录后交给用户决策，不强制无限循环。
+- 如果 reviewer 的意见不正确，不要盲修；应记录反驳依据，并在下一轮复查中说明。
+
+## 审阅与交付要求
+
+- 任何需要人审阅的文档，都应生成 HTML 审阅版，并在最终回复中给出本地路径。
+- 修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。
+- 重要文档的审阅记录应保存到 `docs/reviews/`，包含 reviewer 结论、必须修复项、修复摘要和复查结果。
+- 交付前必须做本地验证：文件存在、关键内容非空、无 `TBD/TODO/FIXME/placeholder` 等占位符、链接和章节结构可读。
+- 修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。
+
+## Donkey 项目边界
+
+- Donkey 的当前目标是面向技术基建团队，优先支持 B/D 类需求：研发效能工具功能迭代、技术平台增强、Bugfix 和小优化。
+- MVP 默认自动交付到 PR 和交付证据包，不自动合入主干，不自动上线生产。
+- 高危动作包括但不限于：生产写操作、删除数据、权限扩大、密钥变更、不可逆迁移、自动合入、自动上线。
+- 技术方案必须维护“自动化效率”和“风险可控”之间的平衡。
