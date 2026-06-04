@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Donkey V2 技术方案</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1a1a1a; }
+  h1 { font-size: 1.8em; border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 40px; }
+  h2 { font-size: 1.4em; border-bottom: 1px solid #ddd; padding-bottom: 8px; margin-top: 32px; }
+  h3 { font-size: 1.15em; margin-top: 24px; }
+  h4 { font-size: 1.05em; margin-top: 20px; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; overflow-x: auto; font-size: 0.85em; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; }
+  strong { color: #222; }
+  hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
+  li { margin: 4px 0; }
+  blockquote { border-left: 4px solid #ddd; margin: 16px 0; padding: 8px 16px; color: #555; background: #fafafa; }
+</style>
+</head>
+<body>
+<h1>Donkey V2 技术方案</h1>
+
+<blockquote><p>本文档是 Donkey 重构版本（V2）的完整技术方案。V2 保留 V1 的核心定位（面向技术基建团队的 AI 自动交付系统），在架构上进行了根本性重构：从单块 CLI 工具演进为基于角色文件系统 + 可编排 Workflow 引擎的 AI 原生产研流程执行系统。</p></blockquote>
+
+<h2>一、产品定位与核心思路</h2>
+
+<h3>1.1 定位</h3>
+
+Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提出需求目标，Donkey 自动组织可协作的 AI 角色团队，通过动态 Workflow、角色工具链和质量 Gate，把项目从需求推进到可验收的 PR。
+
+<strong>一句话定位</strong>：让技术基建团队从"自己提出需求、自己拆、自己做、自己测、自己催"转向"提出目标，验收交付"。
+
+<h3>1.2 核心设计思路</h3>
+
+<li><strong>角色即文件夹</strong>：每个角色（PM/RD/QA 等）以文件夹形式维护（<code>agent.yaml</code> + <code>system.md</code> + <code>skills/</code> + <code>tools.yaml</code> + <code>knowledge/</code>），运行时自动扫描加载。约定优于配置。</li>
+<li><strong>流程即 Workflow 模板</strong>：研发流程由可配置的 YAML 模板定义，根据需求类型自动匹配和编排。模板可通过脚手架交互式创建，也可由 Agent 动态生成。</li>
+<li><strong>引擎是纯确定性调度器</strong>：Orchestrator 不做 LLM 调用，只做状态机和任务调度。所有"智能判断"委托给对应的角色 Agent。</li>
+<li><strong>产物驱动而非聊天驱动</strong>：角色 Agent 之间通过结构化产物（需求卡、PRD、测试报告等）交接，不以自由聊天推进项目。</li>
+<li><strong>Autonomy-first, Risk-gated</strong>：执行阶段尽量全自动到 PR，交付阶段强证据验收。高危动作必须动态插入人工确认 Gate。</li>
+
+<h3>1.3 架构原则</h3>
+
+| 原则 | 含义 | 来源 |
+|------|------|------|
+| 角色原生 | 每个角色是独立实体，有身份、能力、工具、知识 | Multica / CrewAI |
+| 生成与评审分离 | 产出 Agent ≠ 评审 Agent | SDD 社区共识 |
+| 上下文独立 | Agent 在干净上下文启动，只注入当前阶段必需知识 | 逐级披露策略 |
+| 结构化交接 | Agent 间通过结构化产物传递信息 | SDD / spec-first |
+| 硬门禁 | Gate 是确定性检查，不是软约束 | autonomous-dev 12-element harness |
+| 产物驱动 | 项目推进依据产物和 Gate，不以聊天记录 | Alpha-G 4.3、Beta-G 4.1 |
+| 约定优于配置 | 角色文件夹按约定存放，自动发现加载 | OpenClaw 模式 |
+
+<h3>1.4 术语约定</h3>
+
+| 术语 | 含义 |
+|------|------|
+| <strong>Orchestrator</strong> | 系统级调度中心，统称。包含 Workflow Engine + Constraint Validator + Gate Engine 调度器 |
+| <strong>Workflow Engine</strong> | Orchestrator 的核心子模块，负责 Workflow 模板解析、Phase/Node 实例化和执行调度 |
+| <strong>Role Runner</strong> | Role System 的子模块，负责角色加载、prompt 组装和 Agent 进程 spawn |
+| <strong>Engine</strong> | 在上下文明确时为 Workflow Engine 的简称 |
+
+<hr>
+
+<h2>二、系统架构</h2>
+
+<h3>2.1 总体架构图</h3>
+
+<pre><code class="language-">┌──────────────────────────────────────────────────────────────┐
+│                      Donkey System                            │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌─────────────┐  ┌──────────────────────────────────────┐   │
+│  │   CLI       │  │         Web Dashboard                 │   │
+│  │ (Commander  │  │   (Next.js + tRPC + shadcn/ui)       │   │
+│  │  + ink)     │  │                                       │   │
+│  └──────┬──────┘  └────────────────┬─────────────────────┘   │
+│         │                          │                          │
+│         └──────────┬───────────────┘                          │
+│                    │                                          │
+│         ┌──────────▼──────────────┐                           │
+│         │      Core API           │  ← tRPC router            │
+│         │  (packages/core)        │     CLI 直接调用函数      │
+│         │                         │     Web 通过 HTTP          │
+│         │  ┌───────────────────┐  │                           │
+│         │  │ Workflow Engine   │  │  纯状态机 + 调度器        │
+│         │  │ (pipeline/parallel│  │  不调 LLM                │
+│         │  │  /phase 原语)     │  │                          │
+│         │  ├───────────────────┤  │                           │
+│         │  │ Role System       │  │  扫描→加载→组装→运行     │
+│         │  ├───────────────────┤  │                           │
+│         │  │ Gate Engine       │  │  build/test/lint/        │
+│         │  │                   │  │  e2e/schema/security     │
+│         │  ├───────────────────┤  │                           │
+│         │  │ Artifact Store    │  │  产物 CRUD + 版本化      │
+│         │  ├───────────────────┤  │                           │
+│         │  │ Constraint        │  │  hard/conditional/       │
+│         │  │ Validator         │  │  soft 三层约束           │
+│         │  ├───────────────────┤  │                           │
+│         │  │ Audit Logger      │  │  不可变事件日志           │
+│         │  └───────────────────┘  │                           │
+│         └──────────┬──────────────┘                           │
+│                    │                                          │
+│         ┌──────────▼──────────────┐                           │
+│         │    Agent Runtime        │                           │
+│         │  spawn Claude Code/     │                           │
+│         │  Codex (子进程)          │                           │
+│         │  Git Worktree 隔离      │                           │
+│         └──────────┬──────────────┘                           │
+│                    │                                          │
+│         ┌──────────▼──────────────┐                           │
+│         │    Storage              │                           │
+│         │  SQLite (better-sqlite3)│  状态机 + 审计 + 元数据   │
+│         │  + FS (产物/角色/WF)    │  产物以文件存储           │
+│         └─────────────────────────┘                           │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+</code></pre>
+
+<h3>2.2 技术栈</h3>
+
+| 层 | 选择 | 理由 |
+|---|------|------|
+| <strong>语言</strong> | TypeScript | AI Coding 友好度最高；Claude Code/Codex 生态原生 |
+| <strong>Monorepo</strong> | pnpm workspaces + tsup | 最简 monorepo 方案，tsup 打包快 |
+| <strong>Core</strong> | TypeScript 纯逻辑 | CLI 和 Web 共享 |
+| <strong>CLI</strong> | Commander.js + ink | Commander 生态最大；ink = React 渲染终端 UI |
+| <strong>Web</strong> | Next.js + shadcn/ui + tRPC | 端到端类型安全；Multica 同款栈 |
+| <strong>数据库</strong> | SQLite (<code>better-sqlite3</code>) | 零依赖，同步 API，单机场景最优 |
+| <strong>测试</strong> | Vitest + Playwright | 单测到 E2E 全覆盖 |
+| <strong>Agent 隔离</strong> | Git Worktree | Codex/CC 原生支持，Agent 间互不干扰 |
+
+<h3>2.3 为什么用 TypeScript</h3>
+
+<li>AI Coding Agent（Claude Code / Codex / Cursor）的训练数据中 TypeScript 压倒性多，代码生成质量和速度明显优于 Go/Rust</li>
+<li>Donkey 本身就是一个会被 AI 辅助开发的项目，技术栈应该对自己最友好</li>
+<li>Node.js 生态的 CLI、Web、测试工具链最完整</li>
+<li>角色文件夹的动态加载（<code>fs.readdir</code> + 模板渲染）在 TypeScript 中最自然</li>
+
+<hr>
+
+<h2>三、核心数据模型</h2>
+
+<h3>3.1 对象关系</h3>
+
+<pre><code class="language-">Demand ──────→ Project ──────→ WorkflowInstance
+（需求卡）      （项目实例）     （流程实例）
+                                    │
+                          ┌─────────┼─────────┐
+                          ▼         ▼         ▼
+                       Phase     Phase     Phase
+                       （阶段）   （阶段）   （阶段）
+                          │
+                    ┌─────┼─────┐
+                    ▼     ▼     ▼
+                  Node  Node  Node
+                  （节点：最小执行单元）
+                    │
+              ┌─────┼─────┐
+              ▼     ▼     ▼
+          RoleRun  Gate  Artifact
+          （一次    （门禁）（产物）
+           角色执行）
+</code></pre>
+
+<h3>3.2 核心对象定义</h3>
+
+<h4>Demand（需求卡）</h4>
+
+<pre><code class="language-typescript">interface Demand {
+  id: string;
+  title: string;
+  description: string;            // 原始需求描述
+  scope: string;                  // 范围说明
+  nonGoals: string[];             // 非目标
+  tags: string[];                 // 分类标签（auth/data/payment 等）
+  riskLevel: 'low' | 'medium' | 'high' | 'blocked';
+  acceptanceCriteria: AcceptanceCriterion[];
+  status: DemandStatus;
+  // draft → clarifying → shaped → prioritized → converted → project-linked
+}
+</code></pre>
+
+<h4>Project（项目实例）</h4>
+
+<pre><code class="language-typescript">interface Project {
+  id: string;
+  demandId: string;
+  name: string;
+  workflowInstanceId: string;
+  status: ProjectStatus;
+  // pending → planning → executing → verifying → delivering
+  // → completed | rolled-back | cancelled
+  repoUrl: string;
+  branch: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+</code></pre>
+
+<h4>WorkflowInstance（流程实例）</h4>
+
+<pre><code class="language-typescript">interface WorkflowInstance {
+  id: string;
+  templateRef: string;           // 模板引用或 'dynamic' 标记
+  projectId: string;
+  phases: Phase[];
+  currentPhaseIndex: number;
+  status: 'running' | 'paused' | 'completed' | 'failed';
+}
+</code></pre>
+
+<h4>Phase（阶段）</h4>
+
+<pre><code class="language-typescript">interface Phase {
+  id: string;
+  title: string;
+  nodes: Node[];
+  parallel: boolean;             // 节点是否并行执行
+  gate?: GateConfig;             // 阶段出口 Gate（Phase 内所有 Node 通过后运行，可选）
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  source: 'template' | 'dynamic' | 'constraint';
+  // template: 来自预定义 YAML 模板
+  // dynamic: 由 PM Agent 动态生成
+  // constraint: 由约束系统自动注入（<code>requirePhase</code> 规则触发）
+}
+</code></pre>
+
+<h4>Node（最小执行单元）</h4>
+
+<pre><code class="language-typescript">interface Node {
+  id: string;
+  role: string;
+  task: {
+    input: ArtifactRef[];
+    output: ArtifactType[];
+    instruction: string;
+  };
+  skills: string[];
+  gate?: GateConfig;            // 节点级 Gate（节点完成后、Phase 出口 Gate 之前运行）
+  status: NodeStatus;
+  // pending → running → awaiting-gate → passed
+  // → needs-revision → blocked → skipped
+  // running → interrupted（Ctrl+C / 信号中断）
+  // interrupted → pending（恢复时从头重新执行，因为产物可能不完整）
+  retryCount: number;
+  maxRetries: number;
+  source: 'template' | 'dynamic' | 'constraint';
+}
+</code></pre>
+
+<h4>RoleRun（角色执行记录）</h4>
+
+<pre><code class="language-typescript">interface RoleRun {
+  id: string;
+  nodeId: string;
+  role: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'running' | 'completed' | 'failed';
+  worktreePath: string;
+  logFile: string;
+  artifacts: string[];
+}
+</code></pre>
+
+<h4>Gate（门禁）</h4>
+
+<pre><code class="language-typescript">type GateType =
+  | 'build' | 'test' | 'lint' | 'e2e-pass'
+  | 'schema' | 'security-scan' | 'human';
+
+// 单个门禁检查项
+interface GateCheck {
+  type: GateType;
+  command?: string;          // 确定性 gate 的执行命令（如 npm test）
+  autoFix: boolean;          // 失败后是否自动 spawn Agent 修复
+}
+
+// 门禁配置：包含检查链和执行策略
+interface GateConfig {
+  checks: GateCheck[];       // 按顺序执行的检查列表
+  retryLimit: number;        // 整条链的最大重试次数
+  onExhausted: 'skip' | 'block' | 'escalate-human';
+  // skip: 跳过当前 gate（标记 warning），继续执行后续检查
+  // block: 停止当前 Node，Node 标记为 blocked，等待人工处理
+  // escalate-human: 暂停整个 Workflow，等待人类确认
+}
+</code></pre>
+
+<strong>Node.retry 与 GateConfig.retryLimit 的关系</strong>：
+<li><code>Node.retry</code>（模板定义）控制 Node 级别的重试次数</li>
+<li><code>GateConfig.retryLimit</code> 控制 Gate chain 级别</li>
+<li>合并规则：Node 级 <code>retry</code> 优先于角色级 <code>agent.yaml#maxRetries</code>，两者都未设置则默认不重试（<code>maxRetries = 0</code>，即只执行一次）</li>
+<li>Gate chain 内部每个 check 的重试计入 Node 的 retry 配额</li>
+
+interface GateResult {
+  type: GateType;
+  status: 'pass' | 'fail' | 'error';
+  output: string;
+  duration: number;
+  retriesUsed: number;
+  fixedByAgent: boolean;
+}
+<pre><code class="language-">
+<h4>ArtifactRef（产物引用）</h4>
+
+</code></pre>typescript
+// Node 间产物依赖解析的核心类型
+// 引擎按 phase 顺序向前查找匹配的 Artifact
+interface ArtifactRef {
+  type: ArtifactType;          // 必填：按类型匹配最近的同类产物
+  nodeId?: string;             // 可选：精确指定来源 Node
+  phaseIndex?: number;         // 可选：限定搜索范围（默认向前搜索所有已完成 phase）
+}
+
+// 依赖解析算法（引擎执行时）：
+// 1. 若有 nodeId → 精确匹配
+// 2. 若有 phaseIndex → 限定在该 phase 及之前的所有产物中找最近匹配
+// 3. 若仅 type → 在所有已完成 Node 的产物中找最近匹配
+// 4. 若找不到 → Node 进入 blocked 状态，等待人工指定
+<pre><code class="language-">
+<h4>Artifact（产物）</h4>
+
+</code></pre>typescript
+type ArtifactType =
+  | 'demand-card' | 'prd' | 'tech-design'
+  | 'task-breakdown' | 'code-changes' | 'test-report'
+  | 'review-report' | 'delivery-package' | 'rollback-plan'
+  | 'security-report';
+
+interface Artifact {
+  id: string;
+  projectId: string;
+  nodeId: string;
+  type: ArtifactType;
+  version: number;
+  status: 'draft' | 'reviewing' | 'needs-revision' | 'approved' | 'archived';
+  summary?: string;            // Agent 产出时一并生成的结构化摘要（≤ 500 字）
+                               // 上下文注入时优先用 summary；内容超 context 限制时以 summary 替代
+  filePath: string;            // 完整产物文件路径
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Artifact 状态流转：
+// Node 完成 → draft
+// Schema Gate 通过 → reviewing
+// Reviewer 角色报告通过 → approved
+// 被驳回 → needs-revision
+// 项目归档 → archived
+<pre><code class="language-">
+<h4>AuditEvent（审计日志事件）</h4>
+
+</code></pre>typescript
+interface AuditEvent {
+  id: string;
+  timestamp: Date;
+  projectId: string;
+  nodeId: string;
+  eventType: 'node_started' | 'node_completed' | 'node_interrupted'
+    | 'node_retried' | 'gate_pass' | 'gate_fail' | 'gate_escalated'
+    | 'artifact_created' | 'artifact_approved' | 'human_decision';
+  payload: Record&lt;string, unknown&gt;;  // 事件相关的结构化数据
+  roleSource?: string;               // 角色配置的实际来源路径（用于审计追溯）
+}
+<pre><code class="language-">
+<h3>3.3 Node 状态流转</h3>
+
+</code></pre>
+               ┌──────────────┐
+               │   pending    │◄────────────────────┐
+               └──────┬───────┘                     │
+                      │ Engine 调度                  │
+               ┌──────▼───────┐                     │
+         ┌─────│   running    │─────┐               │
+         │     └──┬───┬───────┘     │               │
+         │        │   │             │               │
+         │        │   │ Ctrl+C      │               │
+         │        │   │ /signal     │               │
+         │        │   ▼            │               │
+         │        │ interrupted    │               │
+         │        │ (恢复时从头重   │               │
+         │        │  新执行)───────┘               │
+         │        │                                │
+    retry &lt; limit  Agent 完成  retry &gt;= limit       │
+         │            │             │               │
+         │     ┌──────▼───────┐     │               │
+         └─────│awaiting-gate │     │               │
+               └──────┬───────┘     │               │
+                      │             │               │
+              Gate 判定              │               │
+           ┌──────┼──────┐          │               │
+           ▼      ▼      ▼          │               │
+        passed  needs-  needs-      │               │
+                revision human      │               │
+           │      │      │          │               │
+           │   ┌──┘      │          │               │
+           │   ▼         ▼          │               │
+           │  回退重做   等待确认    │               │
+           │   │         │          │               │
+           ▼   ▼         ▼          ▼               │
+       passed needs-revision blocked failed          │
+<pre><code class="language-">
+<hr>
+
+<h2>四、角色系统</h2>
+
+<h3>4.1 角色文件夹结构</h3>
+
+</code></pre>
+roles/
+├── pm/                          # 角色名 = 文件夹名
+│   ├── agent.yaml               # 角色元信息
+│   ├── system.md                # System Prompt（核心，模板变量渲染）
+│   ├── skills/                  # 技能：按需注入的上下文
+│   │   ├── clarify.md
+│   │   ├── prd-gen.md
+│   │   └── acceptance.md
+│   ├── tools.yaml               # 可用工具声明
+│   └── knowledge/               # 领域知识（可空）
+│       └── prd-template.md
+│
+├── rd/
+│   ├── agent.yaml
+│   ├── system.md
+│   ├── skills/
+│   │   ├── implement.md
+│   │   ├── refactor.md
+│   │   └── debug.md
+│   └── tools.yaml
+│
+├── qa/
+│   ├── agent.yaml
+│   ├── system.md
+│   ├── skills/
+│   │   ├── test-plan.md
+│   │   └── e2e.md
+│   └── tools.yaml
+│
+├── reviewer/
+│   ├── agent.yaml
+│   ├── system.md
+│   ├── skills/
+│   │   ├── code-review.md
+│   │   └── security.md
+│   └── tools.yaml
+│
+└── pmo/
+    ├── agent.yaml
+    ├── system.md
+    └── skills/
+        └── delivery-summary.md
+<pre><code class="language-">
+<h3>4.2 agent.yaml 定义</h3>
+
+</code></pre>yaml
+<h1>roles/pm/agent.yaml</h1>
+name: pm
+display: 产品经理
+description: 负责需求澄清、PRD 生成、验收标准定义
+model: claude-sonnet-4
+agent:
+  command: claude
+  args:
+<li>--permission-mode</li>
+<li>bypassPermissions</li>
+<li>--output-format</li>
+<li>json</li>
+timeout: 600000
+maxRetries: 2
+
+outputs:
+<li>demand-card</li>
+<li>prd</li>
+
+quality: "输出必须结构化、完整、可验证。验收标准必须可客观判定。"
+
+gate:
+  checks:
+<li>type: schema</li>
+  retryLimit: 2
+  onExhausted: escalate-human
+
+context:
+  maxSkills: 2
+  includeHistory: true
+  knowledgeFiles:             # 指定要注入的知识文件名
+<li>prd-template.md         # 显式设置时仅注入列表中的文件；不设/空数组时注入全部 .md</li>
+<pre><code class="language-">
+<h4>tools.yaml 格式</h4>
+
+</code></pre>yaml
+<h1>roles/rd/tools.yaml</h1>
+tools:
+<li>name: git</li>
+    description: Git 版本控制（commit、push、创建分支）
+    allowedCommands: [status, add, commit, push, branch, checkout]
+<li>name: npm</li>
+    description: Node.js 包管理器和脚本执行
+    allowedCommands: [install, test, run, build]
+<li>name: playwright</li>
+    description: 浏览器 E2E 测试
+    allowedCommands: [test]
+<pre><code class="language-">
+<code>tools.yaml</code> 定义该角色可调用的外部工具及允许的命令白名单。Engine 在 spawn Agent 子进程时将 <code>tools.yaml</code> 内容渲染为人类可读的 Markdown 片段，注入到 system prompt 的 <code>{{loaded_tools}}</code> 变量位置。危险命令（如 <code>rm -rf</code>、<code>git push --force</code>）不在白名单中时，Agent 运行时会被 Donkey 的 Tool Gateway 拦截。
+
+<h4>system.md 模板变量完整列表</h4>
+
+| 变量 | 来源 | 说明 |
+|------|------|------|
+| <code>{{display}}</code> | agent.yaml | 角色显示名 |
+| <code>{{description}}</code> | agent.yaml | 角色职责描述 |
+| <code>{{loaded_skills}}</code> | skills/ 目录 | 注入的 skill 内容（Markdown） |
+| <code>{{loaded_tools}}</code> | tools.yaml | 渲染后的工具列表 |
+| <code>{{knowledge}}</code> | knowledge/ 目录 | 注入的知识文件内容（Markdown） |
+| <code>{{input_artifacts}}</code> | 上游 Node 产物 | 上游产物的 summary 或截断内容 |
+| <code>{{project_context}}</code> | 项目元数据 | 项目名称、仓库 URL、分支等 |
+| <code>{{quality_standards}}</code> | agent.yaml | 由 <code>quality</code> 字段定义的质量标准 |
+
+<code>agent</code> 字段支持两种写法：
+
+</code></pre>yaml
+<h1>简洁版（使用预设名称）</h1>
+agent: claude-code
+
+<h1>完整版（自定义 command + args + promptMode）</h1>
+agent:
+  command: claude
+  args:
+<li>--model</li>
+<li>claude-sonnet-4</li>
+<li>--permission-mode</li>
+<li>bypassPermissions</li>
+  promptMode: arg-append       # prompt 注入方式（见下文）
+  env:
+    CLAUDE_CODE_API_KEY: ${CC_API_KEY}
+<pre><code class="language-">
+<h4>promptMode：Prompt 注入协议</h4>
+
+| 模式 | 行为 | 适用场景 |
+|------|------|----------|
+| <code>stdin</code> | 通过子进程 stdin 写入 prompt | 大部分 CLI Agent 的标准方式 |
+| <code>arg-append</code> | 追加到 args 末尾（如 <code>-p "<prompt>"</code>） | Claude Code 的 <code>-p</code> 模式 |
+| <code>file</code> | 写入临时文件，通过环境变量 <code>DONKEY_PROMPT_FILE</code> 传入路径 | 超长 prompt 超过 shell argv 限制时 |
+| <code>none</code> | 不注入 prompt，仅设置环境变量 | Agent 自行从环境变量读取上下文 |
+
+<strong>内置 preset 的默认 promptMode</strong>：
+<li><code>claude-code</code> → <code>arg-append</code>（拼接 <code>-p</code> flag）</li>
+<li><code>codex</code> → <code>stdin</code></li>
+
+<strong>自动降级</strong>：当 prompt 长度超过 shell argv 限制（通常 ~128KB），Engine 自动从 <code>arg-append</code> 降级为 <code>file</code> 模式，并在 stderr 输出 warning。
+
+<strong>自定义命令的接管协议</strong>：只要自定义脚本/CLI 能从 stdin 读取 prompt 并将产物写入 <code>DONKEY_OUTPUT_DIR</code> 环境变量指定的目录，即可作为 Donkey Agent 使用。Engine 在 spawn 前设置以下环境变量：
+
+| 环境变量 | 值 | 说明 |
+|----------|----|------|
+| <code>DONKEY_OUTPUT_DIR</code> | <code><worktree>/.donkey-output/</code> | Agent 写入产物的目录 |
+| <code>DONKEY_ROLE</code> | <code>pm</code> / <code>rd</code> / ... | 当前角色名 |
+| <code>DONKEY_PROJECT_ID</code> | <code>proj-xxx</code> | 项目 ID |
+| <code>DONKEY_NODE_ID</code> | <code>node-xxx</code> | 当前 Node ID |
+| <code>DONKEY_PROMPT_FILE</code> | 临时文件路径 | <code>file</code> 模式时指向 prompt 文件 |
+
+<h3>4.3 system.md 模板</h3>
+
+</code></pre>
+你是 {{display}}，{{description}}。
+
+<h2>输出规范</h2>
+你必须以结构化 Markdown 输出，包含：
+{{#outputs}}
+<li>{{type}}: {{format}}</li>
+{{/outputs}}
+
+<h2>质量标准</h2>
+{{quality_standards}}
+
+<h2>可用技能</h2>
+{{loaded_skills}}
+
+<h2>可用工具</h2>
+{{loaded_tools}}
+
+<h2>上下文</h2>
+上游产物：{{input_artifacts}}
+项目背景：{{project_context}}
+<pre><code class="language-">
+<h3>4.4 角色加载优先级</h3>
+
+</code></pre>
+<li>项目级：&lt;project&gt;/.donkey/roles/&lt;roleName&gt;/    ← 使用者自定义</li>
+<li>用户级：~/.donkey/roles/&lt;roleName&gt;/            ← 使用者全局自定义</li>
+<li>内置：  &lt;donkey-pkg&gt;/roles/&lt;roleName&gt;/         ← 开发者预置</li>
+（找到第一个存在的目录即停止，不合并文件。定制角色时需完整复制角色文件夹后修改。Phase 2 将支持文件级 deep merge 覆盖策略，降低定制成本）
+<pre><code class="language-">
+<h3>4.5 Role Runner 执行流程</h3>
+
+<h4>Skill 解析规范</h4>
+
+Skill 文件支持可选的 YAML frontmatter：
+
+</code></pre>markdown
+<hr>
+id: clarify
+description: 需求澄清追问——向用户提出关键问题以补全需求背景
+injectMode: append       # append: 追加到 system prompt 末尾; replace: 替换系统提示中的指定区块
+priority: required       # required: 强制执行; optional: 按匹配度选择
+<hr>
+
+<h2>澄清追问策略</h2>
+
+当需求描述不完整时，按以下顺序追问：
+<li>用户是谁？目标是什么？</li>
+<li>具体场景和触发条件？</li>
+<li>边界和约束？</li>
+...
+<pre><code class="language-">
+<strong>映射规则</strong>：
+<li>文件名（去掉 <code>.md</code> 后缀）= skill ID（如 <code>clarify.md</code> → id=<code>clarify</code>）</li>
+<li>Workflow 模板中 <code>skills: [clarify, acceptance]</code> 直接按 ID 匹配</li>
+<li>只从<strong>当前角色的 <code>skills/</code> 目录</strong>中加载——角色间不跨引 skill</li>
+
+<strong>Skills 加载优先级</strong>（同角色三个来源合并）：
+<li>项目级 <code><project>/.donkey/roles/<role>/skills/</code></li>
+<li>用户级 <code>~/.donkey/roles/<role>/skills/</code></li>
+<li>内置 <code><donkey-pkg>/roles/<role>/skills/</code></li>
+<li>同名 skill 高优先级覆盖低优先级；不同名 skill 全部合并可用</li>
+
+<strong>注入策略</strong>：
+<li>引擎根据 Node 的 <code>skills</code> 列表和 skill 文件的 <code>injectMode</code> 决定注入方式</li>
+<li><code>maxSkills</code>（来自 <code>agent.yaml</code>）限制单次注入数量，按 <code>priority</code> 过滤（<code>required</code> 必注，<code>optional</code> 按匹配度选）</li>
+<li>注入位置：<code>append</code> → system prompt 末尾；<code>replace</code> → 替换系统提示中的 <code>{{loaded_skills}}</code> 占位符</li>
+
+<h4>执行流程</h4>
+
+</code></pre>
+<li>resolveRole(roleName) → 确定角色目录</li>
+<li>读 agent.yaml → 拿到 model / agent / timeout / outputs 等配置</li>
+<li>根据 task 匹配需要的 skills → 最多注入 maxSkills 个</li>
+<li>收集 input_artifacts（上游产物内容）</li>
+<li>渲染 system.md 模板（注入 skills / tools / artifacts / context）</li>
+<li>组装完整 prompt = system.md + task instruction + artifacts</li>
+<li>创建 Git Worktree（隔离工作区）</li>
+<li>spawn agent 子进程 → 传入 prompt</li>
+<li>stdout 收集 → 解析为结构化产物</li>
+<li>产物写入 Artifact Store</li>
+<li>触发 Gate 检查</li>
+<pre><code class="language-">
+<hr>
+
+<h2>五、Workflow 引擎</h2>
+
+<h3>5.1 Workflow 模板文件</h3>
+
+</code></pre>yaml
+<h1>workflows/standard-feature.yaml</h1>
+name: standard-feature
+description: 标准功能需求，从需求澄清到交付 PR
+match:
+  riskLevel: [low, medium]
+  types: [feature, enhancement]
+
+phases:
+<li>title: 需求澄清</li>
+    parallel: false
+    nodes:
+      - role: pm
+        task:
+          instruction: "理解用户需求，补全背景、范围、非目标和验收标准"
+          output: [demand-card]
+        skills: [clarify, acceptance]
+        retry: 2
+
+<li>title: 技术方案与开发</li>
+    parallel: false
+    nodes:
+      - role: rd
+        task:
+          instruction: "基于需求卡完成技术实现"
+          input: [demand-card]
+          output: [code-changes]
+        skills: [implement, refactor]
+        retry: 3
+        gate:
+          checks:
+            - type: build
+            - type: test
+              autoFix: true
+            - type: lint
+              autoFix: true
+          retryLimit: 3
+          onExhausted: escalate-human
+
+<li>title: 测试验证</li>
+    parallel: false
+    nodes:
+      - role: qa
+        task:
+          instruction: "基于需求卡和代码变更生成测试计划并执行 E2E"
+          input: [demand-card, code-changes]
+          output: [test-report]
+        skills: [test-plan, e2e]
+        retry: 2
+        gate:
+          checks:
+            - type: e2e-pass
+          retryLimit: 2
+          onExhausted: escalate-human
+
+<li>title: 代码审查</li>
+    parallel: false
+    nodes:
+      - role: reviewer
+        task:
+          instruction: "审查代码变更，检查安全、规范和边界问题"
+          input: [code-changes, test-report]
+          output: [review-report]
+        skills: [code-review, security]
+
+<li>title: 交付</li>
+    parallel: false
+    nodes:
+      - role: pmo
+        task:
+          instruction: "汇总所有产物，生成交付证据包和 PR"
+          input: [demand-card, code-changes, test-report, review-report]
+          output: [delivery-package]
+<pre><code class="language-">
+<h3>5.2 input/output 简写规则</h3>
+
+YAML 模板中 <code>input</code> 和 <code>output</code> 支持简写，Engine 解析时自动展开：
+
+</code></pre>yaml
+<h1>简写（裸字符串）→ 自动展开为 { type: "demand-card" }</h1>
+input: [demand-card]
+output: [code-changes]
+
+<h1>完整对象（精确指定来源时使用）→ 保持原样</h1>
+input:
+<li>{ type: code-changes, nodeId: node-002 }   # 精确指定来源 Node</li>
+<li>{ type: tech-design }                       # 按类型匹配最近产物</li>
+output: [code-changes]
+<pre><code class="language-">
+<strong>转换规则</strong>：若元素为字符串 → 展开为 <code>{ type: <string> }</code>；若元素为对象 → 保持原样，必须包含 <code>type</code> 字段。
+
+<h3>5.3 Engine 原语</h3>
+
+</code></pre>typescript
+// Phase 级操作
+phase(title: string): void
+
+// Node 执行：驱动一个角色 Agent 执行
+agent(opts: AgentOpts): Promise&lt;Artifact&gt;
+
+// pipeline：item 独立流经所有 stage，无 barrier
+pipeline&lt;T&gt;(
+  items: T[],
+  ...stages: Array&lt;(item: T, i: number) =&gt; Promise&lt;Result&gt;&gt;
+): Promise&lt;Result[]&gt;
+
+// parallel：并行执行，barrier 等待全部完成
+parallel(
+  thunks: Array&lt;() =&gt; Promise&lt;Result&gt;&gt;
+): Promise&lt;Result[]&gt;
+<pre><code class="language-">
+参考 Claude Code Dynamic Workflow 的模式——pipeline 是默认模式，parallel 只在必要时使用。
+
+<h3>5.4 Engine 执行流程</h3>
+
+</code></pre>
+<li>加载 Workflow 模板 → 实例化 phases</li>
+<li>遍历 phases：</li>
+   a. phase(title) → 标记开始
+   b. 执行 nodes（parallel 或串行）：
+      - 加载角色配置
+      - 渲染 system.md → 组装 prompt
+      - 创建 Git Worktree
+      - spawn Agent 子进程
+      - 等待完成 → 收集产物
+      - 运行 Gate chain
+      - 写入审计日志
+   c. 阶段完成 → 进入下一个 phase
+<li>所有 phase 完成 → 项目标记为 completed</li>
+<li>生成交付证据包</li>
+<pre><code class="language-">
+<h3>5.5 状态持久化</h3>
+
+每个 Node 执行前后写 SQLite，支持中断恢复：
+
+</code></pre>
+场景：
+donkey run → PM 完成 → RD 执行中 → Ctrl+C
+donkey run → Engine 读 SQLite → 从 RD 的 Node 继续
+<pre><code class="language-">
+<h3>5.6 动态 Workflow 模式</h3>
+
+不依赖预定义模板，由 PM Agent 动态生成 workflow spec。引擎不关心来源。
+
+</code></pre>bash
+donkey run --dynamic "给任务平台加批量重试"
+<pre><code class="language-">
+执行流程：
+
+</code></pre>
+<li>PM Agent 分析需求 → 输出 workflow spec (draft)</li>
+<li>Constraint Validator 校验：</li>
+<li>hard constraints → 缺失则强制注入</li>
+<li>conditional constraints → 根据特征判断触发</li>
+<li>soft suggestions → 记录 warnings</li>
+<li>展示预览（--dry-run 模式）</li>
+<li>Engine 实例化并执行</li>
+
+--save-as flag: 保存为模板供后续复用
+donkey run --dynamic --save-as batch-retry "给任务平台加批量重试"
+<pre><code class="language-">
+<h3>5.7 脚手架命令</h3>
+
+</code></pre>bash
+<h1>交互式创建</h1>
+donkey workflow create
+
+<h1>从已有模板复制</h1>
+donkey workflow create --from standard-feature --name my-custom
+
+<h1>快速生成骨架</h1>
+donkey workflow create --name api-dev --roles pm,rd,qa --preset api
+<pre><code class="language-">
+<hr>
+
+<h2>六、Gate Engine</h2>
+
+<h3>6.1 设计原则</h3>
+
+Gate 是<strong>确定性检查</strong>，不是软约束。失败要么自动修复（spawn Agent 修复后重试），要么上升给 Reviewer Agent 或人工。
+
+Gate Engine 不调 LLM。需要智能判断时委托给 Reviewer Agent。
+
+<h3>6.2 Gate 类型</h3>
+
+| Gate | 类型 | 检查方式 | autoFix | 失败策略 |
+|------|------|----------|---------|----------|
+| build | 确定性 | npm build 退出码 | 是 | spawn RD 修复，最多 retryLimit 次 |
+| test | 确定性 | npm test 退出码 | 是 | spawn RD 修复 |
+| lint | 确定性 | lint 命令退出码 | 是 | spawn RD 修复 |
+| e2e-pass | 确定性 | E2E 命令退出码 | 是 | spawn RD/QA 修复 |
+| schema | 确定性 | ajv validate artifact | 是 | spawn 对应角色补全缺失字段 |
+| security-scan | 确定性 | 安全扫描命令退出码 | 否 | escalate-human |
+| human | 阻塞 | 人确认 | N/A | 暂停等待 |
+
+<h3>6.3 Gate 层级：Node Gate vs Phase Gate</h3>
+
+| 层级 | 触发时机 | 职责 | 示例 |
+|------|----------|------|------|
+| <strong>Node Gate</strong> | 单个 Node 执行完成后 | 检查该 Node 的产物质量（编译/测试/结构） | RD Node 产出代码后跑 build+test+lint |
+| <strong>Phase Gate</strong> | Phase 内所有 Node 通过后 | 跨节点整体质量检查（端到端一致性） | 所有开发 Node 完成后跑 E2E 集成测试 |
+
+<strong>执行顺序</strong>：Phase 内 Node 并行/串行完成 → 各 Node Gate 逐个通过 → Phase 出口 Gate（若配置）运行 → 通过后才进入下一 Phase。
+
+<strong>Phase 1 默认策略</strong>：Gate 统一挂在 Node 级别；Phase 出口 Gate 作为可选增强，在动态模式的高风险需求中由约束系统注入。
+
+<h3>6.4 Gate 执行顺序</h3>
+
+</code></pre>
+build → test → lint → e2e → security → schema → human
+ 快     快      快     慢      慢         快      阻塞
+<pre><code class="language-">
+先跑快的，快速失败；慢的后面跑；阻塞的 human gate 总是最后。
+
+<h3>6.5 Gate Chain 执行流程</h3>
+
+</code></pre>
+Node 完成 → Artifact 保存
+              │
+     ┌───────▼────────┐
+     │  Gate 1         │
+     └───────┬────────┘
+             │
+     ┌───────┼───────┐
+     pass    fail    error
+      │       │        │
+      │  autoFix=true?  │
+      │    ┌──┴──┐     │
+      │   yes   no     │
+      │    │     │     │
+      │   spawn RD     │
+      │   修复   直接标记
+      │    │     fail
+      │   retry&lt;limit?
+      │    ┌──┴──┐
+      │   yes   no
+      │    │     │
+      │    └→Gate│
+      │     ┌──┴──────┴──┐
+      │     │ onExhausted │
+      │     └──┬────┬─────┘
+      │     skip block escalate
+      └──────┬────────────┘
+             │
+        Gate 通过 → 下一个 Gate
+<pre><code class="language-">
+<h3>6.6 产物 Schema Gate</h3>
+
+每个 ArtifactType 有对应的 JSON Schema：
+
+</code></pre>typescript
+const DEMAND_CARD_SCHEMA = {
+  type: 'object',
+  required: ['title', 'scope', 'nonGoals', 'acceptanceCriteria'],
+  properties: {
+    title: { type: 'string', minLength: 1 },
+    scope: { type: 'string', minLength: 1 },
+    nonGoals: { type: 'array', items: { type: 'string' } },
+    acceptanceCriteria: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        required: ['description'],
+        properties: {
+          description: { type: 'string', minLength: 1 }
+        }
+      }
+    }
+  }
+};
+<pre><code class="language-">
+失败处理：解析 Artifact 内容 → ajv.validate(schema, content) → fail 则 spawn 对应角色 Agent 补全。
+
+<hr>
+
+<h2>七、约束系统</h2>
+
+<h3>7.1 三层约束</h3>
+
+约束系统保证动态生成的 Workflow 质量下限。参考 autonomous-dev 的 12-element harness 设计。
+
+</code></pre>yaml
+<h1>constraints.yaml</h1>
+constraints:
+  # 一、硬约束 — 任何 workflow 不可移除
+  hard:
+<li>rule: "所有代码变更必须经过 build + lint gate"</li>
+      appliesWhen: { outputs: [code-changes] }
+      gates: [build, lint]
+
+<li>rule: "所有 workflow 必须有独立的审查阶段"</li>
+      appliesWhen: { phasesCount: '&gt;= 2' }
+      requirePhase:
+        title: "审查"
+        containsRole: reviewer
+
+<li>rule: "所有 workflow 必须有验证阶段"</li>
+      requiresOneOf:
+        - { role: qa }
+        - { gate: e2e-pass }
+
+  # 二、条件约束 — 根据需求特征自动触发
+  conditional:
+<li>rule: "高风险需求必须有人工确认 Gate"</li>
+      when: { riskLevel: high }
+      injectGate: { type: human, at: 'end-of-workflow' }
+
+<li>rule: "涉及权限/安全的需求必须有安全审查"</li>
+      when: { tags: [auth, security, permission] }
+      requireRole: reviewer        # 使用已有 reviewer 角色，注入其 security.md skill
+      requireSkills: [security]    # 强制加载安全审查 skill
+      injectGate: { type: security-scan, at: 'after-node:rd' }
+
+<li>rule: "数据相关变更必须有回滚方案"</li>
+      when: { tags: [data, migration, schema-change] }
+      requireOutput: rollback-plan
+
+<li>rule: "多模块变更建议拆分阶段"</li>
+      when: { affectedModules: '&gt;= 3' }
+      suggest: { splitPhases: true, mode: per-module }
+
+  # 三、软建议 — 生成时提示，可人工跳过
+  soft:
+<li>rule: "独立模块建议并行开发"</li>
+      suggest: { parallel: true }
+
+<li>rule: "建议为 E2E 测试预留独立阶段"</li>
+      suggest: { separateE2EPhase: true }
+<pre><code class="language-">
+<h3>7.2 Gate 注入位置语义</h3>
+
+<code>injectGate.at</code> 指定 gate 插入到 workflow 中的位置：
+
+| 值 | 含义 |
+|----|------|
+| <code>'end-of-workflow'</code> | 插入到最后一个 phase 的最后一个 node 之后 |
+| <code>'after-node:<role>'</code> | 插入到匹配角色的 node 之后（如 <code>after-node:rd</code>） |
+| <code>'after-phase:<title>'</code> | 插入到指定 title 的 phase 之后（如 <code>after-phase:开发实现</code>） |
+| <code>'before-node:<role>'</code> | 插入到匹配角色的 node 之前 |
+
+<h3>7.3 约束注入的默认节点模板</h3>
+
+当约束系统通过 <code>requirePhase</code> 注入新阶段时，使用以下默认 Node 模板（可在 constraints.yaml 中覆写）：
+
+</code></pre>yaml
+<h1>约束注入节点的默认配置</h1>
+defaultNodeTemplate:
+  retry: 1
+  source: constraint     # 标记为约束注入，在 UI 中显示 [AUTO]
+<pre><code class="language-">
+每个角色的默认 task instruction 在角色 <code>agent.yaml</code> 中定义：
+
+</code></pre>yaml
+<h1>roles/reviewer/agent.yaml</h1>
+constraintTask:
+  instruction: "基于安全审查 skill 对代码变更进行安全分析"
+  skills: [security]
+  output: [security-report]
+<pre><code class="language-">
+<h3>7.4 动态模式注入示例</h3>
+
+</code></pre>
+用户输入：--dynamic "给支付模块加退款功能"
+→ PM Agent 分析 → demand-card: { tags: [payment, data], riskLevel: high }
+→ Constraint Validator：
+  ✓ hard 约束全部满足
+  → conditional: tags=[payment] → 注入 reviewer（含 security skill）+ security-scan gate
+  → conditional: riskLevel=high → 注入 human gate（at: end-of-workflow）
+  → conditional: tags=[data] → 注入 rollback-plan 产物要求
+  → soft: 提示可考虑并行开发
+→ 最终 Workflow: 5 phases → 6 phases（注入 1 个安全审查阶段）
+<pre><code class="language-">
+<hr>
+
+<h2>八、Agent Runtime</h2>
+
+<h3>8.1 定位</h3>
+
+Agent Runtime 是 Donkey 中最薄的一层。职责：角色配置 → 子进程调用 → 收集结果。
+
+</code></pre>typescript
+interface AgentConfig {
+  command: string;
+  args: string[];
+  env?: Record&lt;string, string&gt;;
+  worktreePath: string;
+  timeout: number;
+}
+
+async function runAgent(run: AgentRun): Promise&lt;AgentResult&gt; {
+  // 1. 构建命令行
+  // 2. spawn 子进程
+  // 3. 收集 stdout/stderr
+  // 4. 等待完成
+  // 5. 返回结果
+}
+<pre><code class="language-">
+<h3>8.2 Git Worktree 隔离</h3>
+
+</code></pre>
+&lt;project&gt;/.donkey/worktrees/
+├── node-001-pm-clarify/        # PM Agent 工作区
+├── node-002-rd-implement/      # RD Agent 工作区
+├── node-003-qa-test/           # QA Agent 工作区
+└── ...
+
+每个 worktree：
+├── &lt;原仓库代码&gt;
+└── .donkey-output/             # Agent 写入产物的目录
+<pre><code class="language-">
+执行完后 Engine 从 <code>.donkey-output/</code> 读取产物，worktree 可清理或保留审计。
+
+<h3>8.3 支持自定义命令</h3>
+
+</code></pre>yaml
+<h1>角色级别</h1>
+agent:
+  command: claude
+  args:
+<li>--permission-mode</li>
+<li>bypassPermissions</li>
+<li>--model</li>
+<li>claude-sonnet-4-6</li>
+
+<h1>全局默认（donkey.config.yaml）</h1>
+defaults:
+  agent:
+    command: claude
+    args:
+      - --permission-mode
+      - bypassPermissions
+<pre><code class="language-">
+内置 preset（<code>claude-code</code> / <code>codex</code>）是预设的 command + args 组合，用户可完全替换。只要符合"stdin prompt → stdout 产物"协议即可。
+
+<hr>
+
+<h2>九、CLI 设计</h2>
+
+<h3>9.1 命令清单</h3>
+
+</code></pre>bash
+<h1>── 项目管理 ──</h1>
+donkey init                    # 初始化当前目录为 Donkey 项目
+donkey run "需求描述"           # 启动需求（默认动态模式）
+donkey run --template &lt;name&gt;   # 使用指定模板
+donkey run --dynamic           # 强制动态模式
+donkey run --dry-run           # 预览 Workflow，不执行
+donkey status                  # 查看当前项目状态
+donkey pause                   # 暂停
+donkey resume                  # 从中断点恢复
+donkey cancel                  # 取消
+
+<h1>── 角色管理 ──</h1>
+donkey role list               # 列出所有角色（标注来源：内置/用户/项目）
+donkey role show &lt;name&gt;        # 查看角色详情
+donkey role path &lt;name&gt;        # 输出角色目录路径
+donkey role create &lt;name&gt;      # 交互式创建角色
+
+<h1>── Workflow 管理 ──</h1>
+donkey workflow list           # 列出所有模板
+donkey workflow create         # 交互式创建
+donkey workflow create --from &lt;name&gt; --name &lt;new&gt;
+donkey workflow show &lt;name&gt;    # 查看模板内容
+
+<h1>── 约束管理 ──</h1>
+donkey constraints show        # 查看约束规则
+
+<h1>── 审计 ──</h1>
+donkey log [--project &lt;id&gt;]    # 查看审计日志
+
+<h1>── 清理 ──</h1>
+donkey clean                   # 清理 worktree
+<pre><code class="language-">
+<h3>9.2 status 输出示例</h3>
+
+</code></pre>
+Project: 批量重试失败任务 (proj-001)
+Status:  executing
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ ✓ 需求澄清          completed · 45s ago
+    产物: demand-card.md ✓
+ ● 开发实现          running · 12s elapsed
+    rd-agent: implementing...
+ ○ 测试验证          pending
+ ○ 审查              pending
+ ○ 交付              pending
+
+Gates: 4 passed, 0 failed, 1 pending
+Risk: low · Agent: claude-code
+<pre><code class="language-">
+<hr>
+
+<h2>十、Web Dashboard</h2>
+
+<h3>10.1 技术栈</h3>
+
+Next.js + shadcn/ui + tRPC（共享 core types）。React Query 做缓存层，SQLite 是单一真相源。
+
+<h3>10.2 页面结构</h3>
+
+</code></pre>
+/                         首页 · 项目列表 + 快速入口
+/demand                   需求池 · 提交/查看需求
+/project/:id              项目驾驶舱
+  /overview                 概览：当前阶段、进度、阻塞
+  /artifacts                产物：所有产物的版本历史
+  /audit                    审计：完整执行日志
+  /gates                    Gate：各阶段通过情况
+/roles                    角色管理 · 列表/查看
+/workflows                Workflow 模板管理
+/settings                 项目设置 · 约束规则 · 关联仓库
+<pre><code class="language-">
+<h3>10.3 驾驶舱布局</h3>
+
+</code></pre>
+┌─────────────────────────────────────────────────────────┐
+│  批量重试失败任务                    Status: Executing   │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  Progress                                                │
+│  ✓ 需求澄清  ✓ 技术方案  ● 开发实现  ○ 测试  ○ 交付   │
+│                                                          │
+│  Current Phase: 开发实现                                  │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ rd-agent: implementing batch retry logic...      │    │
+│  │ [████████░░░░░░░░░░░] 12s elapsed                │    │
+│  └─────────────────────────────────────────────────┘    │
+│                                                          │
+│  Gates                    Artifacts                      │
+│  build    ✓              demand-card.md     ✓           │
+│  test     ○              code-changes       ●           │
+│  lint     ○                                              │
+│                                                          │
+│  [Pause] [Cancel] [View Audit]                           │
+└─────────────────────────────────────────────────────────┘
+<pre><code class="language-">
+<hr>
+
+<h2>十一、测试与效果评估</h2>
+
+<h3>11.1 测试金字塔</h3>
+
+</code></pre>
+     ┌──────┐
+     │ E2E  │  完整流程：donkey init → run → 验收 PR
+     │ 5-8  │  使用 mock workspace（fixture 仓库）
+     ├──────┤
+     │ 集成  │  组件间协作：role-loader + runner / engine + gate
+     │ 20+  │
+     ├──────────┤
+     │   单元    │  每个模块独立：template parser / constraint validator
+     │   60+    │
+     └──────────┘
+<pre><code class="language-">
+<h3>11.2 E2E Fixture 设计</h3>
+
+</code></pre>
+packages/cli/__tests__/fixtures/
+├── mock-repo/                   # 假的目标仓库
+│   ├── src/
+│   ├── package.json
+│   └── .donkey/
+│       └── roles/               # 项目级角色覆盖（用于测试）
+├── mock-roles/                  # 内置角色
+│   ├── pm/
+│   ├── rd/
+│   └── qa/
+└── mock-workflows/
+    └── standard-feature.yaml
+```
+
+<h3>11.3 效果评估指标</h3>
+
+| 维度 | 指标 | MVP 达标线 |
+|------|------|-----------|
+| 效率 | 需求输入到 PR 创建耗时 | 比人工流程下降 30%+ |
+| 自动化 | 无中途人工介入到 PR 比例 | ≥ 50% |
+| 质量 | 验收标准可判定率（逐条有证据） | ≥ 90% |
+| 质量 | PR 一次审查通过率 | ≥ 60% |
+| 风险 | 高危动作误执行次数 | 0 |
+
+<h3>11.4 Dogfooding 计划</h3>
+
+Phase 1 期间让 Donkey 管理 Donkey 自身的开发：
+
+| 周 | 内容 |
+|----|------|
+| 1-2 | 角色系统开发 → 用 PM Agent 产需求卡 |
+| 3-4 | Workflow Engine 开发 → 用 RD Agent 辅助编码 |
+| 5-6 | Gate Engine 开发 → 跑通需求→PR 闭环 |
+| 7-8 | 完整自举：Donkey 管理 Donkey 一个完整迭代 |
+
+<hr>
+
+<h2>十二、Phase 1 范围</h2>
+
+<h3>12.1 交付范围</h3>
+
+| 维度 | 范围 |
+|------|------|
+| <strong>周期</strong> | 6-8 周 |
+| <strong>Core</strong> | Workflow Engine + Role System (loader/builder/runner) + Gate Engine + Artifact Store + Constraint Validator + Audit Logger |
+| <strong>CLI</strong> | init / run / status / role list·show·path / workflow list·create·show / constraints show / log / clean |
+| <strong>Web</strong> | 项目列表 + 驾驶舱 (overview + artifacts + audit) + 角色浏览 |
+| <strong>内置角色</strong> | pm / rd / qa / reviewer / pmo（5 个角色文件夹） |
+| <strong>内置 Workflow</strong> | standard-feature / bugfix（2 个 YAML 模板） + dynamic 模式 |
+| <strong>内置约束</strong> | 硬约束 3 条 + 条件约束 4 条 |
+| <strong>底层 Agent</strong> | Claude Code（v1 仅 claude，Codex 后续加） |
+| <strong>自动化边界</strong> | checkout 分支 → 开发 → test → lint → commit → push → create PR → 交付证据包 |
+
+<h3>12.2 明确不做 (V2 Phase 1)</h3>
+
+<li>不自动合入 PR，不自动上线</li>
+<li>不做多人协作</li>
+<li>不做远程部署</li>
+<li>不做角色版本升级/迁移</li>
+<li>不做 Codex 集成（通过自定义 command 可自行配置但不保证）</li>
+<li>不做飞书 IM 通知集成</li>
+
+<hr>
+
+<h2>十三、风险与缓解</h2>
+
+| 风险 | 概率 | 影响 | 缓解 |
+|------|------|------|------|
+| Agent 产出质量波动 | 高 | 高 | Schema Gate 强制结构校验 + 重试 + onExhausted escalate |
+| Agent 陷入修复死循环 | 中 | 中 | maxRetries 限制 + onExhausted block + 审计日志可追溯 |
+| Worktree 泄漏磁盘空间 | 中 | 低 | donkey clean 命令 + 定期清理策略 |
+| 动态 Workflow 生成不合理 | 中 | 中 | 三层约束系统 + --dry-run 预览 + --save-as 可修正 |
+| Claude Code/Codex 版本更新不兼容 | 低 | 中 | Agent command 可自定义，用户可替换任何 CLI |
+
+<hr>
+
+<h2>十四、关键参考</h2>
+
+<li><strong>Multica</strong> — Agent 团队管理平台（35.2k stars）<a href="https://github.com/multica-ai/multica">GitHub</a></li>
+<li><strong>CrewAI</strong> — 多 Agent 编排框架（52.8k stars）<a href="https://github.com/crewAIinc/crewAI">GitHub</a></li>
+<li><strong>cc-sdd</strong> — 跨平台 Spec-Driven Development（17 Skills, 8 Agents）<a href="https://github.com/gotalab/cc-sdd">GitHub</a></li>
+<li><strong>autonomous-dev</strong> — 12-Element Production Harness <a href="https://github.com/akaszubski/autonomous-dev">GitHub</a></li>
+<li><strong>Claude Code Dynamic Workflows</strong> — pipeline/parallel/phase 原语 <a href="https://code.claude.com/docs/en/workflows">文档</a></li>
+<li><strong>产品方案 Beta-G</strong> — <a href="https://bytedance.larkoffice.com/docx/ANrCdZCv4oH81sx756HcAUKCnkc">飞书文档</a></li>
+<li><strong>产品方案 Alpha-G</strong> — <a href="https://bytedance.larkoffice.com/wiki/YBDMwjB6nih5mzkdhhpckeCNn7e">飞书文档</a></li>
+<li><strong>产品方案 Alpha-D</strong> — <a href="https://bytedance.larkoffice.com/docx/GrH5d57JEoOF5zxTJ4IcfLmFnkg">飞书文档</a></li>
+<li><strong>产品方案 Alpha-Q</strong> — <a href="https://bytedance.larkoffice.com/docx/JHuId8oJwoc9vVxNiRtcU2pVnHc">飞书文档</a></li>
+
+</body>
+</html>
