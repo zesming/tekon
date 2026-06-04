@@ -1,0 +1,21 @@
+{
+  "name": "@donkey/mvp",
+  "version": "0.1.0",
+  "description": "Donkey Phase 0/1 MVP local runner and CLI",
+  "type": "module",
+  "bin": {
+    "donkey": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "donkey": "node dist/src/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,150 @@
+import type { AgentProfile, RepoProfile, WorkflowDefinition } from "./types.js";
+
+export function defaultRepoProfile(root: string): RepoProfile {
+  return {
+    id: "default-repo",
+    name: "Default Repo",
+    root,
+    commands: {
+      test: "npm test",
+      lint: undefined,
+      typecheck: undefined,
+      e2e: undefined,
+    },
+    risk: {
+      highRiskKeywords: [
+        "生产",
+        "prod",
+        "production",
+        "secret",
+        "token",
+        "权限",
+        "permission",
+        "删除",
+        "delete",
+        "drop",
+        "deploy",
+        "发布",
+        "上线",
+        "数据库迁移",
+        "migration",
+      ],
+      blockedCommandPatterns: [
+        "\\brm\\s+-rf\\b",
+        "\\brm\\s+-fr\\b",
+        "\\bgit\\s+push\\b",
+        "\\bgit\\s+push\\s+--force\\b",
+        "\\bdeploy\\b",
+        "\\bkubectl\\b",
+        "\\bterraform\\s+apply\\b",
+        "\\bchmod\\s+777\\b",
+        "&&",
+        ";",
+        "\\|",
+        "`",
+        "\\$\\(",
+      ],
+      allowedCommandPatterns: [
+        "^npm\\s+test(\\s|$)",
+        "^npm\\s+run\\s+(test|lint|typecheck|e2e)(\\s|$)",
+        "^pnpm\\s+(test|lint|typecheck)(\\s|$)",
+        "^yarn\\s+(test|lint|typecheck)(\\s|$)",
+        "^node\\s+--test(\\s|$)",
+      ],
+      highRiskPaths: [".env", "secrets", "deploy", "infra", "migrations"],
+    },
+  };
+}
+
+export function defaultWorkflowDefinition(): WorkflowDefinition {
+  return {
+    name: "local-target-stage-workflow",
+    version: "0.1.0",
+    supportedInputTypes: [
+      "idea",
+      "demand",
+      "tech_plan",
+      "task_list",
+      "code_change",
+      "pull_request",
+      "review_only",
+    ],
+    targetStages: [
+      "demand_doc",
+      "tech_plan",
+      "task_breakdown",
+      "development",
+      "validation_report",
+      "pull_request",
+      "risk_report",
+    ],
+  };
+}
+
+export function defaultAgentProfiles(): AgentProfile[] {
+  return [
+    {
+      name: "intent-agent",
+      version: "0.1.0",
+      role: "Intent",
+      description: "判断输入类型、目标阶段、上下文缺口和风险等级。",
+      tools: [],
+      skills: [],
+      permissions: { allow: [], deny: ["Bash(*)"] },
+    },
+    {
+      name: "pm-agent",
+      version: "0.1.0",
+      role: "PM",
+      description: "生成或补齐需求文档、验收标准和信息缺口。",
+      tools: ["document-writer"],
+      skills: ["demand-doc"],
+      permissions: { allow: ["Write(docs/**)"], deny: ["Bash(*)"] },
+    },
+    {
+      name: "tech-agent",
+      version: "0.1.0",
+      role: "Tech",
+      description: "生成技术方案、影响面、风险和任务拆解。",
+      tools: ["document-writer", "repo-reader"],
+      skills: ["plan-review"],
+      permissions: { allow: ["Read(*)", "Write(docs/**)"], deny: ["Bash(git push *)"] },
+    },
+    {
+      name: "rd-agent",
+      version: "0.1.0",
+      role: "RD",
+      description: "在隔离工作区执行安全的代码变更任务。",
+      tools: ["git-cli", "coding-agent-adapter"],
+      skills: ["implementation"],
+      permissions: { allow: ["Bash(npm *)", "Bash(node *)"], deny: ["Bash(git push *)", "Bash(rm -rf *)"] },
+    },
+    {
+      name: "test-agent",
+      version: "0.1.0",
+      role: "Test",
+      description: "运行测试、E2E、静态检查并生成证据。",
+      tools: ["repo-test-cli", "ci-api", "playwright-cli"],
+      skills: ["run-tests", "run-e2e", "failure-triage"],
+      permissions: { allow: ["Bash(npm test *)", "Bash(node --test *)"], deny: ["Bash(git push *)", "Bash(rm -rf *)"] },
+    },
+    {
+      name: "review-agent",
+      version: "0.1.0",
+      role: "Review",
+      description: "审阅方案、diff、风险和测试证据。",
+      tools: ["repo-reader"],
+      skills: ["code-review"],
+      permissions: { allow: ["Read(*)"], deny: ["Write(*)", "Bash(*)"] },
+    },
+    {
+      name: "evidence-agent",
+      version: "0.1.0",
+      role: "Evidence",
+      description: "汇总交付证据包、HTML 报告和未覆盖项。",
+      tools: ["document-writer"],
+      skills: ["pr-evidence"],
+      permissions: { allow: ["Write(.donkey/**)"], deny: ["Bash(git push *)"] },
+    },
+  ];
+}
