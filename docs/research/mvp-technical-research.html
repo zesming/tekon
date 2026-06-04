@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Donkey MVP 技术调研</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --text: #172033;
+      --muted: #586174;
+      --line: #dfe5f2;
+      --panel: #f7f9fd;
+      --accent: #2457e6;
+      --accent-soft: #eef4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 44px 28px 72px;
+    }
+    .doc-meta {
+      margin: 0 0 28px;
+      padding: 14px 16px;
+      border: 1px solid #cfddff;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: #23365f;
+      font-size: 14px;
+    }
+    h1, h2, h3, h4 {
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+    h1 {
+      margin: 0 0 18px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--line);
+      font-size: 32px;
+    }
+    h2 {
+      margin: 38px 0 14px;
+      padding-left: 12px;
+      border-left: 4px solid var(--accent);
+      font-size: 24px;
+    }
+    h3 { margin: 28px 0 10px; font-size: 19px; }
+    h4 { margin: 22px 0 8px; font-size: 16px; }
+    p { margin: 10px 0; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #eef2f8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      padding: 16px;
+      border-radius: 8px;
+      background: #101827;
+      color: #edf3ff;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    ul, ol { padding-left: 26px; }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      margin: 16px 0 22px;
+      border-collapse: collapse;
+      table-layout: auto;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--panel);
+      text-align: left;
+      font-weight: 650;
+    }
+    tr:nth-child(even) td { background: #fbfcff; }
+    hr {
+      margin: 30px 0;
+      border: 0;
+      border-top: 1px solid var(--line);
+    }
+    .diagram {
+      margin: 18px 0 24px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      overflow: auto;
+    }
+    .mermaid { min-width: 720px; }
+    @media (max-width: 760px) {
+      main { padding: 28px 18px 52px; }
+      h1 { font-size: 26px; }
+      h2 { font-size: 21px; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .mermaid { min-width: 620px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="doc-meta">本 HTML 由 <code>docs/research/mvp-technical-research.md</code> 生成，用于人类审阅；源稿仍以 Markdown 文件为准。生成日期：2026-06-04。</div>
+<h1 id="donkey-mvp-技术调研">Donkey MVP 技术调研</h1>
+<p>本文档记录 Donkey MVP 技术方案使用的外部技术调研。调研优先使用官方文档、标准组织文档和项目官方资料。</p>
+<h2 id="1-agent-编排与运行时">1. Agent 编排与运行时</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>LangGraph</td><td><a href="https://docs.langchain.com/oss/python/langgraph/workflows-agents">LangGraph workflows and agents</a></td><td>LangGraph 区分 workflow 与 agent，强调持久化、流式输出、调试和部署。</td><td>Donkey 需要把确定性流程和动态 Agent 分开：流程主干可控，局部任务交给 Agent。</td></tr>
+<tr><td>CrewAI</td><td><a href="https://docs.crewai.com/">CrewAI documentation</a></td><td>CrewAI 面向多 Agent 系统，包含 crews、flows、guardrails、memory、knowledge、observability。</td><td>角色化 Agent 和 Flow 适合作为参考，但 Donkey 不应被某个框架锁死。</td></tr>
+<tr><td>Microsoft AutoGen</td><td><a href="https://microsoft.github.io/autogen/stable/index.html">AutoGen documentation</a></td><td>AutoGen 是事件驱动的多 Agent 框架，支持确定性和动态 Agent workflow。</td><td>多 Agent 协作成熟度提升，但产品层仍需要自己的状态、权限、证据和风险模型。</td></tr>
+<tr><td>OpenAI Agents SDK</td><td><a href="https://openai.github.io/openai-agents-python/">OpenAI Agents SDK</a></td><td>SDK 支持工具执行、handoffs、guardrails、sessions、tracing、sandbox agents。</td><td>适合作为 OpenAI-first Agent runtime 备选，尤其适合结构化 handoff 和 guardrail。</td></tr>
+<tr><td>Claude Code Dynamic Workflows</td><td><a href="https://code.claude.com/docs/en/workflows.md">Claude Code workflows</a></td><td>官方文档说明 Dynamic Workflows 是由 Claude 写出的 JavaScript orchestration script，由 runtime 在后台编排 subagents，适合代码库审计、大迁移、交叉验证和复杂研究。</td><td>Donkey 可借鉴“计划进入代码、结果可复跑”的设计；但它应作为专项节点后端，不应承载 Donkey 的全局业务状态。</td></tr>
+</tbody>
+</table>
+<h2 id="1-1-claude-code-运行形态-角色与技能">1.1 Claude Code 运行形态、角色与技能</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>Headless / CLI</td><td><a href="https://code.claude.com/docs/en/headless.md">Run Claude Code programmatically</a></td><td>Claude Code 支持 <code>claude -p</code> 非交互运行、stdin、JSON 输出、allowedTools 和 bare mode。</td><td>Donkey Runner 可以优先用 CLI 方式接入 Claude Code，避免过早引入复杂协议。</td></tr>
+<tr><td>Agent SDK</td><td><a href="https://code.claude.com/docs/en/agent-sdk/overview.md">Agent SDK overview</a></td><td>Agent SDK 提供 Python/TypeScript 编程接口，内置读文件、命令执行、编辑、subagents、hooks、permissions、sessions 等能力。</td><td>适合作为可编程 Role Agent 或 Coding Agent Adapter。</td></tr>
+<tr><td>SDK Hosting</td><td><a href="https://code.claude.com/docs/en/agent-sdk/hosting.md">Hosting the Agent SDK</a></td><td>Agent SDK 通过 <code>claude</code> CLI subprocess 运行，每个 session 关联工作目录、进程树和本地 transcript；生产部署要考虑容器、session store、观测和多租户隔离。</td><td>Donkey Runner 不能把 Agent 后端当作无状态 API；需要显式管理 session、cwd、隔离和持久化。</td></tr>
+<tr><td>Subagents</td><td><a href="https://code.claude.com/docs/en/sub-agents.md">Create custom subagents</a></td><td>subagent 用 Markdown + YAML frontmatter 定义，支持 description、tools、model、permissionMode、skills、memory、isolation 等字段。</td><td>Donkey 的 Agent Profile 应版本化管理职责、工具、技能、权限、模型和评测指标。</td></tr>
+<tr><td>Skills</td><td><a href="https://code.claude.com/docs/en/skills.md">Extend Claude with skills</a></td><td>Skill 用 <code>SKILL.md</code> 封装可复用能力、命令、工具权限、动态上下文和 subagent 执行方式。</td><td>Skill 适合沉淀团队 SOP、测试验收、PR 描述、失败分类等重复流程，应优先于 MCP 进入 MVP。</td></tr>
+<tr><td>Permissions</td><td><a href="https://code.claude.com/docs/en/agent-sdk/permissions.md">Configure permissions</a></td><td>SDK 支持 permission modes、allow/deny rules、hooks 和运行时审批。</td><td>Donkey 需要独立 Tool Policy 层，不能只依赖 prompt 控制工具行为。</td></tr>
+</tbody>
+</table>
+<h2 id="2-工具协作-协议与互操作">2. 工具协作、协议与互操作</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>CLI</td><td>现有仓库命令、git、测试工具、内部脚手架</td><td>CLI 是研发流程中最直接、可观察、可复用的执行方式。</td><td>Donkey MVP 应优先复用 CLI，减少协议层复杂度。</td></tr>
+<tr><td>Skill</td><td><a href="https://code.claude.com/docs/en/skills.md">Claude Code Skills</a></td><td>Skill 可以把重复流程、动态上下文和工具权限封装为可复用能力。</td><td>用于沉淀团队 SOP、评审清单、测试验收和证据生成。</td></tr>
+<tr><td>Direct API</td><td>内部平台 API、代码托管 API、CI API、飞书 API</td><td>对稳定内部系统直接接 API，减少中间层和不必要抽象。</td><td>内部核心系统优先 Direct API，不需要先包装成 MCP。</td></tr>
+<tr><td>SDK</td><td><a href="https://code.claude.com/docs/en/agent-sdk/overview.md">Claude Agent SDK</a>、OpenAI SDK 等</td><td>官方 SDK 通常提供结构化输出、权限、session、streaming 等能力。</td><td>Agent 后端优先用官方 SDK 或 CLI，便于可靠调用和观测。</td></tr>
+<tr><td>MCP</td><td><a href="https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices">MCP security best practices</a></td><td>MCP 官方安全实践强调授权流、安全边界和 OAuth 相关风险。</td><td>MCP 可作为标准化工具接入方式，但不应作为 Donkey MVP 的默认优先路径。</td></tr>
+<tr><td>A2A</td><td><a href="https://a2a-protocol.org/latest/">A2A official docs</a></td><td>A2A 是开放 Agent 间通信标准，目标是不同框架和厂商 Agent 的互操作。</td><td>MVP 不必直接实现 A2A，但 Agent Adapter 要保留未来接入异构 Agent 的空间。</td></tr>
+<tr><td>ACP</td><td><a href="https://agentcommunicationprotocol.dev/introduction/welcome">Agent Communication Protocol</a></td><td>ACP 是 Linux Foundation 下的开放 Agent 通信标准，后续与 A2A 生态收敛。</td><td>Agent 通信协议仍在演进，Donkey 应避免把内部对象模型绑定到单一协议。</td></tr>
+</tbody>
+</table>
+<h2 id="3-coding-agent-与代码交付">3. Coding Agent 与代码交付</h2>
+<table>
+<thead><tr><th>工具</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>OpenAI Codex</td><td><a href="https://developers.openai.com/codex/cloud">Codex cloud docs</a></td><td>Codex 可在云端后台处理任务，连接 GitHub 并创建 PR。</td><td>Donkey MVP 可把 Codex 作为 RD Agent Adapter，而不是自研完整代码编辑 Agent。</td></tr>
+<tr><td>Codex Environments</td><td><a href="https://developers.openai.com/codex/cloud/environments">Codex environments</a></td><td>Codex cloud task 在环境中检出仓库、运行配置命令并执行任务。</td><td>Coding Agent Adapter 不能假设所有执行者都用同一种任务/权限/日志模型，需要定义最小合同。</td></tr>
+<tr><td>Claude Code</td><td><a href="https://code.claude.com/docs/en/github-actions">Claude Code GitHub Actions</a></td><td>Claude 可通过 GitHub Actions 在 issue/PR 中分析代码、创建 PR、实现功能和修复 bug。</td><td>Donkey 需要抽象“代码执行者”，支持 Claude Code、Codex 等多后端。</td></tr>
+<tr><td>Cursor</td><td><a href="https://cursor.com/docs">Cursor docs</a></td><td>Cursor 官方文档覆盖 Agent、Rules、MCP、Skills、CLI 与团队能力。</td><td>Repo Profile 中的规则和指令文件应作为 Agent 工作的关键上下文。</td></tr>
+<tr><td>Devin</td><td><a href="https://docs.devin.ai/integrations/pr-templates">Devin PR templates docs</a></td><td>Devin 可使用仓库 PR 模板生成 PR 描述。</td><td>Donkey 应规范 PR 证据包模板，让外部 Coding Agent 也能稳定输出可验收 PR。</td></tr>
+<tr><td>Factory Droids</td><td><a href="https://factory.ai/product/droids">Factory Droids</a></td><td>Droids 面向自动计划、编码、测试和交付代码。</td><td>行业方向已从补全代码走向任务级交付，Donkey 的差异应是流程治理和证据验收。</td></tr>
+</tbody>
+</table>
+<h2 id="4-持久化工作流与任务调度">4. 持久化工作流与任务调度</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>Temporal</td><td><a href="https://docs.temporal.io/workflows">Temporal Workflows</a></td><td>Temporal workflow 可长期运行，面对底层失败仍能保持可靠、持久和可扩展。</td><td>Donkey 的 Orchestrator 应具备长任务、重试、暂停、恢复和审计能力。</td></tr>
+<tr><td>Inngest</td><td><a href="https://www.inngest.com/docs">Inngest docs</a></td><td>Inngest 是事件驱动的 durable execution 平台，支持 TypeScript、Python、Go、步骤执行、队列和观测。</td><td>若团队更偏 Node/Serverless，Inngest 是轻量备选。</td></tr>
+<tr><td>Hatchet</td><td><a href="https://docs.hatchet.run/home">Hatchet docs</a></td><td>Hatchet 支持 durable workflows、任务持久化、重试、replay、监控、告警和日志。</td><td>Hatchet 与 Agent/任务调度场景贴近，可作为轻量自托管备选。</td></tr>
+<tr><td>Dagger</td><td><a href="https://dagger.io/">Dagger</a></td><td>Dagger 用容器化函数构建可编程软件交付环境，适合复杂 CI 与 AI Agent 场景。</td><td>Donkey 可借鉴“可编程、可复现、容器化”的执行环境思路。</td></tr>
+</tbody>
+</table>
+<h2 id="5-安全-风险与供应链">5. 安全、风险与供应链</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>OWASP LLM Top 10</td><td><a href="https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf">OWASP Top 10 for LLM Applications 2025</a></td><td>OWASP 总结 LLM 应用的主要风险，包括 prompt injection、敏感信息泄露、供应链等。</td><td>Donkey 必须把仓库内容、文档和用户输入视为不可信上下文。</td></tr>
+<tr><td>OWASP Agentic AI</td><td><a href="https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/">Agentic AI Threats and Mitigations</a></td><td>OWASP 针对 Agent 工具使用、自治决策和多 Agent 协作提出威胁与缓解思路。</td><td>Donkey 的高危动作 Gate、工具权限和审计日志是核心设计，不是附加项。</td></tr>
+<tr><td>Codex Internet Access</td><td><a href="https://developers.openai.com/codex/cloud/internet-access">Codex internet access</a></td><td>Codex 官方文档将网络访问与 prompt injection、代码/secret 外泄、恶意依赖等风险关联。</td><td>Donkey 的执行环境要有网络 egress 策略、secret 隔离和工具审计，不能只靠分支隔离。</td></tr>
+<tr><td>NIST GenAI Profile</td><td><a href="https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence">NIST AI RMF Generative AI Profile</a></td><td>NIST 为生成式 AI 风险管理提供跨行业 profile。</td><td>Donkey 应以风险识别、度量、治理和反馈闭环组织安全能力。</td></tr>
+<tr><td>SLSA</td><td><a href="https://slsa.dev/">SLSA</a></td><td>SLSA 是软件供应链完整性框架，关注防篡改、构建完整性和基础设施安全。</td><td>Donkey 生成 PR 时应保留执行记录、依赖变更和验证证据，支持后续供应链治理。</td></tr>
+</tbody>
+</table>
+<h2 id="6-ci-e2e-与可观测性">6. CI/E2E 与可观测性</h2>
+<table>
+<thead><tr><th>方向</th><th>资料</th><th>关键内容</th><th>对 Donkey 的启发</th></tr></thead>
+<tbody>
+<tr><td>Playwright</td><td><a href="https://playwright.dev/">Playwright</a></td><td>Playwright Test 支持自动等待、断言、trace、并行和多浏览器 E2E。</td><td>Test Agent 应把 E2E 结果、trace、截图和日志纳入交付证据包。</td></tr>
+<tr><td>GitHub Actions</td><td><a href="https://docs.github.com/en/actions/get-started/continuous-integration">GitHub Actions CI</a></td><td>GitHub Actions 支持在仓库中创建 CI workflow，自动运行构建和测试。</td><td>Donkey 不替代 CI，而是消费 CI 结果并把它转成验收证据。</td></tr>
+<tr><td>GitLab CI</td><td><a href="https://docs.gitlab.com/ci/yaml/workflow/">GitLab workflow rules</a></td><td>GitLab 支持分支 pipeline 与 MR pipeline 规则。</td><td>Donkey 的代码仓库适配层要抽象 GitHub/GitLab 差异。</td></tr>
+<tr><td>OpenTelemetry</td><td><a href="https://opentelemetry.io/docs/">OpenTelemetry docs</a></td><td>OpenTelemetry 是供应商中立的 traces、metrics、logs 标准。</td><td>Donkey 的 AgentRun、ToolRun、WorkflowRun 应可关联 trace、metric 和 audit log。</td></tr>
+</tbody>
+</table>
+  </main>
+
+</body>
+</html>

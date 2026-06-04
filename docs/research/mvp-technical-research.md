@@ -10,12 +10,28 @@
 | CrewAI | [CrewAI documentation](https://docs.crewai.com/) | CrewAI 面向多 Agent 系统，包含 crews、flows、guardrails、memory、knowledge、observability。 | 角色化 Agent 和 Flow 适合作为参考，但 Donkey 不应被某个框架锁死。 |
 | Microsoft AutoGen | [AutoGen documentation](https://microsoft.github.io/autogen/stable/index.html) | AutoGen 是事件驱动的多 Agent 框架，支持确定性和动态 Agent workflow。 | 多 Agent 协作成熟度提升，但产品层仍需要自己的状态、权限、证据和风险模型。 |
 | OpenAI Agents SDK | [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) | SDK 支持工具执行、handoffs、guardrails、sessions、tracing、sandbox agents。 | 适合作为 OpenAI-first Agent runtime 备选，尤其适合结构化 handoff 和 guardrail。 |
+| Claude Code Dynamic Workflows | [Claude Code workflows](https://code.claude.com/docs/en/workflows.md) | 官方文档说明 Dynamic Workflows 是由 Claude 写出的 JavaScript orchestration script，由 runtime 在后台编排 subagents，适合代码库审计、大迁移、交叉验证和复杂研究。 | Donkey 可借鉴“计划进入代码、结果可复跑”的设计；但它应作为专项节点后端，不应承载 Donkey 的全局业务状态。 |
 
-## 2. Agent 协议与工具连接
+## 1.1 Claude Code 运行形态、角色与技能
 
 | 方向 | 资料 | 关键内容 | 对 Donkey 的启发 |
 |-|-|-|-|
-| MCP | [MCP security best practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) | MCP 官方安全实践强调授权流、安全边界和 OAuth 相关风险。 | Donkey 的工具连接层应采用最小权限、工具白名单、审计和敏感操作拦截。 |
+| Headless / CLI | [Run Claude Code programmatically](https://code.claude.com/docs/en/headless.md) | Claude Code 支持 `claude -p` 非交互运行、stdin、JSON 输出、allowedTools 和 bare mode。 | Donkey Runner 可以优先用 CLI 方式接入 Claude Code，避免过早引入复杂协议。 |
+| Agent SDK | [Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview.md) | Agent SDK 提供 Python/TypeScript 编程接口，内置读文件、命令执行、编辑、subagents、hooks、permissions、sessions 等能力。 | 适合作为可编程 Role Agent 或 Coding Agent Adapter。 |
+| SDK Hosting | [Hosting the Agent SDK](https://code.claude.com/docs/en/agent-sdk/hosting.md) | Agent SDK 通过 `claude` CLI subprocess 运行，每个 session 关联工作目录、进程树和本地 transcript；生产部署要考虑容器、session store、观测和多租户隔离。 | Donkey Runner 不能把 Agent 后端当作无状态 API；需要显式管理 session、cwd、隔离和持久化。 |
+| Subagents | [Create custom subagents](https://code.claude.com/docs/en/sub-agents.md) | subagent 用 Markdown + YAML frontmatter 定义，支持 description、tools、model、permissionMode、skills、memory、isolation 等字段。 | Donkey 的 Agent Profile 应版本化管理职责、工具、技能、权限、模型和评测指标。 |
+| Skills | [Extend Claude with skills](https://code.claude.com/docs/en/skills.md) | Skill 用 `SKILL.md` 封装可复用能力、命令、工具权限、动态上下文和 subagent 执行方式。 | Skill 适合沉淀团队 SOP、测试验收、PR 描述、失败分类等重复流程，应优先于 MCP 进入 MVP。 |
+| Permissions | [Configure permissions](https://code.claude.com/docs/en/agent-sdk/permissions.md) | SDK 支持 permission modes、allow/deny rules、hooks 和运行时审批。 | Donkey 需要独立 Tool Policy 层，不能只依赖 prompt 控制工具行为。 |
+
+## 2. 工具协作、协议与互操作
+
+| 方向 | 资料 | 关键内容 | 对 Donkey 的启发 |
+|-|-|-|-|
+| CLI | 现有仓库命令、git、测试工具、内部脚手架 | CLI 是研发流程中最直接、可观察、可复用的执行方式。 | Donkey MVP 应优先复用 CLI，减少协议层复杂度。 |
+| Skill | [Claude Code Skills](https://code.claude.com/docs/en/skills.md) | Skill 可以把重复流程、动态上下文和工具权限封装为可复用能力。 | 用于沉淀团队 SOP、评审清单、测试验收和证据生成。 |
+| Direct API | 内部平台 API、代码托管 API、CI API、飞书 API | 对稳定内部系统直接接 API，减少中间层和不必要抽象。 | 内部核心系统优先 Direct API，不需要先包装成 MCP。 |
+| SDK | [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview.md)、OpenAI SDK 等 | 官方 SDK 通常提供结构化输出、权限、session、streaming 等能力。 | Agent 后端优先用官方 SDK 或 CLI，便于可靠调用和观测。 |
+| MCP | [MCP security best practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) | MCP 官方安全实践强调授权流、安全边界和 OAuth 相关风险。 | MCP 可作为标准化工具接入方式，但不应作为 Donkey MVP 的默认优先路径。 |
 | A2A | [A2A official docs](https://a2a-protocol.org/latest/) | A2A 是开放 Agent 间通信标准，目标是不同框架和厂商 Agent 的互操作。 | MVP 不必直接实现 A2A，但 Agent Adapter 要保留未来接入异构 Agent 的空间。 |
 | ACP | [Agent Communication Protocol](https://agentcommunicationprotocol.dev/introduction/welcome) | ACP 是 Linux Foundation 下的开放 Agent 通信标准，后续与 A2A 生态收敛。 | Agent 通信协议仍在演进，Donkey 应避免把内部对象模型绑定到单一协议。 |
 

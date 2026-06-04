@@ -171,6 +171,14 @@ function renderMarkdown(markdown) {
 
 const body = renderMarkdown(source);
 const renderedAt = new Date().toISOString().slice(0, 10);
+const hasMermaid = body.includes('class="mermaid"');
+const mermaidScript = hasMermaid
+  ? `  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, securityLevel: "strict", theme: "default" });
+  </script>
+`
+  : "";
 
 const html = `<!doctype html>
 <html lang="zh-CN">
@@ -294,10 +302,7 @@ const html = `<!doctype html>
     <div class="doc-meta">本 HTML 由 <code>${escapeHtml(sourceRelative)}</code> 生成，用于人类审阅；源稿仍以 Markdown 文件为准。生成日期：${renderedAt}。</div>
 ${body}
   </main>
-  <script type="module">
-    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({ startOnLoad: true, securityLevel: "strict", theme: "default" });
-  </script>
+${mermaidScript}
 </body>
 </html>
 `;
