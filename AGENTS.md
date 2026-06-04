@@ -8,6 +8,7 @@
 
 - 产品方案放在 `docs/product/`。
 - 技术方案放在 `docs/technical/`。
+- 使用手册放在 `docs/manual/`。
 - 外部调研和资料摘录放在 `docs/research/`。
 - 审阅记录放在 `docs/reviews/`。
 - 实施计划放在 `docs/superpowers/plans/`。
@@ -50,4 +51,7 @@
 - 修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。
 - 重要文档的审阅记录应保存到 `docs/reviews/`，包含 reviewer 结论、必须修复项、修复摘要和复查结果。
 - 交付前必须做本地验证：文件存在、关键内容非空、无 `TBD/TODO/FIXME/placeholder` 等占位符、链接和章节结构可读。
+- 提交代码、行为或 CLI 命令变更前，必须检查并按需同步更新 `README.md`、`CHANGELOG.md`、`docs/manual/donkey-mvp-user-manual.html`、相关产品/技术/验收 HTML 文档和本指令文件。
+- 若运行产物位于 `.donkey/` 且不会随 git 提交归档，必须把关键验收结论、run id、风险 Gate 结果和 eval 指标摘要写入 `docs/reviews/` 或其他可提交文档。
+- 提交前检查文档更新时，若判断“不需要更新”，应在最终回复或提交说明中简要说明理由。
 - 修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。
