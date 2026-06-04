@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { defaultAgentProfiles, defaultRepoProfile } from "./defaults.js";
 import { readJson, writeJson } from "./fs-store.js";
@@ -7,6 +8,7 @@ import { runEvalCases } from "./eval.js";
 import { renderEvalHtml } from "./html.js";
 import { loadRepoProfile } from "./repo-profile.js";
 import { runProject } from "./runner.js";
+import { startTui } from "./tui.js";
 import type { EvalCase, ProjectRun, TargetStage } from "./types.js";
 
 interface ParsedArgs {
@@ -19,7 +21,16 @@ async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
   const command = args.command;
 
-  if (!command || command === "help" || args.flags.help) {
+  if (!command) {
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      await startTui({ repo: resolveRepo(args) });
+    } else {
+      printHelp();
+    }
+    return;
+  }
+
+  if (command === "help" || args.flags.help) {
     printHelp();
     return;
   }
@@ -28,8 +39,12 @@ async function main(argv: string[]): Promise<void> {
     await initCommand(args);
     return;
   }
-  if (command === "run") {
+  if (command === "run" || command === "ask" || command === "go") {
     await runCommand(args);
+    return;
+  }
+  if (command === "tui") {
+    await startTui({ repo: resolveRepo(args) });
     return;
   }
   if (command === "status") {
@@ -44,21 +59,23 @@ async function main(argv: string[]): Promise<void> {
     await evalCommand(args);
     return;
   }
+  if (command === "adapter") {
+    await adapterCommand(args);
+    return;
+  }
 
   throw new Error(`Unknown command: ${command}`);
 }
 
 async function initCommand(args: ParsedArgs): Promise<void> {
   const repo = resolveRepo(args);
-  const donkeyDir = path.join(repo, ".donkey");
-  await mkdir(donkeyDir, { recursive: true });
-  await writeJson(path.join(donkeyDir, "repo-profile.json"), defaultRepoProfile(repo));
-  await writeJson(path.join(donkeyDir, "agent-profiles.json"), defaultAgentProfiles());
+  await writeDefaultProjectFiles(repo, true);
   print(args, { repo, profile: ".donkey/repo-profile.json", agents: ".donkey/agent-profiles.json" });
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
   const repo = resolveRepo(args);
+  await writeDefaultProjectFiles(repo, false);
   const input = await readInput(args);
   const profile = await loadRepoProfile(repo);
   const testCommand = getString(args, "test-command");
@@ -116,6 +133,7 @@ async function showCommand(args: ParsedArgs): Promise<void> {
 
 async function evalCommand(args: ParsedArgs): Promise<void> {
   const repo = resolveRepo(args);
+  await writeDefaultProjectFiles(repo, false);
   const cases = builtinEvalCases();
   const result = runEvalCases(cases, await loadRepoProfile(repo));
   const outputDir = path.join(repo, ".donkey", "eval");
@@ -130,6 +148,36 @@ async function evalCommand(args: ParsedArgs): Promise<void> {
   });
 }
 
+async function adapterCommand(args: ParsedArgs): Promise<void> {
+  const provider = args.positional[0];
+  const promptPath = args.positional[1];
+  if ((provider !== "codex" && provider !== "claude") || !promptPath) {
+    throw new Error("adapter requires: donkey adapter <codex|claude> <promptPath>");
+  }
+  const prompt = await readFile(path.resolve(promptPath), "utf8");
+  const exitCode = await runProvider(provider, prompt, process.cwd());
+  process.exitCode = exitCode;
+}
+
+function runProvider(provider: "codex" | "claude", prompt: string, cwd: string): Promise<number> {
+  const argv =
+    provider === "codex"
+      ? ["codex", "exec", "--cd", cwd, "--sandbox", "workspace-write", "--ask-for-approval", "never", prompt]
+      : ["claude", "-p", "--permission-mode", "dontAsk", "--add-dir", cwd, prompt];
+  return new Promise((resolve) => {
+    const child = spawn(argv[0] ?? "", argv.slice(1), {
+      cwd,
+      shell: false,
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    child.on("close", (code) => resolve(code ?? 1));
+    child.on("error", (error) => {
+      process.stderr.write(`${error.message}\n`);
+      resolve(1);
+    });
+  });
+}
+
 async function loadRun(repo: string, runId: string): Promise<ProjectRun> {
   return readJson<ProjectRun>(path.join(repo, ".donkey", "runs", runId, "state.json"));
 }
@@ -139,12 +187,38 @@ async function readInput(args: ParsedArgs): Promise<string> {
   if (input) {
     return input;
   }
+  if (args.positional.length > 0) {
+    return args.positional.join(" ");
+  }
   const inputFile = getString(args, "input-file");
   if (inputFile) {
     const { readFile } = await import("node:fs/promises");
     return readFile(path.resolve(inputFile), "utf8");
   }
   throw new Error("run requires --input or --input-file");
+}
+
+async function writeDefaultProjectFiles(repo: string, overwrite: boolean): Promise<void> {
+  const donkeyDir = path.join(repo, ".donkey");
+  await mkdir(donkeyDir, { recursive: true });
+  await writeJsonIfNeeded(path.join(donkeyDir, "repo-profile.json"), defaultRepoProfile(repo), overwrite);
+  await writeJsonIfNeeded(path.join(donkeyDir, "agent-profiles.json"), defaultAgentProfiles(), overwrite);
+}
+
+async function writeJsonIfNeeded(filePath: string, value: unknown, overwrite: boolean): Promise<void> {
+  if (!overwrite && (await exists(filePath))) {
+    return;
+  }
+  await writeJson(filePath, value);
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function builtinEvalCases(): EvalCase[] {
@@ -166,6 +240,12 @@ function builtinEvalCases(): EvalCase[] {
       input: "已有技术方案，请直接执行测试验收",
       expectedInputType: "tech_plan",
       expectedTargetStage: "validation_report",
+    },
+    {
+      id: "tech-plan-to-development",
+      input: "已有技术方案，请按方案执行",
+      expectedInputType: "tech_plan",
+      expectedTargetStage: "development",
     },
     {
       id: "pr-to-validation",
@@ -232,10 +312,13 @@ function printHelp(): void {
 
 Commands:
   donkey init [--repo <path>] [--json]
+  donkey tui [--repo <path>]
+  donkey ask|go <text> [--repo <path>] [--test-command <cmd>] [--target-stage <stage>] [--dry-run] [--json]
   donkey run --input <text> [--repo <path>] [--test-command <cmd>] [--target-stage <stage>] [--dry-run] [--json]
   donkey status <runId> [--repo <path>] [--json]
   donkey show <runId> [--repo <path>] [--json]
   donkey eval [--repo <path>] [--json]
+  donkey adapter <codex|claude> <promptPath>
 `);
 }
 

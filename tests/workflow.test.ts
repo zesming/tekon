@@ -24,3 +24,15 @@ test("plans technical plan execution by skipping demand document stage", () => {
   assert.equal(workflow.stages.find((stage) => stage.id === "implementation")?.skipped, true);
   assert.equal(workflow.stages.find((stage) => stage.id === "validation")?.skipped, false);
 });
+
+test("plans development workflow with implementation and validation stages", () => {
+  const repoProfile = defaultRepoProfile(".");
+  const intent = classifyIntent({ input: "已有技术方案，请按方案执行", repoProfile });
+  const workflow = planWorkflow(intent);
+
+  assert.equal(workflow.inputType, "tech_plan");
+  assert.equal(workflow.targetStage, "development");
+  assert.equal(workflow.stages.find((stage) => stage.id === "demand_document")?.skipped, true);
+  assert.equal(workflow.stages.find((stage) => stage.id === "implementation")?.skipped, false);
+  assert.equal(workflow.stages.find((stage) => stage.id === "validation")?.skipped, false);
+});

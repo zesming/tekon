@@ -14,14 +14,33 @@ test("classifies an idea as demand document target", () => {
   assert.equal(intent.riskLevel, "low");
 });
 
-test("classifies an existing technical plan for execution as validation target", () => {
+test("classifies an existing technical plan for validation as validation target", () => {
   const intent = classifyIntent({
-    input: "这是技术方案，请按这个方案执行并测试验收",
+    input: "这是技术方案，请直接执行测试验收",
     repoProfile: defaultRepoProfile("."),
   });
 
   assert.equal(intent.inputType, "tech_plan");
   assert.equal(intent.targetStage, "validation_report");
+});
+
+test("classifies explicit implementation request as development target", () => {
+  const intent = classifyIntent({
+    input: "请开发一个本地搜索功能并补充测试",
+    repoProfile: defaultRepoProfile("."),
+  });
+
+  assert.equal(intent.targetStage, "development");
+});
+
+test("classifies technical plan execution as development when validation is not the only goal", () => {
+  const intent = classifyIntent({
+    input: "已有技术方案，请按方案执行并测试验收",
+    repoProfile: defaultRepoProfile("."),
+  });
+
+  assert.equal(intent.inputType, "tech_plan");
+  assert.equal(intent.targetStage, "development");
 });
 
 test("downgrades production and secret changes to risk report", () => {

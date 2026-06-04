@@ -76,7 +76,7 @@ function isStageRequired(stageId: string, intent: IntentResult): boolean {
       return stageId === "technical_plan";
     }
     if (intent.targetStage === "development") {
-      return stageId === "implementation";
+      return ["implementation", "validation"].includes(stageId);
     }
     if (intent.targetStage === "validation_report") {
       return stageId === "validation";
@@ -103,6 +103,10 @@ function isStageRequired(stageId: string, intent: IntentResult): boolean {
   }
 
   if (intent.targetStage === "validation_report") {
+    return stageId === "validation";
+  }
+
+  if (intent.targetStage === "development") {
     return ["implementation", "validation"].includes(stageId);
   }
 

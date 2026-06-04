@@ -6,6 +6,7 @@ export function defaultRepoProfile(root: string): RepoProfile {
     name: "Default Repo",
     root,
     commands: {
+      develop: process.env.DONKEY_DEVELOP_COMMAND,
       test: "npm test",
       lint: undefined,
       typecheck: undefined,
@@ -50,6 +51,8 @@ export function defaultRepoProfile(root: string): RepoProfile {
         "^pnpm\\s+(test|lint|typecheck)(\\s|$)",
         "^yarn\\s+(test|lint|typecheck)(\\s|$)",
         "^node\\s+--test(\\s|$)",
+        "^node\\s+.*cli\\.js\\s+adapter\\s+(codex|claude)\\s+.*$",
+        "^donkey\\s+adapter\\s+(codex|claude)\\s+.*$",
       ],
       highRiskPaths: [".env", "secrets", "deploy", "infra", "migrations"],
     },

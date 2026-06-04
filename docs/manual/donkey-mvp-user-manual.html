@@ -19,16 +19,17 @@
 </head>
 <body>
   <h1>Donkey MVP 用户手册</h1>
-  <p><strong>适用版本：</strong>0.1.0，本地 Phase 0/1 MVP。</p>
+  <p><strong>适用版本：</strong>本地可试用版本。</p>
   <p><strong>这份手册面向：</strong>想把一个需求、技术方案或验收任务交给 Donkey 处理的试点用户。它不讲 Donkey 如何开发，只讲当前工具怎么用、能交付什么、不能交付什么。</p>
 
   <h2>1. 当前能不能一句话开始开发需求？</h2>
-  <p class="warning"><strong>当前不能。</strong>0.1.0 MVP 还不能做到“你说一句需求，Donkey 自动改代码、跑测试、提交 PR”。现在已经能做的是：理解输入成熟度，决定应该推进到哪个目标阶段，并在本地完成文档草案、测试验收、风险报告和证据包。</p>
+  <p class="warning"><strong>可以进入本地代码修改链路，但不会自动提交 PR。</strong>Donkey 会先判断目标阶段；如果命中开发目标且已配置开发命令，会调用本地 Coding Agent Adapter 修改工作区，然后继续运行测试并生成证据包。Donkey 当前不会 commit、push、创建 PR、自动合入或上线。</p>
   <table>
     <thead><tr><th>你说一句话</th><th>当前 Donkey 会做什么</th><th>不会做什么</th></tr></thead>
     <tbody>
-      <tr><td>“我想优化内部任务筛选体验”</td><td>识别为想法，生成需求文档草案和信息缺口。</td><td>不会直接改代码或创建 PR。</td></tr>
-      <tr><td>“这是需求文档，请输出技术方案”</td><td>识别为需求，生成技术方案草案。</td><td>不会自动拆到真实研发任务或调用 Coding Agent。</td></tr>
+      <tr><td>“我想优化内部任务筛选体验”</td><td>识别为想法，默认生成需求文档草案和信息缺口。</td><td>不会跳过需求边界直接改代码。</td></tr>
+      <tr><td>“请开发一个本地搜索功能并补充测试”</td><td>识别为开发目标；已配置开发命令时，调用 Coding Agent Adapter 修改代码并跑测试。</td><td>不会 commit、push 或创建 PR。</td></tr>
+      <tr><td>“已有技术方案，请按方案执行”</td><td>识别为已有方案的开发目标；跳过需求梳理，调用 Coding Agent Adapter 写代码，再进入测试验收。</td><td>不会创建分支或提交 PR。</td></tr>
       <tr><td>“已有技术方案，请直接执行测试验收”</td><td>跳过需求和开发执行，运行配置的测试命令，生成 HTML 证据包。</td><td>不会声称已经完成开发。</td></tr>
       <tr><td>“请修改 .env 文件并提交 PR”</td><td>命中高危路径，降级到风险报告，阻断工具执行。</td><td>不会执行测试、提交、推送或修改敏感文件。</td></tr>
     </tbody>
@@ -39,13 +40,14 @@
     <thead><tr><th>能力</th><th>当前状态</th><th>用户可感知结果</th></tr></thead>
     <tbody>
       <tr><td>自然语言输入识别</td><td>已实现 MVP</td><td>判断输入是想法、需求、技术方案、代码变更、PR、评审或高危请求。</td></tr>
-      <tr><td>目标阶段选择</td><td>已实现 MVP</td><td>自动决定停在需求文档、技术方案、任务拆解、测试验收或风险报告。PR/代码变更类输入当前进入测试验收或风险报告，不会自动进入 PR 交付。</td></tr>
+      <tr><td>目标阶段选择</td><td>已实现</td><td>自动决定停在需求文档、技术方案、任务拆解、开发执行、测试验收或风险报告。PR 类输入当前进入测试验收或风险报告，不会自动创建 PR。</td></tr>
       <tr><td>需求文档草案</td><td>已实现基础版</td><td>对模糊想法输出可继续补充的需求草案和信息缺口。</td></tr>
       <tr><td>技术方案草案</td><td>已实现基础版</td><td>对需求或技术方案类输入输出最小技术方案草案。</td></tr>
+      <tr><td>开发执行</td><td>已实现 Adapter 版</td><td>通过配置的 Codex / Claude / 自定义命令修改本地工作区，并生成代码变更报告。</td></tr>
       <tr><td>测试验收</td><td>已实现本地版</td><td>运行本地测试命令，记录结果、日志、退出码和 HTML 证据包。</td></tr>
       <tr><td>风险降级</td><td>已实现 MVP</td><td>命中生产、secret、token、删除、<code>.env</code>、deploy、infra 等风险时停止执行并生成风险报告。</td></tr>
       <tr><td>证据包</td><td>已实现 MVP</td><td>生成面向人审的 HTML 报告，说明输入、目标阶段、Workflow、工具执行和证据。</td></tr>
-      <tr><td>效果评测</td><td>已实现内置样本版</td><td>运行 5 个内置 EvalCase，检查目标阶段判断和高危误放行。</td></tr>
+      <tr><td>效果评测</td><td>已实现内置样本版</td><td>运行 6 个内置 EvalCase，检查目标阶段判断和高危误放行。</td></tr>
     </tbody>
   </table>
 
@@ -53,24 +55,26 @@
   <table>
     <thead><tr><th>能力</th><th>当前状态</th><th>意味着什么</th></tr></thead>
     <tbody>
-      <tr><td>自动开发代码</td><td>未完成</td><td>Donkey 当前不会根据需求直接改业务代码。</td></tr>
-      <tr><td>自动任务委派给真实 Coding Agent</td><td>未完成</td><td>Agent Registry 只是角色画像和边界，尚未接真实外部执行器。</td></tr>
+      <tr><td>无需配置即可稳定开发任意需求</td><td>未完成</td><td>当前依赖本地 Coding Agent CLI 和仓库测试质量，复杂需求仍需要人工验收。</td></tr>
+      <tr><td>团队级任务委派</td><td>未完成</td><td>当前是单机单次运行，不是多人队列或 Web Console。</td></tr>
       <tr><td>自动创建 PR</td><td>未完成</td><td>当前不会提交代码、push 分支或创建 Pull Request。</td></tr>
       <tr><td>CI Runner / Container Runner</td><td>未完成</td><td>当前只支持本地运行命令，不提供容器隔离和 CI 编排。</td></tr>
-      <tr><td>飞书入口 / Web Console</td><td>未完成</td><td>当前主要是 CLI 和本地 HTML 报告，不是面向全员的网页产品。</td></tr>
+      <tr><td>飞书入口 / Web Console</td><td>未完成</td><td>当前主要是 CLI、TUI 和本地 HTML 报告，不是面向全员的网页产品。</td></tr>
       <tr><td>真实 B/D 需求闭环评测</td><td>未完成</td><td>内置样本还少，不能代表真实需求成功率。</td></tr>
-      <tr><td>自动修复测试失败</td><td>未完成</td><td>测试失败后会报告失败，不会自动改代码修复。</td></tr>
+      <tr><td>稳定自动修复测试失败</td><td>未完成</td><td>当前会报告失败；是否继续修复由外部 Coding Agent 能力和人工确认决定。</td></tr>
     </tbody>
   </table>
 
   <h2>4. 你应该怎么使用它</h2>
-  <p>当前推荐把 Donkey 当作“本地交付判断与验收助手”，而不是完整自动研发平台。</p>
+  <p>当前推荐把 Donkey 当作“本地自动开发与验收助手”，而不是完整团队研发平台。</p>
   <table>
     <thead><tr><th>使用场景</th><th>推荐输入</th><th>你应该看什么结果</th></tr></thead>
     <tbody>
       <tr><td>把想法整理成需求</td><td>“我想做一个 xxx，目标是 xxx”</td><td>看需求草案是否覆盖目标、范围、非目标和信息缺口。</td></tr>
       <tr><td>把需求推进到方案</td><td>“这是需求文档，请输出技术方案：...”</td><td>看技术方案草案是否有改动范围、风险和测试策略。</td></tr>
       <tr><td>已有方案，只需要验收</td><td>“已有技术方案，请直接执行测试验收”</td><td>看 HTML 证据包里的测试命令、退出码、日志路径和建议结论。</td></tr>
+      <tr><td>已有方案，需要直接落地</td><td>“已有技术方案，请按方案执行”</td><td>看代码变更报告、测试报告、HTML 证据包和工作区 diff。</td></tr>
+      <tr><td>直接开发一个需求</td><td>“请开发 xxx，并补充测试”</td><td>看代码变更报告、测试报告和工作区 diff。</td></tr>
       <tr><td>检查高危请求</td><td>“请修改 .env / deploy / production 配置...”</td><td>确认它是否降级到风险报告且没有执行工具命令。</td></tr>
     </tbody>
   </table>
@@ -93,16 +97,20 @@
   <h3>从需求开始</h3>
   <p class="note">这是需求文档：【粘贴内容】。请推进到技术方案，重点关注影响范围、风险和验收方式。</p>
   <h3>从技术方案开始</h3>
+  <p class="note">已有技术方案，请按方案执行。完成后运行 npm test 并生成验收报告。</p>
+  <h3>只做测试验收</h3>
   <p class="note">已有技术方案，请直接执行测试验收。测试命令使用 npm test。</p>
   <h3>只做风险判断</h3>
   <p class="note">这个需求涉及【生产 / secret / .env / deploy / infra】，请先判断风险并输出风险报告。</p>
 
-  <h2>7. 当前 CLI 入口</h2>
-  <p>当前没有飞书入口和 Web Console。试点阶段由研发或项目负责人在仓库本地通过 CLI 发起运行。</p>
-  <p class="note">前置条件：项目负责人已在本地准备好 CLI 环境，完成依赖安装、构建和必要的 Repo Profile 配置；普通需求方可以把推荐输入交给负责人代跑。</p>
+  <h2>7. 当前入口</h2>
+  <p>当前没有飞书入口和 Web Console。试点阶段可通过 TUI 或短命令在仓库本地发起运行。</p>
+  <p class="note">前置条件：本地已安装依赖并完成构建；如果要让 Donkey 写代码，需要在 TUI 中配置开发命令，或在 <code>.donkey/repo-profile.json</code> 中配置 <code>commands.develop</code>。</p>
   <table>
     <thead><tr><th>动作</th><th>命令</th></tr></thead>
     <tbody>
+      <tr><td>打开 TUI</td><td><code>npm start</code></td></tr>
+      <tr><td>一句话运行</td><td><code>npm run d -- "请开发一个本地搜索功能并补充测试"</code></td></tr>
       <tr><td>初始化 Donkey 配置</td><td><code>npm run donkey -- init --repo . --json</code></td></tr>
       <tr><td>发起一次运行</td><td><code>npm run donkey -- run --repo . --input "..." --json</code></td></tr>
       <tr><td>指定测试命令验收</td><td><code>npm run donkey -- run --repo . --input "已有技术方案，请直接执行测试验收" --test-command "npm test" --json</code></td></tr>
@@ -116,9 +124,10 @@
   <ul>
     <li>测试通过不等于需求完成，只代表配置的验证命令通过。</li>
     <li>风险报告不是审批通过，它表示当前请求不应自动执行。</li>
+    <li>代码修改发生在当前工作区；Donkey 不会自动 commit、push 或创建 PR。</li>
     <li>当前证据包在本地 <code>.donkey/</code> 下，长期归档要沉淀到 <code>docs/reviews/</code>。</li>
     <li>不要把生产凭证、token、secret 明文输入给 Donkey。</li>
-    <li>真正的“一句话自动开发到 PR”是后续目标，不是 0.1.0 已完成能力。</li>
+    <li>“一句话自动开发到 PR”仍是后续目标；当前只做到本地代码修改、测试和证据包。</li>
   </ul>
 
   <h2>9. 下一阶段目标</h2>
@@ -126,7 +135,7 @@
     <thead><tr><th>阶段</th><th>目标</th></tr></thead>
     <tbody>
       <tr><td>Phase 1 后续</td><td>补真实 B/D 类需求样本，完善需求文档、技术方案、任务拆解和测试验收质量。</td></tr>
-      <tr><td>Phase 2</td><td>接入真实 Coding Agent / CI Runner，开始支持代码变更和 PR 交付。</td></tr>
+      <tr><td>Phase 2</td><td>增强 Coding Agent Adapter、CI Runner 和自动修复能力，开始支持 PR 交付。</td></tr>
       <tr><td>Phase 3</td><td>支持多仓库复用、失败修复、证据质量评分和团队级 Dashboard。</td></tr>
     </tbody>
   </table>

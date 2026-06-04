@@ -80,6 +80,27 @@ test("cli run uses repo profile created by init", async () => {
   assert.equal(payload.status, "completed");
 });
 
+test("cli ask accepts a one sentence positional input", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "donkey-cli-ask-"));
+  await writeFile(path.join(root, "ask.test.js"), "import test from 'node:test'; test('ask ok', () => {});\n");
+
+  const ask = runCli([
+    "ask",
+    "已有技术方案，请直接执行测试验收",
+    "--repo",
+    root,
+    "--test-command",
+    "node --test ask.test.js",
+    "--json",
+  ]);
+
+  assert.equal(ask.status, 0, ask.stderr);
+  const payload = JSON.parse(ask.stdout) as { status: string; targetStage: string; reportPath: string };
+  assert.equal(payload.status, "completed");
+  assert.equal(payload.targetStage, "validation_report");
+  assert.ok(payload.reportPath.endsWith("report.html"));
+});
+
 function runCli(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     encoding: "utf8",

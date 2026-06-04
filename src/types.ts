@@ -32,6 +32,7 @@ export interface RepoProfile {
   name: string;
   root: string;
   commands: {
+    develop?: string;
     test?: string;
     lint?: string;
     typecheck?: string;

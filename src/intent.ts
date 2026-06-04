@@ -74,10 +74,17 @@ function chooseTargetStage(
   }
 
   if (inputType === "tech_plan") {
-    if (containsAny(normalized, ["执行", "测试", "验收", "跑"])) {
+    if (isValidationOnlyRequest(normalized)) {
       return "validation_report";
     }
+    if (isImplementationRequest(normalized)) {
+      return "development";
+    }
     return "task_breakdown";
+  }
+
+  if (isImplementationRequest(normalized)) {
+    return "development";
   }
 
   const byInputType: Record<IntentResult["inputType"], TargetStage> = {
@@ -99,4 +106,24 @@ function reasonFor(inputType: IntentResult["inputType"], targetStage: TargetStag
 
 function containsAny(value: string, keywords: string[]): boolean {
   return keywords.some((keyword) => value.includes(keyword.toLowerCase()));
+}
+
+function isImplementationRequest(normalized: string): boolean {
+  return containsAny(normalized, ["开发", "实现", "写代码", "改代码", "修改代码", "修复", "bugfix", "执行", "落地"]);
+}
+
+function isValidationOnlyRequest(normalized: string): boolean {
+  return containsAny(normalized, [
+    "只验收",
+    "仅验收",
+    "只做验收",
+    "仅做验收",
+    "直接验收",
+    "直接执行测试",
+    "执行测试验收",
+    "跑测试",
+    "运行测试",
+    "run tests",
+    "validation only",
+  ]);
 }

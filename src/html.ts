@@ -1,4 +1,4 @@
-import type { ProjectRun } from "./types.js";
+import type { ProjectRun, ToolRun, WorkflowStage } from "./types.js";
 import type { EvalRunResult } from "./eval.js";
 import { redactSensitive } from "./redact.js";
 
@@ -28,7 +28,7 @@ export function renderEvidenceHtml(run: ProjectRun): string {
     .map(
       (stage) => `<li>
         <strong>${escapeHtml(stage.title)}</strong>
-        ${stage.skipped ? `已跳过：${escapeHtml(stage.skipReason ?? "")}` : "已执行或已交付"}
+        ${escapeHtml(stageStatus(run, stage))}
       </li>`,
     )
     .join("");
@@ -77,6 +77,92 @@ export function renderEvidenceHtml(run: ProjectRun): string {
 </body>
 </html>
 `;
+}
+
+function stageStatus(run: ProjectRun, stage: WorkflowStage): string {
+  if (stage.skipped) {
+    return `已跳过：${stage.skipReason ?? ""}`;
+  }
+
+  if (stage.id === "implementation") {
+    return implementationStageStatus(run);
+  }
+
+  if (stage.id === "validation") {
+    return validationStageStatus(run);
+  }
+
+  if (stage.id === "evidence_package") {
+    return hasEvidence(run, "HTML 交付证据包") ? "已交付：HTML 证据包已生成" : "计划交付：等待证据包生成";
+  }
+
+  return "已交付：文档或报告已生成";
+}
+
+function implementationStageStatus(run: ProjectRun): string {
+  if (!requiresDevelopment(run)) {
+    return "未执行：目标阶段不需要代码修改";
+  }
+
+  if (hasEvidence(run, "开发命令缺口")) {
+    return "已阻断：缺少开发命令 commands.develop";
+  }
+
+  const tool = developmentToolRun(run);
+  if (!tool) {
+    return run.status === "blocked" ? "已阻断：开发命令未执行" : "未执行：未记录开发命令";
+  }
+
+  return toolStatus("开发命令", tool);
+}
+
+function validationStageStatus(run: ProjectRun): string {
+  const tool = validationToolRun(run);
+  if (tool) {
+    return toolStatus("测试命令", tool);
+  }
+
+  if (hasEvidence(run, "测试缺口")) {
+    return "已交付缺口：未配置测试命令";
+  }
+
+  if (requiresDevelopment(run)) {
+    return "未执行：开发阶段未通过或被阻断";
+  }
+
+  return run.status === "blocked" ? "未执行：运行已阻断" : "未执行：未记录测试命令";
+}
+
+function toolStatus(label: string, tool: ToolRun): string {
+  if (tool.status === "passed") {
+    return `已执行：${label}通过`;
+  }
+
+  if (tool.status === "failed") {
+    return `已失败：${label}退出码 ${tool.exitCode ?? "无"}`;
+  }
+
+  return `已阻断：${tool.reason ?? `${label}被策略拦截`}`;
+}
+
+function requiresDevelopment(run: ProjectRun): boolean {
+  return run.intent.targetStage === "development" || run.intent.targetStage === "pull_request";
+}
+
+function developmentToolRun(run: ProjectRun): ToolRun | undefined {
+  return requiresDevelopment(run) ? run.toolRuns[0] : undefined;
+}
+
+function validationToolRun(run: ProjectRun): ToolRun | undefined {
+  if (requiresDevelopment(run)) {
+    return run.toolRuns[1];
+  }
+
+  return run.intent.targetStage === "validation_report" ? run.toolRuns[0] : undefined;
+}
+
+function hasEvidence(run: ProjectRun, title: string): boolean {
+  return run.evidence.some((item) => item.title === title);
 }
 
 export function escapeHtml(value: string): string {

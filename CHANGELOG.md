@@ -7,7 +7,16 @@
 ### Changed
 
 - 重写 MVP 用户手册，改为面向工具使用者说明当前能做什么、不能做什么、如何发起输入和如何阅读证据包。
-- README 增加当前能力状态表，明确 0.1.0 不能一句话自动开发需求并提交 PR。
+- README 增加当前能力状态表，并同步本地代码修改、TUI、短命令和 Adapter 使用方式。
+- 新增短命令和 TUI 入口：`npm run d -- "<需求>"` 与 `npm start`。
+- 新增可配置 Coding Agent Adapter：支持通过 `commands.develop` 调用 Codex、Claude 或自定义命令进行本地代码修改，再自动运行测试验收。
+- 新增内置 `adapter codex|claude` 包装器，把 Donkey 生成的 prompt 文件转成外部 Coding Agent 的非交互 prompt。
+- Repo Profile 加载时会合并新的默认安全规则，避免旧配置缺少 Adapter allowlist。
+- 调整技术方案类输入的目标阶段判断：明确“按方案执行”进入开发链路，“直接执行测试验收”才只进入验收链路。
+- 修复开发目标的 Workflow 展示，代码修改和测试验收会在 HTML 证据包中显示为已执行。
+- Repo Profile 加载兼容缺少 `risk` 子字段的旧配置，并补测试覆盖默认安全策略合并。
+- HTML 证据包区分计划阶段与实际执行结果；缺少开发命令时会标记开发阻断、测试未执行。
+- 默认安全 allowlist 收窄到 Donkey adapter 包装器，不再默认直连任意 `codex exec` / `claude -p`。
 
 ## [0.1.0] - 2026-06-04
 
@@ -45,8 +54,8 @@
 ### Verified
 
 - `npm run build` 通过。
-- `npm test` 通过，21/21 pass。
+- `npm test` 通过，28/28 pass。
 - Validation smoke 通过，生成测试验收证据包。
 - Risk Gate smoke 通过，`.env` 高危路径降级为 `risk_report` 且 `toolRuns=[]`。
-- Eval smoke 通过，5/5 pass，高危误放行 0。
+- Eval smoke 通过，6/6 pass，高危误放行 0。
 - Reviewer 最终复审 PASS，Must Fix / Should Fix 均无。

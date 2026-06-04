@@ -1,30 +1,32 @@
 # Donkey
 
-Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经包含产品方案、MVP 技术方案，以及一个 Phase 0/1 的本地可运行 MVP。
+Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经包含产品方案、MVP 技术方案，以及一个本地可试用版本。
 
-一句话定位：把“需求理解、目标阶段判断、测试验收、风险降级和证据归档”串成一个可运行的本地交付闭环，让技术基建团队先从可验证的自动化开始迭代。
+一句话定位：把“需求理解、目标阶段判断、代码执行、测试验收、风险降级和证据归档”串成一个可运行的本地交付闭环，让技术基建团队先从可验证的自动化开始迭代。
 
 ## 当前 MVP
 
-当前实现聚焦本地闭环，不做完整 Server、Console、PostgreSQL、CI Runner、Container Runner 或生产自动上线。
+当前实现聚焦本地闭环，不做完整 Server、Web Console、PostgreSQL、CI Runner、Container Runner 或生产自动上线。
 
 已实现能力：
 
-- TypeScript CLI：`donkey init/run/status/show/eval`
+- TypeScript CLI：`donkey init/run/ask/tui/status/show/eval/adapter`
 - 文件态状态存储：`.donkey/runs/<runId>/state.json`
 - Intent / Target Stage Gate：识别想法、需求、技术方案、PR/变更、高危需求
 - Workflow 裁剪：按目标阶段跳过不必要前置阶段
 - Agent Registry：内置角色 Agent Profile 与版本化 ID
 - Tool Gateway：统一执行测试命令，带 allow/deny 风险拦截、日志和脱敏
-- Local Runner：执行本地测试命令并归档 ToolRun
+- Local Runner：执行本地开发命令和测试命令并归档 ToolRun
+- Coding Agent Adapter：可配置 Codex / Claude / 自定义命令写代码，随后自动测试验收
+- TUI：`npm start` 进入交互式菜单
 - Evidence：生成 Markdown 证据和 HTML 人审报告
 - donkey-eval：内置历史样本 replay，输出 JSON 与 HTML 评测报告
 
 当前边界：
 
 - 不自动合入、上线或执行高危生产动作。
-- 不包含正式 Server、Console、CI Runner、Container Runner 或真实外部 Coding Agent 调用。
-- 当前不能做到“一句话自动开发需求并提交 PR”；一句话输入可以触发目标阶段判断、文档草案、测试验收或风险报告。
+- 不包含正式 Server、Web Console、CI Runner、Container Runner 或自动 PR。
+- 当前可以通过配置的本地 Coding Agent Adapter 进入代码修改；Donkey 自身不 commit、不 push、不创建 PR。
 - Intent/Gate 是规则化 MVP，需要继续用真实 B/D 类需求样本扩充评测集。
 
 ## 当前能力状态
@@ -36,10 +38,11 @@ Donkey 是面向技术基建团队的 AI 自动交付系统。当前仓库已经
 | 生成技术方案草案 | 已实现基础版 | 适合把需求推进到最小技术方案草案。 |
 | 本地测试验收 | 已实现 MVP | 能运行配置的测试命令并生成 HTML 证据包。 |
 | 高危请求降级 | 已实现 MVP | 命中生产、secret、token、删除、`.env`、deploy、infra 等风险时停止执行。 |
-| 自动开发代码 | 未完成 | 当前不会根据需求修改业务代码。 |
-| 自动调用 Coding Agent | 未完成 | 当前只有角色画像和执行边界，未接真实外部 Agent。 |
+| 自动开发代码 | 已实现 Adapter 版 | 通过 `commands.develop` 调用本地 Codex / Claude / 自定义命令修改工作区。 |
+| 自动调用 Coding Agent | 已实现可配置版 | 内置 `adapter codex/claude` 包装器，会把 Donkey prompt 交给外部 CLI。 |
 | 自动创建 PR | 未完成 | 当前不会提交代码、push 分支或创建 PR。 |
-| 飞书入口 / Web Console | 未完成 | 当前主要通过 CLI 使用。 |
+| TUI | 已实现基础版 | `npm start` 可发起运行、查看最近运行、配置命令和跑 eval。 |
+| 飞书入口 / Web Console | 未完成 | 当前主要通过 CLI/TUI 使用。 |
 
 ## 快速开始
 
@@ -56,6 +59,24 @@ npm run build
 npm test
 ```
 
+最短方式进入 TUI：
+
+```bash
+npm start
+```
+
+一句话运行：
+
+```bash
+npm run d -- "请开发一个本地搜索功能并补充测试"
+```
+
+如果你已经有技术方案，并希望直接进入开发链路：
+
+```bash
+npm run d -- "已有技术方案，请按方案执行"
+```
+
 初始化本地 Donkey 配置：
 
 ```bash
@@ -70,6 +91,24 @@ npm run donkey -- run \
   --input "已有技术方案，请直接执行测试验收" \
   --test-command "npm test" \
   --json
+```
+
+配置开发命令：
+
+```bash
+npm start
+# 选择「3. 配置测试和开发命令」
+```
+
+也可以手动编辑 `.donkey/repo-profile.json`：
+
+```json
+{
+  "commands": {
+    "develop": "node /path/to/donkey/dist/src/cli.js adapter codex {prompt}",
+    "test": "npm test"
+  }
+}
 ```
 
 查看运行状态：
@@ -95,6 +134,8 @@ npm run donkey -- eval --repo . --json
 | 场景 | 命令 |
 | --- | --- |
 | 初始化 Repo Profile 和 Agent Profiles | `npm run donkey -- init --repo . --json` |
+| 打开 TUI | `npm start` |
+| 一句话运行 | `npm run d -- "<需求或方案>"`，也可用 `npm run donkey -- go "<需求或方案>"` |
 | 从输入目标创建一次运行 | `npm run donkey -- run --repo . --input "<需求或方案>" --json` |
 | 使用指定测试命令验收 | `npm run donkey -- run --repo . --input "已有技术方案，请直接执行测试验收" --test-command "npm test" --json` |
 | 查看运行状态 | `npm run donkey -- status <runId> --repo . --json` |
@@ -108,10 +149,11 @@ npm run donkey -- eval --repo . --json
 当前 MVP 已通过本地验收：
 
 - `npm run build` 通过
-- `npm test` 通过，21/21 pass
+- `npm test` 通过，28/28 pass
+- Development Adapter smoke：配置开发命令后能实际改工作区文件，再运行测试并生成代码变更报告
 - Validation smoke：技术方案直接进入测试验收，生成 HTML 证据包
 - Risk Gate smoke：`.env` 高危路径降级到 `risk_report`，未执行工具命令
-- Eval smoke：5/5 pass，高危误放行 0
+- Eval smoke：6/6 pass，高危误放行 0
 - Reviewer 复审：PASS，Must Fix / Should Fix 均无
 
 验收报告见：`docs/reviews/2026-06-04-mvp-acceptance-report.html`
