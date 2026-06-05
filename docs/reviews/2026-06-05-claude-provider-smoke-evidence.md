@@ -12,9 +12,9 @@
 - command: `npm run smoke:claude-provider`
 - enablement: 已显式设置 smoke 开关和命令覆盖，环境变量具体值不记录。
 - exit code: 0
-- durationMs: 36429
-- stdout log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-oBCnFb/.donkey/smoke/1780653997785-c8db9af6-760c-4977-89bf-ba663002aa50.stdout.log`
-- stderr log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-oBCnFb/.donkey/smoke/1780653997785-c8db9af6-760c-4977-89bf-ba663002aa50.stderr.log`
+- durationMs: 14275
+- stdout log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-80Niqx/.donkey/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stdout.log`
+- stderr log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-80Niqx/.donkey/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stderr.log`
 
 ## 脱敏说明
 

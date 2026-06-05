@@ -70,7 +70,7 @@ export function buildClaudeProviderSmokeEvidenceHtml(
     <title>Claude Provider Smoke 证据</title>
     <style>
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         line-height: 1.65;
         margin: 0;
         color: #17202a;
