@@ -83,7 +83,7 @@
 
   <h2>1. 结论</h2>
   <p>阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。</p>
-  <p>当前结论：可以进入下一阶段前的代码评审与集成准备。</p>
+  <p>最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 <code>90855a9</code> 修复，并新增对应 RED/GREEN 回归测试。</p>
 
   <h2>2. 提交清单</h2>
   <table>
@@ -99,6 +99,7 @@
       <tr><td><code>41b1286</code></td><td><code>feat(core): add deterministic gate engine and human approvals</code></td></tr>
       <tr><td><code>584589a</code></td><td><code>test(core): add phase 1 kernel e2e coverage</code></td></tr>
       <tr><td><code>8f49918</code></td><td><code>fix(core): pass stdin prompts through command gateway</code></td></tr>
+      <tr><td><code>90855a9</code></td><td><code>fix(core): harden phase 1 gate and path safety</code></td></tr>
     </tbody>
   </table>
 
@@ -116,18 +117,20 @@
       <tr><td>Task 8 GateEngine/HumanGate</td><td><code>createGateEngine is not a function</code> / <code>createHumanGate is not a function</code></td><td>command/schema/human gate 与 autoFix 测试通过</td></tr>
       <tr><td>stdin 修复</td><td><code>timedOut: true</code>、<code>exitCode: null</code></td><td>stdin prompt 写入子进程后测试通过</td></tr>
       <tr><td>E2E 脚本</td><td><code>No test files found</code></td><td>显式 e2e 文件列表后 2 个 e2e 测试通过</td></tr>
+      <tr><td>Reviewer 阻断项修复</td><td>新增回归测试确认无效 artifact 仍通过 schema gate、<code>../escape</code> ID 可写出受管目录、空 allow list/危险命令未被稳定拒绝</td><td>schema gate 校验内容；Artifact/Worktree 路径段净化；CommandGateway 拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过</td></tr>
     </tbody>
   </table>
 
   <h2>4. E2E 覆盖</h2>
   <ul>
     <li><code>runtime/worktree-manager.e2e.test.ts</code>：真实临时 git repo、两个独立 worktree、release/prune。</li>
-    <li><code>phase1/kernel.e2e.test.ts</code>：run 创建、worktree lease、mock Agent、9 类 artifact、schema gate、audit chain、危险命令拒绝、human gate、真实 Agent capability 拒绝、worktree 清理。</li>
+    <li><code>phase1/kernel.e2e.test.ts</code>：run 创建、worktree lease、mock Agent、9 类 artifact、schema gate 内容校验、audit chain、危险命令拒绝、human gate、真实 Agent capability 拒绝、worktree 清理。</li>
   </ul>
 
   <h2>5. 验证命令</h2>
   <pre><code>npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- --run
 # 20 test files passed, 31 tests passed
+# 修复 reviewer 阻断项后：20 test files passed, 35 tests passed
 
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
 # tsc -p tsconfig.json passed
@@ -140,11 +143,12 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
     <li><code>better-sqlite3</code> 是原生依赖。当前环境中 pnpm 安装后未自动生成 binding，需要执行过一次定向 <code>better-sqlite3</code> build。后续 CI 应显式允许或缓存该原生构建。</li>
     <li>Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖命令构造、权限能力检查、输出流、timeout 和 stdin。</li>
     <li>Worktree dirty 检测会忽略 Donkey 自己生成的 <code>.donkey/</code> 未跟踪目录，用户工作区的已跟踪改动仍会阻断。</li>
+    <li>Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层。</li>
     <li>当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；因此本阶段未更新用户手册。</li>
   </ul>
 
   <h2>7. Subagent 执行情况</h2>
-  <p>本阶段已尝试按要求使用 subagent：Task 1 worker 曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物；Task 1 的两个 reviewer subagent 均因 <code>429 Too Many Requests</code> 中断。后续仍需尝试最高思考等级 reviewer；若运行时继续 429，应在最终交付说明中明确记录该限制。</p>
+  <p>本阶段已尝试按要求使用 subagent：Task 1 worker 曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物；Task 1 的两个 reviewer subagent 均因 <code>429 Too Many Requests</code> 中断。阶段一最终 reviewer 成功返回 <code>CHANGES_REQUIRED</code>，3 个阻断项已在 <code>90855a9</code> 修复。后续仍需再次启动最高思考等级 reviewer 复查；若运行时继续 429，应在最终交付说明中明确记录该限制。</p>
 </main>
 </body>
 </html>

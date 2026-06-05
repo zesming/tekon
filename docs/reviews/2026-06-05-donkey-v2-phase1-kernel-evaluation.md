@@ -1,14 +1,14 @@
 # Donkey V2 阶段一安全可恢复内核评估报告
 
-生成日期：2026-06-05  
-分支：`phase1-kernel`  
+生成日期：2026-06-05
+分支：`phase1-kernel`
 范围：`packages/core` 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。
 
 ## 1. 结论
 
 阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。
 
-当前结论：可以进入下一阶段前的代码评审与集成准备。
+最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 `90855a9` 修复，并新增对应 RED/GREEN 回归测试。
 
 ## 2. 提交清单
 
@@ -24,6 +24,7 @@
 | `41b1286` | `feat(core): add deterministic gate engine and human approvals` |
 | `584589a` | `test(core): add phase 1 kernel e2e coverage` |
 | `8f49918` | `fix(core): pass stdin prompts through command gateway` |
+| `90855a9` | `fix(core): harden phase 1 gate and path safety` |
 
 ## 3. TDD 证据
 
@@ -39,6 +40,7 @@
 | Task 8 GateEngine/HumanGate | gate 测试调用未实现的 `createGateEngine`/`createHumanGate`，失败为 `is not a function` | command/schema/human gate、GateResult persistence、autoFix repair node 测试通过 |
 | stdin 修复 | `promptMode: stdin` 测试失败，实际结果 `timedOut: true`、`exitCode: null` | CommandGateway 写入 stdin 后，Claude stdin 测试通过 |
 | E2E 脚本 | 初始 `test:e2e` glob 未匹配文件，失败为 `No test files found` | 显式 e2e 文件列表后，2 个 e2e 测试通过 |
+| Reviewer 阻断项修复 | 新增回归测试确认无效 artifact 仍通过 schema gate、`../escape` ID 可写出受管目录、空 allow list/`rm -r -f`/`git push --force-with-lease` 未被稳定拒绝 | schema gate 读取并校验 artifact 内容；Artifact/Worktree 路径段只允许 `[a-zA-Z0-9_-]`；CommandGateway 默认拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过 |
 
 ## 4. E2E 覆盖
 
@@ -54,7 +56,7 @@
   - 创建 worktree lease。
   - 执行 mock Agent。
   - 写入 9 类内置 artifact。
-  - 执行 schema gate 并持久化 GateResult。
+  - 执行 schema gate，校验 artifact 内容并持久化 GateResult。
   - 写入并验证 audit hash chain。
   - 验证 `rm -rf` 在 spawn 前被拒绝。
   - 验证 human gate pause/resume。
@@ -68,6 +70,7 @@
 ```bash
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- --run
 # 20 test files passed, 31 tests passed
+# 修复 reviewer 阻断项后：20 test files passed, 35 tests passed
 
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
 # tsc -p tsconfig.json passed
@@ -81,6 +84,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
 - `better-sqlite3` 是原生依赖。当前环境中 pnpm 安装后未自动生成 binding，需要执行过一次定向 `better-sqlite3` build。后续 CI 应显式允许或缓存该原生构建。
 - Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。真实 provider smoke 建议放到阶段二或独立人工凭证环境。
 - Worktree dirty 检测会忽略 Donkey 自己生成的 `.donkey/` 未跟踪目录，避免第二个 lease 被自身运行产物阻塞；用户工作区的已跟踪改动仍会阻断。
+- Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层，不能直接拼路径。
 - 当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；因此本阶段未更新用户手册。
 
 ## 7. Subagent 执行情况
@@ -90,5 +94,6 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
 - Task 1 worker 曾因模型名错误中断。
 - 重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物，主线程按 TDD 接手完成。
 - Task 1 的两个 reviewer subagent 均因 `429 Too Many Requests` 中断。
+- 阶段一最终 reviewer 成功返回 `CHANGES_REQUIRED`，3 个阻断项已在 `90855a9` 修复。
 
-后续仍需按仓库规则尝试最高思考等级 reviewer；若运行时继续 429，本报告和最终交付说明应明确记录该限制，并以本地保守复查替代。
+后续仍需按仓库规则再次启动最高思考等级 reviewer 复查；若运行时继续 429，本报告和最终交付说明应明确记录该限制，并以本地保守复查替代。
