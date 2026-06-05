@@ -1,154 +1,408 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Donkey V2 阶段一安全可恢复内核评估报告</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #1f2937;
-      background: #f8fafc;
-      line-height: 1.65;
-    }
-    main {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 40px 24px 72px;
-      background: #ffffff;
-      min-height: 100vh;
-    }
-    h1, h2 {
-      color: #111827;
-      line-height: 1.25;
-    }
-    h1 {
-      font-size: 30px;
-      margin: 0 0 12px;
-    }
-    h2 {
-      font-size: 20px;
-      margin-top: 32px;
-      border-top: 1px solid #e5e7eb;
-      padding-top: 24px;
-    }
-    .meta {
-      color: #4b5563;
-      margin-bottom: 28px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0 24px;
-      font-size: 14px;
-    }
-    th, td {
-      border: 1px solid #d1d5db;
-      padding: 10px 12px;
-      vertical-align: top;
-      text-align: left;
-    }
-    th {
-      background: #f3f4f6;
-      color: #111827;
-    }
-    code {
-      font-family: "SFMono-Regular", Consolas, monospace;
-      background: #f3f4f6;
-      padding: 1px 4px;
-      border-radius: 4px;
-    }
-    pre {
-      background: #111827;
-      color: #f9fafb;
-      padding: 16px;
-      border-radius: 8px;
-      overflow-x: auto;
-    }
-    pre code {
-      background: transparent;
-      color: inherit;
-      padding: 0;
-    }
-    li {
-      margin: 6px 0;
-    }
-  </style>
-</head>
-<body>
-<main>
-  <h1>Donkey V2 阶段一安全可恢复内核评估报告</h1>
-  <p class="meta">生成日期：2026-06-05<br>实现分支：<code>phase1-kernel</code>；当前已合入：<code>rebuild-v2</code><br>范围：<code>packages/core</code> 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey V2 阶段一安全可恢复内核评估报告</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #1f2937;
+        background: #f8fafc;
+        line-height: 1.65;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+        background: #ffffff;
+        min-height: 100vh;
+      }
+      h1,
+      h2 {
+        color: #111827;
+        line-height: 1.25;
+      }
+      h1 {
+        font-size: 30px;
+        margin: 0 0 12px;
+      }
+      h2 {
+        font-size: 20px;
+        margin-top: 32px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 24px;
+      }
+      .meta {
+        color: #4b5563;
+        margin-bottom: 28px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 24px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid #d1d5db;
+        padding: 10px 12px;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: #f3f4f6;
+        color: #111827;
+      }
+      code {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        background: #f3f4f6;
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
+      pre {
+        background: #111827;
+        color: #f9fafb;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Donkey V2 阶段一安全可恢复内核评估报告</h1>
+      <p class="meta">
+        生成日期：2026-06-05<br />实现分支：<code>phase1-kernel</code>；当前已合入：<code
+          >rebuild-v2</code
+        ><br />范围：<code>packages/core</code> 阶段一安全可恢复内核、TDD
+        证据、E2E 验收、已知风险。
+      </p>
 
-  <h2>1. 结论</h2>
-  <p>阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。</p>
-  <p>最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 <code>90855a9</code> 修复，并新增对应 RED/GREEN 回归测试；复查 reviewer 返回 <code>APPROVED</code>，未检出必须修复项。</p>
+      <h2>1. 结论</h2>
+      <p>
+        阶段一核心能力已完成本地实现并通过验证：monorepo/test
+        harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact
+        Store、Audit hash
+        chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude
+        runner、GateEngine/HumanGate，以及阶段一出口 E2E。
+      </p>
+      <p>
+        最高思考等级 reviewer 初审检出 3 个阻断项：schema gate
+        只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway
+        危险命令拒绝过窄。已在 <code>90855a9</code> 修复，并新增对应 RED/GREEN
+        回归测试；复查 reviewer 返回 <code>APPROVED</code>，未检出必须修复项。
+      </p>
+      <p>
+        合入 <code>rebuild-v2</code> 后已补充 CI 与 pnpm native build
+        配置：<code>pnpm-workspace.yaml</code> 显式允许
+        <code>better-sqlite3</code> 与 <code>esbuild</code> build
+        scripts，GitHub Actions 会在 <code>rebuild-v2</code>、<code>main</code>
+        和 PR 上执行 install、ignored-builds gate、build、unit tests 与 e2e
+        tests；unit 与 e2e 在 CI 中分开执行，避免重复统计。
+      </p>
 
-  <h2>2. 提交清单</h2>
-  <table>
-    <thead><tr><th>Commit</th><th>内容</th></tr></thead>
-    <tbody>
-      <tr><td><code>9355487</code></td><td><code>feat(core): scaffold monorepo and test harness</code></td></tr>
-      <tr><td><code>7fa23cd</code></td><td><code>feat(core): define domain types and runtime config schemas</code></td></tr>
-      <tr><td><code>5d1dcdd</code></td><td><code>feat(core): add durable sqlite persistence and recovery queue</code></td></tr>
-      <tr><td><code>5fc5695</code></td><td><code>feat(core): add artifact store and append-only audit log</code></td></tr>
-      <tr><td><code>9b53423</code></td><td><code>feat(core): add command gateway with argv policy enforcement</code></td></tr>
-      <tr><td><code>b0be361</code></td><td><code>feat(core): add git worktree isolation manager</code></td></tr>
-      <tr><td><code>4669c76</code></td><td><code>feat(core): add agent adapter contract and claude runner</code></td></tr>
-      <tr><td><code>41b1286</code></td><td><code>feat(core): add deterministic gate engine and human approvals</code></td></tr>
-      <tr><td><code>584589a</code></td><td><code>test(core): add phase 1 kernel e2e coverage</code></td></tr>
-      <tr><td><code>8f49918</code></td><td><code>fix(core): pass stdin prompts through command gateway</code></td></tr>
-      <tr><td><code>90855a9</code></td><td><code>fix(core): harden phase 1 gate and path safety</code></td></tr>
-    </tbody>
-  </table>
+      <h2>2. 提交清单</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Commit</th>
+            <th>内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>9355487</code></td>
+            <td><code>feat(core): scaffold monorepo and test harness</code></td>
+          </tr>
+          <tr>
+            <td><code>7fa23cd</code></td>
+            <td>
+              <code
+                >feat(core): define domain types and runtime config
+                schemas</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>5d1dcdd</code></td>
+            <td>
+              <code
+                >feat(core): add durable sqlite persistence and recovery
+                queue</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>5fc5695</code></td>
+            <td>
+              <code
+                >feat(core): add artifact store and append-only audit log</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>9b53423</code></td>
+            <td>
+              <code
+                >feat(core): add command gateway with argv policy
+                enforcement</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>b0be361</code></td>
+            <td><code>feat(core): add git worktree isolation manager</code></td>
+          </tr>
+          <tr>
+            <td><code>4669c76</code></td>
+            <td>
+              <code
+                >feat(core): add agent adapter contract and claude runner</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>41b1286</code></td>
+            <td>
+              <code
+                >feat(core): add deterministic gate engine and human
+                approvals</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <td><code>584589a</code></td>
+            <td><code>test(core): add phase 1 kernel e2e coverage</code></td>
+          </tr>
+          <tr>
+            <td><code>8f49918</code></td>
+            <td>
+              <code>fix(core): pass stdin prompts through command gateway</code>
+            </td>
+          </tr>
+          <tr>
+            <td><code>90855a9</code></td>
+            <td><code>fix(core): harden phase 1 gate and path safety</code></td>
+          </tr>
+        </tbody>
+      </table>
 
-  <h2>3. TDD 证据</h2>
-  <table>
-    <thead><tr><th>任务</th><th>RED 证据</th><th>GREEN 证据</th></tr></thead>
-    <tbody>
-      <tr><td>Task 1 Monorepo</td><td><code>Cannot find module '../src/index.js'</code></td><td>smoke test、build、typecheck 通过</td></tr>
-      <tr><td>Task 2 Types/Config</td><td><code>Cannot read properties of undefined (reading 'parse')</code></td><td>domain/config 测试通过</td></tr>
-      <tr><td>Task 3 SQLite</td><td><code>openDonkeyDatabase is not a function</code> / <code>createWriteQueue is not a function</code></td><td>migrations/repositories/recovery/write queue 测试通过</td></tr>
-      <tr><td>Task 4 Artifact/Audit</td><td><code>createArtifactStore is not a function</code> / <code>createAuditLogger is not a function</code></td><td>artifact 与 audit 测试通过</td></tr>
-      <tr><td>Task 5 CommandGateway</td><td><code>createCommandGateway is not a function</code></td><td>安全策略、审批边界、stdout/stderr、gate runner 测试通过</td></tr>
-      <tr><td>Task 6 WorktreeManager</td><td><code>createWorktreeManager is not a function</code></td><td>dirty base 与真实 git worktree E2E 通过</td></tr>
-      <tr><td>Task 7 AgentAdapter</td><td>adapter 入口函数缺失</td><td>capability check、mock、Claude runner 测试通过</td></tr>
-      <tr><td>Task 8 GateEngine/HumanGate</td><td><code>createGateEngine is not a function</code> / <code>createHumanGate is not a function</code></td><td>command/schema/human gate 与 autoFix 测试通过</td></tr>
-      <tr><td>stdin 修复</td><td><code>timedOut: true</code>、<code>exitCode: null</code></td><td>stdin prompt 写入子进程后测试通过</td></tr>
-      <tr><td>E2E 脚本</td><td><code>No test files found</code></td><td>显式 e2e 文件列表后 2 个 e2e 测试通过</td></tr>
-      <tr><td>Reviewer 阻断项修复</td><td>新增回归测试确认无效 artifact 仍通过 schema gate、<code>../escape</code> ID 可写出受管目录、空 allow list/危险命令未被稳定拒绝</td><td>schema gate 校验内容；Artifact/Worktree 路径段净化；CommandGateway 拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过</td></tr>
-    </tbody>
-  </table>
+      <h2>3. TDD 证据</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>RED 证据</th>
+            <th>GREEN 证据</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Task 1 Monorepo</td>
+            <td><code>Cannot find module '../src/index.js'</code></td>
+            <td>smoke test、build、typecheck 通过</td>
+          </tr>
+          <tr>
+            <td>Task 2 Types/Config</td>
+            <td>
+              <code>Cannot read properties of undefined (reading 'parse')</code>
+            </td>
+            <td>domain/config 测试通过</td>
+          </tr>
+          <tr>
+            <td>Task 3 SQLite</td>
+            <td>
+              <code>openDonkeyDatabase is not a function</code> /
+              <code>createWriteQueue is not a function</code>
+            </td>
+            <td>migrations/repositories/recovery/write queue 测试通过</td>
+          </tr>
+          <tr>
+            <td>Task 4 Artifact/Audit</td>
+            <td>
+              <code>createArtifactStore is not a function</code> /
+              <code>createAuditLogger is not a function</code>
+            </td>
+            <td>artifact 与 audit 测试通过</td>
+          </tr>
+          <tr>
+            <td>Task 5 CommandGateway</td>
+            <td><code>createCommandGateway is not a function</code></td>
+            <td>安全策略、审批边界、stdout/stderr、gate runner 测试通过</td>
+          </tr>
+          <tr>
+            <td>Task 6 WorktreeManager</td>
+            <td><code>createWorktreeManager is not a function</code></td>
+            <td>dirty base 与真实 git worktree E2E 通过</td>
+          </tr>
+          <tr>
+            <td>Task 7 AgentAdapter</td>
+            <td>adapter 入口函数缺失</td>
+            <td>capability check、mock、Claude runner 测试通过</td>
+          </tr>
+          <tr>
+            <td>Task 8 GateEngine/HumanGate</td>
+            <td>
+              <code>createGateEngine is not a function</code> /
+              <code>createHumanGate is not a function</code>
+            </td>
+            <td>command/schema/human gate 与 autoFix 测试通过</td>
+          </tr>
+          <tr>
+            <td>stdin 修复</td>
+            <td><code>timedOut: true</code>、<code>exitCode: null</code></td>
+            <td>stdin prompt 写入子进程后测试通过</td>
+          </tr>
+          <tr>
+            <td>E2E 脚本</td>
+            <td><code>No test files found</code></td>
+            <td>显式 e2e 文件列表后 2 个 e2e 测试通过</td>
+          </tr>
+          <tr>
+            <td>Reviewer 阻断项修复</td>
+            <td>
+              新增回归测试确认无效 artifact 仍通过 schema gate、<code
+                >../escape</code
+              >
+              ID 可写出受管目录、空 allow list/危险命令未被稳定拒绝
+            </td>
+            <td>
+              schema gate 校验内容；Artifact/Worktree 路径段净化；CommandGateway
+              拒绝空 allow list、递归强制删除和 force push 变体；20
+              个测试文件、35 个测试通过
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-  <h2>4. E2E 覆盖</h2>
-  <ul>
-    <li><code>runtime/worktree-manager.e2e.test.ts</code>：真实临时 git repo、两个独立 worktree、release/prune。</li>
-    <li><code>phase1/kernel.e2e.test.ts</code>：run 创建、worktree lease、mock Agent、9 类 artifact、schema gate 内容校验、audit chain、危险命令拒绝、human gate、真实 Agent capability 拒绝、worktree 清理。</li>
-  </ul>
+      <h2>4. E2E 覆盖</h2>
+      <ul>
+        <li>
+          <code>runtime/worktree-manager.e2e.test.ts</code>：真实临时 git
+          repo、两个独立 worktree、release/prune。
+        </li>
+        <li>
+          <code>phase1/kernel.e2e.test.ts</code>：run 创建、worktree lease、mock
+          Agent、9 类 artifact、schema gate 内容校验、audit
+          chain、危险命令拒绝、human gate、真实 Agent capability 拒绝、worktree
+          清理。
+        </li>
+      </ul>
 
-  <h2>5. 验证命令</h2>
-  <pre><code>npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- --run
+      <h2>5. 验证命令</h2>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- --run
 # 20 test files passed, 31 tests passed
 # 修复 reviewer 阻断项后：20 test files passed, 35 tests passed
+
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+# 18 test files passed, 33 tests passed
 
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
 # tsc -p tsconfig.json passed
 
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
-# 2 test files passed, 2 tests passed</code></pre>
+# 2 test files passed, 2 tests passed
 
-  <h2>6. 风险与后续建议</h2>
-  <ul>
-    <li><code>better-sqlite3</code> 是原生依赖。当前环境中 pnpm 安装后未自动生成 binding，需要执行过一次定向 <code>better-sqlite3</code> build。后续 CI 应显式允许或缓存该原生构建。</li>
-    <li>Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖命令构造、权限能力检查、输出流、timeout 和 stdin。</li>
-    <li>Worktree dirty 检测会忽略 Donkey 自己生成的 <code>.donkey/</code> 未跟踪目录，用户工作区的已跟踪改动仍会阻断。</li>
-    <li>Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层。</li>
-    <li>当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；因此本阶段未更新用户手册。</li>
-  </ul>
+npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+# better-sqlite3/esbuild build scripts executed from explicit allowlist
 
-  <h2>7. Subagent 执行情况</h2>
-  <p>本阶段已尝试按要求使用 subagent：Task 1 worker 曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物；Task 1 的两个 reviewer subagent 均因 <code>429 Too Many Requests</code> 中断。阶段一最终 reviewer 成功返回 <code>CHANGES_REQUIRED</code>，3 个阻断项已在 <code>90855a9</code> 修复。修复后重新委派最高思考等级 reviewer 复查，结论为 <code>APPROVED</code>；仅保留一项建议：<code>CommandPolicy.network</code> 目前是策略字段，不是 OS 级网络隔离。合入 <code>rebuild-v2</code> 后，主工作区重新执行本地 build、unit、e2e 和文档占位符检查；结果记录见最终交付说明。</p>
-</main>
-</body>
+npm exec --yes -- pnpm@10.12.1 ignored-builds
+# Automatically ignored builds during installation: None</code></pre>
+
+      <h2>6. 风险与后续建议</h2>
+      <ul>
+        <li>
+          <code>better-sqlite3</code> 是原生依赖，已通过
+          <code>onlyBuiltDependencies</code> 显式允许构建，并由 CI 的
+          ignored-builds gate 覆盖；后续新增 native/toolchain
+          依赖时必须审阅并维护 allowlist，避免静默跳过 build scripts。
+        </li>
+        <li>
+          Claude adapter 的真实 Claude CLI
+          调用未在阶段一执行；当前测试覆盖命令构造、权限能力检查、输出流、timeout
+          和 stdin。
+        </li>
+        <li>
+          Worktree dirty 检测会忽略 Donkey 自己生成的
+          <code>.donkey/</code> 未跟踪目录，用户工作区的已跟踪改动仍会阻断。
+        </li>
+        <li>
+          Artifact Store 和 WorktreeManager
+          现在拒绝包含路径分隔符或其他非安全字符的 run/node/role
+          路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID
+          到路径映射层。
+        </li>
+        <li>
+          <code>CommandPolicy.network</code> 目前是 Donkey 策略字段，不是 OS
+          级网络隔离；阶段二若接入真实 agent provider，需要补 provider
+          sandbox/approval 能力映射或外层隔离。
+        </li>
+        <li>
+          <code>vitest.workspace.ts</code> 当前可用，但 Vitest 已提示 workspace
+          文件形式将迁移到 <code>test.projects</code>；后续工具链升级时应处理。
+        </li>
+        <li>
+          当前 core API 是阶段一内核 API，尚未提供 CLI/Web
+          产品入口；因此本阶段未更新用户手册。
+        </li>
+      </ul>
+
+      <h2>7. Subagent 执行情况</h2>
+      <p>
+        本阶段已尝试按要求使用 subagent：Task 1 worker
+        曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD
+        产物；Task 1 的两个 reviewer subagent 均因
+        <code>429 Too Many Requests</code> 中断。阶段一最终 reviewer 成功返回
+        <code>CHANGES_REQUIRED</code>，3 个阻断项已在
+        <code>90855a9</code> 修复。修复后重新委派最高思考等级 reviewer
+        复查，结论为 <code>APPROVED</code>；仅保留一项建议：<code
+          >CommandPolicy.network</code
+        >
+        目前是策略字段，不是 OS 级网络隔离。合入
+        <code>rebuild-v2</code> 后，主工作区重新执行本地 build、unit、e2e
+        和文档占位符检查；结果记录见最终交付说明。
+      </p>
+
+      <h2>8. 资料依据</h2>
+      <ul>
+        <li>
+          pnpm
+          <code>approve-builds</code>
+          官方文档：<code>https://pnpm.io/cli/approve-builds</code>。资料内容：该命令用于批准安装期间允许运行
+          scripts 的依赖，并会把批准结果写入
+          <code>pnpm-workspace.yaml</code>。对 Donkey 的判断依据：<code
+            >better-sqlite3</code
+          >
+          需要 native build，必须显式进入 allowlist。
+        </li>
+        <li>
+          pnpm
+          <code>ignored-builds</code>
+          官方文档：<code>https://pnpm.io/cli/ignored-builds</code>。资料内容：该命令列出安装期间被自动阻止执行
+          build scripts 的包。对 Donkey 的判断依据：CI 应把 ignored builds
+          作为环境 gate，避免 native binding 缺失只在运行测试时才暴露。
+        </li>
+        <li>
+          pnpm 10.x
+          <code>approve-builds</code>
+          版本化文档：<code>https://pnpm.io/10.x/cli/approve-builds</code>。
+        </li>
+        <li>
+          pnpm 10.x
+          <code>ignored-builds</code>
+          版本化文档：<code>https://pnpm.io/10.x/cli/ignored-builds</code>。
+        </li>
+      </ul>
+    </main>
+  </body>
 </html>
