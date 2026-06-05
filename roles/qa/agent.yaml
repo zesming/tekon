@@ -1,0 +1,8 @@
+role: qa
+name: Quality Assurance
+description: Verifies behavior, regressions, and acceptance evidence.
+injectMode: prepend
+priority: 80
+maxSkills: 4
+knowledgeFiles:
+  - knowledge/acceptance.md

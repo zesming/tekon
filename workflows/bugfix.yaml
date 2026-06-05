@@ -1,0 +1,81 @@
+id: bugfix
+name: Bugfix
+version: 1
+retry:
+  maxAttempts: 2
+  backoffMs: 250
+  strategy: fixed
+phases:
+  - id: pm
+    name: PM
+    nodes:
+      - id: pm-triage
+        role: pm
+        outputs:
+          - demand:demand-card
+        gates:
+          - type: schema
+            artifactType: demand-card
+  - id: rd
+    name: RD
+    dependsOn:
+      - pm
+    nodes:
+      - id: rd-fix
+        role: rd
+        inputs:
+          - demand:demand-card
+        outputs:
+          - code:code-changes
+        gates:
+          - type: build
+            command:
+              tool: pnpm
+              args:
+                - build
+          - type: lint
+            command:
+              tool: pnpm
+              args:
+                - lint
+  - id: qa-review
+    name: QA and Reviewer
+    dependsOn:
+      - rd
+    nodes:
+      - id: qa-regression
+        role: qa
+        inputs:
+          - code:code-changes
+        outputs:
+          - test:test-report
+        gates:
+          - type: test
+            command:
+              tool: pnpm
+              args:
+                - test
+      - id: reviewer-review
+        role: reviewer
+        inputs:
+          - code:code-changes
+        outputs:
+          - review:review-report
+        gates:
+          - type: human
+            requiresHumanApproval: true
+  - id: pmo
+    name: PMO
+    dependsOn:
+      - qa-review
+    nodes:
+      - id: pmo-delivery
+        role: pmo
+        inputs:
+          - test:test-report
+          - review:review-report
+        outputs:
+          - delivery:delivery-package
+        gates:
+          - type: schema
+            artifactType: delivery-package

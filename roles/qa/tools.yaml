@@ -1,0 +1,8 @@
+network: disabled
+allow:
+  - tool: pnpm
+    args: []
+  - tool: npm
+    args: []
+deny: []
+requiresHumanApproval: []

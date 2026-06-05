@@ -1,0 +1,17 @@
+network: restricted
+allow:
+  - tool: git
+    args: []
+  - tool: pnpm
+    args: []
+  - tool: npm
+    args: []
+deny:
+  - tool: git
+    args:
+      - push
+      - --force
+requiresHumanApproval:
+  - tool: git
+    args:
+      - push

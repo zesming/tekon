@@ -1,0 +1,99 @@
+id: standard-feature
+name: Standard Feature
+version: 1
+retry:
+  maxAttempts: 3
+  backoffMs: 500
+  strategy: exponential
+phases:
+  - id: pm
+    name: PM
+    nodes:
+      - id: pm-intake
+        role: pm
+        outputs:
+          - demand:demand-card
+          - prd:prd
+        gates:
+          - type: schema
+            artifactType: demand-card
+          - type: schema
+            artifactType: prd
+  - id: rd
+    name: RD
+    dependsOn:
+      - pm
+    nodes:
+      - id: rd-implementation
+        role: rd
+        inputs:
+          - prd:prd
+        outputs:
+          - design:tech-design
+          - code:code-changes
+        gates:
+          - type: build
+            command:
+              tool: pnpm
+              args:
+                - build
+          - type: lint
+            command:
+              tool: pnpm
+              args:
+                - lint
+          - type: schema
+            artifactType: tech-design
+          - type: schema
+            artifactType: code-changes
+  - id: qa
+    name: QA
+    dependsOn:
+      - rd
+    nodes:
+      - id: qa-validation
+        role: qa
+        inputs:
+          - code:code-changes
+        outputs:
+          - test:test-report
+        gates:
+          - type: test
+            command:
+              tool: pnpm
+              args:
+                - test
+          - type: schema
+            artifactType: test-report
+  - id: reviewer
+    name: Reviewer
+    dependsOn:
+      - qa
+    nodes:
+      - id: reviewer-independent-review
+        role: reviewer
+        inputs:
+          - design:tech-design
+          - code:code-changes
+          - test:test-report
+        outputs:
+          - review:review-report
+        gates:
+          - type: human
+            requiresHumanApproval: true
+          - type: schema
+            artifactType: review-report
+  - id: pmo
+    name: PMO
+    dependsOn:
+      - reviewer
+    nodes:
+      - id: pmo-delivery
+        role: pmo
+        inputs:
+          - review:review-report
+        outputs:
+          - delivery:delivery-package
+        gates:
+          - type: schema
+            artifactType: delivery-package
