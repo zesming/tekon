@@ -55,4 +55,39 @@ describe('web write authorization', () => {
 
     await api.close();
   });
+
+  it('rejects run writes outside the explicit project root even with a valid token', async () => {
+    const fixture = await createWebFixtureProject({
+      includeOutOfScopeProject: true,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.project.pause({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      api.project.resume({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      api.project.cancel({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      api.project.clean({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
 });

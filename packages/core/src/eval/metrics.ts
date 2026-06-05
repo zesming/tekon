@@ -94,7 +94,9 @@ export async function extractRunMetrics(input: {
       ? Date.parse(workflow.updatedAt) - Date.parse(workflow.createdAt)
       : null,
     gatePassRate:
-      completedGates.length === 0 ? 0 : passedGates.length / completedGates.length,
+      completedGates.length === 0
+        ? 0
+        : passedGates.length / completedGates.length,
     gateByType: summarizeGates(gates),
     retryCount:
       gates.reduce((total, gate) => total + gate.retries, 0) +
@@ -114,7 +116,9 @@ export async function extractRunMetrics(input: {
             brokenEventId: auditVerification.brokenEventId,
           },
     automationRatio:
-      automationDenominator === 0 ? 0 : nonHumanCompleted / automationDenominator,
+      automationDenominator === 0
+        ? 0
+        : nonHumanCompleted / automationDenominator,
     highRiskActionCount: gates.filter((gate) =>
       ['human', 'security-scan'].includes(gate.gateType),
     ).length,
@@ -165,7 +169,8 @@ function summarizeHumanDecisions(
     );
   return {
     total: decisions.length,
-    pending: decisions.filter((decision) => decision.status === 'pending').length,
+    pending: decisions.filter((decision) => decision.status === 'pending')
+      .length,
     approved: decisions.filter((decision) => decision.status === 'approved')
       .length,
     rejected: decisions.filter((decision) => decision.status === 'rejected')

@@ -28,6 +28,9 @@ describe('donkey cli e2e', () => {
     expect(initOutput).toContain('initialized');
     expect(existsSync(join(repoPath, '.donkey', 'config.yaml'))).toBe(true);
     expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
+    expect(existsSync(join(repoPath, '.donkey', 'web-session.json'))).toBe(
+      true,
+    );
 
     const standardRunOutput = runCli(
       cliPath,

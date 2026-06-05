@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { randomBytes } from 'node:crypto';
 import {
   cpSync,
   existsSync,
@@ -118,6 +119,14 @@ async function commandInit(argv: string[], io: CliIO) {
   mkdirSync(join(donkeyDir, 'roles'), { recursive: true });
   mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
   mkdirSync(join(donkeyDir, 'worktrees'), { recursive: true });
+  const webSessionPath = join(donkeyDir, 'web-session.json');
+  if (!existsSync(webSessionPath)) {
+    writeFileSync(
+      webSessionPath,
+      JSON.stringify({ token: randomBytes(32).toString('hex') }, null, 2),
+      'utf8',
+    );
+  }
   writeFileSync(
     join(donkeyDir, 'config.yaml'),
     stringifyYaml({

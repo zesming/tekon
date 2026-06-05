@@ -48,9 +48,12 @@ describe('scm delivery', () => {
       'git push -u origin donkey/phase-3',
       'gh pr create --title Phase 3 delivery --body Evidence body --head donkey/phase-3',
     ]);
-    expect(execFileSync('git', ['status', '--short'], { cwd: repoPath, encoding: 'utf8' })).toContain(
-      'feature.txt',
-    );
+    expect(
+      execFileSync('git', ['status', '--short'], {
+        cwd: repoPath,
+        encoding: 'utf8',
+      }),
+    ).toContain('feature.txt');
   });
 
   it('captures a PR URL from a fake gh fixture after human-approved push', async () => {
@@ -59,7 +62,9 @@ describe('scm delivery', () => {
     const binDir = mkdtempSync(join(tmpdir(), 'donkey-fake-gh-'));
     tempDirs.push(remotePath, binDir);
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
-    execFileSync('git', ['remote', 'add', 'origin', remotePath], { cwd: repoPath });
+    execFileSync('git', ['remote', 'add', 'origin', remotePath], {
+      cwd: repoPath,
+    });
     writeFakeGh(binDir);
     writeFileSync(join(repoPath, 'feature.txt'), 'feature\n', 'utf8');
 

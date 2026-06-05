@@ -6,7 +6,7 @@ import {
   type RunningWebServer,
 } from '../../src/server/http.js';
 
-test.describe('Donkey dashboard', () => {
+test.describe('Donkey release dashboard', () => {
   let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
   let server: RunningWebServer;
 
@@ -25,28 +25,39 @@ test.describe('Donkey dashboard', () => {
     fixture.cleanup();
   });
 
-  test('shows core dashboard sections and approves a pending human gate', async ({
+  test('reviews release dashboard sections and writes human approval', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(server.url);
 
     await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '待人工审批' }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: '产物' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Gates' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '审计' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '角色' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: '待人工审批' }),
-    ).toBeVisible();
-    await expect(page.getByText('decision_1')).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
-    await page.getByLabel('审批备注').fill('approved from dashboard');
+    await page.getByLabel('审批备注').fill('release approval');
     await page.getByRole('button', { name: '批准' }).click();
 
     await expect(page.getByText('approved')).toBeVisible();
-    await expect(page.getByText('run_1')).toBeVisible();
+    await expect(page.getByText('gate_1 passed')).toBeVisible();
+
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath('donkey-dashboard-mobile.png'),
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
+    await page.screenshot({
+      fullPage: true,
+      path: testInfo.outputPath('donkey-dashboard-desktop.png'),
+    });
   });
 });

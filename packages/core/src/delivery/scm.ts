@@ -48,7 +48,9 @@ export interface CreateScmDeliveryOptions {
   outputDir?: string;
 }
 
-export function createScmDelivery(options: CreateScmDeliveryOptions): ScmDelivery {
+export function createScmDelivery(
+  options: CreateScmDeliveryOptions,
+): ScmDelivery {
   return {
     async getStatus(input) {
       return getScmStatus(options, input?.branch);
@@ -138,7 +140,12 @@ async function getScmStatus(
       )
     : undefined;
   const currentBranch =
-    runReadCommand('git', ['branch', '--show-current'], options.repoPath, env) ??
+    runReadCommand(
+      'git',
+      ['branch', '--show-current'],
+      options.repoPath,
+      env,
+    ) ??
     runReadCommand(
       'git',
       ['rev-parse', '--abbrev-ref', 'HEAD'],
@@ -146,9 +153,15 @@ async function getScmStatus(
       env,
     );
   const dirty =
-    (runReadCommand('git', ['status', '--short'], options.repoPath, env) ?? '')
-      .trim().length > 0;
-  const auth = runStatusCommand('gh', ['auth', 'status'], options.repoPath, env);
+    (
+      runReadCommand('git', ['status', '--short'], options.repoPath, env) ?? ''
+    ).trim().length > 0;
+  const auth = runStatusCommand(
+    'gh',
+    ['auth', 'status'],
+    options.repoPath,
+    env,
+  );
   const branchPushed =
     remoteName && branch
       ? runExitCodeCommand(

@@ -15,7 +15,9 @@ export interface WebProjectContext {
   workflowsDir: string;
 }
 
-export function resolveProjectRoot(input: ResolveProjectRootInput = {}): string {
+export function resolveProjectRoot(
+  input: ResolveProjectRootInput = {},
+): string {
   const explicitRoot = input.projectRoot ?? input.env?.DONKEY_PROJECT_ROOT;
   if (!explicitRoot) {
     throw new Error(

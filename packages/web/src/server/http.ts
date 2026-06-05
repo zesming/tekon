@@ -1,8 +1,17 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createApiCaller, dispatchApiCall, type ApiCaller } from './api/root.js';
+import {
+  createApiCaller,
+  dispatchApiCall,
+  type ApiCaller,
+} from './api/root.js';
 import { ApiError } from './api/errors.js';
 import { resolveProjectRoot } from './project-context.js';
 
@@ -99,7 +108,8 @@ async function handleRpc(input: {
     writeJson(input.response, 200, { result });
   } catch (error) {
     const code = error instanceof ApiError ? error.code : 'BAD_REQUEST';
-    const status = code === 'UNAUTHORIZED' ? 401 : code === 'NOT_FOUND' ? 404 : 400;
+    const status =
+      code === 'UNAUTHORIZED' ? 401 : code === 'NOT_FOUND' ? 404 : 400;
     writeJson(input.response, status, {
       error: {
         code,
@@ -118,7 +128,11 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   return raw.length === 0 ? {} : JSON.parse(raw);
 }
 
-function writeJson(response: ServerResponse, status: number, value: unknown): void {
+function writeJson(
+  response: ServerResponse,
+  status: number,
+  value: unknown,
+): void {
   response.statusCode = status;
   response.setHeader('content-type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(value));
@@ -128,7 +142,7 @@ async function createViteMiddleware() {
   const { createServer: createViteServer } = await import('vite');
   return createViteServer({
     root: resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
-    server: { middlewareMode: true },
+    server: { hmr: false, middlewareMode: true },
     appType: 'spa',
     logLevel: 'error',
   });

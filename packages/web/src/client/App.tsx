@@ -6,7 +6,11 @@ import './styles.css';
 
 type Overview = {
   project: { id: string; name: string; repoPath: string };
-  latestRun: { id: string; status: string; currentNodeId: string | null } | null;
+  latestRun: {
+    id: string;
+    status: string;
+    currentNodeId: string | null;
+  } | null;
   counts: {
     artifacts: number;
     gates: number;
@@ -146,7 +150,9 @@ function App() {
           <h1>Donkey Cockpit</h1>
           <p>{overview?.project.repoPath ?? 'Loading project context'}</p>
         </div>
-        <div className="run-pill">{overview?.latestRun?.status ?? 'loading'}</div>
+        <div className="run-pill">
+          {overview?.latestRun?.status ?? 'loading'}
+        </div>
       </header>
 
       <section className="band">
@@ -189,13 +195,16 @@ function App() {
             </label>
             <div className="actions">
               <button onClick={() => void decide('approve')}>批准</button>
-              <button className="secondary" onClick={() => void decide('reject')}>
+              <button
+                className="secondary"
+                onClick={() => void decide('reject')}
+              >
                 拒绝
               </button>
             </div>
           </div>
         ) : (
-          <p>{message || '没有待处理人工审批'}</p>
+          <p>没有待处理人工审批</p>
         )}
         {message ? <p className="status-line">{message}</p> : null}
       </section>
@@ -221,7 +230,11 @@ function App() {
         </Panel>
         <Panel title="审计">
           {audit.map((event) => (
-            <Row key={event.id} primary={event.type} secondary={event.createdAt} />
+            <Row
+              key={event.id}
+              primary={event.type}
+              secondary={event.createdAt}
+            />
           ))}
         </Panel>
         <Panel title="角色">
@@ -231,11 +244,18 @@ function App() {
         </Panel>
         <Panel title="工作流">
           {workflows.map((workflow) => (
-            <Row key={workflow.id} primary={workflow.id} secondary={workflow.name} />
+            <Row
+              key={workflow.id}
+              primary={workflow.id}
+              secondary={workflow.name}
+            />
           ))}
         </Panel>
         <Panel title="设置">
-          <Row primary="project" secondary={overview?.project.name ?? 'loading'} />
+          <Row
+            primary="project"
+            secondary={overview?.project.name ?? 'loading'}
+          />
           <Row primary="write gate" secondary=".donkey/web-session.json" />
         </Panel>
       </section>

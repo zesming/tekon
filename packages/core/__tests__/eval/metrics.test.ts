@@ -70,8 +70,18 @@ describe('eval metrics', () => {
         open: 0,
       },
     });
-    expect(metrics.gateByType.build).toEqual({ passed: 1, failed: 1, blocked: 0, skipped: 0 });
-    expect(metrics.gateByType.human).toEqual({ passed: 1, failed: 0, blocked: 0, skipped: 0 });
+    expect(metrics.gateByType.build).toEqual({
+      passed: 1,
+      failed: 1,
+      blocked: 0,
+      skipped: 0,
+    });
+    expect(metrics.gateByType.human).toEqual({
+      passed: 1,
+      failed: 0,
+      blocked: 0,
+      skipped: 0,
+    });
 
     db.close();
   });

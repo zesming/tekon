@@ -8,5 +8,16 @@ const isRepoRoot = resolve(process.cwd()) === resolve(repoRoot);
 export default defineConfig({
   test: {
     ...(isRepoRoot ? { projects: ['packages/*'] } : {}),
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      exclude: [
+        '**/dist/**',
+        '**/*.config.ts',
+        'scripts/**',
+        'packages/web/src/client/**',
+        'packages/web/src/server/index.ts',
+      ],
+    },
   },
 });

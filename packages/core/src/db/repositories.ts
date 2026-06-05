@@ -204,7 +204,9 @@ export function createRepositories(
     },
 
     async getDemand(demandId) {
-      const row = db.prepare('select * from demands where id = ?').get(demandId) as
+      const row = db
+        .prepare('select * from demands where id = ?')
+        .get(demandId) as
         | {
             id: string;
             title: string;
@@ -236,7 +238,9 @@ export function createRepositories(
     },
 
     async getProject(projectId) {
-      const row = db.prepare('select * from projects where id = ?').get(projectId) as
+      const row = db
+        .prepare('select * from projects where id = ?')
+        .get(projectId) as
         | {
             id: string;
             name: string;
