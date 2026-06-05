@@ -123,6 +123,18 @@ export function migrateDatabase(db: DonkeyDatabase): void {
         locked_by text not null,
         locked_at text not null
       );
+
+      create table if not exists worktree_leases (
+        id text primary key,
+        run_id text not null,
+        node_id text not null,
+        role text not null,
+        repo_path text not null,
+        worktree_path text not null,
+        branch_name text not null,
+        created_at text not null,
+        released_at text
+      );
     `);
 
     db.prepare(

@@ -20,6 +20,10 @@ import {
   type WorkflowInstance,
   workflowInstanceSchema,
 } from '../types/domain.js';
+import {
+  type WorktreeLease,
+  worktreeLeaseSchema,
+} from '../types/config.js';
 import type { DonkeyDatabase } from './connection.js';
 import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
@@ -95,6 +99,18 @@ type HumanDecisionRow = {
   decided_at: string | null;
 };
 
+type WorktreeLeaseRow = {
+  id: string;
+  run_id: string;
+  node_id: string;
+  role: WorktreeLease['role'];
+  repo_path: string;
+  worktree_path: string;
+  branch_name: string;
+  created_at: string;
+  released_at: string | null;
+};
+
 export interface RecoverableRun {
   runId: string;
   nodeId: string;
@@ -122,6 +138,10 @@ export interface DonkeyRepositories {
   ): Promise<HumanDecision | null>;
   getHumanDecision(decisionId: string): Promise<HumanDecision | null>;
   listHumanDecisions(runId: string): Promise<HumanDecision[]>;
+  recordWorktreeLease(lease: WorktreeLease): Promise<WorktreeLease>;
+  releaseWorktreeLease(leaseId: string, releasedAt: string): Promise<WorktreeLease | null>;
+  getWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
+  listWorktreeLeases(runId: string): Promise<WorktreeLease[]>;
   createRoleRun(roleRun: RoleRun): Promise<RoleRun>;
   getRoleRun(roleRunId: string): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
@@ -337,6 +357,47 @@ export function createRepositories(
       return rows.map(mapHumanDecision);
     },
 
+    async recordWorktreeLease(input) {
+      const lease = worktreeLeaseSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into worktree_leases (
+             id, run_id, node_id, role, repo_path, worktree_path, branch_name, created_at, released_at
+           ) values (
+             @id, @runId, @nodeId, @role, @repoPath, @worktreePath, @branchName, @createdAt, @releasedAt
+           )`,
+        ).run({ ...lease, releasedAt: lease.releasedAt ?? null });
+        return lease;
+      });
+    },
+
+    async releaseWorktreeLease(leaseId, releasedAt) {
+      return writeQueue.enqueue(() => {
+        db.prepare('update worktree_leases set released_at = ? where id = ?').run(
+          releasedAt,
+          leaseId,
+        );
+        const row = db.prepare('select * from worktree_leases where id = ?').get(leaseId) as
+          | WorktreeLeaseRow
+          | undefined;
+        return row ? mapWorktreeLease(row) : null;
+      });
+    },
+
+    async getWorktreeLease(leaseId) {
+      const row = db.prepare('select * from worktree_leases where id = ?').get(leaseId) as
+        | WorktreeLeaseRow
+        | undefined;
+      return row ? mapWorktreeLease(row) : null;
+    },
+
+    async listWorktreeLeases(runId) {
+      const rows = db
+        .prepare('select * from worktree_leases where run_id = ? order by created_at, id')
+        .all(runId) as WorktreeLeaseRow[];
+      return rows.map(mapWorktreeLease);
+    },
+
     async createRoleRun(input) {
       const roleRun = roleRunSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -471,6 +532,20 @@ function mapHumanDecision(row: HumanDecisionRow): HumanDecision {
     note: row.note,
     createdAt: row.created_at,
     decidedAt: row.decided_at,
+  });
+}
+
+function mapWorktreeLease(row: WorktreeLeaseRow): WorktreeLease {
+  return worktreeLeaseSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    nodeId: row.node_id,
+    role: row.role,
+    repoPath: row.repo_path,
+    worktreePath: row.worktree_path,
+    branchName: row.branch_name,
+    createdAt: row.created_at,
+    releasedAt: row.released_at,
   });
 }
 
