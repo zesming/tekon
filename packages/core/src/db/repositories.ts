@@ -8,6 +8,8 @@ import {
   demandSchema,
   type GateResult,
   gateResultSchema,
+  type HumanDecision,
+  humanDecisionSchema,
   type Node,
   nodeSchema,
   type NodeStatus,
@@ -81,6 +83,18 @@ type ArtifactRow = {
   created_at: string;
 };
 
+type HumanDecisionRow = {
+  id: string;
+  run_id: string;
+  node_id: string;
+  gate_result_id: string | null;
+  status: HumanDecision['status'];
+  actor: string | null;
+  note: string | null;
+  created_at: string;
+  decided_at: string | null;
+};
+
 export interface RecoverableRun {
   runId: string;
   nodeId: string;
@@ -101,6 +115,13 @@ export interface DonkeyRepositories {
   listAuditEvents(runId: string): Promise<AuditEvent[]>;
   recordArtifact(artifact: Artifact): Promise<Artifact>;
   listArtifacts(runId: string, nodeId?: string, type?: ArtifactType): Promise<Artifact[]>;
+  createHumanDecision(decision: HumanDecision): Promise<HumanDecision>;
+  updateHumanDecision(
+    decisionId: string,
+    patch: Pick<HumanDecision, 'status' | 'actor' | 'note' | 'decidedAt'>,
+  ): Promise<HumanDecision | null>;
+  getHumanDecision(decisionId: string): Promise<HumanDecision | null>;
+  listHumanDecisions(runId: string): Promise<HumanDecision[]>;
   createRoleRun(roleRun: RoleRun): Promise<RoleRun>;
   getRoleRun(roleRunId: string): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
@@ -262,6 +283,60 @@ export function createRepositories(
       return rows.map(mapArtifact);
     },
 
+    async createHumanDecision(input) {
+      const decision = humanDecisionSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into human_decisions (
+             id, run_id, node_id, gate_result_id, status, actor, note, created_at, decided_at
+           ) values (
+             @id, @runId, @nodeId, @gateResultId, @status, @actor, @note, @createdAt, @decidedAt
+           )`,
+        ).run({
+          ...decision,
+          gateResultId: decision.gateResultId ?? null,
+          actor: decision.actor ?? null,
+          note: decision.note ?? null,
+          decidedAt: decision.decidedAt ?? null,
+        });
+        return decision;
+      });
+    },
+
+    async updateHumanDecision(decisionId, patch) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update human_decisions
+           set status = @status, actor = @actor, note = @note, decided_at = @decidedAt
+           where id = @decisionId`,
+        ).run({
+          decisionId,
+          status: patch.status,
+          actor: patch.actor ?? null,
+          note: patch.note ?? null,
+          decidedAt: patch.decidedAt ?? null,
+        });
+        const row = db.prepare('select * from human_decisions where id = ?').get(decisionId) as
+          | HumanDecisionRow
+          | undefined;
+        return row ? mapHumanDecision(row) : null;
+      });
+    },
+
+    async getHumanDecision(decisionId) {
+      const row = db.prepare('select * from human_decisions where id = ?').get(decisionId) as
+        | HumanDecisionRow
+        | undefined;
+      return row ? mapHumanDecision(row) : null;
+    },
+
+    async listHumanDecisions(runId) {
+      const rows = db
+        .prepare('select * from human_decisions where run_id = ? order by created_at, id')
+        .all(runId) as HumanDecisionRow[];
+      return rows.map(mapHumanDecision);
+    },
+
     async createRoleRun(input) {
       const roleRun = roleRunSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -382,6 +457,20 @@ function mapArtifact(row: ArtifactRow): Artifact {
     sizeBytes: row.size_bytes,
     summary: row.summary ?? undefined,
     createdAt: row.created_at,
+  });
+}
+
+function mapHumanDecision(row: HumanDecisionRow): HumanDecision {
+  return humanDecisionSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    nodeId: row.node_id,
+    gateResultId: row.gate_result_id,
+    status: row.status,
+    actor: row.actor,
+    note: row.note,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
   });
 }
 

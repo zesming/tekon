@@ -10,3 +10,5 @@ export * from './db/write-queue.js';
 export * from './artifact/schemas.js';
 export * from './artifact/store.js';
 export * from './audit/logger.js';
+export * from './runtime/command-gateway.js';
+export * from './gate/runners.js';
