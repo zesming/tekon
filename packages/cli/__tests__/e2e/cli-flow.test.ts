@@ -101,6 +101,15 @@ describe('donkey cli e2e', () => {
     expect(statusOutput).toContain('status=paused');
     expect(statusOutput).toContain('pendingHumanDecisions=1');
 
+    const deliveryOutput = runCli(
+      cliPath,
+      ['delivery', 'dry-run', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(deliveryOutput).toContain(`runId=${standardRunId}`);
+    expect(deliveryOutput).toContain('prDryRun=true');
+    expect(deliveryOutput).toContain('requiresHumanApproval=true');
+
     const logOutput = runCli(
       cliPath,
       ['log', '--run-id', runId!, '--repo', repoPath],

@@ -140,7 +140,9 @@ export interface RecoverableRun {
 
 export interface DonkeyRepositories {
   createDemand(demand: Demand): Promise<Demand>;
+  getDemand(demandId: string): Promise<Demand | null>;
   createProject(project: Project): Promise<Project>;
+  getProject(projectId: string): Promise<Project | null>;
   createWorkflowInstance(instance: WorkflowInstance): Promise<WorkflowInstance>;
   getWorkflowInstance(runId: string): Promise<WorkflowInstance | null>;
   updateWorkflowInstanceStatus(
@@ -201,6 +203,27 @@ export function createRepositories(
       });
     },
 
+    async getDemand(demandId) {
+      const row = db.prepare('select * from demands where id = ?').get(demandId) as
+        | {
+            id: string;
+            title: string;
+            body: string;
+            source: string | null;
+            created_at: string;
+          }
+        | undefined;
+      return row
+        ? demandSchema.parse({
+            id: row.id,
+            title: row.title,
+            body: row.body,
+            source: row.source ?? undefined,
+            createdAt: row.created_at,
+          })
+        : null;
+    },
+
     async createProject(input) {
       const project = projectSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -210,6 +233,25 @@ export function createRepositories(
         ).run(project);
         return project;
       });
+    },
+
+    async getProject(projectId) {
+      const row = db.prepare('select * from projects where id = ?').get(projectId) as
+        | {
+            id: string;
+            name: string;
+            repo_path: string;
+            created_at: string;
+          }
+        | undefined;
+      return row
+        ? projectSchema.parse({
+            id: row.id,
+            name: row.name,
+            repoPath: row.repo_path,
+            createdAt: row.created_at,
+          })
+        : null;
     },
 
     async createWorkflowInstance(input) {

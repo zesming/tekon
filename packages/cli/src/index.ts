@@ -18,10 +18,12 @@ import { stringify as stringifyYaml } from 'yaml';
 import {
   createAuditLogger,
   createCommandGateway,
+  createDeliveryEvidencePackage,
   createGateEngine,
   createHumanGate,
   createMockAgentAdapter,
   createRepositories,
+  createScmDelivery,
   createWorkflowEngine,
   generateDynamicWorkflow,
   listRoleIds,
@@ -75,6 +77,9 @@ export async function runCli(
         return 0;
       case 'constraints':
         await commandConstraints(rest, io);
+        return 0;
+      case 'delivery':
+        await commandDelivery(rest, io);
         return 0;
       case 'log':
         await commandLog(rest, io);
@@ -508,6 +513,37 @@ async function commandConstraints(argv: string[], io: CliIO) {
   io.stdout.write(
     readFileSync(join(getRepoRoot(), 'constraints.yaml'), 'utf8'),
   );
+}
+
+async function commandDelivery(argv: string[], io: CliIO) {
+  const [subcommand, ...rest] = argv;
+  if (subcommand !== 'dry-run') {
+    throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
+  }
+  const { repositories, db, repoPath, runId } = openCommandContext(rest);
+  const audit = createAuditLogger({ repositories });
+  const evidence = await createDeliveryEvidencePackage({
+    repositories,
+    audit,
+    runId,
+    riskGates: ['human'],
+  });
+  const pr = await createScmDelivery({ repoPath }).createPr({
+    title: `Donkey delivery ${runId}`,
+    body: `Run ${runId} status=${evidence.workflowStatus}`,
+    branch: `donkey/${runId}`,
+    dryRun: true,
+  });
+  io.stdout.write(
+    [
+      `runId=${runId}`,
+      `workflowStatus=${evidence.workflowStatus}`,
+      `artifacts=${evidence.artifacts.length}`,
+      `prDryRun=${pr.dryRun}`,
+      `requiresHumanApproval=${pr.requiresHumanApproval}`,
+    ].join(' ') + '\n',
+  );
+  db.close();
 }
 
 async function commandStatus(argv: string[], io: CliIO) {

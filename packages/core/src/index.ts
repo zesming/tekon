@@ -28,4 +28,6 @@ export * from './workflow/scheduler.js';
 export * from './workflow/engine.js';
 export * from './workflow/dynamic.js';
 export * from './constraint/validator.js';
+export * from './delivery/scm.js';
+export * from './delivery/evidence.js';
 export type { WorkflowTemplate } from './workflow/template.js';
