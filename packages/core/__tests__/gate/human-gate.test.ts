@@ -22,8 +22,12 @@ describe('human gate', () => {
     });
 
     expect(decision).toMatchObject({ status: 'pending', nodeId: 'node_1' });
-    expect(await repositories.getNode('node_1')).toMatchObject({ status: 'paused' });
-    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({ status: 'paused' });
+    expect(await repositories.getNode('node_1')).toMatchObject({
+      status: 'paused',
+    });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'paused',
+    });
 
     await humanGate.approveHumanGate(decision.id, 'zhaoensheng', 'approved');
 
@@ -31,13 +35,19 @@ describe('human gate', () => {
       status: 'approved',
       actor: 'zhaoensheng',
     });
-    expect(await repositories.getNode('node_1')).toMatchObject({ status: 'running' });
-    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({ status: 'running' });
+    expect(await repositories.getNode('node_1')).toMatchObject({
+      status: 'running',
+    });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'running',
+    });
     db.close();
   });
 });
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Human gate',

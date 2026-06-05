@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { artifactPayloadSchemas, validateArtifactPayload } from '../../src/index.js';
+import {
+  artifactPayloadSchemas,
+  validateArtifactPayload,
+} from '../../src/index.js';
 
 describe('artifact schemas', () => {
   it('provides schemas for all built-in artifact types', () => {

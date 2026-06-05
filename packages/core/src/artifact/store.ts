@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
@@ -25,7 +31,9 @@ export interface ArtifactStore {
   readArtifactForPrompt(artifact: Artifact): Promise<string>;
 }
 
-export function createArtifactStore(options: CreateArtifactStoreOptions): ArtifactStore {
+export function createArtifactStore(
+  options: CreateArtifactStoreOptions,
+): ArtifactStore {
   const maxPromptChars = options.maxPromptChars ?? 16_000;
 
   return {
@@ -38,7 +46,10 @@ export function createArtifactStore(options: CreateArtifactStoreOptions): Artifa
         input.type,
       );
       const version =
-        existing.reduce((highest, artifact) => Math.max(highest, artifact.version), 0) + 1;
+        existing.reduce(
+          (highest, artifact) => Math.max(highest, artifact.version),
+          0,
+        ) + 1;
       const relativePath = `.donkey/runs/${runSegment}/artifacts/${nodeSegment}/${input.type}.v${version}.md`;
       const absolutePath = resolveManagedPath(options.repoPath, relativePath);
       mkdirSync(dirname(absolutePath), { recursive: true });

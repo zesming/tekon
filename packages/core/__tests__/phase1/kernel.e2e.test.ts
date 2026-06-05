@@ -89,7 +89,13 @@ describe('phase 1 kernel e2e', () => {
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
-      policy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
     });
     expect(schemaGate).toMatchObject({ status: 'passed' });
 
@@ -128,9 +134,13 @@ describe('phase 1 kernel e2e', () => {
       nodeId: 'node_1',
       note: 'phase 1 checkpoint',
     });
-    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({ status: 'paused' });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'paused',
+    });
     await humanGate.approveHumanGate(decision.id, 'reviewer', 'approved');
-    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({ status: 'running' });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'running',
+    });
 
     expect(() =>
       assertAgentProviderCapabilities({
@@ -153,15 +163,22 @@ function createTempGitRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'donkey-phase1-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+    cwd: repoPath,
+  });
+  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+    cwd: repoPath,
+  });
   writeFileSync(join(repoPath, 'README.md'), 'phase 1 fixture repo\n', 'utf8');
   execFileSync('git', ['add', 'README.md'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
   return repoPath;
 }
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>, repoPath: string) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+  repoPath: string,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Phase 1 e2e',

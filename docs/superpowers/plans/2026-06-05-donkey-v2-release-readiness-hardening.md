@@ -161,7 +161,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: '24'
 
       - name: Install dependencies
         run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
@@ -189,23 +189,23 @@ jobs:
 
 ```js
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync } from 'node:child_process';
 
-const owner = process.env.GITHUB_OWNER ?? "zesming";
-const repo = process.env.GITHUB_REPO ?? "donkey";
+const owner = process.env.GITHUB_OWNER ?? 'zesming';
+const repo = process.env.GITHUB_REPO ?? 'donkey';
 const token = process.env.GITHUB_TOKEN;
 const sha =
   process.env.GITHUB_SHA_TO_CHECK ??
-  execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const url = new URL(
   `https://api.github.com/repos/${owner}/${repo}/actions/runs`,
 );
-url.searchParams.set("branch", "rebuild-v2");
-url.searchParams.set("head_sha", sha);
-url.searchParams.set("per_page", "10");
+url.searchParams.set('branch', 'rebuild-v2');
+url.searchParams.set('head_sha', sha);
+url.searchParams.set('per_page', '10');
 
 if (!token) {
-  console.error("GITHUB_TOKEN is required to verify remote GitHub Actions.");
+  console.error('GITHUB_TOKEN is required to verify remote GitHub Actions.');
   console.error(`Target: ${owner}/${repo}@${sha}`);
   process.exit(2);
 }
@@ -213,8 +213,8 @@ if (!token) {
 const response = await fetch(url, {
   headers: {
     Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
   },
 });
 
@@ -228,7 +228,7 @@ if (!response.ok) {
 
 const payload = await response.json();
 const runs = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
-const coreRuns = runs.filter((run) => run.name === "Core");
+const coreRuns = runs.filter((run) => run.name === 'Core');
 
 if (coreRuns.length === 0) {
   console.error(`No Core workflow run found for ${sha}.`);
@@ -237,11 +237,11 @@ if (coreRuns.length === 0) {
 
 const latest = coreRuns[0];
 console.log(
-  `${latest.name} #${latest.run_number}: ${latest.status}/${latest.conclusion ?? "pending"}`,
+  `${latest.name} #${latest.run_number}: ${latest.status}/${latest.conclusion ?? 'pending'}`,
 );
 console.log(latest.html_url);
 
-if (latest.status !== "completed" || latest.conclusion !== "success") {
+if (latest.status !== 'completed' || latest.conclusion !== 'success') {
   process.exit(1);
 }
 ```
@@ -298,11 +298,11 @@ git commit -m "ci: harden core workflow gates"
 创建 `vitest.config.ts`：
 
 ```ts
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    projects: ["packages/*"],
+    projects: ['packages/*'],
   },
 });
 ```
@@ -505,35 +505,35 @@ git commit -m "docs: add release readiness baseline"
 创建 `packages/core/__tests__/runtime/command-gateway-env.test.ts`：
 
 ```ts
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import {
   createCommandGateway,
   type SpawnImpl,
-} from "../../src/runtime/command-gateway.js";
+} from '../../src/runtime/command-gateway.js';
 
-describe("command gateway environment boundary", () => {
-  it("does not pass sensitive parent environment variables by default", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "donkey-env-"));
+describe('command gateway environment boundary', () => {
+  it('does not pass sensitive parent environment variables by default', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-env-'));
     const previous = process.env.ANTHROPIC_API_KEY;
-    process.env.ANTHROPIC_API_KEY = "secret-value";
+    process.env.ANTHROPIC_API_KEY = 'secret-value';
     let receivedEnv: NodeJS.ProcessEnv | undefined;
     const spawnImpl: SpawnImpl = (_command, _args, options) => {
       receivedEnv = options.env;
-      throw new Error("stop before spawn");
+      throw new Error('stop before spawn');
     };
 
     const gateway = createCommandGateway({ spawnImpl });
     const result = await gateway.run({
-      command: { tool: "node", args: ["-v"] },
+      command: { tool: 'node', args: ['-v'] },
       cwd,
       policy: {
-        allow: [{ tool: "node", args: [] }],
+        allow: [{ tool: 'node', args: [] }],
         deny: [],
         cwdScope: [cwd],
-        network: "disabled",
+        network: 'disabled',
       },
     });
 
@@ -543,34 +543,34 @@ describe("command gateway environment boundary", () => {
       process.env.ANTHROPIC_API_KEY = previous;
     }
 
-    expect(result.status).toBe("rejected");
+    expect(result.status).toBe('rejected');
     expect(receivedEnv?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(receivedEnv?.PATH).toBeTruthy();
   });
 
-  it("supports exact env for manual provider smoke", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "donkey-env-"));
+  it('supports exact env for manual provider smoke', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-env-'));
     let receivedEnv: NodeJS.ProcessEnv | undefined;
     const spawnImpl: SpawnImpl = (_command, _args, options) => {
       receivedEnv = options.env;
-      throw new Error("stop before spawn");
+      throw new Error('stop before spawn');
     };
 
     const gateway = createCommandGateway({ spawnImpl });
     await gateway.run({
-      command: { tool: "node", args: ["-v"] },
+      command: { tool: 'node', args: ['-v'] },
       cwd,
       policy: {
-        allow: [{ tool: "node", args: [] }],
+        allow: [{ tool: 'node', args: [] }],
         deny: [],
         cwdScope: [cwd],
-        network: "disabled",
+        network: 'disabled',
       },
-      envMode: "exact",
-      env: { PATH: "/usr/bin", HOME: "/tmp/donkey-home" },
+      envMode: 'exact',
+      env: { PATH: '/usr/bin', HOME: '/tmp/donkey-home' },
     });
 
-    expect(receivedEnv).toEqual({ PATH: "/usr/bin", HOME: "/tmp/donkey-home" });
+    expect(receivedEnv).toEqual({ PATH: '/usr/bin', HOME: '/tmp/donkey-home' });
   });
 });
 ```
@@ -588,27 +588,27 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- __tests__/runtime/c
 修改 `packages/core/src/runtime/command-gateway.ts`：
 
 ```ts
-export type CommandEnvironmentMode = "safe-default" | "inherit" | "exact";
+export type CommandEnvironmentMode = 'safe-default' | 'inherit' | 'exact';
 
 const SAFE_ENV_KEYS = [
-  "PATH",
-  "HOME",
-  "TMPDIR",
-  "TMP",
-  "TEMP",
-  "LANG",
-  "LC_ALL",
-  "SHELL",
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
 ] as const;
 
 function buildChildEnv(input: {
   env?: NodeJS.ProcessEnv;
   envMode?: CommandEnvironmentMode;
 }): NodeJS.ProcessEnv {
-  if (input.envMode === "inherit") {
+  if (input.envMode === 'inherit') {
     return { ...process.env, ...(input.env ?? {}) };
   }
-  if (input.envMode === "exact") {
+  if (input.envMode === 'exact') {
     return { ...(input.env ?? {}) };
   }
   const safeEnv: NodeJS.ProcessEnv = {};
@@ -628,51 +628,51 @@ Add `envMode?: CommandEnvironmentMode` to `CommandGatewayRunInput`, then pass `b
 创建 `packages/core/__manual__/claude-code-provider.smoke.test.ts`：
 
 ```ts
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { createClaudeCodeAdapter, createCommandGateway } from "../src/index.js";
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createClaudeCodeAdapter, createCommandGateway } from '../src/index.js';
 
-describe("claude-code provider manual smoke", () => {
-  it("requires explicit enablement and authenticated Claude CLI", async () => {
-    if (process.env.DONKEY_CLAUDE_PROVIDER_SMOKE !== "1") {
+describe('claude-code provider manual smoke', () => {
+  it('requires explicit enablement and authenticated Claude CLI', async () => {
+    if (process.env.DONKEY_CLAUDE_PROVIDER_SMOKE !== '1') {
       throw new Error(
-        "DONKEY_CLAUDE_PROVIDER_SMOKE=1 is required; this smoke is fail-closed.",
+        'DONKEY_CLAUDE_PROVIDER_SMOKE=1 is required; this smoke is fail-closed.',
       );
     }
 
-    const claudeCommand = process.env.DONKEY_CLAUDE_COMMAND ?? "claude";
-    const version = execFileSync(claudeCommand, ["--version"], {
-      encoding: "utf8",
+    const claudeCommand = process.env.DONKEY_CLAUDE_COMMAND ?? 'claude';
+    const version = execFileSync(claudeCommand, ['--version'], {
+      encoding: 'utf8',
     }).trim();
-    execFileSync(claudeCommand, ["auth", "status"], { stdio: "pipe" });
+    execFileSync(claudeCommand, ['auth', 'status'], { stdio: 'pipe' });
 
-    const repoPath = mkdtempSync(join(tmpdir(), "donkey-claude-smoke-"));
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-smoke-'));
     writeFileSync(
-      join(repoPath, "README.md"),
-      "DONKEY_CLAUDE_PROVIDER_SMOKE_FIXTURE\n",
-      "utf8",
+      join(repoPath, 'README.md'),
+      'DONKEY_CLAUDE_PROVIDER_SMOKE_FIXTURE\n',
+      'utf8',
     );
-    const dataDir = join(repoPath, ".donkey");
-    const outputDir = join(dataDir, "smoke");
+    const dataDir = join(repoPath, '.donkey');
+    const outputDir = join(dataDir, 'smoke');
     const adapter = createClaudeCodeAdapter(
       {
-        provider: "claude-code",
+        provider: 'claude-code',
         command: claudeCommand,
-        promptMode: "stdin",
-        outputFormat: "json",
+        promptMode: 'stdin',
+        outputFormat: 'json',
         timeoutMs: 120_000,
-        args: ["-p"],
+        args: ['-p'],
         permissionProfile: {
-          sandbox: "workspace-write",
-          approval: "on-request",
+          sandbox: 'workspace-write',
+          approval: 'on-request',
           filesystemScope: [repoPath],
-          network: "restricted",
+          network: 'restricted',
           tools: {
-            allow: ["Read"],
-            deny: ["Bash(rm *)", "Bash(git push *)", "WebFetch", "WebSearch"],
+            allow: ['Read'],
+            deny: ['Bash(rm *)', 'Bash(git push *)', 'WebFetch', 'WebSearch'],
           },
         },
       },
@@ -680,41 +680,41 @@ describe("claude-code provider manual smoke", () => {
     );
 
     const result = await adapter.runAgent({
-      roleConfig: { role: "reviewer" },
+      roleConfig: { role: 'reviewer' },
       prompt:
-        "Read README.md and print DONKEY_CLAUDE_PROVIDER_SMOKE_OK. Do not edit files.",
+        'Read README.md and print DONKEY_CLAUDE_PROVIDER_SMOKE_OK. Do not edit files.',
       worktreeLease: {
-        id: "lease_smoke",
-        runId: "run_smoke",
-        nodeId: "node_claude",
-        role: "reviewer",
+        id: 'lease_smoke',
+        runId: 'run_smoke',
+        nodeId: 'node_claude',
+        role: 'reviewer',
         repoPath,
         worktreePath: repoPath,
-        branchName: "donkey/run_smoke/node_claude-reviewer",
+        branchName: 'donkey/run_smoke/node_claude-reviewer',
         createdAt: new Date().toISOString(),
       },
       outputDir,
       commandPolicy: {
-        allow: [{ tool: claudeCommand, args: ["-p"] }],
+        allow: [{ tool: claudeCommand, args: ['-p'] }],
         deny: [],
         cwdScope: [repoPath],
-        network: "restricted",
+        network: 'restricted',
       },
       runContext: {
-        projectId: "manual",
-        runId: "run_smoke",
-        nodeId: "node_claude",
+        projectId: 'manual',
+        runId: 'run_smoke',
+        nodeId: 'node_claude',
         repoPath,
         dataDir,
       },
     });
 
     expect(version.length).toBeGreaterThan(0);
-    expect(result.provider).toBe("claude-code");
+    expect(result.provider).toBe('claude-code');
     expect(result.exitCode).toBe(0);
     expect(result.outputFiles).toHaveLength(2);
-    expect(readFileSync(result.outputFiles[0]!, "utf8")).toContain(
-      "DONKEY_CLAUDE_PROVIDER_SMOKE_OK",
+    expect(readFileSync(result.outputFiles[0]!, 'utf8')).toContain(
+      'DONKEY_CLAUDE_PROVIDER_SMOKE_OK',
     );
   });
 });
@@ -858,33 +858,33 @@ git commit -m "test(core): add claude provider smoke boundary"
 创建 `packages/core/__tests__/runtime/command-gateway-network.test.ts`：
 
 ```ts
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import {
   createCommandGateway,
   type SpawnImpl,
-} from "../../src/runtime/command-gateway.js";
+} from '../../src/runtime/command-gateway.js';
 
-describe("command gateway network policy", () => {
+describe('command gateway network policy', () => {
   it.each([
-    { tool: "curl", args: ["https://example.com"] },
-    { tool: "wget", args: ["https://example.com"] },
-    { tool: "ssh", args: ["git@example.com"] },
-    { tool: "git", args: ["fetch"] },
-    { tool: "git", args: ["push"] },
-    { tool: "npm", args: ["install"] },
-    { tool: "pnpm", args: ["install"] },
-    { tool: "npx", args: ["some-package"] },
+    { tool: 'curl', args: ['https://example.com'] },
+    { tool: 'wget', args: ['https://example.com'] },
+    { tool: 'ssh', args: ['git@example.com'] },
+    { tool: 'git', args: ['fetch'] },
+    { tool: 'git', args: ['push'] },
+    { tool: 'npm', args: ['install'] },
+    { tool: 'pnpm', args: ['install'] },
+    { tool: 'npx', args: ['some-package'] },
   ])(
-    "rejects known network command $tool $args before spawn when network is disabled",
+    'rejects known network command $tool $args before spawn when network is disabled',
     async (command) => {
-      const cwd = mkdtempSync(join(tmpdir(), "donkey-network-"));
+      const cwd = mkdtempSync(join(tmpdir(), 'donkey-network-'));
       let spawnCalls = 0;
       const spawnImpl: SpawnImpl = () => {
         spawnCalls += 1;
-        throw new Error("spawn should not run");
+        throw new Error('spawn should not run');
       };
       const gateway = createCommandGateway({ spawnImpl });
 
@@ -895,13 +895,13 @@ describe("command gateway network policy", () => {
           allow: [command],
           deny: [],
           cwdScope: [cwd],
-          network: "disabled",
+          network: 'disabled',
         },
       });
 
       expect(result).toEqual({
-        status: "rejected",
-        reason: "network command is not allowed by policy",
+        status: 'rejected',
+        reason: 'network command is not allowed by policy',
       });
       expect(spawnCalls).toBe(0);
     },
@@ -924,26 +924,26 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test -- __tests__/runtime/c
 ```ts
 function isKnownNetworkCommand(command: CommandInvocation): boolean {
   const tool = basename(command.tool);
-  if (["curl", "wget", "ssh", "scp", "sftp", "npx"].includes(tool)) {
+  if (['curl', 'wget', 'ssh', 'scp', 'sftp', 'npx'].includes(tool)) {
     return true;
   }
-  if (tool === "git") {
+  if (tool === 'git') {
     return [
-      "fetch",
-      "pull",
-      "push",
-      "clone",
-      "ls-remote",
-      "submodule",
-    ].includes(command.args[0] ?? "");
+      'fetch',
+      'pull',
+      'push',
+      'clone',
+      'ls-remote',
+      'submodule',
+    ].includes(command.args[0] ?? '');
   }
-  if (tool === "npm" || tool === "pnpm") {
-    return ["install", "add", "update", "dlx", "exec"].includes(
-      command.args[0] ?? "",
+  if (tool === 'npm' || tool === 'pnpm') {
+    return ['install', 'add', 'update', 'dlx', 'exec'].includes(
+      command.args[0] ?? '',
     );
   }
-  if (tool === "gh") {
-    return ["api", "pr", "repo", "run"].includes(command.args[0] ?? "");
+  if (tool === 'gh') {
+    return ['api', 'pr', 'repo', 'run'].includes(command.args[0] ?? '');
   }
   return false;
 }
@@ -952,8 +952,8 @@ function isKnownNetworkCommand(command: CommandInvocation): boolean {
 Call after dangerous remove/force push checks:
 
 ```ts
-if (policy.network !== "enabled" && isKnownNetworkCommand(command)) {
-  return "network command is not allowed by policy";
+if (policy.network !== 'enabled' && isKnownNetworkCommand(command)) {
+  return 'network command is not allowed by policy';
 }
 ```
 
@@ -963,12 +963,12 @@ if (policy.network !== "enabled" && isKnownNetworkCommand(command)) {
 
 ```ts
 export type NetworkEnforcement =
-  | "declared"
-  | "provider-enforced"
-  | "os-enforced";
+  | 'declared'
+  | 'provider-enforced'
+  | 'os-enforced';
 
 export interface NetworkCapabilityEvidence {
-  mode: "disabled" | "restricted" | "enabled";
+  mode: 'disabled' | 'restricted' | 'enabled';
   enforcement: NetworkEnforcement;
   allowHosts: string[];
   evidence: string[];
@@ -1008,20 +1008,20 @@ function assertSafeClaudeArgs(args: string[]): void {
   if (
     args.some(
       (arg) =>
-        arg === "--permission-mode" || arg.startsWith("--permission-mode="),
+        arg === '--permission-mode' || arg.startsWith('--permission-mode='),
     )
   ) {
-    throw new Error("claude permission mode is controlled by Donkey");
+    throw new Error('claude permission mode is controlled by Donkey');
   }
   if (
     args.some(
       (arg) =>
-        arg === "bypassPermissions" ||
-        arg.startsWith("--dangerously-skip-permissions") ||
-        arg.includes("bypassPermissions"),
+        arg === 'bypassPermissions' ||
+        arg.startsWith('--dangerously-skip-permissions') ||
+        arg.includes('bypassPermissions'),
     )
   ) {
-    throw new Error("claude bypass permissions mode is not allowed");
+    throw new Error('claude bypass permissions mode is not allowed');
   }
 }
 ```
@@ -1034,46 +1034,46 @@ function assertSafeClaudeArgs(args: string[]): void {
 
 ```ts
 const safeConfig = {
-  provider: "claude-code" as const,
-  command: "claude",
+  provider: 'claude-code' as const,
+  command: 'claude',
   args: [],
-  promptMode: "stdin" as const,
-  outputFormat: "json" as const,
+  promptMode: 'stdin' as const,
+  outputFormat: 'json' as const,
   timeoutMs: 1000,
-  permissionProfile: safePermissionProfile("/tmp/repo"),
+  permissionProfile: safePermissionProfile('/tmp/repo'),
 };
 
 expect(() =>
   buildClaudeCodeCommand(
-    { ...safeConfig, args: ["--permission-mode", "bypassPermissions"] },
-    { prompt: "x" },
+    { ...safeConfig, args: ['--permission-mode', 'bypassPermissions'] },
+    { prompt: 'x' },
   ),
-).toThrow("permission mode is controlled by Donkey");
+).toThrow('permission mode is controlled by Donkey');
 
 expect(() =>
   buildClaudeCodeCommand(
-    { ...safeConfig, args: ["--permission-mode=bypassPermissions"] },
-    { prompt: "x" },
+    { ...safeConfig, args: ['--permission-mode=bypassPermissions'] },
+    { prompt: 'x' },
   ),
-).toThrow("permission mode is controlled by Donkey");
+).toThrow('permission mode is controlled by Donkey');
 
 expect(() =>
   buildClaudeCodeCommand(
-    { ...safeConfig, args: ["--dangerously-skip-permissions"] },
-    { prompt: "x" },
+    { ...safeConfig, args: ['--dangerously-skip-permissions'] },
+    { prompt: 'x' },
   ),
-).toThrow("bypass permissions mode is not allowed");
+).toThrow('bypass permissions mode is not allowed');
 ```
 
 修改 `packages/core/__tests__/runtime/agent-adapter.test.ts`，断言结构化 network evidence：
 
 ```ts
-const mapping = assertAgentProviderCapabilities({ provider: "mock" });
+const mapping = assertAgentProviderCapabilities({ provider: 'mock' });
 expect(mapping.network).toEqual({
-  mode: "disabled",
-  enforcement: "declared",
+  mode: 'disabled',
+  enforcement: 'declared',
   allowHosts: [],
-  evidence: ["mock provider does not spawn a child process"],
+  evidence: ['mock provider does not spawn a child process'],
 });
 ```
 

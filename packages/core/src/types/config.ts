@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { commandInvocationSchema, gateConfigSchema, roleSchema } from './domain.js';
+import {
+  commandInvocationSchema,
+  gateConfigSchema,
+  roleSchema,
+} from './domain.js';
 
 const unsafeToolNames = new Set(['rm', 'sudo', 'su', 'chmod', 'chown']);
 const shellMetaPattern = /[;&|`$<>]/u;
@@ -32,7 +36,10 @@ export const permissionProfileSchema = z
     tools: toolPolicySchema.default({ allow: [], deny: [] }),
   })
   .superRefine((profile, ctx) => {
-    if (profile.sandbox === 'danger-full-access' && profile.approval === 'never') {
+    if (
+      profile.sandbox === 'danger-full-access' &&
+      profile.approval === 'never'
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'danger-full-access requires an approval boundary',
@@ -76,7 +83,8 @@ export const commandPolicySchema = z
         if (!assertSafeCommand(command)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'command policy cannot contain shell metacharacters or unsafe tool defaults',
+            message:
+              'command policy cannot contain shell metacharacters or unsafe tool defaults',
             path: [listName, index],
           });
         }

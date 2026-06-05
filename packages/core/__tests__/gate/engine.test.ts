@@ -28,12 +28,21 @@ describe('gate engine', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
-    const engine = createGateEngine({ repositories, gateway: createCommandGateway() });
+    const engine = createGateEngine({
+      repositories,
+      gateway: createCommandGateway(),
+    });
 
     const result = await engine.runGate({
       runId: 'run_1',
       nodeId: 'node_1',
-      gate: { type: 'test', command: { tool: process.execPath, args: ['-e', "process.stdout.write('ok\\n')"] } },
+      gate: {
+        type: 'test',
+        command: {
+          tool: process.execPath,
+          args: ['-e', "process.stdout.write('ok\\n')"],
+        },
+      },
       cwd: repoPath,
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
       policy: {
@@ -85,7 +94,10 @@ describe('gate engine', () => {
   });
 });
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>, repoPath: string) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+  repoPath: string,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Gate engine',

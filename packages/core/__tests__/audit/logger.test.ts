@@ -32,17 +32,22 @@ describe('audit logger', () => {
     expect(second.prevHash).toBe(first.hash);
     expect(await logger.verify('run_1')).toMatchObject({ valid: true });
 
-    db.prepare("update audit_events set payload = ? where id = ?").run(
+    db.prepare('update audit_events set payload = ? where id = ?').run(
       JSON.stringify({ gateType: 'schema', tampered: true }),
       second.id,
     );
 
-    expect(await logger.verify('run_1')).toMatchObject({ valid: false, brokenEventId: second.id });
+    expect(await logger.verify('run_1')).toMatchObject({
+      valid: false,
+      brokenEventId: second.id,
+    });
     db.close();
   });
 });
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Audit run',

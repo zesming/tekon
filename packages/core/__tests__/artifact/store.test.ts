@@ -1,4 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,12 +52,18 @@ describe('artifact store', () => {
 
     const stored = await repositories.listArtifacts('run_1', 'node_1', 'prd');
     expect(stored.map((artifact) => artifact.version)).toEqual([1, 2]);
-    expect(readFileSync(join(repoPath, v1.path), 'utf8')).toContain('First version');
+    expect(readFileSync(join(repoPath, v1.path), 'utf8')).toContain(
+      'First version',
+    );
   });
 
   it('truncates oversized artifact content for prompt use and fails on missing files', async () => {
     const { repoPath, repositories } = await createRunFixture(tempDirs);
-    const store = createArtifactStore({ repoPath, repositories, maxPromptChars: 12 });
+    const store = createArtifactStore({
+      repoPath,
+      repositories,
+      maxPromptChars: 12,
+    });
 
     const artifact = await store.writeArtifact({
       runId: 'run_1',
@@ -60,10 +72,14 @@ describe('artifact store', () => {
       content: '0123456789abcdefghijklmnopqrstuvwxyz',
     });
 
-    expect(await store.readArtifactForPrompt(artifact)).toContain('[truncated artifact');
+    expect(await store.readArtifactForPrompt(artifact)).toContain(
+      '[truncated artifact',
+    );
 
     unlinkSync(join(repoPath, artifact.path));
-    await expect(store.readArtifact(artifact)).rejects.toThrow(/missing artifact file/u);
+    await expect(store.readArtifact(artifact)).rejects.toThrow(
+      /missing artifact file/u,
+    );
   });
 
   it('rejects unsafe run and node identifiers before writing files', async () => {
@@ -77,7 +93,10 @@ describe('artifact store', () => {
         return artifact;
       },
     } as never;
-    const store = createArtifactStore({ repoPath, repositories: fakeRepositories });
+    const store = createArtifactStore({
+      repoPath,
+      repositories: fakeRepositories,
+    });
 
     await expect(
       store.writeArtifact({

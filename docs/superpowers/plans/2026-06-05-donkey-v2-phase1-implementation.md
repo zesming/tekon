@@ -222,6 +222,7 @@ donkey/
 ### Task 1: Monorepo scaffolding
 
 **Files:**
+
 - Create: `pnpm-workspace.yaml`
 - Create: `package.json`
 - Create: `tsconfig.base.json`
@@ -409,6 +410,7 @@ git commit -m "feat: monorepo scaffolding — pnpm workspaces + core/cli/web pac
 ### Task 2: Core shared types
 
 **Files:**
+
 - Create: `packages/core/src/types.ts`
 - Create: `packages/core/src/index.ts`
 
@@ -417,14 +419,33 @@ git commit -m "feat: monorepo scaffolding — pnpm workspaces + core/cli/web pac
 ```typescript
 // packages/core/__tests__/types.test.ts
 import { describe, it, expect } from 'vitest';
-import type { Demand, Project, WorkflowInstance, Phase, Node, GateConfig, Artifact, ArtifactRef, RoleRun, AuditEvent } from '../src/types.js';
+import type {
+  Demand,
+  Project,
+  WorkflowInstance,
+  Phase,
+  Node,
+  GateConfig,
+  Artifact,
+  ArtifactRef,
+  RoleRun,
+  AuditEvent,
+} from '../src/types.js';
 
 describe('Type exports', () => {
   it('should have all core type identifiers available', () => {
     // Compile-time check: if types aren't exported, this file won't compile
     const types = [
-      'Demand', 'Project', 'WorkflowInstance', 'Phase', 'Node',
-      'GateConfig', 'Artifact', 'ArtifactRef', 'RoleRun', 'AuditEvent',
+      'Demand',
+      'Project',
+      'WorkflowInstance',
+      'Phase',
+      'Node',
+      'GateConfig',
+      'Artifact',
+      'ArtifactRef',
+      'RoleRun',
+      'AuditEvent',
     ];
     expect(types.length).toBe(10);
   });
@@ -442,12 +463,56 @@ Expected: FAIL — module not found
 // packages/core/src/types.ts
 
 // ── Enums ──
-export type DemandStatus = 'draft' | 'clarifying' | 'shaped' | 'prioritized' | 'converted' | 'project-linked';
-export type ProjectStatus = 'pending' | 'planning' | 'executing' | 'verifying' | 'delivering' | 'completed' | 'rolled-back' | 'cancelled';
-export type NodeStatus = 'pending' | 'running' | 'awaiting-gate' | 'passed' | 'needs-revision' | 'blocked' | 'skipped' | 'interrupted';
-export type ArtifactStatus = 'draft' | 'reviewing' | 'needs-revision' | 'approved' | 'archived';
-export type ArtifactType = 'demand-card' | 'prd' | 'tech-design' | 'task-breakdown' | 'code-changes' | 'test-report' | 'review-report' | 'delivery-package' | 'rollback-plan' | 'security-report';
-export type GateType = 'build' | 'test' | 'lint' | 'e2e-pass' | 'schema' | 'security-scan' | 'human';
+export type DemandStatus =
+  | 'draft'
+  | 'clarifying'
+  | 'shaped'
+  | 'prioritized'
+  | 'converted'
+  | 'project-linked';
+export type ProjectStatus =
+  | 'pending'
+  | 'planning'
+  | 'executing'
+  | 'verifying'
+  | 'delivering'
+  | 'completed'
+  | 'rolled-back'
+  | 'cancelled';
+export type NodeStatus =
+  | 'pending'
+  | 'running'
+  | 'awaiting-gate'
+  | 'passed'
+  | 'needs-revision'
+  | 'blocked'
+  | 'skipped'
+  | 'interrupted';
+export type ArtifactStatus =
+  | 'draft'
+  | 'reviewing'
+  | 'needs-revision'
+  | 'approved'
+  | 'archived';
+export type ArtifactType =
+  | 'demand-card'
+  | 'prd'
+  | 'tech-design'
+  | 'task-breakdown'
+  | 'code-changes'
+  | 'test-report'
+  | 'review-report'
+  | 'delivery-package'
+  | 'rollback-plan'
+  | 'security-report';
+export type GateType =
+  | 'build'
+  | 'test'
+  | 'lint'
+  | 'e2e-pass'
+  | 'schema'
+  | 'security-scan'
+  | 'human';
 export type OnExhausted = 'skip' | 'block' | 'escalate-human';
 export type PhaseSource = 'template' | 'dynamic' | 'constraint';
 export type NodeSource = 'template' | 'dynamic' | 'constraint';
@@ -715,6 +780,7 @@ git commit -m "feat(core): shared types — all core interfaces and type definit
 ### Task 3: Database layer
 
 **Files:**
+
 - Create: `packages/core/src/db.ts`
 - Create: `packages/core/__tests__/db.test.ts`
 
@@ -735,11 +801,13 @@ describe('Database', () => {
     initDb(TEST_DB);
     const db = getDb();
 
-    const tables = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    ).all() as Array<{ name: string }>;
+    const tables = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+      )
+      .all() as Array<{ name: string }>;
 
-    const names = tables.map(t => t.name);
+    const names = tables.map((t) => t.name);
     expect(names).toContain('projects');
     expect(names).toContain('demands');
     expect(names).toContain('workflow_instances');
@@ -754,13 +822,21 @@ describe('Database', () => {
     initDb(TEST_DB);
     const db = getDb();
 
-    db.prepare(`INSERT INTO projects (id, name, status, repo_url, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)`).run(
-      'proj-1', 'test-project', 'pending', 'https://github.com/test/repo',
-      new Date().toISOString(), new Date().toISOString()
+    db.prepare(
+      `INSERT INTO projects (id, name, status, repo_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'proj-1',
+      'test-project',
+      'pending',
+      'https://github.com/test/repo',
+      new Date().toISOString(),
+      new Date().toISOString(),
     );
 
-    const row = db.prepare('SELECT * FROM projects WHERE id = ?').get('proj-1') as any;
+    const row = db
+      .prepare('SELECT * FROM projects WHERE id = ?')
+      .get('proj-1') as any;
     expect(row.id).toBe('proj-1');
     expect(row.name).toBe('test-project');
     expect(row.status).toBe('pending');
@@ -910,7 +986,10 @@ export function getDb(): Database.Database {
 }
 
 export function closeDb(): void {
-  if (db) { db.close(); db = null; }
+  if (db) {
+    db.close();
+    db = null;
+  }
 }
 ```
 
@@ -933,6 +1012,7 @@ git commit -m "feat(core): database layer — SQLite schema + init/query/close"
 ### Task 4: Role Loader
 
 **Files:**
+
 - Create: `packages/core/src/role/loader.ts`
 - Create: `packages/core/__tests__/role/loader.test.ts`
 
@@ -954,7 +1034,9 @@ describe('Role Loader', () => {
     // Create mock builtin role
     const pmDir = path.join(tmpDir, 'roles', 'pm');
     fs.mkdirSync(pmDir, { recursive: true });
-    fs.writeFileSync(path.join(pmDir, 'agent.yaml'), `
+    fs.writeFileSync(
+      path.join(pmDir, 'agent.yaml'),
+      `
 name: pm
 display: 产品经理
 description: 测试角色
@@ -968,7 +1050,8 @@ outputs: [demand-card]
 context:
   maxSkills: 2
   includeHistory: false
-`);
+`,
+    );
     fs.writeFileSync(path.join(pmDir, 'system.md'), '你是{{display}}');
   });
 
@@ -989,7 +1072,9 @@ context:
   it('should prioritize project-level over builtin roles', async () => {
     const projectDir = path.join(tmpDir, 'project-roles', 'pm');
     fs.mkdirSync(projectDir, { recursive: true });
-    fs.writeFileSync(path.join(projectDir, 'agent.yaml'), `
+    fs.writeFileSync(
+      path.join(projectDir, 'agent.yaml'),
+      `
 name: pm
 display: 自定义PM
 description: custom
@@ -1003,9 +1088,14 @@ outputs: [demand-card, prd]
 context:
   maxSkills: 2
   includeHistory: false
-`);
+`,
+    );
 
-    const roles = await loadRoles(tmpDir, path.join(tmpDir, 'project-roles'), undefined);
+    const roles = await loadRoles(
+      tmpDir,
+      path.join(tmpDir, 'project-roles'),
+      undefined,
+    );
     const pm = roles.get('pm')!;
     expect(pm.display).toBe('自定义PM');
     expect(pm.source).toBe('project');
@@ -1029,14 +1119,22 @@ import yaml from 'js-yaml';
 import type { RoleConfig } from '../types.js';
 
 const BUILTIN_ROLES_DIR = path.resolve(
-  new URL('../../../../roles', import.meta.url).pathname
+  new URL('../../../../roles', import.meta.url).pathname,
 );
 
 async function dirExists(p: string): Promise<boolean> {
-  try { await fs.access(p); return true; } catch { return false; }
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-async function loadRoleFromDir(dirPath: string, source: RoleConfig['source']): Promise<RoleConfig | null> {
+async function loadRoleFromDir(
+  dirPath: string,
+  source: RoleConfig['source'],
+): Promise<RoleConfig | null> {
   const yamlPath = path.join(dirPath, 'agent.yaml');
   if (!(await dirExists(yamlPath))) return null;
 
@@ -1047,8 +1145,12 @@ async function loadRoleFromDir(dirPath: string, source: RoleConfig['source']): P
   let agent: RoleConfig['agent'];
   if (typeof raw.agent === 'string') {
     const presets: Record<string, RoleConfig['agent']> = {
-      'claude-code': { command: 'claude', args: ['-p'], promptMode: 'arg-append' },
-      'codex': { command: 'codex', args: [], promptMode: 'stdin' },
+      'claude-code': {
+        command: 'claude',
+        args: ['-p'],
+        promptMode: 'arg-append',
+      },
+      codex: { command: 'codex', args: [], promptMode: 'stdin' },
     };
     agent = presets[raw.agent] || { command: raw.agent, args: [] };
   } else {
@@ -1085,7 +1187,7 @@ async function loadRoleFromDir(dirPath: string, source: RoleConfig['source']): P
 export async function loadRoles(
   projectRoot: string,
   projectRolesPath?: string,
-  userRolesPath?: string
+  userRolesPath?: string,
 ): Promise<Map<string, RoleConfig>> {
   const roles = new Map<string, RoleConfig>();
 
@@ -1106,7 +1208,10 @@ export async function loadRoles(
     const entries = await fs.readdir(builtinPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        const role = await loadRoleFromDir(path.join(builtinPath, entry.name), 'builtin');
+        const role = await loadRoleFromDir(
+          path.join(builtinPath, entry.name),
+          'builtin',
+        );
         if (role && !roles.has(entry.name)) {
           roles.set(entry.name, role);
         }
@@ -1115,22 +1220,28 @@ export async function loadRoles(
   }
 
   // Override with user roles
-  if (userRolesPath && await dirExists(userRolesPath)) {
+  if (userRolesPath && (await dirExists(userRolesPath))) {
     const entries = await fs.readdir(userRolesPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        const role = await loadRoleFromDir(path.join(userRolesPath, entry.name), 'user');
+        const role = await loadRoleFromDir(
+          path.join(userRolesPath, entry.name),
+          'user',
+        );
         if (role) roles.set(entry.name, role);
       }
     }
   }
 
   // Override with project roles
-  if (projectRolesPath && await dirExists(projectRolesPath)) {
+  if (projectRolesPath && (await dirExists(projectRolesPath))) {
     const entries = await fs.readdir(projectRolesPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        const role = await loadRoleFromDir(path.join(projectRolesPath, entry.name), 'project');
+        const role = await loadRoleFromDir(
+          path.join(projectRolesPath, entry.name),
+          'project',
+        );
         if (role) roles.set(entry.name, role);
       }
     }
@@ -1157,6 +1268,7 @@ git commit -m "feat(core): role loader — filesystem-based role discovery with 
 ### Task 5: Built-in role files
 
 **Files:**
+
 - Create: `roles/pm/agent.yaml`, `roles/pm/system.md`, `roles/pm/skills/clarify.md`, `roles/pm/skills/acceptance.md`, `roles/pm/tools.yaml`
 - Create: `roles/rd/agent.yaml`, `roles/rd/system.md`, `roles/rd/skills/implement.md`, `roles/rd/tools.yaml`
 - Create: `roles/qa/agent.yaml`, `roles/qa/system.md`, `roles/qa/skills/test-plan.md`, `roles/qa/skills/e2e.md`, `roles/qa/tools.yaml`
@@ -1187,7 +1299,7 @@ maxRetries: 2
 outputs:
   - demand-card
   - prd
-quality: "输出必须结构化、完整、可验证。验收标准必须可客观判定。"
+quality: '输出必须结构化、完整、可验证。验收标准必须可客观判定。'
 gate:
   checks:
     - type: schema
@@ -1218,7 +1330,7 @@ maxRetries: 2
 outputs:
   - code-changes
   - tech-design
-quality: "代码可编译、测试通过、遵循项目规范。"
+quality: '代码可编译、测试通过、遵循项目规范。'
 context:
   maxSkills: 2
   includeHistory: false
@@ -1241,7 +1353,7 @@ timeout: 600000
 maxRetries: 2
 outputs:
   - test-report
-quality: "测试覆盖主流程和异常路径，每条验收标准有对应测试证据。"
+quality: '测试覆盖主流程和异常路径，每条验收标准有对应测试证据。'
 context:
   maxSkills: 2
   includeHistory: false
@@ -1265,9 +1377,9 @@ maxRetries: 1
 outputs:
   - review-report
   - security-report
-quality: "审查覆盖安全、规范、性能和架构一致性。"
+quality: '审查覆盖安全、规范、性能和架构一致性。'
 constraintTask:
-  instruction: "基于安全审查 skill 对代码变更进行安全分析"
+  instruction: '基于安全审查 skill 对代码变更进行安全分析'
   skills: [security]
   output: [security-report]
 context:
@@ -1301,27 +1413,35 @@ context:
 
 ```markdown
 <!-- roles/pm/system.md -->
+
 你是 {{display}}，{{description}}。
 
 ## 输出规范
+
 你必须以结构化 Markdown 输出，包含：
+
 - 需求卡（标题、范围、非目标）
 - 可验证的验收标准（每条带编号，后续 Gate 会逐条检查）
 - 关键假设和风险
 
 ## 质量标准
+
 {{quality_standards}}
 
 ## 可用技能
+
 {{loaded_skills}}
 
 ## 可用工具
+
 {{loaded_tools}}
 
 ## 领域知识
+
 {{knowledge}}
 
 ## 上下文
+
 上游产物：{{input_artifacts}}
 项目背景：{{project_context}}
 ```
@@ -1333,17 +1453,19 @@ context:
 Skill files use YAML frontmatter:
 
 ```markdown
-<!-- roles/pm/skills/clarify.md -->
----
+## <!-- roles/pm/skills/clarify.md -->
+
 id: clarify
 description: 需求澄清追问——向用户提出关键问题以补全需求背景
 injectMode: append
 priority: required
+
 ---
 
 ## 澄清追问策略
 
 当需求描述不完整时，按以下顺序追问：
+
 1. 用户是谁？目标是什么？
 2. 具体场景和触发条件？
 3. 边界和约束？
@@ -1427,6 +1549,7 @@ git commit -m "feat: built-in roles — pm/rd/qa/reviewer/pmo with agent.yaml, s
 ### Task 6: Role Builder (prompt assembler)
 
 **Files:**
+
 - Create: `packages/core/src/role/builder.ts`
 - Create: `packages/core/__tests__/role/builder.test.ts`
 
@@ -1453,23 +1576,34 @@ const mockRole: RoleConfig = {
   dirPath: '/tmp/test/pm',
 };
 
-const mockArtifacts: Artifact[] = [{
-  id: 'art-1',
-  projectId: 'proj-1',
-  nodeId: 'node-1',
-  type: 'demand-card',
-  version: 1,
-  status: 'approved',
-  summary: '需求摘要：批量重试失败任务',
-  filePath: '/tmp/artifacts/demand-card.md',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-}];
+const mockArtifacts: Artifact[] = [
+  {
+    id: 'art-1',
+    projectId: 'proj-1',
+    nodeId: 'node-1',
+    type: 'demand-card',
+    version: 1,
+    status: 'approved',
+    summary: '需求摘要：批量重试失败任务',
+    filePath: '/tmp/artifacts/demand-card.md',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
 
 describe('Role Builder', () => {
   it('should render system.md template with variables', () => {
-    const systemMd = '你是{{display}}，{{description}}。\n质量标准：{{quality_standards}}';
-    const result = buildPrompt(mockRole, systemMd, [], [], [], mockArtifacts, 'test-project');
+    const systemMd =
+      '你是{{display}}，{{description}}。\n质量标准：{{quality_standards}}';
+    const result = buildPrompt(
+      mockRole,
+      systemMd,
+      [],
+      [],
+      [],
+      mockArtifacts,
+      'test-project',
+    );
     expect(result).toContain('你是产品经理');
     expect(result).toContain('测试角色');
     expect(result).toContain('输出必须可验证。');
@@ -1477,22 +1611,53 @@ describe('Role Builder', () => {
 
   it('should include loaded skills content', () => {
     const systemMd = '{{loaded_skills}}';
-    const skills = [{ id: 'clarify', content: '## 澄清策略\n1. 问目标', injectMode: 'append' as const, priority: 'required' as const }];
-    const result = buildPrompt(mockRole, systemMd, skills, [], [], [], 'test-project');
+    const skills = [
+      {
+        id: 'clarify',
+        content: '## 澄清策略\n1. 问目标',
+        injectMode: 'append' as const,
+        priority: 'required' as const,
+      },
+    ];
+    const result = buildPrompt(
+      mockRole,
+      systemMd,
+      skills,
+      [],
+      [],
+      [],
+      'test-project',
+    );
     expect(result).toContain('## 澄清策略');
     expect(result).toContain('1. 问目标');
   });
 
   it('should include input artifacts', () => {
     const systemMd = '上游产物：{{input_artifacts}}';
-    const result = buildPrompt(mockRole, systemMd, [], [], [], mockArtifacts, 'test-project');
+    const result = buildPrompt(
+      mockRole,
+      systemMd,
+      [],
+      [],
+      [],
+      mockArtifacts,
+      'test-project',
+    );
     expect(result).toContain('需求摘要：批量重试失败任务');
   });
 
   it('should inject knowledge content', () => {
     const systemMd = '{{knowledge}}';
     const knowledge = [{ name: 'prd-template.md', content: '# PRD 模板\n...' }];
-    const result = buildPrompt(mockRole, systemMd, [], knowledge, [], [], 'test-project');
+    const result = buildPrompt(
+      mockRole,
+      systemMd,
+      [],
+      knowledge,
+      [],
+      [],
+      'test-project',
+    );
     expect(result).toContain('# PRD 模板');
   });
 });
@@ -1527,7 +1692,10 @@ export interface LoadedTool {
   allowedCommands: string[];
 }
 
-function renderTemplate(template: string, vars: Record<string, string>): string {
+function renderTemplate(
+  template: string,
+  vars: Record<string, string>,
+): string {
   let result = template;
   for (const [key, value] of Object.entries(vars)) {
     result = result.replaceAll(`{{${key}}}`, value || '');
@@ -1546,22 +1714,31 @@ export function buildPrompt(
 ): string {
   // Build skill content for injection
   const skillsContent = skills
-    .filter(s => s.injectMode === 'append')
-    .map(s => s.content)
+    .filter((s) => s.injectMode === 'append')
+    .map((s) => s.content)
     .join('\n\n');
 
   // Build tools content
-  const toolsContent = tools.length > 0
-    ? tools.map(t => `- **${t.name}**: ${t.description} (允许: ${t.allowedCommands.join(', ')})`).join('\n')
-    : '';
+  const toolsContent =
+    tools.length > 0
+      ? tools
+          .map(
+            (t) =>
+              `- **${t.name}**: ${t.description} (允许: ${t.allowedCommands.join(', ')})`,
+          )
+          .join('\n')
+      : '';
 
   // Build knowledge content
-  const knowledgeContent = knowledge.map(k => k.content).join('\n\n');
+  const knowledgeContent = knowledge.map((k) => k.content).join('\n\n');
 
   // Build input artifacts content (use summary, fallback to type)
-  const artifactsContent = artifacts.length > 0
-    ? artifacts.map(a => `- [${a.type}] ${a.summary || '(无摘要)'}`).join('\n')
-    : '(无上游产物)';
+  const artifactsContent =
+    artifacts.length > 0
+      ? artifacts
+          .map((a) => `- [${a.type}] ${a.summary || '(无摘要)'}`)
+          .join('\n')
+      : '(无上游产物)';
 
   // Replace template variables for first pass (display/description etc.)
   let rendered = renderTemplate(systemMd, {
@@ -1574,7 +1751,7 @@ export function buildPrompt(
     input_artifacts: '',
     project_context: projectContext,
     ...Object.fromEntries(
-      (role.outputs || []).map((o, i) => [`output_${i}`, o])
+      (role.outputs || []).map((o, i) => [`output_${i}`, o]),
     ),
   });
 
@@ -1605,6 +1782,7 @@ git commit -m "feat(core): role builder — system.md template rendering with va
 ### Task 7: Role Runner (Agent spawn)
 
 **Files:**
+
 - Create: `packages/core/src/role/runner.ts`
 - Create: `packages/core/__tests__/role/runner.test.ts`
 
@@ -1620,12 +1798,17 @@ import path from 'node:path';
 import os from 'node:os';
 
 const mockRole: RoleConfig = {
-  name: 'pm', display: 'PM', description: 'test',
+  name: 'pm',
+  display: 'PM',
+  description: 'test',
   model: 'claude-sonnet-4',
   agent: { command: 'echo', args: [], promptMode: 'stdin' },
-  timeout: 5000, maxRetries: 0, outputs: ['demand-card'],
+  timeout: 5000,
+  maxRetries: 0,
+  outputs: ['demand-card'],
   context: { maxSkills: 1, includeHistory: false },
-  source: 'builtin', dirPath: '/tmp/test',
+  source: 'builtin',
+  dirPath: '/tmp/test',
 };
 
 describe('Role Runner', () => {
@@ -1633,7 +1816,10 @@ describe('Role Runner', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donkey-runner-'));
     const outputDir = path.join(tmpDir, 'output');
     fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(path.join(outputDir, 'result.md'), 'mock artifact content');
+    fs.writeFileSync(
+      path.join(outputDir, 'result.md'),
+      'mock artifact content',
+    );
 
     const opts: AgentRunOptions = {
       role: 'pm',
@@ -1656,7 +1842,7 @@ describe('Role Runner', () => {
     const slowRole: RoleConfig = {
       ...mockRole,
       agent: { command: 'sleep', args: ['10'], promptMode: 'none' },
-      timeout: 500,  // 500ms timeout
+      timeout: 500, // 500ms timeout
     };
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donkey-timeout-'));
@@ -1665,9 +1851,12 @@ describe('Role Runner', () => {
 
     await expect(
       runAgent({
-        role: 'pm', roleConfig: slowRole,
-        promptContent: 'test', outputDir, worktreePath: tmpDir,
-      })
+        role: 'pm',
+        roleConfig: slowRole,
+        promptContent: 'test',
+        outputDir,
+        worktreePath: tmpDir,
+      }),
     ).rejects.toThrow();
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -1728,8 +1917,12 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       proc.stdin.end();
     }
 
-    proc.stdout?.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
-    proc.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
 
     proc.on('error', (err) => {
       reject(new Error(`Failed to spawn agent: ${err.message}`));
@@ -1742,7 +1935,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       let outputFiles: string[] = [];
       try {
         const files = await fs.readdir(outputDir);
-        outputFiles = files.filter(f => !f.startsWith('.'));
+        outputFiles = files.filter((f) => !f.startsWith('.'));
       } catch {
         // output dir may not exist if agent failed
       }
@@ -1762,7 +1955,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentResult> {
       setTimeout(() => {
         if (!proc.killed) {
           proc.kill('SIGTERM');
-          reject(new Error(`Agent '${opts.role}' timed out after ${roleConfig.timeout}ms`));
+          reject(
+            new Error(
+              `Agent '${opts.role}' timed out after ${roleConfig.timeout}ms`,
+            ),
+          );
         }
       }, roleConfig.timeout);
     }
@@ -1789,6 +1986,7 @@ git commit -m "feat(core): role runner — spawn agent subprocess with prompt in
 ### Task 8: Workflow template parser
 
 **Files:**
+
 - Create: `packages/core/src/workflow/template.ts`
 - Create: `packages/core/__tests__/workflow/template.test.ts`
 - Create: `workflows/standard-feature.yaml`
@@ -1815,7 +2013,7 @@ phases:
     nodes:
       - role: pm
         task:
-          instruction: "理解 Bug 描述，补全复现步骤和预期行为"
+          instruction: '理解 Bug 描述，补全复现步骤和预期行为'
           output: [demand-card]
         skills: [clarify]
         retry: 1
@@ -1825,7 +2023,7 @@ phases:
     nodes:
       - role: rd
         task:
-          instruction: "定位 Bug 根因，修复代码，补充测试"
+          instruction: '定位 Bug 根因，修复代码，补充测试'
           input: [demand-card]
           output: [code-changes]
         skills: [implement, debug]
@@ -1845,7 +2043,7 @@ phases:
     nodes:
       - role: reviewer
         task:
-          instruction: "审查修复代码，确认不引入新问题"
+          instruction: '审查修复代码，确认不引入新问题'
           input: [code-changes]
           output: [review-report]
         skills: [code-review]
@@ -1865,7 +2063,9 @@ const WORKFLOWS_DIR = path.resolve(__dirname, '../../../../../workflows');
 
 describe('Template parser', () => {
   it('should parse standard-feature template', async () => {
-    const tmpl = await parseTemplate(path.join(WORKFLOWS_DIR, 'standard-feature.yaml'));
+    const tmpl = await parseTemplate(
+      path.join(WORKFLOWS_DIR, 'standard-feature.yaml'),
+    );
     expect(tmpl.name).toBe('standard-feature');
     expect(tmpl.phases).toHaveLength(5);
     expect(tmpl.phases[0].title).toBe('需求澄清');
@@ -1881,13 +2081,15 @@ describe('Template parser', () => {
   it('should list all templates', async () => {
     const templates = await listTemplates(WORKFLOWS_DIR);
     expect(templates.length).toBeGreaterThanOrEqual(2);
-    const names = templates.map(t => t.name);
+    const names = templates.map((t) => t.name);
     expect(names).toContain('standard-feature');
     expect(names).toContain('bugfix');
   });
 
   it('should handle input shorthand (string → ArtifactRef)', async () => {
-    const tmpl = await parseTemplate(path.join(WORKFLOWS_DIR, 'standard-feature.yaml'));
+    const tmpl = await parseTemplate(
+      path.join(WORKFLOWS_DIR, 'standard-feature.yaml'),
+    );
     const devPhase = tmpl.phases[1]; // 技术方案与开发
     const node = devPhase.nodes[0];
     // input: [demand-card] should be expanded to [{ type: 'demand-card' }]
@@ -1912,7 +2114,9 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import type { WorkflowTemplate, ArtifactRef, GateConfig } from '../types.js';
 
-export async function parseTemplate(filePath: string): Promise<WorkflowTemplate> {
+export async function parseTemplate(
+  filePath: string,
+): Promise<WorkflowTemplate> {
   const content = await fs.readFile(filePath, 'utf-8');
   const raw = yaml.load(content) as Record<string, any>;
 
@@ -1951,7 +2155,9 @@ function expandInput(input: any): (string | ArtifactRef)[] {
   });
 }
 
-export async function listTemplates(workflowsDir: string): Promise<WorkflowTemplate[]> {
+export async function listTemplates(
+  workflowsDir: string,
+): Promise<WorkflowTemplate[]> {
   const templates: WorkflowTemplate[] = [];
   try {
     const files = await fs.readdir(workflowsDir);
@@ -1985,6 +2191,7 @@ git commit -m "feat(core): workflow template parser — YAML parsing with input 
 ### Task 9: Workflow state machine
 
 **Files:**
+
 - Create: `packages/core/src/workflow/state.ts`
 - Create: `packages/core/__tests__/workflow/state.test.ts`
 
@@ -1993,7 +2200,11 @@ git commit -m "feat(core): workflow template parser — YAML parsing with input 
 ```typescript
 // packages/core/__tests__/workflow/state.test.ts
 import { describe, it, expect } from 'vitest';
-import { advanceNode, interruptNode, resolveArtifactRef } from '../../src/workflow/state.js';
+import {
+  advanceNode,
+  interruptNode,
+  resolveArtifactRef,
+} from '../../src/workflow/state.js';
 import type { Node, Phase, Artifact } from '../../src/types.js';
 
 function makeNode(overrides: Partial<Node> = {}): Node {
@@ -2012,9 +2223,15 @@ function makeNode(overrides: Partial<Node> = {}): Node {
 
 function makeArtifact(overrides: Partial<Artifact> = {}): Artifact {
   return {
-    id: 'art-1', projectId: 'proj-1', nodeId: 'node-0',
-    type: 'demand-card', version: 1, status: 'approved',
-    filePath: '/tmp/test.md', createdAt: '2026-01-01', updatedAt: '2026-01-01',
+    id: 'art-1',
+    projectId: 'proj-1',
+    nodeId: 'node-0',
+    type: 'demand-card',
+    version: 1,
+    status: 'approved',
+    filePath: '/tmp/test.md',
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
     ...overrides,
   };
 }
@@ -2045,14 +2262,22 @@ describe('Node state machine', () => {
   });
 
   it('should handle retry on gate fail', () => {
-    const node = makeNode({ status: 'awaiting-gate', retryCount: 0, maxRetries: 2 });
+    const node = makeNode({
+      status: 'awaiting-gate',
+      retryCount: 0,
+      maxRetries: 2,
+    });
     const next = advanceNode(node, 'gate-fail');
     expect(next.status).toBe('pending');
     expect(next.retryCount).toBe(1);
   });
 
   it('should move to needs-revision when retries exhausted', () => {
-    const node = makeNode({ status: 'awaiting-gate', retryCount: 2, maxRetries: 2 });
+    const node = makeNode({
+      status: 'awaiting-gate',
+      retryCount: 2,
+      maxRetries: 2,
+    });
     const next = advanceNode(node, 'gate-fail');
     expect(next.status).toBe('needs-revision');
   });
@@ -2085,7 +2310,10 @@ describe('ArtifactRef resolution', () => {
       makeArtifact({ id: 'art-1', nodeId: 'node-0', type: 'demand-card' }),
       makeArtifact({ id: 'art-2', nodeId: 'node-2', type: 'demand-card' }),
     ];
-    const result = resolveArtifactRef({ type: 'demand-card', nodeId: 'node-0' }, artifacts);
+    const result = resolveArtifactRef(
+      { type: 'demand-card', nodeId: 'node-0' },
+      artifacts,
+    );
     expect(result?.id).toBe('art-1');
   });
 });
@@ -2099,7 +2327,12 @@ describe('ArtifactRef resolution', () => {
 // packages/core/src/workflow/state.ts
 import type { Node, NodeStatus, Artifact, ArtifactRef } from '../types.js';
 
-type TransitionEvent = 'start' | 'agent-complete' | 'gate-pass' | 'gate-fail' | 'resume';
+type TransitionEvent =
+  | 'start'
+  | 'agent-complete'
+  | 'gate-pass'
+  | 'gate-fail'
+  | 'resume';
 
 export function advanceNode(node: Node, event: TransitionEvent): Node {
   const next = { ...node };
@@ -2152,16 +2385,18 @@ export function interruptNode(node: Node): Node {
 
 export function resolveArtifactRef(
   ref: ArtifactRef,
-  artifacts: Artifact[]
+  artifacts: Artifact[],
 ): Artifact | undefined {
   // 1. Exact nodeId match
   if (ref.nodeId) {
-    const exact = artifacts.findLast(a => a.type === ref.type && a.nodeId === ref.nodeId);
+    const exact = artifacts.findLast(
+      (a) => a.type === ref.type && a.nodeId === ref.nodeId,
+    );
     if (exact) return exact;
   }
 
   // 2. Type match (closest = last in array for same type)
-  const byType = artifacts.filter(a => a.type === ref.type);
+  const byType = artifacts.filter((a) => a.type === ref.type);
   return byType.length > 0 ? byType[byType.length - 1] : undefined;
 }
 ```
@@ -2183,6 +2418,7 @@ git commit -m "feat(core): workflow state machine — node transitions + Artifac
 ### Task 10: Workflow Engine (core execution loop)
 
 **Files:**
+
 - Create: `packages/core/src/workflow/engine.ts`
 - Create: `packages/core/__tests__/workflow/engine.test.ts`
 
@@ -2223,11 +2459,20 @@ describe('WorkflowEngine', () => {
     const engine = new WorkflowEngine({ dbPath: ':memory:' });
 
     const mockRunner = vi.fn().mockResolvedValue({
-      role: 'pm', exitCode: 0, stdout: 'OK', stderr: '',
-      outputFiles: ['demand-card.md'], duration: 100,
+      role: 'pm',
+      exitCode: 0,
+      stdout: 'OK',
+      stderr: '',
+      outputFiles: ['demand-card.md'],
+      duration: 100,
     });
 
-    const result = await engine.execute(mockTemplate, mockRoles, '/tmp/test-repo', mockRunner);
+    const result = await engine.execute(
+      mockTemplate,
+      mockRoles,
+      '/tmp/test-repo',
+      mockRunner,
+    );
 
     expect(result.status).toBe('completed');
     expect(mockRunner).toHaveBeenCalledOnce();
@@ -2245,8 +2490,13 @@ import { initDb, getDb, closeDb } from '../db.js';
 import { advanceNode } from './state.js';
 import { buildPrompt } from '../role/builder.js';
 import type {
-  WorkflowTemplate, RoleConfig, WorkflowInstance, Phase,
-  Node, ArtifactRef, AgentResult,
+  WorkflowTemplate,
+  RoleConfig,
+  WorkflowInstance,
+  Phase,
+  Node,
+  ArtifactRef,
+  AgentResult,
 } from '../types.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -2320,13 +2570,19 @@ export class WorkflowEngine {
         phase.nodes = nodes.filter((n): n is Node => n !== null);
       } else {
         for (const tNode of tPhase.nodes) {
-          const node = await this.executeNode(tNode, roles, repoPath, outputBase, runner);
+          const node = await this.executeNode(
+            tNode,
+            roles,
+            repoPath,
+            outputBase,
+            runner,
+          );
           if (node) phase.nodes.push(node);
         }
       }
 
       // Check if all nodes passed
-      const allPassed = phase.nodes.every(n => n.status === 'passed');
+      const allPassed = phase.nodes.every((n) => n.status === 'passed');
       phase.status = allPassed ? 'completed' : 'failed';
       instance.phases.push(phase);
 
@@ -2364,8 +2620,8 @@ export class WorkflowEngine {
       id: this.uid(),
       role: tNode.role,
       task: {
-        input: (tNode.task.input || []).map(i =>
-          typeof i === 'string' ? { type: i } as ArtifactRef : i
+        input: (tNode.task.input || []).map((i) =>
+          typeof i === 'string' ? ({ type: i } as ArtifactRef) : i,
         ),
         output: tNode.task.output,
         instruction: tNode.task.instruction,
@@ -2382,12 +2638,13 @@ export class WorkflowEngine {
     node = advanceNode(node, 'start');
 
     // Build prompt
-    const systemMd = await fs.readFile(
-      path.join(roleConfig.dirPath, 'system.md'), 'utf-8'
-    ).catch(() => '你是{{display}}，{{description}}。');
+    const systemMd = await fs
+      .readFile(path.join(roleConfig.dirPath, 'system.md'), 'utf-8')
+      .catch(() => '你是{{display}}，{{description}}。');
 
     const promptContent = buildPrompt(
-      roleConfig, systemMd,
+      roleConfig,
+      systemMd,
       [], // skills loaded later
       [], // tools loaded later
       [], // knowledge loaded later
@@ -2435,13 +2692,20 @@ export class WorkflowEngine {
 
       // Log audit event
       const db = getDb();
-      db.prepare(`INSERT INTO audit_events (id, timestamp, project_id, node_id, event_type, payload)
-        VALUES (?, ?, ?, ?, ?, ?)`).run(
-        this.uid(), new Date().toISOString(), '', node.id,
+      db.prepare(
+        `INSERT INTO audit_events (id, timestamp, project_id, node_id, event_type, payload)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        this.uid(),
+        new Date().toISOString(),
+        '',
+        node.id,
         node.status === 'passed' ? 'node_completed' : 'artifact_created',
-        JSON.stringify({ exitCode: result.exitCode, duration: result.duration }),
+        JSON.stringify({
+          exitCode: result.exitCode,
+          duration: result.duration,
+        }),
       );
-
     } catch (err) {
       node.status = 'needs-revision';
     }
@@ -2486,6 +2750,7 @@ git commit -m "feat(core): workflow engine — orchestrator with phase/node exec
 ### Task 11: Gate Engine
 
 **Files:**
+
 - Create: `packages/core/src/gate/engine.ts`
 - Create: `packages/core/src/gate/checks.ts`
 - Create: `packages/core/__tests__/gate/engine.test.ts`
@@ -2500,9 +2765,7 @@ import type { GateConfig } from '../../src/types.js';
 
 describe('Gate Engine', () => {
   const simpleGate: GateConfig = {
-    checks: [
-      { type: 'build', command: 'echo "build ok"', autoFix: false },
-    ],
+    checks: [{ type: 'build', command: 'echo "build ok"', autoFix: false }],
     retryLimit: 1,
     onExhausted: 'block',
   };
@@ -2599,10 +2862,14 @@ export async function runGateChain(
             results.push(finalResult);
           } else if (config.onExhausted === 'block') {
             results.push(finalResult);
-            throw new Error(`Gate '${check.type}' failed after ${retries} retries: ${lastError}`);
+            throw new Error(
+              `Gate '${check.type}' failed after ${retries} retries: ${lastError}`,
+            );
           } else {
             // escalate-human
-            throw new Error(`Gate '${check.type}' requires human intervention: ${lastError}`);
+            throw new Error(
+              `Gate '${check.type}' requires human intervention: ${lastError}`,
+            );
           }
         }
         // Otherwise: retry loop continues
@@ -2623,6 +2890,7 @@ export async function runGateChain(
 ### Task 12: Artifact Store
 
 **Files:**
+
 - Create: `packages/core/src/artifact/store.ts`
 - Create: `packages/core/__tests__/artifact/store.test.ts`
 
@@ -2651,8 +2919,10 @@ describe('ArtifactStore', () => {
 
   it('should save and read an artifact', async () => {
     const art = await store.save({
-      projectId: 'proj-1', nodeId: 'node-1',
-      type: 'demand-card', content: '# 需求卡\n测试需求',
+      projectId: 'proj-1',
+      nodeId: 'node-1',
+      type: 'demand-card',
+      content: '# 需求卡\n测试需求',
     });
     expect(art.type).toBe('demand-card');
     expect(art.version).toBe(1);
@@ -2665,8 +2935,10 @@ describe('ArtifactStore', () => {
 
   it('should version artifacts', async () => {
     const a1 = await store.save({
-      projectId: 'proj-1', nodeId: 'node-1',
-      type: 'demand-card', content: 'v1',
+      projectId: 'proj-1',
+      nodeId: 'node-1',
+      type: 'demand-card',
+      content: 'v1',
     });
     const a2 = await store.saveVersion(a1.id, 'v2 content');
     expect(a2.version).toBe(2);
@@ -2675,8 +2947,18 @@ describe('ArtifactStore', () => {
   });
 
   it('should list artifacts by project', async () => {
-    await store.save({ projectId: 'proj-1', nodeId: 'n1', type: 'demand-card', content: 'd' });
-    await store.save({ projectId: 'proj-1', nodeId: 'n2', type: 'code-changes', content: 'c' });
+    await store.save({
+      projectId: 'proj-1',
+      nodeId: 'n1',
+      type: 'demand-card',
+      content: 'd',
+    });
+    await store.save({
+      projectId: 'proj-1',
+      nodeId: 'n2',
+      type: 'code-changes',
+      content: 'c',
+    });
     const list = await store.listByProject('proj-1');
     expect(list).toHaveLength(2);
   });
@@ -2690,6 +2972,7 @@ describe('ArtifactStore', () => {
 ### Task 13: Constraint Validator
 
 **Files:**
+
 - Create: `packages/core/src/constraint/validator.ts`
 - Create: `constraints.yaml`
 - Create: `packages/core/__tests__/constraint/validator.test.ts`
@@ -2700,37 +2983,37 @@ describe('ArtifactStore', () => {
 # constraints.yaml
 constraints:
   hard:
-    - rule: "所有代码变更必须经过 build + lint gate"
+    - rule: '所有代码变更必须经过 build + lint gate'
       appliesWhen: { outputs: [code-changes] }
       gates: [build, lint]
-    - rule: "所有 workflow 必须有独立的审查阶段"
+    - rule: '所有 workflow 必须有独立的审查阶段'
       appliesWhen: { phasesCount: '>= 2' }
       requirePhase:
-        title: "审查"
+        title: '审查'
         containsRole: reviewer
-    - rule: "所有 workflow 必须有验证阶段"
+    - rule: '所有 workflow 必须有验证阶段'
       requiresOneOf:
         - { role: qa }
         - { gate: e2e-pass }
   conditional:
-    - rule: "高风险需求必须有人工确认 Gate"
+    - rule: '高风险需求必须有人工确认 Gate'
       when: { riskLevel: high }
       injectGate: { type: human, at: 'end-of-workflow' }
-    - rule: "涉及权限/安全的需求必须有安全审查"
+    - rule: '涉及权限/安全的需求必须有安全审查'
       when: { tags: [auth, security, permission] }
       requireRole: reviewer
       requireSkills: [security]
       injectGate: { type: security-scan, at: 'after-node:rd' }
-    - rule: "数据相关变更必须有回滚方案"
+    - rule: '数据相关变更必须有回滚方案'
       when: { tags: [data, migration, schema-change] }
       requireOutput: rollback-plan
-    - rule: "多模块变更建议拆分阶段"
+    - rule: '多模块变更建议拆分阶段'
       when: { affectedModules: '>= 3' }
       suggest: { splitPhases: true, mode: per-module }
   soft:
-    - rule: "独立模块建议并行开发"
+    - rule: '独立模块建议并行开发'
       suggest: { parallel: true }
-    - rule: "建议为 E2E 测试预留独立阶段"
+    - rule: '建议为 E2E 测试预留独立阶段'
       suggest: { separateE2EPhase: true }
 ```
 
@@ -2750,8 +3033,10 @@ const mockWorkflow: WorkflowTemplate = {
       title: '开发',
       nodes: [
         {
-          role: 'rd', task: { instruction: 'code', output: ['code-changes'] },
-          skills: [], retry: 1,
+          role: 'rd',
+          task: { instruction: 'code', output: ['code-changes'] },
+          skills: [],
+          retry: 1,
         },
       ],
     },
@@ -2759,7 +3044,8 @@ const mockWorkflow: WorkflowTemplate = {
       title: '审查',
       nodes: [
         {
-          role: 'reviewer', task: { instruction: 'review', output: ['review-report'] },
+          role: 'reviewer',
+          task: { instruction: 'review', output: ['review-report'] },
           skills: [],
         },
       ],
@@ -2768,9 +3054,15 @@ const mockWorkflow: WorkflowTemplate = {
       title: '验证',
       nodes: [
         {
-          role: 'qa', task: { instruction: 'test', output: ['test-report'] },
-          skills: [], retry: 1,
-          gate: { checks: [{ type: 'e2e-pass', autoFix: false }], retryLimit: 1, onExhausted: 'block' },
+          role: 'qa',
+          task: { instruction: 'test', output: ['test-report'] },
+          skills: [],
+          retry: 1,
+          gate: {
+            checks: [{ type: 'e2e-pass', autoFix: false }],
+            retryLimit: 1,
+            onExhausted: 'block',
+          },
         },
       ],
     },
@@ -2787,27 +3079,46 @@ describe('Constraint Validator', () => {
 
   it('should flag missing review phase', () => {
     const badWf: WorkflowTemplate = {
-      name: 'bad', description: '',
-      phases: [{
-        title: 'dev', nodes: [{
-          role: 'rd', task: { instruction: 'code', output: ['code-changes'] }, skills: []
-        }],
-      }],
+      name: 'bad',
+      description: '',
+      phases: [
+        {
+          title: 'dev',
+          nodes: [
+            {
+              role: 'rd',
+              task: { instruction: 'code', output: ['code-changes'] },
+              skills: [],
+            },
+          ],
+        },
+      ],
     };
-    const result = validateWorkflow(badWf, { riskLevel: 'low', tags: [] } as Demand);
+    const result = validateWorkflow(badWf, {
+      riskLevel: 'low',
+      tags: [],
+    } as Demand);
     expect(result.hardViolations.length).toBeGreaterThan(0);
     expect(result.passed).toBe(false);
   });
 
   it('should inject human gate for high risk', () => {
-    const result = validateWorkflow(mockWorkflow, { riskLevel: 'high', tags: [] } as Demand);
+    const result = validateWorkflow(mockWorkflow, {
+      riskLevel: 'high',
+      tags: [],
+    } as Demand);
     expect(result.injectedGates.length).toBeGreaterThan(0);
-    expect(result.injectedGates.some(g => g.type === 'human')).toBe(true);
+    expect(result.injectedGates.some((g) => g.type === 'human')).toBe(true);
   });
 
   it('should inject security scan for auth tags', () => {
-    const result = validateWorkflow(mockWorkflow, { riskLevel: 'low', tags: ['auth'] } as Demand);
-    expect(result.injectedGates.some(g => g.type === 'security-scan')).toBe(true);
+    const result = validateWorkflow(mockWorkflow, {
+      riskLevel: 'low',
+      tags: ['auth'],
+    } as Demand);
+    expect(result.injectedGates.some((g) => g.type === 'security-scan')).toBe(
+      true,
+    );
   });
 });
 ```
@@ -2821,6 +3132,7 @@ describe('Constraint Validator', () => {
 ### Task 14: CLI entry point + init command
 
 **Files:**
+
 - Create: `packages/cli/src/index.ts`
 - Create: `packages/cli/src/commands/init.ts`
 - Create: `packages/cli/__tests__/commands/init.test.ts`
@@ -2885,9 +3197,13 @@ export function initCommand(): Command {
 
       const configPath = path.join(donkeyDir, 'config.yaml');
       if (!fs.existsSync(configPath)) {
-        fs.writeFileSync(configPath, `# Donkey 项目配置
+        fs.writeFileSync(
+          configPath,
+          `# Donkey 项目配置
 repo: ${repoPath}
-`, 'utf-8');
+`,
+          'utf-8',
+        );
       }
 
       console.log(`✓ Donkey 项目已初始化: ${donkeyDir}`);
@@ -2909,16 +3225,25 @@ import os from 'node:os';
 describe('donkey init', () => {
   let tmpDir: string;
 
-  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donkey-init-')); });
-  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donkey-init-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 
   it('should create .donkey directory and config', () => {
-    execSync(`node ${path.resolve('packages/cli/dist/index.js')} init --repo ${tmpDir}`, {
-      cwd: tmpDir,
-    });
+    execSync(
+      `node ${path.resolve('packages/cli/dist/index.js')} init --repo ${tmpDir}`,
+      {
+        cwd: tmpDir,
+      },
+    );
     expect(fs.existsSync(path.join(tmpDir, '.donkey'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.donkey', 'roles'))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, '.donkey', 'config.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.donkey', 'config.yaml'))).toBe(
+      true,
+    );
   });
 });
 ```
@@ -2953,11 +3278,15 @@ export function runCommand(): Command {
       let template;
       if (opts.template) {
         const workflowDir = path.resolve('workflows');
-        template = await parseTemplate(path.join(workflowDir, `${opts.template}.yaml`));
+        template = await parseTemplate(
+          path.join(workflowDir, `${opts.template}.yaml`),
+        );
       } else {
         // Default: standard-feature
         const workflowDir = path.resolve('workflows');
-        template = await parseTemplate(path.join(workflowDir, 'standard-feature.yaml'));
+        template = await parseTemplate(
+          path.join(workflowDir, 'standard-feature.yaml'),
+        );
       }
 
       if (opts.dryRun) {
@@ -2966,7 +3295,7 @@ export function runCommand(): Command {
       }
 
       console.log(`Starting workflow: ${template.name}`);
-      console.log(`Phases: ${template.phases.map(p => p.title).join(' → ')}`);
+      console.log(`Phases: ${template.phases.map((p) => p.title).join(' → ')}`);
 
       const engine = new WorkflowEngine({
         dbPath: path.join(donkeyDir, 'donkey.db'),
@@ -3002,7 +3331,9 @@ export function statusCommand(): Command {
       initDb(dbPath);
       const db = getDb();
 
-      const projects = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC LIMIT 5').all() as any[];
+      const projects = db
+        .prepare('SELECT * FROM projects ORDER BY updated_at DESC LIMIT 5')
+        .all() as any[];
 
       if (projects.length === 0) {
         console.log('No projects yet. Run `donkey run "..."` to start.');
@@ -3014,23 +3345,31 @@ export function statusCommand(): Command {
         console.log(`Status:  ${proj.status}`);
         console.log('─'.repeat(40));
 
-        const nodes = db.prepare(
-          `SELECT n.*, p.title as phase_title FROM nodes n
+        const nodes = db
+          .prepare(
+            `SELECT n.*, p.title as phase_title FROM nodes n
            JOIN phases p ON n.phase_id = p.id
            JOIN workflow_instances w ON p.workflow_instance_id = w.id
            WHERE w.project_id = ?
-           ORDER BY p.phase_index, n.id`
-        ).all(proj.id) as any[];
+           ORDER BY p.phase_index, n.id`,
+          )
+          .all(proj.id) as any[];
 
         const icons: Record<string, string> = {
-          'passed': '✓', 'completed': '✓',
-          'running': '●', 'pending': '○',
-          'needs-revision': '✗', 'blocked': '⊘', 'failed': '✗',
+          passed: '✓',
+          completed: '✓',
+          running: '●',
+          pending: '○',
+          'needs-revision': '✗',
+          blocked: '⊘',
+          failed: '✗',
         };
 
         for (const node of nodes) {
           const icon = icons[node.status] || '?';
-          console.log(` ${icon} ${node.phase_title}: ${node.role} (${node.status})`);
+          console.log(
+            ` ${icon} ${node.phase_title}: ${node.role} (${node.status})`,
+          );
         }
       }
     });
@@ -3060,6 +3399,7 @@ git commit -m "feat(cli): CLI commands — init/run/status/role/workflow/constra
 ### Task 15: tRPC API routers
 
 **Files:**
+
 - Create: `packages/web/src/server/api/routers/project.ts`
 - Create: `packages/web/src/server/api/routers/role.ts`
 - Create: `packages/web/src/server/api/routers/audit.ts`
@@ -3079,11 +3419,13 @@ export const projectRouter = router({
     return db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all();
   }),
 
-  get: publicProcedure.input(z.object({ id: z.string() })).query(({ input }) => {
-    initDb(getDbPath('.'));
-    const db = getDb();
-    return db.prepare('SELECT * FROM projects WHERE id = ?').get(input.id);
-  }),
+  get: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => {
+      initDb(getDbPath('.'));
+      const db = getDb();
+      return db.prepare('SELECT * FROM projects WHERE id = ?').get(input.id);
+    }),
 });
 ```
 
@@ -3096,13 +3438,18 @@ export const projectRouter = router({
 ### Task 16: Dashboard pages
 
 **Files:**
+
 - Create: All Next.js pages as per file structure
 
 - [ ] **Step 1: Create layout with shadcn/ui sidebar**
 
 ```tsx
 // packages/web/src/app/layout.tsx
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="zh-CN">
       <body>
@@ -3110,9 +3457,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <aside className="w-64 border-r bg-gray-50 p-4">
             <h1 className="text-lg font-bold mb-6">Donkey</h1>
             <nav className="space-y-1">
-              <a href="/" className="block px-3 py-2 rounded hover:bg-gray-100">项目</a>
-              <a href="/roles" className="block px-3 py-2 rounded hover:bg-gray-100">角色</a>
-              <a href="/workflows" className="block px-3 py-2 rounded hover:bg-gray-100">Workflows</a>
+              <a href="/" className="block px-3 py-2 rounded hover:bg-gray-100">
+                项目
+              </a>
+              <a
+                href="/roles"
+                className="block px-3 py-2 rounded hover:bg-gray-100"
+              >
+                角色
+              </a>
+              <a
+                href="/workflows"
+                className="block px-3 py-2 rounded hover:bg-gray-100"
+              >
+                Workflows
+              </a>
             </nav>
           </aside>
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
@@ -3134,13 +3493,20 @@ export default async function HomePage() {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4">项目列表</h2>
-      {projects.length === 0 && <p className="text-gray-500">暂无项目。运行 `donkey run` 开始。</p>}
+      {projects.length === 0 && (
+        <p className="text-gray-500">暂无项目。运行 `donkey run` 开始。</p>
+      )}
       {projects.map((p: any) => (
         <div key={p.id} className="border rounded-lg p-4 mb-3">
-          <a href={`/project/${p.id}`} className="text-lg font-semibold hover:underline">
+          <a
+            href={`/project/${p.id}`}
+            className="text-lg font-semibold hover:underline"
+          >
             {p.name}
           </a>
-          <span className={`ml-3 text-sm px-2 py-0.5 rounded ${p.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+          <span
+            className={`ml-3 text-sm px-2 py-0.5 rounded ${p.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}
+          >
             {p.status}
           </span>
         </div>
@@ -3154,7 +3520,11 @@ export default async function HomePage() {
 
 ```tsx
 // packages/web/src/app/project/[id]/page.tsx
-export default async function ProjectCockpit({ params }: { params: { id: string } }) {
+export default async function ProjectCockpit({
+  params,
+}: {
+  params: { id: string };
+}) {
   const project = await trpc.project.get.query({ id: params.id });
   if (!project) return <div>Project not found</div>;
 
@@ -3186,6 +3556,7 @@ export default async function ProjectCockpit({ params }: { params: { id: string 
 ### Task 17: E2E test (full flow)
 
 **Files:**
+
 - Create: `packages/cli/__tests__/e2e/full-flow.test.ts`
 
 - [ ] **Step 1: E2E test with mock Agent**
@@ -3209,11 +3580,17 @@ describe('E2E: Full workflow execution', () => {
     // Mock runner that "writes" code and test artifacts
     const mockRunner = async (opts: any) => {
       const outputDir = opts.outputDir;
-      fs.writeFileSync(path.join(outputDir, `${opts.role}-output.md`),
-        `# ${opts.role} output\n\nTask completed successfully.`);
+      fs.writeFileSync(
+        path.join(outputDir, `${opts.role}-output.md`),
+        `# ${opts.role} output\n\nTask completed successfully.`,
+      );
       return {
-        role: opts.role, exitCode: 0, stdout: 'Done', stderr: '',
-        outputFiles: [`${opts.role}-output.md`], duration: 50,
+        role: opts.role,
+        exitCode: 0,
+        stdout: 'Done',
+        stderr: '',
+        outputFiles: [`${opts.role}-output.md`],
+        duration: 50,
       };
     };
 
@@ -3223,7 +3600,7 @@ describe('E2E: Full workflow execution', () => {
 
     // Parse template
     const tmpl = await parseTemplate(
-      path.resolve('workflows/standard-feature.yaml')
+      path.resolve('workflows/standard-feature.yaml'),
     );
 
     // Execute
@@ -3267,6 +3644,7 @@ Expected: PASS
 ### Task 19: User manual
 
 **Files:**
+
 - Create: `docs/manual/donkey-v2-user-manual.md`
 - Create: `docs/manual/donkey-v2-user-manual.html`
 

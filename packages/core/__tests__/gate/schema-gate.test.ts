@@ -37,9 +37,18 @@ describe('schema gate', () => {
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
-      policy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
     });
-    expect(missing).toMatchObject({ status: 'failed', failureClassification: 'missing-artifact' });
+    expect(missing).toMatchObject({
+      status: 'failed',
+      failureClassification: 'missing-artifact',
+    });
 
     await artifactStore.writeArtifact({
       runId: 'run_1',
@@ -53,7 +62,13 @@ describe('schema gate', () => {
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
-      policy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
     });
 
     expect(passed).toMatchObject({ status: 'passed' });
@@ -84,7 +99,13 @@ describe('schema gate', () => {
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
-      policy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
     });
 
     expect(result).toMatchObject({
@@ -95,7 +116,10 @@ describe('schema gate', () => {
   });
 });
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>, repoPath: string) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+  repoPath: string,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Schema gate',

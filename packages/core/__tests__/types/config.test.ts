@@ -54,7 +54,9 @@ describe('runtime config schemas', () => {
 
     expect(
       constraintRulesSchema.parse({
-        hard: [{ id: 'review-required', description: 'review before delivery' }],
+        hard: [
+          { id: 'review-required', description: 'review before delivery' },
+        ],
         conditional: [],
         soft: [],
       }),

@@ -66,7 +66,9 @@ describe('sqlite repositories', () => {
       createdAt: '2026-06-05T00:00:01.000Z',
     });
 
-    expect(await repositories.getNode('node_1')).toMatchObject({ status: 'running' });
+    expect(await repositories.getNode('node_1')).toMatchObject({
+      status: 'running',
+    });
     expect(await repositories.listGateResults('run_1')).toHaveLength(1);
     expect(await repositories.listAuditEvents('run_1')).toHaveLength(1);
 

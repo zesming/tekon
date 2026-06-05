@@ -45,7 +45,13 @@ describe('mock agent adapter', () => {
         createdAt: '2026-06-05T00:00:00.000Z',
       },
       outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'agent'),
-      commandPolicy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+      commandPolicy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
       runContext: {
         runId: 'run_1',
         nodeId: 'node_1',
@@ -58,7 +64,11 @@ describe('mock agent adapter', () => {
 
     expect(result).toMatchObject({ provider: 'mock', exitCode: 0 });
     expect(result.outputFiles).toHaveLength(9);
-    expect((await repositories.listArtifacts('run_1', 'node_1')).map((item) => item.type).sort()).toEqual([
+    expect(
+      (await repositories.listArtifacts('run_1', 'node_1'))
+        .map((item) => item.type)
+        .sort(),
+    ).toEqual([
       'code-changes',
       'delivery-package',
       'demand-card',
@@ -73,7 +83,10 @@ describe('mock agent adapter', () => {
   });
 });
 
-async function createRunFixture(repositories: ReturnType<typeof createRepositories>, repoPath: string) {
+async function createRunFixture(
+  repositories: ReturnType<typeof createRepositories>,
+  repoPath: string,
+) {
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Mock agent run',

@@ -10,10 +10,16 @@ export interface HumanGate {
     gateResultId?: string | null;
     note?: string;
   }): Promise<HumanDecision>;
-  approveHumanGate(decisionId: string, actor: string, note?: string): Promise<HumanDecision>;
+  approveHumanGate(
+    decisionId: string,
+    actor: string,
+    note?: string,
+  ): Promise<HumanDecision>;
 }
 
-export function createHumanGate(options: { repositories: DonkeyRepositories }): HumanGate {
+export function createHumanGate(options: {
+  repositories: DonkeyRepositories;
+}): HumanGate {
   return {
     async requestHumanGate(input) {
       const decision = await options.repositories.createHumanDecision({
@@ -26,7 +32,11 @@ export function createHumanGate(options: { repositories: DonkeyRepositories }): 
         createdAt: new Date().toISOString(),
       });
       await options.repositories.transitionNode(input.nodeId, 'paused');
-      await options.repositories.updateWorkflowInstanceStatus(input.runId, 'paused', input.nodeId);
+      await options.repositories.updateWorkflowInstanceStatus(
+        input.runId,
+        'paused',
+        input.nodeId,
+      );
       return decision;
     },
 
@@ -36,19 +46,26 @@ export function createHumanGate(options: { repositories: DonkeyRepositories }): 
         throw new Error(`unknown human decision: ${decisionId}`);
       }
 
-      const updated = await options.repositories.updateHumanDecision(decisionId, {
-        status: 'approved',
-        actor,
-        note: note ?? null,
-        decidedAt: new Date().toISOString(),
-      });
+      const updated = await options.repositories.updateHumanDecision(
+        decisionId,
+        {
+          status: 'approved',
+          actor,
+          note: note ?? null,
+          decidedAt: new Date().toISOString(),
+        },
+      );
 
       if (!updated) {
         throw new Error(`failed to update human decision: ${decisionId}`);
       }
 
       await options.repositories.transitionNode(existing.nodeId, 'running');
-      await options.repositories.updateWorkflowInstanceStatus(existing.runId, 'running', existing.nodeId);
+      await options.repositories.updateWorkflowInstanceStatus(
+        existing.runId,
+        'running',
+        existing.nodeId,
+      );
       return updated;
     },
   };

@@ -48,13 +48,26 @@ export function createWorktreeManager(options: {
       }
 
       const suffix = `${nodeSegment}-${roleSegment}`;
-      const worktreePath = join(repoPath, '.donkey', 'worktrees', runSegment, suffix);
+      const worktreePath = join(
+        repoPath,
+        '.donkey',
+        'worktrees',
+        runSegment,
+        suffix,
+      );
       const branchName = `donkey/${runSegment}/${suffix}`;
 
       await runGit(options.gateway, {
         repoPath,
         runId: runSegment,
-        args: ['worktree', 'add', '-b', branchName, worktreePath, input.baseRef],
+        args: [
+          'worktree',
+          'add',
+          '-b',
+          branchName,
+          worktreePath,
+          input.baseRef,
+        ],
       });
 
       const lease: WorktreeLease = {
@@ -82,7 +95,10 @@ export function createWorktreeManager(options: {
         runId: lease.runId,
         args: ['worktree', 'remove', '--force', lease.worktreePath],
       });
-      await options.repositories.releaseWorktreeLease(leaseId, new Date().toISOString());
+      await options.repositories.releaseWorktreeLease(
+        leaseId,
+        new Date().toISOString(),
+      );
     },
 
     async pruneStaleLeases(repoPath) {
@@ -138,10 +154,15 @@ function assertSafePathSegment(value: string): string {
   return value;
 }
 
-function assertManagedWorktreePath(repoPath: string, worktreePath: string): void {
+function assertManagedWorktreePath(
+  repoPath: string,
+  worktreePath: string,
+): void {
   const root = resolve(repoPath, '.donkey', 'worktrees');
   const target = resolve(worktreePath);
   if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    throw new Error(`refusing to remove unmanaged worktree path: ${worktreePath}`);
+    throw new Error(
+      `refusing to remove unmanaged worktree path: ${worktreePath}`,
+    );
   }
 }

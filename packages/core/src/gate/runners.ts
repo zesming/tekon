@@ -3,14 +3,21 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import type { CommandPolicy } from '../types/config.js';
-import type { CommandInvocation, GateResult, GateType } from '../types/domain.js';
+import type {
+  CommandInvocation,
+  GateResult,
+  GateType,
+} from '../types/domain.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
 
 export interface RunCommandGateInput {
   gateway: CommandGateway;
   runId: string;
   nodeId: string;
-  gateType: Extract<GateType, 'build' | 'test' | 'lint' | 'e2e-pass' | 'security-scan'>;
+  gateType: Extract<
+    GateType,
+    'build' | 'test' | 'lint' | 'e2e-pass' | 'security-scan'
+  >;
   cwd: string;
   command: CommandInvocation;
   policy: CommandPolicy;
@@ -19,7 +26,9 @@ export interface RunCommandGateInput {
   timeoutMs?: number;
 }
 
-export async function runCommandGate(input: RunCommandGateInput): Promise<GateResult> {
+export async function runCommandGate(
+  input: RunCommandGateInput,
+): Promise<GateResult> {
   mkdirSync(input.outputDir, { recursive: true });
   const startedAt = Date.now();
   const result = await input.gateway.run({
@@ -32,7 +41,10 @@ export async function runCommandGate(input: RunCommandGateInput): Promise<GateRe
     nodeId: input.nodeId,
   });
 
-  const outputPath = join(input.outputDir, `${input.nodeId}-${input.gateType}.log`);
+  const outputPath = join(
+    input.outputDir,
+    `${input.nodeId}-${input.gateType}.log`,
+  );
   let status: GateResult['status'] = 'failed';
   let failureClassification: string | null = null;
 
@@ -41,7 +53,11 @@ export async function runCommandGate(input: RunCommandGateInput): Promise<GateRe
     const stderr = readFileSync(result.stderrPath, 'utf8');
     writeFileSync(outputPath, `${stdout}${stderr}`, 'utf8');
     status = result.exitCode === 0 && !result.timedOut ? 'passed' : 'failed';
-    failureClassification = result.timedOut ? 'timeout' : result.exitCode === 0 ? null : 'exit-code';
+    failureClassification = result.timedOut
+      ? 'timeout'
+      : result.exitCode === 0
+        ? null
+        : 'exit-code';
   } else {
     const output =
       result.status === 'rejected'

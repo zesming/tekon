@@ -1,5 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -55,7 +61,9 @@ describe('worktree manager e2e', () => {
 
     writeFileSync(join(first.worktreePath, 'feature.txt'), 'rd only', 'utf8');
     expect(existsSync(join(second.worktreePath, 'feature.txt'))).toBe(false);
-    expect(readFileSync(join(first.worktreePath, 'README.md'), 'utf8')).toContain('fixture');
+    expect(
+      readFileSync(join(first.worktreePath, 'README.md'), 'utf8'),
+    ).toContain('fixture');
 
     expect(await manager.listLeases('run_1')).toHaveLength(2);
 
@@ -73,8 +81,12 @@ function createTempGitRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'donkey-worktree-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+    cwd: repoPath,
+  });
+  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+    cwd: repoPath,
+  });
   writeFileSync(join(repoPath, 'README.md'), 'fixture repo\n', 'utf8');
   execFileSync('git', ['add', 'README.md'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });

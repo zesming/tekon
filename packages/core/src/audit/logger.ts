@@ -10,10 +10,14 @@ export interface AuditLogger {
     payload: Record<string, unknown>;
     createdAt?: string;
   }): Promise<AuditEvent>;
-  verify(runId: string): Promise<{ valid: true } | { valid: false; brokenEventId: string }>;
+  verify(
+    runId: string,
+  ): Promise<{ valid: true } | { valid: false; brokenEventId: string }>;
 }
 
-export function createAuditLogger(options: { repositories: DonkeyRepositories }): AuditLogger {
+export function createAuditLogger(options: {
+  repositories: DonkeyRepositories;
+}): AuditLogger {
   return {
     async append(input) {
       const events = await options.repositories.listAuditEvents(input.runId);

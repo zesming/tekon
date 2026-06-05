@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createRepositories, migrateDatabase, openDonkeyDatabase } from '../../src/index.js';
+import {
+  createRepositories,
+  migrateDatabase,
+  openDonkeyDatabase,
+} from '../../src/index.js';
 
 describe('run recovery', () => {
   it('returns the running node as resume point and interrupts stale role runs', async () => {

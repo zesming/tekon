@@ -24,7 +24,10 @@ describe('command gate runner', () => {
       nodeId: 'node_1',
       gateType: 'test',
       cwd,
-      command: { tool: process.execPath, args: ['-e', "console.log('gate ok')"] },
+      command: {
+        tool: process.execPath,
+        args: ['-e', "console.log('gate ok')"],
+      },
       policy: {
         allow: [{ tool: process.execPath, args: [] }],
         deny: [],

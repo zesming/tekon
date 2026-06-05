@@ -156,7 +156,7 @@ interface Demand {
   scope: string; // 范围说明
   nonGoals: string[]; // 非目标
   tags: string[]; // 分类标签（auth/data/payment 等）
-  riskLevel: "low" | "medium" | "high" | "blocked";
+  riskLevel: 'low' | 'medium' | 'high' | 'blocked';
   acceptanceCriteria: AcceptanceCriterion[];
   status: DemandStatus;
   // draft → clarifying → shaped → prioritized → converted → project-linked
@@ -190,7 +190,7 @@ interface WorkflowInstance {
   projectId: string;
   phases: Phase[];
   currentPhaseIndex: number;
-  status: "running" | "paused" | "completed" | "failed";
+  status: 'running' | 'paused' | 'completed' | 'failed';
 }
 ```
 
@@ -203,8 +203,8 @@ interface Phase {
   nodes: Node[];
   parallel: boolean; // 节点是否并行执行
   gate?: GateConfig; // 阶段出口 Gate（Phase 内所有 Node 通过后运行，可选）
-  status: "pending" | "running" | "completed" | "failed";
-  source: "template" | "dynamic" | "constraint";
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  source: 'template' | 'dynamic' | 'constraint';
   // template: 来自预定义 YAML 模板
   // dynamic: 由 PM Agent 动态生成
   // constraint: 由约束系统自动注入（`requirePhase` 规则触发）
@@ -231,7 +231,7 @@ interface Node {
   // interrupted → pending（恢复时从头重新执行，因为产物可能不完整）
   retryCount: number;
   maxRetries: number;
-  source: "template" | "dynamic" | "constraint";
+  source: 'template' | 'dynamic' | 'constraint';
 }
 ```
 
@@ -244,7 +244,7 @@ interface RoleRun {
   role: string;
   startTime: Date;
   endTime?: Date;
-  status: "running" | "completed" | "failed";
+  status: 'running' | 'completed' | 'failed';
   worktreePath: string;
   logFile: string;
   artifacts: string[];
@@ -255,13 +255,13 @@ interface RoleRun {
 
 ```typescript
 type GateType =
-  | "build"
-  | "test"
-  | "lint"
-  | "e2e-pass"
-  | "schema"
-  | "security-scan"
-  | "human";
+  | 'build'
+  | 'test'
+  | 'lint'
+  | 'e2e-pass'
+  | 'schema'
+  | 'security-scan'
+  | 'human';
 
 // 单个门禁检查项
 interface GateCheck {
@@ -274,7 +274,7 @@ interface GateCheck {
 interface GateConfig {
   checks: GateCheck[]; // 按顺序执行的检查列表
   retryLimit: number; // 整条链的最大重试次数
-  onExhausted: "skip" | "block" | "escalate-human";
+  onExhausted: 'skip' | 'block' | 'escalate-human';
   // skip: 跳过当前 gate（标记 warning），继续执行后续检查
   // block: 停止当前 Node，Node 标记为 blocked，等待人工处理
   // escalate-human: 暂停整个 Workflow，等待人类确认
@@ -321,16 +321,16 @@ interface ArtifactRef {
 
 ```typescript
 type ArtifactType =
-  | "demand-card"
-  | "prd"
-  | "tech-design"
-  | "task-breakdown"
-  | "code-changes"
-  | "test-report"
-  | "review-report"
-  | "delivery-package"
-  | "rollback-plan"
-  | "security-report";
+  | 'demand-card'
+  | 'prd'
+  | 'tech-design'
+  | 'task-breakdown'
+  | 'code-changes'
+  | 'test-report'
+  | 'review-report'
+  | 'delivery-package'
+  | 'rollback-plan'
+  | 'security-report';
 
 interface Artifact {
   id: string;
@@ -338,7 +338,7 @@ interface Artifact {
   nodeId: string;
   type: ArtifactType;
   version: number;
-  status: "draft" | "reviewing" | "needs-revision" | "approved" | "archived";
+  status: 'draft' | 'reviewing' | 'needs-revision' | 'approved' | 'archived';
   summary?: string; // Agent 产出时一并生成的结构化摘要（≤ 500 字）
   // 上下文注入时优先用 summary；内容超 context 限制时以 summary 替代
   filePath: string; // 完整产物文件路径
@@ -363,16 +363,16 @@ interface AuditEvent {
   projectId: string;
   nodeId: string;
   eventType:
-    | "node_started"
-    | "node_completed"
-    | "node_interrupted"
-    | "node_retried"
-    | "gate_pass"
-    | "gate_fail"
-    | "gate_escalated"
-    | "artifact_created"
-    | "artifact_approved"
-    | "human_decision";
+    | 'node_started'
+    | 'node_completed'
+    | 'node_interrupted'
+    | 'node_retried'
+    | 'gate_pass'
+    | 'gate_fail'
+    | 'gate_escalated'
+    | 'artifact_created'
+    | 'artifact_approved'
+    | 'human_decision';
   payload: Record<string, unknown>; // 事件相关的结构化数据
   roleSource?: string; // 角色配置的实际来源路径（用于审计追溯）
 }
@@ -487,7 +487,7 @@ outputs:
   - demand-card
   - prd
 
-quality: "输出必须结构化、完整、可验证。验收标准必须可客观判定。"
+quality: '输出必须结构化、完整、可验证。验收标准必须可客观判定。'
 
 gate:
   checks:
@@ -692,7 +692,7 @@ phases:
     nodes:
       - role: pm
         task:
-          instruction: "理解用户需求，补全背景、范围、非目标和验收标准"
+          instruction: '理解用户需求，补全背景、范围、非目标和验收标准'
           output: [demand-card]
         skills: [clarify, acceptance]
         retry: 2
@@ -702,7 +702,7 @@ phases:
     nodes:
       - role: rd
         task:
-          instruction: "基于需求卡完成技术实现"
+          instruction: '基于需求卡完成技术实现'
           input: [demand-card]
           output: [code-changes]
         skills: [implement, refactor]
@@ -722,7 +722,7 @@ phases:
     nodes:
       - role: qa
         task:
-          instruction: "基于需求卡和代码变更生成测试计划并执行 E2E"
+          instruction: '基于需求卡和代码变更生成测试计划并执行 E2E'
           input: [demand-card, code-changes]
           output: [test-report]
         skills: [test-plan, e2e]
@@ -738,7 +738,7 @@ phases:
     nodes:
       - role: reviewer
         task:
-          instruction: "审查代码变更，检查安全、规范和边界问题"
+          instruction: '审查代码变更，检查安全、规范和边界问题'
           input: [code-changes, test-report]
           output: [review-report]
         skills: [code-review, security]
@@ -748,7 +748,7 @@ phases:
     nodes:
       - role: pmo
         task:
-          instruction: "汇总所有产物，生成交付证据包和 PR"
+          instruction: '汇总所有产物，生成交付证据包和 PR'
           input: [demand-card, code-changes, test-report, review-report]
           output: [delivery-package]
 ```
@@ -940,20 +940,20 @@ Node 完成 → Artifact 保存
 
 ```typescript
 const DEMAND_CARD_SCHEMA = {
-  type: "object",
-  required: ["title", "scope", "nonGoals", "acceptanceCriteria"],
+  type: 'object',
+  required: ['title', 'scope', 'nonGoals', 'acceptanceCriteria'],
   properties: {
-    title: { type: "string", minLength: 1 },
-    scope: { type: "string", minLength: 1 },
-    nonGoals: { type: "array", items: { type: "string" } },
+    title: { type: 'string', minLength: 1 },
+    scope: { type: 'string', minLength: 1 },
+    nonGoals: { type: 'array', items: { type: 'string' } },
     acceptanceCriteria: {
-      type: "array",
+      type: 'array',
       minItems: 1,
       items: {
-        type: "object",
-        required: ["description"],
+        type: 'object',
+        required: ['description'],
         properties: {
-          description: { type: "string", minLength: 1 },
+          description: { type: 'string', minLength: 1 },
         },
       },
     },
@@ -976,47 +976,47 @@ const DEMAND_CARD_SCHEMA = {
 constraints:
   # 一、硬约束 — 任何 workflow 不可移除
   hard:
-    - rule: "所有代码变更必须经过 build + lint gate"
+    - rule: '所有代码变更必须经过 build + lint gate'
       appliesWhen: { outputs: [code-changes] }
       gates: [build, lint]
 
-    - rule: "所有 workflow 必须有独立的审查阶段"
-      appliesWhen: { phasesCount: ">= 2" }
+    - rule: '所有 workflow 必须有独立的审查阶段'
+      appliesWhen: { phasesCount: '>= 2' }
       requirePhase:
-        title: "审查"
+        title: '审查'
         containsRole: reviewer
 
-    - rule: "所有 workflow 必须有验证阶段"
+    - rule: '所有 workflow 必须有验证阶段'
       requiresOneOf:
         - { role: qa }
         - { gate: e2e-pass }
 
   # 二、条件约束 — 根据需求特征自动触发
   conditional:
-    - rule: "高风险需求必须有人工确认 Gate"
+    - rule: '高风险需求必须有人工确认 Gate'
       when: { riskLevel: high }
-      injectGate: { type: human, at: "end-of-workflow" }
+      injectGate: { type: human, at: 'end-of-workflow' }
 
-    - rule: "涉及权限/安全的需求必须有安全审查"
+    - rule: '涉及权限/安全的需求必须有安全审查'
       when: { tags: [auth, security, permission] }
       requireRole: reviewer # 使用已有 reviewer 角色，注入其 security.md skill
       requireSkills: [security] # 强制加载安全审查 skill
-      injectGate: { type: security-scan, at: "after-node:rd" }
+      injectGate: { type: security-scan, at: 'after-node:rd' }
 
-    - rule: "数据相关变更必须有回滚方案"
+    - rule: '数据相关变更必须有回滚方案'
       when: { tags: [data, migration, schema-change] }
       requireOutput: rollback-plan
 
-    - rule: "多模块变更建议拆分阶段"
-      when: { affectedModules: ">= 3" }
+    - rule: '多模块变更建议拆分阶段'
+      when: { affectedModules: '>= 3' }
       suggest: { splitPhases: true, mode: per-module }
 
   # 三、软建议 — 生成时提示，可人工跳过
   soft:
-    - rule: "独立模块建议并行开发"
+    - rule: '独立模块建议并行开发'
       suggest: { parallel: true }
 
-    - rule: "建议为 E2E 测试预留独立阶段"
+    - rule: '建议为 E2E 测试预留独立阶段'
       suggest: { separateE2EPhase: true }
 ```
 
@@ -1047,7 +1047,7 @@ defaultNodeTemplate:
 ```yaml
 # roles/reviewer/agent.yaml
 constraintTask:
-  instruction: "基于安全审查 skill 对代码变更进行安全分析"
+  instruction: '基于安全审查 skill 对代码变更进行安全分析'
   skills: [security]
   output: [security-report]
 ```

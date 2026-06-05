@@ -6,7 +6,9 @@ export interface OpenDonkeyDatabaseOptions {
   filename: string;
 }
 
-export function openDonkeyDatabase(options: OpenDonkeyDatabaseOptions): DonkeyDatabase {
+export function openDonkeyDatabase(
+  options: OpenDonkeyDatabaseOptions,
+): DonkeyDatabase {
   const db = new Database(options.filename);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

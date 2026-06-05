@@ -21,10 +21,7 @@ import {
   type WorkflowStatus,
   workflowInstanceSchema,
 } from '../types/domain.js';
-import {
-  type WorktreeLease,
-  worktreeLeaseSchema,
-} from '../types/config.js';
+import { type WorktreeLease, worktreeLeaseSchema } from '../types/config.js';
 import type { DonkeyDatabase } from './connection.js';
 import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
@@ -147,7 +144,11 @@ export interface DonkeyRepositories {
   appendAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   listAuditEvents(runId: string): Promise<AuditEvent[]>;
   recordArtifact(artifact: Artifact): Promise<Artifact>;
-  listArtifacts(runId: string, nodeId?: string, type?: ArtifactType): Promise<Artifact[]>;
+  listArtifacts(
+    runId: string,
+    nodeId?: string,
+    type?: ArtifactType,
+  ): Promise<Artifact[]>;
   createHumanDecision(decision: HumanDecision): Promise<HumanDecision>;
   updateHumanDecision(
     decisionId: string,
@@ -156,7 +157,10 @@ export interface DonkeyRepositories {
   getHumanDecision(decisionId: string): Promise<HumanDecision | null>;
   listHumanDecisions(runId: string): Promise<HumanDecision[]>;
   recordWorktreeLease(lease: WorktreeLease): Promise<WorktreeLease>;
-  releaseWorktreeLease(leaseId: string, releasedAt: string): Promise<WorktreeLease | null>;
+  releaseWorktreeLease(
+    leaseId: string,
+    releasedAt: string,
+  ): Promise<WorktreeLease | null>;
   getWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   listWorktreeLeases(runId: string): Promise<WorktreeLease[]>;
   createRoleRun(roleRun: RoleRun): Promise<RoleRun>;
@@ -206,20 +210,18 @@ export function createRepositories(
     },
 
     async getWorkflowInstance(runId) {
-      const row = db.prepare('select * from workflow_instances where id = ?').get(runId) as
-        | WorkflowInstanceRow
-        | undefined;
+      const row = db
+        .prepare('select * from workflow_instances where id = ?')
+        .get(runId) as WorkflowInstanceRow | undefined;
       return row ? mapWorkflowInstance(row) : null;
     },
 
     async updateWorkflowInstanceStatus(runId, status, currentNodeId) {
       return writeQueue.enqueue(() => {
         if (currentNodeId === undefined) {
-          db.prepare('update workflow_instances set status = ?, updated_at = ? where id = ?').run(
-            status,
-            now(),
-            runId,
-          );
+          db.prepare(
+            'update workflow_instances set status = ?, updated_at = ? where id = ?',
+          ).run(status, now(), runId);
         } else {
           db.prepare(
             `update workflow_instances
@@ -228,9 +230,9 @@ export function createRepositories(
           ).run(status, currentNodeId, now(), runId);
         }
 
-        const row = db.prepare('select * from workflow_instances where id = ?').get(runId) as
-          | WorkflowInstanceRow
-          | undefined;
+        const row = db
+          .prepare('select * from workflow_instances where id = ?')
+          .get(runId) as WorkflowInstanceRow | undefined;
         return row ? mapWorkflowInstance(row) : null;
       });
     },
@@ -263,11 +265,9 @@ export function createRepositories(
 
     async transitionNode(nodeId, status) {
       return writeQueue.enqueue(() => {
-        db.prepare('update nodes set status = ?, updated_at = ? where id = ?').run(
-          status,
-          now(),
-          nodeId,
-        );
+        db.prepare(
+          'update nodes set status = ?, updated_at = ? where id = ?',
+        ).run(status, now(), nodeId);
       });
     },
 
@@ -295,7 +295,9 @@ export function createRepositories(
     async listGateResults(runId) {
       return (
         db
-          .prepare('select * from gate_results where run_id = ? order by created_at, id')
+          .prepare(
+            'select * from gate_results where run_id = ? order by created_at, id',
+          )
           .all(runId) as GateResultRow[]
       ).map(mapGateResult);
     },
@@ -318,7 +320,9 @@ export function createRepositories(
     async listAuditEvents(runId) {
       return (
         db
-          .prepare('select * from audit_events where run_id = ? order by created_at, id')
+          .prepare(
+            'select * from audit_events where run_id = ? order by created_at, id',
+          )
           .all(runId) as AuditEventRow[]
       ).map(mapAuditEvent);
     },
@@ -346,7 +350,13 @@ export function createRepositories(
              and (? is null or type = ?)
            order by node_id, type, version`,
         )
-        .all(runId, nodeId ?? null, nodeId ?? null, type ?? null, type ?? null) as ArtifactRow[];
+        .all(
+          runId,
+          nodeId ?? null,
+          nodeId ?? null,
+          type ?? null,
+          type ?? null,
+        ) as ArtifactRow[];
       return rows.map(mapArtifact);
     },
 
@@ -383,23 +393,25 @@ export function createRepositories(
           note: patch.note ?? null,
           decidedAt: patch.decidedAt ?? null,
         });
-        const row = db.prepare('select * from human_decisions where id = ?').get(decisionId) as
-          | HumanDecisionRow
-          | undefined;
+        const row = db
+          .prepare('select * from human_decisions where id = ?')
+          .get(decisionId) as HumanDecisionRow | undefined;
         return row ? mapHumanDecision(row) : null;
       });
     },
 
     async getHumanDecision(decisionId) {
-      const row = db.prepare('select * from human_decisions where id = ?').get(decisionId) as
-        | HumanDecisionRow
-        | undefined;
+      const row = db
+        .prepare('select * from human_decisions where id = ?')
+        .get(decisionId) as HumanDecisionRow | undefined;
       return row ? mapHumanDecision(row) : null;
     },
 
     async listHumanDecisions(runId) {
       const rows = db
-        .prepare('select * from human_decisions where run_id = ? order by created_at, id')
+        .prepare(
+          'select * from human_decisions where run_id = ? order by created_at, id',
+        )
         .all(runId) as HumanDecisionRow[];
       return rows.map(mapHumanDecision);
     },
@@ -420,27 +432,28 @@ export function createRepositories(
 
     async releaseWorktreeLease(leaseId, releasedAt) {
       return writeQueue.enqueue(() => {
-        db.prepare('update worktree_leases set released_at = ? where id = ?').run(
-          releasedAt,
-          leaseId,
-        );
-        const row = db.prepare('select * from worktree_leases where id = ?').get(leaseId) as
-          | WorktreeLeaseRow
-          | undefined;
+        db.prepare(
+          'update worktree_leases set released_at = ? where id = ?',
+        ).run(releasedAt, leaseId);
+        const row = db
+          .prepare('select * from worktree_leases where id = ?')
+          .get(leaseId) as WorktreeLeaseRow | undefined;
         return row ? mapWorktreeLease(row) : null;
       });
     },
 
     async getWorktreeLease(leaseId) {
-      const row = db.prepare('select * from worktree_leases where id = ?').get(leaseId) as
-        | WorktreeLeaseRow
-        | undefined;
+      const row = db
+        .prepare('select * from worktree_leases where id = ?')
+        .get(leaseId) as WorktreeLeaseRow | undefined;
       return row ? mapWorktreeLease(row) : null;
     },
 
     async listWorktreeLeases(runId) {
       const rows = db
-        .prepare('select * from worktree_leases where run_id = ? order by created_at, id')
+        .prepare(
+          'select * from worktree_leases where run_id = ? order by created_at, id',
+        )
         .all(runId) as WorktreeLeaseRow[];
       return rows.map(mapWorktreeLease);
     },
@@ -464,9 +477,9 @@ export function createRepositories(
     },
 
     async getRoleRun(roleRunId) {
-      const row = db.prepare('select * from role_runs where id = ?').get(roleRunId) as
-        | RoleRunRow
-        | undefined;
+      const row = db
+        .prepare('select * from role_runs where id = ?')
+        .get(roleRunId) as RoleRunRow | undefined;
       return row ? mapRoleRun(row) : null;
     },
 
@@ -485,7 +498,12 @@ export function createRepositories(
              limit 1`,
           )
           .get(runId ?? null, runId ?? null) as
-          | { node_id: string; run_id: string; role: Node['role']; role_run_id: string | null }
+          | {
+              node_id: string;
+              run_id: string;
+              role: Node['role'];
+              role_run_id: string | null;
+            }
           | undefined;
 
         if (!recovery) {
