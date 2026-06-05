@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey V2 发布就绪加固实施计划</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #1f2937;
+        background: #f8fafc;
+        line-height: 1.65;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        min-height: 100vh;
+        padding: 40px 24px 72px;
+        background: #fff;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #111827;
+        line-height: 1.25;
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 30px;
+      }
+      h2 {
+        margin-top: 32px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        font-size: 21px;
+      }
+      h3 {
+        margin-top: 24px;
+        font-size: 17px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 24px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid #d1d5db;
+        padding: 10px 12px;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: #f3f4f6;
+      }
+      code {
+        border-radius: 4px;
+        padding: 1px 4px;
+        background: #f3f4f6;
+        font-family: "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        overflow-x: auto;
+        border-radius: 8px;
+        padding: 16px;
+        color: #f9fafb;
+        background: #111827;
+      }
+      pre code {
+        padding: 0;
+        color: inherit;
+        background: transparent;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .meta {
+        color: #4b5563;
+      }
+      .gate {
+        border-left: 4px solid #b91c1c;
+        padding: 12px 16px;
+        background: #fef2f2;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Donkey V2 发布就绪加固实施计划</h1>
+      <p class="meta">
+        生成日期：2026-06-05；目标分支：<code>rebuild-v2</code>
+      </p>
+
+      <h2>目标</h2>
+      <p>
+        在创建 PR 之前完成阶段一剩余发布就绪项：远端 CI 绿灯确认、GitHub Actions
+        lint、Vitest 配置迁移、基础文档、真实 Claude provider 手动
+        smoke、网络策略能力边界和最终验收报告。
+      </p>
+
+      <h2>硬门禁</h2>
+      <div class="gate">
+        <ul>
+          <li>
+            最终提交 push 后，必须确认远端 <code>Core</code> workflow 对该
+            commit 成功。
+          </li>
+          <li>
+            真实 Claude provider smoke
+            必须在人工凭证环境执行成功，并写入脱敏证据。
+          </li>
+          <li>
+            同时缺少 <code>GITHUB_TOKEN</code> 和已认证 <code>gh</code>，或缺少
+            Claude CLI / Claude auth 时只能标记 blocked，不能标记完成。
+          </li>
+          <li>PR 创建放在最后，本计划不创建 PR。</li>
+        </ul>
+      </div>
+
+      <h2>Subagent 执行模型</h2>
+      <ul>
+        <li>按任务顺序执行，不并行修改共享文件。</li>
+        <li>每个任务由 worker subagent 执行。</li>
+        <li>
+          每个任务完成后，启动最高思考等级 reviewer 做 spec compliance 和 code
+          quality 复查。
+        </li>
+        <li>reviewer 检出必须修复项时，先修复再复查。</li>
+      </ul>
+
+      <h2>任务总览</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>主要文件</th>
+            <th>完成门禁</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>任务 1：CI actionlint 与远端 Actions 门禁</td>
+            <td>
+              <code>.github/workflows/core.yml</code
+              >、<code>scripts/ci/actionlint.sh</code>、<code
+                >scripts/ci/check-github-actions.mjs</code
+              >
+            </td>
+            <td>
+              actionlint、本地 core build/unit/e2e、远端 Actions 查询脚本可用
+            </td>
+          </tr>
+          <tr>
+            <td>任务 2：Vitest projects 迁移与基础文档</td>
+            <td>
+              <code>vitest.config.ts</code>、删除旧 workspace
+              配置、<code>README.md</code>、<code>CHANGELOG.md</code>、MVP 手册
+            </td>
+            <td>
+              root test、core unit/e2e、build/typecheck、文档未完成标记扫描
+            </td>
+          </tr>
+          <tr>
+            <td>
+              任务 3：CommandGateway 环境边界与 fail-closed Claude provider
+              smoke
+            </td>
+            <td>
+              <code>command-gateway.ts</code
+              >、<code>command-gateway-env.test.ts</code>、<code>claude-code-provider.smoke.test.ts</code>、Claude
+              smoke 手册和证据
+            </td>
+            <td>env boundary tests、真实 Claude smoke 成功、证据脱敏</td>
+          </tr>
+          <tr>
+            <td>任务 4：Network policy 能力边界</td>
+            <td>
+              <code>command-gateway.ts</code
+              >、<code>agent-adapter.ts</code>、<code>claude-code-adapter.ts</code>、network
+              tests、技术方案和评估报告
+            </td>
+            <td>
+              network denial tests、provider evidence tests、无错误 OS
+              级隔离承诺
+            </td>
+          </tr>
+          <tr>
+            <td>任务 5：最终发布就绪报告与远端 CI 证据</td>
+            <td>
+              <code
+                >docs/reviews/2026-06-05-release-readiness-hardening-report.md</code
+              >、对应 HTML、<code>CHANGELOG.md</code>
+            </td>
+            <td>
+              全量本地 gate、代码完成提交和报告提交的远端 Core workflow
+              成功、最终 reviewer 批准
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>关键步骤</h2>
+      <h3>任务 1</h3>
+      <ul>
+        <li>
+          新增 <code>scripts/ci/actionlint.sh</code>，优先使用本地
+          actionlint，否则用 Docker 镜像 <code>rhysd/actionlint:1.7.12</code>。
+        </li>
+        <li>
+          新增 <code>scripts/ci/check-github-actions.mjs</code>，无
+          <code>GITHUB_TOKEN</code> 时 exit 2。
+        </li>
+        <li>
+          workflow 增加
+          <code>permissions: contents: read</code
+          >、<code>concurrency</code>、actionlint job、Node 24、严格
+          ignored-builds gate。
+        </li>
+      </ul>
+      <pre><code>bash -n scripts/ci/actionlint.sh
+node --check scripts/ci/check-github-actions.mjs
+bash scripts/ci/actionlint.sh
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e</code></pre>
+
+      <h3>任务 2</h3>
+      <ul>
+        <li>
+          用根 <code>vitest.config.ts</code> 的
+          <code>test.projects</code> 替代旧 workspace 配置。
+        </li>
+        <li>
+          创建中文
+          README、CHANGELOG、<code>docs/manual/donkey-mvp-user-manual.md/html</code>。
+        </li>
+        <li>手册只说明当前边界，不写不存在的 CLI/Web quickstart。</li>
+      </ul>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- pnpm@10.12.1 build
+npm exec --yes -- pnpm@10.12.1 typecheck</code></pre>
+
+      <h3>任务 3</h3>
+      <ul>
+        <li>
+          CommandGateway 增加
+          <code>envMode: safe-default | inherit | exact</code
+          >，默认只传安全环境变量。
+        </li>
+        <li>
+          Claude smoke fail-closed：未设置
+          <code>DONKEY_CLAUDE_PROVIDER_SMOKE=1</code> 或未通过
+          <code>claude auth status</code> 时失败。
+        </li>
+        <li>
+          smoke 使用完整 <code>WorktreeLease</code> 和
+          <code>RunContext</code> 字段。
+        </li>
+      </ul>
+      <pre><code>DONKEY_CLAUDE_PROVIDER_SMOKE=1 DONKEY_CLAUDE_COMMAND=claude npm run smoke:claude-provider</code></pre>
+
+      <h3>任务 4</h3>
+      <ul>
+        <li>
+          <code>network: disabled/restricted</code> 静态拒绝明显网络命令。
+        </li>
+        <li>
+          provider network evidence 使用 <code>declared</code>，不写
+          <code>os-enforced</code>，除非有 OS/container probe。
+        </li>
+        <li>
+          Claude args 拒绝 <code>--permission-mode</code>、<code
+            >--permission-mode=bypassPermissions</code
+          >
+          和 <code>--dangerously-skip-permissions</code>。
+        </li>
+      </ul>
+
+      <h3>任务 5</h3>
+      <ul>
+        <li>先跑全量本地 gate，再 push 代码完成提交。</li>
+        <li>
+          必须确认代码完成提交的远端 Core workflow 为
+          <code>completed/success</code>。
+        </li>
+        <li>
+          最终报告区分代码完成提交 SHA 和报告提交 SHA；报告提交后的最终远端
+          workflow URL 写入最终交付说明，不回写报告以避免提交循环。
+        </li>
+        <li>
+          changelog 不得在 reviewer 执行前声明“最高思考等级 subagent review
+          已通过”。
+        </li>
+      </ul>
+
+      <h2>外部资料依据</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>主题</th>
+            <th>URL</th>
+            <th>用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GitHub workflow runs REST API</td>
+            <td>
+              <code>https://docs.github.com/en/rest/actions/workflow-runs</code>
+            </td>
+            <td>没有 <code>gh</code> 时查询远端 Actions 状态</td>
+          </tr>
+          <tr>
+            <td>actionlint 安装和使用</td>
+            <td>
+              <code
+                >https://github.com/rhysd/actionlint/blob/main/docs/install.md</code
+              >
+            </td>
+            <td>增加本地和 CI workflow lint</td>
+          </tr>
+          <tr>
+            <td>Vitest projects</td>
+            <td><code>https://vitest.dev/guide/projects</code></td>
+            <td>用 <code>test.projects</code> 替代旧 workspace 配置文件</td>
+          </tr>
+          <tr>
+            <td>Claude Code CLI reference</td>
+            <td><code>https://code.claude.com/docs/en/cli-reference</code></td>
+            <td>定义手动 provider smoke 的命令和成功标准</td>
+          </tr>
+          <tr>
+            <td>Claude Code permissions</td>
+            <td><code>https://code.claude.com/docs/en/permissions</code></td>
+            <td>避免把 prompt 规则误当作 provider-enforced 权限</td>
+          </tr>
+          <tr>
+            <td>pnpm ignored builds</td>
+            <td><code>https://pnpm.io/10.x/cli/ignored-builds</code></td>
+            <td>保留 native dependency build gate</td>
+          </tr>
+          <tr>
+            <td>Docker none network</td>
+            <td>
+              <code>https://docs.docker.com/engine/network/drivers/none/</code>
+            </td>
+            <td>作为后续 OS 级 network isolation 的候选实现</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>完整执行细节</h2>
+      <p>
+        Markdown 源稿包含完整代码片段、验证命令和 commit 边界：
+        <code
+          >docs/superpowers/plans/2026-06-05-donkey-v2-release-readiness-hardening.md</code
+        >
+      </p>
+    </main>
+  </body>
+</html>
