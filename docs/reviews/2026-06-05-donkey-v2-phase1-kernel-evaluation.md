@@ -127,7 +127,8 @@ npm exec --yes -- pnpm@10.12.1 test -- --run
 - Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。维护者侧真实 provider smoke 将在发布就绪加固的后续任务中提供手动执行路径和脱敏证据。
 - Worktree dirty 检测会忽略 Donkey 自己生成的 `.donkey/` 未跟踪目录，避免第二个 lease 被自身运行产物阻塞；用户工作区的已跟踪改动仍会阻断。
 - Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层，不能直接拼路径。
-- `CommandPolicy.network` 目前是 Donkey 策略字段，不是 OS 级网络隔离；阶段二若接入真实 agent provider，需要补 provider sandbox/approval 能力映射或外层隔离。
+- `bypassPermissions` 不作为 Donkey 默认或推荐模式。只有在外层 OS/container sandbox 已验证、HumanGate 已批准、并且证据报告记录隔离方式时，才允许作为受控实验配置。
+- `CommandPolicy.network` 当前分为静态命令拒绝、provider 声明映射和后续 OS 级隔离三个层级。阶段一只能声明前两个层级，不声称已实现 OS 级断网。
 - Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
 - 当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；已新增 `docs/manual/donkey-mvp-user-manual.html` 作为当前 MVP 边界手册，明确普通用户入口仍未交付。
 
@@ -139,7 +140,7 @@ npm exec --yes -- pnpm@10.12.1 test -- --run
 - 重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物，主线程按 TDD 接手完成。
 - Task 1 的两个 reviewer subagent 均因 `429 Too Many Requests` 中断。
 - 阶段一最终 reviewer 成功返回 `CHANGES_REQUIRED`，3 个阻断项已在 `90855a9` 修复。
-- 修复后重新委派最高思考等级 reviewer 复查，结论为 `APPROVED`；仅保留一项建议：`CommandPolicy.network` 目前是策略字段，不是 OS 级网络隔离。
+- 修复后重新委派最高思考等级 reviewer 复查，结论为 `APPROVED`；仅保留一项建议：`CommandPolicy.network` 需要继续推进到 OS/container 级隔离。阶段一已经明确为静态命令拒绝和 provider 声明映射，不声称已实现 OS 级断网。
 
 合入 `rebuild-v2` 后，主工作区重新执行本地 build、unit、e2e 和文档未完成标记检查；结果记录见最终交付说明。
 

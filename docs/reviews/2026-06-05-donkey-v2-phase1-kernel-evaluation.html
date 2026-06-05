@@ -420,9 +420,14 @@ npm exec --yes -- pnpm@10.12.1 test -- --run
           到路径映射层。
         </li>
         <li>
-          <code>CommandPolicy.network</code> 目前是 Donkey 策略字段，不是 OS
-          级网络隔离；阶段二若接入真实 agent provider，需要补 provider
-          sandbox/approval 能力映射或外层隔离。
+          <code>bypassPermissions</code> 不作为 Donkey
+          默认或推荐模式。只有在外层 OS/container sandbox 已验证、HumanGate
+          已批准、并且证据报告记录隔离方式时，才允许作为受控实验配置。
+        </li>
+        <li>
+          <code>CommandPolicy.network</code>
+          当前分为静态命令拒绝、provider 声明映射和后续 OS
+          级隔离三个层级。阶段一只能声明前两个层级，不声称已实现 OS 级断网。
         </li>
         <li>
           Vitest 已迁移到根 <code>vitest.config.ts</code> 的
@@ -446,7 +451,8 @@ npm exec --yes -- pnpm@10.12.1 test -- --run
         复查，结论为 <code>APPROVED</code>；仅保留一项建议：<code
           >CommandPolicy.network</code
         >
-        目前是策略字段，不是 OS 级网络隔离。合入
+        需要继续推进到 OS/container 级隔离。阶段一已经明确为静态命令拒绝和
+        provider 声明映射，不声称已实现 OS 级断网。合入
         <code>rebuild-v2</code> 后，主工作区重新执行本地 build、unit、e2e
         和文档未完成标记检查；结果记录见最终交付说明。
       </p>

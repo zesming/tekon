@@ -158,14 +158,14 @@ describe('command gateway', () => {
     });
 
     const result = await gateway.run({
-      command: { tool: 'git', args: ['push'] },
+      command: { tool: 'git', args: ['commit'] },
       cwd,
       runId: 'run_1',
       nodeId: 'node_1',
       policy: {
         allow: [{ tool: 'git', args: [] }],
         deny: [],
-        requiresHumanApproval: [{ tool: 'git', args: ['push'] }],
+        requiresHumanApproval: [{ tool: 'git', args: ['commit'] }],
         cwdScope: [cwd],
         network: 'disabled',
       },

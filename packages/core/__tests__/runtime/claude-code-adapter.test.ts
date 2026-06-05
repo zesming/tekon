@@ -39,6 +39,47 @@ describe('claude code adapter', () => {
     expect(command.args.at(-1)).toBe('hello');
   });
 
+  it.each([
+    {
+      args: ['--permission-mode'],
+      message: 'permission mode is controlled by Donkey',
+    },
+    {
+      args: ['--permission-mode', 'bypassPermissions'],
+      message: 'permission mode is controlled by Donkey',
+    },
+    {
+      args: ['--permission-mode=bypassPermissions'],
+      message: 'permission mode is controlled by Donkey',
+    },
+    {
+      args: ['--dangerously-skip-permissions'],
+      message: 'bypass permissions mode is not allowed',
+    },
+    {
+      args: ['bypassPermissions'],
+      message: 'bypass permissions mode is not allowed',
+    },
+    {
+      args: ['--mode=bypassPermissions'],
+      message: 'bypass permissions mode is not allowed',
+    },
+  ])('rejects unsafe user Claude args %j', ({ args, message }) => {
+    const safeConfig = {
+      provider: 'claude-code' as const,
+      command: 'claude',
+      args,
+      promptMode: 'stdin' as const,
+      outputFormat: 'json' as const,
+      timeoutMs: 1000,
+      permissionProfile: safePermissionProfile('/tmp/repo'),
+    };
+
+    expect(() =>
+      buildClaudeCodeCommand(safeConfig, { prompt: 'hello' }),
+    ).toThrow(message);
+  });
+
   it('streams large stdout/stderr without deadlock and reports timeout', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-agent-'));
     tempDirs.push(repoPath);
@@ -49,7 +90,7 @@ describe('claude code adapter', () => {
       "process.stdout.write('x'.repeat(128 * 1024))\nprocess.stderr.write('y'.repeat(128 * 1024))\n",
       'utf8',
     );
-    writeFileSync(sleepScript, "setTimeout(() => {}, 10_000)\n", 'utf8');
+    writeFileSync(sleepScript, 'setTimeout(() => {}, 10_000)\n', 'utf8');
     const gateway = createCommandGateway();
 
     const loudAdapter = createClaudeCodeAdapter(
@@ -65,7 +106,11 @@ describe('claude code adapter', () => {
       gateway,
     );
     const loudResult = await loudAdapter.runAgent(baseRunInput(repoPath));
-    expect(loudResult).toMatchObject({ provider: 'claude-code', exitCode: 0, timedOut: false });
+    expect(loudResult).toMatchObject({
+      provider: 'claude-code',
+      exitCode: 0,
+      timedOut: false,
+    });
 
     const sleepAdapter = createClaudeCodeAdapter(
       {
@@ -80,7 +125,10 @@ describe('claude code adapter', () => {
       gateway,
     );
     const sleepResult = await sleepAdapter.runAgent(baseRunInput(repoPath));
-    expect(sleepResult).toMatchObject({ provider: 'claude-code', timedOut: true });
+    expect(sleepResult).toMatchObject({
+      provider: 'claude-code',
+      timedOut: true,
+    });
   });
 
   it('passes prompts through stdin when promptMode is stdin', async () => {
@@ -105,9 +153,16 @@ describe('claude code adapter', () => {
       createCommandGateway(),
     );
 
-    const result = await adapter.runAgent({ ...baseRunInput(repoPath), prompt: 'stdin prompt' });
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      prompt: 'stdin prompt',
+    });
 
-    expect(result).toMatchObject({ provider: 'claude-code', exitCode: 0, timedOut: false });
+    expect(result).toMatchObject({
+      provider: 'claude-code',
+      exitCode: 0,
+      timedOut: false,
+    });
     expect(readFileSync(result.outputFiles[0]!, 'utf8')).toBe('stdin prompt');
   });
 });

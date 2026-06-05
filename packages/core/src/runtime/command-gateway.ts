@@ -120,6 +120,10 @@ function validateCommand(
     return 'force push is always rejected';
   }
 
+  if (policy.network !== 'enabled' && isKnownNetworkCommand(command)) {
+    return 'network command is not allowed by policy';
+  }
+
   if (
     isAbsolute(command.tool) &&
     !policy.allow.some((entry) => entry.tool === command.tool)
@@ -188,6 +192,37 @@ function isForcePush(command: CommandInvocation): boolean {
   }
 
   return command.args.some((arg) => arg === '-f' || arg.startsWith('--force'));
+}
+
+function isKnownNetworkCommand(command: CommandInvocation): boolean {
+  const tool = basename(command.tool);
+
+  if (['curl', 'wget', 'ssh', 'scp', 'sftp', 'npx'].includes(tool)) {
+    return true;
+  }
+
+  if (tool === 'git') {
+    return [
+      'fetch',
+      'pull',
+      'push',
+      'clone',
+      'ls-remote',
+      'submodule',
+    ].includes(command.args[0] ?? '');
+  }
+
+  if (tool === 'npm' || tool === 'pnpm') {
+    return ['install', 'add', 'update', 'dlx', 'exec'].includes(
+      command.args[0] ?? '',
+    );
+  }
+
+  if (tool === 'gh') {
+    return ['api', 'pr', 'repo', 'run'].includes(command.args[0] ?? '');
+  }
+
+  return false;
 }
 
 function isCwdAllowed(cwd: string, scopes: string[]): boolean {

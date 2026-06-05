@@ -1,5 +1,9 @@
 import type { ArtifactStore } from '../artifact/store.js';
-import type { CommandPolicy, RunContext, WorktreeLease } from '../types/config.js';
+import type {
+  CommandPolicy,
+  RunContext,
+  WorktreeLease,
+} from '../types/config.js';
 import type { Artifact, Role } from '../types/domain.js';
 
 export interface RoleConfig {
@@ -35,16 +39,30 @@ export interface AgentAdapter {
   runAgent(input: AgentRunInput): Promise<AgentRunResult>;
 }
 
+export type NetworkEnforcement =
+  | 'declared'
+  | 'provider-enforced'
+  | 'os-enforced';
+
+export interface NetworkCapabilityEvidence {
+  mode: 'disabled' | 'restricted' | 'enabled';
+  enforcement: NetworkEnforcement;
+  allowHosts: string[];
+  evidence: string[];
+}
+
 export interface ProviderCapabilityMapping {
   sandbox: string;
   approval: string;
   filesystemScope: string[];
-  network: string;
+  network: NetworkCapabilityEvidence;
   toolAllow: string[];
   toolDeny: string[];
 }
 
-export function assertAgentProviderCapabilities(config: unknown): ProviderCapabilityMapping {
+export function assertAgentProviderCapabilities(
+  config: unknown,
+): ProviderCapabilityMapping {
   const candidate = config as {
     provider?: string;
     permissionProfile?: {
@@ -61,7 +79,12 @@ export function assertAgentProviderCapabilities(config: unknown): ProviderCapabi
       sandbox: 'in-process',
       approval: 'not-required',
       filesystemScope: [],
-      network: 'disabled',
+      network: {
+        mode: 'disabled',
+        enforcement: 'declared',
+        allowHosts: [],
+        evidence: ['mock provider does not spawn a child process'],
+      },
       toolAllow: [],
       toolDeny: [],
     };
@@ -74,33 +97,46 @@ export function assertAgentProviderCapabilities(config: unknown): ProviderCapabi
   const profile = candidate.permissionProfile;
   const allow = profile.tools?.allow ?? [];
   const deny = profile.tools?.deny ?? [];
+  const network = profile.network;
+  const hasSupportedNetworkMode =
+    network === 'disabled' || network === 'restricted';
+  if (!hasSupportedNetworkMode) {
+    throw new Error(
+      'cannot prove safe provider controls for real agent execution',
+    );
+  }
+
   const cannotProveControls =
     !profile.sandbox ||
     !profile.approval ||
     !profile.filesystemScope?.length ||
-    !profile.network ||
     profile.sandbox === 'danger-full-access' ||
     profile.approval === 'never' ||
     profile.filesystemScope.includes('/') ||
-    profile.network === 'enabled' ||
     (allow.includes('*') && deny.length === 0);
 
   if (cannotProveControls) {
-    throw new Error('cannot prove safe provider controls for real agent execution');
+    throw new Error(
+      'cannot prove safe provider controls for real agent execution',
+    );
   }
 
-  const { sandbox, approval, filesystemScope, network } = profile as {
+  const { sandbox, approval, filesystemScope } = profile as {
     sandbox: string;
     approval: string;
     filesystemScope: string[];
-    network: string;
   };
 
   return {
     sandbox,
     approval,
     filesystemScope,
-    network,
+    network: {
+      mode: network as 'disabled' | 'restricted',
+      enforcement: 'declared',
+      allowHosts: [],
+      evidence: ['provider permission profile declares network control'],
+    },
     toolAllow: allow,
     toolDeny: deny,
   };

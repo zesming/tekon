@@ -13,6 +13,8 @@ export function buildClaudeCodeCommand(
   config: AgentAdapterConfig,
   input: { prompt: string; promptFile?: string },
 ): BuiltClaudeCodeCommand {
+  assertSafeClaudeArgs(config.args ?? []);
+
   const args = [...(config.args ?? [])];
 
   if (config.outputFormat === 'json') {
@@ -86,4 +88,26 @@ function permissionModeFor(config: AgentAdapterConfig): string {
     return 'default';
   }
   return 'acceptEdits';
+}
+
+function assertSafeClaudeArgs(args: readonly string[]): void {
+  if (
+    args.some(
+      (arg) =>
+        arg === '--permission-mode' || arg.startsWith('--permission-mode='),
+    )
+  ) {
+    throw new Error('claude permission mode is controlled by Donkey');
+  }
+
+  if (
+    args.some(
+      (arg) =>
+        arg === 'bypassPermissions' ||
+        arg.startsWith('--dangerously-skip-permissions') ||
+        arg.includes('bypassPermissions'),
+    )
+  ) {
+    throw new Error('claude bypass permissions mode is not allowed');
+  }
 }
