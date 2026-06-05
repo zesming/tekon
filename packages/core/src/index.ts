@@ -15,4 +15,6 @@ export * from './runtime/worktree-manager.js';
 export * from './runtime/agent-adapter.js';
 export * from './runtime/claude-code-adapter.js';
 export * from './runtime/mock-agent-adapter.js';
+export * from './gate/engine.js';
+export * from './gate/human-gate.js';
 export * from './gate/runners.js';

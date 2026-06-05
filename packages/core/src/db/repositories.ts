@@ -18,6 +18,7 @@ import {
   type RoleRun,
   roleRunSchema,
   type WorkflowInstance,
+  type WorkflowStatus,
   workflowInstanceSchema,
 } from '../types/domain.js';
 import {
@@ -51,6 +52,16 @@ type GateResultRow = {
   fix_attempt_id: string | null;
   failure_classification: string | null;
   created_at: string;
+};
+
+type WorkflowInstanceRow = {
+  id: string;
+  project_id: string;
+  demand_id: string;
+  status: WorkflowInstance['status'];
+  current_node_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type AuditEventRow = {
@@ -122,6 +133,12 @@ export interface DonkeyRepositories {
   createDemand(demand: Demand): Promise<Demand>;
   createProject(project: Project): Promise<Project>;
   createWorkflowInstance(instance: WorkflowInstance): Promise<WorkflowInstance>;
+  getWorkflowInstance(runId: string): Promise<WorkflowInstance | null>;
+  updateWorkflowInstanceStatus(
+    runId: string,
+    status: WorkflowStatus,
+    currentNodeId?: string | null,
+  ): Promise<WorkflowInstance | null>;
   createNode(node: Node): Promise<Node>;
   getNode(nodeId: string): Promise<Node | null>;
   transitionNode(nodeId: string, status: NodeStatus): Promise<void>;
@@ -185,6 +202,36 @@ export function createRepositories(
            ) values (@id, @projectId, @demandId, @status, @currentNodeId, @createdAt, @updatedAt)`,
         ).run({ ...instance, currentNodeId: instance.currentNodeId ?? null });
         return instance;
+      });
+    },
+
+    async getWorkflowInstance(runId) {
+      const row = db.prepare('select * from workflow_instances where id = ?').get(runId) as
+        | WorkflowInstanceRow
+        | undefined;
+      return row ? mapWorkflowInstance(row) : null;
+    },
+
+    async updateWorkflowInstanceStatus(runId, status, currentNodeId) {
+      return writeQueue.enqueue(() => {
+        if (currentNodeId === undefined) {
+          db.prepare('update workflow_instances set status = ?, updated_at = ? where id = ?').run(
+            status,
+            now(),
+            runId,
+          );
+        } else {
+          db.prepare(
+            `update workflow_instances
+             set status = ?, current_node_id = ?, updated_at = ?
+             where id = ?`,
+          ).run(status, currentNodeId, now(), runId);
+        }
+
+        const row = db.prepare('select * from workflow_instances where id = ?').get(runId) as
+          | WorkflowInstanceRow
+          | undefined;
+        return row ? mapWorkflowInstance(row) : null;
       });
     },
 
@@ -473,6 +520,18 @@ function mapNode(row: NodeRow): Node {
     status: row.status,
     gates: JSON.parse(row.gates) as unknown,
     dependencies: JSON.parse(row.dependencies) as unknown,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
+  return workflowInstanceSchema.parse({
+    id: row.id,
+    projectId: row.project_id,
+    demandId: row.demand_id,
+    status: row.status,
+    currentNodeId: row.current_node_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
