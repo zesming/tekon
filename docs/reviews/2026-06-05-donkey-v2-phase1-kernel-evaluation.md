@@ -10,7 +10,9 @@
 
 最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 `90855a9` 修复，并新增对应 RED/GREEN 回归测试；复查 reviewer 返回 `APPROVED`，未检出必须修复项。
 
-合入 `rebuild-v2` 后已补充 CI 与 pnpm native build 配置：`pnpm-workspace.yaml` 显式允许 `better-sqlite3` 与 `esbuild` build scripts，GitHub Actions 会在 `rebuild-v2`、`main` 和 PR 上执行 install、ignored-builds gate、build、unit tests 与 e2e tests；unit 与 e2e 在 CI 中分开执行，避免重复统计。
+合入 `rebuild-v2` 后已补充 CI、GitHub Actions lint 与 pnpm native build 配置：`pnpm-workspace.yaml` 显式允许 `better-sqlite3` 与 `esbuild` build scripts；GitHub Actions 会在 `rebuild-v2`、`main` 和 PR 上先执行 `actionlint` job，再执行依赖该 job 的 core build/tests。workflow 已显式声明 `permissions: contents: read` 与 `concurrency`，Node 运行时固定为 24，native build gate 使用 `set -euo pipefail` 并检查 `pnpm ignored-builds`，unit 与 e2e 在 CI 中分开执行，避免重复统计。
+
+发布就绪加固新增两个本地门禁入口：`npm run lint:actions` 通过 `scripts/ci/actionlint.sh` 调用本机 `actionlint`，缺失时回退 Docker，二者都不可用时以 127 失败；`scripts/ci/check-github-actions.mjs` 通过 `GITHUB_TOKEN` 查询 `zesming/donkey` 的 `rebuild-v2` 当前 SHA 的 `Core` workflow，缺 token 以 2 失败，未找到成功完成的 `Core` run 以 1 失败。
 
 ## 2. 提交清单
 
@@ -90,9 +92,27 @@ npm exec --yes -- pnpm@10.12.1 ignored-builds
 # Automatically ignored builds during installation: None
 ```
 
+发布就绪加固新增验证项：
+
+```bash
+bash -n scripts/ci/actionlint.sh
+# shell syntax check passed
+
+node --check scripts/ci/check-github-actions.mjs
+# JavaScript syntax check passed
+
+npm exec --yes -- prettier --check .github/workflows/core.yml package.json scripts/ci/check-github-actions.mjs docs/reviews/2026-06-05-donkey-v2-phase1-kernel-evaluation.md docs/reviews/2026-06-05-donkey-v2-phase1-kernel-evaluation.html
+# CI workflow、package 脚本、远端 Actions 查询脚本与评估文档格式检查
+
+bash scripts/ci/actionlint.sh
+# 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理
+```
+
 ## 6. 风险与后续建议
 
 - `better-sqlite3` 是原生依赖，已通过 `onlyBuiltDependencies` 显式允许构建，并由 CI 的 ignored-builds gate 覆盖；后续新增 native/toolchain 依赖时必须审阅并维护 allowlist，避免静默跳过 build scripts。
+- GitHub Actions 现在由 `actionlint` job 前置校验 workflow 语法与常见错误；本地 wrapper 仍依赖本机 `actionlint` 或 Docker，二者都缺失时必须把失败记录为环境缺口，不能视为通过。
+- 远端 `Core` workflow 成功是发布门禁；`scripts/ci/check-github-actions.mjs` 只读取环境变量 `GITHUB_TOKEN`，不会读取本地 token 文件。无 token、无匹配 run、run 未完成或结论非 `success` 都不能标记远端 CI 已确认。
 - Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。真实 provider smoke 建议放到阶段二或独立人工凭证环境。
 - Worktree dirty 检测会忽略 Donkey 自己生成的 `.donkey/` 未跟踪目录，避免第二个 lease 被自身运行产物阻塞；用户工作区的已跟踪改动仍会阻断。
 - Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层，不能直接拼路径。
@@ -118,3 +138,7 @@ npm exec --yes -- pnpm@10.12.1 ignored-builds
 - pnpm `ignored-builds` 官方文档：https://pnpm.io/cli/ignored-builds。资料内容：该命令列出安装期间被自动阻止执行 build scripts 的包。对 Donkey 的判断依据：CI 应把 ignored builds 作为环境 gate，避免 native binding 缺失只在运行测试时才暴露。
 - pnpm 10.x `approve-builds` 版本化文档：https://pnpm.io/10.x/cli/approve-builds。
 - pnpm 10.x `ignored-builds` 版本化文档：https://pnpm.io/10.x/cli/ignored-builds。
+- GitHub Actions workflow syntax 官方文档：https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax。资料内容：说明 workflow YAML、`permissions`、job 依赖等语法。对 Donkey 的判断依据：CI workflow 应显式最小化 `GITHUB_TOKEN` 权限，并让 core job 依赖 actionlint。
+- GitHub Actions concurrency 官方文档：https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency。资料内容：说明 `concurrency` 可限制同组 workflow/job 并发并取消进行中的运行。对 Donkey 的判断依据：同一 PR 或分支的新提交应取消旧 CI，减少过期结果干扰。
+- GitHub REST Actions workflow runs 官方文档：https://docs.github.com/en/rest/actions/workflow-runs。资料内容：可通过 REST API 查询 repository workflow runs，并使用 branch/head SHA 等参数过滤。对 Donkey 的判断依据：远端 Core workflow 门禁应按 `rebuild-v2` 与当前 SHA 查询，而不是只看最近一次任意运行。
+- actionlint 项目与 Docker 镜像：https://github.com/rhysd/actionlint、https://hub.docker.com/r/rhysd/actionlint。资料内容：`actionlint` 是 GitHub Actions workflow 静态检查器，并提供 Docker 镜像。对 Donkey 的判断依据：本地与 CI 都可以使用固定版本 `rhysd/actionlint:1.7.12` 做 workflow lint。

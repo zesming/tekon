@@ -103,12 +103,26 @@
         回归测试；复查 reviewer 返回 <code>APPROVED</code>，未检出必须修复项。
       </p>
       <p>
-        合入 <code>rebuild-v2</code> 后已补充 CI 与 pnpm native build
-        配置：<code>pnpm-workspace.yaml</code> 显式允许
+        合入 <code>rebuild-v2</code> 后已补充 CI、GitHub Actions lint 与 pnpm
+        native build 配置：<code>pnpm-workspace.yaml</code> 显式允许
         <code>better-sqlite3</code> 与 <code>esbuild</code> build
-        scripts，GitHub Actions 会在 <code>rebuild-v2</code>、<code>main</code>
-        和 PR 上执行 install、ignored-builds gate、build、unit tests 与 e2e
-        tests；unit 与 e2e 在 CI 中分开执行，避免重复统计。
+        scripts；GitHub Actions 会在 <code>rebuild-v2</code>、<code>main</code>
+        和 PR 上先执行 <code>actionlint</code> job，再执行依赖该 job 的 core
+        build/tests。workflow 已显式声明
+        <code>permissions: contents: read</code> 与
+        <code>concurrency</code>，Node 运行时固定为 24，native build gate 使用
+        <code>set -euo pipefail</code> 并检查
+        <code>pnpm ignored-builds</code>，unit 与 e2e 在 CI
+        中分开执行，避免重复统计。
+      </p>
+      <p>
+        发布就绪加固新增两个本地门禁入口：<code>npm run lint:actions</code> 通过
+        <code>scripts/ci/actionlint.sh</code> 调用本机
+        <code>actionlint</code>，缺失时回退 Docker，二者都不可用时以 127
+        失败；<code>scripts/ci/check-github-actions.mjs</code> 通过
+        <code>GITHUB_TOKEN</code> 查询 <code>zesming/donkey</code> 的
+        <code>rebuild-v2</code> 当前 SHA 的 <code>Core</code> workflow，缺 token
+        以 2 失败，未找到成功完成的 <code>Core</code> run 以 1 失败。
       </p>
 
       <h2>2. 提交清单</h2>
@@ -318,6 +332,18 @@ npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
 
 npm exec --yes -- pnpm@10.12.1 ignored-builds
 # Automatically ignored builds during installation: None</code></pre>
+      <p>发布就绪加固新增验证项：</p>
+      <pre><code>bash -n scripts/ci/actionlint.sh
+# shell syntax check passed
+
+node --check scripts/ci/check-github-actions.mjs
+# JavaScript syntax check passed
+
+npm exec --yes -- prettier --check .github/workflows/core.yml package.json scripts/ci/check-github-actions.mjs docs/reviews/2026-06-05-donkey-v2-phase1-kernel-evaluation.md docs/reviews/2026-06-05-donkey-v2-phase1-kernel-evaluation.html
+# CI workflow、package 脚本、远端 Actions 查询脚本与评估文档格式检查
+
+bash scripts/ci/actionlint.sh
+# 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理</code></pre>
 
       <h2>6. 风险与后续建议</h2>
       <ul>
@@ -326,6 +352,19 @@ npm exec --yes -- pnpm@10.12.1 ignored-builds
           <code>onlyBuiltDependencies</code> 显式允许构建，并由 CI 的
           ignored-builds gate 覆盖；后续新增 native/toolchain
           依赖时必须审阅并维护 allowlist，避免静默跳过 build scripts。
+        </li>
+        <li>
+          GitHub Actions 现在由 <code>actionlint</code> job 前置校验 workflow
+          语法与常见错误；本地 wrapper 仍依赖本机 <code>actionlint</code> 或
+          Docker，二者都缺失时必须把失败记录为环境缺口，不能视为通过。
+        </li>
+        <li>
+          远端 <code>Core</code> workflow 成功是发布门禁；<code
+            >scripts/ci/check-github-actions.mjs</code
+          >
+          只读取环境变量 <code>GITHUB_TOKEN</code>，不会读取本地 token 文件。无
+          token、无匹配 run、run 未完成或结论非 <code>success</code>
+          都不能标记远端 CI 已确认。
         </li>
         <li>
           Claude adapter 的真实 Claude CLI
@@ -401,6 +440,36 @@ npm exec --yes -- pnpm@10.12.1 ignored-builds
           pnpm 10.x
           <code>ignored-builds</code>
           版本化文档：<code>https://pnpm.io/10.x/cli/ignored-builds</code>。
+        </li>
+        <li>
+          GitHub Actions workflow syntax
+          官方文档：<code>https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax</code>。资料内容：说明
+          workflow YAML、<code>permissions</code>、job 依赖等语法。对 Donkey
+          的判断依据：CI workflow 应显式最小化
+          <code>GITHUB_TOKEN</code> 权限，并让 core job 依赖 actionlint。
+        </li>
+        <li>
+          GitHub Actions concurrency
+          官方文档：<code>https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency</code>。资料内容：说明
+          <code>concurrency</code> 可限制同组 workflow/job
+          并发并取消进行中的运行。对 Donkey 的判断依据：同一 PR
+          或分支的新提交应取消旧 CI，减少过期结果干扰。
+        </li>
+        <li>
+          GitHub REST Actions workflow runs
+          官方文档：<code>https://docs.github.com/en/rest/actions/workflow-runs</code>。资料内容：可通过
+          REST API 查询 repository workflow runs，并使用 branch/head SHA
+          等参数过滤。对 Donkey 的判断依据：远端 Core workflow 门禁应按
+          <code>rebuild-v2</code> 与当前 SHA 查询，而不是只看最近一次任意运行。
+        </li>
+        <li>
+          actionlint 项目与 Docker
+          镜像：<code>https://github.com/rhysd/actionlint</code>、<code>https://hub.docker.com/r/rhysd/actionlint</code>。资料内容：<code
+            >actionlint</code
+          >
+          是 GitHub Actions workflow 静态检查器，并提供 Docker 镜像。对 Donkey
+          的判断依据：本地与 CI 都可以使用固定版本
+          <code>rhysd/actionlint:1.7.12</code> 做 workflow lint。
         </li>
       </ul>
     </main>

@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "test": "vitest",
     "lint": "pnpm -r lint",
+    "lint:actions": "bash scripts/ci/actionlint.sh",
     "typecheck": "pnpm -r typecheck",
     "format:check": "prettier --check ."
   },
