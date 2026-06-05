@@ -1,0 +1,48 @@
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { createWebFixtureProject } from '../fixtures/project.js';
+import { createApiCaller } from '../../src/server/api/root.js';
+
+const cleanupTasks: Array<() => void> = [];
+
+afterEach(() => {
+  for (const cleanup of cleanupTasks.splice(0)) {
+    cleanup();
+  }
+});
+
+describe('web read API', () => {
+  it('returns overview, artifacts, gates, audit, roles, and workflows', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const overview = await api.project.overview();
+    expect(overview.project).toMatchObject({ id: 'project_1' });
+    expect(overview.latestRun).toMatchObject({ id: 'run_1' });
+    expect(overview.counts).toMatchObject({
+      artifacts: 1,
+      gates: 1,
+      audit: 1,
+      pendingApprovals: 1,
+      roles: 1,
+      workflows: 1,
+    });
+
+    await expect(api.artifact.list({ runId: 'run_1' })).resolves.toMatchObject({
+      artifacts: [expect.objectContaining({ id: 'artifact_1' })],
+    });
+    await expect(api.audit.list({ runId: 'run_1' })).resolves.toMatchObject({
+      verification: { valid: true },
+      events: [expect.objectContaining({ type: 'human.decision.pending' })],
+    });
+    await expect(api.role.list()).resolves.toMatchObject({
+      roles: [expect.objectContaining({ id: 'rd' })],
+    });
+    await expect(api.workflow.list()).resolves.toMatchObject({
+      workflows: [expect.objectContaining({ id: 'standard-feature' })],
+    });
+
+    await api.close();
+  });
+});

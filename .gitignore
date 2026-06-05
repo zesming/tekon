@@ -12,6 +12,7 @@ playwright-report/
 # Donkey 运行时产物（不提交）
 .donkey/runs/
 .donkey/worktrees/
+.donkey/web-session.json
 .worktrees/
 
 # 日志

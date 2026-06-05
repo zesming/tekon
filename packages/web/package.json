@@ -1,0 +1,31 @@
+{
+  "name": "@donkey/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "tsx src/server/index.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest --config vitest.config.ts",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@donkey/core": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.5",
+    "vitest": "^3.2.6"
+  }
+}

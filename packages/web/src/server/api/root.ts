@@ -1,0 +1,614 @@
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+import {
+  createAuditLogger,
+  createRepositories,
+  openDonkeyDatabase,
+  type DonkeyDatabase,
+} from '@donkey/core';
+
+import {
+  assertProjectDatabaseExists,
+  createProjectContext,
+  type ResolveProjectRootInput,
+  type WebProjectContext,
+} from '../project-context.js';
+import { ApiError } from './errors.js';
+
+type JsonRecord = Record<string, unknown>;
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  repo_path: string;
+  created_at: string;
+}
+
+interface WorkflowRow {
+  id: string;
+  project_id: string;
+  demand_id: string;
+  status: string;
+  current_node_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GateRow {
+  id: string;
+  run_id: string;
+  node_id: string;
+  gate_type: string;
+  status: string;
+  output_path: string | null;
+  duration_ms: number;
+  retries: number;
+  fix_attempt_id: string | null;
+  failure_classification: string | null;
+  created_at: string;
+}
+
+interface ArtifactRow {
+  id: string;
+  run_id: string;
+  node_id: string;
+  type: string;
+  version: number;
+  path: string;
+  sha256: string;
+  size_bytes: number;
+  summary: string | null;
+  created_at: string;
+}
+
+interface HumanDecisionRow {
+  id: string;
+  run_id: string;
+  node_id: string;
+  gate_result_id: string | null;
+  status: string;
+  actor: string | null;
+  note: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface ApiCaller {
+  project: {
+    list(): Promise<{ id: string; name: string; repoPath: string; createdAt: string }[]>;
+    overview(): Promise<{
+      project: ReturnType<typeof mapProject>;
+      latestRun: ReturnType<typeof mapWorkflow> | null;
+      counts: {
+        artifacts: number;
+        gates: number;
+        audit: number;
+        pendingApprovals: number;
+        roles: number;
+        workflows: number;
+      };
+    }>;
+    detail(input: { projectId: string }): Promise<{
+      project: ReturnType<typeof mapProject>;
+      runs: ReturnType<typeof mapWorkflow>[];
+    }>;
+    pause(input: TokenRunInput): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
+    resume(input: TokenRunInput): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
+    cancel(input: TokenRunInput): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
+    clean(input: TokenRunInput): Promise<{ removedRunDir: boolean }>;
+  };
+  artifact: {
+    list(input: { runId: string }): Promise<{ artifacts: ReturnType<typeof mapArtifact>[] }>;
+  };
+  gate: {
+    list(input: { runId: string }): Promise<{
+      gates: ReturnType<typeof mapGate>[];
+      pendingDecisions: ReturnType<typeof mapHumanDecision>[];
+    }>;
+    approve(input: DecisionInput): Promise<{ decision: ReturnType<typeof mapHumanDecision> }>;
+    reject(input: DecisionInput): Promise<{ decision: ReturnType<typeof mapHumanDecision> }>;
+  };
+  audit: {
+    list(input: { runId: string }): Promise<{
+      verification: { valid: true } | { valid: false; brokenEventId: string };
+      events: JsonRecord[];
+    }>;
+  };
+  role: {
+    list(): Promise<{ roles: Array<{ id: string; name: string; systemPrompt?: string }> }>;
+  };
+  workflow: {
+    list(): Promise<{ workflows: Array<{ id: string; name: string; path: string }> }>;
+  };
+  close(): Promise<void>;
+}
+
+interface TokenRunInput {
+  runId: string;
+  token: string;
+}
+
+interface DecisionInput {
+  runId: string;
+  decisionId: string;
+  actor: string;
+  note?: string;
+  token: string;
+}
+
+export async function createApiCaller(
+  input: ResolveProjectRootInput,
+): Promise<ApiCaller> {
+  const context = createProjectContext(input);
+  assertProjectDatabaseExists(context);
+  const db = openDonkeyDatabase({ filename: context.dbPath });
+  const repositories = createRepositories(db);
+  const audit = createAuditLogger({ repositories });
+
+  const caller: ApiCaller = {
+    project: {
+      async list() {
+        return listScopedProjects(db, context).map(mapProject);
+      },
+
+      async overview() {
+        const project = firstProject(db, context);
+        const latestRun = project ? latestRunForProject(db, project.id) : null;
+        return {
+          project: mapProject(project),
+          latestRun: latestRun ? mapWorkflow(latestRun) : null,
+          counts: {
+            artifacts: latestRun ? count(db, 'artifacts', latestRun.id) : 0,
+            gates: latestRun ? count(db, 'gate_results', latestRun.id) : 0,
+            audit: latestRun ? count(db, 'audit_events', latestRun.id) : 0,
+            pendingApprovals: latestRun
+              ? pendingDecisionCount(db, latestRun.id)
+              : 0,
+            roles: listRoles(context).length,
+            workflows: listWorkflows(context).length,
+          },
+        };
+      },
+
+      async detail(detailInput) {
+        const project = scopedProjectById(db, context, detailInput.projectId);
+        return {
+          project: mapProject(project),
+          runs: listRunsForProject(db, project.id).map(mapWorkflow),
+        };
+      },
+
+      async pause(runInput) {
+        assertSessionToken(context, runInput.token);
+        await repositories.updateWorkflowInstanceStatus(runInput.runId, 'paused');
+        return { run: mapWorkflow(mustGetRun(db, runInput.runId)) };
+      },
+
+      async resume(runInput) {
+        assertSessionToken(context, runInput.token);
+        await repositories.updateWorkflowInstanceStatus(runInput.runId, 'running');
+        return { run: mapWorkflow(mustGetRun(db, runInput.runId)) };
+      },
+
+      async cancel(runInput) {
+        assertSessionToken(context, runInput.token);
+        await repositories.updateWorkflowInstanceStatus(runInput.runId, 'cancelled');
+        return { run: mapWorkflow(mustGetRun(db, runInput.runId)) };
+      },
+
+      async clean(runInput) {
+        assertSessionToken(context, runInput.token);
+        const runDir = join(context.dataDir, 'runs', runInput.runId);
+        const removedRunDir = existsSync(runDir);
+        if (removedRunDir) {
+          rmSync(runDir, { recursive: true, force: true });
+        }
+        return { removedRunDir };
+      },
+    },
+
+    artifact: {
+      async list(artifactInput) {
+        assertRunInScope(db, context, artifactInput.runId);
+        return {
+          artifacts: listArtifacts(db, artifactInput.runId).map(mapArtifact),
+        };
+      },
+    },
+
+    gate: {
+      async list(gateInput) {
+        assertRunInScope(db, context, gateInput.runId);
+        return {
+          gates: listGates(db, gateInput.runId).map(mapGate),
+          pendingDecisions: listHumanDecisions(db, gateInput.runId)
+            .filter((decision) => decision.status === 'pending')
+            .map(mapHumanDecision),
+        };
+      },
+
+      async approve(decisionInput) {
+        return updateDecision({
+          db,
+          repositories,
+          context,
+          input: decisionInput,
+          status: 'approved',
+          gateStatus: 'passed',
+        });
+      },
+
+      async reject(decisionInput) {
+        return updateDecision({
+          db,
+          repositories,
+          context,
+          input: decisionInput,
+          status: 'rejected',
+          gateStatus: 'failed',
+        });
+      },
+    },
+
+    audit: {
+      async list(auditInput) {
+        assertRunInScope(db, context, auditInput.runId);
+        const events = await repositories.listAuditEvents(auditInput.runId);
+        return {
+          verification: await audit.verify(auditInput.runId),
+          events,
+        };
+      },
+    },
+
+    role: {
+      async list() {
+        return { roles: listRoles(context) };
+      },
+    },
+
+    workflow: {
+      async list() {
+        return { workflows: listWorkflows(context) };
+      },
+    },
+
+    async close() {
+      db.close();
+    },
+  };
+
+  return caller;
+}
+
+export async function dispatchApiCall(
+  caller: ApiCaller,
+  path: string,
+  input: unknown,
+): Promise<unknown> {
+  const [namespace, procedure] = path.split('.');
+  const router = caller[namespace as keyof ApiCaller] as
+    | Record<string, (input?: unknown) => Promise<unknown>>
+    | undefined;
+  const handler = router?.[procedure ?? ''];
+  if (!handler) {
+    throw new ApiError('NOT_FOUND', `Unknown API procedure: ${path}`);
+  }
+  return handler(input);
+}
+
+function listScopedProjects(
+  db: DonkeyDatabase,
+  context: WebProjectContext,
+): ProjectRow[] {
+  return (db.prepare('select * from projects order by created_at, id').all() as ProjectRow[])
+    .filter((project) => resolve(project.repo_path) === context.projectRoot);
+}
+
+function firstProject(db: DonkeyDatabase, context: WebProjectContext): ProjectRow {
+  const project = listScopedProjects(db, context)[0];
+  if (!project) {
+    throw new ApiError('NOT_FOUND', 'No project found for the explicit root');
+  }
+  return project;
+}
+
+function scopedProjectById(
+  db: DonkeyDatabase,
+  context: WebProjectContext,
+  projectId: string,
+): ProjectRow {
+  const project = listScopedProjects(db, context).find(
+    (candidate) => candidate.id === projectId,
+  );
+  if (!project) {
+    throw new ApiError('NOT_FOUND', `Project not found: ${projectId}`);
+  }
+  return project;
+}
+
+function listRunsForProject(db: DonkeyDatabase, projectId: string): WorkflowRow[] {
+  return db
+    .prepare(
+      `select * from workflow_instances
+       where project_id = ?
+       order by updated_at desc, id`,
+    )
+    .all(projectId) as WorkflowRow[];
+}
+
+function latestRunForProject(
+  db: DonkeyDatabase,
+  projectId: string,
+): WorkflowRow | null {
+  return listRunsForProject(db, projectId)[0] ?? null;
+}
+
+function mustGetRun(db: DonkeyDatabase, runId: string): WorkflowRow {
+  const run = db
+    .prepare('select * from workflow_instances where id = ?')
+    .get(runId) as WorkflowRow | undefined;
+  if (!run) {
+    throw new ApiError('NOT_FOUND', `Run not found: ${runId}`);
+  }
+  return run;
+}
+
+function assertRunInScope(
+  db: DonkeyDatabase,
+  context: WebProjectContext,
+  runId: string,
+): void {
+  const run = mustGetRun(db, runId);
+  scopedProjectById(db, context, run.project_id);
+}
+
+function listArtifacts(db: DonkeyDatabase, runId: string): ArtifactRow[] {
+  return db
+    .prepare('select * from artifacts where run_id = ? order by node_id, type, version')
+    .all(runId) as ArtifactRow[];
+}
+
+function listGates(db: DonkeyDatabase, runId: string): GateRow[] {
+  return db
+    .prepare('select * from gate_results where run_id = ? order by created_at, id')
+    .all(runId) as GateRow[];
+}
+
+function listHumanDecisions(
+  db: DonkeyDatabase,
+  runId: string,
+): HumanDecisionRow[] {
+  return db
+    .prepare(
+      'select * from human_decisions where run_id = ? order by created_at, id',
+    )
+    .all(runId) as HumanDecisionRow[];
+}
+
+function count(db: DonkeyDatabase, table: string, runId: string): number {
+  const row = db
+    .prepare(`select count(*) as total from ${table} where run_id = ?`)
+    .get(runId) as { total: number };
+  return row.total;
+}
+
+function pendingDecisionCount(db: DonkeyDatabase, runId: string): number {
+  const row = db
+    .prepare(
+      `select count(*) as total from human_decisions
+       where run_id = ? and status = 'pending'`,
+    )
+    .get(runId) as { total: number };
+  return row.total;
+}
+
+async function updateDecision(input: {
+  db: DonkeyDatabase;
+  repositories: ReturnType<typeof createRepositories>;
+  context: WebProjectContext;
+  input: DecisionInput;
+  status: 'approved' | 'rejected';
+  gateStatus: 'passed' | 'failed';
+}): Promise<{ decision: ReturnType<typeof mapHumanDecision> }> {
+  assertSessionToken(input.context, input.input.token);
+  assertRunInScope(input.db, input.context, input.input.runId);
+  const existing = input.db
+    .prepare('select * from human_decisions where id = ? and run_id = ?')
+    .get(input.input.decisionId, input.input.runId) as
+    | HumanDecisionRow
+    | undefined;
+  if (!existing) {
+    throw new ApiError('NOT_FOUND', `Decision not found: ${input.input.decisionId}`);
+  }
+
+  const decidedAt = new Date().toISOString();
+  const decision = await input.repositories.updateHumanDecision(
+    input.input.decisionId,
+    {
+      status: input.status,
+      actor: input.input.actor,
+      note: input.input.note ?? null,
+      decidedAt,
+    },
+  );
+  if (!decision) {
+    throw new ApiError('NOT_FOUND', `Decision not found: ${input.input.decisionId}`);
+  }
+
+  if (existing.gate_result_id) {
+    input.db
+      .prepare('update gate_results set status = ? where id = ?')
+      .run(input.gateStatus, existing.gate_result_id);
+  }
+  await input.repositories.transitionNode(existing.node_id, 'running');
+  await input.repositories.updateWorkflowInstanceStatus(
+    existing.run_id,
+    'running',
+    existing.node_id,
+  );
+
+  return { decision: mapHumanDecisionRow(decision) };
+}
+
+function assertSessionToken(
+  context: WebProjectContext,
+  providedToken: string,
+): void {
+  if (!providedToken) {
+    throw new ApiError('UNAUTHORIZED', 'Session token is required');
+  }
+
+  let expectedToken: string | undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(context.sessionPath, 'utf8')) as {
+      token?: unknown;
+    };
+    expectedToken = typeof parsed.token === 'string' ? parsed.token : undefined;
+  } catch {
+    throw new ApiError('UNAUTHORIZED', 'Web session token is not configured');
+  }
+
+  if (providedToken !== expectedToken) {
+    throw new ApiError('UNAUTHORIZED', 'Invalid session token');
+  }
+}
+
+function listRoles(
+  context: WebProjectContext,
+): Array<{ id: string; name: string; systemPrompt?: string }> {
+  if (!existsSync(context.rolesDir)) {
+    return [];
+  }
+
+  return readdirSync(context.rolesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const systemPath = join(context.rolesDir, entry.name, 'system.md');
+      return {
+        id: entry.name,
+        name: entry.name.toUpperCase(),
+        systemPrompt: existsSync(systemPath)
+          ? readFileSync(systemPath, 'utf8')
+          : undefined,
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function listWorkflows(
+  context: WebProjectContext,
+): Array<{ id: string; name: string; path: string }> {
+  if (!existsSync(context.workflowsDir)) {
+    return [];
+  }
+
+  return readdirSync(context.workflowsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
+    .map((entry) => {
+      const path = join(context.workflowsDir, entry.name);
+      const content = readFileSync(path, 'utf8');
+      return {
+        id: extractYamlScalar(content, 'id') ?? entry.name.replace(/\.ya?ml$/u, ''),
+        name: extractYamlScalar(content, 'name') ?? entry.name,
+        path,
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function extractYamlScalar(content: string, key: string): string | undefined {
+  const match = new RegExp(`^${key}:\\s*(.+)$`, 'mu').exec(content);
+  return match?.[1]?.trim().replace(/^["']|["']$/gu, '');
+}
+
+function mapProject(project: ProjectRow) {
+  return {
+    id: project.id,
+    name: project.name,
+    repoPath: project.repo_path,
+    createdAt: project.created_at,
+  };
+}
+
+function mapWorkflow(run: WorkflowRow) {
+  return {
+    id: run.id,
+    projectId: run.project_id,
+    demandId: run.demand_id,
+    status: run.status,
+    currentNodeId: run.current_node_id,
+    createdAt: run.created_at,
+    updatedAt: run.updated_at,
+  };
+}
+
+function mapArtifact(artifact: ArtifactRow) {
+  return {
+    id: artifact.id,
+    runId: artifact.run_id,
+    nodeId: artifact.node_id,
+    type: artifact.type,
+    version: artifact.version,
+    path: artifact.path,
+    sha256: artifact.sha256,
+    sizeBytes: artifact.size_bytes,
+    summary: artifact.summary,
+    createdAt: artifact.created_at,
+  };
+}
+
+function mapGate(gate: GateRow) {
+  return {
+    id: gate.id,
+    runId: gate.run_id,
+    nodeId: gate.node_id,
+    gateType: gate.gate_type,
+    status: gate.status,
+    outputPath: gate.output_path,
+    durationMs: gate.duration_ms,
+    retries: gate.retries,
+    fixAttemptId: gate.fix_attempt_id,
+    failureClassification: gate.failure_classification,
+    createdAt: gate.created_at,
+  };
+}
+
+function mapHumanDecision(decision: HumanDecisionRow) {
+  return {
+    id: decision.id,
+    runId: decision.run_id,
+    nodeId: decision.node_id,
+    gateResultId: decision.gate_result_id,
+    status: decision.status,
+    actor: decision.actor,
+    note: decision.note,
+    createdAt: decision.created_at,
+    decidedAt: decision.decided_at,
+  };
+}
+
+function mapHumanDecisionRow(decision: {
+  id: string;
+  runId: string;
+  nodeId: string;
+  gateResultId?: string | null;
+  status: string;
+  actor?: string | null;
+  note?: string | null;
+  createdAt: string;
+  decidedAt?: string | null;
+}) {
+  return {
+    id: decision.id,
+    runId: decision.runId,
+    nodeId: decision.nodeId,
+    gateResultId: decision.gateResultId ?? null,
+    status: decision.status,
+    actor: decision.actor ?? null,
+    note: decision.note ?? null,
+    createdAt: decision.createdAt,
+    decidedAt: decision.decidedAt ?? null,
+  };
+}
