@@ -7,3 +7,6 @@ export * from './db/connection.js';
 export * from './db/migrations.js';
 export * from './db/repositories.js';
 export * from './db/write-queue.js';
+export * from './artifact/schemas.js';
+export * from './artifact/store.js';
+export * from './audit/logger.js';

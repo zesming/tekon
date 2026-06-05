@@ -1,6 +1,9 @@
 import {
   type AuditEvent,
   auditEventSchema,
+  type Artifact,
+  type ArtifactType,
+  artifactSchema,
   type Demand,
   demandSchema,
   type GateResult,
@@ -65,6 +68,19 @@ type RoleRunRow = {
   interrupted_at: string | null;
 };
 
+type ArtifactRow = {
+  id: string;
+  run_id: string;
+  node_id: string;
+  type: Artifact['type'];
+  version: number;
+  path: string;
+  sha256: string;
+  size_bytes: number;
+  summary: string | null;
+  created_at: string;
+};
+
 export interface RecoverableRun {
   runId: string;
   nodeId: string;
@@ -83,6 +99,8 @@ export interface DonkeyRepositories {
   listGateResults(runId: string): Promise<GateResult[]>;
   appendAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   listAuditEvents(runId: string): Promise<AuditEvent[]>;
+  recordArtifact(artifact: Artifact): Promise<Artifact>;
+  listArtifacts(runId: string, nodeId?: string, type?: ArtifactType): Promise<Artifact[]>;
   createRoleRun(roleRun: RoleRun): Promise<RoleRun>;
   getRoleRun(roleRunId: string): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
@@ -217,6 +235,33 @@ export function createRepositories(
       ).map(mapAuditEvent);
     },
 
+    async recordArtifact(input) {
+      const artifact = artifactSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into artifacts (
+             id, run_id, node_id, type, version, path, sha256, size_bytes, summary, created_at
+           ) values (
+             @id, @runId, @nodeId, @type, @version, @path, @sha256, @sizeBytes, @summary, @createdAt
+           )`,
+        ).run({ ...artifact, summary: artifact.summary ?? null });
+        return artifact;
+      });
+    },
+
+    async listArtifacts(runId, nodeId, type) {
+      const rows = db
+        .prepare(
+          `select * from artifacts
+           where run_id = ?
+             and (? is null or node_id = ?)
+             and (? is null or type = ?)
+           order by node_id, type, version`,
+        )
+        .all(runId, nodeId ?? null, nodeId ?? null, type ?? null, type ?? null) as ArtifactRow[];
+      return rows.map(mapArtifact);
+    },
+
     async createRoleRun(input) {
       const roleRun = roleRunSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -321,6 +366,21 @@ function mapAuditEvent(row: AuditEventRow): AuditEvent {
     payload: JSON.parse(row.payload) as Record<string, unknown>,
     prevHash: row.prev_hash,
     hash: row.hash,
+    createdAt: row.created_at,
+  });
+}
+
+function mapArtifact(row: ArtifactRow): Artifact {
+  return artifactSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    nodeId: row.node_id,
+    type: row.type,
+    version: row.version,
+    path: row.path,
+    sha256: row.sha256,
+    sizeBytes: row.size_bytes,
+    summary: row.summary ?? undefined,
     createdAt: row.created_at,
   });
 }
