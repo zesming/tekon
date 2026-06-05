@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Donkey V2 三阶段实施计划审阅记录</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #17202a;
+      background: #fff;
+      line-height: 1.65;
+    }
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 40px 28px 72px;
+    }
+    h1 {
+      font-size: 32px;
+      margin: 0 0 16px;
+      line-height: 1.25;
+    }
+    h2 {
+      font-size: 22px;
+      margin: 34px 0 10px;
+      padding-top: 16px;
+      border-top: 1px solid #d9e1ea;
+    }
+    ul, ol {
+      padding-left: 24px;
+    }
+    li {
+      margin: 6px 0;
+    }
+    code {
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.94em;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+    .status {
+      border-left: 4px solid #0f766e;
+      background: #f0fdfa;
+      padding: 14px 16px;
+      margin: 18px 0;
+    }
+    .fix {
+      border-left: 4px solid #1f6feb;
+      background: #f6f8fb;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>Donkey V2 三阶段实施计划审阅记录</h1>
+
+  <h2>审阅对象</h2>
+  <ul>
+    <li><code>docs/technical/donkey-v2-technical-plan.md</code></li>
+    <li><code>docs/superpowers/plans/2026-06-05-donkey-v2-phase1-implementation.md</code>（旧计划对照）</li>
+    <li><code>docs/superpowers/plans/2026-06-05-donkey-v2-three-phase-implementation.md</code></li>
+    <li><code>docs/superpowers/plans/2026-06-05-donkey-v2-three-phase-implementation.html</code></li>
+  </ul>
+
+  <h2>Reviewer 结论</h2>
+  <div class="status">
+    <p>最高思考等级 reviewer 结论：<strong>有条件通过</strong>。</p>
+    <p>Reviewer 判断新三阶段计划明显比旧计划更可落地，旧计划中的关键阻断点已经被前置拆分到阶段一。</p>
+  </div>
+  <ul>
+    <li>Tool Gateway / 权限边界</li>
+    <li>Git Worktree 隔离</li>
+    <li>SQLite 可恢复状态</li>
+    <li>GateResult 与 HumanGate</li>
+    <li>Artifact Store 与 Audit hash chain</li>
+    <li>Dynamic Workflow 与 PR Delivery</li>
+  </ul>
+
+  <h2>必须修复项</h2>
+  <div class="fix">
+    <p><strong>1. pnpm filter 命令语法不正确</strong></p>
+    <p>修复：统一改为 <code>pnpm --filter @donkey/core test -- --run</code>、<code>pnpm --filter @donkey/core build</code>、<code>pnpm --filter @donkey/cli test -- --run</code>。</p>
+  </div>
+  <div class="fix">
+    <p><strong>2. WorktreeManager 与 CommandGateway 顺序/边界需写死</strong></p>
+    <p>修复：将 CommandGateway 调整为 Task 5，WorktreeManager 调整为 Task 6；明确 WorktreeManager 的 <code>git worktree add/remove/prune</code> 必须通过 CommandGateway argv 命令执行，禁止直接调用 <code>spawn</code>、<code>execFile</code>、<code>exec</code>、<code>execSync</code>。</p>
+  </div>
+
+  <h2>建议修复项处理</h2>
+  <ul>
+    <li>已在 Task 7 增加 provider capability check；无法证明 sandbox/approval/tool allow-deny 映射的真实 AgentAdapter 必须拒绝真实执行。</li>
+    <li>已在 Scope Decisions 中说明 Schema Gate、PR 创建和 <code>&lt;date&gt;</code> 文件名模板变量。</li>
+    <li>已在 HTML 审阅版增加“执行细节索引”。</li>
+  </ul>
+
+  <h2>复查结论</h2>
+  <div class="status">
+    <p>必须修复项已处理。当前计划可以作为 Donkey V2 重构执行基线。</p>
+  </div>
+  <ol>
+    <li>以新三阶段计划替代旧 Phase 1 plan 作为主执行计划。</li>
+    <li>从阶段一 Task 1 开始执行；阶段一不允许跳过 CommandGateway、WorktreeManager、SQLite recovery、Gate/HumanGate。</li>
+    <li>每个 task 完成后按仓库指令启动最高思考等级 reviewer 复查。</li>
+  </ol>
+</div>
+</body>
+</html>
