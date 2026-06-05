@@ -13,6 +13,8 @@ import {
   type Node,
   nodeSchema,
   type NodeStatus,
+  type Phase,
+  phaseSchema,
   type Project,
   projectSchema,
   type RoleRun,
@@ -57,6 +59,16 @@ type WorkflowInstanceRow = {
   demand_id: string;
   status: WorkflowInstance['status'];
   current_node_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PhaseRow = {
+  id: string;
+  run_id: string;
+  name: string;
+  status: Phase['status'];
+  phase_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -136,8 +148,11 @@ export interface DonkeyRepositories {
     status: WorkflowStatus,
     currentNodeId?: string | null,
   ): Promise<WorkflowInstance | null>;
+  createPhase(phase: Phase): Promise<Phase>;
+  listPhases(runId: string): Promise<Phase[]>;
   createNode(node: Node): Promise<Node>;
   getNode(nodeId: string): Promise<Node | null>;
+  listNodes(runId: string): Promise<Node[]>;
   transitionNode(nodeId: string, status: NodeStatus): Promise<void>;
   recordGateResult(gateResult: GateResult): Promise<GateResult>;
   listGateResults(runId: string): Promise<GateResult[]>;
@@ -237,6 +252,30 @@ export function createRepositories(
       });
     },
 
+    async createPhase(input) {
+      const phase = phaseSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into phases (
+             id, run_id, name, status, phase_order, created_at, updated_at
+           ) values (
+             @id, @runId, @name, @status, @order, @createdAt, @updatedAt
+           )`,
+        ).run(phase);
+        return phase;
+      });
+    },
+
+    async listPhases(runId) {
+      return (
+        db
+          .prepare(
+            'select * from phases where run_id = ? order by phase_order, id',
+          )
+          .all(runId) as PhaseRow[]
+      ).map(mapPhase);
+    },
+
     async createNode(input) {
       const node = nodeSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -261,6 +300,19 @@ export function createRepositories(
         | NodeRow
         | undefined;
       return row ? mapNode(row) : null;
+    },
+
+    async listNodes(runId) {
+      const rows = db
+        .prepare(
+          `select n.*
+           from nodes n
+           left join phases p on p.id = n.phase_id
+           where n.run_id = ?
+           order by coalesce(p.phase_order, 999999), n.created_at, n.id`,
+        )
+        .all(runId) as NodeRow[];
+      return rows.map(mapNode);
     },
 
     async transitionNode(nodeId, status) {
@@ -550,6 +602,18 @@ function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
     demandId: row.demand_id,
     status: row.status,
     currentNodeId: row.current_node_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mapPhase(row: PhaseRow): Phase {
+  return phaseSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    name: row.name,
+    status: row.status,
+    order: row.phase_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });

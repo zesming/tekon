@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey V2 Phase 2 CLI Evidence</title>
+    <style>
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        color: #17202a;
+        line-height: 1.68;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+      h1 {
+        margin-top: 0;
+      }
+      h2 {
+        border-top: 1px solid #d8dee8;
+        padding-top: 18px;
+        margin-top: 30px;
+      }
+      code {
+        background: #eef2f7;
+        border: 1px solid #dfe6ef;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      pre {
+        overflow-x: auto;
+        background: #102033;
+        color: #f6f8fb;
+        padding: 14px 16px;
+        border-radius: 8px;
+      }
+      pre code {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Donkey V2 Phase 2 CLI Evidence</h1>
+      <p>日期：2026-06-05<br />分支：<code>rebuild-v2</code></p>
+      <h2>1. 结论</h2>
+      <p>
+        Phase 2 本地验收通过。<code>standard-feature</code> mock 模板可完成到
+        <code>passed</code> 并生成本地 artifacts；dynamic dry-run 可展示
+        constraint mutation preview；控制命令可针对 SQLite 持久化状态工作。
+      </p>
+      <h2>2. TDD 证据</h2>
+      <ul>
+        <li>
+          角色系统 RED：缺失 role loader/tool-policy/prompt-builder 模块。
+        </li>
+        <li>
+          workflow RED：缺失 loadWorkflowTemplate、状态机别名和 schema 覆盖。
+        </li>
+        <li>engine RED：缺失 createWorkflowEngine。</li>
+        <li>CLI RED：<code>not implemented: init</code>。</li>
+        <li>
+          Exit gate RED：standard-feature 暂停、dynamic dry-run 未接入、多 run
+          SQLite ID 冲突。
+        </li>
+      </ul>
+      <h2>3. 覆盖能力</h2>
+      <p>
+        覆盖 role system、workflow templates、constraints、durable
+        engine、dynamic workflow 和 CLI 命令集。
+      </p>
+      <h2>4. 验证命令</h2>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+npm exec --yes -- pnpm@10.12.1 build
+npm exec --yes -- pnpm@10.12.1 typecheck
+npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:e2e
+npm exec --yes -- prettier --check .</code></pre>
+      <p>
+        根测试 36 个 test files、118 个 tests 通过；core unit 110 个 tests
+        通过；core e2e 7 个 tests 通过；CLI e2e 端到端 flow 通过。
+      </p>
+      <h2>5. 已知限制</h2>
+      <ul>
+        <li>dynamic dry-run 当前 CLI 使用 deterministic mock PM draft。</li>
+        <li><code>clean</code> 保留 run artifacts 和 audit evidence。</li>
+        <li>真实 push、PR 创建、Web UI 和 metrics 属于 Phase 3。</li>
+      </ul>
+    </main>
+  </body>
+</html>

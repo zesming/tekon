@@ -24,5 +24,8 @@ export * from './role/tool-policy.js';
 export * from './role/prompt-builder.js';
 export * from './workflow/template.js';
 export * from './workflow/state-machine.js';
+export * from './workflow/scheduler.js';
+export * from './workflow/engine.js';
+export * from './workflow/dynamic.js';
 export * from './constraint/validator.js';
 export type { WorkflowTemplate } from './workflow/template.js';

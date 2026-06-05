@@ -79,8 +79,6 @@ phases:
         outputs:
           - review:review-report
         gates:
-          - type: human
-            requiresHumanApproval: true
           - type: schema
             artifactType: review-report
   - id: pmo

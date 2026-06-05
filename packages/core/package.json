@@ -16,7 +16,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest --exclude \"**/__manual__/**\"",
     "test:unit": "vitest --run --exclude \"**/*.e2e.test.ts\" --exclude \"**/__manual__/**\"",
-    "test:e2e": "vitest --run __tests__/runtime/worktree-manager.e2e.test.ts __tests__/phase1/kernel.e2e.test.ts",
+    "test:e2e": "vitest --run __tests__/runtime/worktree-manager.e2e.test.ts __tests__/phase1/kernel.e2e.test.ts __tests__/workflow/engine-template.e2e.test.ts __tests__/workflow/engine-recovery.e2e.test.ts __tests__/workflow/engine-gate-repair.e2e.test.ts __tests__/workflow/dynamic-constraint.e2e.test.ts",
     "smoke:claude-provider": "vitest --run __manual__/claude-code-provider.smoke.test.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit"

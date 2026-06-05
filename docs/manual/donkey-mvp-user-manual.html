@@ -96,82 +96,95 @@
       <p class="meta">
         生成日期：2026-06-05<br />
         适用分支：<code>rebuild-v2</code><br />
-        适用范围：阶段一安全可恢复内核后的仓库状态。本 HTML 为人工审阅版。
+        适用范围：阶段二本地 mock CLI 验证后的仓库状态。本 HTML 为人工审阅版。
       </p>
 
       <div class="callout">
         <p>
-          Donkey 目前不是可供普通用户直接发起需求、等待自动 PR
-          的完整产品。当前仓库只提供 <code>packages/core</code>
-          内核 API，以及围绕该内核的测试、构建和阶段性文档。
+          Donkey 当前可以通过本地 CLI 发起 mock workflow、查看状态、处理人工
+          gate、查看日志和清理 worktree。Web dashboard、真实 PR 创建、自动
+          merge、真实 LLM 生产执行和远端发布流程还未完成。
         </p>
       </div>
 
       <h2>1. 当前定位</h2>
-      <p>当前可用能力面向研发和评审人员：</p>
       <ul>
+        <li>使用 <code>donkey init</code> 初始化本地项目状态。</li>
         <li>
-          查看阶段一内核的领域模型、运行时配置、持久化、产物、审计、命令网关、worktree、Agent
-          adapter 和 Gate API。
+          使用 <code>donkey run --template standard-feature --agent mock</code>
+          跑通标准模板并生成本地 delivery package。
         </li>
         <li>
-          执行 <code>packages/core</code> 的单元测试、E2E 测试、构建和类型检查。
+          使用 <code>donkey run --dynamic --dry-run --agent mock</code>
+          查看动态 workflow 预览和约束注入结果。
         </li>
-        <li>审阅阶段计划、阶段一评估报告和发布就绪加固后的边界说明。</li>
+        <li>
+          使用 <code>status</code>、<code>pause</code>、<code
+            >resume --approve-human</code
+          >、<code>cancel</code>、<code>log</code>、<code>clean</code>
+          管理持久化运行状态。
+        </li>
+        <li>
+          使用 <code>role</code>、<code>workflow</code>、<code
+            >constraints</code
+          >
+          查看和创建本地配置。
+        </li>
       </ul>
 
       <h2>2. 用户怎么发起</h2>
-      <p>
-        当前没有普通用户入口，因此不能通过 <code>donkey run</code>、Web
-        页面或聊天入口发起 Donkey 任务。
-      </p>
-      <p>研发或评审人员可以在仓库根目录执行验证命令来检查内核状态：</p>
-      <pre><code>npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
-npm exec --yes -- pnpm@10.12.1 ignored-builds
-npm exec --yes -- pnpm@10.12.1 test -- --run
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
-npm exec --yes -- pnpm@10.12.1 build
-npm exec --yes -- pnpm@10.12.1 typecheck</code></pre>
-      <p>
-        这些命令验证的是内核包和 monorepo 工程状态，不代表已经存在产品级 CLI 或
-        Web 工作流。
-      </p>
+      <p>在仓库根目录先构建 CLI：</p>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 build</code></pre>
+      <p>在目标 Git 仓库中初始化 Donkey：</p>
+      <pre><code>node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project</code></pre>
+      <p>运行标准模板：</p>
+      <pre><code>node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重试" --template standard-feature --agent mock --repo /path/to/project</code></pre>
+      <p>查看动态 workflow dry-run：</p>
+      <pre><code>node /path/to/donkey/packages/cli/dist/index.js run --dynamic --dry-run "给支付模块加退款功能，属于高风险数据变更" --agent mock --repo /path/to/project</code></pre>
 
       <h2>3. 用户会得到什么</h2>
       <p>
-        运行验证命令后，用户会得到测试、构建或类型检查结果。结果可用于判断阶段一内核是否仍保持可构建、可测试和可审阅。
+        模板运行会在 <code>.donkey/</code> 下写入 SQLite 状态、run
+        artifacts、gate 结果和 audit events。<code>standard-feature</code> mock
+        路径会到 <code>passed</code>，<code>bugfix</code> 模板会在 reviewer
+        human gate 处暂停，等待 <code>resume --approve-human</code>。
       </p>
-      <p>当前不会得到：</p>
-      <ul>
-        <li>需求分析报告。</li>
-        <li>产品方案自动生成结果。</li>
-        <li>代码变更 PR。</li>
-        <li>Web 驾驶舱页面。</li>
-        <li>自动合入或上线结果。</li>
-      </ul>
+      <p>
+        dynamic dry-run 不创建 worktree，也不执行代码改动；它返回 workflow
+        preview 和 constraint mutation 摘要，例如 high-risk human gate 或
+        rollback-plan 注入。
+      </p>
 
       <h2>4. 如何判断结果</h2>
       <ul>
         <li>
-          <code>packages/core</code> 相关测试通过，说明阶段一内核 API
-          的既有行为仍满足测试约束。
+          <code>run</code> 输出 <code>status=passed</code> 表示本地 mock
+          模板跑完。
         </li>
-        <li><code>build</code> 通过，说明 TypeScript 输出仍可生成。</li>
-        <li><code>typecheck</code> 通过，说明类型层面没有被当前改动破坏。</li>
         <li>
-          文档中的能力边界与仓库实际文件一致，说明没有把后续阶段能力提前描述成已交付能力。
+          <code>run</code> 输出 <code>status=paused humanGate=pending</code>
+          表示等待人工 gate。
+        </li>
+        <li>
+          <code>status</code> 会显示当前 run、current node、gate 数量、artifact
+          数量和 pending human decisions。
+        </li>
+        <li>
+          <code>log</code> 会显示 audit event，包括
+          <code>run.started</code
+          >、<code>human.gate.pending</code>、<code>human.gate.approved</code>。
+        </li>
+        <li>
+          本地验收以
+          <code>npm exec --yes -- pnpm@10.12.1 test -- --run</code
+          >、<code>build</code>、<code>typecheck</code> 和
+          <code>prettier --check .</code> 通过为准。
         </li>
       </ul>
-      <p>
-        若命令失败，应先把失败视为当前内核或工程配置的真实风险，而不是用户操作错误。
-      </p>
 
       <h2>5. 当前不能做什么</h2>
       <div class="callout risk">
         <ul>
-          <li>不能通过 CLI 创建 Donkey run。</li>
           <li>不能通过 Web 查看项目、产物、Gate 或审计。</li>
           <li>不能自动创建、推送、合入 PR。</li>
           <li>不能替代人类完成上线审批或高风险动作。</li>
@@ -185,14 +198,9 @@ npm exec --yes -- pnpm@10.12.1 typecheck</code></pre>
 
       <h2>6. 配置与工具链说明</h2>
       <p>
-        根 <code>test</code> 脚本保持为 <code>vitest</code>。Vitest 已迁移到根
-        <code>vitest.config.ts</code> 的 <code>test.projects</code>，不再使用旧
-        workspace 配置文件。
-      </p>
-      <p>
-        <code>packages/core</code>
-        仍是当前唯一代码包。后续
-        CLI、Web、交付和产品化入口需要在后续阶段单独实现、测试和审阅。
+        当前代码包包括 <code>packages/core</code> 和
+        <code>packages/cli</code>。Web、交付和产品化入口需要在 Phase 3
+        单独实现、测试和审阅。
       </p>
     </main>
   </body>

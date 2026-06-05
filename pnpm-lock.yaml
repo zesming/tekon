@@ -17,6 +17,19 @@ importers:
         specifier: ^3.2.1
         version: 3.2.6(@types/node@25.9.1)(yaml@2.9.0)
 
+  packages/cli:
+    dependencies:
+      '@donkey/core':
+        specifier: workspace:*
+        version: link:../core
+      yaml:
+        specifier: ^2.8.1
+        version: 2.9.0
+    devDependencies:
+      '@types/node':
+        specifier: ^25.9.1
+        version: 25.9.1
+
   packages/core:
     dependencies:
       better-sqlite3:

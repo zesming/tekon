@@ -4,9 +4,11 @@ import {
   DONKEY_CORE_VERSION,
   buildRolePrompt,
   compileRoleToolPolicy,
+  generateDynamicWorkflow,
   loadWorkflowTemplate,
   loadRole,
   parseWorkflowTemplate,
+  saveDynamicTemplate,
   validateWorkflowConstraints,
 } from '../src/index.js';
 
@@ -24,6 +26,8 @@ describe('@donkey/core', () => {
   it('exports phase 2 workflow and constraint APIs', () => {
     expect(parseWorkflowTemplate).toBeTypeOf('function');
     expect(loadWorkflowTemplate).toBeTypeOf('function');
+    expect(generateDynamicWorkflow).toBeTypeOf('function');
+    expect(saveDynamicTemplate).toBeTypeOf('function');
     expect(validateWorkflowConstraints).toBeTypeOf('function');
   });
 });

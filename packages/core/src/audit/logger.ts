@@ -22,13 +22,15 @@ export function createAuditLogger(options: {
     async append(input) {
       const events = await options.repositories.listAuditEvents(input.runId);
       const prevHash = events.at(-1)?.hash ?? null;
+      const createdAt =
+        input.createdAt ?? nextMonotonicTimestamp(events.at(-1)?.createdAt);
       const eventWithoutHash = {
         id: `event_${randomUUID()}`,
         runId: input.runId,
         type: input.type,
         payload: input.payload,
         prevHash,
-        createdAt: input.createdAt ?? new Date().toISOString(),
+        createdAt,
       };
       const event: AuditEvent = {
         ...eventWithoutHash,
@@ -65,6 +67,16 @@ export function createAuditLogger(options: {
       return { valid: true };
     },
   };
+}
+
+function nextMonotonicTimestamp(previous?: string): string {
+  const now = Date.now();
+  if (!previous) {
+    return new Date(now).toISOString();
+  }
+
+  const previousMs = Date.parse(previous);
+  return new Date(Math.max(now, previousMs + 1)).toISOString();
 }
 
 function hashEvent(event: Omit<AuditEvent, 'hash'>): string {

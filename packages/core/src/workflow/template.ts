@@ -42,6 +42,8 @@ export interface WorkflowGateConfig {
   maxRetries: number;
   timeoutMs?: number;
   retryPolicy: WorkflowRetryPolicy;
+  autoFix?: boolean;
+  onExhausted?: 'block' | 'pause' | 'fail';
 }
 
 export interface WorkflowTemplateNode {
@@ -98,6 +100,8 @@ const rawGateSchema = z
     requiresHumanApproval: z.boolean().optional(),
     maxRetries: z.number().int().min(0).optional(),
     timeoutMs: z.number().int().positive().optional(),
+    autoFix: z.boolean().optional(),
+    onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
     retry: workflowRetryPolicySchema.optional(),
     retryPolicy: workflowRetryPolicySchema.optional(),
   })
@@ -328,6 +332,8 @@ function normalizeGate(
       retryPolicy.maxRetries ??
       Math.max(0, (retryPolicy.maxAttempts ?? 1) - 1),
     ...(rawGate.timeoutMs ? { timeoutMs: rawGate.timeoutMs } : {}),
+    ...(rawGate.autoFix !== undefined ? { autoFix: rawGate.autoFix } : {}),
+    onExhausted: rawGate.onExhausted ?? retryPolicy.onExhausted ?? 'block',
     retryPolicy: normalizeRetryPolicy(retryPolicy),
   };
 }
