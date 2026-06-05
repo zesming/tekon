@@ -41,6 +41,8 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByRole('heading', { name: '角色' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
+    await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
+    await expect(page.getByText('Hash chain: valid')).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('release approval');

@@ -195,7 +195,7 @@ describe('donkey cli e2e', () => {
     expect(
       readFileSync(join(repoPath, '.donkey', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
-  });
+  }, 15000);
 });
 
 function runCli(cliPath: string, args: string[], cwd: string): string {

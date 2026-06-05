@@ -162,7 +162,7 @@
             >packages/cli</code
           >
           提供本地命令入口和 TUI；<code>packages/web</code>
-          提供本地只读优先、受控写操作的 Next.js 驾驶舱。
+          提供本地只读优先、受控写操作的 Node HTTP + Vite React 驾驶舱。
         </p>
         <p>
           <strong>发布就绪说明：</strong>Vitest 已迁移到根
@@ -305,16 +305,26 @@
           </tr>
           <tr>
             <td>
-              <a href="https://trpc.io/docs/client/nextjs/app-router-setup"
-                >tRPC Next.js App Router 文档</a
-              >
+              <a href="https://vite.dev/guide/build">Vite build 文档</a> /
+              <a href="https://vite.dev/config/build-options">build options</a>
             </td>
             <td>
-              tRPC 在 App Router 下通过初始化 router/procedure 暴露端到端类型
-              API。
+              <code>vite build</code> 面向生产构建，默认输出目录为
+              <code>dist</code>。
             </td>
             <td>
-              Web 只通过 core API 和 tRPC 读写 SQLite 状态，避免复制业务逻辑。
+              本地 Web 驾驶舱第一版采用 Vite React；发布验收以
+              <code>packages/web/dist</code> 为 Web build 产物。
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <a href="https://nodejs.org/api/http.html">Node.js HTTP 文档</a>
+            </td>
+            <td>Node 内置 HTTP 模块可创建本地 HTTP server。</td>
+            <td>
+              Web 写操作需要本地 session token gate；第一版用轻量 Node HTTP/RPC
+              层直接调用 core API，降低 MVP 复杂度。
             </td>
           </tr>
           <tr>
@@ -497,9 +507,9 @@ pnpm --filter @donkey/cli test:e2e -- --run</code></pre>
           >、dry-run 和 human approval。
         </div>
         <div class="task">
-          <strong>Task 17: Web API and Project Context</strong><br />实现 tRPC
-          routers；Web 必须读取显式 <code>DONKEY_PROJECT_ROOT</code> 或 CLI
-          配置，不能默认假设 <code>.</code>。
+          <strong>Task 17: Web API and Project Context</strong><br />实现本地
+          RPC procedures；Web 必须读取显式 <code>DONKEY_PROJECT_ROOT</code> 或
+          CLI 配置，不能默认假设 <code>.</code>。
         </div>
         <div class="task">
           <strong>Task 18: Web Dashboard UI</strong

@@ -52,14 +52,14 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 │                                                               │
 │  ┌─────────────┐  ┌──────────────────────────────────────┐   │
 │  │   CLI       │  │         Web Dashboard                 │   │
-│  │ (Commander  │  │   (Next.js + tRPC + shadcn/ui)       │   │
+│  │ (Commander  │  │   (Node HTTP + Vite React)           │   │
 │  │  + ink)     │  │                                       │   │
 │  └──────┬──────┘  └────────────────┬─────────────────────┘   │
 │         │                          │                          │
 │         └──────────┬───────────────┘                          │
 │                    │                                          │
 │         ┌──────────▼──────────────┐                           │
-│         │      Core API           │  ← tRPC router            │
+│         │      Core API           │  ← local HTTP/RPC         │
 │         │  (packages/core)        │     CLI 直接调用函数      │
 │         │                         │     Web 通过 HTTP          │
 │         │  ┌───────────────────┐  │                           │
@@ -99,16 +99,16 @@ Donkey V2 是一个面向技术基建团队的 AI 自动交付系统。用户提
 
 ### 2.2 技术栈
 
-| 层             | 选择                       | 理由                                             |
-| -------------- | -------------------------- | ------------------------------------------------ |
-| **语言**       | TypeScript                 | AI Coding 友好度最高；Claude Code/Codex 生态原生 |
-| **Monorepo**   | pnpm workspaces + tsup     | 最简 monorepo 方案，tsup 打包快                  |
-| **Core**       | TypeScript 纯逻辑          | CLI 和 Web 共享                                  |
-| **CLI**        | Commander.js + ink         | Commander 生态最大；ink = React 渲染终端 UI      |
-| **Web**        | Next.js + shadcn/ui + tRPC | 端到端类型安全；Multica 同款栈                   |
-| **数据库**     | SQLite (`better-sqlite3`)  | 零依赖，同步 API，单机场景最优                   |
-| **测试**       | Vitest + Playwright        | 单测到 E2E 全覆盖                                |
-| **Agent 隔离** | Git Worktree               | Codex/CC 原生支持，Agent 间互不干扰              |
+| 层             | 选择                      | 理由                                                  |
+| -------------- | ------------------------- | ----------------------------------------------------- |
+| **语言**       | TypeScript                | AI Coding 友好度最高；Claude Code/Codex 生态原生      |
+| **Monorepo**   | pnpm workspaces + tsup    | 最简 monorepo 方案，tsup 打包快                       |
+| **Core**       | TypeScript 纯逻辑         | CLI 和 Web 共享                                       |
+| **CLI**        | Commander.js + ink        | Commander 生态最大；ink = React 渲染终端 UI           |
+| **Web**        | Node HTTP + Vite React    | 本地驾驶舱第一版优先降低复杂度；构建产物明确为 `dist` |
+| **数据库**     | SQLite (`better-sqlite3`) | 零依赖，同步 API，单机场景最优                        |
+| **测试**       | Vitest + Playwright       | 单测到 E2E 全覆盖                                     |
+| **Agent 隔离** | Git Worktree              | Codex/CC 原生支持，Agent 间互不干扰                   |
 
 ### 2.3 为什么用 TypeScript
 
@@ -1196,7 +1196,7 @@ Risk: low · Agent: claude-code
 
 ### 10.1 技术栈
 
-Next.js + shadcn/ui + tRPC（共享 core types）。React Query 做缓存层，SQLite 是单一真相源。
+当前 rebuild-v2 第一版使用 Node HTTP + Vite React（共享 core types），SQLite 是单一真相源，写操作通过本地 session token gate 控制。Next.js + tRPC 可作为后续远程多路由/多租户 Web 的演进方向，不作为本地 MVP 的阻塞验收项。
 
 ### 10.2 页面结构
 

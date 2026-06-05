@@ -41,6 +41,19 @@ test.describe('Donkey dashboard', () => {
       page.getByRole('heading', { name: '待人工审批' }),
     ).toBeVisible();
     await expect(page.getByText('decision_1')).toBeVisible();
+    await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
+    await expect(
+      page.getByText('donkey run --template standard-feature --agent mock', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByText('Hash chain: valid')).toBeVisible();
+
+    await page.getByLabel('Audit node filter').fill('node_1');
+    await page.getByLabel('Audit gate filter').fill('gate_1');
+    await page.getByLabel('Audit role filter').fill('reviewer');
+    await page.getByRole('button', { name: '筛选审计' }).click();
+    await expect(page.getByText('human.decision.pending node_1')).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('approved from dashboard');

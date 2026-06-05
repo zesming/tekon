@@ -9,9 +9,9 @@
 - actionlint workflow validation。
 - README 和当前 MVP 边界手册。
 - Phase 2 角色文件系统、内置 `pm/rd/qa/reviewer/pmo` 角色、workflow 模板、constraint validator、dynamic workflow dry-run 和 durable workflow engine。
-- `@donkey/cli` 本地 CLI 包，支持 `init/run/status/pause/resume/cancel/role/workflow/constraints/log/clean` 的 mock 验证路径。
+- `@donkey/cli` 本地 CLI 包，支持 `init/run/status/pause/resume/cancel/role/workflow/constraints/log/clean` 的 mock 验证路径；`run --allow-dirty-base` 可显式允许基于本地 dirty base 执行。
 - Phase 2 CLI evidence 和 review HTML 审阅文档。
-- Phase 3 SCM delivery dry-run、delivery evidence、metrics/report、Web dashboard、Web human approval、release-flow e2e 和 coverage provider。
+- Phase 3 SCM delivery dry-run、delivery evidence、metrics/report、Web dashboard、Web human approval、audit hash/filter、release-flow e2e 和 coverage provider。
 - Phase 3 V2 用户手册、dogfooding report、final acceptance report 及对应 HTML 审阅版。
 - README 更新 Phase 3 本地验收边界，并链接 V2 manual、dogfooding report 和 final acceptance report。
 
@@ -21,6 +21,7 @@
 - 建立 `.prettierrc.json`，让全仓 `prettier --check .` 成为可执行的发布 gate。
 - `@donkey/core test:e2e` 覆盖 workflow engine、recovery、gate repair 和 dynamic constraint e2e。
 - 发布说明从 Phase 2 本地 mock CLI 基线更新为 Phase 3 本地验收通过，不把真实 PR、自动 merge 或生产级真实 LLM workflow 写成已完成能力。
+- Web 技术基线从计划中的 Next/tRPC 降级为本地 Node HTTP + Vite React dashboard，验收产物为 `packages/web/dist`；保留后续升级到远程多路由 Web 的空间。
 
 ### 修复
 

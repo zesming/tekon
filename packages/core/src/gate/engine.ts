@@ -63,6 +63,7 @@ export function createGateEngine(options: {
           runId: input.runId,
           nodeId: input.nodeId,
           gateResultId: result.id,
+          note: formatHumanGateContext(input.gate, result),
         });
         return result;
       } else {
@@ -86,6 +87,19 @@ export function createGateEngine(options: {
       });
     },
   };
+}
+
+function formatHumanGateContext(gate: GateConfig, result: GateResult): string {
+  return [
+    'request: Human approval is required before this node can continue.',
+    `gate: ${result.id} ${gate.type} ${result.status}`,
+    `exactCommand: ${gate.command ? formatCommand(gate.command) : 'not_applicable'}`,
+    `risk: ${gate.type === 'human' ? 'human-control' : 'normal'}`,
+  ].join('\n');
+}
+
+function formatCommand(command: NonNullable<GateConfig['command']>): string {
+  return [command.tool, ...(command.args ?? [])].join(' ').trim();
 }
 
 function isCommandGate(

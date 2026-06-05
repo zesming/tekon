@@ -44,13 +44,35 @@ type Decision = {
   status: string;
   note: string | null;
   actor: string | null;
+  context: {
+    request: string;
+    exactCommand: string;
+    riskLabel: string;
+    nodeRole: string | null;
+    gate: {
+      id: string;
+      type: string;
+      status: string;
+      nodeId: string;
+      outputPath: string | null;
+      failureClassification: string | null;
+    } | null;
+  };
 };
 
 type AuditEvent = {
   id: string;
   type: string;
   createdAt: string;
+  nodeId: string | null;
+  gateId: string | null;
+  role: string | null;
+  hash: string;
 };
+
+type AuditVerification =
+  | { valid: true }
+  | { valid: false; brokenEventId: string };
 
 type RoleInfo = {
   id: string;
@@ -68,10 +90,15 @@ function App() {
   const [gates, setGates] = useState<Gate[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [auditVerification, setAuditVerification] =
+    useState<AuditVerification | null>(null);
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
   const [token, setToken] = useState('');
   const [note, setNote] = useState('');
+  const [auditNodeFilter, setAuditNodeFilter] = useState('');
+  const [auditGateFilter, setAuditGateFilter] = useState('');
+  const [auditRoleFilter, setAuditRoleFilter] = useState('');
   const [message, setMessage] = useState('');
 
   const runId = overview?.latestRun?.id;
@@ -104,6 +131,7 @@ function App() {
       setGates([]);
       setDecisions([]);
       setAudit([]);
+      setAuditVerification(null);
       return;
     }
 
@@ -112,11 +140,20 @@ function App() {
       rpc<{ gates: Gate[]; pendingDecisions: Decision[] }>('gate.list', {
         runId: latestRunId,
       }),
-      rpc<{ events: AuditEvent[] }>('audit.list', { runId: latestRunId }),
+      rpc<{ verification: AuditVerification; events: AuditEvent[] }>(
+        'audit.list',
+        {
+          runId: latestRunId,
+          nodeId: auditNodeFilter || undefined,
+          gateId: auditGateFilter || undefined,
+          role: auditRoleFilter || undefined,
+        },
+      ),
     ]);
     setArtifacts(artifactResult.artifacts);
     setGates(gateResult.gates);
     setDecisions(gateResult.pendingDecisions);
+    setAuditVerification(auditResult.verification);
     setAudit(auditResult.events);
   }
 
@@ -174,8 +211,23 @@ function App() {
           <div className="approval-grid">
             <div>
               <p className="mono">{pendingDecision.id}</p>
-              <p>{pendingDecision.note}</p>
-              <p>gate: {pendingDecision.gateResultId}</p>
+              <p className="risk-label">
+                risk: {pendingDecision.context.riskLabel}
+              </p>
+              <dl className="context-list">
+                <dt>exact command</dt>
+                <dd className="mono">{pendingDecision.context.exactCommand}</dd>
+                <dt>gate context</dt>
+                <dd>
+                  {pendingDecision.context.gate
+                    ? `${pendingDecision.context.gate.id} ${pendingDecision.context.gate.type} ${pendingDecision.context.gate.status}`
+                    : 'not linked'}
+                </dd>
+                <dt>request context</dt>
+                <dd>{pendingDecision.context.request}</dd>
+                <dt>role</dt>
+                <dd>{pendingDecision.context.nodeRole ?? 'unknown'}</dd>
+              </dl>
             </div>
             <label>
               Session token
@@ -229,11 +281,46 @@ function App() {
           ))}
         </Panel>
         <Panel title="审计">
+          <div className="audit-filter">
+            <label>
+              node
+              <input
+                aria-label="Audit node filter"
+                value={auditNodeFilter}
+                onChange={(event) => setAuditNodeFilter(event.target.value)}
+              />
+            </label>
+            <label>
+              gate
+              <input
+                aria-label="Audit gate filter"
+                value={auditGateFilter}
+                onChange={(event) => setAuditGateFilter(event.target.value)}
+              />
+            </label>
+            <label>
+              role
+              <input
+                aria-label="Audit role filter"
+                value={auditRoleFilter}
+                onChange={(event) => setAuditRoleFilter(event.target.value)}
+              />
+            </label>
+            <button onClick={() => void loadDashboard()}>筛选审计</button>
+          </div>
+          <p className="status-line">
+            Hash chain:{' '}
+            {auditVerification
+              ? auditVerification.valid
+                ? 'valid'
+                : `broken at ${auditVerification.brokenEventId}`
+              : 'loading'}
+          </p>
           {audit.map((event) => (
             <Row
               key={event.id}
-              primary={event.type}
-              secondary={event.createdAt}
+              primary={`${event.type} ${event.nodeId ?? ''}`.trim()}
+              secondary={`gate=${event.gateId ?? 'none'} role=${event.role ?? 'none'} hash=${event.hash.slice(0, 12)} ${event.createdAt}`}
             />
           ))}
         </Panel>

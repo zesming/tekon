@@ -49,6 +49,14 @@ node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重
 
 按 Phase 2 证据，`standard-feature` mock 路径可完成到 `passed` 并生成本地 artifacts。命令输出包含 `runId`、`status` 和 `humanGate` 状态。
 
+默认情况下，模板运行会检查 Git 工作区并拒绝实际业务文件已有本地改动的 dirty base，`.donkey/` 运行态目录不计入阻断。若你确认要基于当前未提交改动执行，可显式追加：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重试" --template standard-feature --agent mock --allow-dirty-base --repo /path/to/project
+```
+
+`--allow-dirty-base` 应作为人工确认动作使用；它不等于把本地改动提交、审阅或发布。
+
 ### 动态 workflow dry-run
 
 ```bash
@@ -125,11 +133,13 @@ DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @do
 
 Web 写操作依赖 `init` 生成的 `.donkey/web-session.json` session token。没有 token 或 token 错误时，approve/reject、pause/resume/cancel/clean 会被拒绝。
 
+Pending human gate 会展示 request context、gate context、exact command 和 risk label；audit 视图会展示 hash chain 校验状态，并支持按 node、gate、role 过滤。
+
 Web 审阅至少需要记录：
 
 - 本地启动命令和 `DONKEY_PROJECT_ROOT` 或等价项目根配置。
-- pending human gate 的 approve 或 reject 操作结果。
-- Artifact、audit hash、roles、workflows 页面是否可读。
+- pending human gate 的 approve 或 reject 操作结果，以及 command/gate/request/risk 上下文是否符合预期。
+- Artifact、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 
 ## 9. 角色 roles

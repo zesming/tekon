@@ -109,6 +109,32 @@ textarea {
   align-items: start;
 }
 
+.risk-label {
+  display: inline-block;
+  margin: 8px 0;
+  padding: 3px 8px;
+  border: 1px solid #aeb8c6;
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.context-list {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 10px 0 0;
+}
+
+.context-list dt {
+  color: #5b6472;
+  font-weight: 700;
+}
+
+.context-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -168,6 +194,13 @@ button.secondary {
   margin-top: 12px;
 }
 
+.audit-filter {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 8px;
+  align-items: end;
+}
+
 .row {
   display: grid;
   gap: 4px;
@@ -189,7 +222,9 @@ button.secondary {
 
   .topbar,
   .approval-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .audit-filter,
+  .context-list {
     grid-template-columns: 1fr;
     display: grid;
   }

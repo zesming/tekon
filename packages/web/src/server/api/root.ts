@@ -16,8 +16,6 @@ import {
 } from '../project-context.js';
 import { ApiError } from './errors.js';
 
-type JsonRecord = Record<string, unknown>;
-
 interface ProjectRow {
   id: string;
   name: string;
@@ -47,6 +45,18 @@ interface GateRow {
   fix_attempt_id: string | null;
   failure_classification: string | null;
   created_at: string;
+}
+
+interface NodeRow {
+  id: string;
+  run_id: string;
+  phase_id: string | null;
+  role: string;
+  status: string;
+  gates: string;
+  dependencies: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ArtifactRow {
@@ -124,9 +134,14 @@ export interface ApiCaller {
     ): Promise<{ decision: ReturnType<typeof mapHumanDecision> }>;
   };
   audit: {
-    list(input: { runId: string }): Promise<{
+    list(input: {
+      runId: string;
+      nodeId?: string;
+      gateId?: string;
+      role?: string;
+    }): Promise<{
       verification: { valid: true } | { valid: false; brokenEventId: string };
-      events: JsonRecord[];
+      events: ReturnType<typeof mapAuditEvent>[];
     }>;
   };
   role: {
@@ -255,7 +270,7 @@ export async function createApiCaller(
           gates: listGates(db, gateInput.runId).map(mapGate),
           pendingDecisions: listHumanDecisions(db, gateInput.runId)
             .filter((decision) => decision.status === 'pending')
-            .map(mapHumanDecision),
+            .map((decision) => mapHumanDecision(db, decision)),
         };
       },
 
@@ -286,9 +301,14 @@ export async function createApiCaller(
       async list(auditInput) {
         assertRunInScope(db, context, auditInput.runId);
         const events = await repositories.listAuditEvents(auditInput.runId);
+        const nodeById = new Map(
+          listNodes(db, auditInput.runId).map((node) => [node.id, node]),
+        );
         return {
           verification: await audit.verify(auditInput.runId),
-          events,
+          events: events
+            .map((event) => mapAuditEvent(event, nodeById))
+            .filter((event) => matchesAuditFilters(event, auditInput)),
         };
       },
     },
@@ -420,6 +440,31 @@ function listGates(db: DonkeyDatabase, runId: string): GateRow[] {
     .all(runId) as GateRow[];
 }
 
+function getGate(db: DonkeyDatabase, gateId: string | null): GateRow | null {
+  if (!gateId) {
+    return null;
+  }
+  return (
+    (db.prepare('select * from gate_results where id = ?').get(gateId) as
+      | GateRow
+      | undefined) ?? null
+  );
+}
+
+function listNodes(db: DonkeyDatabase, runId: string): NodeRow[] {
+  return db
+    .prepare('select * from nodes where run_id = ? order by created_at, id')
+    .all(runId) as NodeRow[];
+}
+
+function getNode(db: DonkeyDatabase, nodeId: string): NodeRow | null {
+  return (
+    (db.prepare('select * from nodes where id = ?').get(nodeId) as
+      | NodeRow
+      | undefined) ?? null
+  );
+}
+
 function listHumanDecisions(
   db: DonkeyDatabase,
   runId: string,
@@ -499,7 +544,7 @@ async function updateDecision(input: {
     existing.node_id,
   );
 
-  return { decision: mapHumanDecisionRow(decision) };
+  return { decision: mapHumanDecisionRow(input.db, decision) };
 }
 
 function assertSessionToken(
@@ -627,7 +672,58 @@ function mapGate(gate: GateRow) {
   };
 }
 
-function mapHumanDecision(decision: HumanDecisionRow) {
+function mapAuditEvent(
+  event: {
+    id: string;
+    runId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    prevHash?: string | null;
+    hash: string;
+    createdAt: string;
+  },
+  nodeById: Map<string, NodeRow>,
+) {
+  const nodeId = stringValue(event.payload.nodeId);
+  const gateId =
+    stringValue(event.payload.gateResultId) ??
+    stringValue(event.payload.gateId);
+  const role =
+    stringValue(event.payload.role) ??
+    (nodeId ? (nodeById.get(nodeId)?.role ?? null) : null);
+  return {
+    id: event.id,
+    runId: event.runId,
+    type: event.type,
+    payload: event.payload,
+    nodeId,
+    gateId,
+    role,
+    prevHash: event.prevHash ?? null,
+    hash: event.hash,
+    createdAt: event.createdAt,
+  };
+}
+
+function matchesAuditFilters(
+  event: ReturnType<typeof mapAuditEvent>,
+  filters: { nodeId?: string; gateId?: string; role?: string },
+) {
+  if (filters.nodeId && event.nodeId !== filters.nodeId) {
+    return false;
+  }
+  if (filters.gateId && event.gateId !== filters.gateId) {
+    return false;
+  }
+  if (filters.role && event.role !== filters.role) {
+    return false;
+  }
+  return true;
+}
+
+function mapHumanDecision(db: DonkeyDatabase, decision: HumanDecisionRow) {
+  const gate = getGate(db, decision.gate_result_id);
+  const node = getNode(db, decision.node_id);
   return {
     id: decision.id,
     runId: decision.run_id,
@@ -638,21 +734,40 @@ function mapHumanDecision(decision: HumanDecisionRow) {
     note: decision.note,
     createdAt: decision.created_at,
     decidedAt: decision.decided_at,
+    context: {
+      request: decision.note ?? 'No request context recorded.',
+      exactCommand: extractExactCommand(decision.note),
+      riskLabel: deriveRiskLabel(decision.note, gate),
+      nodeRole: node?.role ?? null,
+      gate: gate
+        ? {
+            id: gate.id,
+            type: gate.gate_type,
+            status: gate.status,
+            nodeId: gate.node_id,
+            outputPath: gate.output_path,
+            failureClassification: gate.failure_classification,
+          }
+        : null,
+    },
   };
 }
 
-function mapHumanDecisionRow(decision: {
-  id: string;
-  runId: string;
-  nodeId: string;
-  gateResultId?: string | null;
-  status: string;
-  actor?: string | null;
-  note?: string | null;
-  createdAt: string;
-  decidedAt?: string | null;
-}) {
-  return {
+function mapHumanDecisionRow(
+  db: DonkeyDatabase,
+  decision: {
+    id: string;
+    runId: string;
+    nodeId: string;
+    gateResultId?: string | null;
+    status: string;
+    actor?: string | null;
+    note?: string | null;
+    createdAt: string;
+    decidedAt?: string | null;
+  },
+) {
+  const row = {
     id: decision.id,
     runId: decision.runId,
     nodeId: decision.nodeId,
@@ -663,4 +778,48 @@ function mapHumanDecisionRow(decision: {
     createdAt: decision.createdAt,
     decidedAt: decision.decidedAt ?? null,
   };
+  return mapHumanDecision(db, {
+    id: row.id,
+    run_id: row.runId,
+    node_id: row.nodeId,
+    gate_result_id: row.gateResultId,
+    status: row.status,
+    actor: row.actor,
+    note: row.note,
+    created_at: row.createdAt,
+    decided_at: row.decidedAt,
+  });
+}
+
+function extractExactCommand(note?: string | null): string {
+  if (!note) {
+    return 'not recorded';
+  }
+  const commandLine = /(?:exactCommand|command):\s*([^\n]+)/iu.exec(note);
+  if (commandLine?.[1]) {
+    return commandLine[1].trim();
+  }
+  const approvalLine = /Command requires approval:\s*([^\n]+)/iu.exec(note);
+  if (approvalLine?.[1]) {
+    return approvalLine[1].trim();
+  }
+  return 'not recorded';
+}
+
+function deriveRiskLabel(note: string | null, gate: GateRow | null): string {
+  const riskLine = /risk:\s*([a-z-]+)/iu.exec(note ?? '');
+  if (riskLine?.[1]) {
+    return riskLine[1].toLowerCase();
+  }
+  if (gate?.gate_type === 'human') {
+    return 'human-control';
+  }
+  if (gate?.failure_classification) {
+    return gate.failure_classification;
+  }
+  return 'normal';
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }

@@ -22,19 +22,19 @@ export async function createWebFixtureProject(
   const projectRoot = mkFixtureRoot();
   const donkeyDir = join(projectRoot, '.donkey');
   mkdirSync(donkeyDir, { recursive: true });
-  mkdirSync(join(projectRoot, 'roles', 'rd'), { recursive: true });
-  mkdirSync(join(projectRoot, 'workflows'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'roles', 'rd'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
 
   writeFileSync(
-    join(projectRoot, 'roles', 'rd', 'agent.yaml'),
+    join(donkeyDir, 'roles', 'rd', 'agent.yaml'),
     'role: rd\nname: RD\n',
   );
   writeFileSync(
-    join(projectRoot, 'roles', 'rd', 'system.md'),
+    join(donkeyDir, 'roles', 'rd', 'system.md'),
     'Implement scoped code changes.',
   );
   writeFileSync(
-    join(projectRoot, 'workflows', 'standard-feature.yaml'),
+    join(donkeyDir, 'workflows', 'standard-feature.yaml'),
     [
       'id: standard-feature',
       'name: Standard Feature',
@@ -120,7 +120,12 @@ export async function createWebFixtureProject(
     nodeId: 'node_1',
     gateResultId: 'gate_1',
     status: 'pending',
-    note: 'Review human gate context before continuing.',
+    note: [
+      'request: Review human gate context before continuing.',
+      'gate: gate_1 human blocked',
+      'exactCommand: donkey run --template standard-feature --agent mock',
+      'risk: high',
+    ].join('\n'),
     createdAt: '2026-06-05T00:00:02.000Z',
   });
   await repositories.recordArtifact({
@@ -148,7 +153,12 @@ export async function createWebFixtureProject(
   await audit.append({
     runId: 'run_1',
     type: 'human.decision.pending',
-    payload: { decisionId: 'decision_1', gateResultId: 'gate_1' },
+    payload: {
+      decisionId: 'decision_1',
+      gateResultId: 'gate_1',
+      nodeId: 'node_1',
+      role: 'reviewer',
+    },
     createdAt: '2026-06-05T00:00:04.000Z',
   });
 

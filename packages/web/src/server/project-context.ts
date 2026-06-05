@@ -38,8 +38,8 @@ export function createProjectContext(
     dataDir,
     dbPath: join(dataDir, 'donkey.sqlite'),
     sessionPath: join(dataDir, 'web-session.json'),
-    rolesDir: join(projectRoot, 'roles'),
-    workflowsDir: join(projectRoot, 'workflows'),
+    rolesDir: join(dataDir, 'roles'),
+    workflowsDir: join(dataDir, 'workflows'),
   };
 }
 

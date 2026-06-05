@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   cpSync,
@@ -151,6 +152,7 @@ async function commandRun(argv: string[], io: CliIO) {
       agent: { type: 'string' },
       dynamic: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
+      'allow-dirty-base': { type: 'boolean', default: false },
       'save-as': { type: 'string' },
     },
     allowPositionals: true,
@@ -161,6 +163,7 @@ async function commandRun(argv: string[], io: CliIO) {
   }
   const repoPath = resolve(args.values.repo ?? process.cwd());
   ensureInitialized(repoPath);
+  const allowDirtyBase = Boolean(args.values['allow-dirty-base']);
 
   if (args.values.dynamic) {
     if (!args.values['dry-run']) {
@@ -187,6 +190,8 @@ async function commandRun(argv: string[], io: CliIO) {
     );
     return;
   }
+
+  assertCleanBase(repoPath, allowDirtyBase);
 
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
@@ -647,6 +652,23 @@ function openProjectDb(repoPath: string) {
 function ensureInitialized(repoPath: string) {
   if (!existsSync(join(repoPath, '.donkey', 'config.yaml'))) {
     throw new Error(`not initialized: ${repoPath}`);
+  }
+}
+
+function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
+  const status = execFileSync('git', ['status', '--porcelain'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  const meaningfulDirtyLines = status
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0)
+    .filter((line) => !line.startsWith('?? .donkey/'));
+
+  if (meaningfulDirtyLines.length > 0 && !allowDirtyBase) {
+    throw new Error(
+      'dirty base worktree requires --allow-dirty-base before donkey run',
+    );
   }
 }
 

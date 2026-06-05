@@ -1,5 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -148,6 +154,59 @@ describe('runCli in-process', () => {
       await expect(runCli(argv, io)).resolves.toBe(0);
       expect(io.takeStdout().length).toBeGreaterThan(0);
     }
+  });
+
+  it('requires --allow-dirty-base before running on tracked local changes', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      readFileSync(join(repoPath, 'package.json'), 'utf8').replace(
+        '"name":',
+        '"description": "dirty fixture",\n  "name":',
+      ),
+      'utf8',
+    );
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '带本地改动的任务',
+          '--template',
+          'standard-feature',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain(
+      'dirty base worktree requires --allow-dirty-base',
+    );
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '显式允许本地改动的任务',
+          '--template',
+          'standard-feature',
+          '--agent',
+          'mock',
+          '--allow-dirty-base',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('status=passed');
   });
 });
 

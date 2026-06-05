@@ -4,9 +4,9 @@
 
 **Goal:** 在三个阶段内实现 Donkey V2 技术方案中的核心能力：安全可恢复的 Agent 执行内核、角色化 Workflow 编排、动态 Workflow、硬 Gate、Artifact/Audit、CLI/Web 驾驶舱、PR 交付和 dogfooding 验收。
 
-**Architecture:** 采用 `pnpm` monorepo：`packages/core` 提供纯 TypeScript 领域模型、状态机、仓储、执行内核和编排 API；`packages/cli` 提供本地命令入口和 TUI；`packages/web` 提供本地只读优先、受控写操作的 Next.js 驾驶舱。核心执行路径按“持久化状态机 -> worktree 隔离 -> 权限受控子进程 -> Artifact Store -> Gate Engine -> Audit Logger”推进，避免把安全、恢复和审计能力后补。
+**Architecture:** 采用 `pnpm` monorepo：`packages/core` 提供纯 TypeScript 领域模型、状态机、仓储、执行内核和编排 API；`packages/cli` 提供本地命令入口和 TUI；`packages/web` 提供本地只读优先、受控写操作的 Node HTTP + Vite React 驾驶舱。核心执行路径按“持久化状态机 -> worktree 隔离 -> 权限受控子进程 -> Artifact Store -> Gate Engine -> Audit Logger”推进，避免把安全、恢复和审计能力后补。
 
-**Tech Stack:** TypeScript, pnpm workspaces, tsup, Commander.js, Ink, Next.js App Router, tRPC, SQLite with `better-sqlite3`, Vitest, Playwright, Zod, js-yaml, Mustache, Git worktree, GitHub CLI, Claude Code headless mode, optional custom Agent command adapters.
+**Tech Stack:** TypeScript, pnpm workspaces, tsup, Commander.js, Ink, Node HTTP server, Vite React, SQLite with `better-sqlite3`, Vitest, Playwright, Zod, js-yaml, Mustache, Git worktree, GitHub CLI, Claude Code headless mode, optional custom Agent command adapters.
 
 **Release Readiness Note:** Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
 
@@ -24,16 +24,17 @@
 
 ### 0.2 外部资料依据
 
-| 资料                                                                                            | 资料内容                                                                            | 对 Donkey 的判断依据                                                                               |
-| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Git worktree 官方文档：`https://git-scm.com/docs/git-worktree`                                  | 一个 Git 仓库可支持多个 working tree，每个 worktree 是带独立元数据的工作目录        | Donkey 的并行 Agent 必须真实创建独立 worktree，不能把原仓库路径直接传给所有 Agent                  |
-| Node.js child_process 官方文档：`https://nodejs.org/api/child_process.html`                     | `spawn` 管道容量有限，需要持续消费 stdout/stderr；同步 child process 会阻塞事件循环 | Agent Runner 和 Gate Runner 必须流式消费输出，Gate 不使用 `execSync(commandString)` 执行任意字符串 |
-| SQLite WAL 官方文档：`https://sqlite.org/wal.html`                                              | WAL 支持读写并发，但仍要按 SQLite 的写入锁模型设计事务                              | Donkey 可以用 SQLite，但需要单写者队列、busy timeout、短事务和恢复索引                             |
-| Claude Code permissions 文档：`https://code.claude.com/docs/en/agent-sdk/permissions`           | Agent 可通过 permission modes、hooks、allow/deny 规则控制工具使用                   | `tools.yaml` 不能只是 prompt 文本，必须编译成 Claude permission 配置或外层 gateway 规则            |
-| OpenAI Codex approvals/security：`https://developers.openai.com/codex/agent-approvals-security` | Codex 安全运行依赖 sandbox、approval 和网络访问边界组合                             | Donkey 的 AgentAdapter 合约必须显式表达 sandbox/approval 能力，不把 provider 差异藏在 prompt 中    |
-| pnpm workspace 文档：`https://pnpm.io/pnpm-workspace_yaml`                                      | `pnpm-workspace.yaml` 是 workspace 包发现的根配置                                   | V2 采用 pnpm workspace 管理 core/cli/web，根 lockfile 固化依赖                                     |
-| tRPC Next.js App Router 文档：`https://trpc.io/docs/client/nextjs/app-router-setup`             | tRPC 在 App Router 下通过初始化 router/procedure 暴露端到端类型 API                 | Web 只通过 core API 和 tRPC 读写 SQLite 状态，避免复制业务逻辑                                     |
-| GitHub CLI PR 文档：`https://cli.github.com/manual/gh_pr_create`                                | `gh pr create` 可从当前分支创建 PR，成功后输出 PR URL                               | PR 交付必须有显式 SCM Delivery 模块、认证检查和失败恢复，不放在 PMO prompt 里                      |
+| 资料                                                                                                      | 资料内容                                                                            | 对 Donkey 的判断依据                                                                                   |
+| --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Git worktree 官方文档：`https://git-scm.com/docs/git-worktree`                                            | 一个 Git 仓库可支持多个 working tree，每个 worktree 是带独立元数据的工作目录        | Donkey 的并行 Agent 必须真实创建独立 worktree，不能把原仓库路径直接传给所有 Agent                      |
+| Node.js child_process 官方文档：`https://nodejs.org/api/child_process.html`                               | `spawn` 管道容量有限，需要持续消费 stdout/stderr；同步 child process 会阻塞事件循环 | Agent Runner 和 Gate Runner 必须流式消费输出，Gate 不使用 `execSync(commandString)` 执行任意字符串     |
+| SQLite WAL 官方文档：`https://sqlite.org/wal.html`                                                        | WAL 支持读写并发，但仍要按 SQLite 的写入锁模型设计事务                              | Donkey 可以用 SQLite，但需要单写者队列、busy timeout、短事务和恢复索引                                 |
+| Claude Code permissions 文档：`https://code.claude.com/docs/en/agent-sdk/permissions`                     | Agent 可通过 permission modes、hooks、allow/deny 规则控制工具使用                   | `tools.yaml` 不能只是 prompt 文本，必须编译成 Claude permission 配置或外层 gateway 规则                |
+| OpenAI Codex approvals/security：`https://developers.openai.com/codex/agent-approvals-security`           | Codex 安全运行依赖 sandbox、approval 和网络访问边界组合                             | Donkey 的 AgentAdapter 合约必须显式表达 sandbox/approval 能力，不把 provider 差异藏在 prompt 中        |
+| pnpm workspace 文档：`https://pnpm.io/pnpm-workspace_yaml`                                                | `pnpm-workspace.yaml` 是 workspace 包发现的根配置                                   | V2 采用 pnpm workspace 管理 core/cli/web，根 lockfile 固化依赖                                         |
+| Vite build 文档：`https://vite.dev/guide/build` 与 build options：`https://vite.dev/config/build-options` | `vite build` 面向生产构建，默认输出目录为 `dist`                                    | 本地 Web 驾驶舱第一版采用 Vite React；发布验收以 `packages/web/dist` 为 Web build 产物                 |
+| Node.js HTTP 文档：`https://nodejs.org/api/http.html`                                                     | Node 内置 HTTP 模块可创建本地 HTTP server                                           | Web 写操作需要本地 session token gate；第一版用轻量 Node HTTP/RPC 层直接调用 core API，降低 MVP 复杂度 |
+| GitHub CLI PR 文档：`https://cli.github.com/manual/gh_pr_create`                                          | `gh pr create` 可从当前分支创建 PR，成功后输出 PR URL                               | PR 交付必须有显式 SCM Delivery 模块、认证检查和失败恢复，不放在 PMO prompt 里                          |
 
 ### 0.3 全局验收门槛
 
@@ -115,9 +116,10 @@ donkey/
 │   │   │   └── ui/
 │   │   └── __tests__/
 │   └── web/
-│       ├── src/app/
+│       ├── src/client/
+│       ├── src/server/
 │       ├── src/server/api/
-│       └── src/components/
+│       └── __tests__/
 └── docs/
     ├── manual/
     ├── reviews/
@@ -616,46 +618,35 @@ pnpm --filter @donkey/cli test:e2e -- --run
 **Files:**
 
 - Create: `packages/web/package.json`
-- Create: `packages/web/src/server/api/trpc.ts`
 - Create: `packages/web/src/server/api/root.ts`
-- Create: `packages/web/src/server/api/routers/project.ts`
-- Create: `packages/web/src/server/api/routers/artifact.ts`
-- Create: `packages/web/src/server/api/routers/gate.ts`
-- Create: `packages/web/src/server/api/routers/audit.ts`
-- Create: `packages/web/src/server/api/routers/role.ts`
-- Create: `packages/web/src/server/api/routers/workflow.ts`
+- Create: `packages/web/src/server/api/errors.ts`
+- Create: `packages/web/src/server/http.ts`
+- Create: `packages/web/src/server/index.ts`
 - Create: `packages/web/src/server/project-context.ts`
 - Create: `packages/web/__tests__/api/*.test.ts`
 
 - [ ] **Step 1: Implement project context**  
        Web server reads an explicit `DONKEY_PROJECT_ROOT` or CLI-provided config; it never assumes `getDbPath('.')` silently.
 
-- [ ] **Step 2: Implement read routers**  
-       Project list/detail, artifacts, gates, audit, roles, workflows.
+- [ ] **Step 2: Implement read RPC procedures**: Project list/detail, artifacts, gates, audit, roles, workflows.
 
-- [ ] **Step 3: Implement controlled write routers**  
-       Human approval, pause, resume, cancel, clean require local session token stored in `.donkey/web-session.json`.
+- [ ] **Step 3: Implement controlled write procedures**: Human approval, pause, resume, cancel, clean require local session token stored in `.donkey/web-session.json`.
 
 - [ ] **Step 4: Verify API tests**  
-       Tests use temp DB and assert routers cannot read outside project root.
+       Tests use temp DB and assert RPC procedures cannot read outside project root.
 
 - [ ] **Step 5: Commit**  
-       `git commit -m "feat(web): add typed api routers for donkey project state"`
+       `git commit -m "feat(web): add typed api procedures for donkey project state"`
 
 ### Task 18: Web Dashboard UI
 
 **Files:**
 
-- Create: `packages/web/src/app/layout.tsx`
-- Create: `packages/web/src/app/page.tsx`
-- Create: `packages/web/src/app/project/[id]/page.tsx`
-- Create: `packages/web/src/app/project/[id]/artifacts/page.tsx`
-- Create: `packages/web/src/app/project/[id]/audit/page.tsx`
-- Create: `packages/web/src/app/project/[id]/gates/page.tsx`
-- Create: `packages/web/src/app/roles/page.tsx`
-- Create: `packages/web/src/app/workflows/page.tsx`
-- Create: `packages/web/src/app/settings/page.tsx`
-- Create: `packages/web/src/components/cockpit/*.tsx`
+- Create: `packages/web/src/client/App.tsx`
+- Create: `packages/web/src/client/styles.css`
+- Create: `packages/web/index.html`
+- Create: `packages/web/vite.config.ts`
+- Create: `packages/web/playwright.config.ts`
 - Create: `packages/web/__tests__/e2e/dashboard.test.ts`
 
 - [ ] **Step 1: Build cockpit layout**  
@@ -731,7 +722,7 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Create: `docs/reviews/<date>-donkey-v2-final-acceptance.html`
 
 - [ ] **Step 1: Build packages**  
-       `pnpm build` must produce `packages/core/dist`, executable `packages/cli/dist/index.js`, and `packages/web/.next`.
+       `pnpm build` must produce `packages/core/dist`, executable `packages/cli/dist/index.js`, and Vite web assets in `packages/web/dist`.
 
 - [ ] **Step 2: Run full tests**  
        `pnpm test -- --run --coverage`; target line coverage >= 80% for core, >= 70% for cli/web, with no failing tests.
