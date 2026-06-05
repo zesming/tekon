@@ -48,10 +48,12 @@ export interface CommandGateway {
   run(input: CommandGatewayRunInput): Promise<CommandGatewayResult>;
 }
 
-export function createCommandGateway(options: {
-  repositories?: DonkeyRepositories;
-  spawnImpl?: SpawnImpl;
-} = {}): CommandGateway {
+export function createCommandGateway(
+  options: {
+    repositories?: DonkeyRepositories;
+    spawnImpl?: SpawnImpl;
+  } = {},
+): CommandGateway {
   const spawnImpl = options.spawnImpl ?? spawn;
 
   return {
@@ -63,7 +65,10 @@ export function createCommandGateway(options: {
 
       if (matchesAny(input.command, input.policy.requiresHumanApproval ?? [])) {
         if (!options.repositories || !input.runId || !input.nodeId) {
-          return { status: 'rejected', reason: 'human approval requires repository and run context' };
+          return {
+            status: 'rejected',
+            reason: 'human approval requires repository and run context',
+          };
         }
 
         const decisionId = `decision_${randomUUID()}`;
@@ -82,7 +87,8 @@ export function createCommandGateway(options: {
         command: input.command,
         cwd: input.cwd,
         env: { ...process.env, ...(input.env ?? {}) },
-        outputDir: input.outputDir ?? join(input.cwd, '.donkey', 'command-logs'),
+        outputDir:
+          input.outputDir ?? join(input.cwd, '.donkey', 'command-logs'),
         timeoutMs: input.timeoutMs ?? 60_000,
         stdin: input.stdin,
         spawnImpl,
@@ -96,7 +102,10 @@ function validateCommand(
   cwd: string,
   policy: CommandPolicy,
 ): string | null {
-  if (hasShellMetacharacters(command.tool) || command.args.some(hasShellMetacharacters)) {
+  if (
+    hasShellMetacharacters(command.tool) ||
+    command.args.some(hasShellMetacharacters)
+  ) {
     return 'shell metacharacters are not allowed in argv commands';
   }
 
@@ -108,7 +117,10 @@ function validateCommand(
     return 'force push is always rejected';
   }
 
-  if (isAbsolute(command.tool) && !policy.allow.some((entry) => entry.tool === command.tool)) {
+  if (
+    isAbsolute(command.tool) &&
+    !policy.allow.some((entry) => entry.tool === command.tool)
+  ) {
     return 'absolute command paths must be explicitly allowlisted';
   }
 
@@ -135,9 +147,13 @@ function hasShellMetacharacters(value: string): boolean {
   return /[;&|`$<>]/u.test(value);
 }
 
-function matchesAny(command: CommandInvocation, patterns: CommandInvocation[]): boolean {
+function matchesAny(
+  command: CommandInvocation,
+  patterns: CommandInvocation[],
+): boolean {
   return patterns.some((pattern) => {
-    const toolMatches = pattern.tool === command.tool || pattern.tool === basename(command.tool);
+    const toolMatches =
+      pattern.tool === command.tool || pattern.tool === basename(command.tool);
     if (!toolMatches) {
       return false;
     }
@@ -150,8 +166,16 @@ function isDangerousRemove(command: CommandInvocation): boolean {
     return false;
   }
 
-  const hasRecursive = command.args.some((arg) => arg === '-r' || arg === '-R' || arg === '--recursive' || /^-[^-]*r/i.test(arg));
-  const hasForce = command.args.some((arg) => arg === '-f' || arg === '--force' || /^-[^-]*f/i.test(arg));
+  const hasRecursive = command.args.some(
+    (arg) =>
+      arg === '-r' ||
+      arg === '-R' ||
+      arg === '--recursive' ||
+      /^-[^-]*r/i.test(arg),
+  );
+  const hasForce = command.args.some(
+    (arg) => arg === '-f' || arg === '--force' || /^-[^-]*f/i.test(arg),
+  );
   return hasRecursive && hasForce;
 }
 
@@ -167,7 +191,10 @@ function isCwdAllowed(cwd: string, scopes: string[]): boolean {
   const resolvedCwd = resolve(cwd);
   return scopes.some((scope) => {
     const resolvedScope = resolve(scope);
-    return resolvedCwd === resolvedScope || resolvedCwd.startsWith(`${resolvedScope}${sep}`);
+    return (
+      resolvedCwd === resolvedScope ||
+      resolvedCwd.startsWith(`${resolvedScope}${sep}`)
+    );
   });
 }
 
@@ -186,6 +213,8 @@ async function runProcess(input: {
   const stderrPath = join(input.outputDir, `${commandId}.stderr.log`);
   const stdout = createWriteStream(stdoutPath);
   const stderr = createWriteStream(stderrPath);
+  const stdoutLog = monitorWritable(stdout);
+  const stderrLog = monitorWritable(stderr);
   const startedAt = Date.now();
   let timedOut = false;
 
@@ -207,24 +236,80 @@ async function runProcess(input: {
 
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
-  child.stdin.end(input.stdin ?? '');
-
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    if (child.pid) {
-      try {
-        process.kill(-child.pid, 'SIGTERM');
-      } catch {
-        child.kill('SIGTERM');
-      }
-    }
-  }, input.timeoutMs);
-
   return new Promise((resolvePromise) => {
-    child.on('close', (exitCode, signal) => {
+    let settled = false;
+    let stdinError: Error | null = null;
+    let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
+    let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
+    const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      killChildProcess(child, 'SIGTERM');
+      forceKillTimeout = setTimeout(() => {
+        killChildProcess(child, 'SIGKILL');
+        hardSettleTimeout = setTimeout(() => {
+          child.stdout.unpipe(stdout);
+          child.stderr.unpipe(stderr);
+          settle({
+            status: 'executed',
+            exitCode: null,
+            signal: 'SIGKILL',
+            timedOut: true,
+            stdoutPath,
+            stderrPath,
+            durationMs: Date.now() - startedAt,
+          });
+        }, terminationGraceMs);
+      }, terminationGraceMs);
+    }, input.timeoutMs);
+    const settle = (result: CommandGatewayResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       clearTimeout(timeout);
-      Promise.all([endStream(stdout), endStream(stderr)]).then(() => {
-        resolvePromise({
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout);
+      }
+      if (hardSettleTimeout) {
+        clearTimeout(hardSettleTimeout);
+      }
+      Promise.allSettled([stdoutLog.end(), stderrLog.end()]).then(
+        (streamResults) => {
+          if (result.status === 'executed') {
+            const streamError =
+              stdoutLog.error ??
+              stderrLog.error ??
+              getRejectedReason(streamResults);
+            if (streamError) {
+              resolvePromise({
+                status: 'rejected',
+                reason: `failed to write command logs: ${formatErrorMessage(streamError)}`,
+              });
+              return;
+            }
+          }
+
+          resolvePromise(result);
+        },
+      );
+    };
+
+    child.once('error', (error: Error) => {
+      settle({
+        status: 'rejected',
+        reason: error.message,
+      });
+    });
+    child.once('close', (exitCode, signal) => {
+      if (input.stdin !== undefined && stdinError) {
+        settle({
+          status: 'rejected',
+          reason: `failed to write command stdin: ${stdinError.message}`,
+        });
+        return;
+      }
+      settle({
         status: 'executed',
         exitCode,
         signal,
@@ -233,13 +318,77 @@ async function runProcess(input: {
         stderrPath,
         durationMs: Date.now() - startedAt,
       });
-      });
     });
+    child.stdin.prependListener('error', (error: Error) => {
+      stdinError = error;
+    });
+    if (input.stdin === undefined) {
+      child.stdin.end();
+    } else {
+      child.stdin.end(input.stdin);
+    }
   });
 }
 
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getRejectedReason(results: PromiseSettledResult<void>[]): unknown {
+  return results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  )?.reason;
+}
+
+function getTerminationGraceMs(timeoutMs: number): number {
+  return Math.min(1_000, Math.max(10, Math.floor(timeoutMs / 10)));
+}
+
+function killChildProcess(
+  child: ChildProcessWithoutNullStreams,
+  signal: NodeJS.Signals,
+): void {
+  if (child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to the direct child if process-group signaling is unavailable.
+    }
+  }
+
+  try {
+    child.kill(signal);
+  } catch {
+    // Timeout handling should always converge through the bounded hard-settle path.
+  }
+}
+
+function monitorWritable(stream: Writable): {
+  readonly error: Error | null;
+  end(): Promise<void>;
+} {
+  let streamError: Error | null = null;
+  stream.on('error', (error: Error) => {
+    streamError ??= error;
+  });
+
+  return {
+    get error() {
+      return streamError;
+    },
+    async end() {
+      if (streamError || stream.destroyed || stream.writableFinished) {
+        return;
+      }
+
+      await endStream(stream);
+    },
+  };
+}
+
 async function endStream(stream: Writable): Promise<void> {
-  if (stream.writableFinished) {
+  if (stream.destroyed || stream.writableFinished) {
     return;
   }
 
