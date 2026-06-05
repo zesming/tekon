@@ -12,4 +12,7 @@ export * from './artifact/store.js';
 export * from './audit/logger.js';
 export * from './runtime/command-gateway.js';
 export * from './runtime/worktree-manager.js';
+export * from './runtime/agent-adapter.js';
+export * from './runtime/claude-code-adapter.js';
+export * from './runtime/mock-agent-adapter.js';
 export * from './gate/runners.js';
