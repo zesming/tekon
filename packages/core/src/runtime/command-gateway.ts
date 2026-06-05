@@ -39,10 +39,13 @@ export interface CommandGatewayRunInput {
   outputDir?: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  envMode?: CommandEnvironmentMode;
   stdin?: string;
   runId?: string;
   nodeId?: string;
 }
+
+export type CommandEnvironmentMode = 'safe-default' | 'inherit' | 'exact';
 
 export interface CommandGateway {
   run(input: CommandGatewayRunInput): Promise<CommandGatewayResult>;
@@ -86,7 +89,7 @@ export function createCommandGateway(
       return runProcess({
         command: input.command,
         cwd: input.cwd,
-        env: { ...process.env, ...(input.env ?? {}) },
+        env: buildChildEnv({ env: input.env, envMode: input.envMode }),
         outputDir:
           input.outputDir ?? join(input.cwd, '.donkey', 'command-logs'),
         timeoutMs: input.timeoutMs ?? 60_000,
@@ -196,6 +199,39 @@ function isCwdAllowed(cwd: string, scopes: string[]): boolean {
       resolvedCwd.startsWith(`${resolvedScope}${sep}`)
     );
   });
+}
+
+const SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
+] as const;
+
+function buildChildEnv(input: {
+  env?: NodeJS.ProcessEnv;
+  envMode?: CommandEnvironmentMode;
+}): NodeJS.ProcessEnv {
+  if (input.envMode === 'inherit') {
+    return { ...process.env, ...(input.env ?? {}) };
+  }
+
+  if (input.envMode === 'exact') {
+    return { ...(input.env ?? {}) };
+  }
+
+  const safeEnv: NodeJS.ProcessEnv = {};
+  for (const key of SAFE_ENV_KEYS) {
+    if (process.env[key]) {
+      safeEnv[key] = process.env[key];
+    }
+  }
+
+  return { ...safeEnv, ...(input.env ?? {}) };
 }
 
 async function runProcess(input: {

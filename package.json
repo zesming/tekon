@@ -6,9 +6,10 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "vitest",
+    "test": "vitest --exclude \"**/__manual__/**\"",
     "lint": "pnpm -r lint",
     "lint:actions": "bash scripts/ci/actionlint.sh",
+    "smoke:claude-provider": "npm exec --yes -- pnpm@10.12.1 --filter @donkey/core smoke:claude-provider",
     "typecheck": "pnpm -r typecheck",
     "format:check": "prettier --check ."
   },

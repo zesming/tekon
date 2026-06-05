@@ -3,6 +3,7 @@ import type { CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
+import { buildClaudeProviderEnv } from './claude-code-support.js';
 
 export interface BuiltClaudeCodeCommand extends CommandInvocation {
   stdin?: string;
@@ -52,6 +53,8 @@ export function createClaudeCodeAdapter(
         policy: input.commandPolicy,
         outputDir: input.outputDir,
         timeoutMs: config.timeoutMs,
+        envMode: 'exact',
+        env: buildClaudeProviderEnv(),
         stdin: command.stdin,
         runId: input.runContext.runId,
         nodeId: input.runContext.nodeId,
