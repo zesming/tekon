@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey MVP 用户手册</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --text: #17202a;
+        --muted: #5f6b7a;
+        --line: #d8dee8;
+        --band: #f5f7fa;
+        --accent: #1769aa;
+        --risk: #a43820;
+      }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        color: var(--text);
+        background: #ffffff;
+        line-height: 1.68;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+      h1,
+      h2 {
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 32px;
+      }
+      h2 {
+        margin: 34px 0 12px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 22px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      .meta {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+      .callout {
+        border-left: 4px solid var(--accent);
+        background: var(--band);
+        padding: 14px 16px;
+        margin: 18px 0;
+      }
+      .risk {
+        border-left-color: var(--risk);
+      }
+      code {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.94em;
+        background: #eef2f7;
+        border: 1px solid #dfe6ef;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      pre {
+        overflow-x: auto;
+        background: #102033;
+        color: #f6f8fb;
+        padding: 14px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      pre code {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+      ul {
+        padding-left: 22px;
+      }
+      li {
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Donkey MVP 用户手册</h1>
+      <p class="meta">
+        生成日期：2026-06-05<br />
+        适用分支：<code>rebuild-v2</code><br />
+        适用范围：阶段一安全可恢复内核后的仓库状态。本 HTML 为人工审阅版。
+      </p>
+
+      <div class="callout">
+        <p>
+          Donkey 目前不是可供普通用户直接发起需求、等待自动 PR
+          的完整产品。当前仓库只提供 <code>packages/core</code>
+          内核 API，以及围绕该内核的测试、构建和阶段性文档。
+        </p>
+      </div>
+
+      <h2>1. 当前定位</h2>
+      <p>当前可用能力面向研发和评审人员：</p>
+      <ul>
+        <li>
+          查看阶段一内核的领域模型、运行时配置、持久化、产物、审计、命令网关、worktree、Agent
+          adapter 和 Gate API。
+        </li>
+        <li>
+          执行 <code>packages/core</code> 的单元测试、E2E 测试、构建和类型检查。
+        </li>
+        <li>审阅阶段计划、阶段一评估报告和发布就绪加固后的边界说明。</li>
+      </ul>
+
+      <h2>2. 用户怎么发起</h2>
+      <p>
+        当前没有普通用户入口，因此不能通过 <code>donkey run</code>、Web
+        页面或聊天入口发起 Donkey 任务。
+      </p>
+      <p>研发或评审人员可以在仓库根目录执行验证命令来检查内核状态：</p>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+npm exec --yes -- pnpm@10.12.1 ignored-builds
+npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+npm exec --yes -- pnpm@10.12.1 build
+npm exec --yes -- pnpm@10.12.1 typecheck</code></pre>
+      <p>
+        这些命令验证的是内核包和 monorepo 工程状态，不代表已经存在产品级 CLI 或
+        Web 工作流。
+      </p>
+
+      <h2>3. 用户会得到什么</h2>
+      <p>
+        运行验证命令后，用户会得到测试、构建或类型检查结果。结果可用于判断阶段一内核是否仍保持可构建、可测试和可审阅。
+      </p>
+      <p>当前不会得到：</p>
+      <ul>
+        <li>需求分析报告。</li>
+        <li>产品方案自动生成结果。</li>
+        <li>代码变更 PR。</li>
+        <li>Web 驾驶舱页面。</li>
+        <li>自动合入或上线结果。</li>
+      </ul>
+
+      <h2>4. 如何判断结果</h2>
+      <ul>
+        <li>
+          <code>packages/core</code> 相关测试通过，说明阶段一内核 API
+          的既有行为仍满足测试约束。
+        </li>
+        <li><code>build</code> 通过，说明 TypeScript 输出仍可生成。</li>
+        <li><code>typecheck</code> 通过，说明类型层面没有被当前改动破坏。</li>
+        <li>
+          文档中的能力边界与仓库实际文件一致，说明没有把后续阶段能力提前描述成已交付能力。
+        </li>
+      </ul>
+      <p>
+        若命令失败，应先把失败视为当前内核或工程配置的真实风险，而不是用户操作错误。
+      </p>
+
+      <h2>5. 当前不能做什么</h2>
+      <div class="callout risk">
+        <ul>
+          <li>不能通过 CLI 创建 Donkey run。</li>
+          <li>不能通过 Web 查看项目、产物、Gate 或审计。</li>
+          <li>不能自动创建、推送、合入 PR。</li>
+          <li>不能替代人类完成上线审批或高风险动作。</li>
+          <li>不能承诺真实 LLM provider 在生产工作流中稳定执行。</li>
+          <li>
+            不能把 <code>CommandPolicy.network</code> 理解为 OS 级网络隔离。
+          </li>
+          <li>不能作为普通用户安装后直接使用的完整产品。</li>
+        </ul>
+      </div>
+
+      <h2>6. 配置与工具链说明</h2>
+      <p>
+        根 <code>test</code> 脚本保持为 <code>vitest</code>。Vitest 已迁移到根
+        <code>vitest.config.ts</code> 的 <code>test.projects</code>，不再使用旧
+        workspace 配置文件。
+      </p>
+      <p>
+        <code>packages/core</code>
+        仍是当前唯一代码包。后续
+        CLI、Web、交付和产品化入口需要在后续阶段单独实现、测试和审阅。
+      </p>
+    </main>
+  </body>
+</html>

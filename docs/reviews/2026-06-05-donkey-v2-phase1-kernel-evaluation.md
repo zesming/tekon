@@ -14,6 +14,10 @@
 
 发布就绪加固新增两个本地门禁入口：`npm run lint:actions` 通过 `scripts/ci/actionlint.sh` 调用本机 `actionlint`，缺失时回退 Docker，二者都不可用时以 127 失败；`scripts/ci/check-github-actions.mjs` 通过 `GITHUB_TOKEN` 查询 `zesming/donkey` 的 `rebuild-v2` 当前 SHA 的 `Core` workflow，缺 token 以 2 失败，未找到成功完成的 `Core` run 以 1 失败。
 
+Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
+
+发布就绪加固期间按 TDD 补强了 CommandGateway 的子进程生命周期处理：无 stdin 时不再写入空 chunk，显式 stdin 写入失败会返回 `rejected`，子进程异步 `error` 事件会受控结算，命令日志写入失败不会被标记为 `executed`，忽略 `SIGTERM` 的 timeout 场景会在 `SIGKILL` fallback 后硬结算，避免快速退出命令触发 `EPIPE`、promise 悬挂或丢失执行证据。
+
 ## 2. 提交清单
 
 | Commit    | 内容                                                            |
@@ -32,19 +36,20 @@
 
 ## 3. TDD 证据
 
-| 任务                        | RED 证据                                                                                                                                             | GREEN 证据                                                                                                                                                                               |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Task 1 Monorepo             | `smoke.test.ts` 引用缺失的 `../src/index.js`，失败为 `Cannot find module '../src/index.js'`                                                          | `DONKEY_CORE_VERSION` 实现后，`@donkey/core` smoke test 通过；build/typecheck 通过                                                                                                       |
-| Task 2 Types/Config         | domain/config 测试调用未导出的 schema，失败为 `Cannot read properties of undefined (reading 'parse')`                                                | domain/config schema 实现后，5 个测试通过；typecheck/build 通过                                                                                                                          |
-| Task 3 SQLite               | DB 测试调用未实现的 `openDonkeyDatabase`/`createWriteQueue`，失败为 `is not a function`                                                              | migrations/repositories/recovery/write queue 测试通过；typecheck/build 通过                                                                                                              |
-| Task 4 Artifact/Audit       | artifact/audit 测试调用未实现的 `createArtifactStore`/`createAuditLogger`，失败为 `is not a function`                                                | artifact versioning、schema、truncation、missing file、audit tamper detection 测试通过                                                                                                   |
-| Task 5 CommandGateway       | gateway/gate runner 测试调用未实现的 `createCommandGateway`，失败为 `is not a function`                                                              | dangerous command、cwd scope、human approval boundary、stdout/stderr streaming、gate runner 测试通过                                                                                     |
-| Task 6 WorktreeManager      | worktree 测试调用未实现的 `createWorktreeManager`，失败为 `is not a function`                                                                        | dirty base、真实 git worktree lease/release/prune E2E 通过                                                                                                                               |
-| Task 7 AgentAdapter         | adapter 测试调用未实现的 `assertAgentProviderCapabilities`/`createMockAgentAdapter`/`createClaudeCodeAdapter`，失败为 `is not a function`            | provider capability check、mock artifacts、Claude command builder、large stdout/stderr、timeout 测试通过                                                                                 |
-| Task 8 GateEngine/HumanGate | gate 测试调用未实现的 `createGateEngine`/`createHumanGate`，失败为 `is not a function`                                                               | command/schema/human gate、GateResult persistence、autoFix repair node 测试通过                                                                                                          |
-| stdin 修复                  | `promptMode: stdin` 测试失败，实际结果 `timedOut: true`、`exitCode: null`                                                                            | CommandGateway 写入 stdin 后，Claude stdin 测试通过                                                                                                                                      |
-| E2E 脚本                    | 初始 `test:e2e` glob 未匹配文件，失败为 `No test files found`                                                                                        | 显式 e2e 文件列表后，2 个 e2e 测试通过                                                                                                                                                   |
-| Reviewer 阻断项修复         | 新增回归测试确认无效 artifact 仍通过 schema gate、`../escape` ID 可写出受管目录、空 allow list/`rm -r -f`/`git push --force-with-lease` 未被稳定拒绝 | schema gate 读取并校验 artifact 内容；Artifact/Worktree 路径段只允许 `[a-zA-Z0-9_-]`；CommandGateway 默认拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过 |
+| 任务                        | RED 证据                                                                                                                                                                                                       | GREEN 证据                                                                                                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task 1 Monorepo             | `smoke.test.ts` 引用缺失的 `../src/index.js`，失败为 `Cannot find module '../src/index.js'`                                                                                                                    | `DONKEY_CORE_VERSION` 实现后，`@donkey/core` smoke test 通过；build/typecheck 通过                                                                                                                                                                   |
+| Task 2 Types/Config         | domain/config 测试调用未导出的 schema，失败为 `Cannot read properties of undefined (reading 'parse')`                                                                                                          | domain/config schema 实现后，5 个测试通过；typecheck/build 通过                                                                                                                                                                                      |
+| Task 3 SQLite               | DB 测试调用未实现的 `openDonkeyDatabase`/`createWriteQueue`，失败为 `is not a function`                                                                                                                        | migrations/repositories/recovery/write queue 测试通过；typecheck/build 通过                                                                                                                                                                          |
+| Task 4 Artifact/Audit       | artifact/audit 测试调用未实现的 `createArtifactStore`/`createAuditLogger`，失败为 `is not a function`                                                                                                          | artifact versioning、schema、truncation、missing file、audit tamper detection 测试通过                                                                                                                                                               |
+| Task 5 CommandGateway       | gateway/gate runner 测试调用未实现的 `createCommandGateway`，失败为 `is not a function`                                                                                                                        | dangerous command、cwd scope、human approval boundary、stdout/stderr streaming、gate runner 测试通过                                                                                                                                                 |
+| Task 6 WorktreeManager      | worktree 测试调用未实现的 `createWorktreeManager`，失败为 `is not a function`                                                                                                                                  | dirty base、真实 git worktree lease/release/prune E2E 通过                                                                                                                                                                                           |
+| Task 7 AgentAdapter         | adapter 测试调用未实现的 `assertAgentProviderCapabilities`/`createMockAgentAdapter`/`createClaudeCodeAdapter`，失败为 `is not a function`                                                                      | provider capability check、mock artifacts、Claude command builder、large stdout/stderr、timeout 测试通过                                                                                                                                             |
+| Task 8 GateEngine/HumanGate | gate 测试调用未实现的 `createGateEngine`/`createHumanGate`，失败为 `is not a function`                                                                                                                         | command/schema/human gate、GateResult persistence、autoFix repair node 测试通过                                                                                                                                                                      |
+| stdin 修复                  | `promptMode: stdin` 测试失败，实际结果 `timedOut: true`、`exitCode: null`                                                                                                                                      | CommandGateway 写入 stdin 后，Claude stdin 测试通过                                                                                                                                                                                                  |
+| CommandGateway 稳定性加固   | root test 偶发 `write EPIPE`；fake child 只 emit `error` 不 emit `close` 时旧实现悬挂为 `timed-out`；stdout 日志不可写时旧实现仍返回 `executed`；忽略 `SIGTERM` 且不 emit `close` 的 child 旧实现悬挂为 `hung` | 无 stdin 不写空 chunk；显式 stdin 写失败返回 `rejected`；无 stdin 的 pipe error 不覆盖子进程退出结果；异步 child `error` 返回 `rejected`；日志写入失败返回 `rejected`；timeout 有 `SIGKILL` fallback 和硬结算；root test 为 20 个文件、41 个测试通过 |
+| E2E 脚本                    | 初始 `test:e2e` glob 未匹配文件，失败为 `No test files found`                                                                                                                                                  | 显式 e2e 文件列表后，2 个 e2e 测试通过                                                                                                                                                                                                               |
+| Reviewer 阻断项修复         | 新增回归测试确认无效 artifact 仍通过 schema gate、`../escape` ID 可写出受管目录、空 allow list/`rm -r -f`/`git push --force-with-lease` 未被稳定拒绝                                                           | schema gate 读取并校验 artifact 内容；Artifact/Worktree 路径段只允许 `[a-zA-Z0-9_-]`；CommandGateway 默认拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过                                                             |
 
 ## 4. E2E 覆盖
 
@@ -106,6 +111,12 @@ npm exec --yes -- prettier --check .github/workflows/core.yml package.json scrip
 
 bash scripts/ci/actionlint.sh
 # 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理
+
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core exec vitest --run __tests__/runtime/command-gateway.test.ts
+# CommandGateway 回归测试：11 tests passed
+
+npm exec --yes -- pnpm@10.12.1 test -- --run
+# 发布就绪加固后根测试：20 test files passed, 41 tests passed
 ```
 
 ## 6. 风险与后续建议
@@ -113,12 +124,12 @@ bash scripts/ci/actionlint.sh
 - `better-sqlite3` 是原生依赖，已通过 `onlyBuiltDependencies` 显式允许构建，并由 CI 的 ignored-builds gate 覆盖；后续新增 native/toolchain 依赖时必须审阅并维护 allowlist，避免静默跳过 build scripts。
 - GitHub Actions 现在由 `actionlint` job 前置校验 workflow 语法与常见错误；本地 wrapper 仍依赖本机 `actionlint` 或 Docker，二者都缺失时必须把失败记录为环境缺口，不能视为通过。
 - 远端 `Core` workflow 成功是发布门禁；`scripts/ci/check-github-actions.mjs` 只读取环境变量 `GITHUB_TOKEN`，不会读取本地 token 文件。无 token、无匹配 run、run 未完成或结论非 `success` 都不能标记远端 CI 已确认。
-- Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。真实 provider smoke 建议放到阶段二或独立人工凭证环境。
+- Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。维护者侧真实 provider smoke 将在发布就绪加固的后续任务中提供手动执行路径和脱敏证据。
 - Worktree dirty 检测会忽略 Donkey 自己生成的 `.donkey/` 未跟踪目录，避免第二个 lease 被自身运行产物阻塞；用户工作区的已跟踪改动仍会阻断。
 - Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层，不能直接拼路径。
 - `CommandPolicy.network` 目前是 Donkey 策略字段，不是 OS 级网络隔离；阶段二若接入真实 agent provider，需要补 provider sandbox/approval 能力映射或外层隔离。
-- `vitest.workspace.ts` 当前可用，但 Vitest 已提示 workspace 文件形式将迁移到 `test.projects`；后续工具链升级时应处理。
-- 当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；因此本阶段未更新用户手册。
+- Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
+- 当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；已新增 `docs/manual/donkey-mvp-user-manual.html` 作为当前 MVP 边界手册，明确普通用户入口仍未交付。
 
 ## 7. Subagent 执行情况
 
@@ -130,7 +141,7 @@ bash scripts/ci/actionlint.sh
 - 阶段一最终 reviewer 成功返回 `CHANGES_REQUIRED`，3 个阻断项已在 `90855a9` 修复。
 - 修复后重新委派最高思考等级 reviewer 复查，结论为 `APPROVED`；仅保留一项建议：`CommandPolicy.network` 目前是策略字段，不是 OS 级网络隔离。
 
-合入 `rebuild-v2` 后，主工作区重新执行本地 build、unit、e2e 和文档占位符检查；结果记录见最终交付说明。
+合入 `rebuild-v2` 后，主工作区重新执行本地 build、unit、e2e 和文档未完成标记检查；结果记录见最终交付说明。
 
 ## 8. 资料依据
 

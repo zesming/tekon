@@ -8,30 +8,32 @@
 
 **Tech Stack:** TypeScript, pnpm workspaces, tsup, Commander.js, Ink, Next.js App Router, tRPC, SQLite with `better-sqlite3`, Vitest, Playwright, Zod, js-yaml, Mustache, Git worktree, GitHub CLI, Claude Code headless mode, optional custom Agent command adapters.
 
+**Release Readiness Note:** Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
+
 ---
 
 ## 0. 计划原则
 
 ### 0.1 三阶段边界
 
-| 阶段 | 目标 | 可验收结果 | 不允许后移的能力 |
-|---|---|---|---|
-| 阶段一：安全可恢复内核 | 先把执行边界、持久化、worktree、Gate、Artifact/Audit 打实 | mock Agent 跑完最小 workflow；中断后可恢复；危险命令被拒绝；human gate 会暂停 | Tool Gateway、WorktreeManager、状态持久化、GateResult、Audit hash chain |
+| 阶段                             | 目标                                                               | 可验收结果                                                                        | 不允许后移的能力                                                             |
+| -------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 阶段一：安全可恢复内核           | 先把执行边界、持久化、worktree、Gate、Artifact/Audit 打实          | mock Agent 跑完最小 workflow；中断后可恢复；危险命令被拒绝；human gate 会暂停     | Tool Gateway、WorktreeManager、状态持久化、GateResult、Audit hash chain      |
 | 阶段二：角色化 Workflow 产品闭环 | 实现角色文件系统、模板 workflow、动态 workflow、约束注入、完整 CLI | `donkey run` 可用模板或动态 spec 执行到本地证据包；`pause/resume/status/log` 可用 | Dynamic dry-run、Constraint mutation、角色技能/知识注入、autoFix repair node |
-| 阶段三：交付与可观察产品面 | 实现 PR 交付、Web 驾驶舱、人工确认、指标、手册、dogfooding | 能从需求到 PR URL 和证据包；Web 可审阅项目、产物、Gate 和审计；完成自举验收 | SCM Delivery、Web human approval、指标沉淀、HTML 用户手册 |
+| 阶段三：交付与可观察产品面       | 实现 PR 交付、Web 驾驶舱、人工确认、指标、手册、dogfooding         | 能从需求到 PR URL 和证据包；Web 可审阅项目、产物、Gate 和审计；完成自举验收       | SCM Delivery、Web human approval、指标沉淀、HTML 用户手册                    |
 
 ### 0.2 外部资料依据
 
-| 资料 | 资料内容 | 对 Donkey 的判断依据 |
-|---|---|---|
-| Git worktree 官方文档：`https://git-scm.com/docs/git-worktree` | 一个 Git 仓库可支持多个 working tree，每个 worktree 是带独立元数据的工作目录 | Donkey 的并行 Agent 必须真实创建独立 worktree，不能把原仓库路径直接传给所有 Agent |
-| Node.js child_process 官方文档：`https://nodejs.org/api/child_process.html` | `spawn` 管道容量有限，需要持续消费 stdout/stderr；同步 child process 会阻塞事件循环 | Agent Runner 和 Gate Runner 必须流式消费输出，Gate 不使用 `execSync(commandString)` 执行任意字符串 |
-| SQLite WAL 官方文档：`https://sqlite.org/wal.html` | WAL 支持读写并发，但仍要按 SQLite 的写入锁模型设计事务 | Donkey 可以用 SQLite，但需要单写者队列、busy timeout、短事务和恢复索引 |
-| Claude Code permissions 文档：`https://code.claude.com/docs/en/agent-sdk/permissions` | Agent 可通过 permission modes、hooks、allow/deny 规则控制工具使用 | `tools.yaml` 不能只是 prompt 文本，必须编译成 Claude permission 配置或外层 gateway 规则 |
-| OpenAI Codex approvals/security：`https://developers.openai.com/codex/agent-approvals-security` | Codex 安全运行依赖 sandbox、approval 和网络访问边界组合 | Donkey 的 AgentAdapter 合约必须显式表达 sandbox/approval 能力，不把 provider 差异藏在 prompt 中 |
-| pnpm workspace 文档：`https://pnpm.io/pnpm-workspace_yaml` | `pnpm-workspace.yaml` 是 workspace 包发现的根配置 | V2 采用 pnpm workspace 管理 core/cli/web，根 lockfile 固化依赖 |
-| tRPC Next.js App Router 文档：`https://trpc.io/docs/client/nextjs/app-router-setup` | tRPC 在 App Router 下通过初始化 router/procedure 暴露端到端类型 API | Web 只通过 core API 和 tRPC 读写 SQLite 状态，避免复制业务逻辑 |
-| GitHub CLI PR 文档：`https://cli.github.com/manual/gh_pr_create` | `gh pr create` 可从当前分支创建 PR，成功后输出 PR URL | PR 交付必须有显式 SCM Delivery 模块、认证检查和失败恢复，不放在 PMO prompt 里 |
+| 资料                                                                                            | 资料内容                                                                            | 对 Donkey 的判断依据                                                                               |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Git worktree 官方文档：`https://git-scm.com/docs/git-worktree`                                  | 一个 Git 仓库可支持多个 working tree，每个 worktree 是带独立元数据的工作目录        | Donkey 的并行 Agent 必须真实创建独立 worktree，不能把原仓库路径直接传给所有 Agent                  |
+| Node.js child_process 官方文档：`https://nodejs.org/api/child_process.html`                     | `spawn` 管道容量有限，需要持续消费 stdout/stderr；同步 child process 会阻塞事件循环 | Agent Runner 和 Gate Runner 必须流式消费输出，Gate 不使用 `execSync(commandString)` 执行任意字符串 |
+| SQLite WAL 官方文档：`https://sqlite.org/wal.html`                                              | WAL 支持读写并发，但仍要按 SQLite 的写入锁模型设计事务                              | Donkey 可以用 SQLite，但需要单写者队列、busy timeout、短事务和恢复索引                             |
+| Claude Code permissions 文档：`https://code.claude.com/docs/en/agent-sdk/permissions`           | Agent 可通过 permission modes、hooks、allow/deny 规则控制工具使用                   | `tools.yaml` 不能只是 prompt 文本，必须编译成 Claude permission 配置或外层 gateway 规则            |
+| OpenAI Codex approvals/security：`https://developers.openai.com/codex/agent-approvals-security` | Codex 安全运行依赖 sandbox、approval 和网络访问边界组合                             | Donkey 的 AgentAdapter 合约必须显式表达 sandbox/approval 能力，不把 provider 差异藏在 prompt 中    |
+| pnpm workspace 文档：`https://pnpm.io/pnpm-workspace_yaml`                                      | `pnpm-workspace.yaml` 是 workspace 包发现的根配置                                   | V2 采用 pnpm workspace 管理 core/cli/web，根 lockfile 固化依赖                                     |
+| tRPC Next.js App Router 文档：`https://trpc.io/docs/client/nextjs/app-router-setup`             | tRPC 在 App Router 下通过初始化 router/procedure 暴露端到端类型 API                 | Web 只通过 core API 和 tRPC 读写 SQLite 状态，避免复制业务逻辑                                     |
+| GitHub CLI PR 文档：`https://cli.github.com/manual/gh_pr_create`                                | `gh pr create` 可从当前分支创建 PR，成功后输出 PR URL                               | PR 交付必须有显式 SCM Delivery 模块、认证检查和失败恢复，不放在 PMO prompt 里                      |
 
 ### 0.3 全局验收门槛
 
@@ -50,7 +52,7 @@ donkey/
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── vitest.workspace.ts
+├── vitest.config.ts
 ├── constraints.yaml
 ├── roles/
 │   ├── pm/
@@ -140,33 +142,35 @@ pnpm --filter @donkey/core test:e2e -- --run
 ### Task 1: Monorepo and Test Harness
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `tsconfig.base.json`
-- Create: `vitest.workspace.ts`
+- Create: `vitest.config.ts`
 - Create: `packages/core/package.json`
 - Create: `packages/core/tsconfig.json`
 - Create: `packages/core/src/index.ts`
 - Create: `packages/core/__tests__/smoke.test.ts`
 
 - [ ] **Step 1: Write smoke test**  
-  `packages/core/__tests__/smoke.test.ts` asserts that `@donkey/core` exports `DONKEY_CORE_VERSION`.
+       `packages/core/__tests__/smoke.test.ts` asserts that `@donkey/core` exports `DONKEY_CORE_VERSION`.
 
 - [ ] **Step 2: Create workspace files**  
-  Root scripts must include `build`, `test`, `lint`, `typecheck`, `format:check`. `pnpm-workspace.yaml` includes only `packages/*`.
+       Root scripts must include `build`, `test`, `lint`, `typecheck`, `format:check`. `pnpm-workspace.yaml` includes only `packages/*`; root Vitest config uses `test.projects` for `packages/*`.
 
 - [ ] **Step 3: Implement minimal core export**  
-  `packages/core/src/index.ts` exports `DONKEY_CORE_VERSION = '0.1.0'`.
+       `packages/core/src/index.ts` exports `DONKEY_CORE_VERSION = '0.1.0'`.
 
 - [ ] **Step 4: Verify**  
-  Run `pnpm install`, `pnpm --filter @donkey/core test -- --run`, `pnpm --filter @donkey/core build`.
+       Run `pnpm install`, `pnpm --filter @donkey/core test -- --run`, `pnpm --filter @donkey/core build`.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): scaffold monorepo and test harness"`
+       `git commit -m "feat(core): scaffold monorepo and test harness"`
 
 ### Task 2: Domain Types and Runtime Config
 
 **Files:**
+
 - Create: `packages/core/src/types/domain.ts`
 - Create: `packages/core/src/types/config.ts`
 - Create: `packages/core/src/types/events.ts`
@@ -175,23 +179,24 @@ pnpm --filter @donkey/core test:e2e -- --run
 - Create: `packages/core/__tests__/types/config.test.ts`
 
 - [ ] **Step 1: Define domain model**  
-  Include `Demand`, `Project`, `WorkflowInstance`, `Phase`, `Node`, `RoleRun`, `Artifact`, `ArtifactRef`, `GateConfig`, `GateResult`, `AuditEvent`, `HumanDecision`, `RunSummary`.
+       Include `Demand`, `Project`, `WorkflowInstance`, `Phase`, `Node`, `RoleRun`, `Artifact`, `ArtifactRef`, `GateConfig`, `GateResult`, `AuditEvent`, `HumanDecision`, `RunSummary`.
 
 - [ ] **Step 2: Define provider/runtime model**  
-  Include `AgentAdapterConfig`, `PermissionProfile`, `CommandPolicy`, `ToolPolicy`, `WorktreeLease`, `RunContext`.
+       Include `AgentAdapterConfig`, `PermissionProfile`, `CommandPolicy`, `ToolPolicy`, `WorktreeLease`, `RunContext`.
 
 - [ ] **Step 3: Add Zod schemas for external inputs**  
-  Validate `donkey.config.yaml`, `agent.yaml`, workflow YAML, dynamic workflow spec, constraint rules.
+       Validate `donkey.config.yaml`, `agent.yaml`, workflow YAML, dynamic workflow spec, constraint rules.
 
 - [ ] **Step 4: Verify**  
-  Type tests must prove all public types export from `@donkey/core`; schema tests must reject unknown gate types and unsafe command policy.
+       Type tests must prove all public types export from `@donkey/core`; schema tests must reject unknown gate types and unsafe command policy.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): define domain types and runtime config schemas"`
+       `git commit -m "feat(core): define domain types and runtime config schemas"`
 
 ### Task 3: SQLite Persistence, Migrations, and Single Writer Queue
 
 **Files:**
+
 - Create: `packages/core/src/db/connection.ts`
 - Create: `packages/core/src/db/migrations.ts`
 - Create: `packages/core/src/db/repositories.ts`
@@ -201,23 +206,24 @@ pnpm --filter @donkey/core test:e2e -- --run
 - Create: `packages/core/__tests__/db/recovery.test.ts`
 
 - [ ] **Step 1: Write migration tests**  
-  Tests assert all tables exist: `demands`, `projects`, `workflow_instances`, `phases`, `nodes`, `artifacts`, `role_runs`, `gate_results`, `human_decisions`, `audit_events`, `schema_migrations`, `run_locks`.
+       Tests assert all tables exist: `demands`, `projects`, `workflow_instances`, `phases`, `nodes`, `artifacts`, `role_runs`, `gate_results`, `human_decisions`, `audit_events`, `schema_migrations`, `run_locks`.
 
 - [ ] **Step 2: Implement DB connection**  
-  Use `better-sqlite3`, `journal_mode = WAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and a process-local write queue for all writes.
+       Use `better-sqlite3`, `journal_mode = WAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and a process-local write queue for all writes.
 
 - [ ] **Step 3: Implement repositories**  
-  Repositories expose explicit methods such as `createProject`, `createWorkflowInstance`, `transitionNode`, `recordGateResult`, `appendAuditEvent`, `findRecoverableRun`.
+       Repositories expose explicit methods such as `createProject`, `createWorkflowInstance`, `transitionNode`, `recordGateResult`, `appendAuditEvent`, `findRecoverableRun`.
 
 - [ ] **Step 4: Implement recovery test**  
-  Simulate `PM passed -> RD running -> process exit`; `findRecoverableRun` returns RD as the resume point and marks stale `running` role run as `interrupted`.
+       Simulate `PM passed -> RD running -> process exit`; `findRecoverableRun` returns RD as the resume point and marks stale `running` role run as `interrupted`.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add durable sqlite persistence and recovery queue"`
+       `git commit -m "feat(core): add durable sqlite persistence and recovery queue"`
 
 ### Task 4: Artifact Store and Append-Only Audit Logger
 
 **Files:**
+
 - Create: `packages/core/src/artifact/store.ts`
 - Create: `packages/core/src/artifact/schemas.ts`
 - Create: `packages/core/src/audit/logger.ts`
@@ -226,68 +232,71 @@ pnpm --filter @donkey/core test:e2e -- --run
 - Create: `packages/core/__tests__/audit/logger.test.ts`
 
 - [ ] **Step 1: Implement artifact storage contract**  
-  Artifacts are written under `.donkey/runs/<runId>/artifacts/<nodeId>/<artifactType>.v<version>.md` with metadata in SQLite.
+       Artifacts are written under `.donkey/runs/<runId>/artifacts/<nodeId>/<artifactType>.v<version>.md` with metadata in SQLite.
 
 - [ ] **Step 2: Implement schemas**  
-  Provide Zod schemas for `demand-card`, `prd`, `tech-design`, `code-changes`, `test-report`, `review-report`, `security-report`, `rollback-plan`, `delivery-package`.
+       Provide Zod schemas for `demand-card`, `prd`, `tech-design`, `code-changes`, `test-report`, `review-report`, `security-report`, `rollback-plan`, `delivery-package`.
 
 - [ ] **Step 3: Implement audit hash chain**  
-  Each audit event includes `prevHash` and `hash`; logger is append-only from public API. Tests verify tampering breaks hash validation.
+       Each audit event includes `prevHash` and `hash`; logger is append-only from public API. Tests verify tampering breaks hash validation.
 
 - [ ] **Step 4: Verify**  
-  Artifact tests cover versioning, summary fallback, oversized artifact truncation for prompt injection, and missing file errors.
+       Artifact tests cover versioning, summary fallback, oversized artifact truncation for prompt injection, and missing file errors.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add artifact store and append-only audit log"`
+       `git commit -m "feat(core): add artifact store and append-only audit log"`
 
 ### Task 5: CommandGateway and Safe Process Runner
 
 **Files:**
+
 - Create: `packages/core/src/runtime/command-gateway.ts`
 - Create: `packages/core/src/gate/runners.ts`
 - Create: `packages/core/__tests__/runtime/command-gateway.test.ts`
 - Create: `packages/core/__tests__/gate/runners.test.ts`
 
 - [ ] **Step 1: Define command policy model**  
-  Commands are represented as `{ tool: 'git', args: ['status', '--short'] }`, not shell strings. Policy supports `allow`, `deny`, `requiresHumanApproval`, `cwdScope`, `network`.
+       Commands are represented as `{ tool: 'git', args: ['status', '--short'] }`, not shell strings. Policy supports `allow`, `deny`, `requiresHumanApproval`, `cwdScope`, `network`.
 
 - [ ] **Step 2: Implement argv runner**  
-  Use `spawn(command, args, { cwd, env, stdio: 'pipe', detached: true })`; stream stdout/stderr to log files; enforce timeout; kill process group on timeout.
+       Use `spawn(command, args, { cwd, env, stdio: 'pipe', detached: true })`; stream stdout/stderr to log files; enforce timeout; kill process group on timeout.
 
 - [ ] **Step 3: Implement deny tests**  
-  Tests prove `rm -rf`, `git push --force`, command paths outside allowlist, and shell metacharacter strings are rejected before spawn.
+       Tests prove `rm -rf`, `git push --force`, command paths outside allowlist, and shell metacharacter strings are rejected before spawn.
 
 - [ ] **Step 4: Implement human approval boundary**  
-  If policy requires approval, create a `human_decisions` row with `pending` and return `CommandBlockedForApproval`; do not spawn process.
+       If policy requires approval, create a `human_decisions` row with `pending` and return `CommandBlockedForApproval`; do not spawn process.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add command gateway with argv policy enforcement"`
+       `git commit -m "feat(core): add command gateway with argv policy enforcement"`
 
 ### Task 6: WorktreeManager
 
 **Files:**
+
 - Create: `packages/core/src/runtime/worktree-manager.ts`
 - Create: `packages/core/__tests__/runtime/worktree-manager.test.ts`
 - Create: `packages/core/__tests__/runtime/worktree-manager.e2e.test.ts`
 
 - [ ] **Step 1: Define worktree lease API**  
-  API: `createLease({ repoPath, runId, nodeId, role, baseRef })`, `releaseLease(leaseId)`, `pruneStaleLeases(repoPath)`, `listLeases(runId)`.
+       API: `createLease({ repoPath, runId, nodeId, role, baseRef })`, `releaseLease(leaseId)`, `pruneStaleLeases(repoPath)`, `listLeases(runId)`.
 
 - [ ] **Step 2: Implement branch and path rules**  
-  Path: `.donkey/worktrees/<runId>/<nodeId>-<role>`; branch: `donkey/<runId>/<nodeId>-<role>`. Reject dirty main worktree unless command has `--allow-dirty-base`.
+       Path: `.donkey/worktrees/<runId>/<nodeId>-<role>`; branch: `donkey/<runId>/<nodeId>-<role>`. Reject dirty main worktree unless command has `--allow-dirty-base`.
 
 - [ ] **Step 3: Implement git operations**  
-  Use CommandGateway argv commands for `git worktree add`, `git worktree remove`, and `git worktree prune`. WorktreeManager must not call `spawn`, `execFile`, `exec`, or `execSync` directly. Never delete a path that is not under `.donkey/worktrees/`.
+       Use CommandGateway argv commands for `git worktree add`, `git worktree remove`, and `git worktree prune`. WorktreeManager must not call `spawn`, `execFile`, `exec`, or `execSync` directly. Never delete a path that is not under `.donkey/worktrees/`.
 
 - [ ] **Step 4: Verify**  
-  E2E test creates a temp git repo, leases two worktrees, confirms distinct branches and independent files, then releases and prunes.
+       E2E test creates a temp git repo, leases two worktrees, confirms distinct branches and independent files, then releases and prunes.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add git worktree isolation manager"`
+       `git commit -m "feat(core): add git worktree isolation manager"`
 
 ### Task 7: AgentAdapter Interface and Claude/Mock Runners
 
 **Files:**
+
 - Create: `packages/core/src/runtime/agent-adapter.ts`
 - Create: `packages/core/src/runtime/claude-code-adapter.ts`
 - Create: `packages/core/src/runtime/mock-agent-adapter.ts`
@@ -296,26 +305,27 @@ pnpm --filter @donkey/core test:e2e -- --run
 - Create: `packages/core/__tests__/runtime/mock-agent-adapter.test.ts`
 
 - [ ] **Step 1: Define adapter contract**  
-  `runAgent({ roleConfig, prompt, worktreeLease, outputDir, commandPolicy, runContext })` returns `AgentRunResult` with exit code, duration, output files, token/cost metadata if provider emits it.
+       `runAgent({ roleConfig, prompt, worktreeLease, outputDir, commandPolicy, runContext })` returns `AgentRunResult` with exit code, duration, output files, token/cost metadata if provider emits it.
 
 - [ ] **Step 2: Implement mock adapter**  
-  Writes deterministic artifacts for all built-in artifact types. Used by unit/E2E tests.
+       Writes deterministic artifacts for all built-in artifact types. Used by unit/E2E tests.
 
 - [ ] **Step 3: Implement Claude Code adapter**  
-  Supports `promptMode: stdin | arg-append | file`, `--output-format json` when configured, and permission config generation from `tools.yaml`. Default mode must not be `bypassPermissions`.
+       Supports `promptMode: stdin | arg-append | file`, `--output-format json` when configured, and permission config generation from `tools.yaml`. Default mode must not be `bypassPermissions`.
 
 - [ ] **Step 4: Enforce provider capability checks**  
-  Adapter startup must prove how sandbox, approval, filesystem scope, network scope, and tool allow/deny are mapped for the configured provider. If the provider cannot prove those controls, real Agent execution is rejected and the run may only continue with `mock` or `dry-run`.
+       Adapter startup must prove how sandbox, approval, filesystem scope, network scope, and tool allow/deny are mapped for the configured provider. If the provider cannot prove those controls, real Agent execution is rejected and the run may only continue with `mock` or `dry-run`.
 
 - [ ] **Step 5: Verify streaming and timeout**  
-  Tests use small Node fixture scripts that emit large stdout/stderr and sleep; runner must not deadlock and must kill timed-out process group.
+       Tests use small Node fixture scripts that emit large stdout/stderr and sleep; runner must not deadlock and must kill timed-out process group.
 
 - [ ] **Step 6: Commit**  
-  `git commit -m "feat(core): add agent adapter contract and claude runner"`
+       `git commit -m "feat(core): add agent adapter contract and claude runner"`
 
 ### Task 8: Gate Engine and HumanGate
 
 **Files:**
+
 - Create: `packages/core/src/gate/engine.ts`
 - Create: `packages/core/src/gate/human-gate.ts`
 - Create: `packages/core/__tests__/gate/engine.test.ts`
@@ -323,19 +333,19 @@ pnpm --filter @donkey/core test:e2e -- --run
 - Create: `packages/core/__tests__/gate/schema-gate.test.ts`
 
 - [ ] **Step 1: Implement deterministic gates**  
-  Gate types: `build`, `test`, `lint`, `e2e-pass`, `schema`, `security-scan`, `human`. Command gates go through CommandGateway. Schema gate validates Artifact Store content.
+       Gate types: `build`, `test`, `lint`, `e2e-pass`, `schema`, `security-scan`, `human`. Command gates go through CommandGateway. Schema gate validates Artifact Store content.
 
 - [ ] **Step 2: Implement GateResult persistence**  
-  Every gate attempt writes `gate_results` with status, output path, duration, retries, fix attempt id, and failure classification.
+       Every gate attempt writes `gate_results` with status, output path, duration, retries, fix attempt id, and failure classification.
 
 - [ ] **Step 3: Implement human gate pause/resume**  
-  Human gate writes pending decision and transitions workflow to `paused`. `approveHumanGate(decisionId, actor, note)` resumes the blocked node.
+       Human gate writes pending decision and transitions workflow to `paused`. `approveHumanGate(decisionId, actor, note)` resumes the blocked node.
 
 - [ ] **Step 4: Implement autoFix as repair node**  
-  Auto-fix creates a child node with role `rd` or configured fixer role, linked to failed gate result. Retries are counted against node and gate limits.
+       Auto-fix creates a child node with role `rd` or configured fixer role, linked to failed gate result. Retries are counted against node and gate limits.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add deterministic gate engine and human approvals"`
+       `git commit -m "feat(core): add deterministic gate engine and human approvals"`
 
 ### Phase 1 Exit Gate
 
@@ -364,6 +374,7 @@ pnpm build
 ### Task 9: Role File System
 
 **Files:**
+
 - Create: `packages/core/src/role/loader.ts`
 - Create: `packages/core/src/role/skill-loader.ts`
 - Create: `packages/core/src/role/tool-policy.ts`
@@ -376,23 +387,24 @@ pnpm build
 - Create: `packages/core/__tests__/role/*.test.ts`
 
 - [ ] **Step 1: Implement role resolution**  
-  Priority: project `.donkey/roles/<role>`, user `~/.donkey/roles/<role>`, built-in `roles/<role>`. Role folder override is whole-folder; skills merge by ID with higher priority override.
+       Priority: project `.donkey/roles/<role>`, user `~/.donkey/roles/<role>`, built-in `roles/<role>`. Role folder override is whole-folder; skills merge by ID with higher priority override.
 
 - [ ] **Step 2: Implement skill/knowledge loading**  
-  Parse YAML frontmatter; respect `injectMode`, `priority`, `maxSkills`, `knowledgeFiles`.
+       Parse YAML frontmatter; respect `injectMode`, `priority`, `maxSkills`, `knowledgeFiles`.
 
 - [ ] **Step 3: Compile tools.yaml to policy**  
-  Convert role tool declarations to CommandGateway policy and provider permission config. Tests assert prompt text and policy stay consistent.
+       Convert role tool declarations to CommandGateway policy and provider permission config. Tests assert prompt text and policy stay consistent.
 
 - [ ] **Step 4: Implement prompt builder**  
-  Inject role identity, task instruction, skills, tools, knowledge, artifact summaries, and project context. Oversized artifacts are summarized with explicit truncation notice.
+       Inject role identity, task instruction, skills, tools, knowledge, artifact summaries, and project context. Oversized artifacts are summarized with explicit truncation notice.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add filesystem role system and prompt builder"`
+       `git commit -m "feat(core): add filesystem role system and prompt builder"`
 
 ### Task 10: Workflow Templates and State Machine
 
 **Files:**
+
 - Create: `packages/core/src/workflow/template.ts`
 - Create: `packages/core/src/workflow/state-machine.ts`
 - Create: `workflows/standard-feature.yaml`
@@ -401,46 +413,48 @@ pnpm build
 - Create: `packages/core/__tests__/workflow/state-machine.test.ts`
 
 - [ ] **Step 1: Implement template parser**  
-  Parse YAML into typed `WorkflowTemplate`; expand input/output shorthand; validate roles, artifact refs, gate configs, retry policy, and phase/node IDs.
+       Parse YAML into typed `WorkflowTemplate`; expand input/output shorthand; validate roles, artifact refs, gate configs, retry policy, and phase/node IDs.
 
 - [ ] **Step 2: Implement state machine**  
-  Legal transitions cover `pending`, `running`, `awaiting-gate`, `passed`, `needs-revision`, `blocked`, `paused`, `interrupted`, `skipped`, `failed`.
+       Legal transitions cover `pending`, `running`, `awaiting-gate`, `passed`, `needs-revision`, `blocked`, `paused`, `interrupted`, `skipped`, `failed`.
 
 - [ ] **Step 3: Add built-in templates**  
-  `standard-feature` covers PM -> RD -> QA -> Reviewer -> PMO. `bugfix` covers PM -> RD -> QA/Reviewer -> PMO with shorter retry defaults.
+       `standard-feature` covers PM -> RD -> QA -> Reviewer -> PMO. `bugfix` covers PM -> RD -> QA/Reviewer -> PMO with shorter retry defaults.
 
 - [ ] **Step 4: Verify invalid workflow failures**  
-  Tests reject missing reviewer phase, code-producing node without build/lint gate, invalid artifact dependency, and phase parallelism with conflicting output IDs.
+       Tests reject missing reviewer phase, code-producing node without build/lint gate, invalid artifact dependency, and phase parallelism with conflicting output IDs.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add workflow template parser and state machine"`
+       `git commit -m "feat(core): add workflow template parser and state machine"`
 
 ### Task 11: Constraint Validator and Workflow Mutation
 
 **Files:**
+
 - Create: `packages/core/src/constraint/validator.ts`
 - Create: `constraints.yaml`
 - Create: `packages/core/__tests__/constraint/validator.test.ts`
 - Create: `packages/core/__tests__/constraint/mutation.test.ts`
 
 - [ ] **Step 1: Implement hard constraints**  
-  Enforce build+lint for code changes, independent review phase, and validation phase or e2e gate.
+       Enforce build+lint for code changes, independent review phase, and validation phase or e2e gate.
 
 - [ ] **Step 2: Implement conditional constraints**  
-  High-risk demand injects human gate; auth/security/permission tags inject security review and security-scan; data/migration tags require rollback-plan artifact.
+       High-risk demand injects human gate; auth/security/permission tags inject security review and security-scan; data/migration tags require rollback-plan artifact.
 
 - [ ] **Step 3: Implement soft suggestions**  
-  Suggestions are returned in dry-run preview and audit logs; they do not mutate workflow without explicit user choice.
+       Suggestions are returned in dry-run preview and audit logs; they do not mutate workflow without explicit user choice.
 
 - [ ] **Step 4: Verify mutation output**  
-  Tests assert injected phases/nodes/gates have `source: constraint`, stable IDs, and visible explanation strings.
+       Tests assert injected phases/nodes/gates have `source: constraint`, stable IDs, and visible explanation strings.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): enforce constraints and workflow mutation"`
+       `git commit -m "feat(core): enforce constraints and workflow mutation"`
 
 ### Task 12: Workflow Engine Scheduler
 
 **Files:**
+
 - Create: `packages/core/src/workflow/scheduler.ts`
 - Create: `packages/core/src/workflow/engine.ts`
 - Create: `packages/core/__tests__/workflow/engine-template.e2e.test.ts`
@@ -448,48 +462,50 @@ pnpm build
 - Create: `packages/core/__tests__/workflow/engine-gate-repair.e2e.test.ts`
 
 - [ ] **Step 1: Implement project/run creation**  
-  `startRun({ repoPath, demand, templateName | workflowSpec, mode })` creates demand, project, workflow instance, phases and nodes in SQLite before executing any Agent.
+       `startRun({ repoPath, demand, templateName | workflowSpec, mode })` creates demand, project, workflow instance, phases and nodes in SQLite before executing any Agent.
 
 - [ ] **Step 2: Implement scheduler**  
-  Execute phases sequentially; execute nodes in parallel only when artifact dependencies and worktree leases are independent. Every transition goes through state machine and repository.
+       Execute phases sequentially; execute nodes in parallel only when artifact dependencies and worktree leases are independent. Every transition goes through state machine and repository.
 
 - [ ] **Step 3: Implement artifact dependency resolution**  
-  Resolve `ArtifactRef` by node ID, phase index, or nearest previous artifact type. Missing dependency blocks node with audit event.
+       Resolve `ArtifactRef` by node ID, phase index, or nearest previous artifact type. Missing dependency blocks node with audit event.
 
 - [ ] **Step 4: Implement gate and repair loop**  
-  Node completion triggers artifact schema gate and configured gates. Gate failures create repair node when `autoFix` is true; exhausted retries block or pause according to `onExhausted`.
+       Node completion triggers artifact schema gate and configured gates. Gate failures create repair node when `autoFix` is true; exhausted retries block or pause according to `onExhausted`.
 
 - [ ] **Step 5: Verify recovery**  
-  E2E interrupts after a running node, restarts engine, resumes from the interrupted node, and preserves previous artifacts and audit chain.
+       E2E interrupts after a running node, restarts engine, resumes from the interrupted node, and preserves previous artifacts and audit chain.
 
 - [ ] **Step 6: Commit**  
-  `git commit -m "feat(core): add durable workflow scheduler"`
+       `git commit -m "feat(core): add durable workflow scheduler"`
 
 ### Task 13: Dynamic Workflow Mode
 
 **Files:**
+
 - Create: `packages/core/src/workflow/dynamic.ts`
 - Create: `packages/core/__tests__/workflow/dynamic.test.ts`
 - Create: `packages/core/__tests__/workflow/dynamic-constraint.e2e.test.ts`
 
 - [ ] **Step 1: Define dynamic spec schema**  
-  PM Agent must output `WorkflowSpecDraft` JSON with demand summary, phases, nodes, artifact outputs, risk tags, assumptions, and open questions.
+       PM Agent must output `WorkflowSpecDraft` JSON with demand summary, phases, nodes, artifact outputs, risk tags, assumptions, and open questions.
 
 - [ ] **Step 2: Implement dry-run generation path**  
-  `generateDynamicWorkflow({ demandText, adapter })` runs PM through adapter, validates JSON, applies constraints, and returns preview without executing worktree commands.
+       `generateDynamicWorkflow({ demandText, adapter })` runs PM through adapter, validates JSON, applies constraints, and returns preview without executing worktree commands.
 
 - [ ] **Step 3: Implement save-as template**  
-  `saveDynamicTemplate(spec, name)` writes `workflows/<name>.yaml` only after schema validation and command approval.
+       `saveDynamicTemplate(spec, name)` writes `workflows/<name>.yaml` only after schema validation and command approval.
 
 - [ ] **Step 4: Verify invalid agent output**  
-  Tests cover malformed JSON, missing reviewer/validation phase, high-risk demand human gate injection, and `--save-as` path traversal rejection.
+       Tests cover malformed JSON, missing reviewer/validation phase, high-risk demand human gate injection, and `--save-as` path traversal rejection.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add dynamic workflow generation and dry-run"`
+       `git commit -m "feat(core): add dynamic workflow generation and dry-run"`
 
 ### Task 14: CLI Core Commands
 
 **Files:**
+
 - Create: `packages/cli/package.json`
 - Create: `packages/cli/src/index.ts`
 - Create: `packages/cli/src/commands/init.ts`
@@ -506,44 +522,45 @@ pnpm build
 - Create: `packages/cli/__tests__/commands/*.test.ts`
 
 - [ ] **Step 1: Implement `donkey init`**  
-  Creates `.donkey/config.yaml`, `.donkey/roles/`, `.donkey/runs/`, `.donkey/worktrees/`, and initializes DB.
+       Creates `.donkey/config.yaml`, `.donkey/roles/`, `.donkey/runs/`, `.donkey/worktrees/`, and initializes DB.
 
 - [ ] **Step 2: Implement `donkey run`**  
-  Supports `--template`, `--dynamic`, `--dry-run`, `--save-as`, `--repo`, `--agent mock|claude-code`, `--allow-dirty-base`.
+       Supports `--template`, `--dynamic`, `--dry-run`, `--save-as`, `--repo`, `--agent mock|claude-code`, `--allow-dirty-base`.
 
 - [ ] **Step 3: Implement control commands**  
-  `status`, `pause`, `resume`, `cancel` read/write persisted workflow state and print current phase/node/gate/human decision state.
+       `status`, `pause`, `resume`, `cancel` read/write persisted workflow state and print current phase/node/gate/human decision state.
 
 - [ ] **Step 4: Implement management commands**  
-  `role list/show/path/create`, `workflow list/show/create`, `constraints show`, `log`, `clean`.
+       `role list/show/path/create`, `workflow list/show/create`, `constraints show`, `log`, `clean`.
 
 - [ ] **Step 5: Verify CLI E2E**  
-  Temp repo test runs `init`, `run --template bugfix --agent mock`, `status`, `log`, `clean`, and confirms DB/artifacts/reviews exist.
+       Temp repo test runs `init`, `run --template bugfix --agent mock`, `status`, `log`, `clean`, and confirms DB/artifacts/reviews exist.
 
 - [ ] **Step 6: Commit**  
-  `git commit -m "feat(cli): add core donkey commands"`
+       `git commit -m "feat(cli): add core donkey commands"`
 
 ### Task 15: Real Agent Smoke and Template Product Loop
 
 **Files:**
+
 - Create: `packages/cli/__tests__/e2e/full-template-flow.test.ts`
 - Create: `packages/cli/__tests__/e2e/dynamic-dry-run.test.ts`
 - Create: `docs/reviews/<date>-donkey-v2-phase2-cli-evidence.md`
 
 - [ ] **Step 1: Run mock full flow**  
-  `donkey run "给示例模块加批量重试" --template standard-feature --agent mock` reaches local delivery package.
+       `donkey run "给示例模块加批量重试" --template standard-feature --agent mock` reaches local delivery package.
 
 - [ ] **Step 2: Run dynamic dry-run**  
-  `donkey run --dynamic --dry-run "给支付模块加退款功能" --agent mock` prints injected human/security gates and does not create worktrees.
+       `donkey run --dynamic --dry-run "给支付模块加退款功能" --agent mock` prints injected human/security gates and does not create worktrees.
 
 - [ ] **Step 3: Run optional Claude smoke**  
-  If `claude` CLI is configured, run a bounded non-production fixture with read/write permissions scoped to temp worktree. Record CLI version and permission profile in review evidence.
+       If `claude` CLI is configured, run a bounded non-production fixture with read/write permissions scoped to temp worktree. Record CLI version and permission profile in review evidence.
 
 - [ ] **Step 4: Save evidence**  
-  Write run IDs, Gate results, human decision fixture, and failures to `docs/reviews/`.
+       Write run IDs, Gate results, human decision fixture, and failures to `docs/reviews/`.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "test: validate template and dynamic donkey flows"`
+       `git commit -m "test: validate template and dynamic donkey flows"`
 
 ### Phase 2 Exit Gate
 
@@ -571,6 +588,7 @@ pnpm --filter @donkey/cli test:e2e -- --run
 ### Task 16: SCM Delivery and PR Creation
 
 **Files:**
+
 - Create: `packages/core/src/delivery/scm.ts`
 - Create: `packages/core/src/delivery/evidence.ts`
 - Create: `packages/core/__tests__/delivery/scm.test.ts`
@@ -579,23 +597,24 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Modify: `roles/pmo/tools.yaml`
 
 - [ ] **Step 1: Implement SCM status checks**  
-  Detect remote, current branch, dirty worktree, auth availability (`gh auth status`), and whether push/PR creation requires human approval.
+       Detect remote, current branch, dirty worktree, auth availability (`gh auth status`), and whether push/PR creation requires human approval.
 
 - [ ] **Step 2: Implement delivery package**  
-  Evidence package includes demand, workflow summary, artifacts, gate results, audit hash validation, test output paths, risk gates, and rollback plan when present.
+       Evidence package includes demand, workflow summary, artifacts, gate results, audit hash validation, test output paths, risk gates, and rollback plan when present.
 
 - [ ] **Step 3: Implement commit/push/PR flow**  
-  Use CommandGateway argv commands for `git add`, `git commit`, `git push`, `gh pr create`. No auto merge. If branch is not pushed, require human approval before push.
+       Use CommandGateway argv commands for `git add`, `git commit`, `git push`, `gh pr create`. No auto merge. If branch is not pushed, require human approval before push.
 
 - [ ] **Step 4: Verify dry-run and real fixture**  
-  Dry-run prints commands and required approvals without side effects. Local fixture uses a bare remote repo and a fake `gh` executable to assert PR URL capture.
+       Dry-run prints commands and required approvals without side effects. Local fixture uses a bare remote repo and a fake `gh` executable to assert PR URL capture.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(core): add scm delivery and pr evidence"`
+       `git commit -m "feat(core): add scm delivery and pr evidence"`
 
 ### Task 17: Web API and Project Context
 
 **Files:**
+
 - Create: `packages/web/package.json`
 - Create: `packages/web/src/server/api/trpc.ts`
 - Create: `packages/web/src/server/api/root.ts`
@@ -609,23 +628,24 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Create: `packages/web/__tests__/api/*.test.ts`
 
 - [ ] **Step 1: Implement project context**  
-  Web server reads an explicit `DONKEY_PROJECT_ROOT` or CLI-provided config; it never assumes `getDbPath('.')` silently.
+       Web server reads an explicit `DONKEY_PROJECT_ROOT` or CLI-provided config; it never assumes `getDbPath('.')` silently.
 
 - [ ] **Step 2: Implement read routers**  
-  Project list/detail, artifacts, gates, audit, roles, workflows.
+       Project list/detail, artifacts, gates, audit, roles, workflows.
 
 - [ ] **Step 3: Implement controlled write routers**  
-  Human approval, pause, resume, cancel, clean require local session token stored in `.donkey/web-session.json`.
+       Human approval, pause, resume, cancel, clean require local session token stored in `.donkey/web-session.json`.
 
 - [ ] **Step 4: Verify API tests**  
-  Tests use temp DB and assert routers cannot read outside project root.
+       Tests use temp DB and assert routers cannot read outside project root.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(web): add typed api routers for donkey project state"`
+       `git commit -m "feat(web): add typed api routers for donkey project state"`
 
 ### Task 18: Web Dashboard UI
 
 **Files:**
+
 - Create: `packages/web/src/app/layout.tsx`
 - Create: `packages/web/src/app/page.tsx`
 - Create: `packages/web/src/app/project/[id]/page.tsx`
@@ -639,23 +659,24 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Create: `packages/web/__tests__/e2e/dashboard.test.ts`
 
 - [ ] **Step 1: Build cockpit layout**  
-  Dense operational UI with project status, current phase, nodes, gates, artifacts, and run controls.
+       Dense operational UI with project status, current phase, nodes, gates, artifacts, and run controls.
 
 - [ ] **Step 2: Build human decision flow**  
-  Pending human gates show exact command/gate/request context, risk label, approve/reject buttons, and note input.
+       Pending human gates show exact command/gate/request context, risk label, approve/reject buttons, and note input.
 
 - [ ] **Step 3: Build audit/artifact views**  
-  Artifact versions show summaries and file paths; audit view verifies hash chain status and filters by node/gate/role.
+       Artifact versions show summaries and file paths; audit view verifies hash chain status and filters by node/gate/role.
 
 - [ ] **Step 4: Verify with Playwright**  
-  Start local web server against fixture DB, screenshot dashboard at desktop/mobile widths, approve a pending human gate, and assert state change in DB.
+       Start local web server against fixture DB, screenshot dashboard at desktop/mobile widths, approve a pending human gate, and assert state change in DB.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "feat(web): add donkey dashboard and human gate ui"`
+       `git commit -m "feat(web): add donkey dashboard and human gate ui"`
 
 ### Task 19: Metrics, Evaluation, and Dogfooding Reports
 
 **Files:**
+
 - Create: `packages/core/src/eval/metrics.ts`
 - Create: `packages/core/src/eval/report.ts`
 - Create: `packages/core/__tests__/eval/metrics.test.ts`
@@ -663,20 +684,21 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Create: `docs/reviews/<date>-donkey-v2-dogfooding-report.html`
 
 - [ ] **Step 1: Implement metrics extraction**  
-  Metrics: time to PR/local package, automation ratio, gate pass rate, retry count, human interventions, PR review result, high-risk action count.
+       Metrics: time to PR/local package, automation ratio, gate pass rate, retry count, human interventions, PR review result, high-risk action count.
 
 - [ ] **Step 2: Implement run report**  
-  Report generator reads SQLite + Artifact Store and outputs Markdown/HTML summary with run ID, artifacts, gates, audit hash verification, known failures.
+       Report generator reads SQLite + Artifact Store and outputs Markdown/HTML summary with run ID, artifacts, gates, audit hash verification, known failures.
 
 - [ ] **Step 3: Run dogfooding**  
-  Use Donkey to manage one Donkey repo change. If real PR creation is not safe, run `--delivery dry-run` and record why.
+       Use Donkey to manage one Donkey repo change. If real PR creation is not safe, run `--delivery dry-run` and record why.
 
 - [ ] **Step 4: Commit**  
-  `git commit -m "feat(core): add evaluation metrics and dogfooding reports"`
+       `git commit -m "feat(core): add evaluation metrics and dogfooding reports"`
 
 ### Task 20: Documentation and Manual
 
 **Files:**
+
 - Create: `docs/manual/donkey-v2-user-manual.md`
 - Create: `docs/manual/donkey-v2-user-manual.html`
 - Modify: `README.md`
@@ -685,42 +707,43 @@ pnpm --filter @donkey/cli test:e2e -- --run
 - Create: `docs/reviews/<date>-donkey-v2-release-readiness.md`
 
 - [ ] **Step 1: Write user manual**  
-  Cover install, init, first run, template vs dynamic, reading status, approving gates, role customization, workflow creation, logs, cleanup, current limitations.
+       Cover install, init, first run, template vs dynamic, reading status, approving gates, role customization, workflow creation, logs, cleanup, current limitations.
 
 - [ ] **Step 2: Update README and CHANGELOG**  
-  README links technical plan, three-phase plan, manual, and quickstart. CHANGELOG records V2 rebuild milestones.
+       README links technical plan, three-phase plan, manual, and quickstart. CHANGELOG records V2 rebuild milestones.
 
 - [ ] **Step 3: Generate HTML review versions**  
-  Manual and release readiness docs must have HTML review copies.
+       Manual and release readiness docs must have HTML review copies.
 
 - [ ] **Step 4: Verify docs**  
-  Search generated docs for common unfinished-marker keywords, broken local paths, and missing HTML counterpart.
+       Search generated docs for common unfinished-marker keywords, broken local paths, and missing HTML counterpart.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "docs: add donkey v2 user manual and release notes"`
+       `git commit -m "docs: add donkey v2 user manual and release notes"`
 
 ### Task 21: Release Packaging and Final Acceptance
 
 **Files:**
+
 - Create: `packages/cli/__tests__/e2e/release-flow.test.ts`
 - Create: `packages/web/__tests__/e2e/release-dashboard.test.ts`
 - Create: `docs/reviews/<date>-donkey-v2-final-acceptance.md`
 - Create: `docs/reviews/<date>-donkey-v2-final-acceptance.html`
 
 - [ ] **Step 1: Build packages**  
-  `pnpm build` must produce `packages/core/dist`, executable `packages/cli/dist/index.js`, and `packages/web/.next`.
+       `pnpm build` must produce `packages/core/dist`, executable `packages/cli/dist/index.js`, and `packages/web/.next`.
 
 - [ ] **Step 2: Run full tests**  
-  `pnpm test -- --run --coverage`; target line coverage >= 80% for core, >= 70% for cli/web, with no failing tests.
+       `pnpm test -- --run --coverage`; target line coverage >= 80% for core, >= 70% for cli/web, with no failing tests.
 
 - [ ] **Step 3: Run final E2E**  
-  Fixture repo executes `init -> run --dynamic --dry-run -> run --template standard-feature --agent mock -> approve human gate -> delivery dry-run -> dashboard review`.
+       Fixture repo executes `init -> run --dynamic --dry-run -> run --template standard-feature --agent mock -> approve human gate -> delivery dry-run -> dashboard review`.
 
 - [ ] **Step 4: Save acceptance evidence**  
-  Final acceptance report includes commands, run IDs, Gate summary, coverage summary, known limitations, and release decision.
+       Final acceptance report includes commands, run IDs, Gate summary, coverage summary, known limitations, and release decision.
 
 - [ ] **Step 5: Commit**  
-  `git commit -m "test: add donkey v2 final acceptance evidence"`
+       `git commit -m "test: add donkey v2 final acceptance evidence"`
 
 ### Phase 3 Exit Gate
 
@@ -758,11 +781,11 @@ pnpm --filter @donkey/cli test:e2e -- --run
 
 ### 5.3 阶段工期建议
 
-| 阶段 | 建议周期 | 说明 |
-|---|---:|---|
-| 阶段一 | 2-3 周 | 核心边界最多，不能压缩；失败会影响所有后续能力 |
-| 阶段二 | 3-4 周 | 产出第一个可用 CLI 产品闭环 |
-| 阶段三 | 2-3 周 | 补齐交付、Web、文档和 dogfooding |
+| 阶段   | 建议周期 | 说明                                           |
+| ------ | -------: | ---------------------------------------------- |
+| 阶段一 |   2-3 周 | 核心边界最多，不能压缩；失败会影响所有后续能力 |
+| 阶段二 |   3-4 周 | 产出第一个可用 CLI 产品闭环                    |
+| 阶段三 |   2-3 周 | 补齐交付、Web、文档和 dogfooding               |
 
 总周期建议为 7-10 周。若只能投入 6-8 周，优先保证阶段一和阶段二，阶段三中的 Web 深度和真实 PR 创建可以降级为 dry-run + 证据包。
 

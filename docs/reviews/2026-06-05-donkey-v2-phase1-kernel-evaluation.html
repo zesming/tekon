@@ -124,6 +124,19 @@
         <code>rebuild-v2</code> 当前 SHA 的 <code>Core</code> workflow，缺 token
         以 2 失败，未找到成功完成的 <code>Core</code> run 以 1 失败。
       </p>
+      <p>
+        Vitest 已迁移到根 <code>vitest.config.ts</code> 的
+        <code>test.projects</code>，不再使用旧 workspace 配置文件。
+      </p>
+      <p>
+        发布就绪加固期间按 TDD 补强了 CommandGateway 的子进程生命周期处理：无
+        stdin 时不再写入空 chunk，显式 stdin 写入失败会返回
+        <code>rejected</code>，子进程异步
+        <code>error</code> 事件会受控结算，命令日志写入失败不会被标记为
+        <code>executed</code>，忽略 <code>SIGTERM</code> 的 timeout 场景会在
+        <code>SIGKILL</code> fallback 后硬结算，避免快速退出命令触发
+        <code>EPIPE</code>、promise 悬挂或丢失执行证据。
+      </p>
 
       <h2>2. 提交清单</h2>
       <table>
@@ -278,6 +291,24 @@
             <td>stdin prompt 写入子进程后测试通过</td>
           </tr>
           <tr>
+            <td>CommandGateway 稳定性加固</td>
+            <td>
+              root test 偶发 <code>write EPIPE</code>；fake child 只 emit
+              <code>error</code> 不 emit <code>close</code> 时旧实现悬挂为
+              <code>timed-out</code>；stdout 日志不可写时旧实现仍返回
+              <code>executed</code>；忽略 <code>SIGTERM</code> 且不 emit
+              <code>close</code> 的 child 旧实现悬挂为 <code>hung</code>
+            </td>
+            <td>
+              无 stdin 不写空 chunk；显式 stdin 写失败返回
+              <code>rejected</code>；无 stdin 的 pipe error
+              不覆盖子进程退出结果；异步 child <code>error</code> 返回
+              <code>rejected</code>；日志写入失败返回
+              <code>rejected</code>；timeout 有 <code>SIGKILL</code> fallback
+              和硬结算；root test 为 20 个文件、41 个测试通过
+            </td>
+          </tr>
+          <tr>
             <td>E2E 脚本</td>
             <td><code>No test files found</code></td>
             <td>显式 e2e 文件列表后 2 个 e2e 测试通过</td>
@@ -343,7 +374,13 @@ npm exec --yes -- prettier --check .github/workflows/core.yml package.json scrip
 # CI workflow、package 脚本、远端 Actions 查询脚本与评估文档格式检查
 
 bash scripts/ci/actionlint.sh
-# 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理</code></pre>
+# 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理
+
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core exec vitest --run __tests__/runtime/command-gateway.test.ts
+# CommandGateway 回归测试：11 tests passed
+
+npm exec --yes -- pnpm@10.12.1 test -- --run
+# 发布就绪加固后根测试：20 test files passed, 41 tests passed</code></pre>
 
       <h2>6. 风险与后续建议</h2>
       <ul>
@@ -369,7 +406,8 @@ bash scripts/ci/actionlint.sh
         <li>
           Claude adapter 的真实 Claude CLI
           调用未在阶段一执行；当前测试覆盖命令构造、权限能力检查、输出流、timeout
-          和 stdin。
+          和 stdin。维护者侧真实 provider smoke
+          将在发布就绪加固的后续任务中提供手动执行路径和脱敏证据。
         </li>
         <li>
           Worktree dirty 检测会忽略 Donkey 自己生成的
@@ -387,12 +425,13 @@ bash scripts/ci/actionlint.sh
           sandbox/approval 能力映射或外层隔离。
         </li>
         <li>
-          <code>vitest.workspace.ts</code> 当前可用，但 Vitest 已提示 workspace
-          文件形式将迁移到 <code>test.projects</code>；后续工具链升级时应处理。
+          Vitest 已迁移到根 <code>vitest.config.ts</code> 的
+          <code>test.projects</code>，不再使用旧 workspace 配置文件。
         </li>
         <li>
-          当前 core API 是阶段一内核 API，尚未提供 CLI/Web
-          产品入口；因此本阶段未更新用户手册。
+          当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；已新增
+          <code>docs/manual/donkey-mvp-user-manual.html</code> 作为当前 MVP
+          边界手册，明确普通用户入口仍未交付。
         </li>
       </ul>
 
@@ -409,7 +448,7 @@ bash scripts/ci/actionlint.sh
         >
         目前是策略字段，不是 OS 级网络隔离。合入
         <code>rebuild-v2</code> 后，主工作区重新执行本地 build、unit、e2e
-        和文档占位符检查；结果记录见最终交付说明。
+        和文档未完成标记检查；结果记录见最终交付说明。
       </p>
 
       <h2>8. 资料依据</h2>
