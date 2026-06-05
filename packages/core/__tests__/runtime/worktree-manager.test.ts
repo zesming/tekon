@@ -61,4 +61,45 @@ describe('worktree manager', () => {
     expect(calls).toEqual(['git status --porcelain']);
     db.close();
   });
+
+  it('rejects unsafe run identifiers before git worktree add', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-worktree-path-'));
+    tempDirs.push(repoPath);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const calls: string[] = [];
+    const gateway: CommandGateway = {
+      async run(input) {
+        calls.push(input.command.args.join(' '));
+        const stdoutPath = join(repoPath, `${calls.length}.stdout.log`);
+        const stderrPath = join(repoPath, `${calls.length}.stderr.log`);
+        writeFileSync(stdoutPath, '', 'utf8');
+        writeFileSync(stderrPath, '', 'utf8');
+        return {
+          status: 'executed',
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          stdoutPath,
+          stderrPath,
+          durationMs: 1,
+        };
+      },
+    };
+
+    const manager = createWorktreeManager({ repositories, gateway });
+
+    await expect(
+      manager.createLease({
+        repoPath,
+        runId: '../escape',
+        nodeId: 'node_1',
+        role: 'rd',
+        baseRef: 'HEAD',
+      }),
+    ).rejects.toThrow(/unsafe path segment/u);
+    expect(calls).toEqual([]);
+    db.close();
+  });
 });

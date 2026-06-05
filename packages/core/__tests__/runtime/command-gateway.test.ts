@@ -50,7 +50,38 @@ describe('command gateway', () => {
     await expect(
       gateway.run({ command: { tool: '/bin/git', args: ['status'] }, cwd, policy }),
     ).resolves.toMatchObject({ status: 'rejected' });
+    await expect(
+      gateway.run({ command: { tool: 'rm', args: ['-r', '-f', cwd] }, cwd, policy }),
+    ).resolves.toMatchObject({ status: 'rejected' });
+    await expect(
+      gateway.run({
+        command: { tool: 'git', args: ['push', 'origin', 'main', '--force-with-lease'] },
+        cwd,
+        policy,
+      }),
+    ).resolves.toMatchObject({ status: 'rejected' });
 
+    expect(spawnCalls).toBe(0);
+  });
+
+  it('does not treat an empty allow list as allow all', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-command-empty-allow-'));
+    tempDirs.push(cwd);
+    let spawnCalls = 0;
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        spawnCalls += 1;
+        throw new Error('spawn should not be called');
+      },
+    });
+
+    await expect(
+      gateway.run({
+        command: { tool: 'git', args: ['status'] },
+        cwd,
+        policy: { allow: [], deny: [], cwdScope: [cwd], network: 'disabled' },
+      }),
+    ).resolves.toMatchObject({ status: 'rejected' });
     expect(spawnCalls).toBe(0);
   });
 

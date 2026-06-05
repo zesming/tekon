@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
@@ -30,6 +30,8 @@ export function createArtifactStore(options: CreateArtifactStoreOptions): Artifa
 
   return {
     async writeArtifact(input) {
+      const runSegment = assertSafePathSegment(input.runId);
+      const nodeSegment = assertSafePathSegment(input.nodeId);
       const existing = await options.repositories.listArtifacts(
         input.runId,
         input.nodeId,
@@ -37,8 +39,8 @@ export function createArtifactStore(options: CreateArtifactStoreOptions): Artifa
       );
       const version =
         existing.reduce((highest, artifact) => Math.max(highest, artifact.version), 0) + 1;
-      const relativePath = `.donkey/runs/${input.runId}/artifacts/${input.nodeId}/${input.type}.v${version}.md`;
-      const absolutePath = join(options.repoPath, relativePath);
+      const relativePath = `.donkey/runs/${runSegment}/artifacts/${nodeSegment}/${input.type}.v${version}.md`;
+      const absolutePath = resolveManagedPath(options.repoPath, relativePath);
       mkdirSync(dirname(absolutePath), { recursive: true });
       writeFileSync(absolutePath, input.content, 'utf8');
 
@@ -59,7 +61,7 @@ export function createArtifactStore(options: CreateArtifactStoreOptions): Artifa
     },
 
     async readArtifact(artifact) {
-      const absolutePath = join(options.repoPath, artifact.path);
+      const absolutePath = resolveManagedPath(options.repoPath, artifact.path);
       if (!existsSync(absolutePath)) {
         throw new Error(`missing artifact file: ${artifact.path}`);
       }
@@ -83,4 +85,20 @@ function deriveSummary(content: string): string {
     .map((line) => line.trim())
     .find((line) => line.length > 0);
   return (firstNonEmptyLine ?? content.slice(0, 120)).slice(0, 240);
+}
+
+function assertSafePathSegment(value: string): string {
+  if (!/^[a-zA-Z0-9_-]+$/u.test(value)) {
+    throw new Error(`unsafe path segment: ${value}`);
+  }
+  return value;
+}
+
+function resolveManagedPath(repoPath: string, relativePath: string): string {
+  const root = resolve(repoPath, '.donkey');
+  const target = resolve(repoPath, relativePath);
+  if (target !== root && !target.startsWith(`${root}${sep}`)) {
+    throw new Error(`artifact path escapes .donkey: ${relativePath}`);
+  }
+  return target;
 }

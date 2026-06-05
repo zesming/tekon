@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { CommandPolicy } from '../types/config.js';
 import type { GateConfig, GateResult, Node, Role } from '../types/domain.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
+import { validateArtifactContent } from '../artifact/schemas.js';
 import { runCommandGate } from './runners.js';
 import { createHumanGate } from './human-gate.js';
 
@@ -96,16 +97,29 @@ async function runSchemaGate(
   mkdirSync(input.outputDir, { recursive: true });
   const outputPath = join(input.outputDir, `${input.nodeId}-schema.log`);
   const artifactType = input.gate.artifactType;
-  const artifacts = artifactType
-    ? await repositories.listArtifacts(input.runId, input.nodeId, artifactType)
-    : [];
+  if (!artifactType) {
+    writeFileSync(outputPath, 'missing artifact type for schema gate', 'utf8');
+    return makeGateResult(input, 'failed', 'missing-artifact-type', outputPath);
+  }
+
+  const artifacts = await repositories.listArtifacts(input.runId, input.nodeId, artifactType);
 
   if (artifacts.length === 0) {
     writeFileSync(outputPath, `missing artifact: ${artifactType ?? 'unspecified'}`, 'utf8');
     return makeGateResult(input, 'failed', 'missing-artifact', outputPath);
   }
 
-  writeFileSync(outputPath, `schema gate passed for ${artifactType}`, 'utf8');
+  const latestArtifact = artifacts.at(-1)!;
+  try {
+    const content = readFileSync(join(input.cwd, latestArtifact.path), 'utf8');
+    validateArtifactContent(artifactType, content);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeFileSync(outputPath, `invalid artifact ${latestArtifact.path}: ${message}`, 'utf8');
+    return makeGateResult(input, 'failed', 'invalid-artifact', outputPath);
+  }
+
+  writeFileSync(outputPath, `schema gate passed for ${artifactType}: ${latestArtifact.path}`, 'utf8');
   return makeGateResult(input, 'passed', null, outputPath);
 }
 

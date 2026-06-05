@@ -65,6 +65,40 @@ describe('artifact store', () => {
     unlinkSync(join(repoPath, artifact.path));
     await expect(store.readArtifact(artifact)).rejects.toThrow(/missing artifact file/u);
   });
+
+  it('rejects unsafe run and node identifiers before writing files', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-artifact-path-'));
+    tempDirs.push(repoPath);
+    const fakeRepositories = {
+      async listArtifacts() {
+        return [];
+      },
+      async recordArtifact(artifact: unknown) {
+        return artifact;
+      },
+    } as never;
+    const store = createArtifactStore({ repoPath, repositories: fakeRepositories });
+
+    await expect(
+      store.writeArtifact({
+        runId: '../escape',
+        nodeId: 'node_1',
+        type: 'prd',
+        content: '# PRD\n\nbody',
+      }),
+    ).rejects.toThrow(/unsafe path segment/u);
+
+    await expect(
+      store.writeArtifact({
+        runId: 'run_1',
+        nodeId: '../escape',
+        type: 'prd',
+        content: '# PRD\n\nbody',
+      }),
+    ).rejects.toThrow(/unsafe path segment/u);
+
+    expect(existsSync(join(repoPath, '..', 'escape'))).toBe(false);
+  });
 });
 
 async function createRunFixture(tempDirs: string[]) {

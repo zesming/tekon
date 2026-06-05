@@ -25,3 +25,15 @@ export type ArtifactPayload = z.infer<typeof markdownArtifactPayloadSchema>;
 export function validateArtifactPayload(type: ArtifactType, payload: unknown): ArtifactPayload {
   return artifactPayloadSchemas[type].parse(payload);
 }
+
+export function validateArtifactContent(type: ArtifactType, content: string): ArtifactPayload {
+  const trimmed = content.trim();
+  const [headingLine, ...bodyLines] = trimmed.split(/\r?\n/u);
+  const heading = headingLine?.match(/^#\s+(.+)$/u)?.[1]?.trim();
+  const body = bodyLines.join('\n').trim();
+
+  return validateArtifactPayload(type, {
+    title: heading ?? '',
+    body,
+  });
+}

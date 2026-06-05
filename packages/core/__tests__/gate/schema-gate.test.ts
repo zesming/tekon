@@ -60,6 +60,39 @@ describe('schema gate', () => {
     expect(await repositories.listGateResults('run_1')).toHaveLength(2);
     db.close();
   });
+
+  it('fails when the artifact content does not satisfy the built-in schema', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-schema-invalid-'));
+    tempDirs.push(repoPath);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const engine = createGateEngine({ repositories });
+
+    await artifactStore.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'prd',
+      content: '# PRD\n',
+    });
+
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gate: { type: 'schema', artifactType: 'prd' },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      policy: { allow: [], deny: [], requiresHumanApproval: [], cwdScope: [repoPath], network: 'disabled' },
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      failureClassification: 'invalid-artifact',
+    });
+    db.close();
+  });
 });
 
 async function createRunFixture(repositories: ReturnType<typeof createRepositories>, repoPath: string) {

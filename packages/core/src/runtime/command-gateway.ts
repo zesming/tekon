@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync } from 'node:fs';
+import type { Writable } from 'node:stream';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
@@ -99,8 +100,12 @@ function validateCommand(
     return 'shell metacharacters are not allowed in argv commands';
   }
 
-  if (command.tool === 'rm' && command.args.includes('-rf')) {
-    return 'rm -rf is always rejected';
+  if (isDangerousRemove(command)) {
+    return 'recursive forced remove is always rejected';
+  }
+
+  if (isForcePush(command)) {
+    return 'force push is always rejected';
   }
 
   if (isAbsolute(command.tool) && !policy.allow.some((entry) => entry.tool === command.tool)) {
@@ -115,7 +120,11 @@ function validateCommand(
     return 'command matches deny policy';
   }
 
-  if (policy.allow.length > 0 && !matchesAny(command, policy.allow)) {
+  if (policy.allow.length === 0) {
+    return 'command policy allow list must be explicit';
+  }
+
+  if (!matchesAny(command, policy.allow)) {
     return 'command does not match allow policy';
   }
 
@@ -134,6 +143,24 @@ function matchesAny(command: CommandInvocation, patterns: CommandInvocation[]): 
     }
     return pattern.args.every((arg, index) => command.args[index] === arg);
   });
+}
+
+function isDangerousRemove(command: CommandInvocation): boolean {
+  if (basename(command.tool) !== 'rm') {
+    return false;
+  }
+
+  const hasRecursive = command.args.some((arg) => arg === '-r' || arg === '-R' || arg === '--recursive' || /^-[^-]*r/i.test(arg));
+  const hasForce = command.args.some((arg) => arg === '-f' || arg === '--force' || /^-[^-]*f/i.test(arg));
+  return hasRecursive && hasForce;
+}
+
+function isForcePush(command: CommandInvocation): boolean {
+  if (basename(command.tool) !== 'git' || command.args[0] !== 'push') {
+    return false;
+  }
+
+  return command.args.some((arg) => arg === '-f' || arg.startsWith('--force'));
 }
 
 function isCwdAllowed(cwd: string, scopes: string[]): boolean {
@@ -162,12 +189,21 @@ async function runProcess(input: {
   const startedAt = Date.now();
   let timedOut = false;
 
-  const child = input.spawnImpl(input.command.tool, input.command.args, {
-    cwd: input.cwd,
-    env: input.env,
-    stdio: 'pipe',
-    detached: true,
-  });
+  let child: ChildProcessWithoutNullStreams;
+  try {
+    child = input.spawnImpl(input.command.tool, input.command.args, {
+      cwd: input.cwd,
+      env: input.env,
+      stdio: 'pipe',
+      detached: true,
+    });
+  } catch (error) {
+    await Promise.allSettled([endStream(stdout), endStream(stderr)]);
+    return {
+      status: 'rejected',
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
@@ -187,9 +223,8 @@ async function runProcess(input: {
   return new Promise((resolvePromise) => {
     child.on('close', (exitCode, signal) => {
       clearTimeout(timeout);
-      stdout.end();
-      stderr.end();
-      resolvePromise({
+      Promise.all([endStream(stdout), endStream(stderr)]).then(() => {
+        resolvePromise({
         status: 'executed',
         exitCode,
         signal,
@@ -198,6 +233,33 @@ async function runProcess(input: {
         stderrPath,
         durationMs: Date.now() - startedAt,
       });
+      });
     });
+  });
+}
+
+async function endStream(stream: Writable): Promise<void> {
+  if (stream.writableFinished) {
+    return;
+  }
+
+  await new Promise<void>((resolvePromise, reject) => {
+    const cleanup = () => {
+      stream.off?.('finish', onFinish);
+      stream.off?.('error', onError);
+    };
+    const onFinish = () => {
+      cleanup();
+      resolvePromise();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    stream.once?.('finish', onFinish);
+    stream.once?.('error', onError);
+    if (!stream.writableEnded) {
+      stream.end();
+    }
   });
 }

@@ -30,9 +30,12 @@ export function createWorktreeManager(options: {
   return {
     async createLease(input) {
       const repoPath = resolve(input.repoPath);
+      const runSegment = assertSafePathSegment(input.runId);
+      const nodeSegment = assertSafePathSegment(input.nodeId);
+      const roleSegment = assertSafePathSegment(input.role);
       const dirtyStatus = await runGit(options.gateway, {
         repoPath,
-        runId: input.runId,
+        runId: runSegment,
         args: ['status', '--porcelain'],
       });
       const meaningfulDirtyLines = dirtyStatus
@@ -44,13 +47,13 @@ export function createWorktreeManager(options: {
         throw new Error('dirty base worktree requires allowDirtyBase');
       }
 
-      const suffix = `${safeSegment(input.nodeId)}-${safeSegment(input.role)}`;
-      const worktreePath = join(repoPath, '.donkey', 'worktrees', input.runId, suffix);
-      const branchName = `donkey/${safeSegment(input.runId)}/${suffix}`;
+      const suffix = `${nodeSegment}-${roleSegment}`;
+      const worktreePath = join(repoPath, '.donkey', 'worktrees', runSegment, suffix);
+      const branchName = `donkey/${runSegment}/${suffix}`;
 
       await runGit(options.gateway, {
         repoPath,
-        runId: input.runId,
+        runId: runSegment,
         args: ['worktree', 'add', '-b', branchName, worktreePath, input.baseRef],
       });
 
@@ -128,8 +131,11 @@ async function runGit(
   return stdout;
 }
 
-function safeSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/gu, '-');
+function assertSafePathSegment(value: string): string {
+  if (!/^[a-zA-Z0-9_-]+$/u.test(value)) {
+    throw new Error(`unsafe path segment: ${value}`);
+  }
+  return value;
 }
 
 function assertManagedWorktreePath(repoPath: string, worktreePath: string): void {
