@@ -1,14 +1,14 @@
 # Donkey V2 阶段一安全可恢复内核评估报告
 
 生成日期：2026-06-05
-分支：`phase1-kernel`
+实现分支：`phase1-kernel`；当前已合入：`rebuild-v2`
 范围：`packages/core` 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。
 
 ## 1. 结论
 
 阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。
 
-最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 `90855a9` 修复，并新增对应 RED/GREEN 回归测试。
+最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 `90855a9` 修复，并新增对应 RED/GREEN 回归测试；复查 reviewer 返回 `APPROVED`，未检出必须修复项。
 
 ## 2. 提交清单
 
@@ -95,5 +95,6 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
 - 重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物，主线程按 TDD 接手完成。
 - Task 1 的两个 reviewer subagent 均因 `429 Too Many Requests` 中断。
 - 阶段一最终 reviewer 成功返回 `CHANGES_REQUIRED`，3 个阻断项已在 `90855a9` 修复。
+- 修复后重新委派最高思考等级 reviewer 复查，结论为 `APPROVED`；仅保留一项建议：`CommandPolicy.network` 目前是策略字段，不是 OS 级网络隔离。
 
-后续仍需按仓库规则再次启动最高思考等级 reviewer 复查；若运行时继续 429，本报告和最终交付说明应明确记录该限制，并以本地保守复查替代。
+合入 `rebuild-v2` 后，主工作区重新执行本地 build、unit、e2e 和文档占位符检查；结果记录见最终交付说明。

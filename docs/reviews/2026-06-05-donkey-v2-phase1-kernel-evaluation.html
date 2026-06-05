@@ -79,11 +79,11 @@
 <body>
 <main>
   <h1>Donkey V2 阶段一安全可恢复内核评估报告</h1>
-  <p class="meta">生成日期：2026-06-05<br>分支：<code>phase1-kernel</code><br>范围：<code>packages/core</code> 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。</p>
+  <p class="meta">生成日期：2026-06-05<br>实现分支：<code>phase1-kernel</code>；当前已合入：<code>rebuild-v2</code><br>范围：<code>packages/core</code> 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。</p>
 
   <h2>1. 结论</h2>
   <p>阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。</p>
-  <p>最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 <code>90855a9</code> 修复，并新增对应 RED/GREEN 回归测试。</p>
+  <p>最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 <code>90855a9</code> 修复，并新增对应 RED/GREEN 回归测试；复查 reviewer 返回 <code>APPROVED</code>，未检出必须修复项。</p>
 
   <h2>2. 提交清单</h2>
   <table>
@@ -148,7 +148,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e -- --run
   </ul>
 
   <h2>7. Subagent 执行情况</h2>
-  <p>本阶段已尝试按要求使用 subagent：Task 1 worker 曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物；Task 1 的两个 reviewer subagent 均因 <code>429 Too Many Requests</code> 中断。阶段一最终 reviewer 成功返回 <code>CHANGES_REQUIRED</code>，3 个阻断项已在 <code>90855a9</code> 修复。后续仍需再次启动最高思考等级 reviewer 复查；若运行时继续 429，应在最终交付说明中明确记录该限制。</p>
+  <p>本阶段已尝试按要求使用 subagent：Task 1 worker 曾因模型名错误中断；重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物；Task 1 的两个 reviewer subagent 均因 <code>429 Too Many Requests</code> 中断。阶段一最终 reviewer 成功返回 <code>CHANGES_REQUIRED</code>，3 个阻断项已在 <code>90855a9</code> 修复。修复后重新委派最高思考等级 reviewer 复查，结论为 <code>APPROVED</code>；仅保留一项建议：<code>CommandPolicy.network</code> 目前是策略字段，不是 OS 级网络隔离。合入 <code>rebuild-v2</code> 后，主工作区重新执行本地 build、unit、e2e 和文档占位符检查；结果记录见最终交付说明。</p>
 </main>
 </body>
 </html>
