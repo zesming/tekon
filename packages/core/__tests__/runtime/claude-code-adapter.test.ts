@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -81,6 +81,34 @@ describe('claude code adapter', () => {
     );
     const sleepResult = await sleepAdapter.runAgent(baseRunInput(repoPath));
     expect(sleepResult).toMatchObject({ provider: 'claude-code', timedOut: true });
+  });
+
+  it('passes prompts through stdin when promptMode is stdin', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-stdin-'));
+    tempDirs.push(repoPath);
+    const stdinScript = join(repoPath, 'stdin.mjs');
+    writeFileSync(
+      stdinScript,
+      "let input = ''\nprocess.stdin.on('data', chunk => { input += chunk })\nprocess.stdin.on('end', () => { process.stdout.write(input) })\n",
+      'utf8',
+    );
+    const adapter = createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: [stdinScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({ ...baseRunInput(repoPath), prompt: 'stdin prompt' });
+
+    expect(result).toMatchObject({ provider: 'claude-code', exitCode: 0, timedOut: false });
+    expect(readFileSync(result.outputFiles[0]!, 'utf8')).toBe('stdin prompt');
   });
 });
 

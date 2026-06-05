@@ -52,6 +52,7 @@ export function createClaudeCodeAdapter(
         policy: input.commandPolicy,
         outputDir: input.outputDir,
         timeoutMs: config.timeoutMs,
+        stdin: command.stdin,
         runId: input.runContext.runId,
         nodeId: input.runContext.nodeId,
       });

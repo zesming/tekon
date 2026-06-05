@@ -38,6 +38,7 @@ export interface CommandGatewayRunInput {
   outputDir?: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  stdin?: string;
   runId?: string;
   nodeId?: string;
 }
@@ -82,6 +83,7 @@ export function createCommandGateway(options: {
         env: { ...process.env, ...(input.env ?? {}) },
         outputDir: input.outputDir ?? join(input.cwd, '.donkey', 'command-logs'),
         timeoutMs: input.timeoutMs ?? 60_000,
+        stdin: input.stdin,
         spawnImpl,
       });
     },
@@ -148,6 +150,7 @@ async function runProcess(input: {
   env: NodeJS.ProcessEnv;
   outputDir: string;
   timeoutMs: number;
+  stdin?: string;
   spawnImpl: SpawnImpl;
 }): Promise<CommandGatewayResult> {
   mkdirSync(input.outputDir, { recursive: true });
@@ -168,6 +171,7 @@ async function runProcess(input: {
 
   child.stdout.pipe(stdout);
   child.stderr.pipe(stderr);
+  child.stdin.end(input.stdin ?? '');
 
   const timeout = setTimeout(() => {
     timedOut = true;
