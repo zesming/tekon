@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey 真实工作可用下一步清单</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --paper: #ffffff;
+        --ink: #1f2328;
+        --muted: #626a73;
+        --line: #d9dee6;
+        --accent: #2557a7;
+        --accent-soft: #eaf1ff;
+        --risk: #9f3a25;
+        --ok: #1f7a4d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.72 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      article {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 40px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 32px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 34px 0 12px;
+        padding-top: 4px;
+        font-size: 21px;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin: 24px 0 8px;
+        font-size: 17px;
+        line-height: 1.45;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 10px 0;
+      }
+
+      ul,
+      ol {
+        margin: 8px 0 16px;
+        padding-left: 24px;
+      }
+
+      li {
+        margin: 4px 0;
+      }
+
+      code {
+        border: 1px solid #d6dce5;
+        border-radius: 4px;
+        background: #f4f6f8;
+        padding: 1px 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .meta {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+
+      .summary {
+        border-left: 4px solid var(--accent);
+        background: var(--accent-soft);
+        padding: 14px 18px;
+        margin: 20px 0 26px;
+      }
+
+      .summary p {
+        margin: 6px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 22px;
+        table-layout: fixed;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+        word-break: break-word;
+      }
+
+      th {
+        background: #f2f4f7;
+        font-weight: 650;
+      }
+
+      .tagline {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 16px 0 24px;
+      }
+
+      .tile {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+        background: #fbfcfd;
+        min-height: 108px;
+      }
+
+      .tile strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .tile p {
+        color: var(--muted);
+        margin: 0;
+      }
+
+      .priority {
+        color: var(--risk);
+        font-weight: 650;
+      }
+
+      .ready {
+        color: var(--ok);
+        font-weight: 650;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          padding: 20px 12px 36px;
+        }
+
+        article {
+          padding: 24px 16px;
+        }
+
+        h1 {
+          font-size: 26px;
+        }
+
+        .tagline {
+          grid-template-columns: 1fr;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article>
+        <h1>Donkey 真实工作可用下一步清单</h1>
+        <p class="meta">日期：2026-06-08</p>
+        <p>
+          范围：综合 5 份飞书产品方案、本地实现、本地审阅文档和当前 SQLite
+          落库模型，判断 Donkey
+          要成为“我能在工作上真实使用的工具”还需要补齐什么。本文不以全面自动化为目标，不把自动合入、自动上线、生产权限变更、组织级多租户平台纳入近期范围。
+        </p>
+
+        <section class="summary">
+          <p>
+            <strong>核心判断：</strong>Donkey
+            已经具备受控执行到可审材料的骨架，但还不能直接当成日常稳定工具。下一阶段最缺的不是更多远景模块，而是真实样本证据、人类决策体验、安全与恢复信任。
+          </p>
+        </section>
+
+        <h2>0. 资料来源</h2>
+        <p>为避免把内部高权限 URL 写入仓库，本文只记录资料标题和使用方式：</p>
+        <ul>
+          <li>
+            <code>[Raw]Donkey-智能化研发流程</code
+            >：提取原始目标，即人负责前期需求澄清，后续由角色 Agent 和 workflow
+            推进。
+          </li>
+          <li>
+            <code
+              >[Beta-G]Donkey：面向技术基建团队的 AI 自动交付系统产品方案</code
+            >：采用近期收敛方向，即技术基建/B-D 类需求、推进到
+            PR、证据包和高危受控。
+          </li>
+          <li>
+            <code>[Alpha-Q]Donkey — AI Agent 驱动的智能化研发流程产品方案</code
+            >：参考角色 Agent、人工介入、全链路自动化远景和非目标。
+          </li>
+          <li>
+            <code>[Alpha-G]Donkey：AI Native 产研流程执行系统完整产品方案</code
+            >：参考八大模块、Project Cockpit、Knowledge &amp; Learning
+            和阶段规划。
+          </li>
+          <li>
+            <code>[Alpha-D]Donkey — 智能化研发流程 · 产品方案</code
+            >：参考角色五元组、工具/技能体系、四级人在环路和审计透明。
+          </li>
+          <li>
+            本地实现与文档：<code>packages/</code>、<code>workflows/</code>、<code>README.md</code>、<code>CHANGELOG.md</code>、<code>docs/manual/</code>、<code>docs/reviews/</code>、<code>docs/technical/</code>。
+          </li>
+        </ul>
+
+        <h2>1. 判断口径</h2>
+        <p>本文把“真实工作可用”定义为：</p>
+        <ul>
+          <li>用户能把一个低到中风险的真实工作需求交给 Donkey。</li>
+          <li>
+            Donkey 能在受控仓库里完成需求塑形、执行、验证、审阅材料整理和 PR
+            准备。
+          </li>
+          <li>人能在 5 到 10 分钟内判断本次结果是否值得继续推进。</li>
+          <li>远端副作用只发生在明确批准之后，且不自动 merge、不自动上线。</li>
+          <li>失败时能看到失败点、证据、下一步命令和是否需要人工介入。</li>
+        </ul>
+        <p>这个口径比“Demo 能跑”更高，但比“全自动研发组织”低很多。</p>
+
+        <h2>2. 已经具备的事实基础</h2>
+        <p>
+          飞书方案收敛出的近期方向很明确：Donkey 的完整远景包含需求池、Workflow
+          Orchestrator、Role Hub、Tool Adapter、Artifact Center、Quality
+          Gate、Project Cockpit、Knowledge &amp;
+          Learning；但近期最应该落在技术基建和内部工具的 B/D
+          类需求，默认推进到可审 PR，由人最终决策。
+        </p>
+        <ul>
+          <li>
+            CLI/Web
+            入口：<code>run</code>、<code>status</code>、<code>resume</code>、<code>review</code>、<code>delivery</code>、<code>eval</code>、Web
+            dashboard 和 human approval。
+          </li>
+          <li>
+            需求塑形：<code>demand shape/approve/show</code>、<code
+              >run --demand-file</code
+            >、Web 需求塑形和批准入口。
+          </li>
+          <li>
+            受控
+            workflow：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>，以及
+            <code>workflow select</code> /
+            <code>eval workflow-selection</code>。
+          </li>
+          <li>
+            状态与审计：SQLite 已落库
+            demand、project、workflow、node、artifact、gate、human
+            decision、audit、worktree lease、delivery PR、provider snapshot。
+          </li>
+          <li>
+            执行隔离：workflow 主路径已接入 git worktree lease，节点变更会进入
+            <code>donkey-delivery/&lt;runId&gt;</code> 分支。
+          </li>
+          <li>
+            Gate 与 evidence：repo profile 驱动验证命令，支持
+            <code>notApplicable</code> 明示不适用，内置 security scan，artifact
+            schema 和 readiness。
+          </li>
+          <li>
+            交付链路：<code>delivery prepare</code>、人工批准后的
+            <code>delivery create-pr</code>、只读
+            <code>delivery ci-status</code> / <code>delivery ci-watch</code>。
+          </li>
+          <li>
+            审阅面：CLI/Web review surface 能聚合 readiness、diff、artifact
+            正文、gate log、PR 包、Evidence Navigation 和 Gate Failure Triage。
+          </li>
+          <li>
+            样本评估：<code>eval work-usability --samples</code> 和
+            <code>record</code> 已具备真实样本、真实 provider、真实
+            PR、隔离证据和远端审批的记录与报告字段。
+          </li>
+        </ul>
+        <p>
+          当前仓库根目录没有保留
+          <code>.donkey</code>
+          运行态库，因此本文对“本地落库”的判断主要来自数据库表结构、仓库内可提交审阅报告和已实现的读写路径；真实
+          run 级证据仍需要后续用样本清单沉淀。
+        </p>
+
+        <h2>3. 核心结论</h2>
+        <div class="tagline">
+          <div class="tile">
+            <strong>真实样本证据</strong>
+            <p>
+              代码路径和 fixture 覆盖多，真实 provider
+              在真实仓库中的连续证据少。
+            </p>
+          </div>
+          <div class="tile">
+            <strong>人的决策体验</strong>
+            <p>
+              审阅面已有，但通知、审批摘要、影响文件、批准/拒绝入口还不够贴近日常工作流。
+            </p>
+          </div>
+          <div class="tile">
+            <strong>安全与恢复信任</strong>
+            <p>
+              已有 worktree、CommandGateway、secret scan 和 human
+              gate，还缺真实中断恢复与安全对抗样本。
+            </p>
+          </div>
+        </div>
+        <p>
+          最近不应该继续扩远景角色或做更复杂的自动规划，而应该把“真实仓库、真实
+          provider、真实 PR、真实证据、真实失败恢复”打穿。
+        </p>
+
+        <h2>4. P0：不补齐不建议日常使用</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>缺口</th>
+              <th>现在的状态</th>
+              <th>真实可用最低目标</th>
+              <th>建议下一步</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="priority">真实 provider 端到端证据</td>
+              <td>
+                Claude Code artifact manifest 协议已有，mock/fixture 覆盖较多。
+              </td>
+              <td>
+                至少 5 个真实 provider run 能产出合格 artifacts，通过
+                schema/readiness 或给出可恢复失败。
+              </td>
+              <td>
+                选 1 个内部工具仓库先跑 3 个小需求，记录缺 artifact、schema
+                fail、gate fail 和人工修复成本。
+              </td>
+            </tr>
+            <tr>
+              <td class="priority">真实样本集</td>
+              <td>
+                有 <code>eval work-usability</code> 和报告导出，样本本身还不足。
+              </td>
+              <td>
+                10 个样本、5 个 ready run、5 个真实 provider run、2 个真实
+                PR、全部有隔离证据。
+              </td>
+              <td>
+                建立 <code>docs/reviews</code> 可提交样本清单，每次真实 run 后用
+                <code>record</code> 写入。
+              </td>
+            </tr>
+            <tr>
+              <td class="priority">审批与通知</td>
+              <td>
+                Web 可处理 human gate，CLI 可 resume；但还偏本地按钮/命令。
+              </td>
+              <td>
+                生成可复制审批摘要，包含风险、命令、影响文件、证据链接、批准/拒绝命令；后续再接飞书
+                IM。
+              </td>
+              <td>
+                先做 CLI/Web approval summary，不急着做完整飞书通知机器人。
+              </td>
+            </tr>
+            <tr>
+              <td class="priority">真实 PR 与远端 CI</td>
+              <td>
+                <code>delivery create-pr</code>、<code>ci-status</code>、<code
+                  >ci-watch</code
+                >
+                已有实现和 fake 测试；当前主要围绕 GitHub CLI /
+                <code>gh</code> 路径。
+              </td>
+              <td>
+                至少 2 次受控远端 PR，记录 PR URL、checks、失败恢复和无 checks
+                场景；非 GitHub host 或其它 CI 聚合需要明确 adapter 边界。
+              </td>
+              <td>
+                准备专用测试远端仓库，固定 <code>gh auth status</code>、base
+                branch、PR body 脱敏检查。
+              </td>
+            </tr>
+            <tr>
+              <td class="priority">仓库画像适配</td>
+              <td>
+                repo profile、<code>commandRef</code>、preflight、<code
+                  >notApplicable</code
+                >
+                已有。
+              </td>
+              <td>
+                在非 pnpm 或脚本名不同的真实仓库也能正确给出命令建议和阻断。
+              </td>
+              <td>
+                用 1 到 2 个不同技术栈仓库验证，不把工具不适配误判成需求失败。
+              </td>
+            </tr>
+            <tr>
+              <td class="priority">中断恢复</td>
+              <td>provider snapshot 和 completed marker 已有。</td>
+              <td>
+                真实长任务被中断后，不换 provider、不误推进、不丢 evidence。
+              </td>
+              <td>人为制造 CLI/Web 中断和 pending human gate 恢复样本。</td>
+            </tr>
+            <tr>
+              <td class="priority">安全隔离</td>
+              <td>
+                worktree、CommandGateway、secret scan、artifact 拦截已有。
+              </td>
+              <td>
+                证明主工作区不被改、push/PR 只能走
+                delivery、人类未批准时无远端副作用，日志不泄密。
+              </td>
+              <td>
+                加真实 provider 越界写入/静默
+                push/密钥输出的对抗样本；必要时引入 OS/container 级隔离。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>5. P1：补齐后才像日常工具</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>能力</th>
+              <th>为什么重要</th>
+              <th>建议形态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>5 分钟审阅工作台</td>
+              <td>人不能靠翻 <code>.donkey</code> 文件做决策。</td>
+              <td>
+                Web/CLI 默认突出失败项、高风险项、影响文件、验收标准覆盖、PR
+                body 和下一步命令。
+              </td>
+            </tr>
+            <tr>
+              <td>Gate 失败修复闭环</td>
+              <td>真实使用里失败是常态。</td>
+              <td>
+                对 missing command、test fail、schema fail、secret fail
+                给出可执行修复建议，并支持局部重试。
+              </td>
+            </tr>
+            <tr>
+              <td>QA 证据</td>
+              <td>UI/Web 改动只跑单测不够。</td>
+              <td>
+                支持 Playwright 步骤、截图、失败截图和验收标准映射进入
+                evidence。
+              </td>
+            </tr>
+            <tr>
+              <td>需求入口贴近工作流</td>
+              <td>当前需求塑形是确定性启发式。</td>
+              <td>
+                支持从飞书文档、issue、PRD
+                摘要导入；保留人工批准，不把开放问题当成已解决。
+              </td>
+            </tr>
+            <tr>
+              <td>角色和工具治理</td>
+              <td>角色资产化是长期价值，但不能失控。</td>
+              <td>
+                角色版本、变更审查、工具权限预览、角色修改后的 smoke/e2e 要求。
+              </td>
+            </tr>
+            <tr>
+              <td>数据飞轮</td>
+              <td>没有样本就无法判断真实成功率。</td>
+              <td>
+                每次 run
+                记录成功率、耗时、人工介入、失败原因、返工次数和最终是否采纳。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>6. P2：后置，不阻塞第一批真实使用</h2>
+        <ul>
+          <li>动态 workflow 非 dry-run 自动执行。</li>
+          <li>多 Agent 并行协作和复杂角色矩阵。</li>
+          <li>Workflow Studio / 可视化配置平台。</li>
+          <li>Knowledge &amp; Learning 自动沉淀。</li>
+          <li>多项目、多团队、远程多租户 dashboard。</li>
+          <li>成本预算治理和组织级权限平台。</li>
+          <li>上线、运营、反馈闭环和生产写操作。</li>
+        </ul>
+        <p>
+          这些方向都与飞书完整远景一致，但都不应该抢在真实 provider 与真实 PR
+          证据之前。
+        </p>
+
+        <h2>7. 推荐的最近实施顺序</h2>
+        <h3>第 1 步：把“可试用边界”固定下来</h3>
+        <ul>
+          <li>内部工具、研发效能、测试补齐、文档补齐、低风险 bugfix。</li>
+          <li>
+            不涉及生产数据写入、权限扩大、密钥、支付、强合规、复杂视觉设计。
+          </li>
+          <li>必须有仓库画像、验证命令、人工验收标准和回滚/拒绝路径。</li>
+        </ul>
+        <h3>第 2 步：补审批摘要</h3>
+        <ul>
+          <li>run id、node id、decision id。</li>
+          <li>需求标题和当前 workflow 阶段。</li>
+          <li>风险标签和触发 human gate 的原因。</li>
+          <li>exact command 或将要产生的远端副作用。</li>
+          <li>影响文件和 diff 摘要。</li>
+          <li>readiness 失败项、gate log、artifact 和 PR 包链接。</li>
+          <li>批准命令、拒绝命令、Web 入口。</li>
+        </ul>
+        <p>先支持复制到飞书消息，后续再接飞书 IM 推送。</p>
+        <h3>第 3 步：跑真实样本，不再只跑 fixture</h3>
+        <ul>
+          <li>2 到 3 个相似内部工具仓库。</li>
+          <li>10 个真实或历史需求。</li>
+          <li>至少 5 个使用真实 provider。</li>
+          <li>至少 2 个创建真实测试 PR。</li>
+          <li>
+            每个样本写入 <code>eval work-usability record</code>，生成
+            Markdown/HTML 报告。
+          </li>
+        </ul>
+        <h3>第 4 步：用失败样本改工具</h3>
+        <ul>
+          <li>需求边界不清。</li>
+          <li>provider 没按 artifact 协议输出。</li>
+          <li>repo profile 命令不适配。</li>
+          <li>gate 失败但建议不可操作。</li>
+          <li>人工审批上下文不足。</li>
+          <li>安全边界或远端副作用不可信。</li>
+          <li>恢复/重试后状态不一致。</li>
+        </ul>
+        <p>
+          这些归因应反向进入 repo profile、workflow 模板、角色
+          prompt、审批摘要和 readiness 规则。
+        </p>
+
+        <h2>8. “可以开始真实试用”的判定线</h2>
+        <ul>
+          <li>
+            10 个样本有记录，<code>eval work-usability</code>
+            达到默认阈值或有明确豁免理由。
+          </li>
+          <li>
+            至少 2 个真实 PR 创建成功，PR body、CI 状态和失败恢复路径有证据。
+          </li>
+          <li>
+            至少 2 次中断恢复样本通过，恢复时 provider 不被替换，未误推进
+            workflow。
+          </li>
+          <li>审批摘要能让 reviewer 不打开本地目录也能判断风险和下一步。</li>
+          <li>
+            所有远端副作用都有 human decision、audit event、批准人和时间。
+          </li>
+          <li>
+            真实 provider 样本没有出现主工作区越界写入、未脱敏密钥、未批准
+            push/PR。
+          </li>
+        </ul>
+
+        <h2>9. 明确不建议近期做</h2>
+        <ul>
+          <li>不做自动 merge。</li>
+          <li>不做自动上线。</li>
+          <li>不做生产数据库、权限、密钥或发布系统写操作。</li>
+          <li>不做远程多租户服务。</li>
+          <li>不先扩展复杂角色矩阵。</li>
+          <li>不把动态 workflow 直接从建议升级为自动执行。</li>
+        </ul>
+
+        <h2>10. 最终判断</h2>
+        <p>
+          作为“真实工作可用工具”，Donkey
+          下一阶段最缺的不是更多概念模块，而是更硬的闭环证据和更顺手的人类决策体验。
+        </p>
+        <ol>
+          <li>
+            <strong>审批摘要和通知入口：</strong>让人能在飞书或 Web
+            中快速判断批准/拒绝。
+          </li>
+          <li>
+            <strong>真实样本集：</strong>用 10 个受控需求证明真实
+            provider、真实仓库、真实 PR 的稳定边界。
+          </li>
+          <li>
+            <strong>安全与恢复样本：</strong
+            >证明失败、中断、拒绝和高风险动作都不会把系统带到不可解释状态。
+          </li>
+        </ol>
+        <p>
+          <span class="ready"
+            >只要这三件事打实，Donkey
+            就可以从“本地验收骨架”进入“受控工作试用工具”。</span
+          >
+          在此之前，它应该只用于低风险、可回滚、有人工审阅的研发辅助场景。
+        </p>
+      </article>
+    </main>
+  </body>
+</html>
