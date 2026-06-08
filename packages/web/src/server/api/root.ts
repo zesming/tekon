@@ -8,6 +8,7 @@ import {
   createGateEngine,
   createMockAgentAdapter,
   createRepositories,
+  createWorkReviewSurface,
   createWorkflowEngine,
   createWorktreeManager,
   agentAdapterConfigSchema,
@@ -153,6 +154,12 @@ export interface ApiCaller {
       verification: { valid: true } | { valid: false; brokenEventId: string };
       events: ReturnType<typeof mapAuditEvent>[];
     }>;
+  };
+  review: {
+    get(input: {
+      runId: string;
+      maxContentChars?: number;
+    }): Promise<Awaited<ReturnType<typeof createWorkReviewSurface>>>;
   };
   role: {
     list(): Promise<{
@@ -333,6 +340,19 @@ export async function createApiCaller(
             .map((event) => mapAuditEvent(event, nodeById))
             .filter((event) => matchesAuditFilters(event, auditInput)),
         };
+      },
+    },
+
+    review: {
+      async get(reviewInput) {
+        assertRunInScope(db, context, reviewInput.runId);
+        return createWorkReviewSurface({
+          repoPath: context.projectRoot,
+          repositories,
+          audit,
+          runId: reviewInput.runId,
+          maxContentChars: reviewInput.maxContentChars,
+        });
       },
     },
 

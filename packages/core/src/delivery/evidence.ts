@@ -1,9 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { validateArtifactContent } from '../artifact/schemas.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
+import { readRepoTextFile } from '../repo/safe-path.js';
 import type {
   Artifact,
   Demand,
@@ -48,6 +46,7 @@ export async function createDeliveryEvidencePackage(input: {
   repositories: DonkeyRepositories;
   audit: AuditLogger;
   runId: string;
+  repoPath?: string;
   testOutputPaths?: string[];
   riskGates?: string[];
 }): Promise<DeliveryEvidencePackage> {
@@ -63,7 +62,7 @@ export async function createDeliveryEvidencePackage(input: {
   const gates = await input.repositories.listGateResults(input.runId);
   const audit = await input.audit.verify(input.runId);
   const project = await input.repositories.getProject(workflow.projectId);
-  const repoPath = project?.repoPath;
+  const repoPath = input.repoPath ?? project?.repoPath;
   const semanticEvidence = repoPath
     ? collectSemanticEvidence(repoPath, artifacts, gates)
     : {
@@ -174,13 +173,12 @@ function collectSemanticEvidence(
     acceptanceEvidence,
     securityScans: latestGateResults(
       gates.filter((gate) => gate.gateType === 'security-scan'),
-    )
-      .map((gate) => ({
-        gateResultId: gate.id,
-        status: gate.status,
-        outputPath: gate.outputPath,
-        failureClassification: gate.failureClassification,
-      })),
+    ).map((gate) => ({
+      gateResultId: gate.id,
+      status: gate.status,
+      outputPath: gate.outputPath,
+      failureClassification: gate.failureClassification,
+    })),
   };
 }
 
@@ -229,9 +227,9 @@ function hasPassedReferencedGate(
   return gateResultIds.some((id) => gatesById.get(id)?.status === 'passed');
 }
 
-function latestGateResults<T extends { nodeId: string; gateType: string; createdAt: string }>(
-  gates: T[],
-): T[] {
+function latestGateResults<
+  T extends { nodeId: string; gateType: string; createdAt: string },
+>(gates: T[]): T[] {
   const latestByNodeAndType = new Map<string, T>();
   for (const gate of gates) {
     const key = `${gate.nodeId}:${gate.gateType}`;
@@ -248,10 +246,15 @@ function latestGateResults<T extends { nodeId: string; gateType: string; created
 
 function readPayload(repoPath: string, artifact: Artifact) {
   try {
-    return validateArtifactContent(
-      artifact.type,
-      readFileSync(join(repoPath, artifact.path), 'utf8'),
-    );
+    const content = readRepoTextFile({
+      repoPath,
+      path: artifact.path,
+      maxBytes: 2_000_000,
+    });
+    if (!content) {
+      return null;
+    }
+    return validateArtifactContent(artifact.type, content);
   } catch {
     return null;
   }

@@ -123,6 +123,24 @@ describe('runCli in-process', () => {
     expect(io.takeStdout()).toContain('requiresHumanApproval=true');
 
     await expect(
+      runCli(
+        ['delivery', 'prepare', '--run-id', standardRunId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('packagePath=');
+
+    await expect(
+      runCli(['review', '--run-id', standardRunId!, '--repo', repoPath], io),
+    ).resolves.toBe(0);
+    const reviewOutput = io.takeStdout();
+    expect(reviewOutput).toContain('## Readiness Failed Checks');
+    expect(reviewOutput).toContain('## Artifacts');
+    expect(reviewOutput).toContain('## Gate Logs');
+    expect(reviewOutput).toContain('## PR Body');
+    expect(reviewOutput).toContain('ready=true');
+
+    await expect(
       runCli(['pause', '--run-id', gatedRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
     expect(io.takeStdout()).toContain('status=paused');

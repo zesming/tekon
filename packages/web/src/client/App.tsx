@@ -74,6 +74,46 @@ type AuditVerification =
   | { valid: true }
   | { valid: false; brokenEventId: string };
 
+type TextPreview = {
+  path: string;
+  exists: boolean;
+  content: string;
+  truncated: boolean;
+  sizeBytes: number;
+};
+
+type ReadinessCheck = {
+  id: string;
+  severity: string;
+  passed: boolean;
+  evidence: string;
+};
+
+type ReviewSurface = {
+  readiness: {
+    ready: boolean;
+    score: number;
+    checks: ReadinessCheck[];
+  };
+  artifacts: Array<Artifact & { content: TextPreview }>;
+  gates: Array<Gate & { output: TextPreview | null }>;
+  delivery: {
+    status: string;
+    prUrl: string | null;
+    package: TextPreview | null;
+    prBody: TextPreview | null;
+    diff: {
+      available: boolean;
+      branch: string;
+      baseBranch: string;
+      stat: string;
+      changedFiles: string[];
+      reason?: string;
+    };
+  };
+  nextCommands: string[];
+};
+
 type RoleInfo = {
   id: string;
   name: string;
@@ -92,6 +132,7 @@ function App() {
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [auditVerification, setAuditVerification] =
     useState<AuditVerification | null>(null);
+  const [review, setReview] = useState<ReviewSurface | null>(null);
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
   const [token, setToken] = useState('');
@@ -132,29 +173,36 @@ function App() {
       setDecisions([]);
       setAudit([]);
       setAuditVerification(null);
+      setReview(null);
       return;
     }
 
-    const [artifactResult, gateResult, auditResult] = await Promise.all([
-      rpc<{ artifacts: Artifact[] }>('artifact.list', { runId: latestRunId }),
-      rpc<{ gates: Gate[]; pendingDecisions: Decision[] }>('gate.list', {
-        runId: latestRunId,
-      }),
-      rpc<{ verification: AuditVerification; events: AuditEvent[] }>(
-        'audit.list',
-        {
+    const [artifactResult, gateResult, auditResult, reviewResult] =
+      await Promise.all([
+        rpc<{ artifacts: Artifact[] }>('artifact.list', { runId: latestRunId }),
+        rpc<{ gates: Gate[]; pendingDecisions: Decision[] }>('gate.list', {
           runId: latestRunId,
-          nodeId: auditNodeFilter || undefined,
-          gateId: auditGateFilter || undefined,
-          role: auditRoleFilter || undefined,
-        },
-      ),
-    ]);
+        }),
+        rpc<{ verification: AuditVerification; events: AuditEvent[] }>(
+          'audit.list',
+          {
+            runId: latestRunId,
+            nodeId: auditNodeFilter || undefined,
+            gateId: auditGateFilter || undefined,
+            role: auditRoleFilter || undefined,
+          },
+        ),
+        rpc<ReviewSurface>('review.get', {
+          runId: latestRunId,
+          maxContentChars: 1_600,
+        }),
+      ]);
     setArtifacts(artifactResult.artifacts);
     setGates(gateResult.gates);
     setDecisions(gateResult.pendingDecisions);
     setAuditVerification(auditResult.verification);
     setAudit(auditResult.events);
+    setReview(reviewResult);
   }
 
   useEffect(() => {
@@ -280,6 +328,117 @@ function App() {
             />
           ))}
         </Panel>
+        <Panel title="Readiness">
+          {review ? (
+            <>
+              <Row
+                primary={review.readiness.ready ? 'ready' : 'not ready'}
+                secondary={`score=${review.readiness.score.toFixed(2)} failed=${
+                  review.readiness.checks
+                    .filter((check) => !check.passed)
+                    .map((check) => check.id)
+                    .join(',') || 'none'
+                }`}
+              />
+              {review.readiness.checks
+                .filter((check) => !check.passed)
+                .map((check) => (
+                  <Row
+                    key={check.id}
+                    primary={`${check.id} ${check.severity}`}
+                    secondary={check.evidence}
+                  />
+                ))}
+            </>
+          ) : (
+            <Row primary="loading" secondary="readiness" />
+          )}
+        </Panel>
+        <Panel title="Diff">
+          {review ? (
+            <>
+              <Row
+                primary={
+                  review.delivery.diff.available
+                    ? `${review.delivery.diff.branch}`
+                    : 'diff unavailable'
+                }
+                secondary={
+                  review.delivery.diff.available
+                    ? `base=${review.delivery.diff.baseBranch}`
+                    : (review.delivery.diff.reason ?? 'not recorded')
+                }
+              />
+              {review.delivery.diff.changedFiles.map((file) => (
+                <Row key={file} primary={file} secondary="changed file" />
+              ))}
+              {review.delivery.diff.stat ? (
+                <PreviewBlock preview={review.delivery.diff.stat} />
+              ) : null}
+            </>
+          ) : (
+            <Row primary="loading" secondary="diff" />
+          )}
+        </Panel>
+        <Panel title="Artifact 正文">
+          {review?.artifacts.length ? (
+            review.artifacts.map((artifact) => (
+              <PreviewBlock
+                key={artifact.id}
+                title={`${artifact.type} v${artifact.version}`}
+                preview={artifact.content.content || artifact.summary || ''}
+                meta={`${artifact.content.path} truncated=${artifact.content.truncated}`}
+              />
+            ))
+          ) : (
+            <Row primary="none" secondary="artifact content" />
+          )}
+        </Panel>
+        <Panel title="Gate Logs">
+          {review?.gates.length ? (
+            review.gates.map((gate) => (
+              <PreviewBlock
+                key={gate.id}
+                title={`${gate.gateType} ${gate.status}`}
+                preview={gate.output?.content || 'missing output'}
+                meta={gate.output?.path ?? gate.id}
+              />
+            ))
+          ) : (
+            <Row primary="none" secondary="gate logs" />
+          )}
+        </Panel>
+        <Panel title="PR 包">
+          {review ? (
+            <>
+              <Row
+                primary={review.delivery.status}
+                secondary={review.delivery.prUrl ?? 'not created'}
+              />
+              {review.delivery.prBody ? (
+                <PreviewBlock
+                  title="PR Body"
+                  preview={review.delivery.prBody.content}
+                  meta={review.delivery.prBody.path}
+                />
+              ) : null}
+              {review.delivery.package ? (
+                <PreviewBlock
+                  title="PR Package"
+                  preview={review.delivery.package.content}
+                  meta={review.delivery.package.path}
+                />
+              ) : null}
+            </>
+          ) : (
+            <Row primary="loading" secondary="PR package" />
+          )}
+        </Panel>
+        <Panel title="下一步">
+          {review?.nextCommands.map((command) => (
+            <Row key={command} primary={command} secondary="command" />
+          ))}
+        </Panel>
         <Panel title="审计">
           <div className="audit-filter">
             <label>
@@ -364,6 +523,20 @@ function Row(props: { primary: string; secondary: string }) {
     <div className="row">
       <strong>{props.primary}</strong>
       <span>{props.secondary}</span>
+    </div>
+  );
+}
+
+function PreviewBlock(props: {
+  title?: string;
+  meta?: string;
+  preview: string;
+}) {
+  return (
+    <div className="preview-block">
+      {props.title ? <strong>{props.title}</strong> : null}
+      {props.meta ? <span>{props.meta}</span> : null}
+      <pre>{props.preview}</pre>
     </div>
   );
 }

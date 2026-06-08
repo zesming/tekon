@@ -22,6 +22,7 @@ export async function evaluateWorkReadiness(input: {
   repositories: DonkeyRepositories;
   audit: AuditLogger;
   runId: string;
+  repoPath?: string;
 }): Promise<WorkReadinessEvaluation> {
   const workflow = await input.repositories.getWorkflowInstance(input.runId);
   if (!workflow) {
@@ -39,6 +40,7 @@ export async function evaluateWorkReadiness(input: {
     repositories: input.repositories,
     audit: input.audit,
     runId: input.runId,
+    repoPath: input.repoPath,
   });
   const audit = await input.audit.verify(input.runId);
   const validationGates = latestGateResults(

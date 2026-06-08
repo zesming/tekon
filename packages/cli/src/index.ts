@@ -26,6 +26,7 @@ import {
   createHumanGate,
   createMockAgentAdapter,
   createPullRequestPreparation,
+  createWorkReviewSurface,
   createRepositories,
   createScmDelivery,
   createWorktreeManager,
@@ -97,6 +98,9 @@ export async function runCli(
         return 0;
       case 'eval':
         await commandEval(rest, io);
+        return 0;
+      case 'review':
+        await commandReview(rest, io);
         return 0;
       case 'log':
         await commandLog(rest, io);
@@ -879,6 +883,144 @@ async function commandEval(argv: string[], io: CliIO) {
     ].join(' ') + '\n',
   );
   db.close();
+}
+
+async function commandReview(argv: string[], io: CliIO) {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      'run-id': { type: 'string' },
+      json: { type: 'boolean', default: false },
+      'max-chars': { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolve(args.values.repo ?? process.cwd());
+  ensureInitialized(repoPath);
+  const runId = args.values['run-id'] ?? args.positionals[0];
+  if (!runId) {
+    throw new Error('--run-id is required');
+  }
+  const maxContentChars = args.values['max-chars']
+    ? Number(args.values['max-chars'])
+    : 1_200;
+  if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
+    throw new Error('--max-chars must be a positive number');
+  }
+  const db = openProjectDb(repoPath);
+  migrateDatabase(db);
+  const repositories = createRepositories(db);
+  const audit = createAuditLogger({ repositories });
+  const surface = await createWorkReviewSurface({
+    repoPath,
+    repositories,
+    audit,
+    runId,
+    maxContentChars,
+  });
+
+  if (args.values.json) {
+    io.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
+    db.close();
+    return;
+  }
+
+  io.stdout.write(formatReviewSurface(surface));
+  db.close();
+}
+
+function formatReviewSurface(
+  surface: Awaited<ReturnType<typeof createWorkReviewSurface>>,
+): string {
+  const failedChecks = surface.readiness.checks.filter(
+    (check) => !check.passed,
+  );
+  const lines = [
+    `runId=${surface.runId}`,
+    `workflowStatus=${surface.workflowStatus}`,
+    `ready=${surface.readiness.ready}`,
+    `score=${surface.readiness.score.toFixed(2)}`,
+    `deliveryStatus=${surface.delivery.status}`,
+    `prUrl=${surface.delivery.prUrl ?? ''}`,
+    '',
+    '## Readiness Failed Checks',
+    ...(failedChecks.length === 0
+      ? ['- none']
+      : failedChecks.map(
+          (check) => `- ${check.id} (${check.severity}): ${check.evidence}`,
+        )),
+    '',
+    '## Delivery',
+    `- packagePath: ${surface.delivery.package?.path ?? 'missing'}`,
+    `- prBodyPath: ${surface.delivery.prBody?.path ?? 'missing'}`,
+    `- diffAvailable: ${surface.delivery.diff.available}`,
+    `- diffBranch: ${surface.delivery.diff.branch}`,
+    `- diffBase: ${surface.delivery.diff.baseBranch}`,
+    ...(surface.delivery.diff.reason
+      ? [`- diffReason: ${surface.delivery.diff.reason}`]
+      : []),
+    '',
+    '## Changed Files',
+    ...(surface.delivery.diff.changedFiles.length === 0
+      ? ['- none']
+      : surface.delivery.diff.changedFiles.map((file) => `- ${file}`)),
+    '',
+    '## Artifacts',
+    ...(surface.artifacts.length === 0
+      ? ['- none']
+      : surface.artifacts.map((artifact) =>
+          [
+            `### ${artifact.type} ${artifact.id}`,
+            `path=${artifact.path} summary=${artifact.summary ?? ''}`,
+            formatPreview(artifact.content),
+          ].join('\n'),
+        )),
+    '',
+    '## Gate Logs',
+    ...(surface.gates.length === 0
+      ? ['- none']
+      : surface.gates.map((gate) =>
+          [
+            `### ${gate.gateType} ${gate.id} ${gate.status}`,
+            `node=${gate.nodeId} failure=${gate.failureClassification ?? ''}`,
+            gate.output ? formatPreview(gate.output) : 'output=missing',
+          ].join('\n'),
+        )),
+    '',
+    '## PR Body',
+    surface.delivery.prBody
+      ? formatPreview(surface.delivery.prBody)
+      : 'missing',
+    '',
+    '## PR Package',
+    surface.delivery.package
+      ? formatPreview(surface.delivery.package)
+      : 'missing',
+    '',
+    '## Next Commands',
+    ...surface.nextCommands.map((command) => `- ${command}`),
+    '',
+  ];
+  return `${lines.join('\n')}\n`;
+}
+
+function formatPreview(preview: {
+  path: string;
+  exists: boolean;
+  content: string;
+  truncated: boolean;
+  sizeBytes: number;
+}): string {
+  if (!preview.exists) {
+    return `path=${preview.path} exists=false`;
+  }
+  return [
+    `path=${preview.path} sizeBytes=${preview.sizeBytes} truncated=${preview.truncated}`,
+    '```',
+    preview.content,
+    '```',
+  ].join('\n');
 }
 
 async function commandLog(argv: string[], io: CliIO) {

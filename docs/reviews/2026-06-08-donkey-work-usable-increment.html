@@ -9,7 +9,7 @@
         margin: 0;
         background: #f6f7f9;
         color: #1f2937;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-family: system-ui, sans-serif;
       }
       main {
         max-width: 980px;
@@ -35,7 +35,7 @@
 
 范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
 
-结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、Web approval 自动继续、语义验收证据、安全扫描和工作就绪度评估。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、Web approval 自动继续、语义验收证据、安全扫描、工作就绪度评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
@@ -63,6 +63,7 @@
 | PR 失败恢复                  | `packages/core/src/delivery/scm.ts`                                                                        | `gh pr create` 失败后尝试 `gh pr view &lt;branch&gt; --json url --jq .url` 恢复已存在 PR URL，恢复成功按 created 落库并记录 audit。                                                 |
 | Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                      | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                               |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                           | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 为 recommended。                   |
+| 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                      | 汇总 readiness 失败项、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                   |
 
 ## 3. 验证记录
 
@@ -84,9 +85,11 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `cli` release e2e：`workflow preflight`、repo profile gate 解析、人工批准 PR 创建 fixture。
 - `delivery/scm.test.ts`：PR 状态落库、人工审批、`.donkey` 排除、已有分支空 commit 跳过、PR URL 创建/恢复和失败阶段落库。
 - `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
+- `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
 - `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
 - `delivery/evidence.test.ts` / `delivery/pr-package.test.ts`：验收标准证据和安全扫描证据进入交付包。
-- `web` API/e2e：Web approval 后自动 resume，reject 不继续。
+- `cli` run-cli unit：`review --run-id` 输出 readiness、artifact、gate log 和 PR body。
+- `web` API/e2e：Web approval 后自动 resume，reject 不继续；Web API 和 dashboard 可读取 review surface。
 
 本轮最终收口已通过：
 
@@ -111,13 +114,18 @@ npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/r
 - 自动 merge、自动上线、生产权限变更等高风险动作。
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
 - PR 创建失败后的更复杂恢复策略，例如远端网络抖动后的重试退避、不同 Git host 的 PR 查询差异。
+- Web 仍不能直接发起 run、执行 delivery prepare/create-pr，artifact/gate/audit 互跳也仍需继续打磨。
 - 团队级多项目权限、成本控制、通知和长期知识沉淀仍是后续阶段能力。
 
 ## 5. Reviewer 结论
 
-最高思考 reviewer 复查结论：APPROVED。第一轮 review 检出的 P0-1/P0-3/P0-4 代码、测试和文档一致性问题已修复；复查确认 Markdown/HTML 不再把已实现的 artifact manifest、repo profile `commandRef` 和 provider snapshot 恢复写成当前缺失。
+上一轮最高思考 reviewer 复查结论：APPROVED。第一轮 review 检出的 P0-1/P0-3/P0-4 代码、测试和文档一致性问题已修复；复查确认 Markdown/HTML 不再把已实现的 artifact manifest、repo profile `commandRef` 和 provider snapshot 恢复写成当前缺失。
 
-剩余项均为非阻塞后续工作：P0-2/P0-5/P0-6/P0-7 仍保留为真实仓库样本、审阅体验、真实 PR 证据和生产级隔离证据工作。
+本次 P0-5 最高思考 reviewer 第一轮结论为 CHANGES_REQUESTED，必须修复项包括：review surface 对 artifact/gate log 的路径读取需要防 symlink/traversal 逃逸；readiness/evidence 不应间接采信 repo 外 artifact；delivery diff 不应接受 unsafe ref 或在 base 缺失时 fallback。
+
+已修复摘要：新增 repo-bound safe path 读取；`delivery/evidence.ts`、`review/surface.ts` 和 artifact/gate log preview 统一按目标 repo 边界读取；delivery diff 使用安全 ref 校验、`rev-parse --verify --end-of-options` 和 commit hash range；base/branch 缺失时返回 unavailable。第二轮 reviewer 又指出 DB 中 `project.repoPath` 可能扩大 review readiness/evidence 读取边界；已通过 `evaluateWorkReadiness` / `createDeliveryEvidencePackage` 的显式 `repoPath` override 修复，并新增“DB project repoPath 指向外部目录时 readiness 不采信外部 artifact”的回归测试。
+
+本次 P0-5 复查结论：APPROVED，必须修复项为无。剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 Web 发起 run、prepare/create-pr 和 artifact/gate/audit 互跳体验。
 </pre
       >
     </main>

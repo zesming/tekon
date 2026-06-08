@@ -1,13 +1,13 @@
 # Donkey
 
-Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、Web human approval 自动继续、语义验收证据、安全扫描和 readiness 评估。
+Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、Web human approval 自动继续、语义验收证据、安全扫描、readiness 评估和 CLI/Web 审阅面。
 
 ## 当前状态
 
 - Phase 2 已验证：`packages/core` 安全可恢复内核、角色系统、workflow 模板、约束校验、动态 workflow dry-run、持久化调度器、Artifact Store、Audit hash chain、GateEngine、HumanGate、Mock Agent 和 Claude Code adapter contract。
 - Phase 2 已验证：`packages/cli` 本地命令入口，包括 `init`、`run --template`、`run --dynamic --dry-run`、`run --allow-dirty-base`、`status`、`pause`、`resume --approve-human`、`cancel`、`role`、`workflow`、`constraints`、`log`、`clean`。
 - Phase 3 已验证：交付 dry-run、delivery evidence、metrics、dogfooding 报告、本地 Web dashboard、Web human approval、audit hash/filter、CLI/Web release e2e 和最终验收报告。
-- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`eval readiness` 工作就绪度评估、Web approval 后按 provider 快照自动 resume。
+- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`eval readiness` 工作就绪度评估、`review` 聚合审阅面、Web approval 后按 provider 快照自动 resume。
 - 尚未作为已完成能力发布：自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户服务。
 
 ## 快速开始
@@ -90,6 +90,14 @@ node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/
 
 `eval readiness` 会检查 workflow、audit、验证 gate、delivery package、PR 准备包、pending human gate、验收标准证据、安全扫描和 PR 创建状态，作为“这次是否可拿去人工审阅/提交”的最小评估面。PR 已创建是推荐项；自动 merge 和上线不在 readiness 范围内。
 
+聚合审阅面：
+
+```bash
+node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
+```
+
+`review` 会把 readiness 失败项、PR body、PR package、`donkey-delivery/<runId>` diff 摘要、artifact 正文预览、gate 日志预览和建议下一步命令汇总到一个输出中。Web dashboard 也使用同一 review surface，展示 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令。
+
 真实 provider 需要遵守 Donkey artifact 协议：在 `DONKEY_OUTPUT_DIR` 写入节点产物，并写 `DONKEY_ARTIFACT_MANIFEST`。Adapter 会校验 manifest 中的 artifact schema 并写入 Artifact Store；缺少必需 artifact 时节点失败，不会继续把 stdout/stderr 当作有效交付证据。
 
 启动本地 Web dashboard：
@@ -98,7 +106,7 @@ node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/
 DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @donkey/web dev
 ```
 
-`donkey init` 会生成 `.donkey/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，并在审计区展示 hash chain 状态和 node/gate/role 过滤。
+`donkey init` 会生成 `.donkey/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，并在审阅区展示 readiness、diff、artifact 正文、gate logs、PR 包和下一步命令，在审计区展示 hash chain 状态和 node/gate/role 过滤。
 
 ## 本地验证
 

@@ -57,6 +57,39 @@ describe('web read API', () => {
         }),
       ],
     });
+    await expect(api.review.get({ runId: 'run_1' })).resolves.toMatchObject({
+      readiness: expect.objectContaining({
+        ready: false,
+        checks: expect.arrayContaining([
+          expect.objectContaining({ id: 'workflow-passed', passed: false }),
+        ]),
+      }),
+      artifacts: [
+        expect.objectContaining({
+          id: 'artifact_1',
+          content: expect.objectContaining({
+            exists: true,
+            content: expect.stringContaining('Review report body'),
+          }),
+        }),
+      ],
+      gates: [
+        expect.objectContaining({
+          id: 'gate_1',
+          output: expect.objectContaining({
+            content: expect.stringContaining('human approval is required'),
+          }),
+        }),
+      ],
+      delivery: expect.objectContaining({
+        package: expect.objectContaining({
+          content: expect.stringContaining('PR Preparation'),
+        }),
+        prBody: expect.objectContaining({
+          content: expect.stringContaining('Add dashboard'),
+        }),
+      }),
+    });
     await expect(
       api.audit.list({ runId: 'run_1', nodeId: 'node_1', gateId: 'gate_1' }),
     ).resolves.toMatchObject({

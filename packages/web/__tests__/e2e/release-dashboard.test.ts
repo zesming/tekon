@@ -37,12 +37,26 @@ test.describe('Donkey release dashboard', () => {
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: '产物' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Gates' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Readiness' }),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Diff' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Artifact 正文' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Gate Logs' }),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'PR 包' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '下一步' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '审计' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '角色' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
+    await expect(page.getByText('Review report body')).toBeVisible();
+    await expect(page.getByText('human approval is required')).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('release approval');

@@ -27,6 +27,13 @@ export async function createWebFixtureProject(
   mkdirSync(donkeyDir, { recursive: true });
   mkdirSync(join(donkeyDir, 'roles', 'rd'), { recursive: true });
   mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'artifacts', 'node_1'), {
+    recursive: true,
+  });
+  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'gates'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'delivery'), {
+    recursive: true,
+  });
 
   writeFileSync(
     join(donkeyDir, 'roles', 'rd', 'agent.yaml'),
@@ -57,6 +64,33 @@ export async function createWebFixtureProject(
   writeFileSync(
     join(donkeyDir, 'web-session.json'),
     JSON.stringify({ token: sessionToken }, null, 2),
+  );
+  writeFileSync(
+    join(
+      donkeyDir,
+      'runs',
+      'run_1',
+      'artifacts',
+      'node_1',
+      'review-report.v1.md',
+    ),
+    'Review report body for dashboard.',
+    'utf8',
+  );
+  writeFileSync(
+    join(donkeyDir, 'runs', 'run_1', 'gates', 'human.txt'),
+    'human approval is required',
+    'utf8',
+  );
+  writeFileSync(
+    join(donkeyDir, 'runs', 'run_1', 'delivery', 'pr-body.md'),
+    '# Add dashboard\n\nReview dashboard evidence.',
+    'utf8',
+  );
+  writeFileSync(
+    join(donkeyDir, 'runs', 'run_1', 'delivery', 'pr-package.md'),
+    '# PR Preparation\n\nReview dashboard evidence package.',
+    'utf8',
   );
 
   const db = openDonkeyDatabase({
