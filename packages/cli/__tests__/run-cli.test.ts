@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -34,6 +35,7 @@ describe('runCli in-process', () => {
     expect(JSON.parse(readFileSync(sessionPath, 'utf8'))).toEqual({
       token: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
+    expect(existsSync(join(repoPath, '.donkey', 'eval'))).toBe(true);
 
     await expect(
       runCli(
@@ -139,6 +141,42 @@ describe('runCli in-process', () => {
     expect(reviewOutput).toContain('## Gate Logs');
     expect(reviewOutput).toContain('## PR Body');
     expect(reviewOutput).toContain('ready=true');
+
+    const evalDir = join(repoPath, '.donkey', 'eval');
+    mkdirSync(evalDir, { recursive: true });
+    const samplesPath = join(evalDir, 'work-usability-samples.yaml');
+    writeFileSync(
+      samplesPath,
+      [
+        'thresholds:',
+        '  minSamples: 1',
+        '  minReadyRuns: 1',
+        '  minRealProviderRuns: 0',
+        '  minCreatedPrs: 0',
+        '  requireIsolationEvidence: true',
+        'samples:',
+        '  - id: standard-fixture',
+        `    runId: ${standardRunId}`,
+      ].join('\n'),
+      'utf8',
+    );
+    await expect(
+      runCli(
+        [
+          'eval',
+          'work-usability',
+          '--samples',
+          samplesPath,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const usabilityOutput = io.takeStdout();
+    expect(usabilityOutput).toContain('usable=true');
+    expect(usabilityOutput).toContain('readyRuns=1');
+    expect(usabilityOutput).toContain('isolationPassed=1');
 
     await expect(
       runCli(['pause', '--run-id', gatedRunId!, '--repo', repoPath], io),

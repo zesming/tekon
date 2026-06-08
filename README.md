@@ -1,13 +1,13 @@
 # Donkey
 
-Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、readiness 评估和 CLI/Web 审阅面。
+Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、readiness 评估、CLI/Web 审阅面和工作可用样本评估。
 
 ## 当前状态
 
 - Phase 2 已验证：`packages/core` 安全可恢复内核、角色系统、workflow 模板、约束校验、动态 workflow dry-run、持久化调度器、Artifact Store、Audit hash chain、GateEngine、HumanGate、Mock Agent 和 Claude Code adapter contract。
 - Phase 2 已验证：`packages/cli` 本地命令入口，包括 `init`、`run --template`、`run --dynamic --dry-run`、`run --allow-dirty-base`、`status`、`pause`、`resume --approve-human`、`cancel`、`role`、`workflow`、`constraints`、`log`、`clean`。
 - Phase 3 已验证：交付 dry-run、delivery evidence、metrics、dogfooding 报告、本地 Web dashboard、Web human approval、audit hash/filter、CLI/Web release e2e 和最终验收报告。
-- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`eval readiness` 工作就绪度评估、`review` 聚合审阅面、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
+- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、`review` 聚合审阅面、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
 - 尚未作为已完成能力发布：自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户服务。
 
 ## 快速开始
@@ -90,6 +90,14 @@ node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/
 
 `eval readiness` 会检查 workflow、audit、验证 gate、delivery package、PR 准备包、pending human gate、验收标准证据、安全扫描和 PR 创建状态，作为“这次是否可拿去人工审阅/提交”的最小评估面。PR 已创建是推荐项；自动 merge 和上线不在 readiness 范围内。
 
+评估一组真实工作样本是否达到试用门槛：
+
+```bash
+node packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --repo /path/to/project
+```
+
+样本清单会逐个绑定 run id，并按阈值检查 readiness、真实 provider 运行数、真实 PR 数、security scan、worktree 隔离和远端副作用审批。默认阈值面向正式 dogfooding：10 个样本、5 个 ready run、5 个真实 provider run、2 个真实 PR，并要求所有样本有隔离证据；fixture 或阶段性验收可在清单中显式降低阈值。
+
 聚合审阅面：
 
 ```bash
@@ -142,8 +150,9 @@ npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --
 - V2 用户手册：`docs/manual/donkey-v2-user-manual.html`
 - Dogfooding 报告：`docs/reviews/2026-06-05-donkey-v2-dogfooding-report.html`
 - Final acceptance：`docs/reviews/2026-06-05-donkey-v2-final-acceptance.html`
+- 工作可用样本评估增量：`docs/reviews/2026-06-08-donkey-work-usability-eval-increment.html`
 - 历史 MVP 边界：`docs/manual/donkey-mvp-user-manual.html`
 
 ## 发布状态
 
-当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、eval readiness、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。
+当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、eval readiness、eval work-usability、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。

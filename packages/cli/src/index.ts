@@ -15,7 +15,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 import {
   createAuditLogger,
@@ -32,6 +32,7 @@ import {
   createWorktreeManager,
   createWorkflowEngine,
   evaluateWorkReadiness,
+  evaluateWorkUsability,
   loadRepoProfile,
   writeDefaultRepoProfile,
   generateDynamicWorkflow,
@@ -42,6 +43,7 @@ import {
   openDonkeyDatabase,
   saveDynamicTemplate,
   repoProfileCommand,
+  workUsabilitySampleSetSchema,
   type AgentAdapter,
   type AgentAdapterConfig,
   agentAdapterConfigSchema,
@@ -139,6 +141,7 @@ async function commandInit(argv: string[], io: CliIO) {
   mkdirSync(join(donkeyDir, 'roles'), { recursive: true });
   mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
   mkdirSync(join(donkeyDir, 'worktrees'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'eval'), { recursive: true });
   const webSessionPath = join(donkeyDir, 'web-session.json');
   if (!existsSync(webSessionPath)) {
     writeFileSync(
@@ -858,6 +861,48 @@ async function commandStatus(argv: string[], io: CliIO) {
 
 async function commandEval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
+  if (subcommand === 'work-usability') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        samples: { type: 'string' },
+        json: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const samplePath = resolve(
+      repoPath,
+      args.values.samples ??
+        join('.donkey', 'eval', 'work-usability-samples.yaml'),
+    );
+    if (!existsSync(samplePath)) {
+      throw new Error(`work usability sample file not found: ${samplePath}`);
+    }
+    const sampleSet = workUsabilitySampleSetSchema.parse(
+      parseYaml(readFileSync(samplePath, 'utf8')),
+    );
+    const db = openProjectDb(repoPath);
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const evaluation = await evaluateWorkUsability({
+      repoPath,
+      repositories,
+      audit,
+      sampleSet,
+    });
+    io.stdout.write(
+      args.values.json
+        ? `${JSON.stringify(evaluation, null, 2)}\n`
+        : formatWorkUsabilityEvaluation(evaluation),
+    );
+    db.close();
+    return;
+  }
+
   if (subcommand !== 'readiness') {
     throw new Error(`unknown eval command: ${subcommand ?? ''}`);
   }
@@ -884,6 +929,49 @@ async function commandEval(argv: string[], io: CliIO) {
     ].join(' ') + '\n',
   );
   db.close();
+}
+
+function formatWorkUsabilityEvaluation(
+  evaluation: Awaited<ReturnType<typeof evaluateWorkUsability>>,
+): string {
+  const failedThresholds = evaluation.thresholdChecks.filter(
+    (check) => !check.passed,
+  );
+  const failedSampleChecks = evaluation.samples.flatMap((sample) =>
+    sample.checks
+      .filter((check) => !check.passed)
+      .map((check) => `${sample.id}:${check.id}`),
+  );
+  return (
+    [
+      `usable=${evaluation.usable}`,
+      `score=${evaluation.score.toFixed(2)}`,
+      `samples=${evaluation.counts.samples}`,
+      `readyRuns=${evaluation.counts.readyRuns}`,
+      `realProviderRuns=${evaluation.counts.realProviderRuns}`,
+      `createdPrs=${evaluation.counts.createdPrs}`,
+      `securityScanPassed=${evaluation.counts.securityScanPassed}`,
+      `isolationPassed=${evaluation.counts.isolationPassed}`,
+      `failedThresholds=${failedThresholds.map((check) => check.id).join(',')}`,
+      `failedSamples=${failedSampleChecks.join(',')}`,
+      '',
+      '## Threshold Checks',
+      ...evaluation.thresholdChecks.map(
+        (check) => `- ${check.id}: ${check.passed} ${check.evidence}`,
+      ),
+      '',
+      '## Samples',
+      ...evaluation.samples.map((sample) =>
+        [
+          `- ${sample.id}: runId=${sample.runId} readiness=${sample.readiness?.ready ?? false} provider=${sample.provider ?? 'missing'} prCreated=${sample.prCreated} isolation=${sample.isolationPassed}`,
+          ...sample.checks
+            .filter((check) => !check.passed)
+            .map((check) => `  - failed ${check.id}: ${check.evidence}`),
+        ].join('\n'),
+      ),
+      '',
+    ].join('\n') + '\n'
+  );
 }
 
 async function commandReview(argv: string[], io: CliIO) {

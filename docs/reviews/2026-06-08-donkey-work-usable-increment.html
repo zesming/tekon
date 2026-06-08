@@ -35,7 +35,7 @@
 
 范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
 
-结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、工作就绪度评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
@@ -64,6 +64,7 @@
 | Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                      | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                               |
 | Web 受控执行入口             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`                                   | Web 使用 session token 发起模板 run、执行 PR 准备和触发受人工批准的 create-pr；复用 Engine、PR package 和 SCM delivery 语义，不绕过 dirty base 和人工审批。                   |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                           | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 为 recommended。                   |
+| 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                      | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                    |
 | 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                      | 汇总 readiness 失败项、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                   |
 
 ## 3. 验证记录
@@ -87,9 +88,11 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `delivery/scm.test.ts`：PR 状态落库、人工审批、`.donkey` 排除、已有分支空 commit 跳过、PR URL 创建/恢复和失败阶段落库。
 - `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
 - `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
+- `eval/work-usability.test.ts`：覆盖样本阈值通过、真实 provider/PR/隔离证据缺失失败，以及缺失 run 的样本级失败证据。
 - `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
 - `delivery/evidence.test.ts` / `delivery/pr-package.test.ts`：验收标准证据和安全扫描证据进入交付包。
 - `cli` run-cli unit：`review --run-id` 输出 readiness、artifact、gate log 和 PR body。
+- `cli` release e2e：覆盖 `eval work-usability --samples` 在受控 fixture 中读取样本清单并验证 ready run、created PR 和隔离证据。
 - `web` API/e2e：Web approval 后自动 resume，reject 不继续；Web API 和 dashboard 可读取 review surface；Web 可发起 mock run、执行 prepare、将 create-pr 落库为 awaiting-approval，并在 e2e 中完成 dashboard 发起 run 和准备 PR。
 
 本轮最终收口已通过：
@@ -111,6 +114,7 @@ npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/r
 ## 4. 仍未完成
 
 - 真实 Claude Code / Codex 在受控真实仓库中的端到端稳定执行证据；本轮证明的是 artifact manifest 协议、provider 快照和 fixture 流程，不证明真实任务长期成功率。
+- 真实样本清单本身；`eval work-usability` 只是把样本阈值和证据项固化为评估命令，不会替代 2-3 个真实仓库、10 个需求和至少 2 个真实 PR 的实际 dogfooding。
 - 动态 workflow 非 dry-run 执行。
 - 自动 merge、自动上线、生产权限变更等高风险动作。
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
@@ -127,8 +131,8 @@ npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/r
 已修复摘要：新增 repo-bound safe path 读取；`delivery/evidence.ts`、`review/surface.ts` 和 artifact/gate log preview 统一按目标 repo 边界读取；delivery diff 使用安全 ref 校验、`rev-parse --verify --end-of-options` 和 commit hash range；base/branch 缺失时返回 unavailable。第二轮 reviewer 又指出 DB 中 `project.repoPath` 可能扩大 review readiness/evidence 读取边界；已通过 `evaluateWorkReadiness` / `createDeliveryEvidencePackage` 的显式 `repoPath` override 修复，并新增“DB project repoPath 指向外部目录时 readiness 不采信外部 artifact”的回归测试。
 
 本次 P0-5 复查结论：APPROVED，必须修复项为无。后续又补齐 Web 发起 run、prepare/create-pr 入口和基础锚点互跳；本轮新增 Web 执行入口第一轮 reviewer 指出项目 workflow 优先级和文档过期表述问题，均已修复，并补充 approved create-pr fake `gh` 测试。最终复查结论：APPROVED，必须修复项为无。剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 artifact/gate/audit 的深度上下文导航体验。
-</pre
-      >
+
+      </pre>
     </main>
   </body>
 </html>

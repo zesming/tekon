@@ -37,4 +37,5 @@ export * from './review/surface.js';
 export * from './eval/metrics.js';
 export * from './eval/report.js';
 export * from './eval/work-readiness.js';
+export * from './eval/work-usability.js';
 export type { WorkflowTemplate } from './workflow/template.js';

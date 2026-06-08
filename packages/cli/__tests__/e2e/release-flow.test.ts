@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -182,6 +183,35 @@ describe('donkey release flow e2e', () => {
         repoPath,
       ),
     ).toContain('ready=true');
+
+    const evalDir = join(repoPath, '.donkey', 'eval');
+    mkdirSync(evalDir, { recursive: true });
+    const samplesPath = join(evalDir, 'work-usability-samples.yaml');
+    writeFileSync(
+      samplesPath,
+      [
+        'thresholds:',
+        '  minSamples: 1',
+        '  minReadyRuns: 1',
+        '  minRealProviderRuns: 0',
+        '  minCreatedPrs: 1',
+        '  requireIsolationEvidence: true',
+        'samples:',
+        '  - id: standard-fixture',
+        `    runId: ${deliveryRunId}`,
+        '    requirePr: true',
+        '    expectedPrUrl: https://github.example/donkey/pull/9',
+      ].join('\n'),
+      'utf8',
+    );
+    const usabilityOutput = runCli(
+      cliPath,
+      ['eval', 'work-usability', '--samples', samplesPath, '--repo', repoPath],
+      repoPath,
+    );
+    expect(usabilityOutput).toContain('usable=true');
+    expect(usabilityOutput).toContain('createdPrs=1');
+    expect(usabilityOutput).toContain('isolationPassed=1');
     expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
   }, 15_000);
 });

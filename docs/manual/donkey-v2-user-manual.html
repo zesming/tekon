@@ -37,7 +37,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、聚合审阅面、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、工作可用样本评估、聚合审阅面、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -66,7 +66,7 @@ node /path/to/donkey/packages/cli/dist/index.js
 node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project
 ```
 
-初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录和 worktree 目录。`.donkey/` 是运行态目录，默认不提交；重要验收结论、run id、Gate 结果和风险判断应同步写入 `docs/reviews/`。
+初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录、worktree 目录和 eval 目录。`.donkey/` 是运行态目录，默认不提交；重要验收结论、run id、Gate 结果和风险判断应同步写入 `docs/reviews/`。
 
 `repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e`、`security` 命令，并保留 PR base branch 和风险路径配置。内置 workflow 的 build/lint/test/security gate 会通过 `commandRef` 读取仓库画像命令；缺失 build/lint/test 命令时 gate 不会静默跳过，而会以 missing-command 失败。
 
@@ -217,7 +217,44 @@ node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id &lt;runI
 
 `ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。PR 已创建当前是推荐项，不是 required gate，因为有些团队会先审阅本地 PR 准备包再决定是否创建远端 PR。
 
-## 11. 聚合审阅面 review
+## 11. 工作可用样本评估 eval work-usability
+
+`eval readiness` 判断单个 run 能不能进入人工审阅；`eval work-usability` 判断一组真实工作样本是否达到试用门槛。样本清单建议保存在目标仓库 `.donkey/eval/work-usability-samples.yaml` 或可提交的 `docs/reviews/` 附件中。
+
+```yaml
+thresholds:
+  minSamples: 10
+  minReadyRuns: 5
+  minRealProviderRuns: 5
+  minCreatedPrs: 2
+  requireIsolationEvidence: true
+samples:
+  - id: internal-tool-bugfix-001
+    runId: run_xxx
+    demandType: D
+    expectedProvider: claude-code
+    requireRealProvider: true
+    requirePr: true
+    expectedPrUrl: https://github.example/org/repo/pull/1
+```
+
+运行评估：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --repo /path/to/project
+```
+
+当前评估项包括：
+
+- 样本数、ready run 数、真实 provider run 数和真实 PR 数是否达到阈值。
+- 每个样本的 `readiness`、provider snapshot、PR delivery 状态和 PR URL。
+- 每个样本是否有 passed `security-scan`。
+- 每个样本是否有 worktree lease、worktree 路径是否位于 `.donkey/worktrees`、lease 是否释放。
+- 如果发生 push 或 PR 创建，是否存在 `approvedBy` 和 `approvedAt`，避免把远端副作用写成静默自动行为。
+
+默认阈值面向正式 dogfooding，不代表当前仓库已经满足：10 个样本、5 个 ready run、5 个真实 provider run、2 个真实 PR，并要求所有样本有隔离证据。fixture 或阶段性验收可以在样本文件里显式降低阈值，但不能据此宣称生产级真实可用。
+
+## 12. 聚合审阅面 review
 
 在提交 PR 或批准高风险动作前，可以用 `review` 一次性查看人工决策所需的主要证据：
 
@@ -242,7 +279,7 @@ node /path/to/donkey/packages/cli/dist/index.js review --run-id &lt;runId&gt; --
 
 `review` 只读取目标仓库内的 artifact、gate log 和 delivery 文件；不会读取仓库外路径。它不执行 push、PR 创建、merge 或上线。
 
-## 12. Web dashboard
+## 13. Web dashboard
 
 Web dashboard 属于 Phase 3 产品面。当前实现为本地 Node HTTP + Vite React dashboard，可审阅 project overview、artifacts、gates、audit、roles、workflows、settings 和 human approvals。
 
@@ -271,7 +308,7 @@ Web 审阅至少需要记录：
 - Readiness、Diff、Artifact 正文、Gate Logs、PR 包、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 
-## 13. 角色 roles
+## 14. 角色 roles
 
 查看内置和项目角色：
 
@@ -289,7 +326,7 @@ node /path/to/donkey/packages/cli/dist/index.js role create rd --repo /path/to/p
 
 角色解析遵循内置角色、项目角色和用户角色的加载规则；项目级 whole-folder override 会覆盖对应角色目录。当前 Engine 会把角色 system prompt、skills、knowledge、tools policy 摘要和项目上下文注入 Agent prompt。修改角色后应通过本地 mock workflow、真实 provider smoke 和审阅记录验证，不应直接假设 prompt 或 tools policy 修改已经安全。
 
-## 14. Workflows
+## 15. Workflows
 
 查看模板：
 
@@ -306,7 +343,7 @@ node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --
 
 当前内置模板包括 `standard-feature` 和 `bugfix`。两个模板的代码节点都包含 build、lint、schema 和 security-scan gate，并通过 `commandRef` 读取 repo profile 中的命令。`standard-feature` 适合本地 mock happy path 验证；`bugfix` 保留 reviewer human gate，通常需要人工确认后继续。
 
-## 15. Logs 与审计
+## 16. Logs 与审计
 
 查看 audit log：
 
@@ -316,7 +353,7 @@ node /path/to/donkey/packages/cli/dist/index.js log --run-id &lt;runId&gt; --rep
 
 日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`worktree.lease.created`、`worktree.lease.promoted`、`worktree.lease.released`、`human.gate.pending`、`human.gate.approved`、`delivery.pr-prepared`、`delivery.pr.created` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
 
-## 16. Cleanup
+## 17. Cleanup
 
 清理 worktree 目录：
 
@@ -326,7 +363,7 @@ node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 
 当前 `clean` 只重建 `.donkey/worktrees`，不会删除 SQLite、run artifacts、audit evidence 或 `donkey-delivery/&lt;runId&gt;` 本地分支。需要保留正式验收结论时，应把摘要写入 `docs/reviews/`，不要只依赖 `.donkey/` 运行态文件。
 
-## 17. current limitations（当前限制）
+## 18. current limitations（当前限制）
 
 - Phase 2 已验证的是本地 mock CLI 产品环，不是公开发布产品。
 - 动态 workflow 当前是 deterministic mock preview，不等于真实 PM LLM 规划。
@@ -337,7 +374,7 @@ node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 - `CommandPolicy.network` 不能被理解为操作系统级网络隔离。
 - Donkey 默认增强人类交付，不替代人类完成合入、上线、权限扩大或高危审批。
 
-## 18. 最终验收检查
+## 19. 最终验收检查
 
 最终验收至少执行：
 
@@ -363,8 +400,8 @@ node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id &lt;
 ```
 
 若使用会暂停的模板，还需要记录 `resume --approve-human` 的命令和结果。
-</pre
-      >
+
+      </pre>
     </main>
   </body>
 </html>
