@@ -109,7 +109,7 @@ describe('web read API', () => {
       roles: [expect.objectContaining({ id: 'rd' })],
     });
     await expect(api.workflow.list()).resolves.toMatchObject({
-      workflows: [expect.objectContaining({ id: 'standard-feature' })],
+      workflows: [expect.objectContaining({ id: 'project-feature' })],
     });
 
     await api.close();

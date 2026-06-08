@@ -6,7 +6,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、聚合审阅面、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、聚合审阅面、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -221,14 +221,22 @@ Web dashboard 属于 Phase 3 产品面。当前实现为本地 Node HTTP + Vite 
 DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @donkey/web dev
 ```
 
-Web 写操作依赖 `init` 生成的 `.donkey/web-session.json` session token。没有 token 或 token 错误时，approve/reject、pause/resume/cancel/clean 会被拒绝。
+Web 写操作依赖 `init` 生成的 `.donkey/web-session.json` session token。没有 token 或 token 错误时，approve/reject、pause/resume/cancel/clean、发起 run、PR 准备和 PR 创建入口都会被拒绝。
 
 Pending human gate 会展示 request context、gate context、exact command 和 risk label；审阅区会展示 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令；audit 视图会展示 hash chain 校验状态，并支持按 node、gate、role 过滤。Web approve 会更新 human decision、gate/node/workflow 状态并自动调用 Engine resume 继续推进；resume 会使用 run 自身落库的 provider 快照，当前支持 `mock` 和 `claude-code`，不支持 `custom` adapter。Web reject 会阻断 workflow，不会自动继续。
+
+Web 的“工作流操作”区支持：
+
+- 使用 session token 发起模板 run，默认 `standard-feature` + `mock`，也可选择 `claude-code`；与 CLI 一样会检查 dirty base，除非显式允许 dirty base。
+- 对当前 latest run 执行 PR 准备，复用 `delivery prepare`，生成 PR body/package 并写入审计事件。
+- 对当前 latest run 触发受人工批准的 PR 创建入口，复用 `delivery create-pr`；未批准时只进入 `awaiting-approval`，批准后才会 push 和调用 `gh pr create`。
+- artifact 列表、gate 列表和 audit 中的 delivery 事件提供基础锚点，可跳到 artifact 正文、gate log 或 PR 包。
 
 Web 审阅至少需要记录：
 
 - 本地启动命令和 `DONKEY_PROJECT_ROOT` 或等价项目根配置。
 - pending human gate 的 approve 或 reject 操作结果，以及 command/gate/request/risk 上下文是否符合预期。
+- Web 发起 run、准备 PR 和 PR 创建入口的操作结果；若触发真实 PR 创建，还必须记录远端仓库、认证状态、PR URL 和失败恢复结果。
 - Readiness、Diff、Artifact 正文、Gate Logs、PR 包、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 

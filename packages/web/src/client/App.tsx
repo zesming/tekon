@@ -137,6 +137,10 @@ function App() {
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>([]);
   const [token, setToken] = useState('');
   const [note, setNote] = useState('');
+  const [demandText, setDemandText] = useState('');
+  const [runTemplate, setRunTemplate] = useState('standard-feature');
+  const [runAgent, setRunAgent] = useState('mock');
+  const [allowDirtyBase, setAllowDirtyBase] = useState(false);
   const [auditNodeFilter, setAuditNodeFilter] = useState('');
   const [auditGateFilter, setAuditGateFilter] = useState('');
   const [auditRoleFilter, setAuditRoleFilter] = useState('');
@@ -144,6 +148,16 @@ function App() {
 
   const runId = overview?.latestRun?.id;
   const pendingDecision = decisions[0];
+  const workflowOptions = useMemo(() => {
+    const options = new Map<string, string>([
+      ['standard-feature', 'standard-feature'],
+      ['bugfix', 'bugfix'],
+    ]);
+    for (const workflow of workflows) {
+      options.set(workflow.id, workflow.id);
+    }
+    return [...options.values()];
+  }, [workflows]);
 
   const stats = useMemo(
     () => [
@@ -228,6 +242,61 @@ function App() {
     await loadDashboard();
   }
 
+  async function runAction(action: () => Promise<void>) {
+    try {
+      await action();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+      await loadDashboard().catch(() => undefined);
+    }
+  }
+
+  async function startRun() {
+    const result = await rpc<{
+      run: { id: string; status: string; currentNodeId: string | null };
+    }>('project.run', {
+      demandText,
+      template: runTemplate,
+      agent: runAgent,
+      allowDirtyBase,
+      token,
+    });
+    setMessage(`run started: ${result.run.id} ${result.run.status}`);
+    setDemandText('');
+    await loadDashboard();
+  }
+
+  async function prepareDelivery() {
+    if (!runId) {
+      return;
+    }
+    const result = await rpc<{
+      branch: string;
+      baseBranch: string;
+      packagePath: string;
+      prBodyPath: string;
+    }>('delivery.prepare', { runId, token });
+    setMessage(`PR prepared: ${result.branch} -> ${result.baseBranch}`);
+    await loadDashboard();
+  }
+
+  async function createPr() {
+    if (!runId) {
+      return;
+    }
+    const result = await rpc<{
+      deliveryStatus: string;
+      prUrl: string | null;
+      failureStage: string | null;
+    }>('delivery.createPr', { runId, token, approveHuman: true });
+    setMessage(
+      `PR ${result.deliveryStatus}: ${
+        result.prUrl ?? result.failureStage ?? 'no url'
+      }`,
+    );
+    await loadDashboard();
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -251,6 +320,79 @@ function App() {
           ))}
         </div>
         <p className="mono">{runId ?? 'no run'}</p>
+      </section>
+
+      <section className="band">
+        <h2>工作流操作</h2>
+        <div className="operation-grid">
+          <label>
+            操作 token
+            <input
+              aria-label="Action token"
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+            />
+          </label>
+          <label>
+            template
+            <select
+              aria-label="Run template"
+              value={runTemplate}
+              onChange={(event) => setRunTemplate(event.target.value)}
+            >
+              {workflowOptions.map((workflow) => (
+                <option key={workflow} value={workflow}>
+                  {workflow}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            agent
+            <select
+              aria-label="Run agent"
+              value={runAgent}
+              onChange={(event) => setRunAgent(event.target.value)}
+            >
+              <option value="mock">mock</option>
+              <option value="claude-code">claude-code</option>
+            </select>
+          </label>
+          <label className="checkline">
+            <input
+              aria-label="Allow dirty base"
+              type="checkbox"
+              checked={allowDirtyBase}
+              onChange={(event) => setAllowDirtyBase(event.target.checked)}
+            />
+            allow dirty base
+          </label>
+          <label className="wide">
+            demand
+            <textarea
+              aria-label="Run demand"
+              value={demandText}
+              onChange={(event) => setDemandText(event.target.value)}
+            />
+          </label>
+          <div className="actions wide">
+            <button onClick={() => void runAction(startRun)}>发起运行</button>
+            <button
+              className="secondary"
+              disabled={!runId}
+              onClick={() => void runAction(prepareDelivery)}
+            >
+              准备 PR
+            </button>
+            <button
+              className="secondary"
+              disabled={!runId}
+              onClick={() => void runAction(createPr)}
+            >
+              批准并创建 PR
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="band approval">
@@ -294,10 +436,12 @@ function App() {
               />
             </label>
             <div className="actions">
-              <button onClick={() => void decide('approve')}>批准</button>
+              <button onClick={() => void runAction(() => decide('approve'))}>
+                批准
+              </button>
               <button
                 className="secondary"
-                onClick={() => void decide('reject')}
+                onClick={() => void runAction(() => decide('reject'))}
               >
                 拒绝
               </button>
@@ -312,8 +456,9 @@ function App() {
       <section className="dashboard-grid">
         <Panel title="产物">
           {artifacts.map((artifact) => (
-            <Row
+            <LinkedRow
               key={artifact.id}
+              href={`#artifact-${artifact.id}`}
               primary={`${artifact.type} v${artifact.version}`}
               secondary={artifact.summary ?? artifact.path}
             />
@@ -321,8 +466,9 @@ function App() {
         </Panel>
         <Panel title="Gates">
           {gates.map((gate) => (
-            <Row
+            <LinkedRow
               key={gate.id}
+              href={`#gate-log-${gate.id}`}
               primary={`${gate.id} ${gate.status}`}
               secondary={`${gate.gateType} ${gate.nodeId}`}
             />
@@ -385,6 +531,7 @@ function App() {
             review.artifacts.map((artifact) => (
               <PreviewBlock
                 key={artifact.id}
+                id={`artifact-${artifact.id}`}
                 title={`${artifact.type} v${artifact.version}`}
                 preview={artifact.content.content || artifact.summary || ''}
                 meta={`${artifact.content.path} truncated=${artifact.content.truncated}`}
@@ -399,6 +546,7 @@ function App() {
             review.gates.map((gate) => (
               <PreviewBlock
                 key={gate.id}
+                id={`gate-log-${gate.id}`}
                 title={`${gate.gateType} ${gate.status}`}
                 preview={gate.output?.content || 'missing output'}
                 meta={gate.output?.path ?? gate.id}
@@ -417,6 +565,7 @@ function App() {
               />
               {review.delivery.prBody ? (
                 <PreviewBlock
+                  id="pr-body"
                   title="PR Body"
                   preview={review.delivery.prBody.content}
                   meta={review.delivery.prBody.path}
@@ -424,6 +573,7 @@ function App() {
               ) : null}
               {review.delivery.package ? (
                 <PreviewBlock
+                  id="pr-package"
                   title="PR Package"
                   preview={review.delivery.package.content}
                   meta={review.delivery.package.path}
@@ -476,11 +626,7 @@ function App() {
               : 'loading'}
           </p>
           {audit.map((event) => (
-            <Row
-              key={event.id}
-              primary={`${event.type} ${event.nodeId ?? ''}`.trim()}
-              secondary={`gate=${event.gateId ?? 'none'} role=${event.role ?? 'none'} hash=${event.hash.slice(0, 12)} ${event.createdAt}`}
-            />
+            <AuditRow key={event.id} event={event} />
           ))}
         </Panel>
         <Panel title="角色">
@@ -527,13 +673,48 @@ function Row(props: { primary: string; secondary: string }) {
   );
 }
 
+function LinkedRow(props: {
+  href: string;
+  primary: string;
+  secondary: string;
+}) {
+  return (
+    <a className="row linked-row" href={props.href}>
+      <strong>{props.primary}</strong>
+      <span>{props.secondary}</span>
+    </a>
+  );
+}
+
+function AuditRow(props: { event: AuditEvent }) {
+  const event = props.event;
+  return (
+    <div className="row">
+      <strong>{`${event.type} ${event.nodeId ?? ''}`.trim()}</strong>
+      <span>
+        gate={event.gateId ?? 'none'} role={event.role ?? 'none'} hash=
+        {event.hash.slice(0, 12)} {event.createdAt}
+      </span>
+      <div className="link-strip">
+        {event.gateId ? (
+          <a href={`#gate-log-${event.gateId}`}>gate log</a>
+        ) : null}
+        {event.type.startsWith('delivery.') ? (
+          <a href="#pr-package">PR package</a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function PreviewBlock(props: {
+  id?: string;
   title?: string;
   meta?: string;
   preview: string;
 }) {
   return (
-    <div className="preview-block">
+    <div className="preview-block" id={props.id}>
       {props.title ? <strong>{props.title}</strong> : null}
       {props.meta ? <span>{props.meta}</span> : null}
       <pre>{props.preview}</pre>

@@ -163,6 +163,7 @@ async function closeServer(server: Server): Promise<void> {
     return;
   }
 
+  server.closeIdleConnections?.();
   await new Promise<void>((resolveClose, reject) => {
     server.close((error) => {
       if (error) {
@@ -171,5 +172,6 @@ async function closeServer(server: Server): Promise<void> {
       }
       resolveClose();
     });
+    server.closeAllConnections?.();
   });
 }

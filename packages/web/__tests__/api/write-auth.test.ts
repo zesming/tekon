@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
@@ -168,7 +173,174 @@ describe('web write authorization', () => {
         token: fixture.sessionToken,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      api.delivery.prepare({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(
+      api.delivery.createPr({
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+        approveHuman: false,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
+
+  it('starts a Web run and drives delivery prepare/create-pr approval state', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.project.run({
+        demandText: 'Web should be able to start a controlled mock run.',
+        template: 'project-feature',
+        agent: 'mock',
+        token: 'wrong-token',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    const started = await api.project.run({
+      demandText: 'Web should be able to start a controlled mock run.',
+      template: 'project-feature',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+
+    expect(started.run).toMatchObject({
+      status: 'passed',
+      currentNodeId: null,
+    });
+
+    const overview = await api.project.overview();
+    expect(overview.latestRun).toMatchObject({ id: started.run.id });
+    await expect(
+      api.artifact.list({ runId: started.run.id }),
+    ).resolves.toMatchObject({
+      artifacts: [
+        expect.objectContaining({
+          type: 'code-changes',
+        }),
+        expect.objectContaining({
+          type: 'review-report',
+        }),
+      ],
+    });
+
+    const prepared = await api.delivery.prepare({
+      runId: started.run.id,
+      token: fixture.sessionToken,
+    });
+    expect(prepared).toMatchObject({
+      runId: started.run.id,
+      branch: `donkey-delivery/${started.run.id}`,
+      requiresHumanApproval: true,
+    });
+
+    const awaiting = await api.delivery.createPr({
+      runId: started.run.id,
+      token: fixture.sessionToken,
+      approveHuman: false,
+    });
+    expect(awaiting).toMatchObject({
+      runId: started.run.id,
+      deliveryStatus: 'awaiting-approval',
+      requiresHumanApproval: true,
+      prUrl: null,
+      branch: `donkey-delivery/${started.run.id}`,
+    });
+
+    const review = await api.review.get({ runId: started.run.id });
+    expect(review.delivery.package?.content).toContain('PR Preparation');
+    expect(review.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'code-changes' }),
+        expect.objectContaining({ type: 'delivery-package' }),
+      ]),
+    );
+
+    await api.close();
+  });
+
+  it('requires explicit dirty-base approval before starting a Web run', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    writeFileSync(join(fixture.projectRoot, 'README.md'), 'dirty\n', 'utf8');
+
+    await expect(
+      api.project.run({
+        demandText: 'This run should be blocked by dirty base.',
+        template: 'standard-feature',
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('creates a PR through the approved Web delivery path with fake gh', async () => {
+    const fixture = await createWebFixtureProject();
+    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-web-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'donkey-web-fake-gh-'));
+    cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(() =>
+      rmSync(remotePath, { recursive: true, force: true }),
+    );
+    cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
+    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['remote', 'add', 'origin', remotePath], {
+      cwd: fixture.projectRoot,
+    });
+    writeFakeGh(binDir);
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}` },
+    });
+
+    const result = await api.delivery.createPr({
+      runId: 'run_1',
+      token: fixture.sessionToken,
+      approveHuman: true,
+    });
+
+    expect(result).toMatchObject({
+      runId: 'run_1',
+      deliveryStatus: 'created',
+      requiresHumanApproval: false,
+      prUrl: 'https://github.example/donkey/pull/10',
+      failureStage: null,
+      branch: 'donkey-delivery/run_1',
+    });
+    const audit = await api.audit.list({ runId: 'run_1' });
+    expect(audit.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'delivery.pr.created' }),
+      ]),
+    );
 
     await api.close();
   });
 });
+
+function writeFakeGh(binDir: string): void {
+  const ghPath = join(binDir, 'gh');
+  writeFileSync(
+    ghPath,
+    `#!/usr/bin/env sh
+echo "$*" >> "${join(binDir, 'gh.log')}"
+if [ "$1 $2" = "auth status" ]; then
+  echo "Logged in to github.example" >&2
+  exit 0
+fi
+echo "https://github.example/donkey/pull/10"
+`,
+    'utf8',
+  );
+  chmodSync(ghPath, 0o755);
+}

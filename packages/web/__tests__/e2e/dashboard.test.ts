@@ -31,11 +31,16 @@ test.describe('Donkey dashboard', () => {
     await page.goto(server.url);
 
     await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '工作流操作' }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: '产物' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Gates' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '审计' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '角色' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '工作流', exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: '待人工审批' }),
@@ -57,7 +62,7 @@ test.describe('Donkey dashboard', () => {
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('approved from dashboard');
-    await page.getByRole('button', { name: '批准' }).click();
+    await page.getByRole('button', { name: '批准', exact: true }).click();
 
     await expect(page.getByText('approved')).toBeVisible();
     await expect(page.getByText('run_1', { exact: true })).toBeVisible();

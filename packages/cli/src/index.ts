@@ -861,12 +861,13 @@ async function commandEval(argv: string[], io: CliIO) {
   if (subcommand !== 'readiness') {
     throw new Error(`unknown eval command: ${subcommand ?? ''}`);
   }
-  const { repositories, db, runId } = openCommandContext(rest);
+  const { repositories, db, repoPath, runId } = openCommandContext(rest);
   const audit = createAuditLogger({ repositories });
   const evaluation = await evaluateWorkReadiness({
     repositories,
     audit,
     runId,
+    repoPath,
   });
   const deliveryPr = await repositories.getDeliveryPullRequest(runId);
   io.stdout.write(

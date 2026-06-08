@@ -13,6 +13,7 @@ export interface WebProjectContext {
   sessionPath: string;
   rolesDir: string;
   workflowsDir: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export function resolveProjectRoot(
@@ -40,6 +41,7 @@ export function createProjectContext(
     sessionPath: join(dataDir, 'web-session.json'),
     rolesDir: join(dataDir, 'roles'),
     workflowsDir: join(dataDir, 'workflows'),
+    env: input.env,
   };
 }
 

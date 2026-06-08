@@ -1,17 +1,24 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import {
+  createPullRequestPreparation,
   createAuditLogger,
   createClaudeCodeAdapter,
   createCommandGateway,
   createGateEngine,
   createMockAgentAdapter,
   createRepositories,
+  createScmDelivery,
   createWorkReviewSurface,
   createWorkflowEngine,
   createWorktreeManager,
   agentAdapterConfigSchema,
+  loadWorkflowTemplateFile,
+  type AgentAdapter,
+  type AgentAdapterConfig,
+  type WorkflowTemplate,
   type CommandGateway,
   openDonkeyDatabase,
   type DonkeyDatabase,
@@ -119,6 +126,9 @@ export interface ApiCaller {
     pause(
       input: TokenRunInput,
     ): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
+    run(
+      input: ProjectRunInput,
+    ): Promise<{ run: ReturnType<typeof mapWorkflowFromDomain> }>;
     resume(
       input: TokenRunInput,
     ): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
@@ -126,6 +136,26 @@ export interface ApiCaller {
       input: TokenRunInput,
     ): Promise<{ run: ReturnType<typeof mapWorkflow> }>;
     clean(input: TokenRunInput): Promise<{ removedRunDir: boolean }>;
+  };
+  delivery: {
+    prepare(input: TokenRunInput): Promise<{
+      runId: string;
+      branch: string;
+      baseBranch: string;
+      packagePath: string;
+      prBodyPath: string;
+      requiresHumanApproval: true;
+    }>;
+    createPr(input: DeliveryCreatePrInput): Promise<{
+      runId: string;
+      deliveryStatus: string;
+      requiresHumanApproval: boolean;
+      prUrl: string | null;
+      failureStage: string | null;
+      lastError: string | null;
+      branch: string | null;
+      baseBranch: string | null;
+    }>;
   };
   artifact: {
     list(input: {
@@ -179,6 +209,18 @@ interface TokenRunInput {
   token: string;
 }
 
+interface ProjectRunInput {
+  demandText: string;
+  token: string;
+  template?: string;
+  agent?: string;
+  allowDirtyBase?: boolean;
+}
+
+interface DeliveryCreatePrInput extends TokenRunInput {
+  approveHuman?: boolean;
+}
+
 interface DecisionInput {
   runId: string;
   decisionId: string;
@@ -203,8 +245,9 @@ export async function createApiCaller(
       },
 
       async overview() {
-        const project = firstProject(db, context);
-        const latestRun = project ? latestRunForProject(db, project.id) : null;
+        const latest = latestScopedRun(db, context);
+        const project = latest?.project ?? firstProjectOrFallback(db, context);
+        const latestRun = latest?.run ?? null;
         return {
           project: mapProject(project),
           latestRun: latestRun ? mapWorkflow(latestRun) : null,
@@ -237,6 +280,48 @@ export async function createApiCaller(
           'paused',
         );
         return { run: mapWorkflow(mustGetRun(db, runInput.runId)) };
+      },
+
+      async run(runInput) {
+        assertSessionToken(context, runInput.token);
+        const demandText = runInput.demandText.trim();
+        if (!demandText) {
+          throw new ApiError('BAD_REQUEST', 'Demand text is required.');
+        }
+        const templateName = runInput.template?.trim() || 'standard-feature';
+        assertSafeName(templateName, 'template');
+        const gateway = createCommandGateway({ repositories });
+        const agentRuntime = createWebAgentRuntime({
+          agent: runInput.agent ?? 'mock',
+          repoPath: context.projectRoot,
+          gateway,
+        });
+        assertCleanBase(context.projectRoot, Boolean(runInput.allowDirtyBase));
+        const workflowSpec = loadProjectWorkflowIfPresent(
+          context,
+          templateName,
+        );
+        const engine = createWorkflowEngine({
+          repoPath: context.projectRoot,
+          dataDir: '.donkey',
+          repositories,
+          audit,
+          adapter: agentRuntime.adapter,
+          agentProvider: agentRuntime.provider,
+          agentConfigSummary: agentRuntime.configSummary,
+          allowDirtyBase: Boolean(runInput.allowDirtyBase),
+          gateEngine: createGateEngine({ repositories, gateway }),
+          worktreeManager: createWorktreeManager({
+            repositories,
+            gateway,
+          }),
+        });
+        const result = await engine.startRun({
+          demandText,
+          mode: 'template',
+          ...(workflowSpec ? { workflowSpec } : { templateName }),
+        });
+        return { run: mapWorkflowFromDomain(result.workflow) };
       },
 
       async resume(runInput) {
@@ -279,6 +364,74 @@ export async function createApiCaller(
           rmSync(runDir, { recursive: true, force: true });
         }
         return { removedRunDir };
+      },
+    },
+
+    delivery: {
+      async prepare(deliveryInput) {
+        assertSessionToken(context, deliveryInput.token);
+        assertRunInScope(db, context, deliveryInput.runId);
+        const preparation = await createPullRequestPreparation({
+          repoPath: context.projectRoot,
+          repositories,
+          audit,
+          runId: deliveryInput.runId,
+        });
+        return {
+          runId: deliveryInput.runId,
+          branch: preparation.branch,
+          baseBranch: preparation.baseBranch,
+          packagePath: preparation.packagePath,
+          prBodyPath: preparation.prBodyPath,
+          requiresHumanApproval: preparation.requiresHumanApproval,
+        };
+      },
+
+      async createPr(deliveryInput) {
+        assertSessionToken(context, deliveryInput.token);
+        assertRunInScope(db, context, deliveryInput.runId);
+        const preparation = await createPullRequestPreparation({
+          repoPath: context.projectRoot,
+          repositories,
+          audit,
+          runId: deliveryInput.runId,
+        });
+        const result = await createScmDelivery({
+          repoPath: context.projectRoot,
+          env: context.env,
+          repositories,
+          audit,
+          outputDir: join(
+            context.dataDir,
+            'runs',
+            deliveryInput.runId,
+            'delivery',
+            'scm',
+          ),
+        }).createPr({
+          runId: deliveryInput.runId,
+          title: preparation.title,
+          body: readFileSync(preparation.prBodyPath, 'utf8'),
+          bodyPath: preparation.prBodyPath,
+          branch: preparation.branch,
+          baseBranch: preparation.baseBranch,
+          dryRun: false,
+          humanApproved: Boolean(deliveryInput.approveHuman),
+          approvedBy: 'web',
+        });
+        const delivery = await repositories.getDeliveryPullRequest(
+          deliveryInput.runId,
+        );
+        return {
+          runId: deliveryInput.runId,
+          deliveryStatus: delivery?.status ?? 'unknown',
+          requiresHumanApproval: result.requiresHumanApproval,
+          prUrl: result.prUrl ?? delivery?.prUrl ?? null,
+          failureStage: delivery?.failureStage ?? null,
+          lastError: delivery?.lastError ?? null,
+          branch: delivery?.branch ?? null,
+          baseBranch: delivery?.baseBranch ?? null,
+        };
       },
     },
 
@@ -403,15 +556,37 @@ function listScopedProjects(
   ).filter((project) => resolve(project.repo_path) === context.projectRoot);
 }
 
-function firstProject(
+function firstProjectOrFallback(
   db: DonkeyDatabase,
   context: WebProjectContext,
 ): ProjectRow {
-  const project = listScopedProjects(db, context)[0];
-  if (!project) {
-    throw new ApiError('NOT_FOUND', 'No project found for the explicit root');
-  }
-  return project;
+  return (
+    listScopedProjects(db, context)[0] ?? {
+      id: 'local',
+      name: basenameForProject(context.projectRoot),
+      repo_path: context.projectRoot,
+      created_at: new Date(0).toISOString(),
+    }
+  );
+}
+
+function latestScopedRun(
+  db: DonkeyDatabase,
+  context: WebProjectContext,
+): { project: ProjectRow; run: WorkflowRow } | null {
+  const projects = listScopedProjects(db, context);
+  const runs = projects.flatMap((project) =>
+    listRunsForProject(db, project.id).map((run) => ({ project, run })),
+  );
+  return (
+    runs.sort((left, right) => {
+      const byUpdated =
+        Date.parse(right.run.updated_at) - Date.parse(left.run.updated_at);
+      return byUpdated === 0
+        ? right.run.id.localeCompare(left.run.id)
+        : byUpdated;
+    })[0] ?? null
+  );
 }
 
 function scopedProjectById(
@@ -669,6 +844,35 @@ async function resumeWorkflowRun(input: {
   return engine.resumeRun(input.runId);
 }
 
+function createWebAgentRuntime(input: {
+  agent: string;
+  repoPath: string;
+  gateway: CommandGateway;
+}): {
+  adapter: AgentAdapter;
+  provider: RunProviderConfig['provider'];
+  configSummary: Record<string, unknown>;
+} {
+  if (input.agent === 'mock') {
+    return {
+      adapter: createMockAgentAdapter(),
+      provider: 'mock',
+      configSummary: { provider: 'mock' },
+    };
+  }
+
+  if (input.agent === 'claude-code') {
+    const config = defaultWebClaudeCodeConfig(input.repoPath);
+    return {
+      adapter: createClaudeCodeAdapter(config, input.gateway),
+      provider: 'claude-code',
+      configSummary: summarizeAgentConfig(config),
+    };
+  }
+
+  throw new ApiError('BAD_REQUEST', `Unsupported agent: ${input.agent}`);
+}
+
 async function assertRunCanResume(input: {
   repositories: ReturnType<typeof createRepositories>;
   runId: string;
@@ -706,6 +910,47 @@ function createWebAgentAdapterFromSnapshot(
   );
 }
 
+function defaultWebClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
+  return {
+    provider: 'claude-code',
+    command: 'claude',
+    args: ['-p'],
+    promptMode: 'stdin',
+    outputFormat: 'json',
+    timeoutMs: 300_000,
+    permissionProfile: {
+      sandbox: 'workspace-write',
+      approval: 'on-request',
+      filesystemScope: [repoPath],
+      network: 'restricted',
+      tools: {
+        allow: ['git', 'npm', 'pnpm'],
+        deny: ['rm', 'sudo', 'git push --force'],
+      },
+    },
+  };
+}
+
+function summarizeAgentConfig(
+  config: AgentAdapterConfig,
+): Record<string, unknown> {
+  return {
+    provider: config.provider,
+    command: config.command,
+    args: config.args,
+    promptMode: config.promptMode,
+    outputFormat: config.outputFormat,
+    timeoutMs: config.timeoutMs,
+    permissionProfile: {
+      sandbox: config.permissionProfile.sandbox,
+      approval: config.permissionProfile.approval,
+      filesystemScope: config.permissionProfile.filesystemScope,
+      network: config.permissionProfile.network,
+      tools: config.permissionProfile.tools,
+    },
+  };
+}
+
 function assertSessionToken(
   context: WebProjectContext,
   providedToken: string,
@@ -726,6 +971,40 @@ function assertSessionToken(
 
   if (providedToken !== expectedToken) {
     throw new ApiError('UNAUTHORIZED', 'Invalid session token');
+  }
+}
+
+function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
+  let status: string;
+  try {
+    status = execFileSync('git', ['status', '--porcelain'], {
+      cwd: repoPath,
+      encoding: 'utf8',
+    });
+  } catch (error) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      `Cannot inspect git status for Web run: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  const meaningfulDirtyLines = status
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0)
+    .filter((line) => !line.startsWith('?? .donkey/'));
+
+  if (meaningfulDirtyLines.length > 0 && !allowDirtyBase) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      'Dirty base worktree requires explicit allowDirtyBase before Web run.',
+    );
+  }
+}
+
+function assertSafeName(name: string, label: string): void {
+  if (!/^[a-zA-Z0-9_-]+$/u.test(name)) {
+    throw new ApiError('BAD_REQUEST', `Invalid ${label}: ${name}`);
   }
 }
 
@@ -772,6 +1051,19 @@ function listWorkflows(
       };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function loadProjectWorkflowIfPresent(
+  context: WebProjectContext,
+  name: string,
+): WorkflowTemplate | null {
+  for (const extension of ['.yaml', '.yml']) {
+    const workflowPath = join(context.workflowsDir, `${name}${extension}`);
+    if (existsSync(workflowPath)) {
+      return loadWorkflowTemplateFile(workflowPath);
+    }
+  }
+  return null;
 }
 
 function extractYamlScalar(content: string, key: string): string | undefined {
@@ -993,4 +1285,8 @@ function deriveRiskLabel(note: string | null, gate: GateRow | null): string {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function basenameForProject(repoPath: string): string {
+  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'donkey';
 }

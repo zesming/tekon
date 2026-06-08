@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import {
   createRepositories,
   migrateDatabase,
   openDonkeyDatabase,
+  writeDefaultRepoProfile,
 } from '@donkey/core';
 
 export interface WebFixtureProject {
@@ -23,6 +25,7 @@ export async function createWebFixtureProject(
   } = {},
 ): Promise<WebFixtureProject> {
   const projectRoot = mkFixtureRoot();
+  seedGitRepo(projectRoot);
   const donkeyDir = join(projectRoot, '.donkey');
   mkdirSync(donkeyDir, { recursive: true });
   mkdirSync(join(donkeyDir, 'roles', 'rd'), { recursive: true });
@@ -44,23 +47,55 @@ export async function createWebFixtureProject(
     'Implement scoped code changes.',
   );
   writeFileSync(
-    join(donkeyDir, 'workflows', 'standard-feature.yaml'),
+    join(donkeyDir, 'workflows', 'project-feature.yaml'),
     [
-      'id: standard-feature',
-      'name: Standard Feature',
+      'id: project-feature',
+      'name: Project Feature',
       'version: 1',
       'phases:',
-      '  - id: implementation',
+      '  - id: rd',
       '    nodes:',
       '      - id: rd',
       '        role: rd',
       '        outputs:',
-      '          - type: code-changes',
+      '          - code:code-changes',
+      '        gates:',
+      '          - type: build',
+      '            commandRef: build',
+      '          - type: lint',
+      '            commandRef: lint',
+      '  - id: review',
+      '    dependsOn:',
+      '      - rd',
+      '    nodes:',
+      '      - id: reviewer',
+      '        role: reviewer',
+      '        inputs:',
+      '          - code:code-changes',
+      '        outputs:',
+      '          - review:review-report',
+      '        gates:',
+      '          - type: schema',
+      '            artifactType: review-report',
       '',
     ].join('\n'),
   );
 
   const sessionToken = 'fixture-session-token';
+  writeFileSync(
+    join(donkeyDir, 'config.yaml'),
+    [
+      'project:',
+      '  name: fixture-donkey',
+      `  repoPath: ${projectRoot}`,
+      'storage:',
+      '  dataDir: .donkey',
+      'defaultAgent: mock',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  writeDefaultRepoProfile(projectRoot);
   writeFileSync(
     join(donkeyDir, 'web-session.json'),
     JSON.stringify({ token: sessionToken }, null, 2),
@@ -239,6 +274,37 @@ export async function createWebFixtureProject(
       rmSync(projectRoot, { recursive: true, force: true });
     },
   };
+}
+
+function seedGitRepo(projectRoot: string): void {
+  mkdirSync(projectRoot, { recursive: true });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: projectRoot });
+  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+    cwd: projectRoot,
+  });
+  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+    cwd: projectRoot,
+  });
+  writeFileSync(
+    join(projectRoot, 'package.json'),
+    JSON.stringify(
+      {
+        scripts: {
+          build: 'node -e "process.exit(0)"',
+          lint: 'node -e "process.exit(0)"',
+          test: 'node -e "process.exit(0)"',
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  writeFileSync(join(projectRoot, 'README.md'), 'fixture\n', 'utf8');
+  execFileSync('git', ['add', 'package.json', 'README.md'], {
+    cwd: projectRoot,
+  });
+  execFileSync('git', ['commit', '-m', 'init'], { cwd: projectRoot });
 }
 
 function mkFixtureRoot(): string {

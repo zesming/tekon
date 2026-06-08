@@ -33,6 +33,9 @@ test.describe('Donkey release dashboard', () => {
 
     await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
     await expect(
+      page.getByRole('heading', { name: '工作流操作' }),
+    ).toBeVisible();
+    await expect(
       page.getByRole('heading', { name: '待人工审批' }),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: '产物' })).toBeVisible();
@@ -51,7 +54,9 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByRole('heading', { name: '下一步' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '审计' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '角色' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: '工作流' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '工作流', exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
@@ -60,10 +65,22 @@ test.describe('Donkey release dashboard', () => {
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('release approval');
-    await page.getByRole('button', { name: '批准' }).click();
+    await page.getByRole('button', { name: '批准', exact: true }).click();
 
     await expect(page.getByText('approved', { exact: true })).toBeVisible();
     await expect(page.getByText('gate_1 passed')).toBeVisible();
+
+    await page.getByLabel('Action token').fill(fixture.sessionToken);
+    await page
+      .getByLabel('Run demand')
+      .fill('Web starts a controlled mock run from the dashboard.');
+    await page.getByRole('button', { name: '发起运行' }).click();
+    await expect(page.getByText(/run started:/u)).toBeVisible();
+    await page.getByRole('button', { name: '准备 PR' }).click();
+    await expect(page.getByText(/PR prepared:/u)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '批准并创建 PR' }),
+    ).toBeVisible();
 
     await page.screenshot({
       fullPage: true,

@@ -35,6 +35,7 @@ export async function createPullRequestPreparation(input: {
     repositories: input.repositories,
     audit: input.audit,
     runId: input.runId,
+    repoPath: input.repoPath,
     riskGates: ['human', 'security-scan'],
   });
   const nodes = await input.repositories.listNodes(input.runId);
