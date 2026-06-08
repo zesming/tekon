@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey 工作真实可用能力缺口分析</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1d252c;
+        --muted: #5d6b78;
+        --line: #d8e0e8;
+        --soft: #f5f7fa;
+        --accent: #0f766e;
+        --danger: #9f1239;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        color: var(--ink);
+        background: #fff;
+        line-height: 1.68;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        padding-bottom: 18px;
+        border-bottom: 2px solid var(--ink);
+        font-size: 34px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+      h2 {
+        margin: 34px 0 12px;
+        padding-top: 4px;
+        font-size: 22px;
+        line-height: 1.3;
+        letter-spacing: 0;
+      }
+      h3 {
+        margin: 24px 0 8px;
+        font-size: 18px;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 8px 0 14px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 22px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: #edf2f7;
+        font-weight: 700;
+      }
+      code {
+        background: #eef2f7;
+        border: 1px solid #dce3eb;
+        border-radius: 4px;
+        padding: 1px 4px;
+        font-family:
+          'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.92em;
+      }
+      ul,
+      ol {
+        padding-left: 22px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      main > p:nth-of-type(1),
+      main > p:nth-of-type(2) {
+        color: var(--muted);
+      }
+      h3[id],
+      h3 {
+        scroll-margin-top: 20px;
+      }
+      @media (max-width: 760px) {
+        main {
+          padding: 28px 16px 56px;
+        }
+        h1 {
+          font-size: 28px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Donkey 工作真实可用能力缺口分析</h1>
+      <p>日期：2026-06-08</p>
+      <p>
+        范围：综合 5 份飞书产品方案、本地实现、README/CHANGELOG、V2
+        用户手册、Phase 3/Dogfooding/Final Acceptance/工作可用化增量报告，判断
+        Donkey
+        要成为“我能在真实工作中使用的工具”还需要补齐什么。本文不讨论全面自动化，不把自动
+        merge、自动上线、生产权限变更、跨团队多租户平台作为近期目标。
+      </p>
+      <h2>1. 资料来源</h2>
+      <p>
+        本报告读取并综合了用户提供的 5 份飞书 Docx 文档。为避免把内部高权限 URL
+        写入仓库，本文只记录标题、版本标识和读取日期，不落原始飞书链接。
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>来源</th>
+            <th>标题 / 版本标识</th>
+            <th>读取日期</th>
+            <th>使用方式</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>飞书文档 1</td>
+            <td><code>[Raw]Donkey-智能化研发流程</code></td>
+            <td>2026-06-08</td>
+            <td>
+              提取原始设想：人负责需求澄清，后续由角色 Agent 和 workflow 推进。
+            </td>
+          </tr>
+          <tr>
+            <td>飞书文档 2</td>
+            <td>
+              <code
+                >[Beta-G]Donkey：面向技术基建团队的 AI
+                自动交付系统产品方案</code
+              >
+            </td>
+            <td>2026-06-08</td>
+            <td>
+              作为近期收敛版本，重点采用“技术基建/B-D 类需求/自动到
+              PR/证据包/高危受控”。
+            </td>
+          </tr>
+          <tr>
+            <td>飞书文档 3</td>
+            <td>
+              <code
+                >[Alpha-Q]Donkey — AI Agent 驱动的智能化研发流程产品方案</code
+              >
+            </td>
+            <td>2026-06-08</td>
+            <td>参考完整链路、角色 Agent、人工介入和风险判断。</td>
+          </tr>
+          <tr>
+            <td>飞书文档 4</td>
+            <td>
+              <code
+                >[Alpha-G]Donkey：AI Native 产研流程执行系统完整产品方案</code
+              >
+            </td>
+            <td>2026-06-08</td>
+            <td>
+              参考完整远景对象模型、八大模块、项目驾驶舱、知识沉淀和分阶段规划。
+            </td>
+          </tr>
+          <tr>
+            <td>飞书文档 5</td>
+            <td><code>[Alpha-D]Donkey — 智能化研发流程 · 产品方案</code></td>
+            <td>2026-06-08</td>
+            <td>参考角色五元组、工具/技能体系、四级人在环路和全链路审计。</td>
+          </tr>
+          <tr>
+            <td>本地实现</td>
+            <td>
+              <code>packages/</code>、<code>roles/</code>、<code
+                >workflows/</code
+              >
+            </td>
+            <td>2026-06-08</td>
+            <td>核对当前已经有代码支撑的能力和 mock/dry-run 边界。</td>
+          </tr>
+          <tr>
+            <td>本地文档</td>
+            <td>
+              <code>README.md</code
+              >、<code>CHANGELOG.md</code>、<code>docs/manual/</code>、<code>docs/reviews/</code>、<code
+                >docs/technical/</code
+              >
+            </td>
+            <td>2026-06-08</td>
+            <td>核对已声明能力、验收证据、已知限制和未完成项。</td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>2. 结论</h2>
+      <p>
+        Donkey 当前已经从概念推进到“本地受控 workflow
+        骨架可跑”的阶段：CLI/Web、SQLite
+        状态、Artifact/Audit、Gate、worktree、PR 准备包、受人工批准的 PR
+        创建、readiness 评估都有代码和测试支撑。
+      </p>
+      <p>
+        但它离“真实工作可用”还差一层关键能力：真实 Agent
+        产物协议、真实仓库端到端稳定性、仓库验证命令适配、可靠恢复、可审阅体验和最小数据闭环。换句话说，下一阶段不应该继续扩展远景角色或上线链路，而应先把“给一个真实内部工具仓库的小需求，Donkey
+        能受控产出可审 PR，人在 5 分钟内判断能不能接受”打实。
+      </p>
+      <p>优先级最高的补齐方向是：</p>
+      <ol>
+        <li>
+          当前已接线的真实 provider 是 Claude Code；它需要能产出 Donkey
+          可识别的结构化 artifacts，而不是只返回 stdout/stderr。Codex
+          目前属于后续或自定义 provider，同样要先遵守 artifact
+          协议后才能声明可用。
+        </li>
+        <li>
+          在 2-3 个受控真实仓库上完成 10 个左右 B/D
+          类需求的端到端证据，不再只依赖 mock fixture。
+        </li>
+        <li>
+          workflow gate 使用
+          <code>.donkey/repo-profile.yaml</code> 的仓库命令，而不是硬编码
+          <code>pnpm build/lint/test</code>。
+        </li>
+        <li>
+          resume/recovery 必须保证中断中的节点不会被误当成已完成，也不能在 CLI
+          resume 时把真实 provider 降级成 mock。
+        </li>
+        <li>
+          Web/CLI 的验收面需要展示 diff、artifact 正文、gate 日志、readiness
+          失败原因和下一步命令，而不只是路径和计数。
+        </li>
+        <li>
+          高风险边界要从“声明式 network/tool
+          policy”升级到可验证的隔离与审计证据，至少证明真实 provider
+          不能越权写主工作区、不能静默 push、不能泄露密钥。
+        </li>
+      </ol>
+      <h2>3. 当前事实</h2>
+      <h3>3.1 飞书方案收敛出的近期目标</h3>
+      <p>5 份飞书方案从完整远景到收敛版逐步形成共识：</p>
+      <ul>
+        <li>
+          原始目标是把传统 PM/设计/RD/QA/PMO/Ops
+          流程抽象为角色化、可编排、可审计的 Agent 研发流程。
+        </li>
+        <li>
+          完整远景包含需求池、Workflow Orchestrator、Role Hub、Tool
+          Adapter、Artifact Center、Quality Gate、Project Cockpit、Knowledge
+          &amp; Learning。
+        </li>
+        <li>
+          近期最现实的落点不是组织级全自动产研系统，而是技术基建/内部工具场景中的
+          B/D 类需求，默认推进到可验收 PR，最终由人审查和接受。
+        </li>
+        <li>
+          高风险动作必须受控：不自动合入、不自动上线、不自动做生产写操作或权限扩大。
+        </li>
+      </ul>
+      <h3>3.2 本地已有代码支撑的能力</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>能力</th>
+            <th>本地依据</th>
+            <th>判断</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CLI 本地入口</td>
+            <td><code>packages/cli/src/index.ts</code></td>
+            <td>
+              <code
+                >init/run/status/pause/resume/cancel/role/workflow/constraints/log/clean/delivery/eval</code
+              >
+              已有入口。
+            </td>
+          </tr>
+          <tr>
+            <td>SQLite 状态与审计</td>
+            <td>
+              <code>packages/core/src/db/migrations.ts</code
+              >、<code>packages/core/src/db/repositories.ts</code>、<code
+                >packages/core/src/audit/logger.ts</code
+              >
+            </td>
+            <td>
+              运行、节点、gate、artifact、human decision、worktree
+              lease、delivery PR 状态可落库。
+            </td>
+          </tr>
+          <tr>
+            <td>Artifact Store</td>
+            <td>
+              <code>packages/core/src/artifact/store.ts</code>、<code
+                >packages/core/src/artifact/schemas.ts</code
+              >
+            </td>
+            <td>
+              artifact 版本化写入 <code>.donkey/runs</code>，schema
+              支持验收标准、criteria evidence 和安全发现。
+            </td>
+          </tr>
+          <tr>
+            <td>Workflow Engine</td>
+            <td><code>packages/core/src/workflow/engine.ts</code></td>
+            <td>
+              模板 workflow 可执行，支持 role prompt、gate、human gate、worktree
+              lease、repair node。
+            </td>
+          </tr>
+          <tr>
+            <td>Worktree 隔离</td>
+            <td><code>packages/core/src/runtime/worktree-manager.ts</code></td>
+            <td>
+              节点在 git worktree 中执行，变更可提交并推进到
+              <code>donkey-delivery/&lt;runId&gt;</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>Command Gateway</td>
+            <td><code>packages/core/src/runtime/command-gateway.ts</code></td>
+            <td>
+              以 argv 执行命令，拒绝 shell 元字符、强制删除、force
+              push、部分网络命令和越界 cwd。
+            </td>
+          </tr>
+          <tr>
+            <td>Gate</td>
+            <td><code>packages/core/src/gate/runners.ts</code></td>
+            <td>
+              支持 build/test/lint/e2e/security-scan/human/schema；内置 security
+              scan 可扫明显密钥。
+            </td>
+          </tr>
+          <tr>
+            <td>Claude Code adapter 接线</td>
+            <td>
+              <code>packages/core/src/runtime/claude-code-adapter.ts</code
+              >、<code>packages/cli/src/index.ts</code>
+            </td>
+            <td>
+              CLI 支持 <code>--agent claude-code</code>，并有 provider
+              capability 检查和 smoke 证据。
+            </td>
+          </tr>
+          <tr>
+            <td>PR 准备和创建</td>
+            <td>
+              <code>packages/core/src/delivery/pr-package.ts</code>、<code
+                >packages/core/src/delivery/scm.ts</code
+              >
+            </td>
+            <td>
+              <code>delivery prepare</code> 可生成本地 PR 包；<code
+                >delivery create-pr --approve-human</code
+              >
+              可 push 和 <code>gh pr create</code>，状态落库。
+            </td>
+          </tr>
+          <tr>
+            <td>Readiness</td>
+            <td><code>packages/core/src/eval/work-readiness.ts</code></td>
+            <td>
+              required checks 覆盖 workflow、audit、validation gates、delivery
+              package、PR prepared、human gate、验收证据和安全扫描。
+            </td>
+          </tr>
+          <tr>
+            <td>Web Dashboard</td>
+            <td>
+              <code>packages/web/src/client/App.tsx</code>、<code
+                >packages/web/src/server/api/root.ts</code
+              >
+            </td>
+            <td>
+              本地 dashboard 可看
+              overview/artifacts/gates/audit/roles/workflows/settings，并批准/拒绝
+              human gate。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>3.3 当前仍主要是 mock/dry-run 或受控 fixture 的能力</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>能力</th>
+            <th>当前状态</th>
+            <th>判断</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>动态 workflow</td>
+            <td>
+              <code>run --dynamic</code> 当前强制 <code>--dry-run</code>，CLI
+              使用 <code>createDynamicMockAdapter</code>
+            </td>
+            <td>还不是 PM LLM 真实规划，也不会直接进入执行。</td>
+          </tr>
+          <tr>
+            <td>真实 Agent 端到端</td>
+            <td>
+              Claude provider smoke 已通过，但主 workflow 稳定执行证据不足
+            </td>
+            <td>
+              证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过
+              gates。
+            </td>
+          </tr>
+          <tr>
+            <td>PR 创建</td>
+            <td>
+              代码支持并有 fake fixture 测试；历史 dogfooding 记录
+              <code>PR URL=not_created</code>
+            </td>
+            <td>需要真实受控远端仓库证据。</td>
+          </tr>
+          <tr>
+            <td>Web 产品面</td>
+            <td>只能审阅最新 run 和处理 human gate</td>
+            <td>
+              还不能从 Web 发起 run、查看 artifact 正文、查看
+              diff、prepare/readiness/create-pr。
+            </td>
+          </tr>
+          <tr>
+            <td>仓库画像</td>
+            <td>init 可生成 <code>repo-profile.yaml</code></td>
+            <td>PR 包会展示画像命令，但 workflow gate 仍硬编码模板命令。</td>
+          </tr>
+          <tr>
+            <td>安全隔离</td>
+            <td>CommandGateway 有静态拒绝，provider profile 有声明</td>
+            <td>
+              还不是 OS/container 级隔离；真实 provider
+              内部工具调用边界需要证据。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>4. P0：先补齐，否则不建议用于真实工作</h2>
+      <h3>P0-1 真实 Agent 产物协议</h3>
+      <p>
+        事实：<code>createMockAgentAdapter</code> 会直接写结构化
+        artifacts；<code>createClaudeCodeAdapter</code> 目前只执行 Claude CLI
+        并返回 stdout/stderr 路径，没有把
+        <code>DONKEY_OUTPUT_DIR</code>、artifact schema、所需 artifact
+        类型和写入协议明确传给 provider，也没有把 provider 输出解析为 artifact
+        store 记录。
+      </p>
+      <p>
+        影响：真实 Claude Code 即使完成了代码修改，也可能因为没有
+        <code
+          >demand-card/prd/code-changes/test-report/review-report/delivery-package</code
+        >
+        等结构化产物而无法通过 schema/readiness，或者 evidence package
+        只能看到日志路径。未来 Codex 或自定义 provider
+        也应先满足同一产物协议，再进入可用性声明。
+      </p>
+      <p>
+        本地依据：<code>packages/core/src/runtime/mock-agent-adapter.ts</code>
+        由 mock 直接调用 Artifact Store；<code
+          >packages/core/src/runtime/claude-code-adapter.ts</code
+        >
+        只把 stdout/stderr 作为 <code>outputFiles</code> 返回；schema gate 依赖
+        DB 中已记录的 artifact。因此
+        <code>--agent claude-code</code> 接线不等于真实 workflow artifact
+        闭环已经成立。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          Engine 在 prompt 和环境变量中明确声明
+          <code>DONKEY_OUTPUT_DIR</code>、本节点必须产出的 artifact 类型、每类
+          artifact 的 JSON/YAML/Markdown schema。
+        </li>
+        <li>
+          Real adapter 能收集输出目录中的 artifact 文件，验证 schema 后写入
+          Artifact Store。
+        </li>
+        <li>
+          若真实 Agent
+          只改代码不产物，节点必须失败并给出可恢复错误，而不是继续推进。
+        </li>
+      </ul>
+      <h3>P0-2 真实仓库端到端验收集</h3>
+      <p>
+        事实：现有 dogfooding 是 <code>scm-dry-run</code>；Final Acceptance
+        明确真实 PR、生产级真实 LLM workflow
+        不在通过范围内。工作可用化增量报告也把真实 coding provider
+        在受控真实仓库中的端到端稳定执行证据列为未完成；结合当前 CLI
+        实现，近期应优先验证已接线的 Claude Code，Codex 仍属于后续或自定义
+        provider。
+      </p>
+      <p>
+        影响：没有真实任务样本，就无法判断失败率、返工成本、prompt/role
+        是否有效、gate 是否足够、人工审阅是否省时间。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          选择 2-3 个相似内部工具仓库，准备 10 个 B/D 类真实需求或历史 issue。
+        </li>
+        <li>
+          每个样本记录 run id、provider、仓库、需求类型、是否产出 PR
+          包、是否创建真实 PR、gate 结果、人工介入次数、返工原因。
+        </li>
+        <li>
+          达标线不需要高：先证明 5 个以上需求能从输入走到可审 PR 包，其中至少 2
+          个创建真实测试 PR。
+        </li>
+      </ul>
+      <h3>P0-3 仓库画像驱动 Gate</h3>
+      <p>
+        事实：<code>repo-profile.yaml</code> 能检测
+        build/typecheck/lint/test/e2e/security 命令，但
+        <code>workflows/standard-feature.yaml</code> 和
+        <code>workflows/bugfix.yaml</code> 仍硬编码
+        <code>pnpm build/lint/test</code>。用户手册也说明“workflow gate
+        仍以模板内配置为准，尚未自动改写验证命令”。
+      </p>
+      <p>
+        影响：真实仓库只要不是 pnpm 或脚本名不同，Donkey 就会在 gate
+        层失败；这会把“工具不适配”误判成“需求实现失败”。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          <code>donkey init</code> 后提供 gate preflight，列出将运行的
+          build/typecheck/lint/test/e2e/security 命令。
+        </li>
+        <li>
+          Workflow gate 支持引用 repo profile，例如
+          <code>commandRef: build</code>、<code>commandRef: test</code>。
+        </li>
+        <li>
+          缺失命令时不默认跳过；要求用户在 repo profile
+          中确认替代命令或显式标记“不适用”。
+        </li>
+      </ul>
+      <h3>P0-4 恢复与 Provider 一致性</h3>
+      <p>
+        事实：CLI <code>resume</code> 当前固定使用
+        <code>createMockAgentAdapter()</code>，没有沿用原 run 的 provider
+        配置。Engine 在存在 active lease 且 node 为
+        <code>running/paused</code> 时可能直接切到
+        <code>awaiting-gate</code>，这需要更强的“Agent
+        已完成”标记支撑，否则中断恢复有误推进风险。
+      </p>
+      <p>
+        影响：真实 provider 跑到一半暂停或崩溃后，恢复可能换成 mock
+        或跳过真实执行，readiness 可能建立在错误证据上。
+      </p>
+      <p>
+        本地依据：<code>packages/cli/src/index.ts</code> 的
+        <code>commandResume</code> 固定创建
+        <code>createMockAgentAdapter()</code>；<code
+          >packages/web/src/server/api/root.ts</code
+        >
+        会从 <code>.donkey/config.yaml</code> 读 <code>defaultAgent</code>，但
+        run 自身没有落库 provider 快照。CLI 和 Web 的恢复口径不一致。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          run 创建时落库 provider、adapter config 摘要和安全 profile，CLI/Web
+          resume 必须沿用或要求人工选择。
+        </li>
+        <li>
+          每个节点有明确 completion marker：Agent exit code、artifact schema
+          通过、工作区提交结果三者至少两类可验证。
+        </li>
+        <li>
+          对 <code>running</code> 旧状态做 stale 检测；不能仅凭 lease 存在就进入
+          gate。
+        </li>
+      </ul>
+      <h3>P0-5 人工验收面可决策</h3>
+      <p>
+        事实：Web 当前展示 artifact 列表、gate 列表、audit 摘要和 human
+        gate；artifact 只显示 summary/path，不显示正文；没有 diff viewer、gate
+        log viewer、readiness 结果、PR 包内容和下一步命令。
+      </p>
+      <p>
+        影响：用户仍需要回终端翻 <code>.donkey</code> 文件、手动找 diff
+        和日志；这不满足“真实工作中 5 分钟判断是否接受”的目标。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          Web/CLI 至少能展示：PR body、PR package、git diff 摘要、artifact
+          正文、gate log、readiness failed checks。
+        </li>
+        <li>结果页默认突出失败项、高风险项、未覆盖验收标准和建议下一步。</li>
+        <li>每个 artifact/gate/audit 事件能互相跳转，减少人工查路径。</li>
+      </ul>
+      <h3>P0-6 真实 PR 创建的受控证据</h3>
+      <p>
+        事实：<code>delivery create-pr --approve-human</code>
+        有实现和测试，但历史 dogfooding 仍记录真实 PR
+        未创建。真实工作可用至少要证明 push/PR 在受控仓库可成功，失败恢复可读。
+      </p>
+      <p>
+        影响：自动跑到本地分支和本地 PR
+        包仍需要用户手工完成最后一步，工具价值会打折。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          准备一个专用测试远端仓库，执行至少 2 次真实
+          <code>delivery create-pr --approve-human</code>。
+        </li>
+        <li>
+          记录 <code>gh auth status</code> 前置检查、远端 URL、PR
+          URL、失败恢复路径、PR body 脱敏检查。
+        </li>
+        <li>不加入自动 merge；PR 创建后只进入人工审阅。</li>
+      </ul>
+      <h3>P0-7 最小安全隔离证据</h3>
+      <p>
+        事实：CommandGateway 能拒绝部分危险命令；内置 security scan
+        能扫明显密钥；但 <code>CommandPolicy.network</code> 不是 OS
+        级隔离，provider profile 目前是声明式证据。
+      </p>
+      <p>
+        影响：真实 Agent
+        一旦可执行工具，就必须证明它不能越权写主工作区、不能静默
+        push、不能把密钥写进产物或日志。
+      </p>
+      <p>最低目标：</p>
+      <ul>
+        <li>
+          真实 provider 只在 worktree 下写入，主工作区保持不变，测试覆盖越界
+          cwd/文件写入。
+        </li>
+        <li>
+          provider 子进程环境变量默认脱敏；日志和 artifact
+          写入前做敏感模式扫描。
+        </li>
+        <li>
+          git push、gh pr create、删除、生产写操作只能走显式 human
+          approval，不允许通过角色 prompt 绕过。
+        </li>
+      </ul>
+      <h2>5. P1：补齐后才像日常工具，而不是验收脚手架</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>缺口</th>
+            <th>当前状态</th>
+            <th>建议目标</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>需求塑形入口</td>
+            <td>CLI 直接把一句话作为 demand body；动态路径是 dry-run mock</td>
+            <td>
+              增加 <code>demand create/shape/approve</code> 或 Web
+              表单，先生成需求卡、非目标和验收标准，由人确认后再执行。
+            </td>
+          </tr>
+          <tr>
+            <td>Workflow 选择</td>
+            <td>标准模板和 bugfix 模板可用；动态不可执行</td>
+            <td>
+              提供受控 workflow
+              selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。
+            </td>
+          </tr>
+          <tr>
+            <td>Gate 失败体验</td>
+            <td>有 autoFix repair node，但真实 provider 证据不足</td>
+            <td>
+              gate
+              失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。
+            </td>
+          </tr>
+          <tr>
+            <td>角色/工具治理</td>
+            <td>角色目录和 tools.yaml 已有，Web 只读展示</td>
+            <td>
+              增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e
+              通过。
+            </td>
+          </tr>
+          <tr>
+            <td>通知与审批</td>
+            <td>Web 本地处理 human gate</td>
+            <td>
+              接入飞书 IM
+              或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。
+            </td>
+          </tr>
+          <tr>
+            <td>CI/远端状态</td>
+            <td>可运行本地 gate；release readiness 有远端 CI 证据脚本</td>
+            <td>PR 创建后能查询远端 CI 状态，把结果写回 delivery evidence。</td>
+          </tr>
+          <tr>
+            <td>真实 QA 证据</td>
+            <td>当前主要跑已有 test 命令</td>
+            <td>
+              对 UI/Web 类任务支持 Playwright
+              截图、失败截图、关键路径步骤和验收标准映射。
+            </td>
+          </tr>
+          <tr>
+            <td>基准数据</td>
+            <td>有 metrics/readiness，但缺少持续样本集</td>
+            <td>
+              建立 <code>docs/reviews</code> 或专门数据文件记录每次真实
+              dogfooding 的成功率、耗时、人工介入和失败原因。
+            </td>
+          </tr>
+          <tr>
+            <td>文档验收状态一致性</td>
+            <td>
+              <code
+                >docs/reviews/2026-06-08-donkey-work-usable-increment.md</code
+              >
+              仍保留“待本轮最高思考 reviewer 复查后更新”
+            </td>
+            <td>
+              对外声称工作可用化增量完成前，补正式 reviewer
+              结论，或把该报告明确标为草稿。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>6. P2：增强长期复用，不阻塞第一批工作可用</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>能力</th>
+            <th>为什么不是 P0</th>
+            <th>建议时机</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>多项目/多团队 dashboard</td>
+            <td>当前目标是个人或小团队本地工具，远程多租户不是近期目标</td>
+            <td>等 10-20 个真实需求跑通后再做。</td>
+          </tr>
+          <tr>
+            <td>Knowledge &amp; Learning Layer</td>
+            <td>没有稳定执行数据前，自动沉淀容易沉淀噪音</td>
+            <td>先人工记录复盘，再抽取模板和规则。</td>
+          </tr>
+          <tr>
+            <td>Workflow Studio</td>
+            <td>早做会变成配置平台</td>
+            <td>等 P0/P1 模板稳定后再做可视化编辑。</td>
+          </tr>
+          <tr>
+            <td>成本控制</td>
+            <td>本地 MVP 先可记录 token/cost，完整预算治理可后置</td>
+            <td>真实 provider 连续运行后补。</td>
+          </tr>
+          <tr>
+            <td>Ops/Data/上线反馈闭环</td>
+            <td>用户明确不考虑全面自动化，且风险更高</td>
+            <td>PR 交付稳定后再讨论。</td>
+          </tr>
+          <tr>
+            <td>多 Agent 并行协作</td>
+            <td>当前单 Agent 节点稳定性更关键</td>
+            <td>串行闭环稳定后再增加并行。</td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>7. 建议的最近 2 周实施顺序</h2>
+      <ol>
+        <li>
+          打通真实 provider artifact 协议：输出目录、schema、artifact
+          收集、失败时阻断。
+        </li>
+        <li>把模板 gate 改成 repo profile 驱动，并增加 gate preflight。</li>
+        <li>修复 resume provider 一致性和 running node stale recovery。</li>
+        <li>
+          增强 Web/CLI 验收页：artifact 正文、diff、gate log、readiness failed
+          checks。
+        </li>
+        <li>建立受控真实仓库验收集，跑 5 个任务，至少 1 个真实 PR。</li>
+        <li>
+          把每次 run 的结论写入 <code>docs/reviews/</code>，形成第一版
+          dogfooding 数据表。
+        </li>
+      </ol>
+      <h2>8. 明确不建议近期做</h2>
+      <ul>
+        <li>不做自动 merge。</li>
+        <li>不做自动上线。</li>
+        <li>不做生产数据库、权限、密钥或发布系统的真实写操作。</li>
+        <li>不做远程多租户服务。</li>
+        <li>不先扩展十几个角色或复杂 UI Studio。</li>
+      </ul>
+      <h2>9. 最终判断</h2>
+      <p>
+        Donkey
+        现在已经具备“工作可用工具的骨架”，但还不是“可以直接依赖的工作工具”。最短路径不是扩大自动化范围，而是把真实
+        provider、真实仓库、真实 PR、真实证据和真实恢复打穿。
+      </p>
+      <p>
+        只要 P0 补齐，Donkey 就可以进入一个合理的试用边界：在 2-3
+        个相似内部工具仓库中处理低中风险 B/D 类需求，默认推进到 PR 包或测试
+        PR，由人审阅、决定合入，并把失败原因沉淀为 repo profile、角色规则和
+        workflow 模板。
+      </p>
+    </main>
+  </body>
+</html>
