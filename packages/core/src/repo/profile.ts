@@ -32,17 +32,29 @@ const repoProfileCommandSchema = z
   })
   .strict();
 
+const repoProfileNotApplicableCommandSchema = z
+  .object({
+    notApplicable: z.literal(true),
+    reason: z.string().min(1),
+  })
+  .strict();
+
+const repoProfileCommandEntrySchema = z.union([
+  repoProfileCommandSchema,
+  repoProfileNotApplicableCommandSchema,
+]);
+
 export const repoProfileSchema = z
   .object({
     version: z.number().int().positive().default(1),
     commands: z
       .object({
-        build: repoProfileCommandSchema.optional(),
-        typecheck: repoProfileCommandSchema.optional(),
-        lint: repoProfileCommandSchema.optional(),
-        test: repoProfileCommandSchema.optional(),
-        e2e: repoProfileCommandSchema.optional(),
-        security: repoProfileCommandSchema.optional(),
+        build: repoProfileCommandEntrySchema.optional(),
+        typecheck: repoProfileCommandEntrySchema.optional(),
+        lint: repoProfileCommandEntrySchema.optional(),
+        test: repoProfileCommandEntrySchema.optional(),
+        e2e: repoProfileCommandEntrySchema.optional(),
+        security: repoProfileCommandEntrySchema.optional(),
       })
       .default({}),
     pr: z
@@ -76,12 +88,27 @@ export interface RepoProfileCommandFixSuggestion {
 export interface RepoProfileCommandGuidance {
   commandRef: RepoProfileCommandName;
   profilePath: string;
-  status: 'resolved' | 'missing';
+  status: 'resolved' | 'missing' | 'not-applicable';
   command: CommandInvocation | null;
   commandText: string;
   hint: string;
+  reason?: string;
   suggestions: RepoProfileCommandFixSuggestion[];
 }
+
+export type RepoProfileCommandResolution =
+  | {
+      status: 'resolved';
+      command: CommandInvocation;
+      commandText: string;
+    }
+  | {
+      status: 'not-applicable';
+      reason: string;
+    }
+  | {
+      status: 'missing';
+    };
 
 export function loadRepoProfile(repoPath: string): RepoProfile {
   const profilePath = repoProfilePath(repoPath);
@@ -110,8 +137,27 @@ export function repoProfileCommand(
   profile: RepoProfile,
   name: RepoProfileCommandName,
 ): CommandInvocation | null {
-  const command = profile.commands[name];
-  return command ? { tool: command.tool, args: command.args } : null;
+  const resolution = repoProfileCommandResolution(profile, name);
+  return resolution.status === 'resolved' ? resolution.command : null;
+}
+
+export function repoProfileCommandResolution(
+  profile: RepoProfile,
+  name: RepoProfileCommandName,
+): RepoProfileCommandResolution {
+  const entry = profile.commands[name];
+  if (!entry) {
+    return { status: 'missing' };
+  }
+  if (isNotApplicableCommand(entry)) {
+    return { status: 'not-applicable', reason: entry.reason };
+  }
+  const command = { tool: entry.tool, args: entry.args };
+  return {
+    status: 'resolved',
+    command,
+    commandText: formatCommandInvocation(command),
+  };
 }
 
 export function repoProfileCommandGuidance(
@@ -119,16 +165,28 @@ export function repoProfileCommandGuidance(
   profile: RepoProfile,
   name: RepoProfileCommandName,
 ): RepoProfileCommandGuidance {
-  const command = repoProfileCommand(profile, name);
+  const resolution = repoProfileCommandResolution(profile, name);
   const profilePath = repoProfilePath(repoPath);
-  if (command) {
+  if (resolution.status === 'resolved') {
     return {
       commandRef: name,
       profilePath,
       status: 'resolved',
-      command,
-      commandText: formatCommandInvocation(command),
+      command: resolution.command,
+      commandText: resolution.commandText,
       hint: '',
+      suggestions: [],
+    };
+  }
+  if (resolution.status === 'not-applicable') {
+    return {
+      commandRef: name,
+      profilePath,
+      status: 'not-applicable',
+      command: null,
+      commandText: '',
+      hint: `commands.${name} is explicitly marked notApplicable`,
+      reason: resolution.reason,
       suggestions: [],
     };
   }
@@ -255,6 +313,12 @@ function readPackageScripts(
 
 function formatCommandInvocation(command: CommandInvocation): string {
   return [command.tool, ...command.args].join(' ');
+}
+
+function isNotApplicableCommand(
+  entry: NonNullable<RepoProfile['commands'][RepoProfileCommandName]>,
+): entry is z.infer<typeof repoProfileNotApplicableCommandSchema> {
+  return 'notApplicable' in entry && entry.notApplicable === true;
 }
 
 function formatRepoProfileCommandYaml(

@@ -339,6 +339,53 @@ describe('runCli in-process', () => {
     expect(output).toContain('suggestedCommand=npm run compile');
   });
 
+  it('prints explicit notApplicable repo profile commands in workflow preflight', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-preflight-na-'));
+    tempDirs.push(repoPath);
+    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      [
+        'version: 1',
+        'commands:',
+        '  build:',
+        '    notApplicable: true',
+        '    reason: docs-only',
+        '  security:',
+        '    notApplicable: true',
+        '    reason: no-external-security-script',
+        'pr:',
+        '  baseBranch: main',
+        '  titlePrefix: ""',
+        'risks:',
+        '  highRiskPaths: []',
+        '  requiresHumanApproval: []',
+      ].join('\n'),
+      'utf8',
+    );
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(
+        ['workflow', 'preflight', 'standard-feature', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+
+    const output = io.takeStdout();
+    expect(output).toContain(
+      'gate=build commandRef=build status=not-applicable',
+    );
+    expect(output).toContain(
+      'hint=commands.build is explicitly marked notApplicable',
+    );
+    expect(output).toContain('notApplicableReason=docs-only');
+    expect(output).toContain(
+      'gate=security-scan commandRef=security status=resolved command=donkey-builtin security scan',
+    );
+    expect(output).toContain('notApplicableIgnoredFor=security-scan');
+  });
+
   it('does not approve human gates when the run provider snapshot is missing', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

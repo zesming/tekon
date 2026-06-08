@@ -76,6 +76,17 @@ describe('pull request preparation package', () => {
       retries: 0,
       createdAt: '2026-06-05T00:00:01.000Z',
     });
+    await repositories.recordGateResult({
+      id: 'gate_skipped_e2e',
+      runId: 'run_1',
+      nodeId: 'node_delivery',
+      gateType: 'e2e-pass',
+      status: 'skipped',
+      durationMs: 1,
+      retries: 0,
+      failureClassification: 'not-applicable',
+      createdAt: '2026-06-05T00:00:01.100Z',
+    });
     await audit.append({
       runId: 'run_1',
       type: 'run.passed',
@@ -93,6 +104,10 @@ describe('pull request preparation package', () => {
         commands: {
           build: { tool: 'pnpm', args: ['build'] },
           test: { tool: 'pnpm', args: ['test'] },
+          e2e: {
+            notApplicable: true,
+            reason: 'service has no browser surface',
+          },
         },
         pr: { baseBranch: 'main', titlePrefix: '[Donkey] ' },
         risks: { highRiskPaths: [], requiresHumanApproval: [] },
@@ -111,8 +126,14 @@ describe('pull request preparation package', () => {
     expect(readFileSync(preparation.prBodyPath, 'utf8')).toContain(
       'remote push and PR creation require human approval',
     );
+    expect(readFileSync(preparation.prBodyPath, 'utf8')).toContain(
+      '- gates: 1 passed, 1 skipped, 0 failed_or_blocked',
+    );
     expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
       'Acceptance Evidence',
+    );
+    expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
+      '- e2e: notApplicable reason=service has no browser surface',
     );
     expect(
       await repositories.listArtifacts('run_1', undefined, 'delivery-package'),

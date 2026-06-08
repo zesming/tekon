@@ -96,6 +96,7 @@ export const gateConfigSchema = z.object({
   commandRef: z
     .enum(['build', 'typecheck', 'lint', 'test', 'e2e', 'security'])
     .optional(),
+  skipReason: z.string().min(1).optional(),
   artifactType: artifactTypeSchema.optional(),
   requiresHumanApproval: z.boolean().default(false),
   maxRetries: z.number().int().min(0).default(0),

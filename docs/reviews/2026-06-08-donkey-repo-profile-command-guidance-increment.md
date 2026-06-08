@@ -2,7 +2,7 @@
 
 日期：2026-06-08
 
-范围：补齐 P0-3 “仓库画像驱动 Gate”中缺失命令的第一版修复引导。本文只覆盖 preflight 提示和 repo profile 写入建议，不引入自动跳过 gate、自动修改用户仓库配置或“显式不适用”的 gate 语义。
+范围：补齐 P0-3 “仓库画像驱动 Gate”中缺失命令的第一版修复引导。本文覆盖 preflight 提示和 repo profile 写入建议；后续同日增量已补齐“显式不适用”的 gate 语义。
 
 ## 1. 背景判断
 
@@ -23,9 +23,9 @@ Donkey 已经把内置 workflow 从硬编码 `pnpm build/lint/test` 推进到 `c
 ## 3. 当前边界
 
 - Donkey 不会自动写入 `.donkey/repo-profile.yaml`，因为候选脚本需要用户确认语义是否等价。
-- Donkey 不会把缺失命令静默视为通过；普通命令缺失时 workflow gate 仍会以 `missing-command` 失败。
+- Donkey 不会把缺失命令静默视为通过；普通命令缺失时 workflow gate 仍会以 `missing-command` 失败。后续增量已支持用户显式配置 `notApplicable: true` 和 `reason`。
 - `security-scan` 没有外部命令时仍使用 Donkey 内置扫描；候选外部安全脚本只是 repo profile 的可选增强。
-- 本增量没有新增 `notApplicable` schema。若某仓库确实没有某类 gate，需要后续单独设计显式“不适用”配置和 readiness 表达，不能靠缺失命令绕过。
+- 显式“不适用”不是缺失命令兜底；只有用户在 repo profile 中配置后才会记录为 `skipped/not-applicable`。
 
 ## 4. 验证记录
 
@@ -58,7 +58,7 @@ npm exec --yes -- prettier --check README.md CHANGELOG.md docs/manual/donkey-v2-
 ## 5. 后续仍需
 
 1. 用 1-2 个真实非 pnpm 仓库或脚本名不同的内部仓库验证 preflight 输出是否足够直观。
-2. 设计 `notApplicable` 或等价语义，明确某类 gate 不适用时如何影响 workflow、readiness 和 PR 包，而不是让用户删除命令来绕过 gate。
+2. 在真实仓库样本中验证 `notApplicable` 是否足够表达文档仓库、纯库仓库、无浏览器表面的服务仓库等差异，而不是让用户删除命令来绕过 gate。
 3. 根据真实仓库样本补充更多候选脚本名，例如 `check`、`verify`、`ci:test` 等，但应避免把猜测升级为自动执行。
 
 ## 6. Reviewer 结论
@@ -67,4 +67,4 @@ npm exec --yes -- prettier --check README.md CHANGELOG.md docs/manual/donkey-v2-
 
 复查确认：本轮 `repoProfileCommandGuidance` / `suggestRepoProfileCommandFixes` 只读取 `package.json` 并生成建议，不写 `.donkey/repo-profile.yaml`，不自动执行候选脚本，也不改变 Engine 缺失普通命令时的 `missing-command` 失败语义。CLI `workflow preflight` 只是展示 `hint/profilePath/suggestedScript/suggestedCommand`；`security-scan` 缺外部命令时仍显示内置扫描，符合当前边界。
 
-测试覆盖核心路径：npm `compile -> npm run compile`、pnpm `test:e2e -> pnpm test:e2e`、CLI preflight 缺失 build 的提示字段。文档和 HTML 对能力边界表述一致，没有把 `notApplicable`、真实非 pnpm 仓库验证或自动修复/自动跳过写成已完成。
+测试覆盖核心路径：npm `compile -> npm run compile`、pnpm `test:e2e -> pnpm test:e2e`、CLI preflight 缺失 build 的提示字段。当时文档和 HTML 对能力边界表述一致，没有把尚未实现的 `notApplicable`、真实非 pnpm 仓库验证或自动修复/自动跳过写成已完成；后续同日增量已补齐显式 `notApplicable` 语义。

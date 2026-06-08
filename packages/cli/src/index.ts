@@ -558,16 +558,30 @@ async function commandWorkflow(argv: string[], io: CliIO) {
             : gate.type === 'security-scan'
               ? 'donkey-builtin security scan'
               : '';
+          const status =
+            guidance?.status === 'not-applicable' &&
+            gate.type !== 'security-scan'
+              ? 'not-applicable'
+              : commandText
+                ? 'resolved'
+                : 'missing';
           const fields = [
             `node=${node.id}`,
             `gate=${gate.type}`,
             gate.commandRef
               ? `commandRef=${gate.commandRef}`
               : 'commandRef=none',
-            `status=${commandText ? 'resolved' : 'missing'}`,
+            `status=${status}`,
             commandText ? `command=${commandText}` : 'command=',
           ];
-          if (!commandText && guidance) {
+          if (guidance?.status === 'not-applicable') {
+            fields.push(`hint=${guidance.hint}`);
+            fields.push(`profilePath=${guidance.profilePath}`);
+            fields.push(`notApplicableReason=${guidance.reason ?? ''}`);
+            if (gate.type === 'security-scan') {
+              fields.push('notApplicableIgnoredFor=security-scan');
+            }
+          } else if (!commandText && guidance) {
             fields.push(`hint=${guidance.hint}`);
             fields.push(`profilePath=${guidance.profilePath}`);
             const suggestion = guidance.suggestions[0];

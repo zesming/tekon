@@ -61,6 +61,85 @@ describe('gate engine', () => {
     db.close();
   });
 
+  it('records explicitly not applicable command gates as skipped', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-skip-'));
+    tempDirs.push(repoPath);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    const engine = createGateEngine({ repositories });
+
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gate: {
+        type: 'build',
+        skipReason:
+          'repo profile commands.build is not applicable: docs-only repo',
+      },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'build',
+      status: 'skipped',
+      failureClassification: 'not-applicable',
+    });
+    expect(await repositories.listGateResults('run_1')).toMatchObject([
+      {
+        gateType: 'build',
+        status: 'skipped',
+        failureClassification: 'not-applicable',
+      },
+    ]);
+    db.close();
+  });
+
+  it('does not let skipReason bypass the built-in security scan', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-security-'));
+    tempDirs.push(repoPath);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    const engine = createGateEngine({ repositories });
+
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gate: {
+        type: 'security-scan',
+        skipReason:
+          'repo profile commands.security is not applicable: docs-only repo',
+      },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'security-scan',
+      status: 'passed',
+      failureClassification: null,
+    });
+    db.close();
+  });
+
   it('creates an autoFix repair node linked to a failed gate result', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-repair-'));
     tempDirs.push(repoPath);

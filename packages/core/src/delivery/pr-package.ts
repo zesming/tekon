@@ -125,6 +125,9 @@ function formatPrBody(input: {
   const failedGates = input.evidence.gates.filter(
     (gate) => gate.status === 'failed' || gate.status === 'blocked',
   ).length;
+  const skippedGates = input.evidence.gates.filter(
+    (gate) => gate.status === 'skipped',
+  ).length;
   return [
     `# ${input.evidence.demand.title}`,
     '',
@@ -133,7 +136,7 @@ function formatPrBody(input: {
     '',
     '## Validation',
     `- workflow: ${input.evidence.workflowStatus}`,
-    `- gates: ${passedGates} passed, ${failedGates} failed_or_blocked`,
+    `- gates: ${passedGates} passed, ${skippedGates} skipped, ${failedGates} failed_or_blocked`,
     `- audit: ${input.evidence.audit.valid ? 'valid' : 'invalid'}`,
     `- artifacts: ${input.evidence.artifacts.length}`,
     `- rollback plan: ${input.evidence.rollbackPlanPresent ? 'present' : 'missing'}`,
@@ -168,7 +171,7 @@ function formatPreparationPackage(input: {
     '',
     '## Repo Profile Commands',
     ...Object.entries(input.profile.commands).map(([name, command]) =>
-      `- ${name}: ${command.tool} ${command.args.join(' ')}`.trim(),
+      formatRepoProfileCommandEntry(name, command),
     ),
     '',
     '## Evidence',
@@ -189,6 +192,26 @@ function formatPreparationPackage(input: {
     '## PR Body',
     input.body,
   ].join('\n');
+}
+
+function formatRepoProfileCommandEntry(
+  name: string,
+  command: RepoProfileCommandEntry,
+): string {
+  if (isNotApplicableProfileCommand(command)) {
+    return `- ${name}: notApplicable reason=${command.reason}`;
+  }
+  return `- ${name}: ${command.tool} ${command.args.join(' ')}`.trim();
+}
+
+type RepoProfileCommandEntry = NonNullable<
+  RepoProfile['commands'][keyof RepoProfile['commands']]
+>;
+
+function isNotApplicableProfileCommand(
+  command: RepoProfileCommandEntry,
+): command is { notApplicable: true; reason: string } {
+  return 'notApplicable' in command && command.notApplicable === true;
 }
 
 function formatAcceptanceEvidence(evidence: DeliveryEvidencePackage): string[] {

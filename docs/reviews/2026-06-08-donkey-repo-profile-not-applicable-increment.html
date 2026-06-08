@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey 仓库画像显式不适用语义增量报告</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f6f7f9;
+        color: #1f2937;
+        font-family: system-ui, sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #fff;
+        border: 1px solid #d8dde6;
+        padding: 20px;
+        line-height: 1.55;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <pre>
+# Donkey 仓库画像显式不适用语义增量报告
+
+日期：2026-06-08
+
+范围：补齐 P0-3 “仓库画像驱动 Gate”中显式“不适用”的第一版执行语义。本文只覆盖 repo profile 中由用户明确声明的普通命令 gate，不把缺失命令自动视为不适用，也不允许跳过 Donkey 内置 security-scan。
+
+## 1. 背景判断
+
+上一轮已经让 `workflow preflight` 在命令缺失时给出 `profilePath`、`hint` 和候选脚本建议，但 P0-3 的最低目标还包含“替代命令或显式标记不适用”。真实工作里确实会有文档仓库、配置仓库、纯库仓库或没有浏览器表面的服务仓库，不适合强行要求每类 gate 都有同名脚本。
+
+如果 Donkey 仍只能在缺失命令时失败，用户会倾向于删除 gate 或伪造空脚本。显式 `notApplicable` 的价值是把这类人工判断变成可审计证据：它允许 workflow 继续，但必须留下 reason，并在 readiness 和 PR 包中可见。
+
+## 2. 已完成能力
+
+| 能力                | 实现位置                                                            | 说明                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Repo profile schema | `packages/core/src/repo/profile.ts`                                 | `commands.&lt;ref&gt;` 支持 `{ notApplicable: true, reason: string }`，并通过 guidance 输出 `status=not-applicable` 和 reason。 |
+| Workflow 解析       | `packages/core/src/workflow/engine.ts`                              | 普通 command gate 遇到显式不适用时注入 `skipReason`；`security-scan` 不被跳过，仍走 Donkey 内置扫描。                     |
+| Gate 结果           | `packages/core/src/gate/engine.ts`                                  | 显式不适用的普通 command gate 记录为 `status=skipped`、`failureClassification=not-applicable`，并写 gate log。            |
+| CLI preflight       | `packages/cli/src/index.ts`                                         | 显式不适用时输出 `status=not-applicable`、`profilePath`、`hint` 和 `notApplicableReason`；若声明的是 `security`，额外提示 `notApplicableIgnoredFor=security-scan`。 |
+| Readiness           | `packages/core/src/eval/work-readiness.ts`                          | 验证 gate required check 接受 `passed` 或显式 `skipped/not-applicable`，证据文案展示 “passed or explicitly skipped”。     |
+| PR 包               | `packages/core/src/delivery/pr-package.ts`                          | PR body gate 摘要增加 skipped 计数；PR package 的 repo profile 命令区展示 `notApplicable reason=...`。                    |
+| 回归测试            | `packages/core/__tests__`、`packages/cli/__tests__/run-cli.test.ts` | 覆盖 profile 加载、gate skipped 结果、workflow 继续、readiness、PR 包和 CLI preflight。                                   |
+
+## 3. 当前边界
+
+- 缺失命令仍是 `missing-command`，不会自动跳过。
+- `notApplicable` 必须带 reason；没有 reason 的配置会被 schema 拒绝。
+- 该语义只用于普通 command gate，例如 build、lint、test、e2e-pass。`security-scan` 缺少外部命令时仍会执行 Donkey 内置扫描，避免用 repo profile 绕过基础敏感信息扫描。
+- Readiness 会把显式 `skipped/not-applicable` 视为验证 gate 已解决，但 PR 包会保留 skipped 计数和 reason，供人工审阅。
+
+## 4. 验证记录
+
+已通过的阶段性验证：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit -- --run packages/core/__tests__/repo/profile.test.ts packages/core/__tests__/gate/engine.test.ts packages/core/__tests__/workflow/engine-template.e2e.test.ts packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/pr-package.test.ts
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli build
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:unit -- --run packages/cli/__tests__/run-cli.test.ts
+```
+
+本轮最终收口验证：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 build
+npm exec --yes -- pnpm@10.12.1 typecheck
+npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
+git diff --check
+npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-user-manual.md docs/manual/donkey-v2-user-manual.html docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.md docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.html docs/reviews/2026-06-08-donkey-work-usable-increment.md docs/reviews/2026-06-08-donkey-work-usable-increment.html docs/reviews/2026-06-08-donkey-repo-profile-command-guidance-increment.md docs/reviews/2026-06-08-donkey-repo-profile-command-guidance-increment.html docs/reviews/2026-06-08-donkey-repo-profile-not-applicable-increment.md docs/reviews/2026-06-08-donkey-repo-profile-not-applicable-increment.html packages/core/src/repo/profile.ts packages/core/src/workflow/engine.ts packages/core/src/workflow/template.ts packages/core/src/gate/engine.ts packages/core/src/eval/work-readiness.ts packages/core/src/delivery/pr-package.ts packages/core/src/types/domain.ts packages/core/__tests__/repo/profile.test.ts packages/core/__tests__/gate/engine.test.ts packages/core/__tests__/workflow/engine-template.e2e.test.ts packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/pr-package.test.ts packages/cli/src/index.ts packages/cli/__tests__/run-cli.test.ts
+```
+
+覆盖点：
+
+- `repo/profile.test.ts` 覆盖 `notApplicable` 配置不会被当成 missing，并在 guidance 中返回 reason。
+- `gate/engine.test.ts` 覆盖 `skipReason` 产生 `skipped/not-applicable` gate result，并覆盖 `security-scan` 不会被 `skipReason` 绕过。
+- `workflow/engine-template.e2e.test.ts` 覆盖 repo profile 中的 `notApplicable` 会让 workflow 继续通过。
+- `eval/work-readiness.test.ts` 覆盖显式 skipped 验证 gate 不阻断 readiness。
+- `delivery/pr-package.test.ts` 覆盖 PR body skipped 计数和 PR package repo profile reason 展示。
+- `run-cli.test.ts` 覆盖 preflight 输出 `status=not-applicable` 和 `notApplicableReason`。
+
+## 5. 后续仍需
+
+1. 用真实文档仓库、纯库仓库或无浏览器表面的服务仓库验证 reason 是否足够支撑人工审阅。
+2. 在 review surface / Web 里把 skipped gate reason 做成更醒目的审阅项，而不是只依赖 gate log 和 PR 包。
+3. 根据真实样本判断是否需要对 `notApplicable` 加强策略，例如要求 human approval 或 repo owner approval。
+
+## 6. Reviewer 结论
+
+最高思考 reviewer 结论：APPROVED。必须修复项：无。
+
+复查确认：`notApplicable` 只通过 repo profile resolution 注入普通 command gate；`security-scan` 在 workflow 和 gate engine 两层都不会被该语义跳过。human/schema gate 没有可由 repo profile `notApplicable` 绕过的路径。Readiness 只把 `skipped + failureClassification=not-applicable` 的验证类 gate 视为 satisfied，安全扫描和 pending human gate 仍独立检查。PR package 和 CLI preflight 已能暴露 skipped 计数、reason、profilePath/hint，不是静默通过。
+
+已按 reviewer 建议补充 CLI 输出：当用户对 `commands.security` 声明 `notApplicable` 时，preflight 仍显示 Donkey 内置安全扫描命令，并追加 `notApplicableIgnoredFor=security-scan`，避免误解安全扫描可被声明不适用。
+</pre
+      >
+    </main>
+  </body>
+</html>

@@ -36,7 +36,9 @@ export function createGateEngine(options: {
     async runGate(input) {
       let result: GateResult;
 
-      if (input.gate.type === 'security-scan') {
+      if (input.gate.skipReason && isCommandGate(input.gate.type)) {
+        result = runSkippedGate(input, input.gate.skipReason);
+      } else if (input.gate.type === 'security-scan') {
         result = await runSecurityScanGate({
           gateway: options.gateway,
           runId: input.runId,
@@ -101,6 +103,20 @@ export function createGateEngine(options: {
       });
     },
   };
+}
+
+function runSkippedGate(input: GateEngineRunInput, reason: string): GateResult {
+  mkdirSync(input.outputDir, { recursive: true });
+  const outputPath = join(
+    input.outputDir,
+    `${input.nodeId}-${input.gate.type}.log`,
+  );
+  writeFileSync(
+    outputPath,
+    `gate skipped because it is explicitly marked not applicable\n${reason}\n`,
+    'utf8',
+  );
+  return makeGateResult(input, 'skipped', 'not-applicable', outputPath);
 }
 
 function formatHumanGateContext(gate: GateConfig, result: GateResult): string {

@@ -48,8 +48,8 @@ export async function evaluateWorkReadiness(input: {
       ['build', 'test', 'lint', 'e2e-pass'].includes(gate.gateType),
     ),
   );
-  const passedValidationGates = validationGates.filter(
-    (gate) => gate.status === 'passed',
+  const satisfiedValidationGates = validationGates.filter(
+    isSatisfiedValidationGate,
   );
   const pendingHuman = decisions.filter(
     (decision) => decision.status === 'pending',
@@ -75,8 +75,8 @@ export async function evaluateWorkReadiness(input: {
       severity: 'required',
       passed:
         validationGates.length > 0 &&
-        validationGates.length === passedValidationGates.length,
-      evidence: `${passedValidationGates.length}/${validationGates.length} validation gates passed`,
+        validationGates.length === satisfiedValidationGates.length,
+      evidence: `${satisfiedValidationGates.length}/${validationGates.length} validation gates passed or explicitly skipped`,
     },
     {
       id: 'delivery-package-present',
@@ -157,6 +157,17 @@ export async function evaluateWorkReadiness(input: {
     score: checks.length === 0 ? 0 : passed / checks.length,
     checks,
   };
+}
+
+function isSatisfiedValidationGate(gate: {
+  status: string;
+  failureClassification?: string | null;
+}) {
+  return (
+    gate.status === 'passed' ||
+    (gate.status === 'skipped' &&
+      gate.failureClassification === 'not-applicable')
+  );
 }
 
 function latestGateResults<

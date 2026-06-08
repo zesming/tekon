@@ -76,6 +76,40 @@ describe('repo profile', () => {
     });
   });
 
+  it('loads explicit notApplicable commands without treating them as missing', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-profile-na-'));
+    tempDirs.push(repoPath);
+    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      [
+        'version: 1',
+        'commands:',
+        '  e2e:',
+        '    notApplicable: true',
+        '    reason: "package has no browser surface"',
+        'pr:',
+        '  baseBranch: main',
+        '  titlePrefix: ""',
+        'risks:',
+        '  highRiskPaths: []',
+        '  requiresHumanApproval: []',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const profile = loadRepoProfile(repoPath);
+    const guidance = repoProfileCommandGuidance(repoPath, profile, 'e2e');
+
+    expect(repoProfileCommand(profile, 'e2e')).toBeNull();
+    expect(guidance).toMatchObject({
+      status: 'not-applicable',
+      hint: 'commands.e2e is explicitly marked notApplicable',
+      reason: 'package has no browser surface',
+      suggestions: [],
+    });
+  });
+
   it('suggests package script aliases for missing profile commands', () => {
     const npmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-npm-'));
     const pnpmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-pnpm-'));

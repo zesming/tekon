@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -69,6 +69,86 @@ describe('workflow engine template e2e', () => {
     ).toHaveLength(1);
     expect(await audit.verify(result.runId)).toEqual({ valid: true });
 
+    db.close();
+  });
+
+  it('skips commandRef gates explicitly marked notApplicable in the repo profile', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-na-'));
+    tempDirs.push(repoPath);
+    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      [
+        'version: 1',
+        'commands:',
+        '  build:',
+        '    notApplicable: true',
+        '    reason: "documentation-only repo"',
+        'pr:',
+        '  baseBranch: main',
+        '  titlePrefix: ""',
+        'risks:',
+        '  highRiskPaths: []',
+        '  requiresHumanApproval: []',
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.donkey',
+      repositories,
+      audit,
+      adapter: createMockAgentAdapter(),
+    });
+
+    const result = await engine.startRun({
+      demandText: '文档仓库无需 build gate',
+      mode: 'template',
+      workflowSpec: {
+        id: 'not-applicable-gate',
+        name: 'Not Applicable Gate',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'rd',
+            name: 'RD',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'rd-node',
+                role: 'rd',
+                inputs: [],
+                outputs: [],
+                gates: [{ type: 'build', commandRef: 'build' }],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result.workflow.status).toBe('passed');
+    expect(await repositories.listGateResults(result.runId)).toMatchObject([
+      {
+        gateType: 'build',
+        status: 'skipped',
+        failureClassification: 'not-applicable',
+      },
+    ]);
     db.close();
   });
 });

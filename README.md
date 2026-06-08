@@ -31,7 +31,7 @@ node packages/cli/dist/index.js init --repo /path/to/project
 node packages/cli/dist/index.js workflow preflight standard-feature --repo /path/to/project
 ```
 
-如果某个 `commandRef` 缺失，preflight 会输出 `status=missing`、`profilePath` 和 `hint`；当 `package.json` 中存在 `compile`、`test:e2e` 等候选脚本时，还会输出 `suggestedScript` 和 `suggestedCommand`。用户需要把确认后的命令写入 `.donkey/repo-profile.yaml`；Donkey 不会自动跳过缺失 gate。
+如果某个 `commandRef` 缺失，preflight 会输出 `status=missing`、`profilePath` 和 `hint`；当 `package.json` 中存在 `compile`、`test:e2e` 等候选脚本时，还会输出 `suggestedScript` 和 `suggestedCommand`。用户需要把确认后的命令写入 `.donkey/repo-profile.yaml`；Donkey 不会因命令缺失自动跳过 gate。确实不适用的普通命令 gate 可在 repo profile 中显式配置 `notApplicable: true` 和 `reason`，运行时会记录为 `skipped/not-applicable`，并在 readiness 和 PR 包中可见；`security-scan` 即使没有外部命令仍会执行 Donkey 内置扫描。
 
 运行动态 workflow dry-run：
 

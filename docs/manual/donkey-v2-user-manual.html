@@ -37,7 +37,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询、工作就绪度评估、工作可用样本评估、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询、工作就绪度评估、工作可用样本评估、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -68,7 +68,7 @@ node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project
 
 初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录、worktree 目录和 eval 目录。`.donkey/` 是运行态目录，默认不提交；重要验收结论、run id、Gate 结果和风险判断应同步写入 `docs/reviews/`。
 
-`repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e`、`security` 命令，并保留 PR base branch 和风险路径配置。内置 workflow 的 build/lint/test/security gate 会通过 `commandRef` 读取仓库画像命令；缺失 build/lint/test 命令时 gate 不会静默跳过，而会以 missing-command 失败。运行前可用 `workflow preflight` 查看缺失项；如果 `package.json` 中存在 `compile`、`bundle`、`test:e2e`、`playwright` 等候选脚本，preflight 会提示建议写入 `.donkey/repo-profile.yaml` 的命令。
+`repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e`、`security` 命令，并保留 PR base branch 和风险路径配置。内置 workflow 的 build/lint/test/security gate 会通过 `commandRef` 读取仓库画像命令；缺失 build/lint/test 命令时 gate 不会静默跳过，而会以 missing-command 失败。运行前可用 `workflow preflight` 查看缺失项；如果 `package.json` 中存在 `compile`、`bundle`、`test:e2e`、`playwright` 等候选脚本，preflight 会提示建议写入 `.donkey/repo-profile.yaml` 的命令。确实不适用的普通命令 gate 可在 repo profile 中显式配置 `notApplicable: true` 和 `reason`；运行时会记录为 `skipped/not-applicable`，readiness 会把它视为已显式解决，PR 包会保留 skipped 证据。`security-scan` 没有外部命令时仍执行 Donkey 内置扫描，不应通过 `notApplicable` 绕过基础安全扫描。
 
 `init` 也会生成 `.donkey/web-session.json`。这个文件保存本地 Web 写操作 token，已被 `.gitignore` 排除，不应提交。
 
@@ -132,6 +132,17 @@ node /path/to/donkey/packages/cli/dist/index.js workflow preflight standard-feat
 ```
 
 输出会列出每个 node/gate 的 `commandRef`、解析状态和最终命令。`security-scan` 在没有外部安全命令时会显示 Donkey 内置扫描。普通命令缺失时，输出会包含 `status=missing`、`profilePath`、`hint`；若能从 `package.json` 找到候选脚本，还会包含 `suggestedScript` 和 `suggestedCommand`。示例：某仓库只有 `compile` 脚本但没有 `build` 脚本时，preflight 会提示 `suggestedCommand=npm run compile`，你需要确认后把 `commands.build` 写入 `.donkey/repo-profile.yaml`。
+
+如果某类普通命令 gate 确认不适用，可以显式写入：
+
+```yaml
+commands:
+  e2e:
+    notApplicable: true
+    reason: "service has no browser surface"
+```
+
+preflight 会显示 `status=not-applicable` 和 `notApplicableReason`。这不是缺失命令兜底，只有用户显式配置后才会生效。
 
 ## 6. 人工确认 human gate
 
@@ -233,7 +244,7 @@ node /path/to/donkey/packages/cli/dist/index.js delivery ci-status --run-id &lt;
 node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id &lt;runId&gt; --repo /path/to/project
 ```
 
-当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate、验收标准是否逐条有 passed evidence、安全扫描是否通过、PR 是否已创建，以及远端 CI 是否已查询且通过。安全扫描和 artifact/日志敏感信息治理使用同一组基础规则，但 readiness 不代表完整安全审计通过。
+当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过或显式不适用、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate、验收标准是否逐条有 passed evidence、安全扫描是否通过、PR 是否已创建，以及远端 CI 是否已查询且通过。安全扫描和 artifact/日志敏感信息治理使用同一组基础规则，但 readiness 不代表完整安全审计通过。
 
 `ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。PR 已创建和远端 CI 通过当前是推荐项，不是 required gate，因为有些团队会先审阅本地 PR 准备包再决定是否创建远端 PR 或等待远端 CI。
 

@@ -110,6 +110,17 @@ describe('work readiness evaluation', () => {
       createdAt: '2026-06-05T00:00:01.000Z',
     });
     await repositories.recordGateResult({
+      id: 'gate_docs_only_build',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'build',
+      status: 'skipped',
+      durationMs: 1,
+      retries: 0,
+      failureClassification: 'not-applicable',
+      createdAt: '2026-06-05T00:00:01.050Z',
+    });
+    await repositories.recordGateResult({
       id: 'gate_security',
       runId: 'run_1',
       nodeId: 'node_1',
@@ -159,6 +170,14 @@ describe('work readiness evaluation', () => {
     });
 
     expect(afterPrepare.ready).toBe(true);
+    expect(
+      afterPrepare.checks.find(
+        (check) => check.id === 'validation-gates-passed',
+      ),
+    ).toMatchObject({
+      passed: true,
+      evidence: '2/2 validation gates passed or explicitly skipped',
+    });
     expect(
       afterPrepare.checks.find((check) => check.id === 'pr-created'),
     ).toMatchObject({

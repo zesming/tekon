@@ -47,6 +47,7 @@ export interface WorkflowGateConfig {
   type: GateType;
   command?: CommandInvocation;
   commandRef?: z.infer<typeof commandRefSchema>;
+  skipReason?: string;
   artifactType?: ArtifactType;
   requiresHumanApproval: boolean;
   maxRetries: number;

@@ -12,7 +12,10 @@ import {
   type RolePromptArtifactSummary,
 } from '../role/prompt-builder.js';
 import { loadRole } from '../role/loader.js';
-import { loadRepoProfile, repoProfileCommand } from '../repo/profile.js';
+import {
+  loadRepoProfile,
+  repoProfileCommandResolution,
+} from '../repo/profile.js';
 import type { AgentAdapter, AgentRunInput } from '../runtime/agent-adapter.js';
 import type { AgentRunResult } from '../runtime/agent-adapter.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
@@ -543,8 +546,20 @@ export function createWorkflowEngine(
       return gate;
     }
     const profile = loadRepoProfile(options.repoPath);
-    const command = repoProfileCommand(profile, gate.commandRef);
-    return command ? { ...gate, command } : gate;
+    const resolution = repoProfileCommandResolution(profile, gate.commandRef);
+    if (resolution.status === 'resolved') {
+      return { ...gate, command: resolution.command };
+    }
+    if (resolution.status === 'not-applicable') {
+      if (gate.type === 'security-scan') {
+        return gate;
+      }
+      return {
+        ...gate,
+        skipReason: `repo profile commands.${gate.commandRef} is not applicable: ${resolution.reason}`,
+      };
+    }
+    return gate;
   }
 
   async function createExecutionLease(
