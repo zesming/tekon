@@ -62,14 +62,14 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ### 3.3 当前仍主要是 mock/dry-run 或受控 fixture 的能力
 
-| 能力              | 当前状态                                                                                                                           | 判断                                                                                   |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 动态 workflow     | `run --dynamic` 当前强制 `--dry-run`，CLI 使用 `createDynamicMockAdapter`                                                          | 还不是 PM LLM 真实规划，也不会直接进入执行。                                           |
-| 真实 Agent 端到端 | Claude provider smoke 已通过，但主 workflow 稳定执行证据不足                                                                       | 证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过 gates。              |
-| PR 创建           | 代码支持并有 fake fixture 测试；历史 dogfooding 记录 `PR URL=not_created`                                                          | 需要真实受控远端仓库证据。                                                             |
-| Web 产品面        | 能审阅最新 run、处理 human gate，查看 readiness、diff、artifact 正文、gate logs 和 PR 包，并可受控发起 run、执行 prepare/create-pr | 仍缺多 run 审阅流和 artifact/gate/audit 深度上下文导航。                               |
-| 仓库画像          | init 可生成 `repo-profile.yaml`，内置 workflow gate 通过 `commandRef` 解析画像命令                                                 | 已从硬编码模板命令推进到画像驱动；仍缺更友好的缺失命令修复引导和真实非 pnpm 仓库证据。 |
-| 安全隔离          | CommandGateway 有静态拒绝，provider profile 有声明                                                                                 | 还不是 OS/container 级隔离；真实 provider 内部工具调用边界需要证据。                   |
+| 能力              | 当前状态                                                                                                                                     | 判断                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 动态 workflow     | `run --dynamic` 当前强制 `--dry-run`，CLI 使用 `createDynamicMockAdapter`                                                                    | 还不是 PM LLM 真实规划，也不会直接进入执行。                                           |
+| 真实 Agent 端到端 | Claude provider smoke 已通过，但主 workflow 稳定执行证据不足                                                                                 | 证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过 gates。              |
+| PR 创建           | 代码支持并有 fake fixture 测试；历史 dogfooding 记录 `PR URL=not_created`                                                                    | 需要真实受控远端仓库证据。                                                             |
+| Web 产品面        | 能审阅项目内任意选中 run、处理 human gate，查看 readiness、diff、artifact 正文、gate logs 和 PR 包，并可受控发起 run、执行 prepare/create-pr | 仍缺 artifact/gate/audit 深度上下文导航。                                              |
+| 仓库画像          | init 可生成 `repo-profile.yaml`，内置 workflow gate 通过 `commandRef` 解析画像命令                                                           | 已从硬编码模板命令推进到画像驱动；仍缺更友好的缺失命令修复引导和真实非 pnpm 仓库证据。 |
+| 安全隔离          | CommandGateway 有静态拒绝，provider profile 有声明                                                                                           | 还不是 OS/container 级隔离；真实 provider 内部工具调用边界需要证据。                   |
 
 ## 4. P0：先补齐，否则不建议用于真实工作
 
@@ -145,7 +145,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 - 结果页默认突出失败项、高风险项、未覆盖验收标准和建议下一步。
 - 每个 artifact/gate/audit 事件能互相跳转，减少人工查路径。
 
-当前状态：2026-06-08 本轮已实现第一版 review surface：core 聚合 readiness、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；CLI 新增 `review --run-id`；Web 新增 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步区块。后续增量已补 Web 使用 session token 发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr` 入口，并提供 artifact/gate/audit 到正文、日志和 PR 包的基础锚点互跳；深度上下文导航仍需继续打磨。
+当前状态：2026-06-08 本轮已实现第一版 review surface：core 聚合 readiness、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；CLI 新增 `review --run-id`；Web 新增 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步区块。后续增量已补 Web 使用 session token 发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr` 入口，并提供 artifact/gate/audit 到正文、日志和 PR 包的基础锚点互跳；本轮又补齐项目 run 列表和选中 run 审阅/交付流。深度上下文导航仍需继续打磨。
 
 ### P0-6 真实 PR 创建的受控证据
 
@@ -207,7 +207,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 1. 用真实 Claude Code 任务验证 artifact manifest 协议：记录缺失 artifact、schema 失败和修复重试成本。
 2. 用 1-2 个非 pnpm 或脚本名不同的仓库验证 repo profile gate preflight，补缺失命令修复引导。
 3. 制造真实 provider 中断/恢复样本，验证 provider snapshot、completed marker 和 human gate resume。
-4. 用真实 run 验证第一版 review surface 和 Web 执行入口是否足够 5 分钟决策，继续打磨 artifact/gate/audit 深度互跳和多 run 审阅流。
+4. 用真实 run 验证第一版 review surface 和 Web 执行入口是否足够 5 分钟决策，继续打磨 artifact/gate/audit 深度互跳。
 5. 建立受控真实仓库验收集，跑 5 个任务，至少 1 个真实 PR。
 6. 把每次 run 的结论写入 `docs/reviews/`，形成第一版 dogfooding 数据表。
 

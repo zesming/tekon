@@ -65,6 +65,6 @@ test.describe('Donkey dashboard', () => {
     await page.getByRole('button', { name: '批准', exact: true }).click();
 
     await expect(page.getByText('approved')).toBeVisible();
-    await expect(page.getByText('run_1', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Review run')).toHaveValue('run_1');
   });
 });

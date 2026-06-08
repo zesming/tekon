@@ -32,7 +32,18 @@ describe('web project context', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     const projects = await api.project.list();
-    expect(projects.map((project) => project.id)).toEqual(['project_1']);
+    expect(projects.map((project) => project.id)).toEqual([
+      'project_0',
+      'project_1',
+    ]);
+    await expect(
+      api.project.detail({ projectId: 'project_1' }),
+    ).resolves.toMatchObject({
+      runs: [
+        expect.objectContaining({ id: 'run_1' }),
+        expect.objectContaining({ id: 'run_0' }),
+      ],
+    });
 
     await expect(
       api.project.detail({ projectId: 'project_escaped' }),

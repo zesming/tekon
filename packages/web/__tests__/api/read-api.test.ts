@@ -28,9 +28,35 @@ describe('web read API', () => {
       roles: 1,
       workflows: 1,
     });
+    await expect(
+      api.project.detail({ projectId: 'project_1' }),
+    ).resolves.toMatchObject({
+      runs: [
+        expect.objectContaining({ id: 'run_1' }),
+        expect.objectContaining({ id: 'run_0' }),
+      ],
+    });
 
     await expect(api.artifact.list({ runId: 'run_1' })).resolves.toMatchObject({
       artifacts: [expect.objectContaining({ id: 'artifact_1' })],
+    });
+    await expect(api.review.get({ runId: 'run_0' })).resolves.toMatchObject({
+      artifacts: [
+        expect.objectContaining({
+          id: 'artifact_0',
+          content: expect.objectContaining({
+            content: expect.stringContaining('Older run review body'),
+          }),
+        }),
+      ],
+      gates: [
+        expect.objectContaining({
+          id: 'gate_0',
+          output: expect.objectContaining({
+            content: expect.stringContaining('older build passed'),
+          }),
+        }),
+      ],
     });
     await expect(api.gate.list({ runId: 'run_1' })).resolves.toMatchObject({
       pendingDecisions: [

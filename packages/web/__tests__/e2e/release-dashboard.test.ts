@@ -62,6 +62,19 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
     await expect(page.getByText('Review report body')).toBeVisible();
     await expect(page.getByText('human approval is required')).toBeVisible();
+    await expect(page.getByLabel('Review run')).toContainText('run_0');
+
+    await page.getByLabel('Review run').selectOption('run_0');
+    await expect(page.getByText('Older run review body')).toBeVisible();
+    await expect(page.getByText('older build passed')).toBeVisible();
+
+    await page.getByLabel('Review run').selectOption('run_1');
+    await expect(page.getByText('Review report body')).toBeVisible();
+    await page.getByLabel('Action token').fill(fixture.sessionToken);
+    await page.getByRole('button', { name: '准备 PR' }).click();
+    await expect(
+      page.getByText('PR prepared: donkey-delivery/run_1 -> main'),
+    ).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
     await page.getByLabel('审批备注').fill('release approval');
@@ -70,7 +83,6 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByText('approved', { exact: true })).toBeVisible();
     await expect(page.getByText('gate_1 passed')).toBeVisible();
 
-    await page.getByLabel('Action token').fill(fixture.sessionToken);
     await page
       .getByLabel('Run demand')
       .fill('Web starts a controlled mock run from the dashboard.');

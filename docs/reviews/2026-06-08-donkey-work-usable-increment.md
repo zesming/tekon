@@ -33,6 +33,7 @@
 | PR 失败恢复                  | `packages/core/src/delivery/scm.ts`                                                                                            | `gh pr create` 失败后尝试 `gh pr view <branch> --json url --jq .url` 恢复已存在 PR URL，恢复成功按 created 落库并记录 audit。                                                 |
 | Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                                          | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                               |
 | Web 受控执行入口             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`                                                       | Web 使用 session token 发起模板 run、执行 PR 准备和触发受人工批准的 create-pr；复用 Engine、PR package 和 SCM delivery 语义，不绕过 dirty base 和人工审批。                   |
+| Web 多运行审阅流             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`、`packages/web/__tests__/fixtures/project.ts`         | Web 读取项目 run 列表，可选择历史 run 或 latest run，并按选中 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在选中 run。                     |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 为 recommended。                   |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                    |
 | 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                   |
@@ -67,6 +68,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `cli` run-cli unit：`review --run-id` 输出 readiness、artifact、gate log 和 PR body。
 - `cli` release e2e：覆盖 `eval work-usability --samples` 在受控 fixture 中读取样本清单并验证 ready run、created PR 和隔离证据。
 - `web` API/e2e：Web approval 后自动 resume，reject 不继续；Web API 和 dashboard 可读取 review surface；Web 可发起 mock run、执行 prepare、将 create-pr 落库为 awaiting-approval，并在 e2e 中完成 dashboard 发起 run 和准备 PR。
+- `web` API/e2e：fixture 增加历史 run，API 覆盖 `project.detail` 返回多 run 和指定 run review；dashboard e2e 覆盖选择历史 run 查看 artifact/gate log，再切回 latest run 继续审批和 PR 准备。
 
 本轮最终收口已通过：
 
@@ -93,7 +95,7 @@ npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/r
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
 - 完整 DLP、密钥轮换和生产级安全审计；当前新增的是基础敏感模式扫描、命令日志脱敏和 artifact 入库拦截。
 - PR 创建失败后的更复杂恢复策略，例如远端网络抖动后的重试退避、不同 Git host 的 PR 查询差异。
-- Web 已能直接发起模板 run、执行 delivery prepare 和触发 create-pr 入口；artifact/gate/audit 互跳仍是基础锚点级体验，还需继续打磨成更完整的上下文导航。
+- Web 已能直接发起模板 run、选择历史 run、执行 delivery prepare 和触发 create-pr 入口；artifact/gate/audit 互跳仍是基础锚点级体验，还需继续打磨成更完整的上下文导航。
 - 团队级多项目权限、成本控制、通知和长期知识沉淀仍是后续阶段能力。
 
 ## 5. Reviewer 结论
@@ -104,4 +106,4 @@ npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/r
 
 已修复摘要：新增 repo-bound safe path 读取；`delivery/evidence.ts`、`review/surface.ts` 和 artifact/gate log preview 统一按目标 repo 边界读取；delivery diff 使用安全 ref 校验、`rev-parse --verify --end-of-options` 和 commit hash range；base/branch 缺失时返回 unavailable。第二轮 reviewer 又指出 DB 中 `project.repoPath` 可能扩大 review readiness/evidence 读取边界；已通过 `evaluateWorkReadiness` / `createDeliveryEvidencePackage` 的显式 `repoPath` override 修复，并新增“DB project repoPath 指向外部目录时 readiness 不采信外部 artifact”的回归测试。
 
-本次 P0-5 复查结论：APPROVED，必须修复项为无。后续又补齐 Web 发起 run、prepare/create-pr 入口和基础锚点互跳；本轮新增 Web 执行入口第一轮 reviewer 指出项目 workflow 优先级和文档过期表述问题，均已修复，并补充 approved create-pr fake `gh` 测试。最终复查结论：APPROVED，必须修复项为无。剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 artifact/gate/audit 的深度上下文导航体验。
+本次 P0-5 复查结论：APPROVED，必须修复项为无。后续又补齐 Web 发起 run、prepare/create-pr 入口和基础锚点互跳；本轮新增 Web 执行入口第一轮 reviewer 指出项目 workflow 优先级和文档过期表述问题，均已修复，并补充 approved create-pr fake `gh` 测试。后续继续补齐 Web 多运行审阅流，dashboard 能选择历史 run 或 latest run 并让 review/prepare/create-pr 跟随选中 run。最终复查结论：APPROVED，必须修复项为无。剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 artifact/gate/audit 的深度上下文导航体验。

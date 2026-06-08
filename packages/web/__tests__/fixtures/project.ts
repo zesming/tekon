@@ -30,6 +30,10 @@ export async function createWebFixtureProject(
   mkdirSync(donkeyDir, { recursive: true });
   mkdirSync(join(donkeyDir, 'roles', 'rd'), { recursive: true });
   mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
+  mkdirSync(join(donkeyDir, 'runs', 'run_0', 'artifacts', 'node_0'), {
+    recursive: true,
+  });
+  mkdirSync(join(donkeyDir, 'runs', 'run_0', 'gates'), { recursive: true });
   mkdirSync(join(donkeyDir, 'runs', 'run_1', 'artifacts', 'node_1'), {
     recursive: true,
   });
@@ -104,6 +108,23 @@ export async function createWebFixtureProject(
     join(
       donkeyDir,
       'runs',
+      'run_0',
+      'artifacts',
+      'node_0',
+      'review-report.v1.md',
+    ),
+    'Older run review body for dashboard.',
+    'utf8',
+  );
+  writeFileSync(
+    join(donkeyDir, 'runs', 'run_0', 'gates', 'build.txt'),
+    'older build passed',
+    'utf8',
+  );
+  writeFileSync(
+    join(
+      donkeyDir,
+      'runs',
       'run_1',
       'artifacts',
       'node_1',
@@ -135,16 +156,37 @@ export async function createWebFixtureProject(
   const repositories = createRepositories(db);
 
   await repositories.createDemand({
+    id: 'demand_0',
+    title: 'Earlier dashboard run',
+    body: 'Earlier run for multi-run review selection.',
+    createdAt: '2026-06-04T00:00:00.000Z',
+  });
+  await repositories.createDemand({
     id: 'demand_1',
     title: 'Add dashboard',
     body: 'Show Donkey run state and human approval.',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createProject({
+    id: 'project_0',
+    name: 'fixture-donkey',
+    repoPath: projectRoot,
+    createdAt: '2026-06-04T00:00:00.000Z',
+  });
+  await repositories.createProject({
     id: 'project_1',
     name: 'fixture-donkey',
     repoPath: projectRoot,
     createdAt: '2026-06-05T00:00:00.000Z',
+  });
+  await repositories.createWorkflowInstance({
+    id: 'run_0',
+    projectId: 'project_0',
+    demandId: 'demand_0',
+    status: 'passed',
+    currentNodeId: null,
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
   });
   await repositories.createWorkflowInstance({
     id: 'run_1',
@@ -157,12 +199,27 @@ export async function createWebFixtureProject(
   });
   if (options.includeProviderSnapshot !== false) {
     await repositories.recordRunProviderConfig({
+      runId: 'run_0',
+      provider: 'mock',
+      configSummary: { provider: 'mock' },
+      createdAt: '2026-06-04T00:00:00.000Z',
+    });
+    await repositories.recordRunProviderConfig({
       runId: 'run_1',
       provider: 'mock',
       configSummary: { provider: 'mock' },
       createdAt: '2026-06-05T00:00:00.000Z',
     });
   }
+  await repositories.createPhase({
+    id: 'phase_0',
+    runId: 'run_0',
+    name: 'Earlier Implementation',
+    status: 'passed',
+    order: 1,
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
+  });
   await repositories.createPhase({
     id: 'phase_1',
     runId: 'run_1',
@@ -171,6 +228,22 @@ export async function createWebFixtureProject(
     order: 1,
     createdAt: '2026-06-05T00:00:00.000Z',
     updatedAt: '2026-06-05T00:00:00.000Z',
+  });
+  await repositories.createNode({
+    id: 'node_0',
+    runId: 'run_0',
+    phaseId: 'phase_0',
+    role: 'reviewer',
+    status: 'passed',
+    gates: [
+      {
+        type: 'build',
+        command: { tool: 'node', args: ['-e', 'process.exit(0)'] },
+      },
+    ],
+    dependencies: [],
+    createdAt: '2026-06-04T00:00:00.000Z',
+    updatedAt: '2026-06-04T00:00:00.000Z',
   });
   await repositories.createNode({
     id: 'node_1',
@@ -194,6 +267,17 @@ export async function createWebFixtureProject(
     retries: 0,
     createdAt: '2026-06-05T00:00:01.000Z',
   });
+  await repositories.recordGateResult({
+    id: 'gate_0',
+    runId: 'run_0',
+    nodeId: 'node_0',
+    gateType: 'build',
+    status: 'passed',
+    outputPath: '.donkey/runs/run_0/gates/build.txt',
+    durationMs: 10,
+    retries: 0,
+    createdAt: '2026-06-04T00:00:01.000Z',
+  });
   await repositories.createHumanDecision({
     id: 'decision_1',
     runId: 'run_1',
@@ -207,6 +291,18 @@ export async function createWebFixtureProject(
       'risk: high',
     ].join('\n'),
     createdAt: '2026-06-05T00:00:02.000Z',
+  });
+  await repositories.recordArtifact({
+    id: 'artifact_0',
+    runId: 'run_0',
+    nodeId: 'node_0',
+    type: 'review-report',
+    version: 1,
+    path: '.donkey/runs/run_0/artifacts/node_0/review-report.v1.md',
+    sha256: createHash('sha256').update('older-review').digest('hex'),
+    sizeBytes: 12,
+    summary: 'Older review report summary',
+    createdAt: '2026-06-04T00:00:03.000Z',
   });
   await repositories.recordArtifact({
     id: 'artifact_1',
@@ -230,6 +326,16 @@ export async function createWebFixtureProject(
   });
 
   const audit = createAuditLogger({ repositories });
+  await audit.append({
+    runId: 'run_0',
+    type: 'gate.passed',
+    payload: {
+      gateResultId: 'gate_0',
+      nodeId: 'node_0',
+      role: 'reviewer',
+    },
+    createdAt: '2026-06-04T00:00:04.000Z',
+  });
   await audit.append({
     runId: 'run_1',
     type: 'human.decision.pending',

@@ -21,6 +21,13 @@ type Overview = {
   };
 };
 
+type RunSummary = NonNullable<Overview['latestRun']>;
+
+type ProjectDetail = {
+  project: Overview['project'];
+  runs: RunSummary[];
+};
+
 type Artifact = {
   id: string;
   type: string;
@@ -126,6 +133,8 @@ type WorkflowInfo = {
 
 function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [gates, setGates] = useState<Gate[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -146,7 +155,8 @@ function App() {
   const [auditRoleFilter, setAuditRoleFilter] = useState('');
   const [message, setMessage] = useState('');
 
-  const runId = overview?.latestRun?.id;
+  const runId = selectedRunId ?? overview?.latestRun?.id ?? null;
+  const selectedRun = runs.find((run) => run.id === runId) ?? null;
   const pendingDecision = decisions[0];
   const workflowOptions = useMemo(() => {
     const options = new Map<string, string>([
@@ -161,27 +171,45 @@ function App() {
 
   const stats = useMemo(
     () => [
-      ['Runs', overview?.latestRun ? 1 : 0],
-      ['Artifacts', overview?.counts.artifacts ?? 0],
-      ['Gates', overview?.counts.gates ?? 0],
-      ['Audit', overview?.counts.audit ?? 0],
-      ['Pending', overview?.counts.pendingApprovals ?? 0],
+      ['Runs', runs.length],
+      ['Artifacts', artifacts.length],
+      ['Gates', gates.length],
+      ['Audit', audit.length],
+      ['Pending', decisions.length],
     ],
-    [overview],
+    [
+      artifacts.length,
+      audit.length,
+      decisions.length,
+      gates.length,
+      runs.length,
+    ],
   );
 
-  async function loadDashboard() {
+  async function loadDashboard(preferredRunId?: string) {
     const overviewResult = await rpc<Overview>('project.overview');
     setOverview(overviewResult);
-    const latestRunId = overviewResult.latestRun?.id;
-    const [roleResult, workflowResult] = await Promise.all([
+    const [detailResult, roleResult, workflowResult] = await Promise.all([
+      rpc<ProjectDetail>('project.detail', {
+        projectId: overviewResult.project.id,
+      }),
       rpc<{ roles: RoleInfo[] }>('role.list'),
       rpc<{ workflows: WorkflowInfo[] }>('workflow.list'),
     ]);
+    setRuns(detailResult.runs);
     setRoles(roleResult.roles);
     setWorkflows(workflowResult.workflows);
 
-    if (!latestRunId) {
+    const runIds = new Set(detailResult.runs.map((run) => run.id));
+    const nextRunId =
+      (preferredRunId && runIds.has(preferredRunId) ? preferredRunId : null) ??
+      (selectedRunId && runIds.has(selectedRunId) ? selectedRunId : null) ??
+      overviewResult.latestRun?.id ??
+      detailResult.runs[0]?.id ??
+      null;
+    setSelectedRunId(nextRunId);
+
+    if (!nextRunId) {
       setArtifacts([]);
       setGates([]);
       setDecisions([]);
@@ -193,21 +221,21 @@ function App() {
 
     const [artifactResult, gateResult, auditResult, reviewResult] =
       await Promise.all([
-        rpc<{ artifacts: Artifact[] }>('artifact.list', { runId: latestRunId }),
+        rpc<{ artifacts: Artifact[] }>('artifact.list', { runId: nextRunId }),
         rpc<{ gates: Gate[]; pendingDecisions: Decision[] }>('gate.list', {
-          runId: latestRunId,
+          runId: nextRunId,
         }),
         rpc<{ verification: AuditVerification; events: AuditEvent[] }>(
           'audit.list',
           {
-            runId: latestRunId,
+            runId: nextRunId,
             nodeId: auditNodeFilter || undefined,
             gateId: auditGateFilter || undefined,
             role: auditRoleFilter || undefined,
           },
         ),
         rpc<ReviewSurface>('review.get', {
-          runId: latestRunId,
+          runId: nextRunId,
           maxContentChars: 1_600,
         }),
       ]);
@@ -263,7 +291,7 @@ function App() {
     });
     setMessage(`run started: ${result.run.id} ${result.run.status}`);
     setDemandText('');
-    await loadDashboard();
+    await loadDashboard(result.run.id);
   }
 
   async function prepareDelivery() {
@@ -305,7 +333,7 @@ function App() {
           <p>{overview?.project.repoPath ?? 'Loading project context'}</p>
         </div>
         <div className="run-pill">
-          {overview?.latestRun?.status ?? 'loading'}
+          {selectedRun?.status ?? overview?.latestRun?.status ?? 'loading'}
         </div>
       </header>
 
@@ -319,7 +347,33 @@ function App() {
             </div>
           ))}
         </div>
-        <p className="mono">{runId ?? 'no run'}</p>
+        <div className="run-selector">
+          <label>
+            审阅运行
+            <select
+              aria-label="Review run"
+              value={runId ?? ''}
+              onChange={(event) => {
+                const nextRunId = event.target.value || null;
+                setSelectedRunId(nextRunId);
+                if (nextRunId) {
+                  void runAction(() => loadDashboard(nextRunId));
+                }
+              }}
+            >
+              {runs.length ? null : <option value="">no run</option>}
+              {runs.map((run) => (
+                <option key={run.id} value={run.id}>
+                  {run.id} {run.status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mono">
+            {runId ?? 'no run'}
+            {overview?.latestRun?.id === runId ? ' latest' : ''}
+          </p>
+        </div>
       </section>
 
       <section className="band">

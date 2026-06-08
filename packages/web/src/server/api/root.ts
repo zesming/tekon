@@ -265,10 +265,23 @@ export async function createApiCaller(
       },
 
       async detail(detailInput) {
-        const project = scopedProjectById(db, context, detailInput.projectId);
+        const scopedProjects = listScopedProjects(db, context);
+        const project =
+          scopedProjects.find(
+            (candidate) => candidate.id === detailInput.projectId,
+          ) ??
+          (detailInput.projectId === 'local' && scopedProjects.length === 0
+            ? firstProjectOrFallback(db, context)
+            : null);
+        if (!project) {
+          throw new ApiError(
+            'NOT_FOUND',
+            `Project not found: ${detailInput.projectId}`,
+          );
+        }
         return {
           project: mapProject(project),
-          runs: listRunsForProject(db, project.id).map(mapWorkflow),
+          runs: listRunsForScopedProjects(db, context).map(mapWorkflow),
         };
       },
 
@@ -574,8 +587,7 @@ function latestScopedRun(
   db: DonkeyDatabase,
   context: WebProjectContext,
 ): { project: ProjectRow; run: WorkflowRow } | null {
-  const projects = listScopedProjects(db, context);
-  const runs = projects.flatMap((project) =>
+  const runs = listScopedProjects(db, context).flatMap((project) =>
     listRunsForProject(db, project.id).map((run) => ({ project, run })),
   );
   return (
@@ -587,6 +599,19 @@ function latestScopedRun(
         : byUpdated;
     })[0] ?? null
   );
+}
+
+function listRunsForScopedProjects(
+  db: DonkeyDatabase,
+  context: WebProjectContext,
+): WorkflowRow[] {
+  return listScopedProjects(db, context)
+    .flatMap((project) => listRunsForProject(db, project.id))
+    .sort((left, right) => {
+      const byUpdated =
+        Date.parse(right.updated_at) - Date.parse(left.updated_at);
+      return byUpdated === 0 ? right.id.localeCompare(left.id) : byUpdated;
+    });
 }
 
 function scopedProjectById(

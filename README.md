@@ -116,7 +116,7 @@ Artifact Store 会在写入前扫描明显密钥模式并拒绝入库；CommandG
 DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @donkey/web dev
 ```
 
-`donkey init` 会生成 `.donkey/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，可用 session token 发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr`，并在审阅区展示 readiness、diff、artifact 正文、gate logs、PR 包和下一步命令，在审计区展示 hash chain 状态和 node/gate/role 过滤。Web create-pr 与 CLI 一样仍会在未批准时只落库等待审批，批准后才产生 push/PR 副作用。
+`donkey init` 会生成 `.donkey/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，可用 session token 发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr`，并可在项目 runs 中选择任意 run 审阅 readiness、diff、artifact 正文、gate logs、PR 包和下一步命令，在审计区展示 hash chain 状态和 node/gate/role 过滤。Web prepare/create-pr 会作用在当前选中的 run 上；与 CLI 一样，create-pr 未批准时只落库等待审批，批准后才产生 push/PR 副作用。
 
 ## 本地验证
 
@@ -154,6 +154,7 @@ npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --
 - Final acceptance：`docs/reviews/2026-06-05-donkey-v2-final-acceptance.html`
 - 工作可用样本评估增量：`docs/reviews/2026-06-08-donkey-work-usability-eval-increment.html`
 - 敏感信息治理增量：`docs/reviews/2026-06-08-donkey-secret-governance-increment.html`
+- Web 多运行审阅流增量：`docs/reviews/2026-06-08-donkey-web-multirun-review-increment.html`
 - 历史 MVP 边界：`docs/manual/donkey-mvp-user-manual.html`
 
 ## 发布状态
