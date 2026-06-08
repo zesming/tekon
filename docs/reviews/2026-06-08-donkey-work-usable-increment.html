@@ -35,7 +35,7 @@
 
 范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
 
-结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
@@ -63,12 +63,13 @@
 | 受控 PR 创建                 | `packages/core/src/delivery/scm.ts`、CLI `delivery create-pr`                                                                  | 不带 `--approve-human` 只落库等待审批；带 `--approve-human` 后要求主工作区除 `.donkey` 外干净，直接 push 交付分支并执行 `gh pr create --body-file`，成功/失败/PR URL 均落库。                                                                |
 | PR 失败恢复                  | `packages/core/src/delivery/scm.ts`                                                                                            | `gh pr create` 失败后尝试 `gh pr view &lt;branch&gt; --json url --jq .url` 恢复已存在 PR URL，恢复成功按 created 落库并记录 audit。                                                                                                                |
 | 远端 CI 状态证据             | `packages/core/src/delivery/ci-status.ts`、CLI `delivery ci-status`                                                            | PR 创建后只读调用 `gh pr checks`，把 checks 汇总为 `passed/failed/pending/skipped/unknown`，写入 `ci-status` artifact、delivery evidence 和 `delivery.ci.checked` audit。                                                                    |
+| 远端 CI watch                | `packages/core/src/delivery/ci-status.ts`、CLI `delivery ci-watch`                                                             | 只读轮询 `gh pr checks`，每次查询都写入 `ci-status` artifact；到 `passed/failed/skipped` 终态或达到次数上限后记录 `delivery.ci.watch-completed` audit。                                                                                      |
 | Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                                          | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                                                                                              |
 | Web 受控执行入口             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`                                                       | Web 使用 session token 发起模板 run、执行 PR 准备和触发受人工批准的 create-pr；复用 Engine、PR package 和 SCM delivery 语义，不绕过 dirty base 和人工审批。                                                                                  |
 | Web 多运行审阅流             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`、`packages/web/__tests__/fixtures/project.ts`         | Web 读取项目 run 列表，可选择历史 run 或 latest run，并按选中 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在选中 run。                                                                                    |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 和 remote CI passed 为 recommended。                                                              |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                                                                                   |
-| 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                                 |
+| 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                              |
 
 ## 3. 验证记录
 
@@ -104,6 +105,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `artifact/store.test.ts`：覆盖 artifact 写入前敏感内容拦截且不落盘。
 - `delivery/evidence.test.ts` / `delivery/pr-package.test.ts`：验收标准证据和安全扫描证据进入交付包。
 - `delivery/ci-status.test.ts`：覆盖 PR checks 只读查询、`ci-status` artifact、delivery evidence、readiness 推荐项、失败 checks、pending exit code、历史 passed 后最新 failed 不通过、未审计伪造 `ci-status` artifact 不被信任、unsafe run id 和 escaped outputDir 不执行 `gh` 的场景。
+- `delivery/ci-status.test.ts`：覆盖 `delivery ci-watch` 的 pending 到 passed 轮询、每次尝试 artifact 入库、sleep/backoff 调用和 max attempts 后非终态返回。
 - `artifact/schemas.test.ts`：覆盖 `ci-status` payload schema，并覆盖 agent manifest 拒绝 `ci-status`。
 - `cli` run-cli unit：`review --run-id` 输出 readiness、artifact、gate log 和 PR body。
 - `cli` run-cli unit：覆盖 fake `gh pr checks` 下的 `delivery ci-status` 命令输出。
@@ -126,13 +128,13 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 
 - 真实 Claude Code / Codex 在受控真实仓库中的端到端稳定执行证据；本轮证明的是 artifact manifest 协议、provider 快照和 fixture 流程，不证明真实任务长期成功率。
 - 真实样本清单本身；`eval work-usability record` 和 `--report-md/--report-html` 已经降低样本沉淀和报告归档成本，但不会替代 2-3 个真实仓库、10 个需求和至少 2 个真实 PR 的实际 dogfooding。
-- 真实 PR 上的远端 CI 状态证据；当前 `delivery ci-status` 已有 fake `gh` fixture 和本地入库测试，但仍需在受控 GitHub PR 上记录 `gh pr checks` 输出、PR URL、状态变化和失败恢复。
+- 真实 PR 上的远端 CI 状态证据；当前 `delivery ci-status` / `delivery ci-watch` 已有 fake `gh` fixture 和本地入库测试，但仍需在受控 GitHub PR 上记录 `gh pr checks` 输出、PR URL、状态变化和失败恢复。
 - 动态 workflow 非 dry-run 执行。
 - 自动 merge、自动上线、生产权限变更等高风险动作。
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
 - 完整 DLP、密钥轮换和生产级安全审计；当前新增的是基础敏感模式扫描、命令日志脱敏和 artifact 入库拦截。
 - PR 创建失败后的更复杂恢复策略，例如远端网络抖动后的重试退避、不同 Git host 的 PR 查询差异。
-- 远端 CI 查询的 watch/重试退避、无 checks 场景细分、不同 Git host 或非 GitHub CI provider 适配。
+- 远端 CI 查询的无 checks 场景细分、不同 Git host 或非 GitHub CI provider 适配。
 - Web 已能直接发起模板 run、选择历史 run、执行 delivery prepare 和触发 create-pr 入口；artifact/gate/audit 互跳仍是基础锚点级体验，还需继续打磨成更完整的上下文导航。
 - 团队级多项目权限、成本控制、通知和长期知识沉淀仍是后续阶段能力。
 
@@ -157,6 +159,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 本次仓库画像显式不适用语义最高思考 reviewer 结论：APPROVED，必须修复项为无。复查确认 `notApplicable` 只注入普通 command gate；`security-scan` 在 workflow 和 gate engine 两层都不会被跳过，CLI 也会显示 `notApplicableIgnoredFor=security-scan`；readiness 只把 `skipped/not-applicable` 的验证类 gate 视为 satisfied，安全扫描和 pending human gate 仍独立检查。
 
 剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 的 Evidence Navigation 已有第一版，但仍需真实 run 反馈继续打磨。
+
 </pre
       >
     </main>

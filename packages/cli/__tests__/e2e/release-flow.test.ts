@@ -176,6 +176,26 @@ describe('donkey release flow e2e', () => {
       'prUrl=https://github.example/donkey/pull/9',
     );
 
+    const ciWatchOutput = runCli(
+      cliPath,
+      [
+        'delivery',
+        'ci-watch',
+        '--run-id',
+        deliveryRunId!,
+        '--max-attempts',
+        '1',
+        '--interval-ms',
+        '0',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+      { PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}` },
+    );
+    expect(ciWatchOutput).toContain('ciStatus=passed');
+    expect(ciWatchOutput).toContain('terminal=true');
+
     expect(
       runCli(
         cliPath,
@@ -320,6 +340,10 @@ function writeFakeGh(binDir: string) {
 echo "$*" >> "${join(binDir, 'gh.log')}"
 if [ "$1 $2" = "auth status" ]; then
   echo "Logged in to github.example" >&2
+  exit 0
+fi
+if [ "$1 $2" = "pr checks" ]; then
+  printf '[{"name":"build","bucket":"pass","state":"SUCCESS","workflow":"CI"}]\\n'
   exit 0
 fi
 echo "https://github.example/donkey/pull/9"

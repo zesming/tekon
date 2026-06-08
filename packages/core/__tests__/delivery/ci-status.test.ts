@@ -13,6 +13,7 @@ import {
   migrateDatabase,
   openDonkeyDatabase,
   queryPullRequestCiStatus,
+  watchPullRequestCiStatus,
   type CommandGateway,
   type CommandGatewayRunInput,
 } from '../../src/index.js';
@@ -376,6 +377,133 @@ describe('delivery CI status', () => {
     });
 
     expect(report.status).toBe('pending');
+    db.close();
+  });
+
+  it('watches CI until a terminal status and records every attempt', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-output-'));
+    tempDirs.push(repoPath, outputDir);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedCiRun({ repositories, repoPath });
+    const stdoutPath = join(outputDir, 'checks.json');
+    const calls: CommandGatewayRunInput[] = [];
+    const sleeps: number[] = [];
+    const buckets = ['pending', 'pass'];
+    const gateway: CommandGateway = {
+      async run(input) {
+        calls.push(input);
+        const bucket = buckets.shift() ?? 'pass';
+        writeFileSync(
+          stdoutPath,
+          JSON.stringify([{ name: 'build', bucket, state: bucket }]),
+          'utf8',
+        );
+        return {
+          status: 'executed',
+          exitCode: bucket === 'pending' ? 8 : 0,
+          signal: null,
+          timedOut: false,
+          stdoutPath,
+          stderrPath: join(outputDir, 'checks.err'),
+          durationMs: 1,
+        };
+      },
+    };
+
+    const result = await watchPullRequestCiStatus({
+      repoPath,
+      runId: 'run_1',
+      repositories,
+      audit,
+      gateway,
+      intervalMs: 10,
+      backoffMultiplier: 2,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      maxAttempts: 3,
+    });
+
+    expect(result).toMatchObject({
+      finalStatus: 'passed',
+      terminal: true,
+      attempts: 2,
+      maxAttempts: 3,
+    });
+    expect(result.reports.map((report) => report.status)).toEqual([
+      'pending',
+      'passed',
+    ]);
+    expect(calls).toHaveLength(2);
+    expect(sleeps).toEqual([10]);
+    expect(await repositories.listAuditEvents('run_1')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'delivery.ci.checked' }),
+        expect.objectContaining({ type: 'delivery.ci.watch-completed' }),
+      ]),
+    );
+    const artifacts = await repositories.listArtifacts('run_1');
+    expect(
+      artifacts.filter((artifact) => artifact.type === 'ci-status'),
+    ).toHaveLength(2);
+    db.close();
+  });
+
+  it('stops CI watch after max attempts when checks remain pending', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-pending-'));
+    const outputDir = mkdtempSync(
+      join(tmpdir(), 'donkey-ci-watch-pending-output-'),
+    );
+    tempDirs.push(repoPath, outputDir);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedCiRun({ repositories, repoPath });
+    const stdoutPath = join(outputDir, 'checks.json');
+    writeFileSync(
+      stdoutPath,
+      JSON.stringify([{ name: 'build', bucket: 'pending', state: 'QUEUED' }]),
+      'utf8',
+    );
+
+    const result = await watchPullRequestCiStatus({
+      repoPath,
+      runId: 'run_1',
+      repositories,
+      audit,
+      gateway: {
+        async run() {
+          return {
+            status: 'executed',
+            exitCode: 8,
+            signal: null,
+            timedOut: false,
+            stdoutPath,
+            stderrPath: join(outputDir, 'checks.err'),
+            durationMs: 1,
+          };
+        },
+      },
+      intervalMs: 0,
+      maxAttempts: 2,
+    });
+
+    expect(result).toMatchObject({
+      finalStatus: 'pending',
+      terminal: false,
+      attempts: 2,
+    });
+    expect(await repositories.listAuditEvents('run_1')).toContainEqual(
+      expect.objectContaining({
+        type: 'delivery.ci.watch-completed',
+        payload: expect.objectContaining({ terminal: false, attempts: 2 }),
+      }),
+    );
     db.close();
   });
 });

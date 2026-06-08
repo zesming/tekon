@@ -169,11 +169,31 @@ describe('runCli in-process', () => {
           io,
         ),
       ).resolves.toBe(0);
+      await expect(
+        runCli(
+          [
+            'delivery',
+            'ci-watch',
+            '--run-id',
+            standardRunId!,
+            '--selector',
+            'https://github.example/org/repo/pull/1',
+            '--max-attempts',
+            '1',
+            '--interval-ms',
+            '0',
+            '--repo',
+            repoPath,
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
     } finally {
       process.env.PATH = originalPath;
     }
     const ciOutput = io.takeStdout();
     expect(ciOutput).toContain('ciStatus=passed');
+    expect(ciOutput).toContain('terminal=true');
     expect(ciOutput).toContain(
       'selector=https://github.example/org/repo/pull/1',
     );

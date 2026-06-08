@@ -2,7 +2,7 @@
 
 日期：2026-06-08
 
-范围：补齐“PR 创建后能否把远端 CI 状态写回 Donkey 证据包”的第一版能力。本文只覆盖只读查询和本地落库，不覆盖自动 merge、自动上线、CI rerun、长轮询等待或非 GitHub provider。
+范围：补齐“PR 创建后能否把远端 CI 状态写回 Donkey 证据包”的第一版能力。本文只覆盖单次只读查询和本地落库，不覆盖自动 merge、自动上线、CI rerun 或非 GitHub provider；同日后续的只读 watch 轮询增量单独记录在 `2026-06-08-donkey-remote-ci-watch-increment`。
 
 ## 1. 背景判断
 
@@ -71,8 +71,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 
 1. 在受控 GitHub 测试仓库创建真实 PR 后执行 `delivery ci-status`，记录 PR URL、CI 状态、artifact id 和 `delivery.ci.checked` audit event。
 2. 明确无 checks、required checks、pending 长时间不结束、`gh` 未认证、仓库无权限时的用户提示和失败分类。
-3. 决定是否增加 `--watch` 或重试退避；默认仍应只读、受控，不能引入自动 merge 或上线。
-4. 若内部主力代码平台不是 GitHub，需要设计 CI status provider adapter，而不是把 `gh` 语义写死到产品文档里。
+3. 若内部主力代码平台不是 GitHub，需要设计 CI status provider adapter，而不是把 `gh` 语义写死到产品文档里。
 
 ## 7. Reviewer 结论
 

@@ -38,6 +38,17 @@ export interface PullRequestCiReport {
   artifact: Artifact;
 }
 
+export interface PullRequestCiWatchResult {
+  runId: string;
+  selector: string;
+  finalStatus: PullRequestCiStatus;
+  terminal: boolean;
+  attempts: number;
+  maxAttempts: number;
+  reports: PullRequestCiReport[];
+  finalReport: PullRequestCiReport;
+}
+
 export async function queryPullRequestCiStatus(input: {
   repoPath: string;
   runId: string;
@@ -118,6 +129,63 @@ export async function queryPullRequestCiStatus(input: {
   };
 }
 
+export async function watchPullRequestCiStatus(input: {
+  repoPath: string;
+  runId: string;
+  repositories: DonkeyRepositories;
+  audit?: AuditLogger;
+  gateway?: CommandGateway;
+  env?: NodeJS.ProcessEnv;
+  outputDir?: string;
+  selector?: string;
+  maxContentChars?: number;
+  maxAttempts?: number;
+  intervalMs?: number;
+  backoffMultiplier?: number;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<PullRequestCiWatchResult> {
+  const maxAttempts = normalizeMaxAttempts(input.maxAttempts);
+  const intervalMs = normalizeIntervalMs(input.intervalMs);
+  const backoffMultiplier = normalizeBackoff(input.backoffMultiplier);
+  const sleep = input.sleep ?? defaultSleep;
+  const reports: PullRequestCiReport[] = [];
+  let delayMs = intervalMs;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const report = await queryPullRequestCiStatus(input);
+    reports.push(report);
+    if (isTerminalCiStatus(report.status) || attempt === maxAttempts) {
+      const terminal = isTerminalCiStatus(report.status);
+      await input.audit?.append({
+        runId: input.runId,
+        type: 'delivery.ci.watch-completed',
+        payload: {
+          selector: report.selector,
+          status: report.status,
+          attempts: reports.length,
+          maxAttempts,
+          terminal,
+          artifactId: report.artifact.id,
+        },
+      });
+      return {
+        runId: input.runId,
+        selector: report.selector,
+        finalStatus: report.status,
+        terminal,
+        attempts: reports.length,
+        maxAttempts,
+        reports,
+        finalReport: report,
+      };
+    }
+    await sleep(delayMs);
+    delayMs = Math.ceil(delayMs * backoffMultiplier);
+  }
+
+  throw new Error('unreachable CI watch state');
+}
+
 function parseCiChecks(result: CommandGatewayResult): PullRequestCiCheck[] {
   if (result.status !== 'executed') {
     const detail =
@@ -149,6 +217,46 @@ function parseCiChecks(result: CommandGatewayResult): PullRequestCiCheck[] {
     throw new Error('gh pr checks JSON output must be an array');
   }
   return parsed.map(normalizeCiCheck);
+}
+
+function isTerminalCiStatus(status: PullRequestCiStatus): boolean {
+  return ['passed', 'failed', 'skipped'].includes(status);
+}
+
+function normalizeMaxAttempts(value: number | undefined): number {
+  if (value === undefined) {
+    return 20;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > 200) {
+    throw new Error('--max-attempts must be an integer between 1 and 200');
+  }
+  return value;
+}
+
+function normalizeIntervalMs(value: number | undefined): number {
+  if (value === undefined) {
+    return 15_000;
+  }
+  if (!Number.isFinite(value) || value < 0 || value > 3_600_000) {
+    throw new Error('--interval-ms must be between 0 and 3600000');
+  }
+  return Math.floor(value);
+}
+
+function normalizeBackoff(value: number | undefined): number {
+  if (value === undefined) {
+    return 1;
+  }
+  if (!Number.isFinite(value) || value < 1 || value > 10) {
+    throw new Error('--backoff must be between 1 and 10');
+  }
+  return value;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => {
+    setTimeout(resolveSleep, ms);
+  });
 }
 
 function normalizeCiCheck(value: unknown): PullRequestCiCheck {

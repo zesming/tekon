@@ -34,6 +34,7 @@ import {
   createWorkflowEngine,
   evaluateWorkReadiness,
   evaluateWorkUsability,
+  watchPullRequestCiStatus,
   renderWorkUsabilityEvaluationReport,
   loadRepoProfile,
   writeDefaultRepoProfile,
@@ -760,6 +761,64 @@ async function commandDelivery(argv: string[], io: CliIO) {
           `checks=${report.checks.length}`,
           `artifactId=${report.artifact.id}`,
           `selector=${report.selector}`,
+        ].join(' ') + '\n',
+      );
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
+  if (subcommand === 'ci-watch') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        selector: { type: 'string' },
+        'max-attempts': { type: 'string' },
+        'interval-ms': { type: 'string' },
+        backoff: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const db = openProjectDb(repoPath);
+    try {
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const result = await watchPullRequestCiStatus({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+        selector: args.values.selector,
+        maxAttempts: args.values['max-attempts']
+          ? Number(args.values['max-attempts'])
+          : undefined,
+        intervalMs: args.values['interval-ms']
+          ? Number(args.values['interval-ms'])
+          : undefined,
+        backoffMultiplier: args.values.backoff
+          ? Number(args.values.backoff)
+          : undefined,
+      });
+      io.stdout.write(
+        [
+          `runId=${runId}`,
+          `ciStatus=${result.finalStatus}`,
+          `terminal=${result.terminal}`,
+          `attempts=${result.attempts}`,
+          `maxAttempts=${result.maxAttempts}`,
+          `checks=${result.finalReport.checks.length}`,
+          `artifactId=${result.finalReport.artifact.id}`,
+          `selector=${result.selector}`,
         ].join(' ') + '\n',
       );
     } finally {

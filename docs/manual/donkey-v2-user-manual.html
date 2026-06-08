@@ -37,7 +37,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询、工作就绪度评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询和 watch 轮询、工作就绪度评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -56,7 +56,7 @@ npm exec --yes -- pnpm@10.12.1 build
 node /path/to/donkey/packages/cli/dist/index.js
 ```
 
-如果后续需要真实 PR 创建或 PR checks 查询，本机还需要可用的 `git` 和 `gh`，并且 `gh auth status` 必须在目标远端仓库具备创建 PR 和读取 PR checks 的权限。当前建议先使用交付 dry-run 和 `delivery prepare` 审阅证据，再显式执行 `delivery create-pr --approve-human`；PR 创建后可用 `delivery ci-status` 把远端 CI 状态写回证据包。
+如果后续需要真实 PR 创建或 PR checks 查询，本机还需要可用的 `git` 和 `gh`，并且 `gh auth status` 必须在目标远端仓库具备创建 PR 和读取 PR checks 的权限。当前建议先使用交付 dry-run 和 `delivery prepare` 审阅证据，再显式执行 `delivery create-pr --approve-human`；PR 创建后可用 `delivery ci-status` 或 `delivery ci-watch` 把远端 CI 状态写回证据包。
 
 ## 3. 初始化项目 init
 
@@ -139,7 +139,7 @@ node /path/to/donkey/packages/cli/dist/index.js workflow preflight standard-feat
 commands:
   e2e:
     notApplicable: true
-    reason: "service has no browser surface"
+    reason: 'service has no browser surface'
 ```
 
 preflight 会显示 `status=not-applicable` 和 `notApplicableReason`。这不是缺失命令兜底，只有用户显式配置后才会生效。
@@ -218,7 +218,7 @@ node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id &lt;
 
 这一步是真实远端副作用，必须由人明确批准。Donkey 不会自动 merge、自动上线，也不会替你判断 PR 是否可直接合入。
 
-## 10. 查询远端 CI 状态 delivery ci-status
+## 10. 查询和等待远端 CI 状态 delivery ci-status / ci-watch
 
 PR 创建后，可以只读查询远端 CI/checks 状态并写回 Donkey evidence：
 
@@ -234,7 +234,15 @@ node /path/to/donkey/packages/cli/dist/index.js delivery ci-status --run-id &lt;
 
 当前实现调用 `gh pr checks &lt;selector&gt; --json bucket,completedAt,description,event,link,name,startedAt,state,workflow`，解析 check 的 `bucket/state` 并汇总为 `passed`、`failed`、`pending`、`skipped` 或 `unknown`。查询结果会写入一个 `ci-status` artifact，并记录 `delivery.ci.checked` 审计事件；后续 `delivery prepare` / PR 包会在 Remote CI 区块展示最近入库的 CI 证据，`eval readiness` 会把 `remote-ci-passed` 作为推荐项。
 
-这个命令只读取 PR checks，不会 push、不 rerun CI、不等待 CI、不 merge、不上线。当前只覆盖 GitHub CLI 的 `gh pr checks` 路径；其它 Git host、CI provider 聚合、watch/重试退避和真实 PR 上的稳定证据仍需后续补齐。
+如果希望等待 PR checks 从 pending 进入终态，可使用：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js delivery ci-watch --run-id &lt;runId&gt; --max-attempts 20 --interval-ms 15000 --repo /path/to/project
+```
+
+`delivery ci-watch` 会重复执行同一只读 checks 查询，并把每次尝试都写入 `ci-status` artifact。`passed`、`failed`、`skipped` 会停止轮询并标记 `terminal=true`；如果到达 `--max-attempts` 后仍是 `pending` 或 `unknown`，会以 `terminal=false` 返回最终状态。命令结束时会记录 `delivery.ci.watch-completed` 审计事件，payload 包含 selector、status、attempts、maxAttempts、terminal 和 artifactId。可用 `--selector &lt;prUrl|branch&gt;` 指定查询对象，用 `--backoff &lt;multiplier&gt;` 设置间隔退避。
+
+`ci-status` 和 `ci-watch` 都只读取 PR checks，不会 push、不 rerun CI、不 merge、不上线。当前只覆盖 GitHub CLI 的 `gh pr checks` 路径；其它 Git host、CI provider 聚合、无 checks 细分提示和真实 PR 上的稳定证据仍需后续补齐。
 
 ## 11. 工作就绪度 eval readiness
 
@@ -399,7 +407,7 @@ node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --
 node /path/to/donkey/packages/cli/dist/index.js log --run-id &lt;runId&gt; --repo /path/to/project
 ```
 
-日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`worktree.lease.created`、`worktree.lease.promoted`、`worktree.lease.released`、`human.gate.pending`、`human.gate.approved`、`delivery.pr-prepared`、`delivery.pr.created`、`delivery.ci.checked` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
+日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`worktree.lease.created`、`worktree.lease.promoted`、`worktree.lease.released`、`human.gate.pending`、`human.gate.approved`、`delivery.pr-prepared`、`delivery.pr.created`、`delivery.ci.checked`、`delivery.ci.watch-completed` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
 
 命令 stdout/stderr 由 CommandGateway 写入 `.donkey/runs/&lt;runId&gt;/commands` 或 gate 输出目录。写入前会对明显密钥模式做脱敏；脱敏后的内容仍保留上下文和失败信息，便于排查 gate 失败。Audit event payload 不应写入 API key、token、生产凭证或环境变量值。
 
@@ -417,7 +425,7 @@ node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 
 - Phase 2 已验证的是本地 mock CLI 产品环，不是公开发布产品。
 - 动态 workflow 当前是 deterministic mock preview，不等于真实 PM LLM 规划。
-- `delivery dry-run` 不创建真实 PR，不 push 远端分支；`delivery prepare` 只生成本地 PR 准备包；`delivery create-pr --approve-human` 会产生真实 push/PR 副作用，必须人工批准；`delivery ci-status` 只读查询 GitHub PR checks，不 rerun CI、不等待 CI、不 merge、不上线。
+- `delivery dry-run` 不创建真实 PR，不 push 远端分支；`delivery prepare` 只生成本地 PR 准备包；`delivery create-pr --approve-human` 会产生真实 push/PR 副作用，必须人工批准；`delivery ci-status` 和 `delivery ci-watch` 只读查询 GitHub PR checks，不 rerun CI、不 merge、不上线。
 - Web dashboard 是本地 dashboard，不是远程服务。
 - Coverage 使用 `npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --coverage` 记录；`pnpm test -- --run --coverage` 在当前工具组合下不会输出 coverage 表。
 - 真实 LLM workflow、真实 SCM 权限、远端 PR 和生产级恢复能力必须在受控 fixture 或明确人工批准下验证；当前新增的 manifest 入库和 provider 快照只证明协议与恢复语义，不证明真实任务长期稳定。
@@ -449,9 +457,11 @@ node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id &lt;ru
 node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id &lt;runId&gt; --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id &lt;runId&gt; --approve-human --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js delivery ci-status --run-id &lt;runId&gt; --repo /path/to/fixture
+node /path/to/donkey/packages/cli/dist/index.js delivery ci-watch --run-id &lt;runId&gt; --max-attempts 1 --interval-ms 0 --repo /path/to/fixture
 ```
 
 若使用会暂停的模板，还需要记录 `resume --approve-human` 的命令和结果。
+
 </pre
       >
     </main>
