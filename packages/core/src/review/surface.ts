@@ -27,6 +27,23 @@ export interface ReviewGate extends GateResult {
   output: TextPreview | null;
 }
 
+export type ReviewGateRetryRecommendation =
+  | 'after-fix'
+  | 'after-approval'
+  | 'not-recommended';
+
+export interface ReviewGateFailureTriage {
+  gateId: string;
+  nodeId: string;
+  gateType: GateResult['gateType'];
+  status: GateResult['status'];
+  classification: string;
+  retry: ReviewGateRetryRecommendation;
+  summary: string;
+  suggestedCommand: string;
+  logHref: string;
+}
+
 export interface ReviewDiffSummary {
   branch: string;
   baseBranch: string;
@@ -79,6 +96,7 @@ export interface WorkReviewSurface {
   readiness: WorkReadinessEvaluation;
   artifacts: ReviewArtifact[];
   gates: ReviewGate[];
+  gateFailureTriage: ReviewGateFailureTriage[];
   delivery: ReviewDeliverySurface;
   evidenceGroups: ReviewEvidenceGroup[];
   nextCommands: string[];
@@ -164,6 +182,10 @@ export async function createWorkReviewSurface(input: {
           })
         : null,
     })),
+    gateFailureTriage: createGateFailureTriage({
+      runId: input.runId,
+      gates,
+    }),
     delivery,
     evidenceGroups: createEvidenceGroups({
       readiness,
@@ -225,6 +247,152 @@ function createEvidenceGroups(input: {
   }
 
   return groups;
+}
+
+function createGateFailureTriage(input: {
+  runId: string;
+  gates: GateResult[];
+}): ReviewGateFailureTriage[] {
+  return input.gates
+    .filter((gate) => shouldTriageGate(gate))
+    .map((gate) => {
+      const classification = classifyGateFailure(gate);
+      const advice = gateTriageAdvice({
+        runId: input.runId,
+        gate,
+        classification,
+      });
+      return {
+        gateId: gate.id,
+        nodeId: gate.nodeId,
+        gateType: gate.gateType,
+        status: gate.status,
+        classification,
+        retry: advice.retry,
+        summary: advice.summary,
+        suggestedCommand: advice.suggestedCommand,
+        logHref: `#gate-log-${gate.id}`,
+      };
+    });
+}
+
+function shouldTriageGate(gate: GateResult): boolean {
+  if (gate.status === 'failed' || gate.status === 'blocked') {
+    return true;
+  }
+  return (
+    gate.status === 'skipped' &&
+    gate.failureClassification !== undefined &&
+    gate.failureClassification !== null &&
+    gate.failureClassification !== 'not-applicable'
+  );
+}
+
+function classifyGateFailure(gate: GateResult): string {
+  if (gate.gateType === 'human' && gate.status === 'blocked') {
+    return gate.failureClassification ?? 'human-approval';
+  }
+  return (
+    gate.failureClassification ??
+    (gate.status === 'blocked' ? 'blocked' : 'unknown')
+  );
+}
+
+function gateTriageAdvice(input: {
+  runId: string;
+  gate: GateResult;
+  classification: string;
+}): {
+  retry: ReviewGateRetryRecommendation;
+  summary: string;
+  suggestedCommand: string;
+} {
+  const logCommand = `donkey log --run-id ${input.runId}`;
+  const reviewCommand = `donkey review --run-id ${input.runId}`;
+  if (isHumanApprovalTriage(input.gate, input.classification)) {
+    return {
+      retry: 'after-approval',
+      summary:
+        'Human approval is required before this gate can continue. Approve only after reviewing the pending decision and risk.',
+      suggestedCommand: `donkey resume --run-id ${input.runId} --approve-human`,
+    };
+  }
+  if (input.classification === 'missing-command') {
+    return {
+      retry: 'after-fix',
+      summary:
+        'Gate command is missing from repo profile. Resolve the commandRef before retrying this run.',
+      suggestedCommand: 'donkey workflow preflight <template> --repo <repo>',
+    };
+  }
+  if (input.classification === 'security-findings') {
+    return {
+      retry: 'after-fix',
+      summary:
+        'Security scan found sensitive material or unsafe output. Inspect the gate log and remove the finding before retrying.',
+      suggestedCommand: reviewCommand,
+    };
+  }
+  if (
+    ['missing-artifact-type', 'missing-artifact', 'invalid-artifact'].includes(
+      input.classification,
+    )
+  ) {
+    return {
+      retry: 'after-fix',
+      summary:
+        'Provider artifact output is incomplete or invalid. Fix the manifest/schema output before retrying.',
+      suggestedCommand: reviewCommand,
+    };
+  }
+  if (input.classification === 'timeout') {
+    return {
+      retry: 'after-fix',
+      summary:
+        'Gate command timed out. Inspect logs, adjust the command or timeout, then retry.',
+      suggestedCommand: logCommand,
+    };
+  }
+  if (input.classification === 'rejected') {
+    return {
+      retry: 'not-recommended',
+      summary:
+        'Command policy rejected this gate command. Change the command or policy intentionally before retrying.',
+      suggestedCommand: reviewCommand,
+    };
+  }
+  if (input.classification === 'unsupported-gate') {
+    return {
+      retry: 'not-recommended',
+      summary:
+        'Workflow references a gate type Donkey does not support in the current runtime.',
+      suggestedCommand: reviewCommand,
+    };
+  }
+  if (input.classification === 'exit-code') {
+    return {
+      retry: 'after-fix',
+      summary: `${input.gate.gateType} command exited non-zero. Inspect the gate log, fix the failure, then retry.`,
+      suggestedCommand: logCommand,
+    };
+  }
+  return {
+    retry: 'after-fix',
+    summary:
+      'Gate did not pass. Inspect the linked gate log and audit trail before retrying.',
+    suggestedCommand: logCommand,
+  };
+}
+
+function isHumanApprovalTriage(
+  gate: GateResult,
+  classification: string,
+): boolean {
+  return (
+    classification === 'blocked-for-approval' ||
+    classification === 'human-approval' ||
+    (gate.gateType === 'human' && gate.status === 'blocked')
+  );
 }
 
 function linksForReadinessCheck(input: {

@@ -70,6 +70,7 @@
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 和 remote CI passed 为 recommended。                                                              |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                                                                                   |
 | 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                              |
+| Gate 失败诊断                | `packages/core/src/review/surface.ts`、CLI `review`、Web dashboard                                                             | review surface 新增 Gate Failure Triage，把失败 gate 的 classification、日志锚点、retry 建议和 suggested command 结构化展示。                                                                                                                |
 
 ## 3. 验证记录
 
@@ -98,6 +99,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `delivery/scm.test.ts`：PR 状态落库、人工审批、`.donkey` 排除、已有分支空 commit 跳过、PR URL 创建/恢复和失败阶段落库。
 - `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
 - `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
+- `review/surface.test.ts`：覆盖失败 gate 的 triage 输出，包含 `exit-code`、`missing-command`、日志锚点、retry 建议和 suggested command。
 - `eval/work-usability.test.ts`：覆盖样本阈值通过、真实 provider/PR/隔离证据缺失失败，以及缺失 run 的样本级失败证据。
 - `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
 - `security/secrets.test.ts`：覆盖共享 secret scanner 的文本扫描、脱敏和忽略 `.donkey` 运行态目录。
@@ -135,7 +137,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 - 完整 DLP、密钥轮换和生产级安全审计；当前新增的是基础敏感模式扫描、命令日志脱敏和 artifact 入库拦截。
 - PR 创建失败后的更复杂恢复策略，例如远端网络抖动后的重试退避、不同 Git host 的 PR 查询差异。
 - 远端 CI 查询的无 checks 场景细分、不同 Git host 或非 GitHub CI provider 适配。
-- Web 已能直接发起模板 run、选择历史 run、执行 delivery prepare 和触发 create-pr 入口；artifact/gate/audit 互跳仍是基础锚点级体验，还需继续打磨成更完整的上下文导航。
+- Web 已能直接发起模板 run、选择历史 run、执行 delivery prepare 和触发 create-pr 入口；artifact/gate/audit 互跳和 Gate Failure Triage 仍是基础锚点级体验，还需继续打磨成更完整的上下文导航。
 - 团队级多项目权限、成本控制、通知和长期知识沉淀仍是后续阶段能力。
 
 ## 5. Reviewer 结论

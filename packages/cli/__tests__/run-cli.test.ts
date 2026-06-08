@@ -103,6 +103,18 @@ describe('runCli in-process', () => {
     expect(io.takeStdout()).toContain('pendingHumanDecisions=1');
 
     await expect(
+      runCli(['review', '--run-id', gatedRunId!, '--repo', repoPath], io),
+    ).resolves.toBe(0);
+    const gatedReviewOutput = io.takeStdout();
+    expect(gatedReviewOutput).toContain('## Gate Failure Triage');
+    expect(gatedReviewOutput).toContain(
+      'classification=human-approval retry=after-approval',
+    );
+    expect(gatedReviewOutput).toContain(
+      `suggestedCommand=donkey resume --run-id ${gatedRunId} --approve-human`,
+    );
+
+    await expect(
       runCli(
         [
           'resume',
@@ -204,6 +216,7 @@ describe('runCli in-process', () => {
     const reviewOutput = io.takeStdout();
     expect(reviewOutput).toContain('## Readiness Failed Checks');
     expect(reviewOutput).toContain('## Evidence Navigation');
+    expect(reviewOutput).toContain('## Gate Failure Triage');
     expect(reviewOutput).toContain('Readiness: pr-created');
     expect(reviewOutput).toContain('## Artifacts');
     expect(reviewOutput).toContain('## Gate Logs');

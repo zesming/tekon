@@ -1321,6 +1321,18 @@ function formatReviewSurface(
           ].join('\n'),
         )),
     '',
+    '## Gate Failure Triage',
+    ...(surface.gateFailureTriage.length === 0
+      ? ['- none']
+      : surface.gateFailureTriage.map((item) =>
+          [
+            `### ${item.gateType} ${item.gateId} ${item.status}`,
+            `classification=${item.classification} retry=${item.retry} log=${item.logHref}`,
+            `summary=${item.summary}`,
+            `suggestedCommand=${item.suggestedCommand}`,
+          ].join('\n'),
+        )),
+    '',
     '## Delivery',
     `- packagePath: ${surface.delivery.package?.path ?? 'missing'}`,
     `- prBodyPath: ${surface.delivery.prBody?.path ?? 'missing'}`,

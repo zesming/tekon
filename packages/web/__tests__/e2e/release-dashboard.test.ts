@@ -48,6 +48,9 @@ test.describe('Donkey release dashboard', () => {
       page.getByRole('heading', { name: 'Evidence Links' }),
     ).toBeVisible();
     await expect(
+      page.getByRole('heading', { name: 'Gate Failure Triage' }),
+    ).toBeVisible();
+    await expect(
       page.getByRole('heading', { name: 'Artifact 正文' }),
     ).toBeVisible();
     await expect(
@@ -64,7 +67,14 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
     await expect(page.getByText('Review report body')).toBeVisible();
-    await expect(page.getByText('human approval is required')).toBeVisible();
+    await expect(
+      page.getByText('human approval is required', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('human human-approval')).toBeVisible();
+    await expect(page.getByText(/retry=after-approval/u)).toBeVisible();
+    await expect(
+      page.getByText('command=donkey resume --run-id run_1 --approve-human'),
+    ).toBeVisible();
     await expect(page.getByText('Review Route info')).toBeVisible();
     await expect(page.getByLabel('Review run')).toContainText('run_0');
 

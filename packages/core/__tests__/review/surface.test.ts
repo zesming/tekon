@@ -162,6 +162,7 @@ describe('work review surface', () => {
         }),
       }),
     );
+    expect(surface.gateFailureTriage).toEqual([]);
     expect(surface.evidenceGroups).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -189,6 +190,180 @@ describe('work review surface', () => {
     );
     expect(surface.nextCommands).toContain(
       'donkey delivery create-pr --run-id run_1 --approve-human',
+    );
+    db.close();
+  });
+
+  it('triages failed gates with retry guidance and linked logs', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-triage-'));
+    tempDirs.push(repoPath);
+    seedGitRepo(repoPath);
+    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    writeDefaultRepoProfile(repoPath);
+
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedPassedRun({ repoPath, repositories });
+
+    const gatesDir = join(repoPath, '.donkey', 'runs', 'run_1', 'gates');
+    mkdirSync(gatesDir, { recursive: true });
+    const buildLogPath = join(gatesDir, 'node_1-build.log');
+    const lintLogPath = join(gatesDir, 'node_1-lint.log');
+    const approvalLogPath = join(gatesDir, 'node_1-test.log');
+    const humanLogPath = join(gatesDir, 'node_1-human.log');
+    const legacyHumanLogPath = join(gatesDir, 'node_1-legacy-human.log');
+    const securityLogPath = join(gatesDir, 'node_1-security-scan.log');
+    writeFileSync(buildLogPath, 'build failed with TS error', 'utf8');
+    writeFileSync(lintLogPath, 'missing command: lint', 'utf8');
+    writeFileSync(
+      approvalLogPath,
+      'command blocked for approval: decision_1',
+      'utf8',
+    );
+    writeFileSync(humanLogPath, 'human approval is required', 'utf8');
+    writeFileSync(
+      legacyHumanLogPath,
+      'legacy human approval is required',
+      'utf8',
+    );
+    writeFileSync(
+      securityLogPath,
+      JSON.stringify({
+        findings: [
+          {
+            id: 'finding_1',
+            severity: 'critical',
+            ruleId: 'openai-api-key',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    await repositories.recordGateResult({
+      id: 'gate_build',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'build',
+      status: 'failed',
+      outputPath: buildLogPath,
+      durationMs: 12,
+      retries: 0,
+      failureClassification: 'exit-code',
+      createdAt: '2026-06-08T00:00:02.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_lint',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'lint',
+      status: 'failed',
+      outputPath: lintLogPath,
+      durationMs: 3,
+      retries: 0,
+      failureClassification: 'missing-command',
+      createdAt: '2026-06-08T00:00:03.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_command_approval',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'test',
+      status: 'blocked',
+      outputPath: approvalLogPath,
+      durationMs: 1,
+      retries: 0,
+      failureClassification: 'blocked-for-approval',
+      createdAt: '2026-06-08T00:00:04.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_human',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      status: 'blocked',
+      outputPath: humanLogPath,
+      durationMs: 0,
+      retries: 0,
+      failureClassification: 'human-approval',
+      createdAt: '2026-06-08T00:00:05.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_legacy_human',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      status: 'blocked',
+      outputPath: legacyHumanLogPath,
+      durationMs: 0,
+      retries: 0,
+      createdAt: '2026-06-08T00:00:06.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_security',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'security-scan',
+      status: 'failed',
+      outputPath: securityLogPath,
+      durationMs: 5,
+      retries: 0,
+      failureClassification: 'security-findings',
+      createdAt: '2026-06-08T00:00:07.000Z',
+    });
+
+    const surface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId: 'run_1',
+      maxContentChars: 120,
+    });
+
+    expect(surface.gateFailureTriage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: 'gate_build',
+          classification: 'exit-code',
+          retry: 'after-fix',
+          logHref: '#gate-log-gate_build',
+          suggestedCommand: 'donkey log --run-id run_1',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_lint',
+          classification: 'missing-command',
+          retry: 'after-fix',
+          suggestedCommand:
+            'donkey workflow preflight <template> --repo <repo>',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_command_approval',
+          classification: 'blocked-for-approval',
+          retry: 'after-approval',
+          summary: expect.stringContaining('Approve only after reviewing'),
+          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_human',
+          classification: 'human-approval',
+          retry: 'after-approval',
+          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_legacy_human',
+          classification: 'human-approval',
+          retry: 'after-approval',
+          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_security',
+          classification: 'security-findings',
+          retry: 'after-fix',
+          summary: expect.stringContaining('Security scan found'),
+          suggestedCommand: 'donkey review --run-id run_1',
+        }),
+      ]),
     );
     db.close();
   });

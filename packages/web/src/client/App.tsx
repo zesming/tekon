@@ -131,6 +131,17 @@ type ReviewSurface = {
       summary: string;
     }>;
   }>;
+  gateFailureTriage: Array<{
+    gateId: string;
+    nodeId: string;
+    gateType: string;
+    status: string;
+    classification: string;
+    retry: string;
+    summary: string;
+    suggestedCommand: string;
+    logHref: string;
+  }>;
   nextCommands: string[];
 };
 
@@ -574,6 +585,20 @@ function App() {
             ))
           ) : (
             <Row primary="none" secondary="evidence links" />
+          )}
+        </Panel>
+        <Panel title="Gate Failure Triage">
+          {review?.gateFailureTriage.length ? (
+            review.gateFailureTriage.map((item) => (
+              <LinkedRow
+                key={item.gateId}
+                href={item.logHref}
+                primary={`${item.gateType} ${item.classification}`}
+                secondary={`${item.summary} retry=${item.retry} command=${item.suggestedCommand}`}
+              />
+            ))
+          ) : (
+            <Row primary="none" secondary="gate failure triage" />
           )}
         </Panel>
         <Panel title="Diff">

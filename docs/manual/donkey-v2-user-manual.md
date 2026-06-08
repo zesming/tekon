@@ -6,7 +6,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询和 watch 轮询、工作就绪度评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询和 watch 轮询、工作就绪度评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Gate 失败诊断、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -290,6 +290,7 @@ node /path/to/donkey/packages/cli/dist/index.js review --run-id <runId> --repo /
 
 - readiness 总分和失败项。
 - Evidence Navigation，把 readiness 失败项关联到 artifact、gate log、audit event、PR body、PR package 和 diff。
+- Gate Failure Triage，把失败 gate 的分类、日志锚点、重试建议和建议命令结构化展示。
 - `delivery prepare` 生成的 PR body 和 PR package 正文预览。
 - `donkey-delivery/<runId>` 与 repo profile base branch 的 diff 摘要和变更文件。
 - artifact 正文预览，包括 PRD、代码变更、测试报告、审阅报告、交付包和 `ci-status` 等已入库产物。
@@ -316,7 +317,7 @@ DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @do
 
 Web 写操作依赖 `init` 生成的 `.donkey/web-session.json` session token。没有 token 或 token 错误时，approve/reject、pause/resume/cancel/clean、发起 run、PR 准备和 PR 创建入口都会被拒绝。
 
-Pending human gate 会展示 request context、gate context、exact command 和 risk label；概览区可选择项目内任意 run，审阅区会按当前选中 run 展示 Readiness、Evidence Links、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令；audit 视图会按当前选中 run 展示 hash chain 校验状态，并支持按 node、gate、role 过滤。Web approve 会更新 human decision、gate/node/workflow 状态并自动调用 Engine resume 继续推进；resume 会使用 run 自身落库的 provider 快照，当前支持 `mock` 和 `claude-code`，不支持 `custom` adapter。Web reject 会阻断 workflow，不会自动继续。
+Pending human gate 会展示 request context、gate context、exact command 和 risk label；概览区可选择项目内任意 run，审阅区会按当前选中 run 展示 Readiness、Evidence Links、Gate Failure Triage、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令；audit 视图会按当前选中 run 展示 hash chain 校验状态，并支持按 node、gate、role 过滤。Web approve 会更新 human decision、gate/node/workflow 状态并自动调用 Engine resume 继续推进；resume 会使用 run 自身落库的 provider 快照，当前支持 `mock` 和 `claude-code`，不支持 `custom` adapter。Web reject 会阻断 workflow，不会自动继续。
 
 Web 的“工作流操作”区支持：
 
@@ -330,7 +331,7 @@ Web 审阅至少需要记录：
 - 本地启动命令和 `DONKEY_PROJECT_ROOT` 或等价项目根配置。
 - pending human gate 的 approve 或 reject 操作结果，以及 command/gate/request/risk 上下文是否符合预期。
 - Web 发起 run、切换历史 run、准备 PR 和 PR 创建入口的操作结果；若触发真实 PR 创建，还必须记录 run id、远端仓库、认证状态、PR URL 和失败恢复结果。
-- Readiness、Evidence Links、Diff、Artifact 正文、Gate Logs、PR 包、audit hash、audit filter、roles、workflows 页面是否可读。
+- Readiness、Evidence Links、Gate Failure Triage、Diff、Artifact 正文、Gate Logs、PR 包、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 
 ## 15. 角色 roles

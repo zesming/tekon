@@ -182,17 +182,17 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ## 5. P1：补齐后才像日常工具，而不是验收脚手架
 
-| 缺口               | 当前状态                                                                                                        | 建议目标                                                                                                                  |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                                                       | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
-| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                                                        | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
-| Gate 失败体验      | 有 autoFix repair node，但真实 provider 证据不足                                                                | gate 失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。                                   |
-| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                                                        | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
-| 通知与审批         | Web 本地处理 human gate                                                                                         | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
-| CI/远端状态        | 已新增 `delivery ci-status`、`delivery ci-watch`、`ci-status` artifact、PR 包 Remote CI 区块和 readiness 推荐项 | 用真实受控 PR 验证 `gh pr checks` 结果；补无 checks 细分提示；明确非 GitHub provider 边界或 provider adapter。            |
-| 真实 QA 证据       | 当前主要跑已有 test 命令                                                                                        | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
-| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                                                          | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
-| 文档验收状态一致性 | 本轮已更新 `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 和 HTML 审阅版                             | 后续每次实现后仍需同步 Markdown/HTML，并在最终 reviewer 复查后写入正式结论。                                              |
+| 缺口               | 当前状态                                                                                                                   | 建议目标                                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                                                                  | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
+| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                                                                   | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
+| Gate 失败体验      | 已新增 Gate Failure Triage，能在 review surface 中展示失败分类、日志锚点、重试建议和建议命令；真实 provider 失败样本仍不足 | 用真实 provider 失败样本验证分类和建议是否足够可操作；连续失败后的阻断和上下文保留仍需继续打磨。                          |
+| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                                                                   | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
+| 通知与审批         | Web 本地处理 human gate                                                                                                    | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
+| CI/远端状态        | 已新增 `delivery ci-status`、`delivery ci-watch`、`ci-status` artifact、PR 包 Remote CI 区块和 readiness 推荐项            | 用真实受控 PR 验证 `gh pr checks` 结果；补无 checks 细分提示；明确非 GitHub provider 边界或 provider adapter。            |
+| 真实 QA 证据       | 当前主要跑已有 test 命令                                                                                                   | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
+| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                                                                     | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
+| 文档验收状态一致性 | 本轮已更新 `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 和 HTML 审阅版                                        | 后续每次实现后仍需同步 Markdown/HTML，并在最终 reviewer 复查后写入正式结论。                                              |
 
 ## 6. P2：增强长期复用，不阻塞第一批工作可用
 
