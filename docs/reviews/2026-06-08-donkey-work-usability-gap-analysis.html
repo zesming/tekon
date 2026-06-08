@@ -135,7 +135,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 - 每个样本记录 run id、provider、仓库、需求类型、是否产出 PR 包、是否创建真实 PR、gate 结果、人工介入次数、返工原因。
 - 达标线不需要高：先证明 5 个以上需求能从输入走到可审 PR 包，其中至少 2 个创建真实测试 PR。
 
-当前状态：2026-06-08 后续增量已新增 work usability sample set schema 和 CLI `eval work-usability --samples`。默认阈值为 10 个样本、5 个 ready run、5 个真实 provider run、2 个真实 PR，并要求所有样本有隔离证据；fixture 可降低阈值回归测试，但真实仓库样本本身仍未补齐。
+当前状态：2026-06-08 后续增量已新增 work usability sample set schema 和 CLI `eval work-usability --samples`。默认阈值为 10 个样本、5 个 ready run、5 个真实 provider run、2 个真实 PR，并要求所有样本有隔离证据；fixture 可降低阈值回归测试。本轮又补齐 `eval work-usability record` 和 `--report-md/--report-html`，让真实 run 可以沉淀到样本清单并生成可提交报告；真实仓库样本本身仍未补齐。
 
 ### P0-3 仓库画像驱动 Gate
 

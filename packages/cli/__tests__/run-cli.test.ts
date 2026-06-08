@@ -190,6 +190,35 @@ describe('runCli in-process', () => {
 
     const evalDir = join(repoPath, '.donkey', 'eval');
     mkdirSync(evalDir, { recursive: true });
+    const recordedSamplesPath = join(evalDir, 'recorded-work-usability.yaml');
+    await expect(
+      runCli(
+        [
+          'eval',
+          'work-usability',
+          'record',
+          '--run-id',
+          standardRunId!,
+          '--id',
+          'recorded-standard-fixture',
+          '--samples',
+          recordedSamplesPath,
+          '--notes',
+          'CLI recorded fixture sample.',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const recordOutput = io.takeStdout();
+    expect(recordOutput).toContain('sampleRecorded=true');
+    expect(recordOutput).toContain('created=true');
+    const recordedSamples = readFileSync(recordedSamplesPath, 'utf8');
+    expect(recordedSamples).toContain('id: recorded-standard-fixture');
+    expect(recordedSamples).toContain(`runId: ${standardRunId}`);
+    expect(recordedSamples).toContain('expectedProvider: mock');
+
     const samplesPath = join(evalDir, 'work-usability-samples.yaml');
     writeFileSync(
       samplesPath,
@@ -223,6 +252,47 @@ describe('runCli in-process', () => {
     expect(usabilityOutput).toContain('usable=true');
     expect(usabilityOutput).toContain('readyRuns=1');
     expect(usabilityOutput).toContain('isolationPassed=1');
+
+    const reportMd = join(
+      repoPath,
+      'docs',
+      'reviews',
+      'fixture-work-usability.md',
+    );
+    const reportHtml = join(
+      repoPath,
+      'docs',
+      'reviews',
+      'fixture-work-usability.html',
+    );
+    await expect(
+      runCli(
+        [
+          'eval',
+          'work-usability',
+          '--samples',
+          samplesPath,
+          '--report-md',
+          reportMd,
+          '--report-html',
+          reportHtml,
+          '--title',
+          'Fixture Work Usability',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const reportOutput = io.takeStdout();
+    expect(reportOutput).toContain(`reportMd=${reportMd}`);
+    expect(reportOutput).toContain(`reportHtml=${reportHtml}`);
+    expect(readFileSync(reportMd, 'utf8')).toContain(
+      '# Fixture Work Usability',
+    );
+    expect(readFileSync(reportHtml, 'utf8')).toContain(
+      'Fixture Work Usability',
+    );
 
     await expect(
       runCli(['pause', '--run-id', gatedRunId!, '--repo', repoPath], io),

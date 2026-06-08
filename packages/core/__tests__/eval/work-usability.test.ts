@@ -12,7 +12,9 @@ import {
   evaluateWorkUsability,
   migrateDatabase,
   openDonkeyDatabase,
+  renderWorkUsabilityEvaluationReport,
   type DonkeyRepositories,
+  upsertWorkUsabilitySample,
 } from '../../src/index.js';
 
 describe('work usability evaluation', () => {
@@ -203,6 +205,87 @@ describe('work usability evaluation', () => {
     expect(evaluation.samples[0]?.checks).toContainEqual(
       expect.objectContaining({ id: 'run-present', passed: false }),
     );
+    db.close();
+  });
+
+  it('upserts samples by id and preserves configured thresholds', () => {
+    const result = upsertWorkUsabilitySample(
+      {
+        thresholds: { minSamples: 2, minCreatedPrs: 1 },
+        samples: [
+          {
+            id: 'sample-1',
+            runId: 'run_old',
+            requireRealProvider: false,
+            requirePr: false,
+          },
+        ],
+      },
+      {
+        id: 'sample-1',
+        runId: 'run_new',
+        expectedProvider: 'claude-code',
+        requireRealProvider: true,
+        requirePr: true,
+        expectedPrUrl: 'https://github.example/donkey/pull/7',
+      },
+    );
+
+    expect(result.created).toBe(false);
+    expect(result.sampleSet.thresholds).toMatchObject({
+      minSamples: 2,
+      minCreatedPrs: 1,
+    });
+    expect(result.sampleSet.samples).toHaveLength(1);
+    expect(result.sampleSet.samples[0]).toMatchObject({
+      id: 'sample-1',
+      runId: 'run_new',
+      expectedProvider: 'claude-code',
+      requireRealProvider: true,
+      requirePr: true,
+    });
+  });
+
+  it('renders a bounded work usability report with failed checks visible', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-report-'));
+    tempDirs.push(repoPath);
+    const db = openDonkeyDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+
+    const evaluation = await evaluateWorkUsability({
+      repoPath,
+      repositories,
+      audit,
+      sampleSet: {
+        thresholds: {
+          minSamples: 1,
+          minReadyRuns: 1,
+          minRealProviderRuns: 1,
+          minCreatedPrs: 1,
+          requireIsolationEvidence: true,
+        },
+        samples: [{ id: 'missing', runId: 'run_missing' }],
+      },
+    });
+
+    const report = renderWorkUsabilityEvaluationReport({
+      title: 'Fixture <Work Usability>',
+      generatedAt: '2026-06-08T00:00:00.000Z',
+      samplePath: '/tmp/work-usability-samples.yaml',
+      evaluation,
+    });
+
+    expect(report.markdown).toContain('# Fixture <Work Usability>');
+    expect(report.markdown).toContain('usable: false');
+    expect(report.markdown).toContain('missing:run-present');
+    expect(report.markdown).toContain(
+      'does not yet satisfy the configured work usability thresholds',
+    );
+    expect(report.html).toContain('Fixture &lt;Work Usability&gt;');
+    expect(report.html).toContain('run not found: run_missing');
+    expect(report.html).toContain('does not prove production readiness');
     db.close();
   });
 });

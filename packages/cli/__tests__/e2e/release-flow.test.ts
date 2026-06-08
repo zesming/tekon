@@ -186,6 +186,29 @@ describe('donkey release flow e2e', () => {
 
     const evalDir = join(repoPath, '.donkey', 'eval');
     mkdirSync(evalDir, { recursive: true });
+    const recordedSamplesPath = join(evalDir, 'recorded-work-usability.yaml');
+    const recordOutput = runCli(
+      cliPath,
+      [
+        'eval',
+        'work-usability',
+        'record',
+        '--run-id',
+        deliveryRunId!,
+        '--id',
+        'recorded-delivery-fixture',
+        '--samples',
+        recordedSamplesPath,
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(recordOutput).toContain('sampleRecorded=true');
+    expect(readFileSync(recordedSamplesPath, 'utf8')).toContain(
+      'id: recorded-delivery-fixture',
+    );
+
     const samplesPath = join(evalDir, 'work-usability-samples.yaml');
     writeFileSync(
       samplesPath,
@@ -212,6 +235,35 @@ describe('donkey release flow e2e', () => {
     expect(usabilityOutput).toContain('usable=true');
     expect(usabilityOutput).toContain('createdPrs=1');
     expect(usabilityOutput).toContain('isolationPassed=1');
+
+    const reportMd = join(repoPath, 'docs', 'reviews', 'fixture-usability.md');
+    const reportHtml = join(
+      repoPath,
+      'docs',
+      'reviews',
+      'fixture-usability.html',
+    );
+    const reportOutput = runCli(
+      cliPath,
+      [
+        'eval',
+        'work-usability',
+        '--samples',
+        samplesPath,
+        '--report-md',
+        reportMd,
+        '--report-html',
+        reportHtml,
+        '--title',
+        'Fixture Usability',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(reportOutput).toContain(`reportMd=${reportMd}`);
+    expect(readFileSync(reportMd, 'utf8')).toContain('# Fixture Usability');
+    expect(readFileSync(reportHtml, 'utf8')).toContain('Fixture Usability');
     expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
   }, 15_000);
 });

@@ -6,7 +6,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询、工作就绪度评估、工作可用样本评估、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询、工作就绪度评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -243,6 +243,22 @@ samples:
 ```bash
 node /path/to/donkey/packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --repo /path/to/project
 ```
+
+把已完成 run 记录进样本清单：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js eval work-usability record --run-id <runId> --id <sampleId> --samples /path/to/work-usability-samples.yaml --repo /path/to/project
+```
+
+`record` 会读取 run 的 provider snapshot 和已落库 PR URL，自动填入 `expectedProvider`、`requireRealProvider`、`requirePr` 和 `expectedPrUrl` 的可推断部分；再次记录同一个 `id` 会更新原样本，不会制造重复样本。仍需用户确认 `demandType`、notes 和阈值是否符合真实 dogfooding 口径。
+
+生成可提交的样本评估报告：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html --repo /path/to/project
+```
+
+报告只证明样本清单中记录的 run 和仓库，不代表未采样仓库、未采样需求或生产级隔离已经完成。
 
 当前评估项包括：
 

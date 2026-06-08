@@ -125,7 +125,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 ## 4. 仍未完成
 
 - 真实 Claude Code / Codex 在受控真实仓库中的端到端稳定执行证据；本轮证明的是 artifact manifest 协议、provider 快照和 fixture 流程，不证明真实任务长期成功率。
-- 真实样本清单本身；`eval work-usability` 只是把样本阈值和证据项固化为评估命令，不会替代 2-3 个真实仓库、10 个需求和至少 2 个真实 PR 的实际 dogfooding。
+- 真实样本清单本身；`eval work-usability record` 和 `--report-md/--report-html` 已经降低样本沉淀和报告归档成本，但不会替代 2-3 个真实仓库、10 个需求和至少 2 个真实 PR 的实际 dogfooding。
 - 真实 PR 上的远端 CI 状态证据；当前 `delivery ci-status` 已有 fake `gh` fixture 和本地入库测试，但仍需在受控 GitHub PR 上记录 `gh pr checks` 输出、PR URL、状态变化和失败恢复。
 - 动态 workflow 非 dry-run 执行。
 - 自动 merge、自动上线、生产权限变更等高风险动作。

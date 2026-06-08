@@ -88,6 +88,48 @@ export interface WorkUsabilityEvaluation {
   samples: WorkUsabilitySampleEvaluation[];
 }
 
+export interface UpsertWorkUsabilitySampleResult {
+  sampleSet: WorkUsabilitySampleSet;
+  created: boolean;
+}
+
+export interface RenderWorkUsabilityEvaluationReportInput {
+  title: string;
+  generatedAt: string;
+  samplePath?: string;
+  evaluation: WorkUsabilityEvaluation;
+}
+
+export interface RenderedWorkUsabilityEvaluationReport {
+  markdown: string;
+  html: string;
+}
+
+export function upsertWorkUsabilitySample(
+  sampleSet: WorkUsabilitySampleSet,
+  sample: WorkUsabilitySample,
+): UpsertWorkUsabilitySampleResult {
+  const parsedSampleSet = workUsabilitySampleSetSchema.parse(sampleSet);
+  const parsedSample = workUsabilitySampleSchema.parse(sample);
+  const existingIndex = parsedSampleSet.samples.findIndex(
+    (entry) => entry.id === parsedSample.id,
+  );
+  const samples =
+    existingIndex === -1
+      ? [...parsedSampleSet.samples, parsedSample]
+      : parsedSampleSet.samples.map((entry, index) =>
+          index === existingIndex ? parsedSample : entry,
+        );
+
+  return {
+    sampleSet: {
+      thresholds: parsedSampleSet.thresholds,
+      samples,
+    },
+    created: existingIndex === -1,
+  };
+}
+
 export async function evaluateWorkUsability(input: {
   repoPath: string;
   repositories: DonkeyRepositories;
@@ -171,6 +213,126 @@ export async function evaluateWorkUsability(input: {
     thresholdChecks,
     samples,
   };
+}
+
+export function renderWorkUsabilityEvaluationReport(
+  input: RenderWorkUsabilityEvaluationReportInput,
+): RenderedWorkUsabilityEvaluationReport {
+  const failedSampleChecks = input.evaluation.samples.flatMap((sample) =>
+    sample.checks
+      .filter((check) => !check.passed)
+      .map((check) => `${sample.id}:${check.id} ${check.evidence}`),
+  );
+  const samplePath = input.samplePath ?? 'not_recorded';
+  const markdown = [
+    `# ${input.title}`,
+    '',
+    `generatedAt: ${input.generatedAt}`,
+    `samplePath: ${samplePath}`,
+    `usable: ${input.evaluation.usable}`,
+    `score: ${input.evaluation.score.toFixed(2)}`,
+    '',
+    '## Counts',
+    '',
+    `- samples: ${input.evaluation.counts.samples}`,
+    `- readyRuns: ${input.evaluation.counts.readyRuns}`,
+    `- realProviderRuns: ${input.evaluation.counts.realProviderRuns}`,
+    `- createdPrs: ${input.evaluation.counts.createdPrs}`,
+    `- securityScanPassed: ${input.evaluation.counts.securityScanPassed}`,
+    `- isolationPassed: ${input.evaluation.counts.isolationPassed}`,
+    '',
+    '## Threshold Checks',
+    '',
+    ...input.evaluation.thresholdChecks.map(
+      (check) => `- ${check.id}: ${check.passed} - ${check.evidence}`,
+    ),
+    '',
+    '## Failed Sample Checks',
+    '',
+    ...(failedSampleChecks.length === 0
+      ? ['- none']
+      : failedSampleChecks.map((check) => `- ${check}`)),
+    '',
+    '## Samples',
+    '',
+    ...input.evaluation.samples.map((sample) =>
+      [
+        `- ${sample.id}: runId=${sample.runId} ready=${sample.readiness?.ready ?? false} provider=${sample.provider ?? 'missing'} prCreated=${sample.prCreated} isolation=${sample.isolationPassed}`,
+        `  - prUrl: ${sample.prUrl ?? 'missing'}`,
+        `  - securityScanPassed: ${sample.securityScanPassed}`,
+      ].join('\n'),
+    ),
+    '',
+    '## Judgment',
+    '',
+    input.evaluation.usable
+      ? '- The recorded sample set satisfies the configured work usability thresholds.'
+      : '- The recorded sample set does not yet satisfy the configured work usability thresholds.',
+    '- This report is evidence for the recorded sample set only; it does not prove production readiness outside the sampled repositories and runs.',
+  ].join('\n');
+
+  const html = [
+    '<!doctype html>',
+    '<html lang="zh-CN">',
+    '<head>',
+    '<meta charset="utf-8" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `<title>${escapeHtml(input.title)}</title>`,
+    '<style>',
+    'body{margin:0;background:#f6f7f9;color:#1f2937;font-family:system-ui,sans-serif;}',
+    'main{max-width:1040px;margin:0 auto;padding:32px 20px 56px;}',
+    'section{margin:24px 0;}',
+    'table{width:100%;border-collapse:collapse;background:#fff;}',
+    'th,td{border:1px solid #d8dde6;padding:10px;text-align:left;vertical-align:top;}',
+    'code{background:#eef1f5;padding:2px 4px;border-radius:4px;}',
+    '.summary{background:#fff;border:1px solid #d8dde6;padding:16px;}',
+    '.pass{color:#047857;font-weight:700;}',
+    '.fail{color:#b91c1c;font-weight:700;}',
+    '</style>',
+    '</head>',
+    '<body><main>',
+    `<h1>${escapeHtml(input.title)}</h1>`,
+    '<div class="summary">',
+    `<p>generatedAt: <code>${escapeHtml(input.generatedAt)}</code></p>`,
+    `<p>samplePath: <code>${escapeHtml(samplePath)}</code></p>`,
+    `<p>usable: <span class="${input.evaluation.usable ? 'pass' : 'fail'}">${input.evaluation.usable}</span></p>`,
+    `<p>score: ${input.evaluation.score.toFixed(2)}</p>`,
+    '</div>',
+    '<section><h2>Counts</h2><table><tbody>',
+    countRow('samples', input.evaluation.counts.samples),
+    countRow('readyRuns', input.evaluation.counts.readyRuns),
+    countRow('realProviderRuns', input.evaluation.counts.realProviderRuns),
+    countRow('createdPrs', input.evaluation.counts.createdPrs),
+    countRow('securityScanPassed', input.evaluation.counts.securityScanPassed),
+    countRow('isolationPassed', input.evaluation.counts.isolationPassed),
+    '</tbody></table></section>',
+    '<section><h2>Threshold Checks</h2><table><thead><tr><th>check</th><th>passed</th><th>evidence</th></tr></thead><tbody>',
+    ...input.evaluation.thresholdChecks.map(
+      (check) =>
+        `<tr><td>${escapeHtml(check.id)}</td><td class="${check.passed ? 'pass' : 'fail'}">${check.passed}</td><td>${escapeHtml(check.evidence)}</td></tr>`,
+    ),
+    '</tbody></table></section>',
+    '<section><h2>Samples</h2><table><thead><tr><th>sample</th><th>run</th><th>ready</th><th>provider</th><th>PR</th><th>isolation</th><th>failed checks</th></tr></thead><tbody>',
+    ...input.evaluation.samples.map((sample) => {
+      const failed = sample.checks
+        .filter((check) => !check.passed)
+        .map((check) => `${check.id}: ${check.evidence}`)
+        .join('; ');
+      return `<tr><td>${escapeHtml(sample.id)}</td><td>${escapeHtml(sample.runId)}</td><td>${sample.readiness?.ready ?? false}</td><td>${escapeHtml(sample.provider ?? 'missing')}</td><td>${escapeHtml(sample.prUrl ?? 'missing')}</td><td>${sample.isolationPassed}</td><td>${escapeHtml(failed || 'none')}</td></tr>`;
+    }),
+    '</tbody></table></section>',
+    '<section><h2>Judgment</h2>',
+    `<p>${escapeHtml(
+      input.evaluation.usable
+        ? 'The recorded sample set satisfies the configured work usability thresholds.'
+        : 'The recorded sample set does not yet satisfy the configured work usability thresholds.',
+    )}</p>`,
+    '<p>This report is evidence for the recorded sample set only; it does not prove production readiness outside the sampled repositories and runs.</p>',
+    '</section>',
+    '</main></body></html>',
+  ].join('');
+
+  return { markdown, html };
 }
 
 function isSampleRequiredCheck(
@@ -350,4 +512,16 @@ function isManagedWorktreePath(
   const root = resolve(repoPath, '.donkey', 'worktrees');
   const target = resolve(worktreePath);
   return target === root || target.startsWith(`${root}${sep}`);
+}
+
+function countRow(name: string, value: number) {
+  return `<tr><th>${escapeHtml(name)}</th><td>${value}</td></tr>`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }

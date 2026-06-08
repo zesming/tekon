@@ -34,6 +34,7 @@ import {
   createWorkflowEngine,
   evaluateWorkReadiness,
   evaluateWorkUsability,
+  renderWorkUsabilityEvaluationReport,
   loadRepoProfile,
   writeDefaultRepoProfile,
   generateDynamicWorkflow,
@@ -45,11 +46,14 @@ import {
   saveDynamicTemplate,
   repoProfileCommandGuidance,
   workUsabilitySampleSetSchema,
+  upsertWorkUsabilitySample,
   type AgentAdapter,
   type AgentAdapterConfig,
   agentAdapterConfigSchema,
   type CommandGateway,
   type RunProviderConfig,
+  type WorkUsabilitySample,
+  type WorkUsabilitySampleSet,
 } from '@donkey/core';
 
 export interface CliIO {
@@ -928,12 +932,19 @@ async function commandStatus(argv: string[], io: CliIO) {
 async function commandEval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'work-usability') {
+    if (rest[0] === 'record') {
+      await commandWorkUsabilityRecord(rest.slice(1), io);
+      return;
+    }
     const args = parseArgs({
       args: rest,
       options: {
         repo: { type: 'string' },
         samples: { type: 'string' },
         json: { type: 'boolean', default: false },
+        'report-md': { type: 'string' },
+        'report-html': { type: 'string' },
+        title: { type: 'string' },
       },
       allowPositionals: true,
     });
@@ -952,20 +963,48 @@ async function commandEval(argv: string[], io: CliIO) {
     );
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
-    const repositories = createRepositories(db);
-    const audit = createAuditLogger({ repositories });
-    const evaluation = await evaluateWorkUsability({
-      repoPath,
-      repositories,
-      audit,
-      sampleSet,
-    });
-    io.stdout.write(
-      args.values.json
-        ? `${JSON.stringify(evaluation, null, 2)}\n`
-        : formatWorkUsabilityEvaluation(evaluation),
-    );
-    db.close();
+    try {
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const evaluation = await evaluateWorkUsability({
+        repoPath,
+        repositories,
+        audit,
+        sampleSet,
+      });
+      const reportMarkdownPath = args.values['report-md']
+        ? resolve(repoPath, args.values['report-md'])
+        : null;
+      const reportHtmlPath = args.values['report-html']
+        ? resolve(repoPath, args.values['report-html'])
+        : null;
+      if (reportMarkdownPath || reportHtmlPath) {
+        const report = renderWorkUsabilityEvaluationReport({
+          title: args.values.title ?? 'Donkey Work Usability Evaluation',
+          generatedAt: new Date().toISOString(),
+          samplePath,
+          evaluation,
+        });
+        if (reportMarkdownPath) {
+          mkdirSync(dirname(reportMarkdownPath), { recursive: true });
+          writeFileSync(reportMarkdownPath, report.markdown, 'utf8');
+        }
+        if (reportHtmlPath) {
+          mkdirSync(dirname(reportHtmlPath), { recursive: true });
+          writeFileSync(reportHtmlPath, report.html, 'utf8');
+        }
+      }
+      io.stdout.write(
+        args.values.json
+          ? `${JSON.stringify(evaluation, null, 2)}\n`
+          : formatWorkUsabilityEvaluation(evaluation, {
+              reportMarkdownPath,
+              reportHtmlPath,
+            }),
+      );
+    } finally {
+      db.close();
+    }
     return;
   }
 
@@ -997,8 +1036,107 @@ async function commandEval(argv: string[], io: CliIO) {
   db.close();
 }
 
+async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      samples: { type: 'string' },
+      'run-id': { type: 'string' },
+      id: { type: 'string' },
+      'demand-type': { type: 'string' },
+      'expected-provider': { type: 'string' },
+      'expected-pr-url': { type: 'string' },
+      'require-real-provider': { type: 'boolean', default: false },
+      'require-pr': { type: 'boolean', default: false },
+      notes: { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolve(args.values.repo ?? process.cwd());
+  ensureInitialized(repoPath);
+  const runId = args.values['run-id'] ?? args.positionals[0];
+  if (!runId) {
+    throw new Error('--run-id is required');
+  }
+  const samplePath = resolve(
+    repoPath,
+    args.values.samples ??
+      join('.donkey', 'eval', 'work-usability-samples.yaml'),
+  );
+  const sampleSet: WorkUsabilitySampleSet = existsSync(samplePath)
+    ? workUsabilitySampleSetSchema.parse(
+        parseYaml(readFileSync(samplePath, 'utf8')),
+      )
+    : { thresholds: {}, samples: [] };
+  const db = openProjectDb(repoPath);
+  migrateDatabase(db);
+  try {
+    const repositories = createRepositories(db);
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${runId}`);
+    }
+    const [providerConfig, deliveryPr] = await Promise.all([
+      repositories.getRunProviderConfig(runId),
+      repositories.getDeliveryPullRequest(runId),
+    ]);
+    const provider =
+      args.values['expected-provider'] ?? providerConfig?.provider;
+    const expectedPrUrl =
+      args.values['expected-pr-url'] ?? deliveryPr?.prUrl ?? undefined;
+    const requireRealProvider =
+      args.values['require-real-provider'] ||
+      Boolean(provider && provider !== 'mock');
+    const requirePr = args.values['require-pr'] || Boolean(expectedPrUrl);
+    const sample: WorkUsabilitySample = {
+      id: args.values.id ?? runId,
+      runId,
+      ...(args.values['demand-type']
+        ? {
+            demandType: args.values[
+              'demand-type'
+            ] as WorkUsabilitySample['demandType'],
+          }
+        : {}),
+      ...(provider
+        ? {
+            expectedProvider:
+              provider as WorkUsabilitySample['expectedProvider'],
+          }
+        : {}),
+      requireRealProvider,
+      requirePr,
+      ...(expectedPrUrl ? { expectedPrUrl } : {}),
+      ...(args.values.notes ? { notes: args.values.notes } : {}),
+    };
+    const result = upsertWorkUsabilitySample(sampleSet, sample);
+    mkdirSync(dirname(samplePath), { recursive: true });
+    writeFileSync(samplePath, stringifyYaml(result.sampleSet), 'utf8');
+    io.stdout.write(
+      [
+        `sampleRecorded=true`,
+        `created=${result.created}`,
+        `samplePath=${samplePath}`,
+        `id=${sample.id}`,
+        `runId=${runId}`,
+        `expectedProvider=${sample.expectedProvider ?? ''}`,
+        `requireRealProvider=${sample.requireRealProvider}`,
+        `requirePr=${sample.requirePr}`,
+        `expectedPrUrl=${sample.expectedPrUrl ?? ''}`,
+      ].join(' ') + '\n',
+    );
+  } finally {
+    db.close();
+  }
+}
+
 function formatWorkUsabilityEvaluation(
   evaluation: Awaited<ReturnType<typeof evaluateWorkUsability>>,
+  reports: {
+    reportMarkdownPath?: string | null;
+    reportHtmlPath?: string | null;
+  } = {},
 ): string {
   const failedThresholds = evaluation.thresholdChecks.filter(
     (check) => !check.passed,
@@ -1020,6 +1158,10 @@ function formatWorkUsabilityEvaluation(
       `isolationPassed=${evaluation.counts.isolationPassed}`,
       `failedThresholds=${failedThresholds.map((check) => check.id).join(',')}`,
       `failedSamples=${failedSampleChecks.join(',')}`,
+      reports.reportMarkdownPath
+        ? `reportMd=${reports.reportMarkdownPath}`
+        : '',
+      reports.reportHtmlPath ? `reportHtml=${reports.reportHtmlPath}` : '',
       '',
       '## Threshold Checks',
       ...evaluation.thresholdChecks.map(
