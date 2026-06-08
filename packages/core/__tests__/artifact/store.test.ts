@@ -118,6 +118,26 @@ describe('artifact store', () => {
 
     expect(existsSync(join(repoPath, '..', 'escape'))).toBe(false);
   });
+
+  it('rejects artifacts containing likely secrets before writing files', async () => {
+    const { repoPath, repositories } = await createRunFixture(tempDirs);
+    const store = createArtifactStore({ repoPath, repositories });
+
+    await expect(
+      store.writeArtifact({
+        runId: 'run_1',
+        nodeId: 'node_1',
+        type: 'tech-design',
+        content:
+          '# Design\n\nDo not store token = "sk-123456789012345678901234" here.',
+      }),
+    ).rejects.toThrow(/artifact contains sensitive content: openai-api-key/u);
+    expect(
+      existsSync(
+        join(repoPath, '.donkey/runs/run_1/artifacts/node_1/tech-design.v1.md'),
+      ),
+    ).toBe(false);
+  });
 });
 
 async function createRunFixture(tempDirs: string[]) {

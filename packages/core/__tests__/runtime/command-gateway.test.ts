@@ -213,6 +213,94 @@ describe('command gateway', () => {
     expect(readFileSync(result.stderrPath, 'utf8')).toContain('warn');
   });
 
+  it('redacts likely secrets from command stdout and stderr logs', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-exec-redact-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: [
+          '-e',
+          [
+            'process.stdout.write(\'token = "sk-123456789012345678901234"\\n\')',
+            'process.stderr.write(\'secret = "123456789012345678901234567890"\\n\')',
+          ].join('\n'),
+        ],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const stdout = readFileSync(result.stdoutPath, 'utf8');
+    const stderr = readFileSync(result.stderrPath, 'utf8');
+    expect(stdout).not.toContain('sk-123456789012345678901234');
+    expect(stderr).not.toContain('123456789012345678901234567890');
+    expect(stdout).toContain('[REDACTED_OPENAI_API_KEY]');
+    expect(stderr).toContain('[REDACTED_SECRET]');
+  });
+
+  it('redacts likely secrets that are split across stdout and stderr chunks', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-exec-redact-chunks-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
+        setImmediate(() => {
+          child.stdout.write('token = "sk-1234567890');
+          child.stdout.write('12345678901234"\n');
+          child.stderr.write('secret = "123456789012');
+          child.stderr.write('345678901234567890"\n');
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      },
+    });
+
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['script.js'] },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const stdout = readFileSync(result.stdoutPath, 'utf8');
+    const stderr = readFileSync(result.stderrPath, 'utf8');
+    expect(stdout).not.toContain('sk-123456789012345678901234');
+    expect(stderr).not.toContain('123456789012345678901234567890');
+    expect(stdout).toContain('[REDACTED_OPENAI_API_KEY]');
+    expect(stderr).toContain('[REDACTED_SECRET]');
+  });
+
   it('closes child stdin without writing a chunk when no stdin is provided', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'donkey-stdin-close-'));
     tempDirs.push(cwd);

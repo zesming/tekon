@@ -37,7 +37,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、工作可用样本评估、聚合审阅面、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、工作可用样本评估、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -85,6 +85,8 @@ node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重
 内置模板的代码生产节点会执行 build、lint 和内置 `security-scan`。security scan 默认扫描当前 worktree 中的明显密钥/私钥/token 模式；如果仓库画像提供额外安全命令，后续可扩展为外部命令，但当前不能把它理解为完整 SAST 或生产级安全审计。
 
 当前 `--agent claude-code` 已接入 CLI 主执行链路，会使用 Donkey 的 Claude Code adapter、角色 prompt 注入和 artifact manifest 协议。Engine 会要求真实 provider 在 `DONKEY_OUTPUT_DIR` 下写节点产物，并写入 `DONKEY_ARTIFACT_MANIFEST`；adapter 会校验 manifest 中的 artifact schema 后写入 Artifact Store。使用前必须确认本机 `claude` CLI、认证状态、目标仓库权限和人工审批边界可用；该路径仍需在受控真实仓库中单独记录 smoke 证据，不应把一次本地接线视为生产级真实 LLM workflow 稳定。
+
+Artifact Store 会在写入前扫描明显密钥模式；命中 private key、OpenAI-style key、AWS access key 或常见 token/secret assignment 时拒绝入库。CommandGateway 会在 stdout/stderr 落盘前脱敏，避免命令输出直接写入明文密钥。该机制是最小敏感信息治理，不等于完整 DLP、密钥轮换或生产级安全审计。
 
 默认情况下，模板运行会检查 Git 工作区并拒绝实际业务文件已有本地改动的 dirty base，`.donkey/` 运行态目录不计入阻断。若你确认要基于当前未提交改动执行，可显式追加：
 
@@ -213,7 +215,7 @@ node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id &lt;
 node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id &lt;runId&gt; --repo /path/to/project
 ```
 
-当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate、验收标准是否逐条有 passed evidence、安全扫描是否通过，以及 PR 是否已创建。
+当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate、验收标准是否逐条有 passed evidence、安全扫描是否通过，以及 PR 是否已创建。安全扫描和 artifact/日志敏感信息治理使用同一组基础规则，但 readiness 不代表完整安全审计通过。
 
 `ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。PR 已创建当前是推荐项，不是 required gate，因为有些团队会先审阅本地 PR 准备包再决定是否创建远端 PR。
 
@@ -353,6 +355,8 @@ node /path/to/donkey/packages/cli/dist/index.js log --run-id &lt;runId&gt; --rep
 
 日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`worktree.lease.created`、`worktree.lease.promoted`、`worktree.lease.released`、`human.gate.pending`、`human.gate.approved`、`delivery.pr-prepared`、`delivery.pr.created` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
 
+命令 stdout/stderr 由 CommandGateway 写入 `.donkey/runs/&lt;runId&gt;/commands` 或 gate 输出目录。写入前会对明显密钥模式做脱敏；脱敏后的内容仍保留上下文和失败信息，便于排查 gate 失败。Audit event payload 不应写入 API key、token、生产凭证或环境变量值。
+
 ## 17. Cleanup
 
 清理 worktree 目录：
@@ -372,6 +376,7 @@ node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 - Coverage 使用 `npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --coverage` 记录；`pnpm test -- --run --coverage` 在当前工具组合下不会输出 coverage 表。
 - 真实 LLM workflow、真实 SCM 权限、远端 PR 和生产级恢复能力必须在受控 fixture 或明确人工批准下验证；当前新增的 manifest 入库和 provider 快照只证明协议与恢复语义，不证明真实任务长期稳定。
 - `CommandPolicy.network` 不能被理解为操作系统级网络隔离。
+- 当前敏感信息治理只覆盖基础模式扫描、artifact 写入拦截和命令日志脱敏，不等于完整 DLP、密钥轮换或生产级安全审计。
 - Donkey 默认增强人类交付，不替代人类完成合入、上线、权限扩大或高危审批。
 
 ## 19. 最终验收检查

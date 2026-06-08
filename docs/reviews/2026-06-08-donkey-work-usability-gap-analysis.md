@@ -175,6 +175,8 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 当前状态：`eval work-usability --samples` 已检查 worktree lease 是否存在、路径是否位于 `.donkey/worktrees`、lease 是否释放，以及发生 push/PR 时是否有 `approvedBy`/`approvedAt`。这只是工作可用样本级隔离证据，不等于生产级 OS/container 沙箱或完整密钥治理。
 
+后续增量：新增共享 secret scanner，CommandGateway 在 stdout/stderr 落盘前脱敏，Artifact Store 在写入前拒绝明显密钥，内置 `security-scan` 复用同一规则。当前覆盖 private key、OpenAI-style key、AWS access key 和常见 token/secret assignment；这仍是基础敏感信息治理，不等于完整 DLP、密钥轮换或生产级安全审计。
+
 ## 5. P1：补齐后才像日常工具，而不是验收脚手架
 
 | 缺口               | 当前状态                                                                            | 建议目标                                                                                                                  |

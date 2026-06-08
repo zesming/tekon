@@ -10,6 +10,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
+import { scanTextForSecrets } from '../security/secrets.js';
 
 export interface CreateArtifactStoreOptions {
   repoPath: string;
@@ -40,6 +41,17 @@ export function createArtifactStore(
     async writeArtifact(input) {
       const runSegment = assertSafePathSegment(input.runId);
       const nodeSegment = assertSafePathSegment(input.nodeId);
+      const secretFindings = scanTextForSecrets(
+        input.content,
+        `${input.runId}/${input.nodeId}/${input.type}`,
+      );
+      if (secretFindings.length > 0) {
+        throw new Error(
+          `artifact contains sensitive content: ${secretFindings
+            .map((finding) => finding.ruleId)
+            .join(',')}`,
+        );
+      }
       const existing = await options.repositories.listArtifacts(
         input.runId,
         input.nodeId,

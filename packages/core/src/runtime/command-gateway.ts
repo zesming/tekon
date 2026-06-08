@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { createWriteStream, mkdirSync } from 'node:fs';
-import type { Writable } from 'node:stream';
+import type { Transform, Writable } from 'node:stream';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type { CommandInvocation } from '../types/domain.js';
 import type { CommandPolicy } from '../types/config.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
+import { createSecretRedactionTransform } from '../security/secrets.js';
 
 export type SpawnImpl = (
   command: string,
@@ -284,8 +285,12 @@ async function runProcess(input: {
   const stderrPath = join(input.outputDir, `${commandId}.stderr.log`);
   const stdout = createWriteStream(stdoutPath);
   const stderr = createWriteStream(stderrPath);
+  const stdoutRedactor = createSecretRedactionTransform();
+  const stderrRedactor = createSecretRedactionTransform();
   const stdoutLog = monitorWritable(stdout);
   const stderrLog = monitorWritable(stderr);
+  const stdoutRedaction = monitorTransform(stdoutRedactor);
+  const stderrRedaction = monitorTransform(stderrRedactor);
   const startedAt = Date.now();
   let timedOut = false;
 
@@ -298,15 +303,20 @@ async function runProcess(input: {
       detached: true,
     });
   } catch (error) {
-    await Promise.allSettled([endStream(stdout), endStream(stderr)]);
+    await Promise.allSettled([
+      endTransform(stdoutRedactor),
+      endTransform(stderrRedactor),
+      endStream(stdout),
+      endStream(stderr),
+    ]);
     return {
       status: 'rejected',
       reason: error instanceof Error ? error.message : String(error),
     };
   }
 
-  child.stdout.pipe(stdout);
-  child.stderr.pipe(stderr);
+  child.stdout.pipe(stdoutRedactor).pipe(stdout);
+  child.stderr.pipe(stderrRedactor).pipe(stderr);
   return new Promise((resolvePromise) => {
     let settled = false;
     let stdinError: Error | null = null;
@@ -319,8 +329,8 @@ async function runProcess(input: {
       forceKillTimeout = setTimeout(() => {
         killChildProcess(child, 'SIGKILL');
         hardSettleTimeout = setTimeout(() => {
-          child.stdout.unpipe(stdout);
-          child.stderr.unpipe(stderr);
+          child.stdout.unpipe(stdoutRedactor);
+          child.stderr.unpipe(stderrRedactor);
           settle({
             status: 'executed',
             exitCode: null,
@@ -345,25 +355,30 @@ async function runProcess(input: {
       if (hardSettleTimeout) {
         clearTimeout(hardSettleTimeout);
       }
-      Promise.allSettled([stdoutLog.end(), stderrLog.end()]).then(
-        (streamResults) => {
-          if (result.status === 'executed') {
-            const streamError =
-              stdoutLog.error ??
-              stderrLog.error ??
-              getRejectedReason(streamResults);
-            if (streamError) {
-              resolvePromise({
-                status: 'rejected',
-                reason: `failed to write command logs: ${formatErrorMessage(streamError)}`,
-              });
-              return;
-            }
+      Promise.allSettled([
+        stdoutRedaction.end(),
+        stderrRedaction.end(),
+        stdoutLog.end(),
+        stderrLog.end(),
+      ]).then((streamResults) => {
+        if (result.status === 'executed') {
+          const streamError =
+            stdoutRedaction.error ??
+            stderrRedaction.error ??
+            stdoutLog.error ??
+            stderrLog.error ??
+            getRejectedReason(streamResults);
+          if (streamError) {
+            resolvePromise({
+              status: 'rejected',
+              reason: `failed to write command logs: ${formatErrorMessage(streamError)}`,
+            });
+            return;
           }
+        }
 
-          resolvePromise(result);
-        },
-      );
+        resolvePromise(result);
+      });
     };
 
     child.once('error', (error: Error) => {
@@ -456,6 +471,57 @@ function monitorWritable(stream: Writable): {
       await endStream(stream);
     },
   };
+}
+
+function monitorTransform(stream: Transform): {
+  readonly error: Error | null;
+  end(): Promise<void>;
+} {
+  let streamError: Error | null = null;
+  stream.on('error', (error: Error) => {
+    streamError ??= error;
+  });
+
+  return {
+    get error() {
+      return streamError;
+    },
+    async end() {
+      if (streamError || stream.destroyed || stream.writableEnded) {
+        return;
+      }
+
+      await endTransform(stream);
+    },
+  };
+}
+
+async function endTransform(stream: Transform): Promise<void> {
+  if (stream.destroyed || stream.writableEnded) {
+    return;
+  }
+
+  await new Promise<void>((resolvePromise, reject) => {
+    const cleanup = () => {
+      stream.off('end', onEnd);
+      stream.off('finish', onFinish);
+      stream.off('error', onError);
+    };
+    const resolveOnce = () => {
+      cleanup();
+      resolvePromise();
+    };
+    const onEnd = resolveOnce;
+    const onFinish = resolveOnce;
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    stream.once('end', onEnd);
+    stream.once('finish', onFinish);
+    stream.once('error', onError);
+    stream.end();
+  });
 }
 
 async function endStream(stream: Writable): Promise<void> {
