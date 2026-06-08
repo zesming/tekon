@@ -31,6 +31,9 @@ describe('donkey cli e2e', () => {
     expect(existsSync(join(repoPath, '.donkey', 'web-session.json'))).toBe(
       true,
     );
+    expect(existsSync(join(repoPath, '.donkey', 'repo-profile.yaml'))).toBe(
+      true,
+    );
 
     const standardRunOutput = runCli(
       cliPath,
@@ -112,6 +115,24 @@ describe('donkey cli e2e', () => {
     expect(deliveryOutput).toContain(`runId=${standardRunId}`);
     expect(deliveryOutput).toContain('prDryRun=true');
     expect(deliveryOutput).toContain('requiresHumanApproval=true');
+
+    const prepareOutput = runCli(
+      cliPath,
+      ['delivery', 'prepare', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(prepareOutput).toContain(`runId=${standardRunId}`);
+    expect(prepareOutput).toContain('packagePath=');
+    expect(prepareOutput).toContain('prBodyPath=');
+    expect(prepareOutput).toContain('requiresHumanApproval=true');
+
+    const readinessOutput = runCli(
+      cliPath,
+      ['eval', 'readiness', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(readinessOutput).toContain(`runId=${standardRunId}`);
+    expect(readinessOutput).toContain('ready=true');
 
     const logOutput = runCli(
       cliPath,

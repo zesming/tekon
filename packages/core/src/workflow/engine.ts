@@ -6,7 +6,13 @@ import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
 import { createGateEngine, type GateEngine } from '../gate/engine.js';
+import {
+  buildRolePrompt,
+  type RolePromptArtifactSummary,
+} from '../role/prompt-builder.js';
+import { loadRole } from '../role/loader.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import type { AgentRunResult } from '../runtime/agent-adapter.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { CommandPolicy, WorktreeLease } from '../types/config.js';
 import type {
@@ -51,6 +57,8 @@ export interface CreateWorkflowEngineOptions {
   audit: AuditLogger;
   adapter: AgentAdapter;
   gateEngine?: GateEngine;
+  builtInRolesDir?: string;
+  userHome?: string;
 }
 
 interface ExecutableNode {
@@ -234,10 +242,10 @@ export function createWorkflowEngine(
         status: 'running',
         startedAt: new Date().toISOString(),
       });
-      await options.adapter.runAgent({
+      const agentResult = await options.adapter.runAgent({
         roleConfig: { role: node.role },
-        prompt: `Run node ${node.id}`,
-        worktreeLease: makeSyntheticLease(runId, node),
+        prompt: await buildNodePrompt(runId, node),
+        worktreeLease: makeSyntheticLease(options.repoPath, runId, node),
         outputDir: join(
           options.repoPath,
           options.dataDir,
@@ -255,6 +263,7 @@ export function createWorkflowEngine(
         },
         artifactStore,
       });
+      assertSuccessfulAgentRun(agentResult);
     } catch (error) {
       await options.repositories.transitionNode(node.id, 'interrupted');
       await options.repositories.updateWorkflowInstanceStatus(
@@ -336,31 +345,53 @@ export function createWorkflowEngine(
         },
       });
       await options.repositories.transitionNode(repairNode.id, 'running');
-      await options.adapter.runAgent({
-        roleConfig: { role: repairNode.role },
-        prompt: `Repair failed gate ${result.id}`,
-        worktreeLease: makeSyntheticLease(runId, {
-          id: repairNode.id,
-          role: repairNode.role,
-          phaseId: repairNode.phaseId,
-        }),
-        outputDir: join(
-          options.repoPath,
-          options.dataDir,
-          'runs',
+      try {
+        const repairResult = await options.adapter.runAgent({
+          roleConfig: { role: repairNode.role },
+          prompt: await buildRepairPrompt(runId, repairNode, result),
+          worktreeLease: makeSyntheticLease(options.repoPath, runId, {
+            id: repairNode.id,
+            role: repairNode.role,
+            phaseId: repairNode.phaseId,
+          }),
+          outputDir: join(
+            options.repoPath,
+            options.dataDir,
+            'runs',
+            runId,
+            repairNode.id,
+          ),
+          commandPolicy: defaultCommandPolicy(options.repoPath),
+          runContext: {
+            runId,
+            nodeId: repairNode.id,
+            projectId: (await mustGetWorkflow(runId)).projectId,
+            repoPath: options.repoPath,
+            dataDir: options.dataDir,
+          },
+          artifactStore,
+        });
+        assertSuccessfulAgentRun(repairResult);
+      } catch (error) {
+        await options.repositories.transitionNode(repairNode.id, 'interrupted');
+        await options.repositories.transitionNode(node.id, 'blocked');
+        await options.repositories.updateWorkflowInstanceStatus(
           runId,
-          repairNode.id,
-        ),
-        commandPolicy: defaultCommandPolicy(options.repoPath),
-        runContext: {
+          gate.onExhausted === 'pause' ? 'paused' : 'blocked',
+          node.id,
+        );
+        await options.audit.append({
           runId,
-          nodeId: repairNode.id,
-          projectId: (await mustGetWorkflow(runId)).projectId,
-          repoPath: options.repoPath,
-          dataDir: options.dataDir,
-        },
-        artifactStore,
-      });
+          type: 'gate.repair.failed',
+          payload: {
+            nodeId: node.id,
+            repairNodeId: repairNode.id,
+            gateResultId: result.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return false;
+      }
       await options.repositories.transitionNode(repairNode.id, 'passed');
       await options.repositories.transitionNode(node.id, 'running');
       await options.repositories.transitionNode(node.id, 'awaiting-gate');
@@ -446,6 +477,123 @@ export function createWorkflowEngine(
       throw new Error(`run not found: ${runId}`);
     }
     return workflow;
+  }
+
+  async function buildNodePrompt(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<string> {
+    const role = loadRole({
+      role: node.role,
+      repoPath: options.repoPath,
+      builtInRolesDir: options.builtInRolesDir,
+      userHome: options.userHome,
+    });
+    const workflow = await mustGetWorkflow(runId);
+    const demand = await mustGetDemand(workflow.demandId);
+    const artifacts = await artifactSummariesForNode(runId, node);
+    return buildRolePrompt({
+      role,
+      taskInstruction: [
+        `Demand title: ${demand.title}`,
+        'Demand body:',
+        demand.body,
+        '',
+        `Execute workflow node ${node.id}.`,
+        `Produce the requested artifacts and preserve evidence for gates.`,
+      ].join('\n'),
+      projectContext: {
+        runId,
+        nodeId: node.id,
+        projectId: workflow.projectId,
+        repoPath: options.repoPath,
+        dataDir: options.dataDir,
+      },
+      artifactSummaries: artifacts,
+    });
+  }
+
+  async function buildRepairPrompt(
+    runId: string,
+    node: Pick<Node, 'id' | 'role' | 'phaseId'>,
+    failedGate: GateResult,
+  ): Promise<string> {
+    const role = loadRole({
+      role: node.role,
+      repoPath: options.repoPath,
+      builtInRolesDir: options.builtInRolesDir,
+      userHome: options.userHome,
+    });
+    const workflow = await mustGetWorkflow(runId);
+    const demand = await mustGetDemand(workflow.demandId);
+    return buildRolePrompt({
+      role,
+      taskInstruction: [
+        `Demand title: ${demand.title}`,
+        'Demand body:',
+        demand.body,
+        '',
+        `Repair failed gate ${failedGate.id}.`,
+        `Failed gate type: ${failedGate.gateType}.`,
+        failedGate.failureClassification
+          ? `Failure classification: ${failedGate.failureClassification}.`
+          : 'Failure classification: unavailable.',
+      ].join('\n'),
+      projectContext: {
+        runId,
+        nodeId: node.id,
+        projectId: workflow.projectId,
+        repoPath: options.repoPath,
+        dataDir: options.dataDir,
+      },
+    });
+  }
+
+  async function artifactSummariesForNode(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<RolePromptArtifactSummary[]> {
+    const summaries: RolePromptArtifactSummary[] = [];
+    for (const input of node.inputs) {
+      const artifacts = await options.repositories.listArtifacts(
+        runId,
+        input.fromNodeId,
+        input.type,
+      );
+      const latestArtifact = artifacts.at(-1);
+      if (!latestArtifact) {
+        continue;
+      }
+      summaries.push({
+        type: latestArtifact.type,
+        path: latestArtifact.path,
+        summary: latestArtifact.summary,
+        content: await artifactStore.readArtifactForPrompt(latestArtifact),
+      });
+    }
+    return summaries;
+  }
+
+  async function mustGetDemand(demandId: string) {
+    const demand = await options.repositories.getDemand(demandId);
+    if (!demand) {
+      throw new Error(`demand not found: ${demandId}`);
+    }
+    return demand;
+  }
+}
+
+function assertSuccessfulAgentRun(result: AgentRunResult): void {
+  if (result.timedOut) {
+    throw new Error(`agent timed out: provider=${result.provider}`);
+  }
+
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `agent failed: provider=${result.provider} exitCode=${String(
+        result.exitCode,
+      )}`,
+    );
   }
 }
 
@@ -557,6 +705,7 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
 }
 
 function makeSyntheticLease(
+  repoPath: string,
   runId: string,
   node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'>,
 ): WorktreeLease {
@@ -566,8 +715,8 @@ function makeSyntheticLease(
     runId,
     nodeId: node.id,
     role: node.role,
-    repoPath: '',
-    worktreePath: '',
+    repoPath,
+    worktreePath: repoPath,
     branchName: `donkey/${runId}/${node.id}`,
     createdAt: now,
   };
@@ -579,6 +728,7 @@ function defaultCommandPolicy(repoPath: string): CommandPolicy {
       { tool: 'git', args: [] },
       { tool: 'pnpm', args: [] },
       { tool: 'npm', args: [] },
+      { tool: 'claude', args: [] },
     ],
     deny: [],
     requiresHumanApproval: [],

@@ -19,14 +19,18 @@ import { stringify as stringifyYaml } from 'yaml';
 
 import {
   createAuditLogger,
+  createClaudeCodeAdapter,
   createCommandGateway,
   createDeliveryEvidencePackage,
   createGateEngine,
   createHumanGate,
   createMockAgentAdapter,
+  createPullRequestPreparation,
   createRepositories,
   createScmDelivery,
   createWorkflowEngine,
+  evaluateWorkReadiness,
+  writeDefaultRepoProfile,
   generateDynamicWorkflow,
   listRoleIds,
   loadRole,
@@ -34,6 +38,9 @@ import {
   migrateDatabase,
   openDonkeyDatabase,
   saveDynamicTemplate,
+  type AgentAdapter,
+  type AgentAdapterConfig,
+  type CommandGateway,
 } from '@donkey/core';
 
 export interface CliIO {
@@ -82,6 +89,9 @@ export async function runCli(
         return 0;
       case 'delivery':
         await commandDelivery(rest, io);
+        return 0;
+      case 'eval':
+        await commandEval(rest, io);
         return 0;
       case 'log':
         await commandLog(rest, io);
@@ -140,6 +150,10 @@ async function commandInit(argv: string[], io: CliIO) {
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
   db.close();
+  const profilePath = join(donkeyDir, 'repo-profile.yaml');
+  if (!existsSync(profilePath)) {
+    writeDefaultRepoProfile(repoPath);
+  }
   io.stdout.write(`initialized repo=${repoPath}\n`);
 }
 
@@ -198,13 +212,19 @@ async function commandRun(argv: string[], io: CliIO) {
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
   const gateway = createCommandGateway({ repositories });
+  const adapter = createAgentAdapter({
+    agent: args.values.agent ?? 'mock',
+    repoPath,
+    gateway,
+  });
   const engine = createWorkflowEngine({
     repoPath,
     dataDir: '.donkey',
     repositories,
     audit,
-    adapter: createMockAgentAdapter(),
+    adapter,
     gateEngine: createGateEngine({ repositories, gateway }),
+    builtInRolesDir: getBuiltInRolesDir(),
   });
 
   const result = await engine.startRun({
@@ -383,6 +403,7 @@ async function commandResume(argv: string[], io: CliIO) {
     audit,
     adapter: createMockAgentAdapter(),
     gateEngine: createGateEngine({ repositories, gateway }),
+    builtInRolesDir: getBuiltInRolesDir(),
   });
   const result = await engine.resumeRun(runId);
   io.stdout.write(`runId=${runId} status=${result.workflow.status}\n`);
@@ -531,6 +552,29 @@ async function commandConstraints(argv: string[], io: CliIO) {
 
 async function commandDelivery(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
+  if (subcommand === 'prepare') {
+    const { repositories, db, repoPath, runId } = openCommandContext(rest);
+    const audit = createAuditLogger({ repositories });
+    const preparation = await createPullRequestPreparation({
+      repoPath,
+      repositories,
+      audit,
+      runId,
+    });
+    io.stdout.write(
+      [
+        `runId=${runId}`,
+        `branch=${preparation.branch}`,
+        `baseBranch=${preparation.baseBranch}`,
+        `packagePath=${preparation.packagePath}`,
+        `prBodyPath=${preparation.prBodyPath}`,
+        `requiresHumanApproval=${preparation.requiresHumanApproval}`,
+      ].join(' ') + '\n',
+    );
+    db.close();
+    return;
+  }
+
   if (subcommand !== 'dry-run') {
     throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
   }
@@ -560,6 +604,46 @@ async function commandDelivery(argv: string[], io: CliIO) {
   db.close();
 }
 
+function createAgentAdapter(input: {
+  agent: string;
+  repoPath: string;
+  gateway: CommandGateway;
+}): AgentAdapter {
+  if (input.agent === 'mock') {
+    return createMockAgentAdapter();
+  }
+
+  if (input.agent === 'claude-code') {
+    return createClaudeCodeAdapter(
+      defaultClaudeCodeConfig(input.repoPath),
+      input.gateway,
+    );
+  }
+
+  throw new Error(`unsupported agent: ${input.agent}`);
+}
+
+function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
+  return {
+    provider: 'claude-code',
+    command: 'claude',
+    args: ['-p'],
+    promptMode: 'stdin',
+    outputFormat: 'json',
+    timeoutMs: 300_000,
+    permissionProfile: {
+      sandbox: 'workspace-write',
+      approval: 'on-request',
+      filesystemScope: [repoPath],
+      network: 'restricted',
+      tools: {
+        allow: ['git', 'npm', 'pnpm'],
+        deny: ['rm', 'sudo', 'git push --force'],
+      },
+    },
+  };
+}
+
 async function commandStatus(argv: string[], io: CliIO) {
   const { repositories, db, repoPath, runId } = openCommandContext(argv);
   const workflow = await repositories.getWorkflowInstance(runId);
@@ -581,6 +665,32 @@ async function commandStatus(argv: string[], io: CliIO) {
       `gates=${gates.length}`,
       `artifacts=${artifacts.length}`,
       `pendingHumanDecisions=${pendingHuman.length}`,
+    ].join(' ') + '\n',
+  );
+  db.close();
+}
+
+async function commandEval(argv: string[], io: CliIO) {
+  const [subcommand, ...rest] = argv;
+  if (subcommand !== 'readiness') {
+    throw new Error(`unknown eval command: ${subcommand ?? ''}`);
+  }
+  const { repositories, db, runId } = openCommandContext(rest);
+  const audit = createAuditLogger({ repositories });
+  const evaluation = await evaluateWorkReadiness({
+    repositories,
+    audit,
+    runId,
+  });
+  io.stdout.write(
+    [
+      `runId=${runId}`,
+      `ready=${evaluation.ready}`,
+      `score=${evaluation.score.toFixed(2)}`,
+      `failed=${evaluation.checks
+        .filter((check) => !check.passed)
+        .map((check) => check.id)
+        .join(',')}`,
     ].join(' ') + '\n',
   );
   db.close();

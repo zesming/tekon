@@ -6,9 +6,9 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收：`init`、模板运行、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收：`init`、模板运行、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、工作就绪度评估、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
-本手册只描述当前可验证或按当前实现边界可操作的能力。真实 PR 创建、自动 merge、生产级真实 LLM workflow 和远程多租户 Web 服务不在本次可用范围内。
+本手册只描述当前可验证或按当前实现边界可操作的能力。真实远端 PR 创建、自动 merge、生产级真实 LLM workflow 稳定性和远程多租户 Web 服务不在本次可用范围内。
 
 ## 2. 安装与构建 install
 
@@ -35,7 +35,9 @@ node /path/to/donkey/packages/cli/dist/index.js
 node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project
 ```
 
-初始化会创建 `.donkey/` 目录、`config.yaml`、SQLite 数据库、角色目录、workflow 目录和 worktree 目录。`.donkey/` 是运行态目录，默认不作为可提交验收结论保存；重要结果应同步写入 `docs/reviews/`。
+初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录和 worktree 目录。`.donkey/` 是运行态目录，默认不作为可提交验收结论保存；重要结果应同步写入 `docs/reviews/`。
+
+`repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e` 命令，并保留 PR base branch 和风险路径配置。当前 PR 准备包会展示仓库画像命令并使用其中的 PR base branch；workflow gate 仍以模板内配置为准，尚未自动改写验证命令。
 
 `init` 也会生成 `.donkey/web-session.json`。这个文件保存本地 Web 写操作 token，已被 `.gitignore` 排除，不应提交。
 
@@ -48,6 +50,8 @@ node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重
 ```
 
 按 Phase 2 证据，`standard-feature` mock 路径可完成到 `passed` 并生成本地 artifacts。命令输出包含 `runId`、`status` 和 `humanGate` 状态。
+
+当前 `--agent claude-code` 已接入 CLI 主执行链路，会使用 Donkey 的 Claude Code adapter 和角色 prompt 注入。使用前必须确认本机 `claude` CLI、认证状态、目标仓库权限和人工审批边界可用；该路径仍需在受控真实仓库中单独记录 smoke 证据，不应把一次本地接线视为生产级真实 LLM workflow 稳定。
 
 默认情况下，模板运行会检查 Git 工作区并拒绝实际业务文件已有本地改动的 dirty base，`.donkey/` 运行态目录不计入阻断。若你确认要基于当前未提交改动执行，可显式追加：
 
@@ -121,7 +125,35 @@ node /path/to/donkey/packages/cli/dist/index.js delivery dry-run --run-id <runId
 
 dry-run 只证明命令规划和审批边界，不证明远端分支已 push，也不证明 PR URL 已生成。真实 PR fixture 或真实 PR 创建必须单独记录认证状态、远端仓库、命令输出和失败恢复行为。
 
-## 8. Web dashboard
+## 8. PR 准备包 delivery prepare
+
+生成本地 PR 准备包：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/project
+```
+
+预期输出字段包括：
+
+- `branch`：建议使用的本地交付分支名。
+- `baseBranch`：来自仓库画像的目标 base branch。
+- `packagePath`：本地 PR 准备包路径。
+- `prBodyPath`：可复制或交给 `gh pr create` 使用的 PR body。
+- `requiresHumanApproval=true`：远端 push 和 PR 创建仍需要人工确认。
+
+`delivery prepare` 会记录 `delivery.pr-prepared` 审计事件，并追加一个 `delivery-package` artifact。它不执行 `git push`，也不创建远端 PR。
+
+## 9. 工作就绪度 eval readiness
+
+检查某次 run 是否已经具备人工审阅和提交的最低证据面：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/project
+```
+
+当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate。`ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。
+
+## 10. Web dashboard
 
 Web dashboard 属于 Phase 3 产品面。当前实现为本地 Node HTTP + Vite React dashboard，可审阅 project overview、artifacts、gates、audit、roles、workflows、settings 和 human approvals。
 
@@ -142,7 +174,7 @@ Web 审阅至少需要记录：
 - Artifact、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 
-## 9. 角色 roles
+## 11. 角色 roles
 
 查看内置和项目角色：
 
@@ -158,9 +190,9 @@ node /path/to/donkey/packages/cli/dist/index.js role path rd --repo /path/to/pro
 node /path/to/donkey/packages/cli/dist/index.js role create rd --repo /path/to/project
 ```
 
-角色解析遵循内置角色、项目角色和用户角色的加载规则；项目级 whole-folder override 会覆盖对应角色目录。修改角色后应通过本地 mock workflow 和审阅记录验证，不应直接假设 prompt 或 tools policy 修改已经安全。
+角色解析遵循内置角色、项目角色和用户角色的加载规则；项目级 whole-folder override 会覆盖对应角色目录。当前 Engine 会把角色 system prompt、skills、knowledge、tools policy 摘要和项目上下文注入 Agent prompt。修改角色后应通过本地 mock workflow、真实 provider smoke 和审阅记录验证，不应直接假设 prompt 或 tools policy 修改已经安全。
 
-## 10. Workflows
+## 12. Workflows
 
 查看模板：
 
@@ -177,7 +209,7 @@ node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --
 
 当前内置模板包括 `standard-feature` 和 `bugfix`。`standard-feature` 适合本地 mock happy path 验证；`bugfix` 保留 reviewer human gate，通常需要人工确认后继续。
 
-## 11. Logs 与审计
+## 13. Logs 与审计
 
 查看 audit log：
 
@@ -187,7 +219,7 @@ node /path/to/donkey/packages/cli/dist/index.js log --run-id <runId> --repo /pat
 
 日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`human.gate.pending`、`human.gate.approved` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
 
-## 12. Cleanup
+## 14. Cleanup
 
 清理 worktree 目录：
 
@@ -197,18 +229,18 @@ node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 
 当前 `clean` 只重建 `.donkey/worktrees`，不会删除 SQLite、run artifacts 或 audit evidence。需要保留正式验收结论时，应把摘要写入 `docs/reviews/`，不要只依赖 `.donkey/` 运行态文件。
 
-## 13. current limitations（当前限制）
+## 15. current limitations（当前限制）
 
 - Phase 2 已验证的是本地 mock CLI 产品环，不是公开发布产品。
 - 动态 workflow 当前是 deterministic mock preview，不等于真实 PM LLM 规划。
-- `delivery dry-run` 不创建真实 PR，不 push 远端分支。
+- `delivery dry-run` 不创建真实 PR，不 push 远端分支；`delivery prepare` 只生成本地 PR 准备包。
 - Web dashboard 是本地 dashboard，不是远程服务。
 - Coverage 使用 `npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --coverage` 记录；`pnpm test -- --run --coverage` 在当前工具组合下不会输出 coverage 表。
 - 真实 LLM workflow、真实 SCM 权限、远端 PR 和生产级恢复能力必须在受控 fixture 或明确人工批准下验证。
 - `CommandPolicy.network` 不能被理解为操作系统级网络隔离。
 - Donkey 默认增强人类交付，不替代人类完成合入、上线、权限扩大或高危审批。
 
-## 14. 最终验收检查
+## 16. 最终验收检查
 
 最终验收至少执行：
 
@@ -228,6 +260,8 @@ node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js run --dynamic --dry-run "高风险数据变更" --agent mock --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重试" --template standard-feature --agent mock --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js delivery dry-run --run-id <runId> --repo /path/to/fixture
+node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/fixture
+node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/fixture
 ```
 
 若使用会暂停的模板，还需要记录 `resume --approve-human` 的命令和结果。

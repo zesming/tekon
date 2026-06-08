@@ -112,6 +112,25 @@ describe('donkey release flow e2e', () => {
     expect(deliveryOutput).toContain('workflowStatus=passed');
     expect(deliveryOutput).toContain('prDryRun=true');
     expect(deliveryOutput).toContain('requiresHumanApproval=true');
+
+    const prepareOutput = runCli(
+      cliPath,
+      ['delivery', 'prepare', '--run-id', deliveryRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(prepareOutput).toContain(`runId=${deliveryRunId}`);
+    expect(prepareOutput).toContain('branch=donkey/');
+    expect(prepareOutput).toContain('requiresHumanApproval=true');
+    expect(
+      existsSync(join(repoPath, '.donkey', 'runs', deliveryRunId!, 'delivery')),
+    ).toBe(true);
+    expect(
+      runCli(
+        cliPath,
+        ['eval', 'readiness', '--run-id', deliveryRunId!, '--repo', repoPath],
+        repoPath,
+      ),
+    ).toContain('ready=true');
     expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
   });
 });
