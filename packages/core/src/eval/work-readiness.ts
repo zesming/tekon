@@ -129,6 +129,22 @@ export async function evaluateWorkReadiness(input: {
           ? `PR created: ${deliveryPr.prUrl}`
           : `PR status is ${deliveryPr?.status ?? 'not-created'}`,
     },
+    {
+      id: 'remote-ci-passed',
+      severity: 'recommended',
+      passed: deliveryEvidence.ciStatuses.some(
+        (status) => status.status === 'passed',
+      ),
+      evidence:
+        deliveryEvidence.ciStatuses.length > 0
+          ? deliveryEvidence.ciStatuses
+              .map(
+                (status) =>
+                  `${status.status} checks=${status.checks} artifact=${status.artifactId}`,
+              )
+              .join('; ')
+          : 'remote CI status not checked',
+    },
   ];
   const passed = checks.filter((check) => check.passed).length;
   const requiredChecks = checks.filter(

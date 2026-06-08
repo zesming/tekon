@@ -41,6 +41,7 @@ export const artifactTypeSchema = z.enum([
   'security-report',
   'rollback-plan',
   'delivery-package',
+  'ci-status',
 ]);
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 

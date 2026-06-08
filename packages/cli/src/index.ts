@@ -26,6 +26,7 @@ import {
   createHumanGate,
   createMockAgentAdapter,
   createPullRequestPreparation,
+  queryPullRequestCiStatus,
   createWorkReviewSurface,
   createRepositories,
   createScmDelivery,
@@ -695,6 +696,49 @@ async function commandDelivery(argv: string[], io: CliIO) {
       ].join(' ') + '\n',
     );
     db.close();
+    return;
+  }
+
+  if (subcommand === 'ci-status') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        selector: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const db = openProjectDb(repoPath);
+    try {
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const report = await queryPullRequestCiStatus({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+        selector: args.values.selector,
+      });
+      io.stdout.write(
+        [
+          `runId=${runId}`,
+          `ciStatus=${report.status}`,
+          `checks=${report.checks.length}`,
+          `artifactId=${report.artifact.id}`,
+          `selector=${report.selector}`,
+        ].join(' ') + '\n',
+      );
+    } finally {
+      db.close();
+    }
     return;
   }
 

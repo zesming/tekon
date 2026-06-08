@@ -27,6 +27,14 @@ export interface SecurityScanEvidence {
   failureClassification?: string | null;
 }
 
+export interface CiStatusEvidence {
+  artifactId: string;
+  status: 'passed' | 'failed' | 'pending' | 'skipped' | 'unknown';
+  prUrl?: string;
+  checkedAt?: string;
+  checks: number;
+}
+
 export interface DeliveryEvidencePackage {
   runId: string;
   workflowStatus: WorkflowInstance['status'];
@@ -40,6 +48,7 @@ export interface DeliveryEvidencePackage {
   acceptanceCriteria: Array<{ id: string; description: string }>;
   acceptanceEvidence: AcceptanceCriterionEvidence[];
   securityScans: SecurityScanEvidence[];
+  ciStatuses: CiStatusEvidence[];
 }
 
 export async function createDeliveryEvidencePackage(input: {
@@ -60,15 +69,17 @@ export async function createDeliveryEvidencePackage(input: {
   }
   const artifacts = await input.repositories.listArtifacts(input.runId);
   const gates = await input.repositories.listGateResults(input.runId);
+  const auditEvents = await input.repositories.listAuditEvents(input.runId);
   const audit = await input.audit.verify(input.runId);
   const project = await input.repositories.getProject(workflow.projectId);
   const repoPath = input.repoPath ?? project?.repoPath;
   const semanticEvidence = repoPath
-    ? collectSemanticEvidence(repoPath, artifacts, gates)
+    ? collectSemanticEvidence(repoPath, artifacts, gates, auditEvents)
     : {
         acceptanceCriteria: [],
         acceptanceEvidence: [],
         securityScans: [],
+        ciStatuses: [],
       };
 
   return {
@@ -95,6 +106,7 @@ function collectSemanticEvidence(
   repoPath: string,
   artifacts: Artifact[],
   gates: GateResult[],
+  auditEvents: Awaited<ReturnType<DonkeyRepositories['listAuditEvents']>>,
 ) {
   const criteria = new Map<string, { id: string; description: string }>();
   const evidenceByCriterion = new Map<string, AcceptanceCriterionEvidence>();
@@ -179,7 +191,65 @@ function collectSemanticEvidence(
       outputPath: gate.outputPath,
       failureClassification: gate.failureClassification,
     })),
+    ciStatuses: latestCiStatusEvidence(repoPath, artifacts, auditEvents),
   };
+}
+
+function latestCiStatusEvidence(
+  repoPath: string,
+  artifacts: Artifact[],
+  auditEvents: Awaited<ReturnType<DonkeyRepositories['listAuditEvents']>>,
+): CiStatusEvidence[] {
+  const auditedArtifactIds = new Set(
+    auditEvents
+      .filter((event) => event.type === 'delivery.ci.checked')
+      .map((event) => event.payload.artifactId)
+      .filter(
+        (artifactId): artifactId is string => typeof artifactId === 'string',
+      ),
+  );
+  const statuses = artifacts
+    .filter((artifact) => artifact.type === 'ci-status')
+    .filter((artifact) => auditedArtifactIds.has(artifact.id))
+    .flatMap((artifact) => {
+      const payload = readPayload(repoPath, artifact);
+      if (!payload?.ciStatus) {
+        return [];
+      }
+      return [
+        {
+          artifact,
+          evidence: {
+            artifactId: artifact.id,
+            status: payload.ciStatus,
+            prUrl: payload.prUrl,
+            checkedAt: payload.checkedAt,
+            checks: payload.checks?.length ?? 0,
+          } satisfies CiStatusEvidence,
+        },
+      ];
+    });
+
+  const latest = statuses.sort((left, right) => {
+    const leftChecked = timestampOrZero(left.evidence.checkedAt);
+    const rightChecked = timestampOrZero(right.evidence.checkedAt);
+    if (leftChecked !== rightChecked) {
+      return rightChecked - leftChecked;
+    }
+    const leftCreated = timestampOrZero(left.artifact.createdAt);
+    const rightCreated = timestampOrZero(right.artifact.createdAt);
+    if (leftCreated !== rightCreated) {
+      return rightCreated - leftCreated;
+    }
+    return right.artifact.version - left.artifact.version;
+  })[0];
+
+  return latest ? [latest.evidence] : [];
+}
+
+function timestampOrZero(value?: string): number {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function statusForCriteriaEvidence(input: {

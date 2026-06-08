@@ -1,13 +1,13 @@
 # Donkey
 
-Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面和工作可用样本评估。
+Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、PR 创建后的远端 CI 状态证据、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面和工作可用样本评估。
 
 ## 当前状态
 
 - Phase 2 已验证：`packages/core` 安全可恢复内核、角色系统、workflow 模板、约束校验、动态 workflow dry-run、持久化调度器、Artifact Store、Audit hash chain、GateEngine、HumanGate、Mock Agent 和 Claude Code adapter contract。
 - Phase 2 已验证：`packages/cli` 本地命令入口，包括 `init`、`run --template`、`run --dynamic --dry-run`、`run --allow-dirty-base`、`status`、`pause`、`resume --approve-human`、`cancel`、`role`、`workflow`、`constraints`、`log`、`clean`。
 - Phase 3 已验证：交付 dry-run、delivery evidence、metrics、dogfooding 报告、本地 Web dashboard、Web human approval、audit hash/filter、CLI/Web release e2e 和最终验收报告。
-- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
+- 工作可用化增量已验证：`repo-profile.yaml` 仓库画像、`workflow preflight`、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`delivery ci-status` 只读查询 PR checks 并落库、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
 - 尚未作为已完成能力发布：自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户服务。
 
 ## 快速开始
@@ -82,13 +82,21 @@ node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-hu
 
 `delivery create-pr` 会要求主工作区除 `.donkey` 外没有未提交改动，然后直接 push 本地交付分支并调用 `gh pr create --body-file`。不带 `--approve-human` 时只落库为 `awaiting-approval`；带 `--approve-human` 后才执行 push/PR 副作用。若 `gh pr create` 因 PR 已存在失败，会尝试用 `gh pr view` 恢复 PR URL 并落库。
 
+查询 PR 创建后的远端 CI 状态：
+
+```bash
+node packages/cli/dist/index.js delivery ci-status --run-id <runId> --repo /path/to/project
+```
+
+`delivery ci-status` 会调用 `gh pr checks <prUrl|branch> --json ...` 只读查询 GitHub PR checks，将 `passed/failed/pending/skipped/unknown` 状态写入 `ci-status` artifact 和 `delivery.ci.checked` 审计事件。它不 rerun CI、不等待 CI、不 merge、不上线；没有已落库 PR URL 时可用 `--selector <prUrl|branch>` 显式指定。
+
 检查工作就绪度：
 
 ```bash
 node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/project
 ```
 
-`eval readiness` 会检查 workflow、audit、验证 gate、delivery package、PR 准备包、pending human gate、验收标准证据、安全扫描和 PR 创建状态，作为“这次是否可拿去人工审阅/提交”的最小评估面。PR 已创建是推荐项；自动 merge 和上线不在 readiness 范围内。
+`eval readiness` 会检查 workflow、audit、验证 gate、delivery package、PR 准备包、pending human gate、验收标准证据、安全扫描、PR 创建状态和远端 CI 状态，作为“这次是否可拿去人工审阅/提交”的最小评估面。PR 已创建和远端 CI 通过是推荐项；自动 merge 和上线不在 readiness 范围内。
 
 评估一组真实工作样本是否达到试用门槛：
 
@@ -104,7 +112,7 @@ node packages/cli/dist/index.js eval work-usability --samples /path/to/work-usab
 node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
 ```
 
-`review` 会把 readiness 失败项、PR body、PR package、`donkey-delivery/<runId>` diff 摘要、artifact 正文预览、gate 日志预览和建议下一步命令汇总到一个输出中。Web dashboard 也使用同一 review surface，展示 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令。
+`review` 会把 readiness 失败项、PR body、PR package、`donkey-delivery/<runId>` diff 摘要、artifact 正文预览、gate 日志预览和建议下一步命令汇总到一个输出中；若已执行 `delivery ci-status`，远端 CI 结果会作为 `ci-status` artifact 和 PR 包中的 Remote CI 证据出现。Web dashboard 也使用同一 review surface，展示 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令。
 
 真实 provider 需要遵守 Donkey artifact 协议：在 `DONKEY_OUTPUT_DIR` 写入节点产物，并写 `DONKEY_ARTIFACT_MANIFEST`。Adapter 会校验 manifest 中的 artifact schema 并写入 Artifact Store；缺少必需 artifact 时节点失败，不会继续把 stdout/stderr 当作有效交付证据。
 
@@ -155,8 +163,9 @@ npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --
 - 工作可用样本评估增量：`docs/reviews/2026-06-08-donkey-work-usability-eval-increment.html`
 - 敏感信息治理增量：`docs/reviews/2026-06-08-donkey-secret-governance-increment.html`
 - Web 多运行审阅流增量：`docs/reviews/2026-06-08-donkey-web-multirun-review-increment.html`
+- 远端 CI 状态证据增量：`docs/reviews/2026-06-08-donkey-remote-ci-status-increment.html`
 - 历史 MVP 边界：`docs/manual/donkey-mvp-user-manual.html`
 
 ## 发布状态
 
-当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、eval readiness、eval work-usability、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。
+当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、delivery ci-status 只读查询 GitHub PR checks、eval readiness、eval work-usability、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。

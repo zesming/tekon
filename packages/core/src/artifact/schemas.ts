@@ -44,6 +44,22 @@ const securityReportPayloadSchema = markdownArtifactPayloadSchema.extend({
   securityFindings: z.array(securityFindingSchema).default([]),
 });
 
+const ciCheckSchema = z.object({
+  name: z.string().min(1),
+  state: z.string().min(1).optional(),
+  bucket: z.string().min(1).optional(),
+  workflow: z.string().min(1).optional(),
+  link: z.string().url().optional(),
+  description: z.string().min(1).optional(),
+});
+
+const ciStatusPayloadSchema = markdownArtifactPayloadSchema.extend({
+  ciStatus: z.enum(['passed', 'failed', 'pending', 'skipped', 'unknown']),
+  prUrl: z.string().url().optional(),
+  checkedAt: z.string().datetime(),
+  checks: z.array(ciCheckSchema).default([]),
+});
+
 export const artifactPayloadSchemas = {
   'demand-card': acceptanceArtifactPayloadSchema,
   prd: acceptanceArtifactPayloadSchema,
@@ -54,12 +70,17 @@ export const artifactPayloadSchemas = {
   'security-report': securityReportPayloadSchema,
   'rollback-plan': markdownArtifactPayloadSchema,
   'delivery-package': evidenceArtifactPayloadSchema,
+  'ci-status': ciStatusPayloadSchema,
 } satisfies Record<ArtifactType, z.ZodTypeAny>;
 
 export type ArtifactPayload = z.infer<typeof markdownArtifactPayloadSchema> & {
   acceptanceCriteria?: z.infer<typeof acceptanceCriterionSchema>[];
   criteriaEvidence?: z.infer<typeof criteriaEvidenceSchema>[];
   securityFindings?: z.infer<typeof securityFindingSchema>[];
+  ciStatus?: z.infer<typeof ciStatusPayloadSchema>['ciStatus'];
+  prUrl?: string;
+  checkedAt?: string;
+  checks?: z.infer<typeof ciCheckSchema>[];
 };
 
 export const agentArtifactManifestSchema = z

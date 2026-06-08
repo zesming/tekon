@@ -32,6 +32,7 @@ export * from './workflow/engine.js';
 export * from './workflow/dynamic.js';
 export * from './constraint/validator.js';
 export * from './delivery/scm.js';
+export * from './delivery/ci-status.js';
 export * from './delivery/evidence.js';
 export * from './delivery/pr-package.js';
 export * from './review/surface.js';

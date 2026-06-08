@@ -139,6 +139,7 @@ function formatPrBody(input: {
     `- rollback plan: ${input.evidence.rollbackPlanPresent ? 'present' : 'missing'}`,
     ...formatAcceptanceEvidence(input.evidence),
     ...formatSecurityEvidence(input.evidence),
+    ...formatCiEvidence(input.evidence),
     '',
     '## Delivery',
     `- branch: ${input.branch}`,
@@ -182,6 +183,9 @@ function formatPreparationPackage(input: {
     '## Security',
     ...formatSecurityEvidence(input.evidence),
     '',
+    '## Remote CI',
+    ...formatCiEvidence(input.evidence),
+    '',
     '## PR Body',
     input.body,
   ].join('\n');
@@ -211,6 +215,20 @@ function formatSecurityEvidence(evidence: DeliveryEvidencePackage): string[] {
       `- ${scan.gateResultId}: ${scan.status}`,
       `  - output: ${scan.outputPath ?? 'none'}`,
       `  - failure: ${scan.failureClassification ?? 'none'}`,
+    ].join('\n'),
+  );
+}
+
+function formatCiEvidence(evidence: DeliveryEvidencePackage): string[] {
+  if (evidence.ciStatuses.length === 0) {
+    return ['- remoteCi: not checked'];
+  }
+  return evidence.ciStatuses.map((ci) =>
+    [
+      `- ${ci.artifactId}: ${ci.status}`,
+      `  - checks: ${ci.checks}`,
+      `  - prUrl: ${ci.prUrl ?? 'none'}`,
+      `  - checkedAt: ${ci.checkedAt ?? 'unknown'}`,
     ].join('\n'),
   );
 }

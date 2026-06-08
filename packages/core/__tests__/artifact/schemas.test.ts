@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  agentArtifactManifestSchema,
   artifactPayloadSchemas,
   validateArtifactPayload,
 } from '../../src/index.js';
@@ -8,6 +9,7 @@ import {
 describe('artifact schemas', () => {
   it('provides schemas for all built-in artifact types', () => {
     expect(Object.keys(artifactPayloadSchemas).sort()).toEqual([
+      'ci-status',
       'code-changes',
       'delivery-package',
       'demand-card',
@@ -32,11 +34,28 @@ describe('artifact schemas', () => {
         ],
       }),
     ).toMatchObject({ title: 'Test report' });
+    expect(
+      validateArtifactPayload('ci-status', {
+        title: 'CI status',
+        body: 'Remote checks passed.',
+        ciStatus: 'passed',
+        checkedAt: '2026-06-08T00:00:00.000Z',
+        checks: [{ name: 'build', bucket: 'pass' }],
+      }),
+    ).toMatchObject({ ciStatus: 'passed' });
   });
 
   it('rejects malformed built-in artifact payloads', () => {
     expect(() =>
       validateArtifactPayload('prd', { title: 'PRD', body: 'Missing AC.' }),
+    ).toThrow();
+  });
+
+  it('does not allow providers to forge delivery-owned CI status artifacts', () => {
+    expect(() =>
+      agentArtifactManifestSchema.parse({
+        artifacts: [{ type: 'ci-status', path: 'ci.json' }],
+      }),
     ).toThrow();
   });
 

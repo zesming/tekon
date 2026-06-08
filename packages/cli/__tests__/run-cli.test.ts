@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -8,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -131,6 +132,51 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     expect(io.takeStdout()).toContain('packagePath=');
+
+    await expect(
+      runCli(
+        [
+          'delivery',
+          'ci-status',
+          '--run-id',
+          standardRunId!,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('run has no PR selector for CI status');
+
+    const binDir = mkdtempSync(join(tmpdir(), 'donkey-cli-fake-gh-'));
+    tempDirs.push(binDir);
+    writeFakeGhChecks(binDir);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${binDir}${process.env.PATH ? `${delimiter}${process.env.PATH}` : ''}`;
+    try {
+      await expect(
+        runCli(
+          [
+            'delivery',
+            'ci-status',
+            '--run-id',
+            standardRunId!,
+            '--selector',
+            'https://github.example/org/repo/pull/1',
+            '--repo',
+            repoPath,
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+    const ciOutput = io.takeStdout();
+    expect(ciOutput).toContain('ciStatus=passed');
+    expect(ciOutput).toContain(
+      'selector=https://github.example/org/repo/pull/1',
+    );
 
     await expect(
       runCli(['review', '--run-id', standardRunId!, '--repo', repoPath], io),
@@ -338,6 +384,23 @@ function createMemoryIo(): CliIO & {
       return value;
     },
   };
+}
+
+function writeFakeGhChecks(binDir: string): void {
+  const ghPath = join(binDir, 'gh');
+  writeFileSync(
+    ghPath,
+    `#!/usr/bin/env sh
+if [ "$1 $2" = "pr checks" ]; then
+  printf '[{"name":"build","bucket":"pass","state":"SUCCESS","workflow":"CI"}]\\n'
+  exit 0
+fi
+echo "unexpected gh command: $*" >&2
+exit 1
+`,
+    'utf8',
+  );
+  chmodSync(ghPath, 0o755);
 }
 
 function createFixtureRepo(tempDirs: string[]) {

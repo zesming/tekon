@@ -22,7 +22,7 @@
 
 Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的阶段：CLI/Web、SQLite 状态、Artifact/Audit、Gate、worktree、PR 准备包、受人工批准的 PR 创建、readiness 评估都有代码和测试支撑。
 
-但它离“真实工作可用”还差一层证据和体验：真实仓库端到端稳定性、可审阅体验、真实 PR 证据、安全隔离证据和最小数据闭环仍不足。本轮已经补齐真实 provider artifact 协议、repo profile 驱动 gate 和 provider 快照恢复的第一版代码；下一阶段不应该继续扩展远景角色或上线链路，而应先把“给一个真实内部工具仓库的小需求，Donkey 能受控产出可审 PR，人在 5 分钟内判断能不能接受”打实。
+但它离“真实工作可用”还差一层证据和体验：真实仓库端到端稳定性、可审阅体验、真实 PR 证据、安全隔离证据和最小数据闭环仍不足。本轮已经补齐真实 provider artifact 协议、repo profile 驱动 gate、provider 快照恢复、PR 创建后的远端 CI 状态回写的第一版代码；下一阶段不应该继续扩展远景角色或上线链路，而应先把“给一个真实内部工具仓库的小需求，Donkey 能受控产出可审 PR，人在 5 分钟内判断能不能接受”打实。
 
 优先级最高的补齐方向是：
 
@@ -30,8 +30,9 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 2. 在 2-3 个受控真实仓库上完成 10 个左右 B/D 类需求的端到端证据，不再只依赖 mock fixture；当前已新增 `eval work-usability --samples` 把样本数、ready run、真实 provider run、真实 PR 和隔离证据固化为可执行评估。
 3. workflow gate 已开始使用 `.donkey/repo-profile.yaml` 的仓库命令；后续要补缺失命令修复引导，并用非 pnpm 真实仓库验证。
 4. resume/recovery 已落库 provider/config snapshot 和 completed marker；后续要用真实长任务中断样本证明不会误推进或降级成 mock。
-5. Web/CLI 的验收面需要展示 diff、artifact 正文、gate 日志、readiness 失败原因和下一步命令，而不只是路径和计数。
-6. 高风险边界要从“声明式 network/tool policy”升级到可验证的隔离与审计证据，至少证明真实 provider 不能越权写主工作区、不能静默 push、不能泄露密钥。
+5. Web/CLI 的验收面已经能展示 diff、artifact 正文、gate 日志、readiness 失败原因和下一步命令；后续还要把 artifact/gate/audit 的上下文导航打磨到真实审阅足够顺手。
+6. PR 创建后已能通过 `delivery ci-status` 只读查询 GitHub PR checks 并落库；后续需要真实 PR 上的 CI 证据、watch/重试体验和非 GitHub provider 边界。
+7. 高风险边界要从“声明式 network/tool policy”升级到可验证的隔离与审计证据，至少证明真实 provider 不能越权写主工作区、不能静默 push、不能泄露密钥。
 
 ## 3. 当前事实
 
@@ -46,19 +47,20 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ### 3.2 本地已有代码支撑的能力
 
-| 能力                     | 本地依据                                                                                                          | 判断                                                                                                                                      |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI 本地入口             | `packages/cli/src/index.ts`                                                                                       | `init/run/status/pause/resume/cancel/role/workflow/constraints/log/clean/delivery/eval` 已有入口。                                        |
-| SQLite 状态与审计        | `packages/core/src/db/migrations.ts`、`packages/core/src/db/repositories.ts`、`packages/core/src/audit/logger.ts` | 运行、节点、gate、artifact、human decision、worktree lease、delivery PR 状态可落库。                                                      |
-| Artifact Store           | `packages/core/src/artifact/store.ts`、`packages/core/src/artifact/schemas.ts`                                    | artifact 版本化写入 `.donkey/runs`，schema 支持验收标准、criteria evidence 和安全发现。                                                   |
-| Workflow Engine          | `packages/core/src/workflow/engine.ts`                                                                            | 模板 workflow 可执行，支持 role prompt、gate、human gate、worktree lease、repair node。                                                   |
-| Worktree 隔离            | `packages/core/src/runtime/worktree-manager.ts`                                                                   | 节点在 git worktree 中执行，变更可提交并推进到 `donkey-delivery/<runId>`。                                                                |
-| Command Gateway          | `packages/core/src/runtime/command-gateway.ts`                                                                    | 以 argv 执行命令，拒绝 shell 元字符、强制删除、force push、部分网络命令和越界 cwd。                                                       |
-| Gate                     | `packages/core/src/gate/runners.ts`                                                                               | 支持 build/test/lint/e2e/security-scan/human/schema；内置 security scan 可扫明显密钥。                                                    |
-| Claude Code adapter 接线 | `packages/core/src/runtime/claude-code-adapter.ts`、`packages/cli/src/index.ts`                                   | CLI 支持 `--agent claude-code`，并有 provider capability 检查和 smoke 证据。                                                              |
-| PR 准备和创建            | `packages/core/src/delivery/pr-package.ts`、`packages/core/src/delivery/scm.ts`                                   | `delivery prepare` 可生成本地 PR 包；`delivery create-pr --approve-human` 可 push 和 `gh pr create`，状态落库。                           |
-| Readiness                | `packages/core/src/eval/work-readiness.ts`                                                                        | required checks 覆盖 workflow、audit、validation gates、delivery package、PR prepared、human gate、验收证据和安全扫描。                   |
-| Web Dashboard            | `packages/web/src/client/App.tsx`、`packages/web/src/server/api/root.ts`                                          | 本地 dashboard 可看 overview、readiness、diff、artifact 正文、gate logs、PR 包、audit、roles/workflows/settings，并批准/拒绝 human gate。 |
+| 能力                     | 本地依据                                                                                                          | 判断                                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI 本地入口             | `packages/cli/src/index.ts`                                                                                       | `init/run/status/pause/resume/cancel/role/workflow/constraints/log/clean/delivery/eval` 已有入口。                                           |
+| SQLite 状态与审计        | `packages/core/src/db/migrations.ts`、`packages/core/src/db/repositories.ts`、`packages/core/src/audit/logger.ts` | 运行、节点、gate、artifact、human decision、worktree lease、delivery PR 状态可落库。                                                         |
+| Artifact Store           | `packages/core/src/artifact/store.ts`、`packages/core/src/artifact/schemas.ts`                                    | artifact 版本化写入 `.donkey/runs`，schema 支持验收标准、criteria evidence、安全发现和 `ci-status`。                                         |
+| Workflow Engine          | `packages/core/src/workflow/engine.ts`                                                                            | 模板 workflow 可执行，支持 role prompt、gate、human gate、worktree lease、repair node。                                                      |
+| Worktree 隔离            | `packages/core/src/runtime/worktree-manager.ts`                                                                   | 节点在 git worktree 中执行，变更可提交并推进到 `donkey-delivery/<runId>`。                                                                   |
+| Command Gateway          | `packages/core/src/runtime/command-gateway.ts`                                                                    | 以 argv 执行命令，拒绝 shell 元字符、强制删除、force push、部分网络命令和越界 cwd。                                                          |
+| Gate                     | `packages/core/src/gate/runners.ts`                                                                               | 支持 build/test/lint/e2e/security-scan/human/schema；内置 security scan 可扫明显密钥。                                                       |
+| Claude Code adapter 接线 | `packages/core/src/runtime/claude-code-adapter.ts`、`packages/cli/src/index.ts`                                   | CLI 支持 `--agent claude-code`，并有 provider capability 检查和 smoke 证据。                                                                 |
+| PR 准备和创建            | `packages/core/src/delivery/pr-package.ts`、`packages/core/src/delivery/scm.ts`                                   | `delivery prepare` 可生成本地 PR 包；`delivery create-pr --approve-human` 可 push 和 `gh pr create`，状态落库。                              |
+| 远端 CI 状态             | `packages/core/src/delivery/ci-status.ts`、`packages/core/src/delivery/evidence.ts`                               | `delivery ci-status` 可只读调用 `gh pr checks`，把 PR checks 汇总状态写入 `ci-status` artifact 和审计事件。                                  |
+| Readiness                | `packages/core/src/eval/work-readiness.ts`                                                                        | required checks 覆盖 workflow、audit、validation gates、delivery package、PR prepared、human gate、验收证据和安全扫描；PR/远端 CI 为推荐项。 |
+| Web Dashboard            | `packages/web/src/client/App.tsx`、`packages/web/src/server/api/root.ts`                                          | 本地 dashboard 可看 overview、readiness、diff、artifact 正文、gate logs、PR 包、audit、roles/workflows/settings，并批准/拒绝 human gate。    |
 
 ### 3.3 当前仍主要是 mock/dry-run 或受控 fixture 的能力
 
@@ -67,6 +69,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 | 动态 workflow     | `run --dynamic` 当前强制 `--dry-run`，CLI 使用 `createDynamicMockAdapter`                                                                    | 还不是 PM LLM 真实规划，也不会直接进入执行。                                           |
 | 真实 Agent 端到端 | Claude provider smoke 已通过，但主 workflow 稳定执行证据不足                                                                                 | 证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过 gates。              |
 | PR 创建           | 代码支持并有 fake fixture 测试；历史 dogfooding 记录 `PR URL=not_created`                                                                    | 需要真实受控远端仓库证据。                                                             |
+| 远端 CI 状态      | 代码支持 `gh pr checks` 查询、fake fixture、artifact/evidence/readiness 入库                                                                 | 仍缺真实 PR 上的 CI 证据；当前只覆盖 GitHub CLI，不覆盖其它 Git host 或 CI 聚合。      |
 | Web 产品面        | 能审阅项目内任意选中 run、处理 human gate，查看 readiness、diff、artifact 正文、gate logs 和 PR 包，并可受控发起 run、执行 prepare/create-pr | 仍缺 artifact/gate/audit 深度上下文导航。                                              |
 | 仓库画像          | init 可生成 `repo-profile.yaml`，内置 workflow gate 通过 `commandRef` 解析画像命令                                                           | 已从硬编码模板命令推进到画像驱动；仍缺更友好的缺失命令修复引导和真实非 pnpm 仓库证据。 |
 | 安全隔离          | CommandGateway 有静态拒绝，provider profile 有声明                                                                                           | 还不是 OS/container 级隔离；真实 provider 内部工具调用边界需要证据。                   |
@@ -179,17 +182,17 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ## 5. P1：补齐后才像日常工具，而不是验收脚手架
 
-| 缺口               | 当前状态                                                                            | 建议目标                                                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                           | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
-| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                            | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
-| Gate 失败体验      | 有 autoFix repair node，但真实 provider 证据不足                                    | gate 失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。                                   |
-| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                            | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
-| 通知与审批         | Web 本地处理 human gate                                                             | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
-| CI/远端状态        | 可运行本地 gate；release readiness 有远端 CI 证据脚本                               | PR 创建后能查询远端 CI 状态，把结果写回 delivery evidence。                                                               |
-| 真实 QA 证据       | 当前主要跑已有 test 命令                                                            | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
-| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                              | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
-| 文档验收状态一致性 | 本轮已更新 `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 和 HTML 审阅版 | 后续每次实现后仍需同步 Markdown/HTML，并在最终 reviewer 复查后写入正式结论。                                              |
+| 缺口               | 当前状态                                                                                   | 建议目标                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                                  | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
+| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                                   | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
+| Gate 失败体验      | 有 autoFix repair node，但真实 provider 证据不足                                           | gate 失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。                                   |
+| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                                   | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
+| 通知与审批         | Web 本地处理 human gate                                                                    | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
+| CI/远端状态        | 已新增 `delivery ci-status`、`ci-status` artifact、PR 包 Remote CI 区块和 readiness 推荐项 | 用真实受控 PR 验证 `gh pr checks` 结果；补 watch/重试/无 checks 处理；明确非 GitHub provider 边界或 provider adapter。    |
+| 真实 QA 证据       | 当前主要跑已有 test 命令                                                                   | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
+| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                                     | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
+| 文档验收状态一致性 | 本轮已更新 `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 和 HTML 审阅版        | 后续每次实现后仍需同步 Markdown/HTML，并在最终 reviewer 复查后写入正式结论。                                              |
 
 ## 6. P2：增强长期复用，不阻塞第一批工作可用
 
@@ -208,7 +211,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 2. 用 1-2 个非 pnpm 或脚本名不同的仓库验证 repo profile gate preflight，补缺失命令修复引导。
 3. 制造真实 provider 中断/恢复样本，验证 provider snapshot、completed marker 和 human gate resume。
 4. 用真实 run 验证第一版 review surface 和 Web 执行入口是否足够 5 分钟决策，继续打磨 artifact/gate/audit 深度互跳。
-5. 建立受控真实仓库验收集，跑 5 个任务，至少 1 个真实 PR。
+5. 建立受控真实仓库验收集，跑 5 个任务，至少 1 个真实 PR，并在 PR 创建后执行 `delivery ci-status` 记录远端 CI 证据。
 6. 把每次 run 的结论写入 `docs/reviews/`，形成第一版 dogfooding 数据表。
 
 ## 8. 明确不建议近期做
