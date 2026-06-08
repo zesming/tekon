@@ -115,6 +115,20 @@ describe('web read API', () => {
           content: expect.stringContaining('Add dashboard'),
         }),
       }),
+      evidenceGroups: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'review-route',
+          links: expect.arrayContaining([
+            expect.objectContaining({ href: '#pr-package' }),
+          ]),
+        }),
+        expect.objectContaining({
+          id: 'readiness-workflow-passed',
+          links: expect.arrayContaining([
+            expect.objectContaining({ kind: 'audit-event' }),
+          ]),
+        }),
+      ]),
     });
     await expect(
       api.audit.list({ runId: 'run_1', nodeId: 'node_1', gateId: 'gate_1' }),

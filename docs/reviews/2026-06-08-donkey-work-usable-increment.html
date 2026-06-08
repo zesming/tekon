@@ -68,7 +68,7 @@
 | Web 多运行审阅流             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`、`packages/web/__tests__/fixtures/project.ts`         | Web 读取项目 run 列表，可选择历史 run 或 latest run，并按选中 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在选中 run。                                                                                    |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 和 remote CI passed 为 recommended。                                                              |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                                                                                   |
-| 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                                                                  |
+| 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                                 |
 
 ## 3. 验证记录
 
@@ -156,7 +156,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 
 本次仓库画像显式不适用语义最高思考 reviewer 结论：APPROVED，必须修复项为无。复查确认 `notApplicable` 只注入普通 command gate；`security-scan` 在 workflow 和 gate engine 两层都不会被跳过，CLI 也会显示 `notApplicableIgnoredFor=security-scan`；readiness 只把 `skipped/not-applicable` 的验证类 gate 视为 satisfied，安全扫描和 pending human gate 仍独立检查。
 
-剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 artifact/gate/audit 的深度上下文导航体验。
+剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 的 Evidence Navigation 已有第一版，但仍需真实 run 反馈继续打磨。
 </pre
       >
     </main>

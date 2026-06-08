@@ -1248,6 +1248,20 @@ function formatReviewSurface(
           (check) => `- ${check.id} (${check.severity}): ${check.evidence}`,
         )),
     '',
+    '## Evidence Navigation',
+    ...(surface.evidenceGroups.length === 0
+      ? ['- none']
+      : surface.evidenceGroups.map((group) =>
+          [
+            `### ${group.title} ${group.status}`,
+            `summary=${group.summary}`,
+            ...group.links.map(
+              (link) =>
+                `- ${link.kind} ${link.label} -> ${link.href} (${link.summary})`,
+            ),
+          ].join('\n'),
+        )),
+    '',
     '## Delivery',
     `- packagePath: ${surface.delivery.package?.path ?? 'missing'}`,
     `- prBodyPath: ${surface.delivery.prBody?.path ?? 'missing'}`,

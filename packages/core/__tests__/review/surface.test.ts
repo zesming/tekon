@@ -162,6 +162,31 @@ describe('work review surface', () => {
         }),
       }),
     );
+    expect(surface.evidenceGroups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'review-route',
+          links: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'pr-package',
+              href: '#pr-package',
+            }),
+            expect.objectContaining({ kind: 'diff', href: '#delivery-diff' }),
+          ]),
+        }),
+        expect.objectContaining({
+          id: 'readiness-pr-created',
+          status: 'warning',
+          links: expect.arrayContaining([
+            expect.objectContaining({ kind: 'pr-body', href: '#pr-body' }),
+            expect.objectContaining({
+              kind: 'pr-package',
+              href: '#pr-package',
+            }),
+          ]),
+        }),
+      ]),
+    );
     expect(surface.nextCommands).toContain(
       'donkey delivery create-pr --run-id run_1 --approve-human',
     );

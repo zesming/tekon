@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Donkey 审阅证据导航增量报告</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f6f7f9;
+        color: #1f2937;
+        font-family: system-ui, sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        background: #fff;
+        border: 1px solid #d8dde6;
+        padding: 20px;
+        line-height: 1.55;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <pre>
+# Donkey 审阅证据导航增量报告
+
+日期：2026-06-08
+
+范围：补齐 P0-5 “人工验收面可决策”的第一版深度上下文导航。上一轮 review surface 已经能展示 readiness、diff、artifact 正文、gate log、PR 包和下一步命令，但用户仍需要自己判断某个失败项应该看哪份证据。本轮新增 Evidence Navigation，把 readiness 失败项直接关联到 artifact、gate log、audit event、PR body、PR package 和 delivery diff。
+
+## 1. 背景判断
+
+真实工作场景里，审阅者最需要回答的是“为什么不能交付”和“应该先看哪里”。只有正文和日志堆叠在页面上，仍然会让用户在 artifact、gate、audit 和 PR 包之间人工搜索。本轮不扩大自动化范围，只增强人工判断路径：Donkey 给出证据下一跳，人仍决定是否接受、重试、创建 PR 或返工。
+
+## 2. 已完成能力
+
+| 能力 | 实现位置 | 说明 |
+| --- | --- | --- |
+| Evidence groups | `packages/core/src/review/surface.ts` | `createWorkReviewSurface` 新增 `evidenceGroups`，为 review route 和 failed readiness checks 生成证据链接。 |
+| 证据链接类型 | `packages/core/src/review/surface.ts` | 支持 `artifact`、`gate-log`、`audit-event`、`pr-body`、`pr-package` 和 `diff`，并对链接去重、截断。 |
+| CLI 展示 | `packages/cli/src/index.ts` | `donkey review` 新增 `## Evidence Navigation`，把失败项和对应证据位置输出到终端。 |
+| Web 展示 | `packages/web/src/client/App.tsx` | dashboard 新增 `Evidence Links` 面板；diff、artifact、gate log、audit row 和 PR 包拥有可跳转锚点。 |
+| 回归测试 | `packages/core/__tests__/review/surface.test.ts`、`packages/cli/__tests__/run-cli.test.ts`、`packages/web/__tests__` | 覆盖 core evidence groups、CLI Evidence Navigation、Web API 返回和 Web e2e 页面展示。 |
+
+## 3. 当前边界
+
+- Evidence Navigation 是审阅辅助，不会自动修复、自动重试、自动创建 PR 或自动 merge。
+- 关联规则是第一版启发式：按 readiness check 类型映射到相关 artifact、gate、audit 和 delivery 证据。真实 run 后仍需观察是否有误导或缺漏。
+- 只读取目标仓库边界内的 artifact/gate/delivery 文件；仍沿用 review surface 的 safe path 约束。
+
+## 4. 验证记录
+
+阶段性验证：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+npm exec --yes -- pnpm@10.12.1 typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit -- --run packages/core/__tests__/review/surface.test.ts
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:unit -- --run packages/cli/__tests__/run-cli.test.ts
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test -- --run packages/web/__tests__/api/read-api.test.ts
+```
+
+本轮最终收口验证：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 build
+npm exec --yes -- pnpm@10.12.1 typecheck
+npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
+git diff --check
+npm exec --yes -- prettier --check packages/core/src/review/surface.ts packages/core/__tests__/review/surface.test.ts packages/cli/src/index.ts packages/cli/__tests__/run-cli.test.ts packages/web/src/client/App.tsx packages/web/__tests__/api/read-api.test.ts packages/web/__tests__/e2e/release-dashboard.test.ts README.md CHANGELOG.md docs/manual/donkey-v2-user-manual.md docs/manual/donkey-v2-user-manual.html docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.md docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.html docs/reviews/2026-06-08-donkey-work-usable-increment.md docs/reviews/2026-06-08-donkey-work-usable-increment.html docs/reviews/2026-06-08-donkey-review-evidence-navigation-increment.md docs/reviews/2026-06-08-donkey-review-evidence-navigation-increment.html
+```
+
+最终结果：build 通过；typecheck 通过；全量测试 55 个 test files / 191 个 tests 通过；Web e2e 2 个 tests 通过；`git diff --check` 通过；占位符扫描无命中。
+
+## 5. 后续仍需
+
+1. 用真实 run 验证 Evidence Links 是否足够支撑 5 分钟内判断能否接受。
+2. 根据真实失败样本继续补更精确的 check-to-evidence 映射，例如失败分类、返工建议和重试入口。
+3. 与 work-usability 样本报告打通，把“审阅耗时、点击证据、最终决策”沉淀成评估数据。
+
+## 6. Reviewer 结论
+
+最高思考 reviewer 结论：APPROVED。必须修复项：无。
+
+复查确认：`evidenceGroups` 只基于已加载的 artifact、gate、audit、delivery 元数据生成本页锚点，不新增仓库外文件读取；正文预览仍走 `readRepoTextPreview` 的 repo-bound 和 symlink 边界。Web 端通过 React 文本节点和 fragment link 渲染，未看到 audit payload 或路径注入扩大执行面的风险。关联规则覆盖 readiness 主要失败项；CLI/Web 改动只增加审阅导航展示，不引入自动修复、自动重试、自动创建 PR、merge 或上线。测试覆盖 core evidence groups、CLI Evidence Navigation、Web API 返回和 e2e 面板展示，足以支撑本轮声明。
+</pre
+      >
+    </main>
+  </body>
+</html>

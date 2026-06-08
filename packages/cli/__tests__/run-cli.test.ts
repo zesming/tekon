@@ -183,6 +183,8 @@ describe('runCli in-process', () => {
     ).resolves.toBe(0);
     const reviewOutput = io.takeStdout();
     expect(reviewOutput).toContain('## Readiness Failed Checks');
+    expect(reviewOutput).toContain('## Evidence Navigation');
+    expect(reviewOutput).toContain('Readiness: pr-created');
     expect(reviewOutput).toContain('## Artifacts');
     expect(reviewOutput).toContain('## Gate Logs');
     expect(reviewOutput).toContain('## PR Body');

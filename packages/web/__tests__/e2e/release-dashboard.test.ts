@@ -45,6 +45,9 @@ test.describe('Donkey release dashboard', () => {
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Diff' })).toBeVisible();
     await expect(
+      page.getByRole('heading', { name: 'Evidence Links' }),
+    ).toBeVisible();
+    await expect(
       page.getByRole('heading', { name: 'Artifact 正文' }),
     ).toBeVisible();
     await expect(
@@ -62,6 +65,7 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
     await expect(page.getByText('Review report body')).toBeVisible();
     await expect(page.getByText('human approval is required')).toBeVisible();
+    await expect(page.getByText('Review Route info')).toBeVisible();
     await expect(page.getByLabel('Review run')).toContainText('run_0');
 
     await page.getByLabel('Review run').selectOption('run_0');

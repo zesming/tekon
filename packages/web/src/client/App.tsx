@@ -118,6 +118,19 @@ type ReviewSurface = {
       reason?: string;
     };
   };
+  evidenceGroups: Array<{
+    id: string;
+    title: string;
+    status: string;
+    severity: string;
+    summary: string;
+    links: Array<{
+      kind: string;
+      label: string;
+      href: string;
+      summary: string;
+    }>;
+  }>;
   nextCommands: string[];
 };
 
@@ -554,6 +567,15 @@ function App() {
             <Row primary="loading" secondary="readiness" />
           )}
         </Panel>
+        <Panel title="Evidence Links">
+          {review?.evidenceGroups.length ? (
+            review.evidenceGroups.map((group) => (
+              <EvidenceGroupRow key={group.id} group={group} />
+            ))
+          ) : (
+            <Row primary="none" secondary="evidence links" />
+          )}
+        </Panel>
         <Panel title="Diff">
           {review ? (
             <>
@@ -573,7 +595,10 @@ function App() {
                 <Row key={file} primary={file} secondary="changed file" />
               ))}
               {review.delivery.diff.stat ? (
-                <PreviewBlock preview={review.delivery.diff.stat} />
+                <PreviewBlock
+                  id="delivery-diff"
+                  preview={review.delivery.diff.stat}
+                />
               ) : null}
             </>
           ) : (
@@ -743,7 +768,7 @@ function LinkedRow(props: {
 function AuditRow(props: { event: AuditEvent }) {
   const event = props.event;
   return (
-    <div className="row">
+    <div className="row" id={`audit-${event.id}`}>
       <strong>{`${event.type} ${event.nodeId ?? ''}`.trim()}</strong>
       <span>
         gate={event.gateId ?? 'none'} role={event.role ?? 'none'} hash=
@@ -756,6 +781,25 @@ function AuditRow(props: { event: AuditEvent }) {
         {event.type.startsWith('delivery.') ? (
           <a href="#pr-package">PR package</a>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceGroupRow(props: {
+  group: ReviewSurface['evidenceGroups'][number];
+}) {
+  const group = props.group;
+  return (
+    <div className="row">
+      <strong>{`${group.title} ${group.status}`}</strong>
+      <span>{group.summary}</span>
+      <div className="link-strip">
+        {group.links.map((link) => (
+          <a key={`${group.id}-${link.kind}-${link.href}`} href={link.href}>
+            {link.kind}: {link.label}
+          </a>
+        ))}
       </div>
     </div>
   );
