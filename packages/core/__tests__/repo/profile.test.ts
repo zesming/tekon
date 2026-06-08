@@ -8,6 +8,8 @@ import {
   detectRepoProfile,
   loadRepoProfile,
   repoProfileCommand,
+  repoProfileCommandGuidance,
+  suggestRepoProfileCommandFixes,
   writeDefaultRepoProfile,
 } from '../../src/index.js';
 
@@ -72,5 +74,54 @@ describe('repo profile', () => {
       tool: 'npm',
       args: ['run', 'e2e'],
     });
+  });
+
+  it('suggests package script aliases for missing profile commands', () => {
+    const npmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-npm-'));
+    const pnpmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-pnpm-'));
+    tempDirs.push(npmRepo, pnpmRepo);
+
+    writeFileSync(
+      join(npmRepo, 'package.json'),
+      JSON.stringify({ scripts: { compile: 'tsc -p tsconfig.json' } }),
+      'utf8',
+    );
+    writeFileSync(
+      join(pnpmRepo, 'package.json'),
+      JSON.stringify({
+        packageManager: 'pnpm@10.12.1',
+        scripts: { 'test:e2e': 'playwright test' },
+      }),
+      'utf8',
+    );
+
+    const npmProfile = detectRepoProfile(npmRepo);
+    const npmGuidance = repoProfileCommandGuidance(
+      npmRepo,
+      npmProfile,
+      'build',
+    );
+    expect(repoProfileCommand(npmProfile, 'build')).toBeNull();
+    expect(npmGuidance).toMatchObject({
+      status: 'missing',
+      hint: 'add commands.build to .donkey/repo-profile.yaml',
+      suggestions: [
+        {
+          scriptName: 'compile',
+          command: { tool: 'npm', args: ['run', 'compile'] },
+          commandText: 'npm run compile',
+        },
+      ],
+    });
+    expect(npmGuidance.suggestions[0]?.yamlSnippet).toContain('build:');
+    expect(npmGuidance.suggestions[0]?.yamlSnippet).toContain('- compile');
+
+    expect(suggestRepoProfileCommandFixes(pnpmRepo, 'e2e')).toMatchObject([
+      {
+        scriptName: 'test:e2e',
+        command: { tool: 'pnpm', args: ['test:e2e'] },
+        commandText: 'pnpm test:e2e',
+      },
+    ]);
   });
 });

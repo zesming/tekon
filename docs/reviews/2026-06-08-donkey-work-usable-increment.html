@@ -35,7 +35,7 @@
 
 范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
 
-结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
@@ -52,7 +52,7 @@
 | 能力                         | 实现位置                                                                                                                       | 说明                                                                                                                                                                            |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 仓库画像                     | `packages/core/src/repo/profile.ts`                                                                                            | `init` 时根据 `package.json` 生成 `.donkey/repo-profile.yaml`，记录 build/typecheck/lint/test/e2e/security、PR base branch 和风险路径。                                         |
-| 仓库画像驱动 Gate            | `workflows/*.yaml`、`packages/core/src/workflow/engine.ts`、CLI `workflow preflight`                                           | 内置模板通过 `commandRef` 读取 repo profile 命令；preflight 可列出每个 gate 的解析结果，缺失 build/lint/test 命令时 gate 不会静默跳过。                                         |
+| 仓库画像驱动 Gate            | `workflows/*.yaml`、`packages/core/src/workflow/engine.ts`、CLI `workflow preflight`                                           | 内置模板通过 `commandRef` 读取 repo profile 命令；preflight 可列出每个 gate 的解析结果，缺失普通命令时 gate 不会静默跳过，并给出 repo profile 写入提示和候选脚本建议。          |
 | 角色 prompt 注入             | `packages/core/src/workflow/engine.ts`                                                                                         | Engine 执行节点时加载角色 system prompt、skills、knowledge、tools policy、需求正文和输入 artifacts，组装为 Agent prompt。                                                       |
 | Claude Code adapter CLI 接线 | `packages/cli/src/index.ts`、`packages/core/src/runtime/claude-code-adapter.ts`                                                | `run --agent claude-code` 会创建 Claude Code adapter；adapter 读取 `DONKEY_ARTIFACT_MANIFEST`，校验 artifact schema 后写入 Artifact Store。                                     |
 | Provider 快照恢复            | `packages/core/src/db/repositories.ts`、`packages/cli/src/index.ts`、`packages/web/src/server/api/root.ts`                     | run 创建时落库 provider/config 摘要；CLI/Web resume 使用 run 快照，旧 run 缺少快照时拒绝继续；Engine 增加 role-run completed marker，避免 stale running 节点直接进 gate。       |
@@ -88,6 +88,8 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `runtime/claude-code-adapter.test.ts`：真实 provider manifest 写入、schema 校验和 Artifact Store 入库。
 - `db/repositories.test.ts`：run provider snapshot、delivery PR 状态和 role-run completed marker。
 - `cli` release e2e：`workflow preflight`、repo profile gate 解析、人工批准 PR 创建 fixture。
+- `repo/profile.test.ts`：覆盖缺失 build 时从 `compile` 脚本建议 `npm run compile`，以及 pnpm 仓库缺失 e2e 时从 `test:e2e` 建议 `pnpm test:e2e`。
+- `cli` run-cli unit：覆盖 `workflow preflight` 在缺失 `commands.build` 时输出 `status=missing`、`profilePath`、`hint`、`suggestedScript` 和 `suggestedCommand`。
 - `delivery/scm.test.ts`：PR 状态落库、人工审批、`.donkey` 排除、已有分支空 commit 跳过、PR URL 创建/恢复和失败阶段落库。
 - `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
 - `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
@@ -113,7 +115,7 @@ npm exec --yes -- pnpm@10.12.1 typecheck
 npm exec --yes -- pnpm@10.12.1 test -- --run
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 git diff --check
-npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-user-manual.md docs/manual/donkey-v2-user-manual.html docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.md docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.html docs/reviews/2026-06-08-donkey-work-usable-increment.md docs/reviews/2026-06-08-donkey-work-usable-increment.html docs/reviews/2026-06-08-donkey-remote-ci-status-increment.md docs/reviews/2026-06-08-donkey-remote-ci-status-increment.html packages/cli/__tests__/run-cli.test.ts packages/cli/src/index.ts packages/core/__tests__/artifact/schemas.test.ts packages/core/__tests__/delivery/ci-status.test.ts packages/core/src/artifact/schemas.ts packages/core/src/delivery/ci-status.ts packages/core/src/delivery/evidence.ts packages/core/src/delivery/pr-package.ts packages/core/src/eval/work-readiness.ts packages/core/src/index.ts packages/core/src/types/domain.ts
+npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-user-manual.md docs/manual/donkey-v2-user-manual.html docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.md docs/reviews/2026-06-08-donkey-work-usability-gap-analysis.html docs/reviews/2026-06-08-donkey-work-usable-increment.md docs/reviews/2026-06-08-donkey-work-usable-increment.html docs/reviews/2026-06-08-donkey-remote-ci-status-increment.md docs/reviews/2026-06-08-donkey-remote-ci-status-increment.html docs/reviews/2026-06-08-donkey-repo-profile-command-guidance-increment.md docs/reviews/2026-06-08-donkey-repo-profile-command-guidance-increment.html packages/cli/__tests__/run-cli.test.ts packages/cli/src/index.ts packages/core/__tests__/artifact/schemas.test.ts packages/core/__tests__/delivery/ci-status.test.ts packages/core/__tests__/repo/profile.test.ts packages/core/src/artifact/schemas.ts packages/core/src/delivery/ci-status.ts packages/core/src/delivery/evidence.ts packages/core/src/delivery/pr-package.ts packages/core/src/eval/work-readiness.ts packages/core/src/index.ts packages/core/src/repo/profile.ts packages/core/src/types/domain.ts
 ```
 
 ## 4. 仍未完成
@@ -145,6 +147,8 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 第二轮 reviewer 结论仍为 CHANGES_REQUIRED，必须修复项为：执行 `gh` 前未校验 runId/path segment，恶意 run id 搭配 selector 可能让 CommandGateway 日志 outputDir 逃逸 `.donkey/runs`。已修复：`queryPullRequestCiStatus` 在执行 `gh` 前校验 run 存在和 safe path segment，默认 outputDir 使用安全 run segment，显式 outputDir 必须位于仓库 `.donkey` 内，并补充 unsafe run id / escaped outputDir 不执行 gateway 的回归测试。最终复查结论以 reviewer 返回为准。
 
 第三轮 reviewer 结论仍为 CHANGES_REQUIRED，必须修复项为：agent manifest 允许 `ci-status` 会让真实 provider 伪造远端 CI 通过，delivery evidence 也不应信任任意 `ci-status` artifact。已修复：agent manifest schema 拒绝 `ci-status`；delivery evidence 只信任 `delivery.ci.checked` 审计事件关联的 `ci-status` artifact；补充 manifest 拒绝和未审计伪造 artifact 不影响 readiness 的回归测试。最终复查结论：APPROVED，必须修复项为无。
+
+本次仓库画像缺失命令修复引导最高思考 reviewer 结论：APPROVED，必须修复项为无。复查确认本轮 guidance 只生成建议，不写入 repo profile、不自动执行候选脚本、不改变普通命令缺失时的 `missing-command` 失败语义；文档也未把 `notApplicable`、真实非 pnpm 仓库验证或自动跳过 gate 写成已完成。
 
 剩余项均为后续工作：P0-2/P0-6/P0-7 仍保留为真实仓库样本、真实 PR 证据和生产级隔离证据工作；P0-5 还剩 artifact/gate/audit 的深度上下文导航体验。
 </pre

@@ -43,7 +43,7 @@ import {
   migrateDatabase,
   openDonkeyDatabase,
   saveDynamicTemplate,
-  repoProfileCommand,
+  repoProfileCommandGuidance,
   workUsabilitySampleSetSchema,
   type AgentAdapter,
   type AgentAdapterConfig,
@@ -548,27 +548,35 @@ async function commandWorkflow(argv: string[], io: CliIO) {
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
         for (const gate of node.gates) {
+          const guidance = gate.commandRef
+            ? repoProfileCommandGuidance(repoPath, profile, gate.commandRef)
+            : null;
           const command =
-            gate.command ??
-            (gate.commandRef
-              ? repoProfileCommand(profile, gate.commandRef)
-              : null);
+            gate.command ?? (guidance?.command ? guidance.command : null);
           const commandText = command
             ? [command.tool, ...command.args].join(' ')
             : gate.type === 'security-scan'
               ? 'donkey-builtin security scan'
               : '';
-          io.stdout.write(
-            [
-              `node=${node.id}`,
-              `gate=${gate.type}`,
-              gate.commandRef
-                ? `commandRef=${gate.commandRef}`
-                : 'commandRef=none',
-              `status=${commandText ? 'resolved' : 'missing'}`,
-              commandText ? `command=${commandText}` : 'command=',
-            ].join(' ') + '\n',
-          );
+          const fields = [
+            `node=${node.id}`,
+            `gate=${gate.type}`,
+            gate.commandRef
+              ? `commandRef=${gate.commandRef}`
+              : 'commandRef=none',
+            `status=${commandText ? 'resolved' : 'missing'}`,
+            commandText ? `command=${commandText}` : 'command=',
+          ];
+          if (!commandText && guidance) {
+            fields.push(`hint=${guidance.hint}`);
+            fields.push(`profilePath=${guidance.profilePath}`);
+            const suggestion = guidance.suggestions[0];
+            if (suggestion) {
+              fields.push(`suggestedScript=${suggestion.scriptName}`);
+              fields.push(`suggestedCommand=${suggestion.commandText}`);
+            }
+          }
+          io.stdout.write(fields.join(' ') + '\n');
         }
       }
     }

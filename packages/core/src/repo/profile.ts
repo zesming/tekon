@@ -6,6 +6,24 @@ import { z } from 'zod';
 
 import type { CommandInvocation } from '../types/domain.js';
 
+const repoProfileCommandNames = [
+  'build',
+  'typecheck',
+  'lint',
+  'test',
+  'e2e',
+  'security',
+] as const;
+
+const candidateScriptNames: Record<RepoProfileCommandName, string[]> = {
+  build: ['build', 'compile', 'bundle'],
+  typecheck: ['typecheck', 'tsc', 'check-types'],
+  lint: ['lint', 'eslint'],
+  test: ['test', 'unit', 'test:unit'],
+  e2e: ['e2e', 'test:e2e', 'playwright'],
+  security: ['security:scan', 'security', 'audit'],
+};
+
 const repoProfileCommandSchema = z
   .object({
     tool: z.string().min(1),
@@ -44,6 +62,26 @@ export const repoProfileSchema = z
   .strict();
 
 export type RepoProfile = z.infer<typeof repoProfileSchema>;
+export type RepoProfileCommandName = (typeof repoProfileCommandNames)[number];
+
+export interface RepoProfileCommandFixSuggestion {
+  commandRef: RepoProfileCommandName;
+  profilePath: string;
+  scriptName: string;
+  command: CommandInvocation;
+  commandText: string;
+  yamlSnippet: string;
+}
+
+export interface RepoProfileCommandGuidance {
+  commandRef: RepoProfileCommandName;
+  profilePath: string;
+  status: 'resolved' | 'missing';
+  command: CommandInvocation | null;
+  commandText: string;
+  hint: string;
+  suggestions: RepoProfileCommandFixSuggestion[];
+}
 
 export function loadRepoProfile(repoPath: string): RepoProfile {
   const profilePath = repoProfilePath(repoPath);
@@ -70,26 +108,83 @@ export function repoProfilePath(repoPath: string): string {
 
 export function repoProfileCommand(
   profile: RepoProfile,
-  name: keyof RepoProfile['commands'],
+  name: RepoProfileCommandName,
 ): CommandInvocation | null {
   const command = profile.commands[name];
   return command ? { tool: command.tool, args: command.args } : null;
 }
 
+export function repoProfileCommandGuidance(
+  repoPath: string,
+  profile: RepoProfile,
+  name: RepoProfileCommandName,
+): RepoProfileCommandGuidance {
+  const command = repoProfileCommand(profile, name);
+  const profilePath = repoProfilePath(repoPath);
+  if (command) {
+    return {
+      commandRef: name,
+      profilePath,
+      status: 'resolved',
+      command,
+      commandText: formatCommandInvocation(command),
+      hint: '',
+      suggestions: [],
+    };
+  }
+
+  const suggestions = suggestRepoProfileCommandFixes(repoPath, name);
+  const hint =
+    suggestions.length > 0
+      ? `add commands.${name} to .donkey/repo-profile.yaml`
+      : `add commands.${name} to .donkey/repo-profile.yaml with this repo's validation command`;
+  return {
+    commandRef: name,
+    profilePath,
+    status: 'missing',
+    command: null,
+    commandText: '',
+    hint,
+    suggestions,
+  };
+}
+
+export function suggestRepoProfileCommandFixes(
+  repoPath: string,
+  name: RepoProfileCommandName,
+): RepoProfileCommandFixSuggestion[] {
+  const packageScripts = readPackageScripts(repoPath);
+  if (!packageScripts) {
+    return [];
+  }
+
+  const scriptName = candidateScriptNames[name].find(
+    (candidate) => packageScripts.scripts[candidate],
+  );
+  if (!scriptName) {
+    return [];
+  }
+
+  const command = scriptCommand(packageScripts.runner, scriptName);
+  return [
+    {
+      commandRef: name,
+      profilePath: repoProfilePath(repoPath),
+      scriptName,
+      command,
+      commandText: formatCommandInvocation(command),
+      yamlSnippet: formatRepoProfileCommandYaml(name, command),
+    },
+  ];
+}
+
 export function detectRepoProfile(repoPath: string): RepoProfile {
-  const packageJsonPath = join(repoPath, 'package.json');
-  if (!existsSync(packageJsonPath)) {
+  const packageScripts = readPackageScripts(repoPath);
+  if (!packageScripts) {
     return repoProfileSchema.parse({});
   }
 
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-    scripts?: Record<string, string>;
-    packageManager?: string;
-  };
-  const scripts = packageJson.scripts ?? {};
-  const runner = packageJson.packageManager?.startsWith('pnpm@')
-    ? 'pnpm'
-    : 'npm';
+  const { runner, scripts } = packageScripts;
 
   return repoProfileSchema.parse({
     version: 1,
@@ -131,9 +226,50 @@ function detectSecurityCommand(
 function scriptCommand(
   runner: 'npm' | 'pnpm',
   scriptName: string,
-  description: string,
+  description?: string,
 ) {
-  return runner === 'pnpm'
-    ? { tool: 'pnpm', args: [scriptName], description }
-    : { tool: 'npm', args: ['run', scriptName], description };
+  const command =
+    runner === 'pnpm'
+      ? { tool: 'pnpm', args: [scriptName] }
+      : { tool: 'npm', args: ['run', scriptName] };
+  return description ? { ...command, description } : command;
+}
+
+function readPackageScripts(
+  repoPath: string,
+): { runner: 'npm' | 'pnpm'; scripts: Record<string, string> } | null {
+  const packageJsonPath = join(repoPath, 'package.json');
+  if (!existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+    scripts?: Record<string, string>;
+    packageManager?: string;
+  };
+  return {
+    runner: packageJson.packageManager?.startsWith('pnpm@') ? 'pnpm' : 'npm',
+    scripts: packageJson.scripts ?? {},
+  };
+}
+
+function formatCommandInvocation(command: CommandInvocation): string {
+  return [command.tool, ...command.args].join(' ');
+}
+
+function formatRepoProfileCommandYaml(
+  name: RepoProfileCommandName,
+  command: CommandInvocation,
+): string {
+  return stringifyYaml(
+    {
+      commands: {
+        [name]: {
+          tool: command.tool,
+          args: command.args,
+        },
+      },
+    },
+    { sortMapEntries: false },
+  ).trimEnd();
 }

@@ -312,6 +312,33 @@ describe('runCli in-process', () => {
     expect(io.takeStdout()).toContain('status=passed');
   });
 
+  it('prints repo profile fix guidance for missing workflow commands', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-preflight-'));
+    tempDirs.push(repoPath);
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      JSON.stringify({ scripts: { compile: 'tsc -p tsconfig.json' } }),
+      'utf8',
+    );
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(
+        ['workflow', 'preflight', 'standard-feature', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+
+    const output = io.takeStdout();
+    expect(output).toContain('gate=build commandRef=build status=missing');
+    expect(output).toContain('hint=add commands.build');
+    expect(output).toContain(
+      `profilePath=${join(repoPath, '.donkey', 'repo-profile.yaml')}`,
+    );
+    expect(output).toContain('suggestedScript=compile');
+    expect(output).toContain('suggestedCommand=npm run compile');
+  });
+
   it('does not approve human gates when the run provider snapshot is missing', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
