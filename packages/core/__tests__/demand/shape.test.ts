@@ -7,8 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   approveDemandShape,
   evaluateDemandShape,
+  evaluateWorkflowSelection,
   readDemandShapeFile,
   renderDemandShapeForRun,
+  selectWorkflowTemplateForDemand,
   shapeDemand,
   writeDemandShapeFile,
   writeDemandShapeFiles,
@@ -80,6 +82,56 @@ describe('demand shape', () => {
       'Recommended template: bugfix',
     );
     expect(renderDemandShapeForRun(approved)).toContain('Human approved: yes');
+  });
+
+  it('selects controlled workflow templates for test, docs, and plan-only demands', () => {
+    expect(
+      shapeDemand({
+        id: 'shape_test',
+        createdAt: '2026-06-08T00:00:00.000Z',
+        text: '补齐 Web dashboard 的 Playwright 测试覆盖，要求本地 e2e 通过。',
+      }),
+    ).toMatchObject({
+      category: 'test',
+      recommendedTemplate: 'test-improvement',
+    });
+    expect(
+      shapeDemand({
+        id: 'shape_docs',
+        createdAt: '2026-06-08T00:00:00.000Z',
+        text: '更新 README 和用户手册，说明 workflow selection 的使用方式。',
+      }),
+    ).toMatchObject({
+      category: 'docs',
+      recommendedTemplate: 'docs-update',
+    });
+    expect(
+      selectWorkflowTemplateForDemand({
+        text: '只做技术方案评审，不改代码，输出风险和验收标准。',
+      }),
+    ).toMatchObject({
+      recommendedTemplate: 'plan-only',
+      alternatives: expect.arrayContaining(['standard-feature', 'bugfix']),
+    });
+
+    expect(
+      evaluateWorkflowSelection({
+        text: '补齐 CLI 的单元测试覆盖。',
+        selectedTemplate: 'standard-feature',
+      }),
+    ).toMatchObject({
+      ready: false,
+      recommendedTemplate: 'test-improvement',
+    });
+    expect(
+      evaluateWorkflowSelection({
+        text: '补齐 CLI 的单元测试覆盖。',
+        selectedTemplate: 'test-improvement',
+      }),
+    ).toMatchObject({
+      ready: true,
+      recommendedTemplate: 'test-improvement',
+    });
   });
 
   it('writes, reads, approves, and mirrors markdown review files', () => {

@@ -77,6 +77,11 @@ test.describe('Donkey release dashboard', () => {
     ).toBeVisible();
     await expect(page.getByText('Review Route info')).toBeVisible();
     await expect(page.getByLabel('Review run')).toContainText('run_0');
+    await expect(page.getByLabel('Run template')).toContainText(
+      'test-improvement',
+    );
+    await expect(page.getByLabel('Run template')).toContainText('docs-update');
+    await expect(page.getByLabel('Run template')).toContainText('plan-only');
 
     await page.getByLabel('Review run').selectOption('run_0');
     await expect(page.getByText('Older run review body')).toBeVisible();

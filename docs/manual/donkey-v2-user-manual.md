@@ -6,7 +6,7 @@
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、需求塑形与人工批准、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询和 watch 轮询、工作就绪度评估、需求塑形评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Gate 失败诊断、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、需求塑形与人工批准、受控 workflow selection、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、PR 创建后的只读远端 CI 状态查询和 watch 轮询、工作就绪度评估、需求塑形评估、workflow selection 评估、工作可用样本评估、样本记录和评估报告导出、命令日志脱敏、artifact 入库敏感信息拦截、聚合审阅面、审阅证据导航、Gate 失败诊断、Web 多运行审阅、Web 受控发起 run/prepare/create-pr、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
 本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
@@ -57,6 +57,15 @@ node /path/to/donkey/packages/cli/dist/index.js run --demand-file /path/to/proje
 `demand shape --write` 会在 `.donkey/demands/` 下写入 JSON 源文件和 Markdown 审阅稿，内容包括需求分类、推荐模板、风险等级、风险标签、非目标、假设、开放问题和验收标准。`run --demand-file` 默认要求该需求文件已被 `demand approve` 标记为 approved；如果仍有开放问题，人可以选择先补充需求，也可以在明确接受风险后批准继续。`eval demand-shape` 会检查标题、验收标准、非目标、风险边界和开放问题是否已解决或已被人工批准。
 
 该入口不会自动修改原始需求、不会自动创建 PR，也不会绕过后续 gate。它的目标是把“我想做什么、什么不做、怎么验收、风险在哪里”固定成后续 run 的输入证据。
+
+需求塑形会按确定性规则推荐受控模板：`bugfix`、`test-improvement`、`docs-update`、`plan-only` 或 `standard-feature`。如果需要独立确认模板选择，可先运行：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js workflow select "补齐 CLI 的单元测试覆盖，要求 test 通过" --repo /path/to/project
+node /path/to/donkey/packages/cli/dist/index.js eval workflow-selection "补齐 CLI 的单元测试覆盖，要求 test 通过" --template test-improvement
+```
+
+`workflow select` 只输出推荐模板、分类、可选模板和原因；`eval workflow-selection` 会检查人工选择的模板是否与需求分类匹配。它不会把动态规划结果直接变成可执行 workflow。
 
 ### 标准模板运行
 
@@ -337,7 +346,7 @@ Pending human gate 会展示 request context、gate context、exact command 和 
 Web 的“工作流操作”区支持：
 
 - 使用 session token 对当前输入需求执行塑形，生成推荐模板、风险标签、验收标准、非目标和开放问题；批准需求后，Web 发起 run 会使用塑形后的需求文件。
-- 使用 session token 发起模板 run，默认 `standard-feature` + `mock`，也可选择 `claude-code`；与 CLI 一样会检查 dirty base，除非显式允许 dirty base。
+- 使用 session token 发起模板 run，默认 `standard-feature` + `mock`，可选择 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only` 或项目级 workflow，也可选择 `claude-code`；与 CLI 一样会检查 dirty base，除非显式允许 dirty base。
 - 对当前选中的 run 执行 PR 准备，复用 `delivery prepare`，生成 PR body/package 并写入审计事件；默认选中 latest run，但可切换到历史 run 复盘或补交付。
 - 对当前选中的 run 触发受人工批准的 PR 创建入口，复用 `delivery create-pr`；未批准时只进入 `awaiting-approval`，批准后才会 push 和调用 `gh pr create`。
 - artifact 列表、gate 列表和 audit 中的 delivery 事件提供基础锚点，可跳到 artifact 正文、gate log 或 PR 包。
@@ -383,7 +392,17 @@ node /path/to/donkey/packages/cli/dist/index.js workflow show standard-feature -
 node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --from standard-feature --repo /path/to/project
 ```
 
-当前内置模板包括 `standard-feature` 和 `bugfix`。两个模板的代码节点都包含 build、lint、schema 和 security-scan gate，并通过 `commandRef` 读取 repo profile 中的命令。`standard-feature` 适合本地 mock happy path 验证；`bugfix` 保留 reviewer human gate，通常需要人工确认后继续。
+当前内置模板包括：
+
+| 模板               | 用途                     | 当前边界                                                                                                     |
+| ------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `standard-feature` | 标准功能需求             | 代码节点包含 build、lint、schema 和 security-scan gate，适合低中风险功能改动。                               |
+| `bugfix`           | 缺陷修复                 | 保留 reviewer human gate，适合需要回归验证和人工确认的修复。                                                 |
+| `test-improvement` | 测试补齐、覆盖率和 e2e   | 强调 test/e2e evidence；缺少 e2e 命令时应在 repo profile 中补命令或显式 `notApplicable`。                    |
+| `docs-update`      | README、手册和文档更新   | 仍通过 build/lint/security-scan 保护仓库；文档仓库可用 repo profile 显式标记普通命令不适用。                 |
+| `plan-only`        | 仅方案、技术设计或调研稿 | 不产出 `code-changes`，包含 reviewer human gate；不等价于可交付 PR，readiness 仍会揭示缺少验证 gate 的事实。 |
+
+这些模板都通过 `commandRef` 读取 repo profile 中的命令。`workflow select` 只在这些受控模板之间推荐，不执行 PM LLM 动态规划；动态 workflow 当前仍只支持 dry-run。
 
 ## 17. Logs 与审计
 

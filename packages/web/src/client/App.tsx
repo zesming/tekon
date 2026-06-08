@@ -211,6 +211,9 @@ function App() {
     const options = new Map<string, string>([
       ['standard-feature', 'standard-feature'],
       ['bugfix', 'bugfix'],
+      ['test-improvement', 'test-improvement'],
+      ['docs-update', 'docs-update'],
+      ['plan-only', 'plan-only'],
     ]);
     for (const workflow of workflows) {
       options.set(workflow.id, workflow.id);

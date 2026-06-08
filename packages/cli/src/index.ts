@@ -36,10 +36,12 @@ import {
   evaluateWorkUsability,
   approveDemandShape,
   evaluateDemandShape,
+  evaluateWorkflowSelection,
   readDemandShapeFile,
   watchPullRequestCiStatus,
   renderDemandShapeForRun,
   renderWorkUsabilityEvaluationReport,
+  selectWorkflowTemplateForDemand,
   shapeDemand,
   writeDemandShapeFile,
   writeDemandShapeFiles,
@@ -664,6 +666,53 @@ async function commandRole(argv: string[], io: CliIO) {
 
 async function commandWorkflow(argv: string[], io: CliIO) {
   const [subcommand, name, ...rest] = argv;
+  if (subcommand === 'select') {
+    const selectArgs = parseArgs({
+      args: argv.slice(1),
+      options: {
+        repo: { type: 'string' },
+        shape: { type: 'string' },
+        template: { type: 'string' },
+        json: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(selectArgs.values.repo ?? process.cwd());
+    const shape = selectArgs.values.shape
+      ? readDemandShapeFile(resolve(repoPath, selectArgs.values.shape))
+      : null;
+    const demandText = shape
+      ? shape.rawText
+      : selectArgs.positionals.join(' ').trim();
+    const selection = selectWorkflowTemplateForDemand({
+      text: demandText,
+      ...(shape ? { category: shape.category } : {}),
+    });
+    const evaluation = evaluateWorkflowSelection({
+      text: demandText,
+      selectedTemplate:
+        selectArgs.values.template ?? shape?.recommendedTemplate,
+      ...(shape ? { category: shape.category } : {}),
+    });
+    if (selectArgs.values.json) {
+      io.stdout.write(
+        `${JSON.stringify({ selection, evaluation }, null, 2)}\n`,
+      );
+      return;
+    }
+    io.stdout.write(
+      [
+        `recommendedTemplate=${selection.recommendedTemplate}`,
+        `category=${selection.category}`,
+        `ready=${evaluation.ready}`,
+        `score=${evaluation.score.toFixed(2)}`,
+        `alternatives=${selection.alternatives.join(',')}`,
+        `reasons=${selection.reasons.join('|')}`,
+      ].join(' ') + '\n',
+    );
+    return;
+  }
+
   const args = parseArgs({
     args: rest,
     options: {
@@ -1149,6 +1198,44 @@ async function commandEval(argv: string[], io: CliIO) {
         ? `${JSON.stringify(evaluation, null, 2)}\n`
         : [
             `demandShapeId=${shape.id}`,
+            `ready=${evaluation.ready}`,
+            `score=${evaluation.score.toFixed(2)}`,
+            `failed=${evaluation.checks
+              .filter((check) => !check.passed)
+              .map((check) => check.id)
+              .join(',')}`,
+          ].join(' ') + '\n',
+    );
+    return;
+  }
+
+  if (subcommand === 'workflow-selection') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        shape: { type: 'string' },
+        template: { type: 'string' },
+        json: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const shape = args.values.shape
+      ? readDemandShapeFile(resolve(args.values.shape))
+      : null;
+    const demandText = shape
+      ? shape.rawText
+      : args.positionals.join(' ').trim();
+    const evaluation = evaluateWorkflowSelection({
+      text: demandText,
+      selectedTemplate: args.values.template ?? shape?.recommendedTemplate,
+      ...(shape ? { category: shape.category } : {}),
+    });
+    io.stdout.write(
+      args.values.json
+        ? `${JSON.stringify(evaluation, null, 2)}\n`
+        : [
+            `recommendedTemplate=${evaluation.recommendedTemplate}`,
+            `selectedTemplate=${evaluation.selectedTemplate}`,
             `ready=${evaluation.ready}`,
             `score=${evaluation.score.toFixed(2)}`,
             `failed=${evaluation.checks

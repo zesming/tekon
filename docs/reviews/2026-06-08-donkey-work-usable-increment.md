@@ -4,7 +4,7 @@
 
 范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
 
-结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、缺失命令修复引导和显式不适用语义、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web approval 自动继续、Web 受控发起 run/prepare/create-pr、需求塑形、受控 workflow selection、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、工作就绪度评估、工作可用样本评估和第一版 CLI/Web 聚合审阅面。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
@@ -37,6 +37,7 @@
 | Web 受控执行入口             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`                                                       | Web 使用 session token 发起模板 run、执行 PR 准备和触发受人工批准的 create-pr；复用 Engine、PR package 和 SCM delivery 语义，不绕过 dirty base 和人工审批。                                                                                  |
 | Web 多运行审阅流             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`、`packages/web/__tests__/fixtures/project.ts`         | Web 读取项目 run 列表，可选择历史 run 或 latest run，并按选中 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在选中 run。                                                                                    |
 | 需求塑形入口                 | `packages/core/src/demand/shape.ts`、CLI `demand`、Web dashboard                                                               | 先把原始需求塑形成需求卡、风险、非目标、开放问题和验收标准；CLI/Web 都要求人工批准后再用 `run --demand-file` 或 Web shape path 进入 workflow。                                                                                               |
+| 受控 Workflow 选择           | `workflows/*.yaml`、`packages/core/src/demand/shape.ts`、CLI `workflow select` / `eval workflow-selection`、Web dashboard      | 新增 `test-improvement`、`docs-update`、`plan-only` 受控模板；需求塑形可推荐模板，CLI 可评估人工选择是否匹配需求，Web 模板选择器可直接选择这些模板。                                                                                         |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 和 remote CI passed 为 recommended。                                                              |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                                                                                   |
 | 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                              |
@@ -71,6 +72,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
 - `review/surface.test.ts`：覆盖失败 gate 的 triage 输出，包含 `exit-code`、`missing-command`、日志锚点、retry 建议和 suggested command。
 - `demand/shape.test.ts`：覆盖需求分类、风险识别、验收标准生成、开放问题、人工批准、Markdown/JSON 文件写入和需求塑形评估。
+- `demand/shape.test.ts` / `workflow/template.test.ts`：覆盖 `test-improvement`、`docs-update`、`plan-only` 受控模板推荐、错误模板选择评估失败，以及所有内置模板可被解析。
 - `eval/work-usability.test.ts`：覆盖样本阈值通过、真实 provider/PR/隔离证据缺失失败，以及缺失 run 的样本级失败证据。
 - `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
 - `security/secrets.test.ts`：覆盖共享 secret scanner 的文本扫描、脱敏和忽略 `.donkey` 运行态目录。
@@ -105,6 +107,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 - 真实 PR 上的远端 CI 状态证据；当前 `delivery ci-status` / `delivery ci-watch` 已有 fake `gh` fixture 和本地入库测试，但仍需在受控 GitHub PR 上记录 `gh pr checks` 输出、PR URL、状态变化和失败恢复。
 - 动态 workflow 非 dry-run 执行。
 - 真实 PM/LLM 多轮需求澄清；当前需求塑形是确定性启发式和人工批准入口，不代表自动理解所有需求。
+- 动态 workflow 自动规划和人工确认后保存模板的产品流；当前 workflow selection 只在受控内置模板之间做确定性推荐和评估。
 - 自动 merge、自动上线、生产权限变更等高风险动作。
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
 - 完整 DLP、密钥轮换和生产级安全审计；当前新增的是基础敏感模式扫描、命令日志脱敏和 artifact 入库拦截。

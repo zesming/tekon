@@ -82,7 +82,12 @@ export interface WorkflowTemplate {
   phases: WorkflowTemplatePhase[];
 }
 
-export type BuiltInWorkflowTemplateId = 'standard-feature' | 'bugfix';
+export type BuiltInWorkflowTemplateId =
+  | 'standard-feature'
+  | 'bugfix'
+  | 'test-improvement'
+  | 'docs-update'
+  | 'plan-only';
 
 const rawArtifactRefSchema = z.union([
   z.string().min(1),

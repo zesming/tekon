@@ -48,6 +48,33 @@ describe('donkey release flow e2e', () => {
     expect(preflightOutput).toContain('gate=build commandRef=build');
     expect(preflightOutput).toContain('command=npm run build');
 
+    const workflowSelectionOutput = runCli(
+      cliPath,
+      [
+        'workflow',
+        'select',
+        '补齐 CLI 的单元测试覆盖，要求 test 通过。',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(workflowSelectionOutput).toContain(
+      'recommendedTemplate=test-improvement',
+    );
+    const workflowSelectionEvalOutput = runCli(
+      cliPath,
+      [
+        'eval',
+        'workflow-selection',
+        '补齐 CLI 的单元测试覆盖，要求 test 通过。',
+        '--template',
+        'test-improvement',
+      ],
+      repoPath,
+    );
+    expect(workflowSelectionEvalOutput).toContain('ready=true');
+
     const dynamicOutput = runCli(
       cliPath,
       [

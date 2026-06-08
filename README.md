@@ -1,13 +1,13 @@
 # Donkey
 
-Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：需求塑形与人工批准入口、真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面、审阅证据导航、工作可用样本评估、样本记录和评估报告导出。
+Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：需求塑形与人工批准入口、受控 workflow selection、真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web human approval 自动继续、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面、审阅证据导航、工作可用样本评估、样本记录和评估报告导出。
 
 ## 当前状态
 
 - Phase 2 已验证：`packages/core` 安全可恢复内核、角色系统、workflow 模板、约束校验、动态 workflow dry-run、持久化调度器、Artifact Store、Audit hash chain、GateEngine、HumanGate、Mock Agent 和 Claude Code adapter contract。
 - Phase 2 已验证：`packages/cli` 本地命令入口，包括 `init`、`run --template`、`run --dynamic --dry-run`、`run --allow-dirty-base`、`status`、`pause`、`resume --approve-human`、`cancel`、`role`、`workflow`、`constraints`、`log`、`clean`。
 - Phase 3 已验证：交付 dry-run、delivery evidence、metrics、dogfooding 报告、本地 Web dashboard、Web human approval、audit hash/filter、CLI/Web release e2e 和最终验收报告。
-- 工作可用化增量已验证：`demand shape/approve` 需求塑形、`run --demand-file` 批准后运行、`eval demand-shape` 需求质量评估、`repo-profile.yaml` 仓库画像、`workflow preflight` 缺失命令修复引导、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`delivery ci-status` 只读查询 PR checks 并落库、`delivery ci-watch` 只读轮询 PR checks 直到终态或达到次数上限、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、`eval work-usability record` 样本记录、样本评估 Markdown/HTML 报告导出、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Evidence Navigation 和 Gate Failure Triage、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
+- 工作可用化增量已验证：`demand shape/approve` 需求塑形、`run --demand-file` 批准后运行、`workflow select` 受控模板推荐、`eval demand-shape` 和 `eval workflow-selection` 需求/模板质量评估、`repo-profile.yaml` 仓库画像、`workflow preflight` 缺失命令修复引导、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`delivery ci-status` 只读查询 PR checks 并落库、`delivery ci-watch` 只读轮询 PR checks 直到终态或达到次数上限、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、`eval work-usability record` 样本记录、样本评估 Markdown/HTML 报告导出、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Evidence Navigation 和 Gate Failure Triage、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
 - 尚未作为已完成能力发布：自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户服务。
 
 ## 快速开始
@@ -32,6 +32,15 @@ node packages/cli/dist/index.js workflow preflight standard-feature --repo /path
 ```
 
 如果某个 `commandRef` 缺失，preflight 会输出 `status=missing`、`profilePath` 和 `hint`；当 `package.json` 中存在 `compile`、`test:e2e` 等候选脚本时，还会输出 `suggestedScript` 和 `suggestedCommand`。用户需要把确认后的命令写入 `.donkey/repo-profile.yaml`；Donkey 不会因命令缺失自动跳过 gate。确实不适用的普通命令 gate 可在 repo profile 中显式配置 `notApplicable: true` 和 `reason`，运行时会记录为 `skipped/not-applicable`，并在 readiness 和 PR 包中可见；`security-scan` 即使没有外部命令仍会执行 Donkey 内置扫描。
+
+为需求选择受控模板：
+
+```bash
+node packages/cli/dist/index.js workflow select "补齐 CLI 的单元测试覆盖，要求 test 通过" --repo /path/to/project
+node packages/cli/dist/index.js eval workflow-selection "补齐 CLI 的单元测试覆盖，要求 test 通过" --template test-improvement
+```
+
+当前内置模板包括 `standard-feature`、`bugfix`、`test-improvement`、`docs-update` 和 `plan-only`。`workflow select` 只做确定性推荐和解释，不会自动生成动态 workflow；如果人工选择了不同模板，`eval workflow-selection` 会把推荐模板与所选模板不一致作为失败项暴露出来。
 
 运行动态 workflow dry-run：
 
@@ -190,8 +199,9 @@ npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --
 - 远端 CI watch 增量：`docs/reviews/2026-06-08-donkey-remote-ci-watch-increment.html`
 - Gate 失败诊断增量：`docs/reviews/2026-06-08-donkey-gate-failure-triage-increment.html`
 - 需求塑形入口增量：`docs/reviews/2026-06-08-donkey-demand-shaping-increment.html`
+- 受控 workflow selection 增量：`docs/reviews/2026-06-08-donkey-workflow-selection-increment.html`
 - 历史 MVP 边界：`docs/manual/donkey-mvp-user-manual.html`
 
 ## 发布状态
 
-当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、需求塑形和人工批准、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、delivery ci-status 只读查询 GitHub PR checks、delivery ci-watch 只读等待 PR checks 终态、eval demand-shape、eval readiness、eval work-usability、eval work-usability record、样本评估报告导出、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。
+当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、需求塑形和人工批准、受控 workflow selection、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、delivery ci-status 只读查询 GitHub PR checks、delivery ci-watch 只读等待 PR checks 终态、eval demand-shape、eval workflow-selection、eval readiness、eval work-usability、eval work-usability record、样本评估报告导出、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval 和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。

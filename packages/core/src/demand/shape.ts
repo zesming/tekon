@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'node:path';
 
 import { z } from 'zod';
 
-const demandCategorySchema = z.enum([
+export const demandCategorySchema = z.enum([
   'feature',
   'bugfix',
   'test',
@@ -14,6 +14,17 @@ const demandCategorySchema = z.enum([
 ]);
 
 const demandRiskLevelSchema = z.enum(['low', 'medium', 'high']);
+
+export const controlledWorkflowTemplateIdSchema = z.enum([
+  'standard-feature',
+  'bugfix',
+  'test-improvement',
+  'docs-update',
+  'plan-only',
+]);
+export type ControlledWorkflowTemplateId = z.infer<
+  typeof controlledWorkflowTemplateIdSchema
+>;
 
 const shapedAcceptanceCriterionSchema = z.object({
   id: z.string().min(1),
@@ -29,7 +40,7 @@ export const demandShapeSchema = z
     title: z.string().min(1),
     summary: z.string().min(1),
     category: demandCategorySchema,
-    recommendedTemplate: z.enum(['standard-feature', 'bugfix']),
+    recommendedTemplate: controlledWorkflowTemplateIdSchema,
     risk: z.object({
       level: demandRiskLevelSchema,
       tags: z.array(z.string().min(1)),
@@ -61,6 +72,26 @@ export interface DemandShapeEvaluation {
   }>;
 }
 
+export interface WorkflowTemplateSelection {
+  category: DemandShape['category'];
+  recommendedTemplate: ControlledWorkflowTemplateId;
+  alternatives: ControlledWorkflowTemplateId[];
+  reasons: string[];
+}
+
+export interface WorkflowSelectionEvaluation {
+  ready: boolean;
+  score: number;
+  recommendedTemplate: ControlledWorkflowTemplateId;
+  selectedTemplate: string;
+  checks: Array<{
+    id: string;
+    passed: boolean;
+    severity: 'required' | 'recommended';
+    evidence: string;
+  }>;
+}
+
 export function shapeDemand(input: {
   text: string;
   id?: string;
@@ -75,6 +106,10 @@ export function shapeDemand(input: {
   const risk = classifyRisk(rawText, category);
   const summary = summarizeDemand(rawText);
   const openQuestions = inferOpenQuestions(rawText, risk.level);
+  const selection = selectWorkflowTemplateForDemand({
+    text: rawText,
+    category,
+  });
   const acceptanceCriteria = buildAcceptanceCriteria({
     summary,
     category,
@@ -88,7 +123,7 @@ export function shapeDemand(input: {
     title: summary,
     summary,
     category,
-    recommendedTemplate: category === 'bugfix' ? 'bugfix' : 'standard-feature',
+    recommendedTemplate: selection.recommendedTemplate,
     risk,
     nonGoals: buildNonGoals(risk.level),
     assumptions: buildAssumptions(category),
@@ -100,6 +135,78 @@ export function shapeDemand(input: {
     approvedAt: null,
     createdAt: input.createdAt ?? new Date().toISOString(),
   });
+}
+
+export function selectWorkflowTemplateForDemand(input: {
+  text: string;
+  category?: DemandShape['category'];
+}): WorkflowTemplateSelection {
+  const rawText = normalizeText(input.text);
+  if (!rawText) {
+    throw new Error('demand text is required');
+  }
+  const category = input.category ?? classifyDemand(rawText);
+  const recommendedTemplate = recommendTemplate(rawText, category);
+  return {
+    category,
+    recommendedTemplate,
+    alternatives: controlledWorkflowTemplateIdSchema.options.filter(
+      (template) => template !== recommendedTemplate,
+    ),
+    reasons: buildTemplateSelectionReasons(
+      rawText,
+      category,
+      recommendedTemplate,
+    ),
+  };
+}
+
+export function evaluateWorkflowSelection(input: {
+  text: string;
+  selectedTemplate?: string;
+  category?: DemandShape['category'];
+}): WorkflowSelectionEvaluation {
+  const selection = selectWorkflowTemplateForDemand(input);
+  const selectedTemplate =
+    input.selectedTemplate ?? selection.recommendedTemplate;
+  const knownSelectedTemplate =
+    controlledWorkflowTemplateIdSchema.safeParse(selectedTemplate).success;
+  const checks: WorkflowSelectionEvaluation['checks'] = [
+    {
+      id: 'selected-template-known',
+      severity: 'required',
+      passed: knownSelectedTemplate,
+      evidence: selectedTemplate,
+    },
+    {
+      id: 'selected-template-fits-demand',
+      severity: 'required',
+      passed:
+        knownSelectedTemplate &&
+        selectedTemplate === selection.recommendedTemplate,
+      evidence: `selected=${selectedTemplate} recommended=${selection.recommendedTemplate} category=${selection.category}`,
+    },
+    {
+      id: 'controlled-alternatives-present',
+      severity: 'recommended',
+      passed: selection.alternatives.length >= 2,
+      evidence: selection.alternatives.join(','),
+    },
+    {
+      id: 'selection-reasons-present',
+      severity: 'recommended',
+      passed: selection.reasons.length > 0,
+      evidence: selection.reasons.join(' | '),
+    },
+  ];
+  const required = checks.filter((check) => check.severity === 'required');
+  return {
+    ready: required.every((check) => check.passed),
+    score: checks.filter((check) => check.passed).length / checks.length,
+    recommendedTemplate: selection.recommendedTemplate,
+    selectedTemplate,
+    checks,
+  };
 }
 
 export function approveDemandShape(
@@ -295,6 +402,13 @@ function classifyDemand(text: string): DemandShape['category'] {
     return 'refactor';
   }
   if (
+    /(补齐|新增|增加|完善|改进)(单元|集成|端到端|e2e|playwright|vitest)?(测试|用例|覆盖)|测试(补齐|覆盖|用例)|test coverage/iu.test(
+      text,
+    )
+  ) {
+    return 'test';
+  }
+  if (
     /新增|增加|支持|实现|接入|生成|创建|feature|add|create|support/iu.test(text)
   ) {
     return 'feature';
@@ -303,6 +417,58 @@ function classifyDemand(text: string): DemandShape['category'] {
     return 'test';
   }
   return 'other';
+}
+
+function recommendTemplate(
+  text: string,
+  category: DemandShape['category'],
+): ControlledWorkflowTemplateId {
+  if (isPlanOnlyDemand(text)) {
+    return 'plan-only';
+  }
+  if (category === 'bugfix') {
+    return 'bugfix';
+  }
+  if (category === 'test') {
+    return 'test-improvement';
+  }
+  if (category === 'docs') {
+    return 'docs-update';
+  }
+  return 'standard-feature';
+}
+
+function isPlanOnlyDemand(text: string): boolean {
+  return /只做方案|仅方案|仅设计|不改代码|不实现|方案评审|技术方案|调研报告|plan[- ]?only|design[- ]?only|research only/iu.test(
+    text,
+  );
+}
+
+function buildTemplateSelectionReasons(
+  text: string,
+  category: DemandShape['category'],
+  recommendedTemplate: ControlledWorkflowTemplateId,
+): string[] {
+  if (recommendedTemplate === 'plan-only') {
+    return [
+      'Demand explicitly asks for planning, design, research, or no code changes.',
+    ];
+  }
+  if (category === 'bugfix') {
+    return ['Bugfix demand should keep regression evidence and reviewer gate.'];
+  }
+  if (category === 'test') {
+    return ['Test coverage demand should emphasize test evidence and mapping.'];
+  }
+  if (category === 'docs') {
+    return ['Documentation demand should keep implementation scope narrow.'];
+  }
+  if (category === 'refactor') {
+    return [
+      'Refactor demand needs normal build, lint, security, and review gates.',
+    ];
+  }
+  return [`${category} demand defaults to the standard feature workflow.`];
 }
 
 function classifyRisk(

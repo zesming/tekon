@@ -60,6 +60,38 @@ describe('runCli in-process', () => {
     await expect(
       runCli(
         [
+          'workflow',
+          'select',
+          '补齐 CLI 的单元测试覆盖，要求 test 通过。',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('recommendedTemplate=test-improvement');
+
+    await expect(
+      runCli(
+        [
+          'eval',
+          'workflow-selection',
+          '补齐 CLI 的单元测试覆盖，要求 test 通过。',
+          '--template',
+          'standard-feature',
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const workflowSelectionOutput = io.takeStdout();
+    expect(workflowSelectionOutput).toContain('ready=false');
+    expect(workflowSelectionOutput).toContain(
+      'failed=selected-template-fits-demand',
+    );
+
+    await expect(
+      runCli(
+        [
           'run',
           '--demand-file',
           shapePath!,
@@ -407,6 +439,7 @@ describe('runCli in-process', () => {
       ['role', 'create', 'qa', '--repo', repoPath],
       ['workflow', 'list', '--repo', repoPath],
       ['workflow', 'show', 'standard-feature', '--repo', repoPath],
+      ['workflow', 'show', 'test-improvement', '--repo', repoPath],
       [
         'workflow',
         'create',
@@ -423,6 +456,14 @@ describe('runCli in-process', () => {
       await expect(runCli(argv, io)).resolves.toBe(0);
       expect(io.takeStdout().length).toBeGreaterThan(0);
     }
+
+    await expect(
+      runCli(['workflow', 'list', '--repo', repoPath], io),
+    ).resolves.toBe(0);
+    const workflowListOutput = io.takeStdout();
+    expect(workflowListOutput).toContain('test-improvement');
+    expect(workflowListOutput).toContain('docs-update');
+    expect(workflowListOutput).toContain('plan-only');
   }, 15_000);
 
   it('requires --allow-dirty-base before running on tracked local changes', async () => {

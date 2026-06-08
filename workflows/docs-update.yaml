@@ -1,0 +1,82 @@
+id: docs-update
+name: Documentation Update
+version: 1
+retry:
+  maxAttempts: 2
+  backoffMs: 250
+  strategy: fixed
+phases:
+  - id: pm
+    name: PM
+    nodes:
+      - id: pm-doc-scope
+        role: pm
+        outputs:
+          - demand:demand-card
+        gates:
+          - type: schema
+            artifactType: demand-card
+  - id: rd
+    name: RD
+    dependsOn:
+      - pm
+    nodes:
+      - id: rd-doc-change
+        role: rd
+        inputs:
+          - demand:demand-card
+        outputs:
+          - code:code-changes
+        gates:
+          - type: build
+            commandRef: build
+          - type: lint
+            commandRef: lint
+          - type: security-scan
+            commandRef: security
+          - type: schema
+            artifactType: code-changes
+  - id: qa
+    name: QA
+    dependsOn:
+      - rd
+    nodes:
+      - id: qa-doc-review
+        role: qa
+        inputs:
+          - code:code-changes
+        outputs:
+          - test:test-report
+        gates:
+          - type: schema
+            artifactType: test-report
+  - id: reviewer
+    name: Reviewer
+    dependsOn:
+      - qa
+    nodes:
+      - id: reviewer-doc-review
+        role: reviewer
+        inputs:
+          - code:code-changes
+          - test:test-report
+        outputs:
+          - review:review-report
+        gates:
+          - type: schema
+            artifactType: review-report
+  - id: pmo
+    name: PMO
+    dependsOn:
+      - reviewer
+    nodes:
+      - id: pmo-delivery
+        role: pmo
+        inputs:
+          - test:test-report
+          - review:review-report
+        outputs:
+          - delivery:delivery-package
+        gates:
+          - type: schema
+            artifactType: delivery-package

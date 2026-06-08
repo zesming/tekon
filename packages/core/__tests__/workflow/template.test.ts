@@ -119,12 +119,15 @@ phases:
   });
 
   it('loads built-in standard-feature and bugfix templates from disk', () => {
-    expect(loadWorkflowTemplate({ name: 'standard-feature' })).toMatchObject({
-      id: 'standard-feature',
-    });
-    expect(loadWorkflowTemplate({ name: 'bugfix' })).toMatchObject({
-      id: 'bugfix',
-    });
+    for (const name of [
+      'standard-feature',
+      'bugfix',
+      'test-improvement',
+      'docs-update',
+      'plan-only',
+    ]) {
+      expect(loadWorkflowTemplate({ name })).toMatchObject({ id: name });
+    }
   });
 
   it('rejects missing reviewer, code nodes without build/lint, invalid artifact dependencies, and conflicting parallel outputs', () => {
