@@ -100,6 +100,11 @@ test.describe('Donkey release dashboard', () => {
     await page
       .getByLabel('Run demand')
       .fill('Web starts a controlled mock run from the dashboard.');
+    await page.getByRole('button', { name: '塑形需求' }).click();
+    await expect(page.getByText(/demand shaped:/u)).toBeVisible();
+    await expect(page.getByText(/openQuestions=/u)).toBeVisible();
+    await page.getByRole('button', { name: '批准需求' }).click();
+    await expect(page.getByText(/demand approved:/u)).toBeVisible();
     await page.getByRole('button', { name: '发起运行' }).click();
     await expect(page.getByText(/run started:/u)).toBeVisible();
     await page.getByRole('button', { name: '准备 PR' }).click();

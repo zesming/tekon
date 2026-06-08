@@ -34,8 +34,15 @@ import {
   createWorkflowEngine,
   evaluateWorkReadiness,
   evaluateWorkUsability,
+  approveDemandShape,
+  evaluateDemandShape,
+  readDemandShapeFile,
   watchPullRequestCiStatus,
+  renderDemandShapeForRun,
   renderWorkUsabilityEvaluationReport,
+  shapeDemand,
+  writeDemandShapeFile,
+  writeDemandShapeFiles,
   loadRepoProfile,
   writeDefaultRepoProfile,
   generateDynamicWorkflow,
@@ -79,6 +86,9 @@ export async function runCli(
         return 0;
       case 'run':
         await commandRun(rest, io);
+        return 0;
+      case 'demand':
+        await commandDemand(rest, io);
         return 0;
       case 'status':
         await commandStatus(rest, io);
@@ -186,10 +196,21 @@ async function commandRun(argv: string[], io: CliIO) {
       'dry-run': { type: 'boolean', default: false },
       'allow-dirty-base': { type: 'boolean', default: false },
       'save-as': { type: 'string' },
+      'demand-file': { type: 'string' },
     },
     allowPositionals: true,
   });
-  const demandText = args.positionals.join(' ').trim();
+  const shapedDemand = args.values['demand-file']
+    ? readDemandShapeFile(resolve(args.values['demand-file']))
+    : null;
+  if (shapedDemand && !shapedDemand.approved) {
+    throw new Error(
+      `demand file must be approved before run: ${args.values['demand-file']}`,
+    );
+  }
+  const demandText = shapedDemand
+    ? renderDemandShapeForRun(shapedDemand)
+    : args.positionals.join(' ').trim();
   if (!demandText) {
     throw new Error('run demand text is required');
   }
@@ -252,7 +273,10 @@ async function commandRun(argv: string[], io: CliIO) {
   const result = await engine.startRun({
     demandText,
     mode: 'template',
-    templateName: args.values.template ?? 'standard-feature',
+    templateName:
+      args.values.template ??
+      shapedDemand?.recommendedTemplate ??
+      'standard-feature',
   });
   const pendingHuman = (
     await repositories.listHumanDecisions(result.runId)
@@ -344,6 +368,121 @@ function createDynamicMockAdapter(demandText: string) {
       };
     },
   };
+}
+
+async function commandDemand(argv: string[], io: CliIO) {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === 'shape') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        write: { type: 'boolean', default: false },
+        format: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const demandText = args.positionals.join(' ').trim();
+    const shape = shapeDemand({ text: demandText });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    if (args.values.write) {
+      ensureInitialized(repoPath);
+    }
+    const paths = args.values.write
+      ? writeDemandShapeFiles({ repoPath, shape })
+      : null;
+    if (args.values.format === 'json') {
+      io.stdout.write(
+        `${JSON.stringify({ shape, ...(paths ?? {}) }, null, 2)}\n`,
+      );
+      return;
+    }
+    io.stdout.write(
+      [
+        `demandShapeId=${shape.id}`,
+        `readyForRun=${shape.readyForRun}`,
+        `approved=${shape.approved}`,
+        `category=${shape.category}`,
+        `risk=${shape.risk.level}`,
+        `recommendedTemplate=${shape.recommendedTemplate}`,
+        `openQuestions=${shape.openQuestions.length}`,
+        paths ? `shapePath=${paths.jsonPath}` : '',
+        paths ? `reviewPath=${paths.markdownPath}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ') + '\n',
+    );
+    return;
+  }
+
+  if (subcommand === 'approve') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        shape: { type: 'string' },
+        actor: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const shapeArg = args.values.shape ?? args.positionals[0];
+    if (!shapeArg) {
+      throw new Error('demand shape path is required');
+    }
+    const shapePath = resolve(shapeArg);
+    const approved = approveDemandShape(readDemandShapeFile(shapePath), {
+      actor: args.values.actor ?? 'cli',
+    });
+    writeDemandShapeFile(shapePath, approved);
+    io.stdout.write(
+      [
+        `demandShapeId=${approved.id}`,
+        `approved=${approved.approved}`,
+        `approvedBy=${approved.approvedBy ?? ''}`,
+        `approvedAt=${approved.approvedAt ?? ''}`,
+        `shapePath=${shapePath}`,
+      ].join(' ') + '\n',
+    );
+    return;
+  }
+
+  if (subcommand === 'show') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        shape: { type: 'string' },
+        eval: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const shapeArg = args.values.shape ?? args.positionals[0];
+    if (!shapeArg) {
+      throw new Error('demand shape path is required');
+    }
+    const shapePath = resolve(shapeArg);
+    const shape = readDemandShapeFile(shapePath);
+    const evaluation = evaluateDemandShape(shape);
+    io.stdout.write(
+      [
+        `demandShapeId=${shape.id}`,
+        `title=${shape.title}`,
+        `category=${shape.category}`,
+        `risk=${shape.risk.level}`,
+        `readyForRun=${shape.readyForRun}`,
+        `approved=${shape.approved}`,
+        `recommendedTemplate=${shape.recommendedTemplate}`,
+        `acceptanceCriteria=${shape.acceptanceCriteria.length}`,
+        `openQuestions=${shape.openQuestions.length}`,
+        args.values.eval
+          ? `evalReady=${evaluation.ready} evalScore=${evaluation.score.toFixed(2)}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n') + '\n',
+    );
+    return;
+  }
+
+  throw new Error(`unknown demand command: ${subcommand ?? ''}`);
 }
 
 async function commandPause(argv: string[], io: CliIO) {
@@ -990,6 +1129,37 @@ async function commandStatus(argv: string[], io: CliIO) {
 
 async function commandEval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
+  if (subcommand === 'demand-shape') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        shape: { type: 'string' },
+        json: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const shapeArg = args.values.shape ?? args.positionals[0];
+    if (!shapeArg) {
+      throw new Error('demand shape path is required');
+    }
+    const shape = readDemandShapeFile(resolve(shapeArg));
+    const evaluation = evaluateDemandShape(shape);
+    io.stdout.write(
+      args.values.json
+        ? `${JSON.stringify(evaluation, null, 2)}\n`
+        : [
+            `demandShapeId=${shape.id}`,
+            `ready=${evaluation.ready}`,
+            `score=${evaluation.score.toFixed(2)}`,
+            `failed=${evaluation.checks
+              .filter((check) => !check.passed)
+              .map((check) => check.id)
+              .join(',')}`,
+          ].join(' ') + '\n',
+    );
+    return;
+  }
+
   if (subcommand === 'work-usability') {
     if (rest[0] === 'record') {
       await commandWorkUsabilityRecord(rest.slice(1), io);

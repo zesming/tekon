@@ -36,6 +36,7 @@
 | Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                                          | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                                                                                              |
 | Web 受控执行入口             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`                                                       | Web 使用 session token 发起模板 run、执行 PR 准备和触发受人工批准的 create-pr；复用 Engine、PR package 和 SCM delivery 语义，不绕过 dirty base 和人工审批。                                                                                  |
 | Web 多运行审阅流             | `packages/web/src/server/api/root.ts`、`packages/web/src/client/App.tsx`、`packages/web/__tests__/fixtures/project.ts`         | Web 读取项目 run 列表，可选择历史 run 或 latest run，并按选中 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在选中 run。                                                                                    |
+| 需求塑形入口                 | `packages/core/src/demand/shape.ts`、CLI `demand`、Web dashboard                                                               | 先把原始需求塑形成需求卡、风险、非目标、开放问题和验收标准；CLI/Web 都要求人工批准后再用 `run --demand-file` 或 Web shape path 进入 workflow。                                                                                               |
 | 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                                               | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 和 remote CI passed 为 recommended。                                                              |
 | 工作可用样本评估             | `packages/core/src/eval/work-usability.ts`、CLI `eval work-usability`                                                          | 读取样本清单并按阈值检查样本数、ready run、真实 provider run、created PR、security scan、worktree 隔离和远端副作用审批，把 P0-2/P0-6/P0-7 变成可执行评估。                                                                                   |
 | 聚合审阅面                   | `packages/core/src/review/surface.ts`、CLI `review`、Web `review.get`                                                          | 汇总 readiness 失败项、Evidence Navigation、PR body/package、delivery diff、artifact 正文、gate log 和下一步命令；Web 显示 Readiness/Evidence Links/Diff/Artifact 正文/Gate Logs/PR 包/下一步。                                              |
@@ -69,6 +70,7 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
 - `review/surface.test.ts`：聚合 readiness、artifact 正文、gate log、PR body/package 和 delivery diff，并覆盖 repo 外 artifact/gate log、symlink、DB project repoPath 扩权和 unsafe git ref 不被采信。
 - `review/surface.test.ts`：覆盖失败 gate 的 triage 输出，包含 `exit-code`、`missing-command`、日志锚点、retry 建议和 suggested command。
+- `demand/shape.test.ts`：覆盖需求分类、风险识别、验收标准生成、开放问题、人工批准、Markdown/JSON 文件写入和需求塑形评估。
 - `eval/work-usability.test.ts`：覆盖样本阈值通过、真实 provider/PR/隔离证据缺失失败，以及缺失 run 的样本级失败证据。
 - `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
 - `security/secrets.test.ts`：覆盖共享 secret scanner 的文本扫描、脱敏和忽略 `.donkey` 运行态目录。
@@ -80,8 +82,9 @@ npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
 - `artifact/schemas.test.ts`：覆盖 `ci-status` payload schema，并覆盖 agent manifest 拒绝 `ci-status`。
 - `cli` run-cli unit：`review --run-id` 输出 readiness、artifact、gate log 和 PR body。
 - `cli` run-cli unit：覆盖 fake `gh pr checks` 下的 `delivery ci-status` 命令输出。
+- `cli` run-cli unit：覆盖 `demand shape --write`、未批准 `run --demand-file` 阻断、`demand approve`、`eval demand-shape` 和批准后的 `run --demand-file`。
 - `cli` release e2e：覆盖 `eval work-usability --samples` 在受控 fixture 中读取样本清单并验证 ready run、created PR 和隔离证据。
-- `web` API/e2e：Web approval 后自动 resume，reject 不继续；Web API 和 dashboard 可读取 review surface；Web 可发起 mock run、执行 prepare、将 create-pr 落库为 awaiting-approval，并在 e2e 中完成 dashboard 发起 run 和准备 PR。
+- `web` API/e2e：Web approval 后自动 resume，reject 不继续；Web API 和 dashboard 可读取 review surface；Web 可塑形并批准需求、发起 mock run、执行 prepare、将 create-pr 落库为 awaiting-approval，并在 e2e 中完成 dashboard 需求塑形、发起 run 和准备 PR。
 - `web` API/e2e：fixture 增加历史 run，API 覆盖 `project.detail` 返回多 run 和指定 run review；dashboard e2e 覆盖选择历史 run 查看 artifact/gate log，再切回 latest run 继续审批和 PR 准备。
 
 本轮最终收口已通过：
@@ -101,6 +104,7 @@ npm exec --yes -- prettier --check CHANGELOG.md README.md docs/manual/donkey-v2-
 - 真实样本清单本身；`eval work-usability record` 和 `--report-md/--report-html` 已经降低样本沉淀和报告归档成本，但不会替代 2-3 个真实仓库、10 个需求和至少 2 个真实 PR 的实际 dogfooding。
 - 真实 PR 上的远端 CI 状态证据；当前 `delivery ci-status` / `delivery ci-watch` 已有 fake `gh` fixture 和本地入库测试，但仍需在受控 GitHub PR 上记录 `gh pr checks` 输出、PR URL、状态变化和失败恢复。
 - 动态 workflow 非 dry-run 执行。
+- 真实 PM/LLM 多轮需求澄清；当前需求塑形是确定性启发式和人工批准入口，不代表自动理解所有需求。
 - 自动 merge、自动上线、生产权限变更等高风险动作。
 - 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
 - 完整 DLP、密钥轮换和生产级安全审计；当前新增的是基础敏感模式扫描、命令日志脱敏和 artifact 入库拦截。

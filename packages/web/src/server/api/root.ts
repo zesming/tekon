@@ -1,8 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 
 import {
+  approveDemandShape,
   createPullRequestPreparation,
   createAuditLogger,
   createClaudeCodeAdapter,
@@ -14,6 +23,11 @@ import {
   createWorkReviewSurface,
   createWorkflowEngine,
   createWorktreeManager,
+  readDemandShapeFile,
+  renderDemandShapeForRun,
+  shapeDemand,
+  writeDemandShapeFile,
+  writeDemandShapeFiles,
   agentAdapterConfigSchema,
   loadWorkflowTemplateFile,
   type AgentAdapter,
@@ -103,6 +117,18 @@ interface HumanDecisionRow {
 }
 
 export interface ApiCaller {
+  demand: {
+    shape(input: DemandShapeInput): Promise<{
+      shape: ReturnType<typeof shapeDemand>;
+      shapePath: string;
+      reviewPath: string;
+      runText: string;
+    }>;
+    approve(input: DemandApproveInput): Promise<{
+      shape: ReturnType<typeof shapeDemand>;
+      shapePath: string;
+    }>;
+  };
   project: {
     list(): Promise<
       { id: string; name: string; repoPath: string; createdAt: string }[]
@@ -215,6 +241,18 @@ interface ProjectRunInput {
   template?: string;
   agent?: string;
   allowDirtyBase?: boolean;
+  demandShapePath?: string;
+}
+
+interface DemandShapeInput {
+  demandText: string;
+  token: string;
+}
+
+interface DemandApproveInput {
+  shapePath: string;
+  token: string;
+  actor?: string;
 }
 
 interface DeliveryCreatePrInput extends TokenRunInput {
@@ -239,6 +277,40 @@ export async function createApiCaller(
   const audit = createAuditLogger({ repositories });
 
   const caller: ApiCaller = {
+    demand: {
+      async shape(shapeInput) {
+        assertSessionToken(context, shapeInput.token);
+        const shape = shapeDemand({ text: shapeInput.demandText });
+        assertDemandShapeStorageInScope(context, { create: true });
+        const paths = writeDemandShapeFiles({
+          repoPath: context.projectRoot,
+          shape,
+        });
+        return {
+          shape,
+          shapePath: paths.jsonPath,
+          reviewPath: paths.markdownPath,
+          runText: renderDemandShapeForRun(shape),
+        };
+      },
+
+      async approve(approveInput) {
+        assertSessionToken(context, approveInput.token);
+        const shapePath = assertDemandShapePathInScope(
+          context,
+          approveInput.shapePath,
+        );
+        const approved = approveDemandShape(readDemandShapeFile(shapePath), {
+          actor: approveInput.actor ?? 'web',
+        });
+        writeDemandShapeFile(shapePath, approved);
+        return {
+          shape: approved,
+          shapePath,
+        };
+      },
+    },
+
     project: {
       async list() {
         return listScopedProjects(db, context).map(mapProject);
@@ -297,11 +369,27 @@ export async function createApiCaller(
 
       async run(runInput) {
         assertSessionToken(context, runInput.token);
-        const demandText = runInput.demandText.trim();
+        const shapedDemand = runInput.demandShapePath
+          ? readDemandShapeFile(
+              assertDemandShapePathInScope(context, runInput.demandShapePath),
+            )
+          : null;
+        if (shapedDemand && !shapedDemand.approved) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            'Demand shape must be approved before run.',
+          );
+        }
+        const demandText = shapedDemand
+          ? renderDemandShapeForRun(shapedDemand)
+          : runInput.demandText.trim();
         if (!demandText) {
           throw new ApiError('BAD_REQUEST', 'Demand text is required.');
         }
-        const templateName = runInput.template?.trim() || 'standard-feature';
+        const templateName =
+          runInput.template?.trim() ||
+          shapedDemand?.recommendedTemplate ||
+          'standard-feature';
         assertSafeName(templateName, 'template');
         const gateway = createCommandGateway({ repositories });
         const agentRuntime = createWebAgentRuntime({
@@ -665,6 +753,75 @@ function assertRunInScope(
 ): void {
   const run = mustGetRun(db, runId);
   scopedProjectById(db, context, run.project_id);
+}
+
+function assertDemandShapePathInScope(
+  context: WebProjectContext,
+  shapePath: string,
+): string {
+  const resolvedPath = resolve(shapePath);
+  const demandsDir = assertDemandShapeStorageInScope(context, {
+    create: false,
+  });
+  const pathFromDemands = relative(demandsDir, resolvedPath);
+  if (
+    pathFromDemands.startsWith('..') ||
+    pathFromDemands === '' ||
+    pathFromDemands.includes('..') ||
+    !pathFromDemands.endsWith('.json')
+  ) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (!existsSync(demandsDir) || !existsSync(resolvedPath)) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (lstatSync(resolvedPath).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  const expectedDemandsDir = realpathSync(demandsDir);
+  const realPathFromDemands = relative(
+    expectedDemandsDir,
+    realpathSync(resolvedPath),
+  );
+  if (realPathFromDemands.startsWith('..') || realPathFromDemands === '') {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  return resolvedPath;
+}
+
+function assertDemandShapeStorageInScope(
+  context: WebProjectContext,
+  options: { create: boolean },
+): string {
+  const dataDir = resolve(context.dataDir);
+  const demandsDir = resolve(dataDir, 'demands');
+  if (!existsSync(dataDir)) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (lstatSync(dataDir).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  const expectedDataDir = resolve(realpathSync(context.projectRoot), '.donkey');
+  const realDataDir = realpathSync(dataDir);
+  if (realDataDir !== expectedDataDir) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (existsSync(demandsDir) && lstatSync(demandsDir).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (options.create) {
+    mkdirSync(demandsDir, { recursive: true });
+  }
+  if (!existsSync(demandsDir)) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (lstatSync(demandsDir).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  if (realpathSync(demandsDir) !== resolve(realDataDir, 'demands')) {
+    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  }
+  return demandsDir;
 }
 
 function listArtifacts(db: DonkeyDatabase, runId: string): ArtifactRow[] {

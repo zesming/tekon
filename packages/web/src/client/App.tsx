@@ -155,6 +155,29 @@ type WorkflowInfo = {
   name: string;
 };
 
+type DemandShape = {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  recommendedTemplate: string;
+  readyForRun: boolean;
+  approved: boolean;
+  risk: {
+    level: string;
+    tags: string[];
+    requiresHumanApproval: boolean;
+    reasons: string[];
+  };
+  acceptanceCriteria: Array<{
+    id: string;
+    description: string;
+    verification: string;
+  }>;
+  nonGoals: string[];
+  openQuestions: string[];
+};
+
 function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -171,6 +194,8 @@ function App() {
   const [token, setToken] = useState('');
   const [note, setNote] = useState('');
   const [demandText, setDemandText] = useState('');
+  const [demandShape, setDemandShape] = useState<DemandShape | null>(null);
+  const [demandShapePath, setDemandShapePath] = useState<string | null>(null);
   const [runTemplate, setRunTemplate] = useState('standard-feature');
   const [runAgent, setRunAgent] = useState('mock');
   const [allowDirtyBase, setAllowDirtyBase] = useState(false);
@@ -311,11 +336,47 @@ function App() {
       template: runTemplate,
       agent: runAgent,
       allowDirtyBase,
+      demandShapePath,
       token,
     });
     setMessage(`run started: ${result.run.id} ${result.run.status}`);
     setDemandText('');
+    setDemandShape(null);
+    setDemandShapePath(null);
     await loadDashboard(result.run.id);
+  }
+
+  async function shapeRunDemand() {
+    const result = await rpc<{
+      shape: DemandShape;
+      shapePath: string;
+      reviewPath: string;
+      runText: string;
+    }>('demand.shape', {
+      demandText,
+      token,
+    });
+    setDemandShape(result.shape);
+    setDemandShapePath(result.shapePath);
+    setRunTemplate(result.shape.recommendedTemplate);
+    setMessage(`demand shaped: ${result.shape.id}`);
+  }
+
+  async function approveRunDemand() {
+    if (!demandShapePath) {
+      return;
+    }
+    const result = await rpc<{
+      shape: DemandShape;
+      shapePath: string;
+    }>('demand.approve', {
+      shapePath: demandShapePath,
+      actor: 'web',
+      token,
+    });
+    setDemandShape(result.shape);
+    setDemandShapePath(result.shapePath);
+    setMessage(`demand approved: ${result.shape.id}`);
   }
 
   async function prepareDelivery() {
@@ -450,10 +511,39 @@ function App() {
             <textarea
               aria-label="Run demand"
               value={demandText}
-              onChange={(event) => setDemandText(event.target.value)}
+              onChange={(event) => {
+                setDemandText(event.target.value);
+                setDemandShape(null);
+                setDemandShapePath(null);
+              }}
             />
           </label>
+          {demandShape ? (
+            <div className="wide shape-summary">
+              <Row
+                primary={`${demandShape.category} ${demandShape.risk.level}`}
+                secondary={`${demandShape.title} ready=${demandShape.readyForRun} approved=${demandShape.approved}`}
+              />
+              <Row
+                primary="acceptance"
+                secondary={`${demandShape.acceptanceCriteria.length} criteria openQuestions=${demandShape.openQuestions.length}`}
+              />
+            </div>
+          ) : null}
           <div className="actions wide">
+            <button
+              className="secondary"
+              onClick={() => void runAction(shapeRunDemand)}
+            >
+              塑形需求
+            </button>
+            <button
+              className="secondary"
+              disabled={!demandShapePath || demandShape?.approved}
+              onClick={() => void runAction(approveRunDemand)}
+            >
+              批准需求
+            </button>
             <button onClick={() => void runAction(startRun)}>发起运行</button>
             <button
               className="secondary"

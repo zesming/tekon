@@ -213,6 +213,12 @@ button.secondary {
   grid-column: 1 / -1;
 }
 
+.shape-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .checkline {
   display: flex;
   min-height: 36px;
@@ -318,6 +324,7 @@ button.secondary {
   .topbar,
   .run-selector,
   .operation-grid,
+  .shape-summary,
   .approval-grid,
   .dashboard-grid,
   .audit-filter,

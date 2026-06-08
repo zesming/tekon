@@ -1,5 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -262,6 +271,163 @@ describe('web write authorization', () => {
         expect.objectContaining({ type: 'delivery-package' }),
       ]),
     );
+
+    await api.close();
+  });
+
+  it('shapes and approves a demand before starting a Web run', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.demand.shape({
+        demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+        token: 'wrong-token',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    const shaped = await api.demand.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    expect(shaped.shape).toMatchObject({
+      category: 'feature',
+      recommendedTemplate: 'standard-feature',
+      approved: false,
+    });
+    expect(readFileSync(shaped.shapePath, 'utf8')).toContain(
+      '"approved": false',
+    );
+
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const approved = await api.demand.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+    expect(approved.shape).toMatchObject({
+      approved: true,
+      approvedBy: 'web-test',
+    });
+
+    const started = await api.project.run({
+      demandText: '',
+      demandShapePath: shaped.shapePath,
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.run).toMatchObject({ status: 'passed' });
+
+    await expect(
+      api.demand.approve({
+        shapePath: join(fixture.projectRoot, 'package.json'),
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('rejects demand shape symlink escapes in Web write paths', async () => {
+    const fixture = await createWebFixtureProject();
+    const outsideDir = mkdtempSync(join(tmpdir(), 'donkey-web-shape-outside-'));
+    cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(() =>
+      rmSync(outsideDir, { recursive: true, force: true }),
+    );
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const shaped = await api.demand.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    const outsideShapePath = join(outsideDir, 'outside-shape.json');
+    writeFileSync(outsideShapePath, readFileSync(shaped.shapePath, 'utf8'));
+    rmSync(shaped.shapePath);
+    symlinkSync(outsideShapePath, shaped.shapePath);
+
+    await expect(
+      api.demand.approve({
+        shapePath: shaped.shapePath,
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    rmSync(join(fixture.projectRoot, '.donkey', 'demands'), {
+      recursive: true,
+      force: true,
+    });
+    mkdirSync(outsideDir, { recursive: true });
+    const outsideDirShapePath = join(outsideDir, 'dir-shape.json');
+    writeFileSync(outsideDirShapePath, readFileSync(outsideShapePath, 'utf8'));
+    symlinkSync(
+      outsideDir,
+      join(fixture.projectRoot, '.donkey', 'demands'),
+      'dir',
+    );
+    const escapedViaDemandDir = join(
+      fixture.projectRoot,
+      '.donkey',
+      'demands',
+      'dir-shape.json',
+    );
+
+    await expect(
+      api.demand.approve({
+        shapePath: escapedViaDemandDir,
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: escapedViaDemandDir,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('rejects demand shape writes when demands storage is a symlink', async () => {
+    const fixture = await createWebFixtureProject();
+    const outsideDir = mkdtempSync(
+      join(tmpdir(), 'donkey-web-shape-write-outside-'),
+    );
+    cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(() =>
+      rmSync(outsideDir, { recursive: true, force: true }),
+    );
+    const demandsPath = join(fixture.projectRoot, '.donkey', 'demands');
+    rmSync(demandsPath, { recursive: true, force: true });
+    symlinkSync(outsideDir, demandsPath, 'dir');
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.demand.shape({
+        demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(readdirSync(outsideDir)).toEqual([]);
 
     await api.close();
   });

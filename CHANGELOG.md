@@ -25,6 +25,7 @@
 - 审阅面聚合：core 新增 review surface，CLI 新增 `review --run-id`，Web 新增 Readiness、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令区块；同一聚合器会读取 artifact 正文、gate 输出、PR body/package、delivery diff 和 readiness 失败项。
 - 审阅证据导航：review surface 新增 evidence groups，把 readiness 失败项关联到 artifact、gate log、audit event、PR body、PR package 和 diff；CLI 输出 Evidence Navigation，Web 新增 Evidence Links 面板。
 - Gate 失败诊断：review surface 新增 Gate Failure Triage，把失败 gate 的分类、日志锚点、重试建议和建议命令结构化输出；CLI `review` 和 Web dashboard 会展示同一诊断结果。
+- 需求塑形入口：core 新增 demand shape/approve/evaluate 能力，CLI 新增 `demand shape`、`demand approve`、`demand show`、`run --demand-file` 和 `eval demand-shape`；Web dashboard 可用 session token 塑形、批准需求后再发起 run。
 - Web 受控执行入口：dashboard 可用 session token 发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr`，并提供 artifact/gate/audit 到审阅正文和 PR 包的基础锚点互跳。
 - Web 多运行审阅流：dashboard 会列出当前项目内的 runs，可选择任意 run 加载 readiness、artifact 正文、gate log、audit 和 PR 包；PR 准备/创建也作用在当前选中的 run 上，而不是固定 latest run。
 - 工作可用样本评估：core 新增 work usability evaluator，CLI 新增 `eval work-usability --samples`，可按样本清单检查 readiness、真实 provider、真实 PR、security scan、worktree 隔离和远端副作用审批证据。

@@ -41,6 +41,67 @@ describe('runCli in-process', () => {
     await expect(
       runCli(
         [
+          'demand',
+          'shape',
+          '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+          '--write',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const shapeOutput = io.takeStdout();
+    expect(shapeOutput).toContain('approved=false');
+    expect(shapeOutput).toContain('recommendedTemplate=standard-feature');
+    const shapePath = /shapePath=(\S+)/u.exec(shapeOutput)?.[1];
+    expect(shapePath).toBeTruthy();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '--demand-file',
+          shapePath!,
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('demand file must be approved');
+
+    await expect(
+      runCli(['demand', 'approve', shapePath!, '--actor', 'tester'], io),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('approved=true');
+
+    await expect(
+      runCli(['eval', 'demand-shape', shapePath!], io),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('ready=true');
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '--demand-file',
+          shapePath!,
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('status=passed');
+
+    await expect(
+      runCli(
+        [
           'run',
           '--dynamic',
           '--dry-run',
