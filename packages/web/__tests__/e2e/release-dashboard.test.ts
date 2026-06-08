@@ -48,7 +48,7 @@ test.describe('Donkey release dashboard', () => {
     await page.getByLabel('审批备注').fill('release approval');
     await page.getByRole('button', { name: '批准' }).click();
 
-    await expect(page.getByText('approved')).toBeVisible();
+    await expect(page.getByText('approved', { exact: true })).toBeVisible();
     await expect(page.getByText('gate_1 passed')).toBeVisible();
 
     await page.screenshot({

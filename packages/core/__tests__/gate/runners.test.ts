@@ -1,10 +1,14 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createCommandGateway, runCommandGate } from '../../src/index.js';
+import {
+  createCommandGateway,
+  runCommandGate,
+  runSecurityScanGate,
+} from '../../src/index.js';
 
 describe('command gate runner', () => {
   const tempDirs: string[] = [];
@@ -40,5 +44,63 @@ describe('command gate runner', () => {
     expect(result).toMatchObject({ gateType: 'test', status: 'passed' });
     expect(result.outputPath).toBeTruthy();
     expect(readFileSync(result.outputPath!, 'utf8')).toContain('gate ok');
+  });
+
+  it('runs the built-in security scan without an external command', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-security-pass-'));
+    tempDirs.push(cwd);
+
+    const result = await runSecurityScanGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      cwd,
+      policy: {
+        allow: [],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+      outputDir: join(cwd, '.donkey', 'runs', 'run_1', 'gates'),
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'security-scan',
+      status: 'passed',
+    });
+    expect(readFileSync(result.outputPath!, 'utf8')).toContain(
+      '"findings": []',
+    );
+  });
+
+  it('fails the built-in security scan when likely secrets are present', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'donkey-security-fail-'));
+    tempDirs.push(cwd);
+    writeFileSync(
+      join(cwd, 'config.ts'),
+      'export const token = "sk-123456789012345678901234";\n',
+      'utf8',
+    );
+
+    const result = await runSecurityScanGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      cwd,
+      policy: {
+        allow: [],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+      outputDir: join(cwd, '.donkey', 'runs', 'run_1', 'gates'),
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'security-scan',
+      status: 'failed',
+      failureClassification: 'security-findings',
+    });
+    expect(readFileSync(result.outputPath!, 'utf8')).toContain(
+      'openai-api-key',
+    );
   });
 });

@@ -36,14 +36,13 @@ describe('eval metrics', () => {
       repositories,
       audit,
       runId: 'run_1',
-      prUrl: 'https://github.example/donkey/pull/1',
     });
 
     expect(metrics).toMatchObject({
       runId: 'run_1',
       workflowStatus: 'passed',
       timeToLocalPackageMs: 10_000,
-      timeToPrMs: 10_000,
+      timeToPrMs: 12_000,
       gatePassRate: 0.75,
       retryCount: 2,
       humanInterventions: {
@@ -70,6 +69,7 @@ describe('eval metrics', () => {
         open: 0,
       },
     });
+    expect(metrics.prUrl).toBe('https://github.example/donkey/pull/1');
     expect(metrics.gateByType.build).toEqual({
       passed: 1,
       failed: 1,
@@ -205,6 +205,22 @@ async function seedRun(
     branchName: 'donkey/run_1/node_1',
     createdAt: '2026-06-05T00:00:01.000Z',
     releasedAt: '2026-06-05T00:00:09.000Z',
+  });
+  await repositories.upsertDeliveryPullRequest({
+    id: 'delivery_pr_1',
+    runId: 'run_1',
+    branch: 'donkey-delivery/run_1',
+    baseBranch: 'main',
+    title: 'Refund feature',
+    status: 'created',
+    prUrl: 'https://github.example/donkey/pull/1',
+    approvedBy: 'cli',
+    approvedAt: '2026-06-05T00:00:10.000Z',
+    branchPushedAt: '2026-06-05T00:00:11.000Z',
+    prCreatedAt: '2026-06-05T00:00:12.000Z',
+    attemptCount: 1,
+    createdAt: '2026-06-05T00:00:09.000Z',
+    updatedAt: '2026-06-05T00:00:12.000Z',
   });
   await audit.append({
     runId: 'run_1',

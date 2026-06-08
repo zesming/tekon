@@ -30,13 +30,17 @@ export function createMockAgentAdapter(): AgentAdapter {
 
       const artifacts = [];
       if (input.artifactStore) {
-        for (const type of builtInArtifactTypes) {
+        const artifactTypes =
+          input.requiredArtifactTypes && input.requiredArtifactTypes.length > 0
+            ? input.requiredArtifactTypes
+            : builtInArtifactTypes;
+        for (const type of artifactTypes) {
           artifacts.push(
             await input.artifactStore.writeArtifact({
               runId: input.runContext.runId,
               nodeId: input.runContext.nodeId,
               type,
-              content: `# ${type}\n\nDeterministic mock artifact for ${input.roleConfig.role}.`,
+              content: formatMockArtifactContent(type, input.roleConfig.role),
             }),
           );
         }
@@ -52,4 +56,51 @@ export function createMockAgentAdapter(): AgentAdapter {
       };
     },
   };
+}
+
+function formatMockArtifactContent(type: ArtifactType, role: string): string {
+  const base = {
+    title: type,
+    body: `Deterministic mock artifact for ${role}.`,
+  };
+  if (type === 'demand-card' || type === 'prd') {
+    return JSON.stringify(
+      {
+        ...base,
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            description: 'The requested workflow evidence is present.',
+            verification: 'Review delivery package and gate results.',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (
+    type === 'test-report' ||
+    type === 'review-report' ||
+    type === 'delivery-package'
+  ) {
+    return JSON.stringify(
+      {
+        ...base,
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: `Mock ${type} verifies AC-1.`,
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'security-report') {
+    return JSON.stringify({ ...base, securityFindings: [] }, null, 2);
+  }
+  return `# ${type}\n\n${base.body}`;
 }

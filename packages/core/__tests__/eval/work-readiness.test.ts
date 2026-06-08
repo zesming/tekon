@@ -64,8 +64,30 @@ describe('work readiness evaluation', () => {
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_1',
+      type: 'prd',
+      content: JSON.stringify({
+        title: 'PRD',
+        body: 'Batch retry requirements.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'Batch retry can be executed.' },
+        ],
+      }),
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
       type: 'test-report',
-      content: '# Tests\n\npassed',
+      content: JSON.stringify({
+        title: 'Tests',
+        body: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Unit tests covered batch retry.',
+          },
+        ],
+      }),
     });
     await repositories.recordGateResult({
       id: 'gate_failed_then_repaired',
@@ -86,6 +108,26 @@ describe('work readiness evaluation', () => {
       durationMs: 1,
       retries: 0,
       createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_security',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'security-scan',
+      status: 'failed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.100Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_security_repaired',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'security-scan',
+      status: 'passed',
+      durationMs: 1,
+      retries: 1,
+      createdAt: '2026-06-05T00:00:01.200Z',
     });
     await audit.append({
       runId: 'run_1',
@@ -117,7 +159,41 @@ describe('work readiness evaluation', () => {
     });
 
     expect(afterPrepare.ready).toBe(true);
-    expect(afterPrepare.score).toBe(1);
+    expect(
+      afterPrepare.checks.find((check) => check.id === 'pr-created'),
+    ).toMatchObject({
+      severity: 'recommended',
+      passed: false,
+    });
+
+    await repositories.upsertDeliveryPullRequest({
+      id: 'delivery_pr_1',
+      runId: 'run_1',
+      branch: 'donkey-delivery/run_1',
+      baseBranch: 'main',
+      title: 'Batch retry',
+      status: 'created',
+      prUrl: 'https://github.example/donkey/pull/1',
+      approvedBy: 'cli',
+      approvedAt: '2026-06-05T00:00:03.000Z',
+      branchPushedAt: '2026-06-05T00:00:04.000Z',
+      prCreatedAt: '2026-06-05T00:00:05.000Z',
+      attemptCount: 1,
+      createdAt: '2026-06-05T00:00:03.000Z',
+      updatedAt: '2026-06-05T00:00:05.000Z',
+    });
+    const afterPr = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+    expect(afterPr.ready).toBe(true);
+    expect(
+      afterPr.checks.find((check) => check.id === 'pr-created'),
+    ).toMatchObject({
+      passed: true,
+      evidence: 'PR created: https://github.example/donkey/pull/1',
+    });
     db.close();
   });
 });

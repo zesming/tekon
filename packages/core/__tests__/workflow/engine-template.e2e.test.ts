@@ -59,13 +59,14 @@ describe('workflow engine template e2e', () => {
     expect(result.workflow.status).toBe('passed');
     expect(await repositories.listPhases(result.runId)).toHaveLength(5);
     expect(await repositories.listNodes(result.runId)).toHaveLength(5);
+    expect(await repositories.listArtifacts(result.runId)).toHaveLength(7);
     expect(
       await repositories.listArtifacts(
         result.runId,
         undefined,
         'delivery-package',
       ),
-    ).toHaveLength(5);
+    ).toHaveLength(1);
     expect(await audit.verify(result.runId)).toEqual({ valid: true });
 
     db.close();

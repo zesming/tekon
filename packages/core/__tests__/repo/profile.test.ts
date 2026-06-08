@@ -34,7 +34,11 @@ describe('repo profile', () => {
       join(pnpmRepo, 'package.json'),
       JSON.stringify({
         packageManager: 'pnpm@10.12.1',
-        scripts: { lint: 'eslint .', typecheck: 'tsc --noEmit' },
+        scripts: {
+          lint: 'eslint .',
+          typecheck: 'tsc --noEmit',
+          'security:scan': 'gitleaks detect',
+        },
       }),
       'utf8',
     );
@@ -46,6 +50,7 @@ describe('repo profile', () => {
     expect(detectRepoProfile(pnpmRepo).commands).toMatchObject({
       lint: { tool: 'pnpm', args: ['lint'] },
       typecheck: { tool: 'pnpm', args: ['typecheck'] },
+      security: { tool: 'pnpm', args: ['security:scan'] },
     });
   });
 

@@ -16,6 +16,15 @@ import {
   type Role,
 } from '../types/domain.js';
 
+const commandRefSchema = z.enum([
+  'build',
+  'typecheck',
+  'lint',
+  'test',
+  'e2e',
+  'security',
+]);
+
 export const workflowRetryPolicySchema = z.object({
   maxAttempts: z.number().int().min(1).max(10).optional(),
   maxRetries: z.number().int().min(0).max(9).optional(),
@@ -37,6 +46,7 @@ export interface WorkflowArtifactInputRef extends WorkflowArtifactOutputRef {
 export interface WorkflowGateConfig {
   type: GateType;
   command?: CommandInvocation;
+  commandRef?: z.infer<typeof commandRefSchema>;
   artifactType?: ArtifactType;
   requiresHumanApproval: boolean;
   maxRetries: number;
@@ -96,6 +106,7 @@ const rawGateSchema = z
   .object({
     type: gateTypeSchema,
     command: commandInvocationSchema.optional(),
+    commandRef: commandRefSchema.optional(),
     artifactType: artifactTypeSchema.optional(),
     requiresHumanApproval: z.boolean().optional(),
     maxRetries: z.number().int().min(0).optional(),
@@ -324,6 +335,7 @@ function normalizeGate(
   return {
     type: rawGate.type,
     ...(rawGate.command ? { command: rawGate.command } : {}),
+    ...(rawGate.commandRef ? { commandRef: rawGate.commandRef } : {}),
     ...(rawGate.artifactType ? { artifactType: rawGate.artifactType } : {}),
     requiresHumanApproval:
       rawGate.requiresHumanApproval ?? rawGate.type === 'human',

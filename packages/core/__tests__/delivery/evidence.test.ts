@@ -63,8 +63,47 @@ describe('delivery evidence package', () => {
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_1',
+      type: 'prd',
+      content: JSON.stringify({
+        title: 'PRD',
+        body: 'Refund requirements.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'Refunds can be requested.' },
+        ],
+      }),
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'test-report',
+      content: JSON.stringify({
+        title: 'Tests',
+        body: 'Refund tests passed.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Unit tests covered refund request.',
+            gateResultIds: ['gate_2'],
+          },
+        ],
+      }),
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
       type: 'delivery-package',
-      content: '# Delivery\n',
+      content: JSON.stringify({
+        title: 'Delivery',
+        body: 'Delivery package.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Delivery package includes refund evidence.',
+          },
+        ],
+      }),
     });
     await store.writeArtifact({
       runId: 'run_1',
@@ -81,6 +120,27 @@ describe('delivery evidence package', () => {
       durationMs: 1,
       retries: 0,
       createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_2',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'test',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.500Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_3',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'security-scan',
+      status: 'passed',
+      outputPath: '.donkey/runs/run_1/gates/security.log',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.600Z',
     });
     await audit.append({
       runId: 'run_1',
@@ -106,10 +166,29 @@ describe('delivery evidence package', () => {
       riskGates: ['human'],
       testOutputPaths: ['test-results/core.log'],
     });
-    expect(evidence.artifacts.map((artifact) => artifact.type)).toEqual([
+    expect(evidence.artifacts.map((artifact) => artifact.type).sort()).toEqual([
       'delivery-package',
+      'prd',
       'rollback-plan',
+      'test-report',
     ]);
-    expect(evidence.gates).toHaveLength(1);
+    expect(evidence.gates).toHaveLength(3);
+    expect(evidence.acceptanceCriteria).toEqual([
+      { id: 'AC-1', description: 'Refunds can be requested.' },
+    ]);
+    expect(evidence.acceptanceEvidence).toEqual([
+      expect.objectContaining({
+        criterionId: 'AC-1',
+        status: 'passed',
+        evidence: expect.arrayContaining([
+          'Unit tests covered refund request.',
+          'Delivery package includes refund evidence.',
+        ]),
+        gateResultIds: ['gate_2'],
+      }),
+    ]);
+    expect(evidence.securityScans).toEqual([
+      expect.objectContaining({ gateResultId: 'gate_3', status: 'passed' }),
+    ]);
   });
 });

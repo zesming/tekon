@@ -7,7 +7,7 @@ import type { GateConfig, GateResult, Node, Role } from '../types/domain.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
 import { validateArtifactContent } from '../artifact/schemas.js';
-import { runCommandGate } from './runners.js';
+import { runCommandGate, runSecurityScanGate } from './runners.js';
 import { createHumanGate } from './human-gate.js';
 
 export interface GateEngineRunInput {
@@ -15,6 +15,7 @@ export interface GateEngineRunInput {
   nodeId: string;
   gate: GateConfig;
   cwd: string;
+  artifactRoot?: string;
   outputDir: string;
   policy: CommandPolicy;
 }
@@ -35,7 +36,18 @@ export function createGateEngine(options: {
     async runGate(input) {
       let result: GateResult;
 
-      if (isCommandGate(input.gate.type)) {
+      if (input.gate.type === 'security-scan') {
+        result = await runSecurityScanGate({
+          gateway: options.gateway,
+          runId: input.runId,
+          nodeId: input.nodeId,
+          cwd: input.cwd,
+          command: input.gate.command,
+          policy: input.policy,
+          outputDir: input.outputDir,
+          timeoutMs: input.gate.timeoutMs,
+        });
+      } else if (isCommandGate(input.gate.type)) {
         if (!options.gateway || !input.gate.command) {
           result = makeGateResult(input, 'failed', 'missing-command');
         } else {
@@ -80,6 +92,8 @@ export function createGateEngine(options: {
         runId: input.failedGateResult.runId,
         role: input.fixerRole,
         status: 'pending',
+        inputs: [],
+        outputs: [],
         gates: [],
         dependencies: [input.failedGateResult.nodeId],
         createdAt: now,
@@ -104,8 +118,8 @@ function formatCommand(command: NonNullable<GateConfig['command']>): string {
 
 function isCommandGate(
   type: GateConfig['type'],
-): type is 'build' | 'test' | 'lint' | 'e2e-pass' | 'security-scan' {
-  return ['build', 'test', 'lint', 'e2e-pass', 'security-scan'].includes(type);
+): type is 'build' | 'test' | 'lint' | 'e2e-pass' {
+  return ['build', 'test', 'lint', 'e2e-pass'].includes(type);
 }
 
 async function runSchemaGate(
@@ -137,7 +151,10 @@ async function runSchemaGate(
 
   const latestArtifact = artifacts.at(-1)!;
   try {
-    const content = readFileSync(join(input.cwd, latestArtifact.path), 'utf8');
+    const content = readFileSync(
+      join(input.artifactRoot ?? input.cwd, latestArtifact.path),
+      'utf8',
+    );
     validateArtifactContent(artifactType, content);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

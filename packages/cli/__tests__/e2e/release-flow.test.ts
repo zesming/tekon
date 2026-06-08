@@ -1,7 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -32,6 +39,13 @@ describe('donkey release flow e2e', () => {
         readFileSync(join(repoPath, '.donkey', 'web-session.json'), 'utf8'),
       ),
     ).toMatchObject({ token: expect.stringMatching(/^[a-f0-9]{64}$/u) });
+    const preflightOutput = runCli(
+      cliPath,
+      ['workflow', 'preflight', 'standard-feature', '--repo', repoPath],
+      repoPath,
+    );
+    expect(preflightOutput).toContain('gate=build commandRef=build');
+    expect(preflightOutput).toContain('command=npm run build');
 
     const dynamicOutput = runCli(
       cliPath,
@@ -119,11 +133,48 @@ describe('donkey release flow e2e', () => {
       repoPath,
     );
     expect(prepareOutput).toContain(`runId=${deliveryRunId}`);
-    expect(prepareOutput).toContain('branch=donkey/');
+    expect(prepareOutput).toContain('branch=donkey-delivery/');
     expect(prepareOutput).toContain('requiresHumanApproval=true');
     expect(
       existsSync(join(repoPath, '.donkey', 'runs', deliveryRunId!, 'delivery')),
     ).toBe(true);
+
+    const createPendingOutput = runCli(
+      cliPath,
+      ['delivery', 'create-pr', '--run-id', deliveryRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(createPendingOutput).toContain('deliveryStatus=awaiting-approval');
+    expect(createPendingOutput).toContain('requiresHumanApproval=true');
+
+    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-release-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'donkey-release-gh-'));
+    tempDirs.push(remotePath, binDir);
+    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['remote', 'add', 'origin', remotePath], {
+      cwd: repoPath,
+    });
+    writeFakeGh(binDir);
+    const createOutput = runCli(
+      cliPath,
+      [
+        'delivery',
+        'create-pr',
+        '--run-id',
+        deliveryRunId!,
+        '--approve-human',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+      { PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}` },
+    );
+    expect(createOutput).toContain('deliveryStatus=created');
+    expect(createOutput).toContain('requiresHumanApproval=false');
+    expect(createOutput).toContain(
+      'prUrl=https://github.example/donkey/pull/9',
+    );
+
     expect(
       runCli(
         cliPath,
@@ -132,13 +183,19 @@ describe('donkey release flow e2e', () => {
       ),
     ).toContain('ready=true');
     expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
-  });
+  }, 15_000);
 });
 
-function runCli(cliPath: string, args: string[], cwd: string): string {
+function runCli(
+  cliPath: string,
+  args: string[],
+  cwd: string,
+  env?: NodeJS.ProcessEnv,
+): string {
   return execFileSync(process.execPath, [cliPath, ...args], {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, ...(env ?? {}) },
   });
 }
 
@@ -171,4 +228,21 @@ function createFixtureRepo(tempDirs: string[]) {
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
   return repoPath;
+}
+
+function writeFakeGh(binDir: string) {
+  const ghPath = join(binDir, 'gh');
+  writeFileSync(
+    ghPath,
+    `#!/usr/bin/env sh
+echo "$*" >> "${join(binDir, 'gh.log')}"
+if [ "$1 $2" = "auth status" ]; then
+  echo "Logged in to github.example" >&2
+  exit 0
+fi
+echo "https://github.example/donkey/pull/9"
+`,
+    'utf8',
+  );
+  chmodSync(ghPath, 0o755);
 }

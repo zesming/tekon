@@ -4,6 +4,8 @@ import {
   type Artifact,
   type ArtifactType,
   artifactSchema,
+  type DeliveryPullRequest,
+  deliveryPullRequestSchema,
   type Demand,
   demandSchema,
   type GateResult,
@@ -11,6 +13,7 @@ import {
   type HumanDecision,
   humanDecisionSchema,
   type Node,
+  type NodeInput,
   nodeSchema,
   type NodeStatus,
   type Phase,
@@ -19,6 +22,8 @@ import {
   projectSchema,
   type RoleRun,
   roleRunSchema,
+  type RunProviderConfig,
+  runProviderConfigSchema,
   type WorkflowInstance,
   type WorkflowStatus,
   workflowInstanceSchema,
@@ -33,6 +38,8 @@ type NodeRow = {
   phase_id: string | null;
   role: Node['role'];
   status: Node['status'];
+  inputs: string;
+  outputs: string;
   gates: string;
   dependencies: string;
   created_at: string;
@@ -131,6 +138,35 @@ type WorktreeLeaseRow = {
   released_at: string | null;
 };
 
+type DeliveryPullRequestRow = {
+  id: string;
+  run_id: string;
+  branch: string;
+  base_branch: string;
+  title: string;
+  body_path: string | null;
+  remote_name: string | null;
+  remote_url: string | null;
+  status: DeliveryPullRequest['status'];
+  pr_url: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  branch_pushed_at: string | null;
+  pr_created_at: string | null;
+  failure_stage: string | null;
+  last_error: string | null;
+  attempt_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type RunProviderConfigRow = {
+  run_id: string;
+  provider: RunProviderConfig['provider'];
+  config_summary: string;
+  created_at: string;
+};
+
 export interface RecoverableRun {
   runId: string;
   nodeId: string;
@@ -145,6 +181,10 @@ export interface DonkeyRepositories {
   getProject(projectId: string): Promise<Project | null>;
   createWorkflowInstance(instance: WorkflowInstance): Promise<WorkflowInstance>;
   getWorkflowInstance(runId: string): Promise<WorkflowInstance | null>;
+  recordRunProviderConfig(
+    config: RunProviderConfig,
+  ): Promise<RunProviderConfig>;
+  getRunProviderConfig(runId: string): Promise<RunProviderConfig | null>;
   updateWorkflowInstanceStatus(
     runId: string,
     status: WorkflowStatus,
@@ -152,7 +192,7 @@ export interface DonkeyRepositories {
   ): Promise<WorkflowInstance | null>;
   createPhase(phase: Phase): Promise<Phase>;
   listPhases(runId: string): Promise<Phase[]>;
-  createNode(node: Node): Promise<Node>;
+  createNode(node: NodeInput): Promise<Node>;
   getNode(nodeId: string): Promise<Node | null>;
   listNodes(runId: string): Promise<Node[]>;
   transitionNode(nodeId: string, status: NodeStatus): Promise<void>;
@@ -180,8 +220,33 @@ export interface DonkeyRepositories {
   ): Promise<WorktreeLease | null>;
   getWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   listWorktreeLeases(runId: string): Promise<WorktreeLease[]>;
+  upsertDeliveryPullRequest(
+    delivery: DeliveryPullRequest,
+  ): Promise<DeliveryPullRequest>;
+  getDeliveryPullRequest(runId: string): Promise<DeliveryPullRequest | null>;
+  markDeliveryPullRequestCreated(input: {
+    runId: string;
+    prUrl: string;
+    remoteName?: string | null;
+    remoteUrl?: string | null;
+    createdAt: string;
+  }): Promise<DeliveryPullRequest | null>;
+  markDeliveryPullRequestFailed(input: {
+    runId: string;
+    failureStage: string;
+    lastError: string;
+    failedAt: string;
+  }): Promise<DeliveryPullRequest | null>;
   createRoleRun(roleRun: RoleRun): Promise<RoleRun>;
   getRoleRun(roleRunId: string): Promise<RoleRun | null>;
+  markRoleRunCompleted(input: {
+    roleRunId: string;
+    completedAt: string;
+  }): Promise<RoleRun | null>;
+  getLatestRoleRunForNode(
+    runId: string,
+    nodeId: string,
+  ): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
 }
 
@@ -277,6 +342,31 @@ export function createRepositories(
       return row ? mapWorkflowInstance(row) : null;
     },
 
+    async recordRunProviderConfig(input) {
+      const config = runProviderConfigSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into run_provider_configs (
+             run_id, provider, config_summary, created_at
+           ) values (
+             @runId, @provider, @configSummary, @createdAt
+           )
+           on conflict(run_id) do update set
+             provider = excluded.provider,
+             config_summary = excluded.config_summary,
+             created_at = excluded.created_at`,
+        ).run(toRunProviderConfigParams(config));
+        return config;
+      });
+    },
+
+    async getRunProviderConfig(runId) {
+      const row = db
+        .prepare('select * from run_provider_configs where run_id = ?')
+        .get(runId) as RunProviderConfigRow | undefined;
+      return row ? mapRunProviderConfig(row) : null;
+    },
+
     async updateWorkflowInstanceStatus(runId, status, currentNodeId) {
       return writeQueue.enqueue(() => {
         if (currentNodeId === undefined) {
@@ -327,13 +417,15 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into nodes (
-             id, run_id, phase_id, role, status, gates, dependencies, created_at, updated_at
+             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, created_at, updated_at
            ) values (
-             @id, @runId, @phaseId, @role, @status, @gates, @dependencies, @createdAt, @updatedAt
+             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @createdAt, @updatedAt
            )`,
         ).run({
           ...node,
           phaseId: node.phaseId ?? null,
+          inputs: JSON.stringify(node.inputs),
+          outputs: JSON.stringify(node.outputs),
           gates: JSON.stringify(node.gates),
           dependencies: JSON.stringify(node.dependencies),
         });
@@ -556,6 +648,93 @@ export function createRepositories(
       return rows.map(mapWorktreeLease);
     },
 
+    async upsertDeliveryPullRequest(input) {
+      const delivery = deliveryPullRequestSchema.parse(input);
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `insert into delivery_pull_requests (
+             id, run_id, branch, base_branch, title, body_path, remote_name, remote_url,
+             status, pr_url, approved_by, approved_at, branch_pushed_at, pr_created_at,
+             failure_stage, last_error, attempt_count, created_at, updated_at
+           ) values (
+             @id, @runId, @branch, @baseBranch, @title, @bodyPath, @remoteName, @remoteUrl,
+             @status, @prUrl, @approvedBy, @approvedAt, @branchPushedAt, @prCreatedAt,
+             @failureStage, @lastError, @attemptCount, @createdAt, @updatedAt
+           )
+           on conflict(run_id) do update set
+             branch = excluded.branch,
+             base_branch = excluded.base_branch,
+             title = excluded.title,
+             body_path = excluded.body_path,
+             remote_name = excluded.remote_name,
+             remote_url = excluded.remote_url,
+             status = excluded.status,
+             pr_url = excluded.pr_url,
+             approved_by = excluded.approved_by,
+             approved_at = excluded.approved_at,
+             branch_pushed_at = excluded.branch_pushed_at,
+             pr_created_at = excluded.pr_created_at,
+             failure_stage = excluded.failure_stage,
+             last_error = excluded.last_error,
+             attempt_count = excluded.attempt_count,
+             updated_at = excluded.updated_at`,
+        ).run(toDeliveryPullRequestParams(delivery));
+        return delivery;
+      });
+    },
+
+    async getDeliveryPullRequest(runId) {
+      const row = db
+        .prepare('select * from delivery_pull_requests where run_id = ?')
+        .get(runId) as DeliveryPullRequestRow | undefined;
+      return row ? mapDeliveryPullRequest(row) : null;
+    },
+
+    async markDeliveryPullRequestCreated(input) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update delivery_pull_requests
+           set status = 'created',
+               pr_url = ?,
+               remote_name = coalesce(?, remote_name),
+               remote_url = coalesce(?, remote_url),
+               pr_created_at = ?,
+               failure_stage = null,
+               last_error = null,
+               updated_at = ?
+           where run_id = ?`,
+        ).run(
+          input.prUrl,
+          input.remoteName ?? null,
+          input.remoteUrl ?? null,
+          input.createdAt,
+          input.createdAt,
+          input.runId,
+        );
+        const row = db
+          .prepare('select * from delivery_pull_requests where run_id = ?')
+          .get(input.runId) as DeliveryPullRequestRow | undefined;
+        return row ? mapDeliveryPullRequest(row) : null;
+      });
+    },
+
+    async markDeliveryPullRequestFailed(input) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update delivery_pull_requests
+           set status = 'failed',
+               failure_stage = ?,
+               last_error = ?,
+               updated_at = ?
+           where run_id = ?`,
+        ).run(input.failureStage, input.lastError, input.failedAt, input.runId);
+        const row = db
+          .prepare('select * from delivery_pull_requests where run_id = ?')
+          .get(input.runId) as DeliveryPullRequestRow | undefined;
+        return row ? mapDeliveryPullRequest(row) : null;
+      });
+    },
+
     async createRoleRun(input) {
       const roleRun = roleRunSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -578,6 +757,32 @@ export function createRepositories(
       const row = db
         .prepare('select * from role_runs where id = ?')
         .get(roleRunId) as RoleRunRow | undefined;
+      return row ? mapRoleRun(row) : null;
+    },
+
+    async markRoleRunCompleted(input) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update role_runs
+           set status = 'passed', completed_at = ?
+           where id = ?`,
+        ).run(input.completedAt, input.roleRunId);
+        const row = db
+          .prepare('select * from role_runs where id = ?')
+          .get(input.roleRunId) as RoleRunRow | undefined;
+        return row ? mapRoleRun(row) : null;
+      });
+    },
+
+    async getLatestRoleRunForNode(runId, nodeId) {
+      const row = db
+        .prepare(
+          `select * from role_runs
+           where run_id = ? and node_id = ?
+           order by started_at desc, id desc
+           limit 1`,
+        )
+        .get(runId, nodeId) as RoleRunRow | undefined;
       return row ? mapRoleRun(row) : null;
     },
 
@@ -634,6 +839,8 @@ function mapNode(row: NodeRow): Node {
     phaseId: row.phase_id ?? undefined,
     role: row.role,
     status: row.status,
+    inputs: JSON.parse(row.inputs) as unknown,
+    outputs: JSON.parse(row.outputs) as unknown,
     gates: JSON.parse(row.gates) as unknown,
     dependencies: JSON.parse(row.dependencies) as unknown,
     createdAt: row.created_at,
@@ -747,4 +954,64 @@ function mapRoleRun(row: RoleRunRow): RoleRun {
     completedAt: row.completed_at,
     interruptedAt: row.interrupted_at,
   });
+}
+
+function mapDeliveryPullRequest(
+  row: DeliveryPullRequestRow,
+): DeliveryPullRequest {
+  return deliveryPullRequestSchema.parse({
+    id: row.id,
+    runId: row.run_id,
+    branch: row.branch,
+    baseBranch: row.base_branch,
+    title: row.title,
+    bodyPath: row.body_path,
+    remoteName: row.remote_name,
+    remoteUrl: row.remote_url,
+    status: row.status,
+    prUrl: row.pr_url,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    branchPushedAt: row.branch_pushed_at,
+    prCreatedAt: row.pr_created_at,
+    failureStage: row.failure_stage,
+    lastError: row.last_error,
+    attemptCount: row.attempt_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mapRunProviderConfig(row: RunProviderConfigRow): RunProviderConfig {
+  return runProviderConfigSchema.parse({
+    runId: row.run_id,
+    provider: row.provider,
+    configSummary: JSON.parse(row.config_summary) as Record<string, unknown>,
+    createdAt: row.created_at,
+  });
+}
+
+function toRunProviderConfigParams(config: RunProviderConfig) {
+  return {
+    runId: config.runId,
+    provider: config.provider,
+    configSummary: JSON.stringify(config.configSummary),
+    createdAt: config.createdAt,
+  };
+}
+
+function toDeliveryPullRequestParams(delivery: DeliveryPullRequest) {
+  return {
+    ...delivery,
+    bodyPath: delivery.bodyPath ?? null,
+    remoteName: delivery.remoteName ?? null,
+    remoteUrl: delivery.remoteUrl ?? null,
+    prUrl: delivery.prUrl ?? null,
+    approvedBy: delivery.approvedBy ?? null,
+    approvedAt: delivery.approvedAt ?? null,
+    branchPushedAt: delivery.branchPushedAt ?? null,
+    prCreatedAt: delivery.prCreatedAt ?? null,
+    failureStage: delivery.failureStage ?? null,
+    lastError: delivery.lastError ?? null,
+  };
 }

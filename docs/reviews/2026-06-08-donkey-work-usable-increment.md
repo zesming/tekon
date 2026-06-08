@@ -1,89 +1,89 @@
 # Donkey 工作可用化增量报告
 
-日期：2026-06-08  
-范围：把 Phase 3 本地 mock 产品环向“真实工作可用工具”推进的第一批 P0/P1 能力。  
-结论：本轮完成 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、PR 准备包和工作就绪度评估。真实远端 PR 创建、真实 LLM 稳定性和生产级恢复能力仍未声明完成。
+日期：2026-06-08
+
+范围：把 Phase 3 本地 mock 产品环推进到“可在受控工作场景中真实使用，但不追求全面自动化”的第一批 P0/P1 能力。
+
+结论：本轮已补齐 repo profile、角色 prompt 注入、Claude Code adapter CLI 接线、真实 provider artifact manifest 入库、repo profile 驱动 gate、provider 快照恢复、真实 worktree 主执行路径、PR 准备包、人工批准后的 PR 创建、Web approval 自动继续、语义验收证据、安全扫描和工作就绪度评估。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM 稳定性和远程多租户服务仍未声明完成。
 
 ## 1. 背景判断
 
-根据飞书方案和本地实现对照，Donkey 当前不应继续扩展组织级大平台能力，而应先把工作中真实需要的闭环打穿：
+根据飞书方案和本地实现对照，Donkey 当前最应该补齐的是“人能放心拿去工作”的闭环，而不是扩展组织级全自动平台：
 
-1. 能识别目标仓库的真实命令和 PR 规则。
-2. 能把角色系统真正传给 Agent，而不是只运行 mock。
-3. 能生成可审阅 PR 材料，而不是只输出 dry-run 命令计划。
-4. 能用明确评估项判断一次 run 是否可进入人工审阅和提交。
+1. Agent 必须在隔离 worktree 中执行，且通过 Gate 的代码改动必须进入一个可推送的交付分支。
+2. 交付必须以 evidence package、逐条验收标准、安全扫描和审计链支撑人工判断。
+3. 真实远端副作用必须显式人工批准，默认不 push、不创建 PR、不 merge、不上线。
+4. Web/CLI 的人工审批必须能推进流程，不让人审批后还要手工修数据库或重跑整条链路。
+5. readiness 必须揭示缺口，不能因为没有验收标准或没有安全扫描而误判为 ready。
 
 ## 2. 已完成能力
 
-| 能力                         | 实现位置                                                           | 说明                                                                                                                           |
-| ---------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| 仓库画像                     | `packages/core/src/repo/profile.ts`                                | `init` 时根据 `package.json` 生成 `.donkey/repo-profile.yaml`，记录 build/typecheck/lint/test/e2e、PR base branch 和风险路径。 |
-| 角色 prompt 注入             | `packages/core/src/workflow/engine.ts`                             | Engine 执行节点时加载角色 system prompt、skills、knowledge、tools policy 和输入 artifacts，组装为 Agent prompt。               |
-| Claude Code adapter CLI 接线 | `packages/cli/src/index.ts`                                        | `run --agent claude-code` 会创建 Claude Code adapter；mock 仍为默认和测试路径。                                                |
-| PR 准备包                    | `packages/core/src/delivery/pr-package.ts`、CLI `delivery prepare` | 生成 `.donkey/runs/<runId>/delivery/pr-package.md` 和 `pr-body.md`，记录 `delivery.pr-prepared` 审计事件。                     |
-| 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`   | 检查 workflow、audit、验证 gate、delivery package、PR 准备事件和 pending human gate。                                          |
+| 能力                         | 实现位置                                                                                                   | 说明                                                                                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 仓库画像                     | `packages/core/src/repo/profile.ts`                                                                        | `init` 时根据 `package.json` 生成 `.donkey/repo-profile.yaml`，记录 build/typecheck/lint/test/e2e/security、PR base branch 和风险路径。                                       |
+| 仓库画像驱动 Gate            | `workflows/*.yaml`、`packages/core/src/workflow/engine.ts`、CLI `workflow preflight`                       | 内置模板通过 `commandRef` 读取 repo profile 命令；preflight 可列出每个 gate 的解析结果，缺失 build/lint/test 命令时 gate 不会静默跳过。                                       |
+| 角色 prompt 注入             | `packages/core/src/workflow/engine.ts`                                                                     | Engine 执行节点时加载角色 system prompt、skills、knowledge、tools policy、需求正文和输入 artifacts，组装为 Agent prompt。                                                     |
+| Claude Code adapter CLI 接线 | `packages/cli/src/index.ts`、`packages/core/src/runtime/claude-code-adapter.ts`                            | `run --agent claude-code` 会创建 Claude Code adapter；adapter 读取 `DONKEY_ARTIFACT_MANIFEST`，校验 artifact schema 后写入 Artifact Store。                                   |
+| Provider 快照恢复            | `packages/core/src/db/repositories.ts`、`packages/cli/src/index.ts`、`packages/web/src/server/api/root.ts` | run 创建时落库 provider/config 摘要；CLI/Web resume 使用 run 快照，旧 run 缺少快照时拒绝继续；Engine 增加 role-run completed marker，避免 stale running 节点直接进 gate。     |
+| 真实 worktree 主路径         | `packages/core/src/workflow/engine.ts`、`packages/core/src/runtime/worktree-manager.ts`                    | CLI run/resume 注入 WorktreeManager；节点在 git worktree 中执行，Gate 在同一 worktree 中验证，通过后提交改动并推进到 `donkey-delivery/<runId>`，随后释放 lease。              |
+| 内置安全扫描                 | `packages/core/src/gate/runners.ts`、`workflows/*.yaml`                                                    | `security-scan` gate 可无外部命令运行，扫描明显 private key、`sk-`、AWS key 和 token/secret 赋值；内置模板代码节点已包含该 gate。                                             |
+| PR 准备包                    | `packages/core/src/delivery/pr-package.ts`、CLI `delivery prepare`                                         | 生成 `.donkey/runs/<runId>/delivery/pr-package.md` 和 `pr-body.md`，记录 `delivery.pr-prepared` 审计事件，并汇总 acceptance/security evidence。                               |
+| 受控 PR 创建                 | `packages/core/src/delivery/scm.ts`、CLI `delivery create-pr`                                              | 不带 `--approve-human` 只落库等待审批；带 `--approve-human` 后要求主工作区除 `.donkey` 外干净，直接 push 交付分支并执行 `gh pr create --body-file`，成功/失败/PR URL 均落库。 |
+| PR 失败恢复                  | `packages/core/src/delivery/scm.ts`                                                                        | `gh pr create` 失败后尝试 `gh pr view <branch> --json url --jq .url` 恢复已存在 PR URL，恢复成功按 created 落库并记录 audit。                                                 |
+| Web approval 自动继续        | `packages/web/src/server/api/root.ts`                                                                      | Web approve 会更新 human decision/gate/node/workflow 和 audit，然后调用 Engine resume；reject 会阻断 workflow。                                                               |
+| 工作就绪度评估               | `packages/core/src/eval/work-readiness.ts`、CLI `eval readiness`                                           | required checks 覆盖 workflow、audit、最新验证 gate、delivery package、PR 准备事件、pending human gate、验收标准证据和安全扫描；PR created 为 recommended。                   |
 
 ## 3. 验证记录
 
-已通过：
+本轮已通过的阶段性验证：
 
 ```bash
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:e2e
-npm exec --yes -- pnpm@10.12.1 test -- --run
-npm exec --yes -- pnpm@10.12.1 build
-npm exec --yes -- pnpm@10.12.1 typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test
 npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
-npm exec --yes -- pnpm@10.12.1 exec prettier --check .
-git diff --check
 ```
 
-新增覆盖：
+新增或强化覆盖：
 
-- `repo/profile.test.ts`：仓库画像自动探测和写入读取。
-- `workflow/engine-role-prompt.test.ts`：Engine 注入角色 system、skill、knowledge、tools 和项目上下文。
-- `delivery/pr-package.test.ts`：PR 准备包、PR body、delivery artifact 和审计事件。
-- `eval/work-readiness.test.ts`：PR 准备前后 readiness 状态变化。
-- CLI e2e：覆盖 `repo-profile.yaml`、`delivery prepare` 和 `eval readiness`。
+- `workflow/engine-worktree.e2e.test.ts`：真实 worktree 执行、跨节点改动继承、交付分支推进和 lease release。
+- `runtime/claude-code-adapter.test.ts`：真实 provider manifest 写入、schema 校验和 Artifact Store 入库。
+- `db/repositories.test.ts`：run provider snapshot、delivery PR 状态和 role-run completed marker。
+- `cli` release e2e：`workflow preflight`、repo profile gate 解析、人工批准 PR 创建 fixture。
+- `delivery/scm.test.ts`：PR 状态落库、人工审批、`.donkey` 排除、已有分支空 commit 跳过、PR URL 创建/恢复和失败阶段落库。
+- `eval/work-readiness.test.ts`：readiness 要求逐条 acceptance evidence 和 security-scan。
+- `gate/runners.test.ts`：内置 security scan 的通过和失败路径。
+- `delivery/evidence.test.ts` / `delivery/pr-package.test.ts`：验收标准证据和安全扫描证据进入交付包。
+- `web` API/e2e：Web approval 后自动 resume，reject 不继续。
+
+本轮最终收口已通过：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/core typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/web typecheck
+npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:unit
+npm exec --yes -- pnpm@10.12.1 test -- --run
+npm exec --yes -- prettier --check packages/cli/src/index.ts packages/core/src/runtime/claude-code-adapter.ts packages/core/src/workflow/engine.ts packages/core/src/artifact/schemas.ts packages/core/__tests__/runtime/claude-code-adapter.test.ts packages/web/src/server/api/root.ts
+```
 
 ## 4. 仍未完成
 
-- 真实 Claude Code / Codex 在受控真实仓库中的稳定执行证据。
-- 真实 worktree lease 进入主 Engine 执行路径；当前主执行路径仍使用 repoPath 作为 synthetic lease。
+- 真实 Claude Code / Codex 在受控真实仓库中的端到端稳定执行证据；本轮证明的是 artifact manifest 协议、provider 快照和 fixture 流程，不证明真实任务长期成功率。
 - 动态 workflow 非 dry-run 执行。
-- 真实远端 PR 创建、PR URL 落库和失败恢复。
-- Web approval 后自动调用 Engine resume 继续推进。
-- 语义级 artifact schema、验收标准逐条证据映射和真实 security scan。
+- 自动 merge、自动上线、生产权限变更等高风险动作。
+- 生产级 OS 沙箱、网络隔离和密钥治理；当前 `CommandPolicy.network` 不是 OS 级隔离。
+- PR 创建失败后的更复杂恢复策略，例如远端网络抖动后的重试退避、不同 Git host 的 PR 查询差异。
+- 团队级多项目权限、成本控制、通知和长期知识沉淀仍是后续阶段能力。
 
 ## 5. Reviewer 结论
 
-第一轮最高思考 reviewer 结论：`CHANGES_REQUIRED`。
+最高思考 reviewer 复查结论：APPROVED。第一轮 review 检出的 P0-1/P0-3/P0-4 代码、测试和文档一致性问题已修复；复查确认 Markdown/HTML 不再把已实现的 artifact manifest、repo profile `commandRef` 和 provider snapshot 恢复写成当前缺失。
 
-必须修复项与修复摘要：
-
-- Agent prompt 未注入需求正文：已从 workflow 关联的 demand 读取 title/body，并注入普通节点和 repair 节点 prompt；新增测试断言真实需求进入 prompt。
-- Engine 忽略 Agent 非 0 / timeout：已统一检查 `AgentRunResult`，非 0 或 timeout 会中断节点；repair agent 失败会阻断 workflow 并记录 `gate.repair.failed`。
-- CLI Claude Code 默认未复用手动 smoke 非交互形态：已将默认 args 调整为 `-p`，并启用 `json` 输出格式。
-- 用户手册误写 repo profile 会驱动验证 gate：已降级为“PR 准备包展示仓库画像并使用 PR base branch；workflow gate 仍以模板配置为准”。
-- readiness 误把历史失败 gate 算入最终状态：已按 `nodeId + gateType` 取最新验证 gate 结果判定。
-
-第二轮最高思考 reviewer 复查结论：`APPROVED`。
-
-复查确认第一轮 5 个必须修复项已闭环：
-
-- 需求正文已注入普通节点和 repair prompt。
-- Agent 非 0 / timeout 已阻断运行；普通节点进入 `interrupted`，repair 失败记录 `gate.repair.failed` 并阻断。
-- CLI `--agent claude-code` 默认已接入 `claude -p`、stdin prompt、`json` 输出。
-- 用户手册已明确 repo profile 当前只用于 PR 准备包展示和 base branch，不驱动 workflow gate。
-- readiness 已按 `nodeId + gateType` 取最新 gate 判定，测试覆盖“先失败后通过”场景。
-
-Reviewer 未检出剩余必须修复项。保留以下非阻塞风险：
-
-- 仍需真实 Claude Code / Codex 在受控真实仓库中的端到端 smoke。
-- 主 Engine 仍用 synthetic lease，真实 worktree lease、隔离、释放和冲突处理还没进入主执行路径。
-- `delivery prepare` 不 push、不创建远端 PR，PR URL 落库、失败恢复和远端权限边界仍未实现。
-- Web approval 后不会自动 resume Engine，Web resume 闭环仍是缺口。
-- Artifact 仍偏 Markdown / 文本证据，缺少语义级 schema、验收标准逐条映射和可机器判定的 acceptance evidence。
-- `CommandPolicy.network` 仍不是 OS 级网络隔离，后续真实 provider smoke 需要继续验证边界。
+剩余项均为非阻塞后续工作：P0-2/P0-5/P0-6/P0-7 仍保留为真实仓库样本、审阅体验、真实 PR 证据和生产级隔离证据工作。

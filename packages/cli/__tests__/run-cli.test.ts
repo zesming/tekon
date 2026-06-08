@@ -11,6 +11,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { createRepositories, openDonkeyDatabase } from '@donkey/core';
 import { runCli, type CliIO } from '../src/index.js';
 
 describe('runCli in-process', () => {
@@ -154,7 +155,7 @@ describe('runCli in-process', () => {
       await expect(runCli(argv, io)).resolves.toBe(0);
       expect(io.takeStdout().length).toBeGreaterThan(0);
     }
-  });
+  }, 15_000);
 
   it('requires --allow-dirty-base before running on tracked local changes', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -207,6 +208,49 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     expect(io.takeStdout()).toContain('status=passed');
+  });
+
+  it('does not approve human gates when the run provider snapshot is missing', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    await expect(
+      runCli(
+        [
+          'run',
+          '需要人工确认的旧运行',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    const db = openDonkeyDatabase({
+      filename: join(repoPath, '.donkey', 'donkey.sqlite'),
+    });
+    db.prepare('delete from run_provider_configs where run_id = ?').run(runId);
+    const repositories = createRepositories(db);
+
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--approve-human', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('has no provider snapshot');
+    expect(await repositories.listHumanDecisions(runId!)).toContainEqual(
+      expect.objectContaining({ status: 'pending' }),
+    );
+    db.close();
   });
 });
 

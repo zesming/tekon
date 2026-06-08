@@ -102,7 +102,7 @@ describe('pull request preparation package', () => {
     expect(preparation).toMatchObject({
       runId: 'run_1',
       title: '[Donkey] Add retry action',
-      branch: 'donkey/run_1',
+      branch: 'donkey-delivery/run_1',
       baseBranch: 'main',
       requiresHumanApproval: true,
     });
@@ -110,6 +110,9 @@ describe('pull request preparation package', () => {
     expect(existsSync(preparation.prBodyPath)).toBe(true);
     expect(readFileSync(preparation.prBodyPath, 'utf8')).toContain(
       'remote push and PR creation require human approval',
+    );
+    expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
+      'Acceptance Evidence',
     );
     expect(
       await repositories.listArtifacts('run_1', undefined, 'delivery-package'),

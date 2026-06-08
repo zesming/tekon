@@ -17,7 +17,20 @@ export interface CreateLeaseInput {
 }
 
 export interface WorktreeManager {
+  ensureRunBranch(input: {
+    repoPath: string;
+    runId: string;
+    baseRef: string;
+  }): Promise<string>;
   createLease(input: CreateLeaseInput): Promise<WorktreeLease>;
+  commitLeaseChanges(
+    leaseId: string,
+    input: { message: string },
+  ): Promise<boolean>;
+  promoteLeaseToRunBranch(input: {
+    leaseId: string;
+    branchName?: string;
+  }): Promise<string>;
   releaseLease(leaseId: string): Promise<void>;
   pruneStaleLeases(repoPath: string): Promise<void>;
   listLeases(runId: string): Promise<WorktreeLease[]>;
@@ -28,6 +41,25 @@ export function createWorktreeManager(options: {
   gateway: CommandGateway;
 }): WorktreeManager {
   return {
+    async ensureRunBranch(input) {
+      const repoPath = resolve(input.repoPath);
+      const runSegment = assertSafePathSegment(input.runId);
+      const branchName = deliveryBranchName(runSegment);
+      const existing = await runGit(options.gateway, {
+        repoPath,
+        runId: runSegment,
+        args: ['branch', '--list', branchName],
+      });
+      if (existing.trim().length === 0) {
+        await runGit(options.gateway, {
+          repoPath,
+          runId: runSegment,
+          args: ['branch', branchName, input.baseRef],
+        });
+      }
+      return branchName;
+    },
+
     async createLease(input) {
       const repoPath = resolve(input.repoPath);
       const runSegment = assertSafePathSegment(input.runId);
@@ -47,7 +79,8 @@ export function createWorktreeManager(options: {
         throw new Error('dirty base worktree requires allowDirtyBase');
       }
 
-      const suffix = `${nodeSegment}-${roleSegment}`;
+      const leaseSegment = `lease-${randomUUID()}`;
+      const suffix = `${nodeSegment}-${roleSegment}-${leaseSegment}`;
       const worktreePath = join(
         repoPath,
         '.donkey',
@@ -82,6 +115,56 @@ export function createWorktreeManager(options: {
       };
 
       return options.repositories.recordWorktreeLease(lease);
+    },
+
+    async commitLeaseChanges(leaseId, input) {
+      const lease = await options.repositories.getWorktreeLease(leaseId);
+      if (!lease) {
+        throw new Error(`unknown worktree lease: ${leaseId}`);
+      }
+      assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+      const dirtyStatus = await runGit(options.gateway, {
+        repoPath: lease.worktreePath,
+        runId: lease.runId,
+        args: ['status', '--porcelain'],
+      });
+      const meaningfulDirtyLines = dirtyStatus
+        .split(/\r?\n/u)
+        .filter((line) => line.trim().length > 0)
+        .filter((line) => !line.startsWith('?? .donkey/'));
+
+      if (meaningfulDirtyLines.length === 0) {
+        return false;
+      }
+
+      await runGit(options.gateway, {
+        repoPath: lease.worktreePath,
+        runId: lease.runId,
+        args: ['add', '.', ':!.donkey'],
+      });
+      await runGit(options.gateway, {
+        repoPath: lease.worktreePath,
+        runId: lease.runId,
+        args: ['commit', '-m', input.message],
+      });
+      return true;
+    },
+
+    async promoteLeaseToRunBranch(input) {
+      const lease = await options.repositories.getWorktreeLease(input.leaseId);
+      if (!lease) {
+        throw new Error(`unknown worktree lease: ${input.leaseId}`);
+      }
+      assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+      const branchName =
+        input.branchName ??
+        deliveryBranchName(assertSafePathSegment(lease.runId));
+      await runGit(options.gateway, {
+        repoPath: lease.repoPath,
+        runId: lease.runId,
+        args: ['branch', '-f', branchName, lease.branchName],
+      });
+      return branchName;
     },
 
     async releaseLease(leaseId) {
@@ -152,6 +235,10 @@ function assertSafePathSegment(value: string): string {
     throw new Error(`unsafe path segment: ${value}`);
   }
   return value;
+}
+
+function deliveryBranchName(runSegment: string): string {
+  return `donkey-delivery/${runSegment}`;
 }
 
 function assertManagedWorktreePath(

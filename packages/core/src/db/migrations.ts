@@ -1,6 +1,6 @@
 import type { DonkeyDatabase } from './connection.js';
 
-const PHASE_1_SCHEMA_VERSION = 1;
+const WORK_USABLE_SCHEMA_VERSION = 3;
 
 export function migrateDatabase(db: DonkeyDatabase): void {
   const migrate = db.transaction(() => {
@@ -51,6 +51,8 @@ export function migrateDatabase(db: DonkeyDatabase): void {
         phase_id text references phases(id) on delete set null,
         role text not null,
         status text not null,
+        inputs text not null default '[]',
+        outputs text not null default '[]',
         gates text not null,
         dependencies text not null,
         created_at text not null,
@@ -135,12 +137,59 @@ export function migrateDatabase(db: DonkeyDatabase): void {
         created_at text not null,
         released_at text
       );
+
+      create table if not exists delivery_pull_requests (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        branch text not null,
+        base_branch text not null,
+        title text not null,
+        body_path text,
+        remote_name text,
+        remote_url text,
+        status text not null,
+        pr_url text,
+        approved_by text,
+        approved_at text,
+        branch_pushed_at text,
+        pr_created_at text,
+        failure_stage text,
+        last_error text,
+        attempt_count integer not null,
+        created_at text not null,
+        updated_at text not null,
+        unique(run_id)
+      );
+
+      create table if not exists run_provider_configs (
+        run_id text primary key references workflow_instances(id) on delete cascade,
+        provider text not null,
+        config_summary text not null,
+        created_at text not null
+      );
     `);
+
+    addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
+    addColumnIfMissing(db, 'nodes', 'outputs', "text not null default '[]'");
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',
-    ).run(PHASE_1_SCHEMA_VERSION, new Date().toISOString());
+    ).run(WORK_USABLE_SCHEMA_VERSION, new Date().toISOString());
   });
 
   migrate();
+}
+
+function addColumnIfMissing(
+  db: DonkeyDatabase,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const columns = db.prepare(`pragma table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`alter table ${table} add column ${column} ${definition}`);
+  }
 }

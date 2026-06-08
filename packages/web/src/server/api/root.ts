@@ -3,9 +3,19 @@ import { join, resolve } from 'node:path';
 
 import {
   createAuditLogger,
+  createClaudeCodeAdapter,
+  createCommandGateway,
+  createGateEngine,
+  createMockAgentAdapter,
   createRepositories,
+  createWorkflowEngine,
+  createWorktreeManager,
+  agentAdapterConfigSchema,
+  type CommandGateway,
   openDonkeyDatabase,
   type DonkeyDatabase,
+  type RunProviderConfig,
+  type WorkflowInstance,
 } from '@donkey/core';
 
 import {
@@ -225,11 +235,22 @@ export async function createApiCaller(
       async resume(runInput) {
         assertSessionToken(context, runInput.token);
         assertRunInScope(db, context, runInput.runId);
-        await repositories.updateWorkflowInstanceStatus(
+        const pendingHuman = await repositories.listHumanDecisions(
           runInput.runId,
-          'running',
         );
-        return { run: mapWorkflow(mustGetRun(db, runInput.runId)) };
+        if (pendingHuman.some((decision) => decision.status === 'pending')) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            'Run has pending human decisions; approve or reject the gate first.',
+          );
+        }
+        const result = await resumeWorkflowRun({
+          context,
+          repositories,
+          audit,
+          runId: runInput.runId,
+        });
+        return { run: mapWorkflowFromDomain(result.workflow) };
       },
 
       async cancel(runInput) {
@@ -278,6 +299,7 @@ export async function createApiCaller(
         return updateDecision({
           db,
           repositories,
+          audit,
           context,
           input: decisionInput,
           status: 'approved',
@@ -289,6 +311,7 @@ export async function createApiCaller(
         return updateDecision({
           db,
           repositories,
+          audit,
           context,
           input: decisionInput,
           status: 'rejected',
@@ -496,6 +519,7 @@ function pendingDecisionCount(db: DonkeyDatabase, runId: string): number {
 async function updateDecision(input: {
   db: DonkeyDatabase;
   repositories: ReturnType<typeof createRepositories>;
+  audit: ReturnType<typeof createAuditLogger>;
   context: WebProjectContext;
   input: DecisionInput;
   status: 'approved' | 'rejected';
@@ -513,6 +537,18 @@ async function updateDecision(input: {
       'NOT_FOUND',
       `Decision not found: ${input.input.decisionId}`,
     );
+  }
+  if (existing.status !== 'pending') {
+    throw new ApiError(
+      'BAD_REQUEST',
+      `Decision is already ${existing.status}: ${input.input.decisionId}`,
+    );
+  }
+  if (input.status === 'approved') {
+    await assertRunCanResume({
+      repositories: input.repositories,
+      runId: existing.run_id,
+    });
   }
 
   const decidedAt = new Date().toISOString();
@@ -537,14 +573,117 @@ async function updateDecision(input: {
       .prepare('update gate_results set status = ? where id = ?')
       .run(input.gateStatus, existing.gate_result_id);
   }
-  await input.repositories.transitionNode(existing.node_id, 'running');
-  await input.repositories.updateWorkflowInstanceStatus(
-    existing.run_id,
-    'running',
-    existing.node_id,
-  );
+
+  if (input.status === 'approved') {
+    await input.repositories.transitionNode(existing.node_id, 'running');
+    await input.repositories.transitionNode(existing.node_id, 'awaiting-gate');
+    await input.audit.append({
+      runId: existing.run_id,
+      type: 'human.gate.approved',
+      payload: {
+        decisionId: existing.id,
+        nodeId: existing.node_id,
+        actor: input.input.actor,
+      },
+    });
+    await resumeWorkflowRun({
+      context: input.context,
+      repositories: input.repositories,
+      audit: input.audit,
+      runId: existing.run_id,
+    });
+  } else {
+    await input.repositories.transitionNode(existing.node_id, 'blocked');
+    await input.repositories.updateWorkflowInstanceStatus(
+      existing.run_id,
+      'blocked',
+      existing.node_id,
+    );
+    await input.audit.append({
+      runId: existing.run_id,
+      type: 'human.gate.rejected',
+      payload: {
+        decisionId: existing.id,
+        nodeId: existing.node_id,
+        actor: input.input.actor,
+      },
+    });
+  }
 
   return { decision: mapHumanDecisionRow(input.db, decision) };
+}
+
+async function resumeWorkflowRun(input: {
+  context: WebProjectContext;
+  repositories: ReturnType<typeof createRepositories>;
+  audit: ReturnType<typeof createAuditLogger>;
+  runId: string;
+}) {
+  const gateway = createCommandGateway({ repositories: input.repositories });
+  const runProvider = await input.repositories.getRunProviderConfig(
+    input.runId,
+  );
+  if (!runProvider) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
+    );
+  }
+  const engine = createWorkflowEngine({
+    repoPath: input.context.projectRoot,
+    dataDir: '.donkey',
+    repositories: input.repositories,
+    audit: input.audit,
+    adapter: createWebAgentAdapterFromSnapshot(gateway, runProvider),
+    agentProvider: runProvider.provider,
+    agentConfigSummary: runProvider.configSummary,
+    gateEngine: createGateEngine({
+      repositories: input.repositories,
+      gateway,
+    }),
+    worktreeManager: createWorktreeManager({
+      repositories: input.repositories,
+      gateway,
+    }),
+  });
+  return engine.resumeRun(input.runId);
+}
+
+async function assertRunCanResume(input: {
+  repositories: ReturnType<typeof createRepositories>;
+  runId: string;
+}) {
+  const provider = await input.repositories.getRunProviderConfig(input.runId);
+  if (!provider) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
+    );
+  }
+  createWebAgentAdapterFromSnapshot(createCommandGateway(), provider);
+}
+
+function createWebAgentAdapterFromSnapshot(
+  gateway: CommandGateway,
+  provider: RunProviderConfig,
+) {
+  if (provider.provider === 'mock') {
+    return createMockAgentAdapter();
+  }
+  if (provider.provider === 'claude-code') {
+    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
+    if (!parsed.success || parsed.data.provider !== 'claude-code') {
+      throw new ApiError(
+        'BAD_REQUEST',
+        `Run ${provider.runId} has a non-replayable claude-code provider snapshot.`,
+      );
+    }
+    return createClaudeCodeAdapter(parsed.data, gateway);
+  }
+  throw new ApiError(
+    'BAD_REQUEST',
+    'Web resume does not support custom agent adapters yet',
+  );
 }
 
 function assertSessionToken(
@@ -638,6 +777,18 @@ function mapWorkflow(run: WorkflowRow) {
     currentNodeId: run.current_node_id,
     createdAt: run.created_at,
     updatedAt: run.updated_at,
+  };
+}
+
+function mapWorkflowFromDomain(run: WorkflowInstance) {
+  return {
+    id: run.id,
+    projectId: run.projectId,
+    demandId: run.demandId,
+    status: run.status,
+    currentNodeId: run.currentNodeId ?? null,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
   };
 }
 

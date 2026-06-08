@@ -29,15 +29,13 @@ phases:
           - code:code-changes
         gates:
           - type: build
-            command:
-              tool: pnpm
-              args:
-                - build
+            commandRef: build
           - type: lint
-            command:
-              tool: pnpm
-              args:
-                - lint
+            commandRef: lint
+          - type: security-scan
+            commandRef: security
+          - type: schema
+            artifactType: code-changes
   - id: qa-review
     name: QA and Reviewer
     dependsOn:
@@ -51,10 +49,9 @@ phases:
           - test:test-report
         gates:
           - type: test
-            command:
-              tool: pnpm
-              args:
-                - test
+            commandRef: test
+          - type: schema
+            artifactType: test-report
       - id: reviewer-review
         role: reviewer
         inputs:

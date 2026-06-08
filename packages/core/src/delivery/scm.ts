@@ -6,6 +6,8 @@ import {
   type CommandGateway,
   type CommandGatewayResult,
 } from '../runtime/command-gateway.js';
+import type { AuditLogger } from '../audit/logger.js';
+import type { DonkeyRepositories } from '../db/repositories.js';
 import type { CommandPolicy } from '../types/config.js';
 import type { CommandInvocation } from '../types/domain.js';
 
@@ -33,11 +35,15 @@ export interface ScmStatus {
 export interface ScmDelivery {
   getStatus(input?: { branch?: string }): Promise<ScmStatus>;
   createPr(input: {
+    runId?: string;
     title: string;
     body: string;
+    bodyPath?: string;
     branch: string;
+    baseBranch?: string;
     dryRun: boolean;
     humanApproved?: boolean;
+    approvedBy?: string;
   }): Promise<ScmDeliveryCommandResult>;
 }
 
@@ -46,6 +52,8 @@ export interface CreateScmDeliveryOptions {
   env?: NodeJS.ProcessEnv;
   gateway?: CommandGateway;
   outputDir?: string;
+  repositories?: DonkeyRepositories;
+  audit?: AuditLogger;
 }
 
 export function createScmDelivery(
@@ -57,24 +65,54 @@ export function createScmDelivery(
     },
 
     async createPr(input) {
+      const baseBranch = input.baseBranch ?? 'main';
+      const env = { ...process.env, ...(options.env ?? {}) };
+      const bodyArg = input.bodyPath
+        ? ['--body-file', input.bodyPath]
+        : ['--body', input.body];
+      const branchSetupCommand = localBranchExists(
+        options.repoPath,
+        env,
+        input.branch,
+      )
+        ? null
+        : ['git', 'branch', input.branch];
+      const dirtyWorktree = hasCommittableChanges(options.repoPath, env);
+      const prCreateCommand = [
+        'gh',
+        'pr',
+        'create',
+        '--title',
+        input.title,
+        ...bodyArg,
+        '--head',
+        input.branch,
+        '--base',
+        baseBranch,
+      ];
       const commands: string[][] = [
-        ['git', 'checkout', '-B', input.branch],
-        ['git', 'add', '.'],
-        ['git', 'commit', '-m', input.title],
+        ...(branchSetupCommand ? [branchSetupCommand] : []),
         ['git', 'push', '-u', 'origin', input.branch],
-        [
-          'gh',
-          'pr',
-          'create',
-          '--title',
-          input.title,
-          '--body',
-          input.body,
-          '--head',
-          input.branch,
-        ],
+        prCreateCommand,
+      ];
+      const recoveryCommand = [
+        'gh',
+        'pr',
+        'view',
+        input.branch,
+        '--json',
+        'url',
+        '--jq',
+        '.url',
       ];
       const status = await getScmStatus(options, input.branch);
+      await upsertDeliveryState({
+        options,
+        input,
+        baseBranch,
+        status,
+        nextStatus: input.humanApproved ? 'creating-pr' : 'awaiting-approval',
+      });
 
       if (input.dryRun) {
         return {
@@ -86,6 +124,15 @@ export function createScmDelivery(
       }
 
       if (!input.humanApproved) {
+        await appendDeliveryAudit(
+          options,
+          input.runId,
+          'delivery.pr.awaiting-approval',
+          {
+            branch: input.branch,
+            baseBranch,
+          },
+        );
         return {
           dryRun: false,
           requiresHumanApproval: true,
@@ -96,27 +143,89 @@ export function createScmDelivery(
 
       const gateway = options.gateway ?? createCommandGateway();
       const policy = createDeliveryCommandPolicy(options.repoPath);
-      for (const command of commands.slice(0, -1)) {
+      const executedCommands: string[][] = [];
+      if (dirtyWorktree) {
+        const error = new Error(
+          'delivery create-pr requires a clean worktree outside .donkey; commit or stash local changes before creating a PR',
+        );
+        await markDeliveryFailed(options, input.runId, 'dirty-worktree', error);
+        throw error;
+      }
+      try {
+        if (branchSetupCommand) {
+          await runDeliveryCommand({
+            gateway,
+            command: toInvocation(branchSetupCommand),
+            options,
+            policy,
+          });
+          executedCommands.push(branchSetupCommand);
+        }
+        const pushCommand = ['git', 'push', '-u', 'origin', input.branch];
         await runDeliveryCommand({
           gateway,
-          command: toInvocation(command),
+          command: toInvocation(pushCommand),
           options,
           policy,
         });
+        executedCommands.push(pushCommand);
+        await markBranchPushed(options, input.runId);
+      } catch (error) {
+        await markDeliveryFailed(options, input.runId, 'push-branch', error);
+        throw error;
       }
-      const prResult = await runDeliveryCommand({
-        gateway,
-        command: toInvocation(commands.at(-1)!),
-        options,
-        policy,
+
+      let prUrl: string | undefined;
+      try {
+        const prResult = await runDeliveryCommand({
+          gateway,
+          command: toInvocation(prCreateCommand),
+          options,
+          policy,
+        });
+        executedCommands.push(prCreateCommand);
+        prUrl = parsePrUrl(readLastOutputLine(prResult.stdoutPath));
+        if (!prUrl) {
+          throw new Error('gh pr create did not return a PR URL');
+        }
+      } catch (error) {
+        prUrl = await recoverExistingPrUrl({
+          gateway,
+          command: recoveryCommand,
+          options,
+          policy,
+        });
+        if (!prUrl) {
+          await markDeliveryFailed(options, input.runId, 'create-pr', error);
+          throw error;
+        }
+        executedCommands.push(recoveryCommand);
+        await appendDeliveryAudit(
+          options,
+          input.runId,
+          'delivery.pr.recovered',
+          {
+            branch: input.branch,
+            baseBranch,
+            prUrl,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+
+      const finalStatus = await getScmStatus(options, input.branch);
+      await markDeliveryCreated(options, input.runId, prUrl, finalStatus);
+      await appendDeliveryAudit(options, input.runId, 'delivery.pr.created', {
+        branch: input.branch,
+        baseBranch,
+        prUrl,
       });
-      const prUrl = readLastOutputLine(prResult.stdoutPath);
 
       return {
         dryRun: false,
         requiresHumanApproval: false,
-        commands,
-        status,
+        commands: executedCommands,
+        status: finalStatus,
         prUrl,
       };
     },
@@ -190,10 +299,12 @@ function createDeliveryCommandPolicy(repoPath: string): CommandPolicy {
   return {
     allow: [
       { tool: 'git', args: ['checkout'] },
+      { tool: 'git', args: ['branch'] },
       { tool: 'git', args: ['add'] },
       { tool: 'git', args: ['commit'] },
       { tool: 'git', args: ['push'] },
       { tool: 'gh', args: ['pr', 'create'] },
+      { tool: 'gh', args: ['pr', 'view'] },
     ],
     deny: [{ tool: 'git', args: ['push', '--force'] }],
     requiresHumanApproval: [],
@@ -240,6 +351,182 @@ function toInvocation(command: string[]): CommandInvocation {
 function readLastOutputLine(stdoutPath: string): string | undefined {
   const output = readFileSync(stdoutPath, 'utf8').trim();
   return output.length === 0 ? undefined : output.split(/\r?\n/u).at(-1);
+}
+
+function parsePrUrl(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'http:' || url.protocol === 'https:'
+      ? trimmed
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function recoverExistingPrUrl(input: {
+  gateway: CommandGateway;
+  command: string[];
+  options: CreateScmDeliveryOptions;
+  policy: CommandPolicy;
+}): Promise<string | undefined> {
+  try {
+    const result = await runDeliveryCommand({
+      gateway: input.gateway,
+      command: toInvocation(input.command),
+      options: input.options,
+      policy: input.policy,
+    });
+    return parsePrUrl(readLastOutputLine(result.stdoutPath));
+  } catch {
+    return undefined;
+  }
+}
+
+function localBranchExists(
+  repoPath: string,
+  env: NodeJS.ProcessEnv,
+  branch: string,
+): boolean {
+  return (
+    runExitCodeCommand(
+      'git',
+      ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`],
+      repoPath,
+      env,
+    ) === 0
+  );
+}
+
+function hasCommittableChanges(
+  repoPath: string,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  const status =
+    runReadCommand('git', ['status', '--porcelain'], repoPath, env) ?? '';
+  return status
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0)
+    .some((line) => !line.startsWith('?? .donkey/'));
+}
+
+async function upsertDeliveryState(input: {
+  options: CreateScmDeliveryOptions;
+  input: {
+    runId?: string;
+    title: string;
+    bodyPath?: string;
+    branch: string;
+    humanApproved?: boolean;
+    approvedBy?: string;
+  };
+  baseBranch: string;
+  status: ScmStatus;
+  nextStatus: 'awaiting-approval' | 'creating-pr';
+}) {
+  if (!input.options.repositories || !input.input.runId) {
+    return;
+  }
+  const existing = await input.options.repositories.getDeliveryPullRequest(
+    input.input.runId,
+  );
+  const now = new Date().toISOString();
+  await input.options.repositories.upsertDeliveryPullRequest({
+    id: existing?.id ?? `delivery_pr_${input.input.runId}`,
+    runId: input.input.runId,
+    branch: input.input.branch,
+    baseBranch: input.baseBranch,
+    title: input.input.title,
+    bodyPath: input.input.bodyPath ?? existing?.bodyPath ?? null,
+    remoteName: input.status.remoteName ?? existing?.remoteName ?? null,
+    remoteUrl: input.status.remoteUrl ?? existing?.remoteUrl ?? null,
+    status: existing?.status === 'created' ? 'created' : input.nextStatus,
+    prUrl: existing?.prUrl ?? null,
+    approvedBy: input.input.humanApproved
+      ? (input.input.approvedBy ?? 'cli')
+      : (existing?.approvedBy ?? null),
+    approvedAt: input.input.humanApproved
+      ? (existing?.approvedAt ?? now)
+      : (existing?.approvedAt ?? null),
+    branchPushedAt: existing?.branchPushedAt ?? null,
+    prCreatedAt: existing?.prCreatedAt ?? null,
+    failureStage: null,
+    lastError: null,
+    attemptCount: (existing?.attemptCount ?? 0) + 1,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  });
+}
+
+async function markBranchPushed(
+  options: CreateScmDeliveryOptions,
+  runId: string | undefined,
+) {
+  if (!options.repositories || !runId) {
+    return;
+  }
+  const existing = await options.repositories.getDeliveryPullRequest(runId);
+  if (!existing) {
+    return;
+  }
+  const now = new Date().toISOString();
+  await options.repositories.upsertDeliveryPullRequest({
+    ...existing,
+    status: 'branch-pushed',
+    branchPushedAt: existing.branchPushedAt ?? now,
+    updatedAt: now,
+  });
+}
+
+async function markDeliveryCreated(
+  options: CreateScmDeliveryOptions,
+  runId: string | undefined,
+  prUrl: string,
+  status: ScmStatus,
+) {
+  if (!options.repositories || !runId) {
+    return;
+  }
+  await options.repositories.markDeliveryPullRequestCreated({
+    runId,
+    prUrl,
+    remoteName: status.remoteName,
+    remoteUrl: status.remoteUrl,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+async function markDeliveryFailed(
+  options: CreateScmDeliveryOptions,
+  runId: string | undefined,
+  stage: string,
+  error: unknown,
+) {
+  if (!options.repositories || !runId) {
+    return;
+  }
+  await options.repositories.markDeliveryPullRequestFailed({
+    runId,
+    failureStage: stage,
+    lastError: error instanceof Error ? error.message : String(error),
+    failedAt: new Date().toISOString(),
+  });
+}
+
+async function appendDeliveryAudit(
+  options: CreateScmDeliveryOptions,
+  runId: string | undefined,
+  type: string,
+  payload: Record<string, unknown>,
+) {
+  if (!options.audit || !runId) {
+    return;
+  }
+  await options.audit.append({ runId, type, payload });
 }
 
 function runReadCommand(

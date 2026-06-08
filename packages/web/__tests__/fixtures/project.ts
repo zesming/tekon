@@ -17,7 +17,10 @@ export interface WebFixtureProject {
 }
 
 export async function createWebFixtureProject(
-  options: { includeOutOfScopeProject?: boolean } = {},
+  options: {
+    includeOutOfScopeProject?: boolean;
+    includeProviderSnapshot?: boolean;
+  } = {},
 ): Promise<WebFixtureProject> {
   const projectRoot = mkFixtureRoot();
   const donkeyDir = join(projectRoot, '.donkey');
@@ -83,6 +86,14 @@ export async function createWebFixtureProject(
     createdAt: '2026-06-05T00:00:00.000Z',
     updatedAt: '2026-06-05T00:00:00.000Z',
   });
+  if (options.includeProviderSnapshot !== false) {
+    await repositories.recordRunProviderConfig({
+      runId: 'run_1',
+      provider: 'mock',
+      configSummary: { provider: 'mock' },
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+  }
   await repositories.createPhase({
     id: 'phase_1',
     runId: 'run_1',

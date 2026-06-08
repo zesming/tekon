@@ -1,14 +1,14 @@
 # Donkey V2 用户手册
 
-生成日期：2026-06-05
+生成日期：2026-06-08
 适用分支：`rebuild-v2`
-文档状态：Phase 3 Task 20 最终验收版
+文档状态：工作可用化增量验收版
 
 ## 1. 当前定位
 
-Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收：`init`、模板运行、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、工作就绪度评估、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
+Donkey V2 是面向本地仓库的 Agent workflow 驾驶系统。当前已完成本地 CLI/Web 验收，并补齐第一批工作可用化能力：`init`、模板运行、真实 git worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate、动态 workflow dry-run、状态查询、人工 gate、角色、workflow、约束、日志、清理命令、交付 dry-run、PR 准备包、人工批准后的 PR 创建、工作就绪度评估、metrics 和本地 Web dashboard 可在受控 fixture 中使用。
 
-本手册只描述当前可验证或按当前实现边界可操作的能力。真实远端 PR 创建、自动 merge、生产级真实 LLM workflow 稳定性和远程多租户 Web 服务不在本次可用范围内。
+本手册只描述当前可验证或按当前实现边界可操作的能力。自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户 Web 服务不在本次可用范围内。
 
 ## 2. 安装与构建 install
 
@@ -25,7 +25,7 @@ npm exec --yes -- pnpm@10.12.1 build
 node /path/to/donkey/packages/cli/dist/index.js
 ```
 
-如果后续需要真实 PR 创建，本机还需要可用的 `git` 和 `gh`，并且 `gh auth status` 必须在目标远端仓库具备创建 PR 的权限。当前建议先使用交付 dry-run，不把 dry-run 视为真实 PR 已创建。
+如果后续需要真实 PR 创建，本机还需要可用的 `git` 和 `gh`，并且 `gh auth status` 必须在目标远端仓库具备创建 PR 的权限。当前建议先使用交付 dry-run 和 `delivery prepare` 审阅证据，再显式执行 `delivery create-pr --approve-human`。
 
 ## 3. 初始化项目 init
 
@@ -35,9 +35,9 @@ node /path/to/donkey/packages/cli/dist/index.js
 node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project
 ```
 
-初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录和 worktree 目录。`.donkey/` 是运行态目录，默认不作为可提交验收结论保存；重要结果应同步写入 `docs/reviews/`。
+初始化会创建 `.donkey/` 目录、`config.yaml`、`repo-profile.yaml`、SQLite 数据库、角色目录、workflow 目录和 worktree 目录。`.donkey/` 是运行态目录，默认不提交；重要验收结论、run id、Gate 结果和风险判断应同步写入 `docs/reviews/`。
 
-`repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e` 命令，并保留 PR base branch 和风险路径配置。当前 PR 准备包会展示仓库画像命令并使用其中的 PR base branch；workflow gate 仍以模板内配置为准，尚未自动改写验证命令。
+`repo-profile.yaml` 会根据目标仓库 `package.json` 自动填充可识别的 `build`、`typecheck`、`lint`、`test`、`e2e`、`security` 命令，并保留 PR base branch 和风险路径配置。内置 workflow 的 build/lint/test/security gate 会通过 `commandRef` 读取仓库画像命令；缺失 build/lint/test 命令时 gate 不会静默跳过，而会以 missing-command 失败。
 
 `init` 也会生成 `.donkey/web-session.json`。这个文件保存本地 Web 写操作 token，已被 `.gitignore` 排除，不应提交。
 
@@ -49,9 +49,11 @@ node /path/to/donkey/packages/cli/dist/index.js init --repo /path/to/project
 node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重试" --template standard-feature --agent mock --repo /path/to/project
 ```
 
-按 Phase 2 证据，`standard-feature` mock 路径可完成到 `passed` 并生成本地 artifacts。命令输出包含 `runId`、`status` 和 `humanGate` 状态。
+按当前证据，`standard-feature` mock 路径可完成到 `passed`，生成本地 artifacts，并把节点工作区中的实际文件改动推进到 `donkey-delivery/<runId>` 本地交付分支。命令输出包含 `runId`、`status` 和 `humanGate` 状态。
 
-当前 `--agent claude-code` 已接入 CLI 主执行链路，会使用 Donkey 的 Claude Code adapter 和角色 prompt 注入。使用前必须确认本机 `claude` CLI、认证状态、目标仓库权限和人工审批边界可用；该路径仍需在受控真实仓库中单独记录 smoke 证据，不应把一次本地接线视为生产级真实 LLM workflow 稳定。
+内置模板的代码生产节点会执行 build、lint 和内置 `security-scan`。security scan 默认扫描当前 worktree 中的明显密钥/私钥/token 模式；如果仓库画像提供额外安全命令，后续可扩展为外部命令，但当前不能把它理解为完整 SAST 或生产级安全审计。
+
+当前 `--agent claude-code` 已接入 CLI 主执行链路，会使用 Donkey 的 Claude Code adapter、角色 prompt 注入和 artifact manifest 协议。Engine 会要求真实 provider 在 `DONKEY_OUTPUT_DIR` 下写节点产物，并写入 `DONKEY_ARTIFACT_MANIFEST`；adapter 会校验 manifest 中的 artifact schema 后写入 Artifact Store。使用前必须确认本机 `claude` CLI、认证状态、目标仓库权限和人工审批边界可用；该路径仍需在受控真实仓库中单独记录 smoke 证据，不应把一次本地接线视为生产级真实 LLM workflow 稳定。
 
 默认情况下，模板运行会检查 Git 工作区并拒绝实际业务文件已有本地改动的 dirty base，`.donkey/` 运行态目录不计入阻断。若你确认要基于当前未提交改动执行，可显式追加：
 
@@ -90,6 +92,14 @@ node /path/to/donkey/packages/cli/dist/index.js status --run-id <runId> --repo /
 - `pendingHumanDecisions` 大于 0：需要人工确认后才能继续。
 - `artifacts` 大于 0：已有可审阅产物路径写入 artifact store。
 
+如需在运行前确认 gate 命令，可执行：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js workflow preflight standard-feature --repo /path/to/project
+```
+
+输出会列出每个 node/gate 的 `commandRef`、解析状态和最终命令。`security-scan` 在没有外部安全命令时会显示 Donkey 内置扫描。
+
 ## 6. 人工确认 human gate
 
 `bugfix` 模板和高风险动态 workflow 可能触发 human gate。CLI 确认命令：
@@ -98,7 +108,7 @@ node /path/to/donkey/packages/cli/dist/index.js status --run-id <runId> --repo /
 node /path/to/donkey/packages/cli/dist/index.js resume --run-id <runId> --approve-human --repo /path/to/project
 ```
 
-按当前实现边界，`resume --approve-human` 会批准 pending human decisions，并把对应 human gate 记录为 passed。高风险操作、真实 push、真实 PR 创建和上线动作仍不应自动放行；最终合入、发布、权限扩大和生产变更必须由人类控制。
+按当前实现边界，`resume --approve-human` 会批准 pending human decisions，并把对应 human gate 记录为 passed。run 创建时会落库 provider/config 摘要，CLI/Web resume 会按该 provider 快照恢复；如果旧 run 缺少 provider 快照，resume 会拒绝继续，避免真实 provider 中断后被 mock 误接管。高风险操作、真实 push、真实 PR 创建和上线动作仍不应自动放行；最终合入、发布、权限扩大和生产变更必须由人类控制。
 
 手动暂停和取消：
 
@@ -143,7 +153,28 @@ node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id <runId
 
 `delivery prepare` 会记录 `delivery.pr-prepared` 审计事件，并追加一个 `delivery-package` artifact。它不执行 `git push`，也不创建远端 PR。
 
-## 9. 工作就绪度 eval readiness
+## 9. 创建 PR delivery create-pr
+
+先确认准备包和 readiness 结果，再显式批准远端副作用：
+
+```bash
+node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-human --repo /path/to/project
+```
+
+不带 `--approve-human` 时，命令只会把 PR delivery 状态落库为 `awaiting-approval`，不会 push，也不会调用 `gh pr create`。
+
+带 `--approve-human` 后，命令会：
+
+- 要求主工作区除 `.donkey` 外没有未提交改动，避免把 unrelated 本地修改带进 PR。
+- 直接 push `donkey-delivery/<runId>` 本地分支；如果分支不存在，才从当前 HEAD 创建同名本地分支。
+- `git push -u origin <branch>`。
+- 使用 `gh pr create --body-file <pr-body.md>` 创建 PR，避免把 Markdown body 拼进 shell 字符串。
+- 将 `awaiting-approval`、`branch-pushed`、`created` 或 `failed` 状态写入 SQLite。
+- 如果 `gh pr create` 失败但 PR 已存在，会尝试 `gh pr view <branch> --json url --jq .url` 恢复 PR URL。
+
+这一步是真实远端副作用，必须由人明确批准。Donkey 不会自动 merge、自动上线，也不会替你判断 PR 是否可直接合入。
+
+## 10. 工作就绪度 eval readiness
 
 检查某次 run 是否已经具备人工审阅和提交的最低证据面：
 
@@ -151,9 +182,11 @@ node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id <runId
 node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/project
 ```
 
-当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate。`ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。
+当前评估项包括 workflow 是否 passed、audit hash 是否有效、验证 gate 是否全部通过、delivery package 是否存在、PR 准备事件是否存在、是否仍有 pending human gate、验收标准是否逐条有 passed evidence、安全扫描是否通过，以及 PR 是否已创建。
 
-## 10. Web dashboard
+`ready=true` 代表这次 run 可以进入人工审阅 / PR 提交流程；不代表可以自动 merge 或上线。PR 已创建当前是推荐项，不是 required gate，因为有些团队会先审阅本地 PR 准备包再决定是否创建远端 PR。
+
+## 11. Web dashboard
 
 Web dashboard 属于 Phase 3 产品面。当前实现为本地 Node HTTP + Vite React dashboard，可审阅 project overview、artifacts、gates、audit、roles、workflows、settings 和 human approvals。
 
@@ -165,7 +198,7 @@ DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @do
 
 Web 写操作依赖 `init` 生成的 `.donkey/web-session.json` session token。没有 token 或 token 错误时，approve/reject、pause/resume/cancel/clean 会被拒绝。
 
-Pending human gate 会展示 request context、gate context、exact command 和 risk label；audit 视图会展示 hash chain 校验状态，并支持按 node、gate、role 过滤。
+Pending human gate 会展示 request context、gate context、exact command 和 risk label；audit 视图会展示 hash chain 校验状态，并支持按 node、gate、role 过滤。Web approve 会更新 human decision、gate/node/workflow 状态并自动调用 Engine resume 继续推进；resume 会使用 run 自身落库的 provider 快照，当前支持 `mock` 和 `claude-code`，不支持 `custom` adapter。Web reject 会阻断 workflow，不会自动继续。
 
 Web 审阅至少需要记录：
 
@@ -174,7 +207,7 @@ Web 审阅至少需要记录：
 - Artifact、audit hash、audit filter、roles、workflows 页面是否可读。
 - 桌面和移动宽度截图或 Playwright e2e 输出。
 
-## 11. 角色 roles
+## 12. 角色 roles
 
 查看内置和项目角色：
 
@@ -192,7 +225,7 @@ node /path/to/donkey/packages/cli/dist/index.js role create rd --repo /path/to/p
 
 角色解析遵循内置角色、项目角色和用户角色的加载规则；项目级 whole-folder override 会覆盖对应角色目录。当前 Engine 会把角色 system prompt、skills、knowledge、tools policy 摘要和项目上下文注入 Agent prompt。修改角色后应通过本地 mock workflow、真实 provider smoke 和审阅记录验证，不应直接假设 prompt 或 tools policy 修改已经安全。
 
-## 12. Workflows
+## 13. Workflows
 
 查看模板：
 
@@ -207,9 +240,9 @@ node /path/to/donkey/packages/cli/dist/index.js workflow show standard-feature -
 node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --from standard-feature --repo /path/to/project
 ```
 
-当前内置模板包括 `standard-feature` 和 `bugfix`。`standard-feature` 适合本地 mock happy path 验证；`bugfix` 保留 reviewer human gate，通常需要人工确认后继续。
+当前内置模板包括 `standard-feature` 和 `bugfix`。两个模板的代码节点都包含 build、lint、schema 和 security-scan gate，并通过 `commandRef` 读取 repo profile 中的命令。`standard-feature` 适合本地 mock happy path 验证；`bugfix` 保留 reviewer human gate，通常需要人工确认后继续。
 
-## 13. Logs 与审计
+## 14. Logs 与审计
 
 查看 audit log：
 
@@ -217,9 +250,9 @@ node /path/to/donkey/packages/cli/dist/index.js workflow create release-check --
 node /path/to/donkey/packages/cli/dist/index.js log --run-id <runId> --repo /path/to/project
 ```
 
-日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`human.gate.pending`、`human.gate.approved` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
+日志会输出 audit event 时间、事件类型和 payload。常见事件包括 `run.started`、`worktree.lease.created`、`worktree.lease.promoted`、`worktree.lease.released`、`human.gate.pending`、`human.gate.approved`、`delivery.pr-prepared`、`delivery.pr.created` 和 gate repair 相关事件。最终报告应引用关键事件，而不是只引用 CLI 终端最后一行。
 
-## 14. Cleanup
+## 15. Cleanup
 
 清理 worktree 目录：
 
@@ -227,20 +260,20 @@ node /path/to/donkey/packages/cli/dist/index.js log --run-id <runId> --repo /pat
 node /path/to/donkey/packages/cli/dist/index.js clean --repo /path/to/project
 ```
 
-当前 `clean` 只重建 `.donkey/worktrees`，不会删除 SQLite、run artifacts 或 audit evidence。需要保留正式验收结论时，应把摘要写入 `docs/reviews/`，不要只依赖 `.donkey/` 运行态文件。
+当前 `clean` 只重建 `.donkey/worktrees`，不会删除 SQLite、run artifacts、audit evidence 或 `donkey-delivery/<runId>` 本地分支。需要保留正式验收结论时，应把摘要写入 `docs/reviews/`，不要只依赖 `.donkey/` 运行态文件。
 
-## 15. current limitations（当前限制）
+## 16. current limitations（当前限制）
 
 - Phase 2 已验证的是本地 mock CLI 产品环，不是公开发布产品。
 - 动态 workflow 当前是 deterministic mock preview，不等于真实 PM LLM 规划。
-- `delivery dry-run` 不创建真实 PR，不 push 远端分支；`delivery prepare` 只生成本地 PR 准备包。
+- `delivery dry-run` 不创建真实 PR，不 push 远端分支；`delivery prepare` 只生成本地 PR 准备包；`delivery create-pr --approve-human` 会产生真实 push/PR 副作用，必须人工批准。
 - Web dashboard 是本地 dashboard，不是远程服务。
 - Coverage 使用 `npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --coverage` 记录；`pnpm test -- --run --coverage` 在当前工具组合下不会输出 coverage 表。
-- 真实 LLM workflow、真实 SCM 权限、远端 PR 和生产级恢复能力必须在受控 fixture 或明确人工批准下验证。
+- 真实 LLM workflow、真实 SCM 权限、远端 PR 和生产级恢复能力必须在受控 fixture 或明确人工批准下验证；当前新增的 manifest 入库和 provider 快照只证明协议与恢复语义，不证明真实任务长期稳定。
 - `CommandPolicy.network` 不能被理解为操作系统级网络隔离。
 - Donkey 默认增强人类交付，不替代人类完成合入、上线、权限扩大或高危审批。
 
-## 16. 最终验收检查
+## 17. 最终验收检查
 
 最终验收至少执行：
 
@@ -262,6 +295,7 @@ node /path/to/donkey/packages/cli/dist/index.js run "给示例模块加批量重
 node /path/to/donkey/packages/cli/dist/index.js delivery dry-run --run-id <runId> --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/fixture
 node /path/to/donkey/packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/fixture
+node /path/to/donkey/packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-human --repo /path/to/fixture
 ```
 
 若使用会暂停的模板，还需要记录 `resume --approve-human` 的命令和结果。

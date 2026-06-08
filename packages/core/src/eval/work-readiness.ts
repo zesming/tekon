@@ -1,5 +1,6 @@
 import type { AuditLogger } from '../audit/logger.js';
 import type { DonkeyRepositories } from '../db/repositories.js';
+import { createDeliveryEvidencePackage } from '../delivery/evidence.js';
 
 export type WorkReadinessSeverity = 'required' | 'recommended';
 
@@ -31,6 +32,14 @@ export async function evaluateWorkReadiness(input: {
   const gates = await input.repositories.listGateResults(input.runId);
   const decisions = await input.repositories.listHumanDecisions(input.runId);
   const events = await input.repositories.listAuditEvents(input.runId);
+  const deliveryPr = await input.repositories.getDeliveryPullRequest(
+    input.runId,
+  );
+  const deliveryEvidence = await createDeliveryEvidencePackage({
+    repositories: input.repositories,
+    audit: input.audit,
+    runId: input.runId,
+  });
   const audit = await input.audit.verify(input.runId);
   const validationGates = latestGateResults(
     gates.filter((gate) =>
@@ -88,6 +97,35 @@ export async function evaluateWorkReadiness(input: {
       severity: 'required',
       passed: pendingHuman.length === 0,
       evidence: `${pendingHuman.length} pending human decisions`,
+    },
+    {
+      id: 'acceptance-criteria-evidenced',
+      severity: 'required',
+      passed:
+        deliveryEvidence.acceptanceEvidence.length > 0 &&
+        deliveryEvidence.acceptanceEvidence.every(
+          (item) => item.status === 'passed',
+        ),
+      evidence: `${deliveryEvidence.acceptanceEvidence.filter((item) => item.status === 'passed').length}/${deliveryEvidence.acceptanceEvidence.length} acceptance criteria evidenced`,
+    },
+    {
+      id: 'security-scans-passed',
+      severity: 'required',
+      passed:
+        deliveryEvidence.securityScans.length > 0 &&
+        deliveryEvidence.securityScans.every(
+          (scan) => scan.status === 'passed',
+        ),
+      evidence: `${deliveryEvidence.securityScans.filter((scan) => scan.status === 'passed').length}/${deliveryEvidence.securityScans.length} security scans passed`,
+    },
+    {
+      id: 'pr-created',
+      severity: 'recommended',
+      passed: deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl),
+      evidence:
+        deliveryPr?.status === 'created' && deliveryPr.prUrl
+          ? `PR created: ${deliveryPr.prUrl}`
+          : `PR status is ${deliveryPr?.status ?? 'not-created'}`,
     },
   ];
   const passed = checks.filter((check) => check.passed).length;

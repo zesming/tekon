@@ -69,7 +69,17 @@ describe('workflow engine recovery e2e', () => {
       dataDir: '.donkey',
       repositories,
       audit,
-      adapter: mock,
+      adapter: {
+        async runAgent(input) {
+          if (input.runContext.nodeId.endsWith('_rd-implementation')) {
+            expect(input.requiredArtifactTypes).toEqual(
+              expect.arrayContaining(['tech-design', 'code-changes']),
+            );
+            expect(input.prompt).toContain('Donkey artifact protocol');
+          }
+          return mock.runAgent(input);
+        },
+      },
       gateEngine: createPassingGateEngine(repositories),
     });
 

@@ -54,7 +54,13 @@ describe('schema gate', () => {
       runId: 'run_1',
       nodeId: 'node_1',
       type: 'prd',
-      content: '# PRD\n\nValid artifact.',
+      content: JSON.stringify({
+        title: 'PRD',
+        body: 'Valid artifact.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'The PRD has acceptance criteria.' },
+        ],
+      }),
     });
     const passed = await engine.runGate({
       runId: 'run_1',
@@ -90,7 +96,7 @@ describe('schema gate', () => {
       runId: 'run_1',
       nodeId: 'node_1',
       type: 'prd',
-      content: '# PRD\n',
+      content: '# PRD\n\nMissing semantic acceptance criteria.',
     });
 
     const result = await engine.runGate({

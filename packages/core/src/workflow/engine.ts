@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
@@ -11,11 +12,14 @@ import {
   type RolePromptArtifactSummary,
 } from '../role/prompt-builder.js';
 import { loadRole } from '../role/loader.js';
-import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import { loadRepoProfile, repoProfileCommand } from '../repo/profile.js';
+import type { AgentAdapter, AgentRunInput } from '../runtime/agent-adapter.js';
 import type { AgentRunResult } from '../runtime/agent-adapter.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
+import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { CommandPolicy, WorktreeLease } from '../types/config.js';
 import type {
+  ArtifactType,
   GateConfig,
   GateResult,
   Node,
@@ -27,6 +31,7 @@ import { assertWorkflowTransition } from './state-machine.js';
 import {
   loadWorkflowTemplate,
   type WorkflowArtifactInputRef,
+  type WorkflowArtifactOutputRef,
   type WorkflowGateConfig,
   type WorkflowTemplate,
   type WorkflowTemplateNode,
@@ -57,6 +62,11 @@ export interface CreateWorkflowEngineOptions {
   audit: AuditLogger;
   adapter: AgentAdapter;
   gateEngine?: GateEngine;
+  worktreeManager?: WorktreeManager;
+  baseRef?: string;
+  allowDirtyBase?: boolean;
+  agentProvider?: AgentRunResult['provider'];
+  agentConfigSummary?: Record<string, unknown>;
   builtInRolesDir?: string;
   userHome?: string;
 }
@@ -66,6 +76,7 @@ interface ExecutableNode {
   role: Role;
   phaseId?: string;
   inputs: WorkflowArtifactInputRef[];
+  outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];
   dependsOn: string[];
 }
@@ -91,6 +102,7 @@ export function createWorkflowEngine(
     repoPath: options.repoPath,
     repositories: options.repositories,
   });
+  const executionLeases = new Map<string, WorktreeLease>();
 
   return {
     async startRun(input) {
@@ -128,6 +140,14 @@ export function createWorkflowEngine(
         createdAt: now,
         updatedAt: now,
       });
+      if (options.agentProvider) {
+        await options.repositories.recordRunProviderConfig({
+          runId,
+          provider: options.agentProvider,
+          configSummary: options.agentConfigSummary ?? {},
+          createdAt: now,
+        });
+      }
 
       const plan = templateToPlan(template, runId);
       await persistPlan(runId, plan, options.repositories);
@@ -214,56 +234,124 @@ export function createWorkflowEngine(
       throw new Error(`node not found: ${node.id}`);
     }
 
-    const fromStatus =
-      current.status === 'interrupted' ||
-      current.status === 'needs-revision' ||
-      current.status === 'blocked'
-        ? current.status
-        : 'pending';
-    assertWorkflowTransition(fromStatus, 'running');
-    await options.repositories.transitionNode(node.id, 'running');
-    await options.repositories.updateWorkflowInstanceStatus(
-      runId,
-      'running',
-      node.id,
-    );
-    await options.audit.append({
-      runId,
-      type: 'node.started',
-      payload: { nodeId: node.id, role: node.role },
-    });
-
-    try {
-      await options.repositories.createRoleRun({
-        id: `role_run_${randomUUID()}`,
+    const resumableLease = await activeExecutionLease(runId, node.id);
+    const completedAgentRun = await hasCompletedAgentRun(runId, node.id);
+    if (
+      Boolean(resumableLease) &&
+      current.status === 'running' &&
+      !completedAgentRun
+    ) {
+      await options.repositories.transitionNode(node.id, 'interrupted');
+      await options.repositories.updateWorkflowInstanceStatus(
         runId,
-        nodeId: node.id,
-        role: node.role,
-        status: 'running',
-        startedAt: new Date().toISOString(),
+        'interrupted',
+        node.id,
+      );
+      await options.audit.append({
+        runId,
+        type: 'node.stale-running-detected',
+        payload: { nodeId: node.id, role: node.role },
       });
-      const agentResult = await options.adapter.runAgent({
-        roleConfig: { role: node.role },
-        prompt: await buildNodePrompt(runId, node),
-        worktreeLease: makeSyntheticLease(options.repoPath, runId, node),
-        outputDir: join(
-          options.repoPath,
-          options.dataDir,
-          'runs',
-          runId,
-          node.id,
-        ),
-        commandPolicy: defaultCommandPolicy(options.repoPath),
-        runContext: {
+      return false;
+    }
+    const resumeFromGate =
+      current.status === 'awaiting-gate' ||
+      (Boolean(resumableLease) &&
+        ['paused', 'running'].includes(current.status) &&
+        completedAgentRun);
+
+    if (resumeFromGate) {
+      if (current.status === 'paused') {
+        assertWorkflowTransition('paused', 'running');
+        await options.repositories.transitionNode(node.id, 'running');
+        await options.repositories.transitionNode(node.id, 'awaiting-gate');
+      } else if (current.status === 'running') {
+        assertWorkflowTransition('running', 'awaiting-gate');
+        await options.repositories.transitionNode(node.id, 'awaiting-gate');
+      }
+      await options.repositories.updateWorkflowInstanceStatus(
+        runId,
+        'running',
+        node.id,
+      );
+      await options.audit.append({
+        runId,
+        type: 'node.resumed-at-gates',
+        payload: { nodeId: node.id, role: node.role },
+      });
+    } else {
+      const fromStatus =
+        current.status === 'interrupted' ||
+        current.status === 'needs-revision' ||
+        current.status === 'blocked'
+          ? current.status
+          : 'pending';
+      assertWorkflowTransition(fromStatus, 'running');
+      await options.repositories.transitionNode(node.id, 'running');
+      await options.repositories.updateWorkflowInstanceStatus(
+        runId,
+        'running',
+        node.id,
+      );
+      await options.audit.append({
+        runId,
+        type: 'node.started',
+        payload: { nodeId: node.id, role: node.role },
+      });
+
+      try {
+        const roleRunId = `role_run_${randomUUID()}`;
+        await options.repositories.createRoleRun({
+          id: roleRunId,
           runId,
           nodeId: node.id,
-          projectId: (await mustGetWorkflow(runId)).projectId,
-          repoPath: options.repoPath,
-          dataDir: options.dataDir,
-        },
-        artifactStore,
-      });
-      assertSuccessfulAgentRun(agentResult);
+          role: node.role,
+          status: 'running',
+          startedAt: new Date().toISOString(),
+        });
+        const lease = await createExecutionLease(runId, node);
+        const agentResult = await options.adapter.runAgent(
+          await agentInputForLease(
+            runId,
+            node,
+            lease,
+            await buildNodePrompt(runId, node),
+          ),
+        );
+        assertSuccessfulAgentRun(agentResult);
+        await options.repositories.markRoleRunCompleted({
+          roleRunId,
+          completedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        await options.repositories.transitionNode(node.id, 'interrupted');
+        await options.repositories.updateWorkflowInstanceStatus(
+          runId,
+          'interrupted',
+          node.id,
+        );
+        await options.audit.append({
+          runId,
+          type: 'node.interrupted',
+          payload: {
+            nodeId: node.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return false;
+      }
+
+      await options.repositories.transitionNode(node.id, 'awaiting-gate');
+    }
+    for (const gate of node.gates) {
+      const passed = await runGateWithRepair(runId, node, gate);
+      if (!passed) {
+        return false;
+      }
+    }
+
+    try {
+      await finalizeExecutionLease(runId, node.id);
     } catch (error) {
       await options.repositories.transitionNode(node.id, 'interrupted');
       await options.repositories.updateWorkflowInstanceStatus(
@@ -273,21 +361,13 @@ export function createWorkflowEngine(
       );
       await options.audit.append({
         runId,
-        type: 'node.interrupted',
+        type: 'worktree.lease.finalize.failed',
         payload: {
           nodeId: node.id,
           error: error instanceof Error ? error.message : String(error),
         },
       });
       return false;
-    }
-
-    await options.repositories.transitionNode(node.id, 'awaiting-gate');
-    for (const gate of node.gates) {
-      const passed = await runGateWithRepair(runId, node, gate);
-      if (!passed) {
-        return false;
-      }
     }
 
     await options.repositories.transitionNode(node.id, 'passed');
@@ -304,6 +384,19 @@ export function createWorkflowEngine(
     node: ExecutableNode,
     gate: WorkflowGateConfig,
   ): Promise<boolean> {
+    const existingResult = await latestGateResult(runId, node.id, gate.type);
+    if (
+      existingResult?.status === 'passed' ||
+      existingResult?.status === 'skipped'
+    ) {
+      await options.audit.append({
+        runId,
+        type: 'gate.previously-passed',
+        payload: { nodeId: node.id, gateType: gate.type },
+      });
+      return true;
+    }
+
     let result = await runGate(runId, node.id, gate);
     if (result.status === 'passed' || result.status === 'skipped') {
       await options.audit.append({
@@ -331,6 +424,7 @@ export function createWorkflowEngine(
 
     if (gate.autoFix && gate.maxRetries > 0) {
       await options.repositories.transitionNode(node.id, 'needs-revision');
+      await finalizeExecutionLease(runId, node.id);
       const repairNode = await gateEngine.createAutoFixRepairNode({
         failedGateResult: result,
         fixerRole: node.role,
@@ -346,31 +440,23 @@ export function createWorkflowEngine(
       });
       await options.repositories.transitionNode(repairNode.id, 'running');
       try {
-        const repairResult = await options.adapter.runAgent({
-          roleConfig: { role: repairNode.role },
-          prompt: await buildRepairPrompt(runId, repairNode, result),
-          worktreeLease: makeSyntheticLease(options.repoPath, runId, {
-            id: repairNode.id,
-            role: repairNode.role,
-            phaseId: repairNode.phaseId,
-          }),
-          outputDir: join(
-            options.repoPath,
-            options.dataDir,
-            'runs',
-            runId,
-            repairNode.id,
-          ),
-          commandPolicy: defaultCommandPolicy(options.repoPath),
-          runContext: {
-            runId,
-            nodeId: repairNode.id,
-            projectId: (await mustGetWorkflow(runId)).projectId,
-            repoPath: options.repoPath,
-            dataDir: options.dataDir,
-          },
-          artifactStore,
+        const repairLease = await createExecutionLease(runId, {
+          id: repairNode.id,
+          role: repairNode.role,
+          phaseId: repairNode.phaseId,
         });
+        const repairResult = await options.adapter.runAgent(
+          await agentInputForLease(
+            runId,
+            {
+              id: repairNode.id,
+              role: repairNode.role,
+              phaseId: repairNode.phaseId,
+            },
+            repairLease,
+            await buildRepairPrompt(runId, repairNode, result),
+          ),
+        );
         assertSuccessfulAgentRun(repairResult);
       } catch (error) {
         await options.repositories.transitionNode(repairNode.id, 'interrupted');
@@ -393,6 +479,10 @@ export function createWorkflowEngine(
         return false;
       }
       await options.repositories.transitionNode(repairNode.id, 'passed');
+      const repairLease = await activeExecutionLease(runId, repairNode.id);
+      if (repairLease) {
+        executionLeases.set(node.id, repairLease);
+      }
       await options.repositories.transitionNode(node.id, 'running');
       await options.repositories.transitionNode(node.id, 'awaiting-gate');
       result = await runGate(runId, node.id, gate);
@@ -429,11 +519,14 @@ export function createWorkflowEngine(
     nodeId: string,
     gate: WorkflowGateConfig,
   ): Promise<GateResult> {
+    const cwd = executionLeases.get(nodeId)?.worktreePath ?? options.repoPath;
+    const resolvedGate = resolveGateCommand(gate);
     return gateEngine.runGate({
       runId,
       nodeId,
-      gate: gate as GateConfig,
-      cwd: options.repoPath,
+      gate: resolvedGate as GateConfig,
+      cwd,
+      artifactRoot: options.repoPath,
       outputDir: join(
         options.repoPath,
         options.dataDir,
@@ -441,8 +534,171 @@ export function createWorkflowEngine(
         runId,
         'gates',
       ),
-      policy: defaultCommandPolicy(options.repoPath),
+      policy: defaultCommandPolicy(cwd),
     });
+  }
+
+  function resolveGateCommand(gate: WorkflowGateConfig): WorkflowGateConfig {
+    if (!gate.commandRef || gate.command) {
+      return gate;
+    }
+    const profile = loadRepoProfile(options.repoPath);
+    const command = repoProfileCommand(profile, gate.commandRef);
+    return command ? { ...gate, command } : gate;
+  }
+
+  async function createExecutionLease(
+    runId: string,
+    node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'>,
+  ): Promise<WorktreeLease> {
+    if (!options.worktreeManager) {
+      const lease = makeSyntheticLease(options.repoPath, runId, node);
+      executionLeases.set(node.id, lease);
+      return lease;
+    }
+
+    const runBranch = await options.worktreeManager.ensureRunBranch({
+      repoPath: options.repoPath,
+      runId,
+      baseRef: options.baseRef ?? 'HEAD',
+    });
+    const lease = await options.worktreeManager.createLease({
+      repoPath: options.repoPath,
+      runId,
+      nodeId: node.id,
+      role: node.role,
+      baseRef: runBranch,
+      allowDirtyBase: options.allowDirtyBase,
+    });
+    await options.audit.append({
+      runId,
+      type: 'worktree.lease.created',
+      payload: {
+        nodeId: node.id,
+        leaseId: lease.id,
+        worktreePath: lease.worktreePath,
+        branchName: lease.branchName,
+      },
+    });
+    executionLeases.set(node.id, lease);
+    return lease;
+  }
+
+  async function activeExecutionLease(
+    runId: string,
+    nodeId: string,
+  ): Promise<WorktreeLease | undefined> {
+    const inMemory = executionLeases.get(nodeId);
+    if (inMemory && !inMemory.releasedAt) {
+      return inMemory;
+    }
+    const leases = await options.repositories.listWorktreeLeases(runId);
+    const activeLease = leases
+      .filter((lease) => lease.nodeId === nodeId && !lease.releasedAt)
+      .at(-1);
+    if (activeLease) {
+      executionLeases.set(nodeId, activeLease);
+    }
+    return activeLease;
+  }
+
+  async function finalizeExecutionLease(
+    runId: string,
+    nodeId: string,
+  ): Promise<void> {
+    const lease = await activeExecutionLease(runId, nodeId);
+    if (!lease || !options.worktreeManager) {
+      return;
+    }
+
+    const committed = await options.worktreeManager.commitLeaseChanges(
+      lease.id,
+      {
+        message: `Donkey ${runId} ${nodeId}`,
+      },
+    );
+    const branchName = await options.worktreeManager.promoteLeaseToRunBranch({
+      leaseId: lease.id,
+    });
+    await options.audit.append({
+      runId,
+      type: 'worktree.lease.promoted',
+      payload: {
+        nodeId,
+        leaseId: lease.id,
+        branchName,
+        committed,
+      },
+    });
+    await options.worktreeManager.releaseLease(lease.id);
+    deleteLeaseAliases(lease.id);
+    await options.audit.append({
+      runId,
+      type: 'worktree.lease.released',
+      payload: {
+        nodeId,
+        leaseId: lease.id,
+      },
+    });
+  }
+
+  function deleteLeaseAliases(leaseId: string): void {
+    for (const [key, lease] of executionLeases.entries()) {
+      if (lease.id === leaseId) {
+        executionLeases.delete(key);
+      }
+    }
+  }
+
+  async function latestGateResult(
+    runId: string,
+    nodeId: string,
+    gateType: GateConfig['type'],
+  ): Promise<GateResult | undefined> {
+    return (await options.repositories.listGateResults(runId))
+      .filter(
+        (result) => result.nodeId === nodeId && result.gateType === gateType,
+      )
+      .at(-1);
+  }
+
+  async function agentInputForLease(
+    runId: string,
+    node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
+      outputs?: WorkflowArtifactOutputRef[];
+      gates?: WorkflowGateConfig[];
+    },
+    lease: WorktreeLease,
+    prompt: string,
+  ): Promise<AgentRunInput> {
+    const workflow = await mustGetWorkflow(runId);
+    const outputDir = join(
+      options.repoPath,
+      options.dataDir,
+      'runs',
+      runId,
+      node.id,
+    );
+    const requiredArtifactTypes = requiredArtifactTypesForNode(node);
+    return {
+      roleConfig: { role: node.role },
+      prompt: appendArtifactProtocol(prompt, {
+        outputDir,
+        requiredArtifactTypes,
+      }),
+      worktreeLease: lease,
+      outputDir,
+      commandPolicy: defaultCommandPolicy(lease.worktreePath),
+      runContext: {
+        runId,
+        nodeId: node.id,
+        projectId: workflow.projectId,
+        repoPath: lease.worktreePath,
+        dataDir: options.dataDir,
+      },
+      artifactStore,
+      requiredArtifactTypes,
+    };
   }
 
   async function hasMissingArtifactDependency(
@@ -471,6 +727,69 @@ export function createWorkflowEngine(
     return false;
   }
 
+  function requiredArtifactTypesForNode(input: {
+    outputs?: WorkflowArtifactOutputRef[];
+    gates?: WorkflowGateConfig[];
+  }): ArtifactType[] {
+    const required = new Set<ArtifactType>();
+    for (const output of input.outputs ?? []) {
+      required.add(output.type);
+    }
+    for (const gate of input.gates ?? []) {
+      if (gate.type === 'schema' && gate.artifactType) {
+        required.add(gate.artifactType);
+      }
+    }
+    return [...required];
+  }
+
+  function appendArtifactProtocol(
+    prompt: string,
+    input: {
+      outputDir: string;
+      requiredArtifactTypes: ArtifactType[];
+    },
+  ): string {
+    if (input.requiredArtifactTypes.length === 0) {
+      return prompt;
+    }
+
+    const manifestExample = JSON.stringify(
+      {
+        artifacts: input.requiredArtifactTypes.map((type) => ({
+          type,
+          path: `${type}.json`,
+          summary: `${type} summary`,
+        })),
+      },
+      null,
+      2,
+    );
+    return [
+      prompt,
+      '',
+      'Donkey artifact protocol:',
+      `- Write all node artifacts under DONKEY_OUTPUT_DIR (${input.outputDir}).`,
+      `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
+      '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Donkey artifact schema.',
+      '- Write DONKEY_ARTIFACT_MANIFEST as JSON after producing artifacts.',
+      '- Manifest format example:',
+      manifestExample,
+      '- Do not include secrets, tokens, credentials, or production-only data in artifacts or logs.',
+    ].join('\n');
+  }
+
+  async function hasCompletedAgentRun(
+    runId: string,
+    nodeId: string,
+  ): Promise<boolean> {
+    const roleRun = await options.repositories.getLatestRoleRunForNode(
+      runId,
+      nodeId,
+    );
+    return roleRun?.status === 'passed' && Boolean(roleRun.completedAt);
+  }
+
   async function mustGetWorkflow(runId: string): Promise<WorkflowInstance> {
     const workflow = await options.repositories.getWorkflowInstance(runId);
     if (!workflow) {
@@ -486,7 +805,7 @@ export function createWorkflowEngine(
     const role = loadRole({
       role: node.role,
       repoPath: options.repoPath,
-      builtInRolesDir: options.builtInRolesDir,
+      builtInRolesDir: options.builtInRolesDir ?? defaultBuiltInRolesDir(),
       userHome: options.userHome,
     });
     const workflow = await mustGetWorkflow(runId);
@@ -521,7 +840,7 @@ export function createWorkflowEngine(
     const role = loadRole({
       role: node.role,
       repoPath: options.repoPath,
-      builtInRolesDir: options.builtInRolesDir,
+      builtInRolesDir: options.builtInRolesDir ?? defaultBuiltInRolesDir(),
       userHome: options.userHome,
     });
     const workflow = await mustGetWorkflow(runId);
@@ -620,6 +939,8 @@ async function persistPlan(
         phaseId: phase.id,
         role: node.role,
         status: 'pending',
+        inputs: node.inputs,
+        outputs: node.outputs,
         gates: node.gates.map((gate) => gate as GateConfig),
         dependencies: node.dependsOn,
         createdAt: now,
@@ -665,6 +986,7 @@ function templateNodeToExecutable(
       ...input,
       fromNodeId: nodeIdByTemplateId.get(input.fromNodeId) ?? input.fromNodeId,
     })),
+    outputs: node.outputs,
     gates: node.gates,
     dependsOn: node.dependsOn.map(
       (dependency) => nodeIdByTemplateId.get(dependency) ?? dependency,
@@ -698,7 +1020,8 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
     id: node.id,
     role: node.role,
     phaseId: node.phaseId,
-    inputs: [],
+    inputs: node.inputs,
+    outputs: node.outputs,
     gates: node.gates as WorkflowGateConfig[],
     dependsOn: node.dependencies,
   };
@@ -735,4 +1058,19 @@ function defaultCommandPolicy(repoPath: string): CommandPolicy {
     cwdScope: [repoPath],
     network: 'disabled',
   };
+}
+
+function defaultBuiltInRolesDir(): string {
+  const fromModule = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    '..',
+    'roles',
+  );
+  if (existsSync(fromModule)) {
+    return fromModule;
+  }
+  return resolve(process.cwd(), 'roles');
 }

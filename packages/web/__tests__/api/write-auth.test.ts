@@ -49,9 +49,90 @@ describe('web write authorization', () => {
     const detail = await api.project.detail({ projectId: 'project_1' });
     expect(detail.runs[0]).toMatchObject({
       id: 'run_1',
-      status: 'running',
+      status: 'passed',
+      currentNodeId: null,
+    });
+    const audit = await api.audit.list({ runId: 'run_1' });
+    expect(audit.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'human.gate.approved' }),
+        expect.objectContaining({ type: 'run.resumed' }),
+      ]),
+    );
+
+    await expect(
+      api.gate.approve({
+        runId: 'run_1',
+        decisionId: 'decision_1',
+        actor: 'human-reviewer',
+        note: 'duplicate',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('rejecting a human gate blocks the workflow instead of resuming it', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const result = await api.gate.reject({
+      runId: 'run_1',
+      decisionId: 'decision_1',
+      actor: 'human-reviewer',
+      note: 'needs changes',
+      token: fixture.sessionToken,
+    });
+
+    expect(result.decision).toMatchObject({
+      id: 'decision_1',
+      status: 'rejected',
+      actor: 'human-reviewer',
+    });
+    const detail = await api.project.detail({ projectId: 'project_1' });
+    expect(detail.runs[0]).toMatchObject({
+      id: 'run_1',
+      status: 'blocked',
       currentNodeId: 'node_1',
     });
+    const audit = await api.audit.list({ runId: 'run_1' });
+    expect(audit.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'human.gate.rejected' }),
+      ]),
+    );
+    expect(audit.events).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'run.resumed' }),
+      ]),
+    );
+
+    await api.close();
+  });
+
+  it('does not approve a human gate when the run provider snapshot is missing', async () => {
+    const fixture = await createWebFixtureProject({
+      includeProviderSnapshot: false,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.gate.approve({
+        runId: 'run_1',
+        decisionId: 'decision_1',
+        actor: 'human-reviewer',
+        note: 'cannot resume safely',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const gates = await api.gate.list({ runId: 'run_1' });
+    expect(gates.pendingDecisions).toContainEqual(
+      expect.objectContaining({ id: 'decision_1', status: 'pending' }),
+    );
 
     await api.close();
   });

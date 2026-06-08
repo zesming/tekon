@@ -92,12 +92,24 @@ export type Project = z.infer<typeof projectSchema>;
 export const gateConfigSchema = z.object({
   type: gateTypeSchema,
   command: commandInvocationSchema.optional(),
+  commandRef: z
+    .enum(['build', 'typecheck', 'lint', 'test', 'e2e', 'security'])
+    .optional(),
   artifactType: artifactTypeSchema.optional(),
   requiresHumanApproval: z.boolean().default(false),
   maxRetries: z.number().int().min(0).default(0),
   timeoutMs: z.number().int().positive().optional(),
 });
 export type GateConfig = z.infer<typeof gateConfigSchema>;
+
+const nodeArtifactOutputRefSchema = z.object({
+  id: z.string().min(1),
+  type: artifactTypeSchema,
+});
+
+const nodeArtifactInputRefSchema = nodeArtifactOutputRefSchema.extend({
+  fromNodeId: z.string().min(1),
+});
 
 export const phaseSchema = z.object({
   id: z.string().min(1),
@@ -116,11 +128,14 @@ export const nodeSchema = z.object({
   phaseId: z.string().min(1).optional(),
   role: roleSchema,
   status: nodeStatusSchema,
+  inputs: z.array(nodeArtifactInputRefSchema).default([]),
+  outputs: z.array(nodeArtifactOutputRefSchema).default([]),
   gates: z.array(gateConfigSchema).default([]),
   dependencies: z.array(z.string()).default([]),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });
+export type NodeInput = z.input<typeof nodeSchema>;
 export type Node = z.infer<typeof nodeSchema>;
 
 export const workflowInstanceSchema = z.object({
@@ -191,6 +206,49 @@ export const humanDecisionSchema = z.object({
   decidedAt: isoDateStringSchema.nullable().optional(),
 });
 export type HumanDecision = z.infer<typeof humanDecisionSchema>;
+
+export const deliveryPullRequestStatusSchema = z.enum([
+  'prepared',
+  'awaiting-approval',
+  'branch-pushed',
+  'creating-pr',
+  'created',
+  'failed',
+]);
+export type DeliveryPullRequestStatus = z.infer<
+  typeof deliveryPullRequestStatusSchema
+>;
+
+export const deliveryPullRequestSchema = z.object({
+  id: z.string().min(1),
+  runId: z.string().min(1),
+  branch: z.string().min(1),
+  baseBranch: z.string().min(1),
+  title: z.string().min(1),
+  bodyPath: z.string().nullable().optional(),
+  remoteName: z.string().nullable().optional(),
+  remoteUrl: z.string().nullable().optional(),
+  status: deliveryPullRequestStatusSchema,
+  prUrl: z.string().url().nullable().optional(),
+  approvedBy: z.string().nullable().optional(),
+  approvedAt: isoDateStringSchema.nullable().optional(),
+  branchPushedAt: isoDateStringSchema.nullable().optional(),
+  prCreatedAt: isoDateStringSchema.nullable().optional(),
+  failureStage: z.string().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  attemptCount: z.number().int().min(0),
+  createdAt: isoDateStringSchema,
+  updatedAt: isoDateStringSchema,
+});
+export type DeliveryPullRequest = z.infer<typeof deliveryPullRequestSchema>;
+
+export const runProviderConfigSchema = z.object({
+  runId: z.string().min(1),
+  provider: z.enum(['mock', 'claude-code', 'custom']),
+  configSummary: z.record(z.string(), z.unknown()).default({}),
+  createdAt: isoDateStringSchema,
+});
+export type RunProviderConfig = z.infer<typeof runProviderConfigSchema>;
 
 export const auditEventSchema = z.object({
   id: z.string().min(1),

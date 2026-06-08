@@ -28,8 +28,10 @@ import {
   createPullRequestPreparation,
   createRepositories,
   createScmDelivery,
+  createWorktreeManager,
   createWorkflowEngine,
   evaluateWorkReadiness,
+  loadRepoProfile,
   writeDefaultRepoProfile,
   generateDynamicWorkflow,
   listRoleIds,
@@ -38,9 +40,12 @@ import {
   migrateDatabase,
   openDonkeyDatabase,
   saveDynamicTemplate,
+  repoProfileCommand,
   type AgentAdapter,
   type AgentAdapterConfig,
+  agentAdapterConfigSchema,
   type CommandGateway,
+  type RunProviderConfig,
 } from '@donkey/core';
 
 export interface CliIO {
@@ -212,7 +217,7 @@ async function commandRun(argv: string[], io: CliIO) {
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
   const gateway = createCommandGateway({ repositories });
-  const adapter = createAgentAdapter({
+  const agentRuntime = createAgentAdapter({
     agent: args.values.agent ?? 'mock',
     repoPath,
     gateway,
@@ -222,8 +227,12 @@ async function commandRun(argv: string[], io: CliIO) {
     dataDir: '.donkey',
     repositories,
     audit,
-    adapter,
+    adapter: agentRuntime.adapter,
+    agentProvider: agentRuntime.provider,
+    agentConfigSummary: agentRuntime.configSummary,
     gateEngine: createGateEngine({ repositories, gateway }),
+    worktreeManager: createWorktreeManager({ repositories, gateway }),
+    allowDirtyBase,
     builtInRolesDir: getBuiltInRolesDir(),
   });
 
@@ -372,6 +381,20 @@ async function commandResume(argv: string[], io: CliIO) {
   const pendingHuman = (await repositories.listHumanDecisions(runId)).filter(
     (decision) => decision.status === 'pending',
   );
+  const gateway = createCommandGateway({ repositories });
+  const runProvider = await repositories.getRunProviderConfig(runId);
+  if (!runProvider) {
+    db.close();
+    throw new Error(
+      `run ${runId} has no provider snapshot; cannot resume safely`,
+    );
+  }
+  const agentRuntime = createAgentAdapterFromSnapshot({
+    snapshot: runProvider,
+    repoPath,
+    gateway,
+  });
+
   if (args.values['approve-human']) {
     const humanGate = createHumanGate({ repositories });
     for (const decision of pendingHuman) {
@@ -386,7 +409,7 @@ async function commandResume(argv: string[], io: CliIO) {
         retries: 0,
         createdAt: new Date().toISOString(),
       });
-      await repositories.transitionNode(decision.nodeId, 'passed');
+      await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
       await audit.append({
         runId,
         type: 'human.gate.approved',
@@ -395,14 +418,16 @@ async function commandResume(argv: string[], io: CliIO) {
     }
   }
 
-  const gateway = createCommandGateway({ repositories });
   const engine = createWorkflowEngine({
     repoPath,
     dataDir: '.donkey',
     repositories,
     audit,
-    adapter: createMockAgentAdapter(),
+    adapter: agentRuntime.adapter,
+    agentProvider: agentRuntime.provider,
+    agentConfigSummary: agentRuntime.configSummary,
     gateEngine: createGateEngine({ repositories, gateway }),
+    worktreeManager: createWorktreeManager({ repositories, gateway }),
     builtInRolesDir: getBuiltInRolesDir(),
   });
   const result = await engine.resumeRun(runId);
@@ -508,6 +533,40 @@ async function commandWorkflow(argv: string[], io: CliIO) {
     return;
   }
 
+  if (subcommand === 'preflight') {
+    const templateName = name ?? 'standard-feature';
+    const template = loadWorkflowByName(templateName, projectWorkflowsDir);
+    const profile = loadRepoProfile(repoPath);
+    for (const phase of template.phases) {
+      for (const node of phase.nodes) {
+        for (const gate of node.gates) {
+          const command =
+            gate.command ??
+            (gate.commandRef
+              ? repoProfileCommand(profile, gate.commandRef)
+              : null);
+          const commandText = command
+            ? [command.tool, ...command.args].join(' ')
+            : gate.type === 'security-scan'
+              ? 'donkey-builtin security scan'
+              : '';
+          io.stdout.write(
+            [
+              `node=${node.id}`,
+              `gate=${gate.type}`,
+              gate.commandRef
+                ? `commandRef=${gate.commandRef}`
+                : 'commandRef=none',
+              `status=${commandText ? 'resolved' : 'missing'}`,
+              commandText ? `command=${commandText}` : 'command=',
+            ].join(' ') + '\n',
+          );
+        }
+      }
+    }
+    return;
+  }
+
   if (!name) {
     throw new Error('workflow name is required');
   }
@@ -575,6 +634,63 @@ async function commandDelivery(argv: string[], io: CliIO) {
     return;
   }
 
+  if (subcommand === 'create-pr') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        'approve-human': { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const db = openProjectDb(repoPath);
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const preparation = await createPullRequestPreparation({
+      repoPath,
+      repositories,
+      audit,
+      runId,
+    });
+    const body = readFileSync(preparation.prBodyPath, 'utf8');
+    const result = await createScmDelivery({
+      repoPath,
+      repositories,
+      audit,
+      outputDir: join(repoPath, '.donkey', 'runs', runId, 'delivery', 'scm'),
+    }).createPr({
+      runId,
+      title: preparation.title,
+      body,
+      bodyPath: preparation.prBodyPath,
+      branch: preparation.branch,
+      baseBranch: preparation.baseBranch,
+      dryRun: false,
+      humanApproved: Boolean(args.values['approve-human']),
+      approvedBy: 'cli',
+    });
+    const delivery = await repositories.getDeliveryPullRequest(runId);
+    io.stdout.write(
+      [
+        `runId=${runId}`,
+        `deliveryStatus=${delivery?.status ?? 'unknown'}`,
+        `requiresHumanApproval=${result.requiresHumanApproval}`,
+        `prUrl=${result.prUrl ?? delivery?.prUrl ?? ''}`,
+        `failureStage=${delivery?.failureStage ?? ''}`,
+      ].join(' ') + '\n',
+    );
+    db.close();
+    return;
+  }
+
   if (subcommand !== 'dry-run') {
     throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
   }
@@ -589,7 +705,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
   const pr = await createScmDelivery({ repoPath }).createPr({
     title: `Donkey delivery ${runId}`,
     body: `Run ${runId} status=${evidence.workflowStatus}`,
-    branch: `donkey/${runId}`,
+    branch: `donkey-delivery/${runId}`,
     dryRun: true,
   });
   io.stdout.write(
@@ -608,19 +724,85 @@ function createAgentAdapter(input: {
   agent: string;
   repoPath: string;
   gateway: CommandGateway;
-}): AgentAdapter {
+}): {
+  adapter: AgentAdapter;
+  provider: RunProviderConfig['provider'];
+  configSummary: Record<string, unknown>;
+} {
   if (input.agent === 'mock') {
-    return createMockAgentAdapter();
+    return {
+      adapter: createMockAgentAdapter(),
+      provider: 'mock',
+      configSummary: { provider: 'mock' },
+    };
   }
 
   if (input.agent === 'claude-code') {
-    return createClaudeCodeAdapter(
-      defaultClaudeCodeConfig(input.repoPath),
-      input.gateway,
-    );
+    const config = defaultClaudeCodeConfig(input.repoPath);
+    return {
+      adapter: createClaudeCodeAdapter(config, input.gateway),
+      provider: 'claude-code',
+      configSummary: summarizeAgentConfig(config),
+    };
   }
 
   throw new Error(`unsupported agent: ${input.agent}`);
+}
+
+function createAgentAdapterFromSnapshot(input: {
+  snapshot: RunProviderConfig;
+  repoPath: string;
+  gateway: CommandGateway;
+}): {
+  adapter: AgentAdapter;
+  provider: RunProviderConfig['provider'];
+  configSummary: Record<string, unknown>;
+} {
+  if (input.snapshot.provider === 'mock') {
+    return {
+      adapter: createMockAgentAdapter(),
+      provider: 'mock',
+      configSummary: input.snapshot.configSummary,
+    };
+  }
+
+  if (input.snapshot.provider === 'claude-code') {
+    const parsed = agentAdapterConfigSchema.safeParse(
+      input.snapshot.configSummary,
+    );
+    if (!parsed.success || parsed.data.provider !== 'claude-code') {
+      throw new Error(
+        `run ${input.snapshot.runId} has a non-replayable claude-code provider snapshot`,
+      );
+    }
+    return {
+      adapter: createClaudeCodeAdapter(parsed.data, input.gateway),
+      provider: 'claude-code',
+      configSummary: parsed.data,
+    };
+  }
+
+  throw new Error('custom agent provider snapshots cannot be resumed safely');
+}
+
+function summarizeAgentConfig(
+  config: AgentAdapterConfig,
+): Record<string, unknown> {
+  return {
+    provider: config.provider,
+    command: config.command,
+    args: config.args,
+    promptMode: config.promptMode,
+    outputFormat: config.outputFormat,
+    timeoutMs: config.timeoutMs,
+    permissionProfile: {
+      sandbox: config.permissionProfile.sandbox,
+      approval: config.permissionProfile.approval,
+      filesystemScope: config.permissionProfile.filesystemScope,
+      network: config.permissionProfile.network,
+      tools: config.permissionProfile.tools,
+    },
+  };
 }
 
 function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
@@ -682,11 +864,14 @@ async function commandEval(argv: string[], io: CliIO) {
     audit,
     runId,
   });
+  const deliveryPr = await repositories.getDeliveryPullRequest(runId);
   io.stdout.write(
     [
       `runId=${runId}`,
       `ready=${evaluation.ready}`,
       `score=${evaluation.score.toFixed(2)}`,
+      `prCreated=${deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl)}`,
+      `prUrl=${deliveryPr?.prUrl ?? ''}`,
       `failed=${evaluation.checks
         .filter((check) => !check.passed)
         .map((check) => check.id)

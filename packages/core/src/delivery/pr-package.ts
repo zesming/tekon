@@ -44,7 +44,7 @@ export async function createPullRequestPreparation(input: {
   }
 
   const title = `${profile.pr.titlePrefix}${evidence.demand.title}`.trim();
-  const branch = `donkey/${input.runId}`;
+  const branch = `donkey-delivery/${input.runId}`;
   const baseBranch = profile.pr.baseBranch;
   const body = formatPrBody({ evidence, branch, baseBranch });
   const packageContent = formatPreparationPackage({
@@ -136,6 +136,8 @@ function formatPrBody(input: {
     `- audit: ${input.evidence.audit.valid ? 'valid' : 'invalid'}`,
     `- artifacts: ${input.evidence.artifacts.length}`,
     `- rollback plan: ${input.evidence.rollbackPlanPresent ? 'present' : 'missing'}`,
+    ...formatAcceptanceEvidence(input.evidence),
+    ...formatSecurityEvidence(input.evidence),
     '',
     '## Delivery',
     `- branch: ${input.branch}`,
@@ -173,7 +175,41 @@ function formatPreparationPackage(input: {
     `- audit: ${input.evidence.audit.valid ? 'valid' : 'invalid'}`,
     `- rollbackPlanPresent: ${input.evidence.rollbackPlanPresent}`,
     '',
+    '## Acceptance Evidence',
+    ...formatAcceptanceEvidence(input.evidence),
+    '',
+    '## Security',
+    ...formatSecurityEvidence(input.evidence),
+    '',
     '## PR Body',
     input.body,
   ].join('\n');
+}
+
+function formatAcceptanceEvidence(evidence: DeliveryEvidencePackage): string[] {
+  if (evidence.acceptanceEvidence.length === 0) {
+    return ['- acceptanceEvidence: none'];
+  }
+  return evidence.acceptanceEvidence.map((item) =>
+    [
+      `- ${item.criterionId}: ${item.status}`,
+      `  - description: ${item.description}`,
+      `  - evidence: ${item.evidence.join('; ') || 'missing'}`,
+      `  - artifacts: ${item.artifactIds.join(',') || 'none'}`,
+      `  - gates: ${item.gateResultIds.join(',') || 'none'}`,
+    ].join('\n'),
+  );
+}
+
+function formatSecurityEvidence(evidence: DeliveryEvidencePackage): string[] {
+  if (evidence.securityScans.length === 0) {
+    return ['- securityScans: none'];
+  }
+  return evidence.securityScans.map((scan) =>
+    [
+      `- ${scan.gateResultId}: ${scan.status}`,
+      `  - output: ${scan.outputPath ?? 'none'}`,
+      `  - failure: ${scan.failureClassification ?? 'none'}`,
+    ].join('\n'),
+  );
 }

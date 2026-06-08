@@ -42,6 +42,9 @@ describe('database migrations', () => {
         'audit_events',
         'schema_migrations',
         'run_locks',
+        'worktree_leases',
+        'delivery_pull_requests',
+        'run_provider_configs',
       ]),
     );
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');

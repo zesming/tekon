@@ -68,6 +68,9 @@ export async function extractRunMetrics(input: {
   const decisions = await input.repositories.listHumanDecisions(input.runId);
   const events = await input.repositories.listAuditEvents(input.runId);
   const leases = await input.repositories.listWorktreeLeases(input.runId);
+  const deliveryPr = await input.repositories.getDeliveryPullRequest(
+    input.runId,
+  );
   const auditVerification = await input.audit.verify(input.runId);
   const deliveryPackageExists = artifacts.some(
     (artifact) => artifact.type === 'delivery-package',
@@ -90,8 +93,8 @@ export async function extractRunMetrics(input: {
       workflow.status === 'passed' && deliveryPackageExists
         ? Date.parse(workflow.updatedAt) - Date.parse(workflow.createdAt)
         : null,
-    timeToPrMs: input.prUrl
-      ? Date.parse(workflow.updatedAt) - Date.parse(workflow.createdAt)
+    timeToPrMs: deliveryPr?.prCreatedAt
+      ? Date.parse(deliveryPr.prCreatedAt) - Date.parse(workflow.createdAt)
       : null,
     gatePassRate:
       completedGates.length === 0
@@ -126,7 +129,7 @@ export async function extractRunMetrics(input: {
       total: leases.length,
       open: leases.filter((lease) => !lease.releasedAt).length,
     },
-    prUrl: input.prUrl ?? null,
+    prUrl: deliveryPr?.prUrl ?? input.prUrl ?? null,
   };
 }
 

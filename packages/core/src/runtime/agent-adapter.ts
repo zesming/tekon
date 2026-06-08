@@ -4,7 +4,7 @@ import type {
   RunContext,
   WorktreeLease,
 } from '../types/config.js';
-import type { Artifact, Role } from '../types/domain.js';
+import type { Artifact, ArtifactType, Role } from '../types/domain.js';
 
 export interface RoleConfig {
   role: Role;
@@ -19,6 +19,7 @@ export interface AgentRunInput {
   commandPolicy: CommandPolicy;
   runContext: RunContext;
   artifactStore?: ArtifactStore;
+  requiredArtifactTypes?: ArtifactType[];
 }
 
 export interface AgentRunResult {

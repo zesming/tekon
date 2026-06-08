@@ -53,8 +53,9 @@ describe('worktree manager e2e', () => {
       baseRef: 'HEAD',
     });
 
-    expect(first.branchName).toBe('donkey/run_1/node_rd-rd');
-    expect(second.branchName).toBe('donkey/run_1/node_qa-qa');
+    expect(first.branchName).toMatch(/^donkey\/run_1\/node_rd-rd-lease-/u);
+    expect(second.branchName).toMatch(/^donkey\/run_1\/node_qa-qa-lease-/u);
+    expect(first.branchName).not.toBe(second.branchName);
     expect(first.worktreePath).not.toBe(second.worktreePath);
     expect(existsSync(first.worktreePath)).toBe(true);
     expect(existsSync(second.worktreePath)).toBe(true);

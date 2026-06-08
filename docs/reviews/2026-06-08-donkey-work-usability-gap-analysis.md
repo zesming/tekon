@@ -22,14 +22,14 @@
 
 Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的阶段：CLI/Web、SQLite 状态、Artifact/Audit、Gate、worktree、PR 准备包、受人工批准的 PR 创建、readiness 评估都有代码和测试支撑。
 
-但它离“真实工作可用”还差一层关键能力：真实 Agent 产物协议、真实仓库端到端稳定性、仓库验证命令适配、可靠恢复、可审阅体验和最小数据闭环。换句话说，下一阶段不应该继续扩展远景角色或上线链路，而应先把“给一个真实内部工具仓库的小需求，Donkey 能受控产出可审 PR，人在 5 分钟内判断能不能接受”打实。
+但它离“真实工作可用”还差一层证据和体验：真实仓库端到端稳定性、可审阅体验、真实 PR 证据、安全隔离证据和最小数据闭环仍不足。本轮已经补齐真实 provider artifact 协议、repo profile 驱动 gate 和 provider 快照恢复的第一版代码；下一阶段不应该继续扩展远景角色或上线链路，而应先把“给一个真实内部工具仓库的小需求，Donkey 能受控产出可审 PR，人在 5 分钟内判断能不能接受”打实。
 
 优先级最高的补齐方向是：
 
-1. 当前已接线的真实 provider 是 Claude Code；它需要能产出 Donkey 可识别的结构化 artifacts，而不是只返回 stdout/stderr。Codex 目前属于后续或自定义 provider，同样要先遵守 artifact 协议后才能声明可用。
+1. 当前已接线的真实 provider 是 Claude Code；本轮已提供 Donkey artifact manifest 协议，后续需要真实仓库样本证明 provider 能稳定按协议产出结构化 artifacts。Codex 目前属于后续或自定义 provider，同样要先遵守 artifact 协议后才能声明可用。
 2. 在 2-3 个受控真实仓库上完成 10 个左右 B/D 类需求的端到端证据，不再只依赖 mock fixture。
-3. workflow gate 使用 `.donkey/repo-profile.yaml` 的仓库命令，而不是硬编码 `pnpm build/lint/test`。
-4. resume/recovery 必须保证中断中的节点不会被误当成已完成，也不能在 CLI resume 时把真实 provider 降级成 mock。
+3. workflow gate 已开始使用 `.donkey/repo-profile.yaml` 的仓库命令；后续要补缺失命令修复引导，并用非 pnpm 真实仓库验证。
+4. resume/recovery 已落库 provider/config snapshot 和 completed marker；后续要用真实长任务中断样本证明不会误推进或降级成 mock。
 5. Web/CLI 的验收面需要展示 diff、artifact 正文、gate 日志、readiness 失败原因和下一步命令，而不只是路径和计数。
 6. 高风险边界要从“声明式 network/tool policy”升级到可验证的隔离与审计证据，至少证明真实 provider 不能越权写主工作区、不能静默 push、不能泄露密钥。
 
@@ -62,30 +62,32 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ### 3.3 当前仍主要是 mock/dry-run 或受控 fixture 的能力
 
-| 能力              | 当前状态                                                                  | 判断                                                                                |
-| ----------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| 动态 workflow     | `run --dynamic` 当前强制 `--dry-run`，CLI 使用 `createDynamicMockAdapter` | 还不是 PM LLM 真实规划，也不会直接进入执行。                                        |
-| 真实 Agent 端到端 | Claude provider smoke 已通过，但主 workflow 稳定执行证据不足              | 证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过 gates。           |
-| PR 创建           | 代码支持并有 fake fixture 测试；历史 dogfooding 记录 `PR URL=not_created` | 需要真实受控远端仓库证据。                                                          |
-| Web 产品面        | 只能审阅最新 run 和处理 human gate                                        | 还不能从 Web 发起 run、查看 artifact 正文、查看 diff、prepare/readiness/create-pr。 |
-| 仓库画像          | init 可生成 `repo-profile.yaml`                                           | PR 包会展示画像命令，但 workflow gate 仍硬编码模板命令。                            |
-| 安全隔离          | CommandGateway 有静态拒绝，provider profile 有声明                        | 还不是 OS/container 级隔离；真实 provider 内部工具调用边界需要证据。                |
+| 能力              | 当前状态                                                                           | 判断                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 动态 workflow     | `run --dynamic` 当前强制 `--dry-run`，CLI 使用 `createDynamicMockAdapter`          | 还不是 PM LLM 真实规划，也不会直接进入执行。                                           |
+| 真实 Agent 端到端 | Claude provider smoke 已通过，但主 workflow 稳定执行证据不足                       | 证明了 provider 可调用，不证明真实任务能产出合格 artifacts 并通过 gates。              |
+| PR 创建           | 代码支持并有 fake fixture 测试；历史 dogfooding 记录 `PR URL=not_created`          | 需要真实受控远端仓库证据。                                                             |
+| Web 产品面        | 只能审阅最新 run 和处理 human gate                                                 | 还不能从 Web 发起 run、查看 artifact 正文、查看 diff、prepare/readiness/create-pr。    |
+| 仓库画像          | init 可生成 `repo-profile.yaml`，内置 workflow gate 通过 `commandRef` 解析画像命令 | 已从硬编码模板命令推进到画像驱动；仍缺更友好的缺失命令修复引导和真实非 pnpm 仓库证据。 |
+| 安全隔离          | CommandGateway 有静态拒绝，provider profile 有声明                                 | 还不是 OS/container 级隔离；真实 provider 内部工具调用边界需要证据。                   |
 
 ## 4. P0：先补齐，否则不建议用于真实工作
 
 ### P0-1 真实 Agent 产物协议
 
-事实：`createMockAgentAdapter` 会直接写结构化 artifacts；`createClaudeCodeAdapter` 目前只执行 Claude CLI 并返回 stdout/stderr 路径，没有把 `DONKEY_OUTPUT_DIR`、artifact schema、所需 artifact 类型和写入协议明确传给 provider，也没有把 provider 输出解析为 artifact store 记录。
+修复前事实：`createMockAgentAdapter` 会直接写结构化 artifacts；`createClaudeCodeAdapter` 仅执行 Claude CLI 并返回 stdout/stderr 路径，没有把 `DONKEY_OUTPUT_DIR`、artifact schema、所需 artifact 类型和写入协议明确传给 provider，也没有把 provider 输出解析为 artifact store 记录。
 
 影响：真实 Claude Code 即使完成了代码修改，也可能因为没有 `demand-card/prd/code-changes/test-report/review-report/delivery-package` 等结构化产物而无法通过 schema/readiness，或者 evidence package 只能看到日志路径。未来 Codex 或自定义 provider 也应先满足同一产物协议，再进入可用性声明。
 
-本地依据：`packages/core/src/runtime/mock-agent-adapter.ts` 由 mock 直接调用 Artifact Store；`packages/core/src/runtime/claude-code-adapter.ts` 只把 stdout/stderr 作为 `outputFiles` 返回；schema gate 依赖 DB 中已记录的 artifact。因此 `--agent claude-code` 接线不等于真实 workflow artifact 闭环已经成立。
+修复前本地依据：`packages/core/src/runtime/mock-agent-adapter.ts` 由 mock 直接调用 Artifact Store；`packages/core/src/runtime/claude-code-adapter.ts` 只把 stdout/stderr 作为 `outputFiles` 返回；schema gate 依赖 DB 中已记录的 artifact。因此当时 `--agent claude-code` 接线不等于真实 workflow artifact 闭环已经成立。当前已改为通过 manifest 收集并校验 provider artifact。
 
 最低目标：
 
 - Engine 在 prompt 和环境变量中明确声明 `DONKEY_OUTPUT_DIR`、本节点必须产出的 artifact 类型、每类 artifact 的 JSON/YAML/Markdown schema。
 - Real adapter 能收集输出目录中的 artifact 文件，验证 schema 后写入 Artifact Store。
 - 若真实 Agent 只改代码不产物，节点必须失败并给出可恢复错误，而不是继续推进。
+
+当前状态：2026-06-08 本轮已实现第一版 manifest 协议和失败阻断；仍需真实仓库样本证明 Claude Code 能稳定遵守该协议。
 
 ### P0-2 真实仓库端到端验收集
 
@@ -101,7 +103,7 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ### P0-3 仓库画像驱动 Gate
 
-事实：`repo-profile.yaml` 能检测 build/typecheck/lint/test/e2e/security 命令，但 `workflows/standard-feature.yaml` 和 `workflows/bugfix.yaml` 仍硬编码 `pnpm build/lint/test`。用户手册也说明“workflow gate 仍以模板内配置为准，尚未自动改写验证命令”。
+修复前事实：`repo-profile.yaml` 能检测 build/typecheck/lint/test/e2e/security 命令，但 `workflows/standard-feature.yaml` 和 `workflows/bugfix.yaml` 仍硬编码 `pnpm build/lint/test`。用户手册也说明“workflow gate 仍以模板内配置为准，尚未自动改写验证命令”。
 
 影响：真实仓库只要不是 pnpm 或脚本名不同，Donkey 就会在 gate 层失败；这会把“工具不适配”误判成“需求实现失败”。
 
@@ -111,19 +113,23 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 - Workflow gate 支持引用 repo profile，例如 `commandRef: build`、`commandRef: test`。
 - 缺失命令时不默认跳过；要求用户在 repo profile 中确认替代命令或显式标记“不适用”。
 
+当前状态：2026-06-08 本轮已将内置 workflow 改为 `commandRef`，并新增 `workflow preflight`；后续仍需补更友好的缺失命令修复引导。
+
 ### P0-4 恢复与 Provider 一致性
 
-事实：CLI `resume` 当前固定使用 `createMockAgentAdapter()`，没有沿用原 run 的 provider 配置。Engine 在存在 active lease 且 node 为 `running/paused` 时可能直接切到 `awaiting-gate`，这需要更强的“Agent 已完成”标记支撑，否则中断恢复有误推进风险。
+修复前事实：CLI `resume` 固定使用 `createMockAgentAdapter()`，没有沿用原 run 的 provider 配置。Engine 在存在 active lease 且 node 为 `running/paused` 时可能直接切到 `awaiting-gate`，这需要更强的“Agent 已完成”标记支撑，否则中断恢复有误推进风险。
 
 影响：真实 provider 跑到一半暂停或崩溃后，恢复可能换成 mock 或跳过真实执行，readiness 可能建立在错误证据上。
 
-本地依据：`packages/cli/src/index.ts` 的 `commandResume` 固定创建 `createMockAgentAdapter()`；`packages/web/src/server/api/root.ts` 会从 `.donkey/config.yaml` 读 `defaultAgent`，但 run 自身没有落库 provider 快照。CLI 和 Web 的恢复口径不一致。
+修复前本地依据：`packages/cli/src/index.ts` 的 `commandResume` 固定创建 `createMockAgentAdapter()`；`packages/web/src/server/api/root.ts` 会从 `.donkey/config.yaml` 读 `defaultAgent`，但 run 自身没有落库 provider 快照。CLI 和 Web 的恢复口径不一致。当前已落库 run provider/config snapshot，并在 CLI/Web resume 前校验。
 
 最低目标：
 
 - run 创建时落库 provider、adapter config 摘要和安全 profile，CLI/Web resume 必须沿用或要求人工选择。
 - 每个节点有明确 completion marker：Agent exit code、artifact schema 通过、工作区提交结果三者至少两类可验证。
 - 对 `running` 旧状态做 stale 检测；不能仅凭 lease 存在就进入 gate。
+
+当前状态：2026-06-08 本轮已落库 provider/config snapshot，CLI/Web resume 会在审批前校验并按 snapshot 重建 adapter；Engine 增加 role-run completed marker。生产级恢复仍需要真实长任务中断样本。
 
 ### P0-5 人工验收面可决策
 
@@ -163,17 +169,17 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 
 ## 5. P1：补齐后才像日常工具，而不是验收脚手架
 
-| 缺口               | 当前状态                                                                                             | 建议目标                                                                                                                  |
-| ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                                            | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
-| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                                             | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
-| Gate 失败体验      | 有 autoFix repair node，但真实 provider 证据不足                                                     | gate 失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。                                   |
-| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                                             | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
-| 通知与审批         | Web 本地处理 human gate                                                                              | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
-| CI/远端状态        | 可运行本地 gate；release readiness 有远端 CI 证据脚本                                                | PR 创建后能查询远端 CI 状态，把结果写回 delivery evidence。                                                               |
-| 真实 QA 证据       | 当前主要跑已有 test 命令                                                                             | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
-| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                                               | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
-| 文档验收状态一致性 | `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 仍保留“待本轮最高思考 reviewer 复查后更新” | 对外声称工作可用化增量完成前，补正式 reviewer 结论，或把该报告明确标为草稿。                                              |
+| 缺口               | 当前状态                                                                            | 建议目标                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形入口       | CLI 直接把一句话作为 demand body；动态路径是 dry-run mock                           | 增加 `demand create/shape/approve` 或 Web 表单，先生成需求卡、非目标和验收标准，由人确认后再执行。                        |
+| Workflow 选择      | 标准模板和 bugfix 模板可用；动态不可执行                                            | 提供受控 workflow selection：标准功能、bugfix、测试补齐、文档更新、仅方案；动态规划先作为建议，人工确认后保存模板再执行。 |
+| Gate 失败体验      | 有 autoFix repair node，但真实 provider 证据不足                                    | gate 失败后给出失败分类、关联日志、建议修复命令和是否重试；连续失败后阻断并保留上下文。                                   |
+| 角色/工具治理      | 角色目录和 tools.yaml 已有，Web 只读展示                                            | 增加角色版本、变更审查、工具权限预览，修改角色后要求 smoke/e2e 通过。                                                     |
+| 通知与审批         | Web 本地处理 human gate                                                             | 接入飞书 IM 或至少生成可复制审批摘要：风险、命令、影响文件、同意/拒绝入口。                                               |
+| CI/远端状态        | 可运行本地 gate；release readiness 有远端 CI 证据脚本                               | PR 创建后能查询远端 CI 状态，把结果写回 delivery evidence。                                                               |
+| 真实 QA 证据       | 当前主要跑已有 test 命令                                                            | 对 UI/Web 类任务支持 Playwright 截图、失败截图、关键路径步骤和验收标准映射。                                              |
+| 基准数据           | 有 metrics/readiness，但缺少持续样本集                                              | 建立 `docs/reviews` 或专门数据文件记录每次真实 dogfooding 的成功率、耗时、人工介入和失败原因。                            |
+| 文档验收状态一致性 | 本轮已更新 `docs/reviews/2026-06-08-donkey-work-usable-increment.md` 和 HTML 审阅版 | 后续每次实现后仍需同步 Markdown/HTML，并在最终 reviewer 复查后写入正式结论。                                              |
 
 ## 6. P2：增强长期复用，不阻塞第一批工作可用
 
@@ -186,11 +192,11 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 | Ops/Data/上线反馈闭环      | 用户明确不考虑全面自动化，且风险更高                   | PR 交付稳定后再讨论。               |
 | 多 Agent 并行协作          | 当前单 Agent 节点稳定性更关键                          | 串行闭环稳定后再增加并行。          |
 
-## 7. 建议的最近 2 周实施顺序
+## 7. 建议的最近 2 周后续实施顺序
 
-1. 打通真实 provider artifact 协议：输出目录、schema、artifact 收集、失败时阻断。
-2. 把模板 gate 改成 repo profile 驱动，并增加 gate preflight。
-3. 修复 resume provider 一致性和 running node stale recovery。
+1. 用真实 Claude Code 任务验证 artifact manifest 协议：记录缺失 artifact、schema 失败和修复重试成本。
+2. 用 1-2 个非 pnpm 或脚本名不同的仓库验证 repo profile gate preflight，补缺失命令修复引导。
+3. 制造真实 provider 中断/恢复样本，验证 provider snapshot、completed marker 和 human gate resume。
 4. 增强 Web/CLI 验收页：artifact 正文、diff、gate log、readiness failed checks。
 5. 建立受控真实仓库验收集，跑 5 个任务，至少 1 个真实 PR。
 6. 把每次 run 的结论写入 `docs/reviews/`，形成第一版 dogfooding 数据表。
@@ -208,3 +214,13 @@ Donkey 当前已经从概念推进到“本地受控 workflow 骨架可跑”的
 Donkey 现在已经具备“工作可用工具的骨架”，但还不是“可以直接依赖的工作工具”。最短路径不是扩大自动化范围，而是把真实 provider、真实仓库、真实 PR、真实证据和真实恢复打穿。
 
 只要 P0 补齐，Donkey 就可以进入一个合理的试用边界：在 2-3 个相似内部工具仓库中处理低中风险 B/D 类需求，默认推进到 PR 包或测试 PR，由人审阅、决定合入，并把失败原因沉淀为 repo profile、角色规则和 workflow 模板。
+
+## 10. 2026-06-08 实施进展
+
+本轮已完成 P0-1/P0-3/P0-4 的第一版实现：
+
+- P0-1：Claude Code adapter 支持 `DONKEY_OUTPUT_DIR`、`DONKEY_ARTIFACT_MANIFEST`，真实 provider 产物通过 manifest 校验 schema 后写入 Artifact Store；缺少必需 artifact 时节点失败。
+- P0-3：内置 workflow 改为 `commandRef` 引用 `.donkey/repo-profile.yaml`，CLI 新增 `workflow preflight` 展示 gate 命令解析结果。
+- P0-4：run 创建时落库 provider/config 摘要，CLI/Web resume 使用 provider 快照；Engine 增加 role-run completed marker，避免 stale `running` 节点直接进入 gate。
+
+仍未完成并继续保留为后续 P0/P1 工作：真实仓库端到端样本集、Web/CLI 审阅体验增强、至少 2 次真实测试 PR 证据、生产级隔离和真实 provider 长期稳定性数据。

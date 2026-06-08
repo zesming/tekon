@@ -24,6 +24,7 @@ export const repoProfileSchema = z
         lint: repoProfileCommandSchema.optional(),
         test: repoProfileCommandSchema.optional(),
         e2e: repoProfileCommandSchema.optional(),
+        security: repoProfileCommandSchema.optional(),
       })
       .default({}),
     pr: z
@@ -106,10 +107,25 @@ export function detectRepoProfile(repoPath: string): RepoProfile {
         ? { test: scriptCommand(runner, 'test', 'Test gate') }
         : {}),
       ...(scripts.e2e ? { e2e: scriptCommand(runner, 'e2e', 'E2E gate') } : {}),
+      ...detectSecurityCommand(scripts, runner),
     },
     pr: { baseBranch: 'main', titlePrefix: '' },
     risks: { highRiskPaths: [], requiresHumanApproval: [] },
   });
+}
+
+function detectSecurityCommand(
+  scripts: Record<string, string>,
+  runner: 'npm' | 'pnpm',
+) {
+  const scriptName = ['security:scan', 'security', 'audit'].find(
+    (name) => scripts[name],
+  );
+  return scriptName
+    ? {
+        security: scriptCommand(runner, scriptName, 'Security scan command'),
+      }
+    : {};
 }
 
 function scriptCommand(
