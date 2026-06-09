@@ -1,0 +1,67 @@
+id: plan-only
+name: Plan Only
+version: 1
+retry:
+  maxAttempts: 2
+  backoffMs: 250
+  strategy: fixed
+phases:
+  - id: pm
+    name: PM
+    nodes:
+      - id: pm-plan-scope
+        role: pm
+        outputs:
+          - demand:demand-card
+          - prd:prd
+        gates:
+          - type: schema
+            artifactType: demand-card
+          - type: schema
+            artifactType: prd
+  - id: rd
+    name: RD
+    dependsOn:
+      - pm
+    nodes:
+      - id: rd-technical-plan
+        role: rd
+        inputs:
+          - prd:prd
+        outputs:
+          - design:tech-design
+        gates:
+          - type: schema
+            artifactType: tech-design
+          - type: security-scan
+            commandRef: security
+  - id: reviewer
+    name: Reviewer
+    dependsOn:
+      - rd
+    nodes:
+      - id: reviewer-plan-review
+        role: reviewer
+        inputs:
+          - design:tech-design
+        outputs:
+          - review:review-report
+        gates:
+          - type: schema
+            artifactType: review-report
+          - type: human
+            requiresHumanApproval: true
+  - id: pmo
+    name: PMO
+    dependsOn:
+      - reviewer
+    nodes:
+      - id: pmo-plan-package
+        role: pmo
+        inputs:
+          - review:review-report
+        outputs:
+          - delivery:delivery-package
+        gates:
+          - type: schema
+            artifactType: delivery-package

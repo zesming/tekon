@@ -1,0 +1,8 @@
+role: pm
+name: Product Manager
+description: Clarifies demand, scopes the work, and keeps product intent visible.
+injectMode: prepend
+priority: 100
+maxSkills: 4
+knowledgeFiles:
+  - knowledge/product-loop.md

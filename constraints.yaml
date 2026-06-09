@@ -1,0 +1,31 @@
+version: 1
+hard:
+  - id: hard-code-build-lint
+    description: Code-change workflows must include both build and lint gates.
+  - id: hard-independent-reviewer
+    description: Code-change workflows must include an independent reviewer phase or reviewer node.
+  - id: hard-validation-or-e2e
+    description: Code-change workflows must include a validation phase, QA node, or e2e-pass gate.
+conditional:
+  - id: conditional-high-risk-human-gate
+    description: High-risk demands inject a human approval gate.
+    signals:
+      riskLevel: high
+      tags:
+        - high-risk
+  - id: conditional-security-review
+    description: Auth, security, or permission risk injects security review and security-scan.
+    tags:
+      - auth
+      - security
+      - permission
+  - id: conditional-rollback-plan
+    description: Data or migration risk requires a rollback-plan artifact.
+    tags:
+      - data
+      - migration
+soft:
+  - id: soft-dry-run-preview
+    description: Show dry-run preview suggestions without mutating workflow unless explicitly selected.
+  - id: soft-audit-log
+    description: Show audit-log visibility suggestions without mutating workflow unless explicitly selected.

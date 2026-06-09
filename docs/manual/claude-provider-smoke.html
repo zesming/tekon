@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude Provider Smoke 手动验证手册</title>
+    <style>
+      :root {
+        --text: #17202a;
+        --muted: #5f6b7a;
+        --line: #d8dee8;
+        --band: #f5f7fa;
+      }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        color: var(--text);
+        background: #ffffff;
+        line-height: 1.68;
+      }
+      main {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+      h1,
+      h2 {
+        line-height: 1.25;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+      }
+      h2 {
+        margin: 32px 0 12px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 21px;
+      }
+      .meta {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+      .callout {
+        background: var(--band);
+        border-left: 4px solid #1769aa;
+        padding: 14px 16px;
+      }
+      code {
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        background: #eef2f7;
+        border: 1px solid #dfe6ef;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      pre {
+        overflow-x: auto;
+        background: #102033;
+        color: #f6f8fb;
+        padding: 14px 16px;
+        border-radius: 8px;
+      }
+      pre code {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Claude Provider Smoke 手动验证手册</h1>
+      <p class="meta">生成日期：2026-06-05。本 HTML 为人工审阅版。</p>
+
+      <div class="callout">
+        <p>
+          本手册验证 Tekon 能通过 CommandGateway 启动真实 Claude Code
+          provider。该 smoke 不进入默认 CI，必须由维护者在已认证环境显式执行。
+        </p>
+      </div>
+
+      <h2>前置条件</h2>
+      <ul>
+        <li>本机已安装 Claude Code CLI。</li>
+        <li><code>claude auth status</code> 返回成功。</li>
+        <li>
+          不把 API key、token、认证输出或环境变量值写入命令行、报告或 git。
+        </li>
+      </ul>
+
+      <h2>命令</h2>
+      <p>
+        先在当前 shell 显式设置 smoke 启用开关，并按需设置 Claude CLI
+        命令覆盖；不要把认证输出或密钥写入文档。
+      </p>
+      <pre><code>npm run smoke:claude-provider</code></pre>
+
+      <h2>成功标准</h2>
+      <ul>
+        <li>命令退出 0。</li>
+        <li>stdout 包含 <code>TEKON_CLAUDE_PROVIDER_SMOKE_OK</code>。</li>
+        <li>
+          报告只记录 Claude CLI version、exit code、duration、stdout/stderr
+          文件路径和脱敏说明。
+        </li>
+      </ul>
+
+      <h2>当前边界</h2>
+      <p>
+        该 smoke 不证明 OS 级网络隔离。它只验证 Tekon 命令构造、权限模式不
+        bypass、cwd scope、env 控制、timeout 和日志捕获。
+      </p>
+    </main>
+  </body>
+</html>

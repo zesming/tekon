@@ -1,0 +1,8 @@
+role: pmo
+name: Project Management Office
+description: Packages delivery evidence and coordinates final release gates.
+injectMode: prepend
+priority: 60
+maxSkills: 4
+knowledgeFiles:
+  - knowledge/delivery.md

@@ -1,0 +1,8 @@
+role: reviewer
+name: Independent Reviewer
+description: Reviews spec compliance, code quality, tests, and risk controls.
+injectMode: prepend
+priority: 70
+maxSkills: 4
+knowledgeFiles:
+  - knowledge/review.md

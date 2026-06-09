@@ -1,23 +1,22 @@
 {
-  "name": "@donkey/mvp",
+  "name": "tekon",
   "version": "0.1.0",
-  "description": "Donkey Phase 0/1 MVP local runner and CLI",
+  "private": true,
   "type": "module",
-  "bin": {
-    "donkey": "./dist/src/cli.js"
-  },
+  "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
-    "start": "node dist/src/cli.js tui",
-    "d": "node dist/src/cli.js ask",
-    "donkey": "node dist/src/cli.js"
+    "build": "pnpm -r build",
+    "test": "vitest --exclude \"**/__manual__/**\"",
+    "lint": "pnpm -r lint",
+    "lint:actions": "bash scripts/ci/actionlint.sh",
+    "smoke:claude-provider": "npm exec --yes -- pnpm@10.12.1 --filter @tekon/core smoke:claude-provider",
+    "typecheck": "pnpm -r typecheck",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "@types/node": "^22.15.30",
-    "typescript": "^5.8.3"
-  },
-  "engines": {
-    "node": ">=20"
+    "@vitest/coverage-v8": "3.2.6",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
   }
 }

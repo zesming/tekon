@@ -1,0 +1,61 @@
+name: Core
+
+on:
+  push:
+    branches:
+      - rebuild-v2
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Lint GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check workflow files
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
+
+  core:
+    name: Core build and tests
+    runs-on: ubuntu-latest
+    needs: actionlint
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Verify native dependency builds
+        run: |
+          set -euo pipefail
+          ignored="$(npm exec --yes -- pnpm@10.12.1 ignored-builds)"
+          echo "$ignored"
+          echo "$ignored" | grep -Eq "^[[:space:]]*None[[:space:]]*$"
+
+      - name: Build core
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+
+      - name: Run core unit tests
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+
+      - name: Run core e2e tests
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e

@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon V2 发布就绪加固报告</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.65;
+        margin: 0;
+        color: #17202a;
+        background: #ffffff;
+      }
+      main {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+      h1,
+      h2 {
+        line-height: 1.25;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+      }
+      th,
+      td {
+        border: 1px solid #d8dee6;
+        padding: 8px 10px;
+        vertical-align: top;
+        text-align: left;
+      }
+      code {
+        background: #eef2f7;
+        border: 1px solid #dfe6ef;
+        border-radius: 4px;
+        padding: 1px 4px;
+      }
+      li {
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Tekon V2 发布就绪加固报告</h1>
+      <p>生成日期：2026-06-05</p>
+      <p>分支：<code>rebuild-v2</code></p>
+      <p>
+        代码完成提交 SHA：<code>0d7d14c5f2b34687b27720d1c4f9793123ce30f8</code>
+      </p>
+      <p>代码完成提交远端 Core workflow：<code>completed/success</code></p>
+      <p>
+        代码完成提交 workflow URL：<code
+          >https://github.com/zesming/tekon/actions/runs/27010294512</code
+        >
+      </p>
+      <p>报告提交 SHA：提交后由最终交付说明记录，不回写本文件。</p>
+      <p>
+        报告提交远端 Core workflow：提交后由最终交付说明记录，不回写本文件。
+      </p>
+
+      <h2>1. 结论</h2>
+      <p>
+        代码完成提交已通过本地 gate、真实 Claude provider smoke 和远端 Core
+        workflow。PR 创建仍保留为最后动作；本报告提交后的远端 Core workflow
+        仍需在最终交付说明中确认。
+      </p>
+
+      <h2>2. 本地验证摘要</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>验证项</th>
+            <th>命令</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>依赖锁定安装</td>
+            <td>
+              <code
+                >npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile</code
+              >
+            </td>
+            <td>退出 0，lockfile up to date</td>
+          </tr>
+          <tr>
+            <td>native build gate</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 ignored-builds</code></td>
+            <td>退出 0，<code>None</code></td>
+          </tr>
+          <tr>
+            <td>根测试</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 test -- --run</code></td>
+            <td>23 files / 89 tests passed</td>
+          </tr>
+          <tr>
+            <td>core unit</td>
+            <td>
+              <code
+                >npm exec --yes -- pnpm@10.12.1 --filter @tekon/core
+                test:unit</code
+              >
+            </td>
+            <td>21 files / 87 tests passed</td>
+          </tr>
+          <tr>
+            <td>core e2e</td>
+            <td>
+              <code
+                >npm exec --yes -- pnpm@10.12.1 --filter @tekon/core
+                test:e2e</code
+              >
+            </td>
+            <td>2 files / 2 tests passed</td>
+          </tr>
+          <tr>
+            <td>build</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 build</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>typecheck</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 typecheck</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>GitHub Actions lint</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 lint:actions</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>format gate</td>
+            <td>
+              <code
+                >npm exec --yes -- pnpm@10.12.1 exec prettier --check .</code
+              >
+            </td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>diff whitespace</td>
+            <td><code>git diff --check</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>未完成标记扫描</td>
+            <td>targeted <code>rg</code> scan</td>
+            <td>无输出</td>
+          </tr>
+          <tr>
+            <td>敏感模式扫描</td>
+            <td>targeted <code>rg</code> scan</td>
+            <td>无输出</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>3. 远端 CI 证据：代码完成提交</h2>
+      <ul>
+        <li>workflow: Core</li>
+        <li>
+          commit:
+          <code>0d7d14c5f2b34687b27720d1c4f9793123ce30f8</code>
+        </li>
+        <li>status: <code>completed/success</code></li>
+        <li>
+          url:
+          <code>https://github.com/zesming/tekon/actions/runs/27010294512</code>
+        </li>
+      </ul>
+
+      <h2>4. Claude Provider Smoke 证据</h2>
+      <ul>
+        <li>Claude CLI version: <code>2.1.163 (Claude Code)</code></li>
+        <li>command: <code>npm run smoke:claude-provider</code></li>
+        <li>
+          enablement: 已显式设置 smoke 开关和命令覆盖，环境变量具体值不记录。
+        </li>
+        <li>exit code: <code>0</code></li>
+        <li>durationMs: <code>14275</code></li>
+        <li>
+          stdout log path:
+          <code
+            >/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/tekon-claude-smoke-80Niqx/.tekon/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stdout.log</code
+          >
+        </li>
+        <li>
+          stderr log path:
+          <code
+            >/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/tekon-claude-smoke-80Niqx/.tekon/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stderr.log</code
+          >
+        </li>
+        <li>脱敏说明：未记录 API key、token、认证输出或环境变量值。</li>
+      </ul>
+
+      <h2>5. 已完成加固项</h2>
+      <ul>
+        <li>
+          CI：GitHub Actions 增加 actionlint job、Node 24、native dependency
+          build gate、远端 Actions 查询脚本。
+        </li>
+        <li>
+          测试与构建：Vitest 迁移到 <code>test.projects</code>，默认测试排除手动
+          smoke，全仓 Prettier baseline 已建立。
+        </li>
+        <li>
+          CommandGateway：stdin、child error、log write、timeout
+          和环境变量边界已加固。
+        </li>
+        <li>
+          Claude provider：真实 smoke
+          fail-closed，手动执行成功，证据报告已脱敏。
+        </li>
+        <li>
+          Network policy：阶段一完成静态网络命令拒绝和 provider network evidence
+          mapping，不声称 OS 级断网。
+        </li>
+        <li>
+          文档：README、CHANGELOG、MVP 用户边界手册、Claude smoke
+          手册和阶段一评估已同步更新。
+        </li>
+      </ul>
+
+      <h2>6. 已知边界</h2>
+      <ul>
+        <li>PR 创建仍放在最后，不在本报告提交前执行。</li>
+        <li>
+          OS/container 级网络隔离仍是后续增强项；当前阶段只完成静态拒绝和
+          provider 声明映射。
+        </li>
+        <li>
+          当前没有面向普通用户的 CLI/Web 产品入口，主要可执行对象仍是
+          <code>packages/core</code> 的测试、类型检查和构建。
+        </li>
+      </ul>
+
+      <h2>7. Subagent Review</h2>
+      <p>
+        最终最高思考 reviewer 结论：<code>CHANGES_REQUIRED</code>，必须修复项 1
+        个。
+      </p>
+      <ul>
+        <li>
+          问题：本报告第 7 节仍保留“最终 reviewer
+          将在本报告生成后执行”的未更新口径，与提交前最终报告状态冲突。
+        </li>
+        <li>
+          修复摘要：已将最终 reviewer
+          结论、必须修复项和修复摘要写入本节，并同步更新 HTML 审阅版和
+          CHANGELOG。
+        </li>
+        <li>
+          复查结果：最终 reviewer 复查结论为
+          <code>APPROVED</code>；未检出剩余必须修复项。
+        </li>
+      </ul>
+
+      <h2>8. 报告提交后的远端 CI</h2>
+      <p>
+        报告提交 SHA 和最终远端 Core workflow URL
+        在最终交付说明记录；不回写本文件，避免为了记录最终 workflow URL
+        产生新的提交循环。
+      </p>
+    </main>
+  </body>
+</html>

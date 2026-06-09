@@ -8,7 +8,16 @@ build/
 coverage/
 test-results/
 playwright-report/
-.donkey/
+
+# Tekon 运行时产物（不提交）
+.tekon/runs/
+.tekon/worktrees/
+.tekon/web-session.json
+.worktrees/
+
+# 日志
+*.log
+
+# Python（如有跨语言依赖）
 __pycache__/
 *.pyc
-*.log

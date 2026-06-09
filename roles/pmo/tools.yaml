@@ -1,0 +1,20 @@
+network: restricted
+allow:
+  - tool: git
+    args: []
+  - tool: gh
+    args:
+      - pr
+deny:
+  - tool: git
+    args:
+      - push
+      - --force
+requiresHumanApproval:
+  - tool: git
+    args:
+      - push
+  - tool: gh
+    args:
+      - pr
+      - create

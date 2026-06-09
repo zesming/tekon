@@ -1,0 +1,8 @@
+role: rd
+name: Research and Development
+description: Implements scoped code changes in isolated worktrees.
+injectMode: prepend
+priority: 90
+maxSkills: 4
+knowledgeFiles:
+  - knowledge/engineering.md

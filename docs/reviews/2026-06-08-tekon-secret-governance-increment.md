@@ -1,0 +1,74 @@
+# Tekon 敏感信息治理增量报告
+
+日期：2026-06-08
+
+范围：继续推进 P0-7 最小安全隔离证据。本轮聚焦“命令输出和 artifact 不应静默落入明文密钥”，不声称完成生产级 OS/container 沙箱、完整 DLP、密钥轮换或多租户权限治理。
+
+## 1. 本轮新增能力
+
+| 能力                   | 实现位置                                       | 说明                                                                                |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 共享 secret scanner    | `packages/core/src/security/secrets.ts`        | 提供文本扫描、文件扫描、日志脱敏和 redaction transform。                            |
+| 命令日志落盘前脱敏     | `packages/core/src/runtime/command-gateway.ts` | 子进程 stdout/stderr 进入日志文件前经过 redaction transform，避免明显密钥明文落盘。 |
+| artifact 写入前拦截    | `packages/core/src/artifact/store.ts`          | Artifact Store 在写入 `.tekon/runs` 前扫描内容；命中明显密钥时拒绝写入并返回错误。  |
+| security-scan 复用规则 | `packages/core/src/gate/runners.ts`            | 内置 `security-scan` 不再维护私有规则，改用共享 scanner 扫描工作区文件。            |
+
+## 2. 当前规则覆盖
+
+当前基础规则覆盖：
+
+- private key header。
+- OpenAI-style `sk-...` key。
+- AWS `AKIA...` access key。
+- 常见 `api_key` / `token` / `secret` 字段赋值。
+
+这些规则用于降低明显泄露风险，不应被解释为完整 SAST、DLP 或企业密钥治理。
+
+## 3. 行为边界
+
+- 命令 stdout/stderr 会保留上下文和失败信息，但将命中的敏感片段替换为 `[REDACTED_*]`。
+- artifact 内容命中敏感模式时直接拒绝写入，避免 delivery package 和 review surface 继续传播。
+- `.tekon`、`.git`、`node_modules`、`dist`、`coverage` 不参与工作区文件扫描，避免运行态日志反向影响 security gate。
+- Audit event payload 仍要求调用方不写入密钥；本轮没有把 audit payload 改成自动 redaction。
+
+## 4. 验证记录
+
+本轮新增或强化测试：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit -- --run packages/core/__tests__/security/secrets.test.ts packages/core/__tests__/artifact/store.test.ts packages/core/__tests__/runtime/command-gateway.test.ts packages/core/__tests__/gate/runners.test.ts
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core typecheck
+```
+
+覆盖点：
+
+- 共享 scanner 可识别并脱敏明显密钥。
+- 文件扫描忽略 `.tekon` 运行态目录。
+- CommandGateway stdout/stderr 日志不保留明文密钥。
+- Artifact Store 在写入前拒绝敏感内容，且不会创建 artifact 文件。
+- 内置 `security-scan` 仍能识别工作区中的明显密钥。
+
+## 5. Reviewer 结论
+
+最高思考 reviewer 第一轮结论：CHANGES_REQUESTED。
+
+必须修复项：CommandGateway 日志脱敏的初始 Transform 以 carry 分片写出，密钥跨 chunk 边界时可能拼出明文密钥；文档也不应把当前实现夸大为生产级 DLP。
+
+修复摘要：`createSecretRedactionTransform()` 改为完整缓冲 stdout/stderr 后在 flush 中统一 redaction，再写入日志文件；新增跨 stdout/stderr chunk 的密钥回归测试；文档统一改为“落盘前脱敏”，避免承诺流式语义。
+
+最高思考 reviewer 第二轮结论：CHANGES_REQUESTED。
+
+必须修复项：README 和 HTML 审阅版仍残留“流式脱敏”旧表述。
+
+修复摘要：README、Markdown 文档和 HTML 审阅版已统一为“落盘前脱敏”。
+
+最高思考 reviewer 最终复查结论：APPROVED。
+
+必须修复项：无。
+
+## 6. 仍未完成
+
+- OS/container 级 provider sandbox。
+- 真实 provider 的工具权限强制隔离证据。
+- 网络隔离的系统级证明。
+- 完整 DLP、密钥轮换、凭证发现和审计平台集成。

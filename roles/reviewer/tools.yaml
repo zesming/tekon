@@ -1,0 +1,8 @@
+network: restricted
+allow:
+  - tool: git
+    args: []
+  - tool: pnpm
+    args: []
+deny: []
+requiresHumanApproval: []
