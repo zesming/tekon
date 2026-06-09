@@ -562,6 +562,7 @@ export async function createApiCaller(
               runId: gateInput.runId,
               decisionId: decision.id,
               maxContentChars: 1_200,
+              commandDisplay: 'explicit',
             }),
           ),
         );
@@ -625,6 +626,7 @@ export async function createApiCaller(
           audit,
           runId: reviewInput.runId,
           maxContentChars: reviewInput.maxContentChars,
+          commandDisplay: 'explicit',
         });
       },
     },

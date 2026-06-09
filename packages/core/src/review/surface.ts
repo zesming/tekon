@@ -102,12 +102,15 @@ export interface WorkReviewSurface {
   nextCommands: string[];
 }
 
+export type ReviewCommandDisplay = 'default' | 'explicit';
+
 export async function createWorkReviewSurface(input: {
   repoPath: string;
   repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   maxContentChars?: number;
+  commandDisplay?: ReviewCommandDisplay;
 }): Promise<WorkReviewSurface> {
   const workflow = await input.repositories.getWorkflowInstance(input.runId);
   if (!workflow) {
@@ -183,8 +186,10 @@ export async function createWorkReviewSurface(input: {
         : null,
     })),
     gateFailureTriage: createGateFailureTriage({
+      repoPath: input.repoPath,
       runId: input.runId,
       gates,
+      commandDisplay: input.commandDisplay,
     }),
     delivery,
     evidenceGroups: createEvidenceGroups({
@@ -195,10 +200,12 @@ export async function createWorkReviewSurface(input: {
       auditEvents,
     }),
     nextCommands: nextCommandsFor({
+      repoPath: input.repoPath,
       runId: input.runId,
       readiness,
       deliveryStatus: delivery.status,
       diffAvailable: delivery.diff.available,
+      commandDisplay: input.commandDisplay,
     }),
   };
 }
@@ -250,17 +257,21 @@ function createEvidenceGroups(input: {
 }
 
 function createGateFailureTriage(input: {
+  repoPath: string;
   runId: string;
   gates: GateResult[];
+  commandDisplay?: ReviewCommandDisplay;
 }): ReviewGateFailureTriage[] {
   return input.gates
     .filter((gate) => shouldTriageGate(gate))
     .map((gate) => {
       const classification = classifyGateFailure(gate);
       const advice = gateTriageAdvice({
+        repoPath: input.repoPath,
         runId: input.runId,
         gate,
         classification,
+        commandDisplay: input.commandDisplay,
       });
       return {
         gateId: gate.id,
@@ -299,22 +310,37 @@ function classifyGateFailure(gate: GateResult): string {
 }
 
 function gateTriageAdvice(input: {
+  repoPath: string;
   runId: string;
   gate: GateResult;
   classification: string;
+  commandDisplay?: ReviewCommandDisplay;
 }): {
   retry: ReviewGateRetryRecommendation;
   summary: string;
   suggestedCommand: string;
 } {
-  const logCommand = `tekon log --run-id ${input.runId}`;
-  const reviewCommand = `tekon review --run-id ${input.runId}`;
+  const explicitSuffix =
+    input.commandDisplay === 'explicit'
+      ? ` --run-id ${quoteCliArg(input.runId)} --repo ${quoteCliArg(input.repoPath)}`
+      : '';
+  const logCommand =
+    input.commandDisplay === 'explicit'
+      ? `tekon log${explicitSuffix}`
+      : 'tekon log';
+  const reviewCommand =
+    input.commandDisplay === 'explicit'
+      ? `tekon review${explicitSuffix}`
+      : 'tekon review';
   if (isHumanApprovalTriage(input.gate, input.classification)) {
     return {
       retry: 'after-approval',
       summary:
         'Human approval is required before this gate can continue. Approve only after reviewing the pending decision and risk.',
-      suggestedCommand: `tekon resume --run-id ${input.runId} --approve-human`,
+      suggestedCommand:
+        input.commandDisplay === 'explicit'
+          ? `tekon resume --run-id ${quoteCliArg(input.runId)} --approve-human --repo ${quoteCliArg(input.repoPath)}`
+          : 'tekon resume --approve-human',
     };
   }
   if (input.classification === 'missing-command') {
@@ -322,7 +348,10 @@ function gateTriageAdvice(input: {
       retry: 'after-fix',
       summary:
         'Gate command is missing from repo profile. Resolve the commandRef before retrying this run.',
-      suggestedCommand: 'tekon workflow preflight <template> --repo <repo>',
+      suggestedCommand:
+        input.commandDisplay === 'explicit'
+          ? `tekon workflow preflight <template> --repo ${quoteCliArg(input.repoPath)}`
+          : 'tekon workflow preflight <template>',
     };
   }
   if (input.classification === 'security-findings') {
@@ -748,29 +777,37 @@ function git(repoPath: string, args: string[]): string {
 }
 
 function nextCommandsFor(input: {
+  repoPath: string;
   runId: string;
   readiness: WorkReadinessEvaluation;
   deliveryStatus: string;
   diffAvailable: boolean;
+  commandDisplay?: ReviewCommandDisplay;
 }): string[] {
-  const commands = [
-    `tekon status --run-id ${input.runId}`,
-    `tekon eval readiness --run-id ${input.runId}`,
-  ];
+  const runFlag =
+    input.commandDisplay === 'explicit'
+      ? ` --run-id ${quoteCliArg(input.runId)} --repo ${quoteCliArg(input.repoPath)}`
+      : '';
+  const commands = [`tekon status${runFlag}`, `tekon eval readiness${runFlag}`];
   if (input.deliveryStatus === 'not-prepared') {
-    commands.push(`tekon delivery prepare --run-id ${input.runId}`);
+    commands.push(`tekon delivery prepare${runFlag}`);
   }
   if (!input.readiness.ready) {
-    commands.push(`tekon log --run-id ${input.runId}`);
+    commands.push(`tekon log${runFlag}`);
   }
   if (
     input.readiness.ready &&
     input.deliveryStatus !== 'created' &&
     input.diffAvailable
   ) {
-    commands.push(
-      `tekon delivery create-pr --run-id ${input.runId} --approve-human`,
-    );
+    commands.push(`tekon delivery create-pr${runFlag} --approve-human`);
   }
   return commands;
+}
+
+function quoteCliArg(value: string): string {
+  if (/^[a-zA-Z0-9_./:@-]+$/u.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/gu, `'\\''`)}'`;
 }

@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, relative } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -562,6 +562,355 @@ describe('runCli in-process', () => {
     expect(workflowListOutput).toContain('plan-only');
   }, 15_000);
 
+  it('infers current repo, latest demand shape, latest run, and pending decision by default', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    const originalCwd = process.cwd();
+
+    process.chdir(repoPath);
+    try {
+      const activeRepoPath = process.cwd();
+      await expect(runCli(['init'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`initialized repo=${activeRepoPath}`);
+      const nestedDir = join(activeRepoPath, 'src', 'feature');
+      mkdirSync(nestedDir, { recursive: true });
+      process.chdir(nestedDir);
+
+      await expect(
+        runCli(
+          [
+            'demand',
+            'shape',
+            '给 Web dashboard 增加审批摘要展示，要求 e2e 通过。',
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const shapeOutput = io.takeStdout();
+      expect(shapeOutput).toContain('approved=false');
+      const shapePath = /shapePath=(\S+)/u.exec(shapeOutput)?.[1];
+      expect(shapePath).toBeTruthy();
+      expect(shapePath).toContain(`${activeRepoPath}/.tekon/demands/`);
+
+      await expect(
+        runCli(['demand', 'approve', '--actor', 'tester'], io),
+      ).resolves.toBe(0);
+      expect(io.takeStdout()).toContain('approved=true');
+
+      await expect(runCli(['eval', 'demand-shape'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain('ready=true');
+
+      await expect(runCli(['run', '--agent', 'mock'], io)).resolves.toBe(0);
+      const standardOutput = io.takeStdout();
+      const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+        standardOutput,
+      )?.[1];
+      expect(standardRunId).toBeTruthy();
+      expect(standardOutput).toContain('status=passed');
+
+      await expect(runCli(['status'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${standardRunId}`);
+
+      await expect(runCli(['review'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${standardRunId}`);
+
+      await expect(runCli(['delivery', 'prepare'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${standardRunId}`);
+
+      await expect(runCli(['eval', 'readiness'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${standardRunId}`);
+
+      await expect(
+        runCli(
+          [
+            'run',
+            '修复发布验收中的人工确认路径',
+            '--template',
+            'bugfix',
+            '--agent',
+            'mock',
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const gatedOutput = io.takeStdout();
+      const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
+      expect(gatedRunId).toBeTruthy();
+      expect(gatedOutput).toContain('humanGate=pending');
+
+      await expect(runCli(['approval', 'summary'], io)).resolves.toBe(0);
+      const approvalSummaryOutput = io.takeStdout();
+      expect(approvalSummaryOutput).toContain(`runId=${gatedRunId}`);
+      const rejectDecisionId = /decisionId=(decision_[a-zA-Z0-9-]+)/u.exec(
+        approvalSummaryOutput,
+      )?.[1];
+      expect(rejectDecisionId).toBeTruthy();
+
+      await expect(runCli(['eval', 'approval-summary'], io)).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${gatedRunId}`);
+
+      await expect(
+        runCli(
+          [
+            'approval',
+            'reject',
+            '--actor',
+            'tester',
+            '--note',
+            '测试拒绝最新待审批项。',
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const rejectOutput = io.takeStdout();
+      expect(rejectOutput).toContain(`runId=${gatedRunId}`);
+      expect(rejectOutput).toContain(`decisionId=${rejectDecisionId}`);
+      expect(rejectOutput).toContain('decisionStatus=rejected');
+
+      await expect(
+        runCli(
+          [
+            'run',
+            '再次验证人工批准的默认恢复路径',
+            '--template',
+            'bugfix',
+            '--agent',
+            'mock',
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const resumableOutput = io.takeStdout();
+      const resumableRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+        resumableOutput,
+      )?.[1];
+      expect(resumableRunId).toBeTruthy();
+      expect(resumableOutput).toContain('humanGate=pending');
+
+      await expect(runCli(['resume', '--approve-human'], io)).resolves.toBe(0);
+      const resumeOutput = io.takeStdout();
+      expect(resumeOutput).toContain(`runId=${resumableRunId}`);
+      expect(resumeOutput).toContain('status=passed');
+
+      const samplesPath = join(
+        activeRepoPath,
+        '.tekon',
+        'eval',
+        'default-work-usability.yaml',
+      );
+      await expect(
+        runCli(
+          ['eval', 'work-usability', 'record', '--samples', samplesPath],
+          io,
+        ),
+      ).resolves.toBe(0);
+      expect(io.takeStdout()).toContain(`runId=${resumableRunId}`);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15_000);
+
+  it('resolves explicit shape paths from cwd first and repo root second', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    const originalCwd = process.cwd();
+
+    process.chdir(repoPath);
+    try {
+      const activeRepoPath = process.cwd();
+      await expect(runCli(['init'], io)).resolves.toBe(0);
+      io.takeStdout();
+      await expect(
+        runCli(['demand', 'shape', '给示例模块增加审阅入口'], io),
+      ).resolves.toBe(0);
+      const shapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
+      expect(shapePath).toBeTruthy();
+
+      const nestedDir = join(activeRepoPath, 'src', 'nested-shape');
+      mkdirSync(nestedDir, { recursive: true });
+      process.chdir(nestedDir);
+
+      const repoRootRelativeShapePath = relative(activeRepoPath, shapePath!);
+      await expect(
+        runCli(
+          ['eval', 'demand-shape', '--shape', repoRootRelativeShapePath],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const repoRootRelativeOutput = io.takeStdout();
+      expect(repoRootRelativeOutput).toContain('demandShapeId=');
+
+      const cwdRelativeShapePath = relative(nestedDir, shapePath!);
+      await expect(
+        runCli(
+          ['demand', 'approve', cwdRelativeShapePath, '--actor', 'tester'],
+          io,
+        ),
+      ).resolves.toBe(0);
+      expect(io.takeStdout()).toContain('approved=true');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15_000);
+
+  it('does not approve historical demand shapes by default when the latest shape is already approved', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    const originalCwd = process.cwd();
+
+    process.chdir(repoPath);
+    try {
+      await expect(runCli(['init'], io)).resolves.toBe(0);
+      io.takeStdout();
+
+      await expect(
+        runCli(['demand', 'shape', '旧的未批准需求'], io),
+      ).resolves.toBe(0);
+      const historicalShapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
+      expect(historicalShapePath).toBeTruthy();
+      const historicalShape = JSON.parse(
+        readFileSync(historicalShapePath!, 'utf8'),
+      );
+      writeFileSync(
+        historicalShapePath!,
+        `${JSON.stringify(
+          { ...historicalShape, createdAt: '2026-01-01T00:00:00.000Z' },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+
+      await expect(
+        runCli(['demand', 'shape', '最新且已经批准的需求'], io),
+      ).resolves.toBe(0);
+      const latestShapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
+      expect(latestShapePath).toBeTruthy();
+      await expect(
+        runCli(['demand', 'approve', '--shape', latestShapePath!], io),
+      ).resolves.toBe(0);
+      io.takeStdout();
+
+      await expect(runCli(['demand', 'approve'], io)).resolves.toBe(1);
+      expect(io.takeStderr()).toContain(
+        'latest demand shape is already approved',
+      );
+      expect(
+        JSON.parse(readFileSync(historicalShapePath!, 'utf8')).approved,
+      ).toBe(false);
+
+      await expect(
+        runCli(['demand', 'approve', '--shape', historicalShapePath!], io),
+      ).resolves.toBe(0);
+      expect(io.takeStdout()).toContain('approved=true');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15_000);
+
+  it('prints explicit follow-up commands when repo is passed explicitly', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    await expect(
+      runCli(
+        [
+          'run',
+          '给示例模块增加跨仓库命令提示',
+          '--template',
+          'standard-feature',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+      io.takeStdout(),
+    )?.[1];
+    expect(standardRunId).toBeTruthy();
+
+    await expect(runCli(['review', '--repo', repoPath], io)).resolves.toBe(0);
+    expect(io.takeStdout()).toContain(
+      `tekon status --run-id ${standardRunId} --repo ${repoPath}`,
+    );
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '需要跨仓库审批摘要',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(gatedRunId).toBeTruthy();
+
+    await expect(
+      runCli(['approval', 'summary', '--repo', repoPath], io),
+    ).resolves.toBe(0);
+    const summaryOutput = io.takeStdout();
+    expect(summaryOutput).toContain(
+      `tekon resume --run-id ${gatedRunId} --approve-human --repo ${repoPath}`,
+    );
+    expect(summaryOutput).toContain(
+      `tekon approval reject --run-id ${gatedRunId}`,
+    );
+    expect(summaryOutput).toContain(`--repo ${repoPath}`);
+  }, 15_000);
+
+  it('keeps cwd-relative demand shape paths working from repo subdirectories', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    const originalCwd = process.cwd();
+
+    process.chdir(repoPath);
+    try {
+      await expect(runCli(['init'], io)).resolves.toBe(0);
+      io.takeStdout();
+      await expect(
+        runCli(['demand', 'shape', '给示例模块增加参数默认值'], io),
+      ).resolves.toBe(0);
+      const shapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
+      expect(shapePath).toBeTruthy();
+      await expect(runCli(['demand', 'approve', shapePath!], io)).resolves.toBe(
+        0,
+      );
+      io.takeStdout();
+
+      const nestedDir = join(repoPath, 'packages', 'demo');
+      mkdirSync(nestedDir, { recursive: true });
+      writeFileSync(join(nestedDir, '.gitkeep'), '', 'utf8');
+      execFileSync('git', ['add', 'packages/demo/.gitkeep'], { cwd: repoPath });
+      execFileSync('git', ['commit', '-m', 'add nested fixture dir'], {
+        cwd: repoPath,
+      });
+      process.chdir(nestedDir);
+      const cwdRelativeShapePath = relative(nestedDir, shapePath!);
+
+      await expect(
+        runCli(
+          ['run', '--demand-file', cwdRelativeShapePath, '--agent', 'mock'],
+          io,
+        ),
+      ).resolves.toBe(0);
+      expect(io.takeStdout()).toContain('status=passed');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15_000);
+
   it('requires --allow-dirty-base before running on tracked local changes', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
@@ -688,6 +1037,124 @@ describe('runCli in-process', () => {
     );
     expect(output).toContain('notApplicableIgnoredFor=security-scan');
   });
+
+  it('requires decision-id when a run has multiple pending human decisions', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    await expect(
+      runCli(
+        [
+          'run',
+          '需要多审批歧义保护的变更',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    const repositories = createRepositories(db);
+    const [decision] = await repositories.listHumanDecisions(runId!);
+    expect(decision).toBeTruthy();
+    await repositories.createHumanDecision({
+      ...decision!,
+      id: 'decision_extra_pending',
+      note: 'second pending decision for ambiguity coverage',
+      createdAt: '2026-06-09T00:00:00.000Z',
+    });
+    db.close();
+
+    await expect(
+      runCli(
+        ['approval', 'summary', '--run-id', runId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('multiple pending human decisions');
+
+    await expect(
+      runCli(
+        ['approval', 'reject', '--run-id', runId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('multiple pending human decisions');
+
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--approve-human', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('multiple pending human decisions');
+
+    await expect(
+      runCli(
+        [
+          'approval',
+          'summary',
+          '--run-id',
+          runId!,
+          '--decision-id',
+          decision!.id,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const explicitSummaryOutput = io.takeStdout();
+    expect(explicitSummaryOutput).toContain(`decisionId=${decision!.id}`);
+    expect(explicitSummaryOutput).toContain(
+      `tekon resume --run-id ${runId} --approve-human --repo ${repoPath}`,
+    );
+
+    await expect(
+      runCli(
+        [
+          'resume',
+          '--run-id',
+          runId!,
+          '--decision-id',
+          decision!.id,
+          '--approve-human',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain(`runId=${runId}`);
+
+    const afterResumeDb = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    const afterResumeDecisions = await createRepositories(
+      afterResumeDb,
+    ).listHumanDecisions(runId!);
+    expect(afterResumeDecisions).toContainEqual(
+      expect.objectContaining({ id: decision!.id, status: 'approved' }),
+    );
+    expect(afterResumeDecisions).toContainEqual(
+      expect.objectContaining({
+        id: 'decision_extra_pending',
+        status: 'pending',
+      }),
+    );
+    afterResumeDb.close();
+  }, 15_000);
 
   it('does not approve human gates when the run provider snapshot is missing', async () => {
     const repoPath = createFixtureRepo(tempDirs);

@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -63,7 +64,10 @@ import {
   type AgentAdapterConfig,
   agentAdapterConfigSchema,
   type CommandGateway,
+  type DemandShape,
+  type TekonRepositories,
   type RunProviderConfig,
+  type TekonDatabase,
   type WorkUsabilitySample,
   type WorkUsabilitySampleSet,
 } from '@tekon/core';
@@ -158,7 +162,7 @@ async function commandInit(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveRepoPathForInit(args.values.repo);
   const tekonDir = join(repoPath, '.tekon');
   mkdirSync(join(tekonDir, 'runs'), { recursive: true });
   mkdirSync(join(tekonDir, 'roles'), { recursive: true });
@@ -207,22 +211,30 @@ async function commandRun(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const shapedDemand = args.values['demand-file']
-    ? readDemandShapeFile(resolve(args.values['demand-file']))
+  const repoPath = resolveProjectRepoPath(args.values.repo);
+  ensureInitialized(repoPath);
+  const positionalDemandText = args.positionals.join(' ').trim();
+  const demandFilePath = args.values['demand-file']
+    ? resolveDemandShapePath(repoPath, args.values['demand-file'])
+    : positionalDemandText
+      ? null
+      : resolveDemandShapePath(repoPath, undefined, {
+          latestMustBeApproved: true,
+        });
+  const shapedDemand = demandFilePath
+    ? readDemandShapeFile(demandFilePath)
     : null;
   if (shapedDemand && !shapedDemand.approved) {
     throw new Error(
-      `demand file must be approved before run: ${args.values['demand-file']}`,
+      `demand file must be approved before run: ${demandFilePath}`,
     );
   }
   const demandText = shapedDemand
     ? renderDemandShapeForRun(shapedDemand)
-    : args.positionals.join(' ').trim();
+    : positionalDemandText;
   if (!demandText) {
     throw new Error('run demand text is required');
   }
-  const repoPath = resolve(args.values.repo ?? process.cwd());
-  ensureInitialized(repoPath);
   const allowDirtyBase = Boolean(args.values['allow-dirty-base']);
 
   if (args.values.dynamic) {
@@ -385,17 +397,19 @@ async function commandDemand(argv: string[], io: CliIO) {
       options: {
         repo: { type: 'string' },
         write: { type: 'boolean', default: false },
+        'no-write': { type: 'boolean', default: false },
         format: { type: 'string' },
       },
       allowPositionals: true,
     });
     const demandText = args.positionals.join(' ').trim();
     const shape = shapeDemand({ text: demandText });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
-    if (args.values.write) {
+    const repoPath = resolveProjectRepoPath(args.values.repo);
+    const shouldWrite = !args.values['no-write'];
+    if (shouldWrite) {
       ensureInitialized(repoPath);
     }
-    const paths = args.values.write
+    const paths = shouldWrite
       ? writeDemandShapeFiles({ repoPath, shape })
       : null;
     if (args.values.format === 'json') {
@@ -426,16 +440,20 @@ async function commandDemand(argv: string[], io: CliIO) {
     const args = parseArgs({
       args: rest,
       options: {
+        repo: { type: 'string' },
         shape: { type: 'string' },
         actor: { type: 'string' },
       },
       allowPositionals: true,
     });
     const shapeArg = args.values.shape ?? args.positionals[0];
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      throw new Error('demand shape path is required');
+      ensureInitialized(repoPath);
     }
-    const shapePath = resolve(shapeArg);
+    const shapePath = resolveDemandShapePath(repoPath, shapeArg, {
+      latestMustBeUnapproved: !shapeArg,
+    });
     const approved = approveDemandShape(readDemandShapeFile(shapePath), {
       actor: args.values.actor ?? 'cli',
     });
@@ -456,16 +474,18 @@ async function commandDemand(argv: string[], io: CliIO) {
     const args = parseArgs({
       args: rest,
       options: {
+        repo: { type: 'string' },
         shape: { type: 'string' },
         eval: { type: 'boolean', default: false },
       },
       allowPositionals: true,
     });
     const shapeArg = args.values.shape ?? args.positionals[0];
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      throw new Error('demand shape path is required');
+      ensureInitialized(repoPath);
     }
-    const shapePath = resolve(shapeArg);
+    const shapePath = resolveDemandShapePath(repoPath, shapeArg);
     const shape = readDemandShapeFile(shapePath);
     const evaluation = evaluateDemandShape(shape);
     io.stdout.write(
@@ -517,19 +537,40 @@ async function commandResume(argv: string[], io: CliIO) {
     options: {
       repo: { type: 'string' },
       'run-id': { type: 'string' },
+      'decision-id': { type: 'string' },
       'approve-human': { type: 'boolean', default: false },
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
-  const runId = args.values['run-id'] ?? args.positionals[0];
-  if (!runId) {
-    throw new Error('--run-id is required');
-  }
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
   const repositories = createRepositories(db);
+  let decisionContext: { runId: string; decisionId?: string } | null = null;
+  try {
+    decisionContext = args.values['approve-human']
+      ? await resolveHumanDecisionContext({
+          db,
+          repositories,
+          explicitRunId: args.values['run-id'] ?? args.positionals[0],
+          explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
+          requireDecision: true,
+        })
+      : null;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  const runId =
+    decisionContext?.runId ??
+    args.values['run-id'] ??
+    args.positionals[0] ??
+    selectLatestRunId(db);
+  if (!runId) {
+    db.close();
+    throw new Error('run id could not be inferred; pass --run-id <runId>');
+  }
   const audit = createAuditLogger({ repositories });
   const workflow = await repositories.getWorkflowInstance(runId);
   if (!workflow) {
@@ -537,9 +578,6 @@ async function commandResume(argv: string[], io: CliIO) {
     throw new Error(`run not found: ${runId}`);
   }
 
-  const pendingHuman = (await repositories.listHumanDecisions(runId)).filter(
-    (decision) => decision.status === 'pending',
-  );
   const gateway = createCommandGateway({ repositories });
   const runProvider = await repositories.getRunProviderConfig(runId);
   if (!runProvider) {
@@ -555,26 +593,45 @@ async function commandResume(argv: string[], io: CliIO) {
   });
 
   if (args.values['approve-human']) {
-    const humanGate = createHumanGate({ repositories });
-    for (const decision of pendingHuman) {
-      await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
-      await repositories.recordGateResult({
-        id: `gate_resume_${decision.id}`,
-        runId,
-        nodeId: decision.nodeId,
-        gateType: 'human',
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-      await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
-      await audit.append({
-        runId,
-        type: 'human.gate.approved',
-        payload: { decisionId: decision.id, nodeId: decision.nodeId },
-      });
+    if (!decisionContext?.decisionId) {
+      db.close();
+      throw new Error(
+        'pending human decision could not be inferred; pass --run-id and --decision-id',
+      );
     }
+    const decision = await repositories.getHumanDecision(
+      decisionContext.decisionId,
+    );
+    if (!decision || decision.runId !== runId) {
+      db.close();
+      throw new Error(
+        `human decision not found: ${decisionContext.decisionId}`,
+      );
+    }
+    if (decision.status !== 'pending') {
+      db.close();
+      throw new Error(
+        `decision is already ${decision.status}: ${decisionContext.decisionId}`,
+      );
+    }
+    const humanGate = createHumanGate({ repositories });
+    await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
+    await repositories.recordGateResult({
+      id: `gate_resume_${decision.id}`,
+      runId,
+      nodeId: decision.nodeId,
+      gateType: 'human',
+      status: 'passed',
+      durationMs: 0,
+      retries: 0,
+      createdAt: new Date().toISOString(),
+    });
+    await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
+    await audit.append({
+      runId,
+      type: 'human.gate.approved',
+      payload: { decisionId: decision.id, nodeId: decision.nodeId },
+    });
   }
 
   const engine = createWorkflowEngine({
@@ -622,7 +679,7 @@ async function commandRole(argv: string[], io: CliIO) {
     options: { repo: { type: 'string' } },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   const builtInRolesDir = getBuiltInRolesDir();
 
   if (subcommand === 'list') {
@@ -682,13 +739,15 @@ async function commandWorkflow(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(selectArgs.values.repo ?? process.cwd());
-    const shape = selectArgs.values.shape
-      ? readDemandShapeFile(resolve(repoPath, selectArgs.values.shape))
-      : null;
-    const demandText = shape
-      ? shape.rawText
-      : selectArgs.positionals.join(' ').trim();
+    const repoPath = resolveProjectRepoPath(selectArgs.values.repo);
+    const positionalDemandText = selectArgs.positionals.join(' ').trim();
+    const shapePath = selectArgs.values.shape
+      ? resolveDemandShapePath(repoPath, selectArgs.values.shape)
+      : positionalDemandText
+        ? null
+        : resolveDemandShapePath(repoPath);
+    const shape = shapePath ? readDemandShapeFile(shapePath) : null;
+    const demandText = shape ? shape.rawText : positionalDemandText;
     const selection = selectWorkflowTemplateForDemand({
       text: demandText,
       ...(shape ? { category: shape.category } : {}),
@@ -726,7 +785,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   const builtInWorkflowsDir = getBuiltInWorkflowsDir();
   const projectWorkflowsDir = join(repoPath, '.tekon', 'workflows');
 
@@ -872,14 +931,16 @@ async function commandDelivery(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+    if (!runId) {
+      db.close();
+      throw new Error('run id could not be inferred; pass --run-id <runId>');
+    }
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
     const preparation = await createPullRequestPreparation({
@@ -929,15 +990,16 @@ async function commandDelivery(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
     const db = openProjectDb(repoPath);
     try {
       migrateDatabase(db);
+      const runId =
+        args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+      if (!runId) {
+        throw new Error('run id could not be inferred; pass --run-id <runId>');
+      }
       const repositories = createRepositories(db);
       const audit = createAuditLogger({ repositories });
       const report = await queryPullRequestCiStatus({
@@ -975,15 +1037,16 @@ async function commandDelivery(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
     const db = openProjectDb(repoPath);
     try {
       migrateDatabase(db);
+      const runId =
+        args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+      if (!runId) {
+        throw new Error('run id could not be inferred; pass --run-id <runId>');
+      }
       const repositories = createRepositories(db);
       const audit = createAuditLogger({ repositories });
       const result = await watchPullRequestCiStatus({
@@ -1195,12 +1258,8 @@ async function commandApproval(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
     const maxContentChars = args.values['max-chars']
       ? Number(args.values['max-chars'])
       : 1_200;
@@ -1211,14 +1270,27 @@ async function commandApproval(argv: string[], io: CliIO) {
     migrateDatabase(db);
     try {
       const repositories = createRepositories(db);
+      const { runId, decisionId } = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'],
+      });
+      const explicitCommandDisplay = Boolean(
+        args.values.repo ??
+        args.values['run-id'] ??
+        args.positionals[0] ??
+        args.values['decision-id'],
+      );
       const audit = createAuditLogger({ repositories });
       const summary = await createHumanApprovalSummary({
         repoPath,
         repositories,
         audit,
         runId,
-        decisionId: args.values['decision-id'],
+        decisionId,
         maxContentChars,
+        commandDisplay: explicitCommandDisplay ? 'explicit' : 'default',
       });
       const evaluation = evaluateHumanApprovalSummary(summary);
       io.stdout.write(
@@ -1244,20 +1316,24 @@ async function commandApproval(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
-    const decisionId = args.values['decision-id'] ?? args.positionals[1];
-    if (!decisionId) {
-      throw new Error('--decision-id is required');
-    }
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
     try {
       const repositories = createRepositories(db);
+      const { runId, decisionId } = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
+        requireDecision: true,
+      });
+      if (!decisionId) {
+        throw new Error(
+          'pending human decision could not be inferred; pass --run-id and --decision-id',
+        );
+      }
       const audit = createAuditLogger({ repositories });
       const decision = await repositories.getHumanDecision(decisionId);
       if (!decision || decision.runId !== runId) {
@@ -1306,16 +1382,20 @@ async function commandEval(argv: string[], io: CliIO) {
     const args = parseArgs({
       args: rest,
       options: {
+        repo: { type: 'string' },
         shape: { type: 'string' },
         json: { type: 'boolean', default: false },
       },
       allowPositionals: true,
     });
     const shapeArg = args.values.shape ?? args.positionals[0];
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      throw new Error('demand shape path is required');
+      ensureInitialized(repoPath);
     }
-    const shape = readDemandShapeFile(resolve(shapeArg));
+    const shape = readDemandShapeFile(
+      resolveDemandShapePath(repoPath, shapeArg),
+    );
     const evaluation = evaluateDemandShape(shape);
     io.stdout.write(
       args.values.json
@@ -1337,18 +1417,22 @@ async function commandEval(argv: string[], io: CliIO) {
     const args = parseArgs({
       args: rest,
       options: {
+        repo: { type: 'string' },
         shape: { type: 'string' },
         template: { type: 'string' },
         json: { type: 'boolean', default: false },
       },
       allowPositionals: true,
     });
-    const shape = args.values.shape
-      ? readDemandShapeFile(resolve(args.values.shape))
-      : null;
-    const demandText = shape
-      ? shape.rawText
-      : args.positionals.join(' ').trim();
+    const repoPath = resolveProjectRepoPath(args.values.repo);
+    const positionalDemandText = args.positionals.join(' ').trim();
+    const shapePath = args.values.shape
+      ? resolveDemandShapePath(repoPath, args.values.shape)
+      : positionalDemandText
+        ? null
+        : resolveDemandShapePath(repoPath);
+    const shape = shapePath ? readDemandShapeFile(shapePath) : null;
+    const demandText = shape ? shape.rawText : positionalDemandText;
     const evaluation = evaluateWorkflowSelection({
       text: demandText,
       selectedTemplate: args.values.template ?? shape?.recommendedTemplate,
@@ -1383,12 +1467,8 @@ async function commandEval(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
-    const runId = args.values['run-id'] ?? args.positionals[0];
-    if (!runId) {
-      throw new Error('--run-id is required');
-    }
     const maxContentChars = args.values['max-chars']
       ? Number(args.values['max-chars'])
       : 1_200;
@@ -1399,14 +1479,27 @@ async function commandEval(argv: string[], io: CliIO) {
     migrateDatabase(db);
     try {
       const repositories = createRepositories(db);
+      const { runId, decisionId } = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'],
+      });
+      const explicitCommandDisplay = Boolean(
+        args.values.repo ??
+        args.values['run-id'] ??
+        args.positionals[0] ??
+        args.values['decision-id'],
+      );
       const audit = createAuditLogger({ repositories });
       const summary = await createHumanApprovalSummary({
         repoPath,
         repositories,
         audit,
         runId,
-        decisionId: args.values['decision-id'],
+        decisionId,
         maxContentChars,
+        commandDisplay: explicitCommandDisplay ? 'explicit' : 'default',
       });
       const evaluation = evaluateHumanApprovalSummary(summary);
       io.stdout.write(
@@ -1446,7 +1539,7 @@ async function commandEval(argv: string[], io: CliIO) {
       },
       allowPositionals: true,
     });
-    const repoPath = resolve(args.values.repo ?? process.cwd());
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     ensureInitialized(repoPath);
     const samplePath = resolve(
       repoPath,
@@ -1551,12 +1644,8 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
-  const runId = args.values['run-id'] ?? args.positionals[0];
-  if (!runId) {
-    throw new Error('--run-id is required');
-  }
   const samplePath = resolve(
     repoPath,
     args.values.samples ??
@@ -1571,6 +1660,11 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
   migrateDatabase(db);
   try {
     const repositories = createRepositories(db);
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+    if (!runId) {
+      throw new Error('run id could not be inferred; pass --run-id <runId>');
+    }
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
       throw new Error(`run not found: ${runId}`);
@@ -1691,12 +1785,8 @@ async function commandReview(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
-  const runId = args.values['run-id'] ?? args.positionals[0];
-  if (!runId) {
-    throw new Error('--run-id is required');
-  }
   const maxContentChars = args.values['max-chars']
     ? Number(args.values['max-chars'])
     : 1_200;
@@ -1705,6 +1795,12 @@ async function commandReview(argv: string[], io: CliIO) {
   }
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
+  const runId =
+    args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+  if (!runId) {
+    db.close();
+    throw new Error('run id could not be inferred; pass --run-id <runId>');
+  }
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
   const surface = await createWorkReviewSurface({
@@ -1713,6 +1809,10 @@ async function commandReview(argv: string[], io: CliIO) {
     audit,
     runId,
     maxContentChars,
+    commandDisplay:
+      (args.values.repo ?? args.values['run-id'] ?? args.positionals[0])
+        ? 'explicit'
+        : 'default',
   });
 
   if (args.values.json) {
@@ -1884,7 +1984,7 @@ async function commandClean(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
   const worktreesDir = join(repoPath, '.tekon', 'worktrees');
   let cleaned = 0;
@@ -1905,20 +2005,280 @@ function openCommandContext(argv: string[]) {
     },
     allowPositionals: true,
   });
-  const repoPath = resolve(args.values.repo ?? process.cwd());
+  const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
-  const runId = args.values['run-id'] ?? args.positionals[0];
-  if (!runId) {
-    throw new Error('--run-id is required');
-  }
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
+  const runId =
+    args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+  if (!runId) {
+    db.close();
+    throw new Error('run id could not be inferred; pass --run-id <runId>');
+  }
   return {
     repoPath,
     runId,
     db,
     repositories: createRepositories(db),
   };
+}
+
+function resolveRepoPathForInit(repoArg?: string): string {
+  if (repoArg) {
+    return resolve(repoArg);
+  }
+  return (
+    findInitializedRepoRoot(process.cwd()) ??
+    findGitRoot() ??
+    resolve(process.cwd())
+  );
+}
+
+function resolveProjectRepoPath(repoArg?: string): string {
+  if (repoArg) {
+    return resolve(repoArg);
+  }
+  return (
+    findInitializedRepoRoot(process.cwd()) ??
+    findGitRoot() ??
+    resolve(process.cwd())
+  );
+}
+
+function findInitializedRepoRoot(startDir: string): string | null {
+  return findUp(startDir, (dir) =>
+    existsSync(join(dir, '.tekon', 'config.yaml')),
+  );
+}
+
+function findUp(
+  startDir: string,
+  predicate: (candidateDir: string) => boolean,
+): string | null {
+  let current = resolve(startDir);
+  for (;;) {
+    if (predicate(current)) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function findGitRoot(): string | null {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function resolveDemandShapePath(
+  repoPath: string,
+  shapeArg?: string,
+  options: {
+    latestMustBeApproved?: boolean;
+    latestMustBeUnapproved?: boolean;
+  } = {},
+): string {
+  if (shapeArg) {
+    const shapePath = resolveExplicitPath(repoPath, shapeArg);
+    if (!existsSync(shapePath)) {
+      throw new Error(`demand shape file not found: ${shapePath}`);
+    }
+    return shapePath;
+  }
+
+  const candidates = listDemandShapeCandidates(repoPath);
+  if (candidates.length === 0) {
+    throw new Error(
+      `no demand shape files found in ${join(repoPath, '.tekon', 'demands')}`,
+    );
+  }
+
+  const latest = candidates[0];
+  if (options.latestMustBeApproved && !latest.shape.approved) {
+    throw new Error(
+      `latest demand shape is not approved: ${latest.path}; run tekon demand approve or pass --demand-file <path>`,
+    );
+  }
+  if (options.latestMustBeUnapproved && latest.shape.approved) {
+    throw new Error(
+      `latest demand shape is already approved: ${latest.path}; pass --shape <path> to approve a historical demand shape`,
+    );
+  }
+
+  return latest.path;
+}
+
+function resolveExplicitPath(repoPath: string, inputPath: string): string {
+  if (inputPath.startsWith('/')) {
+    return inputPath;
+  }
+  const cwdPath = resolve(process.cwd(), inputPath);
+  if (existsSync(cwdPath)) {
+    return cwdPath;
+  }
+  return resolve(repoPath, inputPath);
+}
+
+function listDemandShapeCandidates(repoPath: string): Array<{
+  path: string;
+  shape: DemandShape;
+  mtimeMs: number;
+}> {
+  const demandsDir = join(repoPath, '.tekon', 'demands');
+  if (!existsSync(demandsDir)) {
+    return [];
+  }
+  return readdirSync(demandsDir)
+    .filter((entry) => entry.endsWith('.json'))
+    .map((entry) => {
+      const shapePath = join(demandsDir, entry);
+      return {
+        path: shapePath,
+        shape: readDemandShapeFile(shapePath),
+        mtimeMs: statSync(shapePath).mtimeMs,
+      };
+    })
+    .sort((left, right) => {
+      const createdCompare = right.shape.createdAt.localeCompare(
+        left.shape.createdAt,
+      );
+      if (createdCompare !== 0) {
+        return createdCompare;
+      }
+      const mtimeCompare = right.mtimeMs - left.mtimeMs;
+      if (mtimeCompare !== 0) {
+        return mtimeCompare;
+      }
+      return right.path.localeCompare(left.path);
+    });
+}
+
+function selectLatestRunId(db: TekonDatabase): string | null {
+  const row = db
+    .prepare(
+      `select id
+       from workflow_instances
+       order by datetime(updated_at) desc, datetime(created_at) desc, id desc
+       limit 1`,
+    )
+    .get() as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+function selectLatestPendingHumanDecision(
+  db: TekonDatabase,
+): { runId: string; decisionId: string } | null {
+  const row = db
+    .prepare(
+      `select run_id as runId, id as decisionId
+       from human_decisions
+       where status = 'pending'
+       order by datetime(created_at) desc, id desc
+       limit 1`,
+    )
+    .get() as { runId: string; decisionId: string } | undefined;
+  return row ?? null;
+}
+
+function countPendingHumanDecisionsForRun(
+  db: TekonDatabase,
+  runId: string,
+): number {
+  const row = db
+    .prepare(
+      `select count(*) as count
+       from human_decisions
+       where run_id = ? and status = 'pending'`,
+    )
+    .get(runId) as { count: number } | undefined;
+  return row?.count ?? 0;
+}
+
+function assertUnambiguousPendingDecisionForRun(
+  db: TekonDatabase,
+  runId: string,
+): void {
+  const pendingCount = countPendingHumanDecisionsForRun(db, runId);
+  if (pendingCount > 1) {
+    throw new Error(
+      `multiple pending human decisions found for run ${runId}; pass --decision-id <decisionId>`,
+    );
+  }
+}
+
+async function resolveHumanDecisionContext(input: {
+  db: TekonDatabase;
+  repositories: TekonRepositories;
+  explicitRunId?: string;
+  explicitDecisionId?: string;
+  requireDecision?: boolean;
+}): Promise<{ runId: string; decisionId?: string }> {
+  if (input.explicitDecisionId) {
+    const decision = await input.repositories.getHumanDecision(
+      input.explicitDecisionId,
+    );
+    if (!decision) {
+      throw new Error(`human decision not found: ${input.explicitDecisionId}`);
+    }
+    if (input.explicitRunId && decision.runId !== input.explicitRunId) {
+      throw new Error(
+        `decision ${decision.id} belongs to run ${decision.runId}, not ${input.explicitRunId}`,
+      );
+    }
+    return { runId: decision.runId, decisionId: decision.id };
+  }
+
+  if (input.explicitRunId) {
+    assertUnambiguousPendingDecisionForRun(input.db, input.explicitRunId);
+    const pendingDecision = (
+      await input.repositories.listHumanDecisions(input.explicitRunId)
+    )
+      .filter((decision) => decision.status === 'pending')
+      .at(-1);
+    if (!pendingDecision && input.requireDecision) {
+      throw new Error(
+        `run has no pending human decision: ${input.explicitRunId}`,
+      );
+    }
+    return {
+      runId: input.explicitRunId,
+      decisionId: pendingDecision?.id,
+    };
+  }
+
+  const latestPendingDecision = selectLatestPendingHumanDecision(input.db);
+  if (latestPendingDecision) {
+    assertUnambiguousPendingDecisionForRun(
+      input.db,
+      latestPendingDecision.runId,
+    );
+    return {
+      runId: latestPendingDecision.runId,
+      decisionId: latestPendingDecision.decisionId,
+    };
+  }
+
+  if (input.requireDecision) {
+    throw new Error(
+      'pending human decision could not be inferred; pass --run-id and --decision-id',
+    );
+  }
+
+  const runId = selectLatestRunId(input.db);
+  if (!runId) {
+    throw new Error('run id could not be inferred; pass --run-id <runId>');
+  }
+  return { runId };
 }
 
 function openProjectDb(repoPath: string) {

@@ -56,12 +56,8 @@ describe('human approval summary', () => {
       impact: { status: 'available', files: ['packages/web/src/App.tsx'] },
     });
     expect(summary.summaryText).toContain('## 处理入口');
-    expect(summary.summaryText).toContain(
-      'tekon resume --run-id run_1 --approve-human --repo /repo/tekon',
-    );
-    expect(summary.rejectCommand).toBe(
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --repo /repo/tekon',
-    );
+    expect(summary.summaryText).toContain('tekon resume --approve-human');
+    expect(summary.rejectCommand).toBe('tekon approval reject');
     expect(summary.summaryText).toContain(summary.rejectCommand);
     expect(summary.rejectCommand).not.toMatch(/[<>]/u);
 
@@ -77,6 +73,47 @@ describe('human approval summary', () => {
         expect.objectContaining({ id: 'impact-context-present', passed: true }),
       ]),
     );
+  });
+
+  it('uses explicit command entries when the caller is reviewing a non-default context', () => {
+    const summary = buildHumanApprovalSummary({
+      repoPath: '/repo/tekon',
+      decision: {
+        id: 'decision_1',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateResultId: 'gate_1',
+        status: 'pending',
+        note: [
+          'request: Review before continuing.',
+          'exactCommand: tekon delivery create-pr --run-id run_1',
+          'risk: high',
+        ].join('\n'),
+        createdAt: '2026-06-08T00:00:00.000Z',
+      },
+      node: null,
+      gate: {
+        id: 'gate_1',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateType: 'human',
+        status: 'blocked',
+        durationMs: 0,
+        retries: 0,
+        failureClassification: 'human-approval',
+        createdAt: '2026-06-08T00:00:00.000Z',
+      },
+      surface: createSurfaceFixture(),
+      commandDisplay: 'explicit',
+    });
+
+    expect(summary.approveCommand).toBe(
+      'tekon resume --run-id run_1 --approve-human --repo /repo/tekon',
+    );
+    expect(summary.rejectCommand).toBe(
+      'tekon approval reject --run-id run_1 --decision-id decision_1 --repo /repo/tekon',
+    );
+    expect(evaluateHumanApprovalSummary(summary).ready).toBe(true);
   });
 
   it('fails evaluation when command context is not recorded', () => {
@@ -109,14 +146,12 @@ describe('human approval summary', () => {
     const summary = buildReadySummary();
 
     for (const rejectCommand of [
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --actor <name> --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --actor alice --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --actor=<name> --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --actor=alice --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --decision-id --repo /repo/tekon',
-      'tekon approval reject --run-id --decision-id decision_1 --repo /repo/tekon',
-      'tekon approval reject --run-id run_1 --decision-id decision_1 --repo',
+      'tekon approval reject --actor <name>',
+      'tekon approval reject --actor alice',
+      'tekon approval reject --actor=<name>',
+      'tekon approval reject --actor=alice',
+      'tekon approval',
+      'tekon reject',
     ]) {
       const summaryText = summary.summaryText.replace(
         summary.rejectCommand,

@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>天工 Tekon 用户使用手册</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f6f2e8;
+        color: #1d2530;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          sans-serif;
+        line-height: 1.72;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 48px 28px 80px;
+      }
+      h1 {
+        font-size: 40px;
+        margin: 0 0 24px;
+      }
+      h2 {
+        margin-top: 42px;
+        border-top: 1px solid #d8cfbf;
+        padding-top: 28px;
+      }
+      h3 {
+        margin-top: 30px;
+      }
+      code {
+        background: #eee4d2;
+        border: 1px solid #dacdb8;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      pre {
+        background: #111827;
+        color: #f8fafc;
+        border-radius: 8px;
+        padding: 16px;
+        overflow: auto;
+        line-height: 1.55;
+      }
+      pre code {
+        background: transparent;
+        border: 0;
+        color: inherit;
+        padding: 0;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .table {
+        background: #fffaf0;
+        color: #1d2530;
+        border: 1px solid #d8cfbf;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>天工（Tekon）用户使用手册</h1>
+      <p>
+        适用对象：希望把研发需求从“口头描述”推进到“可审阅证据、可验证结果、可准备
+        PR”的个人开发者、技术负责人、研发效能团队和内部工具团队。
+      </p>
+      <p>
+        名称说明：天工的英文名是 Tekon，取 Tech + Kong
+        的融合谐音，中文名取“天工”。
+      </p>
+      <p>
+        适用范围：当前本地 V2
+        能力。本文只描述用户怎么使用、会得到什么、如何判断结果、遇到问题怎么处理，以及当前不能做什么。
+      </p>
+      <h2>1. 天工是什么</h2>
+      <p>
+        天工（Tekon）是一个本地 Agent workflow
+        驾驶系统。它不是聊天机器人，也不是自动上线平台；它更像一个“受控研发工作台”：用户把一个低到中风险的研发需求交给天工，天工会按固定
+        workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀
+        artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。
+      </p>
+      <p>
+        天工的核心目标是增强人类交付能力，而不是替人类做高风险决策。它可以帮助你把需求推进到“可以人工审阅、可以准备
+        PR、可以继续验证”的状态；合入、上线、权限扩大、生产变更仍然由人控制。
+      </p>
+      <p>当前更准确的定位：</p>
+      <ul>
+        <li>一个本地 CLI/Web 工具。</li>
+        <li>一个受控 workflow 执行器。</li>
+        <li>一个证据和审阅材料收集器。</li>
+        <li>一个 PR 准备助手。</li>
+        <li>一个研发工作样本评估器。</li>
+      </ul>
+      <p>当前不是：</p>
+      <ul>
+        <li>生产级远程多租户平台。</li>
+        <li>自动 merge / 自动上线系统。</li>
+        <li>完整 DLP、安全审计或 OS 级沙箱。</li>
+        <li>能稳定处理所有真实 LLM 任务的生产系统。</li>
+        <li>飞书 IM 通知机器人；当前只有可复制审批摘要。</li>
+      </ul>
+      <h2>2. 天工解决什么问题</h2>
+      <h3>2.1 需求进入研发前不清楚</h3>
+      <p>
+        真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给
+        Agent 容易出现边界不清、验收标准不清、风险不清。天工提供
+        <code>demand shape</code>，先把需求塑形成需求卡，包含：
+      </p>
+      <ul>
+        <li>需求标题和正文。</li>
+        <li>推荐 workflow 模板。</li>
+        <li>风险等级和风险标签。</li>
+        <li>非目标。</li>
+        <li>开放问题。</li>
+        <li>验收标准。</li>
+      </ul>
+      <p>用户可以先审阅和批准需求卡，再发起执行。</p>
+      <h3>2.2 不知道该选什么 workflow</h3>
+      <p>不同工作不应该都套同一个流程。天工提供受控模板推荐：</p>
+      <ul>
+        <li><code>standard-feature</code>：标准功能。</li>
+        <li><code>bugfix</code>：缺陷修复。</li>
+        <li><code>test-improvement</code>：测试补齐。</li>
+        <li><code>docs-update</code>：文档更新。</li>
+        <li><code>plan-only</code>：只做方案，不执行代码改动。</li>
+      </ul>
+      <p>
+        <code>workflow select</code> 会给出推荐模板和理由；<code
+          >eval workflow-selection</code
+        >
+        会检查人工选择是否合理。
+      </p>
+      <h3>2.3 Agent 输出不可审阅</h3>
+      <p>
+        很多 Agent 工具会把结果散落在对话、文件和日志里。天工要求 provider
+        输出结构化 artifact，并把 gate、日志、审计事件和 PR
+        包统一组织起来。用户可以通过 <code>review</code> 或 Web dashboard 看：
+      </p>
+      <ul>
+        <li>readiness 失败项。</li>
+        <li>证据入口。</li>
+        <li>Gate 失败诊断。</li>
+        <li>影响文件和 diff。</li>
+        <li>Artifact 正文预览。</li>
+        <li>Gate 日志。</li>
+        <li>PR 准备包。</li>
+        <li>下一步命令建议。</li>
+      </ul>
+      <h3>2.4 远端副作用需要人控制</h3>
+      <p>
+        真实 push、创建 PR、等待远端 CI
+        都属于有副作用或外部依赖的动作。天工把这些动作拆开：
+      </p>
+      <ul>
+        <li><code>delivery dry-run</code>：只看交付计划。</li>
+        <li><code>delivery prepare</code>：只生成本地 PR 包。</li>
+        <li>
+          <code>delivery create-pr --approve-human</code>：人工明确批准后才 push
+          和创建 PR。
+        </li>
+        <li>
+          <code>delivery ci-status</code> / <code>ci-watch</code>：只读查询 PR
+          checks，不 rerun CI、不 merge、不上线。
+        </li>
+      </ul>
+      <h3>2.5 需要判断一次 run 是否真的可交付</h3>
+      <p>
+        <code>eval readiness</code> 会评估单个 run 是否具备进入人工审阅或 PR
+        提交流程的最小证据面。<code>eval work-usability</code>
+        会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo 宣称可用。
+      </p>
+      <h2>3. 核心用户场景</h2>
+      <h3>场景 A：我有一个小功能，希望推进到可审 PR</h3>
+      <p>适用例子：</p>
+      <ul>
+        <li>给内部工具增加一个筛选条件。</li>
+        <li>为 CLI 补一个低风险命令。</li>
+        <li>给 Web dashboard 增加一个入口。</li>
+      </ul>
+      <p>推荐流程：</p>
+      <ol>
+        <li><code>tekon init</code> 初始化目标仓库。</li>
+        <li><code>demand shape</code> 把需求写成需求卡。</li>
+        <li>人工审阅需求卡。</li>
+        <li><code>demand approve</code> 批准需求卡。</li>
+        <li><code>run</code> 发起 workflow。</li>
+        <li><code>status</code> 和 <code>review</code> 查看结果。</li>
+        <li><code>eval readiness</code> 判断是否可审。</li>
+        <li><code>delivery prepare</code> 生成 PR 准备包。</li>
+        <li>
+          人工确认后 <code>delivery create-pr --approve-human</code> 创建远端
+          PR。
+        </li>
+        <li>
+          <code>delivery ci-status</code> 或 <code>ci-watch</code> 写回远端 CI
+          证据。
+        </li>
+      </ol>
+      <h3>场景 B：我只想修一个 bug，但需要人工确认风险</h3>
+      <p>适用例子：</p>
+      <ul>
+        <li>修改一个已有逻辑分支。</li>
+        <li>修复一个低风险接口问题。</li>
+        <li>调整一个内部工具的状态处理。</li>
+      </ul>
+      <p>推荐流程：</p>
+      <ol>
+        <li>使用 <code>bugfix</code> 模板运行。</li>
+        <li>如果触发 human gate，先执行 <code>approval summary</code>。</li>
+        <li>用 <code>eval approval-summary</code> 检查审批摘要是否完整。</li>
+        <li>人工判断后选择：</li>
+        <p>
+          - <code>resume --approve-human</code>：批准继续。 -
+          <code>approval reject</code>：拒绝并阻断 workflow。
+        </p>
+      </ol>
+      <h3>场景 C：我只想补测试</h3>
+      <p>适用例子：</p>
+      <ul>
+        <li>为某个模块补单测。</li>
+        <li>为失败路径补回归测试。</li>
+        <li>为 CLI 或 Web API 增加覆盖。</li>
+      </ul>
+      <p>推荐流程：</p>
+      <ol>
+        <li>
+          <code>workflow select</code> 确认是否推荐
+          <code>test-improvement</code>。
+        </li>
+        <li><code>run --template test-improvement</code> 执行。</li>
+        <li>看 gate 是否通过。</li>
+        <li>用 <code>review</code> 检查 artifact 和测试证据。</li>
+      </ol>
+      <h3>场景 D：我只想写文档或方案</h3>
+      <p>适用例子：</p>
+      <ul>
+        <li>更新用户手册。</li>
+        <li>整理验收报告。</li>
+        <li>写技术方案或产品方案。</li>
+      </ul>
+      <p>推荐模板：</p>
+      <ul>
+        <li><code>docs-update</code>：文档更新。</li>
+        <li><code>plan-only</code>：只做计划或方案，不推进代码改动。</li>
+      </ul>
+      <h3>场景 E：我要判断天工是否已经能用于真实工作</h3>
+      <p>推荐流程：</p>
+      <ol>
+        <li>挑选 2 到 3 个真实但低风险的仓库。</li>
+        <li>准备 10 个真实或历史需求。</li>
+        <li>
+          每次 run 后用 <code>eval work-usability record</code> 写入样本清单。
+        </li>
+        <li>用 <code>eval work-usability --samples</code> 评估样本集。</li>
+        <li>把 Markdown/HTML 报告保存到 <code>docs/reviews/</code>。</li>
+      </ol>
+      <h2>4. Quick Start</h2>
+      <p>
+        以下示例假设 <code>tekon</code> 已安装到
+        PATH，并且你正在目标项目根目录执行命令。没有全局安装时，可用
+        <code>node /path/to/tekon/packages/cli/dist/index.js</code> 替换
+        <code>tekon</code>；从其它目录操作目标仓库时，再显式追加
+        <code>--repo /path/to/project</code>。
+      </p>
+      <h3>4.1 安装和构建</h3>
+      <pre><code>npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+npm exec --yes -- pnpm@10.12.1 build</code></pre>
+      <p>构建后 CLI 路径：</p>
+      <pre><code>node packages/cli/dist/index.js</code></pre>
+      <p>如果将 CLI 安装到 PATH，命令名是：</p>
+      <pre><code>tekon</code></pre>
+      <p>本文默认使用 <code>tekon</code> 示例，重点展示普通用户的最短路径。</p>
+      <h3>4.2 初始化目标仓库</h3>
+      <pre><code>tekon init</code></pre>
+      <p>
+        初始化会在目标仓库生成
+        <code>.tekon/</code>
+        运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session
+        token。
+      </p>
+      <h3>4.3 检查目标仓库命令画像</h3>
+      <pre><code>tekon workflow preflight</code></pre>
+      <p>重点看：</p>
+      <ul>
+        <li><code>status=resolved</code>：该 gate 命令已解析。</li>
+        <li>
+          <code>status=missing</code>：目标仓库缺少对应命令，需要补 repo
+          profile。
+        </li>
+        <li><code>status=not-applicable</code>：用户显式声明不适用。</li>
+        <li>
+          <code>suggestedCommand</code>：天工从
+          <code>package.json</code> 中推断出的候选命令，需要人确认。
+        </li>
+      </ul>
+      <h3>4.4 塑形需求</h3>
+      <pre><code>tekon demand shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</code></pre>
+      <p>
+        命令会输出 <code>shapePath</code> 和 <code>reviewPath</code>。先读
+        Markdown 审阅稿，确认需求边界后批准：
+      </p>
+      <pre><code>tekon demand approve</code></pre>
+      <p>可选：评估需求卡质量。</p>
+      <pre><code>tekon eval demand-shape</code></pre>
+      <h3>4.5 发起运行</h3>
+      <pre><code>tekon run --agent mock</code></pre>
+      <p>
+        输出里会有 <code>runId</code>。后续常规命令默认读取最近一次
+        run；只有查看历史 run 或避免歧义时才需要手动传 <code>--run-id</code>。
+      </p>
+      <h3>4.6 查看结果</h3>
+      <pre><code>tekon status
+tekon review
+tekon eval readiness</code></pre>
+      <p>
+        如果 <code>ready=true</code>，通常可以进入人工审阅或 PR
+        准备。它不代表可以自动合入。
+      </p>
+      <h3>4.7 准备 PR 材料</h3>
+      <pre><code>tekon delivery prepare</code></pre>
+      <p>这一步只生成本地 PR 包，不 push、不创建 PR。</p>
+      <h3>4.8 创建远端 PR</h3>
+      <p>确认 PR 包、diff、gate 和 readiness 后，才执行：</p>
+      <pre><code>tekon delivery create-pr --approve-human</code></pre>
+      <p>这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。</p>
+      <h3>4.9 查询远端 CI</h3>
+      <pre><code>tekon delivery ci-status</code></pre>
+      <p>如果希望等待 checks 到终态：</p>
+      <pre><code>tekon delivery ci-watch --max-attempts 20 --interval-ms 15000</code></pre>
+      <h3>4.10 默认上下文规则</h3>
+      <p>
+        天工的常规 CLI
+        使用方式是“进入目标仓库根目录后执行短命令”。默认推断规则如下：
+      </p>
+      <ul>
+        <li>
+          Repo：优先使用 <code>--repo</code>；不传时从当前目录向上查找
+          <code>.tekon/config.yaml</code>，找不到时使用当前 Git 仓库根目录。
+        </li>
+        <li>
+          Demand shape：<code>demand shape</code> 默认写入
+          <code>.tekon/demands/</code>；<code>demand approve</code>
+          默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传
+          <code>--shape &lt;path&gt;</code>；<code>eval demand-shape</code>
+          默认评估最近一张需求卡。
+        </li>
+        <li>
+          Run：<code>run</code> 没有需求文本且没有
+          <code>--demand-file</code>
+          时，默认读取最近需求卡，且该需求卡必须已批准；<code>status</code>、<code>review</code>、<code
+            >eval readiness</code
+          >、<code>delivery prepare</code> 等默认使用最近一次 run。
+        </li>
+        <li>
+          Human decision：<code>approval summary</code>、<code
+            >eval approval-summary</code
+          >、<code>approval reject</code> 和
+          <code>resume --approve-human</code> 默认使用最近的 pending human
+          decision；如果同一 run 同时存在多个 pending decision，必须显式传
+          <code>--decision-id</code>。
+        </li>
+      </ul>
+      <p>
+        需要显式传参的情况通常只有三类：从其它目录操作目标仓库时传
+        <code>--repo</code>；查看或处理历史对象时传
+        <code>--run-id</code
+        >、<code>--shape</code>、<code>--demand-file</code>、<code>--decision-id</code>；执行高风险动作时保留
+        <code>--approve-human</code> 或
+        <code>--allow-dirty-base</code> 作为明确人工确认。
+      </p>
+      <p>
+        如果你显式传了 <code>--repo</code>、<code>--run-id</code> 或
+        <code>--decision-id</code> 查看跨仓库或历史对象，<code>review</code> 和
+        <code>approval summary</code> 会输出带 id 和 repo
+        的精确后续命令，避免复制短命令后误操作到最新 run、最新待审批项或当前
+        shell 目录。
+      </p>
+      <h2>5. 核心概念</h2>
+      <h3>5.1 Repo</h3>
+      <p>
+        目标仓库，也就是你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。
+      </p>
+      <h3>5.2 <code>.tekon/</code></h3>
+      <p>天工在目标仓库中的运行态目录。它保存：</p>
+      <ul>
+        <li>配置。</li>
+        <li>SQLite 数据库。</li>
+        <li>run artifact。</li>
+        <li>gate 日志。</li>
+        <li>worktree。</li>
+        <li>demand shape 文件。</li>
+        <li>Web session token。</li>
+      </ul>
+      <p>
+        通常不提交 <code>.tekon/</code>。重要结论应写入
+        <code>docs/reviews/</code> 或其它可提交文档。
+      </p>
+      <h3>5.3 Run</h3>
+      <p>
+        一次 workflow 执行。每个 run 有唯一 <code>runId</code>，例如
+        <code>run_xxx</code>。用户查看状态、审阅材料、准备 PR、查询 CI 都围绕
+        run id 进行。
+      </p>
+      <h3>5.4 Workflow</h3>
+      <p>一组有顺序和依赖的角色节点。当前常用内置模板：</p>
+      <ul>
+        <li><code>standard-feature</code></li>
+        <li><code>bugfix</code></li>
+        <li><code>test-improvement</code></li>
+        <li><code>docs-update</code></li>
+        <li><code>plan-only</code></li>
+      </ul>
+      <h3>5.5 Role</h3>
+      <p>
+        执行节点的角色，例如 PM、RD、QA、Reviewer、PMO。角色决定
+        prompt、知识和工具策略。
+      </p>
+      <h3>5.6 Gate</h3>
+      <p>验证关卡。常见 gate：</p>
+      <ul>
+        <li>build</li>
+        <li>lint</li>
+        <li>test</li>
+        <li>schema</li>
+        <li>security-scan</li>
+        <li>human</li>
+      </ul>
+      <p>Gate 不通过时 workflow 不应被当成可交付。</p>
+      <h3>5.7 Artifact</h3>
+      <p>
+        结构化产物，例如需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI
+        状态。Artifact 是人工审阅和自动评估的主要证据。
+      </p>
+      <h3>5.8 Review Surface</h3>
+      <p>
+        聚合审阅面。CLI 命令是 <code>review</code>，Web dashboard
+        也使用同一套数据。它把用户最需要看的东西放在一起。
+      </p>
+      <h3>5.9 Readiness</h3>
+      <p>
+        单次 run 的工作就绪度评估。它回答：“这次 run 是否已经具备进入人工审阅或
+        PR 准备的最低证据？”
+      </p>
+      <h3>5.10 Work Usability</h3>
+      <p>
+        样本集级评估。它回答：“天工是否已经在足够多真实样本上表现稳定，可以作为受控工作工具试用？”
+      </p>
+      <h2>6. 命令详解</h2>
+      <h3>6.1 <code>init</code></h3>
+      <p>用途：初始化目标仓库。</p>
+      <pre><code>tekon init</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          <code>--repo &lt;path&gt;</code
+          >：从其它目录初始化指定仓库时使用。不传时自动使用当前 Git
+          仓库根目录或当前目录。
+        </li>
+      </ul>
+      <p>结果：</p>
+      <ul>
+        <li>创建 <code>.tekon/</code>。</li>
+        <li>创建 <code>.tekon/config.yaml</code>。</li>
+        <li>创建 <code>.tekon/repo-profile.yaml</code>。</li>
+        <li>创建 <code>.tekon/web-session.json</code>。</li>
+        <li>创建运行所需目录。</li>
+      </ul>
+      <p>问题处理：</p>
+      <ul>
+        <li>
+          如果目标目录不是 Git 仓库，后续涉及 diff、worktree、delivery
+          的功能可能失败。
+        </li>
+        <li>
+          如果 <code>.tekon/web-session.json</code> 被删除，Web 写操作会缺
+          token；可重新执行 <code>init</code>。
+        </li>
+      </ul>
+      <h3>6.2 <code>workflow preflight</code></h3>
+      <p>用途：在真正运行前检查 workflow 会用哪些命令。</p>
+      <pre><code>tekon workflow preflight</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          第一个位置参数：模板名；不传时默认 <code>standard-feature</code>。
+        </li>
+        <li><code>--repo &lt;path&gt;</code>：只在跨仓库检查时使用。</li>
+      </ul>
+      <p>如何判断结果：</p>
+      <ul>
+        <li><code>resolved</code>：可执行。</li>
+        <li><code>missing</code>：缺命令，需要补 repo profile。</li>
+        <li><code>not-applicable</code>：用户已显式声明不适用。</li>
+      </ul>
+      <p>常见处理：</p>
+      <ul>
+        <li>
+          如果提示 <code>missing-command</code>，先看
+          <code>suggestedCommand</code>，确认语义后写入
+          <code>.tekon/repo-profile.yaml</code>。
+        </li>
+        <li>
+          不要为了通过 gate 随意配置
+          <code>notApplicable</code>；必须写清楚原因。
+        </li>
+        <li>
+          <code>security-scan</code> 不应通过 <code>notApplicable</code> 绕过。
+        </li>
+      </ul>
+      <h3>6.3 <code>workflow select</code></h3>
+      <p>用途：根据需求文本推荐受控模板。</p>
+      <pre><code>tekon workflow select "补齐 CLI 单元测试"</code></pre>
+      <p>结果：</p>
+      <ul>
+        <li>推荐模板。</li>
+        <li>候选模板。</li>
+        <li>推荐理由。</li>
+      </ul>
+      <p>注意：</p>
+      <ul>
+        <li>这不是动态规划。</li>
+        <li>不会自动保存 workflow。</li>
+        <li>
+          人可以覆盖推荐，但建议用 <code>eval workflow-selection</code> 检查。
+        </li>
+      </ul>
+      <h3>6.4 <code>demand shape</code></h3>
+      <p>用途：把原始需求转成可审阅需求卡。</p>
+      <pre><code>tekon demand shape "需求文本"</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          <code>--no-write</code>：只预览，不写入 <code>.tekon/demands/</code>。
+        </li>
+        <li><code>--repo &lt;path&gt;</code>：只在跨仓库塑形时使用。</li>
+        <li><code>--format json</code>：输出 JSON。</li>
+      </ul>
+      <p>结果：</p>
+      <ul>
+        <li>JSON 源文件。</li>
+        <li>Markdown 审阅稿。</li>
+        <li>推荐模板。</li>
+        <li>风险和验收信息。</li>
+      </ul>
+      <p>问题处理：</p>
+      <ul>
+        <li>
+          如果
+          <code>openQuestions</code>
+          不为空，建议先补充需求；也可以在明确接受风险后批准。
+        </li>
+        <li>
+          如果推荐模板不符合预期，先用 <code>workflow select</code> 和
+          <code>eval workflow-selection</code> 核对原因。
+        </li>
+      </ul>
+      <h3>6.5 <code>demand approve</code></h3>
+      <p>用途：人工批准需求卡进入执行阶段。</p>
+      <pre><code>tekon demand approve</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          位置参数或 <code>--shape &lt;path&gt;</code>：指定需求卡 JSON
+          路径；不传时默认批准最近需求卡。如果最近需求卡已经批准，历史未批准需求卡必须显式指定。
+        </li>
+        <li>
+          <code>--actor &lt;name&gt;</code
+          >：记录批准操作者；建议使用真实账号或姓名。
+        </li>
+      </ul>
+      <p>结果：</p>
+      <ul>
+        <li>需求卡标记为 approved。</li>
+        <li>写入批准时间和批准人。</li>
+      </ul>
+      <p>注意：</p>
+      <ul>
+        <li>批准需求卡不等于批准 PR 创建。</li>
+        <li>批准需求卡不绕过后续 gate。</li>
+      </ul>
+      <h3>6.6 <code>run</code></h3>
+      <p>用途：发起一次 workflow。</p>
+      <p>模板运行：</p>
+      <pre><code>tekon run "需求文本" --template standard-feature --agent mock</code></pre>
+      <p>需求卡运行：</p>
+      <pre><code>tekon run --agent mock</code></pre>
+      <p>动态 dry-run：</p>
+      <pre><code>tekon run --dynamic --dry-run "需求文本" --agent mock</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li><code>--template &lt;name&gt;</code>：使用内置模板。</li>
+        <li>
+          <code>--demand-file &lt;path&gt;</code
+          >：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
+        </li>
+        <li><code>--agent mock</code>：使用 mock provider。</li>
+        <li><code>--agent claude-code</code>：使用 Claude Code adapter。</li>
+        <li><code>--dynamic --dry-run</code>：只生成动态 workflow 预览。</li>
+        <li>
+          <code>--allow-dirty-base</code>：允许基于当前未提交业务改动运行。
+        </li>
+        <li><code>--repo &lt;path&gt;</code>：只在跨仓库运行时使用。</li>
+      </ul>
+      <p>如何判断结果：</p>
+      <ul>
+        <li>
+          输出 <code>runId</code> 后，用 <code>status</code> 和
+          <code>review</code> 继续检查。
+        </li>
+        <li><code>status=passed</code> 不代表可以自动合入。</li>
+        <li>有 pending human gate 时，需要先处理审批。</li>
+      </ul>
+      <h3>6.7 <code>status</code></h3>
+      <p>用途：查看 run 当前状态。</p>
+      <pre><code>tekon status</code></pre>
+      <p>常见字段：</p>
+      <ul>
+        <li><code>workflowStatus</code>：整体状态。</li>
+        <li><code>currentNodeId</code>：当前节点。</li>
+        <li><code>artifacts</code>：产物数量。</li>
+        <li><code>gates</code>：gate 数量。</li>
+        <li><code>pendingHumanDecisions</code>：待人工决策数量。</li>
+      </ul>
+      <h3>6.8 <code>approval summary</code></h3>
+      <p>用途：生成可复制审批摘要。</p>
+      <pre><code>tekon approval summary</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          <code>--run-id &lt;runId&gt;</code>：查看指定历史 run
+          的审批项时使用；不传时默认最近的 pending human decision。同一 run
+          有多个 pending decision 时必须传 <code>--decision-id</code>。
+        </li>
+        <li>
+          <code>--decision-id &lt;decisionId&gt;</code>：同一 run 有多个 pending
+          decision 或需要指定历史决策时使用。
+        </li>
+        <li>
+          <code>--max-chars &lt;n&gt;</code>：限制 artifact 和日志预览长度，默认
+          1200。
+        </li>
+        <li><code>--json</code>：输出结构化 JSON，便于接入其它工具。</li>
+      </ul>
+      <p>摘要包含：</p>
+      <ul>
+        <li>decision id。</li>
+        <li>run id。</li>
+        <li>node id。</li>
+        <li>需求标题。</li>
+        <li>风险。</li>
+        <li>exact command。</li>
+        <li>影响文件状态。</li>
+        <li>readiness 失败项。</li>
+        <li>证据入口。</li>
+        <li>批准命令。</li>
+        <li>拒绝命令。</li>
+        <li>Web 处理入口。</li>
+      </ul>
+      <p>注意：</p>
+      <ul>
+        <li>摘要是审批材料，不是通知机器人。</li>
+        <li>默认拒绝命令不携带操作者示例，避免复制错误审计信息。</li>
+      </ul>
+      <h3>6.9 <code>eval approval-summary</code></h3>
+      <p>用途：检查审批摘要是否完整。</p>
+      <pre><code>tekon eval approval-summary</code></pre>
+      <p>判断方式：</p>
+      <ul>
+        <li><code>ready=true</code>：摘要具备基本审批材料。</li>
+        <li>
+          <code>ready=false</code>：不建议拿给 reviewer 决策，应先补证据。
+        </li>
+      </ul>
+      <p>当前会检查：</p>
+      <ul>
+        <li>pending decision 是否存在。</li>
+        <li>风险信息是否存在。</li>
+        <li>exact command 是否存在。</li>
+        <li>影响信息是否存在。</li>
+        <li>批准入口是否可复制。</li>
+        <li>拒绝入口是否可复制。</li>
+        <li>证据上下文是否存在。</li>
+        <li>正文是否包含关键命令。</li>
+      </ul>
+      <h3>6.10 <code>resume --approve-human</code></h3>
+      <p>用途：批准 pending human gate 并继续运行。</p>
+      <pre><code>tekon resume --approve-human</code></pre>
+      <p>注意：</p>
+      <ul>
+        <li>只在你已经审阅风险和证据后使用。</li>
+        <li>会按 run 创建时落库的 provider 快照恢复。</li>
+        <li>
+          同一 run 有多个 pending decision 时必须传
+          <code>--decision-id &lt;decisionId&gt;</code>；显式指定后只批准这一条
+          decision。
+        </li>
+        <li>
+          旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到
+          mock。
+        </li>
+      </ul>
+      <h3>6.11 <code>approval reject</code></h3>
+      <p>用途：拒绝 pending human decision 并阻断 workflow。</p>
+      <pre><code>tekon approval reject</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li>
+          <code>--run-id &lt;runId&gt;</code>：拒绝指定 run 的 pending decision
+          时使用。
+        </li>
+        <li>
+          <code>--decision-id &lt;decisionId&gt;</code>：同一 run 有多个 pending
+          decision 或要精确拒绝某个 decision 时使用。
+        </li>
+        <li>
+          <code>--actor &lt;name&gt;</code
+          >：记录拒绝操作者；建议使用真实账号或姓名。
+        </li>
+        <li><code>--note &lt;text&gt;</code>：记录拒绝原因。</li>
+        <li><code>--repo &lt;path&gt;</code>：只在跨仓库操作时使用。</li>
+      </ul>
+      <p>结果：</p>
+      <ul>
+        <li>human decision 变为 rejected。</li>
+        <li>workflow 阻断。</li>
+        <li>human gate 分类为 <code>human-rejected</code>。</li>
+        <li>
+          <code>review</code> 会显示人工拒绝语义，不会误判成命令策略拒绝。
+        </li>
+      </ul>
+      <h3>6.12 <code>review</code></h3>
+      <p>用途：看完整审阅材料。</p>
+      <pre><code>tekon review</code></pre>
+      <p>重点章节：</p>
+      <ul>
+        <li><code>Readiness Failed Checks</code></li>
+        <li><code>Evidence Navigation</code></li>
+        <li><code>Gate Failure Triage</code></li>
+        <li><code>Delivery</code></li>
+        <li><code>Changed Files</code></li>
+        <li><code>Artifacts</code></li>
+        <li><code>Gate Logs</code></li>
+        <li><code>PR Body</code></li>
+        <li><code>PR Package</code></li>
+        <li><code>Next Commands</code></li>
+      </ul>
+      <p>如何使用：</p>
+      <ul>
+        <li>先看 readiness 失败项。</li>
+        <li>再看 Evidence Navigation 指向的证据。</li>
+        <li>Gate 失败时先看 triage 分类和建议命令。</li>
+        <li>准备 PR 前看 Changed Files 和 PR Body。</li>
+      </ul>
+      <h3>6.13 <code>delivery dry-run</code></h3>
+      <p>用途：只看交付计划，不产生远端副作用。</p>
+      <pre><code>tekon delivery dry-run</code></pre>
+      <p>适合：</p>
+      <ul>
+        <li>第一次接入仓库。</li>
+        <li>不确定 PR 命令是否正确。</li>
+        <li>只想审阅 evidence 和命令计划。</li>
+      </ul>
+      <h3>6.14 <code>delivery prepare</code></h3>
+      <p>用途：生成本地 PR 准备包。</p>
+      <pre><code>tekon delivery prepare</code></pre>
+      <p>结果：</p>
+      <ul>
+        <li><code>.tekon/runs/&lt;runId&gt;/delivery/pr-package.md</code></li>
+        <li><code>.tekon/runs/&lt;runId&gt;/delivery/pr-body.md</code></li>
+        <li><code>delivery-package</code> artifact。</li>
+        <li><code>delivery.pr-prepared</code> 审计事件。</li>
+      </ul>
+      <h3>6.15 <code>delivery create-pr</code></h3>
+      <p>用途：人工批准后创建远端 PR。</p>
+      <pre><code>tekon delivery create-pr --approve-human</code></pre>
+      <p>必要条件：</p>
+      <ul>
+        <li>已安装并认证 <code>gh</code>。</li>
+        <li>目标远端有创建 PR 权限。</li>
+        <li>主工作区除 <code>.tekon</code> 外没有未提交改动。</li>
+        <li>用户明确传入 <code>--approve-human</code>。</li>
+      </ul>
+      <p>常见失败：</p>
+      <ul>
+        <li><code>gh auth status</code> 不通过。</li>
+        <li>工作区 dirty。</li>
+        <li>远端已有同分支 PR。</li>
+        <li>网络或 GitHub 权限失败。</li>
+      </ul>
+      <p>处理方式：</p>
+      <ul>
+        <li>先修认证和 dirty worktree。</li>
+        <li>如果 PR 已存在，天工会尝试恢复 PR URL。</li>
+        <li>
+          失败后看 <code>review</code> 和 delivery log，不要直接重跑高风险命令。
+        </li>
+      </ul>
+      <h3>6.16 <code>delivery ci-status</code></h3>
+      <p>用途：只读查询 PR checks 并写回证据。</p>
+      <pre><code>tekon delivery ci-status</code></pre>
+      <p>可选：</p>
+      <pre><code>tekon delivery ci-status --selector &lt;prUrl|branch&gt;</code></pre>
+      <p>结果：</p>
+      <ul>
+        <li>写入 <code>ci-status</code> artifact。</li>
+        <li>记录 <code>delivery.ci.checked</code> 审计事件。</li>
+        <li>后续 PR 包和 readiness 可看到远端 CI 证据。</li>
+      </ul>
+      <h3>6.17 <code>delivery ci-watch</code></h3>
+      <p>用途：轮询 PR checks，直到终态或达到次数上限。</p>
+      <pre><code>tekon delivery ci-watch --max-attempts 20 --interval-ms 15000</code></pre>
+      <p>常用参数：</p>
+      <ul>
+        <li><code>--max-attempts &lt;n&gt;</code>：最大查询次数。</li>
+        <li><code>--interval-ms &lt;ms&gt;</code>：初始等待间隔。</li>
+        <li><code>--backoff &lt;n&gt;</code>：退避倍率。</li>
+        <li><code>--selector &lt;prUrl|branch&gt;</code>：指定查询对象。</li>
+      </ul>
+      <p>注意：</p>
+      <ul>
+        <li>不 rerun CI。</li>
+        <li>不 merge。</li>
+        <li>不上线。</li>
+      </ul>
+      <h3>6.18 <code>eval readiness</code></h3>
+      <p>用途：判断单次 run 是否可进入人工审阅或 PR 流程。</p>
+      <pre><code>tekon eval readiness</code></pre>
+      <p>常见失败项：</p>
+      <ul>
+        <li>workflow 未 passed。</li>
+        <li>audit hash 无效。</li>
+        <li>gate 失败。</li>
+        <li>delivery package 缺失。</li>
+        <li>pending human gate 未处理。</li>
+        <li>验收标准没有 evidence。</li>
+        <li>security scan 失败。</li>
+      </ul>
+      <h3>6.19 <code>eval work-usability</code></h3>
+      <p>用途：评估样本集是否达到真实试用门槛。</p>
+      <pre><code>tekon eval work-usability --samples /path/to/work-usability-samples.yaml</code></pre>
+      <p>记录样本：</p>
+      <pre><code>tekon eval work-usability record --samples /path/to/work-usability-samples.yaml</code></pre>
+      <p>生成报告：</p>
+      <pre><code>tekon eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html</code></pre>
+      <h2>7. Web Dashboard</h2>
+      <p>启动：</p>
+      <pre><code>TEKON_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @tekon/web dev</code></pre>
+      <p>Web dashboard 适合：</p>
+      <ul>
+        <li>查看项目 overview。</li>
+        <li>查看 run 列表。</li>
+        <li>选择历史 run。</li>
+        <li>查看 readiness、evidence、diff、artifact、gate log、PR 包。</li>
+        <li>处理 human approval。</li>
+        <li>发起受控模板 run。</li>
+        <li>触发 <code>delivery prepare</code>。</li>
+        <li>在人工批准下触发 <code>delivery create-pr</code>。</li>
+      </ul>
+      <p>写操作需要 session token。token 在：</p>
+      <pre><code>/path/to/project/.tekon/web-session.json</code></pre>
+      <p>注意：</p>
+      <ul>
+        <li>Web 是本地 dashboard，不是远程服务。</li>
+        <li>token 不应提交。</li>
+        <li>
+          Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push
+          和创建 PR。
+        </li>
+      </ul>
+      <h2>8. 如何判断结果是否可信</h2>
+      <p>不要只看“命令退出 0”。建议按顺序看：</p>
+      <ol>
+        <li><code>status</code>：workflow 是否 passed。</li>
+        <li><code>eval readiness</code>：是否 ready。</li>
+        <li><code>review</code>：失败项和证据是否能解释。</li>
+        <li>Changed Files：影响文件是否符合预期。</li>
+        <li>Artifacts：需求、变更、测试、审阅证据是否完整。</li>
+        <li>Gate Logs：build/lint/test/security 是否真的跑过。</li>
+        <li>PR Package：PR body 是否能让 reviewer 看懂。</li>
+        <li>CI Status：如果已创建 PR，远端 checks 是否已记录。</li>
+      </ol>
+      <p>如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。</p>
+      <h2>9. 常见问题处理</h2>
+      <h3>9.1 <code>workflow preflight</code> 显示 missing command</h3>
+      <p>原因：目标仓库没有配置对应命令。</p>
+      <p>处理：</p>
+      <ol>
+        <li>看 <code>suggestedCommand</code> 是否合理。</li>
+        <li>把确认后的命令写入 <code>.tekon/repo-profile.yaml</code>。</li>
+        <li>再跑 <code>workflow preflight</code>。</li>
+      </ol>
+      <p>不要直接跳过 gate，除非该命令确实不适用且你能写出原因。</p>
+      <h3>9.2 run 拒绝 dirty base</h3>
+      <p>原因：目标仓库有未提交业务改动。</p>
+      <p>处理：</p>
+      <ul>
+        <li>先提交、stash 或清理无关改动。</li>
+        <li>
+          如果你明确要基于当前改动运行，追加 <code>--allow-dirty-base</code>。
+        </li>
+      </ul>
+      <p>注意：<code>--allow-dirty-base</code> 是人工确认，不是安全证明。</p>
+      <h3>9.3 pending human gate</h3>
+      <p>处理：</p>
+      <ol>
+        <li>执行 <code>approval summary</code>。</li>
+        <li>执行 <code>eval approval-summary</code>。</li>
+        <li>如果摘要不完整，先看 <code>review</code> 补证据。</li>
+        <li>如果批准，执行 <code>resume --approve-human</code>。</li>
+        <li>如果拒绝，执行 <code>approval reject</code>。</li>
+      </ol>
+      <h3>9.4 readiness 不通过</h3>
+      <p>常见原因：</p>
+      <ul>
+        <li>workflow 还没 passed。</li>
+        <li>还有 pending human gate。</li>
+        <li>验证 gate 失败。</li>
+        <li>PR 准备包不存在。</li>
+        <li>security scan 失败。</li>
+        <li>artifact 缺验收标准 evidence。</li>
+      </ul>
+      <p>处理：</p>
+      <ul>
+        <li>先看 <code>review</code> 的 failed checks。</li>
+        <li>看 Evidence Navigation 指向哪里。</li>
+        <li>按 Gate Failure Triage 的建议处理。</li>
+      </ul>
+      <h3>9.5 <code>delivery create-pr</code> 失败</h3>
+      <p>常见原因：</p>
+      <ul>
+        <li>没有 <code>gh</code>。</li>
+        <li><code>gh auth status</code> 失败。</li>
+        <li>目标远端没有权限。</li>
+        <li>主工作区 dirty。</li>
+        <li>PR 已存在。</li>
+      </ul>
+      <p>处理：</p>
+      <ul>
+        <li>先修认证和工作区状态。</li>
+        <li>若 PR 已存在，看命令是否恢复了 PR URL。</li>
+        <li>
+          不要直接重复执行高风险命令，先看
+          <code>.tekon/runs/&lt;runId&gt;/delivery/</code> 和
+          <code>review</code>。
+        </li>
+      </ul>
+      <h3>9.6 <code>ci-status</code> 查询失败</h3>
+      <p>常见原因：</p>
+      <ul>
+        <li>run 没有 PR URL。</li>
+        <li>selector 不对。</li>
+        <li><code>gh pr checks</code> 不支持目标。</li>
+        <li>远端无 checks。</li>
+        <li>权限不足。</li>
+      </ul>
+      <p>处理：</p>
+      <ul>
+        <li>用 <code>--selector &lt;prUrl|branch&gt;</code> 明确指定。</li>
+        <li>先手动确认 <code>gh pr checks</code> 是否可用。</li>
+        <li>对非 GitHub host，当前需要后续 adapter 支持。</li>
+      </ul>
+      <h3>9.7 Artifact 被拒绝入库</h3>
+      <p>原因：产物命中了明显密钥或 token 模式。</p>
+      <p>处理：</p>
+      <ul>
+        <li>删除密钥内容。</li>
+        <li>使用安全摘要或脱敏示例。</li>
+        <li>重新运行相关节点或 provider。</li>
+      </ul>
+      <p>注意：这只是基础扫描，不等于完整 DLP。</p>
+      <h3>9.8 Web 写操作被拒绝</h3>
+      <p>常见原因：</p>
+      <ul>
+        <li>session token 错误。</li>
+        <li><code>.tekon/web-session.json</code> 不存在。</li>
+        <li>当前项目 root 不在允许范围。</li>
+      </ul>
+      <p>处理：</p>
+      <ul>
+        <li>重新执行 <code>init</code> 生成 token。</li>
+        <li>确认 Web 启动时的 <code>TEKON_PROJECT_ROOT</code> 正确。</li>
+        <li>不要提交 token。</li>
+      </ul>
+      <h2>10. 参数速查</h2>
+      <h3>全局常见参数</h3>
+      <pre class="table">
+| 参数                  | 用途                                                        |</pre
+      >
+      <pre class="table">
+| --------------------- | ----------------------------------------------------------- |</pre
+      >
+      <pre class="table">
+| `--repo &lt;path&gt;`       | 跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。    |</pre
+      >
+      <pre class="table">
+| `--run-id &lt;runId&gt;`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。   |</pre
+      >
+      <pre class="table">
+| `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                |</pre
+      >
+      <pre class="table">
+| `--agent claude-code` | 使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。 |</pre
+      >
+      <pre class="table">
+| `--approve-human`     | 明确批准人工 gate 或远端副作用。                            |</pre
+      >
+      <pre class="table">
+| `--allow-dirty-base`  | 允许基于当前未提交业务改动运行。                            |</pre
+      >
+      <pre class="table">
+| `--shape &lt;path&gt;`      | 指定需求卡；常规批准/查看默认使用最近需求卡。               |</pre
+      >
+      <pre class="table">
+| `--decision-id &lt;id&gt;`  | 指定人工决策；同一 run 有多个 pending decision 或处理历史 decision 时使用。 |</pre
+      >
+      <h3><code>run</code> 参数</h3>
+      <pre class="table">
+| 参数                   | 用途                                                               |</pre
+      >
+      <pre class="table">
+| ---------------------- | ------------------------------------------------------------------ |</pre
+      >
+      <pre class="table">
+| `--template &lt;name&gt;`    | 使用内置模板。                                                     |</pre
+      >
+      <pre class="table">
+| `--demand-file &lt;path&gt;` | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。 |</pre
+      >
+      <pre class="table">
+| `--dynamic`            | 使用动态 workflow 路径。                                           |</pre
+      >
+      <pre class="table">
+| `--dry-run`            | 只预览，不执行。                                                   |</pre
+      >
+      <pre class="table">
+| `--save-as &lt;name&gt;`     | 保存动态 workflow 预览。                                           |</pre
+      >
+      <h3><code>demand shape</code> 参数</h3>
+      <pre class="table">
+| 参数            | 用途                                           |</pre
+      >
+      <pre class="table">
+| --------------- | ---------------------------------------------- |</pre
+      >
+      <pre class="table">
+| `--no-write`    | 只预览需求塑形结果，不写入 `.tekon/demands/`。 |</pre
+      >
+      <pre class="table">
+| `--format json` | 输出 JSON，便于其它工具消费。                  |</pre
+      >
+      <h3><code>delivery ci-watch</code> 参数</h3>
+      <pre class="table">
+| 参数                         | 用途             |</pre
+      >
+      <pre class="table">
+| ---------------------------- | ---------------- |</pre
+      >
+      <pre class="table">
+| `--selector &lt;prUrl或branch&gt;` | 指定 PR 或分支。 |</pre
+      >
+      <pre class="table">
+| `--max-attempts &lt;n&gt;`         | 最大轮询次数。   |</pre
+      >
+      <pre class="table">
+| `--interval-ms &lt;ms&gt;`         | 每次轮询间隔。   |</pre
+      >
+      <pre class="table">
+| `--backoff &lt;n&gt;`              | 轮询退避倍率。   |</pre
+      >
+      <h2>11. 当前边界和安全原则</h2>
+      <p>必须明确：</p>
+      <ul>
+        <li>天工不会自动 merge。</li>
+        <li>天工不会自动上线。</li>
+        <li>天工不会自动扩大权限。</li>
+        <li>天工不会把动态 workflow 非 dry-run 当成已完成能力。</li>
+        <li>天工当前不是生产级 OS 沙箱。</li>
+        <li>天工当前不是完整 DLP。</li>
+        <li>天工当前没有完整的远程多租户权限模型。</li>
+        <li>天工当前只把远端 CI 查询写回证据，不控制 CI。</li>
+        <li>飞书 IM 通知尚未接入；当前是可复制审批摘要。</li>
+      </ul>
+      <p>推荐使用范围：</p>
+      <ul>
+        <li>内部工具。</li>
+        <li>研发效能工具。</li>
+        <li>测试补齐。</li>
+        <li>文档补齐。</li>
+        <li>低风险 bugfix。</li>
+        <li>可回滚、可人工审阅的中小需求。</li>
+      </ul>
+      <p>不建议当前使用范围：</p>
+      <ul>
+        <li>生产数据写入。</li>
+        <li>支付、权限、合规、隐私等高风险改动。</li>
+        <li>自动发布。</li>
+        <li>无人审阅的远端操作。</li>
+        <li>长时间真实 LLM 任务且缺恢复预案的场景。</li>
+      </ul>
+      <h2>12. 每次迭代后的手册更新规则</h2>
+      <p>
+        后续每次功能、行为、CLI/Web
+        入口、参数、错误处理、边界或用户流程发生变化后，都必须评估是否需要更新本手册。
+      </p>
+      <p>需要更新本手册的典型情况：</p>
+      <ul>
+        <li>新增或删除 CLI 命令。</li>
+        <li>参数语义变化。</li>
+        <li>Web dashboard 新增写操作。</li>
+        <li>Gate、readiness、work-usability 规则变化。</li>
+        <li>运行目录、artifact、PR 包或审计结构变化。</li>
+        <li>新增真实 provider 支持。</li>
+        <li>安全边界、人工审批边界或远端副作用规则变化。</li>
+        <li>用户常见故障处理方式变化。</li>
+      </ul>
+      <p>
+        如果一次迭代判断不需要更新本手册，应在最终回复或提交说明中说明理由。
+      </p>
+      <p>当前主手册路径：</p>
+      <pre><code>docs/manual/tekon-user-manual.md</code></pre>
+    </main>
+  </body>
+</html>

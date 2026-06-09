@@ -189,7 +189,18 @@ describe('work review surface', () => {
       ]),
     );
     expect(surface.nextCommands).toContain(
-      'tekon delivery create-pr --run-id run_1 --approve-human',
+      'tekon delivery create-pr --approve-human',
+    );
+
+    const explicitSurface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId: 'run_1',
+      commandDisplay: 'explicit',
+    });
+    expect(explicitSurface.nextCommands).toContain(
+      `tekon delivery create-pr --run-id run_1 --repo ${repoPath} --approve-human`,
     );
     db.close();
   });
@@ -342,46 +353,70 @@ describe('work review surface', () => {
           classification: 'exit-code',
           retry: 'after-fix',
           logHref: '#gate-log-gate_build',
-          suggestedCommand: 'tekon log --run-id run_1',
+          suggestedCommand: 'tekon log',
         }),
         expect.objectContaining({
           gateId: 'gate_lint',
           classification: 'missing-command',
           retry: 'after-fix',
-          suggestedCommand: 'tekon workflow preflight <template> --repo <repo>',
+          suggestedCommand: 'tekon workflow preflight <template>',
         }),
         expect.objectContaining({
           gateId: 'gate_command_approval',
           classification: 'blocked-for-approval',
           retry: 'after-approval',
           summary: expect.stringContaining('Approve only after reviewing'),
-          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_human',
           classification: 'human-approval',
           retry: 'after-approval',
-          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_legacy_human',
           classification: 'human-approval',
           retry: 'after-approval',
-          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_rejected_human',
           classification: 'human-rejected',
           retry: 'not-recommended',
           summary: expect.stringContaining('human reviewer rejected'),
-          suggestedCommand: 'tekon review --run-id run_1',
+          suggestedCommand: 'tekon review',
         }),
         expect.objectContaining({
           gateId: 'gate_security',
           classification: 'security-findings',
           retry: 'after-fix',
           summary: expect.stringContaining('Security scan found'),
-          suggestedCommand: 'tekon review --run-id run_1',
+          suggestedCommand: 'tekon review',
+        }),
+      ]),
+    );
+    const explicitSurface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId: 'run_1',
+      maxContentChars: 120,
+      commandDisplay: 'explicit',
+    });
+    expect(explicitSurface.gateFailureTriage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateId: 'gate_build',
+          suggestedCommand: `tekon log --run-id run_1 --repo ${repoPath}`,
+        }),
+        expect.objectContaining({
+          gateId: 'gate_lint',
+          suggestedCommand: `tekon workflow preflight <template> --repo ${repoPath}`,
+        }),
+        expect.objectContaining({
+          gateId: 'gate_human',
+          suggestedCommand: `tekon resume --run-id run_1 --approve-human --repo ${repoPath}`,
         }),
       ]),
     );

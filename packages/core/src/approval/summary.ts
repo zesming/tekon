@@ -4,6 +4,7 @@ import type { WorkReadinessCheck } from '../eval/work-readiness.js';
 import type { GateResult, HumanDecision, Node } from '../types/domain.js';
 import {
   createWorkReviewSurface,
+  type ReviewCommandDisplay,
   type ReviewEvidenceLink,
   type WorkReviewSurface,
 } from '../review/surface.js';
@@ -59,6 +60,7 @@ export async function createHumanApprovalSummary(input: {
   runId: string;
   decisionId?: string;
   maxContentChars?: number;
+  commandDisplay?: ReviewCommandDisplay;
 }): Promise<HumanApprovalSummary> {
   const decisions = await input.repositories.listHumanDecisions(input.runId);
   const decision =
@@ -80,6 +82,7 @@ export async function createHumanApprovalSummary(input: {
       audit: input.audit,
       runId: input.runId,
       maxContentChars: input.maxContentChars,
+      commandDisplay: input.commandDisplay,
     }),
     input.repositories.getNode(decision.nodeId),
     input.repositories.listGateResults(input.runId),
@@ -94,6 +97,7 @@ export async function createHumanApprovalSummary(input: {
     node,
     gate,
     surface,
+    commandDisplay: input.commandDisplay,
   });
 }
 
@@ -103,6 +107,7 @@ export function buildHumanApprovalSummary(input: {
   node: Node | null;
   gate: GateResult | null;
   surface: WorkReviewSurface;
+  commandDisplay?: ReviewCommandDisplay;
 }): HumanApprovalSummary {
   const riskLabel = deriveRiskLabel(input.decision.note, input.gate);
   const exactCommand = extractExactCommand(input.decision.note);
@@ -113,26 +118,17 @@ export function buildHumanApprovalSummary(input: {
     (check) => !check.passed,
   );
   const evidenceLinks = collectEvidenceLinks(input.surface);
-  const approveCommand = [
-    'tekon',
-    'resume',
-    '--run-id',
-    quoteCliArg(input.decision.runId),
-    '--approve-human',
-    '--repo',
-    quoteCliArg(input.repoPath),
-  ].join(' ');
-  const rejectCommand = [
-    'tekon',
-    'approval',
-    'reject',
-    '--run-id',
-    quoteCliArg(input.decision.runId),
-    '--decision-id',
-    quoteCliArg(input.decision.id),
-    '--repo',
-    quoteCliArg(input.repoPath),
-  ].join(' ');
+  const approveCommand = approvalCommandFor({
+    commandDisplay: input.commandDisplay,
+    runId: input.decision.runId,
+    repoPath: input.repoPath,
+  });
+  const rejectCommand = rejectCommandFor({
+    commandDisplay: input.commandDisplay,
+    runId: input.decision.runId,
+    decisionId: input.decision.id,
+    repoPath: input.repoPath,
+  });
 
   const summary: Omit<HumanApprovalSummary, 'summaryText'> = {
     decisionId: input.decision.id,
@@ -207,9 +203,7 @@ export function evaluateHumanApprovalSummary(
         isCopyableApprovalCommand(summary.approveCommand, [
           'tekon',
           'resume',
-        ]) &&
-        summary.approveCommand.includes('--approve-human') &&
-        commandHasFlagValues(summary.approveCommand, ['--run-id', '--repo']),
+        ]) && summary.approveCommand.includes('--approve-human'),
       evidence: summary.approveCommand,
     },
     {
@@ -219,13 +213,7 @@ export function evaluateHumanApprovalSummary(
           'tekon',
           'approval',
           'reject',
-        ]) &&
-        commandHasFlagValues(summary.rejectCommand, [
-          '--run-id',
-          '--decision-id',
-          '--repo',
-        ]) &&
-        !commandHasAnyFlag(summary.rejectCommand, ['--actor']),
+        ]) && !commandHasAnyFlag(summary.rejectCommand, ['--actor']),
       evidence: summary.rejectCommand || summary.webActionHint,
     },
     {
@@ -398,23 +386,52 @@ function isCopyableApprovalCommand(command: string, requiredTokens: string[]) {
   );
 }
 
-function commandHasFlagValues(command: string, requiredFlags: string[]) {
-  const tokens = command.split(/\s+/u).filter(Boolean);
-  return requiredFlags.every((flag) => {
-    const index = tokens.indexOf(flag);
-    if (index < 0) {
-      return false;
-    }
-    const value = tokens[index + 1];
-    return Boolean(value) && !value.startsWith('-') && !/[<>]/u.test(value);
-  });
-}
-
 function commandHasAnyFlag(command: string, flags: string[]) {
   const tokens = command.split(/\s+/u).filter(Boolean);
   return flags.some((flag) =>
     tokens.some((token) => token === flag || token.startsWith(`${flag}=`)),
   );
+}
+
+function approvalCommandFor(input: {
+  commandDisplay?: ReviewCommandDisplay;
+  runId: string;
+  repoPath: string;
+}): string {
+  if (input.commandDisplay === 'explicit') {
+    return [
+      'tekon',
+      'resume',
+      '--run-id',
+      quoteCliArg(input.runId),
+      '--approve-human',
+      '--repo',
+      quoteCliArg(input.repoPath),
+    ].join(' ');
+  }
+  return 'tekon resume --approve-human';
+}
+
+function rejectCommandFor(input: {
+  commandDisplay?: ReviewCommandDisplay;
+  runId: string;
+  decisionId: string;
+  repoPath: string;
+}): string {
+  if (input.commandDisplay === 'explicit') {
+    return [
+      'tekon',
+      'approval',
+      'reject',
+      '--run-id',
+      quoteCliArg(input.runId),
+      '--decision-id',
+      quoteCliArg(input.decisionId),
+      '--repo',
+      quoteCliArg(input.repoPath),
+    ].join(' ');
+  }
+  return 'tekon approval reject';
 }
 
 function quoteCliArg(value: string): string {

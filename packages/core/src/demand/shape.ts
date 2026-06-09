@@ -542,8 +542,7 @@ function buildAcceptanceCriteria(input: {
       id: 'AC-2',
       description:
         '仓库画像中的 build/lint/test/security gate 通过，或普通命令被显式标记不适用。',
-      verification:
-        'tekon review --run-id <runId> 显示 readiness 和 gate evidence。',
+      verification: 'tekon review 显示 readiness 和 gate evidence。',
     },
   ];
   if (input.category === 'bugfix') {

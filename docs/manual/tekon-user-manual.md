@@ -94,10 +94,10 @@
 推荐流程：
 
 1. `tekon init` 初始化目标仓库。
-2. `demand shape --write` 把需求写成需求卡。
+2. `demand shape` 把需求写成需求卡。
 3. 人工审阅需求卡。
 4. `demand approve` 批准需求卡。
-5. `run --demand-file` 发起 workflow。
+5. `run` 发起 workflow。
 6. `status` 和 `review` 查看结果。
 7. `eval readiness` 判断是否可审。
 8. `delivery prepare` 生成 PR 准备包。
@@ -161,7 +161,7 @@
 
 ## 4. Quick Start
 
-以下示例假设你正在天工仓库根目录，目标项目在 `/path/to/project`。
+以下示例假设 `tekon` 已安装到 PATH，并且你正在目标项目根目录执行命令。没有全局安装时，可用 `node /path/to/tekon/packages/cli/dist/index.js` 替换 `tekon`；从其它目录操作目标仓库时，再显式追加 `--repo /path/to/project`。
 
 ### 4.1 安装和构建
 
@@ -182,12 +182,12 @@ node packages/cli/dist/index.js
 tekon
 ```
 
-本文为了避免依赖全局安装，默认使用 `node packages/cli/dist/index.js` 示例。
+本文默认使用 `tekon` 示例，重点展示普通用户的最短路径。
 
 ### 4.2 初始化目标仓库
 
 ```bash
-node packages/cli/dist/index.js init --repo /path/to/project
+tekon init
 ```
 
 初始化会在目标仓库生成 `.tekon/` 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。
@@ -195,7 +195,7 @@ node packages/cli/dist/index.js init --repo /path/to/project
 ### 4.3 检查目标仓库命令画像
 
 ```bash
-node packages/cli/dist/index.js workflow preflight standard-feature --repo /path/to/project
+tekon workflow preflight
 ```
 
 重点看：
@@ -208,35 +208,35 @@ node packages/cli/dist/index.js workflow preflight standard-feature --repo /path
 ### 4.4 塑形需求
 
 ```bash
-node packages/cli/dist/index.js demand shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过" --write --repo /path/to/project
+tekon demand shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
 ```
 
 命令会输出 `shapePath` 和 `reviewPath`。先读 Markdown 审阅稿，确认需求边界后批准：
 
 ```bash
-node packages/cli/dist/index.js demand approve /path/to/project/.tekon/demands/<shapeId>.json
+tekon demand approve
 ```
 
 可选：评估需求卡质量。
 
 ```bash
-node packages/cli/dist/index.js eval demand-shape /path/to/project/.tekon/demands/<shapeId>.json
+tekon eval demand-shape
 ```
 
 ### 4.5 发起运行
 
 ```bash
-node packages/cli/dist/index.js run --demand-file /path/to/project/.tekon/demands/<shapeId>.json --agent mock --repo /path/to/project
+tekon run --agent mock
 ```
 
-输出里会有 `runId`。后续命令都需要它。
+输出里会有 `runId`。后续常规命令默认读取最近一次 run；只有查看历史 run 或避免歧义时才需要手动传 `--run-id`。
 
 ### 4.6 查看结果
 
 ```bash
-node packages/cli/dist/index.js status --run-id <runId> --repo /path/to/project
-node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
-node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/project
+tekon status
+tekon review
+tekon eval readiness
 ```
 
 如果 `ready=true`，通常可以进入人工审阅或 PR 准备。它不代表可以自动合入。
@@ -244,7 +244,7 @@ node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/
 ### 4.7 准备 PR 材料
 
 ```bash
-node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/project
+tekon delivery prepare
 ```
 
 这一步只生成本地 PR 包，不 push、不创建 PR。
@@ -254,7 +254,7 @@ node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/t
 确认 PR 包、diff、gate 和 readiness 后，才执行：
 
 ```bash
-node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-human --repo /path/to/project
+tekon delivery create-pr --approve-human
 ```
 
 这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。
@@ -262,14 +262,27 @@ node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-hu
 ### 4.9 查询远端 CI
 
 ```bash
-node packages/cli/dist/index.js delivery ci-status --run-id <runId> --repo /path/to/project
+tekon delivery ci-status
 ```
 
 如果希望等待 checks 到终态：
 
 ```bash
-node packages/cli/dist/index.js delivery ci-watch --run-id <runId> --max-attempts 20 --interval-ms 15000 --repo /path/to/project
+tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 ```
+
+### 4.10 默认上下文规则
+
+天工的常规 CLI 使用方式是“进入目标仓库根目录后执行短命令”。默认推断规则如下：
+
+- Repo：优先使用 `--repo`；不传时从当前目录向上查找 `.tekon/config.yaml`，找不到时使用当前 Git 仓库根目录。
+- Demand shape：`demand shape` 默认写入 `.tekon/demands/`；`demand approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
+- Run：`run` 没有需求文本且没有 `--demand-file` 时，默认读取最近需求卡，且该需求卡必须已批准；`status`、`review`、`eval readiness`、`delivery prepare` 等默认使用最近一次 run。
+- Human decision：`approval summary`、`eval approval-summary`、`approval reject` 和 `resume --approve-human` 默认使用最近的 pending human decision；如果同一 run 同时存在多个 pending decision，必须显式传 `--decision-id`。
+
+需要显式传参的情况通常只有三类：从其它目录操作目标仓库时传 `--repo`；查看或处理历史对象时传 `--run-id`、`--shape`、`--demand-file`、`--decision-id`；执行高风险动作时保留 `--approve-human` 或 `--allow-dirty-base` 作为明确人工确认。
+
+如果你显式传了 `--repo`、`--run-id` 或 `--decision-id` 查看跨仓库或历史对象，`review` 和 `approval summary` 会输出带 id 和 repo 的精确后续命令，避免复制短命令后误操作到最新 run、最新待审批项或当前 shell 目录。
 
 ## 5. 核心概念
 
@@ -345,12 +358,12 @@ Gate 不通过时 workflow 不应被当成可交付。
 用途：初始化目标仓库。
 
 ```bash
-node packages/cli/dist/index.js init --repo /path/to/project
+tekon init
 ```
 
 常用参数：
 
-- `--repo <path>`：目标仓库路径。不传时默认当前目录。
+- `--repo <path>`：从其它目录初始化指定仓库时使用。不传时自动使用当前 Git 仓库根目录或当前目录。
 
 结果：
 
@@ -370,13 +383,13 @@ node packages/cli/dist/index.js init --repo /path/to/project
 用途：在真正运行前检查 workflow 会用哪些命令。
 
 ```bash
-node packages/cli/dist/index.js workflow preflight standard-feature --repo /path/to/project
+tekon workflow preflight
 ```
 
 常用参数：
 
-- 第一个位置参数：模板名。
-- `--repo <path>`：目标仓库路径。
+- 第一个位置参数：模板名；不传时默认 `standard-feature`。
+- `--repo <path>`：只在跨仓库检查时使用。
 
 如何判断结果：
 
@@ -395,7 +408,7 @@ node packages/cli/dist/index.js workflow preflight standard-feature --repo /path
 用途：根据需求文本推荐受控模板。
 
 ```bash
-node packages/cli/dist/index.js workflow select "补齐 CLI 单元测试" --repo /path/to/project
+tekon workflow select "补齐 CLI 单元测试"
 ```
 
 结果：
@@ -415,13 +428,13 @@ node packages/cli/dist/index.js workflow select "补齐 CLI 单元测试" --repo
 用途：把原始需求转成可审阅需求卡。
 
 ```bash
-node packages/cli/dist/index.js demand shape "需求文本" --write --repo /path/to/project
+tekon demand shape "需求文本"
 ```
 
 常用参数：
 
-- `--write`：写入 `.tekon/demands/`。
-- `--repo <path>`：目标仓库路径。
+- `--no-write`：只预览，不写入 `.tekon/demands/`。
+- `--repo <path>`：只在跨仓库塑形时使用。
 - `--format json`：输出 JSON。
 
 结果：
@@ -441,12 +454,12 @@ node packages/cli/dist/index.js demand shape "需求文本" --write --repo /path
 用途：人工批准需求卡进入执行阶段。
 
 ```bash
-node packages/cli/dist/index.js demand approve /path/to/project/.tekon/demands/<shapeId>.json
+tekon demand approve
 ```
 
 常用参数：
 
-- 位置参数：需求卡 JSON 路径。
+- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认批准最近需求卡。如果最近需求卡已经批准，历史未批准需求卡必须显式指定。
 - `--actor <name>`：记录批准操作者；建议使用真实账号或姓名。
 
 结果：
@@ -466,30 +479,30 @@ node packages/cli/dist/index.js demand approve /path/to/project/.tekon/demands/<
 模板运行：
 
 ```bash
-node packages/cli/dist/index.js run "需求文本" --template standard-feature --agent mock --repo /path/to/project
+tekon run "需求文本" --template standard-feature --agent mock
 ```
 
 需求卡运行：
 
 ```bash
-node packages/cli/dist/index.js run --demand-file /path/to/project/.tekon/demands/<shapeId>.json --agent mock --repo /path/to/project
+tekon run --agent mock
 ```
 
 动态 dry-run：
 
 ```bash
-node packages/cli/dist/index.js run --dynamic --dry-run "需求文本" --agent mock --repo /path/to/project
+tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
 常用参数：
 
 - `--template <name>`：使用内置模板。
-- `--demand-file <path>`：使用已批准需求卡。
+- `--demand-file <path>`：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
-- `--repo <path>`：目标仓库路径。
+- `--repo <path>`：只在跨仓库运行时使用。
 
 如何判断结果：
 
@@ -502,7 +515,7 @@ node packages/cli/dist/index.js run --dynamic --dry-run "需求文本" --agent m
 用途：查看 run 当前状态。
 
 ```bash
-node packages/cli/dist/index.js status --run-id <runId> --repo /path/to/project
+tekon status
 ```
 
 常见字段：
@@ -518,13 +531,13 @@ node packages/cli/dist/index.js status --run-id <runId> --repo /path/to/project
 用途：生成可复制审批摘要。
 
 ```bash
-node packages/cli/dist/index.js approval summary --run-id <runId> --repo /path/to/project
+tekon approval summary
 ```
 
 常用参数：
 
-- `--run-id <runId>`：run id。
-- `--decision-id <decisionId>`：指定某个 pending decision；不传时使用当前 run 的待审批项。
+- `--run-id <runId>`：查看指定历史 run 的审批项时使用；不传时默认最近的 pending human decision。同一 run 有多个 pending decision 时必须传 `--decision-id`。
+- `--decision-id <decisionId>`：同一 run 有多个 pending decision 或需要指定历史决策时使用。
 - `--max-chars <n>`：限制 artifact 和日志预览长度，默认 1200。
 - `--json`：输出结构化 JSON，便于接入其它工具。
 
@@ -553,7 +566,7 @@ node packages/cli/dist/index.js approval summary --run-id <runId> --repo /path/t
 用途：检查审批摘要是否完整。
 
 ```bash
-node packages/cli/dist/index.js eval approval-summary --run-id <runId> --repo /path/to/project
+tekon eval approval-summary
 ```
 
 判断方式：
@@ -577,13 +590,14 @@ node packages/cli/dist/index.js eval approval-summary --run-id <runId> --repo /p
 用途：批准 pending human gate 并继续运行。
 
 ```bash
-node packages/cli/dist/index.js resume --run-id <runId> --approve-human --repo /path/to/project
+tekon resume --approve-human
 ```
 
 注意：
 
 - 只在你已经审阅风险和证据后使用。
 - 会按 run 创建时落库的 provider 快照恢复。
+- 同一 run 有多个 pending decision 时必须传 `--decision-id <decisionId>`；显式指定后只批准这一条 decision。
 - 旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock。
 
 ### 6.11 `approval reject`
@@ -591,16 +605,16 @@ node packages/cli/dist/index.js resume --run-id <runId> --approve-human --repo /
 用途：拒绝 pending human decision 并阻断 workflow。
 
 ```bash
-node packages/cli/dist/index.js approval reject --run-id <runId> --decision-id <decisionId> --repo /path/to/project
+tekon approval reject
 ```
 
 常用参数：
 
-- `--run-id <runId>`：run id。
-- `--decision-id <decisionId>`：待处理 decision id。
+- `--run-id <runId>`：拒绝指定 run 的 pending decision 时使用。
+- `--decision-id <decisionId>`：同一 run 有多个 pending decision 或要精确拒绝某个 decision 时使用。
 - `--actor <name>`：记录拒绝操作者；建议使用真实账号或姓名。
 - `--note <text>`：记录拒绝原因。
-- `--repo <path>`：目标仓库路径。
+- `--repo <path>`：只在跨仓库操作时使用。
 
 结果：
 
@@ -614,7 +628,7 @@ node packages/cli/dist/index.js approval reject --run-id <runId> --decision-id <
 用途：看完整审阅材料。
 
 ```bash
-node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
+tekon review
 ```
 
 重点章节：
@@ -642,7 +656,7 @@ node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
 用途：只看交付计划，不产生远端副作用。
 
 ```bash
-node packages/cli/dist/index.js delivery dry-run --run-id <runId> --repo /path/to/project
+tekon delivery dry-run
 ```
 
 适合：
@@ -656,7 +670,7 @@ node packages/cli/dist/index.js delivery dry-run --run-id <runId> --repo /path/t
 用途：生成本地 PR 准备包。
 
 ```bash
-node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/project
+tekon delivery prepare
 ```
 
 结果：
@@ -671,7 +685,7 @@ node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/t
 用途：人工批准后创建远端 PR。
 
 ```bash
-node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-human --repo /path/to/project
+tekon delivery create-pr --approve-human
 ```
 
 必要条件：
@@ -699,13 +713,13 @@ node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-hu
 用途：只读查询 PR checks 并写回证据。
 
 ```bash
-node packages/cli/dist/index.js delivery ci-status --run-id <runId> --repo /path/to/project
+tekon delivery ci-status
 ```
 
 可选：
 
 ```bash
-node packages/cli/dist/index.js delivery ci-status --run-id <runId> --selector <prUrl|branch> --repo /path/to/project
+tekon delivery ci-status --selector <prUrl|branch>
 ```
 
 结果：
@@ -719,7 +733,7 @@ node packages/cli/dist/index.js delivery ci-status --run-id <runId> --selector <
 用途：轮询 PR checks，直到终态或达到次数上限。
 
 ```bash
-node packages/cli/dist/index.js delivery ci-watch --run-id <runId> --max-attempts 20 --interval-ms 15000 --repo /path/to/project
+tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 ```
 
 常用参数：
@@ -740,7 +754,7 @@ node packages/cli/dist/index.js delivery ci-watch --run-id <runId> --max-attempt
 用途：判断单次 run 是否可进入人工审阅或 PR 流程。
 
 ```bash
-node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/project
+tekon eval readiness
 ```
 
 常见失败项：
@@ -758,19 +772,19 @@ node packages/cli/dist/index.js eval readiness --run-id <runId> --repo /path/to/
 用途：评估样本集是否达到真实试用门槛。
 
 ```bash
-node packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --repo /path/to/project
+tekon eval work-usability --samples /path/to/work-usability-samples.yaml
 ```
 
 记录样本：
 
 ```bash
-node packages/cli/dist/index.js eval work-usability record --run-id <runId> --samples /path/to/work-usability-samples.yaml --repo /path/to/project
+tekon eval work-usability record --samples /path/to/work-usability-samples.yaml
 ```
 
 生成报告：
 
 ```bash
-node packages/cli/dist/index.js eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html --repo /path/to/project
+tekon eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html
 ```
 
 ## 7. Web Dashboard
@@ -933,24 +947,33 @@ Web dashboard 适合：
 
 ### 全局常见参数
 
-| 参数                  | 用途                                                        |
-| --------------------- | ----------------------------------------------------------- |
-| `--repo <path>`       | 指定目标仓库路径。不传时通常使用当前目录。                  |
-| `--run-id <runId>`    | 指定一次 workflow run。                                     |
-| `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                |
-| `--agent claude-code` | 使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。 |
-| `--approve-human`     | 明确批准人工 gate 或远端副作用。                            |
-| `--allow-dirty-base`  | 允许基于当前未提交业务改动运行。                            |
+| 参数                  | 用途                                                                        |
+| --------------------- | --------------------------------------------------------------------------- |
+| `--repo <path>`       | 跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。                    |
+| `--run-id <runId>`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。                   |
+| `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                                |
+| `--agent claude-code` | 使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。                 |
+| `--approve-human`     | 明确批准人工 gate 或远端副作用。                                            |
+| `--allow-dirty-base`  | 允许基于当前未提交业务改动运行。                                            |
+| `--shape <path>`      | 指定需求卡；常规批准/查看默认使用最近需求卡。                               |
+| `--decision-id <id>`  | 指定人工决策；同一 run 有多个 pending decision 或处理历史 decision 时使用。 |
 
 ### `run` 参数
 
-| 参数                   | 用途                     |
-| ---------------------- | ------------------------ |
-| `--template <name>`    | 使用内置模板。           |
-| `--demand-file <path>` | 使用已批准需求卡。       |
-| `--dynamic`            | 使用动态 workflow 路径。 |
-| `--dry-run`            | 只预览，不执行。         |
-| `--save-as <name>`     | 保存动态 workflow 预览。 |
+| 参数                   | 用途                                                               |
+| ---------------------- | ------------------------------------------------------------------ |
+| `--template <name>`    | 使用内置模板。                                                     |
+| `--demand-file <path>` | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。 |
+| `--dynamic`            | 使用动态 workflow 路径。                                           |
+| `--dry-run`            | 只预览，不执行。                                                   |
+| `--save-as <name>`     | 保存动态 workflow 预览。                                           |
+
+### `demand shape` 参数
+
+| 参数            | 用途                                           |
+| --------------- | ---------------------------------------------- |
+| `--no-write`    | 只预览需求塑形结果，不写入 `.tekon/demands/`。 |
+| `--format json` | 输出 JSON，便于其它工具消费。                  |
 
 ### `delivery ci-watch` 参数
 
