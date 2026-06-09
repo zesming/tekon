@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { AuditEvent } from '../types/domain.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 
 export interface AuditLogger {
   append(input: {
@@ -16,7 +16,7 @@ export interface AuditLogger {
 }
 
 export function createAuditLogger(options: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
 }): AuditLogger {
   return {
     async append(input) {

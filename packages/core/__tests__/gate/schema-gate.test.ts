@@ -9,7 +9,7 @@ import {
   createGateEngine,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('schema gate', () => {
@@ -22,9 +22,9 @@ describe('schema gate', () => {
   });
 
   it('passes only when the required artifact exists and records the gate result', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-schema-gate-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-schema-gate-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -36,7 +36,7 @@ describe('schema gate', () => {
       nodeId: 'node_1',
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -67,7 +67,7 @@ describe('schema gate', () => {
       nodeId: 'node_1',
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -83,9 +83,9 @@ describe('schema gate', () => {
   });
 
   it('fails when the artifact content does not satisfy the built-in schema', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-schema-invalid-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-schema-invalid-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -104,7 +104,7 @@ describe('schema gate', () => {
       nodeId: 'node_1',
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -134,7 +134,7 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

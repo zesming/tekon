@@ -1,5 +1,5 @@
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { WorkReadinessCheck } from '../eval/work-readiness.js';
 import type { GateResult, HumanDecision, Node } from '../types/domain.js';
 import {
@@ -54,7 +54,7 @@ export interface ApprovalSummaryEvaluation {
 
 export async function createHumanApprovalSummary(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   decisionId?: string;
@@ -114,7 +114,7 @@ export function buildHumanApprovalSummary(input: {
   );
   const evidenceLinks = collectEvidenceLinks(input.surface);
   const approveCommand = [
-    'donkey',
+    'tekon',
     'resume',
     '--run-id',
     quoteCliArg(input.decision.runId),
@@ -123,7 +123,7 @@ export function buildHumanApprovalSummary(input: {
     quoteCliArg(input.repoPath),
   ].join(' ');
   const rejectCommand = [
-    'donkey',
+    'tekon',
     'approval',
     'reject',
     '--run-id',
@@ -205,7 +205,7 @@ export function evaluateHumanApprovalSummary(
       id: 'approval-entry-present',
       passed:
         isCopyableApprovalCommand(summary.approveCommand, [
-          'donkey',
+          'tekon',
           'resume',
         ]) &&
         summary.approveCommand.includes('--approve-human') &&
@@ -216,7 +216,7 @@ export function evaluateHumanApprovalSummary(
       id: 'rejection-entry-present',
       passed:
         isCopyableApprovalCommand(summary.rejectCommand, [
-          'donkey',
+          'tekon',
           'approval',
           'reject',
         ]) &&
@@ -258,7 +258,7 @@ export function renderHumanApprovalSummary(
   summary: Omit<HumanApprovalSummary, 'summaryText'>,
 ): string {
   const lines = [
-    `# Donkey 审批摘要`,
+    `# Tekon 审批摘要`,
     '',
     `- decisionId: ${summary.decisionId}`,
     `- runId: ${summary.runId}`,

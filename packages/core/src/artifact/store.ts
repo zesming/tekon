@@ -9,12 +9,12 @@ import {
 import { dirname, join, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { scanTextForSecrets } from '../security/secrets.js';
 
 export interface CreateArtifactStoreOptions {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   maxPromptChars?: number;
 }
 
@@ -62,7 +62,7 @@ export function createArtifactStore(
           (highest, artifact) => Math.max(highest, artifact.version),
           0,
         ) + 1;
-      const relativePath = `.donkey/runs/${runSegment}/artifacts/${nodeSegment}/${input.type}.v${version}.md`;
+      const relativePath = `.tekon/runs/${runSegment}/artifacts/${nodeSegment}/${input.type}.v${version}.md`;
       const absolutePath = resolveManagedPath(options.repoPath, relativePath);
       mkdirSync(dirname(absolutePath), { recursive: true });
       writeFileSync(absolutePath, input.content, 'utf8');
@@ -118,10 +118,10 @@ function assertSafePathSegment(value: string): string {
 }
 
 function resolveManagedPath(repoPath: string, relativePath: string): string {
-  const root = resolve(repoPath, '.donkey');
+  const root = resolve(repoPath, '.tekon');
   const target = resolve(repoPath, relativePath);
   if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    throw new Error(`artifact path escapes .donkey: ${relativePath}`);
+    throw new Error(`artifact path escapes .tekon: ${relativePath}`);
   }
   return target;
 }

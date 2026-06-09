@@ -70,10 +70,10 @@ export function createClaudeCodeAdapter(
         envMode: 'exact',
         env: {
           ...buildClaudeProviderEnv(),
-          DONKEY_OUTPUT_DIR: input.outputDir,
-          DONKEY_ARTIFACT_MANIFEST: manifestPath,
-          DONKEY_RUN_ID: input.runContext.runId,
-          DONKEY_NODE_ID: input.runContext.nodeId,
+          TEKON_OUTPUT_DIR: input.outputDir,
+          TEKON_ARTIFACT_MANIFEST: manifestPath,
+          TEKON_RUN_ID: input.runContext.runId,
+          TEKON_NODE_ID: input.runContext.nodeId,
         },
         stdin: command.stdin,
         runId: input.runContext.runId,
@@ -183,7 +183,7 @@ function resolveOutputPath(outputDir: string, path: string): string {
   if (target !== root && target.startsWith(`${root}${sep}`)) {
     return target;
   }
-  throw new Error(`artifact path escapes DONKEY_OUTPUT_DIR: ${path}`);
+  throw new Error(`artifact path escapes TEKON_OUTPUT_DIR: ${path}`);
 }
 
 function missingRequiredArtifactTypes(
@@ -208,7 +208,7 @@ function assertSafeClaudeArgs(args: readonly string[]): void {
         arg === '--permission-mode' || arg.startsWith('--permission-mode='),
     )
   ) {
-    throw new Error('claude permission mode is controlled by Donkey');
+    throw new Error('claude permission mode is controlled by Tekon');
   }
 
   if (

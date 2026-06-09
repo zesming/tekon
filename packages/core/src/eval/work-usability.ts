@@ -3,7 +3,7 @@ import { resolve, sep } from 'node:path';
 import { z } from 'zod';
 
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type {
   DeliveryPullRequest,
   RunProviderConfig,
@@ -132,7 +132,7 @@ export function upsertWorkUsabilitySample(
 
 export async function evaluateWorkUsability(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   sampleSet: WorkUsabilitySampleSet;
 }): Promise<WorkUsabilityEvaluation> {
@@ -347,7 +347,7 @@ function isSampleRequiredCheck(
 
 async function evaluateSample(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   sample: WorkUsabilitySample;
 }): Promise<WorkUsabilitySampleEvaluation> {
@@ -484,7 +484,7 @@ function evaluateIsolationEvidence(input: {
       id: 'worktree-path-managed',
       passed:
         input.leases.length > 0 && managedLeases.length === input.leases.length,
-      evidence: `${managedLeases.length}/${input.leases.length} worktree paths are under .donkey/worktrees`,
+      evidence: `${managedLeases.length}/${input.leases.length} worktree paths are under .tekon/worktrees`,
     },
     {
       id: 'worktree-leases-released',
@@ -509,7 +509,7 @@ function isManagedWorktreePath(
   repoPath: string,
   worktreePath: string,
 ): boolean {
-  const root = resolve(repoPath, '.donkey', 'worktrees');
+  const root = resolve(repoPath, '.tekon', 'worktrees');
   const target = resolve(worktreePath);
   return target === root || target.startsWith(`${root}${sep}`);
 }

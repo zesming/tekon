@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('run recovery', () => {
   it('returns the running node as resume point and interrupts stale role runs', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
 
@@ -20,8 +20,8 @@ describe('run recovery', () => {
     });
     await repositories.createProject({
       id: 'project_1',
-      name: 'donkey',
-      repoPath: '/tmp/donkey',
+      name: 'tekon',
+      repoPath: '/tmp/tekon',
       createdAt: '2026-06-05T00:00:00.000Z',
     });
     await repositories.createWorkflowInstance({

@@ -140,7 +140,7 @@ export async function generateDynamicWorkflow(
 ): Promise<DynamicWorkflowPreview> {
   const runId = options.runId ?? 'dynamic-preview';
   const repoPath = options.repoPath ?? process.cwd();
-  const dataDir = options.dataDir ?? join(repoPath, '.donkey');
+  const dataDir = options.dataDir ?? join(repoPath, '.tekon');
   const outputDir =
     options.outputDir ?? mkDynamicOutputDir(`${runId}-pm-workflow-`);
 
@@ -317,7 +317,7 @@ function buildPmDraftInput(options: {
 
 function buildPmPrompt(demandText: string): string {
   return [
-    'You are the Donkey PM Agent. Produce only one WorkflowSpecDraft JSON object.',
+    'You are the Tekon PM Agent. Produce only one WorkflowSpecDraft JSON object.',
     'Required top-level fields: demandSummary, phases, riskTags, assumptions, openQuestions.',
     'Each phase must include id, name, nodes, and optional dependsOn/parallel.',
     'Each node must include id, role, artifactOutputs, and optional dependsOn/gates.',
@@ -424,7 +424,7 @@ function assertInsideWorkflowsDir(workflowsDir: string, targetPath: string) {
 }
 
 function mkDynamicOutputDir(prefix: string) {
-  return mkdtempSync(join(tmpdir(), `donkey-${prefix}`));
+  return mkdtempSync(join(tmpdir(), `tekon-${prefix}`));
 }
 
 function formatZodIssues(issues: z.ZodIssue[]) {

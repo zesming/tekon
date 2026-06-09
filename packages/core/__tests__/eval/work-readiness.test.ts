@@ -11,7 +11,7 @@ import {
   createRepositories,
   evaluateWorkReadiness,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('work readiness evaluation', () => {
@@ -24,9 +24,9 @@ describe('work readiness evaluation', () => {
   });
 
   it('requires passed workflow, valid audit, validation gates, delivery package, PR preparation, and no pending human gates', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-ready-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-ready-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -188,11 +188,11 @@ describe('work readiness evaluation', () => {
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',
       runId: 'run_1',
-      branch: 'donkey-delivery/run_1',
+      branch: 'tekon-delivery/run_1',
       baseBranch: 'main',
       title: 'Batch retry',
       status: 'created',
-      prUrl: 'https://github.example/donkey/pull/1',
+      prUrl: 'https://github.example/tekon/pull/1',
       approvedBy: 'cli',
       approvedAt: '2026-06-05T00:00:03.000Z',
       branchPushedAt: '2026-06-05T00:00:04.000Z',
@@ -211,7 +211,7 @@ describe('work readiness evaluation', () => {
       afterPr.checks.find((check) => check.id === 'pr-created'),
     ).toMatchObject({
       passed: true,
-      evidence: 'PR created: https://github.example/donkey/pull/1',
+      evidence: 'PR created: https://github.example/tekon/pull/1',
     });
     db.close();
   });

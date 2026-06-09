@@ -11,7 +11,7 @@ import {
   createCommandGateway,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('claude code adapter', () => {
@@ -46,15 +46,15 @@ describe('claude code adapter', () => {
   it.each([
     {
       args: ['--permission-mode'],
-      message: 'permission mode is controlled by Donkey',
+      message: 'permission mode is controlled by Tekon',
     },
     {
       args: ['--permission-mode', 'bypassPermissions'],
-      message: 'permission mode is controlled by Donkey',
+      message: 'permission mode is controlled by Tekon',
     },
     {
       args: ['--permission-mode=bypassPermissions'],
-      message: 'permission mode is controlled by Donkey',
+      message: 'permission mode is controlled by Tekon',
     },
     {
       args: ['--dangerously-skip-permissions'],
@@ -85,7 +85,7 @@ describe('claude code adapter', () => {
   });
 
   it('streams large stdout/stderr without deadlock and reports timeout', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-agent-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-agent-'));
     tempDirs.push(repoPath);
     const loudScript = join(repoPath, 'loud.mjs');
     const sleepScript = join(repoPath, 'sleep.mjs');
@@ -136,7 +136,7 @@ describe('claude code adapter', () => {
   });
 
   it('passes prompts through stdin when promptMode is stdin', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-stdin-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-stdin-'));
     tempDirs.push(repoPath);
     const stdinScript = join(repoPath, 'stdin.mjs');
     writeFileSync(
@@ -171,7 +171,7 @@ describe('claude code adapter', () => {
   });
 
   it('ingests provider artifact manifests into the artifact store', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-artifacts-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifacts-'));
     tempDirs.push(repoPath);
     const artifactScript = join(repoPath, 'artifact-writer.mjs');
     writeFileSync(
@@ -179,14 +179,14 @@ describe('claude code adapter', () => {
       [
         "import { writeFileSync } from 'node:fs';",
         "import { join } from 'node:path';",
-        'const outputDir = process.env.DONKEY_OUTPUT_DIR;',
-        'const manifestPath = process.env.DONKEY_ARTIFACT_MANIFEST;',
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
         "writeFileSync(join(outputDir, 'code-changes.json'), JSON.stringify({ title: 'Code changes', body: 'Implemented fixture change.' }));",
         "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json', summary: 'Implemented fixture change.' }] }));",
       ].join('\n'),
       'utf8',
     );
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -222,9 +222,7 @@ describe('claude code adapter', () => {
   });
 
   it('fails real provider runs when required artifact manifests are missing or invalid', async () => {
-    const repoPath = mkdtempSync(
-      join(tmpdir(), 'donkey-claude-artifact-fail-'),
-    );
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifact-fail-'));
     tempDirs.push(repoPath);
     const missingScript = join(repoPath, 'missing-manifest.mjs');
     const invalidScript = join(repoPath, 'invalid-artifact.mjs');
@@ -234,13 +232,13 @@ describe('claude code adapter', () => {
       [
         "import { writeFileSync } from 'node:fs';",
         "import { join } from 'node:path';",
-        'const outputDir = process.env.DONKEY_OUTPUT_DIR;',
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
         "writeFileSync(join(outputDir, 'code-changes.json'), JSON.stringify({ title: '', body: '' }));",
-        "writeFileSync(process.env.DONKEY_ARTIFACT_MANIFEST, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json' }] }));",
+        "writeFileSync(process.env.TEKON_ARTIFACT_MANIFEST, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json' }] }));",
       ].join('\n'),
       'utf8',
     );
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -263,7 +261,7 @@ describe('claude code adapter', () => {
         ...baseRunInput(repoPath),
         outputDir: join(
           repoPath,
-          '.donkey',
+          '.tekon',
           'runs',
           'run_1',
           `agent-${script === missingScript ? 'missing' : 'invalid'}`,
@@ -304,10 +302,10 @@ function baseRunInput(repoPath: string) {
       role: 'rd' as const,
       repoPath,
       worktreePath: repoPath,
-      branchName: 'donkey/run_1/node_1-rd',
+      branchName: 'tekon/run_1/node_1-rd',
       createdAt: '2026-06-05T00:00:00.000Z',
     },
-    outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'agent'),
+    outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'agent'),
     commandPolicy: {
       allow: [{ tool: process.execPath, args: [] }],
       deny: [],
@@ -320,7 +318,7 @@ function baseRunInput(repoPath: string) {
       nodeId: 'node_1',
       projectId: 'project_1',
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
     },
   };
 }
@@ -334,8 +332,8 @@ async function seedRun(repositories: ReturnType<typeof createRepositories>) {
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
-    repoPath: '/tmp/donkey',
+    name: 'tekon',
+    repoPath: '/tmp/tekon',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createWorkflowInstance({

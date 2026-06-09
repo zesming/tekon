@@ -10,7 +10,7 @@ import {
   createRepositories,
   createWorkflowEngine,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -24,9 +24,9 @@ describe('workflow engine template e2e', () => {
   });
 
   it('creates durable run state before agent execution and completes the standard-feature template with mock agent', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-template-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-template-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -35,7 +35,7 @@ describe('workflow engine template e2e', () => {
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
@@ -73,11 +73,11 @@ describe('workflow engine template e2e', () => {
   });
 
   it('skips commandRef gates explicitly marked notApplicable in the repo profile', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-na-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-na-'));
     tempDirs.push(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeFileSync(
-      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
       [
         'version: 1',
         'commands:',
@@ -93,14 +93,14 @@ describe('workflow engine template e2e', () => {
       ].join('\n'),
       'utf8',
     );
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: createMockAgentAdapter(),

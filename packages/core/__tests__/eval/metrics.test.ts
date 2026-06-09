@@ -10,7 +10,7 @@ import {
   createRepositories,
   extractRunMetrics,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('eval metrics', () => {
@@ -23,9 +23,9 @@ describe('eval metrics', () => {
   });
 
   it('extracts run metrics from repositories, artifacts, gates, humans, audit, and leases', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-metrics-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-metrics-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -69,7 +69,7 @@ describe('eval metrics', () => {
         open: 0,
       },
     });
-    expect(metrics.prUrl).toBe('https://github.example/donkey/pull/1');
+    expect(metrics.prUrl).toBe('https://github.example/tekon/pull/1');
     expect(metrics.gateByType.build).toEqual({
       passed: 1,
       failed: 1,
@@ -100,7 +100,7 @@ async function seedRun(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });
@@ -201,19 +201,19 @@ async function seedRun(
     nodeId: 'node_1',
     role: 'rd',
     repoPath,
-    worktreePath: join(repoPath, '.donkey', 'worktrees', 'lease_1'),
-    branchName: 'donkey/run_1/node_1',
+    worktreePath: join(repoPath, '.tekon', 'worktrees', 'lease_1'),
+    branchName: 'tekon/run_1/node_1',
     createdAt: '2026-06-05T00:00:01.000Z',
     releasedAt: '2026-06-05T00:00:09.000Z',
   });
   await repositories.upsertDeliveryPullRequest({
     id: 'delivery_pr_1',
     runId: 'run_1',
-    branch: 'donkey-delivery/run_1',
+    branch: 'tekon-delivery/run_1',
     baseBranch: 'main',
     title: 'Refund feature',
     status: 'created',
-    prUrl: 'https://github.example/donkey/pull/1',
+    prUrl: 'https://github.example/tekon/pull/1',
     approvedBy: 'cli',
     approvedAt: '2026-06-05T00:00:10.000Z',
     branchPushedAt: '2026-06-05T00:00:11.000Z',

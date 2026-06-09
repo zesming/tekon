@@ -35,15 +35,15 @@ describe('secret scanning and redaction', () => {
     expect(redacted).toContain('[REDACTED_SECRET]');
   });
 
-  it('scans repository files while ignoring .donkey runtime output', () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-secret-scan-'));
+  it('scans repository files while ignoring .tekon runtime output', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-secret-scan-'));
     tempDirs.push(repoPath);
     writeFileSync(
       join(repoPath, 'config.ts'),
       'export const token = "sk-123456789012345678901234";\n',
       'utf8',
     );
-    writeFileSync(join(repoPath, '.donkey'), 'ignored runtime file', 'utf8');
+    writeFileSync(join(repoPath, '.tekon'), 'ignored runtime file', 'utf8');
 
     const findings = scanFilesForSecrets(repoPath);
     expect(findings).toEqual([

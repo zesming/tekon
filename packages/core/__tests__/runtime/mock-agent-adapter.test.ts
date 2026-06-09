@@ -9,7 +9,7 @@ import {
   createMockAgentAdapter,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('mock agent adapter', () => {
@@ -22,9 +22,9 @@ describe('mock agent adapter', () => {
   });
 
   it('writes deterministic artifacts for all built-in artifact types', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-mock-agent-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-mock-agent-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -41,10 +41,10 @@ describe('mock agent adapter', () => {
         role: 'rd',
         repoPath,
         worktreePath: repoPath,
-        branchName: 'donkey/run_1/node_1-rd',
+        branchName: 'tekon/run_1/node_1-rd',
         createdAt: '2026-06-05T00:00:00.000Z',
       },
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'agent'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'agent'),
       commandPolicy: {
         allow: [],
         deny: [],
@@ -57,7 +57,7 @@ describe('mock agent adapter', () => {
         nodeId: 'node_1',
         projectId: 'project_1',
         repoPath,
-        dataDir: '.donkey',
+        dataDir: '.tekon',
       },
       artifactStore,
     });
@@ -95,7 +95,7 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

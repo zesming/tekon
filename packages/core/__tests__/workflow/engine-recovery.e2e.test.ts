@@ -10,7 +10,7 @@ import {
   createRepositories,
   createWorkflowEngine,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -24,9 +24,9 @@ describe('workflow engine recovery e2e', () => {
   });
 
   it('resumes an interrupted run from the interrupted node while preserving previous artifacts and audit chain', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-recovery-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-recovery-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -35,7 +35,7 @@ describe('workflow engine recovery e2e', () => {
 
     const firstEngine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
@@ -66,7 +66,7 @@ describe('workflow engine recovery e2e', () => {
 
     const secondEngine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
@@ -75,7 +75,7 @@ describe('workflow engine recovery e2e', () => {
             expect(input.requiredArtifactTypes).toEqual(
               expect.arrayContaining(['tech-design', 'code-changes']),
             );
-            expect(input.prompt).toContain('Donkey artifact protocol');
+            expect(input.prompt).toContain('Tekon artifact protocol');
           }
           return mock.runAgent(input);
         },

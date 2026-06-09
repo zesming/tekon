@@ -31,7 +31,7 @@ describe('web http rpc', () => {
 
     await expect(
       fetch(server.url).then((response) => response.text()),
-    ).resolves.toContain('Donkey Web');
+    ).resolves.toContain('Tekon Web');
     await expect(
       fetch(`${server.url}/api/rpc`, { method: 'GET' }).then((response) => ({
         status: response.status,

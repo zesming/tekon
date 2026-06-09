@@ -15,12 +15,10 @@ afterEach(() => {
 
 describe('web project context', () => {
   it('refuses to start without an explicit project root', async () => {
-    expect(() => resolveProjectRoot({ env: {} })).toThrow(
-      /DONKEY_PROJECT_ROOT/,
-    );
+    expect(() => resolveProjectRoot({ env: {} })).toThrow(/TEKON_PROJECT_ROOT/);
 
     await expect(createWebServer({ env: {}, vite: false })).rejects.toThrow(
-      /DONKEY_PROJECT_ROOT/,
+      /TEKON_PROJECT_ROOT/,
     );
   });
 

@@ -11,7 +11,7 @@ import {
   createRepositories,
   evaluateWorkReadiness,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   queryPullRequestCiStatus,
   watchPullRequestCiStatus,
   type CommandGateway,
@@ -28,10 +28,10 @@ describe('delivery CI status', () => {
   });
 
   it('queries PR checks, writes a ci-status artifact, and updates delivery evidence', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-status-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-output-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-status-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-ci-output-'));
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -140,10 +140,10 @@ describe('delivery CI status', () => {
   });
 
   it('summarizes failing PR checks without requiring remote side effects', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-fail-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-fail-output-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-fail-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-ci-fail-output-'));
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedCiRun({ repositories, repoPath });
@@ -178,10 +178,10 @@ describe('delivery CI status', () => {
   });
 
   it('uses only the latest CI status as delivery and readiness evidence', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-latest-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-latest-output-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-latest-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-ci-latest-output-'));
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -255,9 +255,9 @@ describe('delivery CI status', () => {
   });
 
   it('does not trust unaudited ci-status artifacts as remote CI evidence', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-forged-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-forged-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -305,9 +305,9 @@ describe('delivery CI status', () => {
   });
 
   it('rejects unsafe run ids and escaped output directories before running gh', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-safe-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-safe-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedCiRun({ repositories, repoPath });
@@ -335,18 +335,18 @@ describe('delivery CI status', () => {
         repositories,
         gateway,
         selector: 'https://github.example/org/repo/pull/7',
-        outputDir: join(tmpdir(), 'donkey-ci-escaped-output'),
+        outputDir: join(tmpdir(), 'tekon-ci-escaped-output'),
       }),
-    ).rejects.toThrow('CI outputDir escapes .donkey');
+    ).rejects.toThrow('CI outputDir escapes .tekon');
     expect(calls).toEqual([]);
     db.close();
   });
 
   it('records pending checks when gh exits with pending status but prints JSON', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-pending-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-pending-output-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-pending-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-ci-pending-output-'));
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedCiRun({ repositories, repoPath });
@@ -381,10 +381,10 @@ describe('delivery CI status', () => {
   });
 
   it('watches CI until a terminal status and records every attempt', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-output-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-watch-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-ci-watch-output-'));
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -454,12 +454,12 @@ describe('delivery CI status', () => {
   });
 
   it('stops CI watch after max attempts when checks remain pending', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-ci-watch-pending-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-ci-watch-pending-'));
     const outputDir = mkdtempSync(
-      join(tmpdir(), 'donkey-ci-watch-pending-output-'),
+      join(tmpdir(), 'tekon-ci-watch-pending-output-'),
     );
     tempDirs.push(repoPath, outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -520,7 +520,7 @@ async function seedCiRun(input: {
   });
   await input.repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath: input.repoPath,
     createdAt: '2026-06-08T00:00:00.000Z',
   });
@@ -555,7 +555,7 @@ async function seedCiRun(input: {
   await input.repositories.upsertDeliveryPullRequest({
     id: 'delivery_pr_run_1',
     runId: 'run_1',
-    branch: 'donkey-delivery/run_1',
+    branch: 'tekon-delivery/run_1',
     baseBranch: 'main',
     title: 'CI evidence',
     status: 'created',

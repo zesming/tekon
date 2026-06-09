@@ -11,8 +11,8 @@ describe('claude provider smoke support', () => {
     const evidence = {
       version: '2.1.163 (Claude Code)',
       durationMs: 1234,
-      stdoutPath: '/tmp/donkey/stdout.log',
-      stderrPath: '/tmp/donkey/stderr.log',
+      stdoutPath: '/tmp/tekon/stdout.log',
+      stderrPath: '/tmp/tekon/stderr.log',
     };
 
     const markdown = buildClaudeProviderSmokeEvidenceMarkdown(evidence);
@@ -21,8 +21,8 @@ describe('claude provider smoke support', () => {
     for (const body of [markdown, html]) {
       expect(body).toContain('npm run smoke:claude-provider');
       expect(body).toContain('具体值不记录');
-      expect(body).not.toContain('DONKEY_CLAUDE_PROVIDER_SMOKE=');
-      expect(body).not.toContain('DONKEY_CLAUDE_COMMAND=');
+      expect(body).not.toContain('TEKON_CLAUDE_PROVIDER_SMOKE=');
+      expect(body).not.toContain('TEKON_CLAUDE_COMMAND=');
     }
   });
 
@@ -30,7 +30,7 @@ describe('claude provider smoke support', () => {
     expect(
       buildClaudeProviderEnv({
         PATH: '/usr/bin',
-        HOME: '/tmp/donkey-home',
+        HOME: '/tmp/tekon-home',
         LANG: 'C.UTF-8',
         ANTHROPIC_API_KEY: 'secret',
         CLAUDE_CODE_API_KEY: 'secret',
@@ -39,7 +39,7 @@ describe('claude provider smoke support', () => {
       }),
     ).toEqual({
       PATH: '/usr/bin',
-      HOME: '/tmp/donkey-home',
+      HOME: '/tmp/tekon-home',
       LANG: 'C.UTF-8',
     });
   });

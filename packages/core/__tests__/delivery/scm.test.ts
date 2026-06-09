@@ -21,7 +21,7 @@ import {
   createAuditLogger,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('scm delivery', () => {
@@ -41,16 +41,16 @@ describe('scm delivery', () => {
     const result = await delivery.createPr({
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       dryRun: true,
     });
 
     expect(result.dryRun).toBe(true);
     expect(result.requiresHumanApproval).toBe(true);
     expect(result.commands.map((command) => command.join(' '))).toEqual([
-      'git branch donkey/phase-3',
-      'git push -u origin donkey/phase-3',
-      'gh pr create --title Phase 3 delivery --body Evidence body --head donkey/phase-3 --base main',
+      'git branch tekon/phase-3',
+      'git push -u origin tekon/phase-3',
+      'gh pr create --title Phase 3 delivery --body Evidence body --head tekon/phase-3 --base main',
     ]);
     expect(
       execFileSync('git', ['status', '--short'], {
@@ -62,8 +62,8 @@ describe('scm delivery', () => {
 
   it('captures a PR URL from a fake gh fixture after human-approved push', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-remote-'));
-    const binDir = mkdtempSync(join(tmpdir(), 'donkey-fake-gh-'));
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-fake-gh-'));
     tempDirs.push(remotePath, binDir);
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
@@ -81,20 +81,20 @@ describe('scm delivery', () => {
     const result = await delivery.createPr({
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       dryRun: false,
       humanApproved: true,
     });
 
-    expect(result.prUrl).toBe('https://github.example/donkey/pull/1');
+    expect(result.prUrl).toBe('https://github.example/tekon/pull/1');
     expect(result.requiresHumanApproval).toBe(false);
     expect(readFileSync(join(binDir, 'gh.log'), 'utf8')).toContain('pr create');
   });
 
   it('reports remote, current branch, dirty worktree, auth, and approval requirements', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-remote-'));
-    const binDir = mkdtempSync(join(tmpdir(), 'donkey-fake-gh-auth-'));
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-fake-gh-auth-'));
     tempDirs.push(remotePath, binDir);
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
@@ -108,7 +108,7 @@ describe('scm delivery', () => {
       env: { PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}` },
     });
 
-    const status = await delivery.getStatus({ branch: 'donkey/phase-3' });
+    const status = await delivery.getStatus({ branch: 'tekon/phase-3' });
 
     expect(status).toMatchObject({
       hasRemote: true,
@@ -125,10 +125,10 @@ describe('scm delivery', () => {
 
   it('uses CommandGateway argv commands for approved push and PR creation', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-logs-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-logs-'));
     tempDirs.push(outputDir);
     const stdoutPath = join(outputDir, 'gh-pr.stdout.log');
-    writeFileSync(stdoutPath, 'https://github.example/donkey/pull/2\n', 'utf8');
+    writeFileSync(stdoutPath, 'https://github.example/tekon/pull/2\n', 'utf8');
     const calls: CommandGatewayRunInput[] = [];
     const gateway: CommandGateway = {
       async run(input) {
@@ -152,15 +152,15 @@ describe('scm delivery', () => {
     const result = await delivery.createPr({
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       dryRun: false,
       humanApproved: true,
     });
 
-    expect(result.prUrl).toBe('https://github.example/donkey/pull/2');
+    expect(result.prUrl).toBe('https://github.example/tekon/pull/2');
     expect(calls.map((call) => call.command)).toEqual([
-      { tool: 'git', args: ['branch', 'donkey/phase-3'] },
-      { tool: 'git', args: ['push', '-u', 'origin', 'donkey/phase-3'] },
+      { tool: 'git', args: ['branch', 'tekon/phase-3'] },
+      { tool: 'git', args: ['push', '-u', 'origin', 'tekon/phase-3'] },
       {
         tool: 'gh',
         args: [
@@ -171,7 +171,7 @@ describe('scm delivery', () => {
           '--body',
           'Evidence body',
           '--head',
-          'donkey/phase-3',
+          'tekon/phase-3',
           '--base',
           'main',
         ],
@@ -189,7 +189,7 @@ describe('scm delivery', () => {
 
   it('records awaiting approval before remote PR side effects', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -199,8 +199,8 @@ describe('scm delivery', () => {
       runId: 'run_1',
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      bodyPath: '.donkey/runs/run_1/delivery/pr-body.md',
-      branch: 'donkey/phase-3',
+      bodyPath: '.tekon/runs/run_1/delivery/pr-body.md',
+      branch: 'tekon/phase-3',
       baseBranch: 'main',
       dryRun: false,
     });
@@ -208,17 +208,17 @@ describe('scm delivery', () => {
     expect(result.requiresHumanApproval).toBe(true);
     expect(await repositories.getDeliveryPullRequest('run_1')).toMatchObject({
       status: 'awaiting-approval',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       baseBranch: 'main',
-      bodyPath: '.donkey/runs/run_1/delivery/pr-body.md',
+      bodyPath: '.tekon/runs/run_1/delivery/pr-body.md',
     });
     db.close();
   });
 
   it('persists PR URL and audit event after approved creation', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-remote-'));
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-logs-'));
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-remote-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-logs-'));
     tempDirs.push(remotePath, outputDir);
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
@@ -227,14 +227,14 @@ describe('scm delivery', () => {
     writeFileSync(join(repoPath, 'feature.txt'), 'feature\n', 'utf8');
     execFileSync('git', ['add', 'feature.txt'], { cwd: repoPath });
     execFileSync('git', ['commit', '-m', 'feature'], { cwd: repoPath });
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
     await seedRun(repositories);
 
     const stdoutPath = join(outputDir, 'gh-pr.stdout.log');
-    writeFileSync(stdoutPath, 'https://github.example/donkey/pull/3\n', 'utf8');
+    writeFileSync(stdoutPath, 'https://github.example/tekon/pull/3\n', 'utf8');
     const gateway: CommandGateway = {
       async run(input) {
         if (input.command.tool === 'gh') {
@@ -257,16 +257,16 @@ describe('scm delivery', () => {
       runId: 'run_1',
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       dryRun: false,
       humanApproved: true,
       approvedBy: 'test',
     });
 
-    expect(result.prUrl).toBe('https://github.example/donkey/pull/3');
+    expect(result.prUrl).toBe('https://github.example/tekon/pull/3');
     expect(await repositories.getDeliveryPullRequest('run_1')).toMatchObject({
       status: 'created',
-      prUrl: 'https://github.example/donkey/pull/3',
+      prUrl: 'https://github.example/tekon/pull/3',
       approvedBy: 'test',
       failureStage: null,
       lastError: null,
@@ -281,13 +281,13 @@ describe('scm delivery', () => {
 
   it('pushes an existing delivery branch without checking it out', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-existing-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-existing-'));
     tempDirs.push(outputDir);
-    execFileSync('git', ['branch', 'donkey-delivery/run_1'], {
+    execFileSync('git', ['branch', 'tekon-delivery/run_1'], {
       cwd: repoPath,
     });
     const stdoutPath = join(outputDir, 'gh-pr.stdout.log');
-    writeFileSync(stdoutPath, 'https://github.example/donkey/pull/4\n', 'utf8');
+    writeFileSync(stdoutPath, 'https://github.example/tekon/pull/4\n', 'utf8');
     const calls: CommandGatewayRunInput[] = [];
     const gateway: CommandGateway = {
       async run(input) {
@@ -308,14 +308,14 @@ describe('scm delivery', () => {
     }).createPr({
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey-delivery/run_1',
+      branch: 'tekon-delivery/run_1',
       dryRun: false,
       humanApproved: true,
     });
 
-    expect(result.prUrl).toBe('https://github.example/donkey/pull/4');
+    expect(result.prUrl).toBe('https://github.example/tekon/pull/4');
     expect(calls.map((call) => call.command)).toEqual([
-      { tool: 'git', args: ['push', '-u', 'origin', 'donkey-delivery/run_1'] },
+      { tool: 'git', args: ['push', '-u', 'origin', 'tekon-delivery/run_1'] },
       {
         tool: 'gh',
         args: [
@@ -326,7 +326,7 @@ describe('scm delivery', () => {
           '--body',
           'Evidence body',
           '--head',
-          'donkey-delivery/run_1',
+          'tekon-delivery/run_1',
           '--base',
           'main',
         ],
@@ -336,10 +336,10 @@ describe('scm delivery', () => {
 
   it('rejects approved PR creation when the main worktree has uncommitted changes', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-dirty-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-dirty-'));
     tempDirs.push(outputDir);
     writeFileSync(join(repoPath, 'feature.txt'), 'feature\n', 'utf8');
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -349,7 +349,7 @@ describe('scm delivery', () => {
         runId: 'run_1',
         title: 'Phase 3 delivery',
         body: 'Evidence body',
-        branch: 'donkey-delivery/run_1',
+        branch: 'tekon-delivery/run_1',
         dryRun: false,
         humanApproved: true,
       }),
@@ -363,9 +363,9 @@ describe('scm delivery', () => {
 
   it('marks failed delivery stage when PR creation fails after push', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-fail-logs-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-fail-logs-'));
     tempDirs.push(outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -391,7 +391,7 @@ describe('scm delivery', () => {
         runId: 'run_1',
         title: 'Phase 3 delivery',
         body: 'Evidence body',
-        branch: 'donkey/phase-3',
+        branch: 'tekon/phase-3',
         dryRun: false,
         humanApproved: true,
       }),
@@ -405,15 +405,15 @@ describe('scm delivery', () => {
 
   it('recovers an existing PR URL when gh pr create fails after push', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const outputDir = mkdtempSync(join(tmpdir(), 'donkey-scm-recover-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-recover-'));
     tempDirs.push(outputDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
     await seedRun(repositories);
     const viewStdoutPath = join(outputDir, 'gh-pr-view.out');
-    writeFileSync(viewStdoutPath, 'https://github.example/donkey/pull/5\n');
+    writeFileSync(viewStdoutPath, 'https://github.example/tekon/pull/5\n');
     const gateway: CommandGateway = {
       async run(input) {
         const stdoutPath = join(
@@ -444,15 +444,15 @@ describe('scm delivery', () => {
       runId: 'run_1',
       title: 'Phase 3 delivery',
       body: 'Evidence body',
-      branch: 'donkey/phase-3',
+      branch: 'tekon/phase-3',
       dryRun: false,
       humanApproved: true,
     });
 
-    expect(result.prUrl).toBe('https://github.example/donkey/pull/5');
+    expect(result.prUrl).toBe('https://github.example/tekon/pull/5');
     expect(await repositories.getDeliveryPullRequest('run_1')).toMatchObject({
       status: 'created',
-      prUrl: 'https://github.example/donkey/pull/5',
+      prUrl: 'https://github.example/tekon/pull/5',
       failureStage: null,
     });
     expect(await repositories.listAuditEvents('run_1')).toEqual(
@@ -487,8 +487,8 @@ async function seedRun(repositories: ReturnType<typeof createRepositories>) {
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
-    repoPath: '/tmp/donkey',
+    name: 'tekon',
+    repoPath: '/tmp/tekon',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createWorkflowInstance({
@@ -502,13 +502,13 @@ async function seedRun(repositories: ReturnType<typeof createRepositories>) {
 }
 
 function createGitRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-scm-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-scm-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   writeFileSync(join(repoPath, 'README.md'), 'fixture\n', 'utf8');
@@ -533,7 +533,7 @@ if [ "$1 $2" = "auth status" ]; then
       : 'echo "not logged in" >&2\n  exit 1'
   }
 fi
-echo "https://github.example/donkey/pull/1"
+echo "https://github.example/tekon/pull/1"
 `,
     'utf8',
   );

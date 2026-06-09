@@ -1,6 +1,6 @@
 import { validateArtifactContent } from '../artifact/schemas.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { readRepoTextFile } from '../repo/safe-path.js';
 import type {
   Artifact,
@@ -52,7 +52,7 @@ export interface DeliveryEvidencePackage {
 }
 
 export async function createDeliveryEvidencePackage(input: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   repoPath?: string;
@@ -106,7 +106,7 @@ function collectSemanticEvidence(
   repoPath: string,
   artifacts: Artifact[],
   gates: GateResult[],
-  auditEvents: Awaited<ReturnType<DonkeyRepositories['listAuditEvents']>>,
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
 ) {
   const criteria = new Map<string, { id: string; description: string }>();
   const evidenceByCriterion = new Map<string, AcceptanceCriterionEvidence>();
@@ -198,7 +198,7 @@ function collectSemanticEvidence(
 function latestCiStatusEvidence(
   repoPath: string,
   artifacts: Artifact[],
-  auditEvents: Awaited<ReturnType<DonkeyRepositories['listAuditEvents']>>,
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
 ): CiStatusEvidence[] {
   const auditedArtifactIds = new Set(
     auditEvents

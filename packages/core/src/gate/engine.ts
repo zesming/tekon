@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import type { CommandPolicy } from '../types/config.js';
 import type { GateConfig, GateResult, Node, Role } from '../types/domain.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
 import { validateArtifactContent } from '../artifact/schemas.js';
 import { runCommandGate, runSecurityScanGate } from './runners.js';
@@ -29,7 +29,7 @@ export interface GateEngine {
 }
 
 export function createGateEngine(options: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   gateway?: CommandGateway;
 }): GateEngine {
   return {
@@ -140,7 +140,7 @@ function isCommandGate(
 
 async function runSchemaGate(
   input: GateEngineRunInput,
-  repositories: DonkeyRepositories,
+  repositories: TekonRepositories,
 ): Promise<GateResult> {
   mkdirSync(input.outputDir, { recursive: true });
   const outputPath = join(input.outputDir, `${input.nodeId}-schema.log`);

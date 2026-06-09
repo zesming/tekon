@@ -135,7 +135,7 @@ describe('demand shape', () => {
   });
 
   it('writes, reads, approves, and mirrors markdown review files', () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-demand-shape-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-demand-shape-'));
     tempDirs.push(repoPath);
     const shape = shapeDemand({
       id: 'shape_files',

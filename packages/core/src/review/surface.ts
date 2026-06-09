@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import {
   evaluateWorkReadiness,
   type WorkReadinessEvaluation,
@@ -104,7 +104,7 @@ export interface WorkReviewSurface {
 
 export async function createWorkReviewSurface(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   maxContentChars?: number;
@@ -307,14 +307,14 @@ function gateTriageAdvice(input: {
   summary: string;
   suggestedCommand: string;
 } {
-  const logCommand = `donkey log --run-id ${input.runId}`;
-  const reviewCommand = `donkey review --run-id ${input.runId}`;
+  const logCommand = `tekon log --run-id ${input.runId}`;
+  const reviewCommand = `tekon review --run-id ${input.runId}`;
   if (isHumanApprovalTriage(input.gate, input.classification)) {
     return {
       retry: 'after-approval',
       summary:
         'Human approval is required before this gate can continue. Approve only after reviewing the pending decision and risk.',
-      suggestedCommand: `donkey resume --run-id ${input.runId} --approve-human`,
+      suggestedCommand: `tekon resume --run-id ${input.runId} --approve-human`,
     };
   }
   if (input.classification === 'missing-command') {
@@ -322,7 +322,7 @@ function gateTriageAdvice(input: {
       retry: 'after-fix',
       summary:
         'Gate command is missing from repo profile. Resolve the commandRef before retrying this run.',
-      suggestedCommand: 'donkey workflow preflight <template> --repo <repo>',
+      suggestedCommand: 'tekon workflow preflight <template> --repo <repo>',
     };
   }
   if (input.classification === 'security-findings') {
@@ -373,7 +373,7 @@ function gateTriageAdvice(input: {
     return {
       retry: 'not-recommended',
       summary:
-        'Workflow references a gate type Donkey does not support in the current runtime.',
+        'Workflow references a gate type Tekon does not support in the current runtime.',
       suggestedCommand: reviewCommand,
     };
   }
@@ -596,7 +596,7 @@ function deliveryPathsForRun(repoPath: string, runId: string) {
   return {
     packagePath: join(
       repoPath,
-      '.donkey',
+      '.tekon',
       'runs',
       runId,
       'delivery',
@@ -604,7 +604,7 @@ function deliveryPathsForRun(repoPath: string, runId: string) {
     ),
     prBodyPath: join(
       repoPath,
-      '.donkey',
+      '.tekon',
       'runs',
       runId,
       'delivery',
@@ -643,7 +643,7 @@ function createDiffSummary(input: {
   branch?: string | null;
   baseBranch?: string | null;
 }): ReviewDiffSummary {
-  const branch = input.branch ?? `donkey-delivery/${input.runId}`;
+  const branch = input.branch ?? `tekon-delivery/${input.runId}`;
   const baseBranch = input.baseBranch ?? baseBranchForRepo(input.repoPath);
   const branchCommit = resolveCommit(input.repoPath, branch);
   if (!branchCommit) {
@@ -754,14 +754,14 @@ function nextCommandsFor(input: {
   diffAvailable: boolean;
 }): string[] {
   const commands = [
-    `donkey status --run-id ${input.runId}`,
-    `donkey eval readiness --run-id ${input.runId}`,
+    `tekon status --run-id ${input.runId}`,
+    `tekon eval readiness --run-id ${input.runId}`,
   ];
   if (input.deliveryStatus === 'not-prepared') {
-    commands.push(`donkey delivery prepare --run-id ${input.runId}`);
+    commands.push(`tekon delivery prepare --run-id ${input.runId}`);
   }
   if (!input.readiness.ready) {
-    commands.push(`donkey log --run-id ${input.runId}`);
+    commands.push(`tekon log --run-id ${input.runId}`);
   }
   if (
     input.readiness.ready &&
@@ -769,7 +769,7 @@ function nextCommandsFor(input: {
     input.diffAvailable
   ) {
     commands.push(
-      `donkey delivery create-pr --run-id ${input.runId} --approve-human`,
+      `tekon delivery create-pr --run-id ${input.runId} --approve-human`,
     );
   }
   return commands;

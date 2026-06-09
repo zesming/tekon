@@ -11,9 +11,9 @@ import {
   createRepositories,
   evaluateWorkUsability,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   renderWorkUsabilityEvaluationReport,
-  type DonkeyRepositories,
+  type TekonRepositories,
   upsertWorkUsabilitySample,
 } from '../../src/index.js';
 
@@ -27,9 +27,9 @@ describe('work usability evaluation', () => {
   });
 
   it('passes when sample thresholds, readiness, PR evidence, and isolation evidence are satisfied', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-usable-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-usable-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -38,7 +38,7 @@ describe('work usability evaluation', () => {
       repositories,
       runId: 'run_real',
       provider: 'claude-code',
-      prUrl: 'https://github.example/donkey/pull/42',
+      prUrl: 'https://github.example/tekon/pull/42',
     });
     await audit.append({
       runId: 'run_real',
@@ -72,7 +72,7 @@ describe('work usability evaluation', () => {
             expectedProvider: 'claude-code',
             requireRealProvider: true,
             requirePr: true,
-            expectedPrUrl: 'https://github.example/donkey/pull/42',
+            expectedPrUrl: 'https://github.example/tekon/pull/42',
           },
         ],
       },
@@ -98,9 +98,9 @@ describe('work usability evaluation', () => {
   });
 
   it('keeps work usability false when real provider, PR, or isolation evidence is missing', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-not-usable-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-not-usable-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -180,9 +180,9 @@ describe('work usability evaluation', () => {
   });
 
   it('records missing runs as failed sample evidence', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-missing-run-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-missing-run-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -227,7 +227,7 @@ describe('work usability evaluation', () => {
         expectedProvider: 'claude-code',
         requireRealProvider: true,
         requirePr: true,
-        expectedPrUrl: 'https://github.example/donkey/pull/7',
+        expectedPrUrl: 'https://github.example/tekon/pull/7',
       },
     );
 
@@ -247,9 +247,9 @@ describe('work usability evaluation', () => {
   });
 
   it('renders a bounded work usability report with failed checks visible', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-work-report-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-report-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -292,7 +292,7 @@ describe('work usability evaluation', () => {
 
 async function seedReadyRun(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   runId: string;
   provider: 'mock' | 'claude-code';
   prUrl: string | null;
@@ -395,12 +395,12 @@ async function seedReadyRun(input: {
       repoPath: input.repoPath,
       worktreePath: join(
         input.repoPath,
-        '.donkey',
+        '.tekon',
         'worktrees',
         input.runId,
         'node-rd-lease',
       ),
-      branchName: `donkey/${input.runId}/node-rd-lease`,
+      branchName: `tekon/${input.runId}/node-rd-lease`,
       createdAt: '2026-06-08T00:00:00.200Z',
       releasedAt: '2026-06-08T00:00:01.200Z',
     });
@@ -409,7 +409,7 @@ async function seedReadyRun(input: {
     await input.repositories.upsertDeliveryPullRequest({
       id: `delivery_pr_${input.runId}`,
       runId: input.runId,
-      branch: `donkey-delivery/${input.runId}`,
+      branch: `tekon-delivery/${input.runId}`,
       baseBranch: 'main',
       title: 'Batch retry',
       status: 'created',

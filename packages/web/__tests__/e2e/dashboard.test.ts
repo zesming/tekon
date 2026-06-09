@@ -6,7 +6,7 @@ import {
   type RunningWebServer,
 } from '../../src/server/http.js';
 
-test.describe('Donkey dashboard', () => {
+test.describe('Tekon dashboard', () => {
   let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
   let server: RunningWebServer;
 
@@ -48,7 +48,7 @@ test.describe('Donkey dashboard', () => {
     await expect(page.getByText('decision_1')).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
     await expect(
-      page.getByText('donkey run --template standard-feature --agent mock', {
+      page.getByText('tekon run --template standard-feature --agent mock', {
         exact: true,
       }),
     ).toBeVisible();

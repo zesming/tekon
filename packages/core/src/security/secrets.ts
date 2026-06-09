@@ -102,7 +102,7 @@ function listScannableFiles(root: string): string[] {
 
 const IGNORED_DIRS = new Set([
   '.git',
-  '.donkey',
+  '.tekon',
   'node_modules',
   'dist',
   'coverage',

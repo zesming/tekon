@@ -16,7 +16,7 @@ describe('domain schemas', () => {
       demandSchema.parse({
         id: 'demand_1',
         title: 'Add status command',
-        body: 'Show the current Donkey run status.',
+        body: 'Show the current Tekon run status.',
         createdAt: '2026-06-05T00:00:00.000Z',
       }),
     ).toMatchObject({ id: 'demand_1' });
@@ -24,11 +24,11 @@ describe('domain schemas', () => {
     expect(
       projectSchema.parse({
         id: 'project_1',
-        name: 'donkey',
-        repoPath: '/tmp/donkey',
+        name: 'tekon',
+        repoPath: '/tmp/tekon',
         createdAt: '2026-06-05T00:00:00.000Z',
       }),
-    ).toMatchObject({ repoPath: '/tmp/donkey' });
+    ).toMatchObject({ repoPath: '/tmp/tekon' });
 
     expect(
       workflowInstanceSchema.parse({
@@ -48,7 +48,7 @@ describe('domain schemas', () => {
         nodeId: 'node_1',
         type: 'prd',
         version: 1,
-        path: '.donkey/runs/run_1/artifacts/node_1/prd.v1.md',
+        path: '.tekon/runs/run_1/artifacts/node_1/prd.v1.md',
         sha256: 'abc123',
         sizeBytes: 42,
         createdAt: '2026-06-05T00:00:00.000Z',

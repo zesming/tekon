@@ -63,7 +63,7 @@ describe('web read API', () => {
         expect.objectContaining({
           id: 'decision_1',
           context: expect.objectContaining({
-            exactCommand: 'donkey run --template standard-feature --agent mock',
+            exactCommand: 'tekon run --template standard-feature --agent mock',
             riskLabel: 'high',
             nodeRole: 'reviewer',
             gate: expect.objectContaining({ id: 'gate_1', type: 'human' }),

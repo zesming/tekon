@@ -54,7 +54,7 @@ import {
   loadRole,
   loadWorkflowTemplate,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   saveDynamicTemplate,
   repoProfileCommandGuidance,
   workUsabilitySampleSetSchema,
@@ -66,7 +66,7 @@ import {
   type RunProviderConfig,
   type WorkUsabilitySample,
   type WorkUsabilitySampleSet,
-} from '@donkey/core';
+} from '@tekon/core';
 
 export interface CliIO {
   stdout: { write(chunk: string): void };
@@ -80,7 +80,7 @@ export async function runCli(
   try {
     const [command, ...rest] = argv;
     if (!command) {
-      io.stderr.write('usage: donkey <command>\n');
+      io.stderr.write('usage: tekon <command>\n');
       return 1;
     }
 
@@ -159,13 +159,13 @@ async function commandInit(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolve(args.values.repo ?? process.cwd());
-  const donkeyDir = join(repoPath, '.donkey');
-  mkdirSync(join(donkeyDir, 'runs'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'roles'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'worktrees'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'eval'), { recursive: true });
-  const webSessionPath = join(donkeyDir, 'web-session.json');
+  const tekonDir = join(repoPath, '.tekon');
+  mkdirSync(join(tekonDir, 'runs'), { recursive: true });
+  mkdirSync(join(tekonDir, 'roles'), { recursive: true });
+  mkdirSync(join(tekonDir, 'workflows'), { recursive: true });
+  mkdirSync(join(tekonDir, 'worktrees'), { recursive: true });
+  mkdirSync(join(tekonDir, 'eval'), { recursive: true });
+  const webSessionPath = join(tekonDir, 'web-session.json');
   if (!existsSync(webSessionPath)) {
     writeFileSync(
       webSessionPath,
@@ -174,10 +174,10 @@ async function commandInit(argv: string[], io: CliIO) {
     );
   }
   writeFileSync(
-    join(donkeyDir, 'config.yaml'),
+    join(tekonDir, 'config.yaml'),
     stringifyYaml({
       project: { name: basenameForProject(repoPath), repoPath },
-      storage: { dataDir: '.donkey' },
+      storage: { dataDir: '.tekon' },
       defaultAgent: 'mock',
     }),
     'utf8',
@@ -185,7 +185,7 @@ async function commandInit(argv: string[], io: CliIO) {
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
   db.close();
-  const profilePath = join(donkeyDir, 'repo-profile.yaml');
+  const profilePath = join(tekonDir, 'repo-profile.yaml');
   if (!existsSync(profilePath)) {
     writeDefaultRepoProfile(repoPath);
   }
@@ -236,7 +236,7 @@ async function commandRun(argv: string[], io: CliIO) {
     });
     if (args.values['save-as']) {
       saveDynamicTemplate(preview.draft, args.values['save-as'], {
-        workflowsDir: join(repoPath, '.donkey', 'workflows'),
+        workflowsDir: join(repoPath, '.tekon', 'workflows'),
       });
     }
     io.stdout.write(
@@ -265,7 +265,7 @@ async function commandRun(argv: string[], io: CliIO) {
   });
   const engine = createWorkflowEngine({
     repoPath,
-    dataDir: '.donkey',
+    dataDir: '.tekon',
     repositories,
     audit,
     adapter: agentRuntime.adapter,
@@ -579,7 +579,7 @@ async function commandResume(argv: string[], io: CliIO) {
 
   const engine = createWorkflowEngine({
     repoPath,
-    dataDir: '.donkey',
+    dataDir: '.tekon',
     repositories,
     audit,
     adapter: agentRuntime.adapter,
@@ -628,7 +628,7 @@ async function commandRole(argv: string[], io: CliIO) {
   if (subcommand === 'list') {
     const roles = new Set([
       ...listRoleIds(builtInRolesDir),
-      ...listRoleIds(join(repoPath, '.donkey', 'roles')),
+      ...listRoleIds(join(repoPath, '.tekon', 'roles')),
     ]);
     io.stdout.write(`${[...roles].sort().join('\n')}\n`);
     return;
@@ -660,7 +660,7 @@ async function commandRole(argv: string[], io: CliIO) {
   if (subcommand === 'create') {
     ensureInitialized(repoPath);
     const source = join(builtInRolesDir, roleId);
-    const target = join(repoPath, '.donkey', 'roles', roleId);
+    const target = join(repoPath, '.tekon', 'roles', roleId);
     cpSync(source, target, { recursive: true });
     io.stdout.write(`${target}\n`);
     return;
@@ -728,7 +728,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
   });
   const repoPath = resolve(args.values.repo ?? process.cwd());
   const builtInWorkflowsDir = getBuiltInWorkflowsDir();
-  const projectWorkflowsDir = join(repoPath, '.donkey', 'workflows');
+  const projectWorkflowsDir = join(repoPath, '.tekon', 'workflows');
 
   if (subcommand === 'list') {
     const names = new Set([
@@ -754,7 +754,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
           const commandText = command
             ? [command.tool, ...command.args].join(' ')
             : gate.type === 'security-scan'
-              ? 'donkey-builtin security scan'
+              ? 'tekon-builtin security scan'
               : '';
           const status =
             guidance?.status === 'not-applicable' &&
@@ -893,7 +893,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       repoPath,
       repositories,
       audit,
-      outputDir: join(repoPath, '.donkey', 'runs', runId, 'delivery', 'scm'),
+      outputDir: join(repoPath, '.tekon', 'runs', runId, 'delivery', 'scm'),
     }).createPr({
       runId,
       title: preparation.title,
@@ -1032,9 +1032,9 @@ async function commandDelivery(argv: string[], io: CliIO) {
     riskGates: ['human'],
   });
   const pr = await createScmDelivery({ repoPath }).createPr({
-    title: `Donkey delivery ${runId}`,
+    title: `Tekon delivery ${runId}`,
     body: `Run ${runId} status=${evidence.workflowStatus}`,
-    branch: `donkey-delivery/${runId}`,
+    branch: `tekon-delivery/${runId}`,
     dryRun: true,
   });
   io.stdout.write(
@@ -1451,7 +1451,7 @@ async function commandEval(argv: string[], io: CliIO) {
     const samplePath = resolve(
       repoPath,
       args.values.samples ??
-        join('.donkey', 'eval', 'work-usability-samples.yaml'),
+        join('.tekon', 'eval', 'work-usability-samples.yaml'),
     );
     if (!existsSync(samplePath)) {
       throw new Error(`work usability sample file not found: ${samplePath}`);
@@ -1478,7 +1478,7 @@ async function commandEval(argv: string[], io: CliIO) {
         : null;
       if (reportMarkdownPath || reportHtmlPath) {
         const report = renderWorkUsabilityEvaluationReport({
-          title: args.values.title ?? 'Donkey Work Usability Evaluation',
+          title: args.values.title ?? 'Tekon Work Usability Evaluation',
           generatedAt: new Date().toISOString(),
           samplePath,
           evaluation,
@@ -1560,7 +1560,7 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
   const samplePath = resolve(
     repoPath,
     args.values.samples ??
-      join('.donkey', 'eval', 'work-usability-samples.yaml'),
+      join('.tekon', 'eval', 'work-usability-samples.yaml'),
   );
   const sampleSet: WorkUsabilitySampleSet = existsSync(samplePath)
     ? workUsabilitySampleSetSchema.parse(
@@ -1886,7 +1886,7 @@ async function commandClean(argv: string[], io: CliIO) {
   });
   const repoPath = resolve(args.values.repo ?? process.cwd());
   ensureInitialized(repoPath);
-  const worktreesDir = join(repoPath, '.donkey', 'worktrees');
+  const worktreesDir = join(repoPath, '.tekon', 'worktrees');
   let cleaned = 0;
   if (existsSync(worktreesDir)) {
     rmSync(worktreesDir, { force: true, recursive: true });
@@ -1922,14 +1922,14 @@ function openCommandContext(argv: string[]) {
 }
 
 function openProjectDb(repoPath: string) {
-  mkdirSync(join(repoPath, '.donkey'), { recursive: true });
-  return openDonkeyDatabase({
-    filename: join(repoPath, '.donkey', 'donkey.sqlite'),
+  mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+  return openTekonDatabase({
+    filename: join(repoPath, '.tekon', 'tekon.sqlite'),
   });
 }
 
 function ensureInitialized(repoPath: string) {
-  if (!existsSync(join(repoPath, '.donkey', 'config.yaml'))) {
+  if (!existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
     throw new Error(`not initialized: ${repoPath}`);
   }
 }
@@ -1942,17 +1942,17 @@ function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
   const meaningfulDirtyLines = status
     .split(/\r?\n/u)
     .filter((line) => line.trim().length > 0)
-    .filter((line) => !line.startsWith('?? .donkey/'));
+    .filter((line) => !line.startsWith('?? .tekon/'));
 
   if (meaningfulDirtyLines.length > 0 && !allowDirtyBase) {
     throw new Error(
-      'dirty base worktree requires --allow-dirty-base before donkey run',
+      'dirty base worktree requires --allow-dirty-base before tekon run',
     );
   }
 }
 
 function basenameForProject(repoPath: string) {
-  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'donkey';
+  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'tekon';
 }
 
 function getRepoRoot() {

@@ -4,7 +4,7 @@ import { join, resolve, sep } from 'node:path';
 
 import type { Role } from '../types/domain.js';
 import type { WorktreeLease } from '../types/config.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { CommandGateway } from './command-gateway.js';
 
 export interface CreateLeaseInput {
@@ -37,7 +37,7 @@ export interface WorktreeManager {
 }
 
 export function createWorktreeManager(options: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   gateway: CommandGateway;
 }): WorktreeManager {
   return {
@@ -73,7 +73,7 @@ export function createWorktreeManager(options: {
       const meaningfulDirtyLines = dirtyStatus
         .split(/\r?\n/u)
         .filter((line) => line.trim().length > 0)
-        .filter((line) => !line.startsWith('?? .donkey/'));
+        .filter((line) => !line.startsWith('?? .tekon/'));
 
       if (meaningfulDirtyLines.length > 0 && !input.allowDirtyBase) {
         throw new Error('dirty base worktree requires allowDirtyBase');
@@ -83,12 +83,12 @@ export function createWorktreeManager(options: {
       const suffix = `${nodeSegment}-${roleSegment}-${leaseSegment}`;
       const worktreePath = join(
         repoPath,
-        '.donkey',
+        '.tekon',
         'worktrees',
         runSegment,
         suffix,
       );
-      const branchName = `donkey/${runSegment}/${suffix}`;
+      const branchName = `tekon/${runSegment}/${suffix}`;
 
       await runGit(options.gateway, {
         repoPath,
@@ -131,7 +131,7 @@ export function createWorktreeManager(options: {
       const meaningfulDirtyLines = dirtyStatus
         .split(/\r?\n/u)
         .filter((line) => line.trim().length > 0)
-        .filter((line) => !line.startsWith('?? .donkey/'));
+        .filter((line) => !line.startsWith('?? .tekon/'));
 
       if (meaningfulDirtyLines.length === 0) {
         return false;
@@ -140,7 +140,7 @@ export function createWorktreeManager(options: {
       await runGit(options.gateway, {
         repoPath: lease.worktreePath,
         runId: lease.runId,
-        args: ['add', '.', ':!.donkey'],
+        args: ['add', '.', ':!.tekon'],
       });
       await runGit(options.gateway, {
         repoPath: lease.worktreePath,
@@ -205,7 +205,7 @@ async function runGit(
   const result = await gateway.run({
     command: { tool: 'git', args: input.args },
     cwd: input.repoPath,
-    outputDir: join(input.repoPath, '.donkey', 'runs', input.runId, 'commands'),
+    outputDir: join(input.repoPath, '.tekon', 'runs', input.runId, 'commands'),
     policy: {
       allow: [{ tool: 'git', args: [] }],
       deny: [
@@ -238,14 +238,14 @@ function assertSafePathSegment(value: string): string {
 }
 
 function deliveryBranchName(runSegment: string): string {
-  return `donkey-delivery/${runSegment}`;
+  return `tekon-delivery/${runSegment}`;
 }
 
 function assertManagedWorktreePath(
   repoPath: string,
   worktreePath: string,
 ): void {
-  const root = resolve(repoPath, '.donkey', 'worktrees');
+  const root = resolve(repoPath, '.tekon', 'worktrees');
   const target = resolve(worktreePath);
   if (target !== root && !target.startsWith(`${root}${sep}`)) {
     throw new Error(

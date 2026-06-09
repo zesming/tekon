@@ -118,11 +118,11 @@ function getRoleCandidates(options: LoadRoleOptions): RoleCandidate[] {
     },
     {
       source: 'user',
-      roleDir: join(userHome, '.donkey', 'roles', options.role),
+      roleDir: join(userHome, '.tekon', 'roles', options.role),
     },
     {
       source: 'project',
-      roleDir: join(options.repoPath, '.donkey', 'roles', options.role),
+      roleDir: join(options.repoPath, '.tekon', 'roles', options.role),
     },
   ];
 }

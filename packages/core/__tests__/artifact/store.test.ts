@@ -14,7 +14,7 @@ import {
   createArtifactStore,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('artifact store', () => {
@@ -26,7 +26,7 @@ describe('artifact store', () => {
     }
   });
 
-  it('writes versioned artifacts under .donkey and records metadata in sqlite', async () => {
+  it('writes versioned artifacts under .tekon and records metadata in sqlite', async () => {
     const { repoPath, repositories } = await createRunFixture(tempDirs);
     const store = createArtifactStore({ repoPath, repositories });
 
@@ -44,8 +44,8 @@ describe('artifact store', () => {
       summary: 'explicit summary',
     });
 
-    expect(v1.path).toBe('.donkey/runs/run_1/artifacts/node_1/prd.v1.md');
-    expect(v2.path).toBe('.donkey/runs/run_1/artifacts/node_1/prd.v2.md');
+    expect(v1.path).toBe('.tekon/runs/run_1/artifacts/node_1/prd.v1.md');
+    expect(v2.path).toBe('.tekon/runs/run_1/artifacts/node_1/prd.v2.md');
     expect(existsSync(join(repoPath, v2.path))).toBe(true);
     expect(v1.summary).toBe('# PRD');
     expect(v2.summary).toBe('explicit summary');
@@ -83,7 +83,7 @@ describe('artifact store', () => {
   });
 
   it('rejects unsafe run and node identifiers before writing files', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-artifact-path-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-artifact-path-'));
     tempDirs.push(repoPath);
     const fakeRepositories = {
       async listArtifacts() {
@@ -134,16 +134,16 @@ describe('artifact store', () => {
     ).rejects.toThrow(/artifact contains sensitive content: openai-api-key/u);
     expect(
       existsSync(
-        join(repoPath, '.donkey/runs/run_1/artifacts/node_1/tech-design.v1.md'),
+        join(repoPath, '.tekon/runs/run_1/artifacts/node_1/tech-design.v1.md'),
       ),
     ).toBe(false);
   });
 });
 
 async function createRunFixture(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-artifacts-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-artifacts-'));
   tempDirs.push(repoPath);
-  const db = openDonkeyDatabase({ filename: ':memory:' });
+  const db = openTekonDatabase({ filename: ':memory:' });
   migrateDatabase(db);
   const repositories = createRepositories(db);
 
@@ -155,7 +155,7 @@ async function createRunFixture(tempDirs: string[]) {
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

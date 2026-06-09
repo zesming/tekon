@@ -4,12 +4,12 @@ import {
   createRepositories,
   createWriteQueue,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('sqlite repositories', () => {
   it('persists projects, workflow instances, node transitions, gates, and audit events', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
 
@@ -21,8 +21,8 @@ describe('sqlite repositories', () => {
     });
     await repositories.createProject({
       id: 'project_1',
-      name: 'donkey',
-      repoPath: '/tmp/donkey',
+      name: 'tekon',
+      repoPath: '/tmp/tekon',
       createdAt: '2026-06-05T00:00:00.000Z',
     });
     await repositories.createWorkflowInstance({
@@ -93,7 +93,7 @@ describe('sqlite repositories', () => {
   });
 
   it('persists delivery pull request status and recovery transitions', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -101,12 +101,12 @@ describe('sqlite repositories', () => {
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',
       runId: 'run_1',
-      branch: 'donkey/run_1',
+      branch: 'tekon/run_1',
       baseBranch: 'main',
-      title: 'Donkey delivery',
-      bodyPath: '.donkey/runs/run_1/delivery/pr-body.md',
+      title: 'Tekon delivery',
+      bodyPath: '.tekon/runs/run_1/delivery/pr-body.md',
       remoteName: 'origin',
-      remoteUrl: 'https://github.example/donkey.git',
+      remoteUrl: 'https://github.example/tekon.git',
       status: 'branch-pushed',
       approvedBy: 'cli',
       approvedAt: '2026-06-05T00:00:02.000Z',
@@ -131,13 +131,13 @@ describe('sqlite repositories', () => {
 
     await repositories.markDeliveryPullRequestCreated({
       runId: 'run_1',
-      prUrl: 'https://github.example/donkey/pull/1',
+      prUrl: 'https://github.example/tekon/pull/1',
       createdAt: '2026-06-05T00:00:05.000Z',
     });
 
     expect(await repositories.getDeliveryPullRequest('run_1')).toMatchObject({
       status: 'created',
-      prUrl: 'https://github.example/donkey/pull/1',
+      prUrl: 'https://github.example/tekon/pull/1',
       prCreatedAt: '2026-06-05T00:00:05.000Z',
       failureStage: null,
       lastError: null,
@@ -147,7 +147,7 @@ describe('sqlite repositories', () => {
   });
 
   it('persists run provider snapshots and completed role runs for safe resume', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await seedRun(repositories);
@@ -204,8 +204,8 @@ async function seedRun(repositories: ReturnType<typeof createRepositories>) {
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
-    repoPath: '/tmp/donkey',
+    name: 'tekon',
+    repoPath: '/tmp/tekon',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createWorkflowInstance({

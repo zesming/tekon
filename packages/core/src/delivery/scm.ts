@@ -7,7 +7,7 @@ import {
   type CommandGatewayResult,
 } from '../runtime/command-gateway.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { CommandPolicy } from '../types/config.js';
 import type { CommandInvocation } from '../types/domain.js';
 
@@ -52,7 +52,7 @@ export interface CreateScmDeliveryOptions {
   env?: NodeJS.ProcessEnv;
   gateway?: CommandGateway;
   outputDir?: string;
-  repositories?: DonkeyRepositories;
+  repositories?: TekonRepositories;
   audit?: AuditLogger;
 }
 
@@ -146,7 +146,7 @@ export function createScmDelivery(
       const executedCommands: string[][] = [];
       if (dirtyWorktree) {
         const error = new Error(
-          'delivery create-pr requires a clean worktree outside .donkey; commit or stash local changes before creating a PR',
+          'delivery create-pr requires a clean worktree outside .tekon; commit or stash local changes before creating a PR',
         );
         await markDeliveryFailed(options, input.runId, 'dirty-worktree', error);
         throw error;
@@ -411,7 +411,7 @@ function hasCommittableChanges(
   return status
     .split(/\r?\n/u)
     .filter((line) => line.trim().length > 0)
-    .some((line) => !line.startsWith('?? .donkey/'));
+    .some((line) => !line.startsWith('?? .tekon/'));
 }
 
 async function upsertDeliveryState(input: {

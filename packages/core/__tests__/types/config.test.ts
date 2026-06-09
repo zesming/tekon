@@ -4,7 +4,7 @@ import {
   agentAdapterConfigSchema,
   commandPolicySchema,
   constraintRulesSchema,
-  donkeyConfigSchema,
+  tekonConfigSchema,
   dynamicWorkflowSpecSchema,
   permissionProfileSchema,
   workflowTemplateSchema,
@@ -13,9 +13,9 @@ import {
 describe('runtime config schemas', () => {
   it('accepts explicit provider, permission, workflow, and constraint configuration', () => {
     expect(
-      donkeyConfigSchema.parse({
-        project: { name: 'donkey', repoPath: '/tmp/donkey' },
-        storage: { dataDir: '.donkey' },
+      tekonConfigSchema.parse({
+        project: { name: 'tekon', repoPath: '/tmp/tekon' },
+        storage: { dataDir: '.tekon' },
         defaultAgent: 'mock',
       }),
     ).toMatchObject({ defaultAgent: 'mock' });
@@ -29,7 +29,7 @@ describe('runtime config schemas', () => {
         permissionProfile: {
           sandbox: 'workspace-write',
           approval: 'on-request',
-          filesystemScope: ['/tmp/donkey'],
+          filesystemScope: ['/tmp/tekon'],
           network: 'disabled',
           tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
         },
@@ -68,7 +68,7 @@ describe('runtime config schemas', () => {
       commandPolicySchema.parse({
         allow: [{ tool: 'rm', args: ['-rf', '/'] }],
         deny: [],
-        cwdScope: ['/tmp/donkey'],
+        cwdScope: ['/tmp/tekon'],
         network: 'disabled',
       }),
     ).toThrow();

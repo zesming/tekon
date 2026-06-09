@@ -46,7 +46,7 @@ describe('command gateway network policy', () => {
   ])(
     'rejects known network command $tool $args before spawn when network is disabled',
     async (command) => {
-      const cwd = mkdtempSync(join(tmpdir(), 'donkey-network-disabled-'));
+      const cwd = mkdtempSync(join(tmpdir(), 'tekon-network-disabled-'));
       tempDirs.push(cwd);
       let spawnCalls = 0;
       const spawnImpl: SpawnImpl = () => {
@@ -84,7 +84,7 @@ describe('command gateway network policy', () => {
   ])(
     'rejects known network command $tool $args before spawn when network is restricted',
     async (command) => {
-      const cwd = mkdtempSync(join(tmpdir(), 'donkey-network-restricted-'));
+      const cwd = mkdtempSync(join(tmpdir(), 'tekon-network-restricted-'));
       tempDirs.push(cwd);
       let spawnCalls = 0;
       const spawnImpl: SpawnImpl = () => {
@@ -113,7 +113,7 @@ describe('command gateway network policy', () => {
   );
 
   it('does not reject known network commands by the static network rule when network is enabled', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-network-enabled-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-network-enabled-'));
     tempDirs.push(cwd);
     let spawnCalls = 0;
     const spawnImpl: SpawnImpl = () => {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { createGateEngine, type GateEngine } from '../gate/engine.js';
 import {
   buildRolePrompt,
@@ -61,7 +61,7 @@ export interface WorkflowEngine {
 export interface CreateWorkflowEngineOptions {
   repoPath: string;
   dataDir: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   adapter: AgentAdapter;
   gateEngine?: GateEngine;
@@ -131,7 +131,7 @@ export function createWorkflowEngine(
       });
       await options.repositories.createProject({
         id: projectId,
-        name: 'donkey',
+        name: 'tekon',
         repoPath: options.repoPath,
         createdAt: now,
       });
@@ -629,7 +629,7 @@ export function createWorkflowEngine(
     const committed = await options.worktreeManager.commitLeaseChanges(
       lease.id,
       {
-        message: `Donkey ${runId} ${nodeId}`,
+        message: `Tekon ${runId} ${nodeId}`,
       },
     );
     const branchName = await options.worktreeManager.promoteLeaseToRunBranch({
@@ -783,11 +783,11 @@ export function createWorkflowEngine(
     return [
       prompt,
       '',
-      'Donkey artifact protocol:',
-      `- Write all node artifacts under DONKEY_OUTPUT_DIR (${input.outputDir}).`,
+      'Tekon artifact protocol:',
+      `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
-      '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Donkey artifact schema.',
-      '- Write DONKEY_ARTIFACT_MANIFEST as JSON after producing artifacts.',
+      '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',
+      '- Write TEKON_ARTIFACT_MANIFEST as JSON after producing artifacts.',
       '- Manifest format example:',
       manifestExample,
       '- Do not include secrets, tokens, credentials, or production-only data in artifacts or logs.',
@@ -934,7 +934,7 @@ function assertSuccessfulAgentRun(result: AgentRunResult): void {
 async function persistPlan(
   runId: string,
   plan: ExecutionPlan,
-  repositories: DonkeyRepositories,
+  repositories: TekonRepositories,
 ) {
   const now = new Date().toISOString();
   for (const [phaseIndex, phase] of plan.phases.entries()) {
@@ -1011,7 +1011,7 @@ function templateNodeToExecutable(
 
 async function planFromRepository(
   runId: string,
-  repositories: DonkeyRepositories,
+  repositories: TekonRepositories,
 ): Promise<ExecutionPlan> {
   const phases = await repositories.listPhases(runId);
   const nodes = await repositories.listNodes(runId);
@@ -1055,7 +1055,7 @@ function makeSyntheticLease(
     role: node.role,
     repoPath,
     worktreePath: repoPath,
-    branchName: `donkey/${runId}/${node.id}`,
+    branchName: `tekon/${runId}/${node.id}`,
     createdAt: now,
   };
 }

@@ -45,11 +45,11 @@ describe('web write authorization', () => {
     expect(pendingBeforeApproval.pendingDecisions[0]?.context).toMatchObject({
       approvalEvaluation: expect.objectContaining({ ready: true }),
       approvalSummary: expect.objectContaining({
-        summaryText: expect.stringContaining('Donkey 审批摘要'),
+        summaryText: expect.stringContaining('Tekon 审批摘要'),
         approveCommand: expect.stringContaining(
-          'donkey resume --run-id run_1 --approve-human',
+          'tekon resume --run-id run_1 --approve-human',
         ),
-        rejectCommand: expect.stringContaining('donkey approval reject'),
+        rejectCommand: expect.stringContaining('tekon approval reject'),
       }),
     });
 
@@ -275,7 +275,7 @@ describe('web write authorization', () => {
     });
     expect(prepared).toMatchObject({
       runId: started.run.id,
-      branch: `donkey-delivery/${started.run.id}`,
+      branch: `tekon-delivery/${started.run.id}`,
       requiresHumanApproval: true,
     });
 
@@ -289,7 +289,7 @@ describe('web write authorization', () => {
       deliveryStatus: 'awaiting-approval',
       requiresHumanApproval: true,
       prUrl: null,
-      branch: `donkey-delivery/${started.run.id}`,
+      branch: `tekon-delivery/${started.run.id}`,
     });
 
     const review = await api.review.get({ runId: started.run.id });
@@ -368,7 +368,7 @@ describe('web write authorization', () => {
 
   it('rejects demand shape symlink escapes in Web write paths', async () => {
     const fixture = await createWebFixtureProject();
-    const outsideDir = mkdtempSync(join(tmpdir(), 'donkey-web-shape-outside-'));
+    const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-web-shape-outside-'));
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() =>
       rmSync(outsideDir, { recursive: true, force: true }),
@@ -399,7 +399,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
-    rmSync(join(fixture.projectRoot, '.donkey', 'demands'), {
+    rmSync(join(fixture.projectRoot, '.tekon', 'demands'), {
       recursive: true,
       force: true,
     });
@@ -408,12 +408,12 @@ describe('web write authorization', () => {
     writeFileSync(outsideDirShapePath, readFileSync(outsideShapePath, 'utf8'));
     symlinkSync(
       outsideDir,
-      join(fixture.projectRoot, '.donkey', 'demands'),
+      join(fixture.projectRoot, '.tekon', 'demands'),
       'dir',
     );
     const escapedViaDemandDir = join(
       fixture.projectRoot,
-      '.donkey',
+      '.tekon',
       'demands',
       'dir-shape.json',
     );
@@ -439,13 +439,13 @@ describe('web write authorization', () => {
   it('rejects demand shape writes when demands storage is a symlink', async () => {
     const fixture = await createWebFixtureProject();
     const outsideDir = mkdtempSync(
-      join(tmpdir(), 'donkey-web-shape-write-outside-'),
+      join(tmpdir(), 'tekon-web-shape-write-outside-'),
     );
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() =>
       rmSync(outsideDir, { recursive: true, force: true }),
     );
-    const demandsPath = join(fixture.projectRoot, '.donkey', 'demands');
+    const demandsPath = join(fixture.projectRoot, '.tekon', 'demands');
     rmSync(demandsPath, { recursive: true, force: true });
     symlinkSync(outsideDir, demandsPath, 'dir');
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -481,8 +481,8 @@ describe('web write authorization', () => {
 
   it('creates a PR through the approved Web delivery path with fake gh', async () => {
     const fixture = await createWebFixtureProject();
-    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-web-remote-'));
-    const binDir = mkdtempSync(join(tmpdir(), 'donkey-web-fake-gh-'));
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-web-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-web-fake-gh-'));
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() =>
       rmSync(remotePath, { recursive: true, force: true }),
@@ -508,9 +508,9 @@ describe('web write authorization', () => {
       runId: 'run_1',
       deliveryStatus: 'created',
       requiresHumanApproval: false,
-      prUrl: 'https://github.example/donkey/pull/10',
+      prUrl: 'https://github.example/tekon/pull/10',
       failureStage: null,
-      branch: 'donkey-delivery/run_1',
+      branch: 'tekon-delivery/run_1',
     });
     const audit = await api.audit.list({ runId: 'run_1' });
     expect(audit.events).toEqual(
@@ -533,7 +533,7 @@ if [ "$1 $2" = "auth status" ]; then
   echo "Logged in to github.example" >&2
   exit 0
 fi
-echo "https://github.example/donkey/pull/10"
+echo "https://github.example/tekon/pull/10"
 `,
     'utf8',
   );

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-describe('donkey cli e2e', () => {
+describe('tekon cli e2e', () => {
   const tempDirs: string[] = [];
   const cliPackageRoot = join(
     dirname(fileURLToPath(import.meta.url)),
@@ -26,12 +26,10 @@ describe('donkey cli e2e', () => {
 
     const initOutput = runCli(cliPath, ['init', '--repo', repoPath], repoPath);
     expect(initOutput).toContain('initialized');
-    expect(existsSync(join(repoPath, '.donkey', 'config.yaml'))).toBe(true);
-    expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
-    expect(existsSync(join(repoPath, '.donkey', 'web-session.json'))).toBe(
-      true,
-    );
-    expect(existsSync(join(repoPath, '.donkey', 'repo-profile.yaml'))).toBe(
+    expect(existsSync(join(repoPath, '.tekon', 'config.yaml'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'web-session.json'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'repo-profile.yaml'))).toBe(
       true,
     );
 
@@ -55,9 +53,7 @@ describe('donkey cli e2e', () => {
     expect(standardRunId).toBeTruthy();
     expect(standardRunOutput).toContain('status=passed');
     expect(
-      existsSync(
-        join(repoPath, '.donkey', 'runs', standardRunId!, 'artifacts'),
-      ),
+      existsSync(join(repoPath, '.tekon', 'runs', standardRunId!, 'artifacts')),
     ).toBe(true);
 
     const dynamicOutput = runCli(
@@ -96,7 +92,7 @@ describe('donkey cli e2e', () => {
     expect(runId).toBeTruthy();
     expect(runOutput).toContain('status=paused');
     expect(runOutput).toContain('humanGate=pending');
-    expect(existsSync(join(repoPath, '.donkey', 'runs', runId!))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'runs', runId!))).toBe(true);
 
     const statusOutput = runCli(
       cliPath,
@@ -175,7 +171,7 @@ describe('donkey cli e2e', () => {
     ).toContain('roles/rd');
     expect(
       runCli(cliPath, ['role', 'create', 'qa', '--repo', repoPath], repoPath),
-    ).toContain('.donkey/roles/qa');
+    ).toContain('.tekon/roles/qa');
 
     expect(
       runCli(cliPath, ['workflow', 'list', '--repo', repoPath], repoPath),
@@ -201,7 +197,7 @@ describe('donkey cli e2e', () => {
         ],
         repoPath,
       ),
-    ).toContain('.donkey/workflows/custom-bugfix.yaml');
+    ).toContain('.tekon/workflows/custom-bugfix.yaml');
 
     expect(
       runCli(cliPath, ['constraints', 'show', '--repo', repoPath], repoPath),
@@ -214,7 +210,7 @@ describe('donkey cli e2e', () => {
     );
     expect(cleanOutput).toContain('cleaned worktrees=0');
     expect(
-      readFileSync(join(repoPath, '.donkey', 'config.yaml'), 'utf8'),
+      readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
   }, 15000);
 });
@@ -227,13 +223,13 @@ function runCli(cliPath: string, args: string[], cwd: string): string {
 }
 
 function createFixtureRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-e2e-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   execFileSync('npm', ['init', '-y'], { cwd: repoPath });

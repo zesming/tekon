@@ -9,7 +9,7 @@ import {
   createRepositories,
   createWorkflowEngine,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type AgentRunResult,
   type GateEngine,
 } from '../../src/index.js';
@@ -24,11 +24,11 @@ describe('workflow engine role prompt integration', () => {
   });
 
   it('injects role system prompt, skills, tools, knowledge, and project context into agent input', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-prompt-repo-'));
-    const rolesDir = mkdtempSync(join(tmpdir(), 'donkey-engine-prompt-roles-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-prompt-repo-'));
+    const rolesDir = mkdtempSync(join(tmpdir(), 'tekon-engine-prompt-roles-'));
     tempDirs.push(repoPath, rolesDir);
     writeRoleFixture(rolesDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -36,7 +36,7 @@ describe('workflow engine role prompt integration', () => {
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       builtInRolesDir: rolesDir,
@@ -101,20 +101,20 @@ describe('workflow engine role prompt integration', () => {
   });
 
   it('interrupts the workflow when an agent returns a non-zero exit code', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-agent-fail-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-agent-fail-'));
     const rolesDir = mkdtempSync(
-      join(tmpdir(), 'donkey-engine-agent-fail-roles-'),
+      join(tmpdir(), 'tekon-engine-agent-fail-roles-'),
     );
     tempDirs.push(repoPath, rolesDir);
     writeRoleFixture(rolesDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       builtInRolesDir: rolesDir,
@@ -158,20 +158,20 @@ describe('workflow engine role prompt integration', () => {
   });
 
   it('blocks the workflow when an auto-fix repair agent fails', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-repair-fail-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-fail-'));
     const rolesDir = mkdtempSync(
-      join(tmpdir(), 'donkey-engine-repair-fail-roles-'),
+      join(tmpdir(), 'tekon-engine-repair-fail-roles-'),
     );
     tempDirs.push(repoPath, rolesDir);
     writeRoleFixture(rolesDir);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       builtInRolesDir: rolesDir,

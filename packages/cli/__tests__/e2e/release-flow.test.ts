@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-describe('donkey release flow e2e', () => {
+describe('tekon release flow e2e', () => {
   const tempDirs: string[] = [];
   const cliPackageRoot = join(
     dirname(fileURLToPath(import.meta.url)),
@@ -37,7 +37,7 @@ describe('donkey release flow e2e', () => {
     );
     expect(
       JSON.parse(
-        readFileSync(join(repoPath, '.donkey', 'web-session.json'), 'utf8'),
+        readFileSync(join(repoPath, '.tekon', 'web-session.json'), 'utf8'),
       ),
     ).toMatchObject({ token: expect.stringMatching(/^[a-f0-9]{64}$/u) });
     const preflightOutput = runCli(
@@ -161,10 +161,10 @@ describe('donkey release flow e2e', () => {
       repoPath,
     );
     expect(prepareOutput).toContain(`runId=${deliveryRunId}`);
-    expect(prepareOutput).toContain('branch=donkey-delivery/');
+    expect(prepareOutput).toContain('branch=tekon-delivery/');
     expect(prepareOutput).toContain('requiresHumanApproval=true');
     expect(
-      existsSync(join(repoPath, '.donkey', 'runs', deliveryRunId!, 'delivery')),
+      existsSync(join(repoPath, '.tekon', 'runs', deliveryRunId!, 'delivery')),
     ).toBe(true);
 
     const createPendingOutput = runCli(
@@ -175,8 +175,8 @@ describe('donkey release flow e2e', () => {
     expect(createPendingOutput).toContain('deliveryStatus=awaiting-approval');
     expect(createPendingOutput).toContain('requiresHumanApproval=true');
 
-    const remotePath = mkdtempSync(join(tmpdir(), 'donkey-release-remote-'));
-    const binDir = mkdtempSync(join(tmpdir(), 'donkey-release-gh-'));
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-release-remote-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-release-gh-'));
     tempDirs.push(remotePath, binDir);
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
@@ -199,9 +199,7 @@ describe('donkey release flow e2e', () => {
     );
     expect(createOutput).toContain('deliveryStatus=created');
     expect(createOutput).toContain('requiresHumanApproval=false');
-    expect(createOutput).toContain(
-      'prUrl=https://github.example/donkey/pull/9',
-    );
+    expect(createOutput).toContain('prUrl=https://github.example/tekon/pull/9');
 
     const ciWatchOutput = runCli(
       cliPath,
@@ -231,7 +229,7 @@ describe('donkey release flow e2e', () => {
       ),
     ).toContain('ready=true');
 
-    const evalDir = join(repoPath, '.donkey', 'eval');
+    const evalDir = join(repoPath, '.tekon', 'eval');
     mkdirSync(evalDir, { recursive: true });
     const recordedSamplesPath = join(evalDir, 'recorded-work-usability.yaml');
     const recordOutput = runCli(
@@ -270,7 +268,7 @@ describe('donkey release flow e2e', () => {
         '  - id: standard-fixture',
         `    runId: ${deliveryRunId}`,
         '    requirePr: true',
-        '    expectedPrUrl: https://github.example/donkey/pull/9',
+        '    expectedPrUrl: https://github.example/tekon/pull/9',
       ].join('\n'),
       'utf8',
     );
@@ -311,7 +309,7 @@ describe('donkey release flow e2e', () => {
     expect(reportOutput).toContain(`reportMd=${reportMd}`);
     expect(readFileSync(reportMd, 'utf8')).toContain('# Fixture Usability');
     expect(readFileSync(reportHtml, 'utf8')).toContain('Fixture Usability');
-    expect(existsSync(join(repoPath, '.donkey', 'donkey.sqlite'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
   }, 15_000);
 });
 
@@ -329,13 +327,13 @@ function runCli(
 }
 
 function createFixtureRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-release-e2e-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-release-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   execFileSync('npm', ['init', '-y'], { cwd: repoPath });
@@ -373,7 +371,7 @@ if [ "$1 $2" = "pr checks" ]; then
   printf '[{"name":"build","bucket":"pass","state":"SUCCESS","workflow":"CI"}]\\n'
   exit 0
 fi
-echo "https://github.example/donkey/pull/9"
+echo "https://github.example/tekon/pull/9"
 `,
     'utf8',
   );

@@ -16,7 +16,7 @@ import {
   createRepositories,
   createWorktreeManager,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('phase 1 kernel e2e', () => {
@@ -30,7 +30,7 @@ describe('phase 1 kernel e2e', () => {
 
   it('runs the safe recoverable kernel workflow through phase 1 exit gates', async () => {
     const repoPath = createTempGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -63,7 +63,7 @@ describe('phase 1 kernel e2e', () => {
       roleConfig: { role: 'rd' },
       prompt: 'Implement a deterministic phase 1 fixture.',
       worktreeLease: lease,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'agent'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'agent'),
       commandPolicy: {
         allow: [{ tool: 'git', args: [] }],
         deny: [],
@@ -76,7 +76,7 @@ describe('phase 1 kernel e2e', () => {
         nodeId: 'node_1',
         projectId: 'project_1',
         repoPath,
-        dataDir: '.donkey',
+        dataDir: '.tekon',
       },
       artifactStore,
     });
@@ -88,7 +88,7 @@ describe('phase 1 kernel e2e', () => {
       nodeId: 'node_1',
       gate: { type: 'schema', artifactType: 'prd' },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -160,13 +160,13 @@ describe('phase 1 kernel e2e', () => {
 });
 
 function createTempGitRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-phase1-e2e-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-phase1-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   writeFileSync(join(repoPath, 'README.md'), 'phase 1 fixture repo\n', 'utf8');
@@ -187,7 +187,7 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

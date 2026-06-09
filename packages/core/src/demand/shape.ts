@@ -356,7 +356,7 @@ export function writeDemandShapeFiles(input: {
   shape: DemandShape;
 }): { jsonPath: string; markdownPath: string } {
   assertSafeDemandShapeId(input.shape.id);
-  const dir = join(input.repoPath, '.donkey', 'demands');
+  const dir = join(input.repoPath, '.tekon', 'demands');
   mkdirSync(dir, { recursive: true });
   const jsonPath = join(dir, `${input.shape.id}.json`);
   const markdownPath = join(dir, `${input.shape.id}.md`);
@@ -543,7 +543,7 @@ function buildAcceptanceCriteria(input: {
       description:
         '仓库画像中的 build/lint/test/security gate 通过，或普通命令被显式标记不适用。',
       verification:
-        'donkey review --run-id <runId> 显示 readiness 和 gate evidence。',
+        'tekon review --run-id <runId> 显示 readiness 和 gate evidence。',
     },
   ];
   if (input.category === 'bugfix') {
@@ -587,7 +587,7 @@ function buildNonGoals(riskLevel: DemandShape['risk']['level']): string[] {
 
 function buildAssumptions(category: DemandShape['category']): string[] {
   return [
-    '目标仓库已通过 donkey init 初始化，并维护 repo profile gate 命令。',
+    '目标仓库已通过 tekon init 初始化，并维护 repo profile gate 命令。',
     category === 'docs'
       ? '文档类变更仍需要 review surface 证明范围和 diff 可审阅。'
       : '实现类变更需要通过仓库现有验证命令或显式 notApplicable 说明。',

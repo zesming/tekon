@@ -229,7 +229,7 @@ phases:
   });
 
   it('rejects workflow paths outside the configured workflows directory', () => {
-    const root = mkdtempSync(join(tmpdir(), 'donkey-workflows-'));
+    const root = mkdtempSync(join(tmpdir(), 'tekon-workflows-'));
     tempDirs.push(root);
     const workflowsDir = join(root, 'workflows');
     mkdirSync(workflowsDir, { recursive: true });

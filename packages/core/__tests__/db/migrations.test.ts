@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { migrateDatabase, openDonkeyDatabase } from '../../src/index.js';
+import { migrateDatabase, openTekonDatabase } from '../../src/index.js';
 
 describe('database migrations', () => {
   const tempDirs: string[] = [];
@@ -16,9 +16,9 @@ describe('database migrations', () => {
   });
 
   it('creates all phase 1 persistence tables and configures sqlite pragmas', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'donkey-db-'));
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
     tempDirs.push(dir);
-    const db = openDonkeyDatabase({ filename: join(dir, 'donkey.sqlite') });
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
 
     migrateDatabase(db);
 

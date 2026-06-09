@@ -6,7 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 
 import type { CommandInvocation } from '../types/domain.js';
 import type { CommandPolicy } from '../types/config.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { createSecretRedactionTransform } from '../security/secrets.js';
 
 export type SpawnImpl = (
@@ -54,7 +54,7 @@ export interface CommandGateway {
 
 export function createCommandGateway(
   options: {
-    repositories?: DonkeyRepositories;
+    repositories?: TekonRepositories;
     spawnImpl?: SpawnImpl;
   } = {},
 ): CommandGateway {
@@ -91,8 +91,7 @@ export function createCommandGateway(
         command: input.command,
         cwd: input.cwd,
         env: buildChildEnv({ env: input.env, envMode: input.envMode }),
-        outputDir:
-          input.outputDir ?? join(input.cwd, '.donkey', 'command-logs'),
+        outputDir: input.outputDir ?? join(input.cwd, '.tekon', 'command-logs'),
         timeoutMs: input.timeoutMs ?? 60_000,
         stdin: input.stdin,
         spawnImpl,

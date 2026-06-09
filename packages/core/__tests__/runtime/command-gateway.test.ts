@@ -17,7 +17,7 @@ import {
   createCommandGateway,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('command gateway', () => {
@@ -30,7 +30,7 @@ describe('command gateway', () => {
   });
 
   it('rejects dangerous commands and shell metacharacters before spawn', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-command-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-command-'));
     tempDirs.push(cwd);
     let spawnCalls = 0;
     const gateway = createCommandGateway({
@@ -93,7 +93,7 @@ describe('command gateway', () => {
   });
 
   it('does not treat an empty allow list as allow all', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-command-empty-allow-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-command-empty-allow-'));
     tempDirs.push(cwd);
     let spawnCalls = 0;
     const gateway = createCommandGateway({
@@ -114,8 +114,8 @@ describe('command gateway', () => {
   });
 
   it('blocks cwd outside policy scope before spawn', async () => {
-    const allowed = mkdtempSync(join(tmpdir(), 'donkey-allowed-'));
-    const outside = mkdtempSync(join(tmpdir(), 'donkey-outside-'));
+    const allowed = mkdtempSync(join(tmpdir(), 'tekon-allowed-'));
+    const outside = mkdtempSync(join(tmpdir(), 'tekon-outside-'));
     tempDirs.push(allowed, outside);
     let spawnCalls = 0;
     const gateway = createCommandGateway({
@@ -141,9 +141,9 @@ describe('command gateway', () => {
   });
 
   it('creates a pending human decision and does not spawn when approval is required', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-approval-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-approval-'));
     tempDirs.push(cwd);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, cwd);
@@ -180,7 +180,7 @@ describe('command gateway', () => {
   });
 
   it('executes allowed argv commands and streams stdout and stderr to log files', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-exec-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway();
     const result = await gateway.run({
@@ -214,7 +214,7 @@ describe('command gateway', () => {
   });
 
   it('redacts likely secrets from command stdout and stderr logs', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-exec-redact-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-redact-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway();
     const result = await gateway.run({
@@ -251,7 +251,7 @@ describe('command gateway', () => {
   });
 
   it('redacts likely secrets that are split across stdout and stderr chunks', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-exec-redact-chunks-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-redact-chunks-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway({
       spawnImpl: () => {
@@ -302,7 +302,7 @@ describe('command gateway', () => {
   });
 
   it('closes child stdin without writing a chunk when no stdin is provided', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-stdin-close-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-stdin-close-'));
     tempDirs.push(cwd);
     let stdinWrites = 0;
     const gateway = createCommandGateway({
@@ -342,7 +342,7 @@ describe('command gateway', () => {
   });
 
   it('rejects the command result when required stdin cannot be written', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-stdin-error-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-stdin-error-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway({
       spawnImpl: () => {
@@ -383,7 +383,7 @@ describe('command gateway', () => {
   });
 
   it('keeps no-stdin child pipe errors from overriding the child exit result', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-no-stdin-epipe-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-no-stdin-epipe-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway({
       spawnImpl: () => {
@@ -421,7 +421,7 @@ describe('command gateway', () => {
   });
 
   it('rejects when the spawned child emits an asynchronous error before close', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-child-error-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-child-error-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway({
       spawnImpl: () => {
@@ -468,7 +468,7 @@ describe('command gateway', () => {
   });
 
   it('rejects executed commands when stdout logs cannot be written', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-log-error-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-log-error-'));
     tempDirs.push(cwd);
     const outputDir = join(cwd, 'logs');
     mkdirSync(outputDir);
@@ -517,7 +517,7 @@ describe('command gateway', () => {
   });
 
   it('settles timed-out commands even when the child never emits close', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-timeout-hang-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-timeout-hang-'));
     tempDirs.push(cwd);
     const signals: NodeJS.Signals[] = [];
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => {
@@ -588,7 +588,7 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

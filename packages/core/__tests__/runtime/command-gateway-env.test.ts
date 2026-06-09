@@ -19,7 +19,7 @@ describe('command gateway environment boundary', () => {
   });
 
   it('does not pass sensitive parent environment variables by default', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-env-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-env-'));
     tempDirs.push(cwd);
     const previous = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = 'secret-value';
@@ -55,7 +55,7 @@ describe('command gateway environment boundary', () => {
   });
 
   it('supports exact env for manual provider smoke', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-env-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-env-'));
     tempDirs.push(cwd);
     let receivedEnv: NodeJS.ProcessEnv | undefined;
     const spawnImpl: SpawnImpl = (_command, _args, options) => {
@@ -74,12 +74,12 @@ describe('command gateway environment boundary', () => {
         network: 'disabled',
       },
       envMode: 'exact',
-      env: { PATH: '/usr/bin', HOME: '/tmp/donkey-home' },
+      env: { PATH: '/usr/bin', HOME: '/tmp/tekon-home' },
     });
 
     expect(receivedEnv).toEqual({
       PATH: '/usr/bin',
-      HOME: '/tmp/donkey-home',
+      HOME: '/tmp/tekon-home',
     });
   });
 });

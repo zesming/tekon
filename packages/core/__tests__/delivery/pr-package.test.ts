@@ -10,7 +10,7 @@ import {
   createPullRequestPreparation,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('pull request preparation package', () => {
@@ -23,9 +23,9 @@ describe('pull request preparation package', () => {
   });
 
   it('creates a reviewable PR body and delivery-package artifact without remote side effects', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-pr-package-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-pr-package-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -109,15 +109,15 @@ describe('pull request preparation package', () => {
             reason: 'service has no browser surface',
           },
         },
-        pr: { baseBranch: 'main', titlePrefix: '[Donkey] ' },
+        pr: { baseBranch: 'main', titlePrefix: '[Tekon] ' },
         risks: { highRiskPaths: [], requiresHumanApproval: [] },
       },
     });
 
     expect(preparation).toMatchObject({
       runId: 'run_1',
-      title: '[Donkey] Add retry action',
-      branch: 'donkey-delivery/run_1',
+      title: '[Tekon] Add retry action',
+      branch: 'tekon-delivery/run_1',
       baseBranch: 'main',
       requiresHumanApproval: true,
     });

@@ -7,7 +7,7 @@ const server = await createWebServer({
 });
 
 await server.listen();
-console.log(`Donkey Web listening on ${server.url}`);
+console.log(`Tekon Web listening on ${server.url}`);
 
 const shutdown = async () => {
   await server.close();

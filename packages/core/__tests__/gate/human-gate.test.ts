@@ -4,12 +4,12 @@ import {
   createHumanGate,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('human gate', () => {
   it('pauses a workflow for human approval and resumes the blocked node', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories);
@@ -45,7 +45,7 @@ describe('human gate', () => {
   });
 
   it('rejects a pending human decision and blocks the workflow', async () => {
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories);
@@ -101,8 +101,8 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
-    repoPath: '/tmp/donkey',
+    name: 'tekon',
+    repoPath: '/tmp/tekon',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createWorkflowInstance({

@@ -1,18 +1,18 @@
-# Donkey
+# 天工（Tekon）
 
-Donkey V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：需求塑形与人工批准入口、受控 workflow selection、真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web human approval 自动继续、CLI/Web 审批摘要、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面、审阅证据导航、工作可用样本评估、样本记录和评估报告导出。
+天工（Tekon，取 Tech + Kong 的融合谐音）V2 是本地 Agent workflow 系统的重构分支。当前 `rebuild-v2` 已完成 Phase 3 本地验收，并补齐第一批工作可用化闭环：需求塑形与人工批准入口、受控 workflow selection、真实 worktree 执行分支、真实 provider artifact manifest 入库、repo profile 驱动 gate 和缺失命令修复引导、provider 快照恢复、PR 准备包、人工批准后的远端 PR 创建、PR 创建后的远端 CI 状态证据和 watch 轮询、Web human approval 自动继续、CLI/Web 审批摘要、Web 发起受控 run/prepare/create-pr、语义验收证据、安全扫描、命令日志脱敏、artifact 入库敏感信息拦截、readiness 评估、CLI/Web 审阅面、审阅证据导航、工作可用样本评估、样本记录和评估报告导出。
 
 ## 当前状态
 
 - Phase 2 已验证：`packages/core` 安全可恢复内核、角色系统、workflow 模板、约束校验、动态 workflow dry-run、持久化调度器、Artifact Store、Audit hash chain、GateEngine、HumanGate、Mock Agent 和 Claude Code adapter contract。
 - Phase 2 已验证：`packages/cli` 本地命令入口，包括 `init`、`run --template`、`run --dynamic --dry-run`、`run --allow-dirty-base`、`status`、`pause`、`resume --approve-human`、`cancel`、`role`、`workflow`、`constraints`、`log`、`clean`。
 - Phase 3 已验证：交付 dry-run、delivery evidence、metrics、dogfooding 报告、本地 Web dashboard、Web human approval、audit hash/filter、CLI/Web release e2e 和最终验收报告。
-- 工作可用化增量已验证：`demand shape/approve` 需求塑形、`run --demand-file` 批准后运行、`workflow select` 受控模板推荐、`eval demand-shape` 和 `eval workflow-selection` 需求/模板质量评估、`repo-profile.yaml` 仓库画像、`workflow preflight` 缺失命令修复引导、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `donkey-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`delivery ci-status` 只读查询 PR checks 并落库、`delivery ci-watch` 只读轮询 PR checks 直到终态或达到次数上限、`approval summary` 可复制审批摘要、`approval reject` CLI 拒绝入口、`eval approval-summary` 审批摘要质量评估、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、`eval work-usability record` 样本记录、样本评估 Markdown/HTML 报告导出、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Evidence Navigation 和 Gate Failure Triage、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
+- 工作可用化增量已验证：`demand shape/approve` 需求塑形、`run --demand-file` 批准后运行、`workflow select` 受控模板推荐、`eval demand-shape` 和 `eval workflow-selection` 需求/模板质量评估、`repo-profile.yaml` 仓库画像、`workflow preflight` 缺失命令修复引导、模板 `commandRef`、角色 prompt 注入、Claude Code artifact manifest 协议、run provider 快照、真实 git worktree lease 进入 Engine 主执行路径、节点改动推进到 `tekon-delivery/<runId>`、`delivery prepare` PR 准备包、`delivery create-pr --approve-human` 受控创建远端 PR、`delivery ci-status` 只读查询 PR checks 并落库、`delivery ci-watch` 只读轮询 PR checks 直到终态或达到次数上限、`approval summary` 可复制审批摘要、`approval reject` CLI 拒绝入口、`eval approval-summary` 审批摘要质量评估、`eval readiness` 工作就绪度评估、`eval work-usability --samples` 样本集评估、`eval work-usability record` 样本记录、样本评估 Markdown/HTML 报告导出、命令日志脱敏、artifact 入库敏感信息拦截、`review` 聚合审阅面、Evidence Navigation 和 Gate Failure Triage、Web approval 后按 provider 快照自动 resume、Web 使用 session token 发起模板 run、执行 PR 准备和触发受控 create-pr。
 - 尚未作为已完成能力发布：自动 merge、自动上线、动态 workflow 非 dry-run、生产级真实 LLM workflow 稳定性、生产级 OS 沙箱和远程多租户服务。
 
 ## 快速开始
 
-仓库使用 `pnpm@10.12.1`。在 Donkey 仓库根目录构建 CLI：
+仓库使用 `pnpm@10.12.1`。在 Tekon 仓库根目录构建 CLI：
 
 ```bash
 npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
@@ -31,7 +31,7 @@ node packages/cli/dist/index.js init --repo /path/to/project
 node packages/cli/dist/index.js workflow preflight standard-feature --repo /path/to/project
 ```
 
-如果某个 `commandRef` 缺失，preflight 会输出 `status=missing`、`profilePath` 和 `hint`；当 `package.json` 中存在 `compile`、`test:e2e` 等候选脚本时，还会输出 `suggestedScript` 和 `suggestedCommand`。用户需要把确认后的命令写入 `.donkey/repo-profile.yaml`；Donkey 不会因命令缺失自动跳过 gate。确实不适用的普通命令 gate 可在 repo profile 中显式配置 `notApplicable: true` 和 `reason`，运行时会记录为 `skipped/not-applicable`，并在 readiness 和 PR 包中可见；`security-scan` 即使没有外部命令仍会执行 Donkey 内置扫描。
+如果某个 `commandRef` 缺失，preflight 会输出 `status=missing`、`profilePath` 和 `hint`；当 `package.json` 中存在 `compile`、`test:e2e` 等候选脚本时，还会输出 `suggestedScript` 和 `suggestedCommand`。用户需要把确认后的命令写入 `.tekon/repo-profile.yaml`；Tekon 不会因命令缺失自动跳过 gate。确实不适用的普通命令 gate 可在 repo profile 中显式配置 `notApplicable: true` 和 `reason`，运行时会记录为 `skipped/not-applicable`，并在 readiness 和 PR 包中可见；`security-scan` 即使没有外部命令仍会执行 Tekon 内置扫描。
 
 为需求选择受控模板：
 
@@ -60,12 +60,12 @@ node packages/cli/dist/index.js run "给示例模块加批量重试" --template 
 
 ```bash
 node packages/cli/dist/index.js demand shape "给 Web dashboard 增加需求塑形入口，要求 e2e 通过" --write --repo /path/to/project
-node packages/cli/dist/index.js demand approve /path/to/project/.donkey/demands/<shapeId>.json
-node packages/cli/dist/index.js eval demand-shape /path/to/project/.donkey/demands/<shapeId>.json
-node packages/cli/dist/index.js run --demand-file /path/to/project/.donkey/demands/<shapeId>.json --agent mock --repo /path/to/project
+node packages/cli/dist/index.js demand approve /path/to/project/.tekon/demands/<shapeId>.json
+node packages/cli/dist/index.js eval demand-shape /path/to/project/.tekon/demands/<shapeId>.json
+node packages/cli/dist/index.js run --demand-file /path/to/project/.tekon/demands/<shapeId>.json --agent mock --repo /path/to/project
 ```
 
-`demand shape` 会生成 `.donkey/demands/<shapeId>.json` 和同名 Markdown 审阅稿，包含分类、推荐模板、风险标签、非目标、开放问题和验收标准。`run --demand-file` 默认要求该文件先经过 `demand approve`；这一步是人工确认边界，不会自动合并或上线。需要记录具体操作者时，可额外传入真实账号或姓名。
+`demand shape` 会生成 `.tekon/demands/<shapeId>.json` 和同名 Markdown 审阅稿，包含分类、推荐模板、风险标签、非目标、开放问题和验收标准。`run --demand-file` 默认要求该文件先经过 `demand approve`；这一步是人工确认边界，不会自动合并或上线。需要记录具体操作者时，可额外传入真实账号或姓名。
 
 查看状态和日志：
 
@@ -99,7 +99,7 @@ node packages/cli/dist/index.js delivery dry-run --run-id <runId> --repo /path/t
 node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/to/project
 ```
 
-`delivery prepare` 会在 `.donkey/runs/<runId>/delivery/` 下生成 `pr-package.md` 和 `pr-body.md`，并记录 `delivery.pr-prepared` 审计事件。它仍不 push、不创建远端 PR。
+`delivery prepare` 会在 `.tekon/runs/<runId>/delivery/` 下生成 `pr-package.md` 和 `pr-body.md`，并记录 `delivery.pr-prepared` 审计事件。它仍不 push、不创建远端 PR。
 
 人工批准后创建远端 PR：
 
@@ -107,7 +107,7 @@ node packages/cli/dist/index.js delivery prepare --run-id <runId> --repo /path/t
 node packages/cli/dist/index.js delivery create-pr --run-id <runId> --approve-human --repo /path/to/project
 ```
 
-`delivery create-pr` 会要求主工作区除 `.donkey` 外没有未提交改动，然后直接 push 本地交付分支并调用 `gh pr create --body-file`。不带 `--approve-human` 时只落库为 `awaiting-approval`；带 `--approve-human` 后才执行 push/PR 副作用。若 `gh pr create` 因 PR 已存在失败，会尝试用 `gh pr view` 恢复 PR URL 并落库。
+`delivery create-pr` 会要求主工作区除 `.tekon` 外没有未提交改动，然后直接 push 本地交付分支并调用 `gh pr create --body-file`。不带 `--approve-human` 时只落库为 `awaiting-approval`；带 `--approve-human` 后才执行 push/PR 副作用。若 `gh pr create` 因 PR 已存在失败，会尝试用 `gh pr view` 恢复 PR URL 并落库。
 
 查询 PR 创建后的远端 CI 状态：
 
@@ -147,19 +147,19 @@ node packages/cli/dist/index.js eval work-usability --samples /path/to/work-usab
 node packages/cli/dist/index.js review --run-id <runId> --repo /path/to/project
 ```
 
-`review` 会把 readiness 失败项、Evidence Navigation、Gate Failure Triage、PR body、PR package、`donkey-delivery/<runId>` diff 摘要、artifact 正文预览、gate 日志预览和建议下一步命令汇总到一个输出中。Evidence Navigation 会把失败项关联到 artifact、gate log、audit event、PR body、PR package 和 diff；Gate Failure Triage 会给失败 gate 标注分类、日志锚点、重试建议和建议命令。若已执行 `delivery ci-status` 或 `delivery ci-watch`，远端 CI 结果会作为 `ci-status` artifact 和 PR 包中的 Remote CI 证据出现。Web dashboard 也使用同一 review surface，展示 Readiness、Evidence Links、Gate Failure Triage、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令。
+`review` 会把 readiness 失败项、Evidence Navigation、Gate Failure Triage、PR body、PR package、`tekon-delivery/<runId>` diff 摘要、artifact 正文预览、gate 日志预览和建议下一步命令汇总到一个输出中。Evidence Navigation 会把失败项关联到 artifact、gate log、audit event、PR body、PR package 和 diff；Gate Failure Triage 会给失败 gate 标注分类、日志锚点、重试建议和建议命令。若已执行 `delivery ci-status` 或 `delivery ci-watch`，远端 CI 结果会作为 `ci-status` artifact 和 PR 包中的 Remote CI 证据出现。Web dashboard 也使用同一 review surface，展示 Readiness、Evidence Links、Gate Failure Triage、Diff、Artifact 正文、Gate Logs、PR 包和下一步命令。
 
-真实 provider 需要遵守 Donkey artifact 协议：在 `DONKEY_OUTPUT_DIR` 写入节点产物，并写 `DONKEY_ARTIFACT_MANIFEST`。Adapter 会校验 manifest 中的 artifact schema 并写入 Artifact Store；缺少必需 artifact 时节点失败，不会继续把 stdout/stderr 当作有效交付证据。
+真实 provider 需要遵守 Tekon artifact 协议：在 `TEKON_OUTPUT_DIR` 写入节点产物，并写 `TEKON_ARTIFACT_MANIFEST`。Adapter 会校验 manifest 中的 artifact schema 并写入 Artifact Store；缺少必需 artifact 时节点失败，不会继续把 stdout/stderr 当作有效交付证据。
 
 Artifact Store 会在写入前扫描明显密钥模式并拒绝入库；CommandGateway 会在 stdout/stderr 写入日志文件前脱敏。当前规则覆盖 private key、OpenAI-style key、AWS access key 和常见 token/secret assignment。这是最小敏感信息治理，不等于完整 DLP 或生产级密钥平台。
 
 启动本地 Web dashboard：
 
 ```bash
-DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @donkey/web dev
+TEKON_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @tekon/web dev
 ```
 
-`donkey init` 会生成 `.donkey/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，可用 session token 塑形并批准需求、发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr`，并可在项目 runs 中选择任意 run 审阅 readiness、Evidence Links、diff、artifact 正文、gate logs、PR 包和下一步命令，在审计区展示 hash chain 状态和 node/gate/role 过滤。Web prepare/create-pr 会作用在当前选中的 run 上；与 CLI 一样，create-pr 未批准时只落库等待审批，批准后才产生 push/PR 副作用。
+`tekon init` 会生成 `.tekon/web-session.json`，Web 写操作需要其中的 session token。该文件已被 `.gitignore` 排除，不应提交。Web dashboard 会展示 human gate 的 request/gate/command/risk 上下文，可用 session token 塑形并批准需求、发起模板 run、执行 `delivery prepare`、触发受人工批准的 `delivery create-pr`，并可在项目 runs 中选择任意 run 审阅 readiness、Evidence Links、diff、artifact 正文、gate logs、PR 包和下一步命令，在审计区展示 hash chain 状态和 node/gate/role 过滤。Web prepare/create-pr 会作用在当前选中的 run 上；与 CLI 一样，create-pr 未批准时只落库等待审批，批准后才产生 push/PR 副作用。
 
 ## 本地验证
 
@@ -169,11 +169,11 @@ DONKEY_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @do
 npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
 npm exec --yes -- pnpm@10.12.1 ignored-builds
 npm exec --yes -- pnpm@10.12.1 test -- --run
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/cli test:e2e
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/web test:e2e
-npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
 npm exec --yes -- pnpm@10.12.1 build
 npm exec --yes -- pnpm@10.12.1 typecheck
 npm run lint:actions
@@ -187,27 +187,28 @@ npm exec --yes -- pnpm@10.12.1 exec vitest --exclude "**/__manual__/**" --run --
 
 ## 文档入口
 
-- 技术方案：`docs/technical/donkey-v2-technical-plan.html`
-- 三阶段实施计划：`docs/superpowers/plans/2026-06-05-donkey-v2-three-phase-implementation.md`
-- 三阶段实施计划 HTML：`docs/superpowers/plans/2026-06-05-donkey-v2-three-phase-implementation.html`
-- Phase 2 CLI 证据报告：`docs/reviews/2026-06-05-donkey-v2-phase2-cli-evidence.md`
-- Phase 2 评审记录：`docs/reviews/2026-06-05-donkey-v2-phase2-review.md`
-- V2 用户手册：`docs/manual/donkey-v2-user-manual.html`
-- Dogfooding 报告：`docs/reviews/2026-06-05-donkey-v2-dogfooding-report.html`
-- Final acceptance：`docs/reviews/2026-06-05-donkey-v2-final-acceptance.html`
-- 工作可用样本评估增量：`docs/reviews/2026-06-08-donkey-work-usability-eval-increment.html`
-- 工作可用样本沉淀增量：`docs/reviews/2026-06-08-donkey-work-usability-sample-record-increment.html`
-- 审阅证据导航增量：`docs/reviews/2026-06-08-donkey-review-evidence-navigation-increment.html`
-- 敏感信息治理增量：`docs/reviews/2026-06-08-donkey-secret-governance-increment.html`
-- Web 多运行审阅流增量：`docs/reviews/2026-06-08-donkey-web-multirun-review-increment.html`
-- 远端 CI 状态证据增量：`docs/reviews/2026-06-08-donkey-remote-ci-status-increment.html`
-- 远端 CI watch 增量：`docs/reviews/2026-06-08-donkey-remote-ci-watch-increment.html`
-- Gate 失败诊断增量：`docs/reviews/2026-06-08-donkey-gate-failure-triage-increment.html`
-- 需求塑形入口增量：`docs/reviews/2026-06-08-donkey-demand-shaping-increment.html`
-- 受控 workflow selection 增量：`docs/reviews/2026-06-08-donkey-workflow-selection-increment.html`
-- 审批摘要增量：`docs/reviews/2026-06-08-donkey-approval-summary-increment.html`
-- 历史 MVP 边界：`docs/manual/donkey-mvp-user-manual.html`
+- 主用户使用手册：`docs/manual/tekon-user-manual.md`
+- 技术方案：`docs/technical/tekon-v2-technical-plan.html`
+- 三阶段实施计划：`docs/superpowers/plans/2026-06-05-tekon-v2-three-phase-implementation.md`
+- 三阶段实施计划 HTML：`docs/superpowers/plans/2026-06-05-tekon-v2-three-phase-implementation.html`
+- Phase 2 CLI 证据报告：`docs/reviews/2026-06-05-tekon-v2-phase2-cli-evidence.md`
+- Phase 2 评审记录：`docs/reviews/2026-06-05-tekon-v2-phase2-review.md`
+- V2 用户手册：`docs/manual/tekon-v2-user-manual.html`
+- Dogfooding 报告：`docs/reviews/2026-06-05-tekon-v2-dogfooding-report.html`
+- Final acceptance：`docs/reviews/2026-06-05-tekon-v2-final-acceptance.html`
+- 工作可用样本评估增量：`docs/reviews/2026-06-08-tekon-work-usability-eval-increment.html`
+- 工作可用样本沉淀增量：`docs/reviews/2026-06-08-tekon-work-usability-sample-record-increment.html`
+- 审阅证据导航增量：`docs/reviews/2026-06-08-tekon-review-evidence-navigation-increment.html`
+- 敏感信息治理增量：`docs/reviews/2026-06-08-tekon-secret-governance-increment.html`
+- Web 多运行审阅流增量：`docs/reviews/2026-06-08-tekon-web-multirun-review-increment.html`
+- 远端 CI 状态证据增量：`docs/reviews/2026-06-08-tekon-remote-ci-status-increment.html`
+- 远端 CI watch 增量：`docs/reviews/2026-06-08-tekon-remote-ci-watch-increment.html`
+- Gate 失败诊断增量：`docs/reviews/2026-06-08-tekon-gate-failure-triage-increment.html`
+- 需求塑形入口增量：`docs/reviews/2026-06-08-tekon-demand-shaping-increment.html`
+- 受控 workflow selection 增量：`docs/reviews/2026-06-08-tekon-workflow-selection-increment.html`
+- 审批摘要增量：`docs/reviews/2026-06-08-tekon-approval-summary-increment.html`
+- 历史 MVP 边界：`docs/manual/tekon-mvp-user-manual.html`
 
 ## 发布状态
 
-当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Donkey 现在已可在本地通过 CLI 跑 mock workflow、需求塑形和人工批准、受控 workflow selection、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、delivery ci-status 只读查询 GitHub PR checks、delivery ci-watch 只读等待 PR checks 终态、approval summary、approval reject、eval approval-summary、eval demand-shape、eval workflow-selection、eval readiness、eval work-usability、eval work-usability record、样本评估报告导出、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval/审批摘要和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。
+当前状态是本地 V2 重构和工作可用化增量验收通过，不是公开生产发布。任何对外说明都应明确：Tekon 现在已可在本地通过 CLI 跑 mock workflow、需求塑形和人工批准、受控 workflow selection、Claude Code adapter 协议接线、dynamic dry-run、delivery dry-run、delivery prepare、受人工批准的 delivery create-pr、delivery ci-status 只读查询 GitHub PR checks、delivery ci-watch 只读等待 PR checks 终态、approval summary、approval reject、eval approval-summary、eval demand-shape、eval workflow-selection、eval readiness、eval work-usability、eval work-usability record、样本评估报告导出、命令日志脱敏、artifact 敏感内容拦截、Web dashboard human approval/审批摘要和 Web 受控发起 run/prepare/create-pr；自动 merge、自动上线、完整 DLP 和生产级真实 LLM workflow 稳定性仍需后续发布范围确认。

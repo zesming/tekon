@@ -1,8 +1,8 @@
-import type { DonkeyDatabase } from './connection.js';
+import type { TekonDatabase } from './connection.js';
 
 const WORK_USABLE_SCHEMA_VERSION = 3;
 
-export function migrateDatabase(db: DonkeyDatabase): void {
+export function migrateDatabase(db: TekonDatabase): void {
   const migrate = db.transaction(() => {
     db.exec(`
       create table if not exists schema_migrations (
@@ -181,7 +181,7 @@ export function migrateDatabase(db: DonkeyDatabase): void {
 }
 
 function addColumnIfMissing(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   table: string,
   column: string,
   definition: string,

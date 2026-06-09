@@ -36,11 +36,11 @@ import {
   type AgentAdapterConfig,
   type WorkflowTemplate,
   type CommandGateway,
-  openDonkeyDatabase,
-  type DonkeyDatabase,
+  openTekonDatabase,
+  type TekonDatabase,
   type RunProviderConfig,
   type WorkflowInstance,
-} from '@donkey/core';
+} from '@tekon/core';
 
 import {
   assertProjectDatabaseExists,
@@ -274,7 +274,7 @@ export async function createApiCaller(
 ): Promise<ApiCaller> {
   const context = createProjectContext(input);
   assertProjectDatabaseExists(context);
-  const db = openDonkeyDatabase({ filename: context.dbPath });
+  const db = openTekonDatabase({ filename: context.dbPath });
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
 
@@ -406,7 +406,7 @@ export async function createApiCaller(
         );
         const engine = createWorkflowEngine({
           repoPath: context.projectRoot,
-          dataDir: '.donkey',
+          dataDir: '.tekon',
           repositories,
           audit,
           adapter: agentRuntime.adapter,
@@ -666,7 +666,7 @@ export async function dispatchApiCall(
 }
 
 function listScopedProjects(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
 ): ProjectRow[] {
   return (
@@ -677,7 +677,7 @@ function listScopedProjects(
 }
 
 function firstProjectOrFallback(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
 ): ProjectRow {
   return (
@@ -691,7 +691,7 @@ function firstProjectOrFallback(
 }
 
 function latestScopedRun(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
 ): { project: ProjectRow; run: WorkflowRow } | null {
   const runs = listScopedProjects(db, context).flatMap((project) =>
@@ -709,7 +709,7 @@ function latestScopedRun(
 }
 
 function listRunsForScopedProjects(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
 ): WorkflowRow[] {
   return listScopedProjects(db, context)
@@ -722,7 +722,7 @@ function listRunsForScopedProjects(
 }
 
 function scopedProjectById(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
   projectId: string,
 ): ProjectRow {
@@ -736,7 +736,7 @@ function scopedProjectById(
 }
 
 function listRunsForProject(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   projectId: string,
 ): WorkflowRow[] {
   return db
@@ -749,13 +749,13 @@ function listRunsForProject(
 }
 
 function latestRunForProject(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   projectId: string,
 ): WorkflowRow | null {
   return listRunsForProject(db, projectId)[0] ?? null;
 }
 
-function mustGetRun(db: DonkeyDatabase, runId: string): WorkflowRow {
+function mustGetRun(db: TekonDatabase, runId: string): WorkflowRow {
   const run = db
     .prepare('select * from workflow_instances where id = ?')
     .get(runId) as WorkflowRow | undefined;
@@ -766,7 +766,7 @@ function mustGetRun(db: DonkeyDatabase, runId: string): WorkflowRow {
 }
 
 function assertRunInScope(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   context: WebProjectContext,
   runId: string,
 ): void {
@@ -820,7 +820,7 @@ function assertDemandShapeStorageInScope(
   if (lstatSync(dataDir).isSymbolicLink()) {
     throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
   }
-  const expectedDataDir = resolve(realpathSync(context.projectRoot), '.donkey');
+  const expectedDataDir = resolve(realpathSync(context.projectRoot), '.tekon');
   const realDataDir = realpathSync(dataDir);
   if (realDataDir !== expectedDataDir) {
     throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
@@ -843,7 +843,7 @@ function assertDemandShapeStorageInScope(
   return demandsDir;
 }
 
-function listArtifacts(db: DonkeyDatabase, runId: string): ArtifactRow[] {
+function listArtifacts(db: TekonDatabase, runId: string): ArtifactRow[] {
   return db
     .prepare(
       'select * from artifacts where run_id = ? order by node_id, type, version',
@@ -851,7 +851,7 @@ function listArtifacts(db: DonkeyDatabase, runId: string): ArtifactRow[] {
     .all(runId) as ArtifactRow[];
 }
 
-function listGates(db: DonkeyDatabase, runId: string): GateRow[] {
+function listGates(db: TekonDatabase, runId: string): GateRow[] {
   return db
     .prepare(
       'select * from gate_results where run_id = ? order by created_at, id',
@@ -859,7 +859,7 @@ function listGates(db: DonkeyDatabase, runId: string): GateRow[] {
     .all(runId) as GateRow[];
 }
 
-function getGate(db: DonkeyDatabase, gateId: string | null): GateRow | null {
+function getGate(db: TekonDatabase, gateId: string | null): GateRow | null {
   if (!gateId) {
     return null;
   }
@@ -870,13 +870,13 @@ function getGate(db: DonkeyDatabase, gateId: string | null): GateRow | null {
   );
 }
 
-function listNodes(db: DonkeyDatabase, runId: string): NodeRow[] {
+function listNodes(db: TekonDatabase, runId: string): NodeRow[] {
   return db
     .prepare('select * from nodes where run_id = ? order by created_at, id')
     .all(runId) as NodeRow[];
 }
 
-function getNode(db: DonkeyDatabase, nodeId: string): NodeRow | null {
+function getNode(db: TekonDatabase, nodeId: string): NodeRow | null {
   return (
     (db.prepare('select * from nodes where id = ?').get(nodeId) as
       | NodeRow
@@ -885,7 +885,7 @@ function getNode(db: DonkeyDatabase, nodeId: string): NodeRow | null {
 }
 
 function listHumanDecisions(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   runId: string,
 ): HumanDecisionRow[] {
   return db
@@ -895,14 +895,14 @@ function listHumanDecisions(
     .all(runId) as HumanDecisionRow[];
 }
 
-function count(db: DonkeyDatabase, table: string, runId: string): number {
+function count(db: TekonDatabase, table: string, runId: string): number {
   const row = db
     .prepare(`select count(*) as total from ${table} where run_id = ?`)
     .get(runId) as { total: number };
   return row.total;
 }
 
-function pendingDecisionCount(db: DonkeyDatabase, runId: string): number {
+function pendingDecisionCount(db: TekonDatabase, runId: string): number {
   const row = db
     .prepare(
       `select count(*) as total from human_decisions
@@ -913,7 +913,7 @@ function pendingDecisionCount(db: DonkeyDatabase, runId: string): number {
 }
 
 async function updateDecision(input: {
-  db: DonkeyDatabase;
+  db: TekonDatabase;
   repositories: ReturnType<typeof createRepositories>;
   audit: ReturnType<typeof createAuditLogger>;
   context: WebProjectContext;
@@ -1029,7 +1029,7 @@ async function resumeWorkflowRun(input: {
   }
   const engine = createWorkflowEngine({
     repoPath: input.context.projectRoot,
-    dataDir: '.donkey',
+    dataDir: '.tekon',
     repositories: input.repositories,
     audit: input.audit,
     adapter: createWebAgentAdapterFromSnapshot(gateway, runProvider),
@@ -1195,7 +1195,7 @@ function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
   const meaningfulDirtyLines = status
     .split(/\r?\n/u)
     .filter((line) => line.trim().length > 0)
-    .filter((line) => !line.startsWith('?? .donkey/'));
+    .filter((line) => !line.startsWith('?? .tekon/'));
 
   if (meaningfulDirtyLines.length > 0 && !allowDirtyBase) {
     throw new ApiError(
@@ -1388,7 +1388,7 @@ function matchesAuditFilters(
 }
 
 function mapHumanDecision(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   decision: HumanDecisionRow,
   approvalSummary: Awaited<
     ReturnType<typeof createHumanApprovalSummary>
@@ -1430,7 +1430,7 @@ function mapHumanDecision(
 }
 
 function mapHumanDecisionRow(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   decision: {
     id: string;
     runId: string;
@@ -1501,5 +1501,5 @@ function stringValue(value: unknown): string | null {
 }
 
 function basenameForProject(repoPath: string): string {
-  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'donkey';
+  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'tekon';
 }

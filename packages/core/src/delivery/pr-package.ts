@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 
 import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { loadRepoProfile, type RepoProfile } from '../repo/profile.js';
 import type { Artifact } from '../types/domain.js';
 import {
@@ -25,7 +25,7 @@ export interface PullRequestPreparation {
 
 export async function createPullRequestPreparation(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   profile?: RepoProfile;
@@ -45,7 +45,7 @@ export async function createPullRequestPreparation(input: {
   }
 
   const title = `${profile.pr.titlePrefix}${evidence.demand.title}`.trim();
-  const branch = `donkey-delivery/${input.runId}`;
+  const branch = `tekon-delivery/${input.runId}`;
   const baseBranch = profile.pr.baseBranch;
   const body = formatPrBody({ evidence, branch, baseBranch });
   const packageContent = formatPreparationPackage({
@@ -71,7 +71,7 @@ export async function createPullRequestPreparation(input: {
 
   const packagePath = join(
     input.repoPath,
-    '.donkey',
+    '.tekon',
     'runs',
     input.runId,
     'delivery',
@@ -79,7 +79,7 @@ export async function createPullRequestPreparation(input: {
   );
   const prBodyPath = join(
     input.repoPath,
-    '.donkey',
+    '.tekon',
     'runs',
     input.runId,
     'delivery',

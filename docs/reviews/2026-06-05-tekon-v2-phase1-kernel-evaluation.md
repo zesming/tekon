@@ -1,0 +1,156 @@
+# Tekon V2 阶段一安全可恢复内核评估报告
+
+生成日期：2026-06-05
+实现分支：`phase1-kernel`；当前已合入：`rebuild-v2`
+范围：`packages/core` 阶段一安全可恢复内核、TDD 证据、E2E 验收、已知风险。
+
+## 1. 结论
+
+阶段一核心能力已完成本地实现并通过验证：monorepo/test harness、领域类型与运行时配置、SQLite/WAL 持久化与恢复、Artifact Store、Audit hash chain、CommandGateway、WorktreeManager、AgentAdapter/Mock/Claude runner、GateEngine/HumanGate，以及阶段一出口 E2E。
+
+最高思考等级 reviewer 初审检出 3 个阻断项：schema gate 只检查存在性、Artifact/Worktree ID 路径穿越风险、CommandGateway 危险命令拒绝过窄。已在 `90855a9` 修复，并新增对应 RED/GREEN 回归测试；复查 reviewer 返回 `APPROVED`，未检出必须修复项。
+
+合入 `rebuild-v2` 后已补充 CI、GitHub Actions lint 与 pnpm native build 配置：`pnpm-workspace.yaml` 显式允许 `better-sqlite3` 与 `esbuild` build scripts；GitHub Actions 会在 `rebuild-v2`、`main` 和 PR 上先执行 `actionlint` job，再执行依赖该 job 的 core build/tests。workflow 已显式声明 `permissions: contents: read` 与 `concurrency`，Node 运行时固定为 24，native build gate 使用 `set -euo pipefail` 并检查 `pnpm ignored-builds`，unit 与 e2e 在 CI 中分开执行，避免重复统计。
+
+发布就绪加固新增两个本地门禁入口：`npm run lint:actions` 通过 `scripts/ci/actionlint.sh` 调用本机 `actionlint`，缺失时回退 Docker，二者都不可用时以 127 失败；`scripts/ci/check-github-actions.mjs` 通过 `GITHUB_TOKEN` 查询 `zesming/tekon` 的 `rebuild-v2` 当前 SHA 的 `Core` workflow，缺 token 以 2 失败，未找到成功完成的 `Core` run 以 1 失败。
+
+Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
+
+发布就绪加固期间按 TDD 补强了 CommandGateway 的子进程生命周期处理：无 stdin 时不再写入空 chunk，显式 stdin 写入失败会返回 `rejected`，子进程异步 `error` 事件会受控结算，命令日志写入失败不会被标记为 `executed`，忽略 `SIGTERM` 的 timeout 场景会在 `SIGKILL` fallback 后硬结算，避免快速退出命令触发 `EPIPE`、promise 悬挂或丢失执行证据。
+
+## 2. 提交清单
+
+| Commit    | 内容                                                            |
+| --------- | --------------------------------------------------------------- |
+| `9355487` | `feat(core): scaffold monorepo and test harness`                |
+| `7fa23cd` | `feat(core): define domain types and runtime config schemas`    |
+| `5d1dcdd` | `feat(core): add durable sqlite persistence and recovery queue` |
+| `5fc5695` | `feat(core): add artifact store and append-only audit log`      |
+| `9b53423` | `feat(core): add command gateway with argv policy enforcement`  |
+| `b0be361` | `feat(core): add git worktree isolation manager`                |
+| `4669c76` | `feat(core): add agent adapter contract and claude runner`      |
+| `41b1286` | `feat(core): add deterministic gate engine and human approvals` |
+| `584589a` | `test(core): add phase 1 kernel e2e coverage`                   |
+| `8f49918` | `fix(core): pass stdin prompts through command gateway`         |
+| `90855a9` | `fix(core): harden phase 1 gate and path safety`                |
+
+## 3. TDD 证据
+
+| 任务                        | RED 证据                                                                                                                                                                                                       | GREEN 证据                                                                                                                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task 1 Monorepo             | `smoke.test.ts` 引用缺失的 `../src/index.js`，失败为 `Cannot find module '../src/index.js'`                                                                                                                    | `TEKON_CORE_VERSION` 实现后，`@tekon/core` smoke test 通过；build/typecheck 通过                                                                                                                                                                     |
+| Task 2 Types/Config         | domain/config 测试调用未导出的 schema，失败为 `Cannot read properties of undefined (reading 'parse')`                                                                                                          | domain/config schema 实现后，5 个测试通过；typecheck/build 通过                                                                                                                                                                                      |
+| Task 3 SQLite               | DB 测试调用未实现的 `openTekonDatabase`/`createWriteQueue`，失败为 `is not a function`                                                                                                                         | migrations/repositories/recovery/write queue 测试通过；typecheck/build 通过                                                                                                                                                                          |
+| Task 4 Artifact/Audit       | artifact/audit 测试调用未实现的 `createArtifactStore`/`createAuditLogger`，失败为 `is not a function`                                                                                                          | artifact versioning、schema、truncation、missing file、audit tamper detection 测试通过                                                                                                                                                               |
+| Task 5 CommandGateway       | gateway/gate runner 测试调用未实现的 `createCommandGateway`，失败为 `is not a function`                                                                                                                        | dangerous command、cwd scope、human approval boundary、stdout/stderr streaming、gate runner 测试通过                                                                                                                                                 |
+| Task 6 WorktreeManager      | worktree 测试调用未实现的 `createWorktreeManager`，失败为 `is not a function`                                                                                                                                  | dirty base、真实 git worktree lease/release/prune E2E 通过                                                                                                                                                                                           |
+| Task 7 AgentAdapter         | adapter 测试调用未实现的 `assertAgentProviderCapabilities`/`createMockAgentAdapter`/`createClaudeCodeAdapter`，失败为 `is not a function`                                                                      | provider capability check、mock artifacts、Claude command builder、large stdout/stderr、timeout 测试通过                                                                                                                                             |
+| Task 8 GateEngine/HumanGate | gate 测试调用未实现的 `createGateEngine`/`createHumanGate`，失败为 `is not a function`                                                                                                                         | command/schema/human gate、GateResult persistence、autoFix repair node 测试通过                                                                                                                                                                      |
+| stdin 修复                  | `promptMode: stdin` 测试失败，实际结果 `timedOut: true`、`exitCode: null`                                                                                                                                      | CommandGateway 写入 stdin 后，Claude stdin 测试通过                                                                                                                                                                                                  |
+| CommandGateway 稳定性加固   | root test 偶发 `write EPIPE`；fake child 只 emit `error` 不 emit `close` 时旧实现悬挂为 `timed-out`；stdout 日志不可写时旧实现仍返回 `executed`；忽略 `SIGTERM` 且不 emit `close` 的 child 旧实现悬挂为 `hung` | 无 stdin 不写空 chunk；显式 stdin 写失败返回 `rejected`；无 stdin 的 pipe error 不覆盖子进程退出结果；异步 child `error` 返回 `rejected`；日志写入失败返回 `rejected`；timeout 有 `SIGKILL` fallback 和硬结算；root test 为 20 个文件、41 个测试通过 |
+| E2E 脚本                    | 初始 `test:e2e` glob 未匹配文件，失败为 `No test files found`                                                                                                                                                  | 显式 e2e 文件列表后，2 个 e2e 测试通过                                                                                                                                                                                                               |
+| Reviewer 阻断项修复         | 新增回归测试确认无效 artifact 仍通过 schema gate、`../escape` ID 可写出受管目录、空 allow list/`rm -r -f`/`git push --force-with-lease` 未被稳定拒绝                                                           | schema gate 读取并校验 artifact 内容；Artifact/Worktree 路径段只允许 `[a-zA-Z0-9_-]`；CommandGateway 默认拒绝空 allow list、递归强制删除和 force push 变体；20 个测试文件、35 个测试通过                                                             |
+
+## 4. E2E 覆盖
+
+阶段一新增 E2E 覆盖：
+
+- `packages/core/__tests__/runtime/worktree-manager.e2e.test.ts`
+  - 创建真实临时 git repo。
+  - lease 两个独立 worktree。
+  - 验证分支、路径和文件隔离。
+  - release 后确认 worktree 已清理，并执行 `git worktree prune`。
+- `packages/core/__tests__/phase1/kernel.e2e.test.ts`
+  - 创建 run、project、demand、node。
+  - 创建 worktree lease。
+  - 执行 mock Agent。
+  - 写入 9 类内置 artifact。
+  - 执行 schema gate，校验 artifact 内容并持久化 GateResult。
+  - 写入并验证 audit hash chain。
+  - 验证 `rm -rf` 在 spawn 前被拒绝。
+  - 验证 human gate pause/resume。
+  - 验证缺少 sandbox/approval/permission mapping 的真实 Agent 配置被拒绝。
+  - release/prune worktree 并确认清理完成。
+
+## 5. 验证命令
+
+最后一次阶段一验证结果：
+
+```bash
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test -- --run
+# 20 test files passed, 31 tests passed
+# 修复 reviewer 阻断项后：20 test files passed, 35 tests passed
+
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+# 18 test files passed, 33 tests passed
+
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+# tsc -p tsconfig.json passed
+
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e -- --run
+# 2 test files passed, 2 tests passed
+
+npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+# better-sqlite3/esbuild build scripts executed from explicit allowlist
+
+npm exec --yes -- pnpm@10.12.1 ignored-builds
+# Automatically ignored builds during installation: None
+```
+
+发布就绪加固新增验证项：
+
+```bash
+bash -n scripts/ci/actionlint.sh
+# shell syntax check passed
+
+node --check scripts/ci/check-github-actions.mjs
+# JavaScript syntax check passed
+
+npm exec --yes -- prettier --check .github/workflows/core.yml package.json scripts/ci/check-github-actions.mjs docs/reviews/2026-06-05-tekon-v2-phase1-kernel-evaluation.md docs/reviews/2026-06-05-tekon-v2-phase1-kernel-evaluation.html
+# CI workflow、package 脚本、远端 Actions 查询脚本与评估文档格式检查
+
+bash scripts/ci/actionlint.sh
+# 本机存在 actionlint 时直接检查；否则使用 Docker；二者都不存在时返回 127，作为环境缺口处理
+
+npm exec --yes -- pnpm@10.12.1 --filter @tekon/core exec vitest --run __tests__/runtime/command-gateway.test.ts
+# CommandGateway 回归测试：11 tests passed
+
+npm exec --yes -- pnpm@10.12.1 test -- --run
+# 发布就绪加固后根测试：20 test files passed, 41 tests passed
+```
+
+## 6. 风险与后续建议
+
+- `better-sqlite3` 是原生依赖，已通过 `onlyBuiltDependencies` 显式允许构建，并由 CI 的 ignored-builds gate 覆盖；后续新增 native/toolchain 依赖时必须审阅并维护 allowlist，避免静默跳过 build scripts。
+- GitHub Actions 现在由 `actionlint` job 前置校验 workflow 语法与常见错误；本地 wrapper 仍依赖本机 `actionlint` 或 Docker，二者都缺失时必须把失败记录为环境缺口，不能视为通过。
+- 远端 `Core` workflow 成功是发布门禁；`scripts/ci/check-github-actions.mjs` 只读取环境变量 `GITHUB_TOKEN`，不会读取本地 token 文件。无 token、无匹配 run、run 未完成或结论非 `success` 都不能标记远端 CI 已确认。
+- Claude adapter 的真实 Claude CLI 调用未在阶段一执行；当前测试覆盖的是命令构造、权限能力检查、输出流、timeout 和 stdin。维护者侧真实 provider smoke 将在发布就绪加固的后续任务中提供手动执行路径和脱敏证据。
+- Worktree dirty 检测会忽略 Tekon 自己生成的 `.tekon/` 未跟踪目录，避免第二个 lease 被自身运行产物阻塞；用户工作区的已跟踪改动仍会阻断。
+- Artifact Store 和 WorktreeManager 现在拒绝包含路径分隔符或其他非安全字符的 run/node/role 路径段；如果后续业务需要更宽松的 ID，需要先定义独立的 ID 到路径映射层，不能直接拼路径。
+- `bypassPermissions` 不作为 Tekon 默认或推荐模式。只有在外层 OS/container sandbox 已验证、HumanGate 已批准、并且证据报告记录隔离方式时，才允许作为受控实验配置。
+- `CommandPolicy.network` 当前分为静态命令拒绝、provider 声明映射和后续 OS 级隔离三个层级。阶段一只能声明前两个层级，不声称已实现 OS 级断网。
+- Vitest 已迁移到根 `vitest.config.ts` 的 `test.projects`，不再使用旧 workspace 配置文件。
+- 当前 core API 是阶段一内核 API，尚未提供 CLI/Web 产品入口；已新增 `docs/manual/tekon-mvp-user-manual.html` 作为当前 MVP 边界手册，明确普通用户入口仍未交付。
+
+## 7. Subagent 执行情况
+
+本阶段按用户要求尝试使用 subagent：
+
+- Task 1 worker 曾因模型名错误中断。
+- 重新委派 worker 后未能在共享 worktree 留下有效 TDD 产物，主线程按 TDD 接手完成。
+- Task 1 的两个 reviewer subagent 均因 `429 Too Many Requests` 中断。
+- 阶段一最终 reviewer 成功返回 `CHANGES_REQUIRED`，3 个阻断项已在 `90855a9` 修复。
+- 修复后重新委派最高思考等级 reviewer 复查，结论为 `APPROVED`；仅保留一项建议：`CommandPolicy.network` 需要继续推进到 OS/container 级隔离。阶段一已经明确为静态命令拒绝和 provider 声明映射，不声称已实现 OS 级断网。
+
+合入 `rebuild-v2` 后，主工作区重新执行本地 build、unit、e2e 和文档未完成标记检查；结果记录见最终交付说明。
+
+## 8. 资料依据
+
+- pnpm `approve-builds` 官方文档：https://pnpm.io/cli/approve-builds。资料内容：该命令用于批准安装期间允许运行 scripts 的依赖，并会把批准结果写入 `pnpm-workspace.yaml`。对 Tekon 的判断依据：`better-sqlite3` 需要 native build，必须显式进入 allowlist。
+- pnpm `ignored-builds` 官方文档：https://pnpm.io/cli/ignored-builds。资料内容：该命令列出安装期间被自动阻止执行 build scripts 的包。对 Tekon 的判断依据：CI 应把 ignored builds 作为环境 gate，避免 native binding 缺失只在运行测试时才暴露。
+- pnpm 10.x `approve-builds` 版本化文档：https://pnpm.io/10.x/cli/approve-builds。
+- pnpm 10.x `ignored-builds` 版本化文档：https://pnpm.io/10.x/cli/ignored-builds。
+- GitHub Actions workflow syntax 官方文档：https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax。资料内容：说明 workflow YAML、`permissions`、job 依赖等语法。对 Tekon 的判断依据：CI workflow 应显式最小化 `GITHUB_TOKEN` 权限，并让 core job 依赖 actionlint。
+- GitHub Actions concurrency 官方文档：https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency。资料内容：说明 `concurrency` 可限制同组 workflow/job 并发并取消进行中的运行。对 Tekon 的判断依据：同一 PR 或分支的新提交应取消旧 CI，减少过期结果干扰。
+- GitHub REST Actions workflow runs 官方文档：https://docs.github.com/en/rest/actions/workflow-runs。资料内容：可通过 REST API 查询 repository workflow runs，并使用 branch/head SHA 等参数过滤。对 Tekon 的判断依据：远端 Core workflow 门禁应按 `rebuild-v2` 与当前 SHA 查询，而不是只看最近一次任意运行。
+- actionlint 项目与 Docker 镜像：https://github.com/rhysd/actionlint、https://hub.docker.com/r/rhysd/actionlint。资料内容：`actionlint` 是 GitHub Actions workflow 静态检查器，并提供 Docker 镜像。对 Tekon 的判断依据：本地与 CI 都可以使用固定版本 `rhysd/actionlint:1.7.12` 做 workflow lint。

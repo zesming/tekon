@@ -1,5 +1,5 @@
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import { createDeliveryEvidencePackage } from '../delivery/evidence.js';
 
 export type WorkReadinessSeverity = 'required' | 'recommended';
@@ -19,7 +19,7 @@ export interface WorkReadinessEvaluation {
 }
 
 export async function evaluateWorkReadiness(input: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   repoPath?: string;

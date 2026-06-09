@@ -3,7 +3,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import {
   createCommandGateway,
   type CommandGateway,
@@ -52,7 +52,7 @@ export interface PullRequestCiWatchResult {
 export async function queryPullRequestCiStatus(input: {
   repoPath: string;
   runId: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit?: AuditLogger;
   gateway?: CommandGateway;
   env?: NodeJS.ProcessEnv;
@@ -72,7 +72,7 @@ export async function queryPullRequestCiStatus(input: {
   }
   const outputDir = input.outputDir
     ? assertManagedOutputDir(input.repoPath, input.outputDir)
-    : join(input.repoPath, '.donkey', 'runs', runSegment, 'delivery', 'ci');
+    : join(input.repoPath, '.tekon', 'runs', runSegment, 'delivery', 'ci');
 
   const result = await (input.gateway ?? createCommandGateway()).run({
     command: {
@@ -132,7 +132,7 @@ export async function queryPullRequestCiStatus(input: {
 export async function watchPullRequestCiStatus(input: {
   repoPath: string;
   runId: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit?: AuditLogger;
   gateway?: CommandGateway;
   env?: NodeJS.ProcessEnv;
@@ -325,7 +325,7 @@ function summarizeCiStatus(checks: PullRequestCiCheck[]): PullRequestCiStatus {
 
 async function writeCiStatusArtifact(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   runId: string;
   selector: string;
   prUrl?: string;
@@ -403,12 +403,12 @@ function assertSafePathSegment(value: string): string {
 }
 
 function assertManagedOutputDir(repoPath: string, outputDir: string): string {
-  const root = resolve(repoPath, '.donkey');
+  const root = resolve(repoPath, '.tekon');
   const target = isAbsolute(outputDir)
     ? resolve(outputDir)
     : resolve(repoPath, outputDir);
   if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    throw new Error(`CI outputDir escapes .donkey: ${outputDir}`);
+    throw new Error(`CI outputDir escapes .tekon: ${outputDir}`);
   }
   return target;
 }

@@ -52,10 +52,10 @@ jobs:
           echo "$ignored" | grep -Eq "^[[:space:]]*None[[:space:]]*$"
 
       - name: Build core
-        run: npm exec --yes -- pnpm@10.12.1 --filter @donkey/core build
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
 
       - name: Run core unit tests
-        run: npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
 
       - name: Run core e2e tests
-        run: npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e

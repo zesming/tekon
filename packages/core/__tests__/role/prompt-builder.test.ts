@@ -29,14 +29,14 @@ describe('role prompt builder', () => {
       },
       taskInstruction: 'Review the delivery package.',
       projectContext: {
-        name: 'donkey',
+        name: 'tekon',
         repoPath: '/repo',
         currentRunId: 'run_1',
       },
       artifactSummaries: [
         {
           type: 'tech-design',
-          path: '.donkey/runs/run_1/artifacts/rd/tech-design.v1.md',
+          path: '.tekon/runs/run_1/artifacts/rd/tech-design.v1.md',
           summary: 'Design summary',
           content: 'A'.repeat(40),
         },

@@ -6,7 +6,7 @@ import {
   type RunningWebServer,
 } from '../../src/server/http.js';
 
-test.describe('Donkey release dashboard', () => {
+test.describe('Tekon release dashboard', () => {
   let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
   let server: RunningWebServer;
 
@@ -65,9 +65,9 @@ test.describe('Donkey release dashboard', () => {
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('审批摘要')).toContainText('Donkey 审批摘要');
+    await expect(page.getByLabel('审批摘要')).toContainText('Tekon 审批摘要');
     await expect(page.getByLabel('审批摘要')).toContainText(
-      'donkey approval reject',
+      'tekon approval reject',
     );
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
     await expect(page.getByText('Review report body')).toBeVisible();
@@ -77,7 +77,7 @@ test.describe('Donkey release dashboard', () => {
     await expect(page.getByText('human human-approval')).toBeVisible();
     await expect(page.getByText(/retry=after-approval/u)).toBeVisible();
     await expect(
-      page.getByText('command=donkey resume --run-id run_1 --approve-human'),
+      page.getByText('command=tekon resume --run-id run_1 --approve-human'),
     ).toBeVisible();
     await expect(page.getByText('Review Route info')).toBeVisible();
     await expect(page.getByLabel('Review run')).toContainText('run_0');
@@ -96,7 +96,7 @@ test.describe('Donkey release dashboard', () => {
     await page.getByLabel('Action token').fill(fixture.sessionToken);
     await page.getByRole('button', { name: '准备 PR' }).click();
     await expect(
-      page.getByText('PR prepared: donkey-delivery/run_1 -> main'),
+      page.getByText('PR prepared: tekon-delivery/run_1 -> main'),
     ).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
@@ -124,13 +124,13 @@ test.describe('Donkey release dashboard', () => {
 
     await page.screenshot({
       fullPage: true,
-      path: testInfo.outputPath('donkey-dashboard-mobile.png'),
+      path: testInfo.outputPath('tekon-dashboard-mobile.png'),
     });
     await page.setViewportSize({ width: 1280, height: 900 });
     await expect(page.getByRole('heading', { name: '概览' })).toBeVisible();
     await page.screenshot({
       fullPage: true,
-      path: testInfo.outputPath('donkey-dashboard-desktop.png'),
+      path: testInfo.outputPath('tekon-dashboard-desktop.png'),
     });
   });
 });

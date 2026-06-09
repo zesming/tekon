@@ -76,7 +76,7 @@ describe('dynamic workflow generation', () => {
   });
 
   it('saves a schema-validated workflow YAML template under a safe name', () => {
-    const root = mkdtempSync(join(tmpdir(), 'donkey-dynamic-template-'));
+    const root = mkdtempSync(join(tmpdir(), 'tekon-dynamic-template-'));
     tempDirs.push(root);
     const workflowsDir = join(root, 'workflows');
 

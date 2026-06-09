@@ -130,7 +130,7 @@ export function writeDefaultRepoProfile(repoPath: string): RepoProfile {
 }
 
 export function repoProfilePath(repoPath: string): string {
-  return join(repoPath, '.donkey', 'repo-profile.yaml');
+  return join(repoPath, '.tekon', 'repo-profile.yaml');
 }
 
 export function repoProfileCommand(
@@ -194,8 +194,8 @@ export function repoProfileCommandGuidance(
   const suggestions = suggestRepoProfileCommandFixes(repoPath, name);
   const hint =
     suggestions.length > 0
-      ? `add commands.${name} to .donkey/repo-profile.yaml`
-      : `add commands.${name} to .donkey/repo-profile.yaml with this repo's validation command`;
+      ? `add commands.${name} to .tekon/repo-profile.yaml`
+      : `add commands.${name} to .tekon/repo-profile.yaml with this repo's validation command`;
   return {
     commandRef: name,
     profilePath,

@@ -432,7 +432,7 @@ function App() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <h1>Donkey Cockpit</h1>
+          <h1>Tekon Cockpit</h1>
           <p>{overview?.project.repoPath ?? 'Loading project context'}</p>
         </div>
         <div className="run-pill">
@@ -880,7 +880,7 @@ function App() {
             primary="project"
             secondary={overview?.project.name ?? 'loading'}
           />
-          <Row primary="write gate" secondary=".donkey/web-session.json" />
+          <Row primary="write gate" secondary=".tekon/web-session.json" />
         </Panel>
       </section>
     </main>

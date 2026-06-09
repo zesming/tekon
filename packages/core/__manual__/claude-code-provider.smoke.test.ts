@@ -16,13 +16,13 @@ import {
 
 describe('claude-code provider manual smoke', () => {
   it('requires explicit enablement and authenticated Claude CLI', async () => {
-    if (process.env.DONKEY_CLAUDE_PROVIDER_SMOKE !== '1') {
+    if (process.env.TEKON_CLAUDE_PROVIDER_SMOKE !== '1') {
       throw new Error(
         'Claude provider smoke requires explicit enablement; this smoke is fail-closed.',
       );
     }
 
-    const claudeCommand = process.env.DONKEY_CLAUDE_COMMAND ?? 'claude';
+    const claudeCommand = process.env.TEKON_CLAUDE_COMMAND ?? 'claude';
     const preflightEnv = buildClaudeProviderEnv();
     const version = execFileSync(claudeCommand, ['--version'], {
       encoding: 'utf8',
@@ -33,13 +33,13 @@ describe('claude-code provider manual smoke', () => {
       stdio: 'pipe',
     });
 
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-claude-smoke-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-smoke-'));
     writeFileSync(
       join(repoPath, 'README.md'),
-      'DONKEY_CLAUDE_PROVIDER_SMOKE_FIXTURE\n',
+      'TEKON_CLAUDE_PROVIDER_SMOKE_FIXTURE\n',
       'utf8',
     );
-    const dataDir = join(repoPath, '.donkey');
+    const dataDir = join(repoPath, '.tekon');
     const outputDir = join(dataDir, 'smoke');
     const adapter = createClaudeCodeAdapter(
       {
@@ -66,7 +66,7 @@ describe('claude-code provider manual smoke', () => {
     const result = await adapter.runAgent({
       roleConfig: { role: 'reviewer' },
       prompt:
-        'Read README.md and print DONKEY_CLAUDE_PROVIDER_SMOKE_OK. Do not edit files.',
+        'Read README.md and print TEKON_CLAUDE_PROVIDER_SMOKE_OK. Do not edit files.',
       worktreeLease: {
         id: 'lease_smoke',
         runId: 'run_smoke',
@@ -74,7 +74,7 @@ describe('claude-code provider manual smoke', () => {
         role: 'reviewer',
         repoPath,
         worktreePath: repoPath,
-        branchName: 'donkey/run_smoke/node_claude-reviewer',
+        branchName: 'tekon/run_smoke/node_claude-reviewer',
         createdAt: new Date().toISOString(),
       },
       outputDir,
@@ -98,7 +98,7 @@ describe('claude-code provider manual smoke', () => {
     expect(result.exitCode).toBe(0);
     expect(result.outputFiles).toHaveLength(2);
     expect(readFileSync(result.outputFiles[0]!, 'utf8')).toContain(
-      'DONKEY_CLAUDE_PROVIDER_SMOKE_OK',
+      'TEKON_CLAUDE_PROVIDER_SMOKE_OK',
     );
 
     writeEvidence({

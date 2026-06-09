@@ -152,8 +152,8 @@ function renderFallbackHtml(): string {
   return [
     '<!doctype html>',
     '<html lang="zh-CN">',
-    '<head><meta charset="utf-8" /><title>Donkey Web</title></head>',
-    '<body><main><h1>Donkey Web</h1></main></body>',
+    '<head><meta charset="utf-8" /><title>Tekon Web</title></head>',
+    '<body><main><h1>Tekon Web</h1></main></body>',
     '</html>',
   ].join('');
 }

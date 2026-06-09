@@ -114,7 +114,7 @@ export async function runSecurityScanGate(
   if (findings.length > 0) {
     writeFileSync(
       outputPath,
-      JSON.stringify({ findings, scanner: 'donkey-builtin' }, null, 2),
+      JSON.stringify({ findings, scanner: 'tekon-builtin' }, null, 2),
       'utf8',
     );
     return {
@@ -147,7 +147,7 @@ export async function runSecurityScanGate(
 
   writeFileSync(
     outputPath,
-    JSON.stringify({ findings: [], scanner: 'donkey-builtin' }, null, 2),
+    JSON.stringify({ findings: [], scanner: 'tekon-builtin' }, null, 2),
     'utf8',
   );
   return {

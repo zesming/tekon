@@ -19,10 +19,10 @@ export interface WebProjectContext {
 export function resolveProjectRoot(
   input: ResolveProjectRootInput = {},
 ): string {
-  const explicitRoot = input.projectRoot ?? input.env?.DONKEY_PROJECT_ROOT;
+  const explicitRoot = input.projectRoot ?? input.env?.TEKON_PROJECT_ROOT;
   if (!explicitRoot) {
     throw new Error(
-      'DONKEY_PROJECT_ROOT or an explicit projectRoot is required for Donkey Web',
+      'TEKON_PROJECT_ROOT or an explicit projectRoot is required for Tekon Web',
     );
   }
 
@@ -33,11 +33,11 @@ export function createProjectContext(
   input: ResolveProjectRootInput = {},
 ): WebProjectContext {
   const projectRoot = resolveProjectRoot(input);
-  const dataDir = join(projectRoot, '.donkey');
+  const dataDir = join(projectRoot, '.tekon');
   return {
     projectRoot,
     dataDir,
-    dbPath: join(dataDir, 'donkey.sqlite'),
+    dbPath: join(dataDir, 'tekon.sqlite'),
     sessionPath: join(dataDir, 'web-session.json'),
     rolesDir: join(dataDir, 'roles'),
     workflowsDir: join(dataDir, 'workflows'),
@@ -47,6 +47,6 @@ export function createProjectContext(
 
 export function assertProjectDatabaseExists(context: WebProjectContext): void {
   if (!existsSync(context.dbPath)) {
-    throw new Error(`Donkey database not found: ${context.dbPath}`);
+    throw new Error(`Tekon database not found: ${context.dbPath}`);
   }
 }

@@ -13,7 +13,7 @@ import { delimiter, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createRepositories, openDonkeyDatabase } from '@donkey/core';
+import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
 
 describe('runCli in-process', () => {
@@ -31,12 +31,12 @@ describe('runCli in-process', () => {
 
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
     expect(io.takeStdout()).toContain('initialized');
-    const sessionPath = join(repoPath, '.donkey', 'web-session.json');
+    const sessionPath = join(repoPath, '.tekon', 'web-session.json');
     expect(existsSync(sessionPath)).toBe(true);
     expect(JSON.parse(readFileSync(sessionPath, 'utf8'))).toEqual({
       token: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
-    expect(existsSync(join(repoPath, '.donkey', 'eval'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'eval'))).toBe(true);
 
     await expect(
       runCli(
@@ -204,7 +204,7 @@ describe('runCli in-process', () => {
       'classification=human-approval retry=after-approval',
     );
     expect(gatedReviewOutput).toContain(
-      `suggestedCommand=donkey resume --run-id ${gatedRunId} --approve-human`,
+      `suggestedCommand=tekon resume --run-id ${gatedRunId} --approve-human`,
     );
 
     await expect(
@@ -217,9 +217,9 @@ describe('runCli in-process', () => {
     expect(approvalSummaryOutput).toContain('ready=true');
     expect(approvalSummaryOutput).toContain('## 处理入口');
     expect(approvalSummaryOutput).toContain(
-      `donkey resume --run-id ${gatedRunId} --approve-human`,
+      `tekon resume --run-id ${gatedRunId} --approve-human`,
     );
-    expect(approvalSummaryOutput).toContain('donkey approval reject');
+    expect(approvalSummaryOutput).toContain('tekon approval reject');
 
     await expect(
       runCli(
@@ -349,7 +349,7 @@ describe('runCli in-process', () => {
     ).resolves.toBe(1);
     expect(io.takeStderr()).toContain('run has no PR selector for CI status');
 
-    const binDir = mkdtempSync(join(tmpdir(), 'donkey-cli-fake-gh-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-cli-fake-gh-'));
     tempDirs.push(binDir);
     writeFakeGhChecks(binDir);
     const originalPath = process.env.PATH;
@@ -412,7 +412,7 @@ describe('runCli in-process', () => {
     expect(reviewOutput).toContain('## PR Body');
     expect(reviewOutput).toContain('ready=true');
 
-    const evalDir = join(repoPath, '.donkey', 'eval');
+    const evalDir = join(repoPath, '.tekon', 'eval');
     mkdirSync(evalDir, { recursive: true });
     const recordedSamplesPath = join(evalDir, 'recorded-work-usability.yaml');
     await expect(
@@ -616,7 +616,7 @@ describe('runCli in-process', () => {
   });
 
   it('prints repo profile fix guidance for missing workflow commands', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-preflight-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-'));
     tempDirs.push(repoPath);
     writeFileSync(
       join(repoPath, 'package.json'),
@@ -636,18 +636,18 @@ describe('runCli in-process', () => {
     expect(output).toContain('gate=build commandRef=build status=missing');
     expect(output).toContain('hint=add commands.build');
     expect(output).toContain(
-      `profilePath=${join(repoPath, '.donkey', 'repo-profile.yaml')}`,
+      `profilePath=${join(repoPath, '.tekon', 'repo-profile.yaml')}`,
     );
     expect(output).toContain('suggestedScript=compile');
     expect(output).toContain('suggestedCommand=npm run compile');
   });
 
   it('prints explicit notApplicable repo profile commands in workflow preflight', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-preflight-na-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-na-'));
     tempDirs.push(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeFileSync(
-      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
       [
         'version: 1',
         'commands:',
@@ -684,7 +684,7 @@ describe('runCli in-process', () => {
     );
     expect(output).toContain('notApplicableReason=docs-only');
     expect(output).toContain(
-      'gate=security-scan commandRef=security status=resolved command=donkey-builtin security scan',
+      'gate=security-scan commandRef=security status=resolved command=tekon-builtin security scan',
     );
     expect(output).toContain('notApplicableIgnoredFor=security-scan');
   });
@@ -713,8 +713,8 @@ describe('runCli in-process', () => {
     const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
-    const db = openDonkeyDatabase({
-      filename: join(repoPath, '.donkey', 'donkey.sqlite'),
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
     });
     db.prepare('delete from run_provider_configs where run_id = ?').run(runId);
     const repositories = createRepositories(db);
@@ -781,13 +781,13 @@ exit 1
 }
 
 function createFixtureRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-cli-unit-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-unit-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   execFileSync('npm', ['init', '-y'], { cwd: repoPath });

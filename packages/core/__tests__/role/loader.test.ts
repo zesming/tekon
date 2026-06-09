@@ -16,7 +16,7 @@ describe('role loader', () => {
   });
 
   it('resolves project roles before user roles before built-in roles and treats agent folders as whole-folder overrides', () => {
-    const root = mkdtempSync(join(tmpdir(), 'donkey-role-loader-'));
+    const root = mkdtempSync(join(tmpdir(), 'tekon-role-loader-'));
     tempDirs.push(root);
     const repoPath = join(root, 'repo');
     const userHome = join(root, 'home');
@@ -32,7 +32,7 @@ describe('role loader', () => {
           '---\nid: implement\npriority: 10\ninjectMode: append\n---\nbuilt-in implement skill',
       },
     });
-    writeRole(join(userHome, '.donkey', 'roles'), 'rd', {
+    writeRole(join(userHome, '.tekon', 'roles'), 'rd', {
       agent: 'role: rd\nname: user rd\n',
       system: 'user system',
       skills: {
@@ -40,7 +40,7 @@ describe('role loader', () => {
           '---\nid: implement\npriority: 50\ninjectMode: append\n---\nuser implement skill',
       },
     });
-    writeRole(join(repoPath, '.donkey', 'roles'), 'rd', {
+    writeRole(join(repoPath, '.tekon', 'roles'), 'rd', {
       agent:
         'role: rd\nname: project rd\nmaxSkills: 1\nknowledgeFiles:\n  - knowledge/project.md\n',
       system: 'project system',
@@ -74,7 +74,7 @@ describe('role loader', () => {
   });
 
   it('merges skills by id from lower-priority role folders with higher-priority skill overrides', () => {
-    const root = mkdtempSync(join(tmpdir(), 'donkey-role-skills-'));
+    const root = mkdtempSync(join(tmpdir(), 'tekon-role-skills-'));
     tempDirs.push(root);
     const repoPath = join(root, 'repo');
     const userHome = join(root, 'home');
@@ -89,7 +89,7 @@ describe('role loader', () => {
           '---\nid: report\npriority: 30\n---\nbuilt-in report skill',
       },
     });
-    writeRole(join(userHome, '.donkey', 'roles'), 'qa', {
+    writeRole(join(userHome, '.tekon', 'roles'), 'qa', {
       agent: 'role: qa\nname: user qa\nmaxSkills: 3\n',
       system: 'user qa system',
       skills: {

@@ -8,7 +8,7 @@ import {
   createRepositories,
   createWorktreeManager,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type CommandGateway,
 } from '../../src/index.js';
 
@@ -22,9 +22,9 @@ describe('worktree manager', () => {
   });
 
   it('rejects a dirty base worktree unless explicitly allowed', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-worktree-unit-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-worktree-unit-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const calls: string[] = [];
@@ -63,9 +63,9 @@ describe('worktree manager', () => {
   });
 
   it('rejects unsafe run identifiers before git worktree add', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-worktree-path-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-worktree-path-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const calls: string[] = [];

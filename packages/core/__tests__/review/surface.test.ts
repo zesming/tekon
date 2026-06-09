@@ -18,7 +18,7 @@ import {
   createRepositories,
   createWorkReviewSurface,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   writeDefaultRepoProfile,
 } from '../../src/index.js';
 
@@ -32,19 +32,19 @@ describe('work review surface', () => {
   });
 
   it('collects readiness, artifact bodies, gate logs, PR package, and delivery diff', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-surface-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-surface-'));
     tempDirs.push(repoPath);
     seedGitRepo(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeDefaultRepoProfile(repoPath);
 
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
     await seedPassedRun({ repoPath, repositories });
 
-    const gatesDir = join(repoPath, '.donkey', 'runs', 'run_1', 'gates');
+    const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
     const testLogPath = join(gatesDir, 'node_1-test.log');
     const securityLogPath = join(gatesDir, 'node_1-security-scan.log');
@@ -110,7 +110,7 @@ describe('work review surface', () => {
       nodeId: 'node_1',
       type: 'review-report',
       version: 1,
-      path: join(tmpdir(), 'donkey-review-outside.txt'),
+      path: join(tmpdir(), 'tekon-review-outside.txt'),
       sha256: 'outside',
       sizeBytes: 7,
       summary: 'outside path must not be read',
@@ -189,25 +189,25 @@ describe('work review surface', () => {
       ]),
     );
     expect(surface.nextCommands).toContain(
-      'donkey delivery create-pr --run-id run_1 --approve-human',
+      'tekon delivery create-pr --run-id run_1 --approve-human',
     );
     db.close();
   });
 
   it('triages failed gates with retry guidance and linked logs', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-triage-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-triage-'));
     tempDirs.push(repoPath);
     seedGitRepo(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeDefaultRepoProfile(repoPath);
 
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
     await seedPassedRun({ repoPath, repositories });
 
-    const gatesDir = join(repoPath, '.donkey', 'runs', 'run_1', 'gates');
+    const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
     const buildLogPath = join(gatesDir, 'node_1-build.log');
     const lintLogPath = join(gatesDir, 'node_1-lint.log');
@@ -342,47 +342,46 @@ describe('work review surface', () => {
           classification: 'exit-code',
           retry: 'after-fix',
           logHref: '#gate-log-gate_build',
-          suggestedCommand: 'donkey log --run-id run_1',
+          suggestedCommand: 'tekon log --run-id run_1',
         }),
         expect.objectContaining({
           gateId: 'gate_lint',
           classification: 'missing-command',
           retry: 'after-fix',
-          suggestedCommand:
-            'donkey workflow preflight <template> --repo <repo>',
+          suggestedCommand: 'tekon workflow preflight <template> --repo <repo>',
         }),
         expect.objectContaining({
           gateId: 'gate_command_approval',
           classification: 'blocked-for-approval',
           retry: 'after-approval',
           summary: expect.stringContaining('Approve only after reviewing'),
-          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_human',
           classification: 'human-approval',
           retry: 'after-approval',
-          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_legacy_human',
           classification: 'human-approval',
           retry: 'after-approval',
-          suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+          suggestedCommand: 'tekon resume --run-id run_1 --approve-human',
         }),
         expect.objectContaining({
           gateId: 'gate_rejected_human',
           classification: 'human-rejected',
           retry: 'not-recommended',
           summary: expect.stringContaining('human reviewer rejected'),
-          suggestedCommand: 'donkey review --run-id run_1',
+          suggestedCommand: 'tekon review --run-id run_1',
         }),
         expect.objectContaining({
           gateId: 'gate_security',
           classification: 'security-findings',
           retry: 'after-fix',
           summary: expect.stringContaining('Security scan found'),
-          suggestedCommand: 'donkey review --run-id run_1',
+          suggestedCommand: 'tekon review --run-id run_1',
         }),
       ]),
     );
@@ -390,14 +389,14 @@ describe('work review surface', () => {
   });
 
   it('does not read symlinked or traversed repo paths for previews or readiness evidence', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-safe-'));
-    const outsideDir = mkdtempSync(join(tmpdir(), 'donkey-review-outside-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-safe-'));
+    const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-review-outside-'));
     tempDirs.push(repoPath, outsideDir);
     seedGitRepo(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeDefaultRepoProfile(repoPath);
 
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -427,7 +426,7 @@ describe('work review surface', () => {
 
     const artifactsDir = join(
       repoPath,
-      '.donkey',
+      '.tekon',
       'runs',
       'run_1',
       'artifacts',
@@ -442,7 +441,7 @@ describe('work review surface', () => {
       nodeId: 'node_1',
       type: 'test-report',
       version: 1,
-      path: '.donkey/runs/run_1/artifacts/node_1/symlink-report.v1.md',
+      path: '.tekon/runs/run_1/artifacts/node_1/symlink-report.v1.md',
       sha256: 'symlink',
       sizeBytes: 10,
       summary: 'symlink must not be read',
@@ -466,7 +465,7 @@ describe('work review surface', () => {
       nodeId: 'node_1',
       type: 'delivery-package',
       version: 1,
-      path: '.donkey/runs/run_1/artifacts/node_1/delivery-package.v1.md',
+      path: '.tekon/runs/run_1/artifacts/node_1/delivery-package.v1.md',
       sha256: 'delivery',
       sizeBytes: 1,
       summary: 'delivery package marker',
@@ -475,13 +474,13 @@ describe('work review surface', () => {
     await audit.append({
       runId: 'run_1',
       type: 'delivery.pr-prepared',
-      payload: { branch: 'donkey-delivery/run_1' },
+      payload: { branch: 'tekon-delivery/run_1' },
       createdAt: '2026-06-08T00:00:07.000Z',
     });
 
     const outsideGatePath = join(outsideDir, 'outside-gate.log');
     writeFileSync(outsideGatePath, 'secret gate output', 'utf8');
-    const gatesDir = join(repoPath, '.donkey', 'runs', 'run_1', 'gates');
+    const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
     const symlinkGatePath = join(gatesDir, 'symlink-gate.log');
     symlinkSync(outsideGatePath, symlinkGatePath);
@@ -533,16 +532,16 @@ describe('work review surface', () => {
   });
 
   it('does not let a stored project repo path widen review readiness evidence reads', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-boundary-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-boundary-'));
     const outsideRepoPath = mkdtempSync(
-      join(tmpdir(), 'donkey-review-boundary-outside-'),
+      join(tmpdir(), 'tekon-review-boundary-outside-'),
     );
     tempDirs.push(repoPath, outsideRepoPath);
     seedGitRepo(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeDefaultRepoProfile(repoPath);
 
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -587,7 +586,7 @@ describe('work review surface', () => {
       nodeId: 'node_1',
       type: 'delivery-package',
       version: 1,
-      path: '.donkey/runs/run_1/artifacts/node_1/delivery-package.v1.md',
+      path: '.tekon/runs/run_1/artifacts/node_1/delivery-package.v1.md',
       sha256: 'delivery',
       sizeBytes: 1,
       summary: 'delivery package marker',
@@ -596,7 +595,7 @@ describe('work review surface', () => {
     await audit.append({
       runId: 'run_1',
       type: 'delivery.pr-prepared',
-      payload: { branch: 'donkey-delivery/run_1' },
+      payload: { branch: 'tekon-delivery/run_1' },
       createdAt: '2026-06-08T00:00:06.000Z',
     });
 
@@ -625,13 +624,13 @@ describe('work review surface', () => {
   });
 
   it('marks delivery diff unavailable for unsafe refs and missing base refs', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-review-diff-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-diff-'));
     tempDirs.push(repoPath);
     seedGitRepo(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeDefaultRepoProfile(repoPath);
 
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -662,7 +661,7 @@ describe('work review surface', () => {
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',
       runId: 'run_1',
-      branch: 'donkey-delivery/run_1',
+      branch: 'tekon-delivery/run_1',
       baseBranch: 'HEAD@{1}',
       title: 'Unsafe base',
       status: 'prepared',
@@ -684,7 +683,7 @@ describe('work review surface', () => {
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',
       runId: 'run_1',
-      branch: 'donkey-delivery/run_1',
+      branch: 'tekon-delivery/run_1',
       baseBranch: 'missing-base',
       title: 'Missing base',
       status: 'prepared',
@@ -708,10 +707,10 @@ describe('work review surface', () => {
 
 function seedGitRepo(repoPath: string) {
   execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   writeFileSync(
@@ -724,7 +723,7 @@ function seedGitRepo(repoPath: string) {
     cwd: repoPath,
   });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
-  execFileSync('git', ['checkout', '-b', 'donkey-delivery/run_1'], {
+  execFileSync('git', ['checkout', '-b', 'tekon-delivery/run_1'], {
     cwd: repoPath,
   });
   writeFileSync(join(repoPath, 'feature.txt'), 'after\n', 'utf8');
@@ -773,7 +772,7 @@ async function seedPassedValidationGates(input: {
   repoPath: string;
   repositories: ReturnType<typeof createRepositories>;
 }) {
-  const gatesDir = join(input.repoPath, '.donkey', 'runs', 'run_1', 'gates');
+  const gatesDir = join(input.repoPath, '.tekon', 'runs', 'run_1', 'gates');
   mkdirSync(gatesDir, { recursive: true });
   const testLogPath = join(gatesDir, 'node_1-test.log');
   const securityLogPath = join(gatesDir, 'node_1-security-scan.log');

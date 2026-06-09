@@ -1,12 +1,12 @@
-# Donkey V2 发布就绪加固报告
+# Tekon V2 发布就绪加固报告
 
-生成日期：2026-06-05  
-分支：`rebuild-v2`  
-代码完成提交 SHA：`0d7d14c5f2b34687b27720d1c4f9793123ce30f8`  
-代码完成提交远端 Core workflow：`completed/success`  
-代码完成提交 workflow URL：`https://github.com/zesming/donkey/actions/runs/27010294512`  
-报告提交 SHA：提交后由最终交付说明记录，不回写本文件。  
-报告提交远端 Core workflow：提交后由最终交付说明记录，不回写本文件。
+- 生成日期：2026-06-05
+- 分支：`rebuild-v2`
+- 代码完成提交 SHA：`0d7d14c5f2b34687b27720d1c4f9793123ce30f8`
+- 代码完成提交远端 Core workflow：`completed/success`
+- 代码完成提交 workflow URL：`https://github.com/zesming/tekon/actions/runs/27010294512`
+- 报告提交 SHA：提交后由最终交付说明记录，不回写本文件。
+- 报告提交远端 Core workflow：提交后由最终交付说明记录，不回写本文件。
 
 ## 1. 结论
 
@@ -14,27 +14,27 @@
 
 ## 2. 本地验证摘要
 
-| 验证项              | 命令                                                             | 结果                        |
-| ------------------- | ---------------------------------------------------------------- | --------------------------- |
-| 依赖锁定安装        | `npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile`       | 退出 0，lockfile up to date |
-| native build gate   | `npm exec --yes -- pnpm@10.12.1 ignored-builds`                  | 退出 0，`None`              |
-| 根测试              | `npm exec --yes -- pnpm@10.12.1 test -- --run`                   | 23 files / 89 tests passed  |
-| core unit           | `npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:unit` | 21 files / 87 tests passed  |
-| core e2e            | `npm exec --yes -- pnpm@10.12.1 --filter @donkey/core test:e2e`  | 2 files / 2 tests passed    |
-| build               | `npm exec --yes -- pnpm@10.12.1 build`                           | 退出 0                      |
-| typecheck           | `npm exec --yes -- pnpm@10.12.1 typecheck`                       | 退出 0                      |
-| GitHub Actions lint | `npm exec --yes -- pnpm@10.12.1 lint:actions`                    | 退出 0                      |
-| format gate         | `npm exec --yes -- pnpm@10.12.1 exec prettier --check .`         | 退出 0                      |
-| diff whitespace     | `git diff --check`                                               | 退出 0                      |
-| 未完成标记扫描      | targeted `rg` scan                                               | 无输出                      |
-| 敏感模式扫描        | targeted `rg` scan                                               | 无输出                      |
+| 验证项              | 命令                                                            | 结果                        |
+| ------------------- | --------------------------------------------------------------- | --------------------------- |
+| 依赖锁定安装        | `npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile`      | 退出 0，lockfile up to date |
+| native build gate   | `npm exec --yes -- pnpm@10.12.1 ignored-builds`                 | 退出 0，`None`              |
+| 根测试              | `npm exec --yes -- pnpm@10.12.1 test -- --run`                  | 23 files / 89 tests passed  |
+| core unit           | `npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit` | 21 files / 87 tests passed  |
+| core e2e            | `npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e`  | 2 files / 2 tests passed    |
+| build               | `npm exec --yes -- pnpm@10.12.1 build`                          | 退出 0                      |
+| typecheck           | `npm exec --yes -- pnpm@10.12.1 typecheck`                      | 退出 0                      |
+| GitHub Actions lint | `npm exec --yes -- pnpm@10.12.1 lint:actions`                   | 退出 0                      |
+| format gate         | `npm exec --yes -- pnpm@10.12.1 exec prettier --check .`        | 退出 0                      |
+| diff whitespace     | `git diff --check`                                              | 退出 0                      |
+| 未完成标记扫描      | targeted `rg` scan                                              | 无输出                      |
+| 敏感模式扫描        | targeted `rg` scan                                              | 无输出                      |
 
 ## 3. 远端 CI 证据：代码完成提交
 
 - workflow: Core
 - commit: `0d7d14c5f2b34687b27720d1c4f9793123ce30f8`
 - status: `completed/success`
-- url: `https://github.com/zesming/donkey/actions/runs/27010294512`
+- url: `https://github.com/zesming/tekon/actions/runs/27010294512`
 
 ## 4. Claude Provider Smoke 证据
 
@@ -43,8 +43,8 @@
 - enablement: 已显式设置 smoke 开关和命令覆盖，环境变量具体值不记录。
 - exit code: 0
 - durationMs: 14275
-- stdout log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-80Niqx/.donkey/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stdout.log`
-- stderr log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/donkey-claude-smoke-80Niqx/.donkey/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stderr.log`
+- stdout log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/tekon-claude-smoke-80Niqx/.tekon/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stdout.log`
+- stderr log path: `/var/folders/p8/xn4n9zv14n13nrq3zyzf9wpm0000gn/T/tekon-claude-smoke-80Niqx/.tekon/smoke/1780656076183-b476d5ed-23c5-4a32-b1ca-d6e42a5623a2.stderr.log`
 - 脱敏说明：未记录 API key、token、认证输出或环境变量值。
 
 ## 5. 已完成加固项

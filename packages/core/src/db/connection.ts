@@ -1,14 +1,14 @@
 import Database from 'better-sqlite3';
 
-export type DonkeyDatabase = Database.Database;
+export type TekonDatabase = Database.Database;
 
-export interface OpenDonkeyDatabaseOptions {
+export interface OpenTekonDatabaseOptions {
   filename: string;
 }
 
-export function openDonkeyDatabase(
-  options: OpenDonkeyDatabaseOptions,
-): DonkeyDatabase {
+export function openTekonDatabase(
+  options: OpenTekonDatabaseOptions,
+): TekonDatabase {
   const db = new Database(options.filename);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

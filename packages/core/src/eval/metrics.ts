@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { AuditLogger } from '../audit/logger.js';
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { GateStatus, GateType, WorkflowStatus } from '../types/domain.js';
 
 export interface GateTypeMetrics {
@@ -53,7 +53,7 @@ export interface RunMetrics {
 
 export async function extractRunMetrics(input: {
   repoPath: string;
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   prUrl?: string | null;

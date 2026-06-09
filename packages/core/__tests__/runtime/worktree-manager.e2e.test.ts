@@ -16,7 +16,7 @@ import {
   createRepositories,
   createWorktreeManager,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('worktree manager e2e', () => {
@@ -30,7 +30,7 @@ describe('worktree manager e2e', () => {
 
   it('leases two isolated git worktrees and releases them safely', async () => {
     const repoPath = createTempGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const manager = createWorktreeManager({
@@ -53,8 +53,8 @@ describe('worktree manager e2e', () => {
       baseRef: 'HEAD',
     });
 
-    expect(first.branchName).toMatch(/^donkey\/run_1\/node_rd-rd-lease-/u);
-    expect(second.branchName).toMatch(/^donkey\/run_1\/node_qa-qa-lease-/u);
+    expect(first.branchName).toMatch(/^tekon\/run_1\/node_rd-rd-lease-/u);
+    expect(second.branchName).toMatch(/^tekon\/run_1\/node_qa-qa-lease-/u);
     expect(first.branchName).not.toBe(second.branchName);
     expect(first.worktreePath).not.toBe(second.worktreePath);
     expect(existsSync(first.worktreePath)).toBe(true);
@@ -79,13 +79,13 @@ describe('worktree manager e2e', () => {
 });
 
 function createTempGitRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-worktree-e2e-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-worktree-e2e-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   writeFileSync(join(repoPath, 'README.md'), 'fixture repo\n', 'utf8');

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { DonkeyRepositories } from '../db/repositories.js';
+import type { TekonRepositories } from '../db/repositories.js';
 import type { HumanDecision } from '../types/domain.js';
 
 export interface HumanGate {
@@ -23,7 +23,7 @@ export interface HumanGate {
 }
 
 export function createHumanGate(options: {
-  repositories: DonkeyRepositories;
+  repositories: TekonRepositories;
 }): HumanGate {
   return {
     async requestHumanGate(input) {

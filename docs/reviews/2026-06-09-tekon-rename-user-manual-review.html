@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>天工（Tekon）品牌迁移与用户手册审阅记录</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --text: #1d2733;
+        --muted: #5d6978;
+        --line: #d7dde6;
+        --soft: #f5f7fa;
+        --accent: #0c6b58;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: var(--text);
+        background: #ffffff;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.25;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 32px;
+      }
+
+      h2 {
+        margin-top: 34px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 22px;
+      }
+
+      p,
+      li {
+        line-height: 1.72;
+      }
+
+      .meta {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+
+      .summary {
+        border-left: 4px solid var(--accent);
+        background: var(--soft);
+        padding: 14px 18px;
+        margin: 20px 0;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.92em;
+        background: var(--soft);
+        padding: 0.1em 0.35em;
+        border-radius: 4px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0 24px;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--soft);
+      }
+
+      pre {
+        overflow-x: auto;
+        background: var(--soft);
+        padding: 14px 16px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>天工（Tekon）品牌迁移与用户手册审阅记录</h1>
+      <p class="meta">日期：2026-06-09</p>
+
+      <div class="summary">
+        最终结论：未发现必须修复项。主用户使用手册、品牌迁移、同步文档和本地验证均已完成；后续每次迭代必须评估是否更新
+        <code>docs/manual/tekon-user-manual.md</code>。
+      </div>
+
+      <h2>1. Reviewer 结论</h2>
+      <p>
+        本轮使用两个 subagent 做最终审阅。当前 runtime
+        没有独立“最高思考等级”开关可设置；两个 reviewer
+        均按最高可用审阅强度执行。
+      </p>
+      <p>第一轮 reviewer 发现 4 个必须修复项：</p>
+      <ul>
+        <li>隐藏 CI 配置仍引用旧包作用域，存在 CI 假绿风险。</li>
+        <li>
+          <code>.gitignore</code> 仍忽略旧运行态目录，新的
+          <code>.tekon/</code> 运行产物治理不完整。
+        </li>
+        <li>
+          主用户手册的 <code>delivery ci-watch</code> 参数表被管道符拆坏。
+        </li>
+        <li>大量文档路径重命名尚未进入 Git index，提交前必须 stage。</li>
+      </ul>
+      <p>第二轮 reviewer 复查结论：</p>
+      <ul>
+        <li>前 3 个内容问题已修复。</li>
+        <li>未发现受控源码、隐藏配置、文档、测试中的旧品牌内容残留。</li>
+        <li>
+          主用户使用手册覆盖 overview、Quick
+          Start、核心场景、命令详解、参数、问题处理、可信度判断、边界说明，并已写入“每次迭代后评估是否更新手册”的规则。
+        </li>
+        <li>
+          README、CHANGELOG、AGENTS 已同步主手册路径、Tekon
+          命名和后续迭代手册更新要求。
+        </li>
+        <li>唯一剩余动作是提交前将重命名纳入 Git index。</li>
+      </ul>
+
+      <h2>2. 修复摘要</h2>
+      <ul>
+        <li>
+          <code>.github/workflows/core.yml</code>：CI filter 改为
+          <code>@tekon/core</code>，避免 core build/test/e2e 未实际命中
+          workspace 项目。
+        </li>
+        <li>
+          <code>.gitignore</code>：运行态忽略规则改为
+          <code>.tekon/runs/</code
+          >、<code>.tekon/worktrees/</code>、<code>.tekon/web-session.json</code>。
+        </li>
+        <li>
+          <code>docs/manual/tekon-user-manual.md</code>：修复
+          <code>delivery ci-watch</code> 参数表，补充 Tekon
+          命名来源，以及审批相关参数说明。
+        </li>
+        <li>README、CHANGELOG、AGENTS 已同步主手册路径和后续更新规则。</li>
+        <li>
+          全仓源码、测试、角色、历史文档路径和 HTML 审阅版同步迁移到 Tekon
+          命名。
+        </li>
+      </ul>
+
+      <h2>3. 验证摘要</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>验证项</th>
+            <th>命令</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>依赖锁定安装</td>
+            <td>
+              <code
+                >npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile</code
+              >
+            </td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>类型检查</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 typecheck</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>构建</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 build</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>全仓测试</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 test -- --run</code></td>
+            <td>57 files / 205 tests passed</td>
+          </tr>
+          <tr>
+            <td>格式检查</td>
+            <td><code>npm exec --yes -- pnpm@10.12.1 format:check</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>Action lint</td>
+            <td><code>npm run lint:actions</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>diff 空白检查</td>
+            <td><code>git diff --check</code></td>
+            <td>退出 0</td>
+          </tr>
+          <tr>
+            <td>品牌残留扫描</td>
+            <td>隐藏内容和文件名扫描，排除依赖、构建和测试产物目录</td>
+            <td>无命中</td>
+          </tr>
+          <tr>
+            <td>staged rename 复核</td>
+            <td><code>git diff --cached --name-status --find-renames</code></td>
+            <td>重命名已进入 index</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>4. 手册更新规则确认</h2>
+      <p>本次迭代已新增主用户使用手册：</p>
+      <pre><code>docs/manual/tekon-user-manual.md</code></pre>
+      <p>
+        后续每次功能、行为、CLI/Web
+        入口、参数、错误处理、边界或用户流程发生变化后，都必须评估是否需要更新该手册。若判断不需要更新，应在最终回复或提交说明中说明理由。
+      </p>
+    </main>
+  </body>
+</html>

@@ -23,8 +23,8 @@ describe('repo profile', () => {
   });
 
   it('detects npm and pnpm validation commands from package scripts', () => {
-    const npmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-npm-'));
-    const pnpmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-pnpm-'));
+    const npmRepo = mkdtempSync(join(tmpdir(), 'tekon-profile-npm-'));
+    const pnpmRepo = mkdtempSync(join(tmpdir(), 'tekon-profile-pnpm-'));
     tempDirs.push(npmRepo, pnpmRepo);
 
     writeFileSync(
@@ -56,10 +56,10 @@ describe('repo profile', () => {
     });
   });
 
-  it('writes and reloads .donkey repo-profile.yaml', () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-profile-write-'));
+  it('writes and reloads .tekon repo-profile.yaml', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-profile-write-'));
     tempDirs.push(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeFileSync(
       join(repoPath, 'package.json'),
       JSON.stringify({ scripts: { e2e: 'playwright test' } }),
@@ -77,11 +77,11 @@ describe('repo profile', () => {
   });
 
   it('loads explicit notApplicable commands without treating them as missing', () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-profile-na-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-profile-na-'));
     tempDirs.push(repoPath);
-    mkdirSync(join(repoPath, '.donkey'), { recursive: true });
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
     writeFileSync(
-      join(repoPath, '.donkey', 'repo-profile.yaml'),
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
       [
         'version: 1',
         'commands:',
@@ -111,8 +111,8 @@ describe('repo profile', () => {
   });
 
   it('suggests package script aliases for missing profile commands', () => {
-    const npmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-npm-'));
-    const pnpmRepo = mkdtempSync(join(tmpdir(), 'donkey-profile-hint-pnpm-'));
+    const npmRepo = mkdtempSync(join(tmpdir(), 'tekon-profile-hint-npm-'));
+    const pnpmRepo = mkdtempSync(join(tmpdir(), 'tekon-profile-hint-pnpm-'));
     tempDirs.push(npmRepo, pnpmRepo);
 
     writeFileSync(
@@ -138,7 +138,7 @@ describe('repo profile', () => {
     expect(repoProfileCommand(npmProfile, 'build')).toBeNull();
     expect(npmGuidance).toMatchObject({
       status: 'missing',
-      hint: 'add commands.build to .donkey/repo-profile.yaml',
+      hint: 'add commands.build to .tekon/repo-profile.yaml',
       suggestions: [
         {
           scriptName: 'compile',

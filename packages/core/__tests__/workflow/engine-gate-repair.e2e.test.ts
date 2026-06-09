@@ -10,7 +10,7 @@ import {
   createRepositories,
   createWorkflowEngine,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -24,16 +24,16 @@ describe('workflow engine gate repair e2e', () => {
   });
 
   it('creates a repair node when an auto-fix gate fails', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-repair-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: createMockAgentAdapter(),

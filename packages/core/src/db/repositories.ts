@@ -30,7 +30,7 @@ import {
   workflowInstanceSchema,
 } from '../types/domain.js';
 import { type WorktreeLease, worktreeLeaseSchema } from '../types/config.js';
-import type { DonkeyDatabase } from './connection.js';
+import type { TekonDatabase } from './connection.js';
 import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
 type NodeRow = {
@@ -175,7 +175,7 @@ export interface RecoverableRun {
   interruptedRoleRunId: string | null;
 }
 
-export interface DonkeyRepositories {
+export interface TekonRepositories {
   createDemand(demand: Demand): Promise<Demand>;
   getDemand(demandId: string): Promise<Demand | null>;
   createProject(project: Project): Promise<Project>;
@@ -256,9 +256,9 @@ export interface DonkeyRepositories {
 }
 
 export function createRepositories(
-  db: DonkeyDatabase,
+  db: TekonDatabase,
   writeQueue: WriteQueue = createWriteQueue(),
-): DonkeyRepositories {
+): TekonRepositories {
   const now = () => new Date().toISOString();
 
   return {

@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 
 const owner = process.env.GITHUB_OWNER ?? 'zesming';
-const repo = process.env.GITHUB_REPO ?? 'donkey';
+const repo = process.env.GITHUB_REPO ?? 'tekon';
 const token = process.env.GITHUB_TOKEN;
 const sha =
   process.env.GITHUB_SHA_TO_CHECK ??

@@ -20,7 +20,7 @@ describe('command gate runner', () => {
   });
 
   it('runs command gates through CommandGateway and returns deterministic output paths', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-gate-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-gate-'));
     tempDirs.push(cwd);
     const result = await runCommandGate({
       gateway: createCommandGateway(),
@@ -38,7 +38,7 @@ describe('command gate runner', () => {
         cwdScope: [cwd],
         network: 'disabled',
       },
-      outputDir: join(cwd, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(cwd, '.tekon', 'runs', 'run_1', 'gates'),
     });
 
     expect(result).toMatchObject({ gateType: 'test', status: 'passed' });
@@ -47,7 +47,7 @@ describe('command gate runner', () => {
   });
 
   it('runs the built-in security scan without an external command', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-security-pass-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-security-pass-'));
     tempDirs.push(cwd);
 
     const result = await runSecurityScanGate({
@@ -60,7 +60,7 @@ describe('command gate runner', () => {
         cwdScope: [cwd],
         network: 'disabled',
       },
-      outputDir: join(cwd, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(cwd, '.tekon', 'runs', 'run_1', 'gates'),
     });
 
     expect(result).toMatchObject({
@@ -73,7 +73,7 @@ describe('command gate runner', () => {
   });
 
   it('fails the built-in security scan when likely secrets are present', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'donkey-security-fail-'));
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-security-fail-'));
     tempDirs.push(cwd);
     writeFileSync(
       join(cwd, 'config.ts'),
@@ -91,7 +91,7 @@ describe('command gate runner', () => {
         cwdScope: [cwd],
         network: 'disabled',
       },
-      outputDir: join(cwd, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(cwd, '.tekon', 'runs', 'run_1', 'gates'),
     });
 
     expect(result).toMatchObject({

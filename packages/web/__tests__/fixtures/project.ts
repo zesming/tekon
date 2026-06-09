@@ -8,9 +8,9 @@ import {
   createAuditLogger,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   writeDefaultRepoProfile,
-} from '@donkey/core';
+} from '@tekon/core';
 
 export interface WebFixtureProject {
   projectRoot: string;
@@ -26,32 +26,32 @@ export async function createWebFixtureProject(
 ): Promise<WebFixtureProject> {
   const projectRoot = mkFixtureRoot();
   seedGitRepo(projectRoot);
-  const donkeyDir = join(projectRoot, '.donkey');
-  mkdirSync(donkeyDir, { recursive: true });
-  mkdirSync(join(donkeyDir, 'roles', 'rd'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'workflows'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'runs', 'run_0', 'artifacts', 'node_0'), {
+  const tekonDir = join(projectRoot, '.tekon');
+  mkdirSync(tekonDir, { recursive: true });
+  mkdirSync(join(tekonDir, 'roles', 'rd'), { recursive: true });
+  mkdirSync(join(tekonDir, 'workflows'), { recursive: true });
+  mkdirSync(join(tekonDir, 'runs', 'run_0', 'artifacts', 'node_0'), {
     recursive: true,
   });
-  mkdirSync(join(donkeyDir, 'runs', 'run_0', 'gates'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'artifacts', 'node_1'), {
+  mkdirSync(join(tekonDir, 'runs', 'run_0', 'gates'), { recursive: true });
+  mkdirSync(join(tekonDir, 'runs', 'run_1', 'artifacts', 'node_1'), {
     recursive: true,
   });
-  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'gates'), { recursive: true });
-  mkdirSync(join(donkeyDir, 'runs', 'run_1', 'delivery'), {
+  mkdirSync(join(tekonDir, 'runs', 'run_1', 'gates'), { recursive: true });
+  mkdirSync(join(tekonDir, 'runs', 'run_1', 'delivery'), {
     recursive: true,
   });
 
   writeFileSync(
-    join(donkeyDir, 'roles', 'rd', 'agent.yaml'),
+    join(tekonDir, 'roles', 'rd', 'agent.yaml'),
     'role: rd\nname: RD\n',
   );
   writeFileSync(
-    join(donkeyDir, 'roles', 'rd', 'system.md'),
+    join(tekonDir, 'roles', 'rd', 'system.md'),
     'Implement scoped code changes.',
   );
   writeFileSync(
-    join(donkeyDir, 'workflows', 'project-feature.yaml'),
+    join(tekonDir, 'workflows', 'project-feature.yaml'),
     [
       'id: project-feature',
       'name: Project Feature',
@@ -87,13 +87,13 @@ export async function createWebFixtureProject(
 
   const sessionToken = 'fixture-session-token';
   writeFileSync(
-    join(donkeyDir, 'config.yaml'),
+    join(tekonDir, 'config.yaml'),
     [
       'project:',
-      '  name: fixture-donkey',
+      '  name: fixture-tekon',
       `  repoPath: ${projectRoot}`,
       'storage:',
-      '  dataDir: .donkey',
+      '  dataDir: .tekon',
       'defaultAgent: mock',
       '',
     ].join('\n'),
@@ -101,12 +101,12 @@ export async function createWebFixtureProject(
   );
   writeDefaultRepoProfile(projectRoot);
   writeFileSync(
-    join(donkeyDir, 'web-session.json'),
+    join(tekonDir, 'web-session.json'),
     JSON.stringify({ token: sessionToken }, null, 2),
   );
   writeFileSync(
     join(
-      donkeyDir,
+      tekonDir,
       'runs',
       'run_0',
       'artifacts',
@@ -117,13 +117,13 @@ export async function createWebFixtureProject(
     'utf8',
   );
   writeFileSync(
-    join(donkeyDir, 'runs', 'run_0', 'gates', 'build.txt'),
+    join(tekonDir, 'runs', 'run_0', 'gates', 'build.txt'),
     'older build passed',
     'utf8',
   );
   writeFileSync(
     join(
-      donkeyDir,
+      tekonDir,
       'runs',
       'run_1',
       'artifacts',
@@ -134,23 +134,23 @@ export async function createWebFixtureProject(
     'utf8',
   );
   writeFileSync(
-    join(donkeyDir, 'runs', 'run_1', 'gates', 'human.txt'),
+    join(tekonDir, 'runs', 'run_1', 'gates', 'human.txt'),
     'human approval is required',
     'utf8',
   );
   writeFileSync(
-    join(donkeyDir, 'runs', 'run_1', 'delivery', 'pr-body.md'),
+    join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-body.md'),
     '# Add dashboard\n\nReview dashboard evidence.',
     'utf8',
   );
   writeFileSync(
-    join(donkeyDir, 'runs', 'run_1', 'delivery', 'pr-package.md'),
+    join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-package.md'),
     '# PR Preparation\n\nReview dashboard evidence package.',
     'utf8',
   );
 
-  const db = openDonkeyDatabase({
-    filename: join(donkeyDir, 'donkey.sqlite'),
+  const db = openTekonDatabase({
+    filename: join(tekonDir, 'tekon.sqlite'),
   });
   migrateDatabase(db);
   const repositories = createRepositories(db);
@@ -164,18 +164,18 @@ export async function createWebFixtureProject(
   await repositories.createDemand({
     id: 'demand_1',
     title: 'Add dashboard',
-    body: 'Show Donkey run state and human approval.',
+    body: 'Show Tekon run state and human approval.',
     createdAt: '2026-06-05T00:00:00.000Z',
   });
   await repositories.createProject({
     id: 'project_0',
-    name: 'fixture-donkey',
+    name: 'fixture-tekon',
     repoPath: projectRoot,
     createdAt: '2026-06-04T00:00:00.000Z',
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'fixture-donkey',
+    name: 'fixture-tekon',
     repoPath: projectRoot,
     createdAt: '2026-06-05T00:00:00.000Z',
   });
@@ -262,7 +262,7 @@ export async function createWebFixtureProject(
     nodeId: 'node_1',
     gateType: 'human',
     status: 'blocked',
-    outputPath: '.donkey/runs/run_1/gates/human.txt',
+    outputPath: '.tekon/runs/run_1/gates/human.txt',
     durationMs: 0,
     retries: 0,
     createdAt: '2026-06-05T00:00:01.000Z',
@@ -273,7 +273,7 @@ export async function createWebFixtureProject(
     nodeId: 'node_0',
     gateType: 'build',
     status: 'passed',
-    outputPath: '.donkey/runs/run_0/gates/build.txt',
+    outputPath: '.tekon/runs/run_0/gates/build.txt',
     durationMs: 10,
     retries: 0,
     createdAt: '2026-06-04T00:00:01.000Z',
@@ -287,7 +287,7 @@ export async function createWebFixtureProject(
     note: [
       'request: Review human gate context before continuing.',
       'gate: gate_1 human blocked',
-      'exactCommand: donkey run --template standard-feature --agent mock',
+      'exactCommand: tekon run --template standard-feature --agent mock',
       'risk: high',
     ].join('\n'),
     createdAt: '2026-06-05T00:00:02.000Z',
@@ -298,7 +298,7 @@ export async function createWebFixtureProject(
     nodeId: 'node_0',
     type: 'review-report',
     version: 1,
-    path: '.donkey/runs/run_0/artifacts/node_0/review-report.v1.md',
+    path: '.tekon/runs/run_0/artifacts/node_0/review-report.v1.md',
     sha256: createHash('sha256').update('older-review').digest('hex'),
     sizeBytes: 12,
     summary: 'Older review report summary',
@@ -310,7 +310,7 @@ export async function createWebFixtureProject(
     nodeId: 'node_1',
     type: 'review-report',
     version: 1,
-    path: '.donkey/runs/run_1/artifacts/node_1/review-report.v1.md',
+    path: '.tekon/runs/run_1/artifacts/node_1/review-report.v1.md',
     sha256: createHash('sha256').update('review').digest('hex'),
     sizeBytes: 6,
     summary: 'Review report summary',
@@ -358,7 +358,7 @@ export async function createWebFixtureProject(
     await repositories.createProject({
       id: 'project_escaped',
       name: 'escaped',
-      repoPath: join(tmpdir(), 'outside-donkey-project'),
+      repoPath: join(tmpdir(), 'outside-tekon-project'),
       createdAt: '2026-06-05T00:00:00.000Z',
     });
     await repositories.createWorkflowInstance({
@@ -385,10 +385,10 @@ export async function createWebFixtureProject(
 function seedGitRepo(projectRoot: string): void {
   mkdirSync(projectRoot, { recursive: true });
   execFileSync('git', ['init', '-b', 'main'], { cwd: projectRoot });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: projectRoot,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: projectRoot,
   });
   writeFileSync(
@@ -416,7 +416,7 @@ function seedGitRepo(projectRoot: string): void {
 function mkFixtureRoot(): string {
   return join(
     tmpdir(),
-    `donkey-web-${process.pid}-${Date.now()}-${Math.random()
+    `tekon-web-${process.pid}-${Date.now()}-${Math.random()
       .toString(16)
       .slice(2)}`,
   );

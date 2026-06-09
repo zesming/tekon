@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  DONKEY_CORE_VERSION,
+  TEKON_CORE_VERSION,
   buildRolePrompt,
   compileRoleToolPolicy,
   generateDynamicWorkflow,
@@ -12,9 +12,9 @@ import {
   validateWorkflowConstraints,
 } from '../src/index.js';
 
-describe('@donkey/core', () => {
+describe('@tekon/core', () => {
   it('exports the core package version marker', () => {
-    expect(DONKEY_CORE_VERSION).toBe('0.1.0');
+    expect(TEKON_CORE_VERSION).toBe('0.1.0');
   });
 
   it('exports phase 2 role system APIs', () => {

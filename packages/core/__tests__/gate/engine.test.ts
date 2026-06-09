@@ -9,7 +9,7 @@ import {
   createGateEngine,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('gate engine', () => {
@@ -22,9 +22,9 @@ describe('gate engine', () => {
   });
 
   it('runs command gates through CommandGateway and persists GateResult', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-engine-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-engine-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -44,7 +44,7 @@ describe('gate engine', () => {
         },
       },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [{ tool: process.execPath, args: [] }],
         deny: [],
@@ -62,9 +62,9 @@ describe('gate engine', () => {
   });
 
   it('records explicitly not applicable command gates as skipped', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-skip-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-skip-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -79,7 +79,7 @@ describe('gate engine', () => {
           'repo profile commands.build is not applicable: docs-only repo',
       },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -105,9 +105,9 @@ describe('gate engine', () => {
   });
 
   it('does not let skipReason bypass the built-in security scan', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-security-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-security-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -122,7 +122,7 @@ describe('gate engine', () => {
           'repo profile commands.security is not applicable: docs-only repo',
       },
       cwd: repoPath,
-      outputDir: join(repoPath, '.donkey', 'runs', 'run_1', 'gates'),
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
       policy: {
         allow: [],
         deny: [],
@@ -141,9 +141,9 @@ describe('gate engine', () => {
   });
 
   it('creates an autoFix repair node linked to a failed gate result', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-gate-repair-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-repair-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
@@ -185,7 +185,7 @@ async function createRunFixture(
   });
   await repositories.createProject({
     id: 'project_1',
-    name: 'donkey',
+    name: 'tekon',
     repoPath,
     createdAt: '2026-06-05T00:00:00.000Z',
   });

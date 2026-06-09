@@ -21,7 +21,7 @@ import {
   createWorkflowEngine,
   createWorktreeManager,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -36,7 +36,7 @@ describe('workflow engine worktree execution e2e', () => {
 
   it('leases real git worktrees, promotes passed node changes, and releases leases', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -47,14 +47,14 @@ describe('workflow engine worktree execution e2e', () => {
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
         async runAgent(input) {
           observedAgentCwds.push(input.runContext.repoPath);
           expect(input.worktreeLease.worktreePath).toContain(
-            join('.donkey', 'worktrees'),
+            join('.tekon', 'worktrees'),
           );
           expect(existsSync(input.worktreeLease.worktreePath)).toBe(true);
           if (input.runContext.nodeId.endsWith('rd-node')) {
@@ -124,8 +124,8 @@ describe('workflow engine worktree execution e2e', () => {
 
     expect(result.workflow.status).toBe('passed');
     expect(observedAgentCwds).toHaveLength(2);
-    expect(observedAgentCwds[0]).toContain(join('.donkey', 'worktrees'));
-    expect(observedAgentCwds[1]).toContain(join('.donkey', 'worktrees'));
+    expect(observedAgentCwds[0]).toContain(join('.tekon', 'worktrees'));
+    expect(observedAgentCwds[1]).toContain(join('.tekon', 'worktrees'));
     expect(observedGateCwds).toEqual(observedAgentCwds);
     const leases = await repositories.listWorktreeLeases(result.runId);
     expect(leases).toHaveLength(2);
@@ -133,7 +133,7 @@ describe('workflow engine worktree execution e2e', () => {
     expect(
       execFileSync(
         'git',
-        ['show', `donkey-delivery/${result.runId}:feature.txt`],
+        ['show', `tekon-delivery/${result.runId}:feature.txt`],
         {
           cwd: repoPath,
           encoding: 'utf8',
@@ -152,7 +152,7 @@ describe('workflow engine worktree execution e2e', () => {
 
   it('finalizes and releases a worktree after a human gate is approved on resume', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -161,7 +161,7 @@ describe('workflow engine worktree execution e2e', () => {
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
@@ -210,7 +210,7 @@ describe('workflow engine worktree execution e2e', () => {
 
     const resumed = await createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
@@ -227,7 +227,7 @@ describe('workflow engine worktree execution e2e', () => {
     expect(
       execFileSync(
         'git',
-        ['show', `donkey-delivery/${result.runId}:human-approved.txt`],
+        ['show', `tekon-delivery/${result.runId}:human-approved.txt`],
         {
           cwd: repoPath,
           encoding: 'utf8',
@@ -244,7 +244,7 @@ describe('workflow engine worktree execution e2e', () => {
 
   it('promotes repair worktree changes before rerunning a failed gate', async () => {
     const repoPath = createGitRepo(tempDirs);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -252,14 +252,17 @@ describe('workflow engine worktree execution e2e', () => {
 
     const engine = createWorkflowEngine({
       repoPath,
-      dataDir: '.donkey',
+      dataDir: '.tekon',
       repositories,
       audit,
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.includes('repair_')) {
             expect(
-              readFileSync(join(input.runContext.repoPath, 'broken.txt'), 'utf8'),
+              readFileSync(
+                join(input.runContext.repoPath, 'broken.txt'),
+                'utf8',
+              ),
             ).toBe('needs repair\n');
             writeFileSync(
               join(input.runContext.repoPath, 'fixed.txt'),
@@ -305,10 +308,14 @@ describe('workflow engine worktree execution e2e', () => {
 
     expect(result.workflow.status).toBe('passed');
     expect(
-      execFileSync('git', ['show', `donkey-delivery/${result.runId}:fixed.txt`], {
-        cwd: repoPath,
-        encoding: 'utf8',
-      }),
+      execFileSync(
+        'git',
+        ['show', `tekon-delivery/${result.runId}:fixed.txt`],
+        {
+          cwd: repoPath,
+          encoding: 'utf8',
+        },
+      ),
     ).toBe('repaired\n');
     expect(
       (await repositories.listWorktreeLeases(result.runId)).every(
@@ -425,13 +432,13 @@ function createRepairGateEngine(
 }
 
 function createGitRepo(tempDirs: string[]) {
-  const repoPath = mkdtempSync(join(tmpdir(), 'donkey-engine-worktree-'));
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-worktree-'));
   tempDirs.push(repoPath);
   execFileSync('git', ['init'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'donkey@example.com'], {
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
-  execFileSync('git', ['config', 'user.name', 'Donkey Test'], {
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
   writeFileSync(join(repoPath, 'README.md'), 'fixture\n', 'utf8');

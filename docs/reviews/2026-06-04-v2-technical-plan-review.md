@@ -1,7 +1,7 @@
-# Donkey V2 技术方案审阅记录
+# Tekon V2 技术方案审阅记录
 
 - 审阅时间：2026-06-04
-- 审阅文档：`docs/technical/donkey-v2-technical-plan.md`
+- 审阅文档：`docs/technical/tekon-v2-technical-plan.md`
 - 审阅轮次：3 轮（最高思考等级 subagent 审查）
 
 ## 审查摘要

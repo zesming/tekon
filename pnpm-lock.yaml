@@ -22,7 +22,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@donkey/core':
+      '@tekon/core':
         specifier: workspace:*
         version: link:../core
       yaml:
@@ -54,7 +54,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@donkey/core':
+      '@tekon/core':
         specifier: workspace:*
         version: link:../core
       react:

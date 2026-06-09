@@ -10,7 +10,7 @@ import {
   createDeliveryEvidencePackage,
   createRepositories,
   migrateDatabase,
-  openDonkeyDatabase,
+  openTekonDatabase,
 } from '../../src/index.js';
 
 describe('delivery evidence package', () => {
@@ -23,9 +23,9 @@ describe('delivery evidence package', () => {
   });
 
   it('summarizes demand, workflow, artifacts, gates, audit verification, risk gates, and rollback plan', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'donkey-evidence-'));
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-evidence-'));
     tempDirs.push(repoPath);
-    const db = openDonkeyDatabase({ filename: ':memory:' });
+    const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
@@ -37,7 +37,7 @@ describe('delivery evidence package', () => {
     });
     await repositories.createProject({
       id: 'project_1',
-      name: 'donkey',
+      name: 'tekon',
       repoPath,
       createdAt: '2026-06-05T00:00:00.000Z',
     });
@@ -137,7 +137,7 @@ describe('delivery evidence package', () => {
       nodeId: 'node_1',
       gateType: 'security-scan',
       status: 'passed',
-      outputPath: '.donkey/runs/run_1/gates/security.log',
+      outputPath: '.tekon/runs/run_1/gates/security.log',
       durationMs: 1,
       retries: 0,
       createdAt: '2026-06-05T00:00:01.600Z',

@@ -126,17 +126,17 @@ export const runContextSchema = z.object({
 });
 export type RunContext = z.infer<typeof runContextSchema>;
 
-export const donkeyConfigSchema = z.object({
+export const tekonConfigSchema = z.object({
   project: z.object({
     name: z.string().min(1),
     repoPath: z.string().min(1),
   }),
   storage: z.object({
-    dataDir: z.string().min(1).default('.donkey'),
+    dataDir: z.string().min(1).default('.tekon'),
   }),
   defaultAgent: z.enum(['mock', 'claude-code', 'custom']).default('mock'),
 });
-export type DonkeyConfig = z.infer<typeof donkeyConfigSchema>;
+export type TekonConfig = z.infer<typeof tekonConfigSchema>;
 
 export const workflowTemplateSchema = z.object({
   id: z.string().min(1),
