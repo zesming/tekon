@@ -214,6 +214,7 @@ describe('work review surface', () => {
     const approvalLogPath = join(gatesDir, 'node_1-test.log');
     const humanLogPath = join(gatesDir, 'node_1-human.log');
     const legacyHumanLogPath = join(gatesDir, 'node_1-legacy-human.log');
+    const rejectedHumanLogPath = join(gatesDir, 'node_1-rejected-human.log');
     const securityLogPath = join(gatesDir, 'node_1-security-scan.log');
     writeFileSync(buildLogPath, 'build failed with TS error', 'utf8');
     writeFileSync(lintLogPath, 'missing command: lint', 'utf8');
@@ -228,6 +229,7 @@ describe('work review surface', () => {
       'legacy human approval is required',
       'utf8',
     );
+    writeFileSync(rejectedHumanLogPath, 'human rejected this gate', 'utf8');
     writeFileSync(
       securityLogPath,
       JSON.stringify({
@@ -301,6 +303,18 @@ describe('work review surface', () => {
       createdAt: '2026-06-08T00:00:06.000Z',
     });
     await repositories.recordGateResult({
+      id: 'gate_rejected_human',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      status: 'failed',
+      outputPath: rejectedHumanLogPath,
+      durationMs: 0,
+      retries: 0,
+      failureClassification: 'human-rejected',
+      createdAt: '2026-06-08T00:00:07.000Z',
+    });
+    await repositories.recordGateResult({
       id: 'gate_security',
       runId: 'run_1',
       nodeId: 'node_1',
@@ -310,7 +324,7 @@ describe('work review surface', () => {
       durationMs: 5,
       retries: 0,
       failureClassification: 'security-findings',
-      createdAt: '2026-06-08T00:00:07.000Z',
+      createdAt: '2026-06-08T00:00:08.000Z',
     });
 
     const surface = await createWorkReviewSurface({
@@ -355,6 +369,13 @@ describe('work review surface', () => {
           classification: 'human-approval',
           retry: 'after-approval',
           suggestedCommand: 'donkey resume --run-id run_1 --approve-human',
+        }),
+        expect.objectContaining({
+          gateId: 'gate_rejected_human',
+          classification: 'human-rejected',
+          retry: 'not-recommended',
+          summary: expect.stringContaining('human reviewer rejected'),
+          suggestedCommand: 'donkey review --run-id run_1',
         }),
         expect.objectContaining({
           gateId: 'gate_security',

@@ -150,6 +150,24 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.approval-summary {
+  margin-top: 12px;
+}
+
+.approval-summary p {
+  margin: 0 0 6px;
+  color: #374151;
+  font-weight: 700;
+}
+
+.approval-summary textarea {
+  min-height: 220px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 label {
   display: grid;
   gap: 6px;

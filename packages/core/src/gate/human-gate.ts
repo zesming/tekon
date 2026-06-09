@@ -15,6 +15,11 @@ export interface HumanGate {
     actor: string,
     note?: string,
   ): Promise<HumanDecision>;
+  rejectHumanGate(
+    decisionId: string,
+    actor: string,
+    note?: string,
+  ): Promise<HumanDecision>;
 }
 
 export function createHumanGate(options: {
@@ -64,6 +69,44 @@ export function createHumanGate(options: {
       await options.repositories.updateWorkflowInstanceStatus(
         existing.runId,
         'running',
+        existing.nodeId,
+      );
+      return updated;
+    },
+
+    async rejectHumanGate(decisionId, actor, note) {
+      const existing = await options.repositories.getHumanDecision(decisionId);
+      if (!existing) {
+        throw new Error(`unknown human decision: ${decisionId}`);
+      }
+
+      const updated = await options.repositories.updateHumanDecision(
+        decisionId,
+        {
+          status: 'rejected',
+          actor,
+          note: note ?? null,
+          decidedAt: new Date().toISOString(),
+        },
+      );
+
+      if (!updated) {
+        throw new Error(`failed to update human decision: ${decisionId}`);
+      }
+
+      if (existing.gateResultId) {
+        await options.repositories.updateGateResultStatus(
+          existing.gateResultId,
+          {
+            status: 'failed',
+            failureClassification: 'human-rejected',
+          },
+        );
+      }
+      await options.repositories.transitionNode(existing.nodeId, 'blocked');
+      await options.repositories.updateWorkflowInstanceStatus(
+        existing.runId,
+        'blocked',
         existing.nodeId,
       );
       return updated;

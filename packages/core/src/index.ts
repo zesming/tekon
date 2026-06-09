@@ -15,6 +15,7 @@ export * from './runtime/worktree-manager.js';
 export * from './repo/profile.js';
 export * from './repo/safe-path.js';
 export * from './security/secrets.js';
+export * from './approval/summary.js';
 export * from './demand/shape.js';
 export * from './runtime/agent-adapter.js';
 export * from './runtime/claude-code-adapter.js';

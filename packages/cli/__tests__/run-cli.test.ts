@@ -209,6 +209,35 @@ describe('runCli in-process', () => {
 
     await expect(
       runCli(
+        ['approval', 'summary', '--run-id', gatedRunId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const approvalSummaryOutput = io.takeStdout();
+    expect(approvalSummaryOutput).toContain('ready=true');
+    expect(approvalSummaryOutput).toContain('## 处理入口');
+    expect(approvalSummaryOutput).toContain(
+      `donkey resume --run-id ${gatedRunId} --approve-human`,
+    );
+    expect(approvalSummaryOutput).toContain('donkey approval reject');
+
+    await expect(
+      runCli(
+        [
+          'eval',
+          'approval-summary',
+          '--run-id',
+          gatedRunId!,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('ready=true');
+
+    await expect(
+      runCli(
         [
           'resume',
           '--run-id',
@@ -221,6 +250,73 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     expect(io.takeStdout()).toContain('status=passed');
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '拒绝一个需要人工确认的变更',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const rejectableOutput = io.takeStdout();
+    const rejectableRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+      rejectableOutput,
+    )?.[1];
+    expect(rejectableRunId).toBeTruthy();
+    await expect(
+      runCli(
+        [
+          'approval',
+          'summary',
+          '--run-id',
+          rejectableRunId!,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const rejectableSummary = io.takeStdout();
+    const decisionId = /decisionId=(decision_[a-zA-Z0-9-]+)/u.exec(
+      rejectableSummary,
+    )?.[1];
+    expect(decisionId).toBeTruthy();
+    await expect(
+      runCli(
+        [
+          'approval',
+          'reject',
+          '--run-id',
+          rejectableRunId!,
+          '--decision-id',
+          decisionId!,
+          '--actor',
+          'tester',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const rejectOutput = io.takeStdout();
+    expect(rejectOutput).toContain('decisionStatus=rejected');
+    expect(rejectOutput).toContain('status=blocked');
+    await expect(
+      runCli(['review', '--run-id', rejectableRunId!, '--repo', repoPath], io),
+    ).resolves.toBe(0);
+    const rejectedReviewOutput = io.takeStdout();
+    expect(rejectedReviewOutput).toContain(
+      'classification=human-rejected retry=not-recommended',
+    );
+    expect(rejectedReviewOutput).toContain('human reviewer rejected');
 
     await expect(
       runCli(

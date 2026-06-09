@@ -383,14 +383,16 @@
             <tr>
               <td class="priority">审批与通知</td>
               <td>
-                Web 可处理 human gate，CLI 可 resume；但还偏本地按钮/命令。
+                CLI/Web 已生成可复制审批摘要，并支持
+                <code>eval approval-summary</code>；Web 可处理 human gate，CLI
+                可 approve/reject。
               </td>
               <td>
-                生成可复制审批摘要，包含风险、命令、影响文件、证据链接、批准/拒绝命令；后续再接飞书
-                IM。
+                用真实 run 验证摘要是否足够让 reviewer 在飞书或 Web
+                中判断风险；后续再接飞书 IM。
               </td>
               <td>
-                先做 CLI/Web approval summary，不急着做完整飞书通知机器人。
+                收集真实审批样本，检查风险、命令、影响文件、证据链接和批准/拒绝入口是否完整。
               </td>
             </tr>
             <tr>
@@ -535,7 +537,11 @@
           </li>
           <li>必须有仓库画像、验证命令、人工验收标准和回滚/拒绝路径。</li>
         </ul>
-        <h3>第 2 步：补审批摘要</h3>
+        <h3>第 2 步：验证真实审批样本和通知入口</h3>
+        <p>
+          CLI/Web 已有可复制审批摘要；下一步不再是补入口，而是用真实 run
+          检查摘要是否足够 reviewer 独立判断。每个真实审批样本至少记录：
+        </p>
         <ul>
           <li>run id、node id、decision id。</li>
           <li>需求标题和当前 workflow 阶段。</li>
@@ -543,9 +549,13 @@
           <li>exact command 或将要产生的远端副作用。</li>
           <li>影响文件和 diff 摘要。</li>
           <li>readiness 失败项、gate log、artifact 和 PR 包链接。</li>
-          <li>批准命令、拒绝命令、Web 入口。</li>
+          <li>可直接复制执行的批准命令、拒绝命令、Web 入口。</li>
+          <li>reviewer 是批准、拒绝还是要求补材料。</li>
         </ul>
-        <p>先支持复制到飞书消息，后续再接飞书 IM 推送。</p>
+        <p>
+          真实样本证明摘要稳定后，再接飞书 IM 推送；通知只做分发和链接，不绕过
+          human gate。
+        </p>
         <h3>第 3 步：跑真实样本，不再只跑 fixture</h3>
         <ul>
           <li>2 到 3 个相似内部工具仓库。</li>
@@ -612,8 +622,9 @@
         </p>
         <ol>
           <li>
-            <strong>审批摘要和通知入口：</strong>让人能在飞书或 Web
-            中快速判断批准/拒绝。
+            <strong>真实审批样本和通知入口：</strong
+            >当前已有可复制审批摘要；下一步要用真实 run
+            验证摘要质量，并在需要时接入飞书 IM。
           </li>
           <li>
             <strong>真实样本集：</strong>用 10 个受控需求证明真实

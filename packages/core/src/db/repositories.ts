@@ -9,6 +9,7 @@ import {
   type Demand,
   demandSchema,
   type GateResult,
+  type GateStatus,
   gateResultSchema,
   type HumanDecision,
   humanDecisionSchema,
@@ -197,6 +198,10 @@ export interface DonkeyRepositories {
   listNodes(runId: string): Promise<Node[]>;
   transitionNode(nodeId: string, status: NodeStatus): Promise<void>;
   recordGateResult(gateResult: GateResult): Promise<GateResult>;
+  updateGateResultStatus(
+    gateResultId: string,
+    patch: { status: GateStatus; failureClassification?: string | null },
+  ): Promise<GateResult | null>;
   listGateResults(runId: string): Promise<GateResult[]>;
   appendAuditEvent(event: AuditEvent): Promise<AuditEvent>;
   listAuditEvents(runId: string): Promise<AuditEvent[]>;
@@ -479,6 +484,21 @@ export function createRepositories(
           failureClassification: gateResult.failureClassification ?? null,
         });
         return gateResult;
+      });
+    },
+
+    async updateGateResultStatus(gateResultId, patch) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update gate_results
+           set status = ?,
+               failure_classification = coalesce(?, failure_classification)
+           where id = ?`,
+        ).run(patch.status, patch.failureClassification ?? null, gateResultId);
+        const row = db
+          .prepare('select * from gate_results where id = ?')
+          .get(gateResultId) as GateResultRow | undefined;
+        return row ? mapGateResult(row) : null;
       });
     },
 

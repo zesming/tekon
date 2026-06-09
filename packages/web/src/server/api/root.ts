@@ -17,6 +17,7 @@ import {
   createClaudeCodeAdapter,
   createCommandGateway,
   createGateEngine,
+  createHumanApprovalSummary,
   createMockAgentAdapter,
   createRepositories,
   createScmDelivery,
@@ -26,6 +27,7 @@ import {
   readDemandShapeFile,
   renderDemandShapeForRun,
   shapeDemand,
+  evaluateHumanApprovalSummary,
   writeDemandShapeFile,
   writeDemandShapeFiles,
   agentAdapterConfigSchema,
@@ -548,11 +550,26 @@ export async function createApiCaller(
     gate: {
       async list(gateInput) {
         assertRunInScope(db, context, gateInput.runId);
+        const pendingDecisions = listHumanDecisions(db, gateInput.runId).filter(
+          (decision) => decision.status === 'pending',
+        );
+        const summaries = await Promise.all(
+          pendingDecisions.map((decision) =>
+            createHumanApprovalSummary({
+              repoPath: context.projectRoot,
+              repositories,
+              audit,
+              runId: gateInput.runId,
+              decisionId: decision.id,
+              maxContentChars: 1_200,
+            }),
+          ),
+        );
         return {
           gates: listGates(db, gateInput.runId).map(mapGate),
-          pendingDecisions: listHumanDecisions(db, gateInput.runId)
-            .filter((decision) => decision.status === 'pending')
-            .map((decision) => mapHumanDecision(db, decision)),
+          pendingDecisions: pendingDecisions.map((decision, index) =>
+            mapHumanDecision(db, decision, summaries[index] ?? null),
+          ),
         };
       },
 
@@ -565,6 +582,7 @@ export async function createApiCaller(
           input: decisionInput,
           status: 'approved',
           gateStatus: 'passed',
+          gateFailureClassification: null,
         });
       },
 
@@ -577,6 +595,7 @@ export async function createApiCaller(
           input: decisionInput,
           status: 'rejected',
           gateStatus: 'failed',
+          gateFailureClassification: 'human-rejected',
         });
       },
     },
@@ -901,6 +920,7 @@ async function updateDecision(input: {
   input: DecisionInput;
   status: 'approved' | 'rejected';
   gateStatus: 'passed' | 'failed';
+  gateFailureClassification: string | null;
 }): Promise<{ decision: ReturnType<typeof mapHumanDecision> }> {
   assertSessionToken(input.context, input.input.token);
   assertRunInScope(input.db, input.context, input.input.runId);
@@ -946,9 +966,10 @@ async function updateDecision(input: {
   }
 
   if (existing.gate_result_id) {
-    input.db
-      .prepare('update gate_results set status = ? where id = ?')
-      .run(input.gateStatus, existing.gate_result_id);
+    await input.repositories.updateGateResultStatus(existing.gate_result_id, {
+      status: input.gateStatus,
+      failureClassification: input.gateFailureClassification,
+    });
   }
 
   if (input.status === 'approved') {
@@ -1366,7 +1387,13 @@ function matchesAuditFilters(
   return true;
 }
 
-function mapHumanDecision(db: DonkeyDatabase, decision: HumanDecisionRow) {
+function mapHumanDecision(
+  db: DonkeyDatabase,
+  decision: HumanDecisionRow,
+  approvalSummary: Awaited<
+    ReturnType<typeof createHumanApprovalSummary>
+  > | null = null,
+) {
   const gate = getGate(db, decision.gate_result_id);
   const node = getNode(db, decision.node_id);
   return {
@@ -1384,6 +1411,10 @@ function mapHumanDecision(db: DonkeyDatabase, decision: HumanDecisionRow) {
       exactCommand: extractExactCommand(decision.note),
       riskLabel: deriveRiskLabel(decision.note, gate),
       nodeRole: node?.role ?? null,
+      approvalSummary,
+      approvalEvaluation: approvalSummary
+        ? evaluateHumanApprovalSummary(approvalSummary)
+        : null,
       gate: gate
         ? {
             id: gate.id,

@@ -65,6 +65,10 @@ test.describe('Donkey release dashboard', () => {
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('审批摘要')).toContainText('Donkey 审批摘要');
+    await expect(page.getByLabel('审批摘要')).toContainText(
+      'donkey approval reject',
+    );
     await expect(page.getByText('Hash chain: valid')).toBeVisible();
     await expect(page.getByText('Review report body')).toBeVisible();
     await expect(

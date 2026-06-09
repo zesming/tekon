@@ -56,6 +56,21 @@ type Decision = {
     exactCommand: string;
     riskLabel: string;
     nodeRole: string | null;
+    approvalSummary: {
+      summaryText: string;
+      approveCommand: string;
+      rejectCommand: string;
+      impact: {
+        status: string;
+        files: string[];
+        reason: string | null;
+      };
+    } | null;
+    approvalEvaluation: {
+      ready: boolean;
+      score: number;
+      checks: Array<{ id: string; passed: boolean; evidence: string }>;
+    } | null;
     gate: {
       id: string;
       type: string;
@@ -589,6 +604,26 @@ function App() {
                 <dt>role</dt>
                 <dd>{pendingDecision.context.nodeRole ?? 'unknown'}</dd>
               </dl>
+              {pendingDecision.context.approvalSummary ? (
+                <div className="approval-summary">
+                  <p>
+                    审批摘要 ready=
+                    {String(
+                      pendingDecision.context.approvalEvaluation?.ready ??
+                        false,
+                    )}{' '}
+                    score=
+                    {(
+                      pendingDecision.context.approvalEvaluation?.score ?? 0
+                    ).toFixed(2)}
+                  </p>
+                  <textarea
+                    aria-label="审批摘要"
+                    readOnly
+                    value={pendingDecision.context.approvalSummary.summaryText}
+                  />
+                </div>
+              ) : null}
             </div>
             <label>
               Session token

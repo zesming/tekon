@@ -361,6 +361,14 @@ function gateTriageAdvice(input: {
       suggestedCommand: reviewCommand,
     };
   }
+  if (input.classification === 'human-rejected') {
+    return {
+      retry: 'not-recommended',
+      summary:
+        'A human reviewer rejected this gate. Review the rejection note and change the work before starting a new run or retrying.',
+      suggestedCommand: reviewCommand,
+    };
+  }
   if (input.classification === 'unsupported-gate') {
     return {
       retry: 'not-recommended',

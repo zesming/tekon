@@ -41,6 +41,18 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
+    const pendingBeforeApproval = await api.gate.list({ runId: 'run_1' });
+    expect(pendingBeforeApproval.pendingDecisions[0]?.context).toMatchObject({
+      approvalEvaluation: expect.objectContaining({ ready: true }),
+      approvalSummary: expect.objectContaining({
+        summaryText: expect.stringContaining('Donkey 审批摘要'),
+        approveCommand: expect.stringContaining(
+          'donkey resume --run-id run_1 --approve-human',
+        ),
+        rejectCommand: expect.stringContaining('donkey approval reject'),
+      }),
+    });
+
     const result = await api.gate.approve({
       runId: 'run_1',
       decisionId: 'decision_1',
@@ -111,6 +123,23 @@ describe('web write authorization', () => {
       status: 'blocked',
       currentNodeId: 'node_1',
     });
+    const gates = await api.gate.list({ runId: 'run_1' });
+    expect(gates.gates).toContainEqual(
+      expect.objectContaining({
+        id: 'gate_1',
+        status: 'failed',
+        failureClassification: 'human-rejected',
+      }),
+    );
+    const review = await api.review.get({ runId: 'run_1' });
+    expect(review.gateFailureTriage).toContainEqual(
+      expect.objectContaining({
+        gateId: 'gate_1',
+        classification: 'human-rejected',
+        retry: 'not-recommended',
+        summary: expect.stringContaining('human reviewer rejected'),
+      }),
+    );
     const audit = await api.audit.list({ runId: 'run_1' });
     expect(audit.events).toEqual(
       expect.arrayContaining([

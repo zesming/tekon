@@ -24,6 +24,7 @@ import {
   createDeliveryEvidencePackage,
   createGateEngine,
   createHumanGate,
+  createHumanApprovalSummary,
   createMockAgentAdapter,
   createPullRequestPreparation,
   queryPullRequestCiStatus,
@@ -34,6 +35,7 @@ import {
   createWorkflowEngine,
   evaluateWorkReadiness,
   evaluateWorkUsability,
+  evaluateHumanApprovalSummary,
   approveDemandShape,
   evaluateDemandShape,
   evaluateWorkflowSelection,
@@ -115,6 +117,9 @@ export async function runCli(
         return 0;
       case 'delivery':
         await commandDelivery(rest, io);
+        return 0;
+      case 'approval':
+        await commandApproval(rest, io);
         return 0;
       case 'eval':
         await commandEval(rest, io);
@@ -1176,6 +1181,125 @@ async function commandStatus(argv: string[], io: CliIO) {
   db.close();
 }
 
+async function commandApproval(argv: string[], io: CliIO) {
+  const [subcommand, ...rest] = argv;
+  if (subcommand === 'summary') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        'decision-id': { type: 'string' },
+        json: { type: 'boolean', default: false },
+        'max-chars': { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const maxContentChars = args.values['max-chars']
+      ? Number(args.values['max-chars'])
+      : 1_200;
+    if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
+      throw new Error('--max-chars must be a positive number');
+    }
+    const db = openProjectDb(repoPath);
+    migrateDatabase(db);
+    try {
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const summary = await createHumanApprovalSummary({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+        decisionId: args.values['decision-id'],
+        maxContentChars,
+      });
+      const evaluation = evaluateHumanApprovalSummary(summary);
+      io.stdout.write(
+        args.values.json
+          ? `${JSON.stringify({ summary, evaluation }, null, 2)}\n`
+          : formatApprovalSummary(summary, evaluation),
+      );
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
+  if (subcommand === 'reject') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        'decision-id': { type: 'string' },
+        actor: { type: 'string' },
+        note: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const decisionId = args.values['decision-id'] ?? args.positionals[1];
+    if (!decisionId) {
+      throw new Error('--decision-id is required');
+    }
+    const db = openProjectDb(repoPath);
+    migrateDatabase(db);
+    try {
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const decision = await repositories.getHumanDecision(decisionId);
+      if (!decision || decision.runId !== runId) {
+        throw new Error(`human decision not found: ${decisionId}`);
+      }
+      if (decision.status !== 'pending') {
+        throw new Error(
+          `decision is already ${decision.status}: ${decisionId}`,
+        );
+      }
+      const rejected = await createHumanGate({ repositories }).rejectHumanGate(
+        decisionId,
+        args.values.actor ?? 'cli',
+        args.values.note ?? 'rejected by CLI',
+      );
+      await audit.append({
+        runId,
+        type: 'human.gate.rejected',
+        payload: {
+          decisionId,
+          nodeId: rejected.nodeId,
+          actor: args.values.actor ?? 'cli',
+        },
+      });
+      const workflow = await repositories.getWorkflowInstance(runId);
+      io.stdout.write(
+        [
+          `runId=${runId}`,
+          `decisionId=${decisionId}`,
+          `decisionStatus=${rejected.status}`,
+          `status=${workflow?.status ?? 'blocked'}`,
+        ].join(' ') + '\n',
+      );
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
+  throw new Error(`unknown approval command: ${subcommand ?? ''}`);
+}
+
 async function commandEval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'demand-shape') {
@@ -1244,6 +1368,64 @@ async function commandEval(argv: string[], io: CliIO) {
               .join(',')}`,
           ].join(' ') + '\n',
     );
+    return;
+  }
+
+  if (subcommand === 'approval-summary') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'run-id': { type: 'string' },
+        'decision-id': { type: 'string' },
+        json: { type: 'boolean', default: false },
+        'max-chars': { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const repoPath = resolve(args.values.repo ?? process.cwd());
+    ensureInitialized(repoPath);
+    const runId = args.values['run-id'] ?? args.positionals[0];
+    if (!runId) {
+      throw new Error('--run-id is required');
+    }
+    const maxContentChars = args.values['max-chars']
+      ? Number(args.values['max-chars'])
+      : 1_200;
+    if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
+      throw new Error('--max-chars must be a positive number');
+    }
+    const db = openProjectDb(repoPath);
+    migrateDatabase(db);
+    try {
+      const repositories = createRepositories(db);
+      const audit = createAuditLogger({ repositories });
+      const summary = await createHumanApprovalSummary({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+        decisionId: args.values['decision-id'],
+        maxContentChars,
+      });
+      const evaluation = evaluateHumanApprovalSummary(summary);
+      io.stdout.write(
+        args.values.json
+          ? `${JSON.stringify(evaluation, null, 2)}\n`
+          : [
+              `runId=${runId}`,
+              `decisionId=${summary.decisionId}`,
+              `ready=${evaluation.ready}`,
+              `score=${evaluation.score.toFixed(2)}`,
+              `failed=${evaluation.checks
+                .filter((check) => !check.passed)
+                .map((check) => check.id)
+                .join(',')}`,
+            ].join(' ') + '\n',
+      );
+    } finally {
+      db.close();
+    }
     return;
   }
 
@@ -1642,6 +1824,27 @@ function formatReviewSurface(
     '',
   ];
   return `${lines.join('\n')}\n`;
+}
+
+function formatApprovalSummary(
+  summary: Awaited<ReturnType<typeof createHumanApprovalSummary>>,
+  evaluation: ReturnType<typeof evaluateHumanApprovalSummary>,
+): string {
+  return [
+    `decisionId=${summary.decisionId}`,
+    `runId=${summary.runId}`,
+    `ready=${evaluation.ready}`,
+    `score=${evaluation.score.toFixed(2)}`,
+    `risk=${summary.riskLabel}`,
+    `exactCommand=${summary.exactCommand}`,
+    `impact=${summary.impact.status}`,
+    `failed=${evaluation.checks
+      .filter((check) => !check.passed)
+      .map((check) => check.id)
+      .join(',')}`,
+    '',
+    summary.summaryText,
+  ].join('\n');
 }
 
 function formatPreview(preview: {
