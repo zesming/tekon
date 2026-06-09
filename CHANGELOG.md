@@ -42,6 +42,7 @@
 
 ### 变更
 
+- README 从阶段验收与增量清单改为项目级介绍，聚焦定位、工作流、核心能力、边界、快速开始、运行产物、仓库结构和文档入口。
 - 项目品牌迁移为天工（Tekon）/tekon，CLI、包名、运行态目录、环境变量前缀、交付分支前缀、文档文件名和用户文档引用同步更新。
 - Vitest 配置从旧 workspace 文件迁移到 `vitest.config.ts` 的 `test.projects`。
 - 建立 `.prettierrc.json`，让全仓 `prettier --check .` 成为可执行的发布 gate。
