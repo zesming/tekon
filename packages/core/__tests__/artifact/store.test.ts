@@ -122,14 +122,14 @@ describe('artifact store', () => {
   it('rejects artifacts containing likely secrets before writing files', async () => {
     const { repoPath, repositories } = await createRunFixture(tempDirs);
     const store = createArtifactStore({ repoPath, repositories });
+    const fakeOpenAiKey = ['sk', '123456789012345678901234'].join('-');
 
     await expect(
       store.writeArtifact({
         runId: 'run_1',
         nodeId: 'node_1',
         type: 'tech-design',
-        content:
-          '# Design\n\nDo not store token = "sk-123456789012345678901234" here.',
+        content: `# Design\n\nDo not store token = "${fakeOpenAiKey}" here.`,
       }),
     ).rejects.toThrow(/artifact contains sensitive content: openai-api-key/u);
     expect(

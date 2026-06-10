@@ -75,9 +75,10 @@ describe('command gate runner', () => {
   it('fails the built-in security scan when likely secrets are present', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-security-fail-'));
     tempDirs.push(cwd);
+    const fakeOpenAiKey = ['sk', '123456789012345678901234'].join('-');
     writeFileSync(
       join(cwd, 'config.ts'),
-      'export const token = "sk-123456789012345678901234";\n',
+      `export const token = "${fakeOpenAiKey}";\n`,
       'utf8',
     );
 

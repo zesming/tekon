@@ -217,14 +217,16 @@ describe('command gateway', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-redact-'));
     tempDirs.push(cwd);
     const gateway = createCommandGateway();
+    const fakeOpenAiKey = ['sk', '123456789012345678901234'].join('-');
+    const fakeGenericSecret = ['123456789012', '345678901234567890'].join('');
     const result = await gateway.run({
       command: {
         tool: process.execPath,
         args: [
           '-e',
           [
-            'process.stdout.write(\'token = "sk-123456789012345678901234"\\n\')',
-            'process.stderr.write(\'secret = "123456789012345678901234567890"\\n\')',
+            `process.stdout.write('token = "${fakeOpenAiKey}"\\n')`,
+            `process.stderr.write('secret = "${fakeGenericSecret}"\\n')`,
           ].join('\n'),
         ],
       },
@@ -244,8 +246,8 @@ describe('command gateway', () => {
     }
     const stdout = readFileSync(result.stdoutPath, 'utf8');
     const stderr = readFileSync(result.stderrPath, 'utf8');
-    expect(stdout).not.toContain('sk-123456789012345678901234');
-    expect(stderr).not.toContain('123456789012345678901234567890');
+    expect(stdout).not.toContain(fakeOpenAiKey);
+    expect(stderr).not.toContain(fakeGenericSecret);
     expect(stdout).toContain('[REDACTED_OPENAI_API_KEY]');
     expect(stderr).toContain('[REDACTED_SECRET]');
   });
@@ -253,6 +255,8 @@ describe('command gateway', () => {
   it('redacts likely secrets that are split across stdout and stderr chunks', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-redact-chunks-'));
     tempDirs.push(cwd);
+    const fakeOpenAiKey = ['sk', '123456789012345678901234'].join('-');
+    const fakeGenericSecret = ['123456789012', '345678901234567890'].join('');
     const gateway = createCommandGateway({
       spawnImpl: () => {
         const child = new EventEmitter() as ChildProcessWithoutNullStreams;
@@ -265,10 +269,10 @@ describe('command gateway', () => {
         });
         child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
         setImmediate(() => {
-          child.stdout.write('token = "sk-1234567890');
-          child.stdout.write('12345678901234"\n');
-          child.stderr.write('secret = "123456789012');
-          child.stderr.write('345678901234567890"\n');
+          child.stdout.write(`token = "${fakeOpenAiKey.slice(0, 13)}`);
+          child.stdout.write(`${fakeOpenAiKey.slice(13)}"\n`);
+          child.stderr.write(`secret = "${fakeGenericSecret.slice(0, 12)}`);
+          child.stderr.write(`${fakeGenericSecret.slice(12)}"\n`);
           child.stdout.end();
           child.stderr.end();
           child.emit('close', 0, null);
@@ -295,8 +299,8 @@ describe('command gateway', () => {
     }
     const stdout = readFileSync(result.stdoutPath, 'utf8');
     const stderr = readFileSync(result.stderrPath, 'utf8');
-    expect(stdout).not.toContain('sk-123456789012345678901234');
-    expect(stderr).not.toContain('123456789012345678901234567890');
+    expect(stdout).not.toContain(fakeOpenAiKey);
+    expect(stderr).not.toContain(fakeGenericSecret);
     expect(stdout).toContain('[REDACTED_OPENAI_API_KEY]');
     expect(stderr).toContain('[REDACTED_SECRET]');
   });
