@@ -40,6 +40,8 @@ npm exec --yes -- pnpm@10.12.1 build
 
 如果 Codex 在写完有效 `TEKON_ARTIFACT_MANIFEST` 后没有及时退出，adapter 会尝试读取并校验 manifest；只要 workflow 必需 artifact 已完整入库，该节点会继续进入后续 gate。若 manifest 缺失、schema 非法或必需 artifact 不齐，该节点仍会失败。
 
+结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段。`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，会被 Tekon 归一化为可审阅 artifact；真实 provider prompt 仍应优先按 Tekon schema 写出完整字段，避免依赖容错恢复。
+
 ## 4. 最小运行命令
 
 ```bash
@@ -125,6 +127,7 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `Unsupported agent: codex`                | CLI/Web 没有接线 Codex provider。                                                                                                         | 更新到包含 Codex adapter 的版本，并重新构建。                                                                  |
 | `agent failed: provider=codex exitCode=1` | Codex 没写 manifest、artifact schema 不合法，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。               |
+| `code-changes` artifact schema 不合法     | 非 provider-style、字段为空、正文为空，或无法归一化为含 `title`/`body` 的有效 artifact。                                                  | 更新 provider prompt 或 artifact 内容；`changedFiles`/`verification` 等 provider-style 字段只作为兼容输入。    |
 | `agent timed out: provider=codex`         | Codex 进程在写完有效 manifest 前超时，或 manifest/artifact 不完整。                                                                       | 查 `artifact-manifest.json` 和必需 artifact；若它们完整合法，更新到支持 timeout 后 manifest 恢复的版本后重试。 |
 | resume 拒绝                               | run 缺 provider snapshot 或 snapshot 不能 replay。                                                                                        | 不手工篡改 provider；必要时重新跑真实 Codex run。                                                              |
 | `delivery create-pr` 等待审批             | 未传 `--approve-human`。                                                                                                                  | 审阅 PR 包和 diff 后再显式批准。                                                                               |

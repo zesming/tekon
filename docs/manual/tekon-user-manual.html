@@ -1414,9 +1414,16 @@
             节点内也不执行 <code>git add</code>、<code>git commit</code>、<code
               >git push</code
             >
-            或创建 PR。若 Codex 写完有效 manifest 后未及时退出，adapter 会以必需
-            artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需
-            artifact 时，该节点会失败。
+            或创建 PR。结构化 JSON artifact 必须包含非空
+            <code>title</code> 和 <code>body</code> 字段；<code
+              >code-changes</code
+            >
+            的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
+            <code>changedFiles</code>/<code>verification</code>
+            条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
+            schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出，adapter
+            会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少
+            workflow 必需 artifact 时，该节点会失败。
           </div>
 
           <h3>4.6 查看结果</h3>
@@ -2378,7 +2385,8 @@
             artifact 输出目录。再查看
             <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下
             stdout/stderr、<code>artifact-manifest.json</code> 和 artifact
-            内容。不要把真实 provider 失败降级成 mock 通过。
+            内容，并确认结构化 JSON 有非空 <code>title</code> 和
+            <code>body</code>。不要把真实 provider 失败降级成 mock 通过。
           </p>
           <p>详细流程见 <code>docs/manual/codex-provider-smoke.md</code>。</p>
 

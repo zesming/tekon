@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentArtifactManifestSchema,
   artifactPayloadSchemas,
+  validateArtifactContent,
   validateArtifactPayload,
 } from '../../src/index.js';
 
@@ -77,5 +78,78 @@ describe('artifact schemas', () => {
         securityFindings: [],
       }),
     ).toMatchObject({ securityFindings: [] });
+  });
+
+  it('normalizes provider-style code changes artifacts into a readable payload', () => {
+    expect(
+      validateArtifactContent(
+        'code-changes',
+        JSON.stringify({
+          type: 'code-changes',
+          summary: '同步补充 Codex provider smoke artifact 输出目录诊断说明',
+          changedFiles: [
+            {
+              path: 'docs/manual/codex-provider-smoke.md',
+              changes: ['补充 TEKON_OUTPUT_DIR 诊断说明。'],
+            },
+          ],
+          verification: [
+            {
+              command: 'git diff --check',
+              result: 'exit 0',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      title: 'Code changes',
+      body: expect.stringContaining('docs/manual/codex-provider-smoke.md'),
+      summary: '同步补充 Codex provider smoke artifact 输出目录诊断说明',
+    });
+  });
+
+  it('rejects non-provider-style code changes artifacts without title and body', () => {
+    for (const payload of [
+      {},
+      { type: 'code-changes' },
+      { changedFiles: [{}] },
+      { verification: [{}] },
+      {
+        changedFiles: ['  '],
+        verification: [{ command: ' ', result: ' ' }],
+      },
+    ]) {
+      expect(() =>
+        validateArtifactContent('code-changes', JSON.stringify(payload)),
+      ).toThrow();
+    }
+  });
+
+  it('does not normalize provider-style fields for other artifact types', () => {
+    expect(() =>
+      validateArtifactContent(
+        'tech-design',
+        JSON.stringify({
+          summary: '技术方案摘要',
+          changedFiles: ['docs/manual/codex-provider-smoke.md'],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('does not normalize provider-style code changes fields in YAML front matter', () => {
+    expect(() =>
+      validateArtifactContent(
+        'code-changes',
+        [
+          '---',
+          'summary: 同步补充 Codex provider smoke artifact 输出目录诊断说明',
+          'changedFiles:',
+          '  - docs/manual/codex-provider-smoke.md',
+          '---',
+          '',
+        ].join('\n'),
+      ),
+    ).toThrow();
   });
 });

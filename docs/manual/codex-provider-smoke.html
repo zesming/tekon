@@ -303,6 +303,14 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           已完整入库，该节点会继续进入后续 gate。若 manifest 缺失、schema
           非法或必需 artifact 不齐，该节点仍会失败。
         </p>
+        <p>
+          结构化 JSON artifact 必须包含非空 <code>title</code> 和
+          <code>body</code> 字段。<code>code-changes</code> 的 provider-style
+          JSON 如果包含非空 <code>summary</code>，或包含有效
+          <code>changedFiles</code>/<code>verification</code> 条目，会被 Tekon
+          归一化为可审阅 artifact；真实 provider prompt 仍应优先按 Tekon schema
+          写出完整字段，避免依赖容错恢复。
+        </p>
       </section>
 
       <section>
@@ -382,6 +390,18 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
                 bypass。
               </td>
               <td>查 stdout/stderr、manifest 和 artifact 内容。</td>
+            </tr>
+            <tr>
+              <td><code>code-changes</code> artifact schema 不合法</td>
+              <td>
+                非 provider-style、字段为空、正文为空，或无法归一化为含
+                <code>title</code>/<code>body</code> 的有效 artifact。
+              </td>
+              <td>
+                更新 provider prompt 或 artifact 内容；<code>changedFiles</code>
+                / <code>verification</code> 等 provider-style
+                字段只作为兼容输入。
+              </td>
             </tr>
             <tr>
               <td><code>agent timed out: provider=codex</code></td>

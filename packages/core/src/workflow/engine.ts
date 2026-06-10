@@ -795,6 +795,7 @@ export function createWorkflowEngine(
       `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',
+      '- Structured JSON artifacts must include non-empty title and body fields.',
       '- Write TEKON_ARTIFACT_MANIFEST as JSON after producing artifacts.',
       '- Write required artifact files and TEKON_ARTIFACT_MANIFEST before optional checks or reviews.',
       '- After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
