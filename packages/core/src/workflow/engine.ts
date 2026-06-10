@@ -784,10 +784,16 @@ export function createWorkflowEngine(
       prompt,
       '',
       'Tekon artifact protocol:',
+      "- Complete only this workflow node's responsibilities.",
+      !input.requiredArtifactTypes.includes('code-changes')
+        ? '- Required artifact types do not include code-changes; do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.'
+        : '- Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
       `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',
       '- Write TEKON_ARTIFACT_MANIFEST as JSON after producing artifacts.',
+      '- After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+      '- Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.',
       '- Manifest format example:',
       manifestExample,
       '- Do not include secrets, tokens, credentials, or production-only data in artifacts or logs.',

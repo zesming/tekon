@@ -238,7 +238,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点写完 manifest 后立即退出。缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
 
 ### 4.6 查看结果
 

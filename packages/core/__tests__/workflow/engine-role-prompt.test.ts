@@ -100,6 +100,177 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('adds artifact boundary and exit instructions for nodes with required artifacts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '补充 smoke 文档',
+      mode: 'template',
+      workflowSpec: {
+        id: 'artifact-prompt-boundary',
+        name: 'Artifact Prompt Boundary',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-scope',
+                role: 'pm',
+                inputs: [],
+                outputs: [{ id: 'demand', type: 'demand-card' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain('Tekon artifact protocol');
+    expect(prompts[0]).toContain(
+      "Complete only this workflow node's responsibilities.",
+    );
+    expect(prompts[0]).toContain(
+      'do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.',
+    );
+    expect(prompts[0]).toContain(
+      'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not continue editing, formatting, running checks, printing diffs, or explaining',
+    );
+    db.close();
+  });
+
+  it('keeps repository edit scope for code-changes nodes while preserving exit instructions', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-code-changes-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-code-changes-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '实现 smoke 文档更新',
+      mode: 'template',
+      workflowSpec: {
+        id: 'code-changes-prompt-boundary',
+        name: 'Code Changes Prompt Boundary',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'rd',
+            name: 'RD',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'rd-change',
+                role: 'rd',
+                inputs: [],
+                outputs: [{ id: 'code', type: 'code-changes' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain('Tekon artifact protocol');
+    expect(prompts[0]).toContain(
+      'Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+    );
+    expect(prompts[0]).not.toContain(
+      'Required artifact types do not include code-changes; do not modify the repository working tree;',
+    );
+    expect(prompts[0]).toContain(
+      'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+    );
+    db.close();
+  });
+
   it('interrupts the workflow when an agent returns a non-zero exit code', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-agent-fail-'));
     const rolesDir = mkdtempSync(
@@ -214,6 +385,20 @@ describe('workflow engine role prompt integration', () => {
 });
 
 function writeRoleFixture(rolesDir: string) {
+  const pmDir = join(rolesDir, 'pm');
+  mkdirSync(pmDir, { recursive: true });
+  writeFileSync(
+    join(pmDir, 'agent.yaml'),
+    ['role: pm', 'name: Test PM', 'description: Test PM role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(pmDir, 'system.md'), 'PM system instructions', 'utf8');
+  writeFileSync(
+    join(pmDir, 'tools.yaml'),
+    ['network: disabled', 'allow: []', 'deny: []'].join('\n'),
+    'utf8',
+  );
+
   const rdDir = join(rolesDir, 'rd');
   mkdirSync(join(rdDir, 'skills'), { recursive: true });
   mkdirSync(join(rdDir, 'knowledge'), { recursive: true });
