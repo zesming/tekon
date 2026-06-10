@@ -1424,9 +1424,11 @@
             的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出，adapter
-            会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少
-            workflow 必需 artifact 时，该节点会失败。
+            schema 写完整字段。若 Codex 写完有效 manifest
+            后未及时退出或返回非零退出码，adapter 会以必需 artifact
+            校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需
+            artifact、artifact schema 不合法或 path/symlink
+            边界失败时，该节点会失败。
           </div>
 
           <h3>4.6 查看结果</h3>

@@ -118,7 +118,12 @@ export function createCodexAdapter(
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
       let artifactIngestionFailed = false;
-      if ((result.exitCode === 0 || result.timedOut) && input.artifactStore) {
+      const requiredArtifactTypes = input.requiredArtifactTypes ?? [];
+      const hasNonZeroExitCode =
+        typeof result.exitCode === 'number' && result.exitCode !== 0;
+      const shouldTryArtifactIngestion =
+        result.exitCode === 0 || result.timedOut || hasNonZeroExitCode;
+      if (shouldTryArtifactIngestion && input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -147,14 +152,15 @@ export function createCodexAdapter(
       }
 
       const missingRequiredTypes = missingRequiredArtifactTypes(
-        input.requiredArtifactTypes,
+        requiredArtifactTypes,
         artifacts,
       );
+      const hasCompleteRequiredArtifacts =
+        requiredArtifactTypes.length > 0 && missingRequiredTypes.length === 0;
       if (
-        result.timedOut &&
+        (result.timedOut || hasNonZeroExitCode) &&
         !artifactIngestionFailed &&
-        (input.requiredArtifactTypes ?? []).length > 0 &&
-        missingRequiredTypes.length === 0
+        hasCompleteRequiredArtifacts
       ) {
         return {
           provider: 'codex',

@@ -299,11 +299,12 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           输出目录。
         </p>
         <p>
-          如果 Codex 在写完有效 manifest 后没有及时退出，adapter
-          会尝试读取并校验
+          如果 Codex 在写完有效 manifest
+          后没有及时退出，或写完后仍返回非零退出码，adapter 会尝试读取并校验
           <code>$TEKON_ARTIFACT_MANIFEST</code> 指向的文件；只要 workflow 必需
           artifact 已完整入库，该节点会继续进入后续 gate。若 manifest
-          缺失、schema 非法或必需 artifact 不齐，该节点仍会失败。
+          缺失、schema 非法、必需 artifact 不齐，或 artifact path/symlink
+          边界校验失败，该节点仍会失败。
         </p>
         <p>
           <code>TEKON_ARTIFACT_MANIFEST</code> 是环境变量，值是 manifest
@@ -395,9 +396,9 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
             <tr>
               <td><code>agent failed: provider=codex exitCode=1</code></td>
               <td>
-                manifest 缺失、artifact schema 不合法、命令失败，或用户 args
-                试图覆盖 profile、sandbox、approval、文件系统、配置或危险
-                bypass。
+                manifest 缺失、artifact schema 不合法、必需 artifact
+                不齐，命令失败，或用户 args 试图覆盖
+                profile、sandbox、approval、文件系统、配置或危险 bypass。
               </td>
               <td>
                 查 stdout/stderr、<code>artifact-manifest.json</code>、字面
