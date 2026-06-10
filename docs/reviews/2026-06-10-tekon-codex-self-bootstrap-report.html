@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon Codex 自举闭环归档报告</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17202a;
+        --muted: #5d6b78;
+        --line: #d8dee5;
+        --soft: #f5f7fa;
+        --panel: #ffffff;
+        --accent: #1f6feb;
+        --ok: #137333;
+        --warn: #8a5700;
+      }
+
+      body {
+        margin: 0;
+        background: #f7f8fa;
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        line-height: 1.62;
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 28px;
+        padding-bottom: 22px;
+      }
+
+      h1 {
+        font-size: 32px;
+        line-height: 1.25;
+        margin: 0 0 12px;
+      }
+
+      h2 {
+        font-size: 21px;
+        margin: 34px 0 12px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 6px;
+      }
+
+      p {
+        margin: 10px 0;
+      }
+
+      code {
+        background: #eef2f7;
+        border: 1px solid #dde3ea;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .summary {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 16px 18px;
+        margin: 18px 0 26px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 18px 0 26px;
+      }
+
+      .metric {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        min-height: 86px;
+      }
+
+      .metric b {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .metric span {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .ok {
+        color: var(--ok);
+      }
+
+      .warn {
+        color: var(--warn);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        margin: 14px 0 24px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--soft);
+        font-weight: 700;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      ul,
+      ol {
+        padding-left: 22px;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .note {
+        background: #fff8e6;
+        border: 1px solid #f0d48a;
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          padding: 24px 14px 40px;
+        }
+
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tekon Codex 自举闭环归档报告</h1>
+        <p class="meta">
+          日期：2026-06-10｜范围：Codex provider P0 真实样本闭环、Tekon
+          自身自举验证、真实 PR 创建
+        </p>
+      </header>
+
+      <section class="summary">
+        <p>
+          <strong>结论：</strong>P0 目标已达成。Tekon 已使用真实
+          <code>codex --profile internal</code> 完成一次
+          <code>docs-update</code> 工作流，工作流状态为
+          <code>passed</code>，本地 gates 全部通过，远端 PR 已创建且 CI
+          通过；未执行 merge 或 release。
+        </p>
+      </section>
+
+      <section class="grid" aria-label="核心指标">
+        <div class="metric">
+          <b>Run</b>
+          <span>passed</span>
+        </div>
+        <div class="metric">
+          <b>Gates</b>
+          <span class="ok">8 passed</span>
+        </div>
+        <div class="metric">
+          <b>PR</b>
+          <span>#2 open</span>
+        </div>
+        <div class="metric">
+          <b>CI</b>
+          <span class="ok">pass</span>
+        </div>
+      </section>
+
+      <h2>1. 用户约束</h2>
+      <ul>
+        <li>先适配 Codex，不先适配 Trae。</li>
+        <li>
+          真实 provider 启动方式必须是 <code>codex --profile internal</code>。
+        </li>
+        <li>P0 只做真实样本闭环，从 Tekon 自身需求开始自举验证。</li>
+        <li>最终只需要创建真实 PR，不自动合入、不上线。</li>
+      </ul>
+
+      <h2>2. 真实运行结果</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>成功 run id</th>
+            <td><code>run_d2350140-b1b7-4fca-b01b-e28daac61e31</code></td>
+          </tr>
+          <tr>
+            <th>Workflow</th>
+            <td><code>docs-update</code></td>
+          </tr>
+          <tr>
+            <th>Agent</th>
+            <td><code>codex</code></td>
+          </tr>
+          <tr>
+            <th>Provider 启动证据</th>
+            <td>
+              provider stderr 显示 OpenAI Codex，并使用 node
+              worktree；既有修复固定使用
+              <code>codex --profile internal</code>。
+            </td>
+          </tr>
+          <tr>
+            <th>Workflow 状态</th>
+            <td><code>passed</code></td>
+          </tr>
+          <tr>
+            <th>Gates</th>
+            <td>8 passed, 0 failed</td>
+          </tr>
+          <tr>
+            <th>Artifacts</th>
+            <td>
+              demand-card, code-changes, test-report, review-report,
+              delivery-package, ci-status
+            </td>
+          </tr>
+          <tr>
+            <th>PR</th>
+            <td>
+              <a href="https://github.com/zesming/tekon/pull/2"
+                >https://github.com/zesming/tekon/pull/2</a
+              >
+              ，Open，base <code>main</code>，head
+              <code
+                >tekon-delivery/run_d2350140-b1b7-4fca-b01b-e28daac61e31</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <th>Remote CI</th>
+            <td>
+              <span class="ok"
+                >Core build and tests pass；Lint GitHub Actions workflows
+                pass</span
+              >
+            </td>
+          </tr>
+          <tr>
+            <th>Readiness</th>
+            <td>
+              <code>score=0.90</code>，<code>ready=false</code>，剩余缺口为
+              <code>acceptance-criteria-evidenced</code> 结构化映射不足。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>3. 闭环内容</h2>
+      <p>
+        本次真实自举样本选择 Tekon 自身需求：补充
+        <code>docs/manual/codex-provider-smoke.md</code> 与
+        <code>docs/manual/codex-provider-smoke.html</code> 中 artifact
+        输出目录诊断说明。真实 RD 节点改动 smoke 文档，明确写出：
+      </p>
+      <ul>
+        <li>
+          真实 Tekon run 会由 adapter 在 <code>exec</code> 前受控追加
+          <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>。
+        </li>
+        <li>
+          <code>TEKON_OUTPUT_DIR</code> 必须匹配当前 run/node 的受控输出目录。
+        </li>
+        <li>输出目录不能指向其它 run、其它 node、共享目录或 symlink。</li>
+        <li>
+          若输出目录不匹配当前 run/node，或路径经 symlink 跳转，应视为 artifact
+          输出目录诊断异常。
+        </li>
+      </ul>
+
+      <h2>4. 关键失败与修复</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>阶段</th>
+            <th>失败现象</th>
+            <th>根因</th>
+            <th>处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Codex 认证</td>
+            <td><code>401</code></td>
+            <td>internal profile 未生效或凭据未正确进入 provider</td>
+            <td>
+              固定 Codex provider 使用 <code>codex --profile internal</code>
+            </td>
+          </tr>
+          <tr>
+            <td>Artifact 输出目录</td>
+            <td>Codex sandbox 无法写主仓库 <code>.tekon/runs/...</code></td>
+            <td>artifact 输出目录未加入 workspace-write 可写范围</td>
+            <td>
+              adapter 受控追加 <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>
+            </td>
+          </tr>
+          <tr>
+            <td>Provider 协议</td>
+            <td>写 manifest 后继续无关动作或启动嵌套审阅</td>
+            <td>prompt 对完成后停止的约束不足</td>
+            <td>强化 artifact protocol 和 provider 节点边界</td>
+          </tr>
+          <tr>
+            <td>Artifact schema</td>
+            <td>真实模型输出字段漂移</td>
+            <td>provider-style 字段与 Tekon schema 存在差异</td>
+            <td>增加 schema 归一化和兼容，但保持边界</td>
+          </tr>
+          <tr>
+            <td>安全扫描</td>
+            <td>测试 fixture 假 key 被真实 scanner 命中</td>
+            <td>测试字符串静态命中过于接近真实密钥</td>
+            <td>测试改为运行时拼接，不削弱生产 scanner</td>
+          </tr>
+          <tr>
+            <td>Worktree finalize</td>
+            <td>ignored <code>.tekon</code> 运行态被拖入</td>
+            <td>finalize 使用 broad <code>git add .</code></td>
+            <td>
+              解析 <code>git status --porcelain=v1 -z</code> 的真实可提交改动
+            </td>
+          </tr>
+          <tr>
+            <td>RD timeout</td>
+            <td>RD 在写 manifest 前尝试安装依赖和测试</td>
+            <td>角色 TDD 技能与 provider artifact protocol 顺序冲突</td>
+            <td>
+              对 RD/code-changes 节点增加 manifest 优先约束，验证交给 Tekon
+              gates
+            </td>
+          </tr>
+          <tr>
+            <td>PR 创建</td>
+            <td>
+              PR title/body 中的 <code>&lt;TEKON_OUTPUT_DIR&gt;</code> 被拒绝
+            </td>
+            <td>CommandGateway 把 argv 数据误判为 shell 控制语法</td>
+            <td>保持 <code>shell:false</code>，仅拒绝独立 shell 控制 token</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5. 本地与远端验证</h2>
+      <ul>
+        <li>Codex/engine 相关单测：84 tests passed。</li>
+        <li>CommandGateway/delivery/CI 相关单测：32 tests passed。</li>
+        <li><code>pnpm typecheck</code>：通过。</li>
+        <li><code>pnpm build</code>：通过。</li>
+        <li>secret scan：0 findings。</li>
+        <li><code>git diff --check</code>：通过。</li>
+        <li>远端 CI：两个 GitHub Actions checks 均通过。</li>
+      </ul>
+
+      <h2>6. 人工控制边界</h2>
+      <p>
+        本次执行使用 <code>delivery create-pr --approve-human</code> 创建真实
+        PR。该批准只覆盖用户明确要求的“创建真实 PR”。未执行
+        merge、release、上线或 force push。PR 当前保持 open
+        状态，后续合入仍应由人类审阅和批准。
+      </p>
+
+      <h2>7. Readiness 解读</h2>
+      <div class="note">
+        <p>
+          <code>tekon eval readiness</code> 当前为 <code>ready=false</code>、
+          <code>score=0.90</code>，剩余缺口是
+          <code>acceptance-criteria-evidenced</code>。判断：这不是 P0
+          真实闭环阻断项。QA、reviewer、PMO artifact 已用自然语言记录验收依据，
+          PR 与 CI 已完成；但 readiness 尚未把这些证据自动映射到 PM demand-card
+          的 6 条 AC。
+        </p>
+      </div>
+
+      <h2>8. 后续优先级建议</h2>
+      <ol>
+        <li>P0 收尾：保留 PR open，等待人工审阅，不自动 merge。</li>
+        <li>P1：改进 readiness 的 AC evidence 映射。</li>
+        <li>
+          P1：减少 PR body 标题截断和 evidence unknown，提升 PR 包可读性。
+        </li>
+        <li>P1：沉淀 Codex provider 的失败样本回归集。</li>
+        <li>P2：在 Codex 闭环稳定后，再规划 Trae provider。</li>
+      </ol>
+
+      <h2>9. 总结</h2>
+      <p>
+        事实：Tekon 已经完成一次真实 Codex provider 自举闭环，并创建真实
+        PR。推断：当前实现达到 P0 验证目标，但 readiness 的 AC evidence
+        自动映射仍不足，属于证据产品化能力缺口。建议：本 PR 进入人工
+        review；不要自动 merge。
+      </p>
+    </main>
+  </body>
+</html>
