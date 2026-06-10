@@ -10,6 +10,7 @@ test-results/
 playwright-report/
 
 # Tekon 运行时产物（不提交）
+.tekon/
 .tekon/runs/
 .tekon/worktrees/
 .tekon/web-session.json

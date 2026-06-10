@@ -194,6 +194,7 @@ describe('web write authorization', () => {
         provider: 'codex',
         command: 'codex',
         args: [],
+        profile: 'internal',
         promptMode: 'stdin',
         outputFormat: 'text',
         timeoutMs: 300_000,
@@ -389,6 +390,7 @@ describe('web write authorization', () => {
           provider: 'codex',
           command: 'codex',
           args: [],
+          profile: 'internal',
           promptMode: 'stdin',
           outputFormat: 'text',
         }),
@@ -630,6 +632,10 @@ const args = process.argv.slice(2);
 const execIndex = args.indexOf('exec');
 if (execIndex === -1) {
   console.error('expected codex exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== 'internal') {
+  console.error('expected internal profile before exec, got: ' + args.join(' '));
   process.exit(2);
 }
 if (args.indexOf('--ask-for-approval') === -1 || args.indexOf('--ask-for-approval') > execIndex) {

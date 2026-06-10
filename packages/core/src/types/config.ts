@@ -97,6 +97,10 @@ export const agentAdapterConfigSchema = z.object({
   provider: z.enum(['mock', 'claude-code', 'codex', 'custom']),
   command: z.string().min(1).optional(),
   args: z.array(z.string()).default([]),
+  profile: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+$/u, 'agent profile must be a safe profile name')
+    .optional(),
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
   outputFormat: z.enum(['text', 'json']).default('text'),
   permissionProfile: permissionProfileSchema,

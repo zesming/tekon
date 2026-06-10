@@ -285,8 +285,8 @@
               <td>
                 Tekon 默认应使用
                 <code
-                  >codex --sandbox workspace-write --ask-for-approval on-request
-                  exec</code
+                  >codex --profile internal --sandbox workspace-write
+                  --ask-for-approval on-request exec</code
                 >，拒绝危险绕过参数
               </td>
             </tr>
@@ -389,12 +389,12 @@
           <li>
             Codex provider 默认命令使用
             <code
-              >codex --sandbox workspace-write --ask-for-approval on-request
-              exec</code
+              >codex --profile internal --sandbox workspace-write
+              --ask-for-approval on-request exec</code
             >。
           </li>
           <li>
-            用户配置不得覆盖 sandbox 和 approval，不得开启
+            用户配置不得覆盖 profile、sandbox 和 approval，不得开启
             <code>danger-full-access</code> 或 bypass approvals。
           </li>
           <li>

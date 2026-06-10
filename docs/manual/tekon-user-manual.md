@@ -238,7 +238,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --sandbox workspace-write --ask-for-approval on-request exec`。它会通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`。它会通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
 
 ### 4.6 查看结果
 
@@ -350,7 +350,7 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
 
 - `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
 - `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
-- `codex`：本机 Codex CLI adapter，使用 `codex exec` 非交互执行，需本机 Codex CLI 已安装并认证。
+- `codex`：本机 Codex CLI adapter，使用 `codex --profile internal ... exec` 非交互执行，需本机 Codex CLI 已安装并认证 internal profile。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 
@@ -977,12 +977,12 @@ Web dashboard 适合：
 - 本机未安装 `codex`，或 `codex` 不在 `PATH` 中。
 - 本机 Codex CLI 未完成认证。
 - provider 没有按 Tekon artifact manifest 协议写入必需 artifact。
-- 用户传入的 Codex args 试图覆盖 sandbox、approval、文件系统、配置或危险 bypass 参数。
+- 用户传入的 Codex args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass 参数。
 - Codex 在当前仓库需要人工批准，但 Tekon 节点执行没有拿到可恢复的 artifact 证据。
 
 处理：
 
-- 先执行 `codex --version` 和一个最小 `codex exec` smoke，确认本机 CLI 可用。
+- 先执行 `codex --version` 和一个最小 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help` smoke，确认本机 CLI 与 internal profile 可用。
 - 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。
 - 确认 artifact JSON/YAML/Markdown 满足 Tekon schema。
 - 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。

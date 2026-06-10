@@ -38,20 +38,20 @@
 
 ## 核心能力
 
-| 能力              | 当前状态                                       | 说明                                                                                                                      |
-| ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形          | 已实现本地版                                   | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后才能默认进入执行。                              |
-| Workflow 模板     | 已实现受控模板                                 | 内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`。                                       |
-| Workflow 选择评估 | 已实现                                         | `workflow select` 给出推荐模板，`eval workflow-selection` 检查选择质量。                                                  |
-| 角色系统          | 已实现                                         | `roles/` 下维护 PM、RD、QA、Reviewer、PMO 等角色的描述、工具、技能和知识。                                                |
-| 执行隔离          | 已实现本地 worktree 版                         | Engine 在真实 git worktree lease 中执行节点，交付分支使用 `tekon-delivery/<runId>`。                                      |
-| Provider 接入     | 已实现 mock、Claude Code 与 Codex adapter 协议 | 真实 provider 通过 artifact manifest 交付结构化产物；Codex 走本机 `codex exec`，缺少必需 artifact 时节点失败。            |
-| Gate 与证据       | 已实现本地版                                   | 支持 build、lint、test、e2e-pass、security-scan、schema、human 等 gate，并记录日志和 artifact。                           |
-| 审阅面            | 已实现 CLI/Web 聚合视图                        | `tekon review` 和 Web dashboard 汇总 readiness、证据导航、失败诊断、diff、artifact 正文和 PR 包。                         |
-| 交付准备          | 已实现受控流程                                 | `delivery dry-run` 只生成计划，`delivery prepare` 生成本地 PR 包，`delivery create-pr --approve-human` 才产生远端副作用。 |
-| 远端 CI 证据      | 已实现只读查询                                 | `delivery ci-status` 和 `delivery ci-watch` 只读查询 GitHub PR checks，不 rerun CI、不 merge、不上线。                    |
-| 效果评估          | 已实现本地评估                                 | `eval readiness`、`eval work-usability`、`eval approval-summary` 等用于判断证据质量和工作可用性。                         |
-| Web dashboard     | 已实现本地版                                   | 提供 human approval、run 发起、PR 准备、受控 PR 创建和审阅面。                                                            |
+| 能力              | 当前状态                                       | 说明                                                                                                                                  |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形          | 已实现本地版                                   | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后才能默认进入执行。                                          |
+| Workflow 模板     | 已实现受控模板                                 | 内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`。                                                   |
+| Workflow 选择评估 | 已实现                                         | `workflow select` 给出推荐模板，`eval workflow-selection` 检查选择质量。                                                              |
+| 角色系统          | 已实现                                         | `roles/` 下维护 PM、RD、QA、Reviewer、PMO 等角色的描述、工具、技能和知识。                                                            |
+| 执行隔离          | 已实现本地 worktree 版                         | Engine 在真实 git worktree lease 中执行节点，交付分支使用 `tekon-delivery/<runId>`。                                                  |
+| Provider 接入     | 已实现 mock、Claude Code 与 Codex adapter 协议 | 真实 provider 通过 artifact manifest 交付结构化产物；Codex 走本机 `codex --profile internal ... exec`，缺少必需 artifact 时节点失败。 |
+| Gate 与证据       | 已实现本地版                                   | 支持 build、lint、test、e2e-pass、security-scan、schema、human 等 gate，并记录日志和 artifact。                                       |
+| 审阅面            | 已实现 CLI/Web 聚合视图                        | `tekon review` 和 Web dashboard 汇总 readiness、证据导航、失败诊断、diff、artifact 正文和 PR 包。                                     |
+| 交付准备          | 已实现受控流程                                 | `delivery dry-run` 只生成计划，`delivery prepare` 生成本地 PR 包，`delivery create-pr --approve-human` 才产生远端副作用。             |
+| 远端 CI 证据      | 已实现只读查询                                 | `delivery ci-status` 和 `delivery ci-watch` 只读查询 GitHub PR checks，不 rerun CI、不 merge、不上线。                                |
+| 效果评估          | 已实现本地评估                                 | `eval readiness`、`eval work-usability`、`eval approval-summary` 等用于判断证据质量和工作可用性。                                     |
+| Web dashboard     | 已实现本地版                                   | 提供 human approval、run 发起、PR 准备、受控 PR 创建和审阅面。                                                                        |
 
 ## 当前边界
 
@@ -113,7 +113,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex --sandbox workspace-write --ask-for-approval on-request exec`，并通过 `TEKON_OUTPUT_DIR` / `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。它不会改变 Tekon 的人工审批边界：创建 PR、合入和上线仍需人控制。
+Codex provider 使用本机 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`，并通过 `TEKON_OUTPUT_DIR` / `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。它不会改变 Tekon 的人工审批边界：创建 PR、合入和上线仍需人控制。
 
 查看状态和审阅面：
 

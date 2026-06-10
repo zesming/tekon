@@ -49,6 +49,7 @@ describe('runtime config schemas', () => {
         provider: 'codex',
         command: 'codex',
         args: ['exec'],
+        profile: 'internal',
         promptMode: 'stdin',
         outputFormat: 'text',
         permissionProfile: {
@@ -59,7 +60,7 @@ describe('runtime config schemas', () => {
           tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
         },
       }),
-    ).toMatchObject({ provider: 'codex' });
+    ).toMatchObject({ provider: 'codex', profile: 'internal' });
 
     expect(
       workflowTemplateSchema.parse({
@@ -105,6 +106,21 @@ describe('runtime config schemas', () => {
         filesystemScope: ['/'],
         network: 'enabled',
         tools: { allow: ['*'], deny: [] },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      agentAdapterConfigSchema.parse({
+        provider: 'codex',
+        command: 'codex',
+        profile: 'internal;rm',
+        permissionProfile: {
+          sandbox: 'workspace-write',
+          approval: 'on-request',
+          filesystemScope: ['/tmp/tekon'],
+          network: 'restricted',
+          tools: { allow: ['Read'], deny: [] },
+        },
       }),
     ).toThrow();
   });

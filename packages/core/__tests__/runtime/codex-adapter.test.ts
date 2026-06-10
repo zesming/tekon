@@ -29,6 +29,7 @@ describe('codex adapter', () => {
         provider: 'codex',
         command: 'codex',
         args: [],
+        profile: 'internal',
         promptMode: 'stdin',
         outputFormat: 'text',
         timeoutMs: 1000,
@@ -39,6 +40,8 @@ describe('codex adapter', () => {
 
     expect(command.tool).toBe('codex');
     expect(command.args).toEqual([
+      '--profile',
+      'internal',
       '--sandbox',
       'workspace-write',
       '--ask-for-approval',
@@ -54,6 +57,7 @@ describe('codex adapter', () => {
         provider: 'codex',
         command: 'codex',
         args: ['--model', 'gpt-5'],
+        profile: 'internal',
         promptMode: 'stdin',
         outputFormat: 'text',
         timeoutMs: 1000,
@@ -63,6 +67,8 @@ describe('codex adapter', () => {
     );
 
     expect(command.args).toEqual([
+      '--profile',
+      'internal',
       '--sandbox',
       'workspace-write',
       '--ask-for-approval',
@@ -70,6 +76,31 @@ describe('codex adapter', () => {
       'exec',
       '--model',
       'gpt-5',
+    ]);
+  });
+
+  it('defaults real Codex commands to the internal profile when a replayed config omits profile', () => {
+    const command = buildCodexCommand(
+      {
+        provider: 'codex',
+        command: 'codex',
+        args: [],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 1000,
+        permissionProfile: safePermissionProfile('/tmp/repo'),
+      },
+      { prompt: 'implement fixture' },
+    );
+
+    expect(command.args).toEqual([
+      '--profile',
+      'internal',
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'on-request',
+      'exec',
     ]);
   });
 
@@ -102,6 +133,10 @@ describe('codex adapter', () => {
     ['-p'],
     ['-punsafe'],
     ['--profile=unsafe'],
+    ['--image'],
+    ['-i'],
+    ['-i/tmp/outside.png'],
+    ['--image=/tmp/outside.png'],
     ['--output-last-message'],
     ['-o'],
     ['-o/tmp/final.txt'],
@@ -136,6 +171,24 @@ describe('codex adapter', () => {
         { prompt: 'hello' },
       ),
     ).toThrow(/codex sandbox, approval, filesystem, and config boundaries/u);
+  });
+
+  it('rejects unsafe Tekon-controlled Codex profile names', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          profile: 'internal;rm',
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        { prompt: 'hello' },
+      ),
+    ).toThrow(/codex profile must be a safe profile name/u);
   });
 
   it('passes prompts through stdin when promptMode is stdin', async () => {

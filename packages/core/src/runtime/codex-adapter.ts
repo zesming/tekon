@@ -20,6 +20,7 @@ const CONTROLLED_CODEX_GLOBAL_ARGS = [
   '--ask-for-approval',
   'on-request',
 ] as const;
+const DEFAULT_CODEX_PROFILE = 'internal';
 const CODEX_EXEC_SUBCOMMAND = 'exec';
 
 export function buildCodexCommand(
@@ -32,8 +33,9 @@ export function buildCodexCommand(
   if (isRealCodexCommand) {
     assertSafeCodexArgs(userArgs);
   }
+  const controlledGlobalArgs = controlledCodexGlobalArgs(config);
   const args = isRealCodexCommand
-    ? [...CONTROLLED_CODEX_GLOBAL_ARGS, CODEX_EXEC_SUBCOMMAND, ...userArgs]
+    ? [...controlledGlobalArgs, CODEX_EXEC_SUBCOMMAND, ...userArgs]
     : [...userArgs, CODEX_EXEC_SUBCOMMAND, ...CONTROLLED_CODEX_GLOBAL_ARGS];
 
   if (config.promptMode === 'arg-append') {
@@ -147,6 +149,21 @@ function isCodexCommand(command: string): boolean {
   return basename(command) === 'codex';
 }
 
+function controlledCodexGlobalArgs(config: AgentAdapterConfig): string[] {
+  const profileArgs = [
+    '--profile',
+    assertSafeCodexProfile(config.profile ?? DEFAULT_CODEX_PROFILE),
+  ];
+  return [...profileArgs, ...CONTROLLED_CODEX_GLOBAL_ARGS];
+}
+
+function assertSafeCodexProfile(profile: string): string {
+  if (!/^[A-Za-z0-9._-]+$/u.test(profile)) {
+    throw new Error('codex profile must be a safe profile name');
+  }
+  return profile;
+}
+
 function assertSafeCodexArgs(args: readonly string[]): void {
   if (
     args.some(
@@ -184,6 +201,10 @@ function assertSafeCodexArgs(args: readonly string[]): void {
         arg === '-p' ||
         arg.startsWith('-p') ||
         arg.startsWith('--profile=') ||
+        arg === '--image' ||
+        arg === '-i' ||
+        arg.startsWith('-i') ||
+        arg.startsWith('--image=') ||
         arg === '--output-last-message' ||
         arg === '-o' ||
         arg.startsWith('-o') ||

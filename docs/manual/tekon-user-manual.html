@@ -1402,8 +1402,8 @@
             <span class="callout-label">Codex provider</span>
             Codex provider 使用本机 <code>codex exec</code> 非交互模式，固定
             <code
-              >codex --sandbox workspace-write --ask-for-approval on-request
-              exec</code
+              >codex --profile internal --sandbox workspace-write
+              --ask-for-approval on-request exec</code
             >，并通过 <code>TEKON_OUTPUT_DIR</code> /
             <code>TEKON_ARTIFACT_MANIFEST</code> 写回 Tekon artifact。
           </div>
@@ -2352,11 +2352,16 @@
           <p>
             <strong>常见原因：</strong>本机未安装 <code>codex</code>、Codex CLI
             未完成认证、provider 没有写入必需 artifact manifest，或用户 args
-            试图覆盖 sandbox / approval / filesystem / config / bypass 参数。
+            试图覆盖 profile / sandbox / approval / filesystem / config / bypass
+            参数。
           </p>
           <p>
             <strong>处理：</strong>先执行 <code>codex --version</code> 和最小
-            <code>codex exec</code> smoke；再查看
+            <code
+              >codex --profile internal --sandbox workspace-write
+              --ask-for-approval on-request exec --help</code
+            >
+            smoke；再查看
             <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下
             stdout/stderr、<code>artifact-manifest.json</code> 和 artifact
             内容。不要把真实 provider 失败降级成 mock 通过。
