@@ -182,6 +182,12 @@ describe('workflow engine role prompt integration', () => {
       'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
     );
     expect(prompts[0]).toContain(
+      'Write required artifact files and TEKON_ARTIFACT_MANIFEST before optional checks or reviews.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
+    );
+    expect(prompts[0]).toContain(
       'Do not continue editing, formatting, running checks, printing diffs, or explaining',
     );
     db.close();
@@ -267,6 +273,9 @@ describe('workflow engine role prompt integration', () => {
     );
     expect(prompts[0]).toContain(
       'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
     );
     db.close();
   });

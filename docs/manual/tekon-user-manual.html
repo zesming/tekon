@@ -1409,8 +1409,8 @@
             <code>TEKON_ARTIFACT_MANIFEST</code> 写回 Tekon artifact。
             <code>--add-dir</code> 只由 Tekon 受控追加到本节点 artifact
             输出目录。非 <code>code-changes</code> 节点会被要求只写节点
-            artifact、不修改仓库工作区；所有需要 artifact 的节点写完 manifest
-            后立即退出。
+            artifact、不修改仓库工作区；所有需要 artifact 的节点先写
+            artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅。
           </div>
 
           <h3>4.6 查看结果</h3>
