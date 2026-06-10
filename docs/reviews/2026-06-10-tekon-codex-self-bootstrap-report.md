@@ -57,6 +57,10 @@
 
 - `pnpm vitest run packages/core/__tests__/workflow/engine-role-prompt.test.ts packages/core/__tests__/workflow/engine-recovery.e2e.test.ts packages/core/__tests__/runtime/codex-adapter.test.ts packages/core/__tests__/runtime/worktree-manager.test.ts`：84 tests passed。
 - `pnpm vitest run packages/core/__tests__/runtime/command-gateway.test.ts packages/core/__tests__/delivery/scm.test.ts packages/core/__tests__/delivery/ci-status.test.ts`：32 tests passed。
+- `pnpm --filter @tekon/core test:e2e`：7 files、13 tests passed。
+- `pnpm --filter @tekon/cli test:e2e`：2 files、2 tests passed。
+- `pnpm --filter @tekon/web test`：4 files、16 tests passed。
+- `pnpm --filter @tekon/web test:e2e`：2 Playwright tests passed。
 - `pnpm typecheck`：通过。
 - `pnpm build`：通过。
 - `scanFilesForSecrets(process.cwd())`：0 findings。
