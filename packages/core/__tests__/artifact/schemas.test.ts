@@ -108,6 +108,89 @@ describe('artifact schemas', () => {
     });
   });
 
+  it('normalizes provider-style acceptance criteria for demand cards', () => {
+    expect(
+      validateArtifactContent(
+        'demand-card',
+        JSON.stringify({
+          title: '补充 Codex provider smoke 文档中的 artifact 输出目录诊断说明',
+          body: '同步更新 Markdown 源稿与 HTML 审阅版。',
+          acceptance_criteria: [
+            {
+              id: 'AC-1',
+              criterion:
+                'Markdown 源稿包含 --add-dir <TEKON_OUTPUT_DIR> 说明。',
+              verification:
+                'QA 在相关 Markdown 文件中搜索 --add-dir <TEKON_OUTPUT_DIR>。',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      acceptanceCriteria: [
+        {
+          id: 'AC-1',
+          description: 'Markdown 源稿包含 --add-dir <TEKON_OUTPUT_DIR> 说明。',
+        },
+      ],
+    });
+  });
+
+  it('keeps provider-style acceptance criteria normalization narrow', () => {
+    const invalidCriteria = [
+      [],
+      [{ id: '', criterion: 'Missing id.' }],
+      [{ id: 'AC-1', criterion: '' }],
+      [{ id: 'AC-1' }],
+      ['AC-1'],
+    ];
+
+    for (const acceptance_criteria of invalidCriteria) {
+      expect(() =>
+        validateArtifactContent(
+          'demand-card',
+          JSON.stringify({
+            title: 'Demand card',
+            body: 'Scoped documentation update.',
+            acceptance_criteria,
+          }),
+        ),
+      ).toThrow();
+    }
+
+    expect(() =>
+      validateArtifactContent(
+        'demand-card',
+        [
+          '---',
+          'title: Demand card',
+          'body: Scoped documentation update.',
+          'acceptance_criteria:',
+          '  - id: AC-1',
+          '    criterion: Document output directory diagnostics.',
+          '---',
+          '',
+        ].join('\n'),
+      ),
+    ).toThrow();
+
+    const testReport = validateArtifactContent(
+      'test-report',
+      JSON.stringify({
+        title: 'Test report',
+        body: 'Provider-style criteria are not test evidence.',
+        acceptance_criteria: [
+          {
+            id: 'AC-1',
+            criterion: 'This should not satisfy criteriaEvidence.',
+          },
+        ],
+      }),
+    );
+    expect(testReport).not.toHaveProperty('acceptanceCriteria');
+    expect(testReport).not.toHaveProperty('criteriaEvidence');
+  });
+
   it('rejects non-provider-style code changes artifacts without title and body', () => {
     for (const payload of [
       {},

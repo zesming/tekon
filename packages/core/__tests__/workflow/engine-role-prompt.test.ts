@@ -188,6 +188,9 @@ describe('workflow engine role prompt integration', () => {
       'TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
     );
     expect(prompts[0]).toContain(
+      'For demand-card and prd JSON artifacts, include acceptanceCriteria with id and description fields.',
+    );
+    expect(prompts[0]).toContain(
       'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
     );
     expect(prompts[0]).toContain(

@@ -505,7 +505,7 @@ describe('codex adapter', () => {
         "import { writeFileSync } from 'node:fs';",
         "import { join } from 'node:path';",
         'const outputDir = process.env.TEKON_OUTPUT_DIR;',
-        "writeFileSync(join(outputDir, 'demand-card.json'), JSON.stringify({ title: 'Demand card', body: 'Scoped Codex smoke documentation update.', acceptanceCriteria: [{ id: 'AC-1', description: 'Document output directory diagnostics.' }] }));",
+        "writeFileSync(join(outputDir, 'demand-card.json'), JSON.stringify({ title: 'Demand card', body: 'Scoped Codex smoke documentation update.', acceptance_criteria: [{ id: 'AC-1', criterion: 'Document output directory diagnostics.' }] }));",
         "writeFileSync(join(outputDir, 'TEKON_ARTIFACT_MANIFEST'), JSON.stringify({ artifacts: [{ type: 'demand-card', path: 'demand-card.json', summary: 'Scoped Codex smoke documentation update.' }] }));",
       ].join('\n'),
       'utf8',

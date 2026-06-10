@@ -796,6 +796,13 @@ export function createWorkflowEngine(
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',
       '- Structured JSON artifacts must include non-empty title and body fields.',
+      ...(input.requiredArtifactTypes.some(
+        (type) => type === 'demand-card' || type === 'prd',
+      )
+        ? [
+            '- For demand-card and prd JSON artifacts, include acceptanceCriteria with id and description fields.',
+          ]
+        : []),
       '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
       '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
       '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',

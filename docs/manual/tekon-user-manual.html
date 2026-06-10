@@ -1418,10 +1418,12 @@
               >git push</code
             >
             或创建 PR。结构化 JSON artifact 必须包含非空
-            <code>title</code> 和 <code>body</code> 字段；<code
-              >code-changes</code
-            >
-            的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
+            <code>title</code> 和
+            <code>body</code> 字段；<code>demand-card</code>/<code>prd</code>
+            应使用 <code>acceptanceCriteria[].id/description</code>，有效的
+            <code>acceptance_criteria[].criterion</code>
+            会被兼容归一化；<code>code-changes</code> 的 provider-style JSON
+            如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
             schema 写完整字段。若 Codex 写完有效 manifest

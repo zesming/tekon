@@ -167,6 +167,9 @@ function normalizeStructuredPayload(
   type: ArtifactType,
   payload: unknown,
 ): unknown {
+  if (type === 'demand-card' || type === 'prd') {
+    return normalizeAcceptanceArtifactPayload(payload);
+  }
   if (
     type !== 'code-changes' ||
     typeof payload !== 'object' ||
@@ -190,6 +193,63 @@ function normalizeStructuredPayload(
     body: body || summary,
     summary: summary ?? 'Code changes',
   };
+}
+
+function normalizeAcceptanceArtifactPayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const criteria =
+    normalizeProviderStyleAcceptanceCriteria(record.acceptanceCriteria) ??
+    normalizeProviderStyleAcceptanceCriteria(record.acceptance_criteria);
+  if (!criteria) {
+    return payload;
+  }
+
+  return {
+    ...record,
+    acceptanceCriteria: criteria,
+  };
+}
+
+function normalizeProviderStyleAcceptanceCriteria(value: unknown):
+  | {
+      id: string;
+      description: string;
+      verification?: string;
+    }[]
+  | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+
+  const criteria: {
+    id: string;
+    description: string;
+    verification?: string;
+  }[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) {
+      return undefined;
+    }
+    const record = entry as Record<string, unknown>;
+    const id = nonEmptyString(record.id);
+    const description =
+      nonEmptyString(record.description) ?? nonEmptyString(record.criterion);
+    if (!id || !description) {
+      return undefined;
+    }
+    const verification = nonEmptyString(record.verification);
+    criteria.push({
+      id,
+      description,
+      ...(verification ? { verification } : {}),
+    });
+  }
+
+  return criteria;
 }
 
 function providerStyleBody(record: Record<string, unknown>): string {
