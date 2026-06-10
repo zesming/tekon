@@ -790,6 +790,8 @@ export function createWorkflowEngine(
       !input.requiredArtifactTypes.includes('code-changes')
         ? '- Required artifact types do not include code-changes; do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.'
         : '- Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+      '- Do not run git add, git commit, git push, or create PRs inside this node.',
+      '- Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
       `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',

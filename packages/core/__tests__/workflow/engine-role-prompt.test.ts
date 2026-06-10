@@ -268,6 +268,12 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       'Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
     );
+    expect(prompts[0]).toContain(
+      'Do not run git add, git commit, git push, or create PRs inside this node.',
+    );
+    expect(prompts[0]).toContain(
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+    );
     expect(prompts[0]).not.toContain(
       'Required artifact types do not include code-changes; do not modify the repository working tree;',
     );

@@ -1411,6 +1411,10 @@
             输出目录。非 <code>code-changes</code> 节点会被要求只写节点
             artifact、不修改仓库工作区；所有需要 artifact 的节点先写
             artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅。
+            节点内也不执行 <code>git add</code>、<code>git commit</code>、<code
+              >git push</code
+            >
+            或创建 PR。
           </div>
 
           <h3>4.6 查看结果</h3>
