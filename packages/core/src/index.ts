@@ -19,6 +19,7 @@ export * from './approval/summary.js';
 export * from './demand/shape.js';
 export * from './runtime/agent-adapter.js';
 export * from './runtime/claude-code-adapter.js';
+export * from './runtime/codex-adapter.js';
 export * from './runtime/mock-agent-adapter.js';
 export * from './gate/engine.js';
 export * from './gate/human-gate.js';

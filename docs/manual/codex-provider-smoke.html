@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Provider Smoke 手册</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --panel-2: #1f2630;
+        --text: #e6edf3;
+        --muted: #9aa4b2;
+        --line: #30363d;
+        --accent: #2f81f7;
+        --ok: #3fb950;
+        --warn: #d29922;
+        --danger: #f85149;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          16px/1.7 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          'PingFang SC',
+          sans-serif;
+      }
+      .shell {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+      header {
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 24px;
+        margin-bottom: 28px;
+      }
+      .eyebrow {
+        color: var(--accent);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(34px, 5vw, 58px);
+        margin-top: 8px;
+      }
+      h2 {
+        font-size: 24px;
+        margin: 36px 0 14px;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 22px 0 10px;
+      }
+      p {
+        margin: 10px 0;
+        color: var(--muted);
+      }
+      a {
+        color: #79c0ff;
+      }
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      code {
+        background: #0b0f14;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 1px 6px;
+        color: #d2a8ff;
+      }
+      pre {
+        overflow-x: auto;
+        background: #0b0f14;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      pre code {
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        padding: 0;
+        color: var(--text);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 14px;
+      }
+      .card,
+      .note {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .card strong {
+        color: var(--text);
+      }
+      .note {
+        border-left: 4px solid var(--accent);
+      }
+      .note.warn {
+        border-left-color: var(--warn);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 14px 0;
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--panel-2);
+      }
+      ul {
+        margin: 10px 0 0;
+        padding-left: 22px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .tag {
+        display: inline-block;
+        margin: 4px 6px 4px 0;
+        padding: 3px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0b0f14;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .tag.ok {
+        border-color: rgba(63, 185, 80, 0.45);
+        color: var(--ok);
+      }
+      .tag.warn {
+        border-color: rgba(210, 153, 34, 0.55);
+        color: var(--warn);
+      }
+      footer {
+        border-top: 1px solid var(--line);
+        margin-top: 44px;
+        padding-top: 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div class="eyebrow">Tekon P0 Provider Smoke</div>
+        <h1>Codex Provider Smoke 手册</h1>
+        <p>
+          用于验证 Tekon <code>--agent codex</code> 能通过本机 Codex CLI
+          跑通真实 provider run，并最终创建真实 PR 证据。
+        </p>
+        <div>
+          <span class="tag ok">codex exec</span>
+          <span class="tag ok">artifact manifest</span>
+          <span class="tag warn">human-approved PR only</span>
+        </div>
+      </header>
+
+      <section>
+        <h2>1. 目标</h2>
+        <div class="grid">
+          <div class="card">
+            <strong>真实 provider</strong>
+            <p>
+              本机 Codex CLI 可用，并由 Tekon 通过
+              <code>codex exec</code> 调起。
+            </p>
+          </div>
+          <div class="card">
+            <strong>结构化产物</strong>
+            <p>
+              Codex 按 <code>TEKON_ARTIFACT_MANIFEST</code> 写回必需 artifact。
+            </p>
+          </div>
+          <div class="card">
+            <strong>可恢复快照</strong>
+            <p>
+              run provider snapshot 记录为 <code>codex</code>，resume 不降级。
+            </p>
+          </div>
+          <div class="card">
+            <strong>真实 PR</strong>
+            <p>
+              只在人工确认后执行
+              <code>delivery create-pr --approve-human</code>。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. 官方资料和判断依据</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>资料</th>
+              <th>资料内容</th>
+              <th>对 Tekon 的判断依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a href="https://developers.openai.com/codex/noninteractive"
+                  >Codex noninteractive</a
+                >
+              </td>
+              <td><code>codex exec</code> 面向脚本、CI 和一次性自动化任务。</td>
+              <td>
+                Tekon 可以把 workflow node 映射为一次非交互 provider 调用。
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://developers.openai.com/codex/agent-approvals-security"
+                  >Approvals &amp; security</a
+                >
+              </td>
+              <td>Codex 支持 sandbox、approval 和网络访问边界组合。</td>
+              <td>
+                Tekon 默认固定
+                <code
+                  >codex --sandbox workspace-write --ask-for-approval on-request
+                  exec</code
+                >。
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://developers.openai.com/codex/cli/reference"
+                  >CLI reference</a
+                >
+              </td>
+              <td>
+                CLI 参考列出
+                <code>exec</code>、sandbox、approval、配置覆盖和危险 bypass
+                参数。
+              </td>
+              <td>
+                Adapter 必须拒绝用户覆盖 sandbox、approval、文件系统、配置或危险
+                bypass。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>3. 前置条件</h2>
+        <pre><code>codex --version
+npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+npm exec --yes -- pnpm@10.12.1 build</code></pre>
+        <div class="note warn">
+          如果 <code>codex --version</code> 不可用，先安装并认证 Codex
+          CLI。不要用 mock 结果替代 Codex provider smoke。
+        </div>
+      </section>
+
+      <section>
+        <h2>4. 最小运行命令</h2>
+        <pre><code>node packages/cli/dist/index.js init --repo /Users/zhaoensheng/Projects/tekon
+
+node packages/cli/dist/index.js run "补齐 Codex provider smoke 证据，要求产出可审阅文档和测试记录。" \
+  --template docs-update \
+  --agent codex \
+  --repo /Users/zhaoensheng/Projects/tekon</code></pre>
+        <p>
+          期望输出包含 <code>runId=run_...</code> 与
+          <code>status=passed</code>。
+        </p>
+        <pre><code>node packages/cli/dist/index.js review --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js status --repo /Users/zhaoensheng/Projects/tekon</code></pre>
+      </section>
+
+      <section>
+        <h2>5. 验证和样本记录</h2>
+        <pre><code>node packages/cli/dist/index.js eval readiness --repo /Users/zhaoensheng/Projects/tekon
+
+node packages/cli/dist/index.js eval work-usability record \
+  --id tekon-codex-self-bootstrap \
+  --expected-provider codex \
+  --require-real-provider \
+  --require-pr \
+  --samples docs/reviews/tekon-codex-work-usability-samples.yaml \
+  --repo /Users/zhaoensheng/Projects/tekon</code></pre>
+      </section>
+
+      <section>
+        <h2>6. 创建 PR</h2>
+        <pre><code>node packages/cli/dist/index.js delivery prepare --repo /Users/zhaoensheng/Projects/tekon
+
+node packages/cli/dist/index.js delivery create-pr \
+  --approve-human \
+  --repo /Users/zhaoensheng/Projects/tekon
+
+node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Projects/tekon</code></pre>
+        <div class="note">
+          <code>ci-status</code> 是只读查询，不 rerun CI、不 merge、不上线。
+        </div>
+      </section>
+
+      <section>
+        <h2>7. 结果归档</h2>
+        <ul>
+          <li>需求摘要、run id 和 provider snapshot。</li>
+          <li>readiness、gate、PR package、PR URL 和 CI status。</li>
+          <li>人工介入点、风险和后续动作。</li>
+          <li>Markdown 与 HTML 报告归档到 <code>docs/reviews/</code>。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>8. 常见失败</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>失败现象</th>
+              <th>可能原因</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Unsupported agent: codex</code></td>
+              <td>CLI/Web 未接线 Codex provider。</td>
+              <td>更新到包含 Codex adapter 的版本并重新构建。</td>
+            </tr>
+            <tr>
+              <td><code>agent failed: provider=codex exitCode=1</code></td>
+              <td>
+                manifest 缺失、artifact schema 不合法、命令失败，或用户 args
+                试图覆盖 sandbox、approval、文件系统、配置或危险 bypass。
+              </td>
+              <td>查 stdout/stderr、manifest 和 artifact 内容。</td>
+            </tr>
+            <tr>
+              <td>resume 拒绝</td>
+              <td>缺 provider snapshot 或 snapshot 不能 replay。</td>
+              <td>重新跑真实 Codex run，不要手工改 provider。</td>
+            </tr>
+            <tr>
+              <td>PR 等待审批</td>
+              <td>未传 <code>--approve-human</code>。</td>
+              <td>审阅 PR 包和 diff 后再显式批准。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <footer>Codex provider smoke · Tekon · 2026-06-10</footer>
+    </main>
+  </body>
+</html>

@@ -16,6 +16,7 @@ import {
   createAuditLogger,
   createClaudeCodeAdapter,
   createCommandGateway,
+  createCodexAdapter,
   createGateEngine,
   createHumanApprovalSummary,
   createMockAgentAdapter,
@@ -1075,6 +1076,15 @@ function createWebAgentRuntime(input: {
     };
   }
 
+  if (input.agent === 'codex') {
+    const config = defaultWebCodexConfig(input.repoPath);
+    return {
+      adapter: createCodexAdapter(config, input.gateway),
+      provider: 'codex',
+      configSummary: summarizeAgentConfig(config),
+    };
+  }
+
   throw new ApiError('BAD_REQUEST', `Unsupported agent: ${input.agent}`);
 }
 
@@ -1109,6 +1119,16 @@ function createWebAgentAdapterFromSnapshot(
     }
     return createClaudeCodeAdapter(parsed.data, gateway);
   }
+  if (provider.provider === 'codex') {
+    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
+    if (!parsed.success || parsed.data.provider !== 'codex') {
+      throw new ApiError(
+        'BAD_REQUEST',
+        `Run ${provider.runId} has a non-replayable codex provider snapshot.`,
+      );
+    }
+    return createCodexAdapter(parsed.data, gateway);
+  }
   throw new ApiError(
     'BAD_REQUEST',
     'Web resume does not support custom agent adapters yet',
@@ -1122,6 +1142,27 @@ function defaultWebClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     args: ['-p'],
     promptMode: 'stdin',
     outputFormat: 'json',
+    timeoutMs: 300_000,
+    permissionProfile: {
+      sandbox: 'workspace-write',
+      approval: 'on-request',
+      filesystemScope: [repoPath],
+      network: 'restricted',
+      tools: {
+        allow: ['git', 'npm', 'pnpm'],
+        deny: ['rm', 'sudo', 'git push --force'],
+      },
+    },
+  };
+}
+
+function defaultWebCodexConfig(repoPath: string): AgentAdapterConfig {
+  return {
+    provider: 'codex',
+    command: 'codex',
+    args: [],
+    promptMode: 'stdin',
+    outputFormat: 'text',
     timeoutMs: 300_000,
     permissionProfile: {
       sandbox: 'workspace-write',

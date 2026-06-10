@@ -37,6 +37,31 @@ describe('runtime config schemas', () => {
     ).toMatchObject({ provider: 'claude-code' });
 
     expect(
+      tekonConfigSchema.parse({
+        project: { name: 'tekon', repoPath: '/tmp/tekon' },
+        storage: { dataDir: '.tekon' },
+        defaultAgent: 'codex',
+      }),
+    ).toMatchObject({ defaultAgent: 'codex' });
+
+    expect(
+      agentAdapterConfigSchema.parse({
+        provider: 'codex',
+        command: 'codex',
+        args: ['exec'],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        permissionProfile: {
+          sandbox: 'workspace-write',
+          approval: 'on-request',
+          filesystemScope: ['/tmp/tekon'],
+          network: 'restricted',
+          tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
+        },
+      }),
+    ).toMatchObject({ provider: 'codex' });
+
+    expect(
       workflowTemplateSchema.parse({
         id: 'standard-feature',
         name: 'Standard Feature',

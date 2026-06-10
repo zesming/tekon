@@ -1,1644 +1,2022 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>天工 Tekon — 用户使用手册</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-/* ═══════════════════════════════════════════════
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>天工 Tekon — 用户使用手册</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ═══════════════════════════════════════════════
    天工 TEKON — User Manual
    Aesthetic: Ink & Seal (水墨印章)
    ═══════════════════════════════════════════════ */
 
-:root {
-  --ink-deepest: #08090d;
-  --ink-deep: #0e1018;
-  --ink-mid: #161822;
-  --ink-light: #1e2030;
-  --ink-faint: #282a3a;
-  --ink-whisper: #353849;
+      :root {
+        --ink-deepest: #08090d;
+        --ink-deep: #0e1018;
+        --ink-mid: #161822;
+        --ink-light: #1e2030;
+        --ink-faint: #282a3a;
+        --ink-whisper: #353849;
 
-  --vermillion: #c43a31;
-  --vermillion-bright: #e8503a;
-  --vermillion-glow: #ff6b52;
-  --vermillion-deep: #8b1a12;
+        --vermillion: #c43a31;
+        --vermillion-bright: #e8503a;
+        --vermillion-glow: #ff6b52;
+        --vermillion-deep: #8b1a12;
 
-  --gold: #c9a96e;
-  --gold-bright: #e8c88a;
-  --gold-dim: #8a7a4e;
+        --gold: #c9a96e;
+        --gold-bright: #e8c88a;
+        --gold-dim: #8a7a4e;
 
-  --jade: #4a9e7a;
-  --jade-bright: #5ec49a;
-  --jade-dim: #2a6e52;
+        --jade: #4a9e7a;
+        --jade-bright: #5ec49a;
+        --jade-dim: #2a6e52;
 
-  --paper: #e8e0d0;
-  --paper-bright: #f2ece0;
-  --paper-dim: #c8bfae;
-  --paper-faint: #a89e8e;
+        --paper: #e8e0d0;
+        --paper-bright: #f2ece0;
+        --paper-dim: #c8bfae;
+        --paper-faint: #a89e8e;
 
-  --text-primary: #d8d0c2;
-  --text-secondary: #9a9488;
-  --text-dim: #6a655e;
-  --text-bright: #f0e8da;
+        --text-primary: #d8d0c2;
+        --text-secondary: #9a9488;
+        --text-dim: #6a655e;
+        --text-bright: #f0e8da;
 
-  --code-bg: #0c0d14;
-  --code-border: #2a2c3e;
+        --code-bg: #0c0d14;
+        --code-border: #2a2c3e;
 
-  --sidebar-w: 280px;
-  --header-h: 64px;
-  --content-max: 900px;
+        --sidebar-w: 280px;
+        --header-h: 64px;
+        --content-max: 900px;
 
-  --font-display: 'Noto Serif SC', 'Songti SC', serif;
-  --font-body: 'LXGW WenKai', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        --font-display: 'Noto Serif SC', 'Songti SC', serif;
+        --font-body:
+          'LXGW WenKai', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
 
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+        --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-html {
-  font-size: 16px;
-  scroll-behavior: smooth;
-}
+      html {
+        font-size: 16px;
+        scroll-behavior: smooth;
+      }
 
-body {
-  font-family: var(--font-body);
-  background: var(--ink-deepest);
-  color: var(--text-primary);
-  line-height: 1.8;
-  overflow-x: hidden;
-  min-height: 100vh;
-}
+      body {
+        font-family: var(--font-body);
+        background: var(--ink-deepest);
+        color: var(--text-primary);
+        line-height: 1.8;
+        overflow-x: hidden;
+        min-height: 100vh;
+      }
 
-/* ── Grain overlay ── */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-size: 200px;
-  pointer-events: none;
-  z-index: 9999;
-}
+      /* ── Grain overlay ── */
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        background-size: 200px;
+        pointer-events: none;
+        z-index: 9999;
+      }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--ink-whisper); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+      /* ── Scrollbar ── */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--ink-whisper);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--gold-dim);
+      }
 
-::selection {
-  background: var(--vermillion);
-  color: var(--paper-bright);
-}
+      ::selection {
+        background: var(--vermillion);
+        color: var(--paper-bright);
+      }
 
-/* ═══════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════
    HEADER
    ═══════════════════════════════════════════════ */
-.site-header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--header-h);
-  background: rgba(8, 9, 13, 0.85);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-  border-bottom: 1px solid rgba(201, 169, 110, 0.08);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  padding: 0 32px;
-}
+      .site-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: var(--header-h);
+        background: rgba(8, 9, 13, 0.85);
+        backdrop-filter: blur(20px) saturate(1.2);
+        -webkit-backdrop-filter: blur(20px) saturate(1.2);
+        border-bottom: 1px solid rgba(201, 169, 110, 0.08);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        padding: 0 32px;
+      }
 
-.header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
+      .header-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+      }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
 
-.brand-seal {
-  width: 40px;
-  height: 40px;
-  background: var(--vermillion);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 18px;
-  color: var(--paper-bright);
-  letter-spacing: -1px;
-  position: relative;
-  box-shadow: 0 2px 12px rgba(196, 58, 49, 0.3);
-  transform: rotate(-2deg);
-}
+      .brand-seal {
+        width: 40px;
+        height: 40px;
+        background: var(--vermillion);
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-display);
+        font-weight: 900;
+        font-size: 18px;
+        color: var(--paper-bright);
+        letter-spacing: -1px;
+        position: relative;
+        box-shadow: 0 2px 12px rgba(196, 58, 49, 0.3);
+        transform: rotate(-2deg);
+      }
 
-.brand-seal::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
-}
+      .brand-seal::after {
+        content: '';
+        position: absolute;
+        inset: 2px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 2px;
+      }
 
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
+      .brand-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+      }
 
-.brand-zh {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 17px;
-  color: var(--text-bright);
-  letter-spacing: 2px;
-}
+      .brand-zh {
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 17px;
+        color: var(--text-bright);
+        letter-spacing: 2px;
+      }
 
-.brand-en {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--gold);
-  letter-spacing: 3px;
-  text-transform: uppercase;
-}
+      .brand-en {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--gold);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+      }
 
-.header-meta {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  font-size: 12px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-}
+      .header-meta {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        font-size: 12px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+      }
 
-.header-badge {
-  padding: 4px 10px;
-  border: 1px solid var(--ink-whisper);
-  border-radius: 3px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  letter-spacing: 0.5px;
-}
+      .header-badge {
+        padding: 4px 10px;
+        border: 1px solid var(--ink-whisper);
+        border-radius: 3px;
+        font-size: 11px;
+        color: var(--text-secondary);
+        letter-spacing: 0.5px;
+      }
 
-/* ═══════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════
    LAYOUT
    ═══════════════════════════════════════════════ */
-.layout {
-  display: flex;
-  margin-top: var(--header-h);
-  min-height: calc(100vh - var(--header-h));
-}
+      .layout {
+        display: flex;
+        margin-top: var(--header-h);
+        min-height: calc(100vh - var(--header-h));
+      }
 
-/* ═══════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════
    SIDEBAR
    ═══════════════════════════════════════════════ */
-.sidebar {
-  width: var(--sidebar-w);
-  flex-shrink: 0;
-  position: fixed;
-  top: var(--header-h);
-  left: 0;
-  bottom: 0;
-  background: var(--ink-deep);
-  border-right: 1px solid rgba(201, 169, 110, 0.06);
-  overflow-y: auto;
-  padding: 24px 0;
-  z-index: 100;
-}
+      .sidebar {
+        width: var(--sidebar-w);
+        flex-shrink: 0;
+        position: fixed;
+        top: var(--header-h);
+        left: 0;
+        bottom: 0;
+        background: var(--ink-deep);
+        border-right: 1px solid rgba(201, 169, 110, 0.06);
+        overflow-y: auto;
+        padding: 24px 0;
+        z-index: 100;
+      }
 
-.nav-group {
-  margin-bottom: 8px;
-}
+      .nav-group {
+        margin-bottom: 8px;
+      }
 
-.nav-group-label {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--gold-dim);
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  padding: 12px 24px 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+      .nav-group-label {
+        font-family: var(--font-display);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--gold-dim);
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        padding: 12px 24px 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
 
-.nav-group-label::before {
-  content: '';
-  width: 3px;
-  height: 12px;
-  background: var(--gold-dim);
-  border-radius: 1px;
-  opacity: 0.5;
-}
+      .nav-group-label::before {
+        content: '';
+        width: 3px;
+        height: 12px;
+        background: var(--gold-dim);
+        border-radius: 1px;
+        opacity: 0.5;
+      }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 24px 9px 34px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 14px;
-  transition: all 0.2s ease;
-  position: relative;
-  user-select: none;
-  border-left: 2px solid transparent;
-}
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 24px 9px 34px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: 14px;
+        transition: all 0.2s ease;
+        position: relative;
+        user-select: none;
+        border-left: 2px solid transparent;
+      }
 
-.nav-item:hover {
-  color: var(--text-primary);
-  background: rgba(201, 169, 110, 0.03);
-}
+      .nav-item:hover {
+        color: var(--text-primary);
+        background: rgba(201, 169, 110, 0.03);
+      }
 
-.nav-item.active {
-  color: var(--gold-bright);
-  background: rgba(201, 169, 110, 0.06);
-  border-left-color: var(--gold);
-}
+      .nav-item.active {
+        color: var(--gold-bright);
+        background: rgba(201, 169, 110, 0.06);
+        border-left-color: var(--gold);
+      }
 
-.nav-item .nav-num {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-dim);
-  min-width: 20px;
-  opacity: 0.6;
-}
+      .nav-item .nav-num {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--text-dim);
+        min-width: 20px;
+        opacity: 0.6;
+      }
 
-.nav-item.active .nav-num {
-  color: var(--gold);
-  opacity: 1;
-}
+      .nav-item.active .nav-num {
+        color: var(--gold);
+        opacity: 1;
+      }
 
-.nav-divider {
-  height: 1px;
-  background: rgba(201, 169, 110, 0.06);
-  margin: 12px 24px;
-}
+      .nav-divider {
+        height: 1px;
+        background: rgba(201, 169, 110, 0.06);
+        margin: 12px 24px;
+      }
 
-/* ═══════════════════════════════════════════════
+      /* ═══════════════════════════════════════════════
    CONTENT
    ═══════════════════════════════════════════════ */
-.content-area {
-  margin-left: var(--sidebar-w);
-  flex: 1;
-  min-height: calc(100vh - var(--header-h));
-}
-
-.tab-panel {
-  display: none;
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 48px 48px 120px;
-  animation: fadeIn 0.4s var(--ease-out-expo);
-}
-
-.tab-panel.active {
-  display: block;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Section Header ── */
-.section-header {
-  margin-bottom: 48px;
-  padding-bottom: 32px;
-  border-bottom: 1px solid rgba(201, 169, 110, 0.1);
-  position: relative;
-}
-
-.section-header::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  width: 60px;
-  height: 2px;
-  background: var(--vermillion);
-}
-
-.section-number {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--vermillion);
-  letter-spacing: 2px;
-  margin-bottom: 8px;
-  display: block;
-}
-
-.section-title {
-  font-family: var(--font-display);
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--text-bright);
-  line-height: 1.3;
-  letter-spacing: 1px;
-}
-
-.section-subtitle {
-  font-size: 15px;
-  color: var(--text-secondary);
-  margin-top: 12px;
-  line-height: 1.7;
-}
-
-/* ── Typography ── */
-h3 {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text-bright);
-  margin: 48px 0 20px;
-  padding-left: 16px;
-  border-left: 3px solid var(--vermillion);
-  line-height: 1.4;
-}
-
-h4 {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--gold-bright);
-  margin: 32px 0 14px;
-}
-
-p {
-  margin-bottom: 16px;
-  font-size: 15px;
-  line-height: 1.9;
-  color: var(--text-primary);
-}
-
-/* ── Lists ── */
-ul, ol {
-  margin: 12px 0 20px 0;
-  padding-left: 24px;
-}
-
-li {
-  margin-bottom: 8px;
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--text-primary);
-}
-
-li::marker {
-  color: var(--gold-dim);
-}
-
-/* ── Inline Code ── */
-code:not(pre code) {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  background: rgba(201, 169, 110, 0.08);
-  color: var(--gold-bright);
-  padding: 2px 7px;
-  border-radius: 3px;
-  border: 1px solid rgba(201, 169, 110, 0.1);
-  white-space: nowrap;
-}
-
-/* ── Code Blocks ── */
-pre {
-  background: var(--code-bg);
-  border: 1px solid var(--code-border);
-  border-radius: 6px;
-  padding: 20px 24px;
-  margin: 16px 0 24px;
-  overflow-x: auto;
-  position: relative;
-}
-
-pre::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--vermillion), var(--gold-dim), transparent);
-  border-radius: 6px 6px 0 0;
-  opacity: 0.6;
-}
-
-pre code {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  background: none;
-  border: none;
-  padding: 0;
-}
-
-/* ── Syntax Highlighting ── */
-.kw { color: var(--vermillion-bright); }
-.cmd { color: var(--jade-bright); }
-.arg { color: var(--gold-bright); }
-.str { color: #a8d4a0; }
-.cmt { color: var(--text-dim); font-style: italic; }
-.flag { color: #80b4f0; }
-.path { color: var(--paper-dim); }
-.num { color: #d4a0d4; }
-
-/* ── Tables ── */
-.table-wrap {
-  overflow-x: auto;
-  margin: 16px 0 28px;
-  border-radius: 6px;
-  border: 1px solid var(--ink-faint);
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-thead {
-  background: rgba(201, 169, 110, 0.06);
-}
-
-th {
-  font-family: var(--font-display);
-  font-weight: 600;
-  color: var(--gold-bright);
-  text-align: left;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ink-faint);
-  white-space: nowrap;
-  font-size: 13px;
-  letter-spacing: 0.5px;
-}
-
-td {
-  padding: 10px 16px;
-  border-bottom: 1px solid rgba(40, 42, 58, 0.5);
-  color: var(--text-primary);
-  vertical-align: top;
-}
-
-tr:last-child td {
-  border-bottom: none;
-}
-
-tr:hover td {
-  background: rgba(201, 169, 110, 0.02);
-}
-
-td code {
-  font-size: 12px;
-}
-
-/* ── Callouts ── */
-.callout {
-  border-radius: 6px;
-  padding: 16px 20px;
-  margin: 20px 0;
-  font-size: 14px;
-  line-height: 1.7;
-  border-left: 3px solid;
-}
-
-.callout-warn {
-  background: rgba(196, 58, 49, 0.06);
-  border-color: var(--vermillion);
-}
-
-.callout-info {
-  background: rgba(74, 158, 122, 0.06);
-  border-color: var(--jade);
-}
-
-.callout-tip {
-  background: rgba(201, 169, 110, 0.06);
-  border-color: var(--gold);
-}
-
-.callout-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-  display: block;
-}
-
-.callout-warn .callout-label { color: var(--vermillion-bright); }
-.callout-info .callout-label { color: var(--jade-bright); }
-.callout-tip .callout-label { color: var(--gold-bright); }
-
-/* ── Scenario Cards ── */
-.scenario-card {
-  background: var(--ink-mid);
-  border: 1px solid var(--ink-faint);
-  border-radius: 8px;
-  padding: 24px 28px;
-  margin: 20px 0;
-  position: relative;
-  overflow: hidden;
-}
-
-.scenario-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: linear-gradient(180deg, var(--vermillion), var(--gold-dim));
-}
-
-.scenario-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--vermillion-bright);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-.scenario-title {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-bright);
-  margin-bottom: 12px;
-}
-
-.scenario-steps {
-  counter-reset: step;
-  list-style: none;
-  padding-left: 0;
-}
-
-.scenario-steps li {
-  counter-increment: step;
-  padding-left: 32px;
-  position: relative;
-  margin-bottom: 10px;
-}
-
-.scenario-steps li::before {
-  content: counter(step);
-  position: absolute;
-  left: 0;
-  top: 2px;
-  width: 20px;
-  height: 20px;
-  background: var(--ink-faint);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--gold);
-}
-
-/* ── Concept Grid ── */
-.concept-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  margin: 20px 0 32px;
-}
-
-.concept-card {
-  background: var(--ink-mid);
-  border: 1px solid var(--ink-faint);
-  border-radius: 6px;
-  padding: 20px;
-  transition: all 0.25s ease;
-}
-
-.concept-card:hover {
-  border-color: var(--gold-dim);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-}
-
-.concept-card h4 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-
-.concept-card p {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.7;
-}
-
-/* ── Flow diagram ── */
-.flow-diagram {
-  background: var(--code-bg);
-  border: 1px solid var(--code-border);
-  border-radius: 6px;
-  padding: 24px;
-  margin: 20px 0 28px;
-  overflow-x: auto;
-}
-
-.flow-diagram code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--jade-bright);
-  white-space: pre;
-  background: none;
-  border: none;
-  padding: 0;
-}
-
-/* ── Footer seal ── */
-.content-footer {
-  margin-top: 64px;
-  padding-top: 32px;
-  border-top: 1px solid rgba(201, 169, 110, 0.08);
-  text-align: center;
-}
-
-.footer-seal {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  background: var(--vermillion-deep);
-  border-radius: 50%;
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 900;
-  color: rgba(232, 224, 208, 0.3);
-  border: 2px solid rgba(196, 58, 49, 0.2);
-  margin-bottom: 12px;
-}
-
-.footer-text {
-  font-size: 12px;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  letter-spacing: 1px;
-}
-
-/* ── Tag chips ── */
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 20px;
-}
-
-.tag {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 3px;
-  border: 1px solid;
-}
-
-.tag-red { border-color: var(--vermillion-deep); color: var(--vermillion-bright); background: rgba(196,58,49,0.08); }
-.tag-gold { border-color: var(--gold-dim); color: var(--gold-bright); background: rgba(201,169,110,0.08); }
-.tag-jade { border-color: var(--jade-dim); color: var(--jade-bright); background: rgba(74,158,122,0.08); }
-
-/* ── Command block ── */
-.cmd-block {
-  background: var(--ink-mid);
-  border: 1px solid var(--ink-faint);
-  border-radius: 8px;
-  margin: 20px 0 28px;
-  overflow: hidden;
-}
-
-.cmd-block-header {
-  background: rgba(201, 169, 110, 0.04);
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--ink-faint);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.cmd-block-header .cmd-name {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--jade-bright);
-}
-
-.cmd-block-header .cmd-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-left: auto;
-}
-
-.cmd-block pre {
-  margin: 0;
-  border: none;
-  border-radius: 0;
-}
-
-.cmd-block pre::before {
-  display: none;
-}
-
-.cmd-section {
-  padding: 16px 20px;
-  border-top: 1px solid var(--ink-faint);
-}
-
-.cmd-section-title {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--gold);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-}
-
-/* ── Responsive ── */
-@media (max-width: 1024px) {
-  .sidebar { display: none; }
-  .content-area { margin-left: 0; }
-  .tab-panel { padding: 32px 24px 80px; }
-
-  .mobile-nav {
-    display: flex !important;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(8, 9, 13, 0.95);
-    backdrop-filter: blur(16px);
-    border-top: 1px solid var(--ink-faint);
-    z-index: 1000;
-    overflow-x: auto;
-    padding: 8px;
-    gap: 4px;
-  }
-
-  .mobile-nav-btn {
-    flex-shrink: 0;
-    padding: 8px 14px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: var(--font-body);
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  .mobile-nav-btn.active {
-    background: var(--ink-faint);
-    color: var(--gold-bright);
-  }
-}
-
-.mobile-nav { display: none; }
-
-/* ── Decorative ── */
-.deco-line {
-  width: 40px;
-  height: 1px;
-  background: var(--gold-dim);
-  margin: 32px 0;
-  opacity: 0.4;
-}
-
-.spacer { height: 24px; }
-</style>
-</head>
-<body>
-
-<!-- ═══════════════════════════════════════════════
+      .content-area {
+        margin-left: var(--sidebar-w);
+        flex: 1;
+        min-height: calc(100vh - var(--header-h));
+      }
+
+      .tab-panel {
+        display: none;
+        max-width: var(--content-max);
+        margin: 0 auto;
+        padding: 48px 48px 120px;
+        animation: fadeIn 0.4s var(--ease-out-expo);
+      }
+
+      .tab-panel.active {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Section Header ── */
+      .section-header {
+        margin-bottom: 48px;
+        padding-bottom: 32px;
+        border-bottom: 1px solid rgba(201, 169, 110, 0.1);
+        position: relative;
+      }
+
+      .section-header::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        width: 60px;
+        height: 2px;
+        background: var(--vermillion);
+      }
+
+      .section-number {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--vermillion);
+        letter-spacing: 2px;
+        margin-bottom: 8px;
+        display: block;
+      }
+
+      .section-title {
+        font-family: var(--font-display);
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--text-bright);
+        line-height: 1.3;
+        letter-spacing: 1px;
+      }
+
+      .section-subtitle {
+        font-size: 15px;
+        color: var(--text-secondary);
+        margin-top: 12px;
+        line-height: 1.7;
+      }
+
+      /* ── Typography ── */
+      h3 {
+        font-family: var(--font-display);
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--text-bright);
+        margin: 48px 0 20px;
+        padding-left: 16px;
+        border-left: 3px solid var(--vermillion);
+        line-height: 1.4;
+      }
+
+      h4 {
+        font-family: var(--font-display);
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--gold-bright);
+        margin: 32px 0 14px;
+      }
+
+      p {
+        margin-bottom: 16px;
+        font-size: 15px;
+        line-height: 1.9;
+        color: var(--text-primary);
+      }
+
+      /* ── Lists ── */
+      ul,
+      ol {
+        margin: 12px 0 20px 0;
+        padding-left: 24px;
+      }
+
+      li {
+        margin-bottom: 8px;
+        font-size: 15px;
+        line-height: 1.8;
+        color: var(--text-primary);
+      }
+
+      li::marker {
+        color: var(--gold-dim);
+      }
+
+      /* ── Inline Code ── */
+      code:not(pre code) {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        background: rgba(201, 169, 110, 0.08);
+        color: var(--gold-bright);
+        padding: 2px 7px;
+        border-radius: 3px;
+        border: 1px solid rgba(201, 169, 110, 0.1);
+        white-space: nowrap;
+      }
+
+      /* ── Code Blocks ── */
+      pre {
+        background: var(--code-bg);
+        border: 1px solid var(--code-border);
+        border-radius: 6px;
+        padding: 20px 24px;
+        margin: 16px 0 24px;
+        overflow-x: auto;
+        position: relative;
+      }
+
+      pre::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(
+          90deg,
+          var(--vermillion),
+          var(--gold-dim),
+          transparent
+        );
+        border-radius: 6px 6px 0 0;
+        opacity: 0.6;
+      }
+
+      pre code {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text-primary);
+        background: none;
+        border: none;
+        padding: 0;
+      }
+
+      /* ── Syntax Highlighting ── */
+      .kw {
+        color: var(--vermillion-bright);
+      }
+      .cmd {
+        color: var(--jade-bright);
+      }
+      .arg {
+        color: var(--gold-bright);
+      }
+      .str {
+        color: #a8d4a0;
+      }
+      .cmt {
+        color: var(--text-dim);
+        font-style: italic;
+      }
+      .flag {
+        color: #80b4f0;
+      }
+      .path {
+        color: var(--paper-dim);
+      }
+      .num {
+        color: #d4a0d4;
+      }
+
+      /* ── Tables ── */
+      .table-wrap {
+        overflow-x: auto;
+        margin: 16px 0 28px;
+        border-radius: 6px;
+        border: 1px solid var(--ink-faint);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      thead {
+        background: rgba(201, 169, 110, 0.06);
+      }
+
+      th {
+        font-family: var(--font-display);
+        font-weight: 600;
+        color: var(--gold-bright);
+        text-align: left;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--ink-faint);
+        white-space: nowrap;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+      }
+
+      td {
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(40, 42, 58, 0.5);
+        color: var(--text-primary);
+        vertical-align: top;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      tr:hover td {
+        background: rgba(201, 169, 110, 0.02);
+      }
+
+      td code {
+        font-size: 12px;
+      }
+
+      /* ── Callouts ── */
+      .callout {
+        border-radius: 6px;
+        padding: 16px 20px;
+        margin: 20px 0;
+        font-size: 14px;
+        line-height: 1.7;
+        border-left: 3px solid;
+      }
+
+      .callout-warn {
+        background: rgba(196, 58, 49, 0.06);
+        border-color: var(--vermillion);
+      }
+
+      .callout-info {
+        background: rgba(74, 158, 122, 0.06);
+        border-color: var(--jade);
+      }
+
+      .callout-tip {
+        background: rgba(201, 169, 110, 0.06);
+        border-color: var(--gold);
+      }
+
+      .callout-label {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+        display: block;
+      }
+
+      .callout-warn .callout-label {
+        color: var(--vermillion-bright);
+      }
+      .callout-info .callout-label {
+        color: var(--jade-bright);
+      }
+      .callout-tip .callout-label {
+        color: var(--gold-bright);
+      }
+
+      /* ── Scenario Cards ── */
+      .scenario-card {
+        background: var(--ink-mid);
+        border: 1px solid var(--ink-faint);
+        border-radius: 8px;
+        padding: 24px 28px;
+        margin: 20px 0;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .scenario-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: linear-gradient(180deg, var(--vermillion), var(--gold-dim));
+      }
+
+      .scenario-label {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--vermillion-bright);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      .scenario-title {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-bright);
+        margin-bottom: 12px;
+      }
+
+      .scenario-steps {
+        counter-reset: step;
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .scenario-steps li {
+        counter-increment: step;
+        padding-left: 32px;
+        position: relative;
+        margin-bottom: 10px;
+      }
+
+      .scenario-steps li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 2px;
+        width: 20px;
+        height: 20px;
+        background: var(--ink-faint);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--gold);
+      }
+
+      /* ── Concept Grid ── */
+      .concept-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+        margin: 20px 0 32px;
+      }
+
+      .concept-card {
+        background: var(--ink-mid);
+        border: 1px solid var(--ink-faint);
+        border-radius: 6px;
+        padding: 20px;
+        transition: all 0.25s ease;
+      }
+
+      .concept-card:hover {
+        border-color: var(--gold-dim);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      }
+
+      .concept-card h4 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+
+      .concept-card p {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.7;
+      }
+
+      /* ── Flow diagram ── */
+      .flow-diagram {
+        background: var(--code-bg);
+        border: 1px solid var(--code-border);
+        border-radius: 6px;
+        padding: 24px;
+        margin: 20px 0 28px;
+        overflow-x: auto;
+      }
+
+      .flow-diagram code {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--jade-bright);
+        white-space: pre;
+        background: none;
+        border: none;
+        padding: 0;
+      }
+
+      /* ── Footer seal ── */
+      .content-footer {
+        margin-top: 64px;
+        padding-top: 32px;
+        border-top: 1px solid rgba(201, 169, 110, 0.08);
+        text-align: center;
+      }
+
+      .footer-seal {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        background: var(--vermillion-deep);
+        border-radius: 50%;
+        font-family: var(--font-display);
+        font-size: 22px;
+        font-weight: 900;
+        color: rgba(232, 224, 208, 0.3);
+        border: 2px solid rgba(196, 58, 49, 0.2);
+        margin-bottom: 12px;
+      }
+
+      .footer-text {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        letter-spacing: 1px;
+      }
+
+      /* ── Tag chips ── */
+      .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 20px;
+      }
+
+      .tag {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 3px;
+        border: 1px solid;
+      }
+
+      .tag-red {
+        border-color: var(--vermillion-deep);
+        color: var(--vermillion-bright);
+        background: rgba(196, 58, 49, 0.08);
+      }
+      .tag-gold {
+        border-color: var(--gold-dim);
+        color: var(--gold-bright);
+        background: rgba(201, 169, 110, 0.08);
+      }
+      .tag-jade {
+        border-color: var(--jade-dim);
+        color: var(--jade-bright);
+        background: rgba(74, 158, 122, 0.08);
+      }
+
+      /* ── Command block ── */
+      .cmd-block {
+        background: var(--ink-mid);
+        border: 1px solid var(--ink-faint);
+        border-radius: 8px;
+        margin: 20px 0 28px;
+        overflow: hidden;
+      }
+
+      .cmd-block-header {
+        background: rgba(201, 169, 110, 0.04);
+        padding: 10px 20px;
+        border-bottom: 1px solid var(--ink-faint);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .cmd-block-header .cmd-name {
+        font-family: var(--font-mono);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--jade-bright);
+      }
+
+      .cmd-block-header .cmd-desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-left: auto;
+      }
+
+      .cmd-block pre {
+        margin: 0;
+        border: none;
+        border-radius: 0;
+      }
+
+      .cmd-block pre::before {
+        display: none;
+      }
+
+      .cmd-section {
+        padding: 16px 20px;
+        border-top: 1px solid var(--ink-faint);
+      }
+
+      .cmd-section-title {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--gold);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      /* ── Responsive ── */
+      @media (max-width: 1024px) {
+        .sidebar {
+          display: none;
+        }
+        .content-area {
+          margin-left: 0;
+        }
+        .tab-panel {
+          padding: 32px 24px 80px;
+        }
+
+        .mobile-nav {
+          display: flex !important;
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: rgba(8, 9, 13, 0.95);
+          backdrop-filter: blur(16px);
+          border-top: 1px solid var(--ink-faint);
+          z-index: 1000;
+          overflow-x: auto;
+          padding: 8px;
+          gap: 4px;
+        }
+
+        .mobile-nav-btn {
+          flex-shrink: 0;
+          padding: 8px 14px;
+          border: none;
+          background: transparent;
+          color: var(--text-secondary);
+          font-family: var(--font-body);
+          font-size: 12px;
+          cursor: pointer;
+          border-radius: 4px;
+          white-space: nowrap;
+        }
+
+        .mobile-nav-btn.active {
+          background: var(--ink-faint);
+          color: var(--gold-bright);
+        }
+      }
+
+      .mobile-nav {
+        display: none;
+      }
+
+      /* ── Decorative ── */
+      .deco-line {
+        width: 40px;
+        height: 1px;
+        background: var(--gold-dim);
+        margin: 32px 0;
+        opacity: 0.4;
+      }
+
+      .spacer {
+        height: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ═══════════════════════════════════════════════
      HEADER
      ═══════════════════════════════════════════════ -->
-<header class="site-header">
-  <div class="header-inner">
-    <div class="brand">
-      <div class="brand-seal">天工</div>
-      <div class="brand-text">
-        <span class="brand-zh">天工开物</span>
-        <span class="brand-en">Tekon Manual</span>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-seal">天工</div>
+          <div class="brand-text">
+            <span class="brand-zh">天工开物</span>
+            <span class="brand-en">Tekon Manual</span>
+          </div>
+        </div>
+        <div class="header-meta">
+          <span class="header-badge">V2 · LOCAL</span>
+          <span>2026.06</span>
+        </div>
       </div>
-    </div>
-    <div class="header-meta">
-      <span class="header-badge">V2 · LOCAL</span>
-      <span>2026.06</span>
-    </div>
-  </div>
-</header>
+    </header>
 
-<!-- ═══════════════════════════════════════════════
+    <!-- ═══════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════ -->
-<div class="layout">
+    <div class="layout">
+      <!-- ── Sidebar ── -->
+      <nav class="sidebar" id="sidebar">
+        <div class="nav-group">
+          <div class="nav-group-label">认识天工</div>
+          <div class="nav-item active" data-tab="overview">
+            <span class="nav-num">01</span> 天工是什么
+          </div>
+          <div class="nav-item" data-tab="problems">
+            <span class="nav-num">02</span> 解决什么问题
+          </div>
+        </div>
 
-  <!-- ── Sidebar ── -->
-  <nav class="sidebar" id="sidebar">
+        <div class="nav-divider"></div>
 
-    <div class="nav-group">
-      <div class="nav-group-label">认识天工</div>
-      <div class="nav-item active" data-tab="overview">
-        <span class="nav-num">01</span> 天工是什么
-      </div>
-      <div class="nav-item" data-tab="problems">
-        <span class="nav-num">02</span> 解决什么问题
-      </div>
-    </div>
+        <div class="nav-group">
+          <div class="nav-group-label">上手指南</div>
+          <div class="nav-item" data-tab="scenarios">
+            <span class="nav-num">03</span> 核心场景
+          </div>
+          <div class="nav-item" data-tab="quickstart">
+            <span class="nav-num">04</span> Quick Start
+          </div>
+        </div>
 
-    <div class="nav-divider"></div>
+        <div class="nav-divider"></div>
 
-    <div class="nav-group">
-      <div class="nav-group-label">上手指南</div>
-      <div class="nav-item" data-tab="scenarios">
-        <span class="nav-num">03</span> 核心场景
-      </div>
-      <div class="nav-item" data-tab="quickstart">
-        <span class="nav-num">04</span> Quick Start
-      </div>
-    </div>
+        <div class="nav-group">
+          <div class="nav-group-label">深入理解</div>
+          <div class="nav-item" data-tab="concepts">
+            <span class="nav-num">05</span> 核心概念
+          </div>
+          <div class="nav-item" data-tab="commands">
+            <span class="nav-num">06</span> 命令详解
+          </div>
+        </div>
 
-    <div class="nav-divider"></div>
+        <div class="nav-divider"></div>
 
-    <div class="nav-group">
-      <div class="nav-group-label">深入理解</div>
-      <div class="nav-item" data-tab="concepts">
-        <span class="nav-num">05</span> 核心概念
-      </div>
-      <div class="nav-item" data-tab="commands">
-        <span class="nav-num">06</span> 命令详解
-      </div>
-    </div>
+        <div class="nav-group">
+          <div class="nav-group-label">更多</div>
+          <div class="nav-item" data-tab="web">
+            <span class="nav-num">07</span> Web Dashboard
+          </div>
+          <div class="nav-item" data-tab="judge">
+            <span class="nav-num">08</span> 判断结果
+          </div>
+          <div class="nav-item" data-tab="faq">
+            <span class="nav-num">09</span> 常见问题
+          </div>
+          <div class="nav-item" data-tab="params">
+            <span class="nav-num">10</span> 参数速查
+          </div>
+          <div class="nav-item" data-tab="bounds">
+            <span class="nav-num">11</span> 边界与安全
+          </div>
+        </div>
+      </nav>
 
-    <div class="nav-divider"></div>
-
-    <div class="nav-group">
-      <div class="nav-group-label">更多</div>
-      <div class="nav-item" data-tab="web">
-        <span class="nav-num">07</span> Web Dashboard
-      </div>
-      <div class="nav-item" data-tab="judge">
-        <span class="nav-num">08</span> 判断结果
-      </div>
-      <div class="nav-item" data-tab="faq">
-        <span class="nav-num">09</span> 常见问题
-      </div>
-      <div class="nav-item" data-tab="params">
-        <span class="nav-num">10</span> 参数速查
-      </div>
-      <div class="nav-item" data-tab="bounds">
-        <span class="nav-num">11</span> 边界与安全
-      </div>
-    </div>
-  </nav>
-
-  <!-- ── Content ── -->
-  <main class="content-area">
-
-    <!-- ════════════════════════════════════════
+      <!-- ── Content ── -->
+      <main class="content-area">
+        <!-- ════════════════════════════════════════
          TAB 01: 天工是什么
          ════════════════════════════════════════ -->
-    <div class="tab-panel active" id="panel-overview">
-      <div class="section-header">
-        <span class="section-number">SECTION 01</span>
-        <h1 class="section-title">天工是什么</h1>
-        <p class="section-subtitle">天工（Tekon）是一个本地 Agent workflow 驾驶系统——一个"受控研发工作台"。</p>
-      </div>
+        <div class="tab-panel active" id="panel-overview">
+          <div class="section-header">
+            <span class="section-number">SECTION 01</span>
+            <h1 class="section-title">天工是什么</h1>
+            <p class="section-subtitle">
+              天工（Tekon）是一个本地 Agent workflow
+              驾驶系统——一个"受控研发工作台"。
+            </p>
+          </div>
 
-      <p>天工（Tekon）不是聊天机器人，也不是自动上线平台。用户把一个低到中风险的研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。</p>
+          <p>
+            天工（Tekon）不是聊天机器人，也不是自动上线平台。用户把一个低到中风险的研发需求交给天工，天工会按固定
+            workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀
+            artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。
+          </p>
 
-      <p>天工的核心目标是<strong>增强人类交付能力</strong>，而不是替人类做高风险决策。它可以帮助你把需求推进到"可以人工审阅、可以准备 PR、可以继续验证"的状态；合入、上线、权限扩大、生产变更仍然由人控制。</p>
+          <p>
+            天工的核心目标是<strong>增强人类交付能力</strong>，而不是替人类做高风险决策。它可以帮助你把需求推进到"可以人工审阅、可以准备
+            PR、可以继续验证"的状态；合入、上线、权限扩大、生产变更仍然由人控制。
+          </p>
 
-      <div class="deco-line"></div>
+          <div class="deco-line"></div>
 
-      <h3>当前定位</h3>
+          <h3>当前定位</h3>
 
-      <div class="concept-grid">
-        <div class="concept-card">
-          <h4>本地 CLI/Web 工具</h4>
-          <p>在你自己的机器上运行，不依赖远程服务。</p>
+          <div class="concept-grid">
+            <div class="concept-card">
+              <h4>本地 CLI/Web 工具</h4>
+              <p>在你自己的机器上运行，不依赖远程服务。</p>
+            </div>
+            <div class="concept-card">
+              <h4>受控 Workflow 执行器</h4>
+              <p>按固定流程拆解、执行、验证研发任务。</p>
+            </div>
+            <div class="concept-card">
+              <h4>证据与审阅收集器</h4>
+              <p>统一收集 artifact、gate 日志、审计事件。</p>
+            </div>
+            <div class="concept-card">
+              <h4>PR 准备助手</h4>
+              <p>帮你生成可审阅材料和 PR 准备包。</p>
+            </div>
+            <div class="concept-card">
+              <h4>研发工作样本评估器</h4>
+              <p>评估真实样本是否达到试用门槛。</p>
+            </div>
+            <div class="concept-card">
+              <h4>多 Provider 执行入口</h4>
+              <p>
+                支持 mock、Claude Code 和 Codex provider；真实 provider 必须通过
+                artifact manifest 写回证据。
+              </p>
+            </div>
+          </div>
+
+          <h3>当前不是</h3>
+
+          <div class="tag-list">
+            <span class="tag tag-red">生产级远程多租户平台</span>
+            <span class="tag tag-red">自动 merge / 自动上线</span>
+            <span class="tag tag-red">完整 DLP / 安全审计</span>
+            <span class="tag tag-red">OS 级沙箱</span>
+            <span class="tag tag-red">飞书 IM 通知机器人</span>
+          </div>
+
+          <div class="callout callout-info">
+            <span class="callout-label">名称说明</span>
+            天工的英文名是 Tekon，取 Tech + Kong
+            的融合谐音，中文名取"天工"，源自《天工开物》。
+          </div>
+
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
         </div>
-        <div class="concept-card">
-          <h4>受控 Workflow 执行器</h4>
-          <p>按固定流程拆解、执行、验证研发任务。</p>
-        </div>
-        <div class="concept-card">
-          <h4>证据与审阅收集器</h4>
-          <p>统一收集 artifact、gate 日志、审计事件。</p>
-        </div>
-        <div class="concept-card">
-          <h4>PR 准备助手</h4>
-          <p>帮你生成可审阅材料和 PR 准备包。</p>
-        </div>
-        <div class="concept-card">
-          <h4>研发工作样本评估器</h4>
-          <p>评估真实样本是否达到试用门槛。</p>
-        </div>
-      </div>
 
-      <h3>当前不是</h3>
-
-      <div class="tag-list">
-        <span class="tag tag-red">生产级远程多租户平台</span>
-        <span class="tag tag-red">自动 merge / 自动上线</span>
-        <span class="tag tag-red">完整 DLP / 安全审计</span>
-        <span class="tag tag-red">OS 级沙箱</span>
-        <span class="tag tag-red">飞书 IM 通知机器人</span>
-      </div>
-
-      <div class="callout callout-info">
-        <span class="callout-label">名称说明</span>
-        天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。
-      </div>
-
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 02: 解决什么问题
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-problems">
-      <div class="section-header">
-        <span class="section-number">SECTION 02</span>
-        <h1 class="section-title">天工解决什么问题</h1>
-        <p class="section-subtitle">五个核心痛点，天工逐一应对。</p>
-      </div>
+        <div class="tab-panel" id="panel-problems">
+          <div class="section-header">
+            <span class="section-number">SECTION 02</span>
+            <h1 class="section-title">天工解决什么问题</h1>
+            <p class="section-subtitle">五个核心痛点，天工逐一应对。</p>
+          </div>
 
-      <h3>2.1 需求进入研发前不清楚</h3>
-      <p>真实工作里，很多需求只有一句话："帮我补个功能""修一下这个问题"。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。</p>
-      <p>天工提供 <code>demand shape</code>，先把需求塑形成需求卡：</p>
-      <ul>
-        <li>需求标题和正文</li>
-        <li>推荐 workflow 模板</li>
-        <li>风险等级和风险标签</li>
-        <li>非目标</li>
-        <li>开放问题</li>
-        <li>验收标准</li>
-      </ul>
-      <p>用户可以先审阅和批准需求卡，再发起执行。</p>
+          <h3>2.1 需求进入研发前不清楚</h3>
+          <p>
+            真实工作里，很多需求只有一句话："帮我补个功能""修一下这个问题"。直接交给
+            Agent 容易出现边界不清、验收标准不清、风险不清。
+          </p>
+          <p>天工提供 <code>demand shape</code>，先把需求塑形成需求卡：</p>
+          <ul>
+            <li>需求标题和正文</li>
+            <li>推荐 workflow 模板</li>
+            <li>风险等级和风险标签</li>
+            <li>非目标</li>
+            <li>开放问题</li>
+            <li>验收标准</li>
+          </ul>
+          <p>用户可以先审阅和批准需求卡，再发起执行。</p>
 
-      <h3>2.2 不知道该选什么 Workflow</h3>
-      <p>不同工作不应该都套同一个流程。天工提供受控模板推荐：</p>
-      <div class="tag-list">
-        <span class="tag tag-jade">standard-feature</span>
-        <span class="tag tag-jade">bugfix</span>
-        <span class="tag tag-jade">test-improvement</span>
-        <span class="tag tag-jade">docs-update</span>
-        <span class="tag tag-jade">plan-only</span>
-      </div>
-      <p><code>workflow select</code> 会给出推荐模板和理由；<code>eval workflow-selection</code> 会检查人工选择是否合理。</p>
+          <h3>2.2 不知道该选什么 Workflow</h3>
+          <p>不同工作不应该都套同一个流程。天工提供受控模板推荐：</p>
+          <div class="tag-list">
+            <span class="tag tag-jade">standard-feature</span>
+            <span class="tag tag-jade">bugfix</span>
+            <span class="tag tag-jade">test-improvement</span>
+            <span class="tag tag-jade">docs-update</span>
+            <span class="tag tag-jade">plan-only</span>
+          </div>
+          <p>
+            <code>workflow select</code> 会给出推荐模板和理由；<code
+              >eval workflow-selection</code
+            >
+            会检查人工选择是否合理。
+          </p>
 
-      <h3>2.3 Agent 输出不可审阅</h3>
-      <p>很多 Agent 工具会把结果散落在对话、文件和日志里。天工要求 provider 输出结构化 artifact，并把 gate、日志、审计事件和 PR 包统一组织起来。用户可以通过 <code>review</code> 或 Web dashboard 看：</p>
-      <ul>
-        <li>readiness 失败项</li>
-        <li>证据入口</li>
-        <li>Gate 失败诊断</li>
-        <li>影响文件和 diff</li>
-        <li>Artifact 正文预览</li>
-        <li>Gate 日志</li>
-        <li>PR 准备包</li>
-        <li>下一步命令建议</li>
-      </ul>
+          <h3>2.3 Agent 输出不可审阅</h3>
+          <p>
+            很多 Agent 工具会把结果散落在对话、文件和日志里。天工要求 provider
+            输出结构化 artifact，并把 gate、日志、审计事件和 PR
+            包统一组织起来。用户可以通过 <code>review</code> 或 Web dashboard
+            看：
+          </p>
+          <ul>
+            <li>readiness 失败项</li>
+            <li>证据入口</li>
+            <li>Gate 失败诊断</li>
+            <li>影响文件和 diff</li>
+            <li>Artifact 正文预览</li>
+            <li>Gate 日志</li>
+            <li>PR 准备包</li>
+            <li>下一步命令建议</li>
+          </ul>
 
-      <h3>2.4 远端副作用需要人控制</h3>
-      <p>真实 push、创建 PR、等待远端 CI 都属于有副作用或外部依赖的动作。天工把这些动作拆开：</p>
+          <h3>2.4 远端副作用需要人控制</h3>
+          <p>
+            真实 push、创建 PR、等待远端 CI
+            都属于有副作用或外部依赖的动作。天工把这些动作拆开：
+          </p>
 
-      <div class="flow-diagram"><code>delivery dry-run     →  只看交付计划，无副作用
-delivery prepare     →  只生成本地 PR 包
-delivery create-pr   →  人工明确批准后才 push
-  --approve-human
-delivery ci-status   →  只读查询 PR checks
-delivery ci-watch    →  只读轮询，不 rerun/merge</code></div>
+          <div class="flow-diagram">
+            <code
+              >delivery dry-run → 只看交付计划，无副作用 delivery prepare →
+              只生成本地 PR 包 delivery create-pr → 人工明确批准后才 push
+              --approve-human delivery ci-status → 只读查询 PR checks delivery
+              ci-watch → 只读轮询，不 rerun/merge</code
+            >
+          </div>
 
-      <h3>2.5 需要判断一次 run 是否真的可交付</h3>
-      <p><code>eval readiness</code> 会评估单个 run 是否具备进入人工审阅或 PR 提交流程的最小证据面。<code>eval work-usability</code> 会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo 宣称可用。</p>
+          <h3>2.5 需要判断一次 run 是否真的可交付</h3>
+          <p>
+            <code>eval readiness</code> 会评估单个 run 是否具备进入人工审阅或 PR
+            提交流程的最小证据面。<code>eval work-usability</code>
+            会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo
+            宣称可用。
+          </p>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
 
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 03: 核心场景
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-scenarios">
-      <div class="section-header">
-        <span class="section-number">SECTION 03</span>
-        <h1 class="section-title">核心用户场景</h1>
-        <p class="section-subtitle">五种典型场景，从功能开发到工具评估。</p>
-      </div>
+        <div class="tab-panel" id="panel-scenarios">
+          <div class="section-header">
+            <span class="section-number">SECTION 03</span>
+            <h1 class="section-title">核心用户场景</h1>
+            <p class="section-subtitle">五种典型场景，从功能开发到工具评估。</p>
+          </div>
 
-      <!-- Scenario A -->
-      <div class="scenario-card">
-        <div class="scenario-label">SCENARIO A</div>
-        <div class="scenario-title">我有一个小功能，希望推进到可审 PR</div>
-        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px;">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
-        <ol class="scenario-steps">
-          <li><code>tekon init</code> 初始化目标仓库</li>
-          <li><code>demand shape</code> 把需求写成需求卡</li>
-          <li>人工审阅需求卡</li>
-          <li><code>demand approve</code> 批准需求卡</li>
-          <li><code>run</code> 发起 workflow</li>
-          <li><code>status</code> 和 <code>review</code> 查看结果</li>
-          <li><code>eval readiness</code> 判断是否可审</li>
-          <li><code>delivery prepare</code> 生成 PR 准备包</li>
-          <li>人工确认后 <code>delivery create-pr --approve-human</code></li>
-          <li><code>delivery ci-status</code> 或 <code>ci-watch</code> 写回远端 CI 证据</li>
-        </ol>
-      </div>
+          <!-- Scenario A -->
+          <div class="scenario-card">
+            <div class="scenario-label">SCENARIO A</div>
+            <div class="scenario-title">我有一个小功能，希望推进到可审 PR</div>
+            <p
+              style="
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-bottom: 14px;
+              "
+            >
+              适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web
+              dashboard 增加入口。
+            </p>
+            <ol class="scenario-steps">
+              <li><code>tekon init</code> 初始化目标仓库</li>
+              <li><code>demand shape</code> 把需求写成需求卡</li>
+              <li>人工审阅需求卡</li>
+              <li><code>demand approve</code> 批准需求卡</li>
+              <li><code>run</code> 发起 workflow</li>
+              <li><code>status</code> 和 <code>review</code> 查看结果</li>
+              <li><code>eval readiness</code> 判断是否可审</li>
+              <li><code>delivery prepare</code> 生成 PR 准备包</li>
+              <li>
+                人工确认后 <code>delivery create-pr --approve-human</code>
+              </li>
+              <li>
+                <code>delivery ci-status</code> 或
+                <code>ci-watch</code> 写回远端 CI 证据
+              </li>
+            </ol>
+          </div>
 
-      <!-- Scenario B -->
-      <div class="scenario-card">
-        <div class="scenario-label">SCENARIO B</div>
-        <div class="scenario-title">我只想修一个 bug，但需要人工确认风险</div>
-        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px;">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
-        <ol class="scenario-steps">
-          <li>使用 <code>bugfix</code> 模板运行</li>
-          <li>如果触发 human gate，先执行 <code>approval summary</code></li>
-          <li>用 <code>eval approval-summary</code> 检查审批摘要是否完整</li>
-          <li>人工判断：<code>resume --approve-human</code> 批准继续，或 <code>approval reject</code> 拒绝并阻断</li>
-        </ol>
-      </div>
+          <!-- Scenario B -->
+          <div class="scenario-card">
+            <div class="scenario-label">SCENARIO B</div>
+            <div class="scenario-title">
+              我只想修一个 bug，但需要人工确认风险
+            </div>
+            <p
+              style="
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-bottom: 14px;
+              "
+            >
+              适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。
+            </p>
+            <ol class="scenario-steps">
+              <li>使用 <code>bugfix</code> 模板运行</li>
+              <li>如果触发 human gate，先执行 <code>approval summary</code></li>
+              <li>
+                用 <code>eval approval-summary</code> 检查审批摘要是否完整
+              </li>
+              <li>
+                人工判断：<code>resume --approve-human</code> 批准继续，或
+                <code>approval reject</code> 拒绝并阻断
+              </li>
+            </ol>
+          </div>
 
-      <!-- Scenario C -->
-      <div class="scenario-card">
-        <div class="scenario-label">SCENARIO C</div>
-        <div class="scenario-title">我只想补测试</div>
-        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px;">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
-        <ol class="scenario-steps">
-          <li><code>workflow select</code> 确认是否推荐 <code>test-improvement</code></li>
-          <li><code>run --template test-improvement</code> 执行</li>
-          <li>看 gate 是否通过</li>
-          <li>用 <code>review</code> 检查 artifact 和测试证据</li>
-        </ol>
-      </div>
+          <!-- Scenario C -->
+          <div class="scenario-card">
+            <div class="scenario-label">SCENARIO C</div>
+            <div class="scenario-title">我只想补测试</div>
+            <p
+              style="
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-bottom: 14px;
+              "
+            >
+              适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API
+              增加覆盖。
+            </p>
+            <ol class="scenario-steps">
+              <li>
+                <code>workflow select</code> 确认是否推荐
+                <code>test-improvement</code>
+              </li>
+              <li><code>run --template test-improvement</code> 执行</li>
+              <li>看 gate 是否通过</li>
+              <li>用 <code>review</code> 检查 artifact 和测试证据</li>
+            </ol>
+          </div>
 
-      <!-- Scenario D -->
-      <div class="scenario-card">
-        <div class="scenario-label">SCENARIO D</div>
-        <div class="scenario-title">我只想写文档或方案</div>
-        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px;">适用：更新用户手册、整理验收报告、写技术方案或产品方案。</p>
-        <div class="tag-list">
-          <span class="tag tag-gold">docs-update — 文档更新</span>
-          <span class="tag tag-gold">plan-only — 只做方案，不执行代码改动</span>
+          <!-- Scenario D -->
+          <div class="scenario-card">
+            <div class="scenario-label">SCENARIO D</div>
+            <div class="scenario-title">我只想写文档或方案</div>
+            <p
+              style="
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-bottom: 14px;
+              "
+            >
+              适用：更新用户手册、整理验收报告、写技术方案或产品方案。
+            </p>
+            <div class="tag-list">
+              <span class="tag tag-gold">docs-update — 文档更新</span>
+              <span class="tag tag-gold"
+                >plan-only — 只做方案，不执行代码改动</span
+              >
+            </div>
+          </div>
+
+          <!-- Scenario E -->
+          <div class="scenario-card">
+            <div class="scenario-label">SCENARIO E</div>
+            <div class="scenario-title">我要判断天工是否已经能用于真实工作</div>
+            <ol class="scenario-steps">
+              <li>挑选 2~3 个真实但低风险的仓库</li>
+              <li>准备 10 个真实或历史需求</li>
+              <li>
+                每次 run 后用
+                <code>eval work-usability record</code> 写入样本清单
+              </li>
+              <li>用 <code>eval work-usability --samples</code> 评估样本集</li>
+              <li>把 Markdown/HTML 报告保存到 <code>docs/reviews/</code></li>
+            </ol>
+          </div>
+
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
         </div>
-      </div>
 
-      <!-- Scenario E -->
-      <div class="scenario-card">
-        <div class="scenario-label">SCENARIO E</div>
-        <div class="scenario-title">我要判断天工是否已经能用于真实工作</div>
-        <ol class="scenario-steps">
-          <li>挑选 2~3 个真实但低风险的仓库</li>
-          <li>准备 10 个真实或历史需求</li>
-          <li>每次 run 后用 <code>eval work-usability record</code> 写入样本清单</li>
-          <li>用 <code>eval work-usability --samples</code> 评估样本集</li>
-          <li>把 Markdown/HTML 报告保存到 <code>docs/reviews/</code></li>
-        </ol>
-      </div>
-
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 04: Quick Start
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-quickstart">
-      <div class="section-header">
-        <span class="section-number">SECTION 04</span>
-        <h1 class="section-title">Quick Start</h1>
-        <p class="section-subtitle">以下示例假设 <code>tekon</code> 已安装到 PATH，并且你正在目标项目根目录执行命令。</p>
-      </div>
+        <div class="tab-panel" id="panel-quickstart">
+          <div class="section-header">
+            <span class="section-number">SECTION 04</span>
+            <h1 class="section-title">Quick Start</h1>
+            <p class="section-subtitle">
+              以下示例假设 <code>tekon</code> 已安装到
+              PATH，并且你正在目标项目根目录执行命令。
+            </p>
+          </div>
 
-      <div class="callout callout-info">
-        <span class="callout-label">命令约定</span>
-        没有全局安装时，可用 <code>node /path/to/tekon/packages/cli/dist/index.js</code> 替换 <code>tekon</code>；从其它目录操作目标仓库时，再显式追加 <code>--repo /path/to/project</code>。
-      </div>
+          <div class="callout callout-info">
+            <span class="callout-label">命令约定</span>
+            没有全局安装时，可用
+            <code>node /path/to/tekon/packages/cli/dist/index.js</code> 替换
+            <code>tekon</code>；从其它目录操作目标仓库时，再显式追加
+            <code>--repo /path/to/project</code>。
+          </div>
 
-      <h3>4.1 安装和构建</h3>
-      <pre><code><span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="arg">install</span> <span class="flag">--frozen-lockfile</span>
+          <h3>4.1 安装和构建</h3>
+          <pre><code><span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="arg">install</span> <span class="flag">--frozen-lockfile</span>
 <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="arg">build</span></code></pre>
 
-      <p>构建后 CLI 路径：</p>
-      <pre><code><span class="cmd">node</span> <span class="path">packages/cli/dist/index.js</span></code></pre>
-      <p>如果将 CLI 安装到 PATH，命令名是 <code>tekon</code>。本文默认使用 <code>tekon</code> 示例，重点展示普通用户的最短路径。</p>
+          <p>构建后 CLI 路径：</p>
+          <pre><code><span class="cmd">node</span> <span class="path">packages/cli/dist/index.js</span></code></pre>
+          <p>
+            如果将 CLI 安装到 PATH，命令名是 <code>tekon</code>。本文默认使用
+            <code>tekon</code> 示例，重点展示普通用户的最短路径。
+          </p>
 
-      <h3>4.2 初始化目标仓库</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
-      <p>初始化会在目标仓库生成 <code>.tekon/</code> 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。</p>
+          <h3>4.2 初始化目标仓库</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
+          <p>
+            初始化会在目标仓库生成
+            <code>.tekon/</code>
+            运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session
+            token。
+          </p>
 
-      <h3>4.3 检查目标仓库命令画像</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
-      <p>重点看：</p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>状态</th><th>含义</th></tr></thead>
-          <tbody>
-            <tr><td><code>resolved</code></td><td>该 gate 命令已解析</td></tr>
-            <tr><td><code>missing</code></td><td>目标仓库缺少对应命令，需要补 repo profile</td></tr>
-            <tr><td><code>not-applicable</code></td><td>用户显式声明不适用</td></tr>
-            <tr><td><code>suggestedCommand</code></td><td>天工从 package.json 推断的候选命令</td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3>4.3 检查目标仓库命令画像</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
+          <p>重点看：</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>状态</th>
+                  <th>含义</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>resolved</code></td>
+                  <td>该 gate 命令已解析</td>
+                </tr>
+                <tr>
+                  <td><code>missing</code></td>
+                  <td>目标仓库缺少对应命令，需要补 repo profile</td>
+                </tr>
+                <tr>
+                  <td><code>not-applicable</code></td>
+                  <td>用户显式声明不适用</td>
+                </tr>
+                <tr>
+                  <td><code>suggestedCommand</code></td>
+                  <td>天工从 package.json 推断的候选命令</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3>4.4 塑形需求</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span></code></pre>
-      <p>命令会输出 <code>shapePath</code> 和 <code>reviewPath</code>。先读 Markdown 审阅稿，确认需求边界后批准：</p>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
-      <p>可选：评估需求卡质量。</p>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
+          <h3>4.4 塑形需求</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span></code></pre>
+          <p>
+            命令会输出 <code>shapePath</code> 和 <code>reviewPath</code>。先读
+            Markdown 审阅稿，确认需求边界后批准：
+          </p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
+          <p>可选：评估需求卡质量。</p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
 
-      <h3>4.5 发起运行</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
-      <p>输出里会有 <code>runId</code>。后续常规命令默认读取最近一次 run；只有查看历史 run 或避免歧义时才需要手动传 <code>--run-id</code>。</p>
+          <h3>4.5 发起运行</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
+          <p>
+            输出里会有 <code>runId</code>。后续常规命令默认读取最近一次
+            run；只有查看历史 run 或避免歧义时才需要手动传
+            <code>--run-id</code>。
+          </p>
+          <p>本机已安装并认证 Codex CLI 时，可使用 Codex provider：</p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">codex</span></code></pre>
+          <div class="callout callout-info">
+            <span class="callout-label">Codex provider</span>
+            Codex provider 使用本机 <code>codex exec</code> 非交互模式，固定
+            <code
+              >codex --sandbox workspace-write --ask-for-approval on-request
+              exec</code
+            >，并通过 <code>TEKON_OUTPUT_DIR</code> /
+            <code>TEKON_ARTIFACT_MANIFEST</code> 写回 Tekon artifact。
+          </div>
 
-      <h3>4.6 查看结果</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">status</span>
+          <h3>4.6 查看结果</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">status</span>
 <span class="cmd">tekon</span> <span class="arg">review</span>
 <span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
-      <div class="callout callout-tip">
-        <span class="callout-label">提示</span>
-        如果 <code>ready=true</code>，通常可以进入人工审阅或 PR 准备。它不代表可以自动合入。
-      </div>
+          <div class="callout callout-tip">
+            <span class="callout-label">提示</span>
+            如果 <code>ready=true</code>，通常可以进入人工审阅或 PR
+            准备。它不代表可以自动合入。
+          </div>
 
-      <h3>4.7 准备 PR 材料</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
-      <p>这一步只生成本地 PR 包，不 push、不创建 PR。</p>
+          <h3>4.7 准备 PR 材料</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
+          <p>这一步只生成本地 PR 包，不 push、不创建 PR。</p>
 
-      <h3>4.8 创建远端 PR</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
-      <div class="callout callout-warn">
-        <span class="callout-label">注意</span>
-        这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。确认 PR 包、diff、gate 和 readiness 后才执行。
-      </div>
+          <h3>4.8 创建远端 PR</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
+          <div class="callout callout-warn">
+            <span class="callout-label">注意</span>
+            这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。确认
+            PR 包、diff、gate 和 readiness 后才执行。
+          </div>
 
-      <h3>4.9 查询远端 CI</h3>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span></code></pre>
-      <p>如果希望等待 checks 到终态：</p>
-      <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span></code></pre>
+          <h3>4.9 查询远端 CI</h3>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span></code></pre>
+          <p>如果希望等待 checks 到终态：</p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span></code></pre>
 
-      <h3>4.10 默认上下文规则</h3>
-      <p>天工的常规 CLI 使用方式是"进入目标仓库根目录后执行短命令"。默认推断规则如下：</p>
+          <h3>4.10 默认上下文规则</h3>
+          <p>
+            天工的常规 CLI
+            使用方式是"进入目标仓库根目录后执行短命令"。默认推断规则如下：
+          </p>
 
-      <h4>Repo</h4>
-      <p>优先使用 <code>--repo</code>；不传时从当前目录向上查找 <code>.tekon/config.yaml</code>，找不到时使用当前 Git 仓库根目录。</p>
+          <h4>Repo</h4>
+          <p>
+            优先使用 <code>--repo</code>；不传时从当前目录向上查找
+            <code>.tekon/config.yaml</code>，找不到时使用当前 Git 仓库根目录。
+          </p>
 
-      <h4>Demand shape</h4>
-      <p><code>demand shape</code> 默认写入 <code>.tekon/demands/</code>；<code>demand approve</code> 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 <code>--shape &lt;path&gt;</code>；<code>eval demand-shape</code> 默认评估最近一张需求卡。</p>
+          <h4>Demand shape</h4>
+          <p>
+            <code>demand shape</code> 默认写入
+            <code>.tekon/demands/</code>；<code>demand approve</code>
+            默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传
+            <code>--shape &lt;path&gt;</code>；<code>eval demand-shape</code>
+            默认评估最近一张需求卡。
+          </p>
 
-      <h4>Run</h4>
-      <p><code>run</code> 没有需求文本且没有 <code>--demand-file</code> 时，默认读取最近需求卡，且该需求卡必须已批准；<code>status</code>、<code>review</code>、<code>eval readiness</code>、<code>delivery prepare</code> 等默认使用最近一次 run。</p>
+          <h4>Run</h4>
+          <p>
+            <code>run</code> 没有需求文本且没有
+            <code>--demand-file</code>
+            时，默认读取最近需求卡，且该需求卡必须已批准；<code>status</code>、<code>review</code>、<code
+              >eval readiness</code
+            >、<code>delivery prepare</code> 等默认使用最近一次 run。
+          </p>
 
-      <h4>Human decision</h4>
-      <p><code>approval summary</code>、<code>eval approval-summary</code>、<code>approval reject</code> 和 <code>resume --approve-human</code> 默认使用最近的 pending human decision；如果同一 run 同时存在多个 pending decision，必须显式传 <code>--decision-id</code>。</p>
+          <h4>Human decision</h4>
+          <p>
+            <code>approval summary</code>、<code>eval approval-summary</code
+            >、<code>approval reject</code> 和
+            <code>resume --approve-human</code> 默认使用最近的 pending human
+            decision；如果同一 run 同时存在多个 pending decision，必须显式传
+            <code>--decision-id</code>。
+          </p>
 
-      <div class="callout callout-tip">
-        <span class="callout-label">显式传参的三种情况</span>
-        <strong>1.</strong> 从其它目录操作目标仓库时传 <code>--repo</code>；<strong>2.</strong> 查看或处理历史对象时传 <code>--run-id</code>、<code>--shape</code>、<code>--demand-file</code>、<code>--decision-id</code>；<strong>3.</strong> 执行高风险动作时保留 <code>--approve-human</code> 或 <code>--allow-dirty-base</code> 作为明确人工确认。
-      </div>
+          <div class="callout callout-tip">
+            <span class="callout-label">显式传参的三种情况</span>
+            <strong>1.</strong> 从其它目录操作目标仓库时传
+            <code>--repo</code>；<strong>2.</strong> 查看或处理历史对象时传
+            <code>--run-id</code
+            >、<code>--shape</code>、<code>--demand-file</code>、<code>--decision-id</code>；<strong
+              >3.</strong
+            >
+            执行高风险动作时保留 <code>--approve-human</code> 或
+            <code>--allow-dirty-base</code> 作为明确人工确认。
+          </div>
 
-      <p>如果你显式传了 <code>--repo</code>、<code>--run-id</code> 或 <code>--decision-id</code> 查看跨仓库或历史对象，<code>review</code> 和 <code>approval summary</code> 会输出带 id 和 repo 的精确后续命令，避免复制短命令后误操作到最新 run、最新待审批项或当前 shell 目录。</p>
+          <p>
+            如果你显式传了 <code>--repo</code>、<code>--run-id</code> 或
+            <code>--decision-id</code> 查看跨仓库或历史对象，<code>review</code>
+            和 <code>approval summary</code> 会输出带 id 和 repo
+            的精确后续命令，避免复制短命令后误操作到最新 run、最新待审批项或当前
+            shell 目录。
+          </p>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
 
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 05: 核心概念
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-concepts">
-      <div class="section-header">
-        <span class="section-number">SECTION 05</span>
-        <h1 class="section-title">核心概念</h1>
-        <p class="section-subtitle">理解天工的十个基础构件。</p>
-      </div>
+        <div class="tab-panel" id="panel-concepts">
+          <div class="section-header">
+            <span class="section-number">SECTION 05</span>
+            <h1 class="section-title">核心概念</h1>
+            <p class="section-subtitle">理解天工的十一个基础构件。</p>
+          </div>
 
-      <div class="concept-grid">
-        <div class="concept-card">
-          <h4>5.1 Repo</h4>
-          <p>目标仓库，即你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.2 .tekon/</h4>
-          <p>天工在目标仓库中的运行态目录。保存配置、SQLite 数据库、run artifact、gate 日志、worktree、demand shape 文件和 Web session token。通常不提交。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.3 Run</h4>
-          <p>一次 workflow 执行。每个 run 有唯一 <code>runId</code>（如 <code>run_xxx</code>）。查看状态、审阅、准备 PR 都围绕 run id。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.4 Workflow</h4>
-          <p>一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.5 Role</h4>
-          <p>执行节点的角色，例如 PM、RD、QA、Reviewer、PMO。角色决定 prompt、知识和工具策略。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.6 Gate</h4>
-          <p>验证关卡：build、lint、test、schema、security-scan、human。Gate 不通过时 workflow 不应被当成可交付。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.7 Artifact</h4>
-          <p>结构化产物：需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI 状态。是人工审阅和自动评估的主要证据。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.8 Review Surface</h4>
-          <p>聚合审阅面。CLI 命令是 <code>review</code>，Web dashboard 也使用同一套数据。把用户最需要看的东西放在一起。</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.9 Readiness</h4>
-          <p>单次 run 的工作就绪度评估。回答："这次 run 是否已具备进入人工审阅或 PR 准备的最低证据？"</p>
-        </div>
-        <div class="concept-card">
-          <h4>5.10 Work Usability</h4>
-          <p>样本集级评估。回答："天工是否已在足够多真实样本上表现稳定，可以作为受控工作工具试用？"</p>
-        </div>
-      </div>
+          <div class="concept-grid">
+            <div class="concept-card">
+              <h4>5.1 Repo</h4>
+              <p>
+                目标仓库，即你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.2 .tekon/</h4>
+              <p>
+                天工在目标仓库中的运行态目录。保存配置、SQLite 数据库、run
+                artifact、gate 日志、worktree、demand shape 文件和 Web session
+                token。通常不提交。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.3 Run</h4>
+              <p>
+                一次 workflow 执行。每个 run 有唯一 <code>runId</code>（如
+                <code>run_xxx</code>）。查看状态、审阅、准备 PR 都围绕 run id。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.4 Workflow</h4>
+              <p>
+                一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.5 Role</h4>
+              <p>
+                执行节点的角色，例如 PM、RD、QA、Reviewer、PMO。角色决定
+                prompt、知识和工具策略。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.6 Gate</h4>
+              <p>
+                验证关卡：build、lint、test、schema、security-scan、human。Gate
+                不通过时 workflow 不应被当成可交付。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.7 Artifact</h4>
+              <p>
+                结构化产物：需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI
+                状态。是人工审阅和自动评估的主要证据。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.8 Provider</h4>
+              <p>
+                执行节点的 agent 后端。当前可选 <code>mock</code>、<code
+                  >claude-code</code
+                >
+                和 <code>codex</code>；真实 provider 需要本机认证并写入
+                manifest。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.9 Review Surface</h4>
+              <p>
+                聚合审阅面。CLI 命令是 <code>review</code>，Web dashboard
+                也使用同一套数据。把用户最需要看的东西放在一起。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.10 Readiness</h4>
+              <p>
+                单次 run 的工作就绪度评估。回答："这次 run
+                是否已具备进入人工审阅或 PR 准备的最低证据？"
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>5.11 Work Usability</h4>
+              <p>
+                样本集级评估。回答："天工是否已在足够多真实样本上表现稳定，可以作为受控工作工具试用？"
+              </p>
+            </div>
+          </div>
 
-      <div class="deco-line"></div>
+          <div class="deco-line"></div>
 
-      <h3>Workflow 执行流程概览</h3>
+          <h3>Workflow 执行流程概览</h3>
 
-      <div class="flow-diagram"><code>需求 → demand shape → 需求卡 → approve
-                                ↓
-                         workflow select
-                                ↓
-         ┌──────────────────── run ────────────────────┐
-         │                                             │
-         │  PM → RD → QA → Reviewer → PMO            │
-         │   ↓     ↓     ↓      ↓        ↓            │
-         │ gate  gate  gate   gate     gate           │
-         │                                             │
-         └─────────────────────────────────────────────┘
-                                ↓
-                    eval readiness → review
-                                ↓
-                    delivery prepare → create-pr</code></div>
+          <div class="flow-diagram">
+            <code
+              >需求 → demand shape → 需求卡 → approve ↓ workflow select ↓
+              ┌──────────────────── run ────────────────────┐ │ │ │ PM → RD → QA
+              → Reviewer → PMO │ │ ↓ ↓ ↓ ↓ ↓ │ │ gate gate gate gate gate │ │ │
+              └─────────────────────────────────────────────┘ ↓ eval readiness →
+              review ↓ delivery prepare → create-pr</code
+            >
+          </div>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
 
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 06: 命令详解
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-commands">
-      <div class="section-header">
-        <span class="section-number">SECTION 06</span>
-        <h1 class="section-title">命令详解</h1>
-        <p class="section-subtitle">天工 CLI 全部命令的参数、用法和故障处理。命令均假设在目标仓库根目录执行。</p>
-      </div>
-
-      <!-- init -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.1 init</span>
-          <span class="cmd-desc">初始化目标仓库</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li><code>--repo &lt;path&gt;</code> — 从其它目录初始化指定仓库时使用。不传时自动使用当前 Git 仓库根目录或当前目录。</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">结果</div>
-          <ul>
-            <li>创建 <code>.tekon/</code>、<code>config.yaml</code>、<code>repo-profile.yaml</code>、<code>web-session.json</code></li>
-            <li>创建运行所需目录</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">问题处理</div>
-          <p style="font-size:14px;">如果目标目录不是 Git 仓库，涉及 diff/worktree/delivery 的功能可能失败。如果 <code>web-session.json</code> 被删除，可重新执行 <code>init</code>。</p>
-        </div>
-      </div>
-
-      <!-- workflow preflight -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.2 workflow preflight</span>
-          <span class="cmd-desc">运行前检查命令画像</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li>第一个位置参数 — 模板名；不传时默认 <code>standard-feature</code>。</li>
-            <li><code>--repo &lt;path&gt;</code> — 只在跨仓库检查时使用。</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">判断结果</div>
-          <ul>
-            <li><code>resolved</code> — 可执行</li>
-            <li><code>missing</code> — 缺命令，需要补 repo profile</li>
-            <li><code>not-applicable</code> — 用户已显式声明不适用</li>
-          </ul>
-          <div class="callout callout-warn" style="margin-top:12px;">
-            <span class="callout-label">注意</span>
-            不要为了通过 gate 随意配置 <code>notApplicable</code>。<code>security-scan</code> 不应通过 <code>notApplicable</code> 绕过。
+        <div class="tab-panel" id="panel-commands">
+          <div class="section-header">
+            <span class="section-number">SECTION 06</span>
+            <h1 class="section-title">命令详解</h1>
+            <p class="section-subtitle">
+              天工 CLI
+              全部命令的参数、用法和故障处理。命令均假设在目标仓库根目录执行。
+            </p>
           </div>
-        </div>
-      </div>
 
-      <!-- workflow select -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.3 workflow select</span>
-          <span class="cmd-desc">根据需求推荐模板</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">说明</div>
-          <p style="font-size:14px;">这不是动态规划，不会自动保存 workflow。人可以覆盖推荐，但建议用 <code>eval workflow-selection</code> 检查。</p>
-        </div>
-      </div>
-
-      <!-- demand shape -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.4 demand shape</span>
-          <span class="cmd-desc">需求塑形成需求卡</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li><code>--no-write</code> — 只预览，不写入 <code>.tekon/demands/</code></li>
-            <li><code>--repo &lt;path&gt;</code> — 只在跨仓库塑形时使用</li>
-            <li><code>--format json</code> — 输出 JSON</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">结果</div>
-          <ul>
-            <li>JSON 源文件</li>
-            <li>Markdown 审阅稿</li>
-            <li>推荐模板</li>
-            <li>风险和验收信息</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">问题处理</div>
-          <p style="font-size:14px;">如果 <code>openQuestions</code> 不为空，建议先补充需求。如果推荐模板不符合预期，用 <code>workflow select</code> 和 <code>eval workflow-selection</code> 核对。</p>
-        </div>
-      </div>
-
-      <!-- demand approve -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.5 demand approve</span>
-          <span class="cmd-desc">人工批准需求卡</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li>位置参数或 <code>--shape &lt;path&gt;</code> — 指定需求卡 JSON 路径；不传时默认批准最近需求卡。如果最近需求卡已经批准，历史未批准需求卡必须显式指定。</li>
-            <li><code>--actor &lt;name&gt;</code> — 记录批准操作者</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="callout callout-info" style="margin:0;">
-            <span class="callout-label">注意</span>
-            批准需求卡不等于批准 PR 创建，也不绕过后续 gate。
+          <!-- init -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.1 init</span>
+              <span class="cmd-desc">初始化目标仓库</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  <code>--repo &lt;path&gt;</code> —
+                  从其它目录初始化指定仓库时使用。不传时自动使用当前 Git
+                  仓库根目录或当前目录。
+                </li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">结果</div>
+              <ul>
+                <li>
+                  创建
+                  <code>.tekon/</code
+                  >、<code>config.yaml</code>、<code>repo-profile.yaml</code>、<code
+                    >web-session.json</code
+                  >
+                </li>
+                <li>创建运行所需目录</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">问题处理</div>
+              <p style="font-size: 14px">
+                如果目标目录不是 Git 仓库，涉及 diff/worktree/delivery
+                的功能可能失败。如果
+                <code>web-session.json</code> 被删除，可重新执行
+                <code>init</code>。
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- run -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.6 run</span>
-          <span class="cmd-desc">发起一次 workflow</span>
-        </div>
-        <pre><code><span class="cmt"># 模板运行</span>
+          <!-- workflow preflight -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.2 workflow preflight</span>
+              <span class="cmd-desc">运行前检查命令画像</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  第一个位置参数 — 模板名；不传时默认
+                  <code>standard-feature</code>。
+                </li>
+                <li>
+                  <code>--repo &lt;path&gt;</code> — 只在跨仓库检查时使用。
+                </li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">判断结果</div>
+              <ul>
+                <li><code>resolved</code> — 可执行</li>
+                <li><code>missing</code> — 缺命令，需要补 repo profile</li>
+                <li><code>not-applicable</code> — 用户已显式声明不适用</li>
+              </ul>
+              <div class="callout callout-warn" style="margin-top: 12px">
+                <span class="callout-label">注意</span>
+                不要为了通过 gate 随意配置 <code>notApplicable</code>。<code
+                  >security-scan</code
+                >
+                不应通过 <code>notApplicable</code> 绕过。
+              </div>
+            </div>
+          </div>
+
+          <!-- workflow select -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.3 workflow select</span>
+              <span class="cmd-desc">根据需求推荐模板</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">说明</div>
+              <p style="font-size: 14px">
+                这不是动态规划，不会自动保存 workflow。人可以覆盖推荐，但建议用
+                <code>eval workflow-selection</code> 检查。
+              </p>
+            </div>
+          </div>
+
+          <!-- demand shape -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.4 demand shape</span>
+              <span class="cmd-desc">需求塑形成需求卡</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  <code>--no-write</code> — 只预览，不写入
+                  <code>.tekon/demands/</code>
+                </li>
+                <li><code>--repo &lt;path&gt;</code> — 只在跨仓库塑形时使用</li>
+                <li><code>--format json</code> — 输出 JSON</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">结果</div>
+              <ul>
+                <li>JSON 源文件</li>
+                <li>Markdown 审阅稿</li>
+                <li>推荐模板</li>
+                <li>风险和验收信息</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">问题处理</div>
+              <p style="font-size: 14px">
+                如果
+                <code>openQuestions</code>
+                不为空，建议先补充需求。如果推荐模板不符合预期，用
+                <code>workflow select</code> 和
+                <code>eval workflow-selection</code> 核对。
+              </p>
+            </div>
+          </div>
+
+          <!-- demand approve -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.5 demand approve</span>
+              <span class="cmd-desc">人工批准需求卡</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  位置参数或 <code>--shape &lt;path&gt;</code> — 指定需求卡 JSON
+                  路径；不传时默认批准最近需求卡。如果最近需求卡已经批准，历史未批准需求卡必须显式指定。
+                </li>
+                <li><code>--actor &lt;name&gt;</code> — 记录批准操作者</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="callout callout-info" style="margin: 0">
+                <span class="callout-label">注意</span>
+                批准需求卡不等于批准 PR 创建，也不绕过后续 gate。
+              </div>
+            </div>
+          </div>
+
+          <!-- run -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.6 run</span>
+              <span class="cmd-desc">发起一次 workflow</span>
+            </div>
+            <pre><code><span class="cmt"># 模板运行</span>
 <span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"需求文本"</span> <span class="flag">--template</span> <span class="str">standard-feature</span> <span class="flag">--agent</span> <span class="str">mock</span>
 
 <span class="cmt"># 需求卡运行（默认读取最近已批准需求卡）</span>
 <span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">mock</span>
 
+<span class="cmt"># 使用本机 Codex CLI provider</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">codex</span>
+
 <span class="cmt"># 动态 dry-run</span>
 <span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span> <span class="str">"需求文本"</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li><code>--template &lt;name&gt;</code> — 使用内置模板</li>
-            <li><code>--demand-file &lt;path&gt;</code> — 使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准</li>
-            <li><code>--agent mock</code> — 使用 mock provider</li>
-            <li><code>--agent claude-code</code> — 使用 Claude Code adapter</li>
-            <li><code>--allow-dirty-base</code> — 允许基于未提交改动运行</li>
-            <li><code>--repo &lt;path&gt;</code> — 只在跨仓库运行时使用</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">判断结果</div>
-          <p style="font-size:14px;">输出 <code>runId</code> 后，用 <code>status</code> 和 <code>review</code> 继续检查。<code>status=passed</code> 不代表可以自动合入。有 pending human gate 时，需要先处理审批。</p>
-        </div>
-      </div>
-
-      <!-- status -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.7 status</span>
-          <span class="cmd-desc">查看 run 当前状态</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">status</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常见字段</div>
-          <ul>
-            <li><code>workflowStatus</code> — 整体状态</li>
-            <li><code>currentNodeId</code> — 当前节点</li>
-            <li><code>artifacts</code> — 产物数量</li>
-            <li><code>gates</code> — gate 数量</li>
-            <li><code>pendingHumanDecisions</code> — 待人工决策数量</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- approval summary -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.8 approval summary</span>
-          <span class="cmd-desc">生成可复制审批摘要</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">approval summary</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li><code>--run-id &lt;runId&gt;</code> — 查看指定历史 run 的审批项时使用；不传时默认最近的 pending human decision</li>
-            <li><code>--decision-id &lt;decisionId&gt;</code> — 同一 run 有多个 pending decision 或需要指定历史决策时使用</li>
-            <li><code>--max-chars &lt;n&gt;</code> — 限制 artifact 和日志预览长度，默认 1200</li>
-            <li><code>--json</code> — 输出结构化 JSON</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">摘要包含</div>
-          <p style="font-size:14px;">decision id、run id、node id、需求标题、风险、exact command、影响文件状态、readiness 失败项、证据入口、批准/拒绝命令、Web 处理入口。</p>
-        </div>
-        <div class="cmd-section">
-          <div class="callout callout-info" style="margin:0;">
-            <span class="callout-label">注意</span>
-            摘要是审批材料，不是通知机器人。默认拒绝命令不携带操作者示例，避免复制错误审计信息。
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li><code>--template &lt;name&gt;</code> — 使用内置模板</li>
+                <li>
+                  <code>--demand-file &lt;path&gt;</code> —
+                  使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准
+                </li>
+                <li><code>--agent mock</code> — 使用 mock provider</li>
+                <li>
+                  <code>--agent claude-code</code> — 使用 Claude Code adapter
+                </li>
+                <li>
+                  <code>--agent codex</code> — 使用本机 Codex CLI adapter；要求
+                  <code>codex</code> 在 PATH 中且已完成本机认证
+                </li>
+                <li>
+                  <code>--allow-dirty-base</code> — 允许基于未提交改动运行
+                </li>
+                <li><code>--repo &lt;path&gt;</code> — 只在跨仓库运行时使用</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">判断结果</div>
+              <p style="font-size: 14px">
+                输出 <code>runId</code> 后，用 <code>status</code> 和
+                <code>review</code> 继续检查。<code>status=passed</code>
+                不代表可以自动合入。有 pending human gate 时，需要先处理审批。
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- eval approval-summary -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.9 eval approval-summary</span>
-          <span class="cmd-desc">检查审批摘要完整性</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">eval approval-summary</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">检查项</div>
-          <ul>
-            <li>pending decision 是否存在</li>
-            <li>风险信息、exact command、影响信息</li>
-            <li>批准/拒绝入口是否可复制</li>
-            <li>证据上下文是否存在</li>
-            <li>正文是否包含关键命令</li>
-          </ul>
-          <p style="font-size:14px;margin-top:8px;"><code>ready=true</code> — 摘要具备基本审批材料。<code>ready=false</code> — 不建议拿给 reviewer 决策，应先补证据。</p>
-        </div>
-      </div>
-
-      <!-- resume -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.10 resume --approve-human</span>
-          <span class="cmd-desc">批准 human gate 并继续</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">注意事项</div>
-          <ul>
-            <li>只在你已审阅风险和证据后使用</li>
-            <li>会按 run 创建时落库的 provider 快照恢复</li>
-            <li>同一 run 有多个 pending decision 时必须传 <code>--decision-id &lt;decisionId&gt;</code>；显式指定后只批准这一条 decision</li>
-            <li>旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- approval reject -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.11 approval reject</span>
-          <span class="cmd-desc">拒绝并阻断 workflow</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">approval reject</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">常用参数</div>
-          <ul>
-            <li><code>--run-id &lt;runId&gt;</code> — 拒绝指定 run 的 pending decision 时使用</li>
-            <li><code>--decision-id &lt;decisionId&gt;</code> — 同一 run 有多个 pending decision 或要精确拒绝某个 decision 时使用</li>
-            <li><code>--actor &lt;name&gt;</code> — 记录拒绝操作者</li>
-            <li><code>--note &lt;text&gt;</code> — 记录拒绝原因</li>
-            <li><code>--repo &lt;path&gt;</code> — 只在跨仓库操作时使用</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">结果</div>
-          <ul>
-            <li>human decision 变为 rejected</li>
-            <li>workflow 阻断，human gate 分类为 <code>human-rejected</code></li>
-            <li><code>review</code> 会显示人工拒绝语义，不会误判成命令策略拒绝</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- review -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.12 review</span>
-          <span class="cmd-desc">查看完整审阅材料</span>
-        </div>
-        <pre><code><span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">重点章节</div>
-          <div class="tag-list">
-            <span class="tag tag-gold">Readiness Failed Checks</span>
-            <span class="tag tag-gold">Evidence Navigation</span>
-            <span class="tag tag-gold">Gate Failure Triage</span>
-            <span class="tag tag-gold">Delivery</span>
-            <span class="tag tag-gold">Changed Files</span>
-            <span class="tag tag-gold">Artifacts</span>
-            <span class="tag tag-gold">Gate Logs</span>
-            <span class="tag tag-gold">PR Body</span>
-            <span class="tag tag-gold">PR Package</span>
-            <span class="tag tag-gold">Next Commands</span>
+          <!-- status -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.7 status</span>
+              <span class="cmd-desc">查看 run 当前状态</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">status</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常见字段</div>
+              <ul>
+                <li><code>workflowStatus</code> — 整体状态</li>
+                <li><code>currentNodeId</code> — 当前节点</li>
+                <li><code>artifacts</code> — 产物数量</li>
+                <li><code>gates</code> — gate 数量</li>
+                <li><code>pendingHumanDecisions</code> — 待人工决策数量</li>
+              </ul>
+            </div>
           </div>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">如何使用</div>
-          <ul>
-            <li>先看 readiness 失败项</li>
-            <li>再看 Evidence Navigation 指向的证据</li>
-            <li>Gate 失败时先看 triage 分类和建议命令</li>
-            <li>准备 PR 前看 Changed Files 和 PR Body</li>
-          </ul>
-        </div>
-      </div>
 
-      <!-- delivery commands -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.13–6.17 delivery</span>
-          <span class="cmd-desc">交付与 CI 查询</span>
-        </div>
-        <pre><code><span class="cmt"># 只看交付计划，无远端副作用</span>
+          <!-- approval summary -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.8 approval summary</span>
+              <span class="cmd-desc">生成可复制审批摘要</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">approval summary</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  <code>--run-id &lt;runId&gt;</code> — 查看指定历史 run
+                  的审批项时使用；不传时默认最近的 pending human decision
+                </li>
+                <li>
+                  <code>--decision-id &lt;decisionId&gt;</code> — 同一 run
+                  有多个 pending decision 或需要指定历史决策时使用
+                </li>
+                <li>
+                  <code>--max-chars &lt;n&gt;</code> — 限制 artifact
+                  和日志预览长度，默认 1200
+                </li>
+                <li><code>--json</code> — 输出结构化 JSON</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">摘要包含</div>
+              <p style="font-size: 14px">
+                decision id、run id、node id、需求标题、风险、exact
+                command、影响文件状态、readiness
+                失败项、证据入口、批准/拒绝命令、Web 处理入口。
+              </p>
+            </div>
+            <div class="cmd-section">
+              <div class="callout callout-info" style="margin: 0">
+                <span class="callout-label">注意</span>
+                摘要是审批材料，不是通知机器人。默认拒绝命令不携带操作者示例，避免复制错误审计信息。
+              </div>
+            </div>
+          </div>
+
+          <!-- eval approval-summary -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.9 eval approval-summary</span>
+              <span class="cmd-desc">检查审批摘要完整性</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">eval approval-summary</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">检查项</div>
+              <ul>
+                <li>pending decision 是否存在</li>
+                <li>风险信息、exact command、影响信息</li>
+                <li>批准/拒绝入口是否可复制</li>
+                <li>证据上下文是否存在</li>
+                <li>正文是否包含关键命令</li>
+              </ul>
+              <p style="font-size: 14px; margin-top: 8px">
+                <code>ready=true</code> — 摘要具备基本审批材料。<code
+                  >ready=false</code
+                >
+                — 不建议拿给 reviewer 决策，应先补证据。
+              </p>
+            </div>
+          </div>
+
+          <!-- resume -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.10 resume --approve-human</span>
+              <span class="cmd-desc">批准 human gate 并继续</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">注意事项</div>
+              <ul>
+                <li>只在你已审阅风险和证据后使用</li>
+                <li>会按 run 创建时落库的 provider 快照恢复</li>
+                <li>
+                  同一 run 有多个 pending decision 时必须传
+                  <code>--decision-id &lt;decisionId&gt;</code
+                  >；显式指定后只批准这一条 decision
+                </li>
+                <li>
+                  旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider
+                  意外切到 mock
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- approval reject -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.11 approval reject</span>
+              <span class="cmd-desc">拒绝并阻断 workflow</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">approval reject</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">常用参数</div>
+              <ul>
+                <li>
+                  <code>--run-id &lt;runId&gt;</code> — 拒绝指定 run 的 pending
+                  decision 时使用
+                </li>
+                <li>
+                  <code>--decision-id &lt;decisionId&gt;</code> — 同一 run
+                  有多个 pending decision 或要精确拒绝某个 decision 时使用
+                </li>
+                <li><code>--actor &lt;name&gt;</code> — 记录拒绝操作者</li>
+                <li><code>--note &lt;text&gt;</code> — 记录拒绝原因</li>
+                <li><code>--repo &lt;path&gt;</code> — 只在跨仓库操作时使用</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">结果</div>
+              <ul>
+                <li>human decision 变为 rejected</li>
+                <li>
+                  workflow 阻断，human gate 分类为 <code>human-rejected</code>
+                </li>
+                <li>
+                  <code>review</code> 会显示人工拒绝语义，不会误判成命令策略拒绝
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- review -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.12 review</span>
+              <span class="cmd-desc">查看完整审阅材料</span>
+            </div>
+            <pre><code><span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
+            <div class="cmd-section">
+              <div class="cmd-section-title">重点章节</div>
+              <div class="tag-list">
+                <span class="tag tag-gold">Readiness Failed Checks</span>
+                <span class="tag tag-gold">Evidence Navigation</span>
+                <span class="tag tag-gold">Gate Failure Triage</span>
+                <span class="tag tag-gold">Delivery</span>
+                <span class="tag tag-gold">Changed Files</span>
+                <span class="tag tag-gold">Artifacts</span>
+                <span class="tag tag-gold">Gate Logs</span>
+                <span class="tag tag-gold">PR Body</span>
+                <span class="tag tag-gold">PR Package</span>
+                <span class="tag tag-gold">Next Commands</span>
+              </div>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">如何使用</div>
+              <ul>
+                <li>先看 readiness 失败项</li>
+                <li>再看 Evidence Navigation 指向的证据</li>
+                <li>Gate 失败时先看 triage 分类和建议命令</li>
+                <li>准备 PR 前看 Changed Files 和 PR Body</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- delivery commands -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.13–6.17 delivery</span>
+              <span class="cmd-desc">交付与 CI 查询</span>
+            </div>
+            <pre><code><span class="cmt"># 只看交付计划，无远端副作用</span>
 <span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>
 
 <span class="cmt"># 生成本地 PR 包</span>
@@ -1655,47 +2033,51 @@ delivery ci-watch    →  只读轮询，不 rerun/merge</code></div>
 
 <span class="cmt"># 轮询 PR checks 到终态</span>
 <span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">delivery prepare 结果</div>
-          <ul>
-            <li><code>.tekon/runs/&lt;runId&gt;/delivery/pr-package.md</code></li>
-            <li><code>.tekon/runs/&lt;runId&gt;/delivery/pr-body.md</code></li>
-            <li><code>delivery-package</code> artifact</li>
-            <li><code>delivery.pr-prepared</code> 审计事件</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">create-pr 必要条件</div>
-          <ul>
-            <li>已安装并认证 <code>gh</code></li>
-            <li>目标远端有创建 PR 权限</li>
-            <li>主工作区除 <code>.tekon</code> 外没有未提交改动</li>
-            <li>用户明确传入 <code>--approve-human</code></li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="cmd-section-title">ci-status 结果</div>
-          <ul>
-            <li>写入 <code>ci-status</code> artifact</li>
-            <li>记录 <code>delivery.ci.checked</code> 审计事件</li>
-            <li>后续 PR 包和 readiness 可看到远端 CI 证据</li>
-          </ul>
-        </div>
-        <div class="cmd-section">
-          <div class="callout callout-info" style="margin:0;">
-            <span class="callout-label">ci-watch 注意</span>
-            不 rerun CI、不 merge、不上线。
+            <div class="cmd-section">
+              <div class="cmd-section-title">delivery prepare 结果</div>
+              <ul>
+                <li>
+                  <code>.tekon/runs/&lt;runId&gt;/delivery/pr-package.md</code>
+                </li>
+                <li>
+                  <code>.tekon/runs/&lt;runId&gt;/delivery/pr-body.md</code>
+                </li>
+                <li><code>delivery-package</code> artifact</li>
+                <li><code>delivery.pr-prepared</code> 审计事件</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">create-pr 必要条件</div>
+              <ul>
+                <li>已安装并认证 <code>gh</code></li>
+                <li>目标远端有创建 PR 权限</li>
+                <li>主工作区除 <code>.tekon</code> 外没有未提交改动</li>
+                <li>用户明确传入 <code>--approve-human</code></li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-section-title">ci-status 结果</div>
+              <ul>
+                <li>写入 <code>ci-status</code> artifact</li>
+                <li>记录 <code>delivery.ci.checked</code> 审计事件</li>
+                <li>后续 PR 包和 readiness 可看到远端 CI 证据</li>
+              </ul>
+            </div>
+            <div class="cmd-section">
+              <div class="callout callout-info" style="margin: 0">
+                <span class="callout-label">ci-watch 注意</span>
+                不 rerun CI、不 merge、不上线。
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- eval commands -->
-      <div class="cmd-block">
-        <div class="cmd-block-header">
-          <span class="cmd-name">6.18–6.19 eval</span>
-          <span class="cmd-desc">就绪度与可用性评估</span>
-        </div>
-        <pre><code><span class="cmt"># 判断单次 run 是否可进入审阅或 PR 流程</span>
+          <!-- eval commands -->
+          <div class="cmd-block">
+            <div class="cmd-block-header">
+              <span class="cmd-name">6.18–6.19 eval</span>
+              <span class="cmd-desc">就绪度与可用性评估</span>
+            </div>
+            <pre><code><span class="cmt"># 判断单次 run 是否可进入审阅或 PR 流程</span>
 <span class="cmd">tekon</span> <span class="arg">eval readiness</span>
 
 <span class="cmt"># 记录样本</span>
@@ -1705,441 +2087,641 @@ delivery ci-watch    →  只读轮询，不 rerun/merge</code></div>
 <span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="str">/path/to/samples.yaml</span> \
   <span class="flag">--report-md</span> <span class="str">docs/reviews/work-usability.md</span> \
   <span class="flag">--report-html</span> <span class="str">docs/reviews/work-usability.html</span></code></pre>
-        <div class="cmd-section">
-          <div class="cmd-section-title">readiness 常见失败项</div>
-          <div class="tag-list">
-            <span class="tag tag-red">workflow 未 passed</span>
-            <span class="tag tag-red">audit hash 无效</span>
-            <span class="tag tag-red">gate 失败</span>
-            <span class="tag tag-red">delivery package 缺失</span>
-            <span class="tag tag-red">pending human gate</span>
-            <span class="tag tag-red">验收标准无 evidence</span>
-            <span class="tag tag-red">security scan 失败</span>
+            <div class="cmd-section">
+              <div class="cmd-section-title">readiness 常见失败项</div>
+              <div class="tag-list">
+                <span class="tag tag-red">workflow 未 passed</span>
+                <span class="tag tag-red">audit hash 无效</span>
+                <span class="tag tag-red">gate 失败</span>
+                <span class="tag tag-red">delivery package 缺失</span>
+                <span class="tag tag-red">pending human gate</span>
+                <span class="tag tag-red">验收标准无 evidence</span>
+                <span class="tag tag-red">security scan 失败</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
           </div>
         </div>
-      </div>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 07: Web Dashboard
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-web">
-      <div class="section-header">
-        <span class="section-number">SECTION 07</span>
-        <h1 class="section-title">Web Dashboard</h1>
-        <p class="section-subtitle">本地可视化看板，与 CLI 共享同一套数据。</p>
-      </div>
+        <div class="tab-panel" id="panel-web">
+          <div class="section-header">
+            <span class="section-number">SECTION 07</span>
+            <h1 class="section-title">Web Dashboard</h1>
+            <p class="section-subtitle">
+              本地可视化看板，与 CLI 共享同一套数据。
+            </p>
+          </div>
 
-      <h3>启动</h3>
-      <pre><code><span class="cmd">TEKON_PROJECT_ROOT</span>=<span class="str">/path/to/project</span> <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="flag">--filter</span> <span class="arg">@tekon/web</span> <span class="arg">dev</span></code></pre>
+          <h3>启动</h3>
+          <pre><code><span class="cmd">TEKON_PROJECT_ROOT</span>=<span class="str">/path/to/project</span> <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="flag">--filter</span> <span class="arg">@tekon/web</span> <span class="arg">dev</span></code></pre>
 
-      <h3>功能</h3>
-      <div class="concept-grid">
-        <div class="concept-card">
-          <h4>项目概览</h4>
-          <p>查看项目 overview 和 run 列表。</p>
+          <h3>功能</h3>
+          <div class="concept-grid">
+            <div class="concept-card">
+              <h4>项目概览</h4>
+              <p>查看项目 overview 和 run 列表。</p>
+            </div>
+            <div class="concept-card">
+              <h4>Run 详情</h4>
+              <p>
+                选择历史 run，查看 readiness、evidence、diff、artifact、gate
+                log、PR 包。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>Human Approval</h4>
+              <p>处理 human approval 决策。</p>
+            </div>
+            <div class="concept-card">
+              <h4>受控运行</h4>
+              <p>
+                发起受控模板 run、触发 delivery prepare，在人工批准下触发
+                create-pr。
+              </p>
+            </div>
+            <div class="concept-card">
+              <h4>Provider 选择</h4>
+              <p>
+                Run 表单可选择 <code>mock</code>、<code>claude-code</code> 或
+                <code>codex</code>。
+              </p>
+            </div>
+          </div>
+
+          <h3>Session Token</h3>
+          <p>写操作需要 session token，位于：</p>
+          <pre><code><span class="str">/path/to/project/.tekon/web-session.json</span></code></pre>
+
+          <div class="callout callout-warn">
+            <span class="callout-label">安全提醒</span>
+            Web 是本地 dashboard，不是远程服务。token 不应提交。Web create-pr 和
+            CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
+          </div>
+
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
         </div>
-        <div class="concept-card">
-          <h4>Run 详情</h4>
-          <p>选择历史 run，查看 readiness、evidence、diff、artifact、gate log、PR 包。</p>
-        </div>
-        <div class="concept-card">
-          <h4>Human Approval</h4>
-          <p>处理 human approval 决策。</p>
-        </div>
-        <div class="concept-card">
-          <h4>受控运行</h4>
-          <p>发起受控模板 run、触发 delivery prepare，在人工批准下触发 create-pr。</p>
-        </div>
-      </div>
 
-      <h3>Session Token</h3>
-      <p>写操作需要 session token，位于：</p>
-      <pre><code><span class="str">/path/to/project/.tekon/web-session.json</span></code></pre>
-
-      <div class="callout callout-warn">
-        <span class="callout-label">安全提醒</span>
-        Web 是本地 dashboard，不是远程服务。token 不应提交。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
-      </div>
-
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 08: 判断结果
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-judge">
-      <div class="section-header">
-        <span class="section-number">SECTION 08</span>
-        <h1 class="section-title">如何判断结果是否可信</h1>
-        <p class="section-subtitle">不要只看"命令退出 0"。按顺序检查这八项。</p>
-      </div>
+        <div class="tab-panel" id="panel-judge">
+          <div class="section-header">
+            <span class="section-number">SECTION 08</span>
+            <h1 class="section-title">如何判断结果是否可信</h1>
+            <p class="section-subtitle">
+              不要只看"命令退出 0"。按顺序检查这八项。
+            </p>
+          </div>
 
-      <div class="flow-diagram"><code>  1. status          →  workflow 是否 passed
-  2. eval readiness  →  是否 ready
-  3. review          →  失败项和证据是否能解释
-  4. Changed Files   →  影响文件是否符合预期
-  5. Artifacts       →  需求/变更/测试/审阅证据是否完整
-  6. Gate Logs       →  build/lint/test/security 是否真的跑过
-  7. PR Package      →  PR body 是否能让 reviewer 看懂
-  8. CI Status       →  如已创建 PR，远端 checks 是否已记录</code></div>
+          <div class="flow-diagram">
+            <code>
+              1. status → workflow 是否 passed 2. eval readiness → 是否 ready 3.
+              review → 失败项和证据是否能解释 4. Changed Files →
+              影响文件是否符合预期 5. Artifacts →
+              需求/变更/测试/审阅证据是否完整 6. Gate Logs →
+              build/lint/test/security 是否真的跑过 7. PR Package → PR body
+              是否能让 reviewer 看懂 8. CI Status → 如已创建 PR，远端 checks
+              是否已记录</code
+            >
+          </div>
 
-      <div class="callout callout-warn">
-        <span class="callout-label">核心原则</span>
-        如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。
-      </div>
+          <div class="callout callout-warn">
+            <span class="callout-label">核心原则</span>
+            如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。
+          </div>
 
-      <h3>逐项说明</h3>
+          <h3>逐项说明</h3>
 
-      <h4>1. status — workflow 是否 passed</h4>
-      <p><code>status=passed</code> 表示所有节点完成，但不代表可以自动合入。仍需检查 gate 和 artifact。</p>
+          <h4>1. status — workflow 是否 passed</h4>
+          <p>
+            <code>status=passed</code>
+            表示所有节点完成，但不代表可以自动合入。仍需检查 gate 和 artifact。
+          </p>
 
-      <h4>2. eval readiness — 是否 ready</h4>
-      <p><code>ready=true</code> 表示具备进入人工审阅或 PR 准备的最低证据面。</p>
+          <h4>2. eval readiness — 是否 ready</h4>
+          <p>
+            <code>ready=true</code> 表示具备进入人工审阅或 PR 准备的最低证据面。
+          </p>
 
-      <h4>3. review — 失败项和证据</h4>
-      <p>重点看 Readiness Failed Checks、Evidence Navigation 和 Gate Failure Triage。</p>
+          <h4>3. review — 失败项和证据</h4>
+          <p>
+            重点看 Readiness Failed Checks、Evidence Navigation 和 Gate Failure
+            Triage。
+          </p>
 
-      <h4>4. Changed Files — 影响文件</h4>
-      <p>确认影响范围符合预期，没有意外文件被修改。</p>
+          <h4>4. Changed Files — 影响文件</h4>
+          <p>确认影响范围符合预期，没有意外文件被修改。</p>
 
-      <h4>5. Artifacts — 证据完整性</h4>
-      <p>检查需求卡、变更说明、测试报告、审阅报告是否齐全。</p>
+          <h4>5. Artifacts — 证据完整性</h4>
+          <p>检查需求卡、变更说明、测试报告、审阅报告是否齐全。</p>
 
-      <h4>6. Gate Logs — 验证记录</h4>
-      <p>确认 build、lint、test、security scan 确实执行并通过。</p>
+          <h4>6. Gate Logs — 验证记录</h4>
+          <p>确认 build、lint、test、security scan 确实执行并通过。</p>
 
-      <h4>7. PR Package — PR 材料</h4>
-      <p>PR body 应该能让 reviewer 理解改动内容和原因。</p>
+          <h4>7. PR Package — PR 材料</h4>
+          <p>PR body 应该能让 reviewer 理解改动内容和原因。</p>
 
-      <h4>8. CI Status — 远端检查</h4>
-      <p>如果已创建 PR，确认远端 checks 已记录。</p>
+          <h4>8. CI Status — 远端检查</h4>
+          <p>如果已创建 PR，确认远端 checks 已记录。</p>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
 
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 09: 常见问题
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-faq">
-      <div class="section-header">
-        <span class="section-number">SECTION 09</span>
-        <h1 class="section-title">常见问题处理</h1>
-        <p class="section-subtitle">八类常见故障的诊断和处理方式。</p>
-      </div>
+        <div class="tab-panel" id="panel-faq">
+          <div class="section-header">
+            <span class="section-number">SECTION 09</span>
+            <h1 class="section-title">常见问题处理</h1>
+            <p class="section-subtitle">九类常见故障的诊断和处理方式。</p>
+          </div>
 
-      <h3>9.1 workflow preflight 显示 missing command</h3>
-      <p><strong>原因：</strong>目标仓库没有配置对应命令。</p>
-      <p><strong>处理：</strong></p>
-      <ol>
-        <li>看 <code>suggestedCommand</code> 是否合理</li>
-        <li>把确认后的命令写入 <code>.tekon/repo-profile.yaml</code></li>
-        <li>再跑 <code>workflow preflight</code></li>
-      </ol>
-      <div class="callout callout-warn">
-        <span class="callout-label">注意</span>
-        不要直接跳过 gate，除非该命令确实不适用且你能写出原因。
-      </div>
+          <h3>9.1 workflow preflight 显示 missing command</h3>
+          <p><strong>原因：</strong>目标仓库没有配置对应命令。</p>
+          <p><strong>处理：</strong></p>
+          <ol>
+            <li>看 <code>suggestedCommand</code> 是否合理</li>
+            <li>把确认后的命令写入 <code>.tekon/repo-profile.yaml</code></li>
+            <li>再跑 <code>workflow preflight</code></li>
+          </ol>
+          <div class="callout callout-warn">
+            <span class="callout-label">注意</span>
+            不要直接跳过 gate，除非该命令确实不适用且你能写出原因。
+          </div>
 
-      <h3>9.2 run 拒绝 dirty base</h3>
-      <p><strong>原因：</strong>目标仓库有未提交业务改动。</p>
-      <p><strong>处理：</strong>先提交、stash 或清理无关改动。如果明确要基于当前改动运行，追加 <code>--allow-dirty-base</code>。</p>
-      <div class="callout callout-info">
-        <span class="callout-label">说明</span>
-        <code>--allow-dirty-base</code> 是人工确认，不是安全证明。
-      </div>
+          <h3>9.2 run 拒绝 dirty base</h3>
+          <p><strong>原因：</strong>目标仓库有未提交业务改动。</p>
+          <p>
+            <strong>处理：</strong>先提交、stash
+            或清理无关改动。如果明确要基于当前改动运行，追加
+            <code>--allow-dirty-base</code>。
+          </p>
+          <div class="callout callout-info">
+            <span class="callout-label">说明</span>
+            <code>--allow-dirty-base</code> 是人工确认，不是安全证明。
+          </div>
 
-      <h3>9.3 pending human gate</h3>
-      <p><strong>处理流程：</strong></p>
-      <ol>
-        <li>执行 <code>approval summary</code></li>
-        <li>执行 <code>eval approval-summary</code></li>
-        <li>如果摘要不完整，先看 <code>review</code> 补证据</li>
-        <li>批准：<code>resume --approve-human</code></li>
-        <li>拒绝：<code>approval reject</code></li>
-      </ol>
+          <h3>9.3 pending human gate</h3>
+          <p><strong>处理流程：</strong></p>
+          <ol>
+            <li>执行 <code>approval summary</code></li>
+            <li>执行 <code>eval approval-summary</code></li>
+            <li>如果摘要不完整，先看 <code>review</code> 补证据</li>
+            <li>批准：<code>resume --approve-human</code></li>
+            <li>拒绝：<code>approval reject</code></li>
+          </ol>
 
-      <h3>9.4 readiness 不通过</h3>
-      <p><strong>常见原因：</strong></p>
-      <div class="tag-list">
-        <span class="tag tag-red">workflow 还没 passed</span>
-        <span class="tag tag-red">pending human gate</span>
-        <span class="tag tag-red">验证 gate 失败</span>
-        <span class="tag tag-red">PR 准备包不存在</span>
-        <span class="tag tag-red">security scan 失败</span>
-        <span class="tag tag-red">artifact 缺验收标准 evidence</span>
-      </div>
-      <p><strong>处理：</strong>先看 <code>review</code> 的 failed checks → Evidence Navigation → Gate Failure Triage。</p>
+          <h3>9.4 readiness 不通过</h3>
+          <p><strong>常见原因：</strong></p>
+          <div class="tag-list">
+            <span class="tag tag-red">workflow 还没 passed</span>
+            <span class="tag tag-red">pending human gate</span>
+            <span class="tag tag-red">验证 gate 失败</span>
+            <span class="tag tag-red">PR 准备包不存在</span>
+            <span class="tag tag-red">security scan 失败</span>
+            <span class="tag tag-red">artifact 缺验收标准 evidence</span>
+          </div>
+          <p>
+            <strong>处理：</strong>先看 <code>review</code> 的 failed checks →
+            Evidence Navigation → Gate Failure Triage。
+          </p>
 
-      <h3>9.5 delivery create-pr 失败</h3>
-      <p><strong>常见原因：</strong>没有 <code>gh</code>、<code>gh auth status</code> 失败、远端权限不足、主工作区 dirty、PR 已存在。</p>
-      <p><strong>处理：</strong>先修认证和工作区状态。若 PR 已存在，看命令是否恢复了 PR URL。不要直接重复执行高风险命令，先看 <code>.tekon/runs/&lt;runId&gt;/delivery/</code> 和 <code>review</code>。</p>
+          <h3>9.5 delivery create-pr 失败</h3>
+          <p>
+            <strong>常见原因：</strong>没有 <code>gh</code>、<code
+              >gh auth status</code
+            >
+            失败、远端权限不足、主工作区 dirty、PR 已存在。
+          </p>
+          <p>
+            <strong>处理：</strong>先修认证和工作区状态。若 PR
+            已存在，看命令是否恢复了 PR URL。不要直接重复执行高风险命令，先看
+            <code>.tekon/runs/&lt;runId&gt;/delivery/</code> 和
+            <code>review</code>。
+          </p>
 
-      <h3>9.6 ci-status 查询失败</h3>
-      <p><strong>常见原因：</strong>run 没有 PR URL、selector 不对、<code>gh pr checks</code> 不支持目标、远端无 checks、权限不足。</p>
-      <p><strong>处理：</strong>用 <code>--selector &lt;prUrl|branch&gt;</code> 明确指定。先手动确认 <code>gh pr checks</code> 是否可用。对非 GitHub host，当前需要后续 adapter 支持。</p>
+          <h3>9.6 ci-status 查询失败</h3>
+          <p>
+            <strong>常见原因：</strong>run 没有 PR URL、selector 不对、<code
+              >gh pr checks</code
+            >
+            不支持目标、远端无 checks、权限不足。
+          </p>
+          <p>
+            <strong>处理：</strong>用
+            <code>--selector &lt;prUrl|branch&gt;</code> 明确指定。先手动确认
+            <code>gh pr checks</code> 是否可用。对非 GitHub host，当前需要后续
+            adapter 支持。
+          </p>
 
-      <h3>9.7 Artifact 被拒绝入库</h3>
-      <p><strong>原因：</strong>产物命中了明显密钥或 token 模式。</p>
-      <p><strong>处理：</strong>删除密钥内容，使用安全摘要或脱敏示例，重新运行相关节点或 provider。这只是基础扫描，不等于完整 DLP。</p>
+          <h3>9.7 Artifact 被拒绝入库</h3>
+          <p><strong>原因：</strong>产物命中了明显密钥或 token 模式。</p>
+          <p>
+            <strong>处理：</strong
+            >删除密钥内容，使用安全摘要或脱敏示例，重新运行相关节点或
+            provider。这只是基础扫描，不等于完整 DLP。
+          </p>
 
-      <h3>9.8 Web 写操作被拒绝</h3>
-      <p><strong>常见原因：</strong>session token 错误、<code>.tekon/web-session.json</code> 不存在、项目 root 不在允许范围。</p>
-      <p><strong>处理：</strong>重新执行 <code>init</code> 生成 token。确认 Web 启动时的 <code>TEKON_PROJECT_ROOT</code> 正确。不要提交 token。</p>
+          <h3>9.8 Web 写操作被拒绝</h3>
+          <p>
+            <strong>常见原因：</strong>session token 错误、<code
+              >.tekon/web-session.json</code
+            >
+            不存在、项目 root 不在允许范围。
+          </p>
+          <p>
+            <strong>处理：</strong>重新执行 <code>init</code> 生成 token。确认
+            Web 启动时的 <code>TEKON_PROJECT_ROOT</code> 正确。不要提交 token。
+          </p>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <h3>9.9 Codex provider 运行失败</h3>
+          <p>
+            <strong>常见原因：</strong>本机未安装 <code>codex</code>、Codex CLI
+            未完成认证、provider 没有写入必需 artifact manifest，或用户 args
+            试图覆盖 sandbox / approval / filesystem / config / bypass 参数。
+          </p>
+          <p>
+            <strong>处理：</strong>先执行 <code>codex --version</code> 和最小
+            <code>codex exec</code> smoke；再查看
+            <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下
+            stdout/stderr、<code>artifact-manifest.json</code> 和 artifact
+            内容。不要把真实 provider 失败降级成 mock 通过。
+          </p>
+          <p>详细流程见 <code>docs/manual/codex-provider-smoke.md</code>。</p>
 
-    <!-- ════════════════════════════════════════
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════
          TAB 10: 参数速查
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-params">
-      <div class="section-header">
-        <span class="section-number">SECTION 10</span>
-        <h1 class="section-title">参数速查</h1>
-        <p class="section-subtitle">全局参数、run 参数、demand shape 参数和 delivery ci-watch 参数一览。</p>
-      </div>
+        <div class="tab-panel" id="panel-params">
+          <div class="section-header">
+            <span class="section-number">SECTION 10</span>
+            <h1 class="section-title">参数速查</h1>
+            <p class="section-subtitle">
+              全局参数、run 参数、demand shape 参数和 delivery ci-watch
+              参数一览。
+            </p>
+          </div>
 
-      <h3>全局常见参数</h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>参数</th><th>用途</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>--repo &lt;path&gt;</code></td><td>跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。</td></tr>
-            <tr><td><code>--run-id &lt;runId&gt;</code></td><td>指定历史或非最近 workflow run；常规审阅默认使用最近 run。</td></tr>
-            <tr><td><code>--agent mock</code></td><td>使用 mock provider，适合本地验收和 fixture。</td></tr>
-            <tr><td><code>--agent claude-code</code></td><td>使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。</td></tr>
-            <tr><td><code>--approve-human</code></td><td>明确批准人工 gate 或远端副作用。</td></tr>
-            <tr><td><code>--allow-dirty-base</code></td><td>允许基于当前未提交业务改动运行。</td></tr>
-            <tr><td><code>--shape &lt;path&gt;</code></td><td>指定需求卡；常规批准/查看默认使用最近需求卡。</td></tr>
-            <tr><td><code>--decision-id &lt;id&gt;</code></td><td>指定人工决策；同一 run 有多个 pending decision 或处理历史 decision 时使用。</td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3>全局常见参数</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>--repo &lt;path&gt;</code></td>
+                  <td>
+                    跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--run-id &lt;runId&gt;</code></td>
+                  <td>
+                    指定历史或非最近 workflow run；常规审阅默认使用最近 run。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--agent mock</code></td>
+                  <td>使用 mock provider，适合本地验收和 fixture。</td>
+                </tr>
+                <tr>
+                  <td><code>--agent claude-code</code></td>
+                  <td>
+                    使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--agent codex</code></td>
+                  <td>
+                    使用本机 Codex CLI adapter，需本机安装、认证和真实 smoke
+                    证据。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--approve-human</code></td>
+                  <td>明确批准人工 gate 或远端副作用。</td>
+                </tr>
+                <tr>
+                  <td><code>--allow-dirty-base</code></td>
+                  <td>允许基于当前未提交业务改动运行。</td>
+                </tr>
+                <tr>
+                  <td><code>--shape &lt;path&gt;</code></td>
+                  <td>指定需求卡；常规批准/查看默认使用最近需求卡。</td>
+                </tr>
+                <tr>
+                  <td><code>--decision-id &lt;id&gt;</code></td>
+                  <td>
+                    指定人工决策；同一 run 有多个 pending decision 或处理历史
+                    decision 时使用。
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3>run 参数</h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>参数</th><th>用途</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>--template &lt;name&gt;</code></td><td>使用内置模板。</td></tr>
-            <tr><td><code>--demand-file &lt;path&gt;</code></td><td>指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。</td></tr>
-            <tr><td><code>--dynamic</code></td><td>使用动态 workflow 路径。</td></tr>
-            <tr><td><code>--dry-run</code></td><td>只预览，不执行。</td></tr>
-            <tr><td><code>--save-as &lt;name&gt;</code></td><td>保存动态 workflow 预览。</td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3>run 参数</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>--template &lt;name&gt;</code></td>
+                  <td>使用内置模板。</td>
+                </tr>
+                <tr>
+                  <td><code>--demand-file &lt;path&gt;</code></td>
+                  <td>
+                    指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--dynamic</code></td>
+                  <td>使用动态 workflow 路径。</td>
+                </tr>
+                <tr>
+                  <td><code>--dry-run</code></td>
+                  <td>只预览，不执行。</td>
+                </tr>
+                <tr>
+                  <td><code>--save-as &lt;name&gt;</code></td>
+                  <td>保存动态 workflow 预览。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3>demand shape 参数</h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>参数</th><th>用途</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>--no-write</code></td><td>只预览需求塑形结果，不写入 <code>.tekon/demands/</code>。</td></tr>
-            <tr><td><code>--format json</code></td><td>输出 JSON，便于其它工具消费。</td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3>demand shape 参数</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>--no-write</code></td>
+                  <td>
+                    只预览需求塑形结果，不写入 <code>.tekon/demands/</code>。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--format json</code></td>
+                  <td>输出 JSON，便于其它工具消费。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3>delivery ci-watch 参数</h3>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>参数</th><th>用途</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>--selector &lt;prUrl|branch&gt;</code></td><td>指定 PR 或分支。</td></tr>
-            <tr><td><code>--max-attempts &lt;n&gt;</code></td><td>最大轮询次数。</td></tr>
-            <tr><td><code>--interval-ms &lt;ms&gt;</code></td><td>每次轮询间隔。</td></tr>
-            <tr><td><code>--backoff &lt;n&gt;</code></td><td>轮询退避倍率。</td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3>delivery ci-watch 参数</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>参数</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>--selector &lt;prUrl|branch&gt;</code></td>
+                  <td>指定 PR 或分支。</td>
+                </tr>
+                <tr>
+                  <td><code>--max-attempts &lt;n&gt;</code></td>
+                  <td>最大轮询次数。</td>
+                </tr>
+                <tr>
+                  <td><code>--interval-ms &lt;ms&gt;</code></td>
+                  <td>每次轮询间隔。</td>
+                </tr>
+                <tr>
+                  <td><code>--backoff &lt;n&gt;</code></td>
+                  <td>轮询退避倍率。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <div class="content-footer">
-        <div class="footer-seal">工</div>
-        <div class="footer-text">tekon-user-manual · v2 local</div>
-      </div>
-    </div>
+          <div class="content-footer">
+            <div class="footer-seal">工</div>
+            <div class="footer-text">tekon-user-manual · v2 local</div>
+          </div>
+        </div>
 
-    <!-- ════════════════════════════════════════
+        <!-- ════════════════════════════════════════
          TAB 11: 边界与安全
          ════════════════════════════════════════ -->
-    <div class="tab-panel" id="panel-bounds">
-      <div class="section-header">
-        <span class="section-number">SECTION 11</span>
-        <h1 class="section-title">边界与安全原则</h1>
-        <p class="section-subtitle">天工的设计边界、推荐使用范围和不建议使用范围。</p>
-      </div>
+        <div class="tab-panel" id="panel-bounds">
+          <div class="section-header">
+            <span class="section-number">SECTION 11</span>
+            <h1 class="section-title">边界与安全原则</h1>
+            <p class="section-subtitle">
+              天工的设计边界、推荐使用范围和不建议使用范围。
+            </p>
+          </div>
 
-      <h3>必须明确</h3>
-      <div class="tag-list" style="margin-bottom:24px;">
-        <span class="tag tag-red">不会自动 merge</span>
-        <span class="tag tag-red">不会自动上线</span>
-        <span class="tag tag-red">不会自动扩大权限</span>
-        <span class="tag tag-red">不是生产级 OS 沙箱</span>
-        <span class="tag tag-red">不是完整 DLP</span>
-        <span class="tag tag-red">没有远程多租户权限模型</span>
-        <span class="tag tag-red">只写回 CI 查询，不控制 CI</span>
-        <span class="tag tag-red">飞书 IM 通知尚未接入</span>
-      </div>
+          <h3>必须明确</h3>
+          <div class="tag-list" style="margin-bottom: 24px">
+            <span class="tag tag-red">不会自动 merge</span>
+            <span class="tag tag-red">不会自动上线</span>
+            <span class="tag tag-red">不会自动扩大权限</span>
+            <span class="tag tag-red">不是生产级 OS 沙箱</span>
+            <span class="tag tag-red">不是完整 DLP</span>
+            <span class="tag tag-red">没有远程多租户权限模型</span>
+            <span class="tag tag-red">只写回 CI 查询，不控制 CI</span>
+            <span class="tag tag-red">Codex provider 是本机 CLI 集成</span>
+            <span class="tag tag-red">飞书 IM 通知尚未接入</span>
+          </div>
 
-      <h3>推荐使用范围</h3>
-      <div class="concept-grid">
-        <div class="concept-card">
-          <h4>✓ 内部工具</h4>
-          <p>内部工具的研发和维护。</p>
-        </div>
-        <div class="concept-card">
-          <h4>✓ 研发效能工具</h4>
-          <p>提升研发效率的工具开发。</p>
-        </div>
-        <div class="concept-card">
-          <h4>✓ 测试补齐</h4>
-          <p>补充单测、回归测试、API 测试。</p>
-        </div>
-        <div class="concept-card">
-          <h4>✓ 文档补齐</h4>
-          <p>用户手册、API 文档、技术方案。</p>
-        </div>
-        <div class="concept-card">
-          <h4>✓ 低风险 bugfix</h4>
-          <p>逻辑分支修复、状态处理调整。</p>
-        </div>
-        <div class="concept-card">
-          <h4>✓ 中小需求</h4>
-          <p>可回滚、可人工审阅的改动。</p>
-        </div>
-      </div>
+          <h3>推荐使用范围</h3>
+          <div class="concept-grid">
+            <div class="concept-card">
+              <h4>✓ 内部工具</h4>
+              <p>内部工具的研发和维护。</p>
+            </div>
+            <div class="concept-card">
+              <h4>✓ 研发效能工具</h4>
+              <p>提升研发效率的工具开发。</p>
+            </div>
+            <div class="concept-card">
+              <h4>✓ 测试补齐</h4>
+              <p>补充单测、回归测试、API 测试。</p>
+            </div>
+            <div class="concept-card">
+              <h4>✓ 文档补齐</h4>
+              <p>用户手册、API 文档、技术方案。</p>
+            </div>
+            <div class="concept-card">
+              <h4>✓ 低风险 bugfix</h4>
+              <p>逻辑分支修复、状态处理调整。</p>
+            </div>
+            <div class="concept-card">
+              <h4>✓ 中小需求</h4>
+              <p>可回滚、可人工审阅的改动。</p>
+            </div>
+          </div>
 
-      <h3>不建议当前使用范围</h3>
-      <div class="tag-list">
-        <span class="tag tag-red">生产数据写入</span>
-        <span class="tag tag-red">支付 / 权限 / 合规 / 隐私</span>
-        <span class="tag tag-red">自动发布</span>
-        <span class="tag tag-red">无人审阅的远端操作</span>
-        <span class="tag tag-red">长时间真实 LLM 且缺恢复预案</span>
-      </div>
+          <h3>不建议当前使用范围</h3>
+          <div class="tag-list">
+            <span class="tag tag-red">生产数据写入</span>
+            <span class="tag tag-red">支付 / 权限 / 合规 / 隐私</span>
+            <span class="tag tag-red">自动发布</span>
+            <span class="tag tag-red">无人审阅的远端操作</span>
+            <span class="tag tag-red">长时间真实 LLM 且缺恢复预案</span>
+          </div>
 
-      <div class="deco-line"></div>
+          <div class="deco-line"></div>
 
-      <h3>手册更新规则</h3>
-      <p>后续每次功能、行为、CLI/Web 入口、参数、错误处理、边界或用户流程发生变化后，都必须评估是否需要更新本手册。</p>
-      <p>需要更新的典型情况：</p>
-      <ul>
-        <li>新增或删除 CLI 命令</li>
-        <li>参数语义变化</li>
-        <li>Web dashboard 新增写操作</li>
-        <li>Gate、readiness、work-usability 规则变化</li>
-        <li>运行目录、artifact、PR 包或审计结构变化</li>
-        <li>新增真实 provider 支持</li>
-        <li>安全边界、人工审批边界或远端副作用规则变化</li>
-        <li>用户常见故障处理方式变化</li>
-      </ul>
-      <p>如果一次迭代判断不需要更新本手册，应在最终回复或提交说明中说明理由。</p>
-      <p>当前主手册路径：</p>
-      <pre><code><span class="str">docs/manual/tekon-user-manual.md</span></code></pre>
+          <h3>手册更新规则</h3>
+          <p>
+            后续每次功能、行为、CLI/Web
+            入口、参数、错误处理、边界或用户流程发生变化后，都必须评估是否需要更新本手册。
+          </p>
+          <p>需要更新的典型情况：</p>
+          <ul>
+            <li>新增或删除 CLI 命令</li>
+            <li>参数语义变化</li>
+            <li>Web dashboard 新增写操作</li>
+            <li>Gate、readiness、work-usability 规则变化</li>
+            <li>运行目录、artifact、PR 包或审计结构变化</li>
+            <li>新增真实 provider 支持</li>
+            <li>安全边界、人工审批边界或远端副作用规则变化</li>
+            <li>用户常见故障处理方式变化</li>
+          </ul>
+          <p>
+            如果一次迭代判断不需要更新本手册，应在最终回复或提交说明中说明理由。
+          </p>
+          <p>当前主手册路径：</p>
+          <pre><code><span class="str">docs/manual/tekon-user-manual.md</span></code></pre>
 
-      <div class="content-footer">
-        <div class="footer-seal">天工</div>
-        <div class="footer-text">天工开物 · Tekon User Manual · v2 Local · 2026.06</div>
-      </div>
+          <div class="content-footer">
+            <div class="footer-seal">天工</div>
+            <div class="footer-text">
+              天工开物 · Tekon User Manual · v2 Local · 2026.06
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
 
-  </main>
-</div>
+    <!-- ── Mobile Nav ── -->
+    <div class="mobile-nav" id="mobileNav">
+      <button class="mobile-nav-btn active" data-tab="overview">概述</button>
+      <button class="mobile-nav-btn" data-tab="problems">问题</button>
+      <button class="mobile-nav-btn" data-tab="scenarios">场景</button>
+      <button class="mobile-nav-btn" data-tab="quickstart">快速上手</button>
+      <button class="mobile-nav-btn" data-tab="concepts">概念</button>
+      <button class="mobile-nav-btn" data-tab="commands">命令</button>
+      <button class="mobile-nav-btn" data-tab="web">Web</button>
+      <button class="mobile-nav-btn" data-tab="judge">判断</button>
+      <button class="mobile-nav-btn" data-tab="faq">FAQ</button>
+      <button class="mobile-nav-btn" data-tab="params">参数</button>
+      <button class="mobile-nav-btn" data-tab="bounds">边界</button>
+    </div>
 
-<!-- ── Mobile Nav ── -->
-<div class="mobile-nav" id="mobileNav">
-  <button class="mobile-nav-btn active" data-tab="overview">概述</button>
-  <button class="mobile-nav-btn" data-tab="problems">问题</button>
-  <button class="mobile-nav-btn" data-tab="scenarios">场景</button>
-  <button class="mobile-nav-btn" data-tab="quickstart">快速上手</button>
-  <button class="mobile-nav-btn" data-tab="concepts">概念</button>
-  <button class="mobile-nav-btn" data-tab="commands">命令</button>
-  <button class="mobile-nav-btn" data-tab="web">Web</button>
-  <button class="mobile-nav-btn" data-tab="judge">判断</button>
-  <button class="mobile-nav-btn" data-tab="faq">FAQ</button>
-  <button class="mobile-nav-btn" data-tab="params">参数</button>
-  <button class="mobile-nav-btn" data-tab="bounds">边界</button>
-</div>
+    <script>
+      (function () {
+        'use strict';
 
-<script>
-(function() {
-  'use strict';
+        const navItems = document.querySelectorAll('.nav-item');
+        const mobileBtns = document.querySelectorAll('.mobile-nav-btn');
+        const panels = document.querySelectorAll('.tab-panel');
 
-  const navItems = document.querySelectorAll('.nav-item');
-  const mobileBtns = document.querySelectorAll('.mobile-nav-btn');
-  const panels = document.querySelectorAll('.tab-panel');
+        function switchTab(tabId) {
+          navItems.forEach((n) => n.classList.remove('active'));
+          mobileBtns.forEach((b) => b.classList.remove('active'));
+          panels.forEach((p) => p.classList.remove('active'));
 
-  function switchTab(tabId) {
-    navItems.forEach(n => n.classList.remove('active'));
-    mobileBtns.forEach(b => b.classList.remove('active'));
-    panels.forEach(p => p.classList.remove('active'));
+          const navItem = document.querySelector(
+            `.nav-item[data-tab="${tabId}"]`,
+          );
+          const mobileBtn = document.querySelector(
+            `.mobile-nav-btn[data-tab="${tabId}"]`,
+          );
+          const panel = document.getElementById(`panel-${tabId}`);
 
-    const navItem = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
-    const mobileBtn = document.querySelector(`.mobile-nav-btn[data-tab="${tabId}"]`);
-    const panel = document.getElementById(`panel-${tabId}`);
+          if (navItem) navItem.classList.add('active');
+          if (mobileBtn) mobileBtn.classList.add('active');
+          if (panel) {
+            panel.classList.add('active');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
 
-    if (navItem) navItem.classList.add('active');
-    if (mobileBtn) mobileBtn.classList.add('active');
-    if (panel) {
-      panel.classList.add('active');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+          history.replaceState(null, '', `#${tabId}`);
+        }
 
-    history.replaceState(null, '', `#${tabId}`);
-  }
+        navItems.forEach((item) => {
+          item.addEventListener('click', () => switchTab(item.dataset.tab));
+        });
 
-  navItems.forEach(item => {
-    item.addEventListener('click', () => switchTab(item.dataset.tab));
-  });
+        mobileBtns.forEach((btn) => {
+          btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
 
-  mobileBtns.forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-  });
+        const hash = location.hash.replace('#', '');
+        if (hash) switchTab(hash);
 
-  const hash = location.hash.replace('#', '');
-  if (hash) switchTab(hash);
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+          const tabOrder = [
+            'overview',
+            'problems',
+            'scenarios',
+            'quickstart',
+            'concepts',
+            'commands',
+            'web',
+            'judge',
+            'faq',
+            'params',
+            'bounds',
+          ];
+          const current = document.querySelector('.nav-item.active');
+          if (!current) return;
+          const idx = tabOrder.indexOf(current.dataset.tab);
 
-  // Keyboard navigation
-  document.addEventListener('keydown', (e) => {
-    const tabOrder = ['overview','problems','scenarios','quickstart','concepts','commands','web','judge','faq','params','bounds'];
-    const current = document.querySelector('.nav-item.active');
-    if (!current) return;
-    const idx = tabOrder.indexOf(current.dataset.tab);
-
-    if (e.key === 'ArrowDown' && e.altKey) {
-      e.preventDefault();
-      if (idx < tabOrder.length - 1) switchTab(tabOrder[idx + 1]);
-    }
-    if (e.key === 'ArrowUp' && e.altKey) {
-      e.preventDefault();
-      if (idx > 0) switchTab(tabOrder[idx - 1]);
-    }
-  });
-})();
-</script>
-</body>
+          if (e.key === 'ArrowDown' && e.altKey) {
+            e.preventDefault();
+            if (idx < tabOrder.length - 1) switchTab(tabOrder[idx + 1]);
+          }
+          if (e.key === 'ArrowUp' && e.altKey) {
+            e.preventDefault();
+            if (idx > 0) switchTab(tabOrder[idx - 1]);
+          }
+        });
+      })();
+    </script>
+  </body>
 </html>

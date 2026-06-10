@@ -19,6 +19,7 @@
 - 一个证据和审阅材料收集器。
 - 一个 PR 准备助手。
 - 一个研发工作样本评估器。
+- 一个支持 mock、Claude Code 和 Codex provider 的本地执行入口。
 
 当前不是：
 
@@ -231,6 +232,14 @@ tekon run --agent mock
 
 输出里会有 `runId`。后续常规命令默认读取最近一次 run；只有查看历史 run 或避免歧义时才需要手动传 `--run-id`。
 
+如果本机已安装并认证 Codex CLI，可使用 Codex provider：
+
+```bash
+tekon run --agent codex
+```
+
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --sandbox workspace-write --ask-for-approval on-request exec`。它会通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+
 ### 4.6 查看结果
 
 ```bash
@@ -335,19 +344,29 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 
 Gate 不通过时 workflow 不应被当成可交付。
 
-### 5.7 Artifact
+### 5.7 Provider
+
+Provider 是执行节点的 agent 后端。当前用户可见选项：
+
+- `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
+- `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
+- `codex`：本机 Codex CLI adapter，使用 `codex exec` 非交互执行，需本机 Codex CLI 已安装并认证。
+
+真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
+
+### 5.8 Artifact
 
 结构化产物，例如需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI 状态。Artifact 是人工审阅和自动评估的主要证据。
 
-### 5.8 Review Surface
+### 5.9 Review Surface
 
 聚合审阅面。CLI 命令是 `review`，Web dashboard 也使用同一套数据。它把用户最需要看的东西放在一起。
 
-### 5.9 Readiness
+### 5.10 Readiness
 
 单次 run 的工作就绪度评估。它回答：“这次 run 是否已经具备进入人工审阅或 PR 准备的最低证据？”
 
-### 5.10 Work Usability
+### 5.11 Work Usability
 
 样本集级评估。它回答：“天工是否已经在足够多真实样本上表现稳定，可以作为受控工作工具试用？”
 
@@ -500,6 +519,7 @@ tekon run --dynamic --dry-run "需求文本" --agent mock
 - `--demand-file <path>`：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。
+- `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
 - `--repo <path>`：只在跨仓库运行时使用。
@@ -787,6 +807,12 @@ tekon eval work-usability record --samples /path/to/work-usability-samples.yaml
 tekon eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html
 ```
 
+记录 Codex 自举样本时，应把 provider 和 PR 要求写入样本：
+
+```bash
+tekon eval work-usability record --id tekon-codex-self-bootstrap --expected-provider codex --require-real-provider --require-pr --samples docs/reviews/tekon-codex-samples.yaml
+```
+
 ## 7. Web Dashboard
 
 启动：
@@ -803,6 +829,7 @@ Web dashboard 适合：
 - 查看 readiness、evidence、diff、artifact、gate log、PR 包。
 - 处理 human approval。
 - 发起受控模板 run。
+- 选择 `mock`、`claude-code` 或 `codex` provider 发起 run。
 - 触发 `delivery prepare`。
 - 在人工批准下触发 `delivery create-pr`。
 
@@ -943,6 +970,24 @@ Web dashboard 适合：
 - 确认 Web 启动时的 `TEKON_PROJECT_ROOT` 正确。
 - 不要提交 token。
 
+### 9.9 Codex provider 运行失败
+
+常见原因：
+
+- 本机未安装 `codex`，或 `codex` 不在 `PATH` 中。
+- 本机 Codex CLI 未完成认证。
+- provider 没有按 Tekon artifact manifest 协议写入必需 artifact。
+- 用户传入的 Codex args 试图覆盖 sandbox、approval、文件系统、配置或危险 bypass 参数。
+- Codex 在当前仓库需要人工批准，但 Tekon 节点执行没有拿到可恢复的 artifact 证据。
+
+处理：
+
+- 先执行 `codex --version` 和一个最小 `codex exec` smoke，确认本机 CLI 可用。
+- 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。
+- 确认 artifact JSON/YAML/Markdown 满足 Tekon schema。
+- 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。
+- 参考 `docs/manual/codex-provider-smoke.md` 的自举 smoke 流程。
+
 ## 10. 参数速查
 
 ### 全局常见参数
@@ -953,6 +998,7 @@ Web dashboard 适合：
 | `--run-id <runId>`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。                   |
 | `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                                |
 | `--agent claude-code` | 使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。                 |
+| `--agent codex`       | 使用本机 Codex CLI adapter，需本机安装、认证和真实 smoke 证据。             |
 | `--approve-human`     | 明确批准人工 gate 或远端副作用。                                            |
 | `--allow-dirty-base`  | 允许基于当前未提交业务改动运行。                                            |
 | `--shape <path>`      | 指定需求卡；常规批准/查看默认使用最近需求卡。                               |
@@ -996,6 +1042,7 @@ Web dashboard 适合：
 - 天工当前不是完整 DLP。
 - 天工当前没有完整的远程多租户权限模型。
 - 天工当前只把远端 CI 查询写回证据，不控制 CI。
+- Codex provider 当前是本机 CLI 集成，不是生产级远程执行平台。
 - 飞书 IM 通知尚未接入；当前是可复制审批摘要。
 
 推荐使用范围：

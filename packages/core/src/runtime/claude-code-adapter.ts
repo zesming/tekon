@@ -1,20 +1,15 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join } from 'node:path';
 
-import {
-  agentArtifactManifestSchema,
-  validateArtifactContent,
-} from '../artifact/schemas.js';
 import type { AgentAdapterConfig } from '../types/config.js';
-import type {
-  Artifact,
-  ArtifactType,
-  CommandInvocation,
-} from '../types/domain.js';
+import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
-import type { AgentAdapter, AgentRunInput } from './agent-adapter.js';
+import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import { buildClaudeProviderEnv } from './claude-code-support.js';
+import {
+  ingestAgentManifestArtifacts,
+  missingRequiredArtifactTypes,
+} from './manifest-artifacts.js';
 
 export interface BuiltClaudeCodeCommand extends CommandInvocation {
   stdin?: string;
@@ -94,7 +89,10 @@ export function createClaudeCodeAdapter(
       let artifactOutputFiles: string[] = [];
       if (result.exitCode === 0 && input.artifactStore) {
         try {
-          artifacts = await ingestManifestArtifacts(input, manifestPath);
+          artifacts = await ingestAgentManifestArtifacts({
+            runInput: input,
+            manifestPath,
+          });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch {
           return {
@@ -140,58 +138,6 @@ export function createClaudeCodeAdapter(
       };
     },
   };
-}
-
-async function ingestManifestArtifacts(
-  input: AgentRunInput,
-  manifestPath: string,
-): Promise<Artifact[]> {
-  if (!input.artifactStore) {
-    return [];
-  }
-  if (!existsSync(manifestPath)) {
-    if ((input.requiredArtifactTypes ?? []).length === 0) {
-      return [];
-    }
-    throw new Error(`missing artifact manifest: ${manifestPath}`);
-  }
-
-  const manifest = agentArtifactManifestSchema.parse(
-    JSON.parse(readFileSync(manifestPath, 'utf8')),
-  );
-  const artifacts: Artifact[] = [];
-  for (const entry of manifest.artifacts) {
-    const artifactPath = resolveOutputPath(input.outputDir, entry.path);
-    const content = readFileSync(artifactPath, 'utf8');
-    validateArtifactContent(entry.type, content);
-    artifacts.push(
-      await input.artifactStore.writeArtifact({
-        runId: input.runContext.runId,
-        nodeId: input.runContext.nodeId,
-        type: entry.type,
-        content,
-        summary: entry.summary,
-      }),
-    );
-  }
-  return artifacts;
-}
-
-function resolveOutputPath(outputDir: string, path: string): string {
-  const root = resolve(outputDir);
-  const target = resolve(root, path);
-  if (target !== root && target.startsWith(`${root}${sep}`)) {
-    return target;
-  }
-  throw new Error(`artifact path escapes TEKON_OUTPUT_DIR: ${path}`);
-}
-
-function missingRequiredArtifactTypes(
-  required: ArtifactType[] | undefined,
-  artifacts: Artifact[],
-): ArtifactType[] {
-  const seen = new Set(artifacts.map((artifact) => artifact.type));
-  return (required ?? []).filter((type) => !seen.has(type));
 }
 
 function permissionModeFor(config: AgentAdapterConfig): string {

@@ -1067,6 +1067,7 @@ function defaultCommandPolicy(repoPath: string): CommandPolicy {
       { tool: 'pnpm', args: [] },
       { tool: 'npm', args: [] },
       { tool: 'claude', args: [] },
+      { tool: 'codex', args: [] },
     ],
     deny: [],
     requiresHumanApproval: [],
