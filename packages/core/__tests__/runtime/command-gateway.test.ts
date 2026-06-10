@@ -213,6 +213,33 @@ describe('command gateway', () => {
     expect(readFileSync(result.stderrPath, 'utf8')).toContain('warn');
   });
 
+  it('allows shell-looking characters inside argv data values without invoking a shell', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-argv-data-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const argvData = 'PR title with <TEKON_OUTPUT_DIR> and `literal` $VALUE';
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: ['-e', 'process.stdout.write(process.argv[1])', argvData],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    expect(readFileSync(result.stdoutPath, 'utf8')).toBe(argvData);
+  });
+
   it('redacts likely secrets from command stdout and stderr logs', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-redact-'));
     tempDirs.push(cwd);
