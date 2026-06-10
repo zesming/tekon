@@ -699,6 +699,7 @@ export function createWorkflowEngine(
       roleConfig: { role: node.role },
       prompt: appendArtifactProtocol(prompt, {
         outputDir,
+        role: node.role,
         requiredArtifactTypes,
       }),
       worktreeLease: lease,
@@ -762,12 +763,16 @@ export function createWorkflowEngine(
     prompt: string,
     input: {
       outputDir: string;
+      role: Role;
       requiredArtifactTypes: ArtifactType[];
     },
   ): string {
     if (input.requiredArtifactTypes.length === 0) {
       return prompt;
     }
+    const isCodeChangesRdNode =
+      input.role === 'rd' &&
+      input.requiredArtifactTypes.includes('code-changes');
 
     const manifestExample = JSON.stringify(
       {
@@ -787,6 +792,11 @@ export function createWorkflowEngine(
       "- Complete only this workflow node's responsibilities.",
       '- This provider node produces internal Tekon artifacts; outer Tekon QA, reviewer, and PMO nodes handle workflow review and delivery evidence.',
       '- Do not spawn subagents, delegate review, or wait for external agents inside this node.',
+      ...(isCodeChangesRdNode
+        ? [
+            '- For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
+          ]
+        : []),
       !input.requiredArtifactTypes.includes('code-changes')
         ? '- Required artifact types do not include code-changes; do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.'
         : '- Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
@@ -806,6 +816,11 @@ export function createWorkflowEngine(
       '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
       '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
       '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
+      ...(isCodeChangesRdNode
+        ? [
+            '- Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
+          ]
+        : []),
       '- After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
       '- Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.',
       '- Manifest format example:',

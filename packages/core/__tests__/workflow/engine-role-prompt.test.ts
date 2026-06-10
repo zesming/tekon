@@ -298,6 +298,115 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
     );
+    expect(prompts[0]).toContain(
+      'For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
+    );
+    db.close();
+  });
+
+  it('does not apply RD pre-manifest command bans to QA and reviewer artifact prompts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-role-scope-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-role-scope-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ role: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            role: input.roleConfig.role,
+            prompt: input.prompt,
+          });
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '验证 artifact prompt 作用域',
+      mode: 'template',
+      workflowSpec: {
+        id: 'artifact-role-scope',
+        name: 'Artifact Role Scope',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-test',
+                role: 'qa',
+                inputs: [],
+                outputs: [{ id: 'test', type: 'test-report' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'review',
+            name: 'Review',
+            dependsOn: ['qa'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'reviewer-check',
+                role: 'reviewer',
+                inputs: [],
+                outputs: [{ id: 'review', type: 'review-report' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    for (const role of ['qa', 'reviewer']) {
+      const prompt = prompts.find((item) => item.role === role)?.prompt;
+      expect(prompt).toContain('Tekon artifact protocol');
+      expect(prompt).not.toContain(
+        'For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
+      );
+      expect(prompt).not.toContain(
+        'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
+      );
+    }
     db.close();
   });
 
@@ -459,6 +568,32 @@ function writeRoleFixture(rolesDir: string) {
   writeFileSync(
     join(rdDir, 'knowledge', 'engineering.md'),
     'knowledge body',
+    'utf8',
+  );
+
+  const qaDir = join(rolesDir, 'qa');
+  mkdirSync(qaDir, { recursive: true });
+  writeFileSync(
+    join(qaDir, 'agent.yaml'),
+    ['role: qa', 'name: Test QA', 'description: Test QA role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(qaDir, 'system.md'), 'QA system instructions', 'utf8');
+
+  const reviewerDir = join(rolesDir, 'reviewer');
+  mkdirSync(reviewerDir, { recursive: true });
+  writeFileSync(
+    join(reviewerDir, 'agent.yaml'),
+    [
+      'role: reviewer',
+      'name: Test Reviewer',
+      'description: Test Reviewer role',
+    ].join('\n'),
+    'utf8',
+  );
+  writeFileSync(
+    join(reviewerDir, 'system.md'),
+    'Reviewer system instructions',
     'utf8',
   );
 }
