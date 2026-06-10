@@ -61,6 +61,7 @@
 - `pnpm --filter @tekon/cli test:e2e`：2 files、2 tests passed。
 - `pnpm --filter @tekon/web test`：4 files、16 tests passed。
 - `pnpm --filter @tekon/web test:e2e`：2 Playwright tests passed。
+- 最终兜底 `pnpm test`：58 files、303 tests passed。
 - `pnpm typecheck`：通过。
 - `pnpm build`：通过。
 - `scanFilesForSecrets(process.cwd())`：0 findings。
