@@ -238,7 +238,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
 
 ### 4.6 查看结果
 
@@ -984,7 +984,7 @@ Web dashboard 适合：
 
 - 先执行 `codex --version` 和一个最小 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help` smoke，确认本机 CLI 与 internal profile 可用。
 - 该 `exec --help` smoke 只验证 CLI 与 internal profile；真实 Tekon run 会在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
-- 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。
+- 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。
 - 确认 artifact JSON/YAML/Markdown 满足 Tekon schema；结构化 JSON 必须有非空 `title` 和 `body`。
 - 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。
 - 参考 `docs/manual/codex-provider-smoke.md` 的自举 smoke 流程。

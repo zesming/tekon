@@ -179,10 +179,13 @@ describe('workflow engine role prompt integration', () => {
       'do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.',
     );
     expect(prompts[0]).toContain(
-      'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+      'After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
     );
     expect(prompts[0]).toContain(
-      'Write required artifact files and TEKON_ARTIFACT_MANIFEST before optional checks or reviews.',
+      'Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
+    );
+    expect(prompts[0]).toContain(
+      'TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
     );
     expect(prompts[0]).toContain(
       'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
@@ -278,10 +281,16 @@ describe('workflow engine role prompt integration', () => {
       'Required artifact types do not include code-changes; do not modify the repository working tree;',
     );
     expect(prompts[0]).toContain(
-      'After TEKON_ARTIFACT_MANIFEST is written, stop work and exit immediately.',
+      'After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
     );
     expect(prompts[0]).toContain(
       'Structured JSON artifacts must include non-empty title and body fields.',
+    );
+    expect(prompts[0]).toContain(
+      'TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
     );
     expect(prompts[0]).toContain(
       'Do not spawn subagents, delegate review, or wait for external agents inside this node.',

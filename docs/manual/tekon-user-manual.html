@@ -1406,7 +1406,10 @@
               --ask-for-approval on-request --add-dir &lt;TEKON_OUTPUT_DIR&gt;
               exec</code
             >，并通过 <code>TEKON_OUTPUT_DIR</code> /
-            <code>TEKON_ARTIFACT_MANIFEST</code> 写回 Tekon artifact。
+            <code>$TEKON_ARTIFACT_MANIFEST</code> 写回 Tekon artifact；<code
+              >TEKON_ARTIFACT_MANIFEST</code
+            >
+            是 manifest 文件路径，不是字面文件名。
             <code>--add-dir</code> 只由 Tekon 受控追加到本节点 artifact
             输出目录。非 <code>code-changes</code> 节点会被要求只写节点
             artifact、不修改仓库工作区；所有需要 artifact 的节点先写
@@ -2384,9 +2387,10 @@
             <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>，只开放本节点
             artifact 输出目录。再查看
             <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下
-            stdout/stderr、<code>artifact-manifest.json</code> 和 artifact
-            内容，并确认结构化 JSON 有非空 <code>title</code> 和
-            <code>body</code>。不要把真实 provider 失败降级成 mock 通过。
+            stdout/stderr、<code>artifact-manifest.json</code>、字面
+            <code>TEKON_ARTIFACT_MANIFEST</code> 和 artifact 内容，并确认结构化
+            JSON 有非空 <code>title</code> 和 <code>body</code>。不要把真实
+            provider 失败降级成 mock 通过。
           </p>
           <p>详细流程见 <code>docs/manual/codex-provider-smoke.md</code>。</p>
 

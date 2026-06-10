@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
 import {
@@ -15,7 +15,11 @@ export async function ingestAgentManifestArtifacts(input: {
   if (!input.runInput.artifactStore) {
     return [];
   }
-  if (!existsSync(input.manifestPath)) {
+  const manifestPath = resolveExistingManifestPath(
+    input.manifestPath,
+    input.runInput.outputDir,
+  );
+  if (!manifestPath) {
     if ((input.runInput.requiredArtifactTypes ?? []).length === 0) {
       return [];
     }
@@ -23,15 +27,21 @@ export async function ingestAgentManifestArtifacts(input: {
   }
 
   const manifest = agentArtifactManifestSchema.parse(
-    JSON.parse(readFileSync(input.manifestPath, 'utf8')),
+    JSON.parse(
+      readOutputFile(
+        input.runInput.outputDir,
+        manifestPath,
+        'artifact manifest',
+      ),
+    ),
   );
   const artifacts: Artifact[] = [];
   for (const entry of manifest.artifacts) {
-    const artifactPath = resolveOutputPath(
+    const content = readOutputFile(
       input.runInput.outputDir,
       entry.path,
+      'artifact file',
     );
-    const content = readFileSync(artifactPath, 'utf8');
     validateArtifactContent(entry.type, content);
     artifacts.push(
       await input.runInput.artifactStore.writeArtifact({
@@ -44,6 +54,48 @@ export async function ingestAgentManifestArtifacts(input: {
     );
   }
   return artifacts;
+}
+
+function resolveExistingManifestPath(
+  expectedManifestPath: string,
+  outputDir: string,
+): string | null {
+  const expectedOutputPath = resolveOutputPath(outputDir, expectedManifestPath);
+  if (existsSync(expectedOutputPath)) {
+    return expectedOutputPath;
+  }
+
+  const literalEnvNamePath = resolveOutputPath(
+    outputDir,
+    'TEKON_ARTIFACT_MANIFEST',
+  );
+  if (existsSync(literalEnvNamePath)) {
+    return literalEnvNamePath;
+  }
+
+  return null;
+}
+
+function readOutputFile(
+  outputDir: string,
+  path: string,
+  label: string,
+): string {
+  const outputPath = resolveOutputPath(outputDir, path);
+  const fileStat = lstatSync(outputPath);
+  if (fileStat.isSymbolicLink()) {
+    throw new Error(`${label} cannot be a symlink: ${outputPath}`);
+  }
+  if (!fileStat.isFile()) {
+    throw new Error(`${label} must be a regular file: ${outputPath}`);
+  }
+
+  const root = realpathSync(outputDir);
+  const target = realpathSync(outputPath);
+  if (target !== root && target.startsWith(`${root}${sep}`)) {
+    return readFileSync(outputPath, 'utf8');
+  }
+  throw new Error(`${label} escapes TEKON_OUTPUT_DIR: ${path}`);
 }
 
 export function missingRequiredArtifactTypes(

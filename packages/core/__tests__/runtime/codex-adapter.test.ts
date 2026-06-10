@@ -492,6 +492,235 @@ describe('codex adapter', () => {
     db.close();
   });
 
+  it('recovers literal TEKON_ARTIFACT_MANIFEST files written by Codex', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-literal-manifest-'),
+    );
+    tempDirs.push(repoPath);
+    const artifactScript = join(repoPath, 'literal-manifest-writer.mjs');
+    writeFileSync(
+      artifactScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        "writeFileSync(join(outputDir, 'demand-card.json'), JSON.stringify({ title: 'Demand card', body: 'Scoped Codex smoke documentation update.', acceptanceCriteria: [{ id: 'AC-1', description: 'Document output directory diagnostics.' }] }));",
+        "writeFileSync(join(outputDir, 'TEKON_ARTIFACT_MANIFEST'), JSON.stringify({ artifacts: [{ type: 'demand-card', path: 'demand-card.json', summary: 'Scoped Codex smoke documentation update.' }] }));",
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['demand-card'],
+    });
+
+    expect(result).toMatchObject({
+      provider: 'codex',
+      exitCode: 0,
+      artifacts: [expect.objectContaining({ type: 'demand-card' })],
+    });
+    expect(
+      await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
+    ).toHaveLength(1);
+    db.close();
+  });
+
+  it('rejects literal TEKON_ARTIFACT_MANIFEST symlinks', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-literal-manifest-symlink-'),
+    );
+    const outsidePath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-literal-manifest-outside-'),
+    );
+    tempDirs.push(repoPath, outsidePath);
+    const outsideManifest = join(outsidePath, 'manifest.json');
+    writeFileSync(
+      outsideManifest,
+      JSON.stringify({
+        artifacts: [
+          {
+            type: 'demand-card',
+            path: 'demand-card.json',
+            summary: 'Escaped manifest.',
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const artifactScript = join(repoPath, 'literal-manifest-symlink.mjs');
+    writeFileSync(
+      artifactScript,
+      [
+        "import { symlinkSync, writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        `const outsideManifest = ${JSON.stringify(outsideManifest)};`,
+        "writeFileSync(join(outputDir, 'demand-card.json'), JSON.stringify({ title: 'Demand card', body: 'Scoped Codex smoke documentation update.', acceptanceCriteria: [{ id: 'AC-1', description: 'Document output directory diagnostics.' }] }));",
+        "symlinkSync(outsideManifest, join(outputDir, 'TEKON_ARTIFACT_MANIFEST'));",
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['demand-card'],
+    });
+
+    expect(result).toMatchObject({ provider: 'codex', exitCode: 1 });
+    expect(
+      await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
+    ).toHaveLength(0);
+    db.close();
+  });
+
+  it('rejects artifact symlinks declared by provider manifests', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-artifact-symlink-'),
+    );
+    const outsidePath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-artifact-outside-'),
+    );
+    tempDirs.push(repoPath, outsidePath);
+    const outsideArtifact = join(outsidePath, 'demand-card.json');
+    writeFileSync(
+      outsideArtifact,
+      JSON.stringify({
+        title: 'Demand card',
+        body: 'Escaped artifact.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'Document output directory diagnostics.' },
+        ],
+      }),
+      'utf8',
+    );
+    const artifactScript = join(repoPath, 'artifact-symlink.mjs');
+    writeFileSync(
+      artifactScript,
+      [
+        "import { symlinkSync, writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
+        `const outsideArtifact = ${JSON.stringify(outsideArtifact)};`,
+        "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'demand-card', path: 'demand-card.json', summary: 'Escaped artifact.' }] }));",
+        "symlinkSync(outsideArtifact, join(outputDir, 'demand-card.json'));",
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['demand-card'],
+    });
+
+    expect(result).toMatchObject({ provider: 'codex', exitCode: 1 });
+    expect(
+      await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
+    ).toHaveLength(0);
+    db.close();
+  });
+
+  it('rejects manifest artifact paths that escape TEKON_OUTPUT_DIR', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-artifact-escape-'),
+    );
+    tempDirs.push(repoPath);
+    const artifactScript = join(repoPath, 'artifact-escape.mjs');
+    writeFileSync(
+      artifactScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
+        "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'demand-card', path: '../demand-card.json', summary: 'Escaped artifact path.' }] }));",
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['demand-card'],
+    });
+
+    expect(result).toMatchObject({ provider: 'codex', exitCode: 1 });
+    expect(
+      await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
+    ).toHaveLength(0);
+    db.close();
+  });
+
   it('accepts valid required artifacts when Codex times out after writing the manifest', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-codex-timeout-artifacts-'),
