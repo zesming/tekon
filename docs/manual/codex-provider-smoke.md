@@ -36,7 +36,7 @@ npm exec --yes -- pnpm@10.12.1 build
 
 如果 `codex --version` 或 `codex --profile internal ... exec --help` 不可用，先安装 Codex CLI 并完成 internal profile 认证。不要用 mock 结果替代 Codex provider smoke。
 
-上面的 `exec --help` 只验证 CLI 与 internal profile 是否可用；真实 Tekon run 会由 adapter 在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
+上面的 `exec --help` 只验证 CLI 与 internal profile 是否可用；真实 Tekon run 会由 adapter 在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。`TEKON_OUTPUT_DIR` 必须匹配当前 run/node 的受控输出目录，不能指向其它 run、其它 node、共享目录或 symlink；排障时如果发现输出目录不匹配当前 run/node，或路径经 symlink 跳转，应视为 artifact 输出目录诊断异常，而不是正常 smoke 结果。
 
 `TEKON_ARTIFACT_MANIFEST` 是环境变量，值是 manifest 文件路径；provider 应把 manifest JSON 写到 `$TEKON_ARTIFACT_MANIFEST` 指向的文件，不应创建一个字面名为 `TEKON_ARTIFACT_MANIFEST` 的文件。
 
@@ -129,6 +129,7 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `Unsupported agent: codex`                 | CLI/Web 没有接线 Codex provider。                                                                                                                             | 更新到包含 Codex adapter 的版本，并重新构建。                                                                                       |
 | `agent failed: provider=codex exitCode=1`  | Codex 没写 manifest、artifact schema 不合法、必需 artifact 不齐，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。    |
+| artifact 输出目录诊断异常                 | 真实 Tekon run 受控追加的 `--add-dir <TEKON_OUTPUT_DIR>` 未匹配当前 run/node，目录指向其它 run/node 或共享位置，或该目录是 symlink。                         | 不把该结果当作正常 smoke；确认 `TEKON_OUTPUT_DIR` 对应 `.tekon/runs/<runId>/<nodeId>/` 的真实目录且不是 symlink 后重跑。            |
 | `code-changes` artifact schema 不合法      | 非 provider-style、字段为空、正文为空，或无法归一化为含 `title`/`body` 的有效 artifact。                                                                      | 更新 provider prompt 或 artifact 内容；`changedFiles`/`verification` 等 provider-style 字段只作为兼容输入。                         |
 | `demand-card`/`prd` artifact schema 不合法 | 缺少 `acceptanceCriteria`，或 `acceptance_criteria[].criterion` 等兼容字段为空、条目不完整。                                                                  | 优先按 Tekon schema 写 `acceptanceCriteria[].id/description`；兼容字段只用于真实 provider 字段漂移恢复。                            |
 | `agent timed out: provider=codex`          | Codex 进程在写完有效 manifest 前超时，或 manifest/artifact 不完整。                                                                                           | 查 `artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和必需 artifact；若它们完整合法，更新到支持 manifest 恢复的版本后重试。 |

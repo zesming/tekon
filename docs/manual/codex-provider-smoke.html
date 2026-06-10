@@ -296,7 +296,11 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           上面的 <code>exec --help</code> 只验证 CLI 与 internal profile
           是否可用；真实 Tekon run 会由 adapter 在 <code>exec</code> 前受控追加
           <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>，只开放本节点 artifact
-          输出目录。
+          输出目录。<code>TEKON_OUTPUT_DIR</code> 必须匹配当前 run/node
+          的受控输出目录，不能指向其它 run、其它 node、共享目录或
+          symlink；排障时如果发现输出目录不匹配当前 run/node，或路径经
+          symlink 跳转，应视为 artifact 输出目录诊断异常，而不是正常 smoke
+          结果。
         </p>
         <p>
           如果 Codex 在写完有效 manifest
@@ -409,6 +413,21 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
               <td>
                 查 stdout/stderr、<code>artifact-manifest.json</code>、字面
                 <code>TEKON_ARTIFACT_MANIFEST</code> 和 artifact 内容。
+              </td>
+            </tr>
+            <tr>
+              <td>artifact 输出目录诊断异常</td>
+              <td>
+                真实 Tekon run 受控追加的
+                <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code> 未匹配当前
+                run/node，目录指向其它 run/node 或共享位置，或该目录是
+                symlink。
+              </td>
+              <td>
+                不把该结果当作正常 smoke；确认
+                <code>TEKON_OUTPUT_DIR</code> 对应
+                <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code>
+                的真实目录且不是 symlink 后重跑。
               </td>
             </tr>
             <tr>
