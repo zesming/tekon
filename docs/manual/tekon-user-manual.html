@@ -1414,7 +1414,9 @@
             节点内也不执行 <code>git add</code>、<code>git commit</code>、<code
               >git push</code
             >
-            或创建 PR。
+            或创建 PR。若 Codex 写完有效 manifest 后未及时退出，adapter 会以必需
+            artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需
+            artifact 时，该节点会失败。
           </div>
 
           <h3>4.6 查看结果</h3>

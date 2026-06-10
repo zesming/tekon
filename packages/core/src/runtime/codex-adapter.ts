@@ -117,7 +117,8 @@ export function createCodexAdapter(
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
-      if (result.exitCode === 0 && input.artifactStore) {
+      let artifactIngestionFailed = false;
+      if ((result.exitCode === 0 || result.timedOut) && input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -125,6 +126,16 @@ export function createCodexAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch {
+          artifactIngestionFailed = true;
+          if (result.timedOut) {
+            return {
+              provider: 'codex',
+              exitCode: result.exitCode,
+              durationMs: result.durationMs,
+              outputFiles: [result.stdoutPath, result.stderrPath],
+              timedOut: result.timedOut,
+            };
+          }
           return {
             provider: 'codex',
             exitCode: 1,
@@ -135,11 +146,31 @@ export function createCodexAdapter(
         }
       }
 
+      const missingRequiredTypes = missingRequiredArtifactTypes(
+        input.requiredArtifactTypes,
+        artifacts,
+      );
       if (
-        result.exitCode === 0 &&
-        missingRequiredArtifactTypes(input.requiredArtifactTypes, artifacts)
-          .length > 0
+        result.timedOut &&
+        !artifactIngestionFailed &&
+        (input.requiredArtifactTypes ?? []).length > 0 &&
+        missingRequiredTypes.length === 0
       ) {
+        return {
+          provider: 'codex',
+          exitCode: 0,
+          durationMs: result.durationMs,
+          outputFiles: [
+            result.stdoutPath,
+            result.stderrPath,
+            ...artifactOutputFiles,
+          ],
+          artifacts,
+          timedOut: false,
+        };
+      }
+
+      if (result.exitCode === 0 && missingRequiredTypes.length > 0) {
         return {
           provider: 'codex',
           exitCode: 1,

@@ -492,6 +492,61 @@ describe('codex adapter', () => {
     db.close();
   });
 
+  it('accepts valid required artifacts when Codex times out after writing the manifest', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-timeout-artifacts-'),
+    );
+    tempDirs.push(repoPath);
+    const artifactScript = join(repoPath, 'artifact-then-hang.mjs');
+    writeFileSync(
+      artifactScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
+        "writeFileSync(join(outputDir, 'code-changes.json'), JSON.stringify({ title: 'Code changes', body: 'Implemented Codex fixture change before timeout.' }));",
+        "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json', summary: 'Implemented Codex fixture change before timeout.' }] }));",
+        'setTimeout(() => {}, 5000);',
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 100,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['code-changes'],
+    });
+
+    expect(result).toMatchObject({
+      provider: 'codex',
+      exitCode: 0,
+      timedOut: false,
+      artifacts: [expect.objectContaining({ type: 'code-changes' })],
+    });
+    expect(
+      await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
+    ).toHaveLength(1);
+    db.close();
+  });
+
   it('fails real provider runs when required artifact manifests are missing', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-missing-'));
     tempDirs.push(repoPath);

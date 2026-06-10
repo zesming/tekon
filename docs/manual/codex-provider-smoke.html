@@ -296,6 +296,13 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>，只开放本节点 artifact
           输出目录。
         </p>
+        <p>
+          如果 Codex 在写完有效
+          <code>TEKON_ARTIFACT_MANIFEST</code> 后没有及时退出，adapter
+          会尝试读取并校验 manifest；只要 workflow 必需 artifact
+          已完整入库，该节点会继续进入后续 gate。若 manifest 缺失、schema
+          非法或必需 artifact 不齐，该节点仍会失败。
+        </p>
       </section>
 
       <section>
@@ -375,6 +382,18 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
                 bypass。
               </td>
               <td>查 stdout/stderr、manifest 和 artifact 内容。</td>
+            </tr>
+            <tr>
+              <td><code>agent timed out: provider=codex</code></td>
+              <td>
+                Codex 进程在写完有效 manifest 前超时，或 manifest/artifact
+                不完整。
+              </td>
+              <td>
+                查 <code>artifact-manifest.json</code> 和必需
+                artifact；若它们完整合法，更新到支持 timeout 后 manifest
+                恢复的版本后重试。
+              </td>
             </tr>
             <tr>
               <td>resume 拒绝</td>

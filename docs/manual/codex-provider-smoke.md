@@ -38,6 +38,8 @@ npm exec --yes -- pnpm@10.12.1 build
 
 上面的 `exec --help` 只验证 CLI 与 internal profile 是否可用；真实 Tekon run 会由 adapter 在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
 
+如果 Codex 在写完有效 `TEKON_ARTIFACT_MANIFEST` 后没有及时退出，adapter 会尝试读取并校验 manifest；只要 workflow 必需 artifact 已完整入库，该节点会继续进入后续 gate。若 manifest 缺失、schema 非法或必需 artifact 不齐，该节点仍会失败。
+
 ## 4. 最小运行命令
 
 ```bash
@@ -119,10 +121,11 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
 
 ## 8. 常见失败
 
-| 失败现象                                  | 可能原因                                                                                                                                  | 处理                                                                                             |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `Unsupported agent: codex`                | CLI/Web 没有接线 Codex provider。                                                                                                         | 更新到包含 Codex adapter 的版本，并重新构建。                                                    |
-| `agent failed: provider=codex exitCode=1` | Codex 没写 manifest、artifact schema 不合法，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。 |
-| resume 拒绝                               | run 缺 provider snapshot 或 snapshot 不能 replay。                                                                                        | 不手工篡改 provider；必要时重新跑真实 Codex run。                                                |
-| `delivery create-pr` 等待审批             | 未传 `--approve-human`。                                                                                                                  | 审阅 PR 包和 diff 后再显式批准。                                                                 |
-| `ci-status` 失败                          | 没有 PR URL、`gh` 未认证或目标 host 不支持。                                                                                              | 先确认 `gh auth status` 和 `gh pr checks`。                                                      |
+| 失败现象                                  | 可能原因                                                                                                                                  | 处理                                                                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `Unsupported agent: codex`                | CLI/Web 没有接线 Codex provider。                                                                                                         | 更新到包含 Codex adapter 的版本，并重新构建。                                                                  |
+| `agent failed: provider=codex exitCode=1` | Codex 没写 manifest、artifact schema 不合法，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。               |
+| `agent timed out: provider=codex`         | Codex 进程在写完有效 manifest 前超时，或 manifest/artifact 不完整。                                                                       | 查 `artifact-manifest.json` 和必需 artifact；若它们完整合法，更新到支持 timeout 后 manifest 恢复的版本后重试。 |
+| resume 拒绝                               | run 缺 provider snapshot 或 snapshot 不能 replay。                                                                                        | 不手工篡改 provider；必要时重新跑真实 Codex run。                                                              |
+| `delivery create-pr` 等待审批             | 未传 `--approve-human`。                                                                                                                  | 审阅 PR 包和 diff 后再显式批准。                                                                               |
+| `ci-status` 失败                          | 没有 PR URL、`gh` 未认证或目标 host 不支持。                                                                                              | 先确认 `gh auth status` 和 `gh pr checks`。                                                                    |
