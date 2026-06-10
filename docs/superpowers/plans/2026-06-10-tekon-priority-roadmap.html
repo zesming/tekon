@@ -286,8 +286,10 @@
                 Tekon 默认应使用
                 <code
                   >codex --profile internal --sandbox workspace-write
-                  --ask-for-approval on-request exec</code
-                >，拒绝危险绕过参数
+                  --ask-for-approval on-request --add-dir
+                  &lt;TEKON_OUTPUT_DIR&gt; exec</code
+                >，其中 <code>--add-dir</code> 只由 Tekon 受控追加到 artifact
+                输出目录，并拒绝危险绕过参数
               </td>
             </tr>
             <tr>
@@ -390,8 +392,10 @@
             Codex provider 默认命令使用
             <code
               >codex --profile internal --sandbox workspace-write
-              --ask-for-approval on-request exec</code
-            >。
+              --ask-for-approval on-request --add-dir &lt;TEKON_OUTPUT_DIR&gt;
+              exec</code
+            >，其中 <code>--add-dir</code> 只由 Tekon 受控追加到 artifact
+            输出目录。
           </li>
           <li>
             用户配置不得覆盖 profile、sandbox 和 approval，不得开启

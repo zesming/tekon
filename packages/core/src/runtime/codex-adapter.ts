@@ -1,4 +1,12 @@
-import { basename, join } from 'node:path';
+import { lstatSync } from 'node:fs';
+import {
+  basename,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+} from 'node:path';
 
 import type { AgentAdapterConfig } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
@@ -25,7 +33,11 @@ const CODEX_EXEC_SUBCOMMAND = 'exec';
 
 export function buildCodexCommand(
   config: AgentAdapterConfig,
-  input: { prompt: string },
+  input: {
+    artifactOutputDir?: string;
+    prompt: string;
+    runContext?: { nodeId: string; runId: string };
+  },
 ): BuiltCodexCommand {
   const userArgs = config.args ?? [];
   const command = config.command ?? 'codex';
@@ -33,9 +45,15 @@ export function buildCodexCommand(
   if (isRealCodexCommand) {
     assertSafeCodexArgs(userArgs);
   }
-  const controlledGlobalArgs = controlledCodexGlobalArgs(config);
   const args = isRealCodexCommand
-    ? [...controlledGlobalArgs, CODEX_EXEC_SUBCOMMAND, ...userArgs]
+    ? [
+        ...controlledCodexGlobalArgs(config, {
+          artifactOutputDir: input.artifactOutputDir,
+          runContext: input.runContext,
+        }),
+        CODEX_EXEC_SUBCOMMAND,
+        ...userArgs,
+      ]
     : [...userArgs, CODEX_EXEC_SUBCOMMAND, ...CONTROLLED_CODEX_GLOBAL_ARGS];
 
   if (config.promptMode === 'arg-append') {
@@ -60,7 +78,14 @@ export function createCodexAdapter(
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      const command = buildCodexCommand(config, { prompt: input.prompt });
+      const command = buildCodexCommand(config, {
+        artifactOutputDir: input.outputDir,
+        prompt: input.prompt,
+        runContext: {
+          nodeId: input.runContext.nodeId,
+          runId: input.runContext.runId,
+        },
+      });
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({
         command,
@@ -149,12 +174,28 @@ function isCodexCommand(command: string): boolean {
   return basename(command) === 'codex';
 }
 
-function controlledCodexGlobalArgs(config: AgentAdapterConfig): string[] {
+function controlledCodexGlobalArgs(
+  config: AgentAdapterConfig,
+  input: {
+    artifactOutputDir?: string;
+    runContext?: { nodeId: string; runId: string };
+  },
+): string[] {
   const profileArgs = [
     '--profile',
     assertSafeCodexProfile(config.profile ?? DEFAULT_CODEX_PROFILE),
   ];
-  return [...profileArgs, ...CONTROLLED_CODEX_GLOBAL_ARGS];
+  const outputDir = assertSafeCodexArtifactOutputDir(
+    config,
+    input.artifactOutputDir,
+    input.runContext,
+  );
+  return [
+    ...profileArgs,
+    ...CONTROLLED_CODEX_GLOBAL_ARGS,
+    '--add-dir',
+    outputDir,
+  ];
 }
 
 function assertSafeCodexProfile(profile: string): string {
@@ -162,6 +203,103 @@ function assertSafeCodexProfile(profile: string): string {
     throw new Error('codex profile must be a safe profile name');
   }
   return profile;
+}
+
+function assertSafeCodexArtifactOutputDir(
+  config: AgentAdapterConfig,
+  outputDir: string | undefined,
+  runContext: { nodeId: string; runId: string } | undefined,
+): string {
+  if (!outputDir) {
+    throw new Error('codex artifact output directory is required');
+  }
+  const normalizedOutputDir = normalize(outputDir);
+  const runStoragePath = config.permissionProfile.filesystemScope
+    .map((scope) => tekonRunStoragePath(scope, normalizedOutputDir))
+    .find((path) => path !== undefined);
+  if (!isAbsolute(normalizedOutputDir) || !runStoragePath) {
+    throw new Error(
+      'codex artifact output directory must be under Tekon run storage',
+    );
+  }
+  if (!runContext) {
+    throw new Error('codex run context is required');
+  }
+  if (
+    runStoragePath.runId !== runContext.runId ||
+    runStoragePath.nodeId !== runContext.nodeId
+  ) {
+    throw new Error(
+      'codex artifact output directory must match the current run and node',
+    );
+  }
+  if (
+    config.permissionProfile.filesystemScope.some((scope) =>
+      pathIncludesSymlink(scope, normalizedOutputDir),
+    )
+  ) {
+    throw new Error('codex artifact output directory cannot include symlinks');
+  }
+  return normalizedOutputDir;
+}
+
+function tekonRunStoragePath(
+  scope: string,
+  candidate: string,
+): { nodeId: string; runId: string } | undefined {
+  if (!isPathInside(scope, candidate)) {
+    return undefined;
+  }
+  const segments = normalize(relative(resolve(scope), resolve(candidate)))
+    .split(/[\\/]+/u)
+    .filter(Boolean);
+  if (
+    segments[0] === '.tekon' &&
+    segments[1] === 'runs' &&
+    segments.length === 4 &&
+    Boolean(segments[2]) &&
+    Boolean(segments[3])
+  ) {
+    return { runId: segments[2], nodeId: segments[3] };
+  }
+  return undefined;
+}
+
+function isPathInside(parent: string, candidate: string): boolean {
+  const relativePath = relative(resolve(parent), resolve(candidate));
+  return (
+    relativePath === '' ||
+    (relativePath.length > 0 &&
+      !relativePath.startsWith('..') &&
+      !isAbsolute(relativePath))
+  );
+}
+
+function pathIncludesSymlink(parent: string, candidate: string): boolean {
+  if (!isPathInside(parent, candidate)) {
+    return false;
+  }
+  let currentPath = resolve(parent);
+  for (const segment of normalize(relative(currentPath, resolve(candidate)))
+    .split(/[\\/]+/u)
+    .filter(Boolean)) {
+    currentPath = join(currentPath, segment);
+    try {
+      if (lstatSync(currentPath).isSymbolicLink()) {
+        return true;
+      }
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+  return false;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
 }
 
 function assertSafeCodexArgs(args: readonly string[]): void {

@@ -253,8 +253,10 @@
                 Tekon 默认固定
                 <code
                   >codex --profile internal --sandbox workspace-write
-                  --ask-for-approval on-request exec</code
-                >。
+                  --ask-for-approval on-request --add-dir
+                  &lt;TEKON_OUTPUT_DIR&gt; exec</code
+                >。 <code>--add-dir</code> 只由 Tekon 受控追加到 artifact
+                输出目录。
               </td>
             </tr>
             <tr>
@@ -288,6 +290,12 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           不可用，先安装并认证 Codex CLI internal profile。不要用 mock 结果替代
           Codex provider smoke。
         </div>
+        <p>
+          上面的 <code>exec --help</code> 只验证 CLI 与 internal profile
+          是否可用；真实 Tekon run 会由 adapter 在 <code>exec</code> 前受控追加
+          <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>，只开放本节点 artifact
+          输出目录。
+        </p>
       </section>
 
       <section>

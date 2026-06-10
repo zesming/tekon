@@ -17,11 +17,11 @@
 
 ## 2. 官方资料和判断依据
 
-| 资料                                                           | 资料内容                                                                                                           | 对 Tekon 的判断依据                                                                                                                          |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `https://developers.openai.com/codex/noninteractive`           | Codex 非交互模式使用 `codex exec`，适合脚本、CI 和一次性自动化任务。                                               | Tekon provider 可以把每个 workflow node 映射为一次 `codex exec`。                                                                            |
-| `https://developers.openai.com/codex/agent-approvals-security` | Codex 支持 sandbox、approval 和网络访问边界组合，`workspace-write` + `on-request` 是低摩擦但仍保留批准边界的组合。 | Tekon 默认固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`，不把 profile 和安全边界交给 prompt。 |
-| `https://developers.openai.com/codex/cli/reference`            | CLI 参考列出 `codex exec`、`--profile`、`--sandbox`、`--ask-for-approval`、配置覆盖和危险 bypass 参数。            | Tekon adapter 必须拒绝用户 args 覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。                                               |
+| 资料                                                           | 资料内容                                                                                                           | 对 Tekon 的判断依据                                                                                                                                                                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `https://developers.openai.com/codex/noninteractive`           | Codex 非交互模式使用 `codex exec`，适合脚本、CI 和一次性自动化任务。                                               | Tekon provider 可以把每个 workflow node 映射为一次 `codex exec`。                                                                                                                                                              |
+| `https://developers.openai.com/codex/agent-approvals-security` | Codex 支持 sandbox、approval 和网络访问边界组合，`workspace-write` + `on-request` 是低摩擦但仍保留批准边界的组合。 | Tekon 默认固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`；`--add-dir` 只由 Tekon 受控追加到 artifact 输出目录，不把 profile 和安全边界交给 prompt。 |
+| `https://developers.openai.com/codex/cli/reference`            | CLI 参考列出 `codex exec`、`--profile`、`--sandbox`、`--ask-for-approval`、配置覆盖和危险 bypass 参数。            | Tekon adapter 必须拒绝用户 args 覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。                                                                                                                                 |
 
 ## 3. 前置条件
 
@@ -35,6 +35,8 @@ npm exec --yes -- pnpm@10.12.1 build
 ```
 
 如果 `codex --version` 或 `codex --profile internal ... exec --help` 不可用，先安装 Codex CLI 并完成 internal profile 认证。不要用 mock 结果替代 Codex provider smoke。
+
+上面的 `exec --help` 只验证 CLI 与 internal profile 是否可用；真实 Tekon run 会由 adapter 在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
 
 ## 4. 最小运行命令
 

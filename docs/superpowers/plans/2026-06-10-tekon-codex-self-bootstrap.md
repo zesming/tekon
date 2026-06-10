@@ -135,7 +135,7 @@ Expected: all Claude adapter tests still pass.
 
 Cover:
 
-- default command is `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`;
+- default command is `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`, with `--add-dir` controlled by Tekon and scoped to the node artifact output directory;
 - sandbox is `workspace-write`;
 - approval is `on-request`;
 - prompt is sent through stdin;
@@ -234,7 +234,7 @@ Run CLI unit, Web unit, and the targeted dashboard e2e.
 
 - [ ] **Step 1: Document Codex provider boundaries**
 
-State that Codex provider is local Codex CLI, uses `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`, must be authenticated locally through the internal profile, writes Tekon artifacts through the manifest protocol, and is not proof of production stability without self-bootstrap samples.
+State that Codex provider is local Codex CLI, uses `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`, must be authenticated locally through the internal profile, writes Tekon artifacts through the manifest protocol, and is not proof of production stability without self-bootstrap samples.
 
 - [ ] **Step 2: Add smoke workflow**
 

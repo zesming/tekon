@@ -113,7 +113,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`，并通过 `TEKON_OUTPUT_DIR` / `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。它不会改变 Tekon 的人工审批边界：创建 PR、合入和上线仍需人控制。
+Codex provider 使用本机 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`，其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；产物通过 `TEKON_OUTPUT_DIR` / `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。它不会改变 Tekon 的人工审批边界：创建 PR、合入和上线仍需人控制。
 
 查看状态和审阅面：
 

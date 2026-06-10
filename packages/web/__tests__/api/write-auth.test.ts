@@ -646,6 +646,10 @@ if (args.indexOf('--sandbox') === -1 || args.indexOf('--sandbox') > execIndex) {
   console.error('expected sandbox before exec, got: ' + args.join(' '));
   process.exit(2);
 }
+if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex || args[args.indexOf('--add-dir') + 1] !== process.env.TEKON_OUTPUT_DIR) {
+  console.error('expected controlled artifact output add-dir before exec, got: ' + args.join(' '));
+  process.exit(2);
+}
 if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
   console.error('unsafe codex args');
   process.exit(3);

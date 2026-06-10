@@ -43,13 +43,13 @@
 
 ## 2. 资料依据
 
-| 资料                                                                                  | 资料内容                                                                                                          | 对 Tekon 的判断依据                                                                                                                               |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/reviews/2026-06-10-tekon-comprehensive-evaluation.md`                           | 评估 Tekon 当前工程质量、产品完成度、方向合理性和缺口                                                             | 工程骨架质量高，但价值验证不足；真实 PR 闭环应成为最高优先级                                                                                      |
-| `docs/research/2026-06-10-external-research-report.md`                                | 对 AI Coding Agent、IDP、Governed AI Engineering、ByteDance 生态做外部调研                                        | Tekon 应避开单点 Coding Agent 竞争，聚焦治理、证据和编排                                                                                          |
-| OpenAI Codex 官方手册：`https://developers.openai.com/codex/noninteractive`           | `codex exec` 面向脚本和 CI 等非交互场景，支持 stdin、JSONL 和显式 sandbox 设置                                    | Codex provider 可以用 `codex exec` 承载 Tekon 节点执行                                                                                            |
-| OpenAI Codex 官方手册：`https://developers.openai.com/codex/agent-approvals-security` | Codex CLI 支持 `workspace-write`、`on-request`、默认无网络、危险全访问需要显式开启                                | Tekon 默认应使用 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`，并拒绝用户绕过 profile/sandbox/approval |
-| OpenAI Codex 官方手册：`https://developers.openai.com/codex/cli/reference`            | CLI 参考列出 `codex exec`、`--sandbox`、`--ask-for-approval`、`--dangerously-bypass-approvals-and-sandbox` 等参数 | Adapter 必须固定安全参数，禁止 provider args 覆盖关键安全边界                                                                                     |
+| 资料                                                                                  | 资料内容                                                                                                          | 对 Tekon 的判断依据                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/reviews/2026-06-10-tekon-comprehensive-evaluation.md`                           | 评估 Tekon 当前工程质量、产品完成度、方向合理性和缺口                                                             | 工程骨架质量高，但价值验证不足；真实 PR 闭环应成为最高优先级                                                                                                                                                                        |
+| `docs/research/2026-06-10-external-research-report.md`                                | 对 AI Coding Agent、IDP、Governed AI Engineering、ByteDance 生态做外部调研                                        | Tekon 应避开单点 Coding Agent 竞争，聚焦治理、证据和编排                                                                                                                                                                            |
+| OpenAI Codex 官方手册：`https://developers.openai.com/codex/noninteractive`           | `codex exec` 面向脚本和 CI 等非交互场景，支持 stdin、JSONL 和显式 sandbox 设置                                    | Codex provider 可以用 `codex exec` 承载 Tekon 节点执行                                                                                                                                                                              |
+| OpenAI Codex 官方手册：`https://developers.openai.com/codex/agent-approvals-security` | Codex CLI 支持 `workspace-write`、`on-request`、默认无网络、危险全访问需要显式开启                                | Tekon 默认应使用 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`；`--add-dir` 只由 Tekon 受控追加到 artifact 输出目录，并拒绝用户绕过 profile/sandbox/approval |
+| OpenAI Codex 官方手册：`https://developers.openai.com/codex/cli/reference`            | CLI 参考列出 `codex exec`、`--sandbox`、`--ask-for-approval`、`--dangerously-bypass-approvals-and-sandbox` 等参数 | Adapter 必须固定安全参数，禁止 provider args 覆盖关键安全边界                                                                                                                                                                       |
 
 事实：报告和代码已经证明 Tekon 有确定性工作流、门禁、审计、artifact store、delivery create-pr 等基础能力。
 
@@ -110,7 +110,7 @@ P0 的目标不是“Codex adapter 能跑”，而是“Tekon 能用 Codex adapt
 ### 4.3 P0 验收门禁
 
 - `codex --version` 或等价命令能证明本机 Codex CLI 可用。
-- Codex provider 默认命令使用 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`。
+- Codex provider 默认命令使用 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`，其中 `--add-dir` 只由 Tekon 受控追加到 artifact 输出目录。
 - 用户配置不得覆盖 `--profile`、`--sandbox`、`--ask-for-approval`，不得开启 `danger-full-access` 或 bypass approvals。
 - Tekon artifact manifest 能被 Codex 节点写出并被 artifact store 接收。
 - 缺失 required artifact 时 run 必须失败，不允许用 agent 自述代替产物。

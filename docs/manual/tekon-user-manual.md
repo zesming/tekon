@@ -238,7 +238,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec`。它会通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact；缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact。缺少 workflow 必需 artifact 时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
 
 ### 4.6 查看结果
 
@@ -983,6 +983,7 @@ Web dashboard 适合：
 处理：
 
 - 先执行 `codex --version` 和一个最小 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help` smoke，确认本机 CLI 与 internal profile 可用。
+- 该 `exec --help` smoke 只验证 CLI 与 internal profile；真实 Tekon run 会在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
 - 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json` 和 artifact 内容。
 - 确认 artifact JSON/YAML/Markdown 满足 Tekon schema。
 - 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。

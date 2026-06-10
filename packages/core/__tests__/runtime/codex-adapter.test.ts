@@ -1,4 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -24,6 +31,7 @@ describe('codex adapter', () => {
   });
 
   it('builds codex exec commands with Tekon-controlled sandbox and approval', () => {
+    const artifactOutputDir = '/tmp/repo/.tekon/runs/run_1/node_1';
     const command = buildCodexCommand(
       {
         provider: 'codex',
@@ -35,7 +43,11 @@ describe('codex adapter', () => {
         timeoutMs: 1000,
         permissionProfile: safePermissionProfile('/tmp/repo'),
       },
-      { prompt: 'implement fixture' },
+      {
+        artifactOutputDir,
+        prompt: 'implement fixture',
+        runContext: { runId: 'run_1', nodeId: 'node_1' },
+      },
     );
 
     expect(command.tool).toBe('codex');
@@ -46,12 +58,15 @@ describe('codex adapter', () => {
       'workspace-write',
       '--ask-for-approval',
       'on-request',
+      '--add-dir',
+      artifactOutputDir,
       'exec',
     ]);
     expect(command.stdin).toBe('implement fixture');
   });
 
   it('keeps codex exec first when safe user args are configured', () => {
+    const artifactOutputDir = '/tmp/repo/.tekon/runs/run_1/node_1';
     const command = buildCodexCommand(
       {
         provider: 'codex',
@@ -63,7 +78,11 @@ describe('codex adapter', () => {
         timeoutMs: 1000,
         permissionProfile: safePermissionProfile('/tmp/repo'),
       },
-      { prompt: 'implement fixture' },
+      {
+        artifactOutputDir,
+        prompt: 'implement fixture',
+        runContext: { runId: 'run_1', nodeId: 'node_1' },
+      },
     );
 
     expect(command.args).toEqual([
@@ -73,6 +92,8 @@ describe('codex adapter', () => {
       'workspace-write',
       '--ask-for-approval',
       'on-request',
+      '--add-dir',
+      artifactOutputDir,
       'exec',
       '--model',
       'gpt-5',
@@ -80,6 +101,7 @@ describe('codex adapter', () => {
   });
 
   it('defaults real Codex commands to the internal profile when a replayed config omits profile', () => {
+    const artifactOutputDir = '/tmp/repo/.tekon/runs/run_1/node_1';
     const command = buildCodexCommand(
       {
         provider: 'codex',
@@ -90,7 +112,11 @@ describe('codex adapter', () => {
         timeoutMs: 1000,
         permissionProfile: safePermissionProfile('/tmp/repo'),
       },
-      { prompt: 'implement fixture' },
+      {
+        artifactOutputDir,
+        prompt: 'implement fixture',
+        runContext: { runId: 'run_1', nodeId: 'node_1' },
+      },
     );
 
     expect(command.args).toEqual([
@@ -100,8 +126,170 @@ describe('codex adapter', () => {
       'workspace-write',
       '--ask-for-approval',
       'on-request',
+      '--add-dir',
+      artifactOutputDir,
       'exec',
     ]);
+  });
+
+  it('requires a Tekon artifact output directory for real Codex commands', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        { prompt: 'implement fixture' },
+      ),
+    ).toThrow(/codex artifact output directory is required/u);
+  });
+
+  it('rejects real Codex artifact output directories outside Tekon run storage', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        { artifactOutputDir: '/tmp/repo/outside', prompt: 'implement fixture' },
+      ),
+    ).toThrow(
+      /codex artifact output directory must be under Tekon run storage/u,
+    );
+  });
+
+  it('rejects nested Tekon run-like artifact output directories outside the repo data root', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        {
+          artifactOutputDir: '/tmp/repo/packages/app/.tekon/runs/run_1/node_1',
+          prompt: 'implement fixture',
+        },
+      ),
+    ).toThrow(
+      /codex artifact output directory must be under Tekon run storage/u,
+    );
+  });
+
+  it('rejects artifact output directories for a different run or node', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        {
+          artifactOutputDir: '/tmp/repo/.tekon/runs/run_2/node_1',
+          prompt: 'implement fixture',
+          runContext: { runId: 'run_1', nodeId: 'node_1' },
+        },
+      ),
+    ).toThrow(
+      /codex artifact output directory must match the current run and node/u,
+    );
+
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        {
+          artifactOutputDir: '/tmp/repo/.tekon/runs/run_1/node_1/../node_2',
+          prompt: 'implement fixture',
+          runContext: { runId: 'run_1', nodeId: 'node_1' },
+        },
+      ),
+    ).toThrow(
+      /codex artifact output directory must match the current run and node/u,
+    );
+  });
+
+  it('requires run context for legal Codex artifact output directories', () => {
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile('/tmp/repo'),
+        },
+        {
+          artifactOutputDir: '/tmp/repo/.tekon/runs/run_1/node_1',
+          prompt: 'implement fixture',
+        },
+      ),
+    ).toThrow(/codex run context is required/u);
+  });
+
+  it('rejects symlinked Codex artifact output directories', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-repo-'));
+    const outsidePath = mkdtempSync(join(tmpdir(), 'tekon-codex-outside-'));
+    tempDirs.push(repoPath, outsidePath);
+    mkdirSync(join(repoPath, '.tekon', 'runs', 'run_1'), {
+      recursive: true,
+    });
+    symlinkSync(
+      outsidePath,
+      join(repoPath, '.tekon', 'runs', 'run_1', 'node_1'),
+    );
+
+    expect(() =>
+      buildCodexCommand(
+        {
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 1000,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        {
+          artifactOutputDir: join(
+            repoPath,
+            '.tekon',
+            'runs',
+            'run_1',
+            'node_1',
+          ),
+          prompt: 'implement fixture',
+          runContext: { runId: 'run_1', nodeId: 'node_1' },
+        },
+      ),
+    ).toThrow(/codex artifact output directory cannot include symlinks/u);
   });
 
   it.each([
