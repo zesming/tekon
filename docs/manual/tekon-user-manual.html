@@ -1476,7 +1476,9 @@
               >--progress-heartbeat-ms</code
             >
             显式覆盖，Web dashboard 也提供对应输入项，适合把明确长程任务拉到 2
-            小时或更长。最终配置会写入 provider snapshot 以支持
+            小时或更长，但 1 小时默认预算和 2 小时级长程预算都仍需
+            heartbeat、no-progress 与受控 outputDir
+            产物进展观测共同约束。最终配置会写入 provider snapshot 以支持
             resume；命令执行会写入
             <code>*.progress.json</code>，记录状态、最近输出时间、stdout/stderr
             字节数、受控输出目录文件数量和字节数、最近输出目录活动时间、elapsed、总超时、无进展超时、timeoutReason

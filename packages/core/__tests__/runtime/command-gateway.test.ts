@@ -470,6 +470,93 @@ describe('command gateway', () => {
     expect(progress.timeoutReason).toBeNull();
   });
 
+  it('treats controlled artifact and manifest writes as no-progress activity', async () => {
+    const cwd = mkdtempSync(
+      join(tmpdir(), 'tekon-exec-output-artifact-progress-'),
+    );
+    tempDirs.push(cwd);
+    const outputDir = join(cwd, 'logs');
+    mkdirSync(outputDir, { recursive: true });
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
+        setTimeout(() => {
+          writeFileSync(
+            join(outputDir, 'artifact-manifest.json'),
+            JSON.stringify({
+              artifacts: [
+                {
+                  type: 'implementation-plan',
+                  path: 'implementation-plan.json',
+                  summary: 'Plan artifact.',
+                },
+              ],
+            }),
+          );
+        }, 30);
+        setTimeout(() => {
+          writeFileSync(
+            join(outputDir, 'implementation-plan.json'),
+            JSON.stringify({
+              title: 'Plan artifact',
+              body: 'Plan body.',
+            }),
+          );
+        }, 70);
+        setTimeout(() => {
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        }, 120);
+        return child;
+      },
+    });
+
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['write-tekon-artifacts.js'] },
+      cwd,
+      outputDir,
+      timeoutMs: 1_000,
+      noProgressTimeoutMs: 80,
+      progressIntervalMs: 10,
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'executed',
+      exitCode: 0,
+      timedOut: false,
+    });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const progress = JSON.parse(readFileSync(result.progressPath!, 'utf8')) as {
+      lastOutputDirActivityAt: string | null;
+      outputDirFileCount: number;
+      outputDirBytes: number;
+      outputDirLatestMtimeMs: number | null;
+      timeoutReason: string | null;
+    };
+    expect(progress.lastOutputDirActivityAt).toEqual(expect.any(String));
+    expect(progress.outputDirFileCount).toBe(2);
+    expect(progress.outputDirBytes).toBeGreaterThan(0);
+    expect(progress.outputDirLatestMtimeMs).toEqual(expect.any(Number));
+    expect(progress.timeoutReason).toBeNull();
+  });
+
   it('does not wait for the heartbeat interval before enforcing no-progress timeout', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-no-progress-fast-'));
     tempDirs.push(cwd);
