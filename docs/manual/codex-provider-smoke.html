@@ -302,13 +302,12 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           跳转，应视为 artifact 输出目录诊断异常，而不是正常 smoke 结果。
         </p>
         <p>
-          如果 Codex 在写完有效 manifest 后没有及时退出并被 Tekon
-          超时中断，adapter 会尝试读取并校验
+          如果 Codex 在写完有效 manifest 后没有及时退出并被 Tekon 超时中断，或
+          Codex 进程以非零退出码结束，adapter 会尝试读取并校验
           <code>$TEKON_ARTIFACT_MANIFEST</code> 指向的文件；只要 workflow 必需
-          artifact 已完整入库，该节点会继续进入后续
-          gate。非零退出不会被改写为成功，但已写入的合法 artifact
-          仍会入库用于诊断。若 manifest 缺失、schema 非法、必需 artifact
-          不齐，或 artifact path/symlink 边界校验失败，该节点仍会失败。
+          artifact 已完整入库，该节点会继续进入后续 gate。若 manifest
+          缺失、schema 非法、必需 artifact 不齐、artifact path/symlink
+          边界校验失败，或进程被非 timeout signal 终止，该节点仍会失败。
         </p>
         <p>
           <code>TEKON_ARTIFACT_MANIFEST</code> 是环境变量，值是 manifest
@@ -324,13 +323,38 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           应使用 <code>acceptanceCriteria[].id/description</code>；如果真实
           provider 写出有效的
           <code>acceptance_criteria[].criterion</code>，Tekon 会兼容归一化为
-          <code>acceptanceCriteria[].description</code>。<code
+          <code>acceptanceCriteria[].description</code>。<code>test-plan</code>
+          JSON 应使用 <code>testBasis</code> 和 <code>testCases</code>；如果真实
+          provider 写出有效的 <code>sourceArtifactsReviewed</code> 和
+          <code>testScenarios</code>，Tekon 会窄归一化为
+          <code>testBasis</code> 和 <code>testCases</code>。<code
             >code-changes</code
           >
           的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
           <code>changedFiles</code>/<code>verification</code> 条目，会被 Tekon
           归一化为可审阅 artifact；真实 provider prompt 仍应优先按 Tekon schema
-          写出完整字段，避免依赖容错恢复。
+          写出完整字段，避免依赖容错恢复。<code>demand-review</code>、<code
+            >requirement-interface-review</code
+          >、<code>technical-review</code>、<code>test-plan-review</code>、<code
+            >code-review</code
+          >
+          和 <code>qa-release-signoff-review</code> 等评审类 artifact
+          必须额外包含合法 <code>reviewScope</code>、<code>reviewProcess</code
+          >、<code>decision</code> 和
+          <code>findings</code> 数组；如果有 finding，每项必须包含合法
+          <code>severity</code> 和 <code>message</code>。<code
+            >reviewRole</code
+          >、<code
+            >reviewedArtifacts</code
+          >
+          或数组/对象形式的 <code>reviewScope</code> 不能替代这些字段。
+          若真实 provider 在 finding 里写出非角色枚举的
+          <code>ownerRole</code>，Tekon 会把该值保留进
+          <code>message</code> 并移除无效 <code>ownerRole</code>；这不会放宽
+          <code>reviewScope</code>、<code>reviewProcess.reviewerRole</code>、<code
+            >targetRole</code
+          >
+          或 <code>decision</code>。
         </p>
       </section>
 
@@ -450,7 +474,7 @@ node packages/cli/dist/index.js eval work-usability record \
               <td><code>agent failed: provider=codex exitCode=1</code></td>
               <td>
                 manifest 缺失、artifact schema 不合法、必需 artifact
-                不齐，命令失败，或用户 args 试图覆盖
+                不齐，命令失败且没有完整可恢复 artifact，或用户 args 试图覆盖
                 profile、sandbox、approval、文件系统、配置或危险 bypass。
               </td>
               <td>
@@ -497,6 +521,38 @@ node packages/cli/dist/index.js eval work-usability record \
                 优先按 Tekon schema 写
                 <code>acceptanceCriteria[].id/description</code
                 >；兼容字段只用于真实 provider 字段漂移恢复。
+              </td>
+            </tr>
+            <tr>
+              <td><code>test-plan</code> artifact schema 不合法</td>
+              <td>
+                缺少 <code>testBasis</code>/<code>testCases</code>，且没有可归一化的
+                <code>sourceArtifactsReviewed</code>/<code>testScenarios</code>；或
+                <code>testCases</code> 条目缺少 id/description。
+              </td>
+              <td>
+                优先按 Tekon schema 写 <code>testBasis</code> 和
+                <code>testCases[].id/description</code>；provider-style
+                字段只用于真实 provider 字段漂移恢复。
+              </td>
+            </tr>
+            <tr>
+              <td>评审类 artifact schema 不合法</td>
+              <td>
+                缺少 <code>reviewScope</code>、<code>reviewProcess</code>、<code
+                  >decision</code
+                >，<code>findings</code> 不是数组，或 finding 条目的
+                <code>severity</code>、<code>message</code> 不合法，或
+                <code>reviewScope</code> / <code>reviewProcess</code>
+                使用非法值。
+              </td>
+              <td>
+                按节点 prompt 中的 role-scoped review JSON
+                示例重写 artifact；不要用 <code>reviewRole</code>、<code
+                  >reviewedArtifacts</code
+                >
+                或数组/对象形式的 <code>reviewScope</code> 替代 schema
+                字段；无效 <code>ownerRole</code> 会被窄归一化。
               </td>
             </tr>
             <tr>

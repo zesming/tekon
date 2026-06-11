@@ -99,7 +99,7 @@ pm-demand-card
 - 普通真实 provider 节点：`maxRuntimeMs=1h`。
 - 明确长程任务：允许通过 CLI `run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heartbeat-ms 30000` 或 Web dashboard 对应字段配置 `2h+`，但必须启用进展观测和人工可取消入口。
 - 无进展超时：当前默认 15 分钟，stdout/stderr 有变化或 `outputDir` 中 artifact/manifest 等文件数量、大小、mtime 有变化就续期；后续补 diff 变化续期和外部 job runner。
-- 超时后先读取 manifest；只有 timeout 且 manifest 完整、必需 artifact 合法时允许进入 gate。非零退出不会被改写为成功，但合法 artifact 可入库用于诊断。
+- 超时或非零退出后先读取 manifest；只要 manifest 完整且 workflow 必需 artifact 合法，就允许进入 gate。manifest 缺失、schema 非法、必需 artifact 不齐或非 timeout signal 仍失败。
 - 因此，用户建议把长程任务总超时拉到 1h/2h 是合理的，但应作为“外层预算”；真正判断是否卡死要靠 heartbeat、stdout/stderr、artifact/manifest 文件变化，以及可取消/可恢复机制。
 
 ## 6. 自举验证计划

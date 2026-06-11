@@ -35,6 +35,7 @@ describe('role prompt builder', () => {
       },
       artifactSummaries: [
         {
+          id: 'artifact_123',
           type: 'tech-design',
           path: '.tekon/runs/run_1/artifacts/rd/tech-design.v1.md',
           summary: 'Design summary',
@@ -50,6 +51,7 @@ describe('role prompt builder', () => {
     expect(prompt).toContain('Check gates and evidence.');
     expect(prompt).toContain('Review policy.');
     expect(prompt).toContain('git diff');
+    expect(prompt).toContain('artifactId: artifact_123');
     expect(prompt).toContain('Design summary');
     expect(prompt).toContain('AAAAAAAAAAAA');
     expect(prompt).toContain('[truncated artifact: 28 chars omitted]');

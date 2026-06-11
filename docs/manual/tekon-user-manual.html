@@ -1120,7 +1120,10 @@
             signoff、QA signoff review 和 PMO
             checkpoint；当前已具备独立评审、角色范围、AC evidence、QA
             signoff、节点级 PMO checkpoint 和流程完整性 gate
-            的本地强约束，但不替代真实人类业务决策。
+            的本地强约束，但不替代真实人类业务决策。QA validation 不应仅因 PR
+            创建、delivery package 或下游 PMO/QA signoff
+            尚未运行而阻塞，最终交付闭环仍由 QA signoff、PMO 和 pre-PR readiness
+            继续校验。
           </p>
           <p>
             <code>workflow select</code> 会给出推荐模板和理由；<code
@@ -1468,8 +1471,74 @@
             如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。真实 provider 默认总超时为 1 小时，无
-            stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI
+            schema 写完整字段。<code>test-plan</code> 应使用
+            <code>testBasis</code> 和 <code>testCases</code>，有效的
+            <code>sourceArtifactsReviewed</code>/<code>testScenarios</code>
+            会被窄归一化。<code>test-report</code>/<code>ac-evidence</code>/<code
+              >qa-release-signoff</code
+            >
+            应使用
+            <code>criteriaEvidence[].criterionId/status/evidence</code>，<code
+              >evidence</code
+            >
+            必须是非空字符串；需要 evidence anchor 的场景必须把
+            <code>outputPaths</code>、<code>gateResultIds</code> 或
+            <code>artifactIds</code> 放在对应
+            <code>criteriaEvidence</code> 条目内，不能只放在 artifact
+            顶层；<code>artifactIds</code> 只能使用 Artifacts 区展示的真实
+            <code>artifact_&lt;uuid&gt;</code>，不能使用
+            <code>nodeId:type</code> 标签；<code>gateResultIds</code> 只能使用
+            prompt 的 <code>Prior eligible gate results</code> 区展示的真实
+            <code>gateResultId</code>，不能使用
+            <code>gateKey</code>、<code>commandRef</code>、<code
+              >outputPath</code
+            >
+            或 gate 日志文件名，<code>qa-release-signoff</code> 还必须显式包含
+            <code>targetRef</code>、<code>validatedRef</code> 和
+            <code>overallStatus</code>，其中 <code>overallStatus</code> 只能是
+            <code>passed</code>、<code>failed</code> 或
+            <code>blocked</code>，不能用 <code>decision</code> 或
+            <code>recommendation</code> 替代；<code>status</code> 只能是
+            <code>passed</code>、<code>failed</code>、<code>blocked</code> 或
+            <code>unknown</code>，<code>test-report.summary</code>
+            如存在必须是字符串；对
+            <code>test-report</code>/<code>ac-evidence</code>，若真实 provider
+            写出对象形式 <code>summary</code>，或用 <code>id</code>、带字符串
+            <code>summary</code> 的 evidence
+            对象、<code>evidenceSummary</code>、<code>coverage</code>、<code>passed_with_*</code>/<code>failed_with_*</code>/<code
+              >blocked_with_*</code
+            >
+            状态标签表达 QA evidence，Tekon 会窄归一化为 schema 字段；<code
+              >qa-release-signoff</code
+            >
+            不做这类 provider-style QA evidence 字段归一化，应直接按 schema
+            写完整字段；缺失状态、含糊状态、无 <code>summary</code> 的 evidence
+            对象、只有顶层 anchor，或只有
+            <code>criterion</code> 而无证据字段时仍会失败。<code
+              >process-checkpoint</code
+            >
+            必须使用
+            <code>requiredNodes[].nodeId/status</code
+            >、<code>artifactEvidence[].nodeId/type</code>、<code
+              >gateEvidence[].nodeId/gateType/gateKey/status</code
+            >
+            和数字型 <code>humanDecisionEvidence.pending</code>，其中
+            <code>requiredNodes[].status</code> 与
+            <code>gateEvidence[].status</code> 只能是 <code>passed</code> 或
+            <code>skipped</code>，不能用 <code>output</code>、<code
+              >observedStatus</code
+            >
+            或 pending 数组替代 schema 字段。评审类 artifact 必须额外写入合法
+            <code>reviewScope</code>、<code>reviewProcess</code>、<code
+              >decision</code
+            >
+            和 <code>findings</code> 数组；如果有 finding，每项必须包含合法
+            <code>severity</code> 和 <code>message</code>，不能用
+            <code>reviewRole</code>、<code>reviewedArtifacts</code>
+            或数组/对象形式的 <code>reviewScope</code> 替代这些 schema
+            字段；无效 finding <code>ownerRole</code> 会被保留到
+            message，不会放宽核心 review 字段。真实 provider 默认总超时为 1
+            小时，无 stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI
             <code>run</code> 可用
             <code>--timeout-ms</code
             >、<code>--no-progress-timeout-ms</code>、<code
@@ -1485,12 +1554,11 @@
             和 heartbeat 次数。CommandGateway 会排除自身 stdout/stderr/progress
             文件，只把 artifact、manifest 等产物文件变化计入进展；diff
             级续期和可恢复 job runner 仍是后续增强。若 Codex
-            因超时中断但已写完有效 manifest，adapter 会在必需 artifact
-            校验通过后把该节点视为完成并继续进入
-            gate；非零退出不会被改写为成功，但已写入的合法 artifact
-            仍会被入库用于诊断。缺少 workflow 必需 artifact、artifact schema
-            不合法或 path/symlink 边界失败时，该节点会失败。QA validation 会记录
-            tested ref，QA signoff、PR package 和 readiness
+            超时或非零退出但已写完有效 manifest，adapter 会在必需 artifact
+            校验通过后把该节点视为完成并继续进入 gate；缺少 workflow 必需
+            artifact、artifact schema 不合法、path/symlink 边界失败，或非
+            timeout signal 终止时，该节点会失败。QA validation 会记录 tested
+            ref，QA signoff、PR package 和 readiness
             会校验所测对象与交付对象一致。Codex provider 不会自动创建 PR、merge
             或上线，远端副作用仍由
             <code>delivery create-pr --approve-human</code>
