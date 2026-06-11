@@ -144,6 +144,46 @@ describe('artifact schemas', () => {
     ).toMatchObject({ overallStatus: 'passed' });
   });
 
+  it('normalizes provider-style invalid finding owner roles without changing review scope fields', () => {
+    expect(
+      validateArtifactContent(
+        'demand-review',
+        JSON.stringify({
+          title: 'PM demand review',
+          body: '需求清晰，但需要人类 owner 跟进风险说明。',
+          reviewScope: 'demand-quality',
+          reviewProcess: {
+            mode: 'independent-process',
+            reviewerId: 'pm-reviewer',
+            reviewerRole: 'pm',
+            targetNodeId: 'pm-demand-card',
+            targetRole: 'pm',
+          },
+          decision: 'approved',
+          findings: [
+            {
+              severity: 'important',
+              ownerRole: 'human owner / PMO',
+              message: '需要在最终 review surface 补齐风险说明。',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      reviewScope: 'demand-quality',
+      reviewProcess: {
+        reviewerRole: 'pm',
+        targetRole: 'pm',
+      },
+      findings: [
+        {
+          severity: 'important',
+          message: expect.stringContaining('human owner / PMO'),
+        },
+      ],
+    });
+  });
+
   it('requires PMO process checkpoint gate evidence to carry stable gate keys', () => {
     expect(() =>
       validateArtifactPayload('process-checkpoint', {

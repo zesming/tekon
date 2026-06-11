@@ -1281,6 +1281,7 @@ function roleScopedReviewArtifactInstructions(input: {
     `- reviewProcess.mode must be "independent-agent" or "independent-process"; reviewProcess.reviewerRole must be "${input.role}".`,
     '- decision must be one of: approved, changes-requested, blocked.',
     '- findings must be an array; findings[].severity must be one of: critical, important, minor.',
+    '- findings[].ownerRole is optional; if present, it must be one of: pm, rd, qa, reviewer, pmo.',
     '- findings[].message is required; put ids, category, impact, or recommendation details inside body or message, not in place of message.',
     '- Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
     ...reviewTypes.flatMap((type) =>

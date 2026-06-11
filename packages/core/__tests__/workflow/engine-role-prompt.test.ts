@@ -332,6 +332,9 @@ describe('workflow engine role prompt integration', () => {
       'findings[].severity must be one of: critical, important, minor.',
     );
     expect(reviewPrompt!).toContain(
+      'findings[].ownerRole is optional; if present, it must be one of: pm, rd, qa, reviewer, pmo.',
+    );
+    expect(reviewPrompt!).toContain(
       'Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
     );
     db.close();

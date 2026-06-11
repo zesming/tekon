@@ -307,6 +307,9 @@ function normalizeStructuredPayload(
   if (type === 'demand-card' || type === 'prd') {
     return normalizeAcceptanceArtifactPayload(payload);
   }
+  if (isRoleScopedReviewArtifact(type)) {
+    return normalizeRoleScopedReviewPayload(payload);
+  }
   if (
     type !== 'code-changes' ||
     typeof payload !== 'object' ||
@@ -314,8 +317,64 @@ function normalizeStructuredPayload(
     'title' in payload ||
     'body' in payload
   ) {
+  return payload;
+}
+
+function isRoleScopedReviewArtifact(type: ArtifactType): boolean {
+  return [
+    'code-review',
+    'demand-review',
+    'qa-release-signoff-review',
+    'requirement-interface-review',
+    'technical-review',
+    'test-plan-review',
+  ].includes(type);
+}
+
+function normalizeRoleScopedReviewPayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
     return payload;
   }
+  const record = payload as Record<string, unknown>;
+  if (!Array.isArray(record.findings)) {
+    return payload;
+  }
+  const originalFindings = record.findings;
+
+  const findings = originalFindings.map((entry) => normalizeReviewFinding(entry));
+  if (findings.every((entry, index) => entry === originalFindings[index])) {
+    return payload;
+  }
+
+  return {
+    ...record,
+    findings,
+  };
+}
+
+function normalizeReviewFinding(entry: unknown): unknown {
+  if (typeof entry !== 'object' || entry === null) {
+    return entry;
+  }
+  const record = entry as Record<string, unknown>;
+  const ownerRole = nonEmptyString(record.ownerRole);
+  if (!ownerRole || isRole(ownerRole)) {
+    return entry;
+  }
+  const message = nonEmptyString(record.message);
+  if (!message) {
+    return entry;
+  }
+  const { ownerRole: _ownerRole, ...rest } = record;
+  return {
+    ...rest,
+    message: `[ownerRole: ${ownerRole}] ${message}`,
+  };
+}
+
+function isRole(value: string): value is z.infer<typeof roleSchema> {
+  return ['pm', 'rd', 'qa', 'reviewer', 'pmo'].includes(value);
+}
 
   const record = payload as Record<string, unknown>;
   const summary = nonEmptyString(record.summary);

@@ -344,6 +344,13 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
             >reviewedArtifacts</code
           >
           或数组/对象形式的 <code>reviewScope</code> 不能替代这些字段。
+          若真实 provider 在 finding 里写出非角色枚举的
+          <code>ownerRole</code>，Tekon 会把该值保留进
+          <code>message</code> 并移除无效 <code>ownerRole</code>；这不会放宽
+          <code>reviewScope</code>、<code>reviewProcess.reviewerRole</code>、<code
+            >targetRole</code
+          >
+          或 <code>decision</code>。
         </p>
       </section>
 
@@ -518,14 +525,17 @@ node packages/cli/dist/index.js eval work-usability record \
                 缺少 <code>reviewScope</code>、<code>reviewProcess</code>、<code
                   >decision</code
                 >，<code>findings</code> 不是数组，或 finding 条目的
-                <code>severity</code>、<code>message</code> 不合法。
+                <code>severity</code>、<code>message</code> 不合法，或
+                <code>reviewScope</code> / <code>reviewProcess</code>
+                使用非法值。
               </td>
               <td>
                 按节点 prompt 中的 role-scoped review JSON
                 示例重写 artifact；不要用 <code>reviewRole</code>、<code
                   >reviewedArtifacts</code
                 >
-                或数组/对象形式的 <code>reviewScope</code> 替代 schema 字段。
+                或数组/对象形式的 <code>reviewScope</code> 替代 schema
+                字段；无效 <code>ownerRole</code> 会被窄归一化。
               </td>
             </tr>
             <tr>

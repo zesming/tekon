@@ -1476,7 +1476,8 @@
             <code>severity</code> 和 <code>message</code>，不能用
             <code>reviewRole</code>、<code>reviewedArtifacts</code>
             或数组/对象形式的 <code>reviewScope</code> 替代这些 schema
-            字段。真实 provider 默认总超时为 1 小时，无
+            字段；无效 finding <code>ownerRole</code> 会被保留到 message，不会放宽核心
+            review 字段。真实 provider 默认总超时为 1 小时，无
             stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI
             <code>run</code> 可用
             <code>--timeout-ms</code
