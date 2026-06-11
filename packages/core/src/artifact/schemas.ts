@@ -123,7 +123,12 @@ export function validateArtifactContent(
 ): ArtifactPayload {
   const structured = parseStructuredPayload(content);
   if (structured) {
-    return validateArtifactPayload(type, structured);
+    return validateArtifactPayload(
+      type,
+      structured.format === 'json'
+        ? normalizeStructuredPayload(type, structured.payload)
+        : structured.payload,
+    );
   }
 
   const trimmed = content.trim();
@@ -137,18 +142,182 @@ export function validateArtifactContent(
   });
 }
 
-function parseStructuredPayload(content: string): unknown | null {
+type StructuredPayload = {
+  format: 'json' | 'yaml';
+  payload: unknown;
+};
+
+function parseStructuredPayload(content: string): StructuredPayload | null {
   const trimmed = content.trim();
   if (trimmed.startsWith('{')) {
-    return JSON.parse(trimmed);
+    return { format: 'json', payload: JSON.parse(trimmed) };
   }
 
   if (trimmed.startsWith('---')) {
     const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u.exec(trimmed);
     if (match) {
-      return parseYaml(match[1]);
+      return { format: 'yaml', payload: parseYaml(match[1]) };
     }
   }
 
   return null;
+}
+
+function normalizeStructuredPayload(
+  type: ArtifactType,
+  payload: unknown,
+): unknown {
+  if (type === 'demand-card' || type === 'prd') {
+    return normalizeAcceptanceArtifactPayload(payload);
+  }
+  if (
+    type !== 'code-changes' ||
+    typeof payload !== 'object' ||
+    payload === null ||
+    'title' in payload ||
+    'body' in payload
+  ) {
+    return payload;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const summary = nonEmptyString(record.summary);
+  const body = providerStyleBody(record);
+  if (!summary && !body) {
+    return payload;
+  }
+
+  return {
+    ...record,
+    title: 'Code changes',
+    body: body || summary,
+    summary: summary ?? 'Code changes',
+  };
+}
+
+function normalizeAcceptanceArtifactPayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const criteria =
+    normalizeProviderStyleAcceptanceCriteria(record.acceptanceCriteria) ??
+    normalizeProviderStyleAcceptanceCriteria(record.acceptance_criteria);
+  if (!criteria) {
+    return payload;
+  }
+
+  return {
+    ...record,
+    acceptanceCriteria: criteria,
+  };
+}
+
+function normalizeProviderStyleAcceptanceCriteria(value: unknown):
+  | {
+      id: string;
+      description: string;
+      verification?: string;
+    }[]
+  | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+
+  const criteria: {
+    id: string;
+    description: string;
+    verification?: string;
+  }[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) {
+      return undefined;
+    }
+    const record = entry as Record<string, unknown>;
+    const id = nonEmptyString(record.id);
+    const description =
+      nonEmptyString(record.description) ?? nonEmptyString(record.criterion);
+    if (!id || !description) {
+      return undefined;
+    }
+    const verification = nonEmptyString(record.verification);
+    criteria.push({
+      id,
+      description,
+      ...(verification ? { verification } : {}),
+    });
+  }
+
+  return criteria;
+}
+
+function providerStyleBody(record: Record<string, unknown>): string {
+  const sections: string[] = [];
+  if (Array.isArray(record.changedFiles)) {
+    const changedFiles = record.changedFiles
+      .map((entry) => formatChangedFile(entry))
+      .filter((entry) => entry.length > 0);
+    if (changedFiles.length > 0) {
+      sections.push(['Changed files:', ...changedFiles].join('\n'));
+    }
+  }
+  if (Array.isArray(record.verification)) {
+    const verification = record.verification
+      .map((entry) => formatCommandEvidence(entry))
+      .filter((entry) => entry.length > 0);
+    if (verification.length > 0) {
+      sections.push(['Verification:', ...verification].join('\n'));
+    }
+  }
+  return sections.join('\n\n');
+}
+
+function formatChangedFile(entry: unknown): string {
+  if (typeof entry === 'string') {
+    const value = entry.trim();
+    return value ? `- ${value}` : '';
+  }
+  if (typeof entry !== 'object' || entry === null) {
+    return '';
+  }
+  const record = entry as Record<string, unknown>;
+  const path = nonEmptyString(record.path);
+  const changes = Array.isArray(record.changes)
+    ? record.changes
+        .map((change) => nonEmptyString(change))
+        .filter((change): change is string => change !== undefined)
+    : [];
+  if (!path && changes.length === 0) {
+    return '';
+  }
+  return [
+    path ? `- ${path}` : '- changed file',
+    ...changes.map((change) => `  - ${change}`),
+  ].join('\n');
+}
+
+function formatCommandEvidence(entry: unknown): string {
+  if (typeof entry === 'string') {
+    const value = entry.trim();
+    return value ? `- ${value}` : '';
+  }
+  if (typeof entry !== 'object' || entry === null) {
+    return '';
+  }
+  const record = entry as Record<string, unknown>;
+  const command = nonEmptyString(record.command);
+  const result = nonEmptyString(record.result);
+  if (!command && !result) {
+    return '';
+  }
+  return [`- ${command ?? 'command'}`, result ? `  - ${result}` : undefined]
+    .filter((line): line is string => line !== undefined)
+    .join('\n');
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : undefined;
 }

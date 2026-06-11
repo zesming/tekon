@@ -68,12 +68,9 @@ export function createWorktreeManager(options: {
       const dirtyStatus = await runGit(options.gateway, {
         repoPath,
         runId: runSegment,
-        args: ['status', '--porcelain'],
+        args: ['status', '--porcelain=v1', '-z'],
       });
-      const meaningfulDirtyLines = dirtyStatus
-        .split(/\r?\n/u)
-        .filter((line) => line.trim().length > 0)
-        .filter((line) => !line.startsWith('?? .tekon/'));
+      const meaningfulDirtyLines = meaningfulDirtyStatusLines(dirtyStatus);
 
       if (meaningfulDirtyLines.length > 0 && !input.allowDirtyBase) {
         throw new Error('dirty base worktree requires allowDirtyBase');
@@ -123,25 +120,27 @@ export function createWorktreeManager(options: {
         throw new Error(`unknown worktree lease: ${leaseId}`);
       }
       assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+      await resetTekonRuntimeIndex(options.gateway, lease);
       const dirtyStatus = await runGit(options.gateway, {
         repoPath: lease.worktreePath,
         runId: lease.runId,
-        args: ['status', '--porcelain'],
+        args: ['status', '--porcelain=v1', '-z'],
       });
-      const meaningfulDirtyLines = dirtyStatus
-        .split(/\r?\n/u)
-        .filter((line) => line.trim().length > 0)
-        .filter((line) => !line.startsWith('?? .tekon/'));
+      const meaningfulDirtyLines = meaningfulDirtyStatusLines(dirtyStatus);
 
       if (meaningfulDirtyLines.length === 0) {
         return false;
       }
+      const pathspecs = dirtyPathspecsFromStatusLines(meaningfulDirtyLines);
 
-      await runGit(options.gateway, {
-        repoPath: lease.worktreePath,
-        runId: lease.runId,
-        args: ['add', '.', ':!.tekon'],
-      });
+      if (pathspecs.length > 0) {
+        await runGit(options.gateway, {
+          repoPath: lease.worktreePath,
+          runId: lease.runId,
+          args: ['add', '--all', '--', ...pathspecs],
+        });
+      }
+      await resetTekonRuntimeIndex(options.gateway, lease);
       await runGit(options.gateway, {
         repoPath: lease.worktreePath,
         runId: lease.runId,
@@ -198,9 +197,95 @@ export function createWorktreeManager(options: {
   };
 }
 
+async function resetTekonRuntimeIndex(
+  gateway: CommandGateway,
+  lease: WorktreeLease,
+): Promise<void> {
+  await runGit(gateway, {
+    repoPath: lease.worktreePath,
+    runId: lease.runId,
+    args: ['restore', '--staged', '--ignore-unmerged', '--', '.tekon'],
+    allowFailure: true,
+  });
+}
+
+type PorcelainStatusEntry = {
+  code: string;
+  path: string;
+  sourcePath?: string;
+};
+
+function meaningfulDirtyStatusLines(status: string): PorcelainStatusEntry[] {
+  return parsePorcelainStatus(status).filter((entry) =>
+    statusEntryPaths(entry).some((path) => !isTekonRuntimePath(path)),
+  );
+}
+
+function dirtyPathspecsFromStatusLines(
+  lines: PorcelainStatusEntry[],
+): string[] {
+  const pathspecs = new Set<string>();
+  for (const entry of lines) {
+    if (shouldStagePath(entry) && !isTekonRuntimePath(entry.path)) {
+      pathspecs.add(entry.path);
+    }
+  }
+  return [...pathspecs];
+}
+
+function shouldStagePath(entry: PorcelainStatusEntry): boolean {
+  if (entry.code === '??') {
+    return true;
+  }
+  const indexStatus = entry.code[0];
+  const worktreeStatus = entry.code[1];
+  if (worktreeStatus && worktreeStatus !== ' ') {
+    return true;
+  }
+  return indexStatus !== 'D';
+}
+
+function parsePorcelainStatus(status: string): PorcelainStatusEntry[] {
+  const fields = status.split('\0').filter((field) => field.length > 0);
+  const entries: PorcelainStatusEntry[] = [];
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    const code = field.slice(0, 2);
+    const firstPath = field.slice(3);
+    if (!firstPath) {
+      continue;
+    }
+    if (code[0] === 'R' || code[0] === 'C') {
+      const sourcePath = fields[index + 1];
+      index += sourcePath ? 1 : 0;
+      entries.push({
+        code,
+        path: firstPath,
+        ...(sourcePath ? { sourcePath } : {}),
+      });
+      continue;
+    }
+    entries.push({ code, path: firstPath });
+  }
+  return entries;
+}
+
+function statusEntryPaths(entry: PorcelainStatusEntry): string[] {
+  return entry.sourcePath ? [entry.path, entry.sourcePath] : [entry.path];
+}
+
+function isTekonRuntimePath(path: string): boolean {
+  return path === '.tekon' || path.startsWith('.tekon/');
+}
+
 async function runGit(
   gateway: CommandGateway,
-  input: { repoPath: string; runId: string; args: string[] },
+  input: {
+    repoPath: string;
+    runId: string;
+    args: string[];
+    allowFailure?: boolean;
+  },
 ): Promise<string> {
   const result = await gateway.run({
     command: { tool: 'git', args: input.args },
@@ -224,7 +309,7 @@ async function runGit(
 
   const stdout = readFileSync(result.stdoutPath, 'utf8');
   const stderr = readFileSync(result.stderrPath, 'utf8');
-  if (result.exitCode !== 0) {
+  if (result.exitCode !== 0 && !input.allowFailure) {
     throw new Error(`git command failed: ${stderr || stdout}`);
   }
   return stdout;

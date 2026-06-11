@@ -79,8 +79,8 @@ describe('scm delivery', () => {
       env: { PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}` },
     });
     const result = await delivery.createPr({
-      title: 'Phase 3 delivery',
-      body: 'Evidence body',
+      title: 'Phase 3 <TEKON_OUTPUT_DIR> delivery',
+      body: 'Evidence body with `literal` $VALUE',
       branch: 'tekon/phase-3',
       dryRun: false,
       humanApproved: true,

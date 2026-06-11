@@ -100,6 +100,316 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('adds artifact boundary and exit instructions for nodes with required artifacts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '补充 smoke 文档',
+      mode: 'template',
+      workflowSpec: {
+        id: 'artifact-prompt-boundary',
+        name: 'Artifact Prompt Boundary',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-scope',
+                role: 'pm',
+                inputs: [],
+                outputs: [{ id: 'demand', type: 'demand-card' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain('Tekon artifact protocol');
+    expect(prompts[0]).toContain(
+      "Complete only this workflow node's responsibilities.",
+    );
+    expect(prompts[0]).toContain(
+      'do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.',
+    );
+    expect(prompts[0]).toContain(
+      'After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
+    );
+    expect(prompts[0]).toContain(
+      'Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
+    );
+    expect(prompts[0]).toContain(
+      'TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
+    );
+    expect(prompts[0]).toContain(
+      'For demand-card and prd JSON artifacts, include acceptanceCriteria with id and description fields.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not continue editing, formatting, running checks, printing diffs, or explaining',
+    );
+    db.close();
+  });
+
+  it('keeps repository edit scope for code-changes nodes while preserving exit instructions', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-code-changes-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-code-changes-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '实现 smoke 文档更新',
+      mode: 'template',
+      workflowSpec: {
+        id: 'code-changes-prompt-boundary',
+        name: 'Code Changes Prompt Boundary',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'rd',
+            name: 'RD',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'rd-change',
+                role: 'rd',
+                inputs: [],
+                outputs: [{ id: 'code', type: 'code-changes' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain('Tekon artifact protocol');
+    expect(prompts[0]).toContain(
+      'Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not run git add, git commit, git push, or create PRs inside this node.',
+    );
+    expect(prompts[0]).toContain(
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+    );
+    expect(prompts[0]).not.toContain(
+      'Required artifact types do not include code-changes; do not modify the repository working tree;',
+    );
+    expect(prompts[0]).toContain(
+      'After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
+    );
+    expect(prompts[0]).toContain(
+      'Structured JSON artifacts must include non-empty title and body fields.',
+    );
+    expect(prompts[0]).toContain(
+      'TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not spawn subagents, delegate review, or wait for external agents inside this node.',
+    );
+    expect(prompts[0]).toContain(
+      'For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
+    );
+    db.close();
+  });
+
+  it('does not apply RD pre-manifest command bans to QA and reviewer artifact prompts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-role-scope-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-artifact-role-scope-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ role: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            role: input.roleConfig.role,
+            prompt: input.prompt,
+          });
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '验证 artifact prompt 作用域',
+      mode: 'template',
+      workflowSpec: {
+        id: 'artifact-role-scope',
+        name: 'Artifact Role Scope',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-test',
+                role: 'qa',
+                inputs: [],
+                outputs: [{ id: 'test', type: 'test-report' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'review',
+            name: 'Review',
+            dependsOn: ['qa'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'reviewer-check',
+                role: 'reviewer',
+                inputs: [],
+                outputs: [{ id: 'review', type: 'review-report' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    for (const role of ['qa', 'reviewer']) {
+      const prompt = prompts.find((item) => item.role === role)?.prompt;
+      expect(prompt).toContain('Tekon artifact protocol');
+      expect(prompt).not.toContain(
+        'For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
+      );
+      expect(prompt).not.toContain(
+        'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
+      );
+    }
+    db.close();
+  });
+
   it('interrupts the workflow when an agent returns a non-zero exit code', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-agent-fail-'));
     const rolesDir = mkdtempSync(
@@ -214,6 +524,20 @@ describe('workflow engine role prompt integration', () => {
 });
 
 function writeRoleFixture(rolesDir: string) {
+  const pmDir = join(rolesDir, 'pm');
+  mkdirSync(pmDir, { recursive: true });
+  writeFileSync(
+    join(pmDir, 'agent.yaml'),
+    ['role: pm', 'name: Test PM', 'description: Test PM role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(pmDir, 'system.md'), 'PM system instructions', 'utf8');
+  writeFileSync(
+    join(pmDir, 'tools.yaml'),
+    ['network: disabled', 'allow: []', 'deny: []'].join('\n'),
+    'utf8',
+  );
+
   const rdDir = join(rolesDir, 'rd');
   mkdirSync(join(rdDir, 'skills'), { recursive: true });
   mkdirSync(join(rdDir, 'knowledge'), { recursive: true });
@@ -244,6 +568,32 @@ function writeRoleFixture(rolesDir: string) {
   writeFileSync(
     join(rdDir, 'knowledge', 'engineering.md'),
     'knowledge body',
+    'utf8',
+  );
+
+  const qaDir = join(rolesDir, 'qa');
+  mkdirSync(qaDir, { recursive: true });
+  writeFileSync(
+    join(qaDir, 'agent.yaml'),
+    ['role: qa', 'name: Test QA', 'description: Test QA role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(qaDir, 'system.md'), 'QA system instructions', 'utf8');
+
+  const reviewerDir = join(rolesDir, 'reviewer');
+  mkdirSync(reviewerDir, { recursive: true });
+  writeFileSync(
+    join(reviewerDir, 'agent.yaml'),
+    [
+      'role: reviewer',
+      'name: Test Reviewer',
+      'description: Test Reviewer role',
+    ].join('\n'),
+    'utf8',
+  );
+  writeFileSync(
+    join(reviewerDir, 'system.md'),
+    'Reviewer system instructions',
     'utf8',
   );
 }

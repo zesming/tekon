@@ -107,7 +107,7 @@ function validateCommand(
 ): string | null {
   if (
     hasShellMetacharacters(command.tool) ||
-    command.args.some(hasShellMetacharacters)
+    command.args.some(isShellControlToken)
   ) {
     return 'shell metacharacters are not allowed in argv commands';
   }
@@ -152,6 +152,10 @@ function validateCommand(
 
 function hasShellMetacharacters(value: string): boolean {
   return /[;&|`$<>]/u.test(value);
+}
+
+function isShellControlToken(value: string): boolean {
+  return /^(?:;|&|&&|\||\|\||<|>|>>|2>|2>>)$/u.test(value);
 }
 
 function matchesAny(

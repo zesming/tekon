@@ -246,6 +246,33 @@ describe('work usability evaluation', () => {
     });
   });
 
+  it('accepts Codex as a first-class expected provider in sample records', () => {
+    const result = upsertWorkUsabilitySample(
+      {
+        thresholds: { minSamples: 1, minRealProviderRuns: 1 },
+        samples: [],
+      },
+      {
+        id: 'codex-self-bootstrap-1',
+        runId: 'run_codex',
+        expectedProvider: 'codex',
+        requireRealProvider: true,
+        requirePr: true,
+        expectedPrUrl: 'https://github.example/tekon/pull/99',
+      },
+    );
+
+    expect(result.created).toBe(true);
+    expect(result.sampleSet.samples).toEqual([
+      expect.objectContaining({
+        id: 'codex-self-bootstrap-1',
+        expectedProvider: 'codex',
+        requireRealProvider: true,
+        requirePr: true,
+      }),
+    ]);
+  });
+
   it('renders a bounded work usability report with failed checks visible', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-report-'));
     tempDirs.push(repoPath);

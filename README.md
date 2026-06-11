@@ -38,20 +38,20 @@
 
 ## 核心能力
 
-| 能力              | 当前状态                                | 说明                                                                                                                      |
-| ----------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形          | 已实现本地版                            | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后才能默认进入执行。                              |
-| Workflow 模板     | 已实现受控模板                          | 内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`。                                       |
-| Workflow 选择评估 | 已实现                                  | `workflow select` 给出推荐模板，`eval workflow-selection` 检查选择质量。                                                  |
-| 角色系统          | 已实现                                  | `roles/` 下维护 PM、RD、QA、Reviewer、PMO 等角色的描述、工具、技能和知识。                                                |
-| 执行隔离          | 已实现本地 worktree 版                  | Engine 在真实 git worktree lease 中执行节点，交付分支使用 `tekon-delivery/<runId>`。                                      |
-| Provider 接入     | 已实现 mock 与 Claude Code adapter 协议 | 真实 provider 通过 artifact manifest 交付结构化产物；缺少必需 artifact 时节点失败。                                       |
-| Gate 与证据       | 已实现本地版                            | 支持 build、lint、test、e2e-pass、security-scan、schema、human 等 gate，并记录日志和 artifact。                           |
-| 审阅面            | 已实现 CLI/Web 聚合视图                 | `tekon review` 和 Web dashboard 汇总 readiness、证据导航、失败诊断、diff、artifact 正文和 PR 包。                         |
-| 交付准备          | 已实现受控流程                          | `delivery dry-run` 只生成计划，`delivery prepare` 生成本地 PR 包，`delivery create-pr --approve-human` 才产生远端副作用。 |
-| 远端 CI 证据      | 已实现只读查询                          | `delivery ci-status` 和 `delivery ci-watch` 只读查询 GitHub PR checks，不 rerun CI、不 merge、不上线。                    |
-| 效果评估          | 已实现本地评估                          | `eval readiness`、`eval work-usability`、`eval approval-summary` 等用于判断证据质量和工作可用性。                         |
-| Web dashboard     | 已实现本地版                            | 提供 human approval、run 发起、PR 准备、受控 PR 创建和审阅面。                                                            |
+| 能力              | 当前状态                                       | 说明                                                                                                                                  |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形          | 已实现本地版                                   | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后才能默认进入执行。                                          |
+| Workflow 模板     | 已实现受控模板                                 | 内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`。                                                   |
+| Workflow 选择评估 | 已实现                                         | `workflow select` 给出推荐模板，`eval workflow-selection` 检查选择质量。                                                              |
+| 角色系统          | 已实现                                         | `roles/` 下维护 PM、RD、QA、Reviewer、PMO 等角色的描述、工具、技能和知识。                                                            |
+| 执行隔离          | 已实现本地 worktree 版                         | Engine 在真实 git worktree lease 中执行节点，交付分支使用 `tekon-delivery/<runId>`。                                                  |
+| Provider 接入     | 已实现 mock、Claude Code 与 Codex adapter 协议 | 真实 provider 通过 artifact manifest 交付结构化产物；Codex 走本机 `codex --profile internal ... exec`，缺少必需 artifact 时节点失败。 |
+| Gate 与证据       | 已实现本地版                                   | 支持 build、lint、test、e2e-pass、security-scan、schema、human 等 gate，并记录日志和 artifact。                                       |
+| 审阅面            | 已实现 CLI/Web 聚合视图                        | `tekon review` 和 Web dashboard 汇总 readiness、证据导航、失败诊断、diff、artifact 正文和 PR 包。                                     |
+| 交付准备          | 已实现受控流程                                 | `delivery dry-run` 只生成计划，`delivery prepare` 生成本地 PR 包，`delivery create-pr --approve-human` 才产生远端副作用。             |
+| 远端 CI 证据      | 已实现只读查询                                 | `delivery ci-status` 和 `delivery ci-watch` 只读查询 GitHub PR checks，不 rerun CI、不 merge、不上线。                                |
+| 效果评估          | 已实现本地评估                                 | `eval readiness`、`eval work-usability`、`eval approval-summary` 等用于判断证据质量和工作可用性。                                     |
+| Web dashboard     | 已实现本地版                                   | 提供 human approval、run 发起、PR 准备、受控 PR 创建和审阅面。                                                                        |
 
 ## 当前边界
 
@@ -107,6 +107,14 @@ tekon demand approve
 tekon run --agent mock
 ```
 
+本机已安装并认证 Codex CLI 时，可把 provider 切到 Codex：
+
+```bash
+tekon run --agent codex
+```
+
+Codex provider 使用本机 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`，其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；产物通过 `TEKON_OUTPUT_DIR` / `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body`；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化。若 Codex 写完有效 manifest 后未及时退出或返回非零退出码，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺失或非法 manifest、artifact schema、path/symlink 边界仍失败。它不会改变 Tekon 的人工审批边界：创建 PR、合入和上线仍需人控制。
+
 查看状态和审阅面：
 
 ```bash
@@ -145,6 +153,7 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 | 推荐 workflow 模板     | `tekon workflow select "<需求>"`                     |
 | 检查 repo profile 命令 | `tekon workflow preflight`                           |
 | 运行模板               | `tekon run --template standard-feature --agent mock` |
+| 使用 Codex provider    | `tekon run --agent codex`                            |
 | 运行最近已批准需求卡   | `tekon run --agent mock`                             |
 | 查看状态               | `tekon status`                                       |
 | 查看审阅面             | `tekon review`                                       |
@@ -219,6 +228,8 @@ npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
 
 - 主用户使用手册：[docs/manual/tekon-user-manual.md](docs/manual/tekon-user-manual.md)
 - 主用户使用手册 HTML：[docs/manual/tekon-user-manual.html](docs/manual/tekon-user-manual.html)
+- Codex provider smoke 手册：[docs/manual/codex-provider-smoke.md](docs/manual/codex-provider-smoke.md)
+- Codex provider smoke HTML：[docs/manual/codex-provider-smoke.html](docs/manual/codex-provider-smoke.html)
 - V2 技术方案：[docs/technical/tekon-v2-technical-plan.md](docs/technical/tekon-v2-technical-plan.md)
 - V2 技术方案 HTML：[docs/technical/tekon-v2-technical-plan.html](docs/technical/tekon-v2-technical-plan.html)
 - 三阶段实施计划：[docs/superpowers/plans/2026-06-05-tekon-v2-three-phase-implementation.md](docs/superpowers/plans/2026-06-05-tekon-v2-three-phase-implementation.md)

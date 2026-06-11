@@ -23,7 +23,7 @@ export interface AgentRunInput {
 }
 
 export interface AgentRunResult {
-  provider: 'mock' | 'claude-code' | 'custom';
+  provider: 'mock' | 'claude-code' | 'codex' | 'custom';
   exitCode: number | null;
   durationMs: number;
   outputFiles: string[];

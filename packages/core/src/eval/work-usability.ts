@@ -33,7 +33,9 @@ export const workUsabilitySampleSchema = z
     demandType: z
       .enum(['B', 'D', 'feature', 'bugfix', 'test', 'docs', 'other'])
       .optional(),
-    expectedProvider: z.enum(['mock', 'claude-code', 'custom']).optional(),
+    expectedProvider: z
+      .enum(['mock', 'claude-code', 'codex', 'custom'])
+      .optional(),
     requireRealProvider: z.boolean().default(false),
     requirePr: z.boolean().default(false),
     expectedPrUrl: z.string().url().optional(),

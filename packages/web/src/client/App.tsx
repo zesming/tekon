@@ -513,6 +513,7 @@ function App() {
             >
               <option value="mock">mock</option>
               <option value="claude-code">claude-code</option>
+              <option value="codex">codex</option>
             </select>
           </label>
           <label className="checkline">

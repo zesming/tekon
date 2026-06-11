@@ -94,9 +94,13 @@ export const commandPolicySchema = z
 export type CommandPolicy = z.infer<typeof commandPolicySchema>;
 
 export const agentAdapterConfigSchema = z.object({
-  provider: z.enum(['mock', 'claude-code', 'custom']),
+  provider: z.enum(['mock', 'claude-code', 'codex', 'custom']),
   command: z.string().min(1).optional(),
   args: z.array(z.string()).default([]),
+  profile: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]+$/u, 'agent profile must be a safe profile name')
+    .optional(),
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
   outputFormat: z.enum(['text', 'json']).default('text'),
   permissionProfile: permissionProfileSchema,
@@ -134,7 +138,9 @@ export const tekonConfigSchema = z.object({
   storage: z.object({
     dataDir: z.string().min(1).default('.tekon'),
   }),
-  defaultAgent: z.enum(['mock', 'claude-code', 'custom']).default('mock'),
+  defaultAgent: z
+    .enum(['mock', 'claude-code', 'codex', 'custom'])
+    .default('mock'),
 });
 export type TekonConfig = z.infer<typeof tekonConfigSchema>;
 

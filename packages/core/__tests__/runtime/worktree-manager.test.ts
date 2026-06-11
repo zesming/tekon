@@ -58,7 +58,7 @@ describe('worktree manager', () => {
         baseRef: 'HEAD',
       }),
     ).rejects.toThrow(/dirty base worktree/u);
-    expect(calls).toEqual(['git status --porcelain']);
+    expect(calls).toEqual(['git status --porcelain=v1 -z']);
     db.close();
   });
 

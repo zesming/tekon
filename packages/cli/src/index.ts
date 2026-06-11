@@ -21,6 +21,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
   createAuditLogger,
   createClaudeCodeAdapter,
+  createCodexAdapter,
   createCommandGateway,
   createDeliveryEvidencePackage,
   createGateEngine,
@@ -1138,6 +1139,15 @@ function createAgentAdapter(input: {
     };
   }
 
+  if (input.agent === 'codex') {
+    const config = defaultCodexConfig(input.repoPath);
+    return {
+      adapter: createCodexAdapter(config, input.gateway),
+      provider: 'codex',
+      configSummary: summarizeAgentConfig(config),
+    };
+  }
+
   throw new Error(`unsupported agent: ${input.agent}`);
 }
 
@@ -1174,6 +1184,22 @@ function createAgentAdapterFromSnapshot(input: {
     };
   }
 
+  if (input.snapshot.provider === 'codex') {
+    const parsed = agentAdapterConfigSchema.safeParse(
+      input.snapshot.configSummary,
+    );
+    if (!parsed.success || parsed.data.provider !== 'codex') {
+      throw new Error(
+        `run ${input.snapshot.runId} has a non-replayable codex provider snapshot`,
+      );
+    }
+    return {
+      adapter: createCodexAdapter(parsed.data, input.gateway),
+      provider: 'codex',
+      configSummary: parsed.data,
+    };
+  }
+
   throw new Error('custom agent provider snapshots cannot be resumed safely');
 }
 
@@ -1184,6 +1210,7 @@ function summarizeAgentConfig(
     provider: config.provider,
     command: config.command,
     args: config.args,
+    profile: config.profile,
     promptMode: config.promptMode,
     outputFormat: config.outputFormat,
     timeoutMs: config.timeoutMs,
@@ -1204,6 +1231,28 @@ function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     args: ['-p'],
     promptMode: 'stdin',
     outputFormat: 'json',
+    timeoutMs: 300_000,
+    permissionProfile: {
+      sandbox: 'workspace-write',
+      approval: 'on-request',
+      filesystemScope: [repoPath],
+      network: 'restricted',
+      tools: {
+        allow: ['git', 'npm', 'pnpm'],
+        deny: ['rm', 'sudo', 'git push --force'],
+      },
+    },
+  };
+}
+
+function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
+  return {
+    provider: 'codex',
+    command: 'codex',
+    args: [],
+    profile: 'internal',
+    promptMode: 'stdin',
+    outputFormat: 'text',
     timeoutMs: 300_000,
     permissionProfile: {
       sandbox: 'workspace-write',

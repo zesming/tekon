@@ -443,6 +443,42 @@ describe('runCli in-process', () => {
     expect(recordedSamples).toContain(`runId: ${standardRunId}`);
     expect(recordedSamples).toContain('expectedProvider: mock');
 
+    const codexRecordedSamplesPath = join(
+      evalDir,
+      'recorded-codex-work-usability.yaml',
+    );
+    await expect(
+      runCli(
+        [
+          'eval',
+          'work-usability',
+          'record',
+          '--run-id',
+          standardRunId!,
+          '--id',
+          'recorded-codex-fixture',
+          '--samples',
+          codexRecordedSamplesPath,
+          '--expected-provider',
+          'codex',
+          '--require-real-provider',
+          '--require-pr',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const codexRecordOutput = io.takeStdout();
+    expect(codexRecordOutput).toContain('expectedProvider=codex');
+    expect(codexRecordOutput).toContain('requireRealProvider=true');
+    expect(codexRecordOutput).toContain('requirePr=true');
+    const codexRecordedSamples = readFileSync(codexRecordedSamplesPath, 'utf8');
+    expect(codexRecordedSamples).toContain('id: recorded-codex-fixture');
+    expect(codexRecordedSamples).toContain('expectedProvider: codex');
+    expect(codexRecordedSamples).toContain('requireRealProvider: true');
+    expect(codexRecordedSamples).toContain('requirePr: true');
+
     const samplesPath = join(evalDir, 'work-usability-samples.yaml');
     writeFileSync(
       samplesPath,
@@ -1198,6 +1234,62 @@ describe('runCli in-process', () => {
     );
     db.close();
   });
+
+  it('starts a Codex provider run and stores a resumable provider snapshot', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-cli-codex-bin-'));
+    tempDirs.push(binDir);
+    writeFakeCodex(binDir);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
+    const io = createMemoryIo();
+
+    try {
+      await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+      io.takeStdout();
+
+      await expect(
+        runCli(
+          [
+            'run',
+            '补齐 Codex provider 文档 smoke，要求产出真实 provider 快照。',
+            '--template',
+            'docs-update',
+            '--agent',
+            'codex',
+            '--repo',
+            repoPath,
+          ],
+          io,
+        ),
+      ).resolves.toBe(0);
+      const runOutput = io.takeStdout();
+      expect(runOutput).toContain('status=passed');
+      const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
+      expect(runId).toBeTruthy();
+
+      const db = openTekonDatabase({
+        filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+      });
+      const provider = await createRepositories(db).getRunProviderConfig(
+        runId!,
+      );
+      expect(provider).toMatchObject({
+        provider: 'codex',
+        configSummary: expect.objectContaining({
+          provider: 'codex',
+          command: 'codex',
+          args: [],
+          profile: 'internal',
+          promptMode: 'stdin',
+          outputFormat: 'text',
+        }),
+      });
+      db.close();
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  }, 15_000);
 });
 
 function createMemoryIo(): CliIO & {
@@ -1245,6 +1337,93 @@ exit 1
     'utf8',
   );
   chmodSync(ghPath, 0o755);
+}
+
+function writeFakeCodex(binDir: string): void {
+  const codexPath = join(binDir, 'codex');
+  writeFileSync(
+    codexPath,
+    `#!/usr/bin/env node
+const { writeFileSync, mkdirSync } = require('node:fs');
+const { join } = require('node:path');
+const args = process.argv.slice(2);
+const execIndex = args.indexOf('exec');
+if (execIndex === -1) {
+  console.error('expected codex exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== 'internal') {
+  console.error('expected internal profile before exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.indexOf('--ask-for-approval') === -1 || args.indexOf('--ask-for-approval') > execIndex) {
+  console.error('expected approval before exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.indexOf('--sandbox') === -1 || args.indexOf('--sandbox') > execIndex) {
+  console.error('expected sandbox before exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex || args[args.indexOf('--add-dir') + 1] !== process.env.TEKON_OUTPUT_DIR) {
+  console.error('expected controlled artifact output add-dir before exec, got: ' + args.join(' '));
+  process.exit(2);
+}
+if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
+  console.error('unsafe codex args');
+  process.exit(3);
+}
+let prompt = '';
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const outputDir = process.env.TEKON_OUTPUT_DIR;
+  const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;
+  if (!outputDir || !manifestPath) {
+    console.error('missing Tekon artifact environment');
+    process.exit(4);
+  }
+  mkdirSync(outputDir, { recursive: true });
+  const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
+  const artifacts = types.map((type) => {
+    const filename = type + '.json';
+    const base = {
+      title: type + ' artifact',
+      body: 'Codex fixture artifact for ' + type + '.',
+      summary: 'Codex fixture artifact for ' + type + '.'
+    };
+    let payload = base;
+    if (type === 'demand-card' || type === 'prd') {
+      payload = {
+        ...base,
+        acceptanceCriteria: [{
+          id: 'AC-1',
+          description: 'The Codex provider run stores a resumable provider snapshot.',
+          verification: 'Inspect run_provider_configs for provider=codex.'
+        }]
+      };
+    } else if (type === 'test-report' || type === 'review-report' || type === 'delivery-package') {
+      payload = {
+        ...base,
+        criteriaEvidence: [{
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
+        }]
+      };
+    } else if (type === 'security-report') {
+      payload = { ...base, securityFindings: [] };
+    }
+    writeFileSync(join(outputDir, filename), JSON.stringify(payload));
+    return { type, path: filename, summary: 'Codex fixture artifact for ' + type + '.' };
+  });
+  writeFileSync(manifestPath, JSON.stringify({ artifacts }));
+  console.log('fake codex completed');
+});
+`,
+    'utf8',
+  );
+  chmodSync(codexPath, 0o755);
 }
 
 function createFixtureRepo(tempDirs: string[]) {

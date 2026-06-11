@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon Codex 自举与后续优先级路线图</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #526071;
+        --line: #d9dee7;
+        --soft: #eef3f8;
+        --accent: #1f6feb;
+        --risk: #b42318;
+        --ok: #067647;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--bg);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        line-height: 1.68;
+      }
+      main {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 36px 0 64px;
+      }
+      header {
+        padding: 30px 32px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.22;
+        letter-spacing: 0;
+      }
+      h2 {
+        margin: 34px 0 14px;
+        padding-top: 24px;
+        border-top: 1px solid var(--line);
+        font-size: 22px;
+        line-height: 1.3;
+        letter-spacing: 0;
+      }
+      h3 {
+        margin: 26px 0 10px;
+        font-size: 17px;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent);
+      }
+      code {
+        border-radius: 4px;
+        padding: 1px 5px;
+        background: #edf0f4;
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.92em;
+      }
+      section {
+        margin-top: 18px;
+        padding: 28px 32px 32px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+      }
+      table {
+        width: 100%;
+        margin: 16px 0 22px;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: var(--soft);
+        font-weight: 650;
+      }
+      ul,
+      ol {
+        padding-left: 24px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .callout {
+        margin: 16px 0;
+        padding: 14px 16px;
+        border-left: 4px solid var(--accent);
+        background: #f0f6ff;
+      }
+      .warning {
+        border-left-color: var(--risk);
+        background: #fff3f0;
+      }
+      .success {
+        border-left-color: var(--ok);
+        background: #eefbf4;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .tile {
+        min-height: 118px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfe;
+      }
+      .tile strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+      @media (max-width: 760px) {
+        main {
+          width: min(100% - 24px, 1180px);
+          padding-top: 18px;
+        }
+        header,
+        section {
+          padding: 22px 18px;
+        }
+        h1 {
+          font-size: 24px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="meta">
+          生成日期：2026-06-10；路径：docs/superpowers/plans/2026-06-10-tekon-priority-roadmap.html
+        </p>
+        <h1>Tekon Codex 自举与后续优先级路线图</h1>
+        <p>
+          本方案将 2026-06-10
+          两份评估报告、用户修正意见和当前实现状态收敛为一条可执行路线： 先完成
+          Codex 自举真实 PR 闭环，再用真实证据决定 Trae、证据包、Web、Provider
+          协议、技能沉淀和 benchmark 的推进顺序。
+        </p>
+      </header>
+
+      <section>
+        <h2>核心结论</h2>
+        <div class="callout success">
+          Tekon 的战略方向是合理的：它不应该再做一个 Coding Agent，而应该做受控
+          AI 软件交付的编排、门禁、审计和证据层。
+        </div>
+        <p>
+          需要调整的是优先级。P0 不应先做 Trae，也不应先扩大到 10
+          个外部样本；更稳妥的路径是先把 Codex 作为真实 provider 接入， 再让
+          Tekon 用自己的真实需求创建一个真实 PR，拿到第一条可信闭环证据。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>报告原判断</th>
+              <th>本方案判断</th>
+              <th>调整依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>P0 跑 10 个真实需求</td>
+              <td>P0 先跑 Tekon 自身 1 个真实需求闭环</td>
+              <td>
+                当前缺真实 provider 和真实 PR 自举证据，先扩大样本会放大噪声
+              </td>
+            </tr>
+            <tr>
+              <td>Trae Agent 优先接入</td>
+              <td>先 Codex，后 Trae</td>
+              <td>
+                用户已明确先适配 Codex；Codex CLI 非交互模式适合当前 provider
+                抽象
+              </td>
+            </tr>
+            <tr>
+              <td>Web 驾驶舱尽快升级</td>
+              <td>放到 P2</td>
+              <td>没有真实 run/PR/CI 数据前，Dashboard 缺少验证对象</td>
+            </tr>
+            <tr>
+              <td>SWE-bench 评测值得推进</td>
+              <td>放到 P4 前后</td>
+              <td>先证明 Tekon 能处理自身真实需求，再做外部 benchmark</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>资料依据</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>资料</th>
+              <th>内容</th>
+              <th>判断依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code
+                  >docs/reviews/2026-06-10-tekon-comprehensive-evaluation.md</code
+                >
+              </td>
+              <td>评估 Tekon 工程质量、产品完成度、方向合理性和缺口</td>
+              <td>
+                工程骨架质量高，但价值验证不足；真实 PR 闭环应成为最高优先级
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code
+                  >docs/research/2026-06-10-external-research-report.md</code
+                >
+              </td>
+              <td>
+                调研 AI Coding Agent、IDP、Governed AI Engineering 和 ByteDance
+                生态
+              </td>
+              <td>Tekon 应避开单点 Coding Agent 竞争，聚焦治理、证据和编排</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://developers.openai.com/codex/noninteractive"
+                  >OpenAI Codex non-interactive mode</a
+                >
+              </td>
+              <td><code>codex exec</code> 面向脚本和 CI 等非交互场景</td>
+              <td>
+                Codex provider 可以用 <code>codex exec</code> 承载 Tekon
+                节点执行
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://developers.openai.com/codex/agent-approvals-security"
+                  >OpenAI Codex approvals and security</a
+                >
+              </td>
+              <td>
+                Codex CLI 支持 workspace sandbox、approval policy 和默认网络隔离
+              </td>
+              <td>
+                Tekon 默认应使用
+                <code
+                  >codex --profile internal --sandbox workspace-write
+                  --ask-for-approval on-request --add-dir
+                  &lt;TEKON_OUTPUT_DIR&gt; exec</code
+                >，其中 <code>--add-dir</code> 只由 Tekon 受控追加到 artifact
+                输出目录，并拒绝危险绕过参数
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://developers.openai.com/codex/cli/reference"
+                  >OpenAI Codex CLI reference</a
+                >
+              </td>
+              <td>
+                列出 <code>codex exec</code>、sandbox、approval 和危险 bypass
+                参数
+              </td>
+              <td>Adapter 必须固定安全参数并禁止用户覆盖关键边界</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>优先级总览</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>优先级</th>
+              <th>名称</th>
+              <th>时间窗口</th>
+              <th>退出标准</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>P0</td>
+              <td>Codex 自举真实 PR 闭环</td>
+              <td>0-2 周</td>
+              <td>
+                PR URL 存在；CI 状态已记录；报告归档到
+                <code>docs/reviews/</code>
+              </td>
+            </tr>
+            <tr>
+              <td>P1-A</td>
+              <td>Codex provider 产品化补齐</td>
+              <td>1-3 周</td>
+              <td>CLI/Web/eval/docs 全链路支持 Codex</td>
+            </tr>
+            <tr>
+              <td>P1-B</td>
+              <td>交付证据包 V2</td>
+              <td>2-4 周</td>
+              <td>review surface 按结果、风险、证据、审查、PR 决策组织</td>
+            </tr>
+            <tr>
+              <td>P1-C</td>
+              <td>Tekon 自身样本扩容</td>
+              <td>3-6 周</td>
+              <td>5-10 个 Tekon 自身真实需求形成 work-usability 汇总</td>
+            </tr>
+            <tr>
+              <td>P2</td>
+              <td>Trae provider、Web Cockpit、Provider 协议</td>
+              <td>5-10 周</td>
+              <td>第二 provider 可对比，真实 run 可在 Web 中清晰管理</td>
+            </tr>
+            <tr>
+              <td>P3/P4</td>
+              <td>DAG 并行、技能沉淀、成本计量、benchmark、平台化</td>
+              <td>2 月+</td>
+              <td>基于真实样本数据推进，不先做空框架</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>P0：Codex 自举真实 PR</h2>
+        <p>
+          P0 的目标不是“adapter 能跑”，而是“Tekon 能用 Codex provider 处理 Tekon
+          自己的真实需求，并通过 Tekon 的交付链路创建真实 PR”。
+        </p>
+        <div class="grid">
+          <div class="tile">
+            <strong>建议需求</strong>
+            补齐 Codex provider 在 CLI/Web/eval/docs 中的可用性，并生成 Codex
+            provider smoke 使用说明。
+          </div>
+          <div class="tile">
+            <strong>关键证据</strong>
+            run id、provider snapshot、required artifacts、gate、readiness、PR
+            URL、CI 状态。
+          </div>
+          <div class="tile">
+            <strong>完成边界</strong>
+            真实 PR 创建才算闭环；<code>delivery prepare</code>、mock
+            provider、dry-run 均不能替代。
+          </div>
+        </div>
+        <h3>P0 门禁</h3>
+        <ul>
+          <li>
+            Codex provider 默认命令使用
+            <code
+              >codex --profile internal --sandbox workspace-write
+              --ask-for-approval on-request --add-dir &lt;TEKON_OUTPUT_DIR&gt;
+              exec</code
+            >，其中 <code>--add-dir</code> 只由 Tekon 受控追加到 artifact
+            输出目录。
+          </li>
+          <li>
+            用户配置不得覆盖 profile、sandbox 和 approval，不得开启
+            <code>danger-full-access</code> 或 bypass approvals。
+          </li>
+          <li>
+            artifact manifest 必须被写出并进入 artifact store；缺失 required
+            artifact 时必须失败。
+          </li>
+          <li>
+            必须通过 <code>delivery create-pr --approve-human</code> 创建真实
+            PR。
+          </li>
+          <li>CI 成功或失败都要如实记录，不把失败包装成成功。</li>
+        </ul>
+        <div class="callout warning">
+          当前工作区已有未提交的 Codex core adapter 初稿，这只表示 P0
+          已开始；CLI/Web 接线、文档、完整验证和真实 PR 证据完成前，P0
+          仍未闭环。
+        </div>
+      </section>
+
+      <section>
+        <h2>P1：把一次成功变成可重复能力</h2>
+        <h3>P1-A：Codex provider 产品化</h3>
+        <p>
+          CLI、Web、eval、docs、snapshot resume 都要把 Codex 当作一等
+          provider。失败 run 必须能给出明确诊断，不能只显示 agent 自述。
+        </p>
+        <h3>P1-B：交付证据包 V2</h3>
+        <p>
+          证据包按五层组织：结果层、风险层、证据层、审查层、PR
+          决策层。默认突出失败项和高风险项，让 reviewer 能在 5
+          分钟内判断接收或退回。
+        </p>
+        <h3>P1-C：Tekon 自身样本扩容</h3>
+        <p>
+          从 1 个自举样本扩展到 5-10 个 Tekon
+          自身真实需求，统计耗时、人工介入、artifact 完整率、gate 一次通过率、PR
+          一次审查通过率。
+        </p>
+      </section>
+
+      <section>
+        <h2>P2：Provider 和体验层扩展</h2>
+        <h3>Trae provider</h3>
+        <p>
+          Trae 是重要方向，但应在 Codex contract 稳定后接入，用同一个 Tekon
+          需求做 Codex/Trae 对比，输出成功率、artifact
+          完整率、耗时、人工介入和失败可诊断性。
+        </p>
+        <h3>Web Cockpit V2</h3>
+        <p>
+          Web 首屏回答：run 到哪一步、哪个 gate 失败、provider
+          是谁、PR/CI/evidence 状态是什么、下一步谁处理。
+        </p>
+        <h3>Provider 协议稳定化</h3>
+        <p>
+          固化 prompt 输入、artifact manifest、provider
+          snapshot、错误模型、安全边界和 resume 语义，避免每接一个 provider 都改
+          workflow engine。
+        </p>
+      </section>
+
+      <section>
+        <h2>P3/P4：长线能力</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>方向</th>
+              <th>前置条件</th>
+              <th>产出</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>并行 DAG 执行</td>
+              <td>顺序 workflow 在真实样本中稳定</td>
+              <td>静态 DAG、并发上限、聚合 gate、失败恢复</td>
+            </tr>
+            <tr>
+              <td>技能沉淀与反技能</td>
+              <td>真实 run 数据足够</td>
+              <td>高评分样本提炼为 skill，重复失败沉淀为 anti-skill</td>
+            </tr>
+            <tr>
+              <td>成本和效率计量</td>
+              <td>Provider usage 或运行时长可采集</td>
+              <td>按 run/provider/role 统计成本、耗时和人工介入</td>
+            </tr>
+            <tr>
+              <td>SWE-bench 和 Backstage</td>
+              <td>内部真实样本已证明核心价值</td>
+              <td>外部 benchmark 报告和平台入口</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>最终建议</h2>
+        <div class="callout">
+          未来 4-6 周的里程碑应定为：Tekon 能连续处理 5 个 Tekon
+          自身真实需求，其中至少 3 个由 Codex provider 创建真实 PR，所有样本都有
+          work-usability、readiness、gate、review surface 和 CI 状态证据。
+        </div>
+        <p>
+          这个目标比“接更多 provider”或“做更大 Dashboard”更能证明 Tekon
+          的核心价值。达到后再推进 Trae、Web Cockpit、provider
+          contract、技能沉淀和
+          benchmark，优先级就会由真实数据驱动，而不是由愿景文档驱动。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

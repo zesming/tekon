@@ -37,6 +37,32 @@ describe('runtime config schemas', () => {
     ).toMatchObject({ provider: 'claude-code' });
 
     expect(
+      tekonConfigSchema.parse({
+        project: { name: 'tekon', repoPath: '/tmp/tekon' },
+        storage: { dataDir: '.tekon' },
+        defaultAgent: 'codex',
+      }),
+    ).toMatchObject({ defaultAgent: 'codex' });
+
+    expect(
+      agentAdapterConfigSchema.parse({
+        provider: 'codex',
+        command: 'codex',
+        args: ['exec'],
+        profile: 'internal',
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        permissionProfile: {
+          sandbox: 'workspace-write',
+          approval: 'on-request',
+          filesystemScope: ['/tmp/tekon'],
+          network: 'restricted',
+          tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
+        },
+      }),
+    ).toMatchObject({ provider: 'codex', profile: 'internal' });
+
+    expect(
       workflowTemplateSchema.parse({
         id: 'standard-feature',
         name: 'Standard Feature',
@@ -80,6 +106,21 @@ describe('runtime config schemas', () => {
         filesystemScope: ['/'],
         network: 'enabled',
         tools: { allow: ['*'], deny: [] },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      agentAdapterConfigSchema.parse({
+        provider: 'codex',
+        command: 'codex',
+        profile: 'internal;rm',
+        permissionProfile: {
+          sandbox: 'workspace-write',
+          approval: 'on-request',
+          filesystemScope: ['/tmp/tekon'],
+          network: 'restricted',
+          tools: { allow: ['Read'], deny: [] },
+        },
       }),
     ).toThrow();
   });

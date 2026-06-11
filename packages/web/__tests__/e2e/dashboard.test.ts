@@ -34,6 +34,7 @@ test.describe('Tekon dashboard', () => {
     await expect(
       page.getByRole('heading', { name: '工作流操作' }),
     ).toBeVisible();
+    await expect(page.getByLabel('Run agent')).toContainText('codex');
     await expect(page.getByRole('heading', { name: '产物' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Gates' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '审计' })).toBeVisible();
@@ -45,7 +46,7 @@ test.describe('Tekon dashboard', () => {
     await expect(
       page.getByRole('heading', { name: '待人工审批' }),
     ).toBeVisible();
-    await expect(page.getByText('decision_1')).toBeVisible();
+    await expect(page.getByText('decision_1', { exact: true })).toBeVisible();
     await expect(page.getByText('risk: high', { exact: true })).toBeVisible();
     await expect(
       page.getByText('tekon run --template standard-feature --agent mock', {

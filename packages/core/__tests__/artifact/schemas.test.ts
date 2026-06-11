@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentArtifactManifestSchema,
   artifactPayloadSchemas,
+  validateArtifactContent,
   validateArtifactPayload,
 } from '../../src/index.js';
 
@@ -77,5 +78,161 @@ describe('artifact schemas', () => {
         securityFindings: [],
       }),
     ).toMatchObject({ securityFindings: [] });
+  });
+
+  it('normalizes provider-style code changes artifacts into a readable payload', () => {
+    expect(
+      validateArtifactContent(
+        'code-changes',
+        JSON.stringify({
+          type: 'code-changes',
+          summary: '同步补充 Codex provider smoke artifact 输出目录诊断说明',
+          changedFiles: [
+            {
+              path: 'docs/manual/codex-provider-smoke.md',
+              changes: ['补充 TEKON_OUTPUT_DIR 诊断说明。'],
+            },
+          ],
+          verification: [
+            {
+              command: 'git diff --check',
+              result: 'exit 0',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      title: 'Code changes',
+      body: expect.stringContaining('docs/manual/codex-provider-smoke.md'),
+      summary: '同步补充 Codex provider smoke artifact 输出目录诊断说明',
+    });
+  });
+
+  it('normalizes provider-style acceptance criteria for demand cards', () => {
+    expect(
+      validateArtifactContent(
+        'demand-card',
+        JSON.stringify({
+          title: '补充 Codex provider smoke 文档中的 artifact 输出目录诊断说明',
+          body: '同步更新 Markdown 源稿与 HTML 审阅版。',
+          acceptance_criteria: [
+            {
+              id: 'AC-1',
+              criterion:
+                'Markdown 源稿包含 --add-dir <TEKON_OUTPUT_DIR> 说明。',
+              verification:
+                'QA 在相关 Markdown 文件中搜索 --add-dir <TEKON_OUTPUT_DIR>。',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      acceptanceCriteria: [
+        {
+          id: 'AC-1',
+          description: 'Markdown 源稿包含 --add-dir <TEKON_OUTPUT_DIR> 说明。',
+        },
+      ],
+    });
+  });
+
+  it('keeps provider-style acceptance criteria normalization narrow', () => {
+    const invalidCriteria = [
+      [],
+      [{ id: '', criterion: 'Missing id.' }],
+      [{ id: 'AC-1', criterion: '' }],
+      [{ id: 'AC-1' }],
+      ['AC-1'],
+    ];
+
+    for (const acceptance_criteria of invalidCriteria) {
+      expect(() =>
+        validateArtifactContent(
+          'demand-card',
+          JSON.stringify({
+            title: 'Demand card',
+            body: 'Scoped documentation update.',
+            acceptance_criteria,
+          }),
+        ),
+      ).toThrow();
+    }
+
+    expect(() =>
+      validateArtifactContent(
+        'demand-card',
+        [
+          '---',
+          'title: Demand card',
+          'body: Scoped documentation update.',
+          'acceptance_criteria:',
+          '  - id: AC-1',
+          '    criterion: Document output directory diagnostics.',
+          '---',
+          '',
+        ].join('\n'),
+      ),
+    ).toThrow();
+
+    const testReport = validateArtifactContent(
+      'test-report',
+      JSON.stringify({
+        title: 'Test report',
+        body: 'Provider-style criteria are not test evidence.',
+        acceptance_criteria: [
+          {
+            id: 'AC-1',
+            criterion: 'This should not satisfy criteriaEvidence.',
+          },
+        ],
+      }),
+    );
+    expect(testReport).not.toHaveProperty('acceptanceCriteria');
+    expect(testReport).not.toHaveProperty('criteriaEvidence');
+  });
+
+  it('rejects non-provider-style code changes artifacts without title and body', () => {
+    for (const payload of [
+      {},
+      { type: 'code-changes' },
+      { changedFiles: [{}] },
+      { verification: [{}] },
+      {
+        changedFiles: ['  '],
+        verification: [{ command: ' ', result: ' ' }],
+      },
+    ]) {
+      expect(() =>
+        validateArtifactContent('code-changes', JSON.stringify(payload)),
+      ).toThrow();
+    }
+  });
+
+  it('does not normalize provider-style fields for other artifact types', () => {
+    expect(() =>
+      validateArtifactContent(
+        'tech-design',
+        JSON.stringify({
+          summary: '技术方案摘要',
+          changedFiles: ['docs/manual/codex-provider-smoke.md'],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it('does not normalize provider-style code changes fields in YAML front matter', () => {
+    expect(() =>
+      validateArtifactContent(
+        'code-changes',
+        [
+          '---',
+          'summary: 同步补充 Codex provider smoke artifact 输出目录诊断说明',
+          'changedFiles:',
+          '  - docs/manual/codex-provider-smoke.md',
+          '---',
+          '',
+        ].join('\n'),
+      ),
+    ).toThrow();
   });
 });
