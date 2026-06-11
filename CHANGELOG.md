@@ -87,6 +87,7 @@
 ### 修复
 
 - CommandGateway 不再在无 stdin 时写入空 chunk；显式 stdin 写失败、子进程异步 `error` 事件、命令日志写入失败和忽略 `SIGTERM` 的 timeout 场景会返回受控结果，降低快速退出命令触发 `EPIPE`、promise 悬挂或丢失执行证据的风险。
+- 真实 provider `process-checkpoint` prompt 明确 `artifactEvidence[].nodeId/type`、`gateEvidence[].nodeId/gateType/gateKey/status` 和数字型 `humanDecisionEvidence.pending`，避免 PMO checkpoint 误写 `output`、`observedStatus` 或 pending 数组后无法通过 schema ingest。
 - Web server 关闭时会主动关闭 idle/all connections，避免 dashboard e2e 或本地开发停止时被 keep-alive 连接挂住。
 - Worktree finalize 提交节点变更时不再 broad `git add .`，改为只 stage `git status --porcelain` 中的非 `.tekon` 真实改动，避免真实 provider 运行态目录被 `.gitignore` 忽略时阻断节点 promote。
 

@@ -1190,7 +1190,12 @@ export function createWorkflowEngine(
             )
           : 'Prior eligible gate results: none.',
         processCheckpointRequired
-          ? 'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes. Also include process-checkpoint.artifactEvidence for every listed prior node output, process-checkpoint.gateEvidence for every listed prior node gate with its gateType, gateKey, and observed passed/skipped status, and process-checkpoint.humanDecisionEvidence.pending.'
+          ? [
+              'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes.',
+              'process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.',
+              'process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.',
+              'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
+            ].join('\n')
           : '',
         expectedDeliveryRef
           ? `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${expectedDeliveryRef}.`

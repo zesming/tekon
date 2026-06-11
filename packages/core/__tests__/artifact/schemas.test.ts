@@ -225,6 +225,31 @@ describe('artifact schemas', () => {
     });
   });
 
+  it('rejects provider-style PMO process checkpoint evidence fields', () => {
+    expect(() =>
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process checkpoint must use the strict checkpoint schema.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        artifactEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            output: 'demand-card',
+          },
+        ],
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            gateKey: '00:schema:artifact=demand-card',
+            observedStatus: 'passed',
+          },
+        ],
+        humanDecisionEvidence: { pending: [] },
+      }),
+    ).toThrow();
+  });
+
   it('normalizes provider-style code changes artifacts into a readable payload', () => {
     expect(
       validateArtifactContent(

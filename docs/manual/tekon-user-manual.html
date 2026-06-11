@@ -1513,8 +1513,22 @@
             >
             不做这类 provider-style QA evidence 字段归一化，应直接按 schema
             写完整字段；缺失状态、含糊状态、无 <code>summary</code> 的 evidence
-            对象、只有顶层 anchor，或只有 <code>criterion</code>
-            而无证据字段时仍会失败。评审类 artifact 必须额外写入合法
+            对象、只有顶层 anchor，或只有
+            <code>criterion</code> 而无证据字段时仍会失败。<code
+              >process-checkpoint</code
+            >
+            必须使用
+            <code>requiredNodes[].nodeId/status</code
+            >、<code>artifactEvidence[].nodeId/type</code>、<code
+              >gateEvidence[].nodeId/gateType/gateKey/status</code
+            >
+            和数字型 <code>humanDecisionEvidence.pending</code>，其中
+            <code>requiredNodes[].status</code> 与
+            <code>gateEvidence[].status</code> 只能是 <code>passed</code> 或
+            <code>skipped</code>，不能用 <code>output</code>、<code
+              >observedStatus</code
+            >
+            或 pending 数组替代 schema 字段。评审类 artifact 必须额外写入合法
             <code>reviewScope</code>、<code>reviewProcess</code>、<code
               >decision</code
             >

@@ -528,6 +528,15 @@ describe('workflow engine role prompt integration', () => {
     expect(pmoPrompt!).toContain(
       'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status',
     );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
+    );
     db.close();
   });
 
