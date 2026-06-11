@@ -151,7 +151,7 @@
         </p>
         <p>
           <span class="pill passed">workflow passed</span>
-          <span class="pill passed">CI passed</span>
+          <span class="pill passed">CI ref-bound</span>
           <span class="pill manual">manual merge decision</span>
           <span class="pill boundary">no release/deploy</span>
         </p>
@@ -178,7 +178,8 @@
         <h2>2. 提交与引用口径</h2>
         <p>
           最终 PR head 会随本归档文档同步提交继续前进，因此本文不把“当前 HEAD”写成不可变的单一事实；最终交付
-          ref 以 <code>PR #5</code> 的 <code>headRefOid</code>、远端 CI 页面和最终交付回复为准。
+          ref 以 <code>PR #5</code> 的 <code>headRefOid</code>、远端 CI 页面和最终交付回复为准。本文记录的远端 CI
+          结论必须绑定到具体 <code>headRefOid</code>，不能外推覆盖尚未推送或后续新增的本地提交。
         </p>
         <div class="table-wrap">
           <table>
@@ -211,9 +212,9 @@
                 <td>要求 PMO pending 数量等于当前 Tekon pending human decision 数量。</td>
               </tr>
               <tr>
-                <td>本文所在后续提交</td>
-                <td>归档同步与 <code>qa-signoff</code> gate hardening</td>
-                <td>同步文档漂移，并拒绝未知或组合 AC id。</td>
+                <td><code>aabd6334ea138ce03893d188c3e2b36b1306a40b</code></td>
+                <td><code>address final self-bootstrap review findings</code></td>
+                <td>修复 reviewer 发现的文档漂移，并让 <code>qa-signoff</code> gate 拒绝未知或组合 AC id。</td>
               </tr>
             </tbody>
           </table>
@@ -249,7 +250,7 @@
           的 PM、RD、QA、Reviewer、PMO 节点和 role-scope / independent-review gates 均通过。
         </p>
         <p class="meta">
-          局限：run_8 的 QA signoff 不覆盖其后暴露并修复的 prompt/gate hardening 提交；这些后续提交由本地测试、独立 reviewer 复查和 PR CI 覆盖。
+          局限：run_8 的 QA signoff 不覆盖其后暴露并修复的 prompt/gate hardening 提交；这些后续提交由本地测试与独立 reviewer 复查覆盖，远端 PR CI 需要按最终推送后的 headRefOid 重新确认。
         </p>
       </section>
 
@@ -271,12 +272,23 @@
                 <td><code>OPEN</code>，非 draft，merge state <code>CLEAN</code></td>
               </tr>
               <tr>
-                <th>GitHub Actions</th>
+                <th>PR 远端 headRefOid（2026-06-12 06:41 CST 查询）</th>
+                <td><code>dd74e034b75a95a4bbf3a99be2e698f6fe6caa7f</code></td>
+              </tr>
+              <tr>
+                <th>该远端 head 的 GitHub Actions</th>
                 <td><code>Core build and tests</code> passed；<code>Lint GitHub Actions workflows</code> passed</td>
+              </tr>
+              <tr>
+                <th>本地后续审阅 head（待推送时点）</th>
+                <td><code>aabd6334ea138ce03893d188c3e2b36b1306a40b</code></td>
               </tr>
             </tbody>
           </table>
         </div>
+        <p class="meta">
+          这些 CI 结果只绑定到查询时的远端 PR head；后续本地提交推送后，需要以新的 PR live checks 作为最终远端 CI 证据。
+        </p>
       </section>
 
       <section>
@@ -286,7 +298,7 @@
             <tbody>
               <tr><th><code>pnpm build</code></th><td>passed</td></tr>
               <tr><th><code>pnpm lint</code></th><td>passed</td></tr>
-              <tr><th><code>pnpm test</code></th><td>58 files / 359 tests passed</td></tr>
+              <tr><th><code>pnpm test</code></th><td>58 files / 360 tests passed</td></tr>
               <tr><th><code>pnpm --filter @tekon/web test:e2e</code></th><td>2 passed</td></tr>
               <tr><th>workflow show / preflight</th><td><code>standard-delivery</code> phases=13，command gates resolved</td></tr>
               <tr><th><code>git diff --check</code></th><td>passed</td></tr>

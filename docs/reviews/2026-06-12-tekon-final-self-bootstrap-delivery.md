@@ -19,7 +19,7 @@
 
 ## 2. 提交与引用口径
 
-最终 PR head 会随本归档文档同步提交继续前进，因此本文不把“当前 HEAD”写成不可变的单一事实；最终交付 ref 以 `PR #5` 的 `headRefOid`、远端 CI 页面和最终交付回复为准。
+最终 PR head 会随本归档文档同步提交继续前进，因此本文不把“当前 HEAD”写成不可变的单一事实；最终交付 ref 以 `PR #5` 的 `headRefOid`、远端 CI 页面和最终交付回复为准。本文记录的远端 CI 结论必须绑定到具体 `headRefOid`，不能外推覆盖尚未推送或后续新增的本地提交。
 
 | 观察点 | 证据 | 说明 |
 | --- | --- | --- |
@@ -27,9 +27,9 @@
 | `38ccd853b7bd15fd33180b1fdc535cc4088a2581` | `Tekon run_8ea4... rd-code-change` | `run_8` 生成的最终归档文档提交；QA validation 与 QA release signoff 绑定该 ref。 |
 | `9260318e500db38ca5f968acd125e6459b773de5` | `tighten QA criteria evidence prompt` | 修复 QA 类 `criteriaEvidence` prompt，要求一个验收标准一个 evidence item。 |
 | `dd74e034b75a95a4bbf3a99be2e698f6fe6caa7f` | `clarify PMO pending decision prompt` | 修复 PMO `humanDecisionEvidence.pending` prompt，要求等于当前 Tekon pending human decision 数量。 |
-| 本文所在后续提交 | 归档同步与 `qa-signoff` gate hardening | 修复 reviewer 发现的文档漂移，并让 `qa-signoff` gate 拒绝未知或组合 AC id。 |
+| `aabd6334ea138ce03893d188c3e2b36b1306a40b` | `address final self-bootstrap review findings` | 修复 reviewer 发现的文档漂移，并让 `qa-signoff` gate 拒绝未知或组合 AC id。 |
 
-判断依据：`run_8` 是 Tekon 自举闭环证据；后续 prompt/gate 修复来自该闭环运行中真实暴露的问题，并通过本地测试与 PR CI 覆盖。
+判断依据：`run_8` 是 Tekon 自举闭环证据；后续 prompt/gate 修复来自该闭环运行中真实暴露的问题，并通过本地测试与独立 reviewer 复查覆盖。远端 CI 只能说明其对应 `headRefOid` 的状态，最终以 PR live checks 为准。
 
 ## 3. `run_8ea4d449-e688-41f4-9ce8-67a3d35d19a3` 自举结果
 
@@ -46,7 +46,7 @@
 
 判断依据：`node packages/cli/dist/index.js status --run-id run_8ea4d449-e688-41f4-9ce8-67a3d35d19a3 --repo /Users/zhaoensheng/Projects/tekon` 返回 `status=passed currentNode=none gates=47 artifacts=25 pendingHumanDecisions=0`。
 
-局限：`run_8` 的 QA signoff 绑定 `38ccd853...`，不覆盖其后暴露并修复的 prompt/gate hardening 提交；这些后续提交由本地测试、独立 reviewer 复查和 PR CI 覆盖。
+局限：`run_8` 的 QA signoff 绑定 `38ccd853...`，不覆盖其后暴露并修复的 prompt/gate hardening 提交；这些后续提交由本地测试与独立 reviewer 复查覆盖，远端 PR CI 需要按最终推送后的 `headRefOid` 重新确认。
 
 ## 4. 真实 PR 与 CI
 
@@ -59,9 +59,11 @@
 | Head branch | `tekon-delivery/run_5cfee596-1540-40fd-af31-8e6652e62258` |
 | PR 状态 | `OPEN`，非 draft |
 | Merge state | `CLEAN` |
-| GitHub Actions | `Core build and tests` passed；`Lint GitHub Actions workflows` passed |
+| PR 远端 headRefOid（2026-06-12 06:41 CST 查询） | `dd74e034b75a95a4bbf3a99be2e698f6fe6caa7f` |
+| 该远端 head 的 GitHub Actions | `Core build and tests` passed；`Lint GitHub Actions workflows` passed |
+| 本地后续审阅 head（待推送时点） | `aabd6334ea138ce03893d188c3e2b36b1306a40b` |
 
-判断依据：`gh pr view 5 --json ...` 与 `gh pr checks 5` 对 `PR #5` 的 live 查询返回上述结果；Tekon `delivery ci-status` 也为 `run_5cfee596-1540-40fd-af31-8e6652e62258` 记录 `ciStatus=passed checks=2`。
+判断依据：`gh pr view 5 --json ...` 与 `gh pr checks 5` 对 `PR #5` 的 live 查询返回上述结果；Tekon `delivery ci-status` 也为 `run_5cfee596-1540-40fd-af31-8e6652e62258` 记录 `ciStatus=passed checks=2`。这些 CI 结果只绑定到查询时的远端 PR head；后续本地提交推送后，需要以新的 PR live checks 作为最终远端 CI 证据。
 
 ## 5. 本地验证
 
@@ -71,14 +73,14 @@
 | --- | --- |
 | `pnpm build` | passed |
 | `pnpm lint` | passed |
-| `pnpm test` | 58 files / 359 tests passed |
+| `pnpm test` | 58 files / 360 tests passed |
 | `pnpm --filter @tekon/web test:e2e` | 2 passed |
 | `node packages/cli/dist/index.js workflow show standard-delivery --repo /Users/zhaoensheng/Projects/tekon` | `phases=13` |
 | `node packages/cli/dist/index.js workflow preflight standard-delivery --repo /Users/zhaoensheng/Projects/tekon` | command gates resolved |
 | `git diff --check` | passed |
 | 目标文档非空与禁用占位标记扫描 | passed |
 
-判断依据：这些命令在最终 PR push 前本地执行通过；PR push 后远端 CI 也通过核心 build/test 与 workflow lint。
+判断依据：这些命令在最终 PR push 前本地执行通过；远端 CI 结论必须按最终推送后的 `headRefOid` 另行确认。
 
 ## 6. 角色评审与职责边界
 
