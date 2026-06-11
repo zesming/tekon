@@ -212,9 +212,9 @@
         <h2>3. Artifact 正文说明</h2>
         <p>
           本次 code-change 节点的内部 artifact 写入
-          <code>TEKON_OUTPUT_DIR</code>，记录变更文件、验证状态、未执行 gate
-          的原因和后续外层 gate 期望。归档文档不包含密钥、token、生产 URL
-          或远端 PR 链接。
+          <code>TEKON_OUTPUT_DIR</code>，记录变更文件、验证状态和后续 gate
+          期望。本归档文档补充了外层实跑验证结果；文档不包含密钥、token、生产
+          URL 或远端 PR 链接。
         </p>
       </section>
 
@@ -233,32 +233,44 @@
             <tr>
               <td>focused-test</td>
               <td><code>pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts -t "controlled artifact and manifest writes"</code></td>
-              <td>本节点未执行</td>
-              <td>Tekon artifact protocol 要求先写 code-changes artifact 和 manifest，且 manifest 写入后立即停止；该命令应由外层 Tekon gate 或后续 QA 执行。</td>
+              <td class="ok">通过</td>
+              <td>2026-06-12 在交付分支 worktree 实跑通过：1 passed、23 skipped。</td>
             </tr>
             <tr>
               <td>runtime-test</td>
               <td><code>pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts</code></td>
-              <td>本节点未执行</td>
-              <td>新增测试位于该测试文件内，需由外层 gate 收集结果。</td>
+              <td class="ok">通过</td>
+              <td>2026-06-12 在交付分支 worktree 实跑通过：24 passed。</td>
             </tr>
             <tr>
-              <td>typecheck</td>
-              <td><code>pnpm --filter @tekon/core typecheck</code></td>
-              <td>本节点未执行</td>
-              <td>本次未改 production TypeScript；结果仍需外层 gate 证明。</td>
+              <td>build</td>
+              <td><code>pnpm build</code></td>
+              <td class="ok">通过</td>
+              <td>2026-06-12 在交付分支 worktree 实跑通过；rd-code-change 外层 build gate 也已通过。</td>
             </tr>
             <tr>
-              <td>build / format / lint / test / security</td>
-              <td><code>pnpm --filter @tekon/core build</code> 等 repo profile gate</td>
-              <td>本节点未执行</td>
-              <td>按节点协议交给 Tekon 外层 gate；security 是否适用以 repo profile 为准。</td>
+              <td>lint / typecheck</td>
+              <td><code>pnpm lint</code></td>
+              <td class="ok">通过</td>
+              <td>rd-code-change 外层 lint gate 已通过；该 gate 运行 <code>pnpm -r lint</code>，覆盖 core、cli、web TypeScript noEmit。</td>
+            </tr>
+            <tr>
+              <td>test</td>
+              <td><code>pnpm test</code></td>
+              <td class="ok">通过</td>
+              <td>首次在未 build 的 worktree 运行失败，原因是 <code>packages/cli/dist/index.js</code> 与 package dist 入口尚未生成；执行 <code>pnpm build</code> 后重跑通过：58 test files passed、348 tests passed。</td>
+            </tr>
+            <tr>
+              <td>security</td>
+              <td>repo profile security gate</td>
+              <td class="ok">通过</td>
+              <td>rd-code-change 外层 security gate 已通过，<code>tekon-builtin</code> scanner findings 为空；本次无依赖新增、无权限扩大、无生产写操作。</td>
             </tr>
             <tr>
               <td>review-surface / delivery-package</td>
               <td><code>tekon review</code> / <code>tekon delivery prepare</code></td>
-              <td>本节点未执行</td>
-              <td>artifact 入库后由 Tekon Engine 或后续交付节点生成 review surface；本需求不授权 run 内远端 PR。</td>
+              <td class="warn">待后续交付节点</td>
+              <td>review surface 和 delivery package 是后续审阅/交付入口，不替代上述 gate；本需求不授权 run 内远端 PR。</td>
             </tr>
           </tbody>
         </table>
@@ -330,8 +342,8 @@
             </tr>
             <tr>
               <td>AC-2 build/lint/test/security gate 通过或显式不适用</td>
-              <td class="warn">待外层 gate</td>
-              <td>本节点按 Tekon artifact protocol 不执行 gate；已记录需由外层 Tekon gate 收集的命令和适用性说明。</td>
+              <td class="ok">已验证</td>
+              <td>build、lint、security 外层 gate 已通过；2026-06-12 补跑 focused-test、CommandGateway runtime-test 和 <code>pnpm test</code>，最终全量测试 58 files / 348 tests passed。</td>
             </tr>
             <tr>
               <td>AC-3 范围保持在需求内</td>

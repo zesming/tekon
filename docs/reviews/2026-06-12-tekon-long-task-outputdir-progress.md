@@ -27,22 +27,20 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 
 ## Artifact 正文说明
 
-本次 code-change 节点的内部 artifact 将写入 `TEKON_OUTPUT_DIR`，记录变更文件、验证状态、未执行 gate 的原因和后续外层 gate 期望。归档文档本身不包含密钥、token、生产 URL 或远端 PR 链接。
+本次 code-change 节点的内部 artifact 写入 `TEKON_OUTPUT_DIR`，记录变更文件、验证状态和后续 gate 期望。本归档文档补充了外层实跑验证结果；文档本身不包含密钥、token、生产 URL 或远端 PR 链接。
 
 ## Gate Evidence
 
 | Gate | Command | Result | Evidence |
 | --- | --- | --- | --- |
-| focused-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts -t "controlled artifact and manifest writes"` | 本节点未执行 | Tekon artifact protocol 要求先写 code-changes artifact 和 manifest，且 manifest 写入后立即停止；该命令应由外层 Tekon gate 或后续 QA 执行。 |
-| runtime-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts` | 本节点未执行 | 同上；新增测试位于该测试文件内。 |
-| typecheck | `pnpm --filter @tekon/core typecheck` | 本节点未执行 | 同上；本次未改 production TypeScript。 |
-| build | `pnpm --filter @tekon/core build` | 本节点未执行 | 同上；本次 runtime 代码未变更。 |
-| format | `pnpm format:check` | 本节点未执行 | 同上；需由外层 gate 收集格式化证据。 |
-| lint | `pnpm lint` | 本节点未执行 | 同上；需由外层 gate 收集 lint 证据。 |
-| test | `pnpm test -- --run` | 本节点未执行 | 同上；需由外层 gate 收集全量测试证据。 |
-| security | repo profile security gate | 本节点未执行 | 本节点无生产写操作、无依赖新增、无权限扩大；security 是否适用以外层 repo profile gate 为准。 |
-| review-surface | `tekon review` | 本节点未执行 | Tekon Engine 应在 artifact 入库后生成 readiness 与 gate evidence。 |
-| delivery-package | `tekon delivery prepare` | 本节点未执行 | 本需求明确不在 run 内创建远端 PR；delivery prepare 是否可用由外层交付节点判定。 |
+| focused-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts -t "controlled artifact and manifest writes"` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过：1 passed、23 skipped。 |
+| runtime-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过：24 passed。 |
+| build | `pnpm build` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过；rd-code-change 外层 build gate 也已通过。 |
+| lint / typecheck | `pnpm lint` | 通过 | rd-code-change 外层 lint gate 已通过；该 gate 运行 `pnpm -r lint`，覆盖 core、cli、web TypeScript noEmit。 |
+| test | `pnpm test` | 通过 | 首次在未 build 的 worktree 运行失败，原因是 `packages/cli/dist/index.js` 与 package dist 入口尚未生成；执行 `pnpm build` 后重跑通过：58 test files passed、348 tests passed。 |
+| security | repo profile security gate | 通过 | rd-code-change 外层 security gate 已通过，`tekon-builtin` scanner findings 为空；本次无依赖新增、无权限扩大、无生产写操作。 |
+| review-surface | `tekon review` | 待后续交付节点 | 该项是审阅入口生成动作，不替代上述 gate；本需求不授权 run 内远端 PR。 |
+| delivery-package | `tekon delivery prepare` | 未授权在本节点执行 | 本需求明确不在 run 内创建远端 PR；delivery prepare 是否可用由外层交付节点判定。 |
 
 ## Human Gate 与回滚
 
@@ -64,7 +62,7 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 | AC | 状态 | 证据 |
 | --- | --- | --- |
 | AC-1 用户可审阅需求结果 | 已准备 | 归档 Markdown/HTML、code-changes artifact、目标 diff 和外层 review surface 共同提供变更摘要、artifact 正文和 gate 状态。 |
-| AC-2 build/lint/test/security gate 通过或显式不适用 | 待外层 gate | 本节点按 Tekon artifact protocol 不执行 gate；已记录需由外层 Tekon gate 收集的命令和适用性说明。 |
+| AC-2 build/lint/test/security gate 通过或显式不适用 | 已验证 | build、lint、security 外层 gate 已通过；2026-06-12 补跑 focused-test、CommandGateway runtime-test 和 `pnpm test`，最终全量测试 58 files / 348 tests passed。 |
 | AC-3 范围保持在需求内 | 已控制 | diff 范围限定为 CommandGateway 定向测试、文档说明和归档报告；未修改 production runtime。 |
 | AC-4 高风险影响具备人工审批、回滚或风险说明 | 已记录 | 本文记录 human gate、rollback、no remote side effects 和残余风险；最终接受残余高风险仍由人类 owner 控制。 |
 
@@ -73,4 +71,3 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 - 可接受风险：outputDir 活动签名依赖文件数量、字节数和 mtime；极短间隔内可能受文件系统 mtime 精度影响。现有 heartbeat、no-progress 和总超时组合约束继续降低误判影响。
 - 必须控制：不得把任意工作区文件变化计为进展，必须限定在 CommandGateway 调用传入的受控 `outputDir`。
 - 必须控制：artifact/manifest 活动只能刷新 no-progress 进展，不得替代 heartbeat、总超时、人类 gate、PR/merge/release 控制。
-
