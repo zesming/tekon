@@ -86,6 +86,7 @@ export const commandInvocationSchema = z.object({
   tool: z.string().min(1),
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).optional(),
+  match: z.enum(['prefix', 'exact']).optional(),
 });
 export type CommandInvocation = z.infer<typeof commandInvocationSchema>;
 
@@ -108,6 +109,7 @@ export type Project = z.infer<typeof projectSchema>;
 
 export const gateConfigSchema = z.object({
   type: gateTypeSchema,
+  gateKey: z.string().min(1).optional(),
   command: commandInvocationSchema.optional(),
   commandRef: z
     .enum(['build', 'typecheck', 'lint', 'test', 'e2e', 'security'])
@@ -202,6 +204,7 @@ export const gateResultSchema = z.object({
   runId: z.string().min(1),
   nodeId: z.string().min(1),
   gateType: gateTypeSchema,
+  gateKey: z.string().min(1).nullable().optional(),
   status: gateStatusSchema,
   outputPath: z.string().nullable().optional(),
   durationMs: z.number().int().min(0),

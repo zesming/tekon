@@ -43,6 +43,21 @@ phases:
     dependsOn:
       - pm-review
     nodes:
+      - id: pm-requirement-intent-review
+        role: pm
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-demand-review:demand-review
+        outputs:
+          - pm-requirement-intent-review:demand-review
+        gates:
+          - type: schema
+            artifactType: demand-review
+          - type: independent-review
+            artifactType: demand-review
+          - type: role-scope
+            artifactType: demand-review
       - id: rd-requirement-interface-review
         role: rd
         inputs:
@@ -83,6 +98,7 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
+          - pm-requirement-intent-review:demand-review
           - rd-requirement-interface-review:requirement-interface-review
           - qa-requirement-interface-review:requirement-interface-review
         outputs:
@@ -118,6 +134,7 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
+          - pm-requirement-intent-review:demand-review
           - implementation-plan:implementation-plan
           - rd-technical-review:technical-review
         outputs:
@@ -231,12 +248,12 @@ phases:
             artifactType: ac-evidence
           - type: ac-evidence
             artifactType: ac-evidence
-  - id: qa-signoff-review
-    name: QA Release Signoff Review
+  - id: qa-signoff
+    name: QA Release Signoff
     dependsOn:
       - qa-final-validation
     nodes:
-      - id: qa-release-signoff-review
+      - id: qa-release-signoff
         role: qa
         inputs:
           - demand:demand-card
@@ -246,12 +263,28 @@ phases:
           - code:code-changes
         outputs:
           - qa-release-signoff:qa-release-signoff
-          - qa-release-signoff-review:qa-release-signoff-review
         gates:
           - type: schema
             artifactType: qa-release-signoff
           - type: qa-signoff
             artifactType: qa-release-signoff
+  - id: qa-signoff-review
+    name: QA Release Signoff Review
+    dependsOn:
+      - qa-signoff
+    nodes:
+      - id: qa-release-signoff-review
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - qa-test-plan:test-plan
+          - qa-validation:test-report
+          - code:code-changes
+          - qa-release-signoff:qa-release-signoff
+        outputs:
+          - qa-release-signoff-review:qa-release-signoff-review
+        gates:
           - type: schema
             artifactType: qa-release-signoff-review
           - type: independent-review
@@ -269,9 +302,14 @@ phases:
           - demand:demand-card
           - prd:prd
           - pm-demand-review:demand-review
+          - pm-requirement-intent-review:demand-review
+          - rd-requirement-interface-review:requirement-interface-review
+          - qa-requirement-interface-review:requirement-interface-review
           - implementation-plan:implementation-plan
           - rd-technical-review:technical-review
           - qa-test-plan:test-plan
+          - qa-test-plan-review:test-plan-review
+          - pm-test-plan-intent-review:test-plan-review
           - qa-validation:test-report
           - reviewer-change-review:code-review
           - qa-release-signoff:qa-release-signoff

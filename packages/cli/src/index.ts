@@ -59,6 +59,8 @@ import {
   openTekonDatabase,
   saveDynamicTemplate,
   repoProfileCommandGuidance,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
   DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   workUsabilitySampleSetSchema,
   upsertWorkUsabilitySample,
@@ -184,7 +186,7 @@ async function commandInit(argv: string[], io: CliIO) {
     stringifyYaml({
       project: { name: basenameForProject(repoPath), repoPath },
       storage: { dataDir: '.tekon' },
-      defaultAgent: 'mock',
+      defaultAgent: 'codex',
     }),
     'utf8',
   );
@@ -210,6 +212,9 @@ async function commandRun(argv: string[], io: CliIO) {
       'allow-dirty-base': { type: 'boolean', default: false },
       'save-as': { type: 'string' },
       'demand-file': { type: 'string' },
+      'timeout-ms': { type: 'string' },
+      'no-progress-timeout-ms': { type: 'string' },
+      'progress-heartbeat-ms': { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -273,9 +278,10 @@ async function commandRun(argv: string[], io: CliIO) {
   const audit = createAuditLogger({ repositories });
   const gateway = createCommandGateway({ repositories });
   const agentRuntime = createAgentAdapter({
-    agent: args.values.agent ?? 'mock',
+    agent: args.values.agent ?? 'codex',
     repoPath,
     gateway,
+    runtime: providerRuntimeFromCliOptions(args.values),
   });
   const engine = createWorkflowEngine({
     repoPath,
@@ -294,10 +300,7 @@ async function commandRun(argv: string[], io: CliIO) {
   const result = await engine.startRun({
     demandText,
     mode: 'template',
-    templateName:
-      args.values.template ??
-      shapedDemand?.recommendedTemplate ??
-      'standard-feature',
+    templateName: args.values.template ?? 'standard-delivery',
   });
   const pendingHuman = (
     await repositories.listHumanDecisions(result.runId)
@@ -618,16 +621,6 @@ async function commandResume(argv: string[], io: CliIO) {
     }
     const humanGate = createHumanGate({ repositories });
     await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
-    await repositories.recordGateResult({
-      id: `gate_resume_${decision.id}`,
-      runId,
-      nodeId: decision.nodeId,
-      gateType: 'human',
-      status: 'passed',
-      durationMs: 0,
-      retries: 0,
-      createdAt: new Date().toISOString(),
-    });
     await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
     await audit.append({
       runId,
@@ -801,7 +794,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
   }
 
   if (subcommand === 'preflight') {
-    const templateName = name ?? 'standard-feature';
+    const templateName = name ?? 'standard-delivery';
     const template = loadWorkflowByName(templateName, projectWorkflowsDir);
     const profile = loadRepoProfile(repoPath);
     for (const phase of template.phases) {
@@ -812,14 +805,20 @@ async function commandWorkflow(argv: string[], io: CliIO) {
             : null;
           const command =
             gate.command ?? (guidance?.command ? guidance.command : null);
+          const isCommandBackedGate = Boolean(
+            gate.commandRef || gate.command || gate.type === 'security-scan',
+          );
           const commandText = command
             ? [command.tool, ...command.args].join(' ')
             : gate.type === 'security-scan'
               ? 'tekon-builtin security scan'
               : '';
-          const status =
+          const repoCommandNotApplicable =
             guidance?.status === 'not-applicable' &&
-            gate.type !== 'security-scan'
+            gate.type !== 'security-scan';
+          const status = !isCommandBackedGate
+            ? 'not-command-gate'
+            : repoCommandNotApplicable
               ? 'not-applicable'
               : commandText
                 ? 'resolved'
@@ -871,7 +870,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
   if (subcommand === 'create') {
     ensureSafeName(name);
     ensureInitialized(repoPath);
-    const fromName = args.values.from ?? 'standard-feature';
+    const fromName = args.values.from ?? 'standard-delivery';
     ensureSafeName(fromName);
     const source = getWorkflowFilePath(fromName, projectWorkflowsDir);
     const target = join(projectWorkflowsDir, `${name}.yaml`);
@@ -1118,6 +1117,7 @@ function createAgentAdapter(input: {
   agent: string;
   repoPath: string;
   gateway: CommandGateway;
+  runtime?: ProviderRuntimeOverrides;
 }): {
   adapter: AgentAdapter;
   provider: RunProviderConfig['provider'];
@@ -1132,7 +1132,10 @@ function createAgentAdapter(input: {
   }
 
   if (input.agent === 'claude-code') {
-    const config = defaultClaudeCodeConfig(input.repoPath);
+    const config = applyProviderRuntimeOverrides(
+      defaultClaudeCodeConfig(input.repoPath),
+      input.runtime,
+    );
     return {
       adapter: createClaudeCodeAdapter(config, input.gateway),
       provider: 'claude-code',
@@ -1141,7 +1144,10 @@ function createAgentAdapter(input: {
   }
 
   if (input.agent === 'codex') {
-    const config = defaultCodexConfig(input.repoPath);
+    const config = applyProviderRuntimeOverrides(
+      defaultCodexConfig(input.repoPath),
+      input.runtime,
+    );
     return {
       adapter: createCodexAdapter(config, input.gateway),
       provider: 'codex',
@@ -1150,6 +1156,60 @@ function createAgentAdapter(input: {
   }
 
   throw new Error(`unsupported agent: ${input.agent}`);
+}
+
+type ProviderRuntimeOverrides = Partial<
+  Pick<
+    AgentAdapterConfig,
+    'timeoutMs' | 'progressHeartbeatMs' | 'noProgressTimeoutMs'
+  >
+>;
+
+function providerRuntimeFromCliOptions(
+  values: Record<string, string | boolean | undefined>,
+): ProviderRuntimeOverrides {
+  return {
+    timeoutMs: parsePositiveIntOption(values['timeout-ms'], '--timeout-ms'),
+    noProgressTimeoutMs: parsePositiveIntOption(
+      values['no-progress-timeout-ms'],
+      '--no-progress-timeout-ms',
+    ),
+    progressHeartbeatMs: parsePositiveIntOption(
+      values['progress-heartbeat-ms'],
+      '--progress-heartbeat-ms',
+    ),
+  };
+}
+
+function applyProviderRuntimeOverrides(
+  config: AgentAdapterConfig,
+  runtime?: ProviderRuntimeOverrides,
+): AgentAdapterConfig {
+  return {
+    ...config,
+    timeoutMs: runtime?.timeoutMs ?? config.timeoutMs,
+    noProgressTimeoutMs:
+      runtime?.noProgressTimeoutMs ?? config.noProgressTimeoutMs,
+    progressHeartbeatMs:
+      runtime?.progressHeartbeatMs ?? config.progressHeartbeatMs,
+  };
+}
+
+function parsePositiveIntOption(
+  value: string | boolean | undefined,
+  name: string,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
 }
 
 function createAgentAdapterFromSnapshot(input: {
@@ -1215,6 +1275,8 @@ function summarizeAgentConfig(
     promptMode: config.promptMode,
     outputFormat: config.outputFormat,
     timeoutMs: config.timeoutMs,
+    progressHeartbeatMs: config.progressHeartbeatMs,
+    noProgressTimeoutMs: config.noProgressTimeoutMs,
     permissionProfile: {
       sandbox: config.permissionProfile.sandbox,
       approval: config.permissionProfile.approval,
@@ -1233,6 +1295,8 @@ function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     promptMode: 'stdin',
     outputFormat: 'json',
     timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',
@@ -1255,6 +1319,8 @@ function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
     promptMode: 'stdin',
     outputFormat: 'text',
     timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',

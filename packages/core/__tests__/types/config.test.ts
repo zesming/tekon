@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
   DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   agentAdapterConfigSchema,
   commandPolicySchema,
@@ -22,6 +24,13 @@ describe('runtime config schemas', () => {
     ).toMatchObject({ defaultAgent: 'mock' });
 
     expect(
+      tekonConfigSchema.parse({
+        project: { name: 'tekon', repoPath: '/tmp/tekon' },
+        storage: { dataDir: '.tekon' },
+      }),
+    ).toMatchObject({ defaultAgent: 'codex' });
+
+    expect(
       agentAdapterConfigSchema.parse({
         provider: 'claude-code',
         command: 'claude',
@@ -38,6 +47,8 @@ describe('runtime config schemas', () => {
     ).toMatchObject({
       provider: 'claude-code',
       timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+      progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+      noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     });
 
     expect(
@@ -68,6 +79,8 @@ describe('runtime config schemas', () => {
       provider: 'codex',
       profile: 'internal',
       timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+      progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+      noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     });
 
     expect(

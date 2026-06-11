@@ -294,7 +294,7 @@ describe('web write authorization', () => {
 
     const started = await api.project.run({
       demandText: 'Web should be able to start a controlled mock run.',
-      template: 'project-feature',
+      template: 'standard-delivery',
       agent: 'mock',
       token: fixture.sessionToken,
     });
@@ -309,14 +309,17 @@ describe('web write authorization', () => {
     await expect(
       api.artifact.list({ runId: started.run.id }),
     ).resolves.toMatchObject({
-      artifacts: [
+      artifacts: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'demand-card',
+        }),
         expect.objectContaining({
           type: 'code-changes',
         }),
         expect.objectContaining({
-          type: 'review-report',
+          type: 'qa-release-signoff',
         }),
-      ],
+      ]),
     });
 
     const prepared = await api.delivery.prepare({
@@ -352,7 +355,7 @@ describe('web write authorization', () => {
     );
 
     await api.close();
-  });
+  }, 30_000);
 
   it('starts a Codex provider run from Web and stores a resumable provider snapshot', async () => {
     const fixture = await createWebFixtureProject();
@@ -370,6 +373,9 @@ describe('web write authorization', () => {
           'Web should be able to start a controlled Codex provider run.',
         template: 'project-feature',
         agent: 'codex',
+        timeoutMs: 7_200_000,
+        noProgressTimeoutMs: 1_200_000,
+        progressHeartbeatMs: 30_000,
         token: fixture.sessionToken,
       });
 
@@ -393,7 +399,9 @@ describe('web write authorization', () => {
           profile: 'internal',
           promptMode: 'stdin',
           outputFormat: 'text',
-          timeoutMs: 3_600_000,
+          timeoutMs: 7_200_000,
+          noProgressTimeoutMs: 1_200_000,
+          progressHeartbeatMs: 30_000,
         }),
       });
       db.close();
@@ -596,22 +604,29 @@ describe('web write authorization', () => {
       projectRoot: fixture.projectRoot,
       env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}` },
     });
+    const started = await api.project.run({
+      demandText:
+        'Web should create a PR only after standard delivery evidence is complete.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
 
     const result = await api.delivery.createPr({
-      runId: 'run_1',
+      runId: started.run.id,
       token: fixture.sessionToken,
       approveHuman: true,
     });
 
     expect(result).toMatchObject({
-      runId: 'run_1',
+      runId: started.run.id,
       deliveryStatus: 'created',
       requiresHumanApproval: false,
       prUrl: 'https://github.example/tekon/pull/10',
       failureStage: null,
-      branch: 'tekon-delivery/run_1',
+      branch: `tekon-delivery/${started.run.id}`,
     });
-    const audit = await api.audit.list({ runId: 'run_1' });
+    const audit = await api.audit.list({ runId: started.run.id });
     expect(audit.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'delivery.pr.created' }),
@@ -619,7 +634,7 @@ describe('web write authorization', () => {
     );
 
     await api.close();
-  });
+  }, 30_000);
 });
 
 function writeFakeCodex(binDir: string): void {
@@ -668,6 +683,7 @@ process.stdin.on('end', () => {
   }
   mkdirSync(outputDir, { recursive: true });
   const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
+  const deliveryRef = (prompt.match(/exact tested delivery ref: ([^\\.\\n]+)/) || ['', 'codex-fixture-ref'])[1];
   const artifacts = types.map((type) => {
     const filename = type + '.json';
     const base = {
@@ -692,6 +708,18 @@ process.stdin.on('end', () => {
           criterionId: 'AC-1',
           status: 'passed',
           evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
+        }]
+      };
+    } else if (type === 'qa-release-signoff') {
+      payload = {
+        ...base,
+        targetRef: deliveryRef,
+        validatedRef: deliveryRef,
+        overallStatus: 'passed',
+        criteriaEvidence: [{
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Codex fixture QA signoff validates ' + deliveryRef + '.'
         }]
       };
     } else if (type === 'security-report') {

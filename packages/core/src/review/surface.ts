@@ -4,6 +4,10 @@ import { join } from 'node:path';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import {
+  evaluatePrePullRequestReadiness,
+  type PrePullRequestReadiness,
+} from '../delivery/pre-pr-readiness.js';
+import {
   evaluateWorkReadiness,
   type WorkReadinessEvaluation,
 } from '../eval/work-readiness.js';
@@ -94,6 +98,7 @@ export interface WorkReviewSurface {
     body: string;
   };
   readiness: WorkReadinessEvaluation;
+  prePullRequestReadiness: PrePullRequestReadiness;
   artifacts: ReviewArtifact[];
   gates: ReviewGate[];
   gateFailureTriage: ReviewGateFailureTriage[];
@@ -122,19 +127,31 @@ export async function createWorkReviewSurface(input: {
   }
 
   const maxContentChars = normalizeMaxContentChars(input.maxContentChars);
-  const [readiness, artifacts, gates, deliveryPr, auditEvents] =
-    await Promise.all([
-      evaluateWorkReadiness({
-        repositories: input.repositories,
-        audit: input.audit,
-        runId: input.runId,
-        repoPath: input.repoPath,
-      }),
-      input.repositories.listArtifacts(input.runId),
-      input.repositories.listGateResults(input.runId),
-      input.repositories.getDeliveryPullRequest(input.runId),
-      input.repositories.listAuditEvents(input.runId),
-    ]);
+  const [
+    readiness,
+    prePullRequestReadiness,
+    artifacts,
+    gates,
+    deliveryPr,
+    auditEvents,
+  ] = await Promise.all([
+    evaluateWorkReadiness({
+      repositories: input.repositories,
+      audit: input.audit,
+      runId: input.runId,
+      repoPath: input.repoPath,
+    }),
+    evaluatePrePullRequestReadiness({
+      repositories: input.repositories,
+      audit: input.audit,
+      runId: input.runId,
+      repoPath: input.repoPath,
+    }),
+    input.repositories.listArtifacts(input.runId),
+    input.repositories.listGateResults(input.runId),
+    input.repositories.getDeliveryPullRequest(input.runId),
+    input.repositories.listAuditEvents(input.runId),
+  ]);
 
   const deliveryPaths = deliveryPathsForRun(input.repoPath, input.runId);
   const delivery = {
@@ -167,6 +184,7 @@ export async function createWorkReviewSurface(input: {
       body: demand.body,
     },
     readiness,
+    prePullRequestReadiness,
     artifacts: artifacts.map((artifact) => ({
       ...artifact,
       content: readPreview({
@@ -203,6 +221,7 @@ export async function createWorkReviewSurface(input: {
       repoPath: input.repoPath,
       runId: input.runId,
       readiness,
+      prePullRequestReadiness,
       deliveryStatus: delivery.status,
       diffAvailable: delivery.diff.available,
       commandDisplay: input.commandDisplay,
@@ -780,6 +799,7 @@ function nextCommandsFor(input: {
   repoPath: string;
   runId: string;
   readiness: WorkReadinessEvaluation;
+  prePullRequestReadiness: PrePullRequestReadiness;
   deliveryStatus: string;
   diffAvailable: boolean;
   commandDisplay?: ReviewCommandDisplay;
@@ -789,14 +809,18 @@ function nextCommandsFor(input: {
       ? ` --run-id ${quoteCliArg(input.runId)} --repo ${quoteCliArg(input.repoPath)}`
       : '';
   const commands = [`tekon status${runFlag}`, `tekon eval readiness${runFlag}`];
-  if (input.deliveryStatus === 'not-prepared') {
+  if (
+    input.deliveryStatus === 'not-prepared' &&
+    input.prePullRequestReadiness.ready
+  ) {
     commands.push(`tekon delivery prepare${runFlag}`);
   }
   if (!input.readiness.ready) {
     commands.push(`tekon log${runFlag}`);
   }
   if (
-    input.readiness.ready &&
+    input.deliveryStatus !== 'not-prepared' &&
+    input.prePullRequestReadiness.ready &&
     input.deliveryStatus !== 'created' &&
     input.diffAvailable
   ) {

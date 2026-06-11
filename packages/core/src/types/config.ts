@@ -10,6 +10,8 @@ const unsafeToolNames = new Set(['rm', 'sudo', 'su', 'chmod', 'chown']);
 const shellMetaPattern = /[;&|`$<>]/u;
 
 export const DEFAULT_REAL_PROVIDER_TIMEOUT_MS = 60 * 60 * 1000;
+export const DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS = 60 * 1000;
+export const DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS = 15 * 60 * 1000;
 
 function assertSafeCommand(command: { tool: string; args?: string[] }) {
   if (unsafeToolNames.has(command.tool)) {
@@ -111,6 +113,16 @@ export const agentAdapterConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_REAL_PROVIDER_TIMEOUT_MS),
+  progressHeartbeatMs: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS),
+  noProgressTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS),
 });
 export type AgentAdapterConfig = z.infer<typeof agentAdapterConfigSchema>;
 
@@ -122,6 +134,7 @@ export const worktreeLeaseSchema = z.object({
   repoPath: z.string().min(1),
   worktreePath: z.string().min(1),
   branchName: z.string().min(1),
+  baseHead: z.string().min(1).nullable().optional(),
   createdAt: z.string().datetime(),
   releasedAt: z.string().datetime().nullable().optional(),
 });
@@ -146,7 +159,7 @@ export const tekonConfigSchema = z.object({
   }),
   defaultAgent: z
     .enum(['mock', 'claude-code', 'codex', 'custom'])
-    .default('mock'),
+    .default('codex'),
 });
 export type TekonConfig = z.infer<typeof tekonConfigSchema>;
 

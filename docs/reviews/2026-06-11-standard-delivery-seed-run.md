@@ -1,7 +1,7 @@
 # Standard Delivery Seed Run 归档记录
 
-日期：2026-06-11  
-Run ID：`run_04b37267-2686-42c6-a0a4-9b37410f65f7`  
+日期：2026-06-11
+Run ID：`run_04b37267-2686-42c6-a0a4-9b37410f65f7`
 结论：P1-0 seed run 未完成，状态为 `interrupted`。这次运行显示 RD 节点在 300 秒内未完成 manifest 交付，并暴露出 seed 任务粒度过大和默认 provider 超时偏短的风险；它不证明 `standard-delivery` 方向不可行。
 
 ## 1. 运行输入
@@ -95,7 +95,7 @@ RD worktree 残留：
 
 - 将 P1-0 调整为 P1-0R 失败归档。
 - 将 P1-A 拆成最小兼容模板、角色边界和长程 provider 支持三个小粒度任务。
-- 把真实 provider 默认超时提升到 1 小时，并在后续补充 heartbeat、manifest mtime、artifact 文件变化和无进展超时。
+- 把真实 provider 默认总超时提升到 1 小时，已补充 progress heartbeat 和基于 stdout/stderr 的无进展超时；后续继续补 manifest mtime、artifact 文件变化和可恢复执行。
 - 后续再用 `standard-delivery` 跑小型 Tekon 自身需求，创建真实 PR，不自动 merge。
 
 ## 5. 本轮跟进

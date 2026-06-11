@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standard Delivery Governance Bootstrap 归档</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #526071;
+        --line: #d8e0ea;
+        --soft: #eef4fa;
+        --ok: #067647;
+        --warn: #9a5b00;
+        --risk: #b42318;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        line-height: 1.68;
+      }
+      main {
+        width: min(1080px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 36px 0 64px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      header {
+        padding: 30px 32px;
+      }
+      section {
+        margin-top: 18px;
+        padding: 28px 32px 32px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.22;
+      }
+      h2 {
+        margin: 30px 0 14px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 21px;
+        line-height: 1.35;
+      }
+      h2:first-child {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        padding: 1px 5px;
+      }
+      pre {
+        overflow-x: auto;
+        background: #111827;
+        color: #f9fafb;
+        border-radius: 8px;
+        padding: 16px;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 22px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+      }
+      ul {
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      .ok {
+        color: var(--ok);
+        font-weight: 650;
+      }
+      .warn {
+        color: var(--warn);
+        font-weight: 650;
+      }
+      @media (max-width: 720px) {
+        main {
+          width: min(100% - 24px, 1080px);
+          padding-top: 20px;
+        }
+        header,
+        section {
+          padding: 22px 18px;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Standard Delivery Governance Bootstrap 归档</h1>
+        <p class="meta">
+          日期：2026-06-11 · 分支：<code
+            >tekon-standard-delivery-full-bootstrap</code
+          >
+        </p>
+        <p>
+          本轮把
+          <code>standard-delivery</code>
+          从种子模板推进到可运行的标准交付治理模板，并使用 mock provider 完成
+          Tekon 自身需求的本地治理链路自举验证。真实 PR 创建不在自举 run
+          内自动执行，将由本分支最终 PR 完成。
+        </p>
+      </header>
+
+      <section>
+        <h2>1. 范围</h2>
+        <ul>
+          <li>
+            新增需求评审、实施计划、接口评审、技术评审、测试计划、AC
+            evidence、QA release signoff、PMO checkpoint 等 artifact。
+          </li>
+          <li>
+            新增
+            <code>independent-review</code
+            >、<code>role-scope</code>、<code>ac-evidence</code>、<code>qa-signoff</code>、<code
+              >process-completeness</code
+            >
+            gate。
+          </li>
+          <li>
+            <code>standard-delivery</code> 覆盖 PM 内审、PM
+            外部需求意图评审、RD/QA 外评、RD 技术评审、QA 测试方案评审、PM
+            测试意图评审、独立变更评审、QA 验收、QA release signoff、QA signoff
+            review 和 PMO checkpoint。
+          </li>
+          <li>
+            交付证据纳入 AC evidence、QA release signoff、CI status、PR package
+            和 readiness 汇总。
+          </li>
+          <li>
+            过程治理纳入非 <code>code-changes</code> 节点源码变更 guard、QA
+            validation tested ref 审计、逐节点 <code>pmo.node-checkpoint</code>
+            审计、审批 note 脱敏和 PR 创建前置只读 probe 统一走 CommandGateway。
+          </li>
+          <li>
+            PR 前置边界纳入 pre-PR readiness：要求 workflow passed、无 pending
+            human gate、验证 gate/安全扫描满足、AC evidence 完整、QA release
+            signoff 通过且绑定 QA validation tested ref；SCM 写命令使用 exact
+            allow，并校验 delivery branch/base branch 安全 ref。
+          </li>
+          <li>
+            真实 provider 和受控 <code>delivery create-pr</code> 的
+            <code>git/gh</code> 命令默认 1 小时总超时、15 分钟无 stdout/stderr
+            进展超时，CommandGateway 输出 <code>*.progress.json</code>；CLI
+            <code>run</code> 与 Web dashboard 可显式覆盖总超时、无进展超时和
+            heartbeat，支持 2 小时以上长程任务预算。
+          </li>
+          <li>
+            Gate result 持久化 <code>gateKey</code>；同一节点下多个
+            <code>schema</code> 等同类型 gate 会按 artifact/commandRef 区分，PMO
+            checkpoint 的 gate evidence 也记录 <code>gateKey</code>；human gate
+            审批更新原始 gate result 并保留 gateKey，不再创建无 key 的 resume
+            gate。
+          </li>
+          <li>常规模板补齐 <code>qa-release-signoff</code> 输出和 gate。</li>
+        </ul>
+
+        <h2>2. 自举运行</h2>
+        <pre><code>runId=run_c1cc3995-a8fc-45ac-a4fe-408eba1b9b50 repo=/Users/zhaoensheng/Projects/tekon status=passed currentNode=none gates=41 artifacts=19 pendingHumanDecisions=0</code></pre>
+        <pre><code>runId=run_c1cc3995-a8fc-45ac-a4fe-408eba1b9b50 ready=false score=0.73 prCreated=false prUrl= failed=pr-prepared,pr-created,remote-ci-passed</code></pre>
+        <p>
+          该 run 使用 mock provider，验证对象是标准治理模板、artifact/gate
+          协议和本地 gate 闭环，不宣称真实 Codex/provider
+          端到端已完成。workflow、artifact schema、独立评审、角色范围、AC
+          evidence、QA signoff、PMO process completeness、逐节点 PMO checkpoint
+          和非 code 节点源码 guard 均已在本地自举 run
+          或目标测试内通过。readiness 仍为 false 是预期结果，因为该 run
+          不在内部创建远端 PR，也未记录远端 CI。
+        </p>
+
+        <h2>3. 失败样本</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Run ID</th>
+              <th>状态</th>
+              <th>原因</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>run_04b37267-2686-42c6-a0a4-9b37410f65f7</code></td>
+              <td>interrupted</td>
+              <td>
+                早期 RD Codex 节点 300 秒超时，任务粒度过大，无 manifest 入库。
+              </td>
+            </tr>
+            <tr>
+              <td><code>run_86811b0c-6b23-40f3-8dab-b07faf4df826</code></td>
+              <td>blocked</td>
+              <td>旧测试仍断言 9 个 artifact，未适配标准流程新增 artifact。</td>
+            </tr>
+            <tr>
+              <td><code>run_7c85825c-fbf3-4abb-8416-9c0f1af2e61c</code></td>
+              <td>blocked</td>
+              <td>慢测试阈值不足，非标准交付 gate 语义失败。</td>
+            </tr>
+            <tr>
+              <td><code>run_13e73649-9a67-4520-9444-e748260c6a26</code></td>
+              <td>blocked</td>
+              <td>慢测试阈值不足，非标准交付 gate 语义失败。</td>
+            </tr>
+            <tr>
+              <td><code>run_c174ef64-0ec4-4083-9e2f-8c1426a79751</code></td>
+              <td>blocked</td>
+              <td>慢测试阈值不足，非标准交付 gate 语义失败。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>4. 长程任务证据</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>命令</th>
+              <th>状态</th>
+              <th>elapsedMs</th>
+              <th>timeoutMs</th>
+              <th>stdoutBytes</th>
+              <th>stderrBytes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>pnpm --dir /Users/zhaoensheng/Projects/tekon build</code>
+              </td>
+              <td class="ok">completed</td>
+              <td>1724</td>
+              <td>60000</td>
+              <td>848</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>
+                <code>pnpm --dir /Users/zhaoensheng/Projects/tekon lint</code>
+              </td>
+              <td class="ok">completed</td>
+              <td>1839</td>
+              <td>60000</td>
+              <td>324</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>
+                <code>pnpm --dir /Users/zhaoensheng/Projects/tekon test</code>
+              </td>
+              <td class="ok">completed</td>
+              <td>28704</td>
+              <td>60000</td>
+              <td>8751</td>
+              <td>38050</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          三条 gate 命令均短于默认 60 秒 heartbeat 间隔，因此 heartbeatCount 为
+          0 是合理现象；单元测试使用 10ms heartbeat 间隔验证了长命令会写入
+          heartbeat evidence。1 小时默认总超时合理，2 小时以上应只作为
+          <code>run</code> 的显式配置，并保留 no-progress timeout。
+        </p>
+
+        <h2>5. 本地验证</h2>
+        <pre><code>pnpm test
+pnpm vitest run packages/cli/__tests__/run-cli.test.ts
+pnpm build
+pnpm lint
+pnpm --filter @tekon/web test:e2e
+node packages/cli/dist/index.js workflow show standard-delivery --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js workflow preflight standard-delivery --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js status --run-id run_c1cc3995-a8fc-45ac-a4fe-408eba1b9b50 --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js eval readiness --run-id run_c1cc3995-a8fc-45ac-a4fe-408eba1b9b50 --repo /Users/zhaoensheng/Projects/tekon
+git diff --check
+git diff --check origin/main</code></pre>
+        <ul>
+          <li>
+            <code>pnpm test</code>：58 个 test files passed，332 个 tests
+            passed。
+          </li>
+          <li>
+            <code>pnpm vitest run packages/cli/__tests__/run-cli.test.ts</code
+            >：1 个 test file passed，12 个 tests passed。
+          </li>
+          <li><code>pnpm build</code>：core、cli、web build passed。</li>
+          <li><code>pnpm lint</code>：core、cli、web typecheck passed。</li>
+          <li>
+            <code>pnpm --filter @tekon/web test:e2e</code>：2 个 Playwright
+            tests passed。
+          </li>
+          <li>
+            <code>workflow show standard-delivery</code
+            >：<code>id=standard-delivery</code>，<code>phases=13</code>。
+          </li>
+          <li>
+            <code>workflow preflight standard-delivery</code
+            >：build/lint/test/security commandRef resolved；schema 和 semantic
+            gate 显示 <code>status=not-command-gate</code>，不再和 repo profile
+            的 <code>not-applicable</code> 混淆。
+          </li>
+          <li>
+            <code>status</code> / <code>eval readiness</code>：自举 run 保持
+            <code>status=passed</code>，readiness 失败项仍为
+            <code>pr-prepared,pr-created,remote-ci-passed</code>，符合“不在 run
+            内创建真实 PR”的边界。
+          </li>
+          <li>
+            <code>git diff --check</code> /
+            <code>git diff --check origin/main</code>：无空白错误。
+          </li>
+          <li>
+            <code>pnpm format:check</code>：仍失败在两个未触碰的历史文档
+            <code>docs/research/2026-06-10-external-research-report.md</code
+            >、<code>docs/reviews/2026-06-10-tekon-comprehensive-evaluation.md</code>；本轮改动文件的空白和未完成标记扫描无新增问题。
+          </li>
+        </ul>
+
+        <h2>6. 风险和下一步</h2>
+        <ul>
+          <li>真实 PR 和远端 CI 证据仍需在本分支 PR 创建后补齐。</li>
+          <li>
+            <code>qa-release-signoff</code> 当前已绑定
+            <code>targetRef</code>、<code>validatedRef</code>
+            和最新 QA validation ref，后续应绑定 delivery branch SHA 或 PR head
+            SHA，并处理 PR 更新后的重新验证策略。
+          </li>
+          <li>
+            PMO 当前已有逐节点 <code>pmo.node-checkpoint</code>
+            审计和末端 checkpoint gate，后续应补 CLI/Web
+            展示、风险聚合和人工升级入口。
+          </li>
+          <li>
+            长程任务已具备总超时、stdout/stderr no-progress timeout 和 progress
+            文件；CLI/Web run 可显式放大外层预算，但仍需 manifest/artifact/diff
+            级进展续期、可恢复执行和外部 job runner。
+          </li>
+          <li>
+            当前强 gate 不能替代人类业务决策，merge、release、deploy
+            仍必须受控。
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

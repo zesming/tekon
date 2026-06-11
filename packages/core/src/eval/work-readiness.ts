@@ -48,8 +48,14 @@ export async function evaluateWorkReadiness(input: {
       ['build', 'test', 'lint', 'e2e-pass'].includes(gate.gateType),
     ),
   );
+  const qaSignoffGates = latestGateResults(
+    gates.filter((gate) => gate.gateType === 'qa-signoff'),
+  );
   const satisfiedValidationGates = validationGates.filter(
     isSatisfiedValidationGate,
+  );
+  const hasPassedQaSignoffGate = qaSignoffGates.some(
+    (gate) => gate.status === 'passed',
   );
   const pendingHuman = decisions.filter(
     (decision) => decision.status === 'pending',
@@ -113,20 +119,29 @@ export async function evaluateWorkReadiness(input: {
     {
       id: 'qa-release-signoff-passed',
       severity: 'required',
-      passed: deliveryEvidence.qaReleaseSignoffs.some(
-        (signoff) =>
-          signoff.status === 'passed' &&
-          signoff.matchedRef &&
-          signoff.criteriaEvidence > 0,
-      ),
+      passed:
+        hasPassedQaSignoffGate &&
+        deliveryEvidence.qaReleaseSignoffs.some(
+          (signoff) =>
+            signoff.status === 'passed' &&
+            signoff.matchedRef &&
+            Boolean(signoff.expectedRef) &&
+            deliveryEvidence.acceptanceCriteria.length > 0 &&
+            deliveryEvidence.acceptanceCriteria.every((criterion) =>
+              signoff.coveredCriteriaIds.includes(criterion.id),
+            ),
+        ),
       evidence:
         deliveryEvidence.qaReleaseSignoffs.length > 0
-          ? deliveryEvidence.qaReleaseSignoffs
-              .map(
+          ? [
+              hasPassedQaSignoffGate
+                ? 'qa-signoff gate passed'
+                : 'qa-signoff gate missing',
+              ...deliveryEvidence.qaReleaseSignoffs.map(
                 (signoff) =>
-                  `${signoff.status} matchedRef=${signoff.matchedRef} criteriaEvidence=${signoff.criteriaEvidence} artifact=${signoff.artifactId}`,
-              )
-              .join('; ')
+                  `${signoff.status} matchedRef=${signoff.matchedRef} expectedRef=${signoff.expectedRef ?? 'missing'} criteriaEvidence=${signoff.criteriaEvidence} artifact=${signoff.artifactId}`,
+              ),
+            ].join('; ')
           : 'QA release signoff missing',
     },
     {
@@ -141,7 +156,7 @@ export async function evaluateWorkReadiness(input: {
     },
     {
       id: 'pr-created',
-      severity: 'recommended',
+      severity: 'required',
       passed: deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl),
       evidence:
         deliveryPr?.status === 'created' && deliveryPr.prUrl
@@ -150,7 +165,7 @@ export async function evaluateWorkReadiness(input: {
     },
     {
       id: 'remote-ci-passed',
-      severity: 'recommended',
+      severity: 'required',
       passed: deliveryEvidence.ciStatuses.some(
         (status) => status.status === 'passed',
       ),
@@ -190,11 +205,16 @@ function isSatisfiedValidationGate(gate: {
 }
 
 function latestGateResults<
-  T extends { nodeId: string; gateType: string; createdAt: string },
+  T extends {
+    nodeId: string;
+    gateType: string;
+    gateKey?: string | null;
+    createdAt: string;
+  },
 >(gates: T[]): T[] {
   const latestByNodeAndType = new Map<string, T>();
   for (const gate of gates) {
-    const key = `${gate.nodeId}:${gate.gateType}`;
+    const key = `${gate.nodeId}:${gate.gateKey ?? gate.gateType}`;
     const existing = latestByNodeAndType.get(key);
     if (
       !existing ||

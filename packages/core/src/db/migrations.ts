@@ -89,6 +89,7 @@ export function migrateDatabase(db: TekonDatabase): void {
         run_id text not null references workflow_instances(id) on delete cascade,
         node_id text not null references nodes(id) on delete cascade,
         gate_type text not null,
+        gate_key text,
         status text not null,
         output_path text,
         duration_ms integer not null,
@@ -134,6 +135,7 @@ export function migrateDatabase(db: TekonDatabase): void {
         repo_path text not null,
         worktree_path text not null,
         branch_name text not null,
+        base_head text,
         created_at text not null,
         released_at text
       );
@@ -171,6 +173,8 @@ export function migrateDatabase(db: TekonDatabase): void {
 
     addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
     addColumnIfMissing(db, 'nodes', 'outputs', "text not null default '[]'");
+    addColumnIfMissing(db, 'gate_results', 'gate_key', 'text');
+    addColumnIfMissing(db, 'worktree_leases', 'base_head', 'text');
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

@@ -144,6 +144,47 @@ describe('artifact schemas', () => {
     ).toMatchObject({ overallStatus: 'passed' });
   });
 
+  it('requires PMO process checkpoint gate evidence to carry stable gate keys', () => {
+    expect(() =>
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process is complete.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        humanDecisionEvidence: { pending: 0 },
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            status: 'passed',
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process is complete.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        humanDecisionEvidence: { pending: 0 },
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            gateKey: '00:schema:artifact=demand-card',
+            status: 'passed',
+          },
+        ],
+      }),
+    ).toMatchObject({
+      gateEvidence: [
+        {
+          gateKey: '00:schema:artifact=demand-card',
+        },
+      ],
+    });
+  });
+
   it('normalizes provider-style code changes artifacts into a readable payload', () => {
     expect(
       validateArtifactContent(

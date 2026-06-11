@@ -1115,10 +1115,12 @@
             <span class="tag tag-jade">standard-delivery</span>
           </div>
           <p>
-            <code>standard-delivery</code> 是标准交付种子流程，包含 PM
-            内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA
-            最终质量建议和 PMO checkpoint；当前首版只使用现有
-            artifact/gate，不代表已具备新 gate 强约束。
+            <code>standard-delivery</code> 是标准交付治理流程，包含 PM
+            内审、PM/RD/QA 外部需求评审、RD 技术评审、QA 测试方案评审、QA final
+            signoff、QA signoff review 和 PMO
+            checkpoint；当前已具备独立评审、角色范围、AC evidence、QA
+            signoff、节点级 PMO checkpoint 和流程完整性 gate
+            的本地强约束，但不替代真实人类业务决策。
           </p>
           <p>
             <code>workflow select</code> 会给出推荐模板和理由；<code
@@ -1162,8 +1164,11 @@
 
           <h3>2.5 需要判断一次 run 是否真的可交付</h3>
           <p>
-            <code>eval readiness</code> 会评估单个 run 是否具备进入人工审阅或 PR
-            提交流程的最小证据面。<code>eval work-usability</code>
+            <code>eval readiness</code> 会评估单个 run 的交付证据是否完整。当前
+            <code>pr-prepared</code>、<code>pr-created</code> 和
+            <code>remote-ci-passed</code> 都是 required，因此在 PR 准备、真实 PR
+            创建或远端 CI 证据写回之前，<code>ready=false</code>
+            是预期状态。<code>eval work-usability</code>
             会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo
             宣称可用。
           </p>
@@ -1205,7 +1210,6 @@
               <li><code>demand approve</code> 批准需求卡</li>
               <li><code>run</code> 发起 workflow</li>
               <li><code>status</code> 和 <code>review</code> 查看结果</li>
-              <li><code>eval readiness</code> 判断是否可审</li>
               <li><code>delivery prepare</code> 生成 PR 准备包</li>
               <li>
                 人工确认后 <code>delivery create-pr --approve-human</code>
@@ -1214,6 +1218,7 @@
                 <code>delivery ci-status</code> 或
                 <code>ci-watch</code> 写回远端 CI 证据
               </li>
+              <li><code>eval readiness</code> 判断 PR/CI 证据是否完整</li>
             </ol>
           </div>
 
@@ -1392,6 +1397,13 @@
                   <td>用户显式声明不适用</td>
                 </tr>
                 <tr>
+                  <td><code>not-command-gate</code></td>
+                  <td>
+                    schema、role-scope、QA signoff 等语义 gate 不需要 repo
+                    profile 命令
+                  </td>
+                </tr>
+                <tr>
                   <td><code>suggestedCommand</code></td>
                   <td>天工从 package.json 推断的候选命令</td>
                 </tr>
@@ -1410,14 +1422,23 @@
           <pre><code><span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
 
           <h3>4.5 发起运行</h3>
-          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span></code></pre>
           <p>
             输出里会有 <code>runId</code>。后续常规命令默认读取最近一次
             run；只有查看历史 run 或避免歧义时才需要手动传
             <code>--run-id</code>。
           </p>
-          <p>本机已安装并认证 Codex CLI 时，可使用 Codex provider：</p>
-          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">codex</span></code></pre>
+          <p>
+            明确长程任务可以在 run 级别显式放大外层预算，例如 2 小时总超时、20
+            分钟无输出进展超时、30 秒 heartbeat：
+          </p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--timeout-ms</span> <span class="str">7200000</span> <span class="flag">--no-progress-timeout-ms</span> <span class="str">1200000</span> <span class="flag">--progress-heartbeat-ms</span> <span class="str">30000</span></code></pre>
+          <p>
+            未传 <code>--template</code> 时默认运行
+            <code>standard-delivery</code>；未传 <code>--agent</code> 时默认使用
+            Codex provider。离线回归或演示时，可显式切到 mock provider：
+          </p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
           <div class="callout callout-info">
             <span class="callout-label">Codex provider</span>
             Codex provider 使用本机 <code>codex exec</code> 非交互模式，固定
@@ -1432,7 +1453,8 @@
             是 manifest 文件路径，不是字面文件名。
             <code>--add-dir</code> 只由 Tekon 受控追加到本节点 artifact
             输出目录。非 <code>code-changes</code> 节点会被要求只写节点
-            artifact、不修改仓库工作区；所有需要 artifact 的节点先写
+            artifact、不修改仓库工作区，Engine 会在 worktree finalize
+            前拦截这类节点的源码变更；所有需要 artifact 的节点先写
             artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅。
             节点内也不执行 <code>git add</code>、<code>git commit</code>、<code
               >git push</code
@@ -1446,42 +1468,72 @@
             如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。真实 provider 默认超时为 1 小时，并写入
-            provider snapshot 以支持 resume；如果长程任务没有 manifest
-            或可见进展，仍应在后续通过 heartbeat、manifest mtime、artifact
-            文件变化和无进展超时来治理。若 Codex 写完有效 manifest
-            后未及时退出或返回非零退出码，adapter 会以必需 artifact
-            校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需
-            artifact、artifact schema 不合法或 path/symlink
-            边界失败时，该节点会失败。
+            schema 写完整字段。真实 provider 默认总超时为 1 小时，无
+            stdout/stderr 进展默认 15 分钟超时；CLI <code>run</code> 可用
+            <code>--timeout-ms</code
+            >、<code>--no-progress-timeout-ms</code>、<code
+              >--progress-heartbeat-ms</code
+            >
+            显式覆盖，Web dashboard 也提供对应输入项，适合把明确长程任务拉到 2
+            小时或更长。最终配置会写入 provider snapshot 以支持
+            resume；命令执行会写入
+            <code>*.progress.json</code>，记录状态、最近输出时间、stdout/stderr
+            字节数、elapsed、总超时、无进展超时、timeoutReason 和 heartbeat
+            次数。manifest mtime、artifact 文件变化和可恢复 job runner
+            仍是后续增强。若 Codex 因超时中断但已写完有效 manifest，adapter
+            会在必需 artifact 校验通过后把该节点视为完成并继续进入
+            gate；非零退出不会被改写为成功，但已写入的合法 artifact
+            仍会被入库用于诊断。缺少 workflow 必需 artifact、artifact schema
+            不合法或 path/symlink 边界失败时，该节点会失败。QA validation 会记录
+            tested ref，QA signoff、PR package 和 readiness
+            会校验所测对象与交付对象一致。Codex provider 不会自动创建 PR、merge
+            或上线，远端副作用仍由
+            <code>delivery create-pr --approve-human</code>
+            控制；该命令中的受控 <code>git/gh</code> 命令及前置只读 probe
+            也会写入 progress JSON，并使用同一 1 小时总超时和 15 分钟无
+            stdout/stderr 进展超时。
           </div>
 
           <h3>4.6 查看结果</h3>
           <pre><code><span class="cmd">tekon</span> <span class="arg">status</span>
-<span class="cmd">tekon</span> <span class="arg">review</span>
-<span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
+<span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
           <div class="callout callout-tip">
             <span class="callout-label">提示</span>
-            如果 <code>ready=true</code>，通常可以进入人工审阅或 PR
-            准备。它不代表可以自动合入。
+            PR/CI 证据尚未写回前，<code>eval readiness</code> 通常会因为
+            <code>pr-prepared</code>、<code>pr-created</code> 或
+            <code>remote-ci-passed</code> 失败而保持 <code>ready=false</code>。
           </div>
 
           <h3>4.7 准备 PR 材料</h3>
           <pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
-          <p>这一步只生成本地 PR 包，不 push、不创建 PR。</p>
+          <p>
+            这一步当前只支持 <code>standard-delivery</code> 治理 run，只生成本地
+            PR 包，不 push、不创建 PR。生成前会执行 pre-PR readiness：workflow
+            必须 passed、无 pending human gate、验证 gate 与安全扫描满足、AC
+            evidence 完整、QA release signoff 必须通过且绑定 QA validation
+            记录的 tested ref。未满足时不会生成 PR 包。
+          </p>
 
           <h3>4.8 创建远端 PR</h3>
           <pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
           <div class="callout callout-warn">
             <span class="callout-label">注意</span>
-            这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。确认
-            PR 包、diff、gate 和 readiness 后才执行。
+            这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建
+            PR。执行前会重新生成并校验 PR 包，因此不会绕过 pre-PR readiness、QA
+            signoff 和所测即所得校验。受控 <code>git/gh</code>
+            命令默认 1 小时总超时、15 分钟无 stdout/stderr 进展超时，并写入
+            progress JSON；delivery 分支名和 base branch 会拒绝
+            <code>--mirror</code
+            >、<code>:branch</code>、空白、<code>..</code>、<code>@{</code>
+            等不安全 ref。
           </div>
 
           <h3>4.9 查询远端 CI</h3>
           <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span></code></pre>
           <p>如果希望等待 checks 到终态：</p>
           <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span></code></pre>
+          <p>远端 CI 证据写回后，再执行：</p>
+          <pre><code><span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
 
           <h3>4.10 默认上下文规则</h3>
           <p>
@@ -1596,7 +1648,7 @@
             <div class="concept-card">
               <h4>5.6 Gate</h4>
               <p>
-                验证关卡：build、lint、test、schema、security-scan、human。Gate
+                验证关卡：build、lint、test、schema、security-scan、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness。Gate
                 不通过时 workflow 不应被当成可交付。
               </p>
             </div>
@@ -1627,8 +1679,9 @@
             <div class="concept-card">
               <h4>5.10 Readiness</h4>
               <p>
-                单次 run 的工作就绪度评估。回答："这次 run
-                是否已具备进入人工审阅或 PR 准备的最低证据？"
+                单次 run 的工作就绪度评估。回答："这次 run 的
+                workflow、gate、artifact、PR 准备、真实 PR 和远端 CI
+                证据是否已经完整？"
               </p>
             </div>
             <div class="concept-card">
@@ -1648,8 +1701,8 @@
               >需求 → demand shape → 需求卡 → approve ↓ workflow select ↓
               ┌──────────────────── run ────────────────────┐ │ │ │ PM → RD → QA
               → Reviewer → PMO │ │ ↓ ↓ ↓ ↓ ↓ │ │ gate gate gate gate gate │ │ │
-              └─────────────────────────────────────────────┘ ↓ eval readiness →
-              review ↓ delivery prepare → create-pr</code
+              └─────────────────────────────────────────────┘ ↓ review →
+              delivery prepare → create-pr → ci-watch → eval readiness</code
             >
           </div>
 
@@ -1725,7 +1778,7 @@
               <ul>
                 <li>
                   第一个位置参数 — 模板名；不传时默认
-                  <code>standard-feature</code>。
+                  <code>standard-delivery</code>。
                 </li>
                 <li>
                   <code>--repo &lt;path&gt;</code> — 只在跨仓库检查时使用。
@@ -1738,6 +1791,10 @@
                 <li><code>resolved</code> — 可执行</li>
                 <li><code>missing</code> — 缺命令，需要补 repo profile</li>
                 <li><code>not-applicable</code> — 用户已显式声明不适用</li>
+                <li>
+                  <code>not-command-gate</code> — 语义 gate，不需要 repo profile
+                  命令
+                </li>
               </ul>
               <div class="callout callout-warn" style="margin-top: 12px">
                 <span class="callout-label">注意</span>
@@ -1836,10 +1893,10 @@
               <span class="cmd-desc">发起一次 workflow</span>
             </div>
             <pre><code><span class="cmt"># 模板运行</span>
-<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"需求文本"</span> <span class="flag">--template</span> <span class="str">standard-feature</span> <span class="flag">--agent</span> <span class="str">mock</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"需求文本"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>
 
 <span class="cmt"># 需求卡运行（默认读取最近已批准需求卡）</span>
-<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">mock</span>
+<span class="cmd">tekon</span> <span class="arg">run</span>
 
 <span class="cmt"># 使用本机 Codex CLI provider</span>
 <span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">codex</span>
@@ -2101,6 +2158,15 @@
                 <li>目标远端有创建 PR 权限</li>
                 <li>主工作区除 <code>.tekon</code> 外没有未提交改动</li>
                 <li>用户明确传入 <code>--approve-human</code></li>
+                <li>
+                  workflow 已 passed，AC evidence、安全扫描和 QA release signoff
+                  已满足，且 QA signoff 绑定 QA validation tested ref。
+                </li>
+                <li>
+                  长程 push、<code>gh pr create</code> 或 create-pr 前置只读
+                  probe 会写入 command progress JSON；默认 1 小时总超时、15
+                  分钟无 stdout/stderr 进展超时。
+                </li>
               </ul>
             </div>
             <div class="cmd-section">
@@ -2125,7 +2191,7 @@
               <span class="cmd-name">6.18–6.19 eval</span>
               <span class="cmd-desc">就绪度与可用性评估</span>
             </div>
-            <pre><code><span class="cmt"># 判断单次 run 是否可进入审阅或 PR 流程</span>
+            <pre><code><span class="cmt"># 判断单次 run 的交付证据是否完整</span>
 <span class="cmd">tekon</span> <span class="arg">eval readiness</span>
 
 <span class="cmt"># 记录样本</span>
@@ -2145,6 +2211,9 @@
                 <span class="tag tag-red">pending human gate</span>
                 <span class="tag tag-red">验收标准无 evidence</span>
                 <span class="tag tag-red">security scan 失败</span>
+                <span class="tag tag-red">PR 准备包不存在</span>
+                <span class="tag tag-red">真实 PR 未创建</span>
+                <span class="tag tag-red">远端 CI 未通过</span>
               </div>
             </div>
           </div>
@@ -2233,13 +2302,12 @@
 
           <div class="flow-diagram">
             <code>
-              1. status → workflow 是否 passed 2. eval readiness → 是否 ready 3.
-              review → 失败项和证据是否能解释 4. Changed Files →
-              影响文件是否符合预期 5. Artifacts →
-              需求/变更/测试/审阅证据是否完整 6. Gate Logs →
-              build/lint/test/security 是否真的跑过 7. PR Package → PR body
-              是否能让 reviewer 看懂 8. CI Status → 如已创建 PR，远端 checks
-              是否已记录</code
+              1. status → workflow 是否 passed 2. review →
+              失败项和证据是否能解释 3. Changed Files → 影响文件是否符合预期 4.
+              Artifacts → 需求/变更/测试/审阅证据是否完整 5. Gate Logs →
+              build/lint/test/security 是否真的跑过 6. PR Package → PR body
+              是否能让 reviewer 看懂 7. CI Status → 远端 checks 是否已记录 8.
+              eval readiness → PR/CI 证据是否完整</code
             >
           </div>
 
@@ -2258,7 +2326,8 @@
 
           <h4>2. eval readiness — 是否 ready</h4>
           <p>
-            <code>ready=true</code> 表示具备进入人工审阅或 PR 准备的最低证据面。
+            <code>ready=true</code> 表示 PR 准备、真实 PR 和远端 CI 证据也已满足
+            required 项；PR/CI 前 <code>ready=false</code> 是预期状态。
           </p>
 
           <h4>3. review — 失败项和证据</h4>
@@ -2353,7 +2422,8 @@
             <strong>常见原因：</strong>没有 <code>gh</code>、<code
               >gh auth status</code
             >
-            失败、远端权限不足、主工作区 dirty、PR 已存在。
+            失败、远端权限不足、主工作区 dirty、pre-PR readiness
+            不满足、delivery 分支名或 base branch 不安全、PR 已存在。
           </p>
           <p>
             <strong>处理：</strong>先修认证和工作区状态。若 PR
@@ -2417,7 +2487,14 @@
             stdout/stderr、<code>artifact-manifest.json</code>、字面
             <code>TEKON_ARTIFACT_MANIFEST</code> 和 artifact 内容，并确认结构化
             JSON 有非空 <code>title</code> 和 <code>body</code>。真实 provider
-            默认 1 小时超时；长程任务仍应结合日志、manifest 和 artifact
+            默认 1 小时总超时和 15 分钟无 stdout/stderr 进展超时；可通过 CLI
+            <code>run</code> 的
+            <code>--timeout-ms</code
+            >、<code>--no-progress-timeout-ms</code>、<code
+              >--progress-heartbeat-ms</code
+            >
+            或 Web dashboard
+            对应字段显式放大外层预算。长程任务仍应结合日志、manifest 和 artifact
             变化判断是否有进展。不要把真实 provider 失败降级成 mock 通过。
           </p>
           <p>详细流程见 <code>docs/manual/codex-provider-smoke.md</code>。</p>
@@ -2534,6 +2611,21 @@
                 <tr>
                   <td><code>--save-as &lt;name&gt;</code></td>
                   <td>保存动态 workflow 预览。</td>
+                </tr>
+                <tr>
+                  <td><code>--timeout-ms &lt;ms&gt;</code></td>
+                  <td>
+                    覆盖真实 provider 外层总超时，明确长程任务可配置为 2
+                    小时以上。
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>--no-progress-timeout-ms &lt;ms&gt;</code></td>
+                  <td>覆盖无 stdout/stderr 进展超时，用来判断任务是否卡死。</td>
+                </tr>
+                <tr>
+                  <td><code>--progress-heartbeat-ms &lt;ms&gt;</code></td>
+                  <td>覆盖 progress JSON heartbeat 间隔。</td>
                 </tr>
               </tbody>
             </table>

@@ -10,8 +10,8 @@
 - Tekon 可以通过 `codex --profile internal ... exec` 发起真实 provider run。
 - Codex provider 能按 Tekon artifact manifest 协议写回必需 artifact。
 - run provider snapshot 记录为 `codex`，后续 resume 不会降级为 mock。
-- `delivery prepare` 生成 PR 包。
-- 人工确认后，`delivery create-pr --approve-human` 创建真实 PR。
+- 对于 `standard-delivery` 治理 run，`delivery prepare` 生成 PR 包。
+- 对于 `standard-delivery` 治理 run，人工确认后，`delivery create-pr --approve-human` 创建真实 PR。
 
 本 smoke 不证明生产级稳定性，不自动 merge，不自动上线。
 
@@ -40,7 +40,7 @@ npm exec --yes -- pnpm@10.12.1 build
 
 `TEKON_ARTIFACT_MANIFEST` 是环境变量，值是 manifest 文件路径；provider 应把 manifest JSON 写到 `$TEKON_ARTIFACT_MANIFEST` 指向的文件，不应创建一个字面名为 `TEKON_ARTIFACT_MANIFEST` 的文件。
 
-如果 Codex 在写完有效 manifest 后没有及时退出，或写完后仍返回非零退出码，adapter 会尝试读取并校验 `$TEKON_ARTIFACT_MANIFEST` 指向的文件；只要 workflow 必需 artifact 已完整入库，该节点会继续进入后续 gate。若 manifest 缺失、schema 非法、必需 artifact 不齐，或 artifact path/symlink 边界校验失败，该节点仍会失败。为兼容真实 Codex 误写出的字面文件名，adapter 也会在受控 `TEKON_OUTPUT_DIR` 内按同一 schema 检查 `TEKON_ARTIFACT_MANIFEST` 文件；该兼容路径不改变 provider prompt 的推荐写法。
+如果 Codex 在写完有效 manifest 后没有及时退出并被 Tekon 超时中断，adapter 会尝试读取并校验 `$TEKON_ARTIFACT_MANIFEST` 指向的文件；只要 workflow 必需 artifact 已完整入库，该节点会继续进入后续 gate。非零退出不会被改写为成功，但已写入的合法 artifact 仍会入库用于诊断。若 manifest 缺失、schema 非法、必需 artifact 不齐，或 artifact path/symlink 边界校验失败，该节点仍会失败。为兼容真实 Codex 误写出的字面文件名，adapter 也会在受控 `TEKON_OUTPUT_DIR` 内按同一 schema 检查 `TEKON_ARTIFACT_MANIFEST` 文件；该兼容路径不改变 provider prompt 的推荐写法。
 
 结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段。`demand-card`/`prd` JSON 应使用 `acceptanceCriteria[].id/description`；如果真实 provider 写出有效的 `acceptance_criteria[].criterion`，Tekon 会兼容归一化为 `acceptanceCriteria[].description`。`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，会被 Tekon 归一化为可审阅 artifact；真实 provider prompt 仍应优先按 Tekon schema 写出完整字段，避免依赖容错恢复。
 
@@ -52,6 +52,18 @@ node packages/cli/dist/index.js init --repo /Users/zhaoensheng/Projects/tekon
 node packages/cli/dist/index.js run "补齐 Codex provider smoke 证据，要求产出可审阅文档和测试记录。" \
   --template docs-update \
   --agent codex \
+  --repo /Users/zhaoensheng/Projects/tekon
+```
+
+如果 smoke 需求明确会运行较久，可以显式放大外层预算，同时保留无进展超时和 heartbeat：
+
+```bash
+node packages/cli/dist/index.js run "补齐 Codex provider 长程 smoke 证据，要求产出可审阅文档和测试记录。" \
+  --template docs-update \
+  --agent codex \
+  --timeout-ms 7200000 \
+  --no-progress-timeout-ms 1200000 \
+  --progress-heartbeat-ms 30000 \
   --repo /Users/zhaoensheng/Projects/tekon
 ```
 
@@ -71,26 +83,32 @@ node packages/cli/dist/index.js status --repo /Users/zhaoensheng/Projects/tekon
 
 ## 5. 验证 provider snapshot
 
-运行结束后检查：
+`docs-update` smoke 只验证 Codex provider、manifest 入库和可恢复快照，不作为真实 PR 样本。运行结束后先检查 provider 证据；`eval readiness` 在 PR 准备、真实 PR 和远端 CI 缺失时返回 `ready=false` 是预期状态，不应据此把 provider 降级成 mock：
 
 ```bash
+node packages/cli/dist/index.js status --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js review --repo /Users/zhaoensheng/Projects/tekon
 node packages/cli/dist/index.js eval readiness --repo /Users/zhaoensheng/Projects/tekon
 node packages/cli/dist/index.js eval work-usability record \
-  --id tekon-codex-self-bootstrap \
+  --id tekon-codex-provider-smoke \
   --expected-provider codex \
   --require-real-provider \
-  --require-pr \
   --samples docs/reviews/tekon-codex-work-usability-samples.yaml \
   --repo /Users/zhaoensheng/Projects/tekon
 ```
 
-如果样本记录失败，不要改成 `expectedProvider: mock`；应先修真实 provider 证据。
+如果 provider 样本记录失败，不要改成 `expectedProvider: mock`；应先修真实 provider 证据。
 
-## 6. 创建 PR
+## 6. PR 口径
 
-PR 创建必须显式人工批准：
+`docs-update` smoke 用于证明 Codex provider 能按 manifest protocol 产出 artifact，不再直接作为 `delivery prepare/create-pr` 的输入。当前 `delivery prepare` 和 `delivery create-pr` 只支持 `standard-delivery` 治理 run：必须具备 AC evidence、QA release signoff、PMO process checkpoint 等标准交付证据。若要创建真实 PR，先使用 `standard-delivery` 重新跑同一需求或一个小型自举需求，然后显式人工批准 PR 创建：
 
 ```bash
+node packages/cli/dist/index.js run "补齐 Codex provider smoke 证据，要求产出可审阅文档和测试记录。" \
+  --template standard-delivery \
+  --agent codex \
+  --repo /Users/zhaoensheng/Projects/tekon
+
 node packages/cli/dist/index.js delivery prepare --repo /Users/zhaoensheng/Projects/tekon
 
 node packages/cli/dist/index.js delivery create-pr \
@@ -102,6 +120,14 @@ node packages/cli/dist/index.js delivery create-pr \
 
 ```bash
 node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Projects/tekon
+
+node packages/cli/dist/index.js eval work-usability record \
+  --id tekon-codex-self-bootstrap-pr \
+  --expected-provider codex \
+  --require-real-provider \
+  --require-pr \
+  --samples docs/reviews/tekon-codex-work-usability-samples.yaml \
+  --repo /Users/zhaoensheng/Projects/tekon
 ```
 
 `ci-status` 是只读查询，不 rerun CI、不 merge、不上线。
@@ -125,14 +151,14 @@ node packages/cli/dist/index.js delivery ci-status --repo /Users/zhaoensheng/Pro
 
 ## 8. 常见失败
 
-| 失败现象                                   | 可能原因                                                                                                                                                      | 处理                                                                                                                                |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Unsupported agent: codex`                 | CLI/Web 没有接线 Codex provider。                                                                                                                             | 更新到包含 Codex adapter 的版本，并重新构建。                                                                                       |
-| `agent failed: provider=codex exitCode=1`  | Codex 没写 manifest、artifact schema 不合法、必需 artifact 不齐，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。    |
-| artifact 输出目录诊断异常                 | 真实 Tekon run 受控追加的 `--add-dir <TEKON_OUTPUT_DIR>` 未匹配当前 run/node，目录指向其它 run/node 或共享位置，或该目录是 symlink。                         | 不把该结果当作正常 smoke；确认 `TEKON_OUTPUT_DIR` 对应 `.tekon/runs/<runId>/<nodeId>/` 的真实目录且不是 symlink 后重跑。            |
-| `code-changes` artifact schema 不合法      | 非 provider-style、字段为空、正文为空，或无法归一化为含 `title`/`body` 的有效 artifact。                                                                      | 更新 provider prompt 或 artifact 内容；`changedFiles`/`verification` 等 provider-style 字段只作为兼容输入。                         |
-| `demand-card`/`prd` artifact schema 不合法 | 缺少 `acceptanceCriteria`，或 `acceptance_criteria[].criterion` 等兼容字段为空、条目不完整。                                                                  | 优先按 Tekon schema 写 `acceptanceCriteria[].id/description`；兼容字段只用于真实 provider 字段漂移恢复。                            |
-| `agent timed out: provider=codex`          | Codex 进程在写完有效 manifest 前超时，或 manifest/artifact 不完整。                                                                                           | 查 `artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和必需 artifact；若它们完整合法，更新到支持 manifest 恢复的版本后重试。 |
-| resume 拒绝                                | run 缺 provider snapshot 或 snapshot 不能 replay。                                                                                                            | 不手工篡改 provider；必要时重新跑真实 Codex run。                                                                                   |
-| `delivery create-pr` 等待审批              | 未传 `--approve-human`。                                                                                                                                      | 审阅 PR 包和 diff 后再显式批准。                                                                                                    |
-| `ci-status` 失败                           | 没有 PR URL、`gh` 未认证或目标 host 不支持。                                                                                                                  | 先确认 `gh auth status` 和 `gh pr checks`。                                                                                         |
+| 失败现象                                   | 可能原因                                                                                                                                                      | 处理                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `Unsupported agent: codex`                 | CLI/Web 没有接线 Codex provider。                                                                                                                             | 更新到包含 Codex adapter 的版本，并重新构建。                                                                                           |
+| `agent failed: provider=codex exitCode=1`  | Codex 没写 manifest、artifact schema 不合法、必需 artifact 不齐，命令执行失败，或用户 args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass。 | 查 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。        |
+| artifact 输出目录诊断异常                  | 真实 Tekon run 受控追加的 `--add-dir <TEKON_OUTPUT_DIR>` 未匹配当前 run/node，目录指向其它 run/node 或共享位置，或该目录是 symlink。                          | 不把该结果当作正常 smoke；确认 `TEKON_OUTPUT_DIR` 对应 `.tekon/runs/<runId>/<nodeId>/` 的真实目录且不是 symlink 后重跑。                |
+| `code-changes` artifact schema 不合法      | 非 provider-style、字段为空、正文为空，或无法归一化为含 `title`/`body` 的有效 artifact。                                                                      | 更新 provider prompt 或 artifact 内容；`changedFiles`/`verification` 等 provider-style 字段只作为兼容输入。                             |
+| `demand-card`/`prd` artifact schema 不合法 | 缺少 `acceptanceCriteria`，或 `acceptance_criteria[].criterion` 等兼容字段为空、条目不完整。                                                                  | 优先按 Tekon schema 写 `acceptanceCriteria[].id/description`；兼容字段只用于真实 provider 字段漂移恢复。                                |
+| `agent timed out: provider=codex`          | Codex 进程在写完有效 manifest 前超时，或 manifest/artifact 不完整；如果必需 artifact 完整合法，timeout 可被 adapter 恢复为节点完成。                          | 查 `artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和必需 artifact；若不完整，拆小任务或提高总超时并保留 no-progress timeout。 |
+| resume 拒绝                                | run 缺 provider snapshot 或 snapshot 不能 replay。                                                                                                            | 不手工篡改 provider；必要时重新跑真实 Codex run。                                                                                       |
+| `delivery create-pr` 等待审批              | 未传 `--approve-human`。                                                                                                                                      | 审阅 PR 包和 diff 后再显式批准。                                                                                                        |
+| `ci-status` 失败                           | 没有 PR URL、`gh` 未认证或目标 host 不支持。                                                                                                                  | 先确认 `gh auth status` 和 `gh pr checks`。                                                                                             |

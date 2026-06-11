@@ -47,6 +47,7 @@ phases:
           - code-changes
         gates:
           - type: build
+            gateKey: build-main
             command:
               tool: pnpm
               args: ["build"]
@@ -111,7 +112,7 @@ phases:
       ],
       outputs: [{ id: 'code-changes', type: 'code-changes' }],
       gates: [
-        { type: 'build' },
+        { type: 'build', gateKey: 'build-main' },
         { type: 'lint' },
         { type: 'schema', artifactType: 'code-changes' },
       ],
@@ -139,6 +140,7 @@ phases:
     expect(nodeIds).toEqual([
       'pm-demand-card',
       'pm-demand-review',
+      'pm-requirement-intent-review',
       'rd-requirement-interface-review',
       'qa-requirement-interface-review',
       'rd-implementation-plan',
@@ -149,6 +151,7 @@ phases:
       'rd-code-change',
       'reviewer-change-review',
       'qa-validation',
+      'qa-release-signoff',
       'qa-release-signoff-review',
       'pmo-checkpoint',
     ]);
@@ -167,6 +170,9 @@ phases:
       ]),
     });
     expect(
+      nodes.find((node) => node.id === 'pm-requirement-intent-review'),
+    ).toMatchObject({ role: 'pm' });
+    expect(
       nodes.find((node) => node.id === 'rd-requirement-interface-review'),
     ).toMatchObject({ role: 'rd' });
     expect(
@@ -181,6 +187,9 @@ phases:
     expect(
       nodes.find((node) => node.id === 'reviewer-change-review'),
     ).toMatchObject({ role: 'reviewer' });
+    expect(
+      nodes.find((node) => node.id === 'qa-release-signoff'),
+    ).toMatchObject({ role: 'qa' });
     expect(
       nodes.find((node) => node.id === 'qa-release-signoff-review'),
     ).toMatchObject({ role: 'qa' });
@@ -318,6 +327,30 @@ phases:
         role: reviewer
 `),
     ).toThrow(/conflicting output/u);
+  });
+
+  it('rejects duplicate effective gate keys within the same node', () => {
+    expect(() =>
+      parseWorkflowTemplate(`
+id: duplicate-gate-key
+phases:
+  - id: implementation
+    nodes:
+      - id: rd-code
+        role: rd
+        outputs: [code-changes]
+        gates:
+          - type: build
+            gateKey: validate
+          - type: lint
+            gateKey: validate
+  - id: review
+    nodes:
+      - id: reviewer-check
+        role: reviewer
+        dependsOn: [rd-code]
+`),
+    ).toThrow(/duplicate gateKey "validate" in node "rd-code"/u);
   });
 
   it('rejects workflow paths outside the configured workflows directory', () => {

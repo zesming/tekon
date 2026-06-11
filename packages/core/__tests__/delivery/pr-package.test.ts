@@ -63,27 +63,46 @@ describe('pull request preparation package', () => {
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_delivery',
-      type: 'test-report',
-      content: '# Test Report\n\npassed',
+      type: 'prd',
+      content: JSON.stringify({
+        title: 'PRD',
+        body: 'Retry requirements.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'Retry can be validated.' },
+        ],
+      }),
     });
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_delivery',
-      type: 'qa-release-signoff',
+      type: 'test-report',
       content: JSON.stringify({
-        title: 'QA signoff',
-        body: 'QA validated the delivered branch.',
-        targetRef: 'branch:tekon-delivery/run_1',
-        validatedRef: 'branch:tekon-delivery/run_1',
-        overallStatus: 'passed',
+        title: 'Test report',
+        body: 'passed',
         criteriaEvidence: [
           {
             criterionId: 'AC-1',
             status: 'passed',
-            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+            evidence: 'Unit validation passed.',
+            gateResultIds: ['gate_1'],
           },
         ],
       }),
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'run.started',
+      payload: { templateId: 'standard-delivery', mode: 'template' },
+      createdAt: '2026-06-05T00:00:00.100Z',
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: {
+        nodeId: 'node_delivery',
+        ref: 'branch:tekon-delivery/run_1',
+      },
+      createdAt: '2026-06-05T00:00:01.250Z',
     });
     await repositories.recordGateResult({
       id: 'gate_1',
@@ -105,6 +124,73 @@ describe('pull request preparation package', () => {
       retries: 0,
       failureClassification: 'not-applicable',
       createdAt: '2026-06-05T00:00:01.100Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_security',
+      runId: 'run_1',
+      nodeId: 'node_delivery',
+      gateType: 'security-scan',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.200Z',
+    });
+    for (const [index, gateType] of [
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'process-completeness',
+    ].entries()) {
+      await repositories.recordGateResult({
+        id: `gate_governance_${gateType}`,
+        runId: 'run_1',
+        nodeId: 'node_delivery',
+        gateType,
+        status: 'passed',
+        durationMs: 1,
+        retries: 0,
+        createdAt: `2026-06-05T00:00:01.${220 + index}Z`,
+      });
+    }
+
+    await expect(
+      createPullRequestPreparation({
+        repoPath,
+        repositories,
+        audit,
+        runId: 'run_1',
+      }),
+    ).rejects.toThrow('qa-release-signoff-passed');
+
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_delivery',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA signoff',
+        body: 'QA validated the delivered branch.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+            gateResultIds: ['gate_1'],
+          },
+        ],
+      }),
+    });
+    await repositories.recordGateResult({
+      id: 'gate_qa_signoff',
+      runId: 'run_1',
+      nodeId: 'node_delivery',
+      gateType: 'qa-signoff',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.300Z',
     });
     await audit.append({
       runId: 'run_1',
@@ -146,7 +232,7 @@ describe('pull request preparation package', () => {
       'remote push and PR creation require human approval',
     );
     expect(readFileSync(preparation.prBodyPath, 'utf8')).toContain(
-      '- gates: 1 passed, 1 skipped, 0 failed_or_blocked',
+      '- gates: 7 passed, 1 skipped, 0 failed_or_blocked',
     );
     expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
       'Acceptance Evidence',

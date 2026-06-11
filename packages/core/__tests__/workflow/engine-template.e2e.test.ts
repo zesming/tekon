@@ -59,7 +59,20 @@ describe('workflow engine template e2e', () => {
     expect(result.workflow.status).toBe('passed');
     expect(await repositories.listPhases(result.runId)).toHaveLength(5);
     expect(await repositories.listNodes(result.runId)).toHaveLength(5);
-    expect(await repositories.listArtifacts(result.runId)).toHaveLength(7);
+    expect(
+      (await repositories.listArtifacts(result.runId))
+        .map((artifact) => artifact.type)
+        .sort(),
+    ).toEqual([
+      'code-changes',
+      'delivery-package',
+      'demand-card',
+      'prd',
+      'qa-release-signoff',
+      'review-report',
+      'tech-design',
+      'test-report',
+    ]);
     expect(
       await repositories.listArtifacts(
         result.runId,
@@ -151,6 +164,177 @@ describe('workflow engine template e2e', () => {
     ]);
     db.close();
   });
+
+  it('runs duplicate gate types independently when they target different artifacts', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-dup-gates-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: {
+        async runAgent(input) {
+          await input.artifactStore?.writeArtifact({
+            runId: input.runContext.runId,
+            nodeId: input.runContext.nodeId,
+            type: 'demand-card',
+            content: JSON.stringify({
+              title: 'Demand',
+              body: 'Valid demand card.',
+              acceptanceCriteria: [
+                { id: 'AC-1', description: 'Demand can be validated.' },
+              ],
+            }),
+          });
+          await input.artifactStore?.writeArtifact({
+            runId: input.runContext.runId,
+            nodeId: input.runContext.nodeId,
+            type: 'prd',
+            content: JSON.stringify({
+              title: 'PRD',
+              body: 'Invalid PRD without acceptance criteria.',
+            }),
+          });
+          return {
+            provider: 'mock',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+          };
+        },
+      },
+    });
+
+    const result = await engine.startRun({
+      demandText: '验证重复 schema gate 不会被折叠',
+      mode: 'template',
+      workflowSpec: {
+        id: 'duplicate-schema-gates',
+        name: 'Duplicate Schema Gates',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-node',
+                role: 'pm',
+                inputs: [],
+                outputs: [
+                  { id: 'demand', type: 'demand-card' },
+                  { id: 'prd', type: 'prd' },
+                ],
+                gates: [
+                  { type: 'schema', artifactType: 'demand-card' },
+                  { type: 'schema', artifactType: 'prd' },
+                ],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const gates = await repositories.listGateResults(result.runId);
+    expect(result.workflow.status).toBe('blocked');
+    expect(gates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateType: 'schema',
+          gateKey: expect.stringContaining('artifact=demand-card'),
+          status: 'passed',
+        }),
+        expect.objectContaining({
+          gateType: 'schema',
+          gateKey: expect.stringContaining('artifact=prd'),
+          status: 'failed',
+          failureClassification: 'invalid-artifact',
+        }),
+      ]),
+    );
+    expect(new Set(gates.map((gate) => gate.gateKey)).size).toBe(2);
+    db.close();
+  });
+
+  it('rejects direct workflow specs with duplicate effective gate keys', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-dup-key-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: {
+        async runAgent() {
+          throw new Error('duplicate gate key spec must not run an agent');
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await expect(
+      engine.startRun({
+        demandText: '直接传入 workflowSpec 时也要拒绝重复 gateKey',
+        mode: 'template',
+        workflowSpec: {
+          id: 'duplicate-direct-gate-key',
+          name: 'Duplicate Direct Gate Key',
+          version: 1,
+          retryPolicy: {
+            maxAttempts: 1,
+            maxRetries: 0,
+            backoffMs: 0,
+            strategy: 'fixed',
+            onExhausted: 'block',
+          },
+          phases: [
+            {
+              id: 'implementation',
+              name: 'Implementation',
+              dependsOn: [],
+              parallel: false,
+              nodes: [
+                {
+                  id: 'rd-node',
+                  role: 'rd',
+                  inputs: [],
+                  outputs: [{ id: 'code', type: 'code-changes' }],
+                  gates: [
+                    { type: 'build', gateKey: 'validate' },
+                    { type: 'lint', gateKey: 'validate' },
+                  ],
+                  dependsOn: [],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/duplicate gateKey "validate" in node "rd-node"/u);
+    db.close();
+  });
 });
 
 export function createPassingGateEngine(
@@ -165,6 +349,7 @@ export function createPassingGateEngine(
         runId: input.runId,
         nodeId: input.nodeId,
         gateType: input.gate.type,
+        gateKey: input.gate.gateKey,
         status: 'passed',
         durationMs: 0,
         retries: 0,

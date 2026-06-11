@@ -94,7 +94,7 @@ export async function createWebFixtureProject(
       `  repoPath: ${projectRoot}`,
       'storage:',
       '  dataDir: .tekon',
-      'defaultAgent: mock',
+      'defaultAgent: codex',
       '',
     ].join('\n'),
     'utf8',
@@ -238,6 +238,7 @@ export async function createWebFixtureProject(
     gates: [
       {
         type: 'build',
+        gateKey: '00:build',
         command: { tool: 'node', args: ['-e', 'process.exit(0)'] },
       },
     ],
@@ -251,7 +252,14 @@ export async function createWebFixtureProject(
     phaseId: 'phase_1',
     role: 'reviewer',
     status: 'paused',
-    gates: [{ type: 'human', requiresHumanApproval: true, maxRetries: 0 }],
+    gates: [
+      {
+        type: 'human',
+        gateKey: '00:human',
+        requiresHumanApproval: true,
+        maxRetries: 0,
+      },
+    ],
     dependencies: [],
     createdAt: '2026-06-05T00:00:00.000Z',
     updatedAt: '2026-06-05T00:00:00.000Z',
@@ -261,6 +269,7 @@ export async function createWebFixtureProject(
     runId: 'run_1',
     nodeId: 'node_1',
     gateType: 'human',
+    gateKey: '00:human',
     status: 'blocked',
     outputPath: '.tekon/runs/run_1/gates/human.txt',
     durationMs: 0,
@@ -272,6 +281,7 @@ export async function createWebFixtureProject(
     runId: 'run_0',
     nodeId: 'node_0',
     gateType: 'build',
+    gateKey: '00:build',
     status: 'passed',
     outputPath: '.tekon/runs/run_0/gates/build.txt',
     durationMs: 10,
@@ -287,7 +297,7 @@ export async function createWebFixtureProject(
     note: [
       'request: Review human gate context before continuing.',
       'gate: gate_1 human blocked',
-      'exactCommand: tekon run --template standard-feature --agent mock',
+      'exactCommand: tekon run --template standard-delivery --agent codex',
       'risk: high',
     ].join('\n'),
     createdAt: '2026-06-05T00:00:02.000Z',
@@ -328,6 +338,12 @@ export async function createWebFixtureProject(
   const audit = createAuditLogger({ repositories });
   await audit.append({
     runId: 'run_0',
+    type: 'run.started',
+    payload: { templateId: 'test-improvement', mode: 'template' },
+    createdAt: '2026-06-04T00:00:03.500Z',
+  });
+  await audit.append({
+    runId: 'run_0',
     type: 'gate.passed',
     payload: {
       gateResultId: 'gate_0',
@@ -335,6 +351,12 @@ export async function createWebFixtureProject(
       role: 'reviewer',
     },
     createdAt: '2026-06-04T00:00:04.000Z',
+  });
+  await audit.append({
+    runId: 'run_1',
+    type: 'run.started',
+    payload: { templateId: 'standard-delivery', mode: 'template' },
+    createdAt: '2026-06-05T00:00:03.500Z',
   });
   await audit.append({
     runId: 'run_1',

@@ -12,6 +12,7 @@ import {
   createRepositories,
   migrateDatabase,
   openTekonDatabase,
+  type CommandGatewayRunInput,
 } from '../../src/index.js';
 
 describe('claude code adapter', () => {
@@ -168,6 +169,47 @@ describe('claude code adapter', () => {
       timedOut: false,
     });
     expect(readFileSync(result.outputFiles[0]!, 'utf8')).toBe('stdin prompt');
+  });
+
+  it('passes progress and no-progress timeouts to the command gateway', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-progress-'));
+    tempDirs.push(repoPath);
+    let capturedInput: CommandGatewayRunInput | undefined;
+    const adapter = createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: ['fixture.mjs'],
+        promptMode: 'arg-append',
+        outputFormat: 'text',
+        timeoutMs: 3_600_000,
+        progressHeartbeatMs: 60_000,
+        noProgressTimeoutMs: 900_000,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      {
+        async run(input: CommandGatewayRunInput) {
+          capturedInput = input;
+          return {
+            status: 'executed',
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            stdoutPath: join(repoPath, 'stdout.log'),
+            stderrPath: join(repoPath, 'stderr.log'),
+            durationMs: 1,
+          };
+        },
+      },
+    );
+
+    await adapter.runAgent(baseRunInput(repoPath));
+
+    expect(capturedInput).toMatchObject({
+      timeoutMs: 3_600_000,
+      progressIntervalMs: 60_000,
+      noProgressTimeoutMs: 900_000,
+    });
   });
 
   it('ingests provider artifact manifests into the artifact store', async () => {

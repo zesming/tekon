@@ -26,6 +26,7 @@ import { parseWorkflowTemplate } from './template.js';
 export const workflowSpecDraftGateSchema = z
   .object({
     type: gateTypeSchema,
+    gateKey: z.string().min(1).optional(),
     command: commandInvocationSchema.optional(),
     artifactType: artifactTypeSchema.optional(),
     requiresHumanApproval: z.boolean().optional(),
@@ -348,6 +349,7 @@ function workflowFromDraft(
         source: 'dynamic',
         gates: node.gates.map((gate) => ({
           type: gate.type,
+          ...(gate.gateKey ? { gateKey: gate.gateKey } : {}),
           ...(gate.command ? { command: gate.command } : {}),
           ...(gate.artifactType ? { artifactType: gate.artifactType } : {}),
           ...(gate.requiresHumanApproval !== undefined
@@ -395,6 +397,7 @@ function toWorkflowTemplateObject(
 function toTemplateGate(gate: WorkflowGate) {
   return {
     type: gate.type,
+    ...(gate.gateKey ? { gateKey: gate.gateKey } : {}),
     ...(gate.command ? { command: gate.command } : {}),
     ...(gate.artifactType ? { artifactType: gate.artifactType } : {}),
     requiresHumanApproval:

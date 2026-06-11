@@ -13,11 +13,24 @@ describe('human gate', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories);
+    await repositories.recordGateResult({
+      id: 'gate_1',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      gateKey: '00:human',
+      status: 'blocked',
+      durationMs: 0,
+      retries: 0,
+      failureClassification: 'human-approval',
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
     const humanGate = createHumanGate({ repositories });
 
     const decision = await humanGate.requestHumanGate({
       runId: 'run_1',
       nodeId: 'node_1',
+      gateResultId: 'gate_1',
       note: 'Needs review',
     });
 
@@ -41,6 +54,14 @@ describe('human gate', () => {
     expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
       status: 'running',
     });
+    expect(await repositories.listGateResults('run_1')).toContainEqual(
+      expect.objectContaining({
+        id: 'gate_1',
+        gateKey: '00:human',
+        status: 'passed',
+        failureClassification: null,
+      }),
+    );
     db.close();
   });
 

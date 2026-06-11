@@ -111,6 +111,27 @@ const processCheckpointPayloadSchema = evidenceArtifactPayloadSchema.extend({
       }),
     )
     .min(1),
+  artifactEvidence: z
+    .array(
+      z.object({
+        nodeId: z.string().min(1),
+        type: z.string().min(1),
+      }),
+    )
+    .default([]),
+  gateEvidence: z
+    .array(
+      z.object({
+        nodeId: z.string().min(1),
+        gateType: z.string().min(1),
+        gateKey: z.string().min(1),
+        status: z.enum(['passed', 'skipped']),
+      }),
+    )
+    .default([]),
+  humanDecisionEvidence: z.object({
+    pending: z.number().int().min(0),
+  }),
   missingInformation: z.array(z.string().min(1)).default([]),
 });
 
@@ -173,6 +194,13 @@ export type ArtifactPayload = z.infer<typeof markdownArtifactPayloadSchema> & {
   requiredNodes?: z.infer<
     typeof processCheckpointPayloadSchema
   >['requiredNodes'];
+  artifactEvidence?: z.infer<
+    typeof processCheckpointPayloadSchema
+  >['artifactEvidence'];
+  gateEvidence?: z.infer<typeof processCheckpointPayloadSchema>['gateEvidence'];
+  humanDecisionEvidence?: z.infer<
+    typeof processCheckpointPayloadSchema
+  >['humanDecisionEvidence'];
   missingInformation?: string[];
   securityFindings?: z.infer<typeof securityFindingSchema>[];
   ciStatus?: z.infer<typeof ciStatusPayloadSchema>['ciStatus'];

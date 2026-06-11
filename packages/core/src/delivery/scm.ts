@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import {
@@ -8,7 +7,12 @@ import {
 } from '../runtime/command-gateway.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
-import type { CommandPolicy } from '../types/config.js';
+import {
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+  type CommandPolicy,
+} from '../types/config.js';
 import type { CommandInvocation } from '../types/domain.js';
 
 export interface ScmDeliveryCommandResult {
@@ -66,18 +70,12 @@ export function createScmDelivery(
 
     async createPr(input) {
       const baseBranch = input.baseBranch ?? 'main';
-      const env = { ...process.env, ...(options.env ?? {}) };
+      assertSafeGitBranchRef(input.branch, 'branch');
+      assertSafeGitBranchRef(baseBranch, 'baseBranch');
+      const gateway = options.gateway ?? createCommandGateway();
       const bodyArg = input.bodyPath
         ? ['--body-file', input.bodyPath]
         : ['--body', input.body];
-      const branchSetupCommand = localBranchExists(
-        options.repoPath,
-        env,
-        input.branch,
-      )
-        ? null
-        : ['git', 'branch', input.branch];
-      const dirtyWorktree = hasCommittableChanges(options.repoPath, env);
       const prCreateCommand = [
         'gh',
         'pr',
@@ -89,11 +87,6 @@ export function createScmDelivery(
         input.branch,
         '--base',
         baseBranch,
-      ];
-      const commands: string[][] = [
-        ...(branchSetupCommand ? [branchSetupCommand] : []),
-        ['git', 'push', '-u', 'origin', input.branch],
-        prCreateCommand,
       ];
       const recoveryCommand = [
         'gh',
@@ -113,6 +106,31 @@ export function createScmDelivery(
         status,
         nextStatus: input.humanApproved ? 'creating-pr' : 'awaiting-approval',
       });
+      let branchSetupCommand: string[] | null;
+      try {
+        branchSetupCommand = (await localBranchExists(
+          gateway,
+          options,
+          input.branch,
+        ))
+          ? null
+          : ['git', 'branch', input.branch];
+      } catch (error) {
+        await markDeliveryFailed(options, input.runId, 'branch-probe', error);
+        throw error;
+      }
+      let dirtyWorktree: boolean;
+      try {
+        dirtyWorktree = await hasCommittableChanges(gateway, options);
+      } catch (error) {
+        await markDeliveryFailed(options, input.runId, 'dirty-worktree', error);
+        throw error;
+      }
+      const commands: string[][] = [
+        ...(branchSetupCommand ? [branchSetupCommand] : []),
+        ['git', 'push', '-u', 'origin', input.branch],
+        prCreateCommand,
+      ];
 
       if (input.dryRun) {
         return {
@@ -141,8 +159,12 @@ export function createScmDelivery(
         };
       }
 
-      const gateway = options.gateway ?? createCommandGateway();
-      const policy = createDeliveryCommandPolicy(options.repoPath);
+      const policy = createDeliveryCommandPolicy(options.repoPath, [
+        ...(branchSetupCommand ? [branchSetupCommand] : []),
+        ['git', 'push', '-u', 'origin', input.branch],
+        prCreateCommand,
+        recoveryCommand,
+      ]);
       const executedCommands: string[][] = [];
       if (dirtyWorktree) {
         const error = new Error(
@@ -236,49 +258,72 @@ async function getScmStatus(
   options: CreateScmDeliveryOptions,
   branch?: string,
 ): Promise<ScmStatus> {
-  const env = { ...process.env, ...(options.env ?? {}) };
-  const remoteName = runReadCommand('git', ['remote'], options.repoPath, env)
-    ?.split(/\r?\n/u)
-    .find(Boolean);
+  if (branch) {
+    assertSafeGitBranchRef(branch, 'branch');
+  }
+  const gateway = options.gateway ?? createCommandGateway();
+  const remoteName = remoteNameFromList(
+    (
+      await runScmStatusCommand({
+        gateway,
+        command: { tool: 'git', args: ['remote', '-v'] },
+        options,
+      })
+    ).stdout,
+  );
   const remoteUrl = remoteName
-    ? runReadCommand(
-        'git',
-        ['remote', 'get-url', remoteName],
-        options.repoPath,
-        env,
+    ? firstOutputLine(
+        (
+          await runScmStatusCommand({
+            gateway,
+            command: { tool: 'git', args: ['remote', 'get-url', remoteName] },
+            options,
+          })
+        ).stdout,
       )
     : undefined;
+  const branchResult = await runScmStatusCommand({
+    gateway,
+    command: { tool: 'git', args: ['branch', '--show-current'] },
+    options,
+  });
   const currentBranch =
-    runReadCommand(
-      'git',
-      ['branch', '--show-current'],
-      options.repoPath,
-      env,
-    ) ??
-    runReadCommand(
-      'git',
-      ['rev-parse', '--abbrev-ref', 'HEAD'],
-      options.repoPath,
-      env,
+    firstOutputLine(branchResult.stdout) ??
+    firstOutputLine(
+      (
+        await runScmStatusCommand({
+          gateway,
+          command: { tool: 'git', args: ['rev-parse', '--abbrev-ref', 'HEAD'] },
+          options,
+        })
+      ).stdout,
     );
-  const dirty =
+  const dirty = Boolean(
     (
-      runReadCommand('git', ['status', '--short'], options.repoPath, env) ?? ''
-    ).trim().length > 0;
-  const auth = runStatusCommand(
-    'gh',
-    ['auth', 'status'],
-    options.repoPath,
-    env,
+      await runScmStatusCommand({
+        gateway,
+        command: { tool: 'git', args: ['status', '--short'] },
+        options,
+      })
+    ).stdout?.trim(),
   );
+  const auth = await runScmStatusCommand({
+    gateway,
+    command: { tool: 'gh', args: ['auth', 'status'] },
+    options,
+  });
   const branchPushed =
     remoteName && branch
-      ? runExitCodeCommand(
-          'git',
-          ['ls-remote', '--exit-code', '--heads', remoteName, branch],
-          options.repoPath,
-          env,
-        ) === 0
+      ? (
+          await runScmStatusCommand({
+            gateway,
+            command: {
+              tool: 'git',
+              args: ['ls-remote', '--exit-code', '--heads', remoteName, branch],
+            },
+            options,
+          })
+        ).exitCode === 0
       : false;
 
   return {
@@ -287,30 +332,134 @@ async function getScmStatus(
     remoteUrl,
     currentBranch,
     dirty,
-    ghAuthenticated: auth.ok,
+    ghAuthenticated: auth.exitCode === 0,
     branchPushed: Boolean(branchPushed),
     pushRequiresHumanApproval: true,
     prRequiresHumanApproval: true,
-    authError: auth.error,
+    authError: auth.exitCode === 0 ? undefined : formatStatusCommandError(auth),
   };
 }
 
-function createDeliveryCommandPolicy(repoPath: string): CommandPolicy {
+function createDeliveryCommandPolicy(
+  repoPath: string,
+  commands: string[][],
+): CommandPolicy {
+  return {
+    allow: commands.map((command) => ({
+      ...toInvocation(command),
+      match: 'exact',
+    })),
+    deny: [{ tool: 'git', args: ['push', '--force'] }],
+    requiresHumanApproval: [],
+    cwdScope: [repoPath],
+    network: 'enabled',
+  };
+}
+
+function assertSafeGitBranchRef(ref: string, label: string): void {
+  if (!isSafeGitBranchRef(ref)) {
+    throw new Error(`unsafe ${label}: ${ref}`);
+  }
+}
+
+function isSafeGitBranchRef(ref: string): boolean {
+  if (
+    ref.length === 0 ||
+    ref.length > 240 ||
+    ref.startsWith('-') ||
+    ref.startsWith(':') ||
+    ref.startsWith('/') ||
+    ref.endsWith('/') ||
+    ref.endsWith('.') ||
+    ref.includes('//') ||
+    ref.includes('..') ||
+    ref.includes('@{') ||
+    /[\s\0\\:*?[~^]/u.test(ref)
+  ) {
+    return false;
+  }
+  return ref
+    .split('/')
+    .every(
+      (part) =>
+        part.length > 0 &&
+        part !== '.' &&
+        part !== '..' &&
+        !part.endsWith('.lock'),
+    );
+}
+
+function createScmStatusCommandPolicy(
+  repoPath: string,
+  command: CommandInvocation,
+): CommandPolicy {
   return {
     allow: [
-      { tool: 'git', args: ['checkout'] },
-      { tool: 'git', args: ['branch'] },
-      { tool: 'git', args: ['add'] },
-      { tool: 'git', args: ['commit'] },
-      { tool: 'git', args: ['push'] },
-      { tool: 'gh', args: ['pr', 'create'] },
-      { tool: 'gh', args: ['pr', 'view'] },
+      { tool: 'git', args: ['remote', '-v'], match: 'exact' },
+      { tool: 'git', args: ['branch', '--show-current'], match: 'exact' },
+      {
+        tool: 'git',
+        args: ['rev-parse', '--abbrev-ref', 'HEAD'],
+        match: 'exact',
+      },
+      { tool: 'git', args: ['status', '--short'], match: 'exact' },
+      { tool: 'gh', args: ['auth', 'status'], match: 'exact' },
+      { ...command, match: 'exact' },
     ],
     deny: [{ tool: 'git', args: ['push', '--force'] }],
     requiresHumanApproval: [],
     cwdScope: [repoPath],
     network: 'enabled',
   };
+}
+
+async function runScmStatusCommand(input: {
+  gateway: CommandGateway;
+  command: CommandInvocation;
+  options: CreateScmDeliveryOptions;
+}): Promise<{
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+  timedOut?: boolean;
+  timeoutReason?: 'total' | 'no-progress';
+  progressPath?: string;
+  rejectedReason?: string;
+}> {
+  const result = await input.gateway.run({
+    command: input.command,
+    cwd: input.options.repoPath,
+    env: scmStatusCommandEnv(input.options),
+    envMode: 'exact',
+    outputDir: input.options.outputDir,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressIntervalMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+    policy: createScmStatusCommandPolicy(input.options.repoPath, input.command),
+  });
+
+  if (result.status !== 'executed') {
+    return {
+      exitCode: 1,
+      rejectedReason:
+        result.status === 'rejected' ? result.reason : result.decisionId,
+    };
+  }
+
+  return {
+    exitCode: result.exitCode ?? 1,
+    stdout: readCommandOutput(result.stdoutPath),
+    stderr: readCommandOutput(result.stderrPath),
+    timedOut: result.timedOut,
+    timeoutReason: result.timeoutReason,
+    progressPath: result.progressPath,
+  };
+}
+
+function scmStatusCommandEnv(
+  options: CreateScmDeliveryOptions,
+): NodeJS.ProcessEnv {
+  return { ...process.env, ...(options.env ?? {}) };
 }
 
 async function runDeliveryCommand(input: {
@@ -325,6 +474,9 @@ async function runDeliveryCommand(input: {
     env: input.options.env,
     envMode: input.options.env ? 'inherit' : 'safe-default',
     outputDir: input.options.outputDir,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressIntervalMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     policy: input.policy,
   });
 
@@ -332,6 +484,19 @@ async function runDeliveryCommand(input: {
     const detail =
       result.status === 'rejected' ? result.reason : result.decisionId;
     throw new Error(`delivery command ${result.status}: ${detail}`);
+  }
+
+  if (result.timedOut) {
+    throw new Error(
+      [
+        `delivery command timed out`,
+        result.timeoutReason ? `reason=${result.timeoutReason}` : null,
+        result.progressPath ? `progress=${result.progressPath}` : null,
+        `${input.command.tool} ${input.command.args.join(' ')}`,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
   }
 
   if (result.exitCode !== 0) {
@@ -351,6 +516,50 @@ function toInvocation(command: string[]): CommandInvocation {
 function readLastOutputLine(stdoutPath: string): string | undefined {
   const output = readFileSync(stdoutPath, 'utf8').trim();
   return output.length === 0 ? undefined : output.split(/\r?\n/u).at(-1);
+}
+
+function readCommandOutput(path: string): string | undefined {
+  try {
+    const output = readFileSync(path, 'utf8').trim();
+    return output.length > 0 ? output : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstOutputLine(output: string | undefined): string | undefined {
+  return output?.split(/\r?\n/u).find((line) => line.trim().length > 0);
+}
+
+function remoteNameFromList(output: string | undefined): string | undefined {
+  const line = firstOutputLine(output);
+  return line?.trim().split(/\s+/u).at(0);
+}
+
+function formatStatusCommandError(input: {
+  exitCode: number;
+  stderr?: string;
+  timedOut?: boolean;
+  timeoutReason?: 'total' | 'no-progress';
+  progressPath?: string;
+  rejectedReason?: string;
+}): string {
+  if (input.stderr) {
+    return input.stderr;
+  }
+  if (input.timedOut) {
+    return [
+      `status command timed out`,
+      input.timeoutReason ? `reason=${input.timeoutReason}` : null,
+      input.progressPath ? `progress=${input.progressPath}` : null,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  return (
+    input.rejectedReason ??
+    `status command failed with exit code ${input.exitCode}`
+  );
 }
 
 function parsePrUrl(value: string | undefined): string | undefined {
@@ -387,31 +596,56 @@ async function recoverExistingPrUrl(input: {
   }
 }
 
-function localBranchExists(
-  repoPath: string,
-  env: NodeJS.ProcessEnv,
+async function localBranchExists(
+  gateway: CommandGateway,
+  options: CreateScmDeliveryOptions,
   branch: string,
-): boolean {
-  return (
-    runExitCodeCommand(
-      'git',
-      ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`],
-      repoPath,
-      env,
-    ) === 0
-  );
+): Promise<boolean> {
+  const command = {
+    tool: 'git',
+    args: ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`],
+  };
+  const result = await runScmStatusCommand({
+    gateway,
+    command,
+    options,
+  });
+  assertStatusProbeResult({ command, result, allowedExitCodes: [0, 1] });
+  return result.exitCode === 0;
 }
 
-function hasCommittableChanges(
-  repoPath: string,
-  env: NodeJS.ProcessEnv,
-): boolean {
-  const status =
-    runReadCommand('git', ['status', '--porcelain'], repoPath, env) ?? '';
+async function hasCommittableChanges(
+  gateway: CommandGateway,
+  options: CreateScmDeliveryOptions,
+): Promise<boolean> {
+  const command = { tool: 'git', args: ['status', '--porcelain'] };
+  const result = await runScmStatusCommand({
+    gateway,
+    command,
+    options,
+  });
+  assertStatusProbeResult({ command, result, allowedExitCodes: [0] });
+  const status = result.stdout ?? '';
   return status
     .split(/\r?\n/u)
     .filter((line) => line.trim().length > 0)
     .some((line) => !line.startsWith('?? .tekon/'));
+}
+
+function assertStatusProbeResult(input: {
+  command: CommandInvocation;
+  result: Awaited<ReturnType<typeof runScmStatusCommand>>;
+  allowedExitCodes: number[];
+}): void {
+  if (
+    input.result.timedOut ||
+    input.result.rejectedReason ||
+    !input.allowedExitCodes.includes(input.result.exitCode)
+  ) {
+    throw new Error(
+      `SCM probe failed: ${input.command.tool} ${input.command.args.join(' ')} ${formatStatusCommandError(input.result)}`,
+    );
+  }
 }
 
 async function upsertDeliveryState(input: {
@@ -527,70 +761,4 @@ async function appendDeliveryAudit(
     return;
   }
   await options.audit.append({ runId, type, payload });
-}
-
-function runReadCommand(
-  tool: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): string | undefined {
-  try {
-    const output = execFileSync(tool, args, {
-      cwd,
-      encoding: 'utf8',
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    return output.length > 0 ? output : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function runStatusCommand(
-  tool: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): { ok: boolean; error?: string } {
-  try {
-    execFileSync(tool, args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-function runExitCodeCommand(
-  tool: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): number {
-  try {
-    execFileSync(tool, args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return 0;
-  } catch (error) {
-    if (
-      error &&
-      typeof error === 'object' &&
-      'status' in error &&
-      typeof error.status === 'number'
-    ) {
-      return error.status;
-    }
-    return 1;
-  }
 }

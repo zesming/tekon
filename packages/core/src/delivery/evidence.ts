@@ -40,8 +40,10 @@ export interface QaReleaseSignoffEvidence {
   status: 'passed' | 'failed' | 'blocked';
   targetRef: string;
   validatedRef: string;
+  expectedRef?: string;
   matchedRef: boolean;
   criteriaEvidence: number;
+  coveredCriteriaIds: string[];
 }
 
 export interface DeliveryEvidencePackage {
@@ -203,14 +205,20 @@ function collectSemanticEvidence(
       failureClassification: gate.failureClassification,
     })),
     ciStatuses: latestCiStatusEvidence(repoPath, artifacts, auditEvents),
-    qaReleaseSignoffs: latestQaReleaseSignoffEvidence(repoPath, artifacts),
+    qaReleaseSignoffs: latestQaReleaseSignoffEvidence(
+      repoPath,
+      artifacts,
+      auditEvents,
+    ),
   };
 }
 
 function latestQaReleaseSignoffEvidence(
   repoPath: string,
   artifacts: Artifact[],
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
 ): QaReleaseSignoffEvidence[] {
+  const expectedRef = latestQaValidationRef(auditEvents);
   const signoffs = artifacts
     .filter((artifact) => artifact.type === 'qa-release-signoff')
     .flatMap((artifact) => {
@@ -230,8 +238,18 @@ function latestQaReleaseSignoffEvidence(
             status: payload.overallStatus,
             targetRef: payload.targetRef,
             validatedRef: payload.validatedRef,
-            matchedRef: payload.targetRef === payload.validatedRef,
+            ...(expectedRef ? { expectedRef } : {}),
+            matchedRef:
+              payload.targetRef === payload.validatedRef &&
+              (!expectedRef || payload.targetRef === expectedRef),
             criteriaEvidence: payload.criteriaEvidence?.length ?? 0,
+            coveredCriteriaIds: [
+              ...new Set(
+                (payload.criteriaEvidence ?? [])
+                  .filter((item) => item.status === 'passed')
+                  .map((item) => item.criterionId),
+              ),
+            ],
           } satisfies QaReleaseSignoffEvidence,
         },
       ];
@@ -247,6 +265,18 @@ function latestQaReleaseSignoffEvidence(
   })[0];
 
   return latest ? [latest.evidence] : [];
+}
+
+function latestQaValidationRef(
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
+): string | undefined {
+  return auditEvents
+    .filter((event) => event.type === 'qa.validation.ref')
+    .map((event) =>
+      typeof event.payload.ref === 'string' ? event.payload.ref : undefined,
+    )
+    .filter((ref): ref is string => Boolean(ref))
+    .at(-1);
 }
 
 function latestCiStatusEvidence(
@@ -352,11 +382,16 @@ function hasPassedReferencedGate(
 }
 
 function latestGateResults<
-  T extends { nodeId: string; gateType: string; createdAt: string },
+  T extends {
+    nodeId: string;
+    gateType: string;
+    gateKey?: string | null;
+    createdAt: string;
+  },
 >(gates: T[]): T[] {
   const latestByNodeAndType = new Map<string, T>();
   for (const gate of gates) {
-    const key = `${gate.nodeId}:${gate.gateType}`;
+    const key = `${gate.nodeId}:${gate.gateKey ?? gate.gateType}`;
     const existing = latestByNodeAndType.get(key);
     if (
       !existing ||

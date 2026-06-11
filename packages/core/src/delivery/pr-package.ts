@@ -10,6 +10,7 @@ import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,
 } from './evidence.js';
+import { assertPrePullRequestReady } from './pre-pr-readiness.js';
 
 export interface PullRequestPreparation {
   runId: string;
@@ -38,10 +39,22 @@ export async function createPullRequestPreparation(input: {
     repoPath: input.repoPath,
     riskGates: ['human', 'security-scan'],
   });
+  await assertPrePullRequestReady({
+    repositories: input.repositories,
+    audit: input.audit,
+    runId: input.runId,
+    repoPath: input.repoPath,
+  });
   const nodes = await input.repositories.listNodes(input.runId);
   const deliveryNode = nodes.at(-1);
   if (!deliveryNode) {
     throw new Error(`run has no nodes: ${input.runId}`);
+  }
+  const qaSignoff = evidence.qaReleaseSignoffs[0];
+  if (qaSignoff && !qaSignoff.matchedRef) {
+    throw new Error(
+      `QA release signoff does not match tested delivery ref: target=${qaSignoff.targetRef} validated=${qaSignoff.validatedRef} expected=${qaSignoff.expectedRef ?? 'unavailable'}`,
+    );
   }
 
   const title = `${profile.pr.titlePrefix}${evidence.demand.title}`.trim();
@@ -255,6 +268,9 @@ function formatQaReleaseSignoff(evidence: DeliveryEvidencePackage): string[] {
       `- qaSignoff: ${signoff.status}`,
       `  - targetRef: ${signoff.targetRef}`,
       `  - validatedRef: ${signoff.validatedRef}`,
+      ...(signoff.expectedRef
+        ? [`  - expectedRef: ${signoff.expectedRef}`]
+        : []),
       `  - matchedRef: ${signoff.matchedRef}`,
       `  - criteriaEvidence: ${signoff.criteriaEvidence}`,
       `  - artifact: ${signoff.artifactId}`,

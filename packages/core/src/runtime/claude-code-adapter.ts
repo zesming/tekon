@@ -62,6 +62,8 @@ export function createClaudeCodeAdapter(
         policy: input.commandPolicy,
         outputDir: input.outputDir,
         timeoutMs: config.timeoutMs,
+        progressIntervalMs: config.progressHeartbeatMs,
+        noProgressTimeoutMs: config.noProgressTimeoutMs,
         envMode: 'exact',
         env: {
           ...buildClaudeProviderEnv(),

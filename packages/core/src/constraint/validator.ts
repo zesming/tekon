@@ -11,6 +11,7 @@ export type WorkflowArtifactType = ArtifactType | string;
 export interface WorkflowGate {
   id?: string;
   type: GateType;
+  gateKey?: string;
   command?: CommandInvocation;
   artifactType?: WorkflowArtifactType;
   requiresHumanApproval?: boolean;
