@@ -1034,12 +1034,14 @@ export function createWorkflowEngine(
           ]
         : []),
       ...(input.requiredArtifactTypes.some((type) =>
-        ['test-report', 'ac-evidence'].includes(type),
+        ['test-report', 'ac-evidence', 'qa-release-signoff'].includes(type),
       )
         ? [
-            '- For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+            '- For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
             '- criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
             '- Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
+            '- criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+            '- If you do not have an exact artifactId, omit artifactIds and use outputPaths or known gateResultIds instead.',
             '- criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
           ]
         : []),
@@ -1053,6 +1055,7 @@ export function createWorkflowEngine(
       )
         ? [
             '- For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor: outputPaths pointing to a file under TEKON_OUTPUT_DIR or an existing repo path, or known gateResultIds/artifactIds.',
+            '- If a criterion depends on downstream delivery packaging, PR creation, PMO checkpoint, QA signoff, or QA signoff review, do not block this QA validation node solely because those downstream nodes have not run yet.',
           ]
         : []),
       ...(input.requiredArtifactTypes.includes('test-plan')
@@ -1231,6 +1234,7 @@ export function createWorkflowEngine(
         continue;
       }
       summaries.push({
+        id: latestArtifact.id,
         type: latestArtifact.type,
         path: latestArtifact.path,
         summary: latestArtifact.summary,

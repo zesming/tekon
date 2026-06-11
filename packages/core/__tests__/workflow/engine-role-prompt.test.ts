@@ -743,13 +743,19 @@ describe('workflow engine role prompt integration', () => {
       );
     }
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
-      'For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+      'For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'If a criterion depends on downstream delivery packaging, PR creation, PMO checkpoint, QA signoff, or QA signoff review, do not block this QA validation node solely because those downstream nodes have not run yet.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
@@ -763,7 +769,7 @@ describe('workflow engine role prompt integration', () => {
     expect(
       prompts.find((item) => item.role === 'reviewer')?.prompt,
     ).not.toContain(
-      'For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+      'For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
     );
     expect(
       prompts.find((item) => item.role === 'reviewer')?.prompt,
@@ -774,6 +780,125 @@ describe('workflow engine role prompt integration', () => {
       prompts.find((item) => item.role === 'reviewer')?.prompt,
     ).not.toContain(
       'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
+    db.close();
+  });
+
+  it('adds artifact id anchor guidance to QA release signoff prompts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-signoff-artifact-id-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-signoff-artifact-id-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: 'QA signoff 需要引用真实 artifact id',
+      mode: 'template',
+      workflowSpec: {
+        id: 'qa-signoff-artifact-id',
+        name: 'QA Signoff Artifact ID',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-card',
+                role: 'pm',
+                inputs: [],
+                outputs: [{ id: 'demand', type: 'demand-card' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: ['pm'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-signoff',
+                role: 'qa',
+                inputs: [
+                  {
+                    id: 'demand',
+                    type: 'demand-card',
+                    fromNodeId: 'pm-demand-card',
+                  },
+                ],
+                outputs: [{ id: 'signoff', type: 'qa-release-signoff' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const signoffPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_qa-signoff'),
+    )?.prompt;
+    expect(signoffPrompt).toBeDefined();
+    expect(signoffPrompt!).toMatch(/artifactId: artifact_[\w-]+/u);
+    expect(signoffPrompt).toContain(
+      'criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
     );
     db.close();
   });
