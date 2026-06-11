@@ -2,7 +2,11 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import type { CommandPolicy } from '../types/config.js';
+import {
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+  type CommandPolicy,
+} from '../types/config.js';
 import type {
   CommandInvocation,
   GateResult,
@@ -22,12 +26,15 @@ export interface RunCommandGateInput {
     GateType,
     'build' | 'test' | 'lint' | 'e2e-pass' | 'security-scan'
   >;
+  gateKey?: string;
   cwd: string;
   command: CommandInvocation;
   policy: CommandPolicy;
   outputDir: string;
   retries?: number;
   timeoutMs?: number;
+  progressIntervalMs?: number;
+  noProgressTimeoutMs?: number;
 }
 
 export async function runCommandGate(
@@ -41,13 +48,17 @@ export async function runCommandGate(
     policy: input.policy,
     outputDir: input.outputDir,
     timeoutMs: input.timeoutMs,
+    progressIntervalMs:
+      input.progressIntervalMs ?? DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs:
+      input.noProgressTimeoutMs ?? DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     runId: input.runId,
     nodeId: input.nodeId,
   });
 
   const outputPath = join(
     input.outputDir,
-    `${input.nodeId}-${input.gateType}.log`,
+    `${input.nodeId}-${gateLogName(input.gateKey ?? input.gateType)}.log`,
   );
   let status: GateResult['status'] = 'failed';
   let failureClassification: string | null = null;
@@ -77,6 +88,7 @@ export async function runCommandGate(
     runId: input.runId,
     nodeId: input.nodeId,
     gateType: input.gateType,
+    gateKey: input.gateKey,
     status,
     outputPath,
     durationMs: Date.now() - startedAt,
@@ -92,11 +104,14 @@ export interface RunSecurityScanGateInput {
   gateway?: CommandGateway;
   runId: string;
   nodeId: string;
+  gateKey?: string;
   cwd: string;
   command?: CommandInvocation;
   policy: CommandPolicy;
   outputDir: string;
   timeoutMs?: number;
+  progressIntervalMs?: number;
+  noProgressTimeoutMs?: number;
 }
 
 export async function runSecurityScanGate(
@@ -109,7 +124,10 @@ export async function runSecurityScanGate(
     id: `finding_${randomUUID()}`,
     path: finding.path ?? '',
   }));
-  const outputPath = join(input.outputDir, `${input.nodeId}-security-scan.log`);
+  const outputPath = join(
+    input.outputDir,
+    `${input.nodeId}-${gateLogName(input.gateKey ?? 'security-scan')}.log`,
+  );
 
   if (findings.length > 0) {
     writeFileSync(
@@ -122,6 +140,7 @@ export async function runSecurityScanGate(
       runId: input.runId,
       nodeId: input.nodeId,
       gateType: 'security-scan',
+      gateKey: input.gateKey,
       status: 'failed',
       outputPath,
       durationMs: Date.now() - startedAt,
@@ -137,11 +156,14 @@ export async function runSecurityScanGate(
       runId: input.runId,
       nodeId: input.nodeId,
       gateType: 'security-scan',
+      gateKey: input.gateKey,
       cwd: input.cwd,
       command: input.command,
       policy: input.policy,
       outputDir: input.outputDir,
       timeoutMs: input.timeoutMs,
+      progressIntervalMs: input.progressIntervalMs,
+      noProgressTimeoutMs: input.noProgressTimeoutMs,
     });
   }
 
@@ -155,6 +177,7 @@ export async function runSecurityScanGate(
     runId: input.runId,
     nodeId: input.nodeId,
     gateType: 'security-scan',
+    gateKey: input.gateKey,
     status: 'passed',
     outputPath,
     durationMs: Date.now() - startedAt,
@@ -162,4 +185,8 @@ export async function runSecurityScanGate(
     failureClassification: null,
     createdAt: new Date().toISOString(),
   };
+}
+
+function gateLogName(gateKey: string): string {
+  return gateKey.replace(/[^A-Za-z0-9._=-]+/gu, '-');
 }

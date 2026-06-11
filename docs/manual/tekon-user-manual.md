@@ -53,6 +53,7 @@
 - `test-improvement`：测试补齐。
 - `docs-update`：文档更新。
 - `plan-only`：只做方案，不执行代码改动。
+- `standard-delivery`：标准交付治理流程，包含 PM 内审、PM/RD/QA 外部需求评审、RD 技术评审、QA 测试方案评审、独立变更评审、QA final signoff、QA signoff review 和 PMO checkpoint；当前已具备独立评审、角色范围、AC evidence、QA signoff、节点级 PMO checkpoint 和流程完整性 gate 的本地强约束，但不替代真实人类业务决策。
 
 `workflow select` 会给出推荐模板和理由；`eval workflow-selection` 会检查人工选择是否合理。
 
@@ -80,7 +81,7 @@
 
 ### 2.5 需要判断一次 run 是否真的可交付
 
-`eval readiness` 会评估单个 run 是否具备进入人工审阅或 PR 提交流程的最小证据面。`eval work-usability` 会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo 宣称可用。
+`eval readiness` 会评估单个 run 的交付证据是否完整。当前 `pr-prepared`、`pr-created` 和 `remote-ci-passed` 都是 required，因此在 PR 准备、真实 PR 创建或远端 CI 证据写回之前，`ready=false` 是预期状态。`eval work-usability` 会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo 宣称可用。
 
 ## 3. 核心用户场景
 
@@ -100,10 +101,10 @@
 4. `demand approve` 批准需求卡。
 5. `run` 发起 workflow。
 6. `status` 和 `review` 查看结果。
-7. `eval readiness` 判断是否可审。
-8. `delivery prepare` 生成 PR 准备包。
-9. 人工确认后 `delivery create-pr --approve-human` 创建远端 PR。
-10. `delivery ci-status` 或 `ci-watch` 写回远端 CI 证据。
+7. `delivery prepare` 生成 PR 准备包。
+8. 人工确认后 `delivery create-pr --approve-human` 创建远端 PR。
+9. `delivery ci-status` 或 `ci-watch` 写回远端 CI 证据。
+10. `eval readiness` 判断 PR/CI 证据是否完整。
 
 ### 场景 B：我只想修一个 bug，但需要人工确认风险
 
@@ -149,6 +150,7 @@
 
 - `docs-update`：文档更新。
 - `plan-only`：只做计划或方案，不推进代码改动。
+- `standard-delivery`：需要验证完整角色链路时使用；当前适合 Tekon 自身 dogfooding 和低风险种子任务，不适合直接承诺生产级强治理。
 
 ### 场景 E：我要判断天工是否已经能用于真实工作
 
@@ -204,6 +206,7 @@ tekon workflow preflight
 - `status=resolved`：该 gate 命令已解析。
 - `status=missing`：目标仓库缺少对应命令，需要补 repo profile。
 - `status=not-applicable`：用户显式声明不适用。
+- `status=not-command-gate`：schema、role-scope、QA signoff 等语义 gate 不需要 repo profile 命令。
 - `suggestedCommand`：天工从 `package.json` 中推断出的候选命令，需要人确认。
 
 ### 4.4 塑形需求
@@ -227,28 +230,33 @@ tekon eval demand-shape
 ### 4.5 发起运行
 
 ```bash
-tekon run --agent mock
+tekon run
 ```
 
 输出里会有 `runId`。后续常规命令默认读取最近一次 run；只有查看历史 run 或避免歧义时才需要手动传 `--run-id`。
 
-如果本机已安装并认证 Codex CLI，可使用 Codex provider：
+明确长程任务可以在 run 级别显式放大外层预算，例如 2 小时总超时、20 分钟无输出进展超时、30 秒 heartbeat：
 
 ```bash
-tekon run --agent codex
+tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heartbeat-ms 30000
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出或返回非零退出码，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需 artifact、artifact schema 不合法或 path/symlink 边界失败时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+未传 `--template` 时默认运行 `standard-delivery`；未传 `--agent` 时默认使用 Codex provider。离线回归或演示时，可显式切到 mock provider：
+
+```bash
+tekon run --template standard-delivery --agent mock
+```
+
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区，Engine 会在 worktree finalize 前拦截这类节点的源码变更；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。真实 provider 默认总超时为 1 小时，无 stdout/stderr 进展默认 15 分钟超时；CLI `run` 可用 `--timeout-ms`、`--no-progress-timeout-ms`、`--progress-heartbeat-ms` 显式覆盖，Web dashboard 也提供对应输入项，适合把明确长程任务拉到 2 小时或更长。最终配置会写入 provider snapshot 以支持 resume；命令执行会写入 `*.progress.json`，记录状态、最近输出时间、stdout/stderr 字节数、elapsed、总超时、无进展超时、timeoutReason 和 heartbeat 次数。manifest mtime、artifact 文件变化和可恢复 job runner 仍是后续增强。若 Codex 因超时中断但已写完有效 manifest，adapter 会在必需 artifact 校验通过后把该节点视为完成并继续进入 gate；非零退出不会被改写为成功，但已写入的合法 artifact 仍会被入库用于诊断。缺少 workflow 必需 artifact、artifact schema 不合法或 path/symlink 边界失败时，该节点会失败。QA validation 会记录 tested ref，QA signoff、PR package 和 readiness 会校验所测对象与交付对象一致。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制；该命令中的受控 `git/gh` 命令及前置只读 probe 也会写入 progress JSON，并使用同一 1 小时总超时和 15 分钟无 stdout/stderr 进展超时。
 
 ### 4.6 查看结果
 
 ```bash
 tekon status
 tekon review
-tekon eval readiness
 ```
 
-如果 `ready=true`，通常可以进入人工审阅或 PR 准备。它不代表可以自动合入。
+此时可以先看审阅面、gate、artifact、diff 和 PR 包建议。PR/CI 证据尚未写回前，`eval readiness` 通常会因为 `pr-prepared`、`pr-created` 或 `remote-ci-passed` 失败而保持 `ready=false`。
 
 ### 4.7 准备 PR 材料
 
@@ -256,17 +264,17 @@ tekon eval readiness
 tekon delivery prepare
 ```
 
-这一步只生成本地 PR 包，不 push、不创建 PR。
+这一步当前只支持 `standard-delivery` 治理 run，只生成本地 PR 包，不 push、不创建 PR。生成前会执行 pre-PR readiness：workflow 必须 passed、无 pending human gate、验证 gate 与安全扫描满足、AC evidence 完整、QA release signoff 必须通过且绑定 QA validation 记录的 tested ref。未满足时不会生成 PR 包。
 
 ### 4.8 创建远端 PR
 
-确认 PR 包、diff、gate 和 readiness 后，才执行：
+确认 PR 包、diff、gate 和审阅面后，才执行：
 
 ```bash
 tekon delivery create-pr --approve-human
 ```
 
-这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。
+这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。执行前会重新生成并校验 PR 包，因此不会绕过 pre-PR readiness、QA signoff 和所测即所得校验。受控 `git/gh` 命令和 create-pr 前置只读 probe 默认 1 小时总超时、15 分钟无 stdout/stderr 进展超时，并写入 progress JSON；delivery 分支名和 base branch 会拒绝 `--mirror`、`:branch`、空白、`..`、`@{` 等不安全 ref。
 
 ### 4.9 查询远端 CI
 
@@ -278,6 +286,12 @@ tekon delivery ci-status
 
 ```bash
 tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
+```
+
+远端 CI 证据写回后，再执行：
+
+```bash
+tekon eval readiness
 ```
 
 ### 4.10 默认上下文规则
@@ -326,6 +340,7 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 - `test-improvement`
 - `docs-update`
 - `plan-only`
+- `standard-delivery`
 
 ### 5.5 Role
 
@@ -341,6 +356,11 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 - schema
 - security-scan
 - human
+- independent-review
+- role-scope
+- ac-evidence
+- qa-signoff
+- process-completeness
 
 Gate 不通过时 workflow 不应被当成可交付。
 
@@ -364,7 +384,7 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
 
 ### 5.10 Readiness
 
-单次 run 的工作就绪度评估。它回答：“这次 run 是否已经具备进入人工审阅或 PR 准备的最低证据？”
+单次 run 的工作就绪度评估。它回答：“这次 run 的 workflow、gate、artifact、PR 准备、真实 PR 和远端 CI 证据是否已经完整？”
 
 ### 5.11 Work Usability
 
@@ -407,7 +427,7 @@ tekon workflow preflight
 
 常用参数：
 
-- 第一个位置参数：模板名；不传时默认 `standard-feature`。
+- 第一个位置参数：模板名；不传时默认 `standard-delivery`。
 - `--repo <path>`：只在跨仓库检查时使用。
 
 如何判断结果：
@@ -415,6 +435,7 @@ tekon workflow preflight
 - `resolved`：可执行。
 - `missing`：缺命令，需要补 repo profile。
 - `not-applicable`：用户已显式声明不适用。
+- `not-command-gate`：语义 gate，不需要 repo profile 命令。
 
 常见处理：
 
@@ -498,13 +519,13 @@ tekon demand approve
 模板运行：
 
 ```bash
-tekon run "需求文本" --template standard-feature --agent mock
+tekon run "需求文本" --template standard-delivery --agent mock
 ```
 
 需求卡运行：
 
 ```bash
-tekon run --agent mock
+tekon run
 ```
 
 动态 dry-run：
@@ -714,11 +735,15 @@ tekon delivery create-pr --approve-human
 - 目标远端有创建 PR 权限。
 - 主工作区除 `.tekon` 外没有未提交改动。
 - 用户明确传入 `--approve-human`。
+- workflow 已 passed，AC evidence、安全扫描和 QA release signoff 已满足，且 QA signoff 绑定 QA validation tested ref。
+- 长程 push、`gh pr create` 或 create-pr 前置只读 probe 会写入 command progress JSON；默认 1 小时总超时、15 分钟无 stdout/stderr 进展超时。
 
 常见失败：
 
 - `gh auth status` 不通过。
 - 工作区 dirty。
+- pre-PR readiness 不满足，例如缺 QA signoff、QA signoff 未绑定 tested ref、AC evidence 不完整或安全扫描失败。
+- delivery 分支名或 base branch 不安全。
 - 远端已有同分支 PR。
 - 网络或 GitHub 权限失败。
 
@@ -771,7 +796,7 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 
 ### 6.18 `eval readiness`
 
-用途：判断单次 run 是否可进入人工审阅或 PR 流程。
+用途：判断单次 run 的交付证据是否完整。
 
 ```bash
 tekon eval readiness
@@ -786,6 +811,11 @@ tekon eval readiness
 - pending human gate 未处理。
 - 验收标准没有 evidence。
 - security scan 失败。
+- PR 准备包不存在。
+- 真实 PR 未创建。
+- 远端 CI 未通过或未写回。
+
+说明：`pr-prepared`、`pr-created` 和 `remote-ci-passed` 是 required。PR 准备、真实 PR 创建或远端 CI 证据写回之前，`ready=false` 是预期状态；这不代表本地 workflow 或治理 gate 一定失败。
 
 ### 6.19 `eval work-usability`
 
@@ -850,13 +880,13 @@ Web dashboard 适合：
 不要只看“命令退出 0”。建议按顺序看：
 
 1. `status`：workflow 是否 passed。
-2. `eval readiness`：是否 ready。
-3. `review`：失败项和证据是否能解释。
-4. Changed Files：影响文件是否符合预期。
-5. Artifacts：需求、变更、测试、审阅证据是否完整。
-6. Gate Logs：build/lint/test/security 是否真的跑过。
-7. PR Package：PR body 是否能让 reviewer 看懂。
-8. CI Status：如果已创建 PR，远端 checks 是否已记录。
+2. `review`：失败项和证据是否能解释。
+3. Changed Files：影响文件是否符合预期。
+4. Artifacts：需求、变更、测试、审阅证据是否完整。
+5. Gate Logs：build/lint/test/security 是否真的跑过。
+6. PR Package：PR body 是否能让 reviewer 看懂。
+7. CI Status：远端 checks 是否已记录。
+8. `eval readiness`：PR/CI 证据是否完整。
 
 如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。
 
@@ -1007,13 +1037,16 @@ Web dashboard 适合：
 
 ### `run` 参数
 
-| 参数                   | 用途                                                               |
-| ---------------------- | ------------------------------------------------------------------ |
-| `--template <name>`    | 使用内置模板。                                                     |
-| `--demand-file <path>` | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。 |
-| `--dynamic`            | 使用动态 workflow 路径。                                           |
-| `--dry-run`            | 只预览，不执行。                                                   |
-| `--save-as <name>`     | 保存动态 workflow 预览。                                           |
+| 参数                            | 用途                                                               |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `--template <name>`             | 使用内置模板。                                                     |
+| `--demand-file <path>`          | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。 |
+| `--dynamic`                     | 使用动态 workflow 路径。                                           |
+| `--dry-run`                     | 只预览，不执行。                                                   |
+| `--save-as <name>`              | 保存动态 workflow 预览。                                           |
+| `--timeout-ms <ms>`             | 覆盖真实 provider 外层总超时，明确长程任务可配置为 2 小时以上。    |
+| `--no-progress-timeout-ms <ms>` | 覆盖无 stdout/stderr 进展超时，用来判断任务是否卡死。              |
+| `--progress-heartbeat-ms <ms>`  | 覆盖 progress JSON heartbeat 间隔。                                |
 
 ### `demand shape` 参数
 

@@ -42,7 +42,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath, repositories });
+    await seedPassedRun({ repoPath, repositories, audit });
 
     const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
@@ -72,6 +72,25 @@ describe('work review surface', () => {
       durationMs: 4,
       retries: 0,
       createdAt: '2026-06-08T00:00:03.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_qa_signoff',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'qa-signoff',
+      status: 'passed',
+      durationMs: 3,
+      retries: 0,
+      createdAt: '2026-06-08T00:00:03.500Z',
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: {
+        nodeId: 'node_1',
+        ref: 'branch:tekon-delivery/run_1',
+      },
+      createdAt: '2026-06-08T00:00:03.600Z',
     });
 
     const store = createArtifactStore({ repoPath, repositories });
@@ -104,6 +123,26 @@ describe('work review surface', () => {
         ],
       }),
     });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA release signoff',
+        body: 'QA validated the branch that will be delivered.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+            gateResultIds: ['gate_qa_signoff'],
+          },
+        ],
+      }),
+    });
     await repositories.recordArtifact({
       id: 'artifact_outside',
       runId: 'run_1',
@@ -117,11 +156,46 @@ describe('work review surface', () => {
       createdAt: '2026-06-08T00:00:04.000Z',
     });
 
-    await createPullRequestPreparation({
+    const preparation = await createPullRequestPreparation({
       repoPath,
       repositories,
       audit,
       runId: 'run_1',
+    });
+    await repositories.upsertDeliveryPullRequest({
+      id: 'delivery_pr_1',
+      runId: 'run_1',
+      branch: preparation.branch,
+      baseBranch: preparation.baseBranch,
+      title: preparation.title,
+      bodyPath: preparation.prBodyPath,
+      status: 'created',
+      prUrl: 'https://github.example/tekon/pull/1',
+      approvedBy: 'tester',
+      approvedAt: '2026-06-08T00:00:05.000Z',
+      branchPushedAt: '2026-06-08T00:00:06.000Z',
+      prCreatedAt: '2026-06-08T00:00:07.000Z',
+      attemptCount: 1,
+      createdAt: '2026-06-08T00:00:05.000Z',
+      updatedAt: '2026-06-08T00:00:07.000Z',
+    });
+    const ciArtifact = await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'ci-status',
+      content: JSON.stringify({
+        title: 'CI status',
+        body: 'Remote CI passed.',
+        ciStatus: 'passed',
+        prUrl: 'https://github.example/tekon/pull/1',
+        checkedAt: '2026-06-08T00:00:08.000Z',
+        checks: [{ name: 'build', bucket: 'pass' }],
+      }),
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'delivery.ci.checked',
+      payload: { artifactId: ciArtifact.id },
     });
 
     const surface = await createWorkReviewSurface({
@@ -135,6 +209,8 @@ describe('work review surface', () => {
     expect(surface.readiness.ready).toBe(true);
     expect(surface.delivery.package?.content).toContain('PR Preparation');
     expect(surface.delivery.prBody?.content).toContain('Expose review surface');
+    expect(surface.delivery.status).toBe('created');
+    expect(surface.delivery.prUrl).toBe('https://github.example/tekon/pull/1');
     expect(surface.delivery.diff.available).toBe(true);
     expect(surface.delivery.diff.changedFiles).toContain('M\tfeature.txt');
     expect(surface.artifacts).toEqual(
@@ -175,22 +251,18 @@ describe('work review surface', () => {
             expect.objectContaining({ kind: 'diff', href: '#delivery-diff' }),
           ]),
         }),
-        expect.objectContaining({
-          id: 'readiness-pr-created',
-          status: 'warning',
-          links: expect.arrayContaining([
-            expect.objectContaining({ kind: 'pr-body', href: '#pr-body' }),
-            expect.objectContaining({
-              kind: 'pr-package',
-              href: '#pr-package',
-            }),
-          ]),
-        }),
       ]),
     );
-    expect(surface.nextCommands).toContain(
+    expect(surface.evidenceGroups.map((group) => group.id)).not.toContain(
+      'readiness-pr-created',
+    );
+    expect(surface.nextCommands).not.toContain(
       'tekon delivery create-pr --approve-human',
     );
+    expect(surface.nextCommands).toEqual([
+      'tekon status',
+      'tekon eval readiness',
+    ]);
 
     const explicitSurface = await createWorkReviewSurface({
       repoPath,
@@ -199,8 +271,41 @@ describe('work review surface', () => {
       runId: 'run_1',
       commandDisplay: 'explicit',
     });
-    expect(explicitSurface.nextCommands).toContain(
-      `tekon delivery create-pr --run-id run_1 --repo ${repoPath} --approve-human`,
+    expect(explicitSurface.nextCommands).toEqual([
+      `tekon status --run-id run_1 --repo ${repoPath}`,
+      `tekon eval readiness --run-id run_1 --repo ${repoPath}`,
+    ]);
+    db.close();
+  });
+
+  it('does not recommend PR preparation for non standard-delivery runs', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-non-standard-'));
+    tempDirs.push(repoPath);
+    seedGitRepo(repoPath);
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+    writeDefaultRepoProfile(repoPath);
+
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedPassedRun({
+      repoPath,
+      repositories,
+      audit,
+      templateId: 'standard-feature',
+    });
+
+    const surface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(surface.nextCommands).not.toContain('tekon delivery prepare');
+    expect(surface.nextCommands).not.toContain(
+      'tekon delivery create-pr --approve-human',
     );
     db.close();
   });
@@ -216,7 +321,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath, repositories });
+    await seedPassedRun({ repoPath, repositories, audit });
 
     const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
@@ -435,7 +540,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath, repositories });
+    await seedPassedRun({ repoPath, repositories, audit });
     await seedPassedValidationGates({ repoPath, repositories });
 
     const outsideArtifactPath = join(outsideDir, 'outside-artifact.json');
@@ -580,7 +685,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath: outsideRepoPath, repositories });
+    await seedPassedRun({ repoPath: outsideRepoPath, repositories, audit });
     await seedPassedValidationGates({ repoPath, repositories });
 
     const outsideArtifactPath = join(outsideRepoPath, 'passed-evidence.json');
@@ -669,7 +774,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath, repositories });
+    await seedPassedRun({ repoPath, repositories, audit });
 
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',
@@ -770,6 +875,8 @@ function seedGitRepo(repoPath: string) {
 async function seedPassedRun(input: {
   repoPath: string;
   repositories: ReturnType<typeof createRepositories>;
+  audit: ReturnType<typeof createAuditLogger>;
+  templateId?: string;
 }) {
   await input.repositories.createDemand({
     id: 'demand_1',
@@ -791,6 +898,15 @@ async function seedPassedRun(input: {
     createdAt: '2026-06-08T00:00:00.000Z',
     updatedAt: '2026-06-08T00:00:01.000Z',
   });
+  await input.audit.append({
+    runId: 'run_1',
+    type: 'run.started',
+    payload: {
+      templateId: input.templateId ?? 'standard-delivery',
+      mode: 'template',
+    },
+    createdAt: '2026-06-08T00:00:00.100Z',
+  });
   await input.repositories.createNode({
     id: 'node_1',
     runId: 'run_1',
@@ -801,6 +917,23 @@ async function seedPassedRun(input: {
     createdAt: '2026-06-08T00:00:00.000Z',
     updatedAt: '2026-06-08T00:00:01.000Z',
   });
+  for (const [index, gateType] of [
+    'independent-review',
+    'role-scope',
+    'ac-evidence',
+    'process-completeness',
+  ].entries()) {
+    await input.repositories.recordGateResult({
+      id: `gate_governance_${gateType}`,
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType,
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: `2026-06-08T00:00:01.${100 + index}Z`,
+    });
+  }
 }
 
 async function seedPassedValidationGates(input: {

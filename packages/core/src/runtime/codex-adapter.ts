@@ -93,7 +93,8 @@ export function createCodexAdapter(
         policy: input.commandPolicy,
         outputDir: input.outputDir,
         timeoutMs: config.timeoutMs,
-        envMode: 'inherit',
+        progressIntervalMs: config.progressHeartbeatMs,
+        noProgressTimeoutMs: config.noProgressTimeoutMs,
         env: {
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
@@ -158,7 +159,7 @@ export function createCodexAdapter(
       const hasCompleteRequiredArtifacts =
         requiredArtifactTypes.length > 0 && missingRequiredTypes.length === 0;
       if (
-        (result.timedOut || hasNonZeroExitCode) &&
+        result.timedOut &&
         !artifactIngestionFailed &&
         hasCompleteRequiredArtifacts
       ) {

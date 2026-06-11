@@ -50,14 +50,21 @@ phases:
       - id: qa-validation
         role: qa
         inputs:
+          - demand:demand-card
+          - prd:prd
           - code:code-changes
         outputs:
           - test:test-report
+          - qa-release-signoff:qa-release-signoff
         gates:
           - type: test
             commandRef: test
           - type: schema
             artifactType: test-report
+          - type: schema
+            artifactType: qa-release-signoff
+          - type: qa-signoff
+            artifactType: qa-release-signoff
   - id: reviewer
     name: Reviewer
     dependsOn:
@@ -83,6 +90,7 @@ phases:
         role: pmo
         inputs:
           - review:review-report
+          - qa-release-signoff:qa-release-signoff
         outputs:
           - delivery:delivery-package
         gates:

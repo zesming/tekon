@@ -199,6 +199,114 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('includes prior node status context for process checkpoints', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-process-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-process-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '补充流程检查点',
+      mode: 'template',
+      workflowSpec: {
+        id: 'process-prompt-context',
+        name: 'Process Prompt Context',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-review',
+                role: 'pm',
+                inputs: [],
+                outputs: [],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'pmo',
+            name: 'PMO',
+            dependsOn: ['pm'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pmo-checkpoint',
+                role: 'pmo',
+                inputs: [],
+                outputs: [
+                  { id: 'process-checkpoint', type: 'process-checkpoint' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const pmNodeId = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-review'),
+    )?.nodeId;
+    const pmoPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_pmo-checkpoint'),
+    )?.prompt;
+    expect(pmNodeId).toBeDefined();
+    expect(pmoPrompt).toBeDefined();
+    expect(pmoPrompt!).toContain('Prior workflow nodes:');
+    expect(pmoPrompt!).toContain(`${pmNodeId} role=pm status=passed`);
+    expect(pmoPrompt!).toContain(
+      'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status',
+    );
+    db.close();
+  });
+
   it('keeps repository edit scope for code-changes nodes while preserving exit instructions', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-engine-code-changes-prompt-'),
@@ -371,7 +479,10 @@ describe('workflow engine role prompt integration', () => {
                 id: 'qa-test',
                 role: 'qa',
                 inputs: [],
-                outputs: [{ id: 'test', type: 'test-report' }],
+                outputs: [
+                  { id: 'test', type: 'test-report' },
+                  { id: 'evidence', type: 'ac-evidence' },
+                ],
                 gates: [],
                 dependsOn: [],
               },
@@ -407,6 +518,14 @@ describe('workflow engine role prompt integration', () => {
         'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
       );
     }
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
     db.close();
   });
 
@@ -596,6 +715,15 @@ function writeRoleFixture(rolesDir: string) {
     'Reviewer system instructions',
     'utf8',
   );
+
+  const pmoDir = join(rolesDir, 'pmo');
+  mkdirSync(pmoDir, { recursive: true });
+  writeFileSync(
+    join(pmoDir, 'agent.yaml'),
+    ['role: pmo', 'name: Test PMO', 'description: Test PMO role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(pmoDir, 'system.md'), 'PMO system instructions', 'utf8');
 }
 
 function minimalWorkflowSpec(name: string) {

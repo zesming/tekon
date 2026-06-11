@@ -1,0 +1,326 @@
+id: standard-delivery
+name: Standard Delivery
+version: 1
+retry:
+  maxAttempts: 2
+  backoffMs: 500
+  strategy: fixed
+phases:
+  - id: pm-scope
+    name: PM Scope
+    nodes:
+      - id: pm-demand-card
+        role: pm
+        outputs:
+          - demand:demand-card
+          - prd:prd
+        gates:
+          - type: schema
+            artifactType: demand-card
+          - type: schema
+            artifactType: prd
+  - id: pm-review
+    name: PM Demand Review
+    dependsOn:
+      - pm-scope
+    nodes:
+      - id: pm-demand-review
+        role: pm
+        inputs:
+          - demand:demand-card
+          - prd:prd
+        outputs:
+          - pm-demand-review:demand-review
+        gates:
+          - type: schema
+            artifactType: demand-review
+          - type: independent-review
+            artifactType: demand-review
+          - type: role-scope
+            artifactType: demand-review
+  - id: requirement-interface-review
+    name: Requirement Interface Review
+    dependsOn:
+      - pm-review
+    nodes:
+      - id: pm-requirement-intent-review
+        role: pm
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-demand-review:demand-review
+        outputs:
+          - pm-requirement-intent-review:demand-review
+        gates:
+          - type: schema
+            artifactType: demand-review
+          - type: independent-review
+            artifactType: demand-review
+          - type: role-scope
+            artifactType: demand-review
+      - id: rd-requirement-interface-review
+        role: rd
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-demand-review:demand-review
+        outputs:
+          - rd-requirement-interface-review:requirement-interface-review
+        gates:
+          - type: schema
+            artifactType: requirement-interface-review
+          - type: independent-review
+            artifactType: requirement-interface-review
+          - type: role-scope
+            artifactType: requirement-interface-review
+      - id: qa-requirement-interface-review
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-demand-review:demand-review
+        outputs:
+          - qa-requirement-interface-review:requirement-interface-review
+        gates:
+          - type: schema
+            artifactType: requirement-interface-review
+          - type: independent-review
+            artifactType: requirement-interface-review
+          - type: role-scope
+            artifactType: requirement-interface-review
+  - id: rd-plan
+    name: RD Implementation Plan
+    dependsOn:
+      - requirement-interface-review
+    nodes:
+      - id: rd-implementation-plan
+        role: rd
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-requirement-intent-review:demand-review
+          - rd-requirement-interface-review:requirement-interface-review
+          - qa-requirement-interface-review:requirement-interface-review
+        outputs:
+          - implementation-plan:implementation-plan
+        gates:
+          - type: schema
+            artifactType: implementation-plan
+  - id: rd-plan-review
+    name: RD Technical Review
+    dependsOn:
+      - rd-plan
+    nodes:
+      - id: rd-technical-review
+        role: rd
+        inputs:
+          - implementation-plan:implementation-plan
+        outputs:
+          - rd-technical-review:technical-review
+        gates:
+          - type: schema
+            artifactType: technical-review
+          - type: independent-review
+            artifactType: technical-review
+          - type: role-scope
+            artifactType: technical-review
+  - id: qa-plan
+    name: QA Test Plan
+    dependsOn:
+      - rd-plan-review
+    nodes:
+      - id: qa-test-plan
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-requirement-intent-review:demand-review
+          - implementation-plan:implementation-plan
+          - rd-technical-review:technical-review
+        outputs:
+          - qa-test-plan:test-plan
+        gates:
+          - type: schema
+            artifactType: test-plan
+  - id: qa-plan-review
+    name: QA Test Plan Review
+    dependsOn:
+      - qa-plan
+    nodes:
+      - id: qa-test-plan-review
+        role: qa
+        inputs:
+          - demand:demand-card
+          - qa-test-plan:test-plan
+        outputs:
+          - qa-test-plan-review:test-plan-review
+        gates:
+          - type: schema
+            artifactType: test-plan-review
+          - type: independent-review
+            artifactType: test-plan-review
+          - type: role-scope
+            artifactType: test-plan-review
+      - id: pm-test-plan-intent-review
+        role: pm
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - qa-test-plan:test-plan
+        outputs:
+          - pm-test-plan-intent-review:test-plan-review
+        gates:
+          - type: schema
+            artifactType: test-plan-review
+          - type: independent-review
+            artifactType: test-plan-review
+          - type: role-scope
+            artifactType: test-plan-review
+  - id: rd-implementation
+    name: RD Implementation
+    dependsOn:
+      - qa-plan-review
+    nodes:
+      - id: rd-code-change
+        role: rd
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - implementation-plan:implementation-plan
+          - qa-test-plan:test-plan
+          - qa-test-plan-review:test-plan-review
+          - pm-test-plan-intent-review:test-plan-review
+        outputs:
+          - code:code-changes
+        gates:
+          - type: build
+            commandRef: build
+          - type: lint
+            commandRef: lint
+          - type: security-scan
+            commandRef: security
+          - type: schema
+            artifactType: code-changes
+  - id: independent-change-review
+    name: Independent Change Review
+    dependsOn:
+      - rd-implementation
+    nodes:
+      - id: reviewer-change-review
+        role: reviewer
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - implementation-plan:implementation-plan
+          - qa-test-plan:test-plan
+          - code:code-changes
+        outputs:
+          - reviewer-change-review:code-review
+        gates:
+          - type: schema
+            artifactType: code-review
+          - type: independent-review
+            artifactType: code-review
+          - type: role-scope
+            artifactType: code-review
+  - id: qa-final-validation
+    name: QA Final Validation
+    dependsOn:
+      - independent-change-review
+    nodes:
+      - id: qa-validation
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - qa-test-plan:test-plan
+          - code:code-changes
+          - reviewer-change-review:code-review
+        outputs:
+          - qa-validation:test-report
+          - qa-ac-evidence:ac-evidence
+        gates:
+          - type: test
+            commandRef: test
+          - type: schema
+            artifactType: test-report
+          - type: schema
+            artifactType: ac-evidence
+          - type: ac-evidence
+            artifactType: ac-evidence
+  - id: qa-signoff
+    name: QA Release Signoff
+    dependsOn:
+      - qa-final-validation
+    nodes:
+      - id: qa-release-signoff
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - qa-test-plan:test-plan
+          - qa-validation:test-report
+          - code:code-changes
+        outputs:
+          - qa-release-signoff:qa-release-signoff
+        gates:
+          - type: schema
+            artifactType: qa-release-signoff
+          - type: qa-signoff
+            artifactType: qa-release-signoff
+  - id: qa-signoff-review
+    name: QA Release Signoff Review
+    dependsOn:
+      - qa-signoff
+    nodes:
+      - id: qa-release-signoff-review
+        role: qa
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - qa-test-plan:test-plan
+          - qa-validation:test-report
+          - code:code-changes
+          - qa-release-signoff:qa-release-signoff
+        outputs:
+          - qa-release-signoff-review:qa-release-signoff-review
+        gates:
+          - type: schema
+            artifactType: qa-release-signoff-review
+          - type: independent-review
+            artifactType: qa-release-signoff-review
+          - type: role-scope
+            artifactType: qa-release-signoff-review
+  - id: pmo-delivery
+    name: PMO Delivery Checkpoint
+    dependsOn:
+      - qa-signoff-review
+    nodes:
+      - id: pmo-checkpoint
+        role: pmo
+        inputs:
+          - demand:demand-card
+          - prd:prd
+          - pm-demand-review:demand-review
+          - pm-requirement-intent-review:demand-review
+          - rd-requirement-interface-review:requirement-interface-review
+          - qa-requirement-interface-review:requirement-interface-review
+          - implementation-plan:implementation-plan
+          - rd-technical-review:technical-review
+          - qa-test-plan:test-plan
+          - qa-test-plan-review:test-plan-review
+          - pm-test-plan-intent-review:test-plan-review
+          - qa-validation:test-report
+          - reviewer-change-review:code-review
+          - qa-release-signoff:qa-release-signoff
+          - qa-release-signoff-review:qa-release-signoff-review
+        outputs:
+          - process-checkpoint:process-checkpoint
+          - delivery:delivery-package
+        gates:
+          - type: schema
+            artifactType: process-checkpoint
+          - type: process-completeness
+            artifactType: process-checkpoint
+          - type: schema
+            artifactType: delivery-package

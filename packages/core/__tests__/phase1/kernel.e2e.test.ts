@@ -81,7 +81,32 @@ describe('phase 1 kernel e2e', () => {
       artifactStore,
     });
     expect(agentResult).toMatchObject({ provider: 'mock', exitCode: 0 });
-    expect(await repositories.listArtifacts('run_1', 'node_1')).toHaveLength(9);
+    expect(
+      (await repositories.listArtifacts('run_1', 'node_1'))
+        .map((item) => item.type)
+        .sort(),
+    ).toEqual([
+      'ac-evidence',
+      'code-changes',
+      'code-review',
+      'delivery-package',
+      'demand-card',
+      'demand-review',
+      'implementation-plan',
+      'prd',
+      'process-checkpoint',
+      'qa-release-signoff',
+      'qa-release-signoff-review',
+      'requirement-interface-review',
+      'review-report',
+      'rollback-plan',
+      'security-report',
+      'tech-design',
+      'technical-review',
+      'test-plan',
+      'test-plan-review',
+      'test-report',
+    ]);
 
     const schemaGate = await gateEngine.runGate({
       runId: 'run_1',

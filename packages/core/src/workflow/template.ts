@@ -45,6 +45,7 @@ export interface WorkflowArtifactInputRef extends WorkflowArtifactOutputRef {
 
 export interface WorkflowGateConfig {
   type: GateType;
+  gateKey?: string;
   command?: CommandInvocation;
   commandRef?: z.infer<typeof commandRefSchema>;
   skipReason?: string;
@@ -87,7 +88,8 @@ export type BuiltInWorkflowTemplateId =
   | 'bugfix'
   | 'test-improvement'
   | 'docs-update'
-  | 'plan-only';
+  | 'plan-only'
+  | 'standard-delivery';
 
 const rawArtifactRefSchema = z.union([
   z.string().min(1),
@@ -111,6 +113,7 @@ const rawArtifactRefSchema = z.union([
 const rawGateSchema = z
   .object({
     type: gateTypeSchema,
+    gateKey: z.string().min(1).optional(),
     command: commandInvocationSchema.optional(),
     commandRef: commandRefSchema.optional(),
     artifactType: artifactTypeSchema.optional(),
@@ -271,6 +274,7 @@ function normalizeWorkflowTemplate(
       const gates = rawNode.gates.map((gate) =>
         normalizeGate(gate, retryPolicy),
       );
+      assertUniqueEffectiveGateKeys(gates, rawNode.id);
       assertCodeProducerHasBuildAndLint(rawNode.id, outputs, gates);
 
       if (rawNode.role === 'reviewer') {
@@ -340,6 +344,7 @@ function normalizeGate(
 
   return {
     type: rawGate.type,
+    ...(rawGate.gateKey ? { gateKey: rawGate.gateKey } : {}),
     ...(rawGate.command ? { command: rawGate.command } : {}),
     ...(rawGate.commandRef ? { commandRef: rawGate.commandRef } : {}),
     ...(rawGate.artifactType ? { artifactType: rawGate.artifactType } : {}),
@@ -354,6 +359,38 @@ function normalizeGate(
     onExhausted: rawGate.onExhausted ?? retryPolicy.onExhausted ?? 'block',
     retryPolicy: normalizeRetryPolicy(retryPolicy),
   };
+}
+
+function assertUniqueEffectiveGateKeys(
+  gates: WorkflowGateConfig[],
+  nodeId: string,
+): void {
+  const seen = new Set<string>();
+  for (const [index, gate] of gates.entries()) {
+    const gateKey = gate.gateKey ?? stableGateKey(gate, index);
+    if (seen.has(gateKey)) {
+      throw new Error(`duplicate gateKey "${gateKey}" in node "${nodeId}"`);
+    }
+    seen.add(gateKey);
+  }
+}
+
+function stableGateKey(
+  gate: Pick<
+    WorkflowGateConfig,
+    'type' | 'artifactType' | 'commandRef' | 'skipReason'
+  >,
+  index: number,
+): string {
+  return [
+    String(index).padStart(2, '0'),
+    gate.type,
+    gate.artifactType ? `artifact=${gate.artifactType}` : '',
+    gate.commandRef ? `commandRef=${gate.commandRef}` : '',
+    gate.skipReason ? 'skipped' : '',
+  ]
+    .filter(Boolean)
+    .join(':');
 }
 
 function parseArtifactRef(ref: RawArtifactRef): WorkflowArtifactOutputRef {

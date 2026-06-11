@@ -113,6 +113,65 @@ describe('command gateway', () => {
     expect(spawnCalls).toBe(0);
   });
 
+  it('rejects extra argv when a policy entry requires exact matching', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-command-exact-'));
+    tempDirs.push(cwd);
+    let spawnCalls = 0;
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        spawnCalls += 1;
+        throw new Error('spawn should not be called');
+      },
+    });
+    const policy = {
+      allow: [{ tool: 'git', args: ['remote', '-v'], match: 'exact' as const }],
+      deny: [],
+      cwdScope: [cwd],
+      network: 'enabled' as const,
+    };
+
+    await expect(
+      gateway.run({
+        command: { tool: 'git', args: ['remote', '-v', 'add', 'origin'] },
+        cwd,
+        policy,
+      }),
+    ).resolves.toMatchObject({ status: 'rejected' });
+    expect(spawnCalls).toBe(0);
+  });
+
+  it('does not allow path-like tool names through basename matching', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-command-path-tool-'));
+    tempDirs.push(cwd);
+    let spawnCalls = 0;
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        spawnCalls += 1;
+        throw new Error('spawn should not be called');
+      },
+    });
+
+    await expect(
+      gateway.run({
+        command: { tool: './git', args: ['remote', '-v'] },
+        cwd,
+        policy: {
+          allow: [
+            {
+              tool: 'git',
+              args: ['remote', '-v'],
+              match: 'exact' as const,
+            },
+          ],
+          deny: [],
+          cwdScope: [cwd],
+          network: 'enabled',
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'rejected' });
+    expect(spawnCalls).toBe(0);
+  });
+
   it('blocks cwd outside policy scope before spawn', async () => {
     const allowed = mkdtempSync(join(tmpdir(), 'tekon-allowed-'));
     const outside = mkdtempSync(join(tmpdir(), 'tekon-outside-'));
@@ -179,6 +238,40 @@ describe('command gateway', () => {
     db.close();
   });
 
+  it('redacts secrets from pending human approval notes', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-approval-redact-'));
+    tempDirs.push(cwd);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, cwd);
+    const tokenValue = 'abcdefghijklmnopqrstuvwxyz123456';
+
+    const gateway = createCommandGateway({ repositories });
+
+    await gateway.run({
+      command: {
+        tool: 'gh',
+        args: ['api', 'repos/example/private', `--token=${tokenValue}`],
+      },
+      cwd,
+      runId: 'run_1',
+      nodeId: 'node_1',
+      policy: {
+        allow: [{ tool: 'gh', args: ['api'] }],
+        deny: [],
+        requiresHumanApproval: [{ tool: 'gh', args: ['api'] }],
+        cwdScope: [cwd],
+        network: 'enabled',
+      },
+    });
+
+    const [decision] = await repositories.listHumanDecisions('run_1');
+    expect(decision?.note).toContain('--token=[REDACTED_SECRET]');
+    expect(decision?.note).not.toContain(tokenValue);
+    db.close();
+  });
+
   it('executes allowed argv commands and streams stdout and stderr to log files', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-'));
     tempDirs.push(cwd);
@@ -211,6 +304,207 @@ describe('command gateway', () => {
     }
     expect(readFileSync(result.stdoutPath, 'utf8')).toContain('hello');
     expect(readFileSync(result.stderrPath, 'utf8')).toContain('warn');
+  });
+
+  it('writes progress heartbeat evidence for long-running commands', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-progress-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: [
+          '-e',
+          [
+            "process.stdout.write('started\\n')",
+            "setTimeout(() => process.stderr.write('still-running\\n'), 20)",
+            'setTimeout(() => process.exit(0), 60)',
+          ].join('\n'),
+        ],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      progressIntervalMs: 10,
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'executed',
+      exitCode: 0,
+      timedOut: false,
+    });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    expect(result.progressPath).toMatch(/\.progress\.json$/u);
+    const progress = JSON.parse(readFileSync(result.progressPath!, 'utf8')) as {
+      status: string;
+      timeoutMs: number;
+      stdoutBytes: number;
+      stderrBytes: number;
+      heartbeatCount: number;
+      lastOutputAt: string | null;
+    };
+    expect(progress).toMatchObject({
+      status: 'completed',
+      timeoutMs: 60_000,
+    });
+    expect(progress.stdoutBytes).toBeGreaterThan(0);
+    expect(progress.stderrBytes).toBeGreaterThan(0);
+    expect(progress.heartbeatCount).toBeGreaterThan(0);
+    expect(progress.lastOutputAt).toEqual(expect.any(String));
+  });
+
+  it('terminates commands after the no-progress timeout even before total timeout', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-no-progress-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: ['-e', 'setTimeout(() => {}, 5000)'],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      timeoutMs: 5_000,
+      noProgressTimeoutMs: 50,
+      progressIntervalMs: 10,
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'executed',
+      timedOut: true,
+      timeoutReason: 'no-progress',
+    });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const progress = JSON.parse(readFileSync(result.progressPath!, 'utf8')) as {
+      status: string;
+      timeoutReason: string;
+      noProgressTimeoutMs: number;
+    };
+    expect(progress).toMatchObject({
+      status: 'timed-out',
+      timeoutReason: 'no-progress',
+      noProgressTimeoutMs: 50,
+    });
+  });
+
+  it('does not wait for the heartbeat interval before enforcing no-progress timeout', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-no-progress-fast-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: ['-e', 'setTimeout(() => {}, 5000)'],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      timeoutMs: 5_000,
+      noProgressTimeoutMs: 50,
+      progressIntervalMs: 1_000,
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'executed',
+      timedOut: true,
+      timeoutReason: 'no-progress',
+    });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    expect(result.durationMs).toBeLessThan(500);
+  });
+
+  it('redacts likely secrets from progress command argv evidence', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-progress-redact-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const fakeOpenAiKey = ['sk', '123456789012345678901234'].join('-');
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: ['-e', 'process.stdout.write("ok")', `token="${fakeOpenAiKey}"`],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const progress = readFileSync(result.progressPath!, 'utf8');
+    expect(progress).not.toContain(fakeOpenAiKey);
+    expect(progress).toContain('[REDACTED_OPENAI_API_KEY]');
+  });
+
+  it('redacts common CLI secret argv forms from progress evidence', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-progress-redact-cli-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway();
+    const tokenValue = 'abcdefghijklmnopqrstuvwxyz123456';
+    const passwordValue = 'ZYXWVUTSRQPONMLKJIHGFEDCBA987654';
+    const envValue = '0123456789abcdefghijklmnopqrstuv';
+    const result = await gateway.run({
+      command: {
+        tool: process.execPath,
+        args: [
+          '-e',
+          'process.stdout.write("ok")',
+          '--',
+          `--token=${tokenValue}`,
+          '--password',
+          passwordValue,
+          `GITHUB_TOKEN=${envValue}`,
+        ],
+      },
+      cwd,
+      outputDir: join(cwd, 'logs'),
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const progress = readFileSync(result.progressPath!, 'utf8');
+    expect(progress).not.toContain(tokenValue);
+    expect(progress).not.toContain(passwordValue);
+    expect(progress).not.toContain(envValue);
+    expect(progress).toContain('--token=[REDACTED_SECRET]');
+    expect(progress).toContain('[REDACTED_SECRET]');
+    expect(progress).toContain('GITHUB_TOKEN=[REDACTED_SECRET]');
   });
 
   it('allows shell-looking characters inside argv data values without invoking a shell', async () => {

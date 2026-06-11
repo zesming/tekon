@@ -41,6 +41,12 @@
 - CLI 默认上下文推断：常规命令会自动发现当前 repo、最近需求卡、最近 run 和最近 pending human decision；`--repo`、`--run-id`、`--shape`、`--demand-file`、`--decision-id` 保留给跨仓库、历史对象和消除歧义场景。
 - Codex provider P0 接线：core 新增 `createCodexAdapter` 和共享 manifest ingestion，CLI/Web 支持 `--agent codex`、provider snapshot resume 和 Web run 下拉选项；`eval work-usability record` 可记录 `expectedProvider: codex` 与真实 PR 要求。
 - Codex provider 使用文档：README、主用户手册和 `docs/manual/codex-provider-smoke.md/html` 说明本机 Codex CLI、`codex --profile internal ... exec`、artifact manifest、权限边界和自举 smoke 流程。
+- Standard Delivery 标准模板：新增完整 `standard-delivery` 内置 workflow，覆盖 PM 内审、PM/RD/QA 外部需求评审、RD 技术评审、QA 测试方案评审、独立变更评审、QA final signoff、QA signoff review 和 PMO checkpoint。
+- Standard Delivery 交付可信度：非 `code-changes` 节点在 worktree finalize 前会被源码变更 guard 拦截；QA validation 会记录 tested ref，QA signoff、pre-PR readiness、PR package 和 readiness 会校验所测对象与交付对象一致。
+- PMO 过程观测：Engine 在每个节点通过后写入 `pmo.node-checkpoint` 审计事件，记录节点状态、必需 artifact、gate 类型和最新 gate 状态；末端 PMO checkpoint 仍负责交付包完整性。
+- Standard Delivery 强治理 gate：新增 `demand-review`、`implementation-plan`、`test-plan`、`ac-evidence`、`qa-release-signoff`、`process-checkpoint` 等 artifact schema，以及 `independent-review`、`role-scope`、`ac-evidence`、`qa-signoff`、`process-completeness` gate。
+- Standard Delivery 角色边界：PM、RD、QA、reviewer、PMO 的 system 描述补充评审范围、不越权边界、独立评审要求和升级条件。
+- Standard Delivery P1-0 seed run 归档：记录 `run_04b37267-2686-42c6-a0a4-9b37410f65f7` 在 RD Codex 节点 300 秒超时中断的证据和后续拆分策略。
 
 ### 变更
 
@@ -52,13 +58,19 @@
 - 发布说明从 Phase 2 本地 mock CLI 基线更新为 Phase 3 本地验收通过，不把真实 PR、自动 merge 或生产级真实 LLM workflow 写成已完成能力。
 - Web 技术基线从计划中的 Next/tRPC 降级为本地 Node HTTP + Vite React dashboard，验收产物为 `packages/web/dist`；保留后续升级到远程多路由 Web 的空间。
 - `init` 会根据目标仓库 `package.json` 自动生成仓库画像；正式远端 PR 仍需人工确认，当前新增的是本地 PR 准备包和工作就绪度判断。
-- `eval readiness` 从“PR 准备可审阅”升级为“验收标准有证据、安全扫描通过、无 pending human gate、PR 创建状态和远端 CI 状态可见”的工作就绪判断；PR 创建和远端 CI 通过为推荐项，merge/上线仍不自动化。
+- `eval readiness` 从“PR 准备可审阅”升级为“验收标准有证据、安全扫描通过、无 pending human gate、PR 已创建且远端 CI 通过”的工作就绪判断；PR 创建和远端 CI 通过已从推荐项升为必需项，merge/上线仍不自动化。
 - `eval work-usability` 把 P0-2/P0-6/P0-7 的真实样本要求固化为阈值评估；默认阈值面向正式 dogfooding 样本集，可在受控 fixture 中通过 sample file 降低阈值做回归测试。
 - 内置安全扫描从 gate 私有规则调整为共享规则集；当前覆盖 private key、OpenAI-style key、AWS access key 和常见 token/secret assignment。
 - `delivery create-pr` 默认不执行远端副作用；只有显式 `--approve-human` 才 push 和创建 PR，并且不会提交主工作区未提交改动或 `.tekon` 运行态目录。
+- `delivery prepare` 和 `delivery create-pr` 统一执行 pre-PR readiness：workflow passed、无 pending human gate、验证 gate 与安全扫描满足、AC evidence 完整、QA release signoff 通过且绑定 QA validation tested ref；不满足时不会生成 PR 包或创建远端 PR。
 - Mock agent 从“每个节点写全量内置 artifact”调整为优先写 workflow 要求的 artifact 类型，更贴近真实 provider manifest 协议。
 - Codex adapter 默认固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`，并拒绝 provider args 覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass 参数；`--add-dir` 只由 Tekon 受控追加到本节点 artifact 输出目录，安全边界参数会放在 `exec` 之前，匹配本机 Codex CLI 语法。
-- Codex adapter 在 provider timeout 或非零退出后会尝试读取并校验 `$TEKON_ARTIFACT_MANIFEST` 指向的 manifest 文件；如果 workflow 必需 artifact 已完整入库，则按 artifact 完成继续进入 gate，manifest 缺失、schema 非法或必需 artifact 不齐仍按失败处理。若真实 Codex 误写出字面文件名 `TEKON_ARTIFACT_MANIFEST`，adapter 会在受控 `TEKON_OUTPUT_DIR` 内按同一 schema 兼容读取。
+- 真实 provider 默认总超时从 300 秒调整为 1 小时，并写入 provider snapshot，降低长程 Codex/Claude Code 节点被短超时误杀的概率；CLI `run` 新增 `--timeout-ms`、`--no-progress-timeout-ms`、`--progress-heartbeat-ms`，Web dashboard 新增对应运行参数输入，允许对明确长程任务显式配置 2 小时以上外层预算；CommandGateway 同步写入 `*.progress.json`，记录命令状态、最近输出时间、stdout/stderr 字节数、elapsed、总超时、无进展超时、timeoutReason 和 heartbeat 次数；默认无 stdout/stderr 进展 15 分钟会触发 `no-progress` timeout，`delivery create-pr --approve-human` 的受控 `git/gh` 命令及前置只读 probe 也复用该超时和进展策略；manifest mtime、artifact 文件变化和可恢复 job runner 仍待后续补强。
+- Gate result 新增 `gateKey`，workflow 会为同一节点下的重复同类型 gate 生成稳定身份，例如多个 `schema` gate 会按 artifact/commandRef 区分；PMO `process-checkpoint` 也会带上 gateKey 证据，避免重复 gate 被误认为已经通过；human gate 审批会更新原始 gate result 并保留 gateKey，不再创建无 key 的 resume gate。
+- CommandGateway 人工审批 note 复用命令参数脱敏逻辑，避免 `--token`、`--password` 或环境变量形式的敏感值进入 human decision 审阅面。
+- SCM 远端交付对 delivery branch/base branch 做安全 ref 校验，并把实际生成的 `git branch`、`git push`、`gh pr create/view` 写命令加入 exact allow，避免 broad prefix allow 放大远端副作用边界。
+- `workflow preflight` 对 schema、QA signoff、role-scope 等非命令 gate 显示 `status=not-command-gate`，与 repo profile 显式 `notApplicable` 的 `status=not-applicable` 区分开，避免把无需命令的语义 gate 误报成 command missing。
+- Codex adapter 在 provider timeout 或非零退出后会尝试读取并校验 `$TEKON_ARTIFACT_MANIFEST` 指向的 manifest 文件；只有 timeout 且 workflow 必需 artifact 已完整入库时，才按 artifact 完成继续进入 gate。非零退出不会被改写为成功，但合法 artifact 仍会入库用于诊断；manifest 缺失、schema 非法或必需 artifact 不齐仍按失败处理。若真实 Codex 误写出字面文件名 `TEKON_ARTIFACT_MANIFEST`，adapter 会在受控 `TEKON_OUTPUT_DIR` 内按同一 schema 兼容读取。
 - 真实 provider artifact 协议增加节点职责边界和收尾约束：非 `code-changes` 节点只写 `TEKON_OUTPUT_DIR` 下的节点 artifact，不修改仓库工作区；所有需要 artifact 的节点先写 artifact 与 `$TEKON_ARTIFACT_MANIFEST` 指向的 manifest 文件，再立即退出，且不在节点内启动嵌套 subagent 审阅或执行 `git add`、`git commit`、`git push`、PR 创建，避免 PM/QA 等节点继续执行下游实现、格式化、额外审阅或远端交付工作。
 - 真实 provider artifact 协议明确结构化 JSON artifact 必须包含非空 `title` 和 `body`，并在 prompt 中要求 `demand-card`/`prd` 使用 `acceptanceCriteria[].id/description`；`code-changes` 的 provider-style JSON 在包含非空 `summary` 或有效 `changedFiles`/`verification` 条目时会被归一化为 Tekon 可审阅 artifact，`demand-card`/`prd` 的有效 `acceptance_criteria[].criterion` 也会被归一化为 `acceptanceCriteria[].description`，降低真实 Codex run 因字段命名漂移中断的概率。
 - Web dashboard 从只展示 artifact/gate 路径和计数，升级为可直接审阅关键正文、日志、diff 和 PR 包的本地审阅面，并能在同一页面完成 run 发起、PR 准备和受控 PR 创建入口。

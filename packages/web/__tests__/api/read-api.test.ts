@@ -23,7 +23,7 @@ describe('web read API', () => {
     expect(overview.counts).toMatchObject({
       artifacts: 1,
       gates: 1,
-      audit: 1,
+      audit: 2,
       pendingApprovals: 1,
       roles: 1,
       workflows: 1,
@@ -63,7 +63,8 @@ describe('web read API', () => {
         expect.objectContaining({
           id: 'decision_1',
           context: expect.objectContaining({
-            exactCommand: 'tekon run --template standard-feature --agent mock',
+            exactCommand:
+              'tekon run --template standard-delivery --agent codex',
             riskLabel: 'high',
             nodeRole: 'reviewer',
             gate: expect.objectContaining({ id: 'gate_1', type: 'human' }),
@@ -73,7 +74,7 @@ describe('web read API', () => {
     });
     await expect(api.audit.list({ runId: 'run_1' })).resolves.toMatchObject({
       verification: { valid: true },
-      events: [
+      events: expect.arrayContaining([
         expect.objectContaining({
           type: 'human.decision.pending',
           nodeId: 'node_1',
@@ -81,7 +82,7 @@ describe('web read API', () => {
           role: 'reviewer',
           hash: expect.any(String),
         }),
-      ],
+      ]),
     });
     await expect(api.review.get({ runId: 'run_1' })).resolves.toMatchObject({
       readiness: expect.objectContaining({

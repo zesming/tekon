@@ -112,7 +112,7 @@ export function createWorkflowEngine(
       const template =
         input.workflowSpec ??
         loadWorkflowTemplate({
-          name: input.templateName ?? 'standard-feature',
+          name: input.templateName ?? 'standard-delivery',
         });
       const runId = `run_${randomUUID()}`;
       const projectId = `project_${randomUUID()}`;
@@ -346,7 +346,8 @@ export function createWorkflowEngine(
 
       await options.repositories.transitionNode(node.id, 'awaiting-gate');
     }
-    for (const gate of node.gates) {
+    const configuredGates = gatesWithStableKeys(node.gates, node.id);
+    for (const gate of configuredGates) {
       const passed = await runGateWithRepair(runId, node, gate);
       if (!passed) {
         return false;
@@ -354,6 +355,7 @@ export function createWorkflowEngine(
     }
 
     try {
+      await recordQaValidationRef(runId, node);
       await finalizeExecutionLease(runId, node.id);
     } catch (error) {
       await options.repositories.transitionNode(node.id, 'interrupted');
@@ -374,6 +376,7 @@ export function createWorkflowEngine(
     }
 
     await options.repositories.transitionNode(node.id, 'passed');
+    await appendPmoNodeCheckpoint(runId, node);
     await options.audit.append({
       runId,
       type: 'node.passed',
@@ -382,12 +385,52 @@ export function createWorkflowEngine(
     return true;
   }
 
+  async function appendPmoNodeCheckpoint(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<void> {
+    const configuredGates = gatesWithStableKeys(node.gates, node.id);
+    const requiredArtifacts = requiredArtifactTypesForNode(node);
+    const missingArtifacts: ArtifactType[] = [];
+    for (const artifactType of requiredArtifacts) {
+      const artifacts = await options.repositories.listArtifacts(
+        runId,
+        node.id,
+        artifactType,
+      );
+      if (artifacts.length === 0) {
+        missingArtifacts.push(artifactType);
+      }
+    }
+    const gateResults = await options.repositories.listGateResults(runId);
+    await options.audit.append({
+      runId,
+      type: 'pmo.node-checkpoint',
+      payload: {
+        nodeId: node.id,
+        role: node.role,
+        status: 'passed',
+        requiredArtifacts,
+        missingArtifacts,
+        gateTypes: configuredGates.map((gate) => gate.type),
+        gateKeys: configuredGates.map((gate) => gate.gateKey),
+        latestGateStatuses: latestGateResultsForNode(gateResults, node.id),
+      },
+    });
+  }
+
   async function runGateWithRepair(
     runId: string,
     node: ExecutableNode,
     gate: WorkflowGateConfig,
   ): Promise<boolean> {
-    const existingResult = await latestGateResult(runId, node.id, gate.type);
+    const existingResult = await latestGateResult(
+      runId,
+      node.id,
+      gate.type,
+      gate.gateKey,
+      gate.type === 'human' && isFirstHumanGate(node.gates, gate.gateKey),
+    );
     if (
       existingResult?.status === 'passed' ||
       existingResult?.status === 'skipped'
@@ -395,17 +438,28 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'gate.previously-passed',
-        payload: { nodeId: node.id, gateType: gate.type },
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+        },
       });
       return true;
     }
 
+    if (gate.type === 'qa-signoff') {
+      await recordQaValidationRef(runId, node);
+    }
     let result = await runGate(runId, node.id, gate);
     if (result.status === 'passed' || result.status === 'skipped') {
       await options.audit.append({
         runId,
         type: 'gate.passed',
-        payload: { nodeId: node.id, gateType: gate.type },
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+        },
       });
       return true;
     }
@@ -493,7 +547,11 @@ export function createWorkflowEngine(
         await options.audit.append({
           runId,
           type: 'gate.passed-after-repair',
-          payload: { nodeId: node.id, gateType: gate.type },
+          payload: {
+            nodeId: node.id,
+            gateType: gate.type,
+            gateKey: gate.gateKey,
+          },
         });
         return true;
       }
@@ -511,6 +569,7 @@ export function createWorkflowEngine(
       payload: {
         nodeId: node.id,
         gateType: gate.type,
+        gateKey: gate.gateKey,
         gateResultId: result.id,
       },
     });
@@ -625,6 +684,23 @@ export function createWorkflowEngine(
     if (!lease || !options.worktreeManager) {
       return;
     }
+    const node = await options.repositories.getNode(nodeId);
+    if (!nodeAllowsSourceChanges(node)) {
+      const sourceInspection =
+        await options.worktreeManager.inspectLeaseSourceChanges(lease.id);
+      if (
+        sourceInspection.changedPaths.length > 0 ||
+        sourceInspection.headChanged
+      ) {
+        const changedPaths =
+          sourceInspection.changedPaths.length > 0
+            ? sourceInspection.changedPaths.join(', ')
+            : `lease HEAD moved from ${sourceInspection.baseHead ?? 'unknown'} to ${sourceInspection.currentHead}`;
+        throw new Error(
+          `node ${nodeId} is not allowed to modify repository source files: ${changedPaths}`,
+        );
+      }
+    }
 
     const committed = await options.worktreeManager.commitLeaseChanges(
       lease.id,
@@ -657,6 +733,49 @@ export function createWorkflowEngine(
     });
   }
 
+  async function recordQaValidationRef(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<void> {
+    if (!options.worktreeManager || !isQaValidationNode(node)) {
+      return;
+    }
+    const lease = await activeExecutionLease(runId, node.id);
+    if (!lease) {
+      return;
+    }
+    const head = await options.worktreeManager.getLeaseHead(lease.id);
+    const ref = `sha:${head}`;
+    if ((await latestQaValidationRef(runId)) === ref) {
+      return;
+    }
+    await options.audit.append({
+      runId,
+      type: 'qa.validation.ref',
+      payload: {
+        nodeId: node.id,
+        ref,
+      },
+    });
+  }
+
+  function isQaValidationNode(node: Pick<ExecutableNode, 'role' | 'outputs'>) {
+    return (
+      node.role === 'qa' &&
+      node.outputs.some((output) =>
+        ['test-report', 'ac-evidence'].includes(output.type),
+      )
+    );
+  }
+
+  function nodeAllowsSourceChanges(
+    node: Pick<Node, 'outputs'> | null,
+  ): boolean {
+    return Boolean(
+      node?.outputs.some((output) => output.type === 'code-changes'),
+    );
+  }
+
   function deleteLeaseAliases(leaseId: string): void {
     for (const [key, lease] of executionLeases.entries()) {
       if (lease.id === leaseId) {
@@ -669,19 +788,71 @@ export function createWorkflowEngine(
     runId: string,
     nodeId: string,
     gateType: GateConfig['type'],
+    gateKey?: string,
+    allowLegacyHumanFallback = false,
   ): Promise<GateResult | undefined> {
-    return (await options.repositories.listGateResults(runId))
-      .filter(
-        (result) => result.nodeId === nodeId && result.gateType === gateType,
+    const matchingResults = (
+      await options.repositories.listGateResults(runId)
+    ).filter(
+      (result) => result.nodeId === nodeId && result.gateType === gateType,
+    );
+    const keyedResult = matchingResults
+      .filter((result) =>
+        gateKey ? result.gateKey === gateKey : !result.gateKey,
       )
       .at(-1);
+    if (keyedResult) {
+      return keyedResult;
+    }
+    if (gateType !== 'human' || !gateKey || !allowLegacyHumanFallback) {
+      return undefined;
+    }
+    return matchingResults
+      .filter(
+        (result) =>
+          !result.gateKey &&
+          (result.status === 'passed' || result.status === 'skipped'),
+      )
+      .at(-1);
+  }
+
+  function isFirstHumanGate(
+    gates: WorkflowGateConfig[],
+    gateKey?: string,
+  ): boolean {
+    if (!gateKey) {
+      return false;
+    }
+    return gates.find((gate) => gate.type === 'human')?.gateKey === gateKey;
+  }
+
+  function latestGateResultsForNode(
+    gates: GateResult[],
+    nodeId: string,
+  ): Record<string, GateResult['status']> {
+    const latest = new Map<string, GateResult>();
+    for (const gate of gates.filter((item) => item.nodeId === nodeId)) {
+      const key = gate.gateKey ?? gate.gateType;
+      const existing = latest.get(key);
+      if (
+        !existing ||
+        Date.parse(gate.createdAt) >= Date.parse(existing.createdAt)
+      ) {
+        latest.set(key, gate);
+      }
+    }
+    return Object.fromEntries(
+      [...latest.entries()].map(([gateKey, gate]) => [gateKey, gate.status]),
+    );
   }
 
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
+      inputs?: WorkflowArtifactInputRef[];
       outputs?: WorkflowArtifactOutputRef[];
       gates?: WorkflowGateConfig[];
+      dependsOn?: string[];
     },
     lease: WorktreeLease,
     prompt: string,
@@ -695,9 +866,23 @@ export function createWorkflowEngine(
       node.id,
     );
     const requiredArtifactTypes = requiredArtifactTypesForNode(node);
+    const allNodes = await options.repositories.listNodes(runId);
+    const currentIndex = allNodes.findIndex((item) => item.id === node.id);
+    const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const deliveryRef = await deliveryRefForNode(runId, node, lease);
+    const promptWithDeliveryRef =
+      deliveryRef &&
+      node.outputs?.some((output) => output.type === 'qa-release-signoff')
+        ? [
+            prompt,
+            '',
+            `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${deliveryRef}.`,
+          ].join('\n')
+        : prompt;
+
     return {
       roleConfig: { role: node.role },
-      prompt: appendArtifactProtocol(prompt, {
+      prompt: appendArtifactProtocol(promptWithDeliveryRef, {
         outputDir,
         role: node.role,
         requiredArtifactTypes,
@@ -712,9 +897,37 @@ export function createWorkflowEngine(
         repoPath: lease.worktreePath,
         dataDir: options.dataDir,
       },
+      nodeInputs: node.inputs ?? [],
+      nodeDependencies: node.dependsOn ?? [],
+      deliveryRef,
+      priorNodes: priorNodes.map((item) => ({
+        id: item.id,
+        role: item.role,
+        status: item.status,
+        outputs: item.outputs,
+        gates: item.gates,
+      })),
       artifactStore,
       requiredArtifactTypes,
     };
+  }
+
+  async function deliveryRefForNode(
+    runId: string,
+    node: { outputs?: WorkflowArtifactOutputRef[] },
+    lease: WorktreeLease,
+  ): Promise<string | undefined> {
+    const latest = await latestQaValidationRef(runId);
+    if (latest) {
+      return latest;
+    }
+    if (
+      options.worktreeManager &&
+      node.outputs?.some((output) => output.type === 'qa-release-signoff')
+    ) {
+      return `sha:${await options.worktreeManager.getLeaseHead(lease.id)}`;
+    }
+    return undefined;
   }
 
   async function hasMissingArtifactDependency(
@@ -813,6 +1026,13 @@ export function createWorkflowEngine(
             '- For demand-card and prd JSON artifacts, include acceptanceCriteria with id and description fields.',
           ]
         : []),
+      ...(input.requiredArtifactTypes.some((type) =>
+        ['ac-evidence', 'qa-release-signoff'].includes(type),
+      )
+        ? [
+            '- For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor: outputPaths pointing to a file under TEKON_OUTPUT_DIR or an existing repo path, or known gateResultIds/artifactIds.',
+          ]
+        : []),
       '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
       '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
       '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
@@ -861,6 +1081,30 @@ export function createWorkflowEngine(
     const workflow = await mustGetWorkflow(runId);
     const demand = await mustGetDemand(workflow.demandId);
     const artifacts = await artifactSummariesForNode(runId, node);
+    const allNodes = await options.repositories.listNodes(runId);
+    const currentIndex = allNodes.findIndex((item) => item.id === node.id);
+    const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const priorNodeLines = priorNodes.map((item) =>
+      [
+        `- ${item.id} role=${item.role} status=${item.status}`,
+        item.outputs.length > 0
+          ? `outputs=${item.outputs.map((output) => output.type).join(',')}`
+          : 'outputs=none',
+        item.gates.length > 0
+          ? `gates=${gatesWithStableKeys(item.gates, item.id)
+              .map((gate) => `${gate.type}:${gate.gateKey}`)
+              .join(',')}`
+          : 'gates=none',
+      ].join(' '),
+    );
+    const processCheckpointRequired = node.outputs.some(
+      (output) => output.type === 'process-checkpoint',
+    );
+    const expectedDeliveryRef = node.outputs.some(
+      (output) => output.type === 'qa-release-signoff',
+    )
+      ? await latestQaValidationRef(runId)
+      : undefined;
     return buildRolePrompt({
       role,
       taskInstruction: [
@@ -869,8 +1113,24 @@ export function createWorkflowEngine(
         demand.body,
         '',
         `Execute workflow node ${node.id}.`,
+        node.inputs.length > 0
+          ? `Declared input artifact aliases: ${node.inputs
+              .map((input) => `${input.id}:${input.type}`)
+              .join(', ')}.`
+          : 'Declared input artifact aliases: none.',
+        priorNodeLines.length > 0
+          ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
+          : 'Prior workflow nodes: none.',
+        processCheckpointRequired
+          ? 'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes. Also include process-checkpoint.artifactEvidence for every listed prior node output, process-checkpoint.gateEvidence for every listed prior node gate with its gateType, gateKey, and observed passed/skipped status, and process-checkpoint.humanDecisionEvidence.pending.'
+          : '',
+        expectedDeliveryRef
+          ? `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${expectedDeliveryRef}.`
+          : '',
         `Produce the requested artifacts and preserve evidence for gates.`,
-      ].join('\n'),
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
       projectContext: {
         runId,
         nodeId: node.id,
@@ -949,6 +1209,19 @@ export function createWorkflowEngine(
       throw new Error(`demand not found: ${demandId}`);
     }
     return demand;
+  }
+
+  async function latestQaValidationRef(
+    runId: string,
+  ): Promise<string | undefined> {
+    const events = await options.repositories.listAuditEvents(runId);
+    return events
+      .filter((event) => event.type === 'qa.validation.ref')
+      .map((event) =>
+        typeof event.payload.ref === 'string' ? event.payload.ref : undefined,
+      )
+      .filter((ref): ref is string => Boolean(ref))
+      .at(-1);
   }
 }
 
@@ -1037,7 +1310,7 @@ function templateNodeToExecutable(
       fromNodeId: nodeIdByTemplateId.get(input.fromNodeId) ?? input.fromNodeId,
     })),
     outputs: node.outputs,
-    gates: node.gates,
+    gates: gatesWithStableKeys(node.gates, node.id),
     dependsOn: node.dependsOn.map(
       (dependency) => nodeIdByTemplateId.get(dependency) ?? dependency,
     ),
@@ -1072,9 +1345,47 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
     phaseId: node.phaseId,
     inputs: node.inputs,
     outputs: node.outputs,
-    gates: node.gates as WorkflowGateConfig[],
+    gates: gatesWithStableKeys(node.gates as WorkflowGateConfig[], node.id),
     dependsOn: node.dependencies,
   };
+}
+
+function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
+  gates: T[],
+  nodeId = 'workflow node',
+): Array<T & { gateKey: string }> {
+  const keyed = gates.map((gate, index) => ({
+    ...gate,
+    gateKey: gate.gateKey ?? stableGateKey(gate, index),
+  }));
+  const seen = new Set<string>();
+  for (const gate of keyed) {
+    if (seen.has(gate.gateKey)) {
+      throw new Error(
+        `duplicate gateKey "${gate.gateKey}" in node "${nodeId}"`,
+      );
+    }
+    seen.add(gate.gateKey);
+  }
+  return keyed;
+}
+
+function stableGateKey(
+  gate: Pick<
+    GateConfig | WorkflowGateConfig,
+    'type' | 'artifactType' | 'commandRef' | 'skipReason'
+  >,
+  index: number,
+): string {
+  return [
+    String(index).padStart(2, '0'),
+    gate.type,
+    gate.artifactType ? `artifact=${gate.artifactType}` : '',
+    gate.commandRef ? `commandRef=${gate.commandRef}` : '',
+    gate.skipReason ? 'skipped' : '',
+  ]
+    .filter(Boolean)
+    .join(':');
 }
 
 function makeSyntheticLease(

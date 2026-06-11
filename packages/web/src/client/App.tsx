@@ -211,8 +211,12 @@ function App() {
   const [demandText, setDemandText] = useState('');
   const [demandShape, setDemandShape] = useState<DemandShape | null>(null);
   const [demandShapePath, setDemandShapePath] = useState<string | null>(null);
-  const [runTemplate, setRunTemplate] = useState('standard-feature');
-  const [runAgent, setRunAgent] = useState('mock');
+  const [runTemplate, setRunTemplate] = useState('standard-delivery');
+  const [runAgent, setRunAgent] = useState('codex');
+  const [runTimeoutMs, setRunTimeoutMs] = useState('3600000');
+  const [runNoProgressTimeoutMs, setRunNoProgressTimeoutMs] =
+    useState('900000');
+  const [runProgressHeartbeatMs, setRunProgressHeartbeatMs] = useState('60000');
   const [allowDirtyBase, setAllowDirtyBase] = useState(false);
   const [auditNodeFilter, setAuditNodeFilter] = useState('');
   const [auditGateFilter, setAuditGateFilter] = useState('');
@@ -224,6 +228,7 @@ function App() {
   const pendingDecision = decisions[0];
   const workflowOptions = useMemo(() => {
     const options = new Map<string, string>([
+      ['standard-delivery', 'standard-delivery'],
       ['standard-feature', 'standard-feature'],
       ['bugfix', 'bugfix'],
       ['test-improvement', 'test-improvement'],
@@ -355,6 +360,9 @@ function App() {
       agent: runAgent,
       allowDirtyBase,
       demandShapePath,
+      timeoutMs: positiveIntOrUndefined(runTimeoutMs),
+      noProgressTimeoutMs: positiveIntOrUndefined(runNoProgressTimeoutMs),
+      progressHeartbeatMs: positiveIntOrUndefined(runProgressHeartbeatMs),
       token,
     });
     setMessage(`run started: ${result.run.id} ${result.run.status}`);
@@ -376,7 +384,6 @@ function App() {
     });
     setDemandShape(result.shape);
     setDemandShapePath(result.shapePath);
-    setRunTemplate(result.shape.recommendedTemplate);
     setMessage(`demand shaped: ${result.shape.id}`);
   }
 
@@ -524,6 +531,37 @@ function App() {
               onChange={(event) => setAllowDirtyBase(event.target.checked)}
             />
             allow dirty base
+          </label>
+          <label>
+            timeout ms
+            <input
+              aria-label="Run timeout ms"
+              inputMode="numeric"
+              value={runTimeoutMs}
+              onChange={(event) => setRunTimeoutMs(event.target.value)}
+            />
+          </label>
+          <label>
+            no progress ms
+            <input
+              aria-label="Run no progress timeout ms"
+              inputMode="numeric"
+              value={runNoProgressTimeoutMs}
+              onChange={(event) =>
+                setRunNoProgressTimeoutMs(event.target.value)
+              }
+            />
+          </label>
+          <label>
+            heartbeat ms
+            <input
+              aria-label="Run progress heartbeat ms"
+              inputMode="numeric"
+              value={runProgressHeartbeatMs}
+              onChange={(event) =>
+                setRunProgressHeartbeatMs(event.target.value)
+              }
+            />
           </label>
           <label className="wide">
             demand
@@ -988,6 +1026,15 @@ async function rpc<T>(path: string, input?: unknown): Promise<T> {
     throw new Error(body.error?.message ?? `RPC failed: ${path}`);
   }
   return body.result as T;
+}
+
+function positiveIntOrUndefined(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

@@ -52,6 +52,7 @@ type GateResultRow = {
   run_id: string;
   node_id: string;
   gate_type: GateResult['gateType'];
+  gate_key: string | null;
   status: GateResult['status'];
   output_path: string | null;
   duration_ms: number;
@@ -135,6 +136,7 @@ type WorktreeLeaseRow = {
   repo_path: string;
   worktree_path: string;
   branch_name: string;
+  base_head: string | null;
   created_at: string;
   released_at: string | null;
 };
@@ -471,14 +473,15 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into gate_results (
-             id, run_id, node_id, gate_type, status, output_path, duration_ms, retries,
+             id, run_id, node_id, gate_type, gate_key, status, output_path, duration_ms, retries,
              fix_attempt_id, failure_classification, created_at
            ) values (
-             @id, @runId, @nodeId, @gateType, @status, @outputPath, @durationMs, @retries,
+             @id, @runId, @nodeId, @gateType, @gateKey, @status, @outputPath, @durationMs, @retries,
              @fixAttemptId, @failureClassification, @createdAt
            )`,
         ).run({
           ...gateResult,
+          gateKey: gateResult.gateKey ?? null,
           outputPath: gateResult.outputPath ?? null,
           fixAttemptId: gateResult.fixAttemptId ?? null,
           failureClassification: gateResult.failureClassification ?? null,
@@ -492,7 +495,7 @@ export function createRepositories(
         db.prepare(
           `update gate_results
            set status = ?,
-               failure_classification = coalesce(?, failure_classification)
+               failure_classification = ?
            where id = ?`,
         ).run(patch.status, patch.failureClassification ?? null, gateResultId);
         const row = db
@@ -631,11 +634,15 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into worktree_leases (
-             id, run_id, node_id, role, repo_path, worktree_path, branch_name, created_at, released_at
+             id, run_id, node_id, role, repo_path, worktree_path, branch_name, base_head, created_at, released_at
            ) values (
-             @id, @runId, @nodeId, @role, @repoPath, @worktreePath, @branchName, @createdAt, @releasedAt
+             @id, @runId, @nodeId, @role, @repoPath, @worktreePath, @branchName, @baseHead, @createdAt, @releasedAt
            )`,
-        ).run({ ...lease, releasedAt: lease.releasedAt ?? null });
+        ).run({
+          ...lease,
+          baseHead: lease.baseHead ?? null,
+          releasedAt: lease.releasedAt ?? null,
+        });
         return lease;
       });
     },
@@ -898,6 +905,7 @@ function mapGateResult(row: GateResultRow): GateResult {
     runId: row.run_id,
     nodeId: row.node_id,
     gateType: row.gate_type,
+    gateKey: row.gate_key,
     status: row.status,
     outputPath: row.output_path,
     durationMs: row.duration_ms,
@@ -958,6 +966,7 @@ function mapWorktreeLease(row: WorktreeLeaseRow): WorktreeLease {
     repoPath: row.repo_path,
     worktreePath: row.worktree_path,
     branchName: row.branch_name,
+    baseHead: row.base_head,
     createdAt: row.created_at,
     releasedAt: row.released_at,
   });

@@ -108,6 +108,25 @@ describe('delivery evidence package', () => {
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA signoff',
+        body: 'QA validated the delivered ref.',
+        targetRef: 'sha:feedface',
+        validatedRef: 'sha:feedface',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation covered refund request on sha:feedface.',
+          },
+        ],
+      }),
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
       type: 'rollback-plan',
       content: '# Rollback\n',
     });
@@ -169,6 +188,7 @@ describe('delivery evidence package', () => {
     expect(evidence.artifacts.map((artifact) => artifact.type).sort()).toEqual([
       'delivery-package',
       'prd',
+      'qa-release-signoff',
       'rollback-plan',
       'test-report',
     ]);
@@ -190,5 +210,89 @@ describe('delivery evidence package', () => {
     expect(evidence.securityScans).toEqual([
       expect.objectContaining({ gateResultId: 'gate_3', status: 'passed' }),
     ]);
+    expect(evidence.qaReleaseSignoffs).toEqual([
+      expect.objectContaining({
+        artifactId: expect.any(String),
+        status: 'passed',
+        targetRef: 'sha:feedface',
+        validatedRef: 'sha:feedface',
+        matchedRef: true,
+      }),
+    ]);
+  });
+
+  it('keeps latest gate evidence separate by stable gate key', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-evidence-gates-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await repositories.createDemand({
+      id: 'demand_1',
+      title: 'Security evidence',
+      body: 'Keep keyed security gates.',
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createProject({
+      id: 'project_1',
+      name: 'tekon',
+      repoPath,
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createWorkflowInstance({
+      id: 'run_1',
+      projectId: 'project_1',
+      demandId: 'demand_1',
+      status: 'passed',
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createNode({
+      id: 'rd-code',
+      runId: 'run_1',
+      role: 'rd',
+      status: 'passed',
+      gates: [],
+      dependencies: [],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_secret_scan',
+      runId: 'run_1',
+      nodeId: 'rd-code',
+      gateType: 'security-scan',
+      gateKey: '00:security-scan:commandRef=secret-scan',
+      status: 'passed',
+      outputPath: '.tekon/runs/run_1/gates/secrets.log',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_dependency_scan',
+      runId: 'run_1',
+      nodeId: 'rd-code',
+      gateType: 'security-scan',
+      gateKey: '01:security-scan:commandRef=dependency-scan',
+      status: 'passed',
+      outputPath: '.tekon/runs/run_1/gates/dependencies.log',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:02.000Z',
+    });
+
+    const evidence = await createDeliveryEvidencePackage({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(evidence.securityScans.map((scan) => scan.gateResultId)).toEqual([
+      'gate_secret_scan',
+      'gate_dependency_scan',
+    ]);
+    db.close();
   });
 });
