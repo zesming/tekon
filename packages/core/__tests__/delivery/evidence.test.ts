@@ -108,6 +108,25 @@ describe('delivery evidence package', () => {
     await store.writeArtifact({
       runId: 'run_1',
       nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA signoff',
+        body: 'QA validated the delivered ref.',
+        targetRef: 'sha:feedface',
+        validatedRef: 'sha:feedface',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation covered refund request on sha:feedface.',
+          },
+        ],
+      }),
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
       type: 'rollback-plan',
       content: '# Rollback\n',
     });
@@ -169,6 +188,7 @@ describe('delivery evidence package', () => {
     expect(evidence.artifacts.map((artifact) => artifact.type).sort()).toEqual([
       'delivery-package',
       'prd',
+      'qa-release-signoff',
       'rollback-plan',
       'test-report',
     ]);
@@ -189,6 +209,15 @@ describe('delivery evidence package', () => {
     ]);
     expect(evidence.securityScans).toEqual([
       expect.objectContaining({ gateResultId: 'gate_3', status: 'passed' }),
+    ]);
+    expect(evidence.qaReleaseSignoffs).toEqual([
+      expect.objectContaining({
+        artifactId: expect.any(String),
+        status: 'passed',
+        targetRef: 'sha:feedface',
+        validatedRef: 'sha:feedface',
+        matchedRef: true,
+      }),
     ]);
   });
 });

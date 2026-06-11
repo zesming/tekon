@@ -32,25 +32,41 @@ export const nodeStatusSchema = z.enum([
 export type NodeStatus = z.infer<typeof nodeStatusSchema>;
 
 export const artifactTypeSchema = z.enum([
+  'ac-evidence',
   'demand-card',
+  'demand-review',
   'prd',
   'tech-design',
+  'implementation-plan',
+  'requirement-interface-review',
+  'technical-review',
   'code-changes',
+  'code-review',
+  'test-plan',
+  'test-plan-review',
   'test-report',
+  'qa-release-signoff',
+  'qa-release-signoff-review',
   'review-report',
   'security-report',
   'rollback-plan',
+  'process-checkpoint',
   'delivery-package',
   'ci-status',
 ]);
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 
 export const gateTypeSchema = z.enum([
+  'ac-evidence',
   'build',
   'test',
   'lint',
   'e2e-pass',
   'schema',
+  'independent-review',
+  'role-scope',
+  'qa-signoff',
+  'process-completeness',
   'security-scan',
   'human',
 ]);

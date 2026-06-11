@@ -111,6 +111,25 @@ export async function evaluateWorkReadiness(input: {
       evidence: `${deliveryEvidence.acceptanceEvidence.filter((item) => item.status === 'passed').length}/${deliveryEvidence.acceptanceEvidence.length} acceptance criteria evidenced`,
     },
     {
+      id: 'qa-release-signoff-passed',
+      severity: 'required',
+      passed: deliveryEvidence.qaReleaseSignoffs.some(
+        (signoff) =>
+          signoff.status === 'passed' &&
+          signoff.matchedRef &&
+          signoff.criteriaEvidence > 0,
+      ),
+      evidence:
+        deliveryEvidence.qaReleaseSignoffs.length > 0
+          ? deliveryEvidence.qaReleaseSignoffs
+              .map(
+                (signoff) =>
+                  `${signoff.status} matchedRef=${signoff.matchedRef} criteriaEvidence=${signoff.criteriaEvidence} artifact=${signoff.artifactId}`,
+              )
+              .join('; ')
+          : 'QA release signoff missing',
+    },
+    {
       id: 'security-scans-passed',
       severity: 'required',
       passed:

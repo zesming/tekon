@@ -155,7 +155,16 @@ phases:
 
     expect(nodes.find((node) => node.id === 'pm-demand-review')).toMatchObject({
       role: 'pm',
-      gates: [{ type: 'schema', artifactType: 'review-report' }],
+      gates: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'schema',
+          artifactType: 'demand-review',
+        }),
+        expect.objectContaining({
+          type: 'role-scope',
+          artifactType: 'demand-review',
+        }),
+      ]),
     });
     expect(
       nodes.find((node) => node.id === 'rd-requirement-interface-review'),
@@ -183,7 +192,18 @@ phases:
       nodes.flatMap((node) => node.gates.map((gate) => gate.type)),
     );
     expect(gateTypes).toEqual(
-      new Set(['build', 'lint', 'schema', 'security-scan', 'test']),
+      new Set([
+        'ac-evidence',
+        'build',
+        'independent-review',
+        'lint',
+        'process-completeness',
+        'qa-signoff',
+        'role-scope',
+        'schema',
+        'security-scan',
+        'test',
+      ]),
     );
     expect(nodes.find((node) => node.id === 'rd-code-change')).toMatchObject({
       gates: expect.arrayContaining([

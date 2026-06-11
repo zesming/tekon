@@ -35,6 +35,15 @@ export interface CiStatusEvidence {
   checks: number;
 }
 
+export interface QaReleaseSignoffEvidence {
+  artifactId: string;
+  status: 'passed' | 'failed' | 'blocked';
+  targetRef: string;
+  validatedRef: string;
+  matchedRef: boolean;
+  criteriaEvidence: number;
+}
+
 export interface DeliveryEvidencePackage {
   runId: string;
   workflowStatus: WorkflowInstance['status'];
@@ -49,6 +58,7 @@ export interface DeliveryEvidencePackage {
   acceptanceEvidence: AcceptanceCriterionEvidence[];
   securityScans: SecurityScanEvidence[];
   ciStatuses: CiStatusEvidence[];
+  qaReleaseSignoffs: QaReleaseSignoffEvidence[];
 }
 
 export async function createDeliveryEvidencePackage(input: {
@@ -80,6 +90,7 @@ export async function createDeliveryEvidencePackage(input: {
         acceptanceEvidence: [],
         securityScans: [],
         ciStatuses: [],
+        qaReleaseSignoffs: [],
       };
 
   return {
@@ -192,7 +203,50 @@ function collectSemanticEvidence(
       failureClassification: gate.failureClassification,
     })),
     ciStatuses: latestCiStatusEvidence(repoPath, artifacts, auditEvents),
+    qaReleaseSignoffs: latestQaReleaseSignoffEvidence(repoPath, artifacts),
   };
+}
+
+function latestQaReleaseSignoffEvidence(
+  repoPath: string,
+  artifacts: Artifact[],
+): QaReleaseSignoffEvidence[] {
+  const signoffs = artifacts
+    .filter((artifact) => artifact.type === 'qa-release-signoff')
+    .flatMap((artifact) => {
+      const payload = readPayload(repoPath, artifact);
+      if (
+        !payload?.overallStatus ||
+        !payload.targetRef ||
+        !payload.validatedRef
+      ) {
+        return [];
+      }
+      return [
+        {
+          artifact,
+          evidence: {
+            artifactId: artifact.id,
+            status: payload.overallStatus,
+            targetRef: payload.targetRef,
+            validatedRef: payload.validatedRef,
+            matchedRef: payload.targetRef === payload.validatedRef,
+            criteriaEvidence: payload.criteriaEvidence?.length ?? 0,
+          } satisfies QaReleaseSignoffEvidence,
+        },
+      ];
+    });
+
+  const latest = signoffs.sort((left, right) => {
+    const leftCreated = timestampOrZero(left.artifact.createdAt);
+    const rightCreated = timestampOrZero(right.artifact.createdAt);
+    if (leftCreated !== rightCreated) {
+      return rightCreated - leftCreated;
+    }
+    return right.artifact.version - left.artifact.version;
+  })[0];
+
+  return latest ? [latest.evidence] : [];
 }
 
 function latestCiStatusEvidence(

@@ -141,6 +141,7 @@ function formatPrBody(input: {
     `- artifacts: ${input.evidence.artifacts.length}`,
     `- rollback plan: ${input.evidence.rollbackPlanPresent ? 'present' : 'missing'}`,
     ...formatAcceptanceEvidence(input.evidence),
+    ...formatQaReleaseSignoff(input.evidence),
     ...formatSecurityEvidence(input.evidence),
     ...formatCiEvidence(input.evidence),
     '',
@@ -182,6 +183,9 @@ function formatPreparationPackage(input: {
     '',
     '## Acceptance Evidence',
     ...formatAcceptanceEvidence(input.evidence),
+    '',
+    '## QA Release Signoff',
+    ...formatQaReleaseSignoff(input.evidence),
     '',
     '## Security',
     ...formatSecurityEvidence(input.evidence),
@@ -238,6 +242,22 @@ function formatSecurityEvidence(evidence: DeliveryEvidencePackage): string[] {
       `- ${scan.gateResultId}: ${scan.status}`,
       `  - output: ${scan.outputPath ?? 'none'}`,
       `  - failure: ${scan.failureClassification ?? 'none'}`,
+    ].join('\n'),
+  );
+}
+
+function formatQaReleaseSignoff(evidence: DeliveryEvidencePackage): string[] {
+  if (evidence.qaReleaseSignoffs.length === 0) {
+    return ['- qaSignoff: missing'];
+  }
+  return evidence.qaReleaseSignoffs.map((signoff) =>
+    [
+      `- qaSignoff: ${signoff.status}`,
+      `  - targetRef: ${signoff.targetRef}`,
+      `  - validatedRef: ${signoff.validatedRef}`,
+      `  - matchedRef: ${signoff.matchedRef}`,
+      `  - criteriaEvidence: ${signoff.criteriaEvidence}`,
+      `  - artifact: ${signoff.artifactId}`,
     ].join('\n'),
   );
 }

@@ -66,6 +66,25 @@ describe('pull request preparation package', () => {
       type: 'test-report',
       content: '# Test Report\n\npassed',
     });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_delivery',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA signoff',
+        body: 'QA validated the delivered branch.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+          },
+        ],
+      }),
+    });
     await repositories.recordGateResult({
       id: 'gate_1',
       runId: 'run_1',
@@ -131,6 +150,12 @@ describe('pull request preparation package', () => {
     );
     expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
       'Acceptance Evidence',
+    );
+    expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
+      'QA Release Signoff',
+    );
+    expect(readFileSync(preparation.prBodyPath, 'utf8')).toContain(
+      '- qaSignoff:',
     );
     expect(readFileSync(preparation.packagePath, 'utf8')).toContain(
       '- e2e: notApplicable reason=service has no browser surface',

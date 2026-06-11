@@ -10,15 +10,26 @@ import {
 describe('artifact schemas', () => {
   it('provides schemas for all built-in artifact types', () => {
     expect(Object.keys(artifactPayloadSchemas).sort()).toEqual([
+      'ac-evidence',
       'ci-status',
       'code-changes',
+      'code-review',
       'delivery-package',
       'demand-card',
+      'demand-review',
+      'implementation-plan',
       'prd',
+      'process-checkpoint',
+      'qa-release-signoff',
+      'qa-release-signoff-review',
+      'requirement-interface-review',
       'review-report',
       'rollback-plan',
       'security-report',
       'tech-design',
+      'technical-review',
+      'test-plan',
+      'test-plan-review',
       'test-report',
     ]);
 
@@ -78,6 +89,59 @@ describe('artifact schemas', () => {
         securityFindings: [],
       }),
     ).toMatchObject({ securityFindings: [] });
+  });
+
+  it('validates role-scoped independent review, AC evidence, and QA signoff payloads', () => {
+    expect(
+      validateArtifactPayload('technical-review', {
+        title: 'RD technical review',
+        body: 'Implementation plan is reasonable.',
+        reviewScope: 'technical-design',
+        reviewProcess: {
+          mode: 'independent-process',
+          reviewerId: 'rd-reviewer-process-1',
+          reviewerRole: 'rd',
+          targetNodeId: 'rd-implementation-plan',
+          targetRole: 'rd',
+        },
+        decision: 'approved',
+      }),
+    ).toMatchObject({
+      reviewScope: 'technical-design',
+      decision: 'approved',
+    });
+
+    expect(
+      validateArtifactPayload('ac-evidence', {
+        title: 'AC evidence',
+        body: 'All acceptance criteria are verified.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Unit test output covers AC-1.',
+            gateResultIds: ['gate_test'],
+          },
+        ],
+      }),
+    ).toMatchObject({ criteriaEvidence: [{ criterionId: 'AC-1' }] });
+
+    expect(
+      validateArtifactPayload('qa-release-signoff', {
+        title: 'QA release signoff',
+        body: 'The tested commit is the delivered commit.',
+        targetRef: 'sha:abc123',
+        validatedRef: 'sha:abc123',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed on sha:abc123.',
+          },
+        ],
+      }),
+    ).toMatchObject({ overallStatus: 'passed' });
   });
 
   it('normalizes provider-style code changes artifacts into a readable payload', () => {

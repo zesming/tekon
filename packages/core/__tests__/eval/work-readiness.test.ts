@@ -163,6 +163,42 @@ describe('work readiness evaluation', () => {
       audit,
       runId: 'run_1',
     });
+    const afterPrepareBeforeSignoff = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(afterPrepareBeforeSignoff.ready).toBe(false);
+    expect(
+      afterPrepareBeforeSignoff.checks.find(
+        (check) => check.id === 'qa-release-signoff-passed',
+      ),
+    ).toMatchObject({
+      severity: 'required',
+      passed: false,
+      evidence: 'QA release signoff missing',
+    });
+
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA release signoff',
+        body: 'QA validated the branch that will be delivered.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+          },
+        ],
+      }),
+    });
     const afterPrepare = await evaluateWorkReadiness({
       repositories,
       audit,

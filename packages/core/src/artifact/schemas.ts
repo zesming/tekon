@@ -18,6 +18,36 @@ const criteriaEvidenceSchema = z.object({
   outputPaths: z.array(z.string().min(1)).default([]),
 });
 
+const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo']);
+
+const reviewScopeSchema = z.enum([
+  'demand-quality',
+  'requirement-interface',
+  'technical-design',
+  'implementation-risk',
+  'test-plan',
+  'test-plan-intent',
+  'validation',
+  'release-signoff',
+  'code-change',
+  'process-completeness',
+  'delivery-readiness',
+]);
+
+const reviewProcessSchema = z.object({
+  mode: z.enum(['independent-agent', 'independent-process']),
+  reviewerId: z.string().min(1),
+  reviewerRole: roleSchema,
+  targetNodeId: z.string().min(1),
+  targetRole: roleSchema,
+});
+
+const reviewFindingSchema = z.object({
+  severity: z.enum(['critical', 'important', 'minor']).default('minor'),
+  ownerRole: roleSchema.optional(),
+  message: z.string().min(1),
+});
+
 const securityFindingSchema = z.object({
   id: z.string().min(1),
   severity: z.enum(['low', 'medium', 'high', 'critical']),
@@ -38,6 +68,50 @@ const acceptanceArtifactPayloadSchema = markdownArtifactPayloadSchema.extend({
 
 const evidenceArtifactPayloadSchema = markdownArtifactPayloadSchema.extend({
   criteriaEvidence: z.array(criteriaEvidenceSchema).min(1).optional(),
+});
+
+const requiredEvidenceArtifactPayloadSchema =
+  markdownArtifactPayloadSchema.extend({
+    criteriaEvidence: z.array(criteriaEvidenceSchema).min(1),
+  });
+
+const roleScopedReviewPayloadSchema = evidenceArtifactPayloadSchema.extend({
+  reviewScope: reviewScopeSchema,
+  reviewProcess: reviewProcessSchema,
+  decision: z.enum(['approved', 'changes-requested', 'blocked']),
+  findings: z.array(reviewFindingSchema).default([]),
+});
+
+const testCaseSchema = z.object({
+  id: z.string().min(1),
+  criterionId: z.string().min(1).optional(),
+  description: z.string().min(1),
+  method: z.enum(['unit', 'integration', 'e2e', 'manual', 'static']).optional(),
+});
+
+const testPlanPayloadSchema = markdownArtifactPayloadSchema.extend({
+  testBasis: z.array(z.string().min(1)).min(1),
+  testCases: z.array(testCaseSchema).min(1),
+  criteriaEvidence: z.array(criteriaEvidenceSchema).min(1).optional(),
+});
+
+const qaReleaseSignoffPayloadSchema =
+  requiredEvidenceArtifactPayloadSchema.extend({
+    targetRef: z.string().min(1),
+    validatedRef: z.string().min(1),
+    overallStatus: z.enum(['passed', 'failed', 'blocked']),
+  });
+
+const processCheckpointPayloadSchema = evidenceArtifactPayloadSchema.extend({
+  requiredNodes: z
+    .array(
+      z.object({
+        nodeId: z.string().min(1),
+        status: z.enum(['passed', 'skipped']),
+      }),
+    )
+    .min(1),
+  missingInformation: z.array(z.string().min(1)).default([]),
 });
 
 const securityReportPayloadSchema = markdownArtifactPayloadSchema.extend({
@@ -61,14 +135,25 @@ const ciStatusPayloadSchema = markdownArtifactPayloadSchema.extend({
 });
 
 export const artifactPayloadSchemas = {
+  'ac-evidence': requiredEvidenceArtifactPayloadSchema,
   'demand-card': acceptanceArtifactPayloadSchema,
+  'demand-review': roleScopedReviewPayloadSchema,
   prd: acceptanceArtifactPayloadSchema,
   'tech-design': markdownArtifactPayloadSchema,
+  'implementation-plan': markdownArtifactPayloadSchema,
+  'requirement-interface-review': roleScopedReviewPayloadSchema,
+  'technical-review': roleScopedReviewPayloadSchema,
   'code-changes': markdownArtifactPayloadSchema,
+  'code-review': roleScopedReviewPayloadSchema,
+  'test-plan': testPlanPayloadSchema,
+  'test-plan-review': roleScopedReviewPayloadSchema,
   'test-report': evidenceArtifactPayloadSchema,
+  'qa-release-signoff': qaReleaseSignoffPayloadSchema,
+  'qa-release-signoff-review': roleScopedReviewPayloadSchema,
   'review-report': evidenceArtifactPayloadSchema,
   'security-report': securityReportPayloadSchema,
   'rollback-plan': markdownArtifactPayloadSchema,
+  'process-checkpoint': processCheckpointPayloadSchema,
   'delivery-package': evidenceArtifactPayloadSchema,
   'ci-status': ciStatusPayloadSchema,
 } satisfies Record<ArtifactType, z.ZodTypeAny>;
@@ -76,6 +161,19 @@ export const artifactPayloadSchemas = {
 export type ArtifactPayload = z.infer<typeof markdownArtifactPayloadSchema> & {
   acceptanceCriteria?: z.infer<typeof acceptanceCriterionSchema>[];
   criteriaEvidence?: z.infer<typeof criteriaEvidenceSchema>[];
+  reviewScope?: z.infer<typeof reviewScopeSchema>;
+  reviewProcess?: z.infer<typeof reviewProcessSchema>;
+  decision?: z.infer<typeof roleScopedReviewPayloadSchema>['decision'];
+  findings?: z.infer<typeof reviewFindingSchema>[];
+  targetRef?: string;
+  validatedRef?: string;
+  overallStatus?: z.infer<
+    typeof qaReleaseSignoffPayloadSchema
+  >['overallStatus'];
+  requiredNodes?: z.infer<
+    typeof processCheckpointPayloadSchema
+  >['requiredNodes'];
+  missingInformation?: string[];
   securityFindings?: z.infer<typeof securityFindingSchema>[];
   ciStatus?: z.infer<typeof ciStatusPayloadSchema>['ciStatus'];
   prUrl?: string;
@@ -90,14 +188,25 @@ export const agentArtifactManifestSchema = z
         z
           .object({
             type: z.enum([
+              'ac-evidence',
               'demand-card',
+              'demand-review',
               'prd',
               'tech-design',
+              'implementation-plan',
+              'requirement-interface-review',
+              'technical-review',
               'code-changes',
+              'code-review',
+              'test-plan',
+              'test-plan-review',
               'test-report',
+              'qa-release-signoff',
+              'qa-release-signoff-review',
               'review-report',
               'security-report',
               'rollback-plan',
+              'process-checkpoint',
               'delivery-package',
             ]),
             path: z.string().min(1),

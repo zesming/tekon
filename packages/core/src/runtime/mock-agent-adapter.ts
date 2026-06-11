@@ -5,14 +5,25 @@ import type { ArtifactType } from '../types/domain.js';
 import type { AgentAdapter } from './agent-adapter.js';
 
 const builtInArtifactTypes: ArtifactType[] = [
+  'ac-evidence',
   'demand-card',
+  'demand-review',
   'prd',
   'tech-design',
+  'implementation-plan',
+  'requirement-interface-review',
+  'technical-review',
   'code-changes',
+  'code-review',
+  'test-plan',
+  'test-plan-review',
   'test-report',
+  'qa-release-signoff',
+  'qa-release-signoff-review',
   'review-report',
   'security-report',
   'rollback-plan',
+  'process-checkpoint',
   'delivery-package',
 ];
 
@@ -80,6 +91,7 @@ function formatMockArtifactContent(type: ArtifactType, role: string): string {
     );
   }
   if (
+    type === 'ac-evidence' ||
     type === 'test-report' ||
     type === 'review-report' ||
     type === 'delivery-package'
@@ -99,8 +111,121 @@ function formatMockArtifactContent(type: ArtifactType, role: string): string {
       2,
     );
   }
+  if (isRoleScopedReviewArtifact(type)) {
+    return JSON.stringify(
+      {
+        ...base,
+        reviewScope: reviewScopeForMock(type, role),
+        reviewProcess: {
+          mode: 'independent-process',
+          reviewerId: `mock-${role}-${type}`,
+          reviewerRole: role,
+          targetNodeId: `target-${type}`,
+          targetRole: role,
+        },
+        decision: 'approved',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: `Mock ${type} review covers AC-1.`,
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'test-plan') {
+    return JSON.stringify(
+      {
+        ...base,
+        testBasis: ['demand-card', 'prd'],
+        testCases: [
+          {
+            id: 'TC-1',
+            criterionId: 'AC-1',
+            description: 'Verify AC-1.',
+            method: 'unit',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'qa-release-signoff') {
+    return JSON.stringify(
+      {
+        ...base,
+        targetRef: 'mock-ref',
+        validatedRef: 'mock-ref',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Mock QA signoff validates mock-ref.',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'process-checkpoint') {
+    return JSON.stringify(
+      {
+        ...base,
+        requiredNodes: [{ nodeId: 'mock-node', status: 'passed' }],
+        missingInformation: [],
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Mock process checkpoint covers AC-1.',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
   if (type === 'security-report') {
     return JSON.stringify({ ...base, securityFindings: [] }, null, 2);
   }
   return `# ${type}\n\n${base.body}`;
+}
+
+function isRoleScopedReviewArtifact(type: ArtifactType): boolean {
+  return [
+    'code-review',
+    'demand-review',
+    'qa-release-signoff-review',
+    'requirement-interface-review',
+    'technical-review',
+    'test-plan-review',
+  ].includes(type);
+}
+
+function reviewScopeForMock(type: ArtifactType, role: string): string {
+  if (type === 'demand-review') {
+    return 'demand-quality';
+  }
+  if (type === 'requirement-interface-review') {
+    return 'requirement-interface';
+  }
+  if (type === 'technical-review') {
+    return 'technical-design';
+  }
+  if (type === 'test-plan-review') {
+    return role === 'pm' ? 'test-plan-intent' : 'test-plan';
+  }
+  if (type === 'qa-release-signoff-review') {
+    return 'release-signoff';
+  }
+  if (type === 'code-review') {
+    return 'code-change';
+  }
+  return 'delivery-readiness';
 }

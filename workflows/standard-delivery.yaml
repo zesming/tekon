@@ -30,10 +30,14 @@ phases:
           - demand:demand-card
           - prd:prd
         outputs:
-          - pm-demand-review:review-report
+          - pm-demand-review:demand-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: demand-review
+          - type: independent-review
+            artifactType: demand-review
+          - type: role-scope
+            artifactType: demand-review
   - id: requirement-interface-review
     name: Requirement Interface Review
     dependsOn:
@@ -44,23 +48,31 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - pm-demand-review:review-report
+          - pm-demand-review:demand-review
         outputs:
-          - rd-requirement-interface-review:review-report
+          - rd-requirement-interface-review:requirement-interface-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: requirement-interface-review
+          - type: independent-review
+            artifactType: requirement-interface-review
+          - type: role-scope
+            artifactType: requirement-interface-review
       - id: qa-requirement-interface-review
         role: qa
         inputs:
           - demand:demand-card
           - prd:prd
-          - pm-demand-review:review-report
+          - pm-demand-review:demand-review
         outputs:
-          - qa-requirement-interface-review:review-report
+          - qa-requirement-interface-review:requirement-interface-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: requirement-interface-review
+          - type: independent-review
+            artifactType: requirement-interface-review
+          - type: role-scope
+            artifactType: requirement-interface-review
   - id: rd-plan
     name: RD Implementation Plan
     dependsOn:
@@ -71,13 +83,13 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - rd-requirement-interface-review:review-report
-          - qa-requirement-interface-review:review-report
+          - rd-requirement-interface-review:requirement-interface-review
+          - qa-requirement-interface-review:requirement-interface-review
         outputs:
-          - implementation-plan:tech-design
+          - implementation-plan:implementation-plan
         gates:
           - type: schema
-            artifactType: tech-design
+            artifactType: implementation-plan
   - id: rd-plan-review
     name: RD Technical Review
     dependsOn:
@@ -86,12 +98,16 @@ phases:
       - id: rd-technical-review
         role: rd
         inputs:
-          - implementation-plan:tech-design
+          - implementation-plan:implementation-plan
         outputs:
-          - rd-technical-review:review-report
+          - rd-technical-review:technical-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: technical-review
+          - type: independent-review
+            artifactType: technical-review
+          - type: role-scope
+            artifactType: technical-review
   - id: qa-plan
     name: QA Test Plan
     dependsOn:
@@ -102,13 +118,13 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - implementation-plan:tech-design
-          - rd-technical-review:review-report
+          - implementation-plan:implementation-plan
+          - rd-technical-review:technical-review
         outputs:
-          - qa-test-plan:test-report
+          - qa-test-plan:test-plan
         gates:
           - type: schema
-            artifactType: test-report
+            artifactType: test-plan
   - id: qa-plan-review
     name: QA Test Plan Review
     dependsOn:
@@ -118,23 +134,31 @@ phases:
         role: qa
         inputs:
           - demand:demand-card
-          - qa-test-plan:test-report
+          - qa-test-plan:test-plan
         outputs:
-          - qa-test-plan-review:review-report
+          - qa-test-plan-review:test-plan-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: test-plan-review
+          - type: independent-review
+            artifactType: test-plan-review
+          - type: role-scope
+            artifactType: test-plan-review
       - id: pm-test-plan-intent-review
         role: pm
         inputs:
           - demand:demand-card
           - prd:prd
-          - qa-test-plan:test-report
+          - qa-test-plan:test-plan
         outputs:
-          - pm-test-plan-intent-review:review-report
+          - pm-test-plan-intent-review:test-plan-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: test-plan-review
+          - type: independent-review
+            artifactType: test-plan-review
+          - type: role-scope
+            artifactType: test-plan-review
   - id: rd-implementation
     name: RD Implementation
     dependsOn:
@@ -145,10 +169,10 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - implementation-plan:tech-design
-          - qa-test-plan:test-report
-          - qa-test-plan-review:review-report
-          - pm-test-plan-intent-review:review-report
+          - implementation-plan:implementation-plan
+          - qa-test-plan:test-plan
+          - qa-test-plan-review:test-plan-review
+          - pm-test-plan-intent-review:test-plan-review
         outputs:
           - code:code-changes
         gates:
@@ -170,14 +194,18 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - implementation-plan:tech-design
-          - qa-test-plan:test-report
+          - implementation-plan:implementation-plan
+          - qa-test-plan:test-plan
           - code:code-changes
         outputs:
-          - reviewer-change-review:review-report
+          - reviewer-change-review:code-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: code-review
+          - type: independent-review
+            artifactType: code-review
+          - type: role-scope
+            artifactType: code-review
   - id: qa-final-validation
     name: QA Final Validation
     dependsOn:
@@ -188,16 +216,21 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - qa-test-plan:test-report
+          - qa-test-plan:test-plan
           - code:code-changes
-          - reviewer-change-review:review-report
+          - reviewer-change-review:code-review
         outputs:
           - qa-validation:test-report
+          - qa-ac-evidence:ac-evidence
         gates:
           - type: test
             commandRef: test
           - type: schema
             artifactType: test-report
+          - type: schema
+            artifactType: ac-evidence
+          - type: ac-evidence
+            artifactType: ac-evidence
   - id: qa-signoff-review
     name: QA Release Signoff Review
     dependsOn:
@@ -208,14 +241,23 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - qa-test-plan:test-report
+          - qa-test-plan:test-plan
           - qa-validation:test-report
           - code:code-changes
         outputs:
-          - qa-release-signoff-review:review-report
+          - qa-release-signoff:qa-release-signoff
+          - qa-release-signoff-review:qa-release-signoff-review
         gates:
           - type: schema
-            artifactType: review-report
+            artifactType: qa-release-signoff
+          - type: qa-signoff
+            artifactType: qa-release-signoff
+          - type: schema
+            artifactType: qa-release-signoff-review
+          - type: independent-review
+            artifactType: qa-release-signoff-review
+          - type: role-scope
+            artifactType: qa-release-signoff-review
   - id: pmo-delivery
     name: PMO Delivery Checkpoint
     dependsOn:
@@ -226,15 +268,21 @@ phases:
         inputs:
           - demand:demand-card
           - prd:prd
-          - pm-demand-review:review-report
-          - implementation-plan:tech-design
-          - rd-technical-review:review-report
-          - qa-test-plan:test-report
+          - pm-demand-review:demand-review
+          - implementation-plan:implementation-plan
+          - rd-technical-review:technical-review
+          - qa-test-plan:test-plan
           - qa-validation:test-report
-          - reviewer-change-review:review-report
-          - qa-release-signoff-review:review-report
+          - reviewer-change-review:code-review
+          - qa-release-signoff:qa-release-signoff
+          - qa-release-signoff-review:qa-release-signoff-review
         outputs:
+          - process-checkpoint:process-checkpoint
           - delivery:delivery-package
         gates:
+          - type: schema
+            artifactType: process-checkpoint
+          - type: process-completeness
+            artifactType: process-checkpoint
           - type: schema
             artifactType: delivery-package
