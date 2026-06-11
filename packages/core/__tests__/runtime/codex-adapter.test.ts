@@ -573,7 +573,7 @@ describe('codex adapter', () => {
     db.close();
   });
 
-  it('rejects non-zero Codex exits even when required artifacts are present', async () => {
+  it('accepts non-zero Codex exits when required artifacts are complete', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-codex-nonzero-artifacts-'),
     );
@@ -618,7 +618,7 @@ describe('codex adapter', () => {
 
     expect(result).toMatchObject({
       provider: 'codex',
-      exitCode: 1,
+      exitCode: 0,
       timedOut: false,
       artifacts: [expect.objectContaining({ type: 'demand-card' })],
     });

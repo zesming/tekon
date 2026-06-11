@@ -159,7 +159,7 @@ export function createCodexAdapter(
       const hasCompleteRequiredArtifacts =
         requiredArtifactTypes.length > 0 && missingRequiredTypes.length === 0;
       if (
-        result.timedOut &&
+        (result.timedOut || hasNonZeroExitCode) &&
         !artifactIngestionFailed &&
         hasCompleteRequiredArtifacts
       ) {

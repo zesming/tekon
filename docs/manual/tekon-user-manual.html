@@ -1483,12 +1483,11 @@
             和 heartbeat 次数。CommandGateway 会排除自身 stdout/stderr/progress
             文件，只把 artifact、manifest 等产物文件变化计入进展；diff
             级续期和可恢复 job runner 仍是后续增强。若 Codex
-            因超时中断但已写完有效 manifest，adapter 会在必需 artifact
-            校验通过后把该节点视为完成并继续进入
-            gate；非零退出不会被改写为成功，但已写入的合法 artifact
-            仍会被入库用于诊断。缺少 workflow 必需 artifact、artifact schema
-            不合法或 path/symlink 边界失败时，该节点会失败。QA validation 会记录
-            tested ref，QA signoff、PR package 和 readiness
+            超时或非零退出但已写完有效 manifest，adapter 会在必需 artifact
+            校验通过后把该节点视为完成并继续进入 gate；缺少 workflow 必需
+            artifact、artifact schema 不合法、path/symlink 边界失败，或非
+            timeout signal 终止时，该节点会失败。QA validation 会记录 tested
+            ref，QA signoff、PR package 和 readiness
             会校验所测对象与交付对象一致。Codex provider 不会自动创建 PR、merge
             或上线，远端副作用仍由
             <code>delivery create-pr --approve-human</code>
