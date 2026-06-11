@@ -1042,6 +1042,7 @@ export function createWorkflowEngine(
       )
         ? [
             '- For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+            '- Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels. Duplicate shared evidence across separate items when needed.',
             '- criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
             '- Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
             '- criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',

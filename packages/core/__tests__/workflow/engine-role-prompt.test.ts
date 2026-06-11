@@ -755,6 +755,9 @@ describe('workflow engine role prompt integration', () => {
       'For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
@@ -911,6 +914,9 @@ describe('workflow engine role prompt integration', () => {
     );
     expect(signoffPrompt).toContain(
       'For qa-release-signoff JSON artifacts, include targetRef, validatedRef, and overallStatus.',
+    );
+    expect(signoffPrompt).toContain(
+      'Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels.',
     );
     expect(signoffPrompt).toContain(
       'qa-release-signoff.overallStatus must be one of passed, failed, or blocked; do not use decision or recommendation as a substitute.',
