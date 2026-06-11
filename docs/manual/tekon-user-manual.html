@@ -1468,7 +1468,15 @@
             如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。真实 provider 默认总超时为 1 小时，无
+            schema 写完整字段。评审类 artifact 必须额外写入合法
+            <code>reviewScope</code>、<code>reviewProcess</code>、<code
+              >decision</code
+            >
+            和 <code>findings</code> 数组；如果有 finding，每项必须包含合法
+            <code>severity</code> 和 <code>message</code>，不能用
+            <code>reviewRole</code>、<code>reviewedArtifacts</code>
+            或数组/对象形式的 <code>reviewScope</code> 替代这些 schema
+            字段。真实 provider 默认总超时为 1 小时，无
             stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI
             <code>run</code> 可用
             <code>--timeout-ms</code

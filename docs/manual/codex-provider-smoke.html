@@ -329,7 +329,21 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
           <code>changedFiles</code>/<code>verification</code> 条目，会被 Tekon
           归一化为可审阅 artifact；真实 provider prompt 仍应优先按 Tekon schema
-          写出完整字段，避免依赖容错恢复。
+          写出完整字段，避免依赖容错恢复。<code>demand-review</code>、<code
+            >requirement-interface-review</code
+          >、<code>technical-review</code>、<code>test-plan-review</code>、<code
+            >code-review</code
+          >
+          和 <code>qa-release-signoff-review</code> 等评审类 artifact
+          必须额外包含合法 <code>reviewScope</code>、<code>reviewProcess</code
+          >、<code>decision</code> 和
+          <code>findings</code> 数组；如果有 finding，每项必须包含合法
+          <code>severity</code> 和 <code>message</code>。<code
+            >reviewRole</code
+          >、<code
+            >reviewedArtifacts</code
+          >
+          或数组/对象形式的 <code>reviewScope</code> 不能替代这些字段。
         </p>
       </section>
 
@@ -496,6 +510,22 @@ node packages/cli/dist/index.js eval work-usability record \
                 优先按 Tekon schema 写
                 <code>acceptanceCriteria[].id/description</code
                 >；兼容字段只用于真实 provider 字段漂移恢复。
+              </td>
+            </tr>
+            <tr>
+              <td>评审类 artifact schema 不合法</td>
+              <td>
+                缺少 <code>reviewScope</code>、<code>reviewProcess</code>、<code
+                  >decision</code
+                >，<code>findings</code> 不是数组，或 finding 条目的
+                <code>severity</code>、<code>message</code> 不合法。
+              </td>
+              <td>
+                按节点 prompt 中的 role-scoped review JSON
+                示例重写 artifact；不要用 <code>reviewRole</code>、<code
+                  >reviewedArtifacts</code
+                >
+                或数组/对象形式的 <code>reviewScope</code> 替代 schema 字段。
               </td>
             </tr>
             <tr>

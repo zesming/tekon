@@ -11,6 +11,8 @@ import {
   migrateDatabase,
   openTekonDatabase,
   type AgentRunResult,
+  type AgentRunInput,
+  type ArtifactType,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -195,6 +197,142 @@ describe('workflow engine role prompt integration', () => {
     );
     expect(prompts[0]).toContain(
       'Do not continue editing, formatting, running checks, printing diffs, or explaining',
+    );
+    db.close();
+  });
+
+  it('adds strict role-scoped review artifact instructions with target context', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-review-artifact-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-review-artifact-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '评审类 artifact 必须严格符合 schema',
+      mode: 'template',
+      workflowSpec: {
+        id: 'review-artifact-prompt',
+        name: 'Review Artifact Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm-scope',
+            name: 'PM Scope',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-card',
+                role: 'pm',
+                inputs: [],
+                outputs: [
+                  { id: 'demand', type: 'demand-card' },
+                  { id: 'prd', type: 'prd' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'pm-review',
+            name: 'PM Review',
+            dependsOn: ['pm-scope'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-review',
+                role: 'pm',
+                inputs: [
+                  {
+                    id: 'demand',
+                    type: 'demand-card',
+                    fromNodeId: 'pm-demand-card',
+                  },
+                  { id: 'prd', type: 'prd', fromNodeId: 'pm-demand-card' },
+                ],
+                outputs: [{ id: 'review', type: 'demand-review' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const targetNodeId = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-demand-card'),
+    )?.nodeId;
+    const reviewPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-demand-review'),
+    )?.prompt;
+    expect(targetNodeId).toBeDefined();
+    expect(reviewPrompt).toBeDefined();
+    expect(reviewPrompt!).toContain(
+      'For role-scoped review JSON artifacts, include reviewScope, reviewProcess, decision, and findings using the exact schema fields.',
+    );
+    expect(reviewPrompt!).toContain('"reviewScope": "demand-quality"');
+    expect(reviewPrompt!).toContain('"reviewerRole": "pm"');
+    expect(reviewPrompt!).toContain(`"targetNodeId": "${targetNodeId}"`);
+    expect(reviewPrompt!).toContain('"targetRole": "pm"');
+    expect(reviewPrompt!).toContain(
+      'findings[].severity must be one of: critical, important, minor.',
+    );
+    expect(reviewPrompt!).toContain(
+      'Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
     );
     db.close();
   });
@@ -724,6 +862,56 @@ function writeRoleFixture(rolesDir: string) {
     'utf8',
   );
   writeFileSync(join(pmoDir, 'system.md'), 'PMO system instructions', 'utf8');
+}
+
+function validArtifactContentForPromptTest(
+  type: ArtifactType,
+  input: AgentRunInput,
+): string {
+  const base = {
+    title: type,
+    body: `Prompt test artifact for ${type}.`,
+  };
+  if (type === 'demand-card' || type === 'prd') {
+    return JSON.stringify(
+      {
+        ...base,
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            description: 'Artifact prompt instructions are present.',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'demand-review') {
+    const targetNodeId =
+      input.nodeInputs?.find((item) => item.type === 'demand-card')
+        ?.fromNodeId ?? input.runContext.nodeId;
+    const targetRole =
+      input.priorNodes?.find((item) => item.id === targetNodeId)?.role ?? 'pm';
+    return JSON.stringify(
+      {
+        ...base,
+        reviewScope: 'demand-quality',
+        reviewProcess: {
+          mode: 'independent-process',
+          reviewerId: 'prompt-test-pm-reviewer',
+          reviewerRole: 'pm',
+          targetNodeId,
+          targetRole,
+        },
+        decision: 'approved',
+        findings: [],
+      },
+      null,
+      2,
+    );
+  }
+  return JSON.stringify(base, null, 2);
 }
 
 function minimalWorkflowSpec(name: string) {

@@ -869,6 +869,13 @@ export function createWorkflowEngine(
     const allNodes = await options.repositories.listNodes(runId);
     const currentIndex = allNodes.findIndex((item) => item.id === node.id);
     const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const priorNodeContext = priorNodes.map((item) => ({
+      id: item.id,
+      role: item.role,
+      status: item.status,
+      outputs: item.outputs,
+      gates: item.gates,
+    }));
     const deliveryRef = await deliveryRefForNode(runId, node, lease);
     const promptWithDeliveryRef =
       deliveryRef &&
@@ -883,8 +890,11 @@ export function createWorkflowEngine(
     return {
       roleConfig: { role: node.role },
       prompt: appendArtifactProtocol(promptWithDeliveryRef, {
+        nodeId: node.id,
         outputDir,
         role: node.role,
+        nodeInputs: node.inputs ?? [],
+        priorNodes: priorNodeContext,
         requiredArtifactTypes,
       }),
       worktreeLease: lease,
@@ -900,13 +910,7 @@ export function createWorkflowEngine(
       nodeInputs: node.inputs ?? [],
       nodeDependencies: node.dependsOn ?? [],
       deliveryRef,
-      priorNodes: priorNodes.map((item) => ({
-        id: item.id,
-        role: item.role,
-        status: item.status,
-        outputs: item.outputs,
-        gates: item.gates,
-      })),
+      priorNodes: priorNodeContext,
       artifactStore,
       requiredArtifactTypes,
     };
@@ -975,8 +979,11 @@ export function createWorkflowEngine(
   function appendArtifactProtocol(
     prompt: string,
     input: {
+      nodeId: string;
       outputDir: string;
       role: Role;
+      nodeInputs: WorkflowArtifactInputRef[];
+      priorNodes: Array<Pick<Node, 'id' | 'role'>>;
       requiredArtifactTypes: ArtifactType[];
     },
   ): string {
@@ -1033,6 +1040,13 @@ export function createWorkflowEngine(
             '- For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor: outputPaths pointing to a file under TEKON_OUTPUT_DIR or an existing repo path, or known gateResultIds/artifactIds.',
           ]
         : []),
+      ...roleScopedReviewArtifactInstructions({
+        nodeId: input.nodeId,
+        role: input.role,
+        nodeInputs: input.nodeInputs,
+        priorNodes: input.priorNodes,
+        requiredArtifactTypes: input.requiredArtifactTypes,
+      }),
       '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
       '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
       '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
@@ -1237,6 +1251,178 @@ function assertSuccessfulAgentRun(result: AgentRunResult): void {
       )}`,
     );
   }
+}
+
+const roleScopedReviewArtifactTypes: ArtifactType[] = [
+  'code-review',
+  'demand-review',
+  'qa-release-signoff-review',
+  'requirement-interface-review',
+  'technical-review',
+  'test-plan-review',
+];
+
+function roleScopedReviewArtifactInstructions(input: {
+  nodeId: string;
+  role: Role;
+  nodeInputs: WorkflowArtifactInputRef[];
+  priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  requiredArtifactTypes: ArtifactType[];
+}): string[] {
+  const reviewTypes = input.requiredArtifactTypes.filter((type) =>
+    roleScopedReviewArtifactTypes.includes(type),
+  );
+  if (reviewTypes.length === 0) {
+    return [];
+  }
+
+  return [
+    '- For role-scoped review JSON artifacts, include reviewScope, reviewProcess, decision, and findings using the exact schema fields.',
+    `- reviewProcess.mode must be "independent-agent" or "independent-process"; reviewProcess.reviewerRole must be "${input.role}".`,
+    '- decision must be one of: approved, changes-requested, blocked.',
+    '- findings must be an array; findings[].severity must be one of: critical, important, minor.',
+    '- findings[].message is required; put ids, category, impact, or recommendation details inside body or message, not in place of message.',
+    '- Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
+    ...reviewTypes.flatMap((type) =>
+      roleScopedReviewArtifactExampleLines(type, input),
+    ),
+  ];
+}
+
+function roleScopedReviewArtifactExampleLines(
+  type: ArtifactType,
+  input: {
+    nodeId: string;
+    role: Role;
+    nodeInputs: WorkflowArtifactInputRef[];
+    priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  },
+): string[] {
+  const target = reviewTargetForArtifact(type, input);
+  const reviewScopes = reviewScopesForArtifact(type, input.role);
+  const example = JSON.stringify(
+    {
+      title: `${type} review`,
+      body: 'Review findings and rationale within this role scope.',
+      reviewScope: reviewScopes[0],
+      reviewProcess: {
+        mode: 'independent-process',
+        reviewerId: `${input.role}-${type}-reviewer`,
+        reviewerRole: input.role,
+        targetNodeId: target.nodeId,
+        targetRole: target.role,
+      },
+      decision: 'approved',
+      findings: [
+        {
+          severity: 'minor',
+          ownerRole: input.role,
+          message: 'No blocking issue found within this role scope.',
+        },
+      ],
+    },
+    null,
+    2,
+  );
+
+  return [
+    `- For ${type}, reviewScope must be ${reviewScopes
+      .map((scope) => `"${scope}"`)
+      .join(' or ')}; use targetNodeId "${target.nodeId}" and targetRole "${
+      target.role
+    }" unless the node explicitly reviews a more specific declared input.`,
+    `- ${type} JSON example:`,
+    example,
+  ];
+}
+
+function reviewScopesForArtifact(type: ArtifactType, role: Role): string[] {
+  if (type === 'demand-review') {
+    return ['demand-quality'];
+  }
+  if (type === 'requirement-interface-review') {
+    return ['requirement-interface'];
+  }
+  if (type === 'technical-review') {
+    return ['technical-design', 'implementation-risk'];
+  }
+  if (type === 'test-plan-review') {
+    return role === 'pm' ? ['test-plan-intent'] : ['test-plan'];
+  }
+  if (type === 'qa-release-signoff-review') {
+    return ['release-signoff'];
+  }
+  if (type === 'code-review') {
+    return ['code-change'];
+  }
+  return ['delivery-readiness'];
+}
+
+function reviewTargetForArtifact(
+  type: ArtifactType,
+  input: {
+    nodeId: string;
+    nodeInputs: WorkflowArtifactInputRef[];
+    priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  },
+): { nodeId: string; role: Role } {
+  const preferredArtifactTypes = preferredReviewTargetTypes(type);
+  const targetInput =
+    preferredArtifactTypes
+      .map((artifactType) =>
+        input.nodeInputs.find((candidate) => candidate.type === artifactType),
+      )
+      .find(Boolean) ?? input.nodeInputs[0];
+  const targetNodeId = targetInput?.fromNodeId ?? input.nodeId;
+  const targetRole =
+    input.priorNodes.find((node) => node.id === targetNodeId)?.role ??
+    fallbackTargetRoleForReviewArtifact(type);
+
+  return { nodeId: targetNodeId, role: targetRole };
+}
+
+function preferredReviewTargetTypes(type: ArtifactType): ArtifactType[] {
+  if (type === 'code-review') {
+    return ['code-changes'];
+  }
+  if (type === 'demand-review') {
+    return ['demand-card', 'prd'];
+  }
+  if (type === 'qa-release-signoff-review') {
+    return ['qa-release-signoff'];
+  }
+  if (type === 'requirement-interface-review') {
+    return ['demand-card', 'prd', 'demand-review'];
+  }
+  if (type === 'technical-review') {
+    return ['implementation-plan'];
+  }
+  if (type === 'test-plan-review') {
+    return ['test-plan'];
+  }
+  return [];
+}
+
+function fallbackTargetRoleForReviewArtifact(type: ArtifactType): Role {
+  if (type === 'code-review') {
+    return 'rd';
+  }
+  if (type === 'demand-review') {
+    return 'pm';
+  }
+  if (type === 'qa-release-signoff-review') {
+    return 'qa';
+  }
+  if (type === 'requirement-interface-review') {
+    return 'pm';
+  }
+  if (type === 'technical-review') {
+    return 'rd';
+  }
+  if (type === 'test-plan-review') {
+    return 'qa';
+  }
+  return 'pmo';
 }
 
 async function persistPlan(
