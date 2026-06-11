@@ -393,6 +393,7 @@ describe('web write authorization', () => {
           profile: 'internal',
           promptMode: 'stdin',
           outputFormat: 'text',
+          timeoutMs: 3_600_000,
         }),
       });
       db.close();

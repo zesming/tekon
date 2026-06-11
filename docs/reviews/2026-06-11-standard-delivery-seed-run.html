@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standard Delivery Seed Run 归档记录</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fa;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #5a6675;
+        --line: #d8e0ea;
+        --soft: #eef3f8;
+        --accent: #1f6feb;
+        --warn: #9a5b00;
+        --risk: #b42318;
+        --ok: #067647;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        line-height: 1.65;
+      }
+      main {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 36px 0 64px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      header {
+        padding: 28px 32px;
+      }
+      section {
+        margin-top: 18px;
+        padding: 26px 32px 32px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.22;
+        letter-spacing: 0;
+      }
+      h2 {
+        margin: 30px 0 12px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+        font-size: 20px;
+        letter-spacing: 0;
+      }
+      h2:first-child {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        padding: 1px 5px;
+      }
+      pre {
+        overflow-x: auto;
+        background: #111827;
+        color: #f9fafb;
+        border-radius: 8px;
+        padding: 16px;
+      }
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+      table {
+        width: 100%;
+        margin: 14px 0 22px;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+      }
+      ul {
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .callout {
+        border-left: 4px solid var(--warn);
+        background: #fff8e6;
+        margin: 16px 0;
+        padding: 14px 16px;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .risk {
+        color: var(--risk);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Standard Delivery Seed Run 归档记录</h1>
+        <p class="meta">
+          日期：2026-06-11｜Run ID：<code
+            >run_04b37267-2686-42c6-a0a4-9b37410f65f7</code
+          >
+        </p>
+        <div class="callout">
+          结论：P1-0 seed run 未完成，状态为
+          <code>interrupted</code>。它显示 RD 节点在 300 秒内未完成 manifest
+          交付，并暴露出 seed 任务粒度过大和默认 provider
+          超时偏短的风险；它不证明 <code>standard-delivery</code> 方向不可行。
+        </div>
+      </header>
+      <section>
+        <h2>运行输入</h2>
+        <pre><code>node packages/cli/dist/index.js run "为 Tekon 新增 standard-delivery workflow 模板初版，并同步角色边界说明。范围：1. 新增 workflows/standard-delivery.yaml，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA final signoff、PMO checkpoint 等节点。2. 更新 roles/pm|rd|qa|reviewer|pmo/system.md，写明角色评审范围和不越权边界。3. 新增或更新 workflow template 测试，确保模板能被加载且关键节点存在。4. 不实现 independent-review、role-scope、qa-signoff、ac-evidence 等新 gate runner。5. 使用 Codex provider 创建真实 PR，不自动 merge。" --template standard-feature --agent codex --repo /Users/zhaoensheng/Projects/tekon</code></pre>
+        <ul>
+          <li>provider：<code>codex</code></li>
+          <li>command：<code>codex</code></li>
+          <li>profile：<code>internal</code></li>
+          <li>promptMode：<code>stdin</code></li>
+          <li>timeoutMs：<code>300000</code></li>
+          <li>sandbox：<code>workspace-write</code></li>
+          <li>network：<code>restricted</code></li>
+        </ul>
+
+        <h2>运行结果</h2>
+        <pre><code>runId=run_04b37267-2686-42c6-a0a4-9b37410f65f7 repo=/Users/zhaoensheng/Projects/tekon status=interrupted currentNode=run_04b37267-2686-42c6-a0a4-9b37410f65f7_rd-implementation gates=1 artifacts=2 pendingHumanDecisions=0</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>节点</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>pm-intake</code></td>
+              <td>PM</td>
+              <td class="ok">passed</td>
+              <td>
+                产出 demand-card 和 PRD；demand-card schema gate 通过，PRD
+                ingestion schema 通过
+              </td>
+            </tr>
+            <tr>
+              <td><code>rd-implementation</code></td>
+              <td>RD</td>
+              <td class="risk">interrupted</td>
+              <td>Codex provider 300 秒超时，无 manifest 入库</td>
+            </tr>
+            <tr>
+              <td><code>qa-validation</code></td>
+              <td>QA</td>
+              <td>pending</td>
+              <td>未开始</td>
+            </tr>
+            <tr>
+              <td><code>reviewer-independent-review</code></td>
+              <td>reviewer</td>
+              <td>pending</td>
+              <td>未开始</td>
+            </tr>
+            <tr>
+              <td><code>pmo-delivery</code></td>
+              <td>PMO</td>
+              <td>pending</td>
+              <td>未开始</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>已入库 artifact：</p>
+        <ul>
+          <li>
+            <code
+              >.tekon/runs/run_04b37267-2686-42c6-a0a4-9b37410f65f7/artifacts/run_04b37267-2686-42c6-a0a4-9b37410f65f7_pm-intake/demand-card.v1.md</code
+            >
+          </li>
+          <li>
+            <code
+              >.tekon/runs/run_04b37267-2686-42c6-a0a4-9b37410f65f7/artifacts/run_04b37267-2686-42c6-a0a4-9b37410f65f7_pm-intake/prd.v1.md</code
+            >
+          </li>
+        </ul>
+        <table>
+          <thead>
+            <tr>
+              <th>Gate</th>
+              <th>结果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>PM <code>demand-card</code> schema</td>
+              <td class="ok">passed</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Artifact schema 校验：</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Artifact</th>
+              <th>结果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>PM <code>prd</code></td>
+              <td class="ok">ingestion schema passed；不是独立 gate result</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>失败证据</h2>
+        <pre><code>node.interrupted {"nodeId":"run_04b37267-2686-42c6-a0a4-9b37410f65f7_rd-implementation","error":"agent timed out: provider=codex"}</code></pre>
+        <ul>
+          <li>RD stdout：0 bytes</li>
+          <li>RD stderr：209902 bytes</li>
+          <li>
+            stderr 显示 Codex 启动参数包含
+            <code>workdir</code>、<code>model</code>、<code
+              >approval: never</code
+            >、<code>sandbox: workspace-write</code>、<code
+              >reasoning effort: xhigh</code
+            >。
+          </li>
+          <li>
+            RD worktree 只留下部分测试修改，未发现
+            <code>artifact-manifest.json</code>
+          </li>
+          <li>主 workflow 未创建 PR，未执行 merge 或 release</li>
+        </ul>
+
+        <h2>判断和跟进</h2>
+        <ul>
+          <li>
+            事实：PM artifact 生成；demand-card schema gate 成立，PRD ingestion
+            schema 成立，RD 节点超时中断。
+          </li>
+          <li>
+            推断：300 秒默认超时对真实 Codex 长程任务偏短，seed 粒度也偏大。
+          </li>
+          <li>
+            建议：P1-A 拆成最小兼容模板、角色边界和长程 provider
+            支持三个小粒度任务。
+          </li>
+          <li>
+            本轮跟进：方案文档已调整，并加入 parser-compatible 模板、角色边界和
+            1 小时真实 provider 超时。
+          </li>
+        </ul>
+
+        <h2>真实 PR 交付证据</h2>
+        <p>
+          本轮已在人工接管后把 P1-A0/P1-A1/P1-A2 最小范围落成真实
+          PR。以下证据核验于提交本归档补充前，指向当时的 PR
+          head；本归档补充提交后，最终 head 和远端 checks 以
+          <code>gh pr view/checks</code> 实时查询为准。
+        </p>
+        <ul>
+          <li>PR：<code>https://github.com/zesming/tekon/pull/3</code></li>
+          <li>Head：<code>tekon-standard-delivery-bootstrap</code></li>
+          <li>Base：<code>main</code></li>
+          <li>状态：Open，未 merge</li>
+          <li>
+            核验时 Head commit：<code
+              >100679078efa4e303fd0f1b9644a3ac1901a828e</code
+            >
+          </li>
+        </ul>
+        <table>
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>结果</th>
+              <th>用时</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Core build and tests</code></td>
+              <td class="ok">pass</td>
+              <td>48s</td>
+            </tr>
+            <tr>
+              <td><code>Lint GitHub Actions workflows</code></td>
+              <td class="ok">pass</td>
+              <td>9s</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>PR 范围不包含：</p>
+        <ul>
+          <li>
+            不包含
+            <code>independent-review</code
+            >、<code>role-scope</code>、<code>qa-signoff</code>、<code
+              >ac-evidence</code
+            >
+            等新 gate runner。
+          </li>
+          <li>
+            不包含
+            <code>test-plan</code>、<code>qa-release-signoff</code>、<code
+              >process-checkpoint</code
+            >
+            等新 artifact type。
+          </li>
+          <li>不包含自动 merge、release 或 deploy。</li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

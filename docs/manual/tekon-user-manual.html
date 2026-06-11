@@ -1112,7 +1112,14 @@
             <span class="tag tag-jade">test-improvement</span>
             <span class="tag tag-jade">docs-update</span>
             <span class="tag tag-jade">plan-only</span>
+            <span class="tag tag-jade">standard-delivery</span>
           </div>
+          <p>
+            <code>standard-delivery</code> 是标准交付种子流程，包含 PM
+            内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA
+            最终质量建议和 PMO checkpoint；当前首版只使用现有
+            artifact/gate，不代表已具备新 gate 强约束。
+          </p>
           <p>
             <code>workflow select</code> 会给出推荐模板和理由；<code
               >eval workflow-selection</code
@@ -1281,7 +1288,20 @@
               <span class="tag tag-gold"
                 >plan-only — 只做方案，不执行代码改动</span
               >
+              <span class="tag tag-gold"
+                >standard-delivery — 验证完整角色链路</span
+              >
             </div>
+            <p
+              style="
+                font-size: 14px;
+                color: var(--text-secondary);
+                margin-top: 12px;
+              "
+            >
+              <code>standard-delivery</code> 当前适合 Tekon 自身 dogfooding
+              和低风险种子任务，不适合直接承诺生产级强治理。
+            </p>
           </div>
 
           <!-- Scenario E -->
@@ -1426,7 +1446,10 @@
             如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。若 Codex 写完有效 manifest
+            schema 写完整字段。真实 provider 默认超时为 1 小时，并写入
+            provider snapshot 以支持 resume；如果长程任务没有 manifest
+            或可见进展，仍应在后续通过 heartbeat、manifest mtime、artifact
+            文件变化和无进展超时来治理。若 Codex 写完有效 manifest
             后未及时退出或返回非零退出码，adapter 会以必需 artifact
             校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需
             artifact、artifact schema 不合法或 path/symlink
@@ -1560,7 +1583,7 @@
             <div class="concept-card">
               <h4>5.4 Workflow</h4>
               <p>
-                一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>。
+                一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>、<code>standard-delivery</code>。
               </p>
             </div>
             <div class="concept-card">
@@ -2393,8 +2416,9 @@
             <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下
             stdout/stderr、<code>artifact-manifest.json</code>、字面
             <code>TEKON_ARTIFACT_MANIFEST</code> 和 artifact 内容，并确认结构化
-            JSON 有非空 <code>title</code> 和 <code>body</code>。不要把真实
-            provider 失败降级成 mock 通过。
+            JSON 有非空 <code>title</code> 和 <code>body</code>。真实 provider
+            默认 1 小时超时；长程任务仍应结合日志、manifest 和 artifact
+            变化判断是否有进展。不要把真实 provider 失败降级成 mock 通过。
           </p>
           <p>详细流程见 <code>docs/manual/codex-provider-smoke.md</code>。</p>
 

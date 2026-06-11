@@ -87,7 +87,8 @@ export type BuiltInWorkflowTemplateId =
   | 'bugfix'
   | 'test-improvement'
   | 'docs-update'
-  | 'plan-only';
+  | 'plan-only'
+  | 'standard-delivery';
 
 const rawArtifactRefSchema = z.union([
   z.string().min(1),

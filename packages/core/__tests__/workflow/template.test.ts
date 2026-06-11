@@ -125,9 +125,81 @@ phases:
       'test-improvement',
       'docs-update',
       'plan-only',
+      'standard-delivery',
     ]) {
       expect(loadWorkflowTemplate({ name })).toMatchObject({ id: name });
     }
+  });
+
+  it('loads standard-delivery with scoped review checkpoints and supported gates', () => {
+    const template = loadWorkflowTemplate({ name: 'standard-delivery' });
+    const nodes = template.phases.flatMap((phase) => phase.nodes);
+    const nodeIds = nodes.map((node) => node.id);
+
+    expect(nodeIds).toEqual([
+      'pm-demand-card',
+      'pm-demand-review',
+      'rd-requirement-interface-review',
+      'qa-requirement-interface-review',
+      'rd-implementation-plan',
+      'rd-technical-review',
+      'qa-test-plan',
+      'qa-test-plan-review',
+      'pm-test-plan-intent-review',
+      'rd-code-change',
+      'reviewer-change-review',
+      'qa-validation',
+      'qa-release-signoff-review',
+      'pmo-checkpoint',
+    ]);
+
+    expect(nodes.find((node) => node.id === 'pm-demand-review')).toMatchObject({
+      role: 'pm',
+      gates: [{ type: 'schema', artifactType: 'review-report' }],
+    });
+    expect(
+      nodes.find((node) => node.id === 'rd-requirement-interface-review'),
+    ).toMatchObject({ role: 'rd' });
+    expect(
+      nodes.find((node) => node.id === 'qa-requirement-interface-review'),
+    ).toMatchObject({ role: 'qa' });
+    expect(
+      nodes.find((node) => node.id === 'rd-technical-review'),
+    ).toMatchObject({ role: 'rd' });
+    expect(
+      nodes.find((node) => node.id === 'qa-test-plan-review'),
+    ).toMatchObject({ role: 'qa' });
+    expect(
+      nodes.find((node) => node.id === 'reviewer-change-review'),
+    ).toMatchObject({ role: 'reviewer' });
+    expect(
+      nodes.find((node) => node.id === 'qa-release-signoff-review'),
+    ).toMatchObject({ role: 'qa' });
+    expect(nodes.find((node) => node.id === 'pmo-checkpoint')).toMatchObject({
+      role: 'pmo',
+    });
+
+    const gateTypes = new Set(
+      nodes.flatMap((node) => node.gates.map((gate) => gate.type)),
+    );
+    expect(gateTypes).toEqual(
+      new Set(['build', 'lint', 'schema', 'security-scan', 'test']),
+    );
+    expect(nodes.find((node) => node.id === 'rd-code-change')).toMatchObject({
+      gates: expect.arrayContaining([
+        expect.objectContaining({ type: 'build', commandRef: 'build' }),
+        expect.objectContaining({ type: 'lint', commandRef: 'lint' }),
+        expect.objectContaining({
+          type: 'security-scan',
+          commandRef: 'security',
+        }),
+      ]),
+    });
+    expect(nodes.find((node) => node.id === 'qa-validation')).toMatchObject({
+      gates: expect.arrayContaining([
+        expect.objectContaining({ type: 'test', commandRef: 'test' }),
+      ]),
+    });
   });
 
   it('rejects missing reviewer, code nodes without build/lint, invalid artifact dependencies, and conflicting parallel outputs', () => {

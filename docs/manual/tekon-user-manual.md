@@ -53,6 +53,7 @@
 - `test-improvement`：测试补齐。
 - `docs-update`：文档更新。
 - `plan-only`：只做方案，不执行代码改动。
+- `standard-delivery`：标准交付种子流程，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA 最终质量建议和 PMO checkpoint；当前首版只使用现有 artifact/gate，不代表已具备新 gate 强约束。
 
 `workflow select` 会给出推荐模板和理由；`eval workflow-selection` 会检查人工选择是否合理。
 
@@ -149,6 +150,7 @@
 
 - `docs-update`：文档更新。
 - `plan-only`：只做计划或方案，不推进代码改动。
+- `standard-delivery`：需要验证完整角色链路时使用；当前适合 Tekon 自身 dogfooding 和低风险种子任务，不适合直接承诺生产级强治理。
 
 ### 场景 E：我要判断天工是否已经能用于真实工作
 
@@ -238,7 +240,7 @@ tekon run --agent mock
 tekon run --agent codex
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。若 Codex 写完有效 manifest 后未及时退出或返回非零退出码，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需 artifact、artifact schema 不合法或 path/symlink 边界失败时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
+Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。真实 provider 默认超时为 1 小时，并写入 provider snapshot 以支持 resume；如果长程任务没有 manifest 或可见进展，仍应在后续通过 heartbeat、manifest mtime、artifact 文件变化和无进展超时来治理。若 Codex 写完有效 manifest 后未及时退出或返回非零退出码，adapter 会以必需 artifact 校验通过作为节点完成信号继续进入 gate；缺少 workflow 必需 artifact、artifact schema 不合法或 path/symlink 边界失败时，该节点会失败。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制。
 
 ### 4.6 查看结果
 
@@ -326,6 +328,7 @@ tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 - `test-improvement`
 - `docs-update`
 - `plan-only`
+- `standard-delivery`
 
 ### 5.5 Role
 

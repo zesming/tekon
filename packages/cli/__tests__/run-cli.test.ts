@@ -1283,6 +1283,7 @@ describe('runCli in-process', () => {
           profile: 'internal',
           promptMode: 'stdin',
           outputFormat: 'text',
+          timeoutMs: 3_600_000,
         }),
       });
       db.close();
