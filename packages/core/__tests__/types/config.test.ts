@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   agentAdapterConfigSchema,
   commandPolicySchema,
   constraintRulesSchema,
@@ -34,7 +35,10 @@ describe('runtime config schemas', () => {
           tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
         },
       }),
-    ).toMatchObject({ provider: 'claude-code' });
+    ).toMatchObject({
+      provider: 'claude-code',
+      timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    });
 
     expect(
       tekonConfigSchema.parse({
@@ -60,7 +64,11 @@ describe('runtime config schemas', () => {
           tools: { allow: ['Read', 'Edit'], deny: ['Bash(rm *)'] },
         },
       }),
-    ).toMatchObject({ provider: 'codex', profile: 'internal' });
+    ).toMatchObject({
+      provider: 'codex',
+      profile: 'internal',
+      timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    });
 
     expect(
       workflowTemplateSchema.parse({

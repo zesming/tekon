@@ -1,942 +1,164 @@
-# Tekon Standard Delivery Workflow Next-Phase Implementation Plan
+# Tekon Standard Delivery 下一阶段迭代方案
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+日期：2026-06-11
+状态：已根据 P1-0 自举失败样本和当前代码约束重新调整。
+目标：先让 Tekon 以 Codex provider 支持可运行的标准交付种子流程，再逐步补齐独立评审、角色边界强校验、AC evidence、QA final signoff、PMO checkpoint 和长程任务可观测能力。
 
-**Goal:** 将 Tekon 从“真实 Codex provider 到真实 PR 的 P0 闭环”升级为“有独立评审、角色边界、证据追踪、QA 最终签核和 PMO 全程治理的标准全链路交付流程”。
+## 1. 当前事实
 
-**Architecture:** 新增 `standard-delivery` 工作流作为默认受控交付模板，保留确定性 workflow engine，不把流程选择和 gate 判断交给 LLM。角色职责写入 `roles/*`，流程顺序写入 `workflows/*`，独立评审、角色越权、AC evidence traceability 和 QA final signoff 通过 artifact schema、gate 与 readiness eval 强制校验。
+- 已完成 P0 Codex 真实闭环：`run_d2350140-b1b7-4fca-b01b-e28daac61e31` 使用 `codex --profile internal` 创建真实 PR #2，CI 通过，未自动 merge。
+- P1-0 seed run `run_04b37267-2686-42c6-a0a4-9b37410f65f7` 使用 `standard-feature` 执行 `standard-delivery` 种子需求，PM 节点通过，RD 节点在 300 秒超时后中断。
+- 当前 `artifactTypeSchema` 只支持 `demand-card`、`prd`、`tech-design`、`code-changes`、`test-report`、`review-report`、`security-report`、`rollback-plan`、`delivery-package`、`ci-status`。
+- 当前 `gateTypeSchema` 只支持 `build`、`test`、`lint`、`e2e-pass`、`schema`、`security-scan`、`human`。
+- 因此，`independent-review`、`role-scope`、`qa-signoff`、`ac-evidence`、`process-completeness` 等 gate，以及 `test-plan`、`qa-release-signoff`、`process-checkpoint` 等 artifact 不能直接写入首版模板。
 
-**Tech Stack:** TypeScript, pnpm workspace, Vitest, Playwright, SQLite, Zod, Git worktree, GitHub CLI, Codex provider, Tekon workflow templates, Tekon role system.
+## 2. 调整原则
 
----
+- P1-A 首版模板必须 parser-compatible：只使用当前已注册 artifact 和 gate。
+- 角色边界先写入 `roles/*/system.md`，作为 prompt 约束；强制防越权必须等后续 gate runner 实现后再宣称。
+- 自举任务必须缩小粒度，避免一个 RD node 同时做模板、角色、schema、gate、PR package 和文档。
+- 长程任务不能只靠拉大超时解决；应组合“总超时 + 进展观测 + 无进展超时 + 可恢复证据”。
+- QA final signoff 先以 QA 节点和 `test-report`/`review-report` 表达，后续再引入绑定 delivery branch SHA 或 PR head SHA 的专用 schema。
+- PR 创建、merge、release、deploy、force push 保持人工控制。
 
-## 1. 背景与判断
+## 3. 资料依据
 
-### 1.1 当前事实
+| 资料                                                                                                        | 资料内容                                                      | 对 Tekon 的判断依据                                                  |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| IBM requirements guideline: `https://www.ibm.com/docs/en/erqa?topic=assistant-guidelines-good-requirements` | 好需求应清晰、可验证，支撑沟通、设计、计划和工程活动。        | PM demand-card 后需要需求质量评审，不能只依赖 schema。               |
+| ISTQB CTFL syllabus: `https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTFL_Syllabus_v4.0.1.pdf`          | 测试活动应维护 test basis、testware、测试结果和追踪关系。     | QA test plan、QA validation、AC evidence 和 signoff 需要结构化关联。 |
+| DORA change approval: `https://dora.dev/capabilities/streamlining-change-approval/`                         | 高效变更审批应前移到开发过程中的 review，并用自动化检测补充。 | Tekon 应做轻量独立评审和自动 gate，不引入重审批委员会。              |
+| Scrum Definition of Done: `https://www.scrum.org/resources/definition-done`                                 | Done 表示增量满足质量标准并处于 usable 状态。                 | QA final signoff 必须绑定确切交付对象，避免“所测非所得”。            |
+| Google Engineering Practices: `https://google.github.io/eng-practices/review/`                              | Review 关注设计、功能、复杂度、测试和文档。                   | RD technical review 和 reviewer change review 需要明确 rubric。      |
 
-Tekon 已完成一次真实 Codex provider 自举闭环：`run_d2350140-b1b7-4fca-b01b-e28daac61e31` 状态为 `passed`，8 个 gates 通过，真实 PR `https://github.com/zesming/tekon/pull/2` 已创建且远端 CI 通过。该 P0 证明“真实 provider 到真实 PR”成立，但当前 `docs-update` 模板仍是 PM -> RD -> QA -> Reviewer -> PMO 的线性流程，没有 PM 内部需求评审、RD/QA 外部需求接口评审、RD 技术方案评审、QA 测试方案评审、QA final signoff 与 PMO checkpoint。
+## 4. 阶段总览
 
-### 1.2 资料依据
+| 阶段  | 目标                              | 范围                                                        | 退出标准                                                  |
+| ----- | --------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------- |
+| P1-0R | 归档 seed run 失败证据            | 写入 `docs/reviews/2026-06-11-standard-delivery-seed-run.*` | 失败原因、产物、gate、风险和下一步明确                    |
+| P1-A0 | 最小兼容 `standard-delivery` 模板 | 新增模板和 parser 测试，只用现有 artifact/gate              | 模板可加载，`workflow preflight standard-delivery` 可执行 |
+| P1-A1 | 角色边界模板化                    | 更新 PM/RD/QA/reviewer/PMO system 描述                      | 每个角色有评审范围、不越权、独立评审、升级条件            |
+| P1-A2 | 长程任务最小支持                  | 真实 provider 默认超时提升到 1 小时，snapshot 保留 timeout  | CLI/Web Codex snapshot 测试通过                           |
+| P1-B  | 独立评审与角色范围强校验          | 新 artifact 字段、`independent-review`、`role-scope` gate   | 自产自测、越权 review 可被 deterministic gate 拦截        |
+| P1-C  | QA signoff 与 AC evidence         | `qa-release-signoff`、AC 到测试证据映射、PR package V2      | readiness 不再泛化为 evidence unknown                     |
+| P1-D  | 标准流程 dogfooding               | 用 Tekon 自身 3 个低风险需求跑标准流程                      | 每个样本有 run、PR、CI、QA/PMO 证据和复盘                 |
+| P2    | Web/Artifact/Telemetry            | Web Cockpit、Artifact Center、审计回放、成本 telemetry      | 人能在 Web 上完成主要审阅和追踪                           |
+| P3    | 平台化扩展                        | DAG 并行、多 Provider、release/rollback、组织治理           | 多角色复杂需求可控运行                                    |
 
-| 资料                                                                                                        | 资料内容                                                                                                        | 对 Tekon 的判断依据                                            |
-| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| IBM requirements guideline：`https://www.ibm.com/docs/en/erqa?topic=assistant-guidelines-good-requirements` | 好需求必须清晰、可验证，是多方沟通、设计、项目计划和工程活动的基础                                              | PM demand-card 后必须有需求质量评审，不能只做 schema 校验      |
-| ISTQB CTFL syllabus：`https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTFL_Syllabus_v4.0.1.pdf`          | 测试流程应维护 test basis、testware、测试结果和角色之间的追踪关系                                               | Tekon 必须把 AC、QA test plan、QA report 和 signoff 自动串起来 |
-| DORA change approval：`https://dora.dev/capabilities/streamlining-change-approval/`                         | 高效变更审批更适合前移到开发过程中的 peer review，并用自动化检测补充                                            | Tekon 应做轻量独立评审和自动 gate，不应引入笨重审批委员会      |
-| Scrum Definition of Done：`https://www.scrum.org/resources/definition-done`                                 | Done 应描述增量满足产品质量标准、处于 usable 状态                                                               | QA final signoff 应绑定 PR head commit，证明所测即所得         |
-| Google Engineering Practices：`https://google.github.io/eng-practices/review/`                              | Review 关注 design、functionality、complexity、tests、documentation                                             | RD technical review 和独立 Reviewer review 应有明确 rubric     |
-| `docs/reviews/2026-06-10-tekon-codex-self-bootstrap-report.md`                                              | P0 真实 Codex run 与 PR 归档证据                                                                                | P1 应补强 readiness AC evidence 映射和 PR 包可读性             |
-| `docs/reviews/2026-06-10-tekon-comprehensive-evaluation.md`                                                 | 当前能力缺口：角色体系、审计追溯、Artifact Center、Web Cockpit、知识层、成本控制、多 Provider、动态编排、评审面 | 后续能力应分层推进，先治理闭环，再体验和平台化                 |
+## 5. P1-A0 模板策略
 
-### 1.3 下一阶段原则
-
-- 先把标准流程可信度做实，再扩更多 provider 和平台化能力。
-- 所有评审必须由独立 agent、独立进程或独立 execution 执行，避免自产自测。
-- 每个角色只评审自身职责范围；跨角色只评审“接口是否足够支撑自己继续工作”。
-- PMO 做流程和证据完整性治理，不替 PM、RD、QA 做专业判断。
-- QA 对最终交付质量负责，final signoff 必须绑定具体 PR head SHA 或 delivery branch SHA。
-- 高风险动作继续由人类批准：PR 创建、merge、release、deploy、force push。
-- 能用 Tekon 自举验证的任务优先用 Tekon 自己跑；但不能让尚未实现的 `standard-delivery` 假装已经可用。
-
----
-
-## 2. 阶段总览
-
-| 阶段 | 时间窗口  | 目标                                                                              | 退出标准                                                                        |
-| ---- | --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| P1-0 | 0-1 周    | 用现有 `docs-update` / Codex 闭环自举首个标准流程种子任务                         | 真实 run、真实 PR、CI 和归档报告存在；不依赖尚未实现的新 gate                   |
-| P1-A | 1-2 周    | 固化 `standard-delivery` 模板和角色边界                                           | 模板可被 parser 加载；角色说明覆盖评审范围；schema tests 通过                   |
-| P1-B | 1-3 周    | 建立独立评审、角色越权和 QA final signoff gate                                    | 同 agent 自评会失败；越权 review 会失败；QA signoff 缺 SHA 会失败               |
-| P1-C | 2-4 周    | 建立 AC evidence traceability 和 PR package V2                                    | readiness 不再显示 `acceptance-criteria-evidenced` unknown；PR 包按 AC 展示证据 |
-| P1-D | 3-5 周    | 用 Tekon 自身 3 个真实需求跑标准流程                                              | 每个样本都有 run、PR、CI、QA signoff、PMO checkpoint 和复盘记录                 |
-| P2   | 5-10 周   | Web Cockpit、Artifact Center、审计回放、成本 telemetry、多 Provider 稳定化        | 人能在 Web 上完成 run 审阅；成本和审计可查询；Codex/Trae 可对比                 |
-| P3   | 10 周以后 | DAG 并行、知识/技能飞轮、Architect/UI/DevOps/Ops 角色、release/rollback、组织治理 | 多角色复杂需求可控运行，经验可沉淀，团队级权限可审计                            |
-
-### 2.1 自举落地策略
-
-下一阶段不应只靠人工手写实现，而应继续 dogfood。自举策略分三层：
-
-| 批次   | 使用流程                                            | 适合任务                                                                                | 不适合任务                                                    | 目标                                                     |
-| ------ | --------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
-| Seed-1 | 现有 `docs-update` + Codex provider + 真实 PR       | `standard-delivery` 模板草案、角色边界文档、模板解析测试、用户手册说明                  | 新 gate runner、AC evidence 自动映射、QA final signoff 强校验 | 用已有能力生成第一条 P1 自举证据                         |
-| Seed-2 | 现有 workflow + 明确要求产出新 schema/gate 验证证据 | artifact schemas、`independent-review`、`role-scope`、`qa-signoff`、`ac-evidence`       | Web Cockpit、Artifact Center、多 Provider 对比                | 在新能力尚未进入标准流程前，用半标准流程验证核心治理能力 |
-| Seed-3 | 新 `standard-delivery`                              | PR package V2、Web Cockpit V2、Artifact Center、审计回放、成本 telemetry、Provider 对比 | release automation、组织权限、复杂 DAG                        | 用标准流程验证标准流程之后的能力                         |
-
-首个自举任务建议定义为：
+首版 `standard-delivery` 不新增引擎能力，只固化节点结构：
 
 ```text
-为 Tekon 新增 standard-delivery workflow 模板初版：
-1. 新增 workflows/standard-delivery.yaml，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA final signoff、PMO checkpoint 等节点。
-2. 更新 roles/pm|rd|qa|reviewer|pmo/system.md，写明角色评审范围和不越权边界。
-3. 新增或更新 workflow template 测试，确保模板能被加载且关键节点存在。
-4. 不实现新 gate runner，不修改交付行为。
-5. 使用现有 Tekon + Codex provider 创建真实 PR，不自动 merge。
+pm-demand-card
+-> pm-demand-review
+-> rd-requirement-interface-review
+-> qa-requirement-interface-review
+-> rd-implementation-plan
+-> rd-technical-review
+-> qa-test-plan
+-> qa-test-plan-review
+-> pm-test-plan-intent-review
+-> rd-code-change
+-> reviewer-change-review
+-> qa-validation
+-> qa-release-signoff-review
+-> pmo-checkpoint
 ```
 
-该任务的价值是验证“流程模板 + 角色职责”这两个基础假设，同时避免把尚未实现的 gate 当作已生效能力。
+兼容映射：
 
----
+| 语义                      | P1-A0 使用的现有 artifact | 后续专用 artifact           |
+| ------------------------- | ------------------------- | --------------------------- |
+| PM demand review          | `review-report`           | `demand-review`             |
+| RD implementation plan    | `tech-design`             | `implementation-plan`       |
+| RD technical review       | `review-report`           | `technical-review`          |
+| QA test plan              | `test-report`             | `test-plan`                 |
+| QA test plan review       | `review-report`           | `test-plan-review`          |
+| QA release signoff review | `review-report`           | `qa-release-signoff-review` |
+| PMO checkpoint            | `delivery-package`        | `process-checkpoint`        |
 
-## 3. 文件结构
+P1-A0 不做：
 
-### 3.1 P1 必改文件
+- 不实现新 gate runner。
+- 不新增 artifact type。
+- 不改变默认 workflow selection。
+- 不把 role prompt 约束宣称为 deterministic enforcement。
+- 不自动创建、合并或发布 PR。
 
-| 文件                                                  | 责任                                                                  |
-| ----------------------------------------------------- | --------------------------------------------------------------------- |
-| `workflows/standard-delivery.yaml`                    | 新标准全链路 workflow 模板，定义节点、依赖、artifact、gate 和人工边界 |
-| `packages/core/src/artifact/schemas.ts`               | 新增 review、plan、signoff、checkpoint 类 artifact schema             |
-| `packages/core/__tests__/artifact/schemas.test.ts`    | 覆盖新 artifact schema 的正反例                                       |
-| `packages/core/src/gate/runners.ts`                   | 新增独立评审、角色范围、QA signoff、AC evidence gate runner           |
-| `packages/core/__tests__/gate/runners.test.ts`        | 覆盖 gate 失败和通过场景                                              |
-| `packages/core/src/eval/work-readiness.ts`            | 将 AC evidence traceability 纳入 readiness 计算                       |
-| `packages/core/__tests__/eval/work-readiness.test.ts` | 覆盖 AC 从 demand-card 到 QA evidence 的映射                          |
-| `packages/core/src/delivery/pr-package.ts`            | PR package V2 按结果、风险、证据、审查、PR 决策组织                   |
-| `packages/core/__tests__/delivery/pr-package.test.ts` | 覆盖 evidence unknown 消除和 PR body 可读性                           |
-| `roles/pm/system.md`                                  | 固化 PM 需求与测试方案意图评审边界                                    |
-| `roles/rd/system.md`                                  | 固化 RD implementation plan 与技术评审边界                            |
-| `roles/qa/system.md`                                  | 固化 QA test plan、验收执行、final signoff 边界                       |
-| `roles/reviewer/system.md`                            | 固化独立 reviewer 的审阅边界                                          |
-| `roles/pmo/system.md`                                 | 固化 PMO checkpoint 和不越权原则                                      |
-| `docs/manual/tekon-user-manual.md`                    | 面向用户说明标准流程如何发起、会得到什么、不能做什么                  |
-| `docs/manual/tekon-user-manual.html`                  | 主用户手册 HTML 同步版                                                |
-| `README.md`                                           | 更新工作流和能力摘要                                                  |
-| `CHANGELOG.md`                                        | 记录标准流程能力变更                                                  |
+## 6. 长程任务策略
 
-### 3.2 P2/P3 候选文件
+这次 RD 节点 300 秒超时说明：真实 Codex 任务可能需要长程执行。调整建议分三层：
 
-| 能力               | 主要文件                                                                                                        |
-| ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Web Cockpit V2     | `packages/web/src/server/api/root.ts`, `packages/web/src/client/App.tsx`, `packages/web/src/client/styles.css`  |
-| Artifact Center    | `packages/core/src/artifact/store.ts`, `packages/core/src/review/surface.ts`, `packages/web/src/client/App.tsx` |
-| 审计回放           | `packages/core/src/audit/logger.ts`, `packages/core/src/eval/report.ts`, `packages/web/src/server/api/root.ts`  |
-| 成本 telemetry     | `packages/core/src/eval/metrics.ts`, `packages/core/src/runtime/agent-adapter.ts`, SQLite migrations            |
-| 多 Provider 稳定化 | `packages/core/src/runtime/*adapter.ts`, `packages/core/src/types/config.ts`, provider contract tests           |
-| DAG 并行           | `packages/core/src/workflow/scheduler.ts`, `packages/core/src/workflow/engine.ts`, workflow e2e tests           |
-| release/rollback   | `packages/core/src/delivery/scm.ts`, `packages/core/src/delivery/pr-package.ts`, new delivery docs              |
+| 层级            | 能力                                                                                  | 判断                                   |
+| --------------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| L1 本轮最小补强 | 将真实 provider 默认超时从 300 秒提升到 1 小时，并写入 provider snapshot              | 合理，能降低长程 seed 误杀概率，改动小 |
+| L2 进展观测     | 记录 stdout/stderr 增量、工作区 diff、manifest mtime、artifact 文件数量、最近命令活动 | 必须做，否则 1 小时只是更久等待        |
+| L3 长程可恢复   | 支持 node heartbeat、无进展超时、可中断恢复、后台 process registry 或外部 job runner  | 适合 P1-D/P2，不应塞进 P1-A0           |
 
----
+推荐运行策略：
 
-## 4. Standard Delivery Workflow v1
+- `maxRuntimeMs` 默认 1 小时，后续允许 repo/profile 或 run 级覆盖。
+- `noProgressTimeoutMs` 默认 15 分钟，只要日志、diff、manifest 或 artifact 有变化就续期。
+- status/review surface 展示 `lastProgressAt`、`lastArtifactAt`、`stdoutBytes`、`stderrBytes`、`changedFiles`。
+- 超时后先尝试读取 manifest；manifest 完整且必需 artifact 合法时允许进入 gate。
+- 没有 manifest 且无进展时中断，并把 stderr 尾部、worktree diff 和 mtime 写入诊断证据。
 
-### 4.1 流程骨架
+## 7. 自举粒度
 
-```text
-PM demand-card
--> independent PM demand review
--> RD requirement interface review
--> QA requirement interface review
--> requirements baseline freeze
--> RD implementation plan
--> independent RD technical review
--> QA test plan
--> independent QA test-plan review
--> PM test-plan intent review
--> RD implementation
--> RD self-check + deterministic gates
--> independent Reviewer change review
--> QA validation on exact delivery SHA
--> independent QA release-signoff review
--> PMO checkpoint and delivery package
--> create/update PR under human approval
-```
+| 批次   | 流程                                | 任务粒度                                    | 目标                    |
+| ------ | ----------------------------------- | ------------------------------------------- | ----------------------- |
+| Seed-1 | 当前模板 + Codex                    | 只做 `standard-delivery` 模板和 parser 测试 | 验证模板可加载          |
+| Seed-2 | 当前模板 + Codex                    | 只做角色边界文档                            | 验证 role prompt 可审阅 |
+| Seed-3 | 当前模板 + Codex                    | 只做长程任务观测或 snapshot 超时            | 验证 provider 稳定性    |
+| Seed-4 | 新 `standard-delivery` + mock/Codex | 只做一个小文档或小测试需求                  | 验证标准流程结构        |
+| Seed-5 | 新 gate 后的 `standard-delivery`    | 独立评审、role-scope、QA signoff            | 验证治理强约束          |
 
-### 4.2 新 workflow 模板草案
+## 8. 当前首 PR 范围
 
-```yaml
-id: standard-delivery
-name: Standard Delivery
-version: 1
-retry:
-  maxAttempts: 3
-  backoffMs: 500
-  strategy: exponential
-phases:
-  - id: pm-scope
-    nodes:
-      - id: pm-demand-card
-        role: pm
-        outputs:
-          - demand:demand-card
-        gates:
-          - type: schema
-            artifactType: demand-card
-  - id: pm-review
-    dependsOn: [pm-scope]
-    nodes:
-      - id: pm-demand-review
-        role: pm
-        inputs:
-          - demand:demand-card
-        outputs:
-          - review:demand-review
-        gates:
-          - type: independent-review
-          - type: role-scope
-            role: pm
-          - type: schema
-            artifactType: demand-review
-  - id: requirement-interface-review
-    dependsOn: [pm-review]
-    nodes:
-      - id: rd-requirement-interface-review
-        role: rd
-        inputs:
-          - demand:demand-card
-          - review:demand-review
-        outputs:
-          - review:requirement-interface-review
-        gates:
-          - type: role-scope
-            role: rd
-          - type: schema
-            artifactType: requirement-interface-review
-      - id: qa-requirement-interface-review
-        role: qa
-        inputs:
-          - demand:demand-card
-          - review:demand-review
-        outputs:
-          - review:requirement-interface-review
-        gates:
-          - type: role-scope
-            role: qa
-          - type: schema
-            artifactType: requirement-interface-review
-  - id: rd-plan
-    dependsOn: [requirement-interface-review]
-    nodes:
-      - id: rd-implementation-plan
-        role: rd
-        inputs:
-          - demand:demand-card
-          - review:requirement-interface-review
-        outputs:
-          - design:implementation-plan
-        gates:
-          - type: schema
-            artifactType: implementation-plan
-  - id: rd-plan-review
-    dependsOn: [rd-plan]
-    nodes:
-      - id: rd-technical-review
-        role: rd
-        inputs:
-          - design:implementation-plan
-        outputs:
-          - review:technical-review
-        gates:
-          - type: independent-review
-          - type: role-scope
-            role: rd
-          - type: schema
-            artifactType: technical-review
-  - id: qa-plan
-    dependsOn: [rd-plan-review]
-    nodes:
-      - id: qa-test-plan
-        role: qa
-        inputs:
-          - demand:demand-card
-          - design:implementation-plan
-        outputs:
-          - test:test-plan
-        gates:
-          - type: ac-traceability
-          - type: schema
-            artifactType: test-plan
-  - id: qa-plan-review
-    dependsOn: [qa-plan]
-    nodes:
-      - id: qa-test-plan-review
-        role: qa
-        inputs:
-          - test:test-plan
-        outputs:
-          - review:test-plan-review
-        gates:
-          - type: independent-review
-          - type: role-scope
-            role: qa
-          - type: schema
-            artifactType: test-plan-review
-      - id: pm-test-plan-intent-review
-        role: pm
-        inputs:
-          - demand:demand-card
-          - test:test-plan
-        outputs:
-          - review:test-plan-intent-review
-        gates:
-          - type: role-scope
-            role: pm
-          - type: schema
-            artifactType: test-plan-intent-review
-  - id: rd-implementation
-    dependsOn: [qa-plan-review]
-    nodes:
-      - id: rd-code-change
-        role: rd
-        inputs:
-          - demand:demand-card
-          - design:implementation-plan
-          - test:test-plan
-        outputs:
-          - code:code-changes
-        gates:
-          - type: build
-            commandRef: build
-          - type: lint
-            commandRef: lint
-          - type: security-scan
-            commandRef: security
-          - type: schema
-            artifactType: code-changes
-  - id: independent-change-review
-    dependsOn: [rd-implementation]
-    nodes:
-      - id: reviewer-change-review
-        role: reviewer
-        inputs:
-          - demand:demand-card
-          - design:implementation-plan
-          - test:test-plan
-          - code:code-changes
-        outputs:
-          - review:review-report
-        gates:
-          - type: independent-review
-          - type: role-scope
-            role: reviewer
-          - type: schema
-            artifactType: review-report
-  - id: qa-final-validation
-    dependsOn: [independent-change-review]
-    nodes:
-      - id: qa-validation
-        role: qa
-        inputs:
-          - demand:demand-card
-          - test:test-plan
-          - code:code-changes
-        outputs:
-          - test:test-report
-          - signoff:qa-release-signoff
-        gates:
-          - type: test
-            commandRef: test
-          - type: qa-signoff
-          - type: ac-evidence
-          - type: schema
-            artifactType: test-report
-          - type: schema
-            artifactType: qa-release-signoff
-  - id: qa-signoff-review
-    dependsOn: [qa-final-validation]
-    nodes:
-      - id: qa-release-signoff-review
-        role: qa
-        inputs:
-          - signoff:qa-release-signoff
-        outputs:
-          - review:qa-release-signoff-review
-        gates:
-          - type: independent-review
-          - type: schema
-            artifactType: qa-release-signoff-review
-  - id: pmo-delivery
-    dependsOn: [qa-signoff-review]
-    nodes:
-      - id: pmo-checkpoint
-        role: pmo
-        inputs:
-          - demand:demand-card
-          - review:demand-review
-          - design:implementation-plan
-          - review:technical-review
-          - test:test-plan
-          - test:test-report
-          - signoff:qa-release-signoff
-          - review:qa-release-signoff-review
-        outputs:
-          - process:process-checkpoint
-          - delivery:delivery-package
-        gates:
-          - type: process-completeness
-          - type: schema
-            artifactType: process-checkpoint
-          - type: schema
-            artifactType: delivery-package
-```
+本轮建议作为一个最小但完整的 PR：
 
----
+- 新增 `workflows/standard-delivery.yaml`。
+- 更新 `packages/core/__tests__/workflow/template.test.ts`，验证模板可加载、关键节点存在、只使用现有 gate。
+- 更新 `packages/core/src/workflow/template.ts`，把 `standard-delivery` 纳入 built-in template union。
+- 更新 `roles/pm|rd|qa|reviewer|pmo/system.md`，固化职责边界。
+- 更新真实 provider 默认超时常量和 CLI/Web Codex snapshot 测试。
+- 归档 P1-0 seed run 失败证据。
+- 同步 README、CHANGELOG、主用户手册 Markdown/HTML。
 
-## 5. Artifact Contract
+延后到后续 PR：
 
-### 5.1 新 artifact 类型
+- `independent-review`、`role-scope`、`qa-signoff`、`ac-evidence` gate runner。
+- 新 artifact type 和 manifest 白名单。
+- PR package V2 和 readiness AC evidence 强映射。
+- Web Cockpit、Artifact Center、成本 telemetry、多 Provider 对比、DAG 并行。
 
-| Artifact                       | Owner       | 作用                                  | 必要字段                                                                                                  |
-| ------------------------------ | ----------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `demand-review`                | PM reviewer | 判断需求必要性、合理性、范围、AC 质量 | `reviewedArtifactId`, `producerAgentId`, `reviewerAgentId`, `scope`, `outOfScope`, `decision`, `findings` |
-| `requirement-interface-review` | RD / QA     | 判断需求产物是否足够支撑自身工作      | `role`, `interfaceQuestions`, `blockingIssues`, `assumptions`, `decision`                                 |
-| `implementation-plan`          | RD          | 开发前技术计划                        | `targetFiles`, `approach`, `risks`, `testStrategy`, `rollbackPlan`, `openQuestions`                       |
-| `technical-review`             | RD reviewer | 评审技术方案合理性                    | `reviewedArtifactId`, `decision`, `designFindings`, `riskFindings`, `requiredChanges`                     |
-| `test-plan`                    | QA          | 测试验收方案                          | `acCoverage`, `testCases`, `testData`, `environment`, `riskBasedTests`, `exitCriteria`                    |
-| `test-plan-review`             | QA reviewer | 评审测试方案充分性                    | `reviewedArtifactId`, `coverageFindings`, `riskFindings`, `decision`                                      |
-| `test-plan-intent-review`      | PM          | 判断测试方案是否覆盖需求意图          | `coveredAcIds`, `missingIntent`, `decision`                                                               |
-| `qa-release-signoff`           | QA          | 绑定目标 SHA 的最终质量签核           | `commitSha`, `deliveryBranch`, `prUrl`, `executedTests`, `acEvidence`, `knownRisks`, `decision`           |
-| `qa-release-signoff-review`    | QA reviewer | 防止 QA 自签自验                      | `reviewedArtifactId`, `producerAgentId`, `reviewerAgentId`, `decision`, `findings`                        |
-| `process-checkpoint`           | PMO         | 过程完整性检查                        | `requiredArtifacts`, `missingArtifacts`, `gateSummary`, `humanDecisions`, `deliveryReadiness`             |
+## 9. 验收命令
 
-### 5.2 独立评审最小字段
-
-每个 review artifact 必须满足：
-
-```json
-{
-  "reviewedArtifactId": "artifact-id",
-  "producerAgentId": "agent-id-that-produced-reviewed-artifact",
-  "reviewerAgentId": "different-reviewer-agent-id",
-  "producerExecutionId": "execution-id-that-produced-reviewed-artifact",
-  "reviewerExecutionId": "different-review-execution-id",
-  "contextMode": "isolated",
-  "scope": {
-    "role": "pm|rd|qa|reviewer|pmo",
-    "allowed": ["role-owned concerns"],
-    "outOfScope": ["other role-owned concerns"]
-  },
-  "decision": "pass|changes-requested|blocked"
-}
-```
-
----
-
-## 6. Role Boundary Rules
-
-| 角色     | 允许评审                                                              | 不允许评审                                     |
-| -------- | --------------------------------------------------------------------- | ---------------------------------------------- |
-| PM       | 需求必要性、业务目标、范围、优先级、AC 表达、测试方案是否覆盖需求意图 | 技术方案优劣、测试用例设计细节、代码实现方式   |
-| RD       | 技术可行性、实现路径、依赖、复杂度、风险、回滚                        | 需求是否值得做、测试覆盖是否充分、最终质量签核 |
-| QA       | AC 可测性、测试方案、验收口径、风险场景、最终 signoff                 | 业务价值判断、技术实现方案优劣、代码风格       |
-| Reviewer | 基于已批准需求和方案审查变更质量、可维护性、风险                      | 重新定义需求目标、替代 PM/RD/QA 的专业结论     |
-| PMO      | 产物齐全性、证据链、gate 状态、风险记录、人工决策、交付包完整性       | 替 PM 判需求、替 RD 判技术、替 QA 判质量       |
-
----
-
-## 7. P1 Implementation Tasks
-
-### Task 0: Dogfood Seed Run
-
-**Files:**
-
-- Create: `docs/reviews/2026-06-11-standard-delivery-seed-run.md`
-- Create: `docs/reviews/2026-06-11-standard-delivery-seed-run.html`
-- No direct runtime source edits in this task unless the Tekon run itself produces them in its delivery branch.
-
-- [ ] **Step 1: Create a Tekon demand for Seed-1**
-
-Demand text:
-
-```text
-为 Tekon 新增 standard-delivery workflow 模板初版，并同步角色边界说明。
-范围：
-1. 新增 workflows/standard-delivery.yaml，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA final signoff、PMO checkpoint 等节点。
-2. 更新 roles/pm|rd|qa|reviewer|pmo/system.md，写明角色评审范围和不越权边界。
-3. 新增或更新 workflow template 测试，确保模板能被加载且关键节点存在。
-4. 不实现 independent-review、role-scope、qa-signoff、ac-evidence 等新 gate runner。
-5. 使用 Codex provider 创建真实 PR，不自动 merge。
-```
-
-- [ ] **Step 2: Run current Tekon workflow with Codex**
-
-Use the current working CLI and `codex --profile internal` provider path. Prefer the existing `docs-update` or closest available current workflow because `standard-delivery` is not implemented yet.
-
-Expected: Tekon creates a real run with demand-card, code-changes, test-report, review-report, delivery-package and PR evidence.
-
-- [ ] **Step 3: Verify the run**
-
-Run:
+本轮最小验收：
 
 ```bash
-node packages/cli/dist/index.js status --run-id <seed-run-id> --repo /Users/zhaoensheng/Projects/tekon
-```
-
-Expected: status is `passed` or, if failed, the failure is diagnosable and recorded with gate/artifact evidence.
-
-- [ ] **Step 4: Record seed evidence**
-
-Create `docs/reviews/2026-06-11-standard-delivery-seed-run.md` and `.html` with run id, PR URL, changed files, gates, CI status, and whether the run proved or disproved the self-bootstrap approach.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add docs/reviews/2026-06-11-standard-delivery-seed-run.md docs/reviews/2026-06-11-standard-delivery-seed-run.html
-git commit -m "docs: record standard delivery seed run"
-```
-
-### Task 1: Create Standard Workflow Template
-
-**Files:**
-
-- Create: `workflows/standard-delivery.yaml`
-- Modify: `packages/core/__tests__/workflow/template.test.ts`
-
-- [ ] **Step 1: Write template parser test**
-
-Add a test case that loads `workflows/standard-delivery.yaml` and asserts these node ids exist in dependency order: `pm-demand-card`, `pm-demand-review`, `rd-requirement-interface-review`, `qa-requirement-interface-review`, `rd-implementation-plan`, `rd-technical-review`, `qa-test-plan`, `qa-test-plan-review`, `pm-test-plan-intent-review`, `rd-code-change`, `reviewer-change-review`, `qa-validation`, `qa-release-signoff-review`, `pmo-checkpoint`.
-
-- [ ] **Step 2: Run the failing test**
-
-Run: `pnpm vitest run packages/core/__tests__/workflow/template.test.ts`
-
-Expected before implementation: the test fails because `workflows/standard-delivery.yaml` does not exist.
-
-- [ ] **Step 3: Add `workflows/standard-delivery.yaml`**
-
-Use the YAML skeleton in section 4.2 and keep artifact aliases consistent with existing workflow templates.
-
-- [ ] **Step 4: Run parser test again**
-
-Run: `pnpm vitest run packages/core/__tests__/workflow/template.test.ts`
-
-Expected after implementation: the new test passes and existing workflow template tests still pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add workflows/standard-delivery.yaml packages/core/__tests__/workflow/template.test.ts
-git commit -m "feat: add standard delivery workflow template"
-```
-
-### Task 2: Add Artifact Schemas
-
-**Files:**
-
-- Modify: `packages/core/src/artifact/schemas.ts`
-- Modify: `packages/core/__tests__/artifact/schemas.test.ts`
-
-- [ ] **Step 1: Add failing schema tests**
-
-Create positive and negative samples for `demand-review`, `implementation-plan`, `technical-review`, `test-plan`, `qa-release-signoff`, `qa-release-signoff-review`, and `process-checkpoint`. Negative samples must cover missing `reviewedArtifactId`, equal producer/reviewer ids, missing `commitSha` in QA signoff, and missing `acCoverage` in test plan.
-
-- [ ] **Step 2: Run schema tests**
-
-Run: `pnpm vitest run packages/core/__tests__/artifact/schemas.test.ts`
-
-Expected before implementation: new artifact types fail validation because the schemas are not registered.
-
-- [ ] **Step 3: Implement schemas**
-
-Add Zod schemas for the artifact types in section 5.1. Keep the shared review fields as a local helper inside `schemas.ts` unless an existing helper already covers the pattern.
-
-- [ ] **Step 4: Run schema tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/artifact/schemas.test.ts`
-
-Expected after implementation: all schema tests pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/core/src/artifact/schemas.ts packages/core/__tests__/artifact/schemas.test.ts
-git commit -m "feat: add standard delivery artifact schemas"
-```
-
-### Task 3: Enforce Independent Review And Role Scope Gates
-
-**Files:**
-
-- Modify: `packages/core/src/gate/runners.ts`
-- Modify: `packages/core/__tests__/gate/runners.test.ts`
-- Modify: `packages/core/src/gate/engine.ts` only if existing gate dispatch needs a new gate type mapping
-
-- [ ] **Step 1: Add failing gate tests**
-
-Add tests for:
-
-- `independent-review` passes when `producerAgentId != reviewerAgentId` and `producerExecutionId != reviewerExecutionId`.
-- `independent-review` fails when agent ids or execution ids match.
-- `role-scope` fails when PM review includes technical design verdicts, RD review includes business value verdicts, QA review includes implementation-choice verdicts, or PMO review includes professional quality verdicts.
-
-- [ ] **Step 2: Run gate tests**
-
-Run: `pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/gate/engine.test.ts`
-
-Expected before implementation: new gate types are unknown or fail.
-
-- [ ] **Step 3: Implement gate runners**
-
-Implement deterministic checks against artifact JSON fields. Do not use LLM judgment inside the gate. Use explicit fields such as `scope.role`, `scope.outOfScope`, `finding.category`, and `decision`.
-
-- [ ] **Step 4: Run gate tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/gate/engine.test.ts`
-
-Expected after implementation: tests pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/core/src/gate/runners.ts packages/core/src/gate/engine.ts packages/core/__tests__/gate/runners.test.ts
-git commit -m "feat: enforce independent scoped reviews"
-```
-
-### Task 4: Add AC Evidence Traceability
-
-**Files:**
-
-- Modify: `packages/core/src/eval/work-readiness.ts`
-- Modify: `packages/core/src/delivery/evidence.ts`
-- Modify: `packages/core/__tests__/eval/work-readiness.test.ts`
-- Modify: `packages/core/__tests__/delivery/evidence.test.ts`
-
-- [ ] **Step 1: Add failing evidence mapping tests**
-
-Create a fixture demand-card with AC ids `AC-01` and `AC-02`, a QA test-plan covering both ids, and a QA test-report with concrete evidence for both. Assert readiness reports `acceptance-criteria-evidenced` as pass.
-
-- [ ] **Step 2: Add failing missing evidence test**
-
-Create a fixture where `AC-02` is absent from QA evidence. Assert readiness reports the missing AC id instead of a generic unknown.
-
-- [ ] **Step 3: Run readiness tests**
-
-Run: `pnpm vitest run packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts`
-
-Expected before implementation: readiness cannot map AC ids through QA evidence.
-
-- [ ] **Step 4: Implement mapping**
-
-Map `demand-card.acceptanceCriteria[].id` to `test-plan.acCoverage[]`, `test-report.acceptanceChecks[]`, and `qa-release-signoff.acEvidence[]`. Treat natural-language evidence as secondary; structured AC id mapping is primary.
-
-- [ ] **Step 5: Run readiness tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts`
-
-Expected after implementation: full evidence passes; missing evidence names the exact AC id.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/core/src/eval/work-readiness.ts packages/core/src/delivery/evidence.ts packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts
-git commit -m "feat: map acceptance criteria evidence"
-```
-
-### Task 5: Add QA Final Signoff Gate
-
-**Files:**
-
-- Modify: `packages/core/src/gate/runners.ts`
-- Modify: `packages/core/__tests__/gate/runners.test.ts`
-- Modify: `packages/core/src/delivery/pr-package.ts`
-- Modify: `packages/core/__tests__/delivery/pr-package.test.ts`
-
-- [ ] **Step 1: Add failing signoff tests**
-
-Assert `qa-signoff` fails when `commitSha` is missing, when `decision` is not `pass`, or when signoff SHA does not match the delivery package PR head SHA.
-
-- [ ] **Step 2: Run tests**
-
-Run: `pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/delivery/pr-package.test.ts`
-
-Expected before implementation: signoff consistency is not enforced.
-
-- [ ] **Step 3: Implement signoff gate and PR package display**
-
-Require `commitSha`, `deliveryBranch`, `executedTests`, `acEvidence`, `knownRisks`, and `decision`. PR package must show QA signoff before PR decision summary.
-
-- [ ] **Step 4: Run tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/delivery/pr-package.test.ts`
-
-Expected after implementation: signoff failures block delivery; valid signoff appears in PR package.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/core/src/gate/runners.ts packages/core/src/delivery/pr-package.ts packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/delivery/pr-package.test.ts
-git commit -m "feat: require QA final signoff"
-```
-
-### Task 6: Update Role Descriptions
-
-**Files:**
-
-- Modify: `roles/pm/system.md`
-- Modify: `roles/rd/system.md`
-- Modify: `roles/qa/system.md`
-- Modify: `roles/reviewer/system.md`
-- Modify: `roles/pmo/system.md`
-- Modify: `packages/core/__tests__/role/prompt-builder.test.ts`
-
-- [ ] **Step 1: Add failing prompt tests**
-
-Assert each role prompt contains its allowed review scope and explicit out-of-scope boundaries.
-
-- [ ] **Step 2: Run prompt tests**
-
-Run: `pnpm vitest run packages/core/__tests__/role/prompt-builder.test.ts`
-
-Expected before implementation: role prompts do not contain the new boundaries.
-
-- [ ] **Step 3: Update role system files**
-
-Add the role rules from section 6 to the corresponding role files. Keep wording concise and imperative.
-
-- [ ] **Step 4: Run prompt tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/role/prompt-builder.test.ts`
-
-Expected after implementation: all role boundary assertions pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add roles/pm/system.md roles/rd/system.md roles/qa/system.md roles/reviewer/system.md roles/pmo/system.md packages/core/__tests__/role/prompt-builder.test.ts
-git commit -m "docs: define scoped role review boundaries"
-```
-
-### Task 7: Build PR Package V2
-
-**Files:**
-
-- Modify: `packages/core/src/delivery/pr-package.ts`
-- Modify: `packages/core/__tests__/delivery/pr-package.test.ts`
-- Modify: `packages/core/src/review/surface.ts`
-- Modify: `packages/core/__tests__/review/surface.test.ts`
-
-- [ ] **Step 1: Add failing PR package tests**
-
-Assert package output has sections in this order: result, risk, AC evidence, QA signoff, review findings, CI, human decisions, rollback. Assert no `evidence: unknown` remains when structured AC evidence exists.
-
-- [ ] **Step 2: Run tests**
-
-Run: `pnpm vitest run packages/core/__tests__/delivery/pr-package.test.ts packages/core/__tests__/review/surface.test.ts`
-
-Expected before implementation: current package does not satisfy V2 structure.
-
-- [ ] **Step 3: Implement package layout**
-
-Use existing evidence aggregation where possible. Prefer deterministic formatting and stable ordering.
-
-- [ ] **Step 4: Run tests again**
-
-Run: `pnpm vitest run packages/core/__tests__/delivery/pr-package.test.ts packages/core/__tests__/review/surface.test.ts`
-
-Expected after implementation: V2 package tests pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/core/src/delivery/pr-package.ts packages/core/src/review/surface.ts packages/core/__tests__/delivery/pr-package.test.ts packages/core/__tests__/review/surface.test.ts
-git commit -m "feat: improve delivery evidence package"
-```
-
-### Task 8: Update User-Facing Documentation
-
-**Files:**
-
-- Modify: `README.md`
-- Modify: `CHANGELOG.md`
-- Modify: `docs/manual/tekon-user-manual.md`
-- Modify: `docs/manual/tekon-user-manual.html`
-- Create: `docs/reviews/2026-06-11-standard-delivery-workflow-review.md`
-- Create: `docs/reviews/2026-06-11-standard-delivery-workflow-review.html`
-
-- [ ] **Step 1: Update Markdown docs**
-
-Explain how users select `standard-delivery`, what artifacts they receive, how QA final signoff works, and which actions still require human approval.
-
-- [ ] **Step 2: Update HTML docs**
-
-Synchronize the HTML user manual with the Markdown source and include the same constraints.
-
-- [ ] **Step 3: Validate docs**
-
-Run: `rg -n "standard-delivery|QA final signoff|独立评审|角色边界|人工批准" README.md docs/manual/tekon-user-manual.md docs/manual/tekon-user-manual.html`
-
-Expected: all core terms appear in user-facing docs.
-
-- [ ] **Step 4: Scan unfinished-marker terms**
-
-Run the repository unfinished-marker scan against `README.md`, `CHANGELOG.md`, `docs/manual/tekon-user-manual.md`, `docs/manual/tekon-user-manual.html`, `docs/reviews/2026-06-11-standard-delivery-workflow-review.md`, and `docs/reviews/2026-06-11-standard-delivery-workflow-review.html`.
-
-Expected: no matches.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add README.md CHANGELOG.md docs/manual/tekon-user-manual.md docs/manual/tekon-user-manual.html docs/reviews/2026-06-11-standard-delivery-workflow-review.md docs/reviews/2026-06-11-standard-delivery-workflow-review.html
-git commit -m "docs: document standard delivery workflow"
-```
-
-### Task 9: Run Full P1 Verification
-
-**Files:**
-
-- No direct source edits unless verification reveals a defect.
-
-- [ ] **Step 1: Run targeted suites**
-
-Run:
-
-```bash
-pnpm vitest run packages/core/__tests__/workflow/template.test.ts packages/core/__tests__/artifact/schemas.test.ts packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts packages/core/__tests__/delivery/pr-package.test.ts packages/core/__tests__/role/prompt-builder.test.ts
-```
-
-Expected: all targeted tests pass.
-
-- [ ] **Step 2: Run broad verification**
-
-Run:
-
-```bash
-pnpm test
-pnpm typecheck
+pnpm vitest run packages/core/__tests__/workflow/template.test.ts
+pnpm vitest run packages/core/__tests__/types/config.test.ts packages/cli/__tests__/run-cli.test.ts packages/web/__tests__/api/write-auth.test.ts
+pnpm --filter @tekon/core build
 pnpm build
+node packages/cli/dist/index.js workflow show standard-delivery --repo /Users/zhaoensheng/Projects/tekon
+node packages/cli/dist/index.js workflow preflight standard-delivery --repo /Users/zhaoensheng/Projects/tekon
 git diff --check
 ```
 
-Expected: all commands exit 0.
-
-- [ ] **Step 3: Run a standard workflow dry run**
-
-Run a local Tekon run using `standard-delivery` on a small documentation-only demand. Expected: the run reaches PM/RD/QA/Reviewer/PMO nodes and produces the new artifact types.
-
-- [ ] **Step 4: Record evidence**
-
-Create a review report under `docs/reviews/` with run id, gate summary, artifact summary, known gaps, and whether a real PR was created.
-
-- [ ] **Step 5: Commit verification report**
+后续 gate/schema PR 追加：
 
 ```bash
-git add docs/reviews/
-git commit -m "docs: record standard delivery workflow verification"
+pnpm vitest run packages/core/__tests__/artifact/schemas.test.ts
+pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/gate/engine.test.ts
+pnpm vitest run packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts packages/core/__tests__/delivery/pr-package.test.ts
 ```
 
----
+## 10. 风险
 
-## 8. P2 Capability Plan
-
-### 8.1 Web Cockpit V2
-
-Goal: user can answer “现在卡在哪、风险是什么、下一步谁处理、PR 是否可审” without reading `.tekon/`.
-
-Required views:
-
-- Run timeline with phase/node/gate status.
-- Artifact graph from demand-card to QA signoff.
-- AC evidence matrix.
-- PR and CI status panel.
-- Human decision queue.
-- Provider/runtime snapshot.
-
-Exit criteria:
-
-- Web shows `standard-delivery` run with all P1 artifact types.
-- Failed gate links to exact artifact and command output.
-- QA signoff SHA and PR head SHA are visible together.
-
-### 8.2 Artifact Center
-
-Goal: artifacts are first-class review objects, not files hidden under `.tekon/runs`.
-
-Required capabilities:
-
-- Artifact list by run, role, type, status, version.
-- Artifact diff between versions.
-- Artifact-to-gate and artifact-to-AC links.
-- Downloadable Markdown/JSON evidence.
-
-### 8.3 Audit Replay And Causal Trace
-
-Goal: explain why a run reached its final state.
-
-Required capabilities:
-
-- Replay node transitions from audit log.
-- Show which gate blocked which node.
-- Show which artifact fixed which failure.
-- Detect audit hash chain breakage and surface it in review.
-
-### 8.4 Cost And Duration Telemetry
-
-Goal: judge whether AI delivery is worth using.
-
-Required metrics:
-
-- Duration by run, role, node, provider.
-- Retry count and repair count.
-- Human intervention count.
-- Token/cost fields when provider exposes them.
-- Time-to-reviewable-PR.
-
-### 8.5 Multi Provider Stabilization
-
-Goal: keep Codex stable, then add Trae as a comparable provider.
-
-Provider contract:
-
-- Non-interactive execution.
-- Isolated worktree.
-- Controlled artifact output directory.
-- Required manifest.
-- Deterministic timeout and retry behavior.
-- Structured failure classification.
-
-Exit criteria:
-
-- Same Tekon demand can run on Codex and Trae.
-- Provider comparison report shows success rate, artifact completeness, duration, human interventions, and failure diagnosability.
-
----
-
-## 9. P3 Capability Plan
-
-| Capability                             | Goal                                                                         | Entry condition                               |
-| -------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
-| DAG parallel execution                 | Run independent review/planning nodes in parallel                            | P1 workflow stable on at least 3 real demands |
-| Knowledge and skill flywheel           | Convert recurring failures and high-quality fixes into repo rules and skills | At least 10 real runs with review feedback    |
-| Architect/UI/DevOps/Ops roles          | Handle larger feature, frontend, release and operations work                 | P1 roles and scope gate stable                |
-| Release and rollback integration       | Extend beyond PR into controlled release preparation                         | QA signoff and PR evidence stable             |
-| Permission and organization governance | Support team use with identity, approval, audit visibility                   | Web Cockpit and audit replay stable           |
-
----
-
-## 10. Metrics
-
-| Metric                          | Target for P1                                          | Notes                                                 |
-| ------------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
-| Standard workflow parse success | 100% in tests                                          | Template cannot be optional once introduced           |
-| Required artifact completeness  | 100% for P1 samples                                    | Missing artifact blocks delivery                      |
-| Independent review enforcement  | 100% deterministic                                     | Same agent or execution must fail                     |
-| Role-scope violation detection  | Covered by tests for PM/RD/QA/Reviewer/PMO             | Gate checks explicit structured fields                |
-| AC evidence coverage            | 100% for accepted PRs                                  | Missing AC evidence blocks readiness                  |
-| QA signoff SHA match            | 100%                                                   | Signoff SHA must match PR head or delivery branch SHA |
-| Human review time               | Under 5 minutes for documentation and low-risk changes | Measured from PR package readability                  |
-| Real sample count               | 3 in P1-D                                              | Use Tekon self-demands first                          |
-
----
-
-## 11. Risks And Controls
-
-| Risk                                                         | Control                                                                                                                |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Workflow becomes too heavy for small docs changes            | Keep `docs-update` as lightweight template; use `standard-delivery` for default governed delivery and medium-risk work |
-| Role-scope gate overfits keywords                            | Gate should validate structured categories, not natural-language text alone                                            |
-| Independent review increases latency                         | Use parallelizable interface reviews after P1; avoid heavyweight approval boards                                       |
-| QA signoff blocks PR creation when PR URL does not exist yet | Allow signoff to bind delivery branch SHA before PR creation, then verify PR head SHA after PR creation                |
-| PMO becomes professional reviewer by accident                | PMO artifact schema only allows completeness, evidence, gate and decision fields                                       |
-| P2 expands before P1 stabilizes                              | P2 starts only after 3 real P1 samples and a review report                                                             |
-
----
-
-## 12. Execution Recommendation
-
-Recommended sequence:
-
-1. Run P1-0 first: use existing Tekon + Codex provider to self-bootstrap the `standard-delivery` template and role-boundary seed task.
-2. Implement P1-A and P1-B next: workflow template, artifact schemas, independent review gate, role-scope gate.
-3. Implement P1-C: AC evidence traceability, QA signoff, PR package V2.
-4. Run P1-D on 3 Tekon self-demands. At least one demand must use `standard-delivery` once the template and gates are available.
-5. Use P1 evidence to decide P2 ordering. If review bottleneck is highest, do Web Cockpit first. If run failures dominate, do provider regression and telemetry first.
-
-Do not start Trae provider, DAG parallel execution, or release automation before P1-D produces at least 3 successful or diagnosable real samples.
+- 长超时会降低误杀，但如果没有进展观测，会让卡死任务占用更久。
+- P1-A 的角色边界只是 prompt 层约束，不是确定性强约束。
+- QA final signoff 若要绑定 PR head SHA，需要处理 PR 创建发生在 workflow 之后的问题；P1-C 应先支持 delivery branch SHA，再补 PR 创建后的二次校验。
+- 当前 engine 仍按 phase/node 顺序执行，不应把模板中的多角色评审理解为已具备复杂 DAG 并行。
+- 如果继续用单个 RD node 承担过大 seed 任务，Codex 超时仍可能复现。

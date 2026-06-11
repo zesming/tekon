@@ -59,6 +59,7 @@ import {
   openTekonDatabase,
   saveDynamicTemplate,
   repoProfileCommandGuidance,
+  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   workUsabilitySampleSetSchema,
   upsertWorkUsabilitySample,
   type AgentAdapter,
@@ -1231,7 +1232,7 @@ function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     args: ['-p'],
     promptMode: 'stdin',
     outputFormat: 'json',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',
@@ -1253,7 +1254,7 @@ function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
     profile: 'internal',
     promptMode: 'stdin',
     outputFormat: 'text',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',

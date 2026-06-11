@@ -32,6 +32,7 @@ import {
   writeDemandShapeFile,
   writeDemandShapeFiles,
   agentAdapterConfigSchema,
+  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   loadWorkflowTemplateFile,
   type AgentAdapter,
   type AgentAdapterConfig,
@@ -1142,7 +1143,7 @@ function defaultWebClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     args: ['-p'],
     promptMode: 'stdin',
     outputFormat: 'json',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',
@@ -1164,7 +1165,7 @@ function defaultWebCodexConfig(repoPath: string): AgentAdapterConfig {
     profile: 'internal',
     promptMode: 'stdin',
     outputFormat: 'text',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',

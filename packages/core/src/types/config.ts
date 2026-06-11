@@ -9,6 +9,8 @@ import {
 const unsafeToolNames = new Set(['rm', 'sudo', 'su', 'chmod', 'chown']);
 const shellMetaPattern = /[;&|`$<>]/u;
 
+export const DEFAULT_REAL_PROVIDER_TIMEOUT_MS = 60 * 60 * 1000;
+
 function assertSafeCommand(command: { tool: string; args?: string[] }) {
   if (unsafeToolNames.has(command.tool)) {
     return false;
@@ -104,7 +106,11 @@ export const agentAdapterConfigSchema = z.object({
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
   outputFormat: z.enum(['text', 'json']).default('text'),
   permissionProfile: permissionProfileSchema,
-  timeoutMs: z.number().int().positive().default(300_000),
+  timeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_REAL_PROVIDER_TIMEOUT_MS),
 });
 export type AgentAdapterConfig = z.infer<typeof agentAdapterConfigSchema>;
 
