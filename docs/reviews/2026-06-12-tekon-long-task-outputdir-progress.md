@@ -1,9 +1,9 @@
 # Tekon 长程任务产物进展观测增强验证归档
 
-日期：2026-06-12  
-Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`  
-节点：`run_5cfee596-1540-40fd-af31-8e6652e62258_rd-code-change`  
-需求：验证并归档 Tekon 长程任务产物进展观测增强，确认 CommandGateway 能把受控 `outputDir` 下 artifact/manifest 文件变化计为 no-progress 进展，progress JSON 记录 outputDir 活动指标，并说明 1h/2h 长程预算仍需 heartbeat、no-progress 与产物进展观测共同约束。
+- 日期：2026-06-12
+- Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
+- 节点：`run_5cfee596-1540-40fd-af31-8e6652e62258_rd-code-change`
+- 需求：验证并归档 Tekon 长程任务产物进展观测增强，确认 CommandGateway 能把受控 `outputDir` 下 artifact/manifest 文件变化计为 no-progress 进展，progress JSON 记录 outputDir 活动指标，并说明 1h/2h 长程预算仍需 heartbeat、no-progress 与产物进展观测共同约束。
 
 ## 结论
 
@@ -15,15 +15,15 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 
 ## 变更摘要
 
-| 文件 | 变更 |
-| --- | --- |
-| `packages/core/__tests__/runtime/command-gateway.test.ts` | 新增 `treats controlled artifact and manifest writes as no-progress activity` 定向测试，使用 fake child 在受控 `outputDir` 写入 `artifact-manifest.json` 与 `implementation-plan.json`，并读取 progress JSON 断言 outputDir 活动指标。 |
-| `README.md` | 明确 1 小时默认预算和 2 小时级长程预算仍需 heartbeat、no-progress 与受控 outputDir 产物进展观测共同约束。 |
-| `CHANGELOG.md` | 在长程任务产物进展观测条目补充 1h/2h 预算约束说明。 |
-| `docs/manual/tekon-user-manual.md` | 同步用户手册正文，说明长程预算放大不替代 heartbeat、no-progress 与受控 outputDir 产物进展观测。 |
-| `docs/manual/tekon-user-manual.html` | 同步用户手册 HTML 审阅版，避免 Markdown/HTML 漂移。 |
-| `docs/reviews/2026-06-12-tekon-long-task-outputdir-progress.md` | 新增本归档报告。 |
-| `docs/reviews/2026-06-12-tekon-long-task-outputdir-progress.html` | 新增 HTML 审阅版。 |
+| 文件                                                              | 变更                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/__tests__/runtime/command-gateway.test.ts`         | 新增 `treats controlled artifact and manifest writes as no-progress activity` 定向测试，使用 fake child 在受控 `outputDir` 写入 `artifact-manifest.json` 与 `implementation-plan.json`，并读取 progress JSON 断言 outputDir 活动指标。 |
+| `README.md`                                                       | 明确 1 小时默认预算和 2 小时级长程预算仍需 heartbeat、no-progress 与受控 outputDir 产物进展观测共同约束。                                                                                                                              |
+| `CHANGELOG.md`                                                    | 在长程任务产物进展观测条目补充 1h/2h 预算约束说明。                                                                                                                                                                                    |
+| `docs/manual/tekon-user-manual.md`                                | 同步用户手册正文，说明长程预算放大不替代 heartbeat、no-progress 与受控 outputDir 产物进展观测。                                                                                                                                        |
+| `docs/manual/tekon-user-manual.html`                              | 同步用户手册 HTML 审阅版，避免 Markdown/HTML 漂移。                                                                                                                                                                                    |
+| `docs/reviews/2026-06-12-tekon-long-task-outputdir-progress.md`   | 新增本归档报告。                                                                                                                                                                                                                       |
+| `docs/reviews/2026-06-12-tekon-long-task-outputdir-progress.html` | 新增 HTML 审阅版。                                                                                                                                                                                                                     |
 
 ## Artifact 正文说明
 
@@ -31,16 +31,16 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 
 ## Gate Evidence
 
-| Gate | Command | Result | Evidence |
-| --- | --- | --- | --- |
-| focused-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts -t "controlled artifact and manifest writes"` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过：1 passed、23 skipped。 |
-| runtime-test | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过：24 passed。 |
-| build | `pnpm build` | 通过 | 2026-06-12 在交付分支 worktree 实跑通过；rd-code-change 外层 build gate 也已通过。 |
-| lint / typecheck | `pnpm lint` | 通过 | rd-code-change 外层 lint gate 已通过；该 gate 运行 `pnpm -r lint`，覆盖 core、cli、web TypeScript noEmit。 |
-| test | `pnpm test` | 通过 | 首次在未 build 的 worktree 运行失败，原因是 `packages/cli/dist/index.js` 与 package dist 入口尚未生成；执行 `pnpm build` 后重跑通过：58 test files passed、348 tests passed。 |
-| security | repo profile security gate | 通过 | rd-code-change 外层 security gate 已通过，`tekon-builtin` scanner findings 为空；本次无依赖新增、无权限扩大、无生产写操作。 |
-| review-surface | `tekon review` | 待后续交付节点 | 该项是审阅入口生成动作，不替代上述 gate；本需求不授权 run 内远端 PR。 |
-| delivery-package | `tekon delivery prepare` | 未授权在本节点执行 | 本需求明确不在 run 内创建远端 PR；delivery prepare 是否可用由外层交付节点判定。 |
+| Gate             | Command                                                                                                                       | Result             | Evidence                                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| focused-test     | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts -t "controlled artifact and manifest writes"` | 通过               | 2026-06-12 在交付分支 worktree 实跑通过：1 passed、23 skipped。                                                                                                               |
+| runtime-test     | `pnpm exec vitest --run packages/core/__tests__/runtime/command-gateway.test.ts`                                              | 通过               | 2026-06-12 在交付分支 worktree 实跑通过：24 passed。                                                                                                                          |
+| build            | `pnpm build`                                                                                                                  | 通过               | 2026-06-12 在交付分支 worktree 实跑通过；rd-code-change 外层 build gate 也已通过。                                                                                            |
+| lint / typecheck | `pnpm lint`                                                                                                                   | 通过               | rd-code-change 外层 lint gate 已通过；该 gate 运行 `pnpm -r lint`，覆盖 core、cli、web TypeScript noEmit。                                                                    |
+| test             | `pnpm test`                                                                                                                   | 通过               | 首次在未 build 的 worktree 运行失败，原因是 `packages/cli/dist/index.js` 与 package dist 入口尚未生成；执行 `pnpm build` 后重跑通过：58 test files passed、348 tests passed。 |
+| security         | repo profile security gate                                                                                                    | 通过               | rd-code-change 外层 security gate 已通过，`tekon-builtin` scanner findings 为空；本次无依赖新增、无权限扩大、无生产写操作。                                                   |
+| review-surface   | `tekon review`                                                                                                                | 待后续交付节点     | 该项是审阅入口生成动作，不替代上述 gate；本需求不授权 run 内远端 PR。                                                                                                         |
+| delivery-package | `tekon delivery prepare`                                                                                                      | 未授权在本节点执行 | 本需求明确不在 run 内创建远端 PR；delivery prepare 是否可用由外层交付节点判定。                                                                                               |
 
 ## Human Gate 与回滚
 
@@ -50,21 +50,21 @@ Run ID：`run_5cfee596-1540-40fd-af31-8e6652e62258`
 
 ## Non-goals 对照
 
-| Non-goal | 对照结论 |
-| --- | --- |
-| 不自动 merge、不自动上线、不执行生产写操作 | 未执行相关命令；文档继续强调人工控制。 |
-| 不在 run 内创建远端 PR | 未创建远端 PR；delivery 行为留给外层受控节点。 |
-| 不扩大需求范围之外的重构、权限或外部系统改动 | 未改权限、依赖、provider 接线或外部系统；新增内容限定为定向测试、文档说明和归档证据。 |
-| 不把 artifact/manifest 活动替代 heartbeat 或 no-progress 机制 | README、CHANGELOG、用户手册和归档文档均说明三者共同约束。 |
+| Non-goal                                                      | 对照结论                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 不自动 merge、不自动上线、不执行生产写操作                    | 未执行相关命令；文档继续强调人工控制。                                                |
+| 不在 run 内创建远端 PR                                        | 未创建远端 PR；delivery 行为留给外层受控节点。                                        |
+| 不扩大需求范围之外的重构、权限或外部系统改动                  | 未改权限、依赖、provider 接线或外部系统；新增内容限定为定向测试、文档说明和归档证据。 |
+| 不把 artifact/manifest 活动替代 heartbeat 或 no-progress 机制 | README、CHANGELOG、用户手册和归档文档均说明三者共同约束。                             |
 
 ## AC 对照
 
-| AC | 状态 | 证据 |
-| --- | --- | --- |
-| AC-1 用户可审阅需求结果 | 已准备 | 归档 Markdown/HTML、code-changes artifact、目标 diff 和外层 review surface 共同提供变更摘要、artifact 正文和 gate 状态。 |
+| AC                                                  | 状态   | 证据                                                                                                                                                         |
+| --------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AC-1 用户可审阅需求结果                             | 已准备 | 归档 Markdown/HTML、code-changes artifact、目标 diff 和外层 review surface 共同提供变更摘要、artifact 正文和 gate 状态。                                     |
 | AC-2 build/lint/test/security gate 通过或显式不适用 | 已验证 | build、lint、security 外层 gate 已通过；2026-06-12 补跑 focused-test、CommandGateway runtime-test 和 `pnpm test`，最终全量测试 58 files / 348 tests passed。 |
-| AC-3 范围保持在需求内 | 已控制 | diff 范围限定为 CommandGateway 定向测试、文档说明和归档报告；未修改 production runtime。 |
-| AC-4 高风险影响具备人工审批、回滚或风险说明 | 已记录 | 本文记录 human gate、rollback、no remote side effects 和残余风险；最终接受残余高风险仍由人类 owner 控制。 |
+| AC-3 范围保持在需求内                               | 已控制 | diff 范围限定为 CommandGateway 定向测试、文档说明和归档报告；未修改 production runtime。                                                                     |
+| AC-4 高风险影响具备人工审批、回滚或风险说明         | 已记录 | 本文记录 human gate、rollback、no remote side effects 和残余风险；最终接受残余高风险仍由人类 owner 控制。                                                    |
 
 ## 风险
 
