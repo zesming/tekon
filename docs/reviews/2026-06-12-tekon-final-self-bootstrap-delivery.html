@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon 最终自举交付归档证据</title>
+    <style>
+      :root {
+        --bg: #f5f7fa;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #526071;
+        --line: #d8e0ea;
+        --soft: #eef4fa;
+        --ok: #067647;
+        --warn: #9a5b00;
+        --risk: #b42318;
+        --info: #175cd3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        line-height: 1.68;
+      }
+      main {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 36px 0 64px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      header {
+        padding: 30px 32px;
+      }
+      section {
+        margin-top: 18px;
+        padding: 28px 32px 32px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.22;
+      }
+      h2 {
+        margin: 0 0 14px;
+        font-size: 21px;
+        line-height: 1.35;
+      }
+      p {
+        margin: 10px 0;
+      }
+      ul {
+        margin: 10px 0;
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .pill {
+        display: inline-block;
+        margin: 3px 6px 3px 0;
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .passed {
+        background: #dcfae6;
+        color: var(--ok);
+      }
+      .not-checked {
+        background: #fef0c7;
+        color: var(--warn);
+      }
+      .manual {
+        background: #e0eaff;
+        color: var(--info);
+      }
+      .boundary {
+        background: #fee4e2;
+        color: var(--risk);
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        padding: 1px 5px;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 22px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+      }
+      @media (max-width: 720px) {
+        main {
+          width: min(100% - 24px, 1120px);
+          padding-top: 20px;
+        }
+        header,
+        section {
+          padding: 22px 18px;
+        }
+        table {
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tekon 最终自举交付归档证据</h1>
+        <p class="meta">
+          日期：2026-06-12 · 归档对象：当前合并后的下一阶段自举交付分支
+        </p>
+        <p>
+          当前合并后 HEAD：<code
+            >9dd2ed3974f57648a8da802150cd3114f87b7a60</code
+          >；关联 run：<code
+            >run_5cfee596-1540-40fd-af31-8e6652e62258</code
+          >；关联 PR：<code>PR #5</code>。
+        </p>
+        <p>
+          <span class="pill passed">passed</span>
+          <span class="pill not-checked">not checked</span>
+          <span class="pill manual">manual review required</span>
+          <span class="pill boundary">boundary</span>
+        </p>
+        <p>
+          本 HTML 是人类正式审阅入口，与 Markdown
+          源稿保持相同章节顺序和核心结论；它不构成自动 merge、release 或
+          deploy 批准。
+        </p>
+      </header>
+
+      <section>
+        <h2>1. 本次目标与范围</h2>
+        <p>
+          <strong>事实：</strong>本次只新增最终自举交付归档 Markdown/HTML，目标路径为
+          <code>docs/reviews/2026-06-12-tekon-final-self-bootstrap-delivery.md</code>
+          与
+          <code>docs/reviews/2026-06-12-tekon-final-self-bootstrap-delivery.html</code>。
+        </p>
+        <p>
+          <strong>非范围：</strong>不改生产代码，不改测试代码，不改工作流，不改 CI
+          配置，不自动创建 PR，不自动 merge，不 release，不 deploy。
+        </p>
+        <p>
+          <strong>判断依据：</strong>需求、PRD 与 RD implementation plan
+          均要求本节点仅归档证据，且当前实现没有扩大到生产代码、工作流、发布或远端操作。
+        </p>
+      </section>
+
+      <section>
+        <h2>2. 当前合并后 HEAD</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>项目</th>
+                <th>证据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>HEAD</td>
+                <td>
+                  <code>9dd2ed3974f57648a8da802150cd3114f87b7a60</code>
+                </td>
+              </tr>
+              <tr>
+                <td>Commit message</td>
+                <td>
+                  <code>merge self-bootstrap prompt fixes into delivery PR</code>
+                </td>
+              </tr>
+              <tr>
+                <td>Merge parents</td>
+                <td><code>3d102b2</code> 与 <code>cbfe8c2</code></td>
+              </tr>
+              <tr>
+                <td>AuthorDate / CommitDate</td>
+                <td><code>2026-06-12 04:57:17 +0800</code></td>
+              </tr>
+              <tr>
+                <td>本地状态</td>
+                <td>
+                  文档创建前 <code>git status --short</code>
+                  无输出；写入后仅应出现本归档 Markdown/HTML 两个目标文件。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>事实：</strong>上述 HEAD 来自本节点执行
+          <code>git rev-parse HEAD</code> 与
+          <code>git show --no-patch --format=fuller HEAD</code> 的实际输出。
+        </p>
+        <p>
+          <strong>判断依据：</strong>本文后续所有“当前合并后”表述均绑定该 HEAD；PR
+          #5 与 run_5 的证据如绑定其他 ref，均单独列明，不混写为当前 HEAD
+          的远端 CI 结论。
+        </p>
+      </section>
+
+      <section>
+        <h2>3. 证据来源总表</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>来源</th>
+                <th>资料内容</th>
+                <th>对 Tekon 的判断依据</th>
+                <th>局限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>process-checkpoint.v1.md</code></td>
+                <td>required nodes、artifact evidence、gate evidence、人工边界</td>
+                <td>支撑 run workflow passed 和交付包可进入人工审阅</td>
+                <td>不等价于 merge、release、deploy 批准</td>
+              </tr>
+              <tr>
+                <td><code>delivery-package.v3.md</code></td>
+                <td>
+                  <code>workflowStatus: passed</code>、branch/base、AC、<code
+                    >qaSignoff: passed</code
+                  >、security、<code>remoteCi: not checked</code>
+                </td>
+                <td>支撑 run readiness 与交付面快照</td>
+                <td>
+                  <code>remoteCi: not checked</code> 是 PR #5 CI
+                  写回前观察，不能误写为最终远端 CI 由该文件验证。
+                </td>
+              </tr>
+              <tr>
+                <td><code>ci-status.v1.md</code></td>
+                <td>
+                  PR #5 URL、<code>checkedAt</code>、<code>ciStatus:
+                    passed</code
+                  >、check names
+                </td>
+                <td>支撑 PR #5 远端 CI 在该快照时点为 passed</td>
+                <td>当前节点未联网访问 GitHub，PR 当前状态需人工复核。</td>
+              </tr>
+              <tr>
+                <td><code>qa-release-signoff.v1.md</code></td>
+                <td>
+                  <code>targetRef</code>、<code>validatedRef</code>、<code
+                    >expectedRef</code
+                  >、<code>overallStatus: passed</code>、manual gates
+                </td>
+                <td>支撑 QA 对所测 ref 的 passed 签署</td>
+                <td>
+                  绑定 ref 为
+                  <code>sha:3d102b2b8257b86d5b7b947d2c4e1a55e7e72709</code>，不同于当前
+                  merge HEAD。
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <code>qa-validation/test-report.v4.md</code> 与
+                  <code>ac-evidence.v4.md</code>
+                </td>
+                <td>QA 命令、AC evidence、环境限制</td>
+                <td>支撑所测即所得风险处理</td>
+                <td>sandbox、缺少本地依赖与只读 DB 限制需人工理解。</td>
+              </tr>
+              <tr>
+                <td><code>code-review.v3.md</code></td>
+                <td>reviewer approved、scope、格式/静态复查、无远端副作用</td>
+                <td>支撑当时变更审阅通过</td>
+                <td>不是本次最终归档文档的独立代码审阅签署。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>
+          4. run_5cfee596-1540-40fd-af31-8e6652e62258 passed/readiness
+          证据
+        </h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>证据项</th>
+                <th>观察结果</th>
+                <th>来源</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>流程节点</td>
+                <td>
+                  required workflow nodes 均为 <span class="pill passed">passed</span
+                  >，PMO checkpoint 结论为流程节点均已通过、artifact 与 gate
+                  证据齐备，交付包可进入人工审阅。
+                </td>
+                <td><code>process-checkpoint.v1.md</code></td>
+              </tr>
+              <tr>
+                <td>交付包状态</td>
+                <td>
+                  <code>workflowStatus: passed</code>，branch 为
+                  <code>tekon-delivery/run_5cfee596-1540-40fd-af31-8e6652e62258</code>，base
+                  为 <code>main</code>，<code>requiresHumanApproval: true</code>。
+                </td>
+                <td><code>delivery-package.v3.md</code></td>
+              </tr>
+              <tr>
+                <td>AC 与 gate evidence</td>
+                <td>
+                  AC-1 至 AC-4 记录为 passed；build、lint、security 与 QA validation
+                  gate evidence 均有 passed 记录，同时保留 root web HTTP
+                  和只读 DB 环境限制说明。
+                </td>
+                <td>
+                  <code>delivery-package.v3.md</code>、<code
+                    >qa-validation/test-report.v4.md</code
+                  >、<code>ac-evidence.v4.md</code>
+                </td>
+              </tr>
+              <tr>
+                <td>QA signoff</td>
+                <td>
+                  <code>qaSignoff: passed</code>；<code>overallStatus:
+                    passed</code
+                  >；<code>targetRef</code>、<code>validatedRef</code>、<code
+                    >expectedRef</code
+                  >
+                  均为
+                  <code>sha:3d102b2b8257b86d5b7b947d2c4e1a55e7e72709</code>。
+                </td>
+                <td><code>delivery-package.v3.md</code>、<code>qa-release-signoff.v1.md</code></td>
+              </tr>
+              <tr>
+                <td>Security</td>
+                <td>
+                  <code>gate_ba352e01-776b-444c-b17b-0ee1431805d3: passed</code>，security-scan
+                  log failure 为 none。
+                </td>
+                <td><code>delivery-package.v3.md</code></td>
+              </tr>
+              <tr>
+                <td>Review</td>
+                <td>
+                  reviewer-change-review <code>decision: approved</code>，未发现
+                  production runtime code 修改、依赖新增、权限扩大、远端 PR
+                  创建或生产写操作。
+                </td>
+                <td><code>code-review.v3.md</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>事实：</strong><code>delivery-package.v3.md</code> 记录
+          <code>remoteCi: not checked</code>；后续
+          <code>ci-status.v1.md</code> 对 PR #5 记录远端 CI passed。二者不是同一观察时点。
+        </p>
+        <p>
+          <strong>判断依据：</strong>run_5 的 passed/readiness 可作为“所测 ref
+          与当时交付面可进入人工审阅”的证据；但当前合并后 HEAD 是后续 merge commit
+          <code>9dd2ed3974f57648a8da802150cd3114f87b7a60</code>，不能把 run 的 QA
+          tested ref 或 PR #5 CI 快照直接外推成当前 HEAD 的 live 远端 CI 全量通过。
+        </p>
+      </section>
+
+      <section>
+        <h2>5. PR #5 真实 PR/CI 证据</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>项目</th>
+                <th>证据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>PR 标识</td>
+                <td><code>PR #5</code></td>
+              </tr>
+              <tr>
+                <td>本地证据来源</td>
+                <td><code>ci-status.v1.md</code></td>
+              </tr>
+              <tr>
+                <td><code>prUrl</code></td>
+                <td><code>https://github.com/zesming/tekon/pull/5</code></td>
+              </tr>
+              <tr>
+                <td><code>checkedAt</code></td>
+                <td><code>2026-06-11T20:54:04.582Z</code></td>
+              </tr>
+              <tr>
+                <td><code>ciStatus</code></td>
+                <td><code>passed</code></td>
+              </tr>
+              <tr>
+                <td>Check 1</td>
+                <td><code>Core build and tests</code>：<code>SUCCESS</code> / pass</td>
+              </tr>
+              <tr>
+                <td>Check 2</td>
+                <td>
+                  <code>Lint GitHub Actions workflows</code>：<code>SUCCESS</code> /
+                  pass
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>局限：</strong>当前节点没有联网访问 GitHub，也没有使用 GitHub
+          凭据核验 live 页面；PR #5 当前状态、当前 head、是否仍为最新、是否已合并、CI
+          页面是否仍显示通过，需要人类打开 PR #5 复核。
+        </p>
+      </section>
+
+      <section>
+        <h2>6. 当前合并后本地验证命令摘要</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>命令</th>
+                <th>目的</th>
+                <th>结果</th>
+                <th>证据/局限</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>git rev-parse HEAD</code></td>
+                <td>复核当前合并后 HEAD</td>
+                <td>exit 0，输出当前 HEAD</td>
+                <td>绑定本文“当前合并后 HEAD”口径</td>
+              </tr>
+              <tr>
+                <td><code>git show --no-patch --format=fuller HEAD</code></td>
+                <td>复核 commit subject、merge parents 与时间</td>
+                <td>exit 0，subject 与 parents 如本文第 2 节</td>
+                <td>证明当前 HEAD 是 merge commit</td>
+              </tr>
+              <tr>
+                <td><code>git status --short</code></td>
+                <td>查看写文档前工作树状态</td>
+                <td>exit 0，无输出</td>
+                <td>写入前工作树干净；写入后范围检查应只包含两个目标文件</td>
+              </tr>
+              <tr>
+                <td><code>test ! -e</code> 两个目标文件</td>
+                <td>确认目标文件创建前不存在</td>
+                <td>exit 0</td>
+                <td>本次为新增归档 Markdown/HTML</td>
+              </tr>
+              <tr>
+                <td><code>test -s</code> run_5 关键 artifact 文件</td>
+                <td>确认本地证据文件可读</td>
+                <td>exit 0</td>
+                <td>覆盖 7 个本地证据文件</td>
+              </tr>
+              <tr>
+                <td><code>rg</code> 证据关键行抽取</td>
+                <td>抽取 workflow、CI、QA signoff、checks、PR URL 等关键字段</td>
+                <td>exit 0，能定位关键证据</td>
+                <td>输出较长；正文只摘录核心字段</td>
+              </tr>
+              <tr>
+                <td><code>test -s</code> 两个目标文件</td>
+                <td>写入后确认 Markdown/HTML 非空</td>
+                <td>exit 0</td>
+                <td>
+                  <code>wc -c</code> 显示 Markdown 与 HTML 均为非零字节。
+                </td>
+              </tr>
+              <tr>
+                <td><code>git status --short</code></td>
+                <td>检查写入后工作树范围</td>
+                <td>exit 0，输出两个未跟踪目标文件</td>
+                <td>仅列本归档 HTML 与 Markdown。</td>
+              </tr>
+              <tr>
+                <td><code>git ls-files --others --exclude-standard</code> 两个目标文件</td>
+                <td>补充确认未跟踪新增文件范围</td>
+                <td>exit 0，输出两个目标文件</td>
+                <td>因本节点禁止 <code>git add</code>，新增文件不会出现在普通 <code>git diff --name-only</code> 中。</td>
+              </tr>
+              <tr>
+                <td><code>git diff --name-only</code></td>
+                <td>检查已跟踪文件改动范围</td>
+                <td>exit 0，无输出</td>
+                <td>
+                  说明没有已跟踪文件被修改；新增文件范围由
+                  <code>git status --short</code> 和
+                  <code>git ls-files --others</code> 证明。
+                </td>
+              </tr>
+              <tr>
+                <td><code>git diff --check -- docs/reviews/...md docs/reviews/...html</code></td>
+                <td>检查 diff 空白问题</td>
+                <td>exit 0，无输出</td>
+                <td>非 package-manager 检查，已在 manifest 前执行</td>
+              </tr>
+              <tr>
+                <td><code>rg</code> 章节、关键证据与禁用占位标记检查</td>
+                <td>确认章节完整、关键证据存在、无禁用占位标记</td>
+                <td>章节/证据检查 exit 0；禁用标记扫描 exit 1 且无输出</td>
+                <td>禁用占位标记命令不在正文展开原始 pattern，避免文档自身命中</td>
+              </tr>
+              <tr>
+                <td><code>pnpm exec prettier --check docs/reviews/...md docs/reviews/...html</code></td>
+                <td>目标文档格式检查</td>
+                <td>本节点未运行</td>
+                <td>
+                  Tekon artifact protocol 要求在写 manifest 前不得运行 package-manager
+                  命令，写 manifest 后停止；外层 gate 可补跑。
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          未运行全量 <code>pnpm build</code>、<code>pnpm lint</code>、<code
+            >pnpm test</code
+          >
+          的理由：本需求只新增 docs/reviews 下归档 Markdown/HTML，不改代码、测试、工作流、CLI
+          行为或用户可见命令；本节点验证聚焦文件范围、证据可追溯、章节完整、禁用占位标记、HTML/Markdown
+          一致性与人工边界。package-manager 命令由外层 Tekon gates 或人工环境补充。
+        </p>
+      </section>
+
+      <section>
+        <h2>7. QA 所测即所得风险处理</h2>
+        <p>
+          <strong>事实：</strong>QA release signoff 绑定
+          <code>sha:3d102b2b8257b86d5b7b947d2c4e1a55e7e72709</code>，当前合并后 HEAD 为
+          <code>9dd2ed3974f57648a8da802150cd3114f87b7a60</code>。两者不一致，本文不把旧
+          QA signoff 扩展成当前 HEAD 的全量 QA 通过。
+        </p>
+        <p>
+          <strong>事实：</strong>PR #5 CI artifact 的 <code>checkedAt</code> 是
+          <code>2026-06-11T20:54:04.582Z</code> 的快照；PR 当前页面、当前 head
+          和合并状态仍需人工复核。
+        </p>
+        <p>
+          <strong>事实：</strong>QA validation 记录当前 QA lease
+          缺少本地依赖、根级 web HTTP 测试受
+          <code>127.0.0.1 listen EPERM</code> 限制，<code>tekon review</code> /
+          <code>delivery prepare</code> 因只读 Tekon DB
+          失败。这些限制作为残余/下游交付核对项记录，不掩盖为已完成事项。
+        </p>
+        <p>
+          <strong>处理方式：</strong>HTML 审阅版与 Markdown
+          源稿采用相同章节顺序和相同核心结论；人类审阅以 HTML
+          为正式入口，但证据语义不得与 Markdown 漂移。任何将历史快照扩展为当前 live
+          状态、当前 HEAD 全量 QA 通过、或已接受残余风险的判断，都需要人类 owner
+          明确确认。
+        </p>
+      </section>
+
+      <section>
+        <h2>8. 不自动 merge/release/deploy 边界</h2>
+        <ul>
+          <li>本次不自动创建 PR。</li>
+          <li>本次不自动 merge。</li>
+          <li>本次不 release。</li>
+          <li>本次不 deploy。</li>
+          <li>本次不执行生产写操作。</li>
+          <li>本次不接受高风险残余风险。</li>
+          <li>合入、发布、上线、残余风险接受均需人类 owner 明确确认。</li>
+        </ul>
+        <p>
+          <strong>判断依据：</strong>本节点只新增归档 Markdown/HTML，不运行
+          <code>git add</code>、<code>git commit</code>、<code>git push</code>、<code
+            >gh pr create</code
+          >、<code>gh pr merge</code>、release 或 deploy 相关动作。Tekon Engine
+          后续若提交或推进流程，属于本节点之外的受控流程。
+        </p>
+      </section>
+
+      <section>
+        <h2>9. 后续人工审阅点</h2>
+        <ul>
+          <li>人工打开 PR #5 复核当前 PR 状态、head、合并状态和 CI 页面。</li>
+          <li>
+            人工确认当前合并后 HEAD
+            <code>9dd2ed3974f57648a8da802150cd3114f87b7a60</code> 与 run_5 QA
+            tested ref <code>3d102b2b8257b86d5b7b947d2c4e1a55e7e72709</code>
+            的差异是否可接受。
+          </li>
+          <li>人工确认当前本地验证命令结果是否足以支撑本次“仅归档文档”的交付口径。</li>
+          <li>人工确认 QA 所测即所得风险是否需要重新 QA 或补充 CI。</li>
+          <li>人工确认是否推进后续 PR、merge、release 或 deploy。</li>
+          <li>
+            人工确认外层 Tekon gates 是否已补跑 package-manager 格式检查、必要
+            lint/test/build，或明确这些命令对本归档文档节点不适用。
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>10. 回滚方案</h2>
+        <p>
+          删除
+          <code>docs/reviews/2026-06-12-tekon-final-self-bootstrap-delivery.md</code>
+          与
+          <code>docs/reviews/2026-06-12-tekon-final-self-bootstrap-delivery.html</code>
+          即可回滚。本次不得产生生产代码、依赖、数据库、工作流或外部系统配置变更。
+        </p>
+      </section>
+
+      <section>
+        <h2>11. README、CHANGELOG 与主用户手册同步判断</h2>
+        <p>
+          <strong>事实：</strong>本需求只新增 docs/reviews
+          下最终归档证据，不改变 Tekon 用户可见命令、行为、工作流、CLI
+          输出或使用方式。
+        </p>
+        <p>
+          <strong>判断依据：</strong>没有修改生产代码、测试代码、工作流、CLI、README、CHANGELOG
+          或主用户手册的需求与技术必要性；同步更新主用户手册反而会扩大本节点范围。因此本次不更新
+          <code>README.md</code>、<code>CHANGELOG.md</code>、<code
+            >docs/manual/tekon-user-manual.md</code
+          >
+          或 <code>docs/manual/tekon-user-manual.html</code>。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
