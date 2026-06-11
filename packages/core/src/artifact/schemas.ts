@@ -313,14 +313,133 @@ function normalizeStructuredPayload(
   if (type === 'test-plan') {
     return normalizeTestPlanPayload(payload);
   }
-  if (
-    type !== 'code-changes' ||
-    typeof payload !== 'object' ||
-    payload === null ||
-    'title' in payload ||
-    'body' in payload
-  ) {
+  if (type === 'test-report' || type === 'ac-evidence') {
+    return normalizeQaEvidencePayload(payload);
+  }
+  if (type === 'code-changes') {
+    return normalizeCodeChangesPayload(payload);
+  }
   return payload;
+}
+
+function normalizeQaEvidencePayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+  const record = payload as Record<string, unknown>;
+  const updates: Record<string, unknown> = {};
+  if (typeof record.summary !== 'string') {
+    const summary = providerStyleSummary(record.summary);
+    if (summary) {
+      updates.summary = summary;
+    }
+  }
+  const originalCriteriaEvidence = record.criteriaEvidence;
+  if (Array.isArray(originalCriteriaEvidence)) {
+    const criteriaEvidence = originalCriteriaEvidence.map((entry) =>
+      normalizeProviderStyleCriteriaEvidence(entry),
+    );
+    if (
+      criteriaEvidence.some(
+        (entry, index) => entry !== originalCriteriaEvidence[index],
+      )
+    ) {
+      updates.criteriaEvidence = criteriaEvidence;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    return payload;
+  }
+  return {
+    ...record,
+    ...updates,
+  };
+}
+
+function providerStyleSummary(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value)
+    .map(([key, entry]) => {
+      const text = providerStyleSummaryValue(entry);
+      return text ? `${key}: ${text}` : undefined;
+    })
+    .filter((entry): entry is string => entry !== undefined);
+  return entries.length > 0 ? entries.join('; ') : undefined;
+}
+
+function providerStyleSummaryValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return nonEmptyString(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    const values = value
+      .map((entry) => providerStyleSummaryValue(entry))
+      .filter((entry): entry is string => entry !== undefined);
+    return values.length > 0 ? values.join(', ') : undefined;
+  }
+  if (typeof value === 'object' && value !== null) {
+    return JSON.stringify(value);
+  }
+  return undefined;
+}
+
+function normalizeProviderStyleCriteriaEvidence(entry: unknown): unknown {
+  if (typeof entry !== 'object' || entry === null) {
+    return entry;
+  }
+  const record = entry as Record<string, unknown>;
+  const criterionId =
+    nonEmptyString(record.criterionId) ?? nonEmptyString(record.id);
+  const status = providerStyleCriteriaEvidenceStatus(record.status);
+  const evidence =
+    nonEmptyString(record.evidence) ??
+    nonEmptyString(record.evidenceSummary) ??
+    nonEmptyString(record.coverage);
+  if (
+    criterionId === record.criterionId &&
+    status === record.status &&
+    evidence === record.evidence
+  ) {
+    return entry;
+  }
+  return {
+    ...record,
+    ...(criterionId ? { criterionId } : {}),
+    ...(status ? { status } : {}),
+    ...(evidence ? { evidence } : {}),
+  };
+}
+
+function providerStyleCriteriaEvidenceStatus(
+  value: unknown,
+): 'passed' | 'failed' | 'blocked' | 'unknown' | undefined {
+  const status = nonEmptyString(value)?.toLowerCase();
+  if (!status) {
+    return undefined;
+  }
+  if (
+    status === 'passed' ||
+    status === 'failed' ||
+    status === 'blocked' ||
+    status === 'unknown'
+  ) {
+    return status;
+  }
+  if (status.startsWith('passed_with_')) {
+    return 'passed';
+  }
+  if (status.startsWith('failed_with_')) {
+    return 'failed';
+  }
+  if (status.startsWith('blocked_with_')) {
+    return 'blocked';
+  }
+  return undefined;
 }
 
 function normalizeTestPlanPayload(payload: unknown): unknown {
@@ -400,7 +519,9 @@ function providerStyleTestCases(record: Record<string, unknown>): {
   if (Array.isArray(record.testScenarios)) {
     const testCases = record.testScenarios
       .map((entry, index) => formatProviderStyleTestCase(entry, index))
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+      .filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== undefined,
+      );
     if (testCases.length > 0) {
       return testCases;
     }
@@ -408,7 +529,9 @@ function providerStyleTestCases(record: Record<string, unknown>): {
   if (Array.isArray(record.acceptanceCoverage)) {
     return record.acceptanceCoverage
       .map((entry, index) => formatAcceptanceCoverageTestCase(entry, index))
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+      .filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== undefined,
+      );
   }
   return [];
 }
@@ -544,7 +667,9 @@ function normalizeRoleScopedReviewPayload(payload: unknown): unknown {
   }
   const originalFindings = record.findings;
 
-  const findings = originalFindings.map((entry) => normalizeReviewFinding(entry));
+  const findings = originalFindings.map((entry) =>
+    normalizeReviewFinding(entry),
+  );
   if (findings.every((entry, index) => entry === originalFindings[index])) {
     return payload;
   }
@@ -579,6 +704,15 @@ function isRole(value: string): value is z.infer<typeof roleSchema> {
   return ['pm', 'rd', 'qa', 'reviewer', 'pmo'].includes(value);
 }
 
+function normalizeCodeChangesPayload(payload: unknown): unknown {
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    'title' in payload ||
+    'body' in payload
+  ) {
+    return payload;
+  }
   const record = payload as Record<string, unknown>;
   const summary = nonEmptyString(record.summary);
   const body = providerStyleBody(record);

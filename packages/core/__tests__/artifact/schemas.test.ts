@@ -321,6 +321,139 @@ describe('artifact schemas', () => {
     });
   });
 
+  it('normalizes provider-style QA validation reports into schema-compatible evidence', () => {
+    expect(
+      validateArtifactContent(
+        'test-report',
+        JSON.stringify({
+          title: 'QA Test Report',
+          body: 'QA validation completed.',
+          summary: {
+            scopedBlockingDefects: 0,
+            recommendation: 'Proceed to controlled delivery review.',
+          },
+          criteriaEvidence: [
+            {
+              id: 'AC-1',
+              status: 'passed_with_delivery_followup',
+              evidenceSummary: 'Focused CommandGateway regression passed.',
+              outputPaths: ['logs/focused-command-gateway.log'],
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      summary:
+        'scopedBlockingDefects: 0; recommendation: Proceed to controlled delivery review.',
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Focused CommandGateway regression passed.',
+          outputPaths: ['logs/focused-command-gateway.log'],
+        },
+      ],
+    });
+
+    expect(
+      validateArtifactContent(
+        'ac-evidence',
+        JSON.stringify({
+          title: 'AC Evidence',
+          body: 'All acceptance criteria are verified.',
+          criteriaEvidence: [
+            {
+              id: 'AC-4',
+              status: 'passed_with_manual_delivery_boundary',
+              criterion: 'High-risk changes require controlled delivery.',
+              coverage: 'QA verified no merge or release was performed.',
+              evidenceSummary:
+                'Manual delivery boundary is documented in review evidence.',
+              gateResultIds: ['gate_security'],
+              artifactIds: ['qa-validation:test-report'],
+              outputPaths: ['docs/reviews/long-task-progress.md'],
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-4',
+          status: 'passed',
+          evidence:
+            'Manual delivery boundary is documented in review evidence.',
+          gateResultIds: ['gate_security'],
+          artifactIds: ['qa-validation:test-report'],
+          outputPaths: ['docs/reviews/long-task-progress.md'],
+        },
+      ],
+    });
+  });
+
+  it('keeps provider-style QA validation evidence normalization narrow', () => {
+    for (const payload of [
+      {
+        title: 'AC Evidence',
+        body: 'Criterion text alone is not validation evidence.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'passed',
+            criterion: 'The user can review long task progress.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Missing status is not evidence.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            evidenceSummary: 'Focused regression passed.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Ambiguous status must not be treated as passed.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'bypassed',
+            evidenceSummary: 'This was skipped.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Negated status must not be treated as passed.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'not_passed',
+            evidenceSummary: 'Validation did not pass.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Unblocked status must not be treated as blocked.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'unblocked',
+            evidenceSummary: 'No longer blocked.',
+          },
+        ],
+      },
+    ]) {
+      expect(() =>
+        validateArtifactContent('ac-evidence', JSON.stringify(payload)),
+      ).toThrow();
+    }
+  });
+
   it('keeps provider-style acceptance criteria normalization narrow', () => {
     const invalidCriteria = [
       [],

@@ -1034,6 +1034,19 @@ export function createWorkflowEngine(
           ]
         : []),
       ...(input.requiredArtifactTypes.some((type) =>
+        ['test-report', 'ac-evidence'].includes(type),
+      )
+        ? [
+            '- For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+            '- criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.includes('test-report')
+        ? [
+            '- For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.some((type) =>
         ['ac-evidence', 'qa-release-signoff'].includes(type),
       )
         ? [

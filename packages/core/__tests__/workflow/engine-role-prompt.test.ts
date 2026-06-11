@@ -743,7 +743,26 @@ describe('workflow engine role prompt integration', () => {
       );
     }
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
     );
     expect(
       prompts.find((item) => item.role === 'reviewer')?.prompt,
