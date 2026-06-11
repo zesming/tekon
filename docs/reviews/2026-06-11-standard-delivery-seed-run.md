@@ -2,7 +2,7 @@
 
 日期：2026-06-11  
 Run ID：`run_04b37267-2686-42c6-a0a4-9b37410f65f7`  
-结论：P1-0 seed run 未完成，状态为 `interrupted`。这次运行证明 RD 节点在 300 秒内未完成 manifest 交付，并暴露出 seed 任务粒度过大和默认 provider 超时偏短的风险；它不证明 `standard-delivery` 方向不可行。
+结论：P1-0 seed run 未完成，状态为 `interrupted`。这次运行显示 RD 节点在 300 秒内未完成 manifest 交付，并暴露出 seed 任务粒度过大和默认 provider 超时偏短的风险；它不证明 `standard-delivery` 方向不可行。
 
 ## 1. 运行输入
 
@@ -32,13 +32,13 @@ runId=run_04b37267-2686-42c6-a0a4-9b37410f65f7 repo=/Users/zhaoensheng/Projects/
 
 节点状态：
 
-| 节点                          | 角色     | 状态        | 说明                                        |
-| ----------------------------- | -------- | ----------- | ------------------------------------------- |
-| `pm-intake`                   | PM       | passed      | 产出 demand-card 和 PRD，schema gate 通过   |
-| `rd-implementation`           | RD       | interrupted | Codex provider 300 秒超时，无 manifest 入库 |
-| `qa-validation`               | QA       | pending     | 未开始                                      |
-| `reviewer-independent-review` | reviewer | pending     | 未开始                                      |
-| `pmo-delivery`                | PMO      | pending     | 未开始                                      |
+| 节点                          | 角色     | 状态        | 说明                                                                             |
+| ----------------------------- | -------- | ----------- | -------------------------------------------------------------------------------- |
+| `pm-intake`                   | PM       | passed      | 产出 demand-card 和 PRD；demand-card schema gate 通过，PRD ingestion schema 通过 |
+| `rd-implementation`           | RD       | interrupted | Codex provider 300 秒超时，无 manifest 入库                                      |
+| `qa-validation`               | QA       | pending     | 未开始                                                                           |
+| `reviewer-independent-review` | reviewer | pending     | 未开始                                                                           |
+| `pmo-delivery`                | PMO      | pending     | 未开始                                                                           |
 
 已入库 artifact：
 
@@ -47,10 +47,15 @@ runId=run_04b37267-2686-42c6-a0a4-9b37410f65f7 repo=/Users/zhaoensheng/Projects/
 
 Gate：
 
-| Gate                    | 结果                       |
-| ----------------------- | -------------------------- |
-| PM `demand-card` schema | passed                     |
-| PM `prd` schema         | previously-passed / passed |
+| Gate                    | 结果   |
+| ----------------------- | ------ |
+| PM `demand-card` schema | passed |
+
+Artifact schema 校验：
+
+| Artifact | 结果                                          |
+| -------- | --------------------------------------------- |
+| PM `prd` | ingestion schema passed；不是独立 gate result |
 
 ## 3. 失败证据
 
@@ -76,7 +81,7 @@ RD worktree 残留：
 
 事实：
 
-- 需求卡和 PRD 可以由 Codex PM 节点生成并通过 schema gate。
+- 需求卡和 PRD 可以由 Codex PM 节点生成；demand-card 通过 schema gate，PRD 通过 artifact ingestion schema 校验。
 - RD 节点在 300 秒内没有完成必需 artifact manifest，workflow 按中断处理。
 - 任务范围同时包含模板、角色、测试、PR 交付，超过单个 seed 节点的稳定粒度。
 
@@ -105,3 +110,26 @@ RD worktree 残留：
 - parser-compatible `workflows/standard-delivery.yaml`
 - 角色边界 `roles/*/system.md`
 - 真实 provider 默认 1 小时超时和 CLI/Web snapshot 测试
+
+## 6. 真实 PR 交付证据
+
+本轮已在人工接管后把 P1-A0/P1-A1/P1-A2 最小范围落成真实 PR。以下证据核验于提交本归档补充前，指向当时的 PR head；本归档补充提交后，最终 head 和远端 checks 以 `gh pr view/checks` 实时查询为准。
+
+- PR：`https://github.com/zesming/tekon/pull/3`
+- Head：`tekon-standard-delivery-bootstrap`
+- Base：`main`
+- 状态：Open，未 merge
+- 核验时 Head commit：`100679078efa4e303fd0f1b9644a3ac1901a828e`
+
+远端检查：
+
+| Check                           | 结果 | 用时 |
+| ------------------------------- | ---- | ---- |
+| `Core build and tests`          | pass | 48s  |
+| `Lint GitHub Actions workflows` | pass | 9s   |
+
+PR 范围不包含：
+
+- 不包含 `independent-review`、`role-scope`、`qa-signoff`、`ac-evidence` 等新 gate runner。
+- 不包含 `test-plan`、`qa-release-signoff`、`process-checkpoint` 等新 artifact type。
+- 不包含自动 merge、release 或 deploy。

@@ -6,7 +6,7 @@
 
 ## 1. 当前事实
 
-- 已完成 P0 Codex 真实闭环：`run_d2350140-b1b7-4fca-b01b-e28daac61e31` 使用 `codex --profile internal` 创建真实 PR #2，CI 通过，未自动 merge。
+- 已完成 P0 Codex 真实闭环：`run_d2350140-b1b7-4fca-b01b-e28daac61e31` 使用 `codex --profile internal` 创建真实 PR #2，CI 通过；Tekon 未自动 merge，PR #2 后续已由人工路径合入 main。
 - P1-0 seed run `run_04b37267-2686-42c6-a0a4-9b37410f65f7` 使用 `standard-feature` 执行 `standard-delivery` 种子需求，PM 节点通过，RD 节点在 300 秒超时后中断。
 - 当前 `artifactTypeSchema` 只支持 `demand-card`、`prd`、`tech-design`、`code-changes`、`test-report`、`review-report`、`security-report`、`rollback-plan`、`delivery-package`、`ci-status`。
 - 当前 `gateTypeSchema` 只支持 `build`、`test`、`lint`、`e2e-pass`、`schema`、`security-scan`、`human`。
@@ -23,13 +23,16 @@
 
 ## 3. 资料依据
 
-| 资料                                                                                                        | 资料内容                                                      | 对 Tekon 的判断依据                                                  |
-| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| IBM requirements guideline: `https://www.ibm.com/docs/en/erqa?topic=assistant-guidelines-good-requirements` | 好需求应清晰、可验证，支撑沟通、设计、计划和工程活动。        | PM demand-card 后需要需求质量评审，不能只依赖 schema。               |
-| ISTQB CTFL syllabus: `https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTFL_Syllabus_v4.0.1.pdf`          | 测试活动应维护 test basis、testware、测试结果和追踪关系。     | QA test plan、QA validation、AC evidence 和 signoff 需要结构化关联。 |
-| DORA change approval: `https://dora.dev/capabilities/streamlining-change-approval/`                         | 高效变更审批应前移到开发过程中的 review，并用自动化检测补充。 | Tekon 应做轻量独立评审和自动 gate，不引入重审批委员会。              |
-| Scrum Definition of Done: `https://www.scrum.org/resources/definition-done`                                 | Done 表示增量满足质量标准并处于 usable 状态。                 | QA final signoff 必须绑定确切交付对象，避免“所测非所得”。            |
-| Google Engineering Practices: `https://google.github.io/eng-practices/review/`                              | Review 关注设计、功能、复杂度、测试和文档。                   | RD technical review 和 reviewer change review 需要明确 rubric。      |
+| 资料                                                                                                        | 资料内容                                                        | 对 Tekon 的判断依据                                                  |
+| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
+| IBM requirements guideline: `https://www.ibm.com/docs/en/erqa?topic=assistant-guidelines-good-requirements` | 好需求应清晰、可验证，支撑沟通、设计、计划和工程活动。          | PM demand-card 后需要需求质量评审，不能只依赖 schema。               |
+| ISTQB CTFL syllabus: `https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTFL_Syllabus_v4.0.1.pdf`          | 测试活动应维护 test basis、testware、测试结果和追踪关系。       | QA test plan、QA validation、AC evidence 和 signoff 需要结构化关联。 |
+| DORA change approval: `https://dora.dev/capabilities/streamlining-change-approval/`                         | 高效变更审批应前移到开发过程中的 review，并用自动化检测补充。   | Tekon 应做轻量独立评审和自动 gate，不引入重审批委员会。              |
+| Scrum Definition of Done: `https://www.scrum.org/resources/definition-done`                                 | Done 表示增量满足质量标准并处于 usable 状态。                   | QA final signoff 必须绑定确切交付对象，避免“所测非所得”。            |
+| Google Engineering Practices: `https://google.github.io/eng-practices/review/`                              | Review 关注设计、功能、复杂度、测试和文档。                     | RD technical review 和 reviewer change review 需要明确 rubric。      |
+| Temporal Activity timeouts: `https://docs.temporal.io/encyclopedia/detecting-activity-failures`             | 长程 activity 可通过总时限、单次执行时限和 heartbeat 检测失败。 | Tekon 长程 node 不能只提高总超时，还要记录进展和无进展超时。         |
+| Celery worker time limits: `https://docs.celeryq.dev/en/stable/userguide/workers.html#time-limits`          | 任务可以配置 soft/hard time limit，soft limit 给清理留窗口。    | Tekon 应区分温和中断、证据收集和最终强制终止。                       |
+| GitHub Actions limits: `https://docs.github.com/en/actions/reference/limits`                                | CI/自动化平台有运行时长、并发和资源限制，需要显式治理。         | Tekon 长程任务要进入可观测队列，不能无限占用本地或 CI 资源。         |
 
 ## 4. 阶段总览
 
@@ -90,11 +93,11 @@ P1-A0 不做：
 
 这次 RD 节点 300 秒超时说明：真实 Codex 任务可能需要长程执行。调整建议分三层：
 
-| 层级            | 能力                                                                                  | 判断                                   |
-| --------------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
-| L1 本轮最小补强 | 将真实 provider 默认超时从 300 秒提升到 1 小时，并写入 provider snapshot              | 合理，能降低长程 seed 误杀概率，改动小 |
-| L2 进展观测     | 记录 stdout/stderr 增量、工作区 diff、manifest mtime、artifact 文件数量、最近命令活动 | 必须做，否则 1 小时只是更久等待        |
-| L3 长程可恢复   | 支持 node heartbeat、无进展超时、可中断恢复、后台 process registry 或外部 job runner  | 适合 P1-D/P2，不应塞进 P1-A0           |
+| 层级            | 能力                                                                                  | 判断                                                               |
+| --------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| L1 本轮最小补强 | 将真实 provider 默认超时从 300 秒提升到 1 小时，并写入 provider snapshot              | 合理，能降低长程 seed 误杀概率，改动小；2 小时以上应只作为显式配置 |
+| L2 进展观测     | 记录 stdout/stderr 增量、工作区 diff、manifest mtime、artifact 文件数量、最近命令活动 | 必须做，否则 1 小时只是更久等待                                    |
+| L3 长程可恢复   | 支持 node heartbeat、无进展超时、可中断恢复、后台 process registry 或外部 job runner  | 适合 P1-D/P2，不应塞进 P1-A0                                       |
 
 推荐运行策略：
 

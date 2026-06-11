@@ -178,7 +178,8 @@
             P0 已完成真实 Codex 闭环：<code
               >run_d2350140-b1b7-4fca-b01b-e28daac61e31</code
             >
-            创建真实 PR #2，CI 通过，未自动 merge。
+            创建真实 PR #2，CI 通过；Tekon 未自动 merge，PR #2
+            后续已由人工路径合入 main。
           </li>
           <li>
             P1-0 seed run <code>run_04b37267-2686-42c6-a0a4-9b37410f65f7</code>
@@ -190,6 +191,26 @@
               >qa-signoff</code
             >
             或 <code>ac-evidence</code>。
+          </li>
+          <li>
+            当前 <code>artifactTypeSchema</code> 只支持
+            <code>demand-card</code
+            >、<code>prd</code>、<code>tech-design</code>、<code>code-changes</code>、<code>test-report</code>、<code>review-report</code>、<code>security-report</code>、<code>rollback-plan</code>、<code>delivery-package</code>、<code>ci-status</code>。
+          </li>
+          <li>
+            当前 <code>gateTypeSchema</code> 只支持
+            <code>build</code
+            >、<code>test</code>、<code>lint</code>、<code>e2e-pass</code>、<code>schema</code>、<code>security-scan</code>、<code>human</code>。
+          </li>
+          <li>
+            因此，<code>independent-review</code>、<code>role-scope</code>、<code>qa-signoff</code>、<code>ac-evidence</code>、<code
+              >process-completeness</code
+            >
+            等 gate，以及
+            <code>test-plan</code>、<code>qa-release-signoff</code>、<code
+              >process-checkpoint</code
+            >
+            等 artifact 不能直接写入首版模板。
           </li>
         </ul>
 
@@ -211,7 +232,119 @@
             长程任务采用“总超时 + 进展观测 + 无进展超时 +
             可恢复证据”，不只靠等待更久。
           </li>
+          <li>
+            QA final signoff 先以 QA 节点和
+            <code>test-report</code>/<code>review-report</code>
+            表达，后续再引入绑定 delivery branch SHA 或 PR head SHA 的专用
+            schema。
+          </li>
+          <li>PR 创建、merge、release、deploy、force push 保持人工控制。</li>
         </ul>
+
+        <h2>资料依据</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>资料</th>
+              <th>资料内容</th>
+              <th>对 Tekon 的判断依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <a
+                  href="https://www.ibm.com/docs/en/erqa?topic=assistant-guidelines-good-requirements"
+                  >IBM requirements guideline</a
+                >
+              </td>
+              <td>好需求应清晰、可验证，支撑沟通、设计、计划和工程活动。</td>
+              <td>PM demand-card 后需要需求质量评审，不能只依赖 schema。</td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://istqb.org/wp-content/uploads/2024/11/ISTQB_CTFL_Syllabus_v4.0.1.pdf"
+                  >ISTQB CTFL syllabus</a
+                >
+              </td>
+              <td>测试活动应维护 test basis、testware、测试结果和追踪关系。</td>
+              <td>
+                QA test plan、QA validation、AC evidence 和 signoff
+                需要结构化关联。
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://dora.dev/capabilities/streamlining-change-approval/"
+                  >DORA change approval</a
+                >
+              </td>
+              <td>
+                高效变更审批应前移到开发过程中的 review，并用自动化检测补充。
+              </td>
+              <td>Tekon 应做轻量独立评审和自动 gate，不引入重审批委员会。</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://www.scrum.org/resources/definition-done"
+                  >Scrum Definition of Done</a
+                >
+              </td>
+              <td>Done 表示增量满足质量标准并处于 usable 状态。</td>
+              <td>QA final signoff 必须绑定确切交付对象，避免“所测非所得”。</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://google.github.io/eng-practices/review/"
+                  >Google Engineering Practices</a
+                >
+              </td>
+              <td>Review 关注设计、功能、复杂度、测试和文档。</td>
+              <td>
+                RD technical review 和 reviewer change review 需要明确 rubric。
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://docs.temporal.io/encyclopedia/detecting-activity-failures"
+                  >Temporal Activity timeouts</a
+                >
+              </td>
+              <td>
+                长程 activity 可通过总时限、单次执行时限和 heartbeat 检测失败。
+              </td>
+              <td>
+                Tekon 长程 node 不能只提高总超时，还要记录进展和无进展超时。
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <a
+                  href="https://docs.celeryq.dev/en/stable/userguide/workers.html#time-limits"
+                  >Celery worker time limits</a
+                >
+              </td>
+              <td>
+                任务可以配置 soft/hard time limit，soft limit 给清理留窗口。
+              </td>
+              <td>Tekon 应区分温和中断、证据收集和最终强制终止。</td>
+            </tr>
+            <tr>
+              <td>
+                <a href="https://docs.github.com/en/actions/reference/limits"
+                  >GitHub Actions limits</a
+                >
+              </td>
+              <td>CI/自动化平台有运行时长、并发和资源限制，需要显式治理。</td>
+              <td>
+                Tekon 长程任务要进入可观测队列，不能无限占用本地或 CI 资源。
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
         <h2>阶段总览</h2>
         <table>
@@ -219,6 +352,7 @@
             <tr>
               <th>阶段</th>
               <th>目标</th>
+              <th>范围</th>
               <th>退出标准</th>
             </tr>
           </thead>
@@ -226,16 +360,24 @@
             <tr>
               <td>P1-0R</td>
               <td>归档 seed run 失败证据</td>
+              <td>
+                写入
+                <code
+                  >docs/reviews/2026-06-11-standard-delivery-seed-run.*</code
+                >
+              </td>
               <td>失败原因、产物、gate、风险和下一步明确</td>
             </tr>
             <tr>
               <td>P1-A0</td>
               <td>最小兼容 <code>standard-delivery</code> 模板</td>
+              <td>新增模板和 parser 测试，只用现有 artifact/gate</td>
               <td>模板可加载，preflight 可执行</td>
             </tr>
             <tr>
               <td>P1-A1</td>
               <td>角色边界模板化</td>
+              <td>更新 PM/RD/QA/reviewer/PMO system 描述</td>
               <td>
                 PM/RD/QA/reviewer/PMO 有评审范围、不越权、独立评审、升级条件
               </td>
@@ -243,17 +385,48 @@
             <tr>
               <td>P1-A2</td>
               <td>长程任务最小支持</td>
-              <td>真实 provider 默认 1 小时超时，snapshot 保留 timeout</td>
+              <td>
+                真实 provider 默认超时提升到 1 小时，snapshot 保留 timeout
+              </td>
+              <td>CLI/Web Codex snapshot 测试通过</td>
             </tr>
             <tr>
               <td>P1-B</td>
               <td>独立评审和角色范围强校验</td>
+              <td>
+                新 artifact 字段、<code>independent-review</code>、<code
+                  >role-scope</code
+                >
+                gate
+              </td>
               <td>自产自测、越权 review 可被 gate 拦截</td>
             </tr>
             <tr>
               <td>P1-C</td>
               <td>QA signoff 与 AC evidence</td>
+              <td>
+                <code>qa-release-signoff</code>、AC 到测试证据映射、PR package
+                V2
+              </td>
               <td>readiness 不再泛化为 evidence unknown</td>
+            </tr>
+            <tr>
+              <td>P1-D</td>
+              <td>标准流程 dogfooding</td>
+              <td>用 Tekon 自身 3 个低风险需求跑标准流程</td>
+              <td>每个样本有 run、PR、CI、QA/PMO 证据和复盘</td>
+            </tr>
+            <tr>
+              <td>P2</td>
+              <td>Web/Artifact/Telemetry</td>
+              <td>Web Cockpit、Artifact Center、审计回放、成本 telemetry</td>
+              <td>人能在 Web 上完成主要审阅和追踪</td>
+            </tr>
+            <tr>
+              <td>P3</td>
+              <td>平台化扩展</td>
+              <td>DAG 并行、多 Provider、release/rollback、组织治理</td>
+              <td>多角色复杂需求可控运行</td>
             </tr>
           </tbody>
         </table>
@@ -274,6 +447,63 @@
 -> qa-release-signoff-review
 -> pmo-checkpoint</code></pre>
 
+        <p>兼容映射：</p>
+        <table>
+          <thead>
+            <tr>
+              <th>语义</th>
+              <th>P1-A0 使用的现有 artifact</th>
+              <th>后续专用 artifact</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>PM demand review</td>
+              <td><code>review-report</code></td>
+              <td><code>demand-review</code></td>
+            </tr>
+            <tr>
+              <td>RD implementation plan</td>
+              <td><code>tech-design</code></td>
+              <td><code>implementation-plan</code></td>
+            </tr>
+            <tr>
+              <td>RD technical review</td>
+              <td><code>review-report</code></td>
+              <td><code>technical-review</code></td>
+            </tr>
+            <tr>
+              <td>QA test plan</td>
+              <td><code>test-report</code></td>
+              <td><code>test-plan</code></td>
+            </tr>
+            <tr>
+              <td>QA test plan review</td>
+              <td><code>review-report</code></td>
+              <td><code>test-plan-review</code></td>
+            </tr>
+            <tr>
+              <td>QA release signoff review</td>
+              <td><code>review-report</code></td>
+              <td><code>qa-release-signoff-review</code></td>
+            </tr>
+            <tr>
+              <td>PMO checkpoint</td>
+              <td><code>delivery-package</code></td>
+              <td><code>process-checkpoint</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>P1-A0 不做：</p>
+        <ul>
+          <li>不实现新 gate runner。</li>
+          <li>不新增 artifact type。</li>
+          <li>不改变默认 workflow selection。</li>
+          <li>不把 role prompt 约束宣称为 deterministic enforcement。</li>
+          <li>不自动创建、合并或发布 PR。</li>
+        </ul>
+
         <h2>长程任务策略</h2>
         <table>
           <thead>
@@ -289,7 +519,9 @@
               <td>
                 默认真实 provider 超时提升到 1 小时，并写入 provider snapshot
               </td>
-              <td>本轮落地，降低长程 seed 误杀概率</td>
+              <td>
+                本轮落地，降低长程 seed 误杀概率；2 小时以上只作为显式配置
+              </td>
             </tr>
             <tr>
               <td>L2</td>
@@ -307,22 +539,117 @@
           </tbody>
         </table>
 
+        <p>推荐运行策略：</p>
+        <ul>
+          <li>
+            <code>maxRuntimeMs</code> 默认 1 小时，后续允许 repo/profile 或 run
+            级覆盖。
+          </li>
+          <li>
+            <code>noProgressTimeoutMs</code> 默认 15
+            分钟，只要日志、diff、manifest 或 artifact 有变化就续期。
+          </li>
+          <li>
+            status/review surface 展示
+            <code>lastProgressAt</code
+            >、<code>lastArtifactAt</code>、<code>stdoutBytes</code>、<code>stderrBytes</code>、<code>changedFiles</code>。
+          </li>
+          <li>
+            超时后先尝试读取 manifest；manifest 完整且必需 artifact
+            合法时允许进入 gate。
+          </li>
+          <li>
+            没有 manifest 且无进展时中断，并把 stderr 尾部、worktree diff 和
+            mtime 写入诊断证据。
+          </li>
+        </ul>
+
+        <h2>自举粒度</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>批次</th>
+              <th>流程</th>
+              <th>任务粒度</th>
+              <th>目标</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Seed-1</td>
+              <td>当前模板 + Codex</td>
+              <td>只做 <code>standard-delivery</code> 模板和 parser 测试</td>
+              <td>验证模板可加载</td>
+            </tr>
+            <tr>
+              <td>Seed-2</td>
+              <td>当前模板 + Codex</td>
+              <td>只做角色边界文档</td>
+              <td>验证 role prompt 可审阅</td>
+            </tr>
+            <tr>
+              <td>Seed-3</td>
+              <td>当前模板 + Codex</td>
+              <td>只做长程任务观测或 snapshot 超时</td>
+              <td>验证 provider 稳定性</td>
+            </tr>
+            <tr>
+              <td>Seed-4</td>
+              <td>新 <code>standard-delivery</code> + mock/Codex</td>
+              <td>只做一个小文档或小测试需求</td>
+              <td>验证标准流程结构</td>
+            </tr>
+            <tr>
+              <td>Seed-5</td>
+              <td>新 gate 后的 <code>standard-delivery</code></td>
+              <td>独立评审、role-scope、QA signoff</td>
+              <td>验证治理强约束</td>
+            </tr>
+          </tbody>
+        </table>
+
         <h2>首 PR 范围</h2>
-        <div class="flow">
-          <div class="step">
-            新增 <code>workflows/standard-delivery.yaml</code> 和模板 parser
-            测试。
-          </div>
-          <div class="step">更新五类角色的 system 描述，写清职责边界。</div>
-          <div class="step">
-            真实 provider 默认超时提升到 1 小时，并覆盖 CLI/Web snapshot 测试。
-          </div>
-          <div class="step">
-            归档 P1-0 seed run 失败证据，同步 README、CHANGELOG 和用户手册。
-          </div>
-        </div>
+        <p>本轮建议作为一个最小但完整的 PR：</p>
+        <ul>
+          <li>新增 <code>workflows/standard-delivery.yaml</code>。</li>
+          <li>
+            更新
+            <code>packages/core/__tests__/workflow/template.test.ts</code
+            >，验证模板可加载、关键节点存在、只使用现有 gate。
+          </li>
+          <li>
+            更新 <code>packages/core/src/workflow/template.ts</code>，把
+            <code>standard-delivery</code> 纳入 built-in template union。
+          </li>
+          <li>
+            更新
+            <code>roles/pm|rd|qa|reviewer|pmo/system.md</code>，固化职责边界。
+          </li>
+          <li>
+            更新真实 provider 默认超时常量和 CLI/Web Codex snapshot 测试。
+          </li>
+          <li>归档 P1-0 seed run 失败证据。</li>
+          <li>同步 README、CHANGELOG、主用户手册 Markdown/HTML。</li>
+        </ul>
+        <p>延后到后续 PR：</p>
+        <ul>
+          <li>
+            <code>independent-review</code
+            >、<code>role-scope</code>、<code>qa-signoff</code>、<code
+              >ac-evidence</code
+            >
+            gate runner。
+          </li>
+          <li>新 artifact type 和 manifest 白名单。</li>
+          <li>PR package V2 和 readiness AC evidence 强映射。</li>
+          <li>
+            Web Cockpit、Artifact Center、成本 telemetry、多 Provider 对比、DAG
+            并行。
+          </li>
+        </ul>
 
         <h2>验收命令</h2>
+        <p>本轮最小验收：</p>
         <pre><code>pnpm vitest run packages/core/__tests__/workflow/template.test.ts
 pnpm vitest run packages/core/__tests__/types/config.test.ts packages/cli/__tests__/run-cli.test.ts packages/web/__tests__/api/write-auth.test.ts
 pnpm --filter @tekon/core build
@@ -330,13 +657,28 @@ pnpm build
 node packages/cli/dist/index.js workflow show standard-delivery --repo /Users/zhaoensheng/Projects/tekon
 node packages/cli/dist/index.js workflow preflight standard-delivery --repo /Users/zhaoensheng/Projects/tekon
 git diff --check</code></pre>
+        <p>后续 gate/schema PR 追加：</p>
+        <pre><code>pnpm vitest run packages/core/__tests__/artifact/schemas.test.ts
+pnpm vitest run packages/core/__tests__/gate/runners.test.ts packages/core/__tests__/gate/engine.test.ts
+pnpm vitest run packages/core/__tests__/eval/work-readiness.test.ts packages/core/__tests__/delivery/evidence.test.ts packages/core/__tests__/delivery/pr-package.test.ts</code></pre>
 
         <h2>主要风险</h2>
-        <div class="callout risk">
-          长超时会降低误杀，但没有进展观测会让卡死任务占用更久。P1-A
-          的角色边界仍是 prompt 层约束，不是确定性强约束。当前 engine 仍按
-          phase/node 顺序执行，不应把模板理解为复杂 DAG 并行能力。
-        </div>
+        <ul class="callout risk">
+          <li>长超时会降低误杀，但如果没有进展观测，会让卡死任务占用更久。</li>
+          <li>P1-A 的角色边界只是 prompt 层约束，不是确定性强约束。</li>
+          <li>
+            QA final signoff 若要绑定 PR head SHA，需要处理 PR 创建发生在
+            workflow 之后的问题；P1-C 应先支持 delivery branch SHA，再补 PR
+            创建后的二次校验。
+          </li>
+          <li>
+            当前 engine 仍按 phase/node
+            顺序执行，不应把模板中的多角色评审理解为已具备复杂 DAG 并行。
+          </li>
+          <li>
+            如果继续用单个 RD node 承担过大 seed 任务，Codex 超时仍可能复现。
+          </li>
+        </ul>
       </section>
     </main>
   </body>
