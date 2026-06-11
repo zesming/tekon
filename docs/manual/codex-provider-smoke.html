@@ -343,9 +343,8 @@ node packages/cli/dist/index.js run "补齐 Codex provider smoke 证据，要求
   --agent codex \
   --repo /Users/zhaoensheng/Projects/tekon</code></pre>
         <p>
-          如果 smoke
-          需求明确会运行较久，可以显式放大外层预算，同时保留无进展超时和
-          heartbeat：
+          如果 smoke 需求明确会运行较久，可以显式放大外层预算，同时保留基于
+          stdout/stderr 与受控输出目录文件变化的无进展超时和 heartbeat：
         </p>
         <pre><code>node packages/cli/dist/index.js run "补齐 Codex provider 长程 smoke 证据，要求产出可审阅文档和测试记录。" \
   --template docs-update \
@@ -509,9 +508,10 @@ node packages/cli/dist/index.js eval work-usability record \
               </td>
               <td>
                 查 <code>artifact-manifest.json</code>、字面
-                <code>TEKON_ARTIFACT_MANIFEST</code> 和必需
-                artifact；若不完整，拆小任务或提高总超时并保留 no-progress
-                timeout。
+                <code>TEKON_ARTIFACT_MANIFEST</code>、必需 artifact 和 progress
+                JSON 的
+                <code>lastOutputDirActivityAt</code
+                >；若不完整，拆小任务或提高总超时并保留 no-progress timeout。
               </td>
             </tr>
             <tr>

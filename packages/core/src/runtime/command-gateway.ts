@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  createWriteStream,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import type { Transform, Writable } from 'node:stream';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -325,6 +331,10 @@ async function runProcess(input: {
   const stderrLog = monitorWritable(stderr);
   const stdoutRedaction = monitorTransform(stdoutRedactor);
   const stderrRedaction = monitorTransform(stderrRedactor);
+  const outputDirMonitor = createOutputDirActivityMonitor({
+    outputDir: input.outputDir,
+    excludedPaths: [stdoutPath, stderrPath, progressPath],
+  });
   const startedAt = Date.now();
   let timedOut = false;
   const progress = createProgressTracker({
@@ -373,6 +383,12 @@ async function runProcess(input: {
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
     let timeoutReason: 'total' | 'no-progress' | undefined;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
+    const recordOutputDirProgress = () => {
+      const activity = outputDirMonitor.sample();
+      if (activity) {
+        progress.recordOutputDirActivity(activity.stats, activity.changed);
+      }
+    };
     const triggerTimeout = (reason: 'total' | 'no-progress') => {
       if (settled || timedOut) {
         return;
@@ -401,12 +417,14 @@ async function runProcess(input: {
       }, terminationGraceMs);
     };
     const progressInterval = setInterval(() => {
+      recordOutputDirProgress();
       progress.heartbeat();
     }, input.progressIntervalMs);
     progressInterval.unref?.();
     const noProgressInterval = input.noProgressTimeoutMs
       ? setInterval(
           () => {
+            recordOutputDirProgress();
             if (
               input.noProgressTimeoutMs &&
               Date.now() - progress.lastActivityAt() >=
@@ -438,6 +456,7 @@ async function runProcess(input: {
       if (hardSettleTimeout) {
         clearTimeout(hardSettleTimeout);
       }
+      recordOutputDirProgress();
       const finalResult =
         result.status === 'executed'
           ? ({ ...result, progressPath } satisfies CommandGatewayResult)
@@ -513,6 +532,12 @@ type ProgressStatus =
   | 'timed-out'
   | 'rejected';
 
+interface OutputDirActivityStats {
+  fileCount: number;
+  totalBytes: number;
+  latestMtimeMs: number | null;
+}
+
 function createProgressTracker(input: {
   command: CommandInvocation;
   progressPath: string;
@@ -527,6 +552,10 @@ function createProgressTracker(input: {
   let lastStatus: ProgressStatus = 'running';
   let timeoutReason: 'total' | 'no-progress' | null = null;
   let lastActivityAt = input.startedAt;
+  let lastOutputDirActivityAt: string | null = null;
+  let outputDirFileCount = 0;
+  let outputDirBytes = 0;
+  let outputDirLatestMtimeMs: number | null = null;
 
   const snapshot = (status: ProgressStatus) => ({
     status,
@@ -540,6 +569,10 @@ function createProgressTracker(input: {
     timeoutReason,
     stdoutBytes,
     stderrBytes,
+    lastOutputDirActivityAt,
+    outputDirFileCount,
+    outputDirBytes,
+    outputDirLatestMtimeMs,
     heartbeatCount,
   });
 
@@ -570,6 +603,17 @@ function createProgressTracker(input: {
       lastActivityAt = Date.now();
       write(lastStatus);
     },
+    recordOutputDirActivity(stats: OutputDirActivityStats, changed: boolean) {
+      outputDirFileCount = stats.fileCount;
+      outputDirBytes = stats.totalBytes;
+      outputDirLatestMtimeMs = stats.latestMtimeMs;
+      if (!changed) {
+        return;
+      }
+      lastOutputDirActivityAt = new Date().toISOString();
+      lastActivityAt = Date.now();
+      write(lastStatus);
+    },
     lastActivityAt() {
       return lastActivityAt;
     },
@@ -581,6 +625,108 @@ function createProgressTracker(input: {
       write(status);
     },
   };
+}
+
+function createOutputDirActivityMonitor(input: {
+  outputDir: string;
+  excludedPaths: string[];
+}): {
+  sample(): { stats: OutputDirActivityStats; changed: boolean } | null;
+} {
+  const excludedPaths = new Set(
+    input.excludedPaths.map((path) => resolve(path)),
+  );
+  let previousSignature = outputDirActivitySignature(
+    readOutputDirActivityStats(input.outputDir, excludedPaths),
+  );
+
+  return {
+    sample() {
+      const stats = readOutputDirActivityStats(input.outputDir, excludedPaths);
+      if (!stats) {
+        return null;
+      }
+      const nextSignature = outputDirActivitySignature(stats);
+      const changed = nextSignature !== previousSignature;
+      previousSignature = nextSignature;
+      return { stats, changed };
+    },
+  };
+}
+
+function readOutputDirActivityStats(
+  outputDir: string,
+  excludedPaths: ReadonlySet<string>,
+): OutputDirActivityStats | null {
+  try {
+    return collectOutputDirActivityStats(resolve(outputDir), excludedPaths);
+  } catch {
+    return null;
+  }
+}
+
+function collectOutputDirActivityStats(
+  directory: string,
+  excludedPaths: ReadonlySet<string>,
+): OutputDirActivityStats {
+  let fileCount = 0;
+  let totalBytes = 0;
+  let latestMtimeMs: number | null = null;
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name);
+    const resolvedPath = resolve(entryPath);
+    if (excludedPaths.has(resolvedPath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      const childStats = collectOutputDirActivityStats(
+        entryPath,
+        excludedPaths,
+      );
+      fileCount += childStats.fileCount;
+      totalBytes += childStats.totalBytes;
+      latestMtimeMs = maxNullableNumber(
+        latestMtimeMs,
+        childStats.latestMtimeMs,
+      );
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const stats = lstatSync(entryPath);
+    fileCount += 1;
+    totalBytes += stats.size;
+    latestMtimeMs = maxNullableNumber(latestMtimeMs, stats.mtimeMs);
+  }
+
+  return { fileCount, totalBytes, latestMtimeMs };
+}
+
+function outputDirActivitySignature(stats: OutputDirActivityStats | null) {
+  if (!stats) {
+    return 'unreadable';
+  }
+  return [stats.fileCount, stats.totalBytes, stats.latestMtimeMs ?? 0].join(
+    ':',
+  );
+}
+
+function maxNullableNumber(
+  left: number | null,
+  right: number | null,
+): number | null {
+  if (left === null) {
+    return right;
+  }
+  if (right === null) {
+    return left;
+  }
+  return Math.max(left, right);
 }
 
 function redactProgressCommand(command: CommandInvocation): CommandInvocation {

@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -400,6 +401,73 @@ describe('command gateway', () => {
       timeoutReason: 'no-progress',
       noProgressTimeoutMs: 50,
     });
+  });
+
+  it('treats output directory file changes as progress for quiet long-running commands', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-exec-output-progress-'));
+    tempDirs.push(cwd);
+    const outputDir = join(cwd, 'logs');
+    mkdirSync(outputDir, { recursive: true });
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
+        setTimeout(() => {
+          writeFileSync(join(outputDir, 'artifact-1.json'), '{"step":1}');
+        }, 30);
+        setTimeout(() => {
+          writeFileSync(join(outputDir, 'artifact-2.json'), '{"step":2}');
+        }, 70);
+        setTimeout(() => {
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        }, 120);
+        return child;
+      },
+    });
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['write-artifacts.js'] },
+      cwd,
+      outputDir,
+      timeoutMs: 1_000,
+      noProgressTimeoutMs: 80,
+      progressIntervalMs: 10,
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'executed',
+      exitCode: 0,
+      timedOut: false,
+    });
+    if (result.status !== 'executed') {
+      throw new Error('expected command to execute');
+    }
+    const progress = JSON.parse(readFileSync(result.progressPath!, 'utf8')) as {
+      lastOutputDirActivityAt: string | null;
+      outputDirFileCount: number;
+      outputDirBytes: number;
+      outputDirLatestMtimeMs: number | null;
+      timeoutReason: string | null;
+    };
+    expect(progress.lastOutputDirActivityAt).toEqual(expect.any(String));
+    expect(progress.outputDirFileCount).toBe(2);
+    expect(progress.outputDirBytes).toBeGreaterThan(0);
+    expect(progress.outputDirLatestMtimeMs).toEqual(expect.any(Number));
+    expect(progress.timeoutReason).toBeNull();
   });
 
   it('does not wait for the heartbeat interval before enforcing no-progress timeout', async () => {

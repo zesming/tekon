@@ -1469,7 +1469,8 @@
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
             schema 写完整字段。真实 provider 默认总超时为 1 小时，无
-            stdout/stderr 进展默认 15 分钟超时；CLI <code>run</code> 可用
+            stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI
+            <code>run</code> 可用
             <code>--timeout-ms</code
             >、<code>--no-progress-timeout-ms</code>、<code
               >--progress-heartbeat-ms</code
@@ -1478,10 +1479,12 @@
             小时或更长。最终配置会写入 provider snapshot 以支持
             resume；命令执行会写入
             <code>*.progress.json</code>，记录状态、最近输出时间、stdout/stderr
-            字节数、elapsed、总超时、无进展超时、timeoutReason 和 heartbeat
-            次数。manifest mtime、artifact 文件变化和可恢复 job runner
-            仍是后续增强。若 Codex 因超时中断但已写完有效 manifest，adapter
-            会在必需 artifact 校验通过后把该节点视为完成并继续进入
+            字节数、受控输出目录文件数量和字节数、最近输出目录活动时间、elapsed、总超时、无进展超时、timeoutReason
+            和 heartbeat 次数。CommandGateway 会排除自身 stdout/stderr/progress
+            文件，只把 artifact、manifest 等产物文件变化计入进展；diff
+            级续期和可恢复 job runner 仍是后续增强。若 Codex
+            因超时中断但已写完有效 manifest，adapter 会在必需 artifact
+            校验通过后把该节点视为完成并继续进入
             gate；非零退出不会被改写为成功，但已写入的合法 artifact
             仍会被入库用于诊断。缺少 workflow 必需 artifact、artifact schema
             不合法或 path/symlink 边界失败时，该节点会失败。QA validation 会记录
@@ -1491,7 +1494,7 @@
             <code>delivery create-pr --approve-human</code>
             控制；该命令中的受控 <code>git/gh</code> 命令及前置只读 probe
             也会写入 progress JSON，并使用同一 1 小时总超时和 15 分钟无
-            stdout/stderr 进展超时。
+            stdout/stderr 或受控输出目录文件进展超时。
           </div>
 
           <h3>4.6 查看结果</h3>
@@ -1521,8 +1524,9 @@
             这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建
             PR。执行前会重新生成并校验 PR 包，因此不会绕过 pre-PR readiness、QA
             signoff 和所测即所得校验。受控 <code>git/gh</code>
-            命令默认 1 小时总超时、15 分钟无 stdout/stderr 进展超时，并写入
-            progress JSON；delivery 分支名和 base branch 会拒绝
+            命令默认 1 小时总超时、15 分钟无 stdout/stderr
+            或受控输出目录文件进展超时，并写入 progress JSON；delivery 分支名和
+            base branch 会拒绝
             <code>--mirror</code
             >、<code>:branch</code>、空白、<code>..</code>、<code>@{</code>
             等不安全 ref。
@@ -2165,7 +2169,7 @@
                 <li>
                   长程 push、<code>gh pr create</code> 或 create-pr 前置只读
                   probe 会写入 command progress JSON；默认 1 小时总超时、15
-                  分钟无 stdout/stderr 进展超时。
+                  分钟无 stdout/stderr 或受控输出目录文件进展超时。
                 </li>
               </ul>
             </div>
@@ -2487,8 +2491,8 @@
             stdout/stderr、<code>artifact-manifest.json</code>、字面
             <code>TEKON_ARTIFACT_MANIFEST</code> 和 artifact 内容，并确认结构化
             JSON 有非空 <code>title</code> 和 <code>body</code>。真实 provider
-            默认 1 小时总超时和 15 分钟无 stdout/stderr 进展超时；可通过 CLI
-            <code>run</code> 的
+            默认 1 小时总超时和 15 分钟无 stdout/stderr
+            或受控输出目录文件进展超时；可通过 CLI <code>run</code> 的
             <code>--timeout-ms</code
             >、<code>--no-progress-timeout-ms</code>、<code
               >--progress-heartbeat-ms</code
@@ -2621,7 +2625,10 @@
                 </tr>
                 <tr>
                   <td><code>--no-progress-timeout-ms &lt;ms&gt;</code></td>
-                  <td>覆盖无 stdout/stderr 进展超时，用来判断任务是否卡死。</td>
+                  <td>
+                    覆盖无 stdout/stderr
+                    或受控输出目录文件进展超时，用来判断任务是否卡死。
+                  </td>
                 </tr>
                 <tr>
                   <td><code>--progress-heartbeat-ms &lt;ms&gt;</code></td>

@@ -213,11 +213,11 @@
           <li>
             真实 provider 和受控 <code>delivery create-pr</code> 的
             <code>git/gh</code> 命令默认总超时已调整为 1 小时，并新增 command
-            progress
-            JSON，记录状态、最近输出、字节数、elapsed、总超时、无进展超时、timeoutReason
-            和 heartbeat 次数；无 stdout/stderr 进展默认 15 分钟会触发
-            <code>no-progress</code> timeout。CLI <code>run</code> 与 Web
-            dashboard 已支持覆盖总超时、无进展超时和
+            progress JSON，记录状态、最近输出、stdout/stderr
+            字节数、受控输出目录文件数量和字节数、elapsed、总超时、无进展超时、timeoutReason
+            和 heartbeat 次数；无 stdout/stderr 或受控输出目录文件进展默认 15
+            分钟会触发 <code>no-progress</code> timeout。CLI <code>run</code> 与
+            Web dashboard 已支持覆盖总超时、无进展超时和
             heartbeat，明确长程任务可显式配置 2 小时以上外层预算。
           </li>
         </ul>
@@ -374,7 +374,8 @@
           </li>
           <li>
             CommandGateway progress JSON、真实 provider 和受控 PR 创建命令 1
-            小时默认总超时与 stdout/stderr no-progress timeout。
+            小时默认总超时，并把 no-progress 续期从 stdout/stderr
+            扩展到受控输出目录文件变化。
           </li>
           <li>
             Gate result 增加稳定 <code>gateKey</code>；同一节点下重复同类型 gate
@@ -418,20 +419,23 @@
               <td>L2</td>
               <td>
                 progress JSON
-                记录状态、最近输出、字节数、elapsed、timeout、heartbeat
+                记录状态、stdout/stderr、输出目录文件指标、elapsed、timeout、heartbeat
               </td>
-              <td><span class="ok">已落地最小版</span></td>
-              <td>能判断任务是否仍在输出，适合作为长程任务基础证据。</td>
+              <td><span class="ok">已增强</span></td>
+              <td>
+                能判断任务是否仍在输出，或是否仍在写入 artifact/manifest。
+              </td>
             </tr>
             <tr>
               <td>L3</td>
               <td>
-                <code>noProgressTimeoutMs</code> 基于 stdout/stderr 续期，默认
-                15 分钟
+                <code>noProgressTimeoutMs</code> 基于 stdout/stderr
+                和受控输出目录文件变化续期，默认 15 分钟
               </td>
-              <td><span class="ok">已落地最小版</span></td>
+              <td><span class="ok">已增强</span></td>
               <td>
-                比无限拉大总超时更稳；manifest/artifact/diff 续期属于后续增强。
+                比无限拉大总超时更稳；diff 级续期和外部 job runner
+                属于后续增强。
               </td>
             </tr>
             <tr>
@@ -454,8 +458,8 @@
         <p>
           因此，把长程任务总超时拉到 1h/2h
           是合理的，但应作为外层预算；是否卡死要靠
-          heartbeat、输出变化、artifact/manifest
-          变化，以及可取消/可恢复机制来判断。
+          heartbeat、stdout/stderr、artifact/manifest
+          文件变化，以及可取消/可恢复机制来判断。
         </p>
 
         <h2>6. 自举验证计划</h2>
@@ -496,7 +500,10 @@
               <td>
                 <code>test-improvement</code> 或 <code>standard-delivery</code>
               </td>
-              <td>manifest mtime、artifact count、diff 变化和恢复证据</td>
+              <td>
+                本轮已补 outputDir artifact/manifest 变化续期；diff
+                级续期和恢复证据继续后置
+              </td>
             </tr>
             <tr>
               <td>B4</td>
@@ -531,7 +538,7 @@
             <tr>
               <td>P1</td>
               <td>长程 resume 和更完整进展判定</td>
-              <td>manifest/artifact/diff 有进展续期；任务可恢复或重跑。</td>
+              <td>diff 有进展续期；任务可恢复或重跑。</td>
             </tr>
             <tr>
               <td>P1</td>
@@ -619,8 +626,8 @@ git diff --check</code></pre>
             证据，但还没有统一外部 process registry。
           </li>
           <li>
-            2 小时以上长超时必须保留 no-progress
-            timeout、人工取消入口和进展证据，否则会放大资源占用。
+            2 小时以上长超时必须保留 no-progress timeout、人工取消入口和
+            stdout/stderr/outputDir 进展证据，否则会放大资源占用。
           </li>
           <li>
             QA signoff 现在绑定 <code>targetRef</code>、<code
