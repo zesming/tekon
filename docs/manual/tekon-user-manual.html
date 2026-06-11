@@ -1476,9 +1476,11 @@
             <code>criteriaEvidence[].criterionId/status/evidence</code>，<code
               >evidence</code
             >
-            必须是非空字符串，anchors 应放在顶层
+            必须是非空字符串；需要 evidence anchor 的场景必须把
             <code>outputPaths</code>、<code>gateResultIds</code> 或
-            <code>artifactIds</code>，<code>status</code> 只能是
+            <code>artifactIds</code> 放在对应
+            <code>criteriaEvidence</code> 条目内，不能只放在 artifact
+            顶层，<code>status</code> 只能是
             <code>passed</code>、<code>failed</code>、<code>blocked</code> 或
             <code>unknown</code>，<code>test-report.summary</code>
             如存在必须是字符串；若真实 provider 写出对象形式
@@ -1489,8 +1491,8 @@
             >
             状态标签表达 QA evidence，Tekon 会窄归一化为 schema
             字段；缺失状态、含糊状态、无 <code>summary</code> 的 evidence
-            对象，或只有 <code>criterion</code> 而无证据字段时仍会失败。评审类
-            artifact 必须额外写入合法
+            对象、只有顶层 anchor，或只有 <code>criterion</code>
+            而无证据字段时仍会失败。评审类 artifact 必须额外写入合法
             <code>reviewScope</code>、<code>reviewProcess</code>、<code
               >decision</code
             >

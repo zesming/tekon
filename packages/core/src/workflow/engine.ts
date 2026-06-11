@@ -1038,7 +1038,8 @@ export function createWorkflowEngine(
       )
         ? [
             '- For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
-            '- criteriaEvidence[].evidence must be a non-empty string; put anchors in top-level outputPaths, gateResultIds, or artifactIds.',
+            '- criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
+            '- Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
             '- criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
           ]
         : []),
