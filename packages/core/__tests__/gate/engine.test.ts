@@ -960,6 +960,111 @@ describe('gate engine', () => {
     db.close();
   });
 
+  it('rejects QA signoff evidence for unknown or grouped acceptance criteria', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-qa-unknown-ac-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await createRunFixture(repositories, repoPath);
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: { nodeId: 'qa_validation', ref: 'sha:cafebabe' },
+    });
+    await repositories.createNode({
+      id: 'qa_signoff',
+      runId: 'run_1',
+      role: 'qa',
+      status: 'running',
+      gates: [],
+      dependencies: ['node_1'],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    const store = createArtifactStore({ repoPath, repositories });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'prd',
+      content: JSON.stringify({
+        title: 'PRD',
+        body: 'Two acceptance criteria.',
+        acceptanceCriteria: [
+          { id: 'AC-1', description: 'First criterion.' },
+          { id: 'AC-2', description: 'Second criterion.' },
+        ],
+      }),
+    });
+    await repositories.recordGateResult({
+      id: 'gate_test',
+      runId: 'run_1',
+      nodeId: 'qa_signoff',
+      gateType: 'test',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'qa_signoff',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA release signoff',
+        body: 'This includes a grouped criterion id alongside valid ACs.',
+        targetRef: 'sha:cafebabe',
+        validatedRef: 'sha:cafebabe',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Validated on sha:cafebabe.',
+            gateResultIds: ['gate_test'],
+          },
+          {
+            criterionId: 'AC-2',
+            status: 'passed',
+            evidence: 'Validated on sha:cafebabe.',
+            gateResultIds: ['gate_test'],
+          },
+          {
+            criterionId: 'AC-1/AC-2',
+            status: 'passed',
+            evidence: 'Grouped evidence must not be accepted.',
+            gateResultIds: ['gate_test'],
+          },
+        ],
+      }),
+    });
+    const engine = createGateEngine({ repositories });
+
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'qa_signoff',
+      gate: { type: 'qa-signoff', artifactType: 'qa-release-signoff' },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'qa-signoff',
+      status: 'failed',
+      failureClassification: 'qa-signoff-ac-evidence',
+    });
+    expect(readFileSync(result.outputPath!, 'utf8')).toContain('AC-1/AC-2');
+    db.close();
+  });
+
   it('rejects QA signoff without a real evidence anchor', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-qa-unanchored-'));
     tempDirs.push(repoPath);

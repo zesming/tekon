@@ -450,6 +450,16 @@ describe('workflow engine role prompt integration', () => {
             nodeId: input.runContext.nodeId,
             prompt: input.prompt,
           });
+          if (input.runContext.nodeId.endsWith('_pm-review')) {
+            await repositories.createHumanDecision({
+              id: `decision_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateResultId: null,
+              status: 'pending',
+              createdAt: new Date().toISOString(),
+            });
+          }
           return {
             provider: 'custom',
             exitCode: 0,
@@ -538,7 +548,7 @@ describe('workflow engine role prompt integration', () => {
       'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
     );
     expect(pmoPrompt!).toContain(
-      'process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: 0. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.',
+      'process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: 1. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.',
     );
     db.close();
   });

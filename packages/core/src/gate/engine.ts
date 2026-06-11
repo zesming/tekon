@@ -703,6 +703,20 @@ async function runQaSignoffGate(
     );
   }
   const passed = new Set(criteriaEvidence.map((item) => item.criterionId));
+  const unknown = [...passed].filter((id) => !criteria.has(id));
+  if (unknown.length > 0) {
+    writeFileSync(
+      outputPath,
+      `QA signoff unknown AC evidence: ${unknown.join(', ')}`,
+      'utf8',
+    );
+    return makeGateResult(
+      input,
+      'failed',
+      'qa-signoff-ac-evidence',
+      outputPath,
+    );
+  }
   const missing = [...criteria.keys()].filter((id) => !passed.has(id));
   if (missing.length > 0) {
     writeFileSync(
