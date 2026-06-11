@@ -900,6 +900,12 @@ describe('workflow engine role prompt integration', () => {
     expect(signoffPrompt).toContain(
       'criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
     );
+    expect(signoffPrompt).toContain(
+      'For qa-release-signoff JSON artifacts, include targetRef, validatedRef, and overallStatus.',
+    );
+    expect(signoffPrompt).toContain(
+      'qa-release-signoff.overallStatus must be one of passed, failed, or blocked; do not use decision or recommendation as a substitute.',
+    );
     db.close();
   });
 

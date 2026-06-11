@@ -502,6 +502,29 @@ describe('artifact schemas', () => {
     }
   });
 
+  it('does not normalize provider-style QA evidence fields for release signoff', () => {
+    expect(() =>
+      validateArtifactContent(
+        'qa-release-signoff',
+        JSON.stringify({
+          title: 'QA Release Signoff',
+          body: 'Final QA signoff must use the strict signoff schema.',
+          targetRef: 'sha:tested',
+          validatedRef: 'sha:tested',
+          overallStatus: 'passed',
+          criteriaEvidence: [
+            {
+              id: 'AC-1',
+              status: 'passed_with_manual_delivery_boundary',
+              evidenceSummary: 'QA verified the tested ref is deliverable.',
+              outputPaths: ['docs/reviews/signoff.md'],
+            },
+          ],
+        }),
+      ),
+    ).toThrow();
+  });
+
   it('keeps provider-style acceptance criteria normalization narrow', () => {
     const invalidCriteria = [
       [],

@@ -1055,6 +1055,12 @@ export function createWorkflowEngine(
             '- For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
           ]
         : []),
+      ...(input.requiredArtifactTypes.includes('qa-release-signoff')
+        ? [
+            '- For qa-release-signoff JSON artifacts, include targetRef, validatedRef, and overallStatus.',
+            '- qa-release-signoff.overallStatus must be one of passed, failed, or blocked; do not use decision or recommendation as a substitute.',
+          ]
+        : []),
       ...(input.requiredArtifactTypes.some((type) =>
         ['ac-evidence', 'qa-release-signoff'].includes(type),
       )
