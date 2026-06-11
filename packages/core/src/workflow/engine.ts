@@ -1040,6 +1040,14 @@ export function createWorkflowEngine(
             '- For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor: outputPaths pointing to a file under TEKON_OUTPUT_DIR or an existing repo path, or known gateResultIds/artifactIds.',
           ]
         : []),
+      ...(input.requiredArtifactTypes.includes('test-plan')
+        ? [
+            '- For test-plan JSON artifacts, include testBasis and testCases using the exact schema fields.',
+            '- testBasis must be a non-empty string array.',
+            '- testCases[].id and testCases[].description are required.',
+            '- Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
+          ]
+        : []),
       ...roleScopedReviewArtifactInstructions({
         nodeId: input.nodeId,
         role: input.role,

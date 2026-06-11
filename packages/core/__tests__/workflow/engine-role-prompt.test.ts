@@ -340,6 +340,89 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('adds strict QA test-plan artifact instructions', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-test-plan-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-test-plan-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '测试方案必须符合 schema',
+      mode: 'template',
+      workflowSpec: {
+        id: 'test-plan-prompt',
+        name: 'Test Plan Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-test-plan',
+                role: 'qa',
+                inputs: [],
+                outputs: [{ id: 'test-plan', type: 'test-plan' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain(
+      'For test-plan JSON artifacts, include testBasis and testCases using the exact schema fields.',
+    );
+    expect(prompts[0]).toContain(
+      'testCases[].id and testCases[].description are required.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
+    );
+    db.close();
+  });
+
   it('includes prior node status context for process checkpoints', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-engine-process-prompt-'),

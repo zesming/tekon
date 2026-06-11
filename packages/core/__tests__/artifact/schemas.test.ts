@@ -281,6 +281,46 @@ describe('artifact schemas', () => {
     });
   });
 
+  it('normalizes provider-style QA test plans into required schema fields', () => {
+    expect(
+      validateArtifactContent(
+        'test-plan',
+        JSON.stringify({
+          title: 'QA 测试方案',
+          body: '验证长程任务产物进展观测。',
+          sourceArtifactsReviewed: [
+            {
+              alias: 'demand',
+              path: '.tekon/runs/run_1/artifacts/demand-card.v1.md',
+            },
+            {
+              alias: 'implementation-plan',
+              path: '.tekon/runs/run_1/artifacts/implementation-plan.v1.md',
+            },
+          ],
+          testScenarios: [
+            {
+              id: 'QA-CG-001',
+              name: '受控 outputDir 文件变化刷新 progress JSON',
+              type: 'targeted-regression',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      testBasis: [
+        'demand: .tekon/runs/run_1/artifacts/demand-card.v1.md',
+        'implementation-plan: .tekon/runs/run_1/artifacts/implementation-plan.v1.md',
+      ],
+      testCases: [
+        {
+          id: 'QA-CG-001',
+          description: '受控 outputDir 文件变化刷新 progress JSON',
+        },
+      ],
+    });
+  });
+
   it('keeps provider-style acceptance criteria normalization narrow', () => {
     const invalidCriteria = [
       [],

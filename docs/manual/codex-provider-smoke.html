@@ -323,7 +323,11 @@ npm exec --yes -- pnpm@10.12.1 build</code></pre>
           应使用 <code>acceptanceCriteria[].id/description</code>；如果真实
           provider 写出有效的
           <code>acceptance_criteria[].criterion</code>，Tekon 会兼容归一化为
-          <code>acceptanceCriteria[].description</code>。<code
+          <code>acceptanceCriteria[].description</code>。<code>test-plan</code>
+          JSON 应使用 <code>testBasis</code> 和 <code>testCases</code>；如果真实
+          provider 写出有效的 <code>sourceArtifactsReviewed</code> 和
+          <code>testScenarios</code>，Tekon 会窄归一化为
+          <code>testBasis</code> 和 <code>testCases</code>。<code
             >code-changes</code
           >
           的 provider-style JSON 如果包含非空 <code>summary</code>，或包含有效
@@ -517,6 +521,19 @@ node packages/cli/dist/index.js eval work-usability record \
                 优先按 Tekon schema 写
                 <code>acceptanceCriteria[].id/description</code
                 >；兼容字段只用于真实 provider 字段漂移恢复。
+              </td>
+            </tr>
+            <tr>
+              <td><code>test-plan</code> artifact schema 不合法</td>
+              <td>
+                缺少 <code>testBasis</code>/<code>testCases</code>，且没有可归一化的
+                <code>sourceArtifactsReviewed</code>/<code>testScenarios</code>；或
+                <code>testCases</code> 条目缺少 id/description。
+              </td>
+              <td>
+                优先按 Tekon schema 写 <code>testBasis</code> 和
+                <code>testCases[].id/description</code>；provider-style
+                字段只用于真实 provider 字段漂移恢复。
               </td>
             </tr>
             <tr>

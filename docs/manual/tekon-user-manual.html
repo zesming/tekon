@@ -1468,7 +1468,10 @@
             如果包含非空 <code>summary</code>，或包含有效
             <code>changedFiles</code>/<code>verification</code>
             条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon
-            schema 写完整字段。评审类 artifact 必须额外写入合法
+            schema 写完整字段。<code>test-plan</code> 应使用
+            <code>testBasis</code> 和 <code>testCases</code>，有效的
+            <code>sourceArtifactsReviewed</code>/<code>testScenarios</code>
+            会被窄归一化。评审类 artifact 必须额外写入合法
             <code>reviewScope</code>、<code>reviewProcess</code>、<code
               >decision</code
             >

@@ -310,6 +310,9 @@ function normalizeStructuredPayload(
   if (isRoleScopedReviewArtifact(type)) {
     return normalizeRoleScopedReviewPayload(payload);
   }
+  if (type === 'test-plan') {
+    return normalizeTestPlanPayload(payload);
+  }
   if (
     type !== 'code-changes' ||
     typeof payload !== 'object' ||
@@ -318,6 +321,206 @@ function normalizeStructuredPayload(
     'body' in payload
   ) {
   return payload;
+}
+
+function normalizeTestPlanPayload(payload: unknown): unknown {
+  if (typeof payload !== 'object' || payload === null) {
+    return payload;
+  }
+  const record = payload as Record<string, unknown>;
+  const updates: Record<string, unknown> = {};
+  if (!isNonEmptyStringArray(record.testBasis)) {
+    const testBasis = providerStyleTestBasis(record);
+    if (testBasis.length > 0) {
+      updates.testBasis = testBasis;
+    }
+  }
+  if (!Array.isArray(record.testCases) || record.testCases.length === 0) {
+    const testCases = providerStyleTestCases(record);
+    if (testCases.length > 0) {
+      updates.testCases = testCases;
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    return payload;
+  }
+  return {
+    ...record,
+    ...updates,
+  };
+}
+
+function providerStyleTestBasis(record: Record<string, unknown>): string[] {
+  if (Array.isArray(record.sourceArtifactsReviewed)) {
+    const basis = record.sourceArtifactsReviewed
+      .map((entry) => formatTestBasisEntry(entry))
+      .filter((entry): entry is string => entry !== undefined);
+    if (basis.length > 0) {
+      return basis;
+    }
+  }
+  if (Array.isArray(record.acceptanceCoverage)) {
+    return record.acceptanceCoverage
+      .map((entry) => {
+        if (typeof entry !== 'object' || entry === null) {
+          return undefined;
+        }
+        const coverage = entry as Record<string, unknown>;
+        const id = nonEmptyString(coverage.id);
+        const label = nonEmptyString(coverage.coverage);
+        return id && label ? `${id}: ${label}` : id;
+      })
+      .filter((entry): entry is string => entry !== undefined);
+  }
+  return [];
+}
+
+function formatTestBasisEntry(entry: unknown): string | undefined {
+  if (typeof entry === 'string') {
+    return nonEmptyString(entry);
+  }
+  if (typeof entry !== 'object' || entry === null) {
+    return undefined;
+  }
+  const record = entry as Record<string, unknown>;
+  const alias = nonEmptyString(record.alias);
+  const path = nonEmptyString(record.path);
+  if (alias && path) {
+    return `${alias}: ${path}`;
+  }
+  return alias ?? path;
+}
+
+function providerStyleTestCases(record: Record<string, unknown>): {
+  id: string;
+  criterionId?: string;
+  description: string;
+  method?: 'unit' | 'integration' | 'e2e' | 'manual' | 'static';
+}[] {
+  if (Array.isArray(record.testScenarios)) {
+    const testCases = record.testScenarios
+      .map((entry, index) => formatProviderStyleTestCase(entry, index))
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+    if (testCases.length > 0) {
+      return testCases;
+    }
+  }
+  if (Array.isArray(record.acceptanceCoverage)) {
+    return record.acceptanceCoverage
+      .map((entry, index) => formatAcceptanceCoverageTestCase(entry, index))
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined);
+  }
+  return [];
+}
+
+function formatProviderStyleTestCase(
+  entry: unknown,
+  index: number,
+):
+  | {
+      id: string;
+      criterionId?: string;
+      description: string;
+      method?: 'unit' | 'integration' | 'e2e' | 'manual' | 'static';
+    }
+  | undefined {
+  if (typeof entry !== 'object' || entry === null) {
+    return undefined;
+  }
+  const record = entry as Record<string, unknown>;
+  const description =
+    nonEmptyString(record.description) ?? nonEmptyString(record.name);
+  if (!description) {
+    return undefined;
+  }
+  const id = nonEmptyString(record.id) ?? `TC-${index + 1}`;
+  const criterionId = providerStyleCriterionId(record);
+  const method = providerStyleTestMethod(record.type);
+  return {
+    id,
+    ...(criterionId ? { criterionId } : {}),
+    description,
+    ...(method ? { method } : {}),
+  };
+}
+
+function formatAcceptanceCoverageTestCase(
+  entry: unknown,
+  index: number,
+):
+  | {
+      id: string;
+      criterionId?: string;
+      description: string;
+      method?: 'unit' | 'integration' | 'e2e' | 'manual' | 'static';
+    }
+  | undefined {
+  if (typeof entry !== 'object' || entry === null) {
+    return undefined;
+  }
+  const record = entry as Record<string, unknown>;
+  const criterionId = nonEmptyString(record.id);
+  const coverage = nonEmptyString(record.coverage);
+  const description =
+    nonEmptyString(record.description) ??
+    (criterionId && coverage
+      ? `Verify ${criterionId}: ${coverage}`
+      : criterionId
+        ? `Verify ${criterionId}`
+        : undefined);
+  if (!description) {
+    return undefined;
+  }
+  return {
+    id: `TC-${index + 1}`,
+    ...(criterionId ? { criterionId } : {}),
+    description,
+    method: 'manual',
+  };
+}
+
+function providerStyleCriterionId(
+  record: Record<string, unknown>,
+): string | undefined {
+  const direct = nonEmptyString(record.criterionId);
+  if (direct) {
+    return direct;
+  }
+  const mapsTo = record.mapsTo;
+  if (Array.isArray(mapsTo)) {
+    return mapsTo.map((entry) => nonEmptyString(entry)).find(Boolean);
+  }
+  return undefined;
+}
+
+function providerStyleTestMethod(
+  value: unknown,
+): 'unit' | 'integration' | 'e2e' | 'manual' | 'static' | undefined {
+  const type = nonEmptyString(value)?.toLowerCase();
+  if (!type) {
+    return undefined;
+  }
+  if (type.includes('unit')) {
+    return 'unit';
+  }
+  if (type.includes('integration') || type.includes('component')) {
+    return 'integration';
+  }
+  if (type.includes('e2e')) {
+    return 'e2e';
+  }
+  if (type.includes('static') || type.includes('diff')) {
+    return 'static';
+  }
+  return 'manual';
+}
+
+function isNonEmptyStringArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((entry) => nonEmptyString(entry))
+  );
 }
 
 function isRoleScopedReviewArtifact(type: ArtifactType): boolean {

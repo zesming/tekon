@@ -76,6 +76,7 @@
 - 真实 provider artifact 协议明确结构化 JSON artifact 必须包含非空 `title` 和 `body`，并在 prompt 中要求 `demand-card`/`prd` 使用 `acceptanceCriteria[].id/description`；`code-changes` 的 provider-style JSON 在包含非空 `summary` 或有效 `changedFiles`/`verification` 条目时会被归一化为 Tekon 可审阅 artifact，`demand-card`/`prd` 的有效 `acceptance_criteria[].criterion` 也会被归一化为 `acceptanceCriteria[].description`，降低真实 Codex run 因字段命名漂移中断的概率。
 - 真实 provider artifact 协议对评审类 artifact 增加严格 role-scoped review JSON 指引：prompt 会给出 `reviewScope`、`reviewProcess`、`decision`、`findings[].severity/message` 的合法字段和值，并写入目标节点和目标角色，避免真实 Codex 用 `reviewRole`、`reviewedArtifacts` 或数组/对象形式 `reviewScope` 产出无法过 schema/role-scope gate 的评审产物。
 - 真实 provider 评审类 artifact 对 `findings[].ownerRole` 做窄归一化：若 provider 写出非角色枚举的 ownerRole，会把该值保留到 finding message 并移除无效 ownerRole；`reviewScope`、`reviewProcess.reviewerRole`、`targetRole` 和 `decision` 仍保持严格 schema 校验。
+- 真实 provider `test-plan` artifact 协议明确要求 `testBasis` 和 `testCases` 字段；若 Codex 写出 provider-style `sourceArtifactsReviewed` 与 `testScenarios`，Tekon 会窄归一化为 schema 所需的测试依据和测试用例，避免 QA 测试方案因字段命名漂移中断。
 - Web dashboard 从只展示 artifact/gate 路径和计数，升级为可直接审阅关键正文、日志、diff 和 PR 包的本地审阅面，并能在同一页面完成 run 发起、PR 准备和受控 PR 创建入口。
 - `demand shape` 默认写入 `.tekon/demands/`，`demand approve`、`run`、`status`、`review`、`approval summary`、`resume --approve-human`、`delivery prepare` 和 `eval readiness` 等常规命令默认读取最近合适的上下文；历史需求卡和历史 run/decision 仍通过显式参数兼容。
 - 审批摘要和 review surface 的建议命令在默认上下文中改为短命令，例如 `tekon resume --approve-human`、`tekon approval reject`、`tekon review`；显式查看历史 run/decision 时仍输出带 id 和 repo 的精确命令，避免复制后操作到最新上下文。
