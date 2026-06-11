@@ -1120,10 +1120,10 @@
             signoff、QA signoff review 和 PMO
             checkpoint；当前已具备独立评审、角色范围、AC evidence、QA
             signoff、节点级 PMO checkpoint 和流程完整性 gate
-            的本地强约束，但不替代真实人类业务决策。QA validation
-            不应仅因 PR 创建、delivery package 或下游 PMO/QA signoff
-            尚未运行而阻塞，最终交付闭环仍由 QA signoff、PMO 和 pre-PR
-            readiness 继续校验。
+            的本地强约束，但不替代真实人类业务决策。QA validation 不应仅因 PR
+            创建、delivery package 或下游 PMO/QA signoff
+            尚未运行而阻塞，最终交付闭环仍由 QA signoff、PMO 和 pre-PR readiness
+            继续校验。
           </p>
           <p>
             <code>workflow select</code> 会给出推荐模板和理由；<code
@@ -1474,7 +1474,9 @@
             schema 写完整字段。<code>test-plan</code> 应使用
             <code>testBasis</code> 和 <code>testCases</code>，有效的
             <code>sourceArtifactsReviewed</code>/<code>testScenarios</code>
-            会被窄归一化。<code>test-report</code>/<code>ac-evidence</code>/<code>qa-release-signoff</code>
+            会被窄归一化。<code>test-report</code>/<code>ac-evidence</code>/<code
+              >qa-release-signoff</code
+            >
             应使用
             <code>criteriaEvidence[].criterionId/status/evidence</code>，<code
               >evidence</code
@@ -1485,7 +1487,13 @@
             <code>criteriaEvidence</code> 条目内，不能只放在 artifact
             顶层；<code>artifactIds</code> 只能使用 Artifacts 区展示的真实
             <code>artifact_&lt;uuid&gt;</code>，不能使用
-            <code>nodeId:type</code> 标签，<code>status</code> 只能是
+            <code>nodeId:type</code> 标签；<code>gateResultIds</code> 只能使用
+            prompt 的 <code>Prior eligible gate results</code> 区展示的真实
+            <code>gateResultId</code>，不能使用
+            <code>gateKey</code>、<code>commandRef</code>、<code
+              >outputPath</code
+            >
+            或 gate 日志文件名，<code>status</code> 只能是
             <code>passed</code>、<code>failed</code>、<code>blocked</code> 或
             <code>unknown</code>，<code>test-report.summary</code>
             如存在必须是字符串；若真实 provider 写出对象形式

@@ -903,6 +903,251 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('exposes exact gate result ids for QA evidence anchors', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-gate-result-id-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-gate-result-id-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          if (input.runContext.nodeId.endsWith('_rd-code-change')) {
+            const createdAt = new Date().toISOString();
+            await repositories.recordGateResult({
+              id: `gate_fixture_failed_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateType: 'test',
+              gateKey: 'fixture:failed',
+              status: 'failed',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+            await repositories.recordGateResult({
+              id: `gate_fixture_blocked_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateType: 'test',
+              gateKey: 'fixture:blocked',
+              status: 'blocked',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+            await repositories.recordGateResult({
+              id: `gate_fixture_future_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: `${input.runContext.runId}_future-delivery`,
+              gateType: 'test',
+              gateKey: 'fixture:future',
+              status: 'passed',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+          }
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: {
+        async runGate(input) {
+          return repositories.recordGateResult({
+            id: `gate_result_${input.nodeId}_${input.gate.type}`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            gateType: input.gate.type,
+            gateKey: input.gate.gateKey,
+            status: input.gate.type === 'lint' ? 'skipped' : 'passed',
+            outputPath: join(
+              repoPath,
+              '.tekon',
+              'runs',
+              input.runId,
+              'gates',
+              `${input.nodeId}-${input.gate.type}.log`,
+            ),
+            durationMs: 0,
+            retries: 0,
+            createdAt: new Date().toISOString(),
+          });
+        },
+        async createAutoFixRepairNode(input) {
+          return repositories.createNode({
+            id: `repair_${input.failedGateResult.id}`,
+            runId: input.failedGateResult.runId,
+            role: input.fixerRole,
+            status: 'pending',
+            gates: [],
+            dependencies: [input.failedGateResult.nodeId],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        },
+      },
+    });
+
+    const result = await engine.startRun({
+      demandText: 'QA evidence 需要引用真实 gate result id',
+      mode: 'template',
+      workflowSpec: {
+        id: 'qa-gate-result-id',
+        name: 'QA Gate Result ID',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'rd',
+            name: 'RD',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'rd-code-change',
+                role: 'rd',
+                inputs: [],
+                outputs: [],
+                gates: [
+                  {
+                    type: 'build',
+                    gateKey: '00:build:commandRef=build',
+                  },
+                  {
+                    type: 'lint',
+                    gateKey: '01:lint:commandRef=lint',
+                  },
+                ],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: ['rd'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-validation',
+                role: 'qa',
+                inputs: [],
+                outputs: [
+                  { id: 'test', type: 'test-report' },
+                  { id: 'evidence', type: 'ac-evidence' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'delivery',
+            name: 'Delivery',
+            dependsOn: ['qa'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'future-delivery',
+                role: 'pmo',
+                inputs: [],
+                outputs: [],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await expect(repositories.listNodes(result.runId)).resolves.toContainEqual(
+      expect.objectContaining({ id: `${result.runId}_future-delivery` }),
+    );
+    await expect(repositories.listGateResults(result.runId)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `gate_fixture_failed_${result.runId}`,
+          nodeId: `${result.runId}_rd-code-change`,
+          status: 'failed',
+        }),
+        expect.objectContaining({
+          id: `gate_fixture_blocked_${result.runId}`,
+          nodeId: `${result.runId}_rd-code-change`,
+          status: 'blocked',
+        }),
+        expect.objectContaining({
+          id: `gate_fixture_future_${result.runId}`,
+          nodeId: `${result.runId}_future-delivery`,
+          status: 'passed',
+        }),
+      ]),
+    );
+    const qaPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_qa-validation'),
+    )?.prompt;
+    expect(qaPrompt).toBeDefined();
+    expect(qaPrompt).toContain('Prior eligible gate results:');
+    expect(qaPrompt).toMatch(
+      /gateResultId: gate_result_.*_rd-code-change_build/u,
+    );
+    expect(qaPrompt).toMatch(
+      /gateResultId: gate_result_.*_rd-code-change_lint/u,
+    );
+    expect(qaPrompt).not.toContain('contextOnlyGateKey=');
+    expect(qaPrompt).not.toContain('outputPath=');
+    expect(qaPrompt).toContain('status=skipped');
+    expect(qaPrompt).not.toContain('gate_fixture_failed_');
+    expect(qaPrompt).not.toContain('gate_fixture_blocked_');
+    expect(qaPrompt).not.toContain('gate_fixture_future_');
+    expect(qaPrompt).toContain(
+      'criteriaEvidence[].gateResultIds must use exact gateResultId values from Prior eligible gate results; do not use gateKey, nodeId:gateKey labels, commandRef labels, outputPath, or log file names.',
+    );
+    db.close();
+  });
+
   it('interrupts the workflow when an agent returns a non-zero exit code', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-agent-fail-'));
     const rolesDir = mkdtempSync(

@@ -846,6 +846,10 @@ export function createWorkflowEngine(
     );
   }
 
+  function formatGateResultForPrompt(gate: GateResult): string {
+    return `- gateResultId: ${gate.id} (context only: nodeId=${gate.nodeId}; gateType=${gate.gateType}; status=${gate.status})`;
+  }
+
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
@@ -1041,6 +1045,7 @@ export function createWorkflowEngine(
             '- criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
             '- Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
             '- criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+            '- criteriaEvidence[].gateResultIds must use exact gateResultId values from Prior eligible gate results; do not use gateKey, nodeId:gateKey labels, commandRef labels, outputPath, or log file names.',
             '- If you do not have an exact artifactId, omit artifactIds and use outputPaths or known gateResultIds instead.',
             '- criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
           ]
@@ -1124,6 +1129,18 @@ export function createWorkflowEngine(
     const allNodes = await options.repositories.listNodes(runId);
     const currentIndex = allNodes.findIndex((item) => item.id === node.id);
     const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const gateResults = await options.repositories.listGateResults(runId);
+    const visibleGateNodeIds = new Set([
+      ...priorNodes.map((item) => item.id),
+      node.id,
+    ]);
+    const eligibleGateResultLines = gateResults
+      .filter(
+        (gate) =>
+          visibleGateNodeIds.has(gate.nodeId) &&
+          (gate.status === 'passed' || gate.status === 'skipped'),
+      )
+      .map(formatGateResultForPrompt);
     const priorNodeLines = priorNodes.map((item) =>
       [
         `- ${item.id} role=${item.role} status=${item.status}`,
@@ -1161,6 +1178,11 @@ export function createWorkflowEngine(
         priorNodeLines.length > 0
           ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
           : 'Prior workflow nodes: none.',
+        eligibleGateResultLines.length > 0
+          ? ['Prior eligible gate results:', ...eligibleGateResultLines].join(
+              '\n',
+            )
+          : 'Prior eligible gate results: none.',
         processCheckpointRequired
           ? 'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes. Also include process-checkpoint.artifactEvidence for every listed prior node output, process-checkpoint.gateEvidence for every listed prior node gate with its gateType, gateKey, and observed passed/skipped status, and process-checkpoint.humanDecisionEvidence.pending.'
           : '',
