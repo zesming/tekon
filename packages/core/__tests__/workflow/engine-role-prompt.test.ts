@@ -537,6 +537,9 @@ describe('workflow engine role prompt integration', () => {
     expect(pmoPrompt!).toContain(
       'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
     );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: 0. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.',
+    );
     db.close();
   });
 
