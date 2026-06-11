@@ -260,10 +260,16 @@
             当前 P0 真实闭环成立，但不是完整治理流程。下一阶段优先做
             <code>standard-delivery</code>
             模板、独立评审、角色越权 gate、AC evidence traceability、QA final
-            signoff 和 PR package V2。
+            signoff 和 PR package V2。能用 Tekon 自举验证的任务优先用 Tekon
+            自己跑，但不让尚未实现的 <code>standard-delivery</code>
+            假装已经可用。
           </p>
         </div>
         <div class="grid">
+          <div class="tile">
+            <strong>P1-0：自举种子</strong>
+            用现有 docs-update / Codex 闭环跑首个标准流程种子 PR。
+          </div>
           <div class="tile">
             <strong>P1-A：流程固化</strong>
             新增标准全链路 workflow 和角色边界。
@@ -288,6 +294,64 @@
             <strong>P3：平台化</strong>
             DAG 并行、知识技能飞轮、新角色、release/rollback、组织治理。
           </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>自举落地策略</h2>
+        <p>
+          标准流程本身也应该被 Tekon dogfood。策略是分层自举：先用现有
+          <code>docs-update</code> 和 Codex provider
+          跑低风险种子任务；再用半标准流程验证 schema/gate；最后等
+          <code>standard-delivery</code> 可用后，用它验证 PR
+          package、Web、Artifact Center 等后续能力。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>批次</th>
+              <th>使用流程</th>
+              <th>适合任务</th>
+              <th>目标</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Seed-1</td>
+              <td>现有 <code>docs-update</code> + Codex provider + 真实 PR</td>
+              <td>模板草案、角色边界文档、模板解析测试、用户手册说明</td>
+              <td>用已有能力生成第一条 P1 自举证据。</td>
+            </tr>
+            <tr>
+              <td>Seed-2</td>
+              <td>现有 workflow + 新 schema/gate 验证证据</td>
+              <td>
+                artifact
+                schemas、<code>independent-review</code>、<code>role-scope</code>、<code>qa-signoff</code>、<code
+                  >ac-evidence</code
+                >
+              </td>
+              <td>在新能力尚未进入标准流程前，验证核心治理能力。</td>
+            </tr>
+            <tr>
+              <td>Seed-3</td>
+              <td>新 <code>standard-delivery</code></td>
+              <td>
+                PR package V2、Web Cockpit、Artifact Center、审计回放、成本
+                telemetry、Provider 对比
+              </td>
+              <td>用标准流程验证标准流程之后的能力。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout warning">
+          <p>
+            首个自举任务只新增
+            <code>workflows/standard-delivery.yaml</code>、角色边界和模板测试；
+            不实现新 gate
+            runner，不改变交付行为。这样能验证流程模板和角色职责两个基础假设，同时避免伪造新
+            gate 已生效。
+          </p>
         </div>
       </section>
 
@@ -507,6 +571,20 @@
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td>Task 0：自举种子 run</td>
+              <td>
+                用现有 Tekon + Codex provider 创建标准流程种子 PR，并记录
+                run/PR/CI 证据。
+              </td>
+              <td>
+                <code
+                  >node packages/cli/dist/index.js status --run-id
+                  &lt;seed-run-id&gt; --repo
+                  /Users/zhaoensheng/Projects/tekon</code
+                >
+              </td>
+            </tr>
             <tr>
               <td>Task 1：创建标准 workflow 模板</td>
               <td><code>workflows/standard-delivery.yaml</code></td>

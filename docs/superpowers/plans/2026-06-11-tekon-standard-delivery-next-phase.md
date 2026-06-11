@@ -36,6 +36,7 @@ Tekon 已完成一次真实 Codex provider 自举闭环：`run_d2350140-b1b7-4fc
 - PMO 做流程和证据完整性治理，不替 PM、RD、QA 做专业判断。
 - QA 对最终交付质量负责，final signoff 必须绑定具体 PR head SHA 或 delivery branch SHA。
 - 高风险动作继续由人类批准：PR 创建、merge、release、deploy、force push。
+- 能用 Tekon 自举验证的任务优先用 Tekon 自己跑；但不能让尚未实现的 `standard-delivery` 假装已经可用。
 
 ---
 
@@ -43,12 +44,36 @@ Tekon 已完成一次真实 Codex provider 自举闭环：`run_d2350140-b1b7-4fc
 
 | 阶段 | 时间窗口  | 目标                                                                              | 退出标准                                                                        |
 | ---- | --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| P1-A | 0-2 周    | 固化 `standard-delivery` 模板和角色边界                                           | 模板可被 parser 加载；角色说明覆盖评审范围；schema tests 通过                   |
+| P1-0 | 0-1 周    | 用现有 `docs-update` / Codex 闭环自举首个标准流程种子任务                         | 真实 run、真实 PR、CI 和归档报告存在；不依赖尚未实现的新 gate                   |
+| P1-A | 1-2 周    | 固化 `standard-delivery` 模板和角色边界                                           | 模板可被 parser 加载；角色说明覆盖评审范围；schema tests 通过                   |
 | P1-B | 1-3 周    | 建立独立评审、角色越权和 QA final signoff gate                                    | 同 agent 自评会失败；越权 review 会失败；QA signoff 缺 SHA 会失败               |
 | P1-C | 2-4 周    | 建立 AC evidence traceability 和 PR package V2                                    | readiness 不再显示 `acceptance-criteria-evidenced` unknown；PR 包按 AC 展示证据 |
 | P1-D | 3-5 周    | 用 Tekon 自身 3 个真实需求跑标准流程                                              | 每个样本都有 run、PR、CI、QA signoff、PMO checkpoint 和复盘记录                 |
 | P2   | 5-10 周   | Web Cockpit、Artifact Center、审计回放、成本 telemetry、多 Provider 稳定化        | 人能在 Web 上完成 run 审阅；成本和审计可查询；Codex/Trae 可对比                 |
 | P3   | 10 周以后 | DAG 并行、知识/技能飞轮、Architect/UI/DevOps/Ops 角色、release/rollback、组织治理 | 多角色复杂需求可控运行，经验可沉淀，团队级权限可审计                            |
+
+### 2.1 自举落地策略
+
+下一阶段不应只靠人工手写实现，而应继续 dogfood。自举策略分三层：
+
+| 批次   | 使用流程                                            | 适合任务                                                                                | 不适合任务                                                    | 目标                                                     |
+| ------ | --------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| Seed-1 | 现有 `docs-update` + Codex provider + 真实 PR       | `standard-delivery` 模板草案、角色边界文档、模板解析测试、用户手册说明                  | 新 gate runner、AC evidence 自动映射、QA final signoff 强校验 | 用已有能力生成第一条 P1 自举证据                         |
+| Seed-2 | 现有 workflow + 明确要求产出新 schema/gate 验证证据 | artifact schemas、`independent-review`、`role-scope`、`qa-signoff`、`ac-evidence`       | Web Cockpit、Artifact Center、多 Provider 对比                | 在新能力尚未进入标准流程前，用半标准流程验证核心治理能力 |
+| Seed-3 | 新 `standard-delivery`                              | PR package V2、Web Cockpit V2、Artifact Center、审计回放、成本 telemetry、Provider 对比 | release automation、组织权限、复杂 DAG                        | 用标准流程验证标准流程之后的能力                         |
+
+首个自举任务建议定义为：
+
+```text
+为 Tekon 新增 standard-delivery workflow 模板初版：
+1. 新增 workflows/standard-delivery.yaml，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA final signoff、PMO checkpoint 等节点。
+2. 更新 roles/pm|rd|qa|reviewer|pmo/system.md，写明角色评审范围和不越权边界。
+3. 新增或更新 workflow template 测试，确保模板能被加载且关键节点存在。
+4. 不实现新 gate runner，不修改交付行为。
+5. 使用现有 Tekon + Codex provider 创建真实 PR，不自动 merge。
+```
+
+该任务的价值是验证“流程模板 + 角色职责”这两个基础假设，同时避免把尚未实现的 gate 当作已生效能力。
 
 ---
 
@@ -398,6 +423,55 @@ phases:
 ---
 
 ## 7. P1 Implementation Tasks
+
+### Task 0: Dogfood Seed Run
+
+**Files:**
+
+- Create: `docs/reviews/2026-06-11-standard-delivery-seed-run.md`
+- Create: `docs/reviews/2026-06-11-standard-delivery-seed-run.html`
+- No direct runtime source edits in this task unless the Tekon run itself produces them in its delivery branch.
+
+- [ ] **Step 1: Create a Tekon demand for Seed-1**
+
+Demand text:
+
+```text
+为 Tekon 新增 standard-delivery workflow 模板初版，并同步角色边界说明。
+范围：
+1. 新增 workflows/standard-delivery.yaml，包含 PM 内审、RD/QA 需求接口评审、RD 技术评审、QA 测试方案评审、QA final signoff、PMO checkpoint 等节点。
+2. 更新 roles/pm|rd|qa|reviewer|pmo/system.md，写明角色评审范围和不越权边界。
+3. 新增或更新 workflow template 测试，确保模板能被加载且关键节点存在。
+4. 不实现 independent-review、role-scope、qa-signoff、ac-evidence 等新 gate runner。
+5. 使用 Codex provider 创建真实 PR，不自动 merge。
+```
+
+- [ ] **Step 2: Run current Tekon workflow with Codex**
+
+Use the current working CLI and `codex --profile internal` provider path. Prefer the existing `docs-update` or closest available current workflow because `standard-delivery` is not implemented yet.
+
+Expected: Tekon creates a real run with demand-card, code-changes, test-report, review-report, delivery-package and PR evidence.
+
+- [ ] **Step 3: Verify the run**
+
+Run:
+
+```bash
+node packages/cli/dist/index.js status --run-id <seed-run-id> --repo /Users/zhaoensheng/Projects/tekon
+```
+
+Expected: status is `passed` or, if failed, the failure is diagnosable and recorded with gate/artifact evidence.
+
+- [ ] **Step 4: Record seed evidence**
+
+Create `docs/reviews/2026-06-11-standard-delivery-seed-run.md` and `.html` with run id, PR URL, changed files, gates, CI status, and whether the run proved or disproved the self-bootstrap approach.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add docs/reviews/2026-06-11-standard-delivery-seed-run.md docs/reviews/2026-06-11-standard-delivery-seed-run.html
+git commit -m "docs: record standard delivery seed run"
+```
 
 ### Task 1: Create Standard Workflow Template
 
@@ -859,9 +933,10 @@ Exit criteria:
 
 Recommended sequence:
 
-1. Implement P1-A and P1-B first: workflow template, artifact schemas, independent review gate, role-scope gate.
-2. Implement P1-C next: AC evidence traceability, QA signoff, PR package V2.
-3. Run P1-D on 3 Tekon self-demands.
-4. Use P1 evidence to decide P2 ordering. If review bottleneck is highest, do Web Cockpit first. If run failures dominate, do provider regression and telemetry first.
+1. Run P1-0 first: use existing Tekon + Codex provider to self-bootstrap the `standard-delivery` template and role-boundary seed task.
+2. Implement P1-A and P1-B next: workflow template, artifact schemas, independent review gate, role-scope gate.
+3. Implement P1-C: AC evidence traceability, QA signoff, PR package V2.
+4. Run P1-D on 3 Tekon self-demands. At least one demand must use `standard-delivery` once the template and gates are available.
+5. Use P1 evidence to decide P2 ordering. If review bottleneck is highest, do Web Cockpit first. If run failures dominate, do provider regression and telemetry first.
 
 Do not start Trae provider, DAG parallel execution, or release automation before P1-D produces at least 3 successful or diagnosable real samples.
