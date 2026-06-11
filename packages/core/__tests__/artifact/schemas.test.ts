@@ -391,6 +391,41 @@ describe('artifact schemas', () => {
     });
   });
 
+  it('normalizes provider-style QA evidence objects with nested anchors', () => {
+    expect(
+      validateArtifactContent(
+        'ac-evidence',
+        JSON.stringify({
+          title: 'AC Evidence',
+          body: 'All acceptance criteria are verified.',
+          criteriaEvidence: [
+            {
+              criterionId: 'AC-1',
+              status: 'passed',
+              evidence: {
+                summary: 'Focused regression passed with anchored evidence.',
+                outputPaths: ['logs/fresh-focused-command-gateway.log'],
+                artifactIds: ['qa-validation:test-report'],
+                gateResultIds: ['gate_build'],
+              },
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Focused regression passed with anchored evidence.',
+          outputPaths: ['logs/fresh-focused-command-gateway.log'],
+          artifactIds: ['qa-validation:test-report'],
+          gateResultIds: ['gate_build'],
+        },
+      ],
+    });
+  });
+
   it('keeps provider-style QA validation evidence normalization narrow', () => {
     for (const payload of [
       {
@@ -411,6 +446,19 @@ describe('artifact schemas', () => {
           {
             id: 'AC-1',
             evidenceSummary: 'Focused regression passed.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Evidence object without summary is not validation evidence.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: {
+              outputPaths: ['logs/fresh-focused-command-gateway.log'],
+            },
           },
         ],
       },

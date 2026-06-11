@@ -1474,21 +1474,23 @@
             会被窄归一化。<code>test-report</code>/<code>ac-evidence</code>
             应使用
             <code>criteriaEvidence[].criterionId/status/evidence</code>，<code
-              >status</code
+              >evidence</code
             >
-            只能是 <code>passed</code>、<code>failed</code>、<code
-              >blocked</code
-            >
-            或 <code>unknown</code>，<code>test-report.summary</code>
+            必须是非空字符串，anchors 应放在顶层
+            <code>outputPaths</code>、<code>gateResultIds</code> 或
+            <code>artifactIds</code>，<code>status</code> 只能是
+            <code>passed</code>、<code>failed</code>、<code>blocked</code> 或
+            <code>unknown</code>，<code>test-report.summary</code>
             如存在必须是字符串；若真实 provider 写出对象形式
-            <code>summary</code>，或用
-            <code>id</code
-            >、<code>evidenceSummary</code>、<code>coverage</code>、<code>passed_with_*</code>/<code>failed_with_*</code>/<code
+            <code>summary</code>，或用 <code>id</code>、带字符串
+            <code>summary</code> 的 evidence
+            对象、<code>evidenceSummary</code>、<code>coverage</code>、<code>passed_with_*</code>/<code>failed_with_*</code>/<code
               >blocked_with_*</code
             >
             状态标签表达 QA evidence，Tekon 会窄归一化为 schema
-            字段；缺失状态、含糊状态或只有 <code>criterion</code>
-            而无证据字段时仍会失败。评审类 artifact 必须额外写入合法
+            字段；缺失状态、含糊状态、无 <code>summary</code> 的 evidence
+            对象，或只有 <code>criterion</code> 而无证据字段时仍会失败。评审类
+            artifact 必须额外写入合法
             <code>reviewScope</code>、<code>reviewProcess</code>、<code
               >decision</code
             >

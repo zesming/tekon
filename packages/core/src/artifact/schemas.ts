@@ -396,7 +396,9 @@ function normalizeProviderStyleCriteriaEvidence(entry: unknown): unknown {
   const criterionId =
     nonEmptyString(record.criterionId) ?? nonEmptyString(record.id);
   const status = providerStyleCriteriaEvidenceStatus(record.status);
+  const evidenceObject = providerStyleEvidenceObject(record.evidence);
   const evidence =
+    evidenceObject?.evidence ??
     nonEmptyString(record.evidence) ??
     nonEmptyString(record.evidenceSummary) ??
     nonEmptyString(record.coverage);
@@ -412,6 +414,65 @@ function normalizeProviderStyleCriteriaEvidence(entry: unknown): unknown {
     ...(criterionId ? { criterionId } : {}),
     ...(status ? { status } : {}),
     ...(evidence ? { evidence } : {}),
+    ...providerStyleEvidenceAnchors(record, evidenceObject),
+  };
+}
+
+function providerStyleEvidenceObject(value: unknown):
+  | {
+      evidence: string;
+      artifactIds?: string[];
+      gateResultIds?: string[];
+      outputPaths?: string[];
+    }
+  | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const evidence = nonEmptyString(record.summary);
+  if (!evidence) {
+    return undefined;
+  }
+  const artifactIds = nonEmptyStringArray(record.artifactIds);
+  const gateResultIds = nonEmptyStringArray(record.gateResultIds);
+  const outputPaths = nonEmptyStringArray(record.outputPaths);
+  return {
+    evidence,
+    ...(artifactIds ? { artifactIds } : {}),
+    ...(gateResultIds ? { gateResultIds } : {}),
+    ...(outputPaths ? { outputPaths } : {}),
+  };
+}
+
+function providerStyleEvidenceAnchors(
+  record: Record<string, unknown>,
+  evidenceObject:
+    | {
+        artifactIds?: string[];
+        gateResultIds?: string[];
+        outputPaths?: string[];
+      }
+    | undefined,
+): {
+  artifactIds?: string[];
+  gateResultIds?: string[];
+  outputPaths?: string[];
+} {
+  if (!evidenceObject) {
+    return {};
+  }
+  return {
+    ...(!isNonEmptyStringArray(record.artifactIds) && evidenceObject.artifactIds
+      ? { artifactIds: evidenceObject.artifactIds }
+      : {}),
+    ...(!isNonEmptyStringArray(record.gateResultIds) &&
+    evidenceObject.gateResultIds
+      ? { gateResultIds: evidenceObject.gateResultIds }
+      : {}),
+    ...(!isNonEmptyStringArray(record.outputPaths) && evidenceObject.outputPaths
+      ? { outputPaths: evidenceObject.outputPaths }
+      : {}),
   };
 }
 
@@ -644,6 +705,16 @@ function isNonEmptyStringArray(value: unknown): boolean {
     value.length > 0 &&
     value.every((entry) => nonEmptyString(entry))
   );
+}
+
+function nonEmptyStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const items = value
+    .map((entry) => nonEmptyString(entry))
+    .filter((entry): entry is string => entry !== undefined);
+  return items.length > 0 ? items : undefined;
 }
 
 function isRoleScopedReviewArtifact(type: ArtifactType): boolean {

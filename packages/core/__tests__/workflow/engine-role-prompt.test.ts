@@ -746,6 +746,9 @@ describe('workflow engine role prompt integration', () => {
       'For test-report and ac-evidence JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].evidence must be a non-empty string; put anchors in top-level outputPaths, gateResultIds, or artifactIds.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
       'criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
     );
     expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
