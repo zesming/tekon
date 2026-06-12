@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { createWriteStream, mkdirSync } from 'node:fs';
+import {
+  createWriteStream,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import type { Transform, Writable } from 'node:stream';
 import { basename, isAbsolute, join, resolve, sep } from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -7,7 +13,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { CommandInvocation } from '../types/domain.js';
 import type { CommandPolicy } from '../types/config.js';
 import type { TekonRepositories } from '../db/repositories.js';
-import { createSecretRedactionTransform } from '../security/secrets.js';
+import {
+  createSecretRedactionTransform,
+  redactSecrets,
+} from '../security/secrets.js';
 
 export type SpawnImpl = (
   command: string,
@@ -28,6 +37,8 @@ export type CommandGatewayResult =
       timedOut: boolean;
       stdoutPath: string;
       stderrPath: string;
+      progressPath?: string;
+      timeoutReason?: 'total' | 'no-progress';
       durationMs: number;
     }
   | { status: 'rejected'; reason: string }
@@ -44,6 +55,8 @@ export interface CommandGatewayRunInput {
   stdin?: string;
   runId?: string;
   nodeId?: string;
+  progressIntervalMs?: number;
+  noProgressTimeoutMs?: number;
 }
 
 export type CommandEnvironmentMode = 'safe-default' | 'inherit' | 'exact';
@@ -81,7 +94,7 @@ export function createCommandGateway(
           runId: input.runId,
           nodeId: input.nodeId,
           status: 'pending',
-          note: `Command requires approval: ${input.command.tool} ${input.command.args.join(' ')}`,
+          note: `Command requires approval: ${formatRedactedCommand(input.command)}`,
           createdAt: new Date().toISOString(),
         });
         return { status: 'blocked-for-approval', decisionId };
@@ -93,6 +106,8 @@ export function createCommandGateway(
         env: buildChildEnv({ env: input.env, envMode: input.envMode }),
         outputDir: input.outputDir ?? join(input.cwd, '.tekon', 'command-logs'),
         timeoutMs: input.timeoutMs ?? 60_000,
+        progressIntervalMs: input.progressIntervalMs ?? 60_000,
+        noProgressTimeoutMs: input.noProgressTimeoutMs,
         stdin: input.stdin,
         spawnImpl,
       });
@@ -110,6 +125,13 @@ function validateCommand(
     command.args.some(isShellControlToken)
   ) {
     return 'shell metacharacters are not allowed in argv commands';
+  }
+
+  if (
+    hasPathSeparator(command.tool) &&
+    !policy.allow.some((entry) => entry.tool === command.tool)
+  ) {
+    return 'path-like command tools must be explicitly allowlisted';
   }
 
   if (isDangerousRemove(command)) {
@@ -154,6 +176,10 @@ function hasShellMetacharacters(value: string): boolean {
   return /[;&|`$<>]/u.test(value);
 }
 
+function hasPathSeparator(value: string): boolean {
+  return /[\\/]/u.test(value);
+}
+
 function isShellControlToken(value: string): boolean {
   return /^(?:;|&|&&|\||\|\||<|>|>>|2>|2>>)$/u.test(value);
 }
@@ -164,8 +190,16 @@ function matchesAny(
 ): boolean {
   return patterns.some((pattern) => {
     const toolMatches =
-      pattern.tool === command.tool || pattern.tool === basename(command.tool);
+      pattern.tool === command.tool ||
+      (!hasPathSeparator(command.tool) &&
+        pattern.tool === basename(command.tool));
     if (!toolMatches) {
+      return false;
+    }
+    if (
+      pattern.match === 'exact' &&
+      command.args.length !== pattern.args.length
+    ) {
       return false;
     }
     return pattern.args.every((arg, index) => command.args[index] === arg);
@@ -279,6 +313,8 @@ async function runProcess(input: {
   env: NodeJS.ProcessEnv;
   outputDir: string;
   timeoutMs: number;
+  noProgressTimeoutMs?: number;
+  progressIntervalMs: number;
   stdin?: string;
   spawnImpl: SpawnImpl;
 }): Promise<CommandGatewayResult> {
@@ -286,6 +322,7 @@ async function runProcess(input: {
   const commandId = `${Date.now()}-${randomUUID()}`;
   const stdoutPath = join(input.outputDir, `${commandId}.stdout.log`);
   const stderrPath = join(input.outputDir, `${commandId}.stderr.log`);
+  const progressPath = join(input.outputDir, `${commandId}.progress.json`);
   const stdout = createWriteStream(stdoutPath);
   const stderr = createWriteStream(stderrPath);
   const stdoutRedactor = createSecretRedactionTransform();
@@ -294,8 +331,20 @@ async function runProcess(input: {
   const stderrLog = monitorWritable(stderr);
   const stdoutRedaction = monitorTransform(stdoutRedactor);
   const stderrRedaction = monitorTransform(stderrRedactor);
+  const outputDirMonitor = createOutputDirActivityMonitor({
+    outputDir: input.outputDir,
+    excludedPaths: [stdoutPath, stderrPath, progressPath],
+  });
   const startedAt = Date.now();
   let timedOut = false;
+  const progress = createProgressTracker({
+    command: input.command,
+    progressPath,
+    startedAt,
+    timeoutMs: input.timeoutMs,
+    noProgressTimeoutMs: input.noProgressTimeoutMs,
+  });
+  progress.write('running');
 
   let child: ChildProcessWithoutNullStreams;
   try {
@@ -306,6 +355,7 @@ async function runProcess(input: {
       detached: true,
     });
   } catch (error) {
+    progress.finish('rejected');
     await Promise.allSettled([
       endTransform(stdoutRedactor),
       endTransform(stderrRedactor),
@@ -318,6 +368,12 @@ async function runProcess(input: {
     };
   }
 
+  child.stdout.on('data', (chunk: unknown) => {
+    progress.recordOutput('stdout', chunk);
+  });
+  child.stderr.on('data', (chunk: unknown) => {
+    progress.recordOutput('stderr', chunk);
+  });
   child.stdout.pipe(stdoutRedactor).pipe(stdout);
   child.stderr.pipe(stderrRedactor).pipe(stderr);
   return new Promise((resolvePromise) => {
@@ -325,9 +381,21 @@ async function runProcess(input: {
     let stdinError: Error | null = null;
     let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
+    let timeoutReason: 'total' | 'no-progress' | undefined;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
-    const timeout = setTimeout(() => {
+    const recordOutputDirProgress = () => {
+      const activity = outputDirMonitor.sample();
+      if (activity) {
+        progress.recordOutputDirActivity(activity.stats, activity.changed);
+      }
+    };
+    const triggerTimeout = (reason: 'total' | 'no-progress') => {
+      if (settled || timedOut) {
+        return;
+      }
       timedOut = true;
+      timeoutReason = reason;
+      progress.write('timed-out', reason);
       killChildProcess(child, 'SIGTERM');
       forceKillTimeout = setTimeout(() => {
         killChildProcess(child, 'SIGKILL');
@@ -339,18 +407,48 @@ async function runProcess(input: {
             exitCode: null,
             signal: 'SIGKILL',
             timedOut: true,
+            timeoutReason: reason,
             stdoutPath,
             stderrPath,
+            progressPath,
             durationMs: Date.now() - startedAt,
           });
         }, terminationGraceMs);
       }, terminationGraceMs);
+    };
+    const progressInterval = setInterval(() => {
+      recordOutputDirProgress();
+      progress.heartbeat();
+    }, input.progressIntervalMs);
+    progressInterval.unref?.();
+    const noProgressInterval = input.noProgressTimeoutMs
+      ? setInterval(
+          () => {
+            recordOutputDirProgress();
+            if (
+              input.noProgressTimeoutMs &&
+              Date.now() - progress.lastActivityAt() >=
+                input.noProgressTimeoutMs
+            ) {
+              triggerTimeout('no-progress');
+            }
+          },
+          Math.min(input.progressIntervalMs, input.noProgressTimeoutMs),
+        )
+      : null;
+    noProgressInterval?.unref?.();
+    const timeout = setTimeout(() => {
+      triggerTimeout('total');
     }, input.timeoutMs);
     const settle = (result: CommandGatewayResult) => {
       if (settled) {
         return;
       }
       settled = true;
+      clearInterval(progressInterval);
+      if (noProgressInterval) {
+        clearInterval(noProgressInterval);
+      }
       clearTimeout(timeout);
       if (forceKillTimeout) {
         clearTimeout(forceKillTimeout);
@@ -358,13 +456,19 @@ async function runProcess(input: {
       if (hardSettleTimeout) {
         clearTimeout(hardSettleTimeout);
       }
+      recordOutputDirProgress();
+      const finalResult =
+        result.status === 'executed'
+          ? ({ ...result, progressPath } satisfies CommandGatewayResult)
+          : result;
+      progress.finish(progressStatusForResult(finalResult));
       Promise.allSettled([
         stdoutRedaction.end(),
         stderrRedaction.end(),
         stdoutLog.end(),
         stderrLog.end(),
       ]).then((streamResults) => {
-        if (result.status === 'executed') {
+        if (finalResult.status === 'executed') {
           const streamError =
             stdoutRedaction.error ??
             stderrRedaction.error ??
@@ -380,7 +484,7 @@ async function runProcess(input: {
           }
         }
 
-        resolvePromise(result);
+        resolvePromise(finalResult);
       });
     };
 
@@ -403,8 +507,10 @@ async function runProcess(input: {
         exitCode,
         signal,
         timedOut,
+        timeoutReason,
         stdoutPath,
         stderrPath,
+        progressPath,
         durationMs: Date.now() - startedAt,
       });
     });
@@ -417,6 +523,299 @@ async function runProcess(input: {
       child.stdin.end(input.stdin);
     }
   });
+}
+
+type ProgressStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'timed-out'
+  | 'rejected';
+
+interface OutputDirActivityStats {
+  fileCount: number;
+  totalBytes: number;
+  latestMtimeMs: number | null;
+}
+
+function createProgressTracker(input: {
+  command: CommandInvocation;
+  progressPath: string;
+  startedAt: number;
+  timeoutMs: number;
+  noProgressTimeoutMs?: number;
+}) {
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  let heartbeatCount = 0;
+  let lastOutputAt: string | null = null;
+  let lastStatus: ProgressStatus = 'running';
+  let timeoutReason: 'total' | 'no-progress' | null = null;
+  let lastActivityAt = input.startedAt;
+  let lastOutputDirActivityAt: string | null = null;
+  let outputDirFileCount = 0;
+  let outputDirBytes = 0;
+  let outputDirLatestMtimeMs: number | null = null;
+
+  const snapshot = (status: ProgressStatus) => ({
+    status,
+    command: redactProgressCommand(input.command),
+    startedAt: new Date(input.startedAt).toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastOutputAt,
+    elapsedMs: Date.now() - input.startedAt,
+    timeoutMs: input.timeoutMs,
+    noProgressTimeoutMs: input.noProgressTimeoutMs,
+    timeoutReason,
+    stdoutBytes,
+    stderrBytes,
+    lastOutputDirActivityAt,
+    outputDirFileCount,
+    outputDirBytes,
+    outputDirLatestMtimeMs,
+    heartbeatCount,
+  });
+
+  const write = (status: ProgressStatus, reason?: 'total' | 'no-progress') => {
+    lastStatus = status;
+    if (reason) {
+      timeoutReason = reason;
+    }
+    try {
+      writeFileSync(
+        input.progressPath,
+        JSON.stringify(snapshot(status), null, 2),
+      );
+    } catch {
+      // Progress evidence is best-effort; stdout/stderr logs remain authoritative.
+    }
+  };
+
+  return {
+    write,
+    recordOutput(stream: 'stdout' | 'stderr', chunk: unknown) {
+      if (stream === 'stdout') {
+        stdoutBytes += chunkByteLength(chunk);
+      } else {
+        stderrBytes += chunkByteLength(chunk);
+      }
+      lastOutputAt = new Date().toISOString();
+      lastActivityAt = Date.now();
+      write(lastStatus);
+    },
+    recordOutputDirActivity(stats: OutputDirActivityStats, changed: boolean) {
+      outputDirFileCount = stats.fileCount;
+      outputDirBytes = stats.totalBytes;
+      outputDirLatestMtimeMs = stats.latestMtimeMs;
+      if (!changed) {
+        return;
+      }
+      lastOutputDirActivityAt = new Date().toISOString();
+      lastActivityAt = Date.now();
+      write(lastStatus);
+    },
+    lastActivityAt() {
+      return lastActivityAt;
+    },
+    heartbeat() {
+      heartbeatCount += 1;
+      write(lastStatus);
+    },
+    finish(status: ProgressStatus) {
+      write(status);
+    },
+  };
+}
+
+function createOutputDirActivityMonitor(input: {
+  outputDir: string;
+  excludedPaths: string[];
+}): {
+  sample(): { stats: OutputDirActivityStats; changed: boolean } | null;
+} {
+  const excludedPaths = new Set(
+    input.excludedPaths.map((path) => resolve(path)),
+  );
+  let previousSignature = outputDirActivitySignature(
+    readOutputDirActivityStats(input.outputDir, excludedPaths),
+  );
+
+  return {
+    sample() {
+      const stats = readOutputDirActivityStats(input.outputDir, excludedPaths);
+      if (!stats) {
+        return null;
+      }
+      const nextSignature = outputDirActivitySignature(stats);
+      const changed = nextSignature !== previousSignature;
+      previousSignature = nextSignature;
+      return { stats, changed };
+    },
+  };
+}
+
+function readOutputDirActivityStats(
+  outputDir: string,
+  excludedPaths: ReadonlySet<string>,
+): OutputDirActivityStats | null {
+  try {
+    return collectOutputDirActivityStats(resolve(outputDir), excludedPaths);
+  } catch {
+    return null;
+  }
+}
+
+function collectOutputDirActivityStats(
+  directory: string,
+  excludedPaths: ReadonlySet<string>,
+): OutputDirActivityStats {
+  let fileCount = 0;
+  let totalBytes = 0;
+  let latestMtimeMs: number | null = null;
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name);
+    const resolvedPath = resolve(entryPath);
+    if (excludedPaths.has(resolvedPath)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      const childStats = collectOutputDirActivityStats(
+        entryPath,
+        excludedPaths,
+      );
+      fileCount += childStats.fileCount;
+      totalBytes += childStats.totalBytes;
+      latestMtimeMs = maxNullableNumber(
+        latestMtimeMs,
+        childStats.latestMtimeMs,
+      );
+      continue;
+    }
+
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const stats = lstatSync(entryPath);
+    fileCount += 1;
+    totalBytes += stats.size;
+    latestMtimeMs = maxNullableNumber(latestMtimeMs, stats.mtimeMs);
+  }
+
+  return { fileCount, totalBytes, latestMtimeMs };
+}
+
+function outputDirActivitySignature(stats: OutputDirActivityStats | null) {
+  if (!stats) {
+    return 'unreadable';
+  }
+  return [stats.fileCount, stats.totalBytes, stats.latestMtimeMs ?? 0].join(
+    ':',
+  );
+}
+
+function maxNullableNumber(
+  left: number | null,
+  right: number | null,
+): number | null {
+  if (left === null) {
+    return right;
+  }
+  if (right === null) {
+    return left;
+  }
+  return Math.max(left, right);
+}
+
+function redactProgressCommand(command: CommandInvocation): CommandInvocation {
+  return {
+    tool: redactProgressValue(command.tool),
+    args: redactProgressArgs(command.args),
+  };
+}
+
+function formatRedactedCommand(command: CommandInvocation): string {
+  return [
+    redactProgressValue(command.tool),
+    ...redactProgressArgs(command.args),
+  ]
+    .join(' ')
+    .trim();
+}
+
+function redactProgressArgs(args: string[]): string[] {
+  const redacted: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    const sensitiveAssignment = redactSensitiveAssignment(arg);
+    if (sensitiveAssignment) {
+      redacted.push(sensitiveAssignment);
+      continue;
+    }
+    if (isSensitiveFlag(arg) && index + 1 < args.length) {
+      redacted.push(redactProgressValue(arg));
+      index += 1;
+      redacted.push('[REDACTED_SECRET]');
+      continue;
+    }
+    redacted.push(redactProgressValue(arg));
+  }
+  return redacted;
+}
+
+function redactSensitiveAssignment(value: string): string | null {
+  const optionMatch =
+    /^(--?[A-Za-z0-9_.-]*(?:api[_-]?key|token|secret|password|passwd|pwd)[A-Za-z0-9_.-]*=)(.+)$/iu.exec(
+      value,
+    );
+  if (optionMatch) {
+    return `${optionMatch[1]}[REDACTED_SECRET]`;
+  }
+
+  const envMatch =
+    /^([A-Za-z_][A-Za-z0-9_]*(?:API_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD)[A-Za-z0-9_]*=)(.+)$/u.exec(
+      value,
+    );
+  if (envMatch) {
+    return `${envMatch[1]}[REDACTED_SECRET]`;
+  }
+
+  return null;
+}
+
+function isSensitiveFlag(value: string): boolean {
+  return /^--?[A-Za-z0-9_.-]*(?:api[_-]?key|token|secret|password|passwd|pwd)[A-Za-z0-9_.-]*$/iu.test(
+    value,
+  );
+}
+
+function redactProgressValue(value: string): string {
+  return redactSecrets(value).content;
+}
+
+function progressStatusForResult(result: CommandGatewayResult): ProgressStatus {
+  if (result.status === 'rejected') {
+    return 'rejected';
+  }
+  if (result.status !== 'executed') {
+    return 'failed';
+  }
+  if (result.timedOut) {
+    return 'timed-out';
+  }
+  return result.exitCode === 0 ? 'completed' : 'failed';
+}
+
+function chunkByteLength(chunk: unknown): number {
+  if (Buffer.isBuffer(chunk)) {
+    return chunk.length;
+  }
+  if (typeof chunk === 'string') {
+    return Buffer.byteLength(chunk);
+  }
+  return Buffer.byteLength(String(chunk));
 }
 
 function formatErrorMessage(error: unknown): string {

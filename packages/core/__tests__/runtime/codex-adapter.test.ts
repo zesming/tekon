@@ -442,6 +442,34 @@ describe('codex adapter', () => {
     });
   });
 
+  it('does not inherit the full parent environment for Codex runs', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-env-'));
+    tempDirs.push(repoPath);
+    let envMode: unknown = 'unset';
+    const gateway: CommandGateway = {
+      async run(input) {
+        envMode = input.envMode;
+        return { status: 'rejected', reason: 'stop after capture' };
+      },
+    };
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      gateway,
+    );
+
+    await adapter.runAgent(baseRunInput(repoPath));
+
+    expect(envMode).toBeUndefined();
+  });
+
   it('ingests provider artifact manifests into the artifact store', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-artifacts-'));
     tempDirs.push(repoPath);
@@ -545,7 +573,7 @@ describe('codex adapter', () => {
     db.close();
   });
 
-  it('accepts valid required artifacts when Codex exits non-zero after writing the manifest', async () => {
+  it('accepts non-zero Codex exits when required artifacts are complete', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-codex-nonzero-artifacts-'),
     );
@@ -1035,7 +1063,7 @@ describe('codex adapter', () => {
         args: [artifactScript],
         promptMode: 'stdin',
         outputFormat: 'text',
-        timeoutMs: 100,
+        timeoutMs: 500,
         permissionProfile: safePermissionProfile(repoPath),
       },
       createCommandGateway(),

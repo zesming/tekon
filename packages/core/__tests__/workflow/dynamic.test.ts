@@ -95,6 +95,25 @@ describe('dynamic workflow generation', () => {
         expect.objectContaining({ id: 'reviewer' }),
       ]),
     });
+    expect(
+      loadWorkflowTemplate({ name: 'refund-flow', workflowsDir }).phases,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodes: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'pm-refund-demand',
+              gates: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'schema',
+                  gateKey: 'pm-demand-schema',
+                }),
+              ]),
+            }),
+          ]),
+        }),
+      ]),
+    );
   });
 
   it('rejects save-as path traversal and malformed template specs', () => {
@@ -126,7 +145,13 @@ function validDraft(): WorkflowSpecDraft {
             id: 'pm-refund-demand',
             role: 'pm',
             artifactOutputs: ['demand-card', 'prd'],
-            gates: [{ type: 'schema', artifactType: 'demand-card' }],
+            gates: [
+              {
+                type: 'schema',
+                gateKey: 'pm-demand-schema',
+                artifactType: 'demand-card',
+              },
+            ],
           },
         ],
       },

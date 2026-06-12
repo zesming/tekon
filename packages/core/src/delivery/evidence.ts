@@ -35,6 +35,17 @@ export interface CiStatusEvidence {
   checks: number;
 }
 
+export interface QaReleaseSignoffEvidence {
+  artifactId: string;
+  status: 'passed' | 'failed' | 'blocked';
+  targetRef: string;
+  validatedRef: string;
+  expectedRef?: string;
+  matchedRef: boolean;
+  criteriaEvidence: number;
+  coveredCriteriaIds: string[];
+}
+
 export interface DeliveryEvidencePackage {
   runId: string;
   workflowStatus: WorkflowInstance['status'];
@@ -49,6 +60,7 @@ export interface DeliveryEvidencePackage {
   acceptanceEvidence: AcceptanceCriterionEvidence[];
   securityScans: SecurityScanEvidence[];
   ciStatuses: CiStatusEvidence[];
+  qaReleaseSignoffs: QaReleaseSignoffEvidence[];
 }
 
 export async function createDeliveryEvidencePackage(input: {
@@ -80,6 +92,7 @@ export async function createDeliveryEvidencePackage(input: {
         acceptanceEvidence: [],
         securityScans: [],
         ciStatuses: [],
+        qaReleaseSignoffs: [],
       };
 
   return {
@@ -192,7 +205,78 @@ function collectSemanticEvidence(
       failureClassification: gate.failureClassification,
     })),
     ciStatuses: latestCiStatusEvidence(repoPath, artifacts, auditEvents),
+    qaReleaseSignoffs: latestQaReleaseSignoffEvidence(
+      repoPath,
+      artifacts,
+      auditEvents,
+    ),
   };
+}
+
+function latestQaReleaseSignoffEvidence(
+  repoPath: string,
+  artifacts: Artifact[],
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
+): QaReleaseSignoffEvidence[] {
+  const expectedRef = latestQaValidationRef(auditEvents);
+  const signoffs = artifacts
+    .filter((artifact) => artifact.type === 'qa-release-signoff')
+    .flatMap((artifact) => {
+      const payload = readPayload(repoPath, artifact);
+      if (
+        !payload?.overallStatus ||
+        !payload.targetRef ||
+        !payload.validatedRef
+      ) {
+        return [];
+      }
+      return [
+        {
+          artifact,
+          evidence: {
+            artifactId: artifact.id,
+            status: payload.overallStatus,
+            targetRef: payload.targetRef,
+            validatedRef: payload.validatedRef,
+            ...(expectedRef ? { expectedRef } : {}),
+            matchedRef:
+              payload.targetRef === payload.validatedRef &&
+              (!expectedRef || payload.targetRef === expectedRef),
+            criteriaEvidence: payload.criteriaEvidence?.length ?? 0,
+            coveredCriteriaIds: [
+              ...new Set(
+                (payload.criteriaEvidence ?? [])
+                  .filter((item) => item.status === 'passed')
+                  .map((item) => item.criterionId),
+              ),
+            ],
+          } satisfies QaReleaseSignoffEvidence,
+        },
+      ];
+    });
+
+  const latest = signoffs.sort((left, right) => {
+    const leftCreated = timestampOrZero(left.artifact.createdAt);
+    const rightCreated = timestampOrZero(right.artifact.createdAt);
+    if (leftCreated !== rightCreated) {
+      return rightCreated - leftCreated;
+    }
+    return right.artifact.version - left.artifact.version;
+  })[0];
+
+  return latest ? [latest.evidence] : [];
+}
+
+function latestQaValidationRef(
+  auditEvents: Awaited<ReturnType<TekonRepositories['listAuditEvents']>>,
+): string | undefined {
+  return auditEvents
+    .filter((event) => event.type === 'qa.validation.ref')
+    .map((event) =>
+      typeof event.payload.ref === 'string' ? event.payload.ref : undefined,
+    )
+    .filter((ref): ref is string => Boolean(ref))
+    .at(-1);
 }
 
 function latestCiStatusEvidence(
@@ -298,11 +382,16 @@ function hasPassedReferencedGate(
 }
 
 function latestGateResults<
-  T extends { nodeId: string; gateType: string; createdAt: string },
+  T extends {
+    nodeId: string;
+    gateType: string;
+    gateKey?: string | null;
+    createdAt: string;
+  },
 >(gates: T[]): T[] {
   const latestByNodeAndType = new Map<string, T>();
   for (const gate of gates) {
-    const key = `${gate.nodeId}:${gate.gateType}`;
+    const key = `${gate.nodeId}:${gate.gateKey ?? gate.gateType}`;
     const existing = latestByNodeAndType.get(key);
     if (
       !existing ||

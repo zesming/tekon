@@ -4,7 +4,13 @@ import type {
   RunContext,
   WorktreeLease,
 } from '../types/config.js';
-import type { Artifact, ArtifactType, Role } from '../types/domain.js';
+import type {
+  Artifact,
+  ArtifactType,
+  Node,
+  NodeStatus,
+  Role,
+} from '../types/domain.js';
 
 export interface RoleConfig {
   role: Role;
@@ -18,6 +24,16 @@ export interface AgentRunInput {
   outputDir: string;
   commandPolicy: CommandPolicy;
   runContext: RunContext;
+  nodeInputs?: Node['inputs'];
+  nodeDependencies?: string[];
+  deliveryRef?: string;
+  priorNodes?: Array<{
+    id: string;
+    role: Role;
+    status: NodeStatus;
+    outputs?: Node['outputs'];
+    gates?: Node['gates'];
+  }>;
   artifactStore?: ArtifactStore;
   requiredArtifactTypes?: ArtifactType[];
 }

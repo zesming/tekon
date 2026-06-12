@@ -98,7 +98,7 @@ describe('tekon release flow e2e', () => {
         'run',
         '给示例模块加批量重试',
         '--template',
-        'standard-feature',
+        'standard-delivery',
         '--agent',
         'mock',
         '--repo',
@@ -310,7 +310,7 @@ describe('tekon release flow e2e', () => {
     expect(readFileSync(reportMd, 'utf8')).toContain('# Fixture Usability');
     expect(readFileSync(reportHtml, 'utf8')).toContain('Fixture Usability');
     expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
-  }, 15_000);
+  }, 30_000);
 });
 
 function runCli(

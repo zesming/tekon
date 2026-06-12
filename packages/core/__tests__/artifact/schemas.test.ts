@@ -10,15 +10,26 @@ import {
 describe('artifact schemas', () => {
   it('provides schemas for all built-in artifact types', () => {
     expect(Object.keys(artifactPayloadSchemas).sort()).toEqual([
+      'ac-evidence',
       'ci-status',
       'code-changes',
+      'code-review',
       'delivery-package',
       'demand-card',
+      'demand-review',
+      'implementation-plan',
       'prd',
+      'process-checkpoint',
+      'qa-release-signoff',
+      'qa-release-signoff-review',
+      'requirement-interface-review',
       'review-report',
       'rollback-plan',
       'security-report',
       'tech-design',
+      'technical-review',
+      'test-plan',
+      'test-plan-review',
       'test-report',
     ]);
 
@@ -80,6 +91,165 @@ describe('artifact schemas', () => {
     ).toMatchObject({ securityFindings: [] });
   });
 
+  it('validates role-scoped independent review, AC evidence, and QA signoff payloads', () => {
+    expect(
+      validateArtifactPayload('technical-review', {
+        title: 'RD technical review',
+        body: 'Implementation plan is reasonable.',
+        reviewScope: 'technical-design',
+        reviewProcess: {
+          mode: 'independent-process',
+          reviewerId: 'rd-reviewer-process-1',
+          reviewerRole: 'rd',
+          targetNodeId: 'rd-implementation-plan',
+          targetRole: 'rd',
+        },
+        decision: 'approved',
+      }),
+    ).toMatchObject({
+      reviewScope: 'technical-design',
+      decision: 'approved',
+    });
+
+    expect(
+      validateArtifactPayload('ac-evidence', {
+        title: 'AC evidence',
+        body: 'All acceptance criteria are verified.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'Unit test output covers AC-1.',
+            gateResultIds: ['gate_test'],
+          },
+        ],
+      }),
+    ).toMatchObject({ criteriaEvidence: [{ criterionId: 'AC-1' }] });
+
+    expect(
+      validateArtifactPayload('qa-release-signoff', {
+        title: 'QA release signoff',
+        body: 'The tested commit is the delivered commit.',
+        targetRef: 'sha:abc123',
+        validatedRef: 'sha:abc123',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed on sha:abc123.',
+          },
+        ],
+      }),
+    ).toMatchObject({ overallStatus: 'passed' });
+  });
+
+  it('normalizes provider-style invalid finding owner roles without changing review scope fields', () => {
+    expect(
+      validateArtifactContent(
+        'demand-review',
+        JSON.stringify({
+          title: 'PM demand review',
+          body: '需求清晰，但需要人类 owner 跟进风险说明。',
+          reviewScope: 'demand-quality',
+          reviewProcess: {
+            mode: 'independent-process',
+            reviewerId: 'pm-reviewer',
+            reviewerRole: 'pm',
+            targetNodeId: 'pm-demand-card',
+            targetRole: 'pm',
+          },
+          decision: 'approved',
+          findings: [
+            {
+              severity: 'important',
+              ownerRole: 'human owner / PMO',
+              message: '需要在最终 review surface 补齐风险说明。',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      reviewScope: 'demand-quality',
+      reviewProcess: {
+        reviewerRole: 'pm',
+        targetRole: 'pm',
+      },
+      findings: [
+        {
+          severity: 'important',
+          message: expect.stringContaining('human owner / PMO'),
+        },
+      ],
+    });
+  });
+
+  it('requires PMO process checkpoint gate evidence to carry stable gate keys', () => {
+    expect(() =>
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process is complete.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        humanDecisionEvidence: { pending: 0 },
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            status: 'passed',
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process is complete.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        humanDecisionEvidence: { pending: 0 },
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            gateKey: '00:schema:artifact=demand-card',
+            status: 'passed',
+          },
+        ],
+      }),
+    ).toMatchObject({
+      gateEvidence: [
+        {
+          gateKey: '00:schema:artifact=demand-card',
+        },
+      ],
+    });
+  });
+
+  it('rejects provider-style PMO process checkpoint evidence fields', () => {
+    expect(() =>
+      validateArtifactPayload('process-checkpoint', {
+        title: 'PMO checkpoint',
+        body: 'Process checkpoint must use the strict checkpoint schema.',
+        requiredNodes: [{ nodeId: 'pm-demand-card', status: 'passed' }],
+        artifactEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            output: 'demand-card',
+          },
+        ],
+        gateEvidence: [
+          {
+            nodeId: 'pm-demand-card',
+            gateType: 'schema',
+            gateKey: '00:schema:artifact=demand-card',
+            observedStatus: 'passed',
+          },
+        ],
+        humanDecisionEvidence: { pending: [] },
+      }),
+    ).toThrow();
+  });
+
   it('normalizes provider-style code changes artifacts into a readable payload', () => {
     expect(
       validateArtifactContent(
@@ -134,6 +304,250 @@ describe('artifact schemas', () => {
         },
       ],
     });
+  });
+
+  it('normalizes provider-style QA test plans into required schema fields', () => {
+    expect(
+      validateArtifactContent(
+        'test-plan',
+        JSON.stringify({
+          title: 'QA 测试方案',
+          body: '验证长程任务产物进展观测。',
+          sourceArtifactsReviewed: [
+            {
+              alias: 'demand',
+              path: '.tekon/runs/run_1/artifacts/demand-card.v1.md',
+            },
+            {
+              alias: 'implementation-plan',
+              path: '.tekon/runs/run_1/artifacts/implementation-plan.v1.md',
+            },
+          ],
+          testScenarios: [
+            {
+              id: 'QA-CG-001',
+              name: '受控 outputDir 文件变化刷新 progress JSON',
+              type: 'targeted-regression',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      testBasis: [
+        'demand: .tekon/runs/run_1/artifacts/demand-card.v1.md',
+        'implementation-plan: .tekon/runs/run_1/artifacts/implementation-plan.v1.md',
+      ],
+      testCases: [
+        {
+          id: 'QA-CG-001',
+          description: '受控 outputDir 文件变化刷新 progress JSON',
+        },
+      ],
+    });
+  });
+
+  it('normalizes provider-style QA validation reports into schema-compatible evidence', () => {
+    expect(
+      validateArtifactContent(
+        'test-report',
+        JSON.stringify({
+          title: 'QA Test Report',
+          body: 'QA validation completed.',
+          summary: {
+            scopedBlockingDefects: 0,
+            recommendation: 'Proceed to controlled delivery review.',
+          },
+          criteriaEvidence: [
+            {
+              id: 'AC-1',
+              status: 'passed_with_delivery_followup',
+              evidenceSummary: 'Focused CommandGateway regression passed.',
+              outputPaths: ['logs/focused-command-gateway.log'],
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      summary:
+        'scopedBlockingDefects: 0; recommendation: Proceed to controlled delivery review.',
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Focused CommandGateway regression passed.',
+          outputPaths: ['logs/focused-command-gateway.log'],
+        },
+      ],
+    });
+
+    expect(
+      validateArtifactContent(
+        'ac-evidence',
+        JSON.stringify({
+          title: 'AC Evidence',
+          body: 'All acceptance criteria are verified.',
+          criteriaEvidence: [
+            {
+              id: 'AC-4',
+              status: 'passed_with_manual_delivery_boundary',
+              criterion: 'High-risk changes require controlled delivery.',
+              coverage: 'QA verified no merge or release was performed.',
+              evidenceSummary:
+                'Manual delivery boundary is documented in review evidence.',
+              gateResultIds: ['gate_security'],
+              artifactIds: ['qa-validation:test-report'],
+              outputPaths: ['docs/reviews/long-task-progress.md'],
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-4',
+          status: 'passed',
+          evidence:
+            'Manual delivery boundary is documented in review evidence.',
+          gateResultIds: ['gate_security'],
+          artifactIds: ['qa-validation:test-report'],
+          outputPaths: ['docs/reviews/long-task-progress.md'],
+        },
+      ],
+    });
+  });
+
+  it('normalizes provider-style QA evidence objects with nested anchors', () => {
+    expect(
+      validateArtifactContent(
+        'ac-evidence',
+        JSON.stringify({
+          title: 'AC Evidence',
+          body: 'All acceptance criteria are verified.',
+          criteriaEvidence: [
+            {
+              criterionId: 'AC-1',
+              status: 'passed',
+              evidence: {
+                summary: 'Focused regression passed with anchored evidence.',
+                outputPaths: ['logs/fresh-focused-command-gateway.log'],
+                artifactIds: ['qa-validation:test-report'],
+                gateResultIds: ['gate_build'],
+              },
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Focused regression passed with anchored evidence.',
+          outputPaths: ['logs/fresh-focused-command-gateway.log'],
+          artifactIds: ['qa-validation:test-report'],
+          gateResultIds: ['gate_build'],
+        },
+      ],
+    });
+  });
+
+  it('keeps provider-style QA validation evidence normalization narrow', () => {
+    for (const payload of [
+      {
+        title: 'AC Evidence',
+        body: 'Criterion text alone is not validation evidence.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'passed',
+            criterion: 'The user can review long task progress.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Missing status is not evidence.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            evidenceSummary: 'Focused regression passed.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Evidence object without summary is not validation evidence.',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: {
+              outputPaths: ['logs/fresh-focused-command-gateway.log'],
+            },
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Ambiguous status must not be treated as passed.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'bypassed',
+            evidenceSummary: 'This was skipped.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Negated status must not be treated as passed.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'not_passed',
+            evidenceSummary: 'Validation did not pass.',
+          },
+        ],
+      },
+      {
+        title: 'AC Evidence',
+        body: 'Unblocked status must not be treated as blocked.',
+        criteriaEvidence: [
+          {
+            id: 'AC-1',
+            status: 'unblocked',
+            evidenceSummary: 'No longer blocked.',
+          },
+        ],
+      },
+    ]) {
+      expect(() =>
+        validateArtifactContent('ac-evidence', JSON.stringify(payload)),
+      ).toThrow();
+    }
+  });
+
+  it('does not normalize provider-style QA evidence fields for release signoff', () => {
+    expect(() =>
+      validateArtifactContent(
+        'qa-release-signoff',
+        JSON.stringify({
+          title: 'QA Release Signoff',
+          body: 'Final QA signoff must use the strict signoff schema.',
+          targetRef: 'sha:tested',
+          validatedRef: 'sha:tested',
+          overallStatus: 'passed',
+          criteriaEvidence: [
+            {
+              id: 'AC-1',
+              status: 'passed_with_manual_delivery_boundary',
+              evidenceSummary: 'QA verified the tested ref is deliverable.',
+              outputPaths: ['docs/reviews/signoff.md'],
+            },
+          ],
+        }),
+      ),
+    ).toThrow();
   });
 
   it('keeps provider-style acceptance criteria normalization narrow', () => {

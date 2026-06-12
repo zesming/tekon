@@ -63,20 +63,31 @@ describe('mock agent adapter', () => {
     });
 
     expect(result).toMatchObject({ provider: 'mock', exitCode: 0 });
-    expect(result.outputFiles).toHaveLength(9);
+    expect(result.outputFiles).toHaveLength(20);
     expect(
       (await repositories.listArtifacts('run_1', 'node_1'))
         .map((item) => item.type)
         .sort(),
     ).toEqual([
+      'ac-evidence',
       'code-changes',
+      'code-review',
       'delivery-package',
       'demand-card',
+      'demand-review',
+      'implementation-plan',
       'prd',
+      'process-checkpoint',
+      'qa-release-signoff',
+      'qa-release-signoff-review',
+      'requirement-interface-review',
       'review-report',
       'rollback-plan',
       'security-report',
       'tech-design',
+      'technical-review',
+      'test-plan',
+      'test-plan-review',
       'test-report',
     ]);
     db.close();

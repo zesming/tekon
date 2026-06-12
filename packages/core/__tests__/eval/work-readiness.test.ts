@@ -70,6 +70,7 @@ describe('work readiness evaluation', () => {
         body: 'Batch retry requirements.',
         acceptanceCriteria: [
           { id: 'AC-1', description: 'Batch retry can be executed.' },
+          { id: 'AC-2', description: 'Batch retry result can be reviewed.' },
         ],
       }),
     });
@@ -86,6 +87,11 @@ describe('work readiness evaluation', () => {
             status: 'passed',
             evidence: 'Unit tests covered batch retry.',
           },
+          {
+            criterionId: 'AC-2',
+            status: 'passed',
+            evidence: 'Review tests covered batch retry evidence.',
+          },
         ],
       }),
     });
@@ -94,6 +100,7 @@ describe('work readiness evaluation', () => {
       runId: 'run_1',
       nodeId: 'node_1',
       gateType: 'test',
+      gateKey: '00:test:unit',
       status: 'failed',
       durationMs: 1,
       retries: 0,
@@ -104,10 +111,22 @@ describe('work readiness evaluation', () => {
       runId: 'run_1',
       nodeId: 'node_1',
       gateType: 'test',
+      gateKey: '00:test:unit',
       status: 'passed',
       durationMs: 1,
       retries: 0,
       createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_secondary_test',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'test',
+      gateKey: '01:test:integration',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.010Z',
     });
     await repositories.recordGateResult({
       id: 'gate_docs_only_build',
@@ -140,11 +159,43 @@ describe('work readiness evaluation', () => {
       retries: 1,
       createdAt: '2026-06-05T00:00:01.200Z',
     });
+    for (const [index, gateType] of [
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'process-completeness',
+    ].entries()) {
+      await repositories.recordGateResult({
+        id: `gate_governance_${gateType}`,
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateType,
+        status: 'passed',
+        durationMs: 1,
+        retries: 0,
+        createdAt: `2026-06-05T00:00:01.${220 + index}Z`,
+      });
+    }
+    await audit.append({
+      runId: 'run_1',
+      type: 'run.started',
+      payload: { templateId: 'standard-delivery', mode: 'template' },
+      createdAt: '2026-06-05T00:00:01.500Z',
+    });
     await audit.append({
       runId: 'run_1',
       type: 'run.passed',
       payload: {},
       createdAt: '2026-06-05T00:00:02.000Z',
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: {
+        nodeId: 'node_1',
+        ref: 'branch:tekon-delivery/run_1',
+      },
+      createdAt: '2026-06-05T00:00:02.100Z',
     });
 
     const beforePrepare = await evaluateWorkReadiness({
@@ -157,6 +208,120 @@ describe('work readiness evaluation', () => {
       beforePrepare.checks.find((check) => check.id === 'pr-prepared'),
     ).toMatchObject({ passed: false });
 
+    await expect(
+      createPullRequestPreparation({
+        repoPath,
+        repositories,
+        audit,
+        runId: 'run_1',
+      }),
+    ).rejects.toThrow('qa-release-signoff-passed');
+
+    const beforeSignoff = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(beforeSignoff.ready).toBe(false);
+    expect(
+      beforeSignoff.checks.find(
+        (check) => check.id === 'qa-release-signoff-passed',
+      ),
+    ).toMatchObject({
+      severity: 'required',
+      passed: false,
+      evidence: 'QA release signoff missing',
+    });
+
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA release signoff',
+        body: 'QA validated the branch that will be delivered.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+          },
+        ],
+      }),
+    });
+    const afterPartialSignoff = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(afterPartialSignoff.ready).toBe(false);
+    expect(
+      afterPartialSignoff.checks.find(
+        (check) => check.id === 'qa-release-signoff-passed',
+      ),
+    ).toMatchObject({
+      severity: 'required',
+      passed: false,
+    });
+
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'qa-release-signoff',
+      content: JSON.stringify({
+        title: 'QA release signoff',
+        body: 'QA validated the branch that will be delivered.',
+        targetRef: 'branch:tekon-delivery/run_1',
+        validatedRef: 'branch:tekon-delivery/run_1',
+        overallStatus: 'passed',
+        criteriaEvidence: [
+          {
+            criterionId: 'AC-1',
+            status: 'passed',
+            evidence: 'QA validation passed for branch:tekon-delivery/run_1.',
+            gateResultIds: ['gate_1'],
+          },
+          {
+            criterionId: 'AC-2',
+            status: 'passed',
+            evidence: 'QA review passed for branch:tekon-delivery/run_1.',
+            gateResultIds: ['gate_1'],
+          },
+        ],
+      }),
+    });
+    const afterFullSignoffBeforeGate = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(afterFullSignoffBeforeGate.ready).toBe(false);
+    expect(
+      afterFullSignoffBeforeGate.checks.find(
+        (check) => check.id === 'qa-release-signoff-passed',
+      ),
+    ).toMatchObject({
+      severity: 'required',
+      passed: false,
+      evidence: expect.stringContaining('qa-signoff gate missing'),
+    });
+
+    await repositories.recordGateResult({
+      id: 'gate_qa_signoff',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'qa-signoff',
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.300Z',
+    });
     await createPullRequestPreparation({
       repoPath,
       repositories,
@@ -169,19 +334,19 @@ describe('work readiness evaluation', () => {
       runId: 'run_1',
     });
 
-    expect(afterPrepare.ready).toBe(true);
+    expect(afterPrepare.ready).toBe(false);
     expect(
       afterPrepare.checks.find(
         (check) => check.id === 'validation-gates-passed',
       ),
     ).toMatchObject({
       passed: true,
-      evidence: '2/2 validation gates passed or explicitly skipped',
+      evidence: '3/3 validation gates passed or explicitly skipped',
     });
     expect(
       afterPrepare.checks.find((check) => check.id === 'pr-created'),
     ).toMatchObject({
-      severity: 'recommended',
+      severity: 'required',
       passed: false,
     });
 
@@ -206,12 +371,50 @@ describe('work readiness evaluation', () => {
       audit,
       runId: 'run_1',
     });
-    expect(afterPr.ready).toBe(true);
+    expect(afterPr.ready).toBe(false);
     expect(
       afterPr.checks.find((check) => check.id === 'pr-created'),
     ).toMatchObject({
+      severity: 'required',
       passed: true,
       evidence: 'PR created: https://github.example/tekon/pull/1',
+    });
+    expect(
+      afterPr.checks.find((check) => check.id === 'remote-ci-passed'),
+    ).toMatchObject({
+      severity: 'required',
+      passed: false,
+    });
+
+    const ciArtifact = await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      type: 'ci-status',
+      content: JSON.stringify({
+        title: 'CI status',
+        body: 'Remote CI passed.',
+        ciStatus: 'passed',
+        prUrl: 'https://github.example/tekon/pull/1',
+        checkedAt: '2026-06-05T00:00:06.000Z',
+        checks: [{ name: 'build', bucket: 'pass' }],
+      }),
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'delivery.ci.checked',
+      payload: { artifactId: ciArtifact.id },
+    });
+    const afterCi = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+    expect(afterCi.ready).toBe(true);
+    expect(
+      afterCi.checks.find((check) => check.id === 'remote-ci-passed'),
+    ).toMatchObject({
+      severity: 'required',
+      passed: true,
     });
     db.close();
   });

@@ -93,7 +93,8 @@ export function createCodexAdapter(
         policy: input.commandPolicy,
         outputDir: input.outputDir,
         timeoutMs: config.timeoutMs,
-        envMode: 'inherit',
+        progressIntervalMs: config.progressHeartbeatMs,
+        noProgressTimeoutMs: config.noProgressTimeoutMs,
         env: {
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,

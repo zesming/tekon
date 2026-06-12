@@ -2,6 +2,7 @@ import type { LoadedRole } from './loader.js';
 import { compileRoleToolPolicy } from './tool-policy.js';
 
 export interface RolePromptArtifactSummary {
+  id?: string;
   type: string;
   path: string;
   summary?: string;
@@ -101,6 +102,7 @@ function formatArtifacts(
 
       return [
         `### ${artifact.type}`,
+        artifact.id ? `artifactId: ${artifact.id}` : undefined,
         `path: ${artifact.path}`,
         artifact.summary ? `summary: ${artifact.summary}` : undefined,
         visibleContent,

@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon 最终自举交付归档证据</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #596779;
+        --line: #d8e0ea;
+        --soft: #eef4fa;
+        --ok: #067647;
+        --warn: #9a5b00;
+        --risk: #b42318;
+        --info: #175cd3;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        line-height: 1.68;
+      }
+      main {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 36px 0 64px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+      header {
+        padding: 30px 32px;
+      }
+      section {
+        margin-top: 18px;
+        padding: 28px 32px 32px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 30px;
+        line-height: 1.22;
+      }
+      h2 {
+        margin: 0 0 14px;
+        font-size: 21px;
+        line-height: 1.35;
+      }
+      p {
+        margin: 10px 0;
+      }
+      ul {
+        margin: 10px 0;
+        padding-left: 22px;
+      }
+      li {
+        margin: 5px 0;
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        padding: 1px 5px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 22px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .pill {
+        display: inline-block;
+        margin: 3px 6px 3px 0;
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .passed {
+        background: #dcfae6;
+        color: var(--ok);
+      }
+      .manual {
+        background: #e0eaff;
+        color: var(--info);
+      }
+      .boundary {
+        background: #fee4e2;
+        color: var(--risk);
+      }
+      .watch {
+        background: #fef0c7;
+        color: var(--warn);
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      @media (max-width: 720px) {
+        main {
+          width: min(100% - 24px, 1120px);
+          padding-top: 20px;
+        }
+        header,
+        section {
+          padding: 22px 18px;
+        }
+        table {
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tekon 最终自举交付归档证据</h1>
+        <p class="meta">
+          日期：2026-06-12 · 归档对象：Tekon 标准交付流程下一阶段自举交付
+        </p>
+        <p>
+          关联主运行：<code>run_5cfee596-1540-40fd-af31-8e6652e62258</code>；
+          关联补充自举运行：<code
+            >run_8ea4d449-e688-41f4-9ce8-67a3d35d19a3</code
+          >；关联真实 PR：<code>PR #5</code>。
+        </p>
+        <p>
+          <span class="pill passed">workflow passed</span>
+          <span class="pill passed">CI ref-bound</span>
+          <span class="pill manual">manual merge decision</span>
+          <span class="pill boundary">no release/deploy</span>
+        </p>
+        <p>
+          本 HTML 是人类正式审阅入口，与 Markdown 源稿保持相同核心结论；它不构成自动
+          merge、release 或 deploy 批准。
+        </p>
+      </header>
+
+      <section>
+        <h2>1. 最终交付范围</h2>
+        <p>
+          <strong>事实：</strong>本阶段交付包括 Codex 优先适配、标准全链路流程模板、独立角色评审、QA
+          final signoff、PMO checkpoint、长程任务 timeout/heartbeat/outputDir
+          进展观测、最终归档文档，以及自举过程中暴露出的 prompt/gate 口径修复。
+        </p>
+        <p>
+          <strong>边界：</strong>本 PR 已创建并更新真实 PR，但不自动 merge、不 release、不
+          deploy、不执行生产写操作、不接受高风险残余风险。
+        </p>
+      </section>
+
+      <section>
+        <h2>2. 提交与引用口径</h2>
+        <p>
+          最终 PR head 会随本归档文档同步提交继续前进，因此本文不把“当前 HEAD”写成不可变的单一事实；最终交付
+          ref 以 <code>PR #5</code> 的 <code>headRefOid</code>、远端 CI 页面和最终交付回复为准。本文记录的远端 CI
+          结论必须绑定到具体 <code>headRefOid</code>，不能外推覆盖尚未推送或后续新增的本地提交。
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>观察点</th>
+                <th>证据</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>9dd2ed3974f57648a8da802150cd3114f87b7a60</code></td>
+                <td><code>merge self-bootstrap prompt fixes into delivery PR</code></td>
+                <td>合并 run_5 delivery 分支与后续 prompt/schema 修复的基线。</td>
+              </tr>
+              <tr>
+                <td><code>38ccd853b7bd15fd33180b1fdc535cc4088a2581</code></td>
+                <td><code>Tekon run_8ea4... rd-code-change</code></td>
+                <td>run_8 生成的最终归档文档提交；QA validation 与 QA release signoff 绑定该 ref。</td>
+              </tr>
+              <tr>
+                <td><code>9260318e500db38ca5f968acd125e6459b773de5</code></td>
+                <td><code>tighten QA criteria evidence prompt</code></td>
+                <td>要求一个验收标准一个 evidence item。</td>
+              </tr>
+              <tr>
+                <td><code>dd74e034b75a95a4bbf3a99be2e698f6fe6caa7f</code></td>
+                <td><code>clarify PMO pending decision prompt</code></td>
+                <td>要求 PMO pending 数量等于当前 Tekon pending human decision 数量。</td>
+              </tr>
+              <tr>
+                <td><code>aabd6334ea138ce03893d188c3e2b36b1306a40b</code></td>
+                <td><code>address final self-bootstrap review findings</code></td>
+                <td>修复 reviewer 发现的文档漂移，并让 <code>qa-signoff</code> gate 拒绝未知或组合 AC id。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. 自举结果</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr>
+                <th>Workflow status</th>
+                <td><span class="pill passed">passed</span></td>
+              </tr>
+              <tr>
+                <th>Gates / Artifacts</th>
+                <td><code>47</code> gates，<code>25</code> artifacts</td>
+              </tr>
+              <tr>
+                <th>Pending human decisions</th>
+                <td><code>0</code></td>
+              </tr>
+              <tr>
+                <th>QA 所测 ref</th>
+                <td><code>sha:38ccd853b7bd15fd33180b1fdc535cc4088a2581</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>判断依据：</strong><code>run_8ea4d449-e688-41f4-9ce8-67a3d35d19a3</code>
+          的 PM、RD、QA、Reviewer、PMO 节点和 role-scope / independent-review gates 均通过。
+        </p>
+        <p class="meta">
+          局限：run_8 的 QA signoff 不覆盖其后暴露并修复的 prompt/gate hardening 提交；这些后续提交由本地测试与独立 reviewer 复查覆盖，远端 PR CI 需要按最终推送后的 headRefOid 重新确认。
+        </p>
+      </section>
+
+      <section>
+        <h2>4. 真实 PR 与 CI</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr>
+                <th>PR</th>
+                <td><code>PR #5</code></td>
+              </tr>
+              <tr>
+                <th>Base / Head branch</th>
+                <td><code>main</code> / <code>tekon-delivery/run_5cfee596-1540-40fd-af31-8e6652e62258</code></td>
+              </tr>
+              <tr>
+                <th>PR 状态</th>
+                <td><code>OPEN</code>，非 draft，merge state <code>CLEAN</code></td>
+              </tr>
+              <tr>
+                <th>PR 远端 headRefOid（2026-06-12 06:41 CST 查询）</th>
+                <td><code>dd74e034b75a95a4bbf3a99be2e698f6fe6caa7f</code></td>
+              </tr>
+              <tr>
+                <th>该远端 head 的 GitHub Actions</th>
+                <td><code>Core build and tests</code> passed；<code>Lint GitHub Actions workflows</code> passed</td>
+              </tr>
+              <tr>
+                <th>本地后续审阅 head（待推送时点）</th>
+                <td><code>aabd6334ea138ce03893d188c3e2b36b1306a40b</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="meta">
+          这些 CI 结果只绑定到查询时的远端 PR head；后续本地提交推送后，需要以新的 PR live checks 作为最终远端 CI 证据。
+        </p>
+      </section>
+
+      <section>
+        <h2>5. 本地验证</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr><th><code>pnpm build</code></th><td>passed</td></tr>
+              <tr><th><code>pnpm lint</code></th><td>passed</td></tr>
+              <tr><th><code>pnpm test</code></th><td>58 files / 360 tests passed</td></tr>
+              <tr><th><code>pnpm --filter @tekon/web test:e2e</code></th><td>2 passed</td></tr>
+              <tr><th>workflow show / preflight</th><td><code>standard-delivery</code> phases=13，command gates resolved</td></tr>
+              <tr><th><code>git diff --check</code></th><td>passed</td></tr>
+              <tr><th>目标文档非空与禁用占位标记扫描</th><td>passed</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>6. 角色评审与职责边界</h2>
+        <ul>
+          <li>PM 先产出需求卡/PRD，再进行 PM 内部需求评审与需求意图复核。</li>
+          <li>RD/QA 分别进行需求接口评审，只看自身职责范围。</li>
+          <li>RD 在开发前产出 implementation plan，并由独立 RD technical review 评估技术方案。</li>
+          <li>QA 产出 test plan，并通过 QA/PM test plan review 校验测试方案合理性。</li>
+          <li>Reviewer 独立审阅 RD code change。</li>
+          <li>QA validation 与 QA release signoff 做最终“所测即所得”签署。</li>
+          <li>PMO checkpoint 校验节点产出、gate、artifact、pending human decision 与交付边界。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>7. 长程任务策略</h2>
+        <p>
+          当前流程支持 <code>--timeout-ms 7200000</code>、<code>--no-progress-timeout-ms 1200000</code>、
+          <code>--progress-heartbeat-ms 30000</code> 等参数；run_8 中多个 Codex 节点使用
+          <code>codex --profile internal</code>，并通过 progress file 记录 heartbeat、stderr bytes 和 outputDir activity。
+        </p>
+      </section>
+
+      <section>
+        <h2>8. 自举暴露的问题与已修复项</h2>
+        <ul>
+          <li>QA 类 <code>criteriaEvidence</code> 曾合并多个 AC id；已修复 prompt，并新增 gate hardening 与测试。</li>
+          <li>PMO checkpoint 曾把人工审阅点计入 <code>humanDecisionEvidence.pending</code>；已修复 prompt，并覆盖非零 pending human decision。</li>
+          <li>本归档文档曾只记录早期“仅新增文档”口径；已同步为当前 PR 真实范围。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>9. 剩余人工审阅点</h2>
+        <ul>
+          <li>人工 owner 决定是否合入 <code>PR #5</code>。</li>
+          <li>人工 owner 决定是否 release、deploy 或接受残余风险。</li>
+          <li>若需要把 run_8 readiness 也提升为 <code>ready=true</code>，需要为 run_8 单独创建或关联 PR 和远端 CI；当前正式交付 PR 复用 <code>PR #5</code>。</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>10. 回滚与文档同步判断</h2>
+        <p>
+          回滚当前 PR 即可撤回本阶段所有代码、模板、文档和测试变更。若只回滚本归档文档，删除本文 Markdown 与 HTML。
+        </p>
+        <p>
+          本次不更新 README、CHANGELOG 或主用户手册；原因是变化面向 Tekon 内部标准交付执行质量和评审产物 schema 约束，不改变工具使用者的主入口命令、Web 使用路径或主用户手册描述的操作方式。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

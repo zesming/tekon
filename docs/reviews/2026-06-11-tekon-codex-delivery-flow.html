@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon Codex 需求落地流程记录图</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17202a;
+        --muted: #5c6672;
+        --line: #d9e0e8;
+        --soft: #f5f7fa;
+        --panel: #ffffff;
+        --blue: #1f6feb;
+        --green: #137333;
+        --orange: #9a5b00;
+        --red: #b3261e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #f7f8fa;
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        line-height: 1.62;
+      }
+
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 28px;
+        padding-bottom: 22px;
+      }
+
+      h1 {
+        font-size: 32px;
+        line-height: 1.25;
+        margin: 0 0 12px;
+      }
+
+      h2 {
+        border-bottom: 1px solid var(--line);
+        font-size: 21px;
+        margin: 34px 0 14px;
+        padding-bottom: 7px;
+      }
+
+      p {
+        margin: 10px 0;
+      }
+
+      code {
+        background: #eef2f7;
+        border: 1px solid #dde3ea;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+        padding: 1px 5px;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .summary {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--blue);
+        border-radius: 8px;
+        margin: 18px 0 26px;
+        padding: 16px 18px;
+      }
+
+      .metrics {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 18px 0 26px;
+      }
+
+      .metric {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        min-height: 92px;
+        padding: 14px;
+      }
+
+      .metric b {
+        color: var(--muted);
+        display: block;
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+
+      .metric span {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .ok {
+        color: var(--green);
+      }
+
+      .warn {
+        color: var(--orange);
+      }
+
+      .diagram-wrap {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow-x: auto;
+        padding: 16px;
+      }
+
+      svg {
+        display: block;
+        min-width: 1100px;
+      }
+
+      .lane-title {
+        fill: #26313d;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .node text,
+      .small-node text {
+        fill: #17202a;
+        font-size: 14px;
+      }
+
+      .small-node text {
+        font-size: 13px;
+      }
+
+      .node rect,
+      .small-node rect {
+        fill: #ffffff;
+        stroke: #c9d3df;
+        stroke-width: 1.2;
+      }
+
+      .node .primary {
+        stroke: var(--blue);
+        stroke-width: 2;
+      }
+
+      .node .success {
+        stroke: var(--green);
+        stroke-width: 2;
+      }
+
+      .node .warn-box {
+        stroke: var(--orange);
+        stroke-width: 2;
+      }
+
+      .node .boundary {
+        stroke: var(--red);
+        stroke-width: 2;
+      }
+
+      .lane {
+        fill: #fbfcfe;
+        stroke: #e1e7ef;
+      }
+
+      .arrow {
+        fill: none;
+        stroke: #657487;
+        stroke-width: 1.8;
+      }
+
+      .dashed {
+        stroke-dasharray: 6 5;
+      }
+
+      table {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-collapse: collapse;
+        margin: 14px 0 24px;
+        width: 100%;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--soft);
+        font-weight: 700;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      ul {
+        padding-left: 22px;
+      }
+
+      a {
+        color: var(--blue);
+      }
+
+      .note {
+        background: #fff8e6;
+        border: 1px solid #f0d48a;
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+
+      @media (max-width: 780px) {
+        main {
+          padding: 24px 14px 44px;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tekon Codex 需求落地流程记录图</h1>
+        <p class="meta">
+          日期：2026-06-11｜依据：本次 Codex provider 自举闭环日志、`.tekon`
+          运行库、PR/CI 证据与归档报告
+        </p>
+      </header>
+
+      <section class="summary">
+        <p>
+          本图记录从用户方向修正、方案收敛、实现修复、真实 Tekon run、真实 PR
+          创建到归档结论的完整链路。P0 目标已落地到真实 PR：成功 run 为
+          <code>run_d2350140-b1b7-4fca-b01b-e28daac61e31</code>，工作流状态
+          <code>passed</code>，8 个 gates 全部通过，PR
+          <a href="https://github.com/zesming/tekon/pull/2">#2</a>
+          已创建且远端 CI 通过；未执行 merge、release 或上线。
+        </p>
+      </section>
+
+      <section class="metrics">
+        <div class="metric">
+          <b>Workflow</b>
+          <span class="ok">passed</span>
+        </div>
+        <div class="metric">
+          <b>Gates</b>
+          <span class="ok">8 passed</span>
+        </div>
+        <div class="metric">
+          <b>Delivery</b>
+          <span class="ok">PR open + CI pass</span>
+        </div>
+        <div class="metric">
+          <b>Boundary</b>
+          <span class="warn">未合入 / 未上线</span>
+        </div>
+      </section>
+
+      <h2>一图总览</h2>
+      <div class="diagram-wrap" aria-label="Tekon Codex 需求落地流程图">
+        <svg viewBox="0 0 1460 980" role="img">
+          <defs>
+            <marker
+              id="arrow"
+              markerHeight="8"
+              markerWidth="8"
+              orient="auto"
+              refX="7"
+              refY="4"
+            >
+              <path d="M0,0 L8,4 L0,8 Z" fill="#657487"></path>
+            </marker>
+          </defs>
+
+          <rect
+            class="lane"
+            x="24"
+            y="34"
+            width="1412"
+            height="128"
+            rx="8"
+          ></rect>
+          <text class="lane-title" x="44" y="64">用户约束</text>
+          <g class="node">
+            <rect
+              class="primary"
+              x="44"
+              y="84"
+              width="230"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="62" y="106">阅读评估报告</text>
+            <text x="62" y="126">判断实现路线</text>
+          </g>
+          <g class="node">
+            <rect
+              class="primary"
+              x="314"
+              y="84"
+              width="230"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="332" y="106">先适配 Codex</text>
+            <text x="332" y="126">不先适配 Trae</text>
+          </g>
+          <g class="node">
+            <rect
+              class="primary"
+              x="584"
+              y="84"
+              width="250"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="602" y="106">provider 启动命令</text>
+            <text x="602" y="126">codex --profile internal</text>
+          </g>
+          <g class="node">
+            <rect
+              class="primary"
+              x="874"
+              y="84"
+              width="250"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="892" y="106">P0：真实样本闭环</text>
+            <text x="892" y="126">从 Tekon 自身需求自举</text>
+          </g>
+          <g class="node">
+            <rect
+              class="boundary"
+              x="1164"
+              y="84"
+              width="230"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="1182" y="106">交付边界</text>
+            <text x="1182" y="126">只创建真实 PR</text>
+          </g>
+
+          <rect
+            class="lane"
+            x="24"
+            y="188"
+            width="1412"
+            height="128"
+            rx="8"
+          ></rect>
+          <text class="lane-title" x="44" y="218">方案收敛与样本选择</text>
+          <g class="node">
+            <rect x="44" y="238" width="300" height="52" rx="8"></rect>
+            <text x="62" y="260">调研：受控 AI 交付</text>
+            <text x="62" y="280">provider 优先级与后续路线</text>
+          </g>
+          <g class="node">
+            <rect x="394" y="238" width="330" height="52" rx="8"></rect>
+            <text x="412" y="260">真实样本</text>
+            <text x="412" y="280">补充 codex-provider-smoke 诊断说明</text>
+          </g>
+          <g class="node">
+            <rect x="774" y="238" width="350" height="52" rx="8"></rect>
+            <text x="792" y="260">实现准备</text>
+            <text x="792" y="280">
+              provider / artifact / schema / delivery 风险点
+            </text>
+          </g>
+          <g class="node">
+            <rect
+              class="warn-box"
+              x="1174"
+              y="238"
+              width="220"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="1192" y="260">进入失败修复侧链</text>
+            <text x="1192" y="280">再启动成功 run</text>
+          </g>
+
+          <rect
+            class="lane"
+            x="24"
+            y="342"
+            width="1412"
+            height="178"
+            rx="8"
+          ></rect>
+          <text class="lane-title" x="44" y="372">失败修复侧链</text>
+          <g class="small-node">
+            <rect x="44" y="396" width="300" height="42" rx="8"></rect>
+            <text x="60" y="422">401：固定 codex --profile internal</text>
+          </g>
+          <g class="small-node">
+            <rect x="374" y="396" width="330" height="42" rx="8"></rect>
+            <text x="390" y="422">
+              输出不可写：追加 --add-dir &lt;TEKON_OUTPUT_DIR&gt;
+            </text>
+          </g>
+          <g class="small-node">
+            <rect x="734" y="396" width="300" height="42" rx="8"></rect>
+            <text x="750" y="422">manifest 后继续执行：完成即停止</text>
+          </g>
+          <g class="small-node">
+            <rect x="1064" y="396" width="330" height="42" rx="8"></rect>
+            <text x="1080" y="422">schema drift：归一化 provider 字段</text>
+          </g>
+          <g class="small-node">
+            <rect x="44" y="456" width="300" height="42" rx="8"></rect>
+            <text x="60" y="482">security fixture：运行时拼接假 key</text>
+          </g>
+          <g class="small-node">
+            <rect x="374" y="456" width="330" height="42" rx="8"></rect>
+            <text x="390" y="482">worktree finalize：只 stage 可提交改动</text>
+          </g>
+          <g class="small-node">
+            <rect x="734" y="456" width="300" height="42" rx="8"></rect>
+            <text x="750" y="482">RD timeout：manifest 优先，gate 验证</text>
+          </g>
+          <g class="small-node">
+            <rect x="1064" y="456" width="330" height="42" rx="8"></rect>
+            <text x="1080" y="482">create-pr argv：允许数据字面量</text>
+          </g>
+
+          <rect
+            class="lane"
+            x="24"
+            y="546"
+            width="1412"
+            height="168"
+            rx="8"
+          ></rect>
+          <text class="lane-title" x="44" y="576">真实 Tekon Run</text>
+          <g class="node">
+            <rect
+              class="primary"
+              x="44"
+              y="600"
+              width="250"
+              height="54"
+              rx="8"
+            ></rect>
+            <text x="62" y="622">run 启动</text>
+            <text x="62" y="642">run_d2350140-b1b7...</text>
+          </g>
+          <g class="node">
+            <rect x="334" y="600" width="150" height="54" rx="8"></rect>
+            <text x="352" y="622">PM</text>
+            <text x="352" y="642">demand-card</text>
+          </g>
+          <g class="node">
+            <rect x="524" y="600" width="170" height="54" rx="8"></rect>
+            <text x="542" y="622">RD / Codex</text>
+            <text x="542" y="642">文档改动</text>
+          </g>
+          <g class="node">
+            <rect x="734" y="600" width="150" height="54" rx="8"></rect>
+            <text x="752" y="622">QA</text>
+            <text x="752" y="642">test-report</text>
+          </g>
+          <g class="node">
+            <rect x="924" y="600" width="170" height="54" rx="8"></rect>
+            <text x="942" y="622">Reviewer</text>
+            <text x="942" y="642">无必须修复项</text>
+          </g>
+          <g class="node">
+            <rect x="1134" y="600" width="150" height="54" rx="8"></rect>
+            <text x="1152" y="622">PMO</text>
+            <text x="1152" y="642">delivery-package</text>
+          </g>
+          <g class="node">
+            <rect
+              class="success"
+              x="556"
+              y="676"
+              width="360"
+              height="42"
+              rx="8"
+            ></rect>
+            <text x="575" y="702">
+              5 个角色节点通过；8 gates passed；workflow passed
+            </text>
+          </g>
+
+          <rect
+            class="lane"
+            x="24"
+            y="740"
+            width="1412"
+            height="126"
+            rx="8"
+          ></rect>
+          <text class="lane-title" x="44" y="770">交付与远端验证</text>
+          <g class="node">
+            <rect x="44" y="790" width="210" height="52" rx="8"></rect>
+            <text x="62" y="812">人工批准 create-pr</text>
+            <text x="62" y="832">--approve-human</text>
+          </g>
+          <g class="node">
+            <rect x="294" y="790" width="250" height="52" rx="8"></rect>
+            <text x="312" y="812">push delivery 分支</text>
+            <text x="312" y="832">tekon-delivery/run_...</text>
+          </g>
+          <g class="node">
+            <rect
+              class="success"
+              x="584"
+              y="790"
+              width="210"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="602" y="812">真实 PR #2</text>
+            <text x="602" y="832">open</text>
+          </g>
+          <g class="node">
+            <rect
+              class="success"
+              x="834"
+              y="790"
+              width="260"
+              height="52"
+              rx="8"
+            ></rect>
+            <text x="852" y="812">远端 CI passed</text>
+            <text x="852" y="832">Core + Actions lint</text>
+          </g>
+          <g class="node">
+            <rect x="1134" y="790" width="260" height="52" rx="8"></rect>
+            <text x="1152" y="812">归档报告</text>
+            <text x="1152" y="832">self-bootstrap-report.*</text>
+          </g>
+
+          <rect
+            class="lane"
+            x="24"
+            y="892"
+            width="1412"
+            height="62"
+            rx="8"
+          ></rect>
+          <g class="node">
+            <rect
+              class="boundary"
+              x="44"
+              y="904"
+              width="430"
+              height="38"
+              rx="8"
+            ></rect>
+            <text x="62" y="929">
+              当前边界：PR open；未 merge / release / deploy；未 force push
+            </text>
+          </g>
+          <g class="node">
+            <rect
+              class="warn-box"
+              x="520"
+              y="904"
+              width="480"
+              height="38"
+              rx="8"
+            ></rect>
+            <text x="538" y="929">
+              readiness：score=0.90，ready=false，仅剩 AC evidence 映射缺口
+            </text>
+          </g>
+          <g class="node">
+            <rect x="1046" y="904" width="348" height="38" rx="8"></rect>
+            <text x="1064" y="929">
+              下一步：人工 review；补强证据索引与回归集
+            </text>
+          </g>
+
+          <path class="arrow" marker-end="url(#arrow)" d="M274 110 H314"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M544 110 H584"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M834 110 H874"></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1124 110 H1164"
+          ></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1279 136 V238"
+          ></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M344 264 H394"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M724 264 H774"></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1124 264 H1174"
+          ></path>
+          <path
+            class="arrow dashed"
+            marker-end="url(#arrow)"
+            d="M1284 290 V396"
+          ></path>
+          <path
+            class="arrow dashed"
+            marker-end="url(#arrow)"
+            d="M1284 498 V600"
+          ></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M294 627 H334"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M484 627 H524"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M694 627 H734"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M884 627 H924"></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1094 627 H1134"
+          ></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1209 654 V790"
+          ></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M254 816 H294"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M544 816 H584"></path>
+          <path class="arrow" marker-end="url(#arrow)" d="M794 816 H834"></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1094 816 H1134"
+          ></path>
+          <path
+            class="arrow"
+            marker-end="url(#arrow)"
+            d="M1264 842 V904"
+          ></path>
+        </svg>
+      </div>
+
+      <h2>落地时间线</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>事件</th>
+            <th>证据</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>2026-06-10 14:32:59 UTC</td>
+            <td>成功 run 创建，5 个角色节点进入执行链路。</td>
+            <td>
+              <code>workflow_instances.status=passed</code>；节点创建时间一致。
+            </td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:34:20 UTC</td>
+            <td>PM 产出 demand-card，schema gate 通过。</td>
+            <td><code>demand-card.v1.md</code>；PM schema gate passed。</td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:36:26-14:36:29 UTC</td>
+            <td>
+              RD 产出 code-changes，build、lint、security-scan、schema gate
+              通过。
+            </td>
+            <td><code>code-changes.v1.md</code>；4 个 RD gates passed。</td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:40:19 UTC</td>
+            <td>QA 验收关键字、占位符、HTML 同步和输出目录边界。</td>
+            <td><code>test-report.v1.md</code>；QA schema gate passed。</td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:43:48 UTC</td>
+            <td>Reviewer 独立审阅，无必须修复项。</td>
+            <td>
+              <code>review-report.v1.md</code>；reviewer schema gate passed。
+            </td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:46:05 UTC</td>
+            <td>PMO 产出 delivery package，工作流到达 passed。</td>
+            <td>
+              <code>delivery-package.v1.md</code>；PMO schema gate passed。
+            </td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:47:01 UTC</td>
+            <td>CLI 记录人工批准 create-pr。</td>
+            <td><code>approved_by=cli</code>；批准范围仅覆盖创建真实 PR。</td>
+          </tr>
+          <tr>
+            <td>2026-06-10 14:57:28 UTC</td>
+            <td>真实 PR 创建成功，第二次尝试完成。</td>
+            <td>
+              <code>https://github.com/zesming/tekon/pull/2</code
+              >；<code>attempt_count=2</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>2026-06-10 15:22:07 UTC</td>
+            <td>远端 CI 最终状态 passed。</td>
+            <td>
+              <code>Core build and tests</code> 与
+              <code>Lint GitHub Actions workflows</code> 均 success。
+            </td>
+          </tr>
+          <tr>
+            <td>2026-06-10 至 2026-06-11</td>
+            <td>归档并补充完整测试 sweep 证据。</td>
+            <td>
+              <code>self-bootstrap-report.*</code>；当前提交
+              <code>93c256b</code>。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>角色泳道</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>泳道</th>
+            <th>动作</th>
+            <th>输出 / Gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>用户 / 产品约束</td>
+            <td>
+              明确 Codex 优先、<code>codex --profile internal</code>、Tekon
+              自举、只创建 PR。
+            </td>
+            <td>形成 P0 可执行边界；不合入、不上线。</td>
+          </tr>
+          <tr>
+            <td>Tekon 编排层</td>
+            <td>创建 run、分配角色节点、维护 artifact/gate/audit。</td>
+            <td><code>docs-update</code> run；确定性调度。</td>
+          </tr>
+          <tr>
+            <td>PM</td>
+            <td>生成结构化 demand-card、验收标准和范围边界。</td>
+            <td><code>demand-card.v1.md</code>；schema passed。</td>
+          </tr>
+          <tr>
+            <td>RD / Codex provider</td>
+            <td>
+              用 <code>codex --profile internal</code> 修改 smoke Markdown 与
+              HTML。
+            </td>
+            <td>
+              <code>code-changes.v1.md</code>；build/lint/security/schema
+              passed。
+            </td>
+          </tr>
+          <tr>
+            <td>QA</td>
+            <td>检查关键字、占位符、HTML 同步和输出目录边界。</td>
+            <td><code>test-report.v1.md</code>；schema passed。</td>
+          </tr>
+          <tr>
+            <td>Reviewer</td>
+            <td>独立审阅需求满足度与风险。</td>
+            <td><code>review-report.v1.md</code>；无必须修复项。</td>
+          </tr>
+          <tr>
+            <td>PMO / Delivery</td>
+            <td>生成 PR 包、记录审批、push 分支、创建 PR、轮询 CI。</td>
+            <td>
+              <code>delivery-package</code>、<code>ci-status</code>、真实 PR。
+            </td>
+          </tr>
+          <tr>
+            <td>归档 / 复盘</td>
+            <td>写入正式评估报告与本流程图。</td>
+            <td>可提交审阅证据。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>失败修复侧链</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>风险点</th>
+            <th>根因判断</th>
+            <th>落地处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Codex 认证</td>
+            <td>internal profile 未生效或凭据未进入 provider。</td>
+            <td>
+              固定 Codex provider 启动命令为
+              <code>codex --profile internal</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>artifact 输出目录</td>
+            <td>输出目录未进入 Codex 可写范围。</td>
+            <td>
+              adapter 在 <code>exec</code> 前受控追加
+              <code>--add-dir &lt;TEKON_OUTPUT_DIR&gt;</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>provider 协议</td>
+            <td>prompt 对完成边界约束不足。</td>
+            <td>
+              强化 manifest 完成即停止；禁止节点内 subagent、git push 等动作。
+            </td>
+          </tr>
+          <tr>
+            <td>schema drift</td>
+            <td>真实模型输出 provider-style 字段。</td>
+            <td>增加归一化和兼容字段，同时保留 schema 边界。</td>
+          </tr>
+          <tr>
+            <td>安全扫描</td>
+            <td>静态测试字符串过像真实密钥。</td>
+            <td>fixture 改运行时拼接，不削弱生产扫描。</td>
+          </tr>
+          <tr>
+            <td>worktree finalize</td>
+            <td>finalize stage 范围过宽。</td>
+            <td>
+              解析 <code>git status --porcelain=v1 -z</code>，只 stage
+              真实可提交变更。
+            </td>
+          </tr>
+          <tr>
+            <td>RD timeout</td>
+            <td>TDD 技能顺序与 provider artifact protocol 冲突。</td>
+            <td>RD 节点 manifest 优先，验证交给 Tekon gates。</td>
+          </tr>
+          <tr>
+            <td>PR 创建</td>
+            <td>
+              CommandGateway 把 argv 数据中的
+              <code>&lt;TEKON_OUTPUT_DIR&gt;</code> 误判为 shell 控制语法。
+            </td>
+            <td>
+              保持 <code>spawn(..., shell:false)</code>，仅拒绝独立 shell 控制
+              token。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>最终状态与边界</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>成功 run</th>
+            <td><code>run_d2350140-b1b7-4fca-b01b-e28daac61e31</code></td>
+          </tr>
+          <tr>
+            <th>Workflow / Provider</th>
+            <td>
+              <code>docs-update</code>；Codex；<code
+                >codex --profile internal</code
+              >
+            </td>
+          </tr>
+          <tr>
+            <th>Gates / Artifacts</th>
+            <td>8 passed；14 条 artifact 记录。</td>
+          </tr>
+          <tr>
+            <th>PR / CI</th>
+            <td>
+              <a href="https://github.com/zesming/tekon/pull/2"
+                >https://github.com/zesming/tekon/pull/2</a
+              >
+              ；远端 CI passed。
+            </td>
+          </tr>
+          <tr>
+            <th>Readiness</th>
+            <td>
+              <code>score=0.90</code>，<code>ready=false</code>，剩余缺口为 AC
+              evidence 结构化映射不足。
+            </td>
+          </tr>
+          <tr>
+            <th>人工边界</th>
+            <td>
+              PR 保持 open；未 merge、未 release、未 deploy；未执行 force push。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <section class="note">
+        <p>
+          判断：P0 的核心目标是验证“真实 provider 到真实
+          PR”的最小闭环，当前证据已经覆盖该目标。
+          <code>readiness</code> 的 AC evidence
+          映射缺口属于后续证据产品化能力，不构成本次 P0 阻断。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -36,9 +36,16 @@ describe('work usability evaluation', () => {
     await seedReadyRun({
       repoPath,
       repositories,
+      audit,
       runId: 'run_real',
       provider: 'claude-code',
       prUrl: 'https://github.example/tekon/pull/42',
+    });
+    await audit.append({
+      runId: 'run_real',
+      type: 'qa.validation.ref',
+      payload: { ref: 'branch:tekon-delivery/run_real' },
+      createdAt: '2026-06-08T00:00:01.500Z',
     });
     await audit.append({
       runId: 'run_real',
@@ -51,6 +58,25 @@ describe('work usability evaluation', () => {
       repositories,
       audit,
       runId: 'run_real',
+    });
+    const store = createArtifactStore({ repoPath, repositories });
+    const ciArtifact = await store.writeArtifact({
+      runId: 'run_real',
+      nodeId: 'node_run_real',
+      type: 'ci-status',
+      content: JSON.stringify({
+        title: 'CI status',
+        body: 'Remote CI passed.',
+        ciStatus: 'passed',
+        prUrl: 'https://github.example/tekon/pull/42',
+        checkedAt: '2026-06-08T00:00:06.000Z',
+        checks: [{ name: 'build', bucket: 'pass' }],
+      }),
+    });
+    await audit.append({
+      runId: 'run_real',
+      type: 'delivery.ci.checked',
+      payload: { artifactId: ciArtifact.id },
     });
 
     const evaluation = await evaluateWorkUsability({
@@ -107,10 +133,17 @@ describe('work usability evaluation', () => {
     await seedReadyRun({
       repoPath,
       repositories,
+      audit,
       runId: 'run_mock',
       provider: 'mock',
       prUrl: null,
       recordLease: false,
+    });
+    await audit.append({
+      runId: 'run_mock',
+      type: 'qa.validation.ref',
+      payload: { ref: 'branch:tekon-delivery/run_mock' },
+      createdAt: '2026-06-08T00:00:01.500Z',
     });
     await audit.append({
       runId: 'run_mock',
@@ -320,6 +353,7 @@ describe('work usability evaluation', () => {
 async function seedReadyRun(input: {
   repoPath: string;
   repositories: TekonRepositories;
+  audit: ReturnType<typeof createAuditLogger>;
   runId: string;
   provider: 'mock' | 'claude-code';
   prUrl: string | null;
@@ -350,6 +384,12 @@ async function seedReadyRun(input: {
     provider: input.provider,
     configSummary: { provider: input.provider },
     createdAt: '2026-06-08T00:00:00.100Z',
+  });
+  await input.audit.append({
+    runId: input.runId,
+    type: 'run.started',
+    payload: { templateId: 'standard-delivery', mode: 'template' },
+    createdAt: '2026-06-08T00:00:00.150Z',
   });
   await input.repositories.createNode({
     id: `node_${input.runId}`,
@@ -389,6 +429,27 @@ async function seedReadyRun(input: {
           criterionId: 'AC-1',
           status: 'passed',
           evidence: 'Unit tests covered batch retry.',
+          gateResultIds: [`gate_test_${input.runId}`],
+        },
+      ],
+    }),
+  });
+  await store.writeArtifact({
+    runId: input.runId,
+    nodeId: `node_${input.runId}`,
+    type: 'qa-release-signoff',
+    content: JSON.stringify({
+      title: 'QA release signoff',
+      body: 'QA validated the branch that will be delivered.',
+      targetRef: `branch:tekon-delivery/${input.runId}`,
+      validatedRef: `branch:tekon-delivery/${input.runId}`,
+      overallStatus: 'passed',
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: `QA validation passed for branch:tekon-delivery/${input.runId}.`,
+          gateResultIds: [`gate_qa_signoff_${input.runId}`],
         },
       ],
     }),
@@ -413,6 +474,33 @@ async function seedReadyRun(input: {
     retries: 0,
     createdAt: '2026-06-08T00:00:01.100Z',
   });
+  await input.repositories.recordGateResult({
+    id: `gate_qa_signoff_${input.runId}`,
+    runId: input.runId,
+    nodeId: `node_${input.runId}`,
+    gateType: 'qa-signoff',
+    status: 'passed',
+    durationMs: 1,
+    retries: 0,
+    createdAt: '2026-06-08T00:00:01.200Z',
+  });
+  for (const [index, gateType] of [
+    'independent-review',
+    'role-scope',
+    'ac-evidence',
+    'process-completeness',
+  ].entries()) {
+    await input.repositories.recordGateResult({
+      id: `gate_${gateType}_${input.runId}`,
+      runId: input.runId,
+      nodeId: `node_${input.runId}`,
+      gateType,
+      status: 'passed',
+      durationMs: 1,
+      retries: 0,
+      createdAt: `2026-06-08T00:00:01.${300 + index}Z`,
+    });
+  }
   if (input.recordLease !== false) {
     await input.repositories.recordWorktreeLease({
       id: `lease_${input.runId}`,

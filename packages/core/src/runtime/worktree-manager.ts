@@ -27,6 +27,14 @@ export interface WorktreeManager {
     leaseId: string,
     input: { message: string },
   ): Promise<boolean>;
+  inspectLeaseSourceChanges(leaseId: string): Promise<{
+    changedPaths: string[];
+    headChanged: boolean;
+    baseHead?: string | null;
+    currentHead: string;
+  }>;
+  listLeaseSourceChanges(leaseId: string): Promise<string[]>;
+  getLeaseHead(leaseId: string): Promise<string>;
   promoteLeaseToRunBranch(input: {
     leaseId: string;
     branchName?: string;
@@ -86,6 +94,13 @@ export function createWorktreeManager(options: {
         suffix,
       );
       const branchName = `tekon/${runSegment}/${suffix}`;
+      const baseHead = (
+        await runGit(options.gateway, {
+          repoPath,
+          runId: runSegment,
+          args: ['rev-parse', input.baseRef],
+        })
+      ).trim();
 
       await runGit(options.gateway, {
         repoPath,
@@ -108,6 +123,7 @@ export function createWorktreeManager(options: {
         repoPath,
         worktreePath,
         branchName,
+        baseHead,
         createdAt: new Date().toISOString(),
       };
 
@@ -121,12 +137,7 @@ export function createWorktreeManager(options: {
       }
       assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
       await resetTekonRuntimeIndex(options.gateway, lease);
-      const dirtyStatus = await runGit(options.gateway, {
-        repoPath: lease.worktreePath,
-        runId: lease.runId,
-        args: ['status', '--porcelain=v1', '-z'],
-      });
-      const meaningfulDirtyLines = meaningfulDirtyStatusLines(dirtyStatus);
+      const meaningfulDirtyLines = await meaningfulLeaseDirtyLines(lease);
 
       if (meaningfulDirtyLines.length === 0) {
         return false;
@@ -147,6 +158,29 @@ export function createWorktreeManager(options: {
         args: ['commit', '-m', input.message],
       });
       return true;
+    },
+
+    async inspectLeaseSourceChanges(leaseId) {
+      return inspectLeaseSourceChanges(leaseId);
+    },
+
+    async listLeaseSourceChanges(leaseId) {
+      return (await inspectLeaseSourceChanges(leaseId)).changedPaths;
+    },
+
+    async getLeaseHead(leaseId) {
+      const lease = await options.repositories.getWorktreeLease(leaseId);
+      if (!lease) {
+        throw new Error(`unknown worktree lease: ${leaseId}`);
+      }
+      assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+      return (
+        await runGit(options.gateway, {
+          repoPath: lease.worktreePath,
+          runId: lease.runId,
+          args: ['rev-parse', 'HEAD'],
+        })
+      ).trim();
     },
 
     async promoteLeaseToRunBranch(input) {
@@ -195,6 +229,66 @@ export function createWorktreeManager(options: {
       return options.repositories.listWorktreeLeases(runId);
     },
   };
+
+  async function meaningfulLeaseDirtyLines(
+    lease: WorktreeLease,
+  ): Promise<PorcelainStatusEntry[]> {
+    const dirtyStatus = await runGit(options.gateway, {
+      repoPath: lease.worktreePath,
+      runId: lease.runId,
+      args: ['status', '--porcelain=v1', '-z'],
+    });
+    return meaningfulDirtyStatusLines(dirtyStatus);
+  }
+
+  async function inspectLeaseSourceChanges(leaseId: string): Promise<{
+    changedPaths: string[];
+    headChanged: boolean;
+    baseHead?: string | null;
+    currentHead: string;
+  }> {
+    const lease = await options.repositories.getWorktreeLease(leaseId);
+    if (!lease) {
+      throw new Error(`unknown worktree lease: ${leaseId}`);
+    }
+    assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+    await resetTekonRuntimeIndex(options.gateway, lease);
+    const paths = new Set<string>();
+    for (const entry of await meaningfulLeaseDirtyLines(lease)) {
+      for (const path of statusEntryPaths(entry)) {
+        if (!isTekonRuntimePath(path)) {
+          paths.add(path);
+        }
+      }
+    }
+    const currentHead = (
+      await runGit(options.gateway, {
+        repoPath: lease.worktreePath,
+        runId: lease.runId,
+        args: ['rev-parse', 'HEAD'],
+      })
+    ).trim();
+    if (lease.baseHead) {
+      const committedDiff = await runGit(options.gateway, {
+        repoPath: lease.worktreePath,
+        runId: lease.runId,
+        args: ['diff', '--name-only', '-z', lease.baseHead, currentHead, '--'],
+      });
+      for (const path of committedDiff
+        .split('\0')
+        .filter((item) => item.length > 0)) {
+        if (!isTekonRuntimePath(path)) {
+          paths.add(path);
+        }
+      }
+    }
+    return {
+      changedPaths: [...paths].sort(),
+      headChanged: Boolean(lease.baseHead) && currentHead !== lease.baseHead,
+      baseHead: lease.baseHead,
+      currentHead,
+    };
+  }
 }
 
 async function resetTekonRuntimeIndex(

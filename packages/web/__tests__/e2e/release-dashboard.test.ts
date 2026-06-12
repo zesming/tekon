@@ -96,7 +96,7 @@ test.describe('Tekon release dashboard', () => {
     await page.getByLabel('Action token').fill(fixture.sessionToken);
     await page.getByRole('button', { name: '准备 PR' }).click();
     await expect(
-      page.getByText('PR prepared: tekon-delivery/run_1 -> main'),
+      page.getByText(/run is not ready for PR creation/u),
     ).toBeVisible();
 
     await page.getByLabel('Session token').fill(fixture.sessionToken);
@@ -114,6 +114,7 @@ test.describe('Tekon release dashboard', () => {
     await expect(page.getByText(/openQuestions=/u)).toBeVisible();
     await page.getByRole('button', { name: '批准需求' }).click();
     await expect(page.getByText(/demand approved:/u)).toBeVisible();
+    await page.getByLabel('Run agent').selectOption('mock');
     await page.getByRole('button', { name: '发起运行' }).click();
     await expect(page.getByText(/run started:/u)).toBeVisible();
     await page.getByRole('button', { name: '准备 PR' }).click();

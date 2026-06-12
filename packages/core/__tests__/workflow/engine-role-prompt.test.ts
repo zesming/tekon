@@ -11,6 +11,8 @@ import {
   migrateDatabase,
   openTekonDatabase,
   type AgentRunResult,
+  type AgentRunInput,
+  type ArtifactType,
   type GateEngine,
 } from '../../src/index.js';
 
@@ -199,6 +201,358 @@ describe('workflow engine role prompt integration', () => {
     db.close();
   });
 
+  it('adds strict role-scoped review artifact instructions with target context', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-review-artifact-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-review-artifact-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '评审类 artifact 必须严格符合 schema',
+      mode: 'template',
+      workflowSpec: {
+        id: 'review-artifact-prompt',
+        name: 'Review Artifact Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm-scope',
+            name: 'PM Scope',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-card',
+                role: 'pm',
+                inputs: [],
+                outputs: [
+                  { id: 'demand', type: 'demand-card' },
+                  { id: 'prd', type: 'prd' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'pm-review',
+            name: 'PM Review',
+            dependsOn: ['pm-scope'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-review',
+                role: 'pm',
+                inputs: [
+                  {
+                    id: 'demand',
+                    type: 'demand-card',
+                    fromNodeId: 'pm-demand-card',
+                  },
+                  { id: 'prd', type: 'prd', fromNodeId: 'pm-demand-card' },
+                ],
+                outputs: [{ id: 'review', type: 'demand-review' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const targetNodeId = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-demand-card'),
+    )?.nodeId;
+    const reviewPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-demand-review'),
+    )?.prompt;
+    expect(targetNodeId).toBeDefined();
+    expect(reviewPrompt).toBeDefined();
+    expect(reviewPrompt!).toContain(
+      'For role-scoped review JSON artifacts, include reviewScope, reviewProcess, decision, and findings using the exact schema fields.',
+    );
+    expect(reviewPrompt!).toContain('"reviewScope": "demand-quality"');
+    expect(reviewPrompt!).toContain('"reviewerRole": "pm"');
+    expect(reviewPrompt!).toContain(`"targetNodeId": "${targetNodeId}"`);
+    expect(reviewPrompt!).toContain('"targetRole": "pm"');
+    expect(reviewPrompt!).toContain(
+      'findings[].severity must be one of: critical, important, minor.',
+    );
+    expect(reviewPrompt!).toContain(
+      'findings[].ownerRole is optional; if present, it must be one of: pm, rd, qa, reviewer, pmo.',
+    );
+    expect(reviewPrompt!).toContain(
+      'Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
+    );
+    db.close();
+  });
+
+  it('adds strict QA test-plan artifact instructions', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-test-plan-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-test-plan-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '测试方案必须符合 schema',
+      mode: 'template',
+      workflowSpec: {
+        id: 'test-plan-prompt',
+        name: 'Test Plan Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-test-plan',
+                role: 'qa',
+                inputs: [],
+                outputs: [{ id: 'test-plan', type: 'test-plan' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts[0]).toContain(
+      'For test-plan JSON artifacts, include testBasis and testCases using the exact schema fields.',
+    );
+    expect(prompts[0]).toContain(
+      'testCases[].id and testCases[].description are required.',
+    );
+    expect(prompts[0]).toContain(
+      'Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
+    );
+    db.close();
+  });
+
+  it('includes prior node status context for process checkpoints', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-process-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-process-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          if (input.runContext.nodeId.endsWith('_pm-review')) {
+            await repositories.createHumanDecision({
+              id: `decision_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateResultId: null,
+              status: 'pending',
+              createdAt: new Date().toISOString(),
+            });
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '补充流程检查点',
+      mode: 'template',
+      workflowSpec: {
+        id: 'process-prompt-context',
+        name: 'Process Prompt Context',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-review',
+                role: 'pm',
+                inputs: [],
+                outputs: [],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'pmo',
+            name: 'PMO',
+            dependsOn: ['pm'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pmo-checkpoint',
+                role: 'pmo',
+                inputs: [],
+                outputs: [
+                  { id: 'process-checkpoint', type: 'process-checkpoint' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const pmNodeId = prompts.find((item) =>
+      item.nodeId.endsWith('_pm-review'),
+    )?.nodeId;
+    const pmoPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_pmo-checkpoint'),
+    )?.prompt;
+    expect(pmNodeId).toBeDefined();
+    expect(pmoPrompt).toBeDefined();
+    expect(pmoPrompt!).toContain('Prior workflow nodes:');
+    expect(pmoPrompt!).toContain(`${pmNodeId} role=pm status=passed`);
+    expect(pmoPrompt!).toContain(
+      'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
+    );
+    expect(pmoPrompt!).toContain(
+      'process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: 1. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.',
+    );
+    db.close();
+  });
+
   it('keeps repository edit scope for code-changes nodes while preserving exit instructions', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-engine-code-changes-prompt-'),
@@ -371,7 +725,10 @@ describe('workflow engine role prompt integration', () => {
                 id: 'qa-test',
                 role: 'qa',
                 inputs: [],
-                outputs: [{ id: 'test', type: 'test-report' }],
+                outputs: [
+                  { id: 'test', type: 'test-report' },
+                  { id: 'evidence', type: 'ac-evidence' },
+                ],
                 gates: [],
                 dependsOn: [],
               },
@@ -407,6 +764,421 @@ describe('workflow engine role prompt integration', () => {
         'Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
       );
     }
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'If a criterion depends on downstream delivery packaging, PR creation, PMO checkpoint, QA signoff, or QA signoff review, do not block this QA validation node solely because those downstream nodes have not run yet.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
+    );
+    expect(prompts.find((item) => item.role === 'qa')?.prompt).toContain(
+      'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
+    );
+    expect(
+      prompts.find((item) => item.role === 'reviewer')?.prompt,
+    ).not.toContain(
+      'For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor',
+    );
+    db.close();
+  });
+
+  it('adds artifact id anchor guidance to QA release signoff prompts', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-signoff-artifact-id-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-signoff-artifact-id-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: createPassingGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: 'QA signoff 需要引用真实 artifact id',
+      mode: 'template',
+      workflowSpec: {
+        id: 'qa-signoff-artifact-id',
+        name: 'QA Signoff Artifact ID',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'pm',
+            name: 'PM',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'pm-demand-card',
+                role: 'pm',
+                inputs: [],
+                outputs: [{ id: 'demand', type: 'demand-card' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: ['pm'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-signoff',
+                role: 'qa',
+                inputs: [
+                  {
+                    id: 'demand',
+                    type: 'demand-card',
+                    fromNodeId: 'pm-demand-card',
+                  },
+                ],
+                outputs: [{ id: 'signoff', type: 'qa-release-signoff' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const signoffPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_qa-signoff'),
+    )?.prompt;
+    expect(signoffPrompt).toBeDefined();
+    expect(signoffPrompt!).toMatch(/artifactId: artifact_[\w-]+/u);
+    expect(signoffPrompt).toContain(
+      'criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+    );
+    expect(signoffPrompt).toContain(
+      'For qa-release-signoff JSON artifacts, include targetRef, validatedRef, and overallStatus.',
+    );
+    expect(signoffPrompt).toContain(
+      'Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels.',
+    );
+    expect(signoffPrompt).toContain(
+      'qa-release-signoff.overallStatus must be one of passed, failed, or blocked; do not use decision or recommendation as a substitute.',
+    );
+    db.close();
+  });
+
+  it('exposes exact gate result ids for QA evidence anchors', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-gate-result-id-prompt-'),
+    );
+    const rolesDir = mkdtempSync(
+      join(tmpdir(), 'tekon-engine-gate-result-id-prompt-roles-'),
+    );
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: Array<{ nodeId: string; prompt: string }> = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
+          if (input.runContext.nodeId.endsWith('_rd-code-change')) {
+            const createdAt = new Date().toISOString();
+            await repositories.recordGateResult({
+              id: `gate_fixture_failed_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateType: 'test',
+              gateKey: 'fixture:failed',
+              status: 'failed',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+            await repositories.recordGateResult({
+              id: `gate_fixture_blocked_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: input.runContext.nodeId,
+              gateType: 'test',
+              gateKey: 'fixture:blocked',
+              status: 'blocked',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+            await repositories.recordGateResult({
+              id: `gate_fixture_future_${input.runContext.runId}`,
+              runId: input.runContext.runId,
+              nodeId: `${input.runContext.runId}_future-delivery`,
+              gateType: 'test',
+              gateKey: 'fixture:future',
+              status: 'passed',
+              durationMs: 0,
+              retries: 0,
+              createdAt,
+            });
+          }
+          const artifacts = [];
+          for (const type of input.requiredArtifactTypes ?? []) {
+            artifacts.push(
+              await input.artifactStore!.writeArtifact({
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                type,
+                content: validArtifactContentForPromptTest(type, input),
+              }),
+            );
+          }
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: artifacts.map((artifact) => artifact.path),
+            artifacts,
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: {
+        async runGate(input) {
+          return repositories.recordGateResult({
+            id: `gate_result_${input.nodeId}_${input.gate.type}`,
+            runId: input.runId,
+            nodeId: input.nodeId,
+            gateType: input.gate.type,
+            gateKey: input.gate.gateKey,
+            status: input.gate.type === 'lint' ? 'skipped' : 'passed',
+            outputPath: join(
+              repoPath,
+              '.tekon',
+              'runs',
+              input.runId,
+              'gates',
+              `${input.nodeId}-${input.gate.type}.log`,
+            ),
+            durationMs: 0,
+            retries: 0,
+            createdAt: new Date().toISOString(),
+          });
+        },
+        async createAutoFixRepairNode(input) {
+          return repositories.createNode({
+            id: `repair_${input.failedGateResult.id}`,
+            runId: input.failedGateResult.runId,
+            role: input.fixerRole,
+            status: 'pending',
+            gates: [],
+            dependencies: [input.failedGateResult.nodeId],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        },
+      },
+    });
+
+    const result = await engine.startRun({
+      demandText: 'QA evidence 需要引用真实 gate result id',
+      mode: 'template',
+      workflowSpec: {
+        id: 'qa-gate-result-id',
+        name: 'QA Gate Result ID',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'rd',
+            name: 'RD',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'rd-code-change',
+                role: 'rd',
+                inputs: [],
+                outputs: [],
+                gates: [
+                  {
+                    type: 'build',
+                    gateKey: '00:build:commandRef=build',
+                  },
+                  {
+                    type: 'lint',
+                    gateKey: '01:lint:commandRef=lint',
+                  },
+                ],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'qa',
+            name: 'QA',
+            dependsOn: ['rd'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'qa-validation',
+                role: 'qa',
+                inputs: [],
+                outputs: [
+                  { id: 'test', type: 'test-report' },
+                  { id: 'evidence', type: 'ac-evidence' },
+                ],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+          {
+            id: 'delivery',
+            name: 'Delivery',
+            dependsOn: ['qa'],
+            parallel: false,
+            nodes: [
+              {
+                id: 'future-delivery',
+                role: 'pmo',
+                inputs: [],
+                outputs: [],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await expect(repositories.listNodes(result.runId)).resolves.toContainEqual(
+      expect.objectContaining({ id: `${result.runId}_future-delivery` }),
+    );
+    await expect(repositories.listGateResults(result.runId)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `gate_fixture_failed_${result.runId}`,
+          nodeId: `${result.runId}_rd-code-change`,
+          status: 'failed',
+        }),
+        expect.objectContaining({
+          id: `gate_fixture_blocked_${result.runId}`,
+          nodeId: `${result.runId}_rd-code-change`,
+          status: 'blocked',
+        }),
+        expect.objectContaining({
+          id: `gate_fixture_future_${result.runId}`,
+          nodeId: `${result.runId}_future-delivery`,
+          status: 'passed',
+        }),
+      ]),
+    );
+    const qaPrompt = prompts.find((item) =>
+      item.nodeId.endsWith('_qa-validation'),
+    )?.prompt;
+    expect(qaPrompt).toBeDefined();
+    expect(qaPrompt).toContain('Prior eligible gate results:');
+    expect(qaPrompt).toMatch(
+      /gateResultId: gate_result_.*_rd-code-change_build/u,
+    );
+    expect(qaPrompt).toMatch(
+      /gateResultId: gate_result_.*_rd-code-change_lint/u,
+    );
+    expect(qaPrompt).not.toContain('contextOnlyGateKey=');
+    expect(qaPrompt).not.toContain('outputPath=');
+    expect(qaPrompt).toContain('status=skipped');
+    expect(qaPrompt).not.toContain('gate_fixture_failed_');
+    expect(qaPrompt).not.toContain('gate_fixture_blocked_');
+    expect(qaPrompt).not.toContain('gate_fixture_future_');
+    expect(qaPrompt).toContain(
+      'criteriaEvidence[].gateResultIds must use exact gateResultId values from Prior eligible gate results; do not use gateKey, nodeId:gateKey labels, commandRef labels, outputPath, or log file names.',
+    );
     db.close();
   });
 
@@ -596,6 +1368,65 @@ function writeRoleFixture(rolesDir: string) {
     'Reviewer system instructions',
     'utf8',
   );
+
+  const pmoDir = join(rolesDir, 'pmo');
+  mkdirSync(pmoDir, { recursive: true });
+  writeFileSync(
+    join(pmoDir, 'agent.yaml'),
+    ['role: pmo', 'name: Test PMO', 'description: Test PMO role'].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(pmoDir, 'system.md'), 'PMO system instructions', 'utf8');
+}
+
+function validArtifactContentForPromptTest(
+  type: ArtifactType,
+  input: AgentRunInput,
+): string {
+  const base = {
+    title: type,
+    body: `Prompt test artifact for ${type}.`,
+  };
+  if (type === 'demand-card' || type === 'prd') {
+    return JSON.stringify(
+      {
+        ...base,
+        acceptanceCriteria: [
+          {
+            id: 'AC-1',
+            description: 'Artifact prompt instructions are present.',
+          },
+        ],
+      },
+      null,
+      2,
+    );
+  }
+  if (type === 'demand-review') {
+    const targetNodeId =
+      input.nodeInputs?.find((item) => item.type === 'demand-card')
+        ?.fromNodeId ?? input.runContext.nodeId;
+    const targetRole =
+      input.priorNodes?.find((item) => item.id === targetNodeId)?.role ?? 'pm';
+    return JSON.stringify(
+      {
+        ...base,
+        reviewScope: 'demand-quality',
+        reviewProcess: {
+          mode: 'independent-process',
+          reviewerId: 'prompt-test-pm-reviewer',
+          reviewerRole: 'pm',
+          targetNodeId,
+          targetRole,
+        },
+        decision: 'approved',
+        findings: [],
+      },
+      null,
+      2,
+    );
+  }
+  return JSON.stringify(base, null, 2);
 }
 
 function minimalWorkflowSpec(name: string) {

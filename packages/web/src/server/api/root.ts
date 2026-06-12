@@ -32,6 +32,9 @@ import {
   writeDemandShapeFile,
   writeDemandShapeFiles,
   agentAdapterConfigSchema,
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
   loadWorkflowTemplateFile,
   type AgentAdapter,
   type AgentAdapterConfig,
@@ -245,6 +248,9 @@ interface ProjectRunInput {
   agent?: string;
   allowDirtyBase?: boolean;
   demandShapePath?: string;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
 }
 
 interface DemandShapeInput {
@@ -389,16 +395,14 @@ export async function createApiCaller(
         if (!demandText) {
           throw new ApiError('BAD_REQUEST', 'Demand text is required.');
         }
-        const templateName =
-          runInput.template?.trim() ||
-          shapedDemand?.recommendedTemplate ||
-          'standard-feature';
+        const templateName = runInput.template?.trim() || 'standard-delivery';
         assertSafeName(templateName, 'template');
         const gateway = createCommandGateway({ repositories });
         const agentRuntime = createWebAgentRuntime({
-          agent: runInput.agent ?? 'mock',
+          agent: runInput.agent ?? 'codex',
           repoPath: context.projectRoot,
           gateway,
+          runtime: providerRuntimeFromRunInput(runInput),
         });
         assertCleanBase(context.projectRoot, Boolean(runInput.allowDirtyBase));
         const workflowSpec = loadProjectWorkflowIfPresent(
@@ -1054,6 +1058,7 @@ function createWebAgentRuntime(input: {
   agent: string;
   repoPath: string;
   gateway: CommandGateway;
+  runtime?: ProviderRuntimeOverrides;
 }): {
   adapter: AgentAdapter;
   provider: RunProviderConfig['provider'];
@@ -1068,7 +1073,10 @@ function createWebAgentRuntime(input: {
   }
 
   if (input.agent === 'claude-code') {
-    const config = defaultWebClaudeCodeConfig(input.repoPath);
+    const config = applyProviderRuntimeOverrides(
+      defaultWebClaudeCodeConfig(input.repoPath),
+      input.runtime,
+    );
     return {
       adapter: createClaudeCodeAdapter(config, input.gateway),
       provider: 'claude-code',
@@ -1077,7 +1085,10 @@ function createWebAgentRuntime(input: {
   }
 
   if (input.agent === 'codex') {
-    const config = defaultWebCodexConfig(input.repoPath);
+    const config = applyProviderRuntimeOverrides(
+      defaultWebCodexConfig(input.repoPath),
+      input.runtime,
+    );
     return {
       adapter: createCodexAdapter(config, input.gateway),
       provider: 'codex',
@@ -1086,6 +1097,56 @@ function createWebAgentRuntime(input: {
   }
 
   throw new ApiError('BAD_REQUEST', `Unsupported agent: ${input.agent}`);
+}
+
+type ProviderRuntimeOverrides = Partial<
+  Pick<
+    AgentAdapterConfig,
+    'timeoutMs' | 'progressHeartbeatMs' | 'noProgressTimeoutMs'
+  >
+>;
+
+function providerRuntimeFromRunInput(
+  input: ProjectRunInput,
+): ProviderRuntimeOverrides {
+  return {
+    timeoutMs: positiveIntOrUndefined(input.timeoutMs, 'timeoutMs'),
+    noProgressTimeoutMs: positiveIntOrUndefined(
+      input.noProgressTimeoutMs,
+      'noProgressTimeoutMs',
+    ),
+    progressHeartbeatMs: positiveIntOrUndefined(
+      input.progressHeartbeatMs,
+      'progressHeartbeatMs',
+    ),
+  };
+}
+
+function positiveIntOrUndefined(
+  value: number | undefined,
+  name: string,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new ApiError('BAD_REQUEST', `${name} must be a positive integer`);
+  }
+  return value;
+}
+
+function applyProviderRuntimeOverrides(
+  config: AgentAdapterConfig,
+  runtime?: ProviderRuntimeOverrides,
+): AgentAdapterConfig {
+  return {
+    ...config,
+    timeoutMs: runtime?.timeoutMs ?? config.timeoutMs,
+    noProgressTimeoutMs:
+      runtime?.noProgressTimeoutMs ?? config.noProgressTimeoutMs,
+    progressHeartbeatMs:
+      runtime?.progressHeartbeatMs ?? config.progressHeartbeatMs,
+  };
 }
 
 async function assertRunCanResume(input: {
@@ -1142,7 +1203,9 @@ function defaultWebClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     args: ['-p'],
     promptMode: 'stdin',
     outputFormat: 'json',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',
@@ -1164,7 +1227,9 @@ function defaultWebCodexConfig(repoPath: string): AgentAdapterConfig {
     profile: 'internal',
     promptMode: 'stdin',
     outputFormat: 'text',
-    timeoutMs: 300_000,
+    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
+    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
       approval: 'on-request',
@@ -1189,6 +1254,8 @@ function summarizeAgentConfig(
     promptMode: config.promptMode,
     outputFormat: config.outputFormat,
     timeoutMs: config.timeoutMs,
+    progressHeartbeatMs: config.progressHeartbeatMs,
+    noProgressTimeoutMs: config.noProgressTimeoutMs,
     permissionProfile: {
       sandbox: config.permissionProfile.sandbox,
       approval: config.permissionProfile.approval,

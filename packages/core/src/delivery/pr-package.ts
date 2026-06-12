@@ -10,6 +10,7 @@ import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,
 } from './evidence.js';
+import { assertPrePullRequestReady } from './pre-pr-readiness.js';
 
 export interface PullRequestPreparation {
   runId: string;
@@ -38,10 +39,22 @@ export async function createPullRequestPreparation(input: {
     repoPath: input.repoPath,
     riskGates: ['human', 'security-scan'],
   });
+  await assertPrePullRequestReady({
+    repositories: input.repositories,
+    audit: input.audit,
+    runId: input.runId,
+    repoPath: input.repoPath,
+  });
   const nodes = await input.repositories.listNodes(input.runId);
   const deliveryNode = nodes.at(-1);
   if (!deliveryNode) {
     throw new Error(`run has no nodes: ${input.runId}`);
+  }
+  const qaSignoff = evidence.qaReleaseSignoffs[0];
+  if (qaSignoff && !qaSignoff.matchedRef) {
+    throw new Error(
+      `QA release signoff does not match tested delivery ref: target=${qaSignoff.targetRef} validated=${qaSignoff.validatedRef} expected=${qaSignoff.expectedRef ?? 'unavailable'}`,
+    );
   }
 
   const title = `${profile.pr.titlePrefix}${evidence.demand.title}`.trim();
@@ -141,6 +154,7 @@ function formatPrBody(input: {
     `- artifacts: ${input.evidence.artifacts.length}`,
     `- rollback plan: ${input.evidence.rollbackPlanPresent ? 'present' : 'missing'}`,
     ...formatAcceptanceEvidence(input.evidence),
+    ...formatQaReleaseSignoff(input.evidence),
     ...formatSecurityEvidence(input.evidence),
     ...formatCiEvidence(input.evidence),
     '',
@@ -182,6 +196,9 @@ function formatPreparationPackage(input: {
     '',
     '## Acceptance Evidence',
     ...formatAcceptanceEvidence(input.evidence),
+    '',
+    '## QA Release Signoff',
+    ...formatQaReleaseSignoff(input.evidence),
     '',
     '## Security',
     ...formatSecurityEvidence(input.evidence),
@@ -238,6 +255,25 @@ function formatSecurityEvidence(evidence: DeliveryEvidencePackage): string[] {
       `- ${scan.gateResultId}: ${scan.status}`,
       `  - output: ${scan.outputPath ?? 'none'}`,
       `  - failure: ${scan.failureClassification ?? 'none'}`,
+    ].join('\n'),
+  );
+}
+
+function formatQaReleaseSignoff(evidence: DeliveryEvidencePackage): string[] {
+  if (evidence.qaReleaseSignoffs.length === 0) {
+    return ['- qaSignoff: missing'];
+  }
+  return evidence.qaReleaseSignoffs.map((signoff) =>
+    [
+      `- qaSignoff: ${signoff.status}`,
+      `  - targetRef: ${signoff.targetRef}`,
+      `  - validatedRef: ${signoff.validatedRef}`,
+      ...(signoff.expectedRef
+        ? [`  - expectedRef: ${signoff.expectedRef}`]
+        : []),
+      `  - matchedRef: ${signoff.matchedRef}`,
+      `  - criteriaEvidence: ${signoff.criteriaEvidence}`,
+      `  - artifact: ${signoff.artifactId}`,
     ].join('\n'),
   );
 }

@@ -39,7 +39,7 @@ describe('tekon cli e2e', () => {
         'run',
         '给示例模块加批量重试',
         '--template',
-        'standard-feature',
+        'standard-delivery',
         '--agent',
         'mock',
         '--repo',
@@ -128,7 +128,8 @@ describe('tekon cli e2e', () => {
       repoPath,
     );
     expect(readinessOutput).toContain(`runId=${standardRunId}`);
-    expect(readinessOutput).toContain('ready=true');
+    expect(readinessOutput).toContain('ready=false');
+    expect(readinessOutput).toContain('failed=pr-created,remote-ci-passed');
 
     const logOutput = runCli(
       cliPath,
@@ -212,7 +213,7 @@ describe('tekon cli e2e', () => {
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
-  }, 15000);
+  }, 30_000);
 });
 
 function runCli(cliPath: string, args: string[], cwd: string): string {

@@ -5,6 +5,10 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+  type CommandGateway,
+  type CommandGatewayRunInput,
   createCommandGateway,
   runCommandGate,
   runSecurityScanGate,
@@ -44,6 +48,54 @@ describe('command gate runner', () => {
     expect(result).toMatchObject({ gateType: 'test', status: 'passed' });
     expect(result.outputPath).toBeTruthy();
     expect(readFileSync(result.outputPath!, 'utf8')).toContain('gate ok');
+  });
+
+  it('passes default progress heartbeat and no-progress timeout to command gates', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-gate-progress-'));
+    tempDirs.push(cwd);
+    let seen: CommandGatewayRunInput | null = null;
+    const gateway: CommandGateway = {
+      async run(input) {
+        seen = input;
+        const stdoutPath = join(input.outputDir!, 'stdout.log');
+        const stderrPath = join(input.outputDir!, 'stderr.log');
+        writeFileSync(stdoutPath, 'ok\n', 'utf8');
+        writeFileSync(stderrPath, '', 'utf8');
+        return {
+          status: 'executed',
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          stdoutPath,
+          stderrPath,
+          durationMs: 1,
+        };
+      },
+    };
+
+    await runCommandGate({
+      gateway,
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'build',
+      cwd,
+      command: {
+        tool: process.execPath,
+        args: ['-e', 'process.exit(0)'],
+      },
+      policy: {
+        allow: [{ tool: process.execPath, args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+      outputDir: join(cwd, '.tekon', 'runs', 'run_1', 'gates'),
+    });
+
+    expect(seen).toMatchObject({
+      progressIntervalMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
+      noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
+    });
   });
 
   it('runs the built-in security scan without an external command', async () => {

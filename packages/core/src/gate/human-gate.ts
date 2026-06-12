@@ -65,6 +65,26 @@ export function createHumanGate(options: {
         throw new Error(`failed to update human decision: ${decisionId}`);
       }
 
+      if (existing.gateResultId) {
+        await options.repositories.updateGateResultStatus(
+          existing.gateResultId,
+          {
+            status: 'passed',
+            failureClassification: null,
+          },
+        );
+      } else {
+        await options.repositories.recordGateResult({
+          id: `gate_resume_${decisionId}`,
+          runId: existing.runId,
+          nodeId: existing.nodeId,
+          gateType: 'human',
+          status: 'passed',
+          durationMs: 0,
+          retries: 0,
+          createdAt: new Date().toISOString(),
+        });
+      }
       await options.repositories.transitionNode(existing.nodeId, 'running');
       await options.repositories.updateWorkflowInstanceStatus(
         existing.runId,

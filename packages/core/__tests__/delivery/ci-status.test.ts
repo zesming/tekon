@@ -127,7 +127,7 @@ describe('delivery CI status', () => {
     expect(readiness.checks).toContainEqual(
       expect.objectContaining({
         id: 'remote-ci-passed',
-        severity: 'recommended',
+        severity: 'required',
         passed: true,
       }),
     );

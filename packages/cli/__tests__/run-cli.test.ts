@@ -36,6 +36,9 @@ describe('runCli in-process', () => {
     expect(JSON.parse(readFileSync(sessionPath, 'utf8'))).toEqual({
       token: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
+    expect(
+      readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
+    ).toContain('defaultAgent: codex');
     expect(existsSync(join(repoPath, '.tekon', 'eval'))).toBe(true);
 
     await expect(
@@ -154,7 +157,7 @@ describe('runCli in-process', () => {
           'run',
           '给示例模块加批量重试',
           '--template',
-          'standard-feature',
+          'standard-delivery',
           '--agent',
           'mock',
           '--repo',
@@ -398,15 +401,41 @@ describe('runCli in-process', () => {
     expect(ciOutput).toContain(
       'selector=https://github.example/org/repo/pull/1',
     );
+    const deliveryDb = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    await createRepositories(deliveryDb).upsertDeliveryPullRequest({
+      id: 'delivery_pr_standard_fixture',
+      runId: standardRunId!,
+      branch: `tekon-delivery/${standardRunId}`,
+      baseBranch: 'main',
+      title: 'Fixture PR',
+      bodyPath: join(
+        repoPath,
+        '.tekon',
+        'runs',
+        standardRunId!,
+        'delivery',
+        'pr-body.md',
+      ),
+      status: 'created',
+      prUrl: 'https://github.example/org/repo/pull/1',
+      approvedBy: 'tester',
+      approvedAt: '2026-06-08T00:00:03.000Z',
+      branchPushedAt: '2026-06-08T00:00:04.000Z',
+      prCreatedAt: '2026-06-08T00:00:05.000Z',
+      attemptCount: 1,
+      createdAt: '2026-06-08T00:00:03.000Z',
+      updatedAt: '2026-06-08T00:00:05.000Z',
+    });
+    deliveryDb.close();
 
     await expect(
       runCli(['review', '--run-id', standardRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
     const reviewOutput = io.takeStdout();
-    expect(reviewOutput).toContain('## Readiness Failed Checks');
     expect(reviewOutput).toContain('## Evidence Navigation');
     expect(reviewOutput).toContain('## Gate Failure Triage');
-    expect(reviewOutput).toContain('Readiness: pr-created');
     expect(reviewOutput).toContain('## Artifacts');
     expect(reviewOutput).toContain('## Gate Logs');
     expect(reviewOutput).toContain('## PR Body');
@@ -596,7 +625,7 @@ describe('runCli in-process', () => {
     expect(workflowListOutput).toContain('test-improvement');
     expect(workflowListOutput).toContain('docs-update');
     expect(workflowListOutput).toContain('plan-only');
-  }, 15_000);
+  }, 30_000);
 
   it('infers current repo, latest demand shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -1019,6 +1048,9 @@ describe('runCli in-process', () => {
 
     const output = io.takeStdout();
     expect(output).toContain('gate=build commandRef=build status=missing');
+    expect(output).toContain(
+      'gate=schema commandRef=none status=not-command-gate',
+    );
     expect(output).toContain('hint=add commands.build');
     expect(output).toContain(
       `profilePath=${join(repoPath, '.tekon', 'repo-profile.yaml')}`,
@@ -1257,6 +1289,12 @@ describe('runCli in-process', () => {
             'docs-update',
             '--agent',
             'codex',
+            '--timeout-ms',
+            '7200000',
+            '--no-progress-timeout-ms',
+            '1200000',
+            '--progress-heartbeat-ms',
+            '30000',
             '--repo',
             repoPath,
           ],
@@ -1283,6 +1321,9 @@ describe('runCli in-process', () => {
           profile: 'internal',
           promptMode: 'stdin',
           outputFormat: 'text',
+          timeoutMs: 7_200_000,
+          noProgressTimeoutMs: 1_200_000,
+          progressHeartbeatMs: 30_000,
         }),
       });
       db.close();
@@ -1385,6 +1426,7 @@ process.stdin.on('end', () => {
   }
   mkdirSync(outputDir, { recursive: true });
   const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
+  const deliveryRef = (prompt.match(/exact tested delivery ref: ([^\\.\\n]+)/) || ['', 'codex-fixture-ref'])[1];
   const artifacts = types.map((type) => {
     const filename = type + '.json';
     const base = {
@@ -1409,6 +1451,19 @@ process.stdin.on('end', () => {
           criterionId: 'AC-1',
           status: 'passed',
           evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
+        }]
+      };
+    } else if (type === 'qa-release-signoff') {
+      payload = {
+        ...base,
+        targetRef: deliveryRef,
+        validatedRef: deliveryRef,
+        overallStatus: 'passed',
+        criteriaEvidence: [{
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Codex fixture QA signoff validates ' + deliveryRef + '.',
+          outputPaths: [join(outputDir, filename)]
         }]
       };
     } else if (type === 'security-report') {

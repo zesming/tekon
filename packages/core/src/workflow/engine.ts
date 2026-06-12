@@ -112,7 +112,7 @@ export function createWorkflowEngine(
       const template =
         input.workflowSpec ??
         loadWorkflowTemplate({
-          name: input.templateName ?? 'standard-feature',
+          name: input.templateName ?? 'standard-delivery',
         });
       const runId = `run_${randomUUID()}`;
       const projectId = `project_${randomUUID()}`;
@@ -346,7 +346,8 @@ export function createWorkflowEngine(
 
       await options.repositories.transitionNode(node.id, 'awaiting-gate');
     }
-    for (const gate of node.gates) {
+    const configuredGates = gatesWithStableKeys(node.gates, node.id);
+    for (const gate of configuredGates) {
       const passed = await runGateWithRepair(runId, node, gate);
       if (!passed) {
         return false;
@@ -354,6 +355,7 @@ export function createWorkflowEngine(
     }
 
     try {
+      await recordQaValidationRef(runId, node);
       await finalizeExecutionLease(runId, node.id);
     } catch (error) {
       await options.repositories.transitionNode(node.id, 'interrupted');
@@ -374,6 +376,7 @@ export function createWorkflowEngine(
     }
 
     await options.repositories.transitionNode(node.id, 'passed');
+    await appendPmoNodeCheckpoint(runId, node);
     await options.audit.append({
       runId,
       type: 'node.passed',
@@ -382,12 +385,52 @@ export function createWorkflowEngine(
     return true;
   }
 
+  async function appendPmoNodeCheckpoint(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<void> {
+    const configuredGates = gatesWithStableKeys(node.gates, node.id);
+    const requiredArtifacts = requiredArtifactTypesForNode(node);
+    const missingArtifacts: ArtifactType[] = [];
+    for (const artifactType of requiredArtifacts) {
+      const artifacts = await options.repositories.listArtifacts(
+        runId,
+        node.id,
+        artifactType,
+      );
+      if (artifacts.length === 0) {
+        missingArtifacts.push(artifactType);
+      }
+    }
+    const gateResults = await options.repositories.listGateResults(runId);
+    await options.audit.append({
+      runId,
+      type: 'pmo.node-checkpoint',
+      payload: {
+        nodeId: node.id,
+        role: node.role,
+        status: 'passed',
+        requiredArtifacts,
+        missingArtifacts,
+        gateTypes: configuredGates.map((gate) => gate.type),
+        gateKeys: configuredGates.map((gate) => gate.gateKey),
+        latestGateStatuses: latestGateResultsForNode(gateResults, node.id),
+      },
+    });
+  }
+
   async function runGateWithRepair(
     runId: string,
     node: ExecutableNode,
     gate: WorkflowGateConfig,
   ): Promise<boolean> {
-    const existingResult = await latestGateResult(runId, node.id, gate.type);
+    const existingResult = await latestGateResult(
+      runId,
+      node.id,
+      gate.type,
+      gate.gateKey,
+      gate.type === 'human' && isFirstHumanGate(node.gates, gate.gateKey),
+    );
     if (
       existingResult?.status === 'passed' ||
       existingResult?.status === 'skipped'
@@ -395,17 +438,28 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'gate.previously-passed',
-        payload: { nodeId: node.id, gateType: gate.type },
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+        },
       });
       return true;
     }
 
+    if (gate.type === 'qa-signoff') {
+      await recordQaValidationRef(runId, node);
+    }
     let result = await runGate(runId, node.id, gate);
     if (result.status === 'passed' || result.status === 'skipped') {
       await options.audit.append({
         runId,
         type: 'gate.passed',
-        payload: { nodeId: node.id, gateType: gate.type },
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+        },
       });
       return true;
     }
@@ -493,7 +547,11 @@ export function createWorkflowEngine(
         await options.audit.append({
           runId,
           type: 'gate.passed-after-repair',
-          payload: { nodeId: node.id, gateType: gate.type },
+          payload: {
+            nodeId: node.id,
+            gateType: gate.type,
+            gateKey: gate.gateKey,
+          },
         });
         return true;
       }
@@ -511,6 +569,7 @@ export function createWorkflowEngine(
       payload: {
         nodeId: node.id,
         gateType: gate.type,
+        gateKey: gate.gateKey,
         gateResultId: result.id,
       },
     });
@@ -625,6 +684,23 @@ export function createWorkflowEngine(
     if (!lease || !options.worktreeManager) {
       return;
     }
+    const node = await options.repositories.getNode(nodeId);
+    if (!nodeAllowsSourceChanges(node)) {
+      const sourceInspection =
+        await options.worktreeManager.inspectLeaseSourceChanges(lease.id);
+      if (
+        sourceInspection.changedPaths.length > 0 ||
+        sourceInspection.headChanged
+      ) {
+        const changedPaths =
+          sourceInspection.changedPaths.length > 0
+            ? sourceInspection.changedPaths.join(', ')
+            : `lease HEAD moved from ${sourceInspection.baseHead ?? 'unknown'} to ${sourceInspection.currentHead}`;
+        throw new Error(
+          `node ${nodeId} is not allowed to modify repository source files: ${changedPaths}`,
+        );
+      }
+    }
 
     const committed = await options.worktreeManager.commitLeaseChanges(
       lease.id,
@@ -657,6 +733,49 @@ export function createWorkflowEngine(
     });
   }
 
+  async function recordQaValidationRef(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<void> {
+    if (!options.worktreeManager || !isQaValidationNode(node)) {
+      return;
+    }
+    const lease = await activeExecutionLease(runId, node.id);
+    if (!lease) {
+      return;
+    }
+    const head = await options.worktreeManager.getLeaseHead(lease.id);
+    const ref = `sha:${head}`;
+    if ((await latestQaValidationRef(runId)) === ref) {
+      return;
+    }
+    await options.audit.append({
+      runId,
+      type: 'qa.validation.ref',
+      payload: {
+        nodeId: node.id,
+        ref,
+      },
+    });
+  }
+
+  function isQaValidationNode(node: Pick<ExecutableNode, 'role' | 'outputs'>) {
+    return (
+      node.role === 'qa' &&
+      node.outputs.some((output) =>
+        ['test-report', 'ac-evidence'].includes(output.type),
+      )
+    );
+  }
+
+  function nodeAllowsSourceChanges(
+    node: Pick<Node, 'outputs'> | null,
+  ): boolean {
+    return Boolean(
+      node?.outputs.some((output) => output.type === 'code-changes'),
+    );
+  }
+
   function deleteLeaseAliases(leaseId: string): void {
     for (const [key, lease] of executionLeases.entries()) {
       if (lease.id === leaseId) {
@@ -669,19 +788,75 @@ export function createWorkflowEngine(
     runId: string,
     nodeId: string,
     gateType: GateConfig['type'],
+    gateKey?: string,
+    allowLegacyHumanFallback = false,
   ): Promise<GateResult | undefined> {
-    return (await options.repositories.listGateResults(runId))
-      .filter(
-        (result) => result.nodeId === nodeId && result.gateType === gateType,
+    const matchingResults = (
+      await options.repositories.listGateResults(runId)
+    ).filter(
+      (result) => result.nodeId === nodeId && result.gateType === gateType,
+    );
+    const keyedResult = matchingResults
+      .filter((result) =>
+        gateKey ? result.gateKey === gateKey : !result.gateKey,
       )
       .at(-1);
+    if (keyedResult) {
+      return keyedResult;
+    }
+    if (gateType !== 'human' || !gateKey || !allowLegacyHumanFallback) {
+      return undefined;
+    }
+    return matchingResults
+      .filter(
+        (result) =>
+          !result.gateKey &&
+          (result.status === 'passed' || result.status === 'skipped'),
+      )
+      .at(-1);
+  }
+
+  function isFirstHumanGate(
+    gates: WorkflowGateConfig[],
+    gateKey?: string,
+  ): boolean {
+    if (!gateKey) {
+      return false;
+    }
+    return gates.find((gate) => gate.type === 'human')?.gateKey === gateKey;
+  }
+
+  function latestGateResultsForNode(
+    gates: GateResult[],
+    nodeId: string,
+  ): Record<string, GateResult['status']> {
+    const latest = new Map<string, GateResult>();
+    for (const gate of gates.filter((item) => item.nodeId === nodeId)) {
+      const key = gate.gateKey ?? gate.gateType;
+      const existing = latest.get(key);
+      if (
+        !existing ||
+        Date.parse(gate.createdAt) >= Date.parse(existing.createdAt)
+      ) {
+        latest.set(key, gate);
+      }
+    }
+    return Object.fromEntries(
+      [...latest.entries()].map(([gateKey, gate]) => [gateKey, gate.status]),
+    );
+  }
+
+  function formatGateResultForPrompt(gate: GateResult): string {
+    return `- gateResultId: ${gate.id} (context only: nodeId=${gate.nodeId}; gateType=${gate.gateType}; status=${gate.status})`;
   }
 
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
+      inputs?: WorkflowArtifactInputRef[];
       outputs?: WorkflowArtifactOutputRef[];
       gates?: WorkflowGateConfig[];
+      dependsOn?: string[];
     },
     lease: WorktreeLease,
     prompt: string,
@@ -695,11 +870,35 @@ export function createWorkflowEngine(
       node.id,
     );
     const requiredArtifactTypes = requiredArtifactTypesForNode(node);
+    const allNodes = await options.repositories.listNodes(runId);
+    const currentIndex = allNodes.findIndex((item) => item.id === node.id);
+    const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const priorNodeContext = priorNodes.map((item) => ({
+      id: item.id,
+      role: item.role,
+      status: item.status,
+      outputs: item.outputs,
+      gates: item.gates,
+    }));
+    const deliveryRef = await deliveryRefForNode(runId, node, lease);
+    const promptWithDeliveryRef =
+      deliveryRef &&
+      node.outputs?.some((output) => output.type === 'qa-release-signoff')
+        ? [
+            prompt,
+            '',
+            `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${deliveryRef}.`,
+          ].join('\n')
+        : prompt;
+
     return {
       roleConfig: { role: node.role },
-      prompt: appendArtifactProtocol(prompt, {
+      prompt: appendArtifactProtocol(promptWithDeliveryRef, {
+        nodeId: node.id,
         outputDir,
         role: node.role,
+        nodeInputs: node.inputs ?? [],
+        priorNodes: priorNodeContext,
         requiredArtifactTypes,
       }),
       worktreeLease: lease,
@@ -712,9 +911,31 @@ export function createWorkflowEngine(
         repoPath: lease.worktreePath,
         dataDir: options.dataDir,
       },
+      nodeInputs: node.inputs ?? [],
+      nodeDependencies: node.dependsOn ?? [],
+      deliveryRef,
+      priorNodes: priorNodeContext,
       artifactStore,
       requiredArtifactTypes,
     };
+  }
+
+  async function deliveryRefForNode(
+    runId: string,
+    node: { outputs?: WorkflowArtifactOutputRef[] },
+    lease: WorktreeLease,
+  ): Promise<string | undefined> {
+    const latest = await latestQaValidationRef(runId);
+    if (latest) {
+      return latest;
+    }
+    if (
+      options.worktreeManager &&
+      node.outputs?.some((output) => output.type === 'qa-release-signoff')
+    ) {
+      return `sha:${await options.worktreeManager.getLeaseHead(lease.id)}`;
+    }
+    return undefined;
   }
 
   async function hasMissingArtifactDependency(
@@ -762,8 +983,11 @@ export function createWorkflowEngine(
   function appendArtifactProtocol(
     prompt: string,
     input: {
+      nodeId: string;
       outputDir: string;
       role: Role;
+      nodeInputs: WorkflowArtifactInputRef[];
+      priorNodes: Array<Pick<Node, 'id' | 'role'>>;
       requiredArtifactTypes: ArtifactType[];
     },
   ): string {
@@ -813,6 +1037,54 @@ export function createWorkflowEngine(
             '- For demand-card and prd JSON artifacts, include acceptanceCriteria with id and description fields.',
           ]
         : []),
+      ...(input.requiredArtifactTypes.some((type) =>
+        ['test-report', 'ac-evidence', 'qa-release-signoff'].includes(type),
+      )
+        ? [
+            '- For test-report, ac-evidence, and qa-release-signoff JSON artifacts, criteriaEvidence[] must use exact fields criterionId, status, and evidence.',
+            '- Create one criteriaEvidence item per acceptance criterion id. criterionId must be exactly one criterion id from the demand/PRD, such as AC-PRD-1; never combine ids with "/", commas, arrays, or grouped labels. Duplicate shared evidence across separate items when needed.',
+            '- criteriaEvidence[].evidence must be a non-empty string; use per-item outputPaths, gateResultIds, or artifactIds for evidence anchors when anchors are required.',
+            '- Do not put evidence anchors only at artifact top-level; gate checks read anchors from each criteriaEvidence item.',
+            '- criteriaEvidence[].artifactIds must use exact artifactId values shown in the Artifacts section; nodeId:type labels are not valid artifactIds.',
+            '- criteriaEvidence[].gateResultIds must use exact gateResultId values from Prior eligible gate results; do not use gateKey, nodeId:gateKey labels, commandRef labels, outputPath, or log file names.',
+            '- If you do not have an exact artifactId, omit artifactIds and use outputPaths or known gateResultIds instead.',
+            '- criteriaEvidence[].status must be one of passed, failed, blocked, or unknown; do not use id, evidenceSummary, coverage, or extended status labels as substitutes.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.includes('test-report')
+        ? [
+            '- For test-report JSON artifacts, summary is optional but must be a string when present; do not write summary as an object.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.includes('qa-release-signoff')
+        ? [
+            '- For qa-release-signoff JSON artifacts, include targetRef, validatedRef, and overallStatus.',
+            '- qa-release-signoff.overallStatus must be one of passed, failed, or blocked; do not use decision or recommendation as a substitute.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.some((type) =>
+        ['ac-evidence', 'qa-release-signoff'].includes(type),
+      )
+        ? [
+            '- For ac-evidence and qa-release-signoff JSON artifacts, each criteriaEvidence item must include at least one evidence anchor: outputPaths pointing to a file under TEKON_OUTPUT_DIR or an existing repo path, or known gateResultIds/artifactIds.',
+            '- If a criterion depends on downstream delivery packaging, PR creation, PMO checkpoint, QA signoff, or QA signoff review, do not block this QA validation node solely because those downstream nodes have not run yet.',
+          ]
+        : []),
+      ...(input.requiredArtifactTypes.includes('test-plan')
+        ? [
+            '- For test-plan JSON artifacts, include testBasis and testCases using the exact schema fields.',
+            '- testBasis must be a non-empty string array.',
+            '- testCases[].id and testCases[].description are required.',
+            '- Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
+          ]
+        : []),
+      ...roleScopedReviewArtifactInstructions({
+        nodeId: input.nodeId,
+        role: input.role,
+        nodeInputs: input.nodeInputs,
+        priorNodes: input.priorNodes,
+        requiredArtifactTypes: input.requiredArtifactTypes,
+      }),
       '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
       '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
       '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
@@ -861,6 +1133,47 @@ export function createWorkflowEngine(
     const workflow = await mustGetWorkflow(runId);
     const demand = await mustGetDemand(workflow.demandId);
     const artifacts = await artifactSummariesForNode(runId, node);
+    const allNodes = await options.repositories.listNodes(runId);
+    const currentIndex = allNodes.findIndex((item) => item.id === node.id);
+    const priorNodes = currentIndex >= 0 ? allNodes.slice(0, currentIndex) : [];
+    const gateResults = await options.repositories.listGateResults(runId);
+    const visibleGateNodeIds = new Set([
+      ...priorNodes.map((item) => item.id),
+      node.id,
+    ]);
+    const eligibleGateResultLines = gateResults
+      .filter(
+        (gate) =>
+          visibleGateNodeIds.has(gate.nodeId) &&
+          (gate.status === 'passed' || gate.status === 'skipped'),
+      )
+      .map(formatGateResultForPrompt);
+    const priorNodeLines = priorNodes.map((item) =>
+      [
+        `- ${item.id} role=${item.role} status=${item.status}`,
+        item.outputs.length > 0
+          ? `outputs=${item.outputs.map((output) => output.type).join(',')}`
+          : 'outputs=none',
+        item.gates.length > 0
+          ? `gates=${gatesWithStableKeys(item.gates, item.id)
+              .map((gate) => `${gate.type}:${gate.gateKey}`)
+              .join(',')}`
+          : 'gates=none',
+      ].join(' '),
+    );
+    const processCheckpointRequired = node.outputs.some(
+      (output) => output.type === 'process-checkpoint',
+    );
+    const pendingHumanDecisionCount = processCheckpointRequired
+      ? (await options.repositories.listHumanDecisions(runId)).filter(
+          (decision) => decision.status === 'pending',
+        ).length
+      : undefined;
+    const expectedDeliveryRef = node.outputs.some(
+      (output) => output.type === 'qa-release-signoff',
+    )
+      ? await latestQaValidationRef(runId)
+      : undefined;
     return buildRolePrompt({
       role,
       taskInstruction: [
@@ -869,8 +1182,35 @@ export function createWorkflowEngine(
         demand.body,
         '',
         `Execute workflow node ${node.id}.`,
+        node.inputs.length > 0
+          ? `Declared input artifact aliases: ${node.inputs
+              .map((input) => `${input.id}:${input.type}`)
+              .join(', ')}.`
+          : 'Declared input artifact aliases: none.',
+        priorNodeLines.length > 0
+          ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
+          : 'Prior workflow nodes: none.',
+        eligibleGateResultLines.length > 0
+          ? ['Prior eligible gate results:', ...eligibleGateResultLines].join(
+              '\n',
+            )
+          : 'Prior eligible gate results: none.',
+        processCheckpointRequired
+          ? [
+              'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes.',
+              'process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.',
+              'process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.',
+              'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
+              `process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: ${pendingHumanDecisionCount}. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.`,
+            ].join('\n')
+          : '',
+        expectedDeliveryRef
+          ? `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${expectedDeliveryRef}.`
+          : '',
         `Produce the requested artifacts and preserve evidence for gates.`,
-      ].join('\n'),
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
       projectContext: {
         runId,
         nodeId: node.id,
@@ -934,6 +1274,7 @@ export function createWorkflowEngine(
         continue;
       }
       summaries.push({
+        id: latestArtifact.id,
         type: latestArtifact.type,
         path: latestArtifact.path,
         summary: latestArtifact.summary,
@@ -950,6 +1291,19 @@ export function createWorkflowEngine(
     }
     return demand;
   }
+
+  async function latestQaValidationRef(
+    runId: string,
+  ): Promise<string | undefined> {
+    const events = await options.repositories.listAuditEvents(runId);
+    return events
+      .filter((event) => event.type === 'qa.validation.ref')
+      .map((event) =>
+        typeof event.payload.ref === 'string' ? event.payload.ref : undefined,
+      )
+      .filter((ref): ref is string => Boolean(ref))
+      .at(-1);
+  }
 }
 
 function assertSuccessfulAgentRun(result: AgentRunResult): void {
@@ -964,6 +1318,179 @@ function assertSuccessfulAgentRun(result: AgentRunResult): void {
       )}`,
     );
   }
+}
+
+const roleScopedReviewArtifactTypes: ArtifactType[] = [
+  'code-review',
+  'demand-review',
+  'qa-release-signoff-review',
+  'requirement-interface-review',
+  'technical-review',
+  'test-plan-review',
+];
+
+function roleScopedReviewArtifactInstructions(input: {
+  nodeId: string;
+  role: Role;
+  nodeInputs: WorkflowArtifactInputRef[];
+  priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  requiredArtifactTypes: ArtifactType[];
+}): string[] {
+  const reviewTypes = input.requiredArtifactTypes.filter((type) =>
+    roleScopedReviewArtifactTypes.includes(type),
+  );
+  if (reviewTypes.length === 0) {
+    return [];
+  }
+
+  return [
+    '- For role-scoped review JSON artifacts, include reviewScope, reviewProcess, decision, and findings using the exact schema fields.',
+    `- reviewProcess.mode must be "independent-agent" or "independent-process"; reviewProcess.reviewerRole must be "${input.role}".`,
+    '- decision must be one of: approved, changes-requested, blocked.',
+    '- findings must be an array; findings[].severity must be one of: critical, important, minor.',
+    '- findings[].ownerRole is optional; if present, it must be one of: pm, rd, qa, reviewer, pmo.',
+    '- findings[].message is required; put ids, category, impact, or recommendation details inside body or message, not in place of message.',
+    '- Do not use reviewRole, reviewedArtifacts, or reviewScope as an array/object as substitutes for these schema fields.',
+    ...reviewTypes.flatMap((type) =>
+      roleScopedReviewArtifactExampleLines(type, input),
+    ),
+  ];
+}
+
+function roleScopedReviewArtifactExampleLines(
+  type: ArtifactType,
+  input: {
+    nodeId: string;
+    role: Role;
+    nodeInputs: WorkflowArtifactInputRef[];
+    priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  },
+): string[] {
+  const target = reviewTargetForArtifact(type, input);
+  const reviewScopes = reviewScopesForArtifact(type, input.role);
+  const example = JSON.stringify(
+    {
+      title: `${type} review`,
+      body: 'Review findings and rationale within this role scope.',
+      reviewScope: reviewScopes[0],
+      reviewProcess: {
+        mode: 'independent-process',
+        reviewerId: `${input.role}-${type}-reviewer`,
+        reviewerRole: input.role,
+        targetNodeId: target.nodeId,
+        targetRole: target.role,
+      },
+      decision: 'approved',
+      findings: [
+        {
+          severity: 'minor',
+          ownerRole: input.role,
+          message: 'No blocking issue found within this role scope.',
+        },
+      ],
+    },
+    null,
+    2,
+  );
+
+  return [
+    `- For ${type}, reviewScope must be ${reviewScopes
+      .map((scope) => `"${scope}"`)
+      .join(' or ')}; use targetNodeId "${target.nodeId}" and targetRole "${
+      target.role
+    }" unless the node explicitly reviews a more specific declared input.`,
+    `- ${type} JSON example:`,
+    example,
+  ];
+}
+
+function reviewScopesForArtifact(type: ArtifactType, role: Role): string[] {
+  if (type === 'demand-review') {
+    return ['demand-quality'];
+  }
+  if (type === 'requirement-interface-review') {
+    return ['requirement-interface'];
+  }
+  if (type === 'technical-review') {
+    return ['technical-design', 'implementation-risk'];
+  }
+  if (type === 'test-plan-review') {
+    return role === 'pm' ? ['test-plan-intent'] : ['test-plan'];
+  }
+  if (type === 'qa-release-signoff-review') {
+    return ['release-signoff'];
+  }
+  if (type === 'code-review') {
+    return ['code-change'];
+  }
+  return ['delivery-readiness'];
+}
+
+function reviewTargetForArtifact(
+  type: ArtifactType,
+  input: {
+    nodeId: string;
+    nodeInputs: WorkflowArtifactInputRef[];
+    priorNodes: Array<Pick<Node, 'id' | 'role'>>;
+  },
+): { nodeId: string; role: Role } {
+  const preferredArtifactTypes = preferredReviewTargetTypes(type);
+  const targetInput =
+    preferredArtifactTypes
+      .map((artifactType) =>
+        input.nodeInputs.find((candidate) => candidate.type === artifactType),
+      )
+      .find(Boolean) ?? input.nodeInputs[0];
+  const targetNodeId = targetInput?.fromNodeId ?? input.nodeId;
+  const targetRole =
+    input.priorNodes.find((node) => node.id === targetNodeId)?.role ??
+    fallbackTargetRoleForReviewArtifact(type);
+
+  return { nodeId: targetNodeId, role: targetRole };
+}
+
+function preferredReviewTargetTypes(type: ArtifactType): ArtifactType[] {
+  if (type === 'code-review') {
+    return ['code-changes'];
+  }
+  if (type === 'demand-review') {
+    return ['demand-card', 'prd'];
+  }
+  if (type === 'qa-release-signoff-review') {
+    return ['qa-release-signoff'];
+  }
+  if (type === 'requirement-interface-review') {
+    return ['demand-card', 'prd', 'demand-review'];
+  }
+  if (type === 'technical-review') {
+    return ['implementation-plan'];
+  }
+  if (type === 'test-plan-review') {
+    return ['test-plan'];
+  }
+  return [];
+}
+
+function fallbackTargetRoleForReviewArtifact(type: ArtifactType): Role {
+  if (type === 'code-review') {
+    return 'rd';
+  }
+  if (type === 'demand-review') {
+    return 'pm';
+  }
+  if (type === 'qa-release-signoff-review') {
+    return 'qa';
+  }
+  if (type === 'requirement-interface-review') {
+    return 'pm';
+  }
+  if (type === 'technical-review') {
+    return 'rd';
+  }
+  if (type === 'test-plan-review') {
+    return 'qa';
+  }
+  return 'pmo';
 }
 
 async function persistPlan(
@@ -1037,7 +1564,7 @@ function templateNodeToExecutable(
       fromNodeId: nodeIdByTemplateId.get(input.fromNodeId) ?? input.fromNodeId,
     })),
     outputs: node.outputs,
-    gates: node.gates,
+    gates: gatesWithStableKeys(node.gates, node.id),
     dependsOn: node.dependsOn.map(
       (dependency) => nodeIdByTemplateId.get(dependency) ?? dependency,
     ),
@@ -1072,9 +1599,47 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
     phaseId: node.phaseId,
     inputs: node.inputs,
     outputs: node.outputs,
-    gates: node.gates as WorkflowGateConfig[],
+    gates: gatesWithStableKeys(node.gates as WorkflowGateConfig[], node.id),
     dependsOn: node.dependencies,
   };
+}
+
+function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
+  gates: T[],
+  nodeId = 'workflow node',
+): Array<T & { gateKey: string }> {
+  const keyed = gates.map((gate, index) => ({
+    ...gate,
+    gateKey: gate.gateKey ?? stableGateKey(gate, index),
+  }));
+  const seen = new Set<string>();
+  for (const gate of keyed) {
+    if (seen.has(gate.gateKey)) {
+      throw new Error(
+        `duplicate gateKey "${gate.gateKey}" in node "${nodeId}"`,
+      );
+    }
+    seen.add(gate.gateKey);
+  }
+  return keyed;
+}
+
+function stableGateKey(
+  gate: Pick<
+    GateConfig | WorkflowGateConfig,
+    'type' | 'artifactType' | 'commandRef' | 'skipReason'
+  >,
+  index: number,
+): string {
+  return [
+    String(index).padStart(2, '0'),
+    gate.type,
+    gate.artifactType ? `artifact=${gate.artifactType}` : '',
+    gate.commandRef ? `commandRef=${gate.commandRef}` : '',
+    gate.skipReason ? 'skipped' : '',
+  ]
+    .filter(Boolean)
+    .join(':');
 }
 
 function makeSyntheticLease(
