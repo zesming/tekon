@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon Web UI 最新复审报告</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fa;
+        --panel: #ffffff;
+        --text: #17202a;
+        --muted: #5f6f82;
+        --line: #d8e0e8;
+        --accent: #0f6b63;
+        --warn: #9a5b13;
+        --warn-soft: #fff3d6;
+        --danger: #b42318;
+        --danger-soft: #fee4df;
+        --info: #2459a6;
+        --info-soft: #e7eefc;
+        --ok: #176a3a;
+        --ok-soft: #e6f4ea;
+        --code: #eef2f6;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.72;
+      }
+
+      .page {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      header,
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+
+      header {
+        padding: 28px 32px;
+        border-left: 6px solid var(--accent);
+      }
+
+      section {
+        margin-top: 18px;
+        padding: 26px 32px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        letter-spacing: 0;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 30px;
+        line-height: 1.25;
+      }
+
+      h2 {
+        margin: 0 0 14px;
+        font-size: 22px;
+        line-height: 1.35;
+      }
+
+      h3 {
+        margin: 24px 0 8px;
+        font-size: 17px;
+        line-height: 1.4;
+      }
+
+      p {
+        margin: 10px 0;
+      }
+
+      ul,
+      ol {
+        margin: 10px 0 10px 22px;
+        padding: 0;
+      }
+
+      li {
+        margin: 5px 0;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #edf3f8;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: var(--code);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.92em;
+      }
+
+      .meta,
+      .lead {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .verdict {
+        border-left: 6px solid var(--warn);
+        background: #fffaf0;
+      }
+
+      .pass {
+        color: var(--ok);
+        font-weight: 700;
+      }
+
+      .fail {
+        color: var(--danger);
+        font-weight: 700;
+      }
+
+      .badge {
+        display: inline-block;
+        min-width: 38px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .p1 {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .p2 {
+        background: var(--info-soft);
+        color: var(--info);
+      }
+
+      .okbox {
+        padding: 12px 14px;
+        border-left: 4px solid var(--ok);
+        background: var(--ok-soft);
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 24px 14px 40px;
+        }
+
+        header,
+        section {
+          padding: 20px;
+        }
+
+        table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>Tekon Web UI 最新复审报告</h1>
+        <p class="meta">审查日期：2026-06-12</p>
+        <p class="lead">
+          审查对象：用户最新一轮修复后的 <code>packages/web</code> Web UI、HTTP/RPC/API、
+          安全边界、E2E 覆盖，以及与
+          <code>docs/technical/tekon-web-architecture.md</code> 的符合度。
+        </p>
+      </header>
+
+      <main>
+        <section class="verdict">
+          <h2>1. 总体结论</h2>
+          <p>
+            当前版本基础验证全部通过，也补上了多项上一轮缺口：redaction 直接文本修复、
+            <code>delivery.dryRun</code> / <code>delivery.ciStatus</code> /
+            <code>progress.list</code> contract、output parse、Create PR 确认 E2E、
+            <code>Sec-Fetch-Site</code> 和生产 HTML fallback。
+          </p>
+          <p>
+            但按技术方案 MVP 验收口径，当前仍
+            <span class="fail">不能认定通过</span>。本轮未发现 P0，但仍有 4 个 P1
+            必须修复。
+          </p>
+        </section>
+
+        <section>
+          <h2>2. 验证结果</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>命令</th>
+                <th>结果</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>pnpm --filter @tekon/web typecheck</code></td>
+                <td class="pass">通过</td>
+                <td>TypeScript 编译检查通过。</td>
+              </tr>
+              <tr>
+                <td><code>pnpm --filter @tekon/web test</code></td>
+                <td class="pass">通过</td>
+                <td>Vitest 5 个测试文件、57 个测试通过。</td>
+              </tr>
+              <tr>
+                <td><code>pnpm --filter @tekon/web test:e2e</code></td>
+                <td class="pass">通过</td>
+                <td>Playwright 4 个测试通过。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>3. 已改善项</h2>
+          <ul>
+            <li><code>redactTextPreview</code> 直接文本脱敏已有改善，并新增 redaction 单测。</li>
+            <li><code>delivery.dryRun</code>、<code>delivery.ciStatus</code>、<code>progress.list</code> 已进入 RPC contract。</li>
+            <li><code>dispatchApiCall</code> 已返回 <code>spec.output.parse(result)</code>，<code>roleItemSchema</code> 已移除 <code>systemPrompt</code>。</li>
+            <li>新增 Create PR 确认弹窗 E2E。</li>
+            <li>HTTP 增加 <code>Sec-Fetch-Site</code> 校验，生产路径开始服务 <code>dist/index.html</code>。</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>4. P1 必须修复项</h2>
+
+          <h3><span class="badge p1">P1</span> 展示 DTO 的 server-side redaction 仍不完整</h3>
+          <p>
+            <code>redactTextPreview</code> 直接文本已改善，但 <code>redactObject</code>
+            对普通字符串仍原样返回；<code>artifact.summary</code>、审批 note、
+            readiness/evidence、<code>nextCommands</code>、gate triage 等展示文本没有统一递归脱敏。
+          </p>
+          <p>
+            影响：<code>artifact.list</code>、<code>gate.list</code>、<code>audit.list</code>、
+            <code>review.get</code> 仍可能泄露 token、secret、Bearer 值。
+          </p>
+
+          <h3><span class="badge p1">P1</span> <code>delivery.dryRun</code> / <code>delivery.ciStatus</code> 语义未达到 MVP</h3>
+          <p>
+            <code>delivery.dryRun</code> 调用 <code>createPullRequestPreparation()</code>，
+            会写 delivery-package artifact、<code>pr-package.md</code>、<code>pr-body.md</code>
+            和 audit，不是无副作用 dry-run。<code>delivery.ciStatus</code> 当前只读本地状态并伪造
+            <code>delivery</code> check，不是真实远端 CI。
+          </p>
+
+          <h3><span class="badge p1">P1</span> fake gh Create PR E2E 仍未充分证明显式批准边界</h3>
+          <p>
+            取消弹窗后只断言没有 UI result banner；确认时 <code>waitForResponse</code>
+            匹配任意 200 <code>/api/rpc</code>，没有过滤
+            <code>path === 'delivery.createPr'</code>，也没有检查 fake <code>gh.log</code>
+            在取消、背景关闭、确认前为空。
+          </p>
+
+          <h3><span class="badge p1">P1</span> <code>progress.list</code> 未覆盖架构要求的 progress 摘要</h3>
+          <p>
+            当前只映射 node/status/started/updated/elapsed/timeout/heartbeat，
+            缺少最近 stdout/stderr 活动、outputDir 活动、接近 no-progress timeout 的风险判断、
+            <code>timeoutReason</code> 语义化展示和 redacted command 展示。
+          </p>
+        </section>
+
+        <section>
+          <h2>5. P2 风险项</h2>
+          <ul>
+            <li>
+              <span class="badge p2">P2</span>
+              output schema 已 parse，但 Zod object 默认丢弃未知字段，不是 strict drift 检测边界。
+            </li>
+            <li>
+              <span class="badge p2">P2</span>
+              生产静态资源服务缺少路径边界，且测试依赖 ignored <code>dist</code>。
+            </li>
+            <li>
+              <span class="badge p2">P2</span>
+              本报告已更新为最新复审结论，交付前仍需确认 Markdown 与 HTML 同步。
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>6. 修复顺序</h2>
+          <ol>
+            <li>补展示 DTO 全链路 redaction，覆盖所有展示字符串和建议命令。</li>
+            <li>修 <code>delivery.dryRun</code> 无副作用语义，或调整命名和技术方案。</li>
+            <li>修 <code>delivery.ciStatus</code>，调用真实 core CI 查询并写 <code>ci-status</code> artifact。</li>
+            <li>加硬 Create PR E2E：检查 fake <code>gh.log</code>、请求体和 PR URL/audit。</li>
+            <li>补完整 <code>progress.list</code> 摘要字段和 UI 展示。</li>
+            <li>公开 DTO schema 改 strict，并加固生产静态资源路径边界。</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>7. 最终判断</h2>
+          <p class="okbox">
+            当前版本具备较好的基础可运行性，验证命令全部通过；但从 Tekon 架构目标看，
+            剩余问题集中在生产语义和安全边界。因此本轮结论是：
+            <strong>P0 未发现，但 MVP 仍不通过；需先修 4 个 P1。</strong>
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

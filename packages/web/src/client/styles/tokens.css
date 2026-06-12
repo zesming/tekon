@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@300..800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Surfaces */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-h: #f8fafc;
+
+  /* Sidebar */
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #94a3b8;
+  --sidebar-active: #f8fafc;
+  --sidebar-active-bg: rgba(99, 102, 241, 0.12);
+
+  /* Text */
+  --text: #0f172a;
+  --text-s: #475569;
+  --text-t: #94a3b8;
+
+  /* Borders */
+  --border: #e2e8f0;
+  --border-l: #f1f5f9;
+
+  /* Accent */
+  --accent: #6366f1;
+  --accent-h: #4f46e5;
+  --accent-bg: #eef2ff;
+
+  /* Status: pass */
+  --pass: #10b981;
+  --pass-bg: #ecfdf5;
+
+  /* Status: pending */
+  --pend: #f59e0b;
+  --pend-bg: #fffbeb;
+
+  /* Status: fail */
+  --fail: #ef4444;
+  --fail-bg: #fef2f2;
+
+  /* Status: running */
+  --run: #6366f1;
+  --run-bg: #eef2ff;
+
+  /* Status: paused */
+  --pau: #8b5cf6;
+  --pau-bg: #f5f3ff;
+
+  /* Status: blocked */
+  --blk: #f97316;
+  --blk-bg: #fff7ed;
+
+  /* Fonts */
+  --font-d: 'Fraunces', Georgia, serif;
+  --font-b: 'Manrope', system-ui, sans-serif;
+  --font-m: 'JetBrains Mono', 'SF Mono', monospace;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  /* Shadows */
+  --sh-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --sh-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 1px 4px rgba(15, 23, 42, 0.04);
+  --sh-lg: 0 12px 28px rgba(15, 23, 42, 0.08);
+}

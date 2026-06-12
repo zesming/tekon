@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -16,7 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { createWebFixtureProject } from '../fixtures/project.js';
-import { createApiCaller } from '../../src/server/api/root.js';
+import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
 
 const cleanupTasks: Array<() => void> = [];
 
@@ -259,6 +260,7 @@ describe('web write authorization', () => {
       api.project.clean({
         runId: 'run_escaped',
         token: fixture.sessionToken,
+        confirm: 'delete-run-dir',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
@@ -271,7 +273,7 @@ describe('web write authorization', () => {
       api.delivery.createPr({
         runId: 'run_escaped',
         token: fixture.sessionToken,
-        approveHuman: false,
+        approveHuman: true,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
@@ -330,19 +332,6 @@ describe('web write authorization', () => {
       runId: started.run.id,
       branch: `tekon-delivery/${started.run.id}`,
       requiresHumanApproval: true,
-    });
-
-    const awaiting = await api.delivery.createPr({
-      runId: started.run.id,
-      token: fixture.sessionToken,
-      approveHuman: false,
-    });
-    expect(awaiting).toMatchObject({
-      runId: started.run.id,
-      deliveryStatus: 'awaiting-approval',
-      requiresHumanApproval: true,
-      prUrl: null,
-      branch: `tekon-delivery/${started.run.id}`,
     });
 
     const review = await api.review.get({ runId: started.run.id });
@@ -635,6 +624,657 @@ describe('web write authorization', () => {
 
     await api.close();
   }, 30_000);
+});
+
+describe('project.clean', () => {
+  it('removes the run directory from disk and reports removedRunDir true', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
+    expect(existsSync(runDir)).toBe(true);
+
+    const result = await dispatchApiCall(api, 'project.clean', {
+      runId: 'run_1',
+      token: fixture.sessionToken,
+      confirm: 'delete-run-dir',
+    });
+    expect(result).toMatchObject({ removedRunDir: true });
+    expect(existsSync(runDir)).toBe(false);
+
+    await api.close();
+  });
+
+  it('rejects project.clean with a wrong token', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.project.clean({ runId: 'run_1', token: 'wrong-token', confirm: 'delete-run-dir' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    expect(
+      existsSync(join(fixture.projectRoot, '.tekon', 'runs', 'run_1')),
+    ).toBe(true);
+
+    await api.close();
+  });
+
+  it('rejects project.clean for an out-of-scope run', async () => {
+    const fixture = await createWebFixtureProject({
+      includeOutOfScopeProject: true,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      dispatchApiCall(api, 'project.clean', {
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+        confirm: 'delete-run-dir',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
+});
+
+describe('project.resume', () => {
+  it('rejects project.resume with a wrong token', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.project.resume({ runId: 'run_1', token: 'wrong-token' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    await api.close();
+  });
+
+  it('rejects project.resume for an out-of-scope run', async () => {
+    const fixture = await createWebFixtureProject({
+      includeOutOfScopeProject: true,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      dispatchApiCall(api, 'project.resume', {
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
+
+  it('rejects project.resume when the run has pending human decisions', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.project.resume({
+        runId: 'run_1',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+});
+
+describe('delivery.prepare', () => {
+  it('rejects delivery.prepare with a wrong token', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.delivery.prepare({ runId: 'run_1', token: 'wrong-token' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    await api.close();
+  });
+
+  it('rejects delivery.prepare for an out-of-scope run', async () => {
+    const fixture = await createWebFixtureProject({
+      includeOutOfScopeProject: true,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      dispatchApiCall(api, 'delivery.prepare', {
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
+});
+
+describe('delivery.dryRun', () => {
+  it('is read-only: does NOT create artifacts or audit events and returns readiness info', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // Snapshot artifact and audit counts before calling dryRun
+    const artifactsBefore = await api.artifact.list({ runId: 'run_1' });
+    const auditBefore = await api.audit.list({ runId: 'run_1' });
+
+    const result = await api.delivery.dryRun({
+      runId: 'run_1',
+      token: fixture.sessionToken,
+    });
+
+    // Assert no new artifacts were created
+    const artifactsAfter = await api.artifact.list({ runId: 'run_1' });
+    expect(artifactsAfter.artifacts).toHaveLength(
+      artifactsBefore.artifacts.length,
+    );
+
+    // Assert no new audit events were created
+    const auditAfter = await api.audit.list({ runId: 'run_1' });
+    expect(auditAfter.events).toHaveLength(auditBefore.events.length);
+
+    // Assert the response contains readiness info
+    expect(result).toMatchObject({
+      runId: 'run_1',
+      workflowStatus: 'paused',
+      artifacts: expect.any(Number),
+      gates: {
+        total: expect.any(Number),
+        passed: expect.any(Number),
+      },
+      pendingHumanDecisions: expect.any(Number),
+      deliveryStatus: expect.any(String),
+      readyForPrepare: false,
+      dryRun: true,
+    });
+
+    // run_1 is paused with a pending human decision, so not ready
+    expect(result.readyForPrepare).toBe(false);
+    expect(result.pendingHumanDecisions).toBeGreaterThan(0);
+
+    await api.close();
+  });
+
+  it('returns readyForPrepare true when all pre-conditions are met', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // Start a fresh run that will complete with status 'passed'
+    const started = await api.project.run({
+      demandText: 'Dry run readiness check with all pre-conditions met.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+
+    expect(started.run.status).toBe('passed');
+
+    // Snapshot artifact and audit counts before calling dryRun
+    const artifactsBefore = await api.artifact.list({ runId: started.run.id });
+    const auditBefore = await api.audit.list({ runId: started.run.id });
+
+    const result = await api.delivery.dryRun({
+      runId: started.run.id,
+      token: fixture.sessionToken,
+    });
+
+    // Assert no new artifacts were created by dryRun
+    const artifactsAfter = await api.artifact.list({ runId: started.run.id });
+    expect(artifactsAfter.artifacts).toHaveLength(
+      artifactsBefore.artifacts.length,
+    );
+
+    // Assert no new audit events were created by dryRun
+    const auditAfter = await api.audit.list({ runId: started.run.id });
+    expect(auditAfter.events).toHaveLength(auditBefore.events.length);
+
+    // Assert dryRun reports ready
+    expect(result).toMatchObject({
+      runId: started.run.id,
+      workflowStatus: 'passed',
+      readyForPrepare: true,
+      dryRun: true,
+      pendingHumanDecisions: 0,
+    });
+
+    await api.close();
+  }, 30_000);
+
+  it('rejects delivery.dryRun with a wrong token', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.delivery.dryRun({ runId: 'run_1', token: 'wrong-token' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    await api.close();
+  });
+});
+
+describe('delivery.createPr', () => {
+  it('rejects delivery.createPr with a wrong token', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      api.delivery.createPr({
+        runId: 'run_1',
+        token: 'wrong-token',
+        approveHuman: true,
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    await api.close();
+  });
+
+  it('rejects delivery.createPr for an out-of-scope run', async () => {
+    const fixture = await createWebFixtureProject({
+      includeOutOfScopeProject: true,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      dispatchApiCall(api, 'delivery.createPr', {
+        runId: 'run_escaped',
+        token: fixture.sessionToken,
+        approveHuman: true,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    await api.close();
+  });
+
+  it('rejects delivery.createPr when approveHuman is not true', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await expect(
+      dispatchApiCall(api, 'delivery.createPr', {
+        runId: 'run_1',
+        token: fixture.sessionToken,
+        approveHuman: false,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await expect(
+      dispatchApiCall(api, 'delivery.createPr', {
+        runId: 'run_1',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+});
+
+describe('security characterization (documents current behavior, some will change in Phase 1)', () => {
+  describe('token validation edge cases', () => {
+    it('rejects write operations with an empty token string', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_1',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'empty token',
+          token: '',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.project.run({
+          demandText: 'should fail with empty token',
+          template: 'project-feature',
+          agent: 'mock',
+          token: '',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.demand.shape({
+          demandText: 'should fail with empty token',
+          token: '',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await api.close();
+    });
+
+    it('rejects write operations with a wrong token across all write endpoints', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await expect(
+        api.project.pause({
+          runId: 'run_1',
+          token: 'incorrect-token-value',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.project.resume({
+          runId: 'run_1',
+          token: 'incorrect-token-value',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.project.cancel({
+          runId: 'run_1',
+          token: 'incorrect-token-value',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.delivery.prepare({
+          runId: 'run_1',
+          token: 'incorrect-token-value',
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await api.close();
+    });
+
+    it('rejects write operations when the session token file is missing', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      rmSync(join(fixture.projectRoot, '.tekon', 'web-session.json'));
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_1',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'missing token file',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.project.pause({
+          runId: 'run_1',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await expect(
+        api.demand.shape({
+          demandText: 'should fail without token file',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+      await api.close();
+    });
+  });
+
+  describe('path scope enforcement', () => {
+    it('returns NOT_FOUND when the runId belongs to a different project scope', async () => {
+      const fixture = await createWebFixtureProject({
+        includeOutOfScopeProject: true,
+      });
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await expect(
+        api.project.pause({
+          runId: 'run_escaped',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await expect(
+        api.project.resume({
+          runId: 'run_escaped',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_escaped',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'out of scope run',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await expect(
+        api.delivery.prepare({
+          runId: 'run_escaped',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await api.close();
+    });
+
+    it('returns NOT_FOUND for a completely nonexistent runId', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await expect(
+        api.project.pause({
+          runId: 'run_does_not_exist',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_does_not_exist',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'nonexistent run',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+      await api.close();
+    });
+
+    it('rejects demand approve when the shape path is outside .tekon/demands/', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await expect(
+        api.demand.approve({
+          shapePath: join(fixture.projectRoot, 'package.json'),
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await expect(
+        api.demand.approve({
+          shapePath: '/tmp/outside-demands-dir/shape.json',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await expect(
+        api.project.run({
+          demandText: '',
+          demandShapePath: join(fixture.projectRoot, 'package.json'),
+          agent: 'mock',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+
+    it('rejects demand operations when the shape path is a symlink escaping the demands directory', async () => {
+      const fixture = await createWebFixtureProject();
+      const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-sec-symlink-'));
+      cleanupTasks.push(fixture.cleanup);
+      cleanupTasks.push(() =>
+        rmSync(outsideDir, { recursive: true, force: true }),
+      );
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      const shaped = await api.demand.shape({
+        demandText: 'Security test: symlink escape in demand shape path.',
+        token: fixture.sessionToken,
+      });
+      const outsidePath = join(outsideDir, 'escaped-shape.json');
+      writeFileSync(outsidePath, readFileSync(shaped.shapePath, 'utf8'));
+      rmSync(shaped.shapePath);
+      symlinkSync(outsidePath, shaped.shapePath);
+
+      await expect(
+        api.demand.approve({
+          shapePath: shaped.shapePath,
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await expect(
+        api.project.run({
+          demandText: '',
+          demandShapePath: shaped.shapePath,
+          agent: 'mock',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+  });
+
+  describe('state validation', () => {
+    it('rejects approving an already-approved decision with BAD_REQUEST', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await api.gate.approve({
+        runId: 'run_1',
+        decisionId: 'decision_1',
+        actor: 'human-reviewer',
+        note: 'first approval',
+        token: fixture.sessionToken,
+      });
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_1',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'duplicate approval attempt',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+
+    it('rejects rejecting an already-rejected decision with BAD_REQUEST', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      await api.gate.reject({
+        runId: 'run_1',
+        decisionId: 'decision_1',
+        actor: 'human-reviewer',
+        note: 'first rejection',
+        token: fixture.sessionToken,
+      });
+
+      await expect(
+        api.gate.reject({
+          runId: 'run_1',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'duplicate rejection attempt',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await expect(
+        api.gate.approve({
+          runId: 'run_1',
+          decisionId: 'decision_1',
+          actor: 'human-reviewer',
+          note: 'approve after rejection',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+
+    it('rejects starting a run with an unapproved demand shape', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      const shaped = await api.demand.shape({
+        demandText: 'Security test: run with unapproved demand shape.',
+        token: fixture.sessionToken,
+      });
+      expect(shaped.shape.approved).toBe(false);
+
+      await expect(
+        api.project.run({
+          demandText: '',
+          demandShapePath: shaped.shapePath,
+          agent: 'mock',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+
+    it('rejects starting a run with dirty base and no allowDirtyBase flag', async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+      writeFileSync(
+        join(fixture.projectRoot, 'README.md'),
+        'dirty change for security test\n',
+        'utf8',
+      );
+
+      await expect(
+        api.project.run({
+          demandText: 'Security test: dirty base without allowDirtyBase.',
+          template: 'standard-feature',
+          agent: 'mock',
+          token: fixture.sessionToken,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      await api.close();
+    });
+  });
 });
 
 function writeFakeCodex(binDir: string): void {

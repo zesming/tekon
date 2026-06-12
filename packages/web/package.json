@@ -15,6 +15,7 @@
     "@tekon/core": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-router": "^7.17.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
