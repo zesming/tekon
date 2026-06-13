@@ -59,7 +59,7 @@ body::before{content:'';position:fixed;inset:0;opacity:.035;background-image:url
 .nav-section{margin-bottom:4px}
 .nav-section-label{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--gold-dim);letter-spacing:2.5px;text-transform:uppercase;padding:10px 20px 6px;display:flex;align-items:center;gap:6px;opacity:.7}
 .nav-section-label::before{content:'';width:3px;height:10px;background:var(--gold-dim);border-radius:1px;opacity:.5}
-.nav-tab{display:flex;align-items:center;gap:8px;padding:8px 20px 8px 28px;cursor:pointer;color:var(--text-secondary);font-size:13px;transition:all .15s ease;border-left:2px solid transparent;user-select:none;text-decoration:none}
+.nav-tab{display:flex;align-items:center;gap:8px;padding:8px 20px 8px 28px;cursor:pointer;color:var(--text-secondary);font-size:13px;transition:all .15s ease;border-left:2px solid transparent;user-select:none;text-decoration:none;background:none;font-family:inherit;width:100%;text-align:left;border-top:none;border-right:none;border-bottom:none}
 .nav-tab:hover{color:var(--text-primary);background:rgba(201,169,110,.025)}
 .nav-tab.active{color:var(--gold-bright);background:rgba(201,169,110,.05);border-left-color:var(--gold)}
 .nav-tab .tab-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-whisper);flex-shrink:0;transition:background .2s}
@@ -89,7 +89,7 @@ strong{color:var(--text-bright);font-weight:600}
 ul,ol{margin:10px 0 18px 0;padding-left:22px}
 li{margin-bottom:6px;font-size:14px;line-height:1.8;color:var(--text-primary)}
 li::marker{color:var(--gold-dim)}
-code:not(pre code){font-family:var(--font-mono);font-size:12px;background:rgba(201,169,110,.08);color:var(--gold-bright);padding:2px 6px;border-radius:3px;border:1px solid rgba(201,169,110,.1);white-space:nowrap}
+code:not(pre code){font-family:var(--font-mono);font-size:12px;background:rgba(201,169,110,.08);color:var(--gold-bright);padding:2px 6px;border-radius:3px;border:1px solid rgba(201,169,110,.1)}
 pre{background:var(--code-bg);border:1px solid var(--code-border);border-radius:5px;padding:16px 20px;margin:14px 0 20px;overflow-x:auto;position:relative}
 pre::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--vermillion),var(--gold-dim),transparent);border-radius:5px 5px 0 0;opacity:.5}
 pre code{font-family:var(--font-mono);font-size:12.5px;line-height:1.65;color:var(--text-primary);background:none;border:none;padding:0;white-space:pre-wrap;word-break:break-word}
@@ -128,7 +128,7 @@ td code{font-size:11px}
 .flow-arrow{stroke:var(--gold-dim);stroke-width:1;fill:none;marker-end:url(#arrowhead)}
 .flow-arrow.vermillion{stroke:var(--vermillion)}
 /* Pipeline specific */
-.pipe-box{fill:var(--ink-mid);stroke:var(--ink-whisper);stroke-width:1;rx:3}
+.pipe-box{fill:var(--ink-mid);stroke:var(--ink-whisper);stroke-width:1}
 .pipe-box.highlight{fill:rgba(196,58,49,.1);stroke:var(--vermillion);stroke-width:1.5}
 .pipe-label{font-family:var(--font-mono);font-size:10px;fill:var(--gold-bright);text-anchor:middle}
 .pipe-desc{font-family:var(--font-body);font-size:9px;fill:var(--text-secondary);text-anchor:middle}
@@ -231,33 +231,33 @@ html.en .section-title{font-family:var(--font-en),var(--font-display),serif}
       </div>
       <span class="header-badge">V2</span>
     </div>
-    <button class="mobile-menu-btn" id="menuBtn" aria-label="Menu">☰</button>
+    <button class="mobile-menu-btn" id="menuBtn" aria-label="菜单" aria-expanded="false">☰</button>
   </div>
 </header>
 
 <div class="layout">
 <nav class="sidebar" id="sidebar">
   <div class="nav-section"><div class="nav-section-label" data-i18n="认识天工">认识天工</div>
-    <a class="nav-tab active" data-tab="0"><span class="tab-dot"></span><span data-i18n="天工是什么">天工是什么</span></a>
-    <a class="nav-tab" data-tab="1"><span class="tab-dot"></span><span data-i18n="解决什么问题">解决什么问题</span></a>
+    <button class="nav-tab active" data-tab="0"><span class="tab-dot"></span><span data-i18n="天工是什么">天工是什么</span></button>
+    <button class="nav-tab" data-tab="1"><span class="tab-dot"></span><span data-i18n="解决什么问题">解决什么问题</span></button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label" data-i18n="上手指南">上手指南</div>
-    <a class="nav-tab" data-tab="2"><span class="tab-dot"></span><span data-i18n="核心场景">核心场景</span></a>
-    <a class="nav-tab" data-tab="3"><span class="tab-dot"></span><span data-i18n="Quick Start">Quick Start</span></a>
+    <button class="nav-tab" data-tab="2"><span class="tab-dot"></span><span data-i18n="核心场景">核心场景</span></button>
+    <button class="nav-tab" data-tab="3"><span class="tab-dot"></span><span data-i18n="Quick Start">Quick Start</span></button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label" data-i18n="深入理解">深入理解</div>
-    <a class="nav-tab" data-tab="4"><span class="tab-dot"></span><span data-i18n="核心概念">核心概念</span></a>
-    <a class="nav-tab" data-tab="5"><span class="tab-dot"></span><span data-i18n="命令详解">命令详解</span></a>
+    <button class="nav-tab" data-tab="4"><span class="tab-dot"></span><span data-i18n="核心概念">核心概念</span></button>
+    <button class="nav-tab" data-tab="5"><span class="tab-dot"></span><span data-i18n="命令详解">命令详解</span></button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label" data-i18n="更多">更多</div>
-    <a class="nav-tab" data-tab="6"><span class="tab-dot"></span><span data-i18n="Web Dashboard">Web Dashboard</span></a>
-    <a class="nav-tab" data-tab="7"><span class="tab-dot"></span><span data-i18n="判断结果">判断结果</span></a>
-    <a class="nav-tab" data-tab="8"><span class="tab-dot"></span><span data-i18n="常见问题">常见问题</span></a>
-    <a class="nav-tab" data-tab="9"><span class="tab-dot"></span><span data-i18n="参数速查">参数速查</span></a>
-    <a class="nav-tab" data-tab="10"><span class="tab-dot"></span><span data-i18n="使用说明">使用说明</span></a>
+    <button class="nav-tab" data-tab="6"><span class="tab-dot"></span><span data-i18n="Web Dashboard">Web Dashboard</span></button>
+    <button class="nav-tab" data-tab="7"><span class="tab-dot"></span><span data-i18n="判断结果">判断结果</span></button>
+    <button class="nav-tab" data-tab="8"><span class="tab-dot"></span><span data-i18n="常见问题">常见问题</span></button>
+    <button class="nav-tab" data-tab="9"><span class="tab-dot"></span><span data-i18n="参数速查">参数速查</span></button>
+    <button class="nav-tab" data-tab="10"><span class="tab-dot"></span><span data-i18n="使用说明">使用说明</span></button>
   </div>
 </nav>
 
@@ -619,7 +619,6 @@ ${flowSVG_workflow()}
 // ═══════════════════════════════════════════════
 function flowSVG_delivery(){
   return `<div class="flow-diagram"><svg viewBox="0 0 820 160" width="100%" height="auto">
-<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
 <rect x="10" y="50" width="120" height="40" class="pipe-box highlight" rx="4"/><text x="70" y="68" class="pipe-label">demand shape</text><text x="70" y="82" class="pipe-desc">Shape requirements</text>
 <line x1="130" y1="70" x2="175" y2="70" class="pipe-arrow"/>
 <rect x="180" y="50" width="120" height="40" class="pipe-box" rx="4"/><text x="240" y="68" class="pipe-label">demand approve</text><text x="240" y="82" class="pipe-desc">Human approval</text>
@@ -635,7 +634,6 @@ function flowSVG_delivery(){
 
 function flowSVG_quickstart(){
   return `<div class="flow-diagram"><svg viewBox="0 0 820 100" width="100%" height="auto">
-<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
 <rect x="10" y="25" width="100" height="40" class="pipe-box highlight" rx="4"/><text x="60" y="43" class="pipe-label">init</text><text x="60" y="57" class="pipe-desc">Initialize</text>
 <line x1="110" y1="45" x2="150" y2="45" class="pipe-arrow"/>
 <rect x="155" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="210" y="43" class="pipe-label">demand shape</text><text x="210" y="57" class="pipe-desc">Shape + approve</text>
@@ -650,7 +648,6 @@ function flowSVG_quickstart(){
 
 function flowSVG_workflow(){
   return `<div class="flow-diagram"><svg viewBox="0 0 820 130" width="100%" height="auto">
-<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
 <rect x="10" y="45" width="110" height="40" class="flow-box active" rx="4"/><text x="65" y="63" class="flow-label">Demand</text><text x="65" y="77" class="flow-label cn">需求输入</text>
 <line x1="120" y1="65" x2="165" y2="65" class="flow-arrow vermillion"/>
 <rect x="170" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="215" y="63" class="flow-label">PM</text><text x="215" y="77" class="flow-label cn">需求塑形</text>
@@ -793,16 +790,20 @@ const navI18n={
 };
 function applyI18nLabels(){
   document.querySelectorAll('[data-i18n]').forEach(el=>{
-    var key=el.dataset.i18n;
+    const key=el.dataset.i18n;
     el.textContent=currentLang==='zh'?key:(navI18n[key]||key);
   });
 }
 
 // Mobile menu
-document.getElementById('menuBtn').addEventListener('click',()=>sidebar.classList.toggle('show'));
+document.getElementById('menuBtn').addEventListener('click',function(){
+  var open=sidebar.classList.toggle('show');
+  this.setAttribute('aria-expanded',String(open));
+});
 document.addEventListener('click',function(e){
   if(!sidebar.contains(e.target)&&e.target!==document.getElementById('menuBtn')&&!document.getElementById('menuBtn').contains(e.target)){
     sidebar.classList.remove('show');
+    document.getElementById('menuBtn').setAttribute('aria-expanded','false');
   }
 });
 
@@ -820,5 +821,6 @@ document.addEventListener('click',function(e){
   if(saved==='en') applyI18nLabels();
 })();
 </script>
+<svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs><marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs></svg>
 </body>
 </html>

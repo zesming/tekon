@@ -4,14 +4,14 @@
 
 天工的核心思路是"受控研发工作台"：让 Agent 承担可自动化的执行和整理工作，让人保留需求批准、风险确认、PR 创建、合入和上线等关键控制权。
 
-> 📖 **用户手册** — [中文版 / 中](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) ｜ [English / EN](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（页面内可切换语言 / built-in language toggle）
+> 📖 **用户手册** — [在线查看 / View Online](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（中文 / English，页面内可切换语言）
 
 ## 项目定位
 
 天工解决 AI 辅助研发进入真实工作流后的几个核心问题：
 
 - **需求塑形**：把一句话需求塑形成需求卡，明确目标、非目标、风险、开放问题和验收标准。
-- **受控 Workflow**：使用固定模板，而不是让 Agent 自由决定所有步骤。内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`、`standard-delivery`。
+- **受控 workflow**：使用固定模板，而不是让 Agent 自由决定所有步骤。内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`、`standard-delivery`。
 - **可审阅产出**：角色产出结构化 artifact，统一收集 gate 日志、审计事件、diff 和 PR 包，通过 `review` 或 Web dashboard 查看。
 - **副作用受控**：push、创建 PR 等远端动作必须显式人工批准。
 - **效果可评估**：用 readiness、work usability eval 判断一次 run 是否真的可交付。
@@ -34,7 +34,7 @@
   -> eval readiness 判断 PR/CI 证据是否完整
 ```
 
-不同任务可选不同模板；dynamic workflow 当前支持 dry-run 预览。
+不同任务可选不同模板，也支持动态 workflow dry-run 预览。
 
 ## 核心能力
 
@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.
 
 脚本自动完成克隆、安装依赖、构建、配置 PATH。前置依赖：`git`、`node`（>=18）、`npm`。
 
-完成后执行 `source ~/.zshrc`，即可使用 `tekon` 命令。
+完成后执行 `source ~/.zshrc`（或 `source ~/.bashrc`），即可使用 `tekon` 命令。
 
 ### 开始使用
 
@@ -103,7 +103,7 @@ tekon eval readiness                          # 评估交付完整度
 | 评估 readiness | `tekon eval readiness` |
 | 评估样本集 | `tekon eval work-usability --samples <yaml>` |
 
-更多命令和详细参数见[用户手册](#文档入口)。
+更多命令和详细参数见[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)。
 
 ## 本地运行产物
 
