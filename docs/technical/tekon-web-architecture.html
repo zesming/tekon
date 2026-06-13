@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Tekon Cockpit Web UI 技术方案</title>
+    <style>
+      *,*::before,*::after{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.75;font-size:16px}.shell{max-width:1120px;margin:0 auto;padding:44px 24px 88px}.doc{background:#fff;border:1px solid #dbe2ea;border-radius:8px;box-shadow:0 12px 32px rgba(23,32,51,.08);padding:44px 52px}h1{font-size:34px;line-height:1.25;margin:0 0 18px;color:#0f172a;letter-spacing:0}h2{font-size:24px;margin:44px 0 14px;padding-top:28px;border-top:1px solid #e7edf3;color:#0f172a;letter-spacing:0}h3{font-size:19px;margin:30px 0 10px;color:#172033;letter-spacing:0}h4{font-size:16px;margin:24px 0 8px;color:#172033;letter-spacing:0}p{margin:12px 0}blockquote{margin:0 0 28px;padding:12px 18px;border-left:4px solid #2563eb;background:#eff6ff;color:#334155;border-radius:0 6px 6px 0}a{color:#1d4ed8;text-decoration:none;border-bottom:1px solid rgba(37,99,235,.25)}a:hover{border-bottom-color:#1d4ed8}code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:.12em .35em;font-size:.88em;color:#0f172a}pre{overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px 20px;margin:16px 0;border:1px solid #111827}pre code{background:transparent;border:0;color:inherit;padding:0;font-size:13px;line-height:1.55}.table-wrap{overflow:auto;margin:16px 0;border:1px solid #dbe2ea;border-radius:8px}table{border-collapse:collapse;width:100%;min-width:720px}th,td{padding:10px 12px;border-bottom:1px solid #e7edf3;text-align:left;vertical-align:top}th{background:#f8fafc;color:#334155;font-size:13px;font-weight:700}td{font-size:14px}tr:last-child td{border-bottom:0}ul,ol{padding-left:24px;margin:10px 0}li{margin:5px 0}strong{font-weight:700;color:#0f172a}@media (max-width:760px){.shell{padding:0}.doc{border-radius:0;border-left:0;border-right:0;padding:28px 20px}h1{font-size:28px}h2{font-size:21px}}
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <article class="doc">
+<h1 id="tekon-cockpit-web-ui-技术方案">Tekon Cockpit Web UI 技术方案</h1>
+<blockquote>状态：正式技术方案  <br />创建日期：2026-06-12  <br />审阅版：<code>docs/technical/tekon-web-architecture.html</code>  <br />关联设计稿：<code>docs/design/tekon-cockpit-mockup.html</code></blockquote>
+<h2 id="1-结论">1. 结论</h2>
+<p>本文定义 Tekon Cockpit Web UI 的下一阶段架构。目标不是重做一个营销式首页，也不是做远程多租户平台，而是把本地 Tekon run 的状态、证据、审批、PR 准备和 CI 结果放进一个可审阅、可操作、可验证的本地驾驶舱。</p>
+<p>核心调整：</p>
+<ul>
+<li><strong>文档位置</strong>：技术方案归档到 <code>docs/technical/</code>，HTML 审阅版同步生成。</li>
+<li><strong>安全边界</strong>：删除自动下发 session token 的设计。Web 写操作继续要求用户显式提供 token；token 默认只进入内存，不写入 <code>sessionStorage</code>。</li>
+<li><strong>契约来源</strong>：RPC 契约改为 schema-first。Zod schema 是运行时事实源，TypeScript 类型由 schema 推导。</li>
+<li><strong>范围口径</strong>：不再宣称“一次性 CLI 完整覆盖”。新增 API 按 MVP、后续增强和暂不做分层列清。</li>
+<li><strong>审阅闭环</strong>：Progress、readiness、gate、artifact、delivery、CI evidence 都作为 Web 的一等信息，而不是只展示 run status。</li>
+<li><strong>实施顺序</strong>：先保行为重构和核心审阅路径，再扩展配置、评估和可视化。</li>
+</ul>
+<p>事实：当前 <code>packages/web/src/client/App.tsx</code> 约 1040 行，<code>packages/web/src/server/api/root.ts</code> 约 1617 行；现有 Web 已支持概览、run 列表、artifact/gate/audit/review、human approval、受控 run、delivery prepare/create-pr 的基本路径。 推断：继续在单文件 SPA 和单文件 API 上叠 UI 会放大回归风险，必须先收紧契约、拆分服务端和前端边界。 建议：本文对应路线图 P2-B Web Cockpit V2 的详细技术方案，实施优先级仍以 <code>docs/superpowers/plans/2026-06-10-tekon-priority-roadmap.md</code> 为准；进入该阶段后按本文 Phase 0-5 实施，不把所有页面和所有 CLI 能力挤进第一轮。</p>
+<h2 id="2-外部资料依据">2. 外部资料依据</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>资料</th>
+<th>资料内容</th>
+<th>对 Tekon 的判断依据</th>
+</tr></thead><tbody>
+<tr>
+<td>React Router 官方 <code>createBrowserRouter</code> 文档：<code><a href="https://reactrouter.com/api/data-routers/createBrowserRouter">https://reactrouter.com/api/data-routers/createBrowserRouter</a></code></td>
+<td><code>createBrowserRouter(routes)</code> 需要显式 route tree，可支持嵌套路由、错误边界和 data router 能力。</td>
+<td>Tekon Web 需要 URL 可分享、tab 可回退、页面级错误隔离，<code>react-router</code> v7 可以作为唯一新增运行时依赖。</td>
+</tr>
+<tr>
+<td>Zod 官方文档：<code><a href="https://zod.dev/">https://zod.dev/</a></code></td>
+<td>Zod 是 TypeScript-first schema validation library，提供 static type inference。</td>
+<td>RPC 不能从 TypeScript interface 反推运行时校验；应从 Zod schema 推导 TS 类型。</td>
+</tr>
+<tr>
+<td>OWASP HTML5 Security Cheat Sheet：<code><a href="https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html</a></code></td>
+<td>对浏览器端存储敏感信息给出安全风险提示。</td>
+<td>Web session token 不应自动下发并持久化到浏览器存储；写操作授权必须保持显式。</td>
+</tr>
+<tr>
+<td>OWASP Content Security Policy Cheat Sheet：<code><a href="https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html">https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html</a></code></td>
+<td>CSP 是浏览器侧 defense-in-depth 控制。</td>
+<td>Tekon 应加 CSP 和文本预览转义，但不能把 CSP 当成 token 或路径边界的替代。</td>
+</tr>
+</tbody></table></div>
+<h2 id="3-产品边界">3. 产品边界</h2>
+<h3 id="3-1-首屏必须回答的问题">3.1 首屏必须回答的问题</h3>
+<p>Web Cockpit V2 的首屏服务于真实 run 的人工审阅，必须直接回答：</p>
+<ul>
+<li>当前 run 到了哪一步。</li>
+<li>哪个 gate 失败、跳过或等待人工确认。</li>
+<li>Provider 是谁，是否真实 provider。</li>
+<li>当前 PR、CI、readiness 和 evidence 状态是什么。</li>
+<li>下一步建议动作是什么，执行动作是否需要 token 和人工确认。</li>
+</ul>
+<h3 id="3-2-mvp-范围">3.2 MVP 范围</h3>
+<p>MVP 只覆盖用户高频审阅和交付闭环：</p>
+<div class="table-wrap"><table><thead><tr>
+<th>路径</th>
+<th>用户问题</th>
+<th>MVP 内容</th>
+</tr></thead><tbody>
+<tr>
+<td>Dashboard</td>
+<td>最近一次 run 是否可继续处理</td>
+<td>项目概览、latest run、readiness、pending approval、PR/CI 摘要、下一步动作</td>
+</tr>
+<tr>
+<td>Runs</td>
+<td>我有哪些历史 run</td>
+<td>run 列表、状态过滤、排序、provider、updatedAt、选中 run</td>
+</tr>
+<tr>
+<td>Run Detail / Review</td>
+<td>这次 run 具体发生了什么</td>
+<td>Overview、Artifacts、Gates、Audit、Delivery、Progress tabs</td>
+</tr>
+<tr>
+<td>Approvals</td>
+<td>哪些动作等我确认</td>
+<td>pending human decision、审批摘要、风险标签、批准/拒绝表单</td>
+</tr>
+<tr>
+<td>Delivery</td>
+<td>PR 是否准备好，CI 是否已写回</td>
+<td>dry-run/prepare/create-pr/ci-status 的状态展示和受控入口</td>
+</tr>
+<tr>
+<td>Demand</td>
+<td>需求是否能进入 run</td>
+<td>demand shape、approve、从已批准 shape 发起 run</td>
+</tr>
+</tbody></table></div>
+<h3 id="3-3-非目标">3.3 非目标</h3>
+<ul>
+<li>不做远程多租户认证、团队权限和组织级报表。</li>
+<li>不自动 merge、不自动上线、不绕过 <code>delivery create-pr --approve-human</code>。</li>
+<li>不提供任意本地文件浏览器。</li>
+<li>不自动读取并下发 <code>.tekon/web-session.json</code> 里的 token。</li>
+<li>不在第一轮实现 <code>ci-watch</code> 的长连接体验；MVP 只做 <code>ci-status</code> 单次查询和后续手动刷新。</li>
+<li>不在第一轮实现 <code>eval work-usability record</code> 和 HTML report 生成；这些仍由 CLI 完成。</li>
+</ul>
+<h2 id="4-目录结构">4. 目录结构</h2>
+<p>目标结构保持现有 <code>packages/web</code> 边界，不引入独立前端应用：</p>
+<pre><code class="language-text">packages/web/
+├── src/
+│   ├── shared/
+│   │   ├── rpc-contract.ts      # Zod procedure specs，运行时契约事实源
+│   │   ├── rpc-types.ts         # 由 specs 推导的 input/output 类型
+│   │   └── api-types.ts         # Web DTO schema 和类型
+│   ├── client/
+│   │   ├── main.tsx             # createRoot + Providers + RouterProvider
+│   │   ├── App.tsx              # createBrowserRouter 路由定义
+│   │   ├── styles/
+│   │   │   ├── tokens.css
+│   │   │   ├── reset.css
+│   │   │   └── utilities.css
+│   │   ├── lib/
+│   │   │   ├── rpc-client.ts
+│   │   │   ├── query-cache.ts
+│   │   │   ├── route-paths.ts
+│   │   │   └── text-format.ts
+│   │   ├── hooks/
+│   │   │   ├── use-query.ts
+│   │   │   ├── use-mutation.ts
+│   │   │   ├── use-run-poller.ts
+│   │   │   └── use-session-token.ts
+│   │   ├── context/
+│   │   │   ├── auth-context.tsx
+│   │   │   └── flash-context.tsx
+│   │   ├── layouts/
+│   │   ├── pages/
+│   │   └── components/
+│   └── server/
+│       ├── index.ts
+│       ├── http.ts
+│       ├── project-context.ts
+│       └── api/
+│           ├── root.ts          # 只组装 routers，目标约 80 行
+│           ├── context.ts       # ServerContext
+│           ├── dispatch.ts      # RPC dispatch + schema parse
+│           ├── auth.ts          # token 校验、Origin/Fetch Metadata 校验 helper
+│           ├── redaction.ts     # 展示 DTO 脱敏
+│           ├── validators.ts
+│           ├── server-helpers.ts
+│           ├── agents.ts
+│           ├── mappers.ts
+│           └── routers/
+│               ├── project.ts
+│               ├── demand.ts
+│               ├── delivery.ts
+│               ├── artifact.ts
+│               ├── gate.ts
+│               ├── audit.ts
+│               ├── review.ts
+│               ├── progress.ts
+│               ├── role.ts
+│               ├── workflow.ts
+│               ├── eval.ts
+│               └── constraint.ts</code></pre>
+<p>判断：<code>shared/</code> 只允许被 client 和 server 同时 import；client 不能 import <code>server/</code>；server 可以 import <code>@tekon/core</code>。</p>
+<h2 id="5-路由设计">5. 路由设计</h2>
+<p>新增唯一运行时依赖：<code>react-router</code> v7。</p>
+<pre><code class="language-typescript">import { createBrowserRouter } from 'react-router';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: &lt;AppLayout /&gt;,
+    errorElement: &lt;RouteError scope=&quot;app&quot; /&gt;,
+    children: [
+      { index: true, element: &lt;DashboardPage /&gt; },
+      { path: 'runs', element: &lt;RunsPage /&gt; },
+      {
+        path: 'runs/:runId',
+        element: &lt;RunDetailPage /&gt;,
+        errorElement: &lt;RouteError scope=&quot;run&quot; /&gt;,
+        children: [
+          { index: true, element: &lt;OverviewTab /&gt; },
+          { path: 'artifacts', element: &lt;ArtifactsTab /&gt; },
+          { path: 'gates', element: &lt;GatesTab /&gt; },
+          { path: 'audit', element: &lt;AuditTab /&gt; },
+          { path: 'delivery', element: &lt;DeliveryTab /&gt; },
+          { path: 'progress', element: &lt;ProgressTab /&gt; },
+        ],
+      },
+      { path: 'approvals', element: &lt;ApprovalsPage /&gt; },
+      { path: 'delivery', element: &lt;DeliveryPage /&gt; },
+      { path: 'demand', element: &lt;DemandPage /&gt; },
+      {
+        path: 'config',
+        element: &lt;ConfigPage /&gt;,
+        children: [
+          { index: true, element: &lt;RolesTab /&gt; },
+          { path: 'workflows', element: &lt;WorkflowsTab /&gt; },
+          { path: 'constraints', element: &lt;ConstraintsTab /&gt; },
+        ],
+      },
+      {
+        path: 'evaluations',
+        element: &lt;EvaluationsPage /&gt;,
+        children: [
+          { index: true, element: &lt;ReadinessTab /&gt; },
+          { path: 'demand-shape', element: &lt;DemandShapeTab /&gt; },
+          { path: 'approval-summary', element: &lt;ApprovalSummaryTab /&gt; },
+          { path: 'workflow-selection', element: &lt;WorkflowSelectionTab /&gt; },
+        ],
+      },
+      { path: '*', element: &lt;NotFoundPage /&gt; },
+    ],
+  },
+]);</code></pre>
+<p>URL 状态规则：</p>
+<ul>
+<li>路径段承载页面和 tab：<code>/runs/:runId/gates</code>。</li>
+<li>查询参数承载 filter/sort/selection：<code>/runs?status=running&amp;sort=updated_desc</code>。</li>
+<li>本地绝对路径不直接进入 URL；<code>shapePath</code> 等路径参数通过 server 校验后只展示 basename 或 repo-relative path。</li>
+</ul>
+<h2 id="6-状态与缓存">6. 状态与缓存</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>状态层</th>
+<th>存放位置</th>
+<th>说明</th>
+</tr></thead><tbody>
+<tr>
+<td>URL 状态</td>
+<td><code>useParams</code> / <code>useSearchParams</code></td>
+<td>runId、tab、filter、sort，可分享、可回退</td>
+</tr>
+<tr>
+<td>服务端状态</td>
+<td><code>QueryCache</code></td>
+<td>API 数据、in-flight 去重、手动 refetch、mutation 后 invalidation</td>
+</tr>
+<tr>
+<td>UI 状态</td>
+<td><code>useState</code> + Context</td>
+<td>表单、弹窗、toast、当前 token 输入</td>
+</tr>
+<tr>
+<td>Token 状态</td>
+<td><code>AuthContext</code> 内存态</td>
+<td>刷新即丢失；不落 <code>sessionStorage</code>；用户可从 <code>.tekon/web-session.json</code> 手动复制</td>
+</tr>
+</tbody></table></div>
+<h3 id="6-1-querycache-v1">6.1 QueryCache v1</h3>
+<p>QueryCache v1 只实现 MVP 所需能力：</p>
+<ul>
+<li><code>get/set</code></li>
+<li>per-key subscribe/notify</li>
+<li>in-flight promise 去重</li>
+<li>prefix invalidation</li>
+<li>manual refetch</li>
+<li>unmount 后丢弃结果</li>
+</ul>
+<p>不在第一版承诺完整 stale-while-revalidate、重试队列、跨 tab 同步和持久化缓存。若实现超过约 220 行且仍需要复杂 stale 策略，再单独评估是否引入 TanStack Query；该评估不属于本方案 MVP。</p>
+<h3 id="6-2-hook-规则">6.2 Hook 规则</h3>
+<p>不能设计 <code>useApi().project.overview.useQuery()</code> 这种容易在对象方法中隐藏 hook 调用的模式。每个 query/mutation 使用独立 hook：</p>
+<pre><code class="language-typescript">export function useOverview() {
+  return useQuery('project.overview', () =&gt; rpc.call('project.overview'));
+}
+
+export function useRunReview(runId: string | null) {
+  return useQuery(
+    runId ? `review.get:${runId}` : null,
+    () =&gt; rpc.call('review.get', { runId: runId!, maxContentChars: 1600 }),
+  );
+}
+
+export function useApproveGate() {
+  return useMutation(
+    (input: DecisionInput) =&gt; rpc.call('gate.approve', input),
+    { invalidateKeys: ['gate.list', 'review.get', 'project.overview'] },
+  );
+}</code></pre>
+<h2 id="7-rpc-契约">7. RPC 契约</h2>
+<h3 id="7-1-schema-first">7.1 Schema-first</h3>
+<p><code>src/shared/rpc-contract.ts</code> 是唯一契约事实源。TypeScript 类型从 Zod schema 推导，不手写重复 interface。</p>
+<pre><code class="language-typescript">import { z } from 'zod';
+
+const tokenRunInputSchema = z.object({
+  runId: z.string().min(1),
+  token: z.string().min(1),
+});
+
+export const procedureSpecs = {
+  'project.overview': {
+    auth: 'none',
+    input: z.undefined(),
+    output: projectOverviewSchema,
+  },
+  'project.run': {
+    auth: 'token',
+    input: projectRunInputSchema,
+    output: z.object({ run: apiRunSchema }),
+  },
+  'gate.approve': {
+    auth: 'token',
+    input: decisionInputSchema,
+    output: z.object({ decision: apiDecisionSchema }),
+  },
+} as const;
+
+export type ProcedureName = keyof typeof procedureSpecs;
+
+export type RpcProcedureMap = {
+  [P in ProcedureName]: {
+    input: z.input&lt;(typeof procedureSpecs)[P]['input']&gt;;
+    output: z.output&lt;(typeof procedureSpecs)[P]['output']&gt;;
+  };
+};</code></pre>
+<p><code>dispatchApiCall</code> 必须做四件事：</p>
+<ol>
+<li>校验 path 存在。</li>
+<li>用 <code>procedureSpecs[path].input.parse(rawInput)</code> 校验输入。</li>
+<li>调用对应 router handler。</li>
+<li>在测试环境或开发模式校验 output，防止 server DTO 漂移。</li>
+</ol>
+<h3 id="7-2-api-inventory">7.2 API inventory</h3>
+<div class="table-wrap"><table><thead><tr>
+<th>Procedure</th>
+<th>当前实现</th>
+<th>目标 MVP 授权</th>
+<th>对应 CLI / Core</th>
+<th>Web 说明</th>
+</tr></thead><tbody>
+<tr>
+<td><code>project.list</code></td>
+<td>已有，只读</td>
+<td>none</td>
+<td>Web read API</td>
+<td>项目列表，本地单仓库主要用于兼容</td>
+</tr>
+<tr>
+<td><code>project.overview</code></td>
+<td>已有，只读</td>
+<td>none</td>
+<td>Web read API</td>
+<td>Dashboard 主数据</td>
+</tr>
+<tr>
+<td><code>project.detail</code></td>
+<td>已有，只读</td>
+<td>none</td>
+<td>Web read API</td>
+<td>Runs 列表</td>
+</tr>
+<tr>
+<td><code>project.run</code></td>
+<td>已有，token</td>
+<td>token + confirm</td>
+<td><code>tekon run</code></td>
+<td>发起受控 run，保留 dirty-base 显式确认</td>
+</tr>
+<tr>
+<td><code>project.pause/resume/cancel</code></td>
+<td>已有，token</td>
+<td>token + confirm</td>
+<td><code>pause/resume/cancel</code></td>
+<td>pause/resume/cancel 都必须有明确按钮确认</td>
+</tr>
+<tr>
+<td><code>project.clean</code></td>
+<td>已有，token</td>
+<td>token + high-risk confirm</td>
+<td><code>clean</code></td>
+<td>删除 run 目录，高危确认必须单独测试</td>
+</tr>
+<tr>
+<td><code>demand.shape</code></td>
+<td>已有，token</td>
+<td>token</td>
+<td><code>demand shape</code></td>
+<td>写 <code>.tekon/demands/</code>，需要 token</td>
+</tr>
+<tr>
+<td><code>demand.approve</code></td>
+<td>已有，token</td>
+<td>token + confirm</td>
+<td><code>demand approve</code></td>
+<td>批准需求卡</td>
+</tr>
+<tr>
+<td><code>demand.detail</code></td>
+<td>新增 MVP</td>
+<td>none</td>
+<td><code>demand show</code></td>
+<td>只读已校验 scope 的需求卡</td>
+</tr>
+<tr>
+<td><code>artifact.list</code></td>
+<td>已有，只读</td>
+<td>none + redaction</td>
+<td><code>review</code> / artifact store</td>
+<td>返回脱敏摘要和受限文本预览</td>
+</tr>
+<tr>
+<td><code>gate.list</code></td>
+<td>已有，只读</td>
+<td>none + redaction</td>
+<td><code>status</code> / <code>approval summary</code></td>
+<td>pending decision 和 gate 摘要</td>
+</tr>
+<tr>
+<td><code>gate.approve/reject</code></td>
+<td>已有，token</td>
+<td>token + confirm</td>
+<td><code>resume --approve-human</code> / <code>approval reject</code></td>
+<td>高风险人工控制入口</td>
+</tr>
+<tr>
+<td><code>audit.list</code></td>
+<td>已有，只读</td>
+<td>none + redaction</td>
+<td>audit logger</td>
+<td>hash chain、过滤、脱敏 payload</td>
+</tr>
+<tr>
+<td><code>review.get</code></td>
+<td>已有，只读</td>
+<td>none + redaction</td>
+<td><code>review</code></td>
+<td>聚合审阅面，所有文本 server-side redaction</td>
+</tr>
+<tr>
+<td><code>delivery.prepare</code></td>
+<td>已有，token</td>
+<td>token + confirm</td>
+<td><code>delivery prepare</code></td>
+<td>生成本地 PR 包</td>
+</tr>
+<tr>
+<td><code>delivery.createPr</code></td>
+<td>已有，token + <code>approveHuman</code>，当前 UI 可单按钮传 true</td>
+<td>token + high-risk confirm + explicit approval field</td>
+<td><code>delivery create-pr --approve-human</code></td>
+<td>push + 创建 PR，高危动作，UI 必须显示副作用文案</td>
+</tr>
+<tr>
+<td><code>delivery.dryRun</code></td>
+<td>新增 MVP</td>
+<td>token</td>
+<td><code>delivery dry-run</code></td>
+<td>可能执行 repo 检查，按写操作授权</td>
+</tr>
+<tr>
+<td><code>delivery.ciStatus</code></td>
+<td>新增 MVP</td>
+<td>token</td>
+<td><code>delivery ci-status</code></td>
+<td>查询并写回 <code>ci-status</code> artifact</td>
+</tr>
+<tr>
+<td><code>progress.list</code></td>
+<td>新增 MVP</td>
+<td>none</td>
+<td>command progress JSON</td>
+<td>展示 run 关联 progress 摘要</td>
+</tr>
+<tr>
+<td><code>role.list</code></td>
+<td>已有，但当前会返回 <code>systemPrompt</code>，需整改</td>
+<td>none，只返回 id/name/summary</td>
+<td><code>role list</code></td>
+<td>Phase 0/1 必须改为不返回完整 system prompt</td>
+</tr>
+<tr>
+<td><code>role.detail</code></td>
+<td>新增后续</td>
+<td>token + explicit reveal</td>
+<td><code>role show</code></td>
+<td>system prompt 默认不展开</td>
+</tr>
+<tr>
+<td><code>workflow.list</code></td>
+<td>已有，只读</td>
+<td>none</td>
+<td><code>workflow list</code></td>
+<td>摘要</td>
+</tr>
+<tr>
+<td><code>workflow.detail</code></td>
+<td>新增后续</td>
+<td>none</td>
+<td><code>workflow show</code></td>
+<td>展示 phases/nodes/gates，不暴露任意文件</td>
+</tr>
+<tr>
+<td><code>workflow.preflight</code></td>
+<td>新增后续</td>
+<td>token</td>
+<td><code>workflow preflight</code></td>
+<td>可能执行命令解析，需授权</td>
+</tr>
+<tr>
+<td><code>constraint.list</code></td>
+<td>新增后续</td>
+<td>none + summary redaction</td>
+<td><code>constraints show</code></td>
+<td>摘要化展示 hard/conditional/soft</td>
+</tr>
+<tr>
+<td><code>eval.readiness</code></td>
+<td>新增 MVP</td>
+<td>none</td>
+<td><code>eval readiness</code></td>
+<td>对当前 run 重新计算或读取评估</td>
+</tr>
+<tr>
+<td><code>eval.demandShape</code></td>
+<td>新增后续</td>
+<td>none</td>
+<td><code>eval demand-shape</code></td>
+<td>评估需求卡</td>
+</tr>
+<tr>
+<td><code>eval.workflowSelection</code></td>
+<td>新增后续</td>
+<td>none</td>
+<td><code>eval workflow-selection</code></td>
+<td>评估 workflow 选择</td>
+</tr>
+<tr>
+<td><code>eval.approvalSummary</code></td>
+<td>新增后续</td>
+<td>none</td>
+<td><code>eval approval-summary</code></td>
+<td>评估审批摘要</td>
+</tr>
+<tr>
+<td><code>eval.workUsability</code></td>
+<td>后续增强</td>
+<td>token</td>
+<td><code>eval work-usability --samples</code></td>
+<td>第一轮不做 record/report</td>
+</tr>
+</tbody></table></div>
+<p>判断：<code>ci-watch</code>、<code>work-usability record</code>、<code>work-usability report</code> 暂不进入 MVP。Web 若需要它们，必须另写小方案，因为它们涉及长轮询、样本文件写入和报告产物归档。</p>
+<h2 id="8-安全与权限">8. 安全与权限</h2>
+<h3 id="8-1-token-策略">8.1 Token 策略</h3>
+<p>事实：当前 <code>.tekon/web-session.json</code> 是本地 Web 写操作的 session token 来源。 建议：Web 不提供 <code>GET /api/session</code> 读取 token。用户需要写操作时，从 <code>.tekon/web-session.json</code> 手动复制 token 到输入框。</p>
+<p>客户端规则：</p>
+<ul>
+<li>token 存在 React Context 内存中，刷新页面后丢失。</li>
+<li>不写 <code>localStorage</code>、不写 <code>sessionStorage</code>、不写 URL。</li>
+<li>mutation 请求体带 token；日志和 toast 不回显 token。</li>
+<li>高危动作使用 <code>ConfirmButton</code> 二次确认，<code>delivery.createPr</code> 需要明确勾选人工批准。</li>
+</ul>
+<p>服务端规则：</p>
+<ul>
+<li>默认 host 为 <code>127.0.0.1</code>。</li>
+<li>不设置 CORS 放开头。</li>
+<li>对非 API 响应设置 CSP；生产默认禁止 inline script，目标为 <code>script-src 'self'</code>，Vite dev 模式如需放宽只能在 dev 生效。</li>
+<li>对 mutation 请求检查 <code>Origin</code> / <code>Sec-Fetch-Site</code>，允许缺失这些 header 的本地 CLI/测试请求，但浏览器跨站请求必须拒绝。</li>
+<li>请求体限制 1MB；超限返回 <code>BAD_REQUEST</code>。</li>
+<li>所有 token 校验失败返回 <code>UNAUTHORIZED</code>，不泄漏期望 token。</li>
+</ul>
+<h3 id="8-2-展示脱敏">8.2 展示脱敏</h3>
+<p>所有展示型 DTO 在 server 侧完成脱敏：</p>
+<ul>
+<li>对 <code>apiKey</code>、<code>token</code>、<code>secret</code>、<code>password</code>、<code>passwd</code>、<code>pwd</code> 等键名做值替换。</li>
+<li>对命令参数复用 core 里已有 command redaction 规则。</li>
+<li>文本预览按纯文本渲染，禁止 <code>dangerouslySetInnerHTML</code>。</li>
+<li>预览长度默认 1600 字符，用户可手动扩到 8000 字符；不提供任意路径读取。</li>
+<li><code>role.detail</code> 的 system prompt 不进入 MVP；后续若做，默认只展示摘要，完整展开需要 token 和显式 reveal。</li>
+</ul>
+<h3 id="8-3-路径边界">8.3 路径边界</h3>
+<p>任何路径输入都必须满足：</p>
+<ul>
+<li><code>runId</code> 先通过 DB scope 校验，确认属于当前 <code>projectRoot</code>。</li>
+<li>demand shape 只能位于真实 <code>.tekon/demands/</code> 目录内，拒绝 symlink escape。</li>
+<li>artifact、gate output、progress path 只能来自 DB 或审计记录中的既有路径，不能由浏览器提交任意路径。</li>
+<li>返回给 client 的路径优先使用 repo-relative path；绝对路径只在复制命令时出现。</li>
+</ul>
+<h2 id="9-progress-与长任务体验">9. Progress 与长任务体验</h2>
+<p>当前 long task 机制已经写入 <code>*.progress.json</code>，字段包含 <code>status</code>、<code>startedAt</code>、<code>updatedAt</code>、<code>lastOutputAt</code>、<code>elapsedMs</code>、<code>timeoutMs</code>、<code>noProgressTimeoutMs</code>、<code>timeoutReason</code>、stdout/stderr bytes、受控 outputDir 文件数量和 heartbeat 计数。</p>
+<p>Web MVP 必须展示：</p>
+<ul>
+<li>最近一次 progress 更新时间。</li>
+<li>最近 stdout/stderr 活动时间。</li>
+<li>最近 outputDir 活动时间。</li>
+<li>是否接近 no-progress timeout。</li>
+<li><code>timeoutReason</code> 是 <code>total</code> 还是 <code>no-progress</code>。</li>
+<li>关联 command 的 redacted 展示。</li>
+</ul>
+<p>Progress API 只读，不允许读取原始 stdout/stderr 全文。Gate log 和 artifact 正文仍通过既有 review surface 受限预览。</p>
+<h2 id="10-服务端重构">10. 服务端重构</h2>
+<p>Phase 0-1 以行为保持重构为主，但明确排除已列明的安全目标修复：<code>role.list</code> 摘要化、token 不自动下发、高危动作 confirm。Characterization tests 不能固化这些已知安全缺口。</p>
+<p>拆分目标：</p>
+<div class="table-wrap"><table><thead><tr>
+<th>文件</th>
+<th>责任</th>
+</tr></thead><tbody>
+<tr>
+<td><code>context.ts</code></td>
+<td>创建 <code>ServerContext</code>，包含 db、repositories、audit、projectContext</td>
+</tr>
+<tr>
+<td><code>dispatch.ts</code></td>
+<td>RPC path 分发、schema parse、统一错误转换</td>
+</tr>
+<tr>
+<td><code>auth.ts</code></td>
+<td>token 校验、browser origin/fetch metadata helper</td>
+</tr>
+<tr>
+<td><code>redaction.ts</code></td>
+<td>展示 DTO 脱敏和文本预览限制</td>
+</tr>
+<tr>
+<td><code>validators.ts</code></td>
+<td>纯校验函数，不做业务查询</td>
+</tr>
+<tr>
+<td><code>server-helpers.ts</code></td>
+<td>组合查询 helper，避免循环依赖</td>
+</tr>
+<tr>
+<td><code>agents.ts</code></td>
+<td>mock/claude-code/codex runtime 工厂</td>
+</tr>
+<tr>
+<td><code>mappers.ts</code></td>
+<td>DB row 到 API DTO</td>
+</tr>
+<tr>
+<td><code>routers/*.ts</code></td>
+<td>每个 namespace 一个 router，handler 签名统一</td>
+</tr>
+</tbody></table></div>
+<p>Router handler 统一签名：</p>
+<pre><code class="language-typescript">type Handler&lt;I, O&gt; = (ctx: ServerContext, input: I) =&gt; Promise&lt;O&gt; | O;</code></pre>
+<p>判断：<code>root.ts</code> 拆分后只负责创建 context、组装 routers、暴露 <code>createApiCaller()</code> 和 <code>close()</code>，不再混合 SQL、Agent runtime、校验和映射。</p>
+<h2 id="11-前端页面">11. 前端页面</h2>
+<h3 id="11-1-dashboard">11.1 Dashboard</h3>
+<p>Dashboard 首屏只放决策信息：</p>
+<ul>
+<li>latest run status、provider、current node。</li>
+<li>readiness score 和 failed required checks。</li>
+<li>pending approvals 数量和最高风险项。</li>
+<li>delivery status、PR URL、CI status。</li>
+<li>next command / next Web action。</li>
+</ul>
+<p>不放大面积热力图作为 MVP 首屏核心。真实样本数量不足前，热力图容易给出虚假的组织级洞察。</p>
+<h3 id="11-2-run-detail">11.2 Run Detail</h3>
+<p>Run Detail tabs：</p>
+<ul>
+<li>Overview：review surface 摘要、readiness、evidence groups、next commands。</li>
+<li>Artifacts：按 node、role、type 过滤，展示脱敏预览。</li>
+<li>Gates：gate 网格、失败分类、重试建议。</li>
+<li>Audit：hash chain verification、事件过滤、脱敏 payload。</li>
+<li>Delivery：PR package、diff summary、PR URL、CI evidence。</li>
+<li>Progress：command progress 摘要和无进展风险。</li>
+</ul>
+<h3 id="11-3-approvals">11.3 Approvals</h3>
+<p>Approvals 是 Web 的高风险入口之一：</p>
+<ul>
+<li>展示 <code>createHumanApprovalSummary()</code> 的摘要和 <code>evaluateHumanApprovalSummary()</code> 分数。</li>
+<li>批准和拒绝都必须要求 token。</li>
+<li>同一 run 多个 pending decision 时必须精确选择 decisionId。</li>
+<li>批准后触发 resume 的事实必须在 toast 和 audit 列表中可见。</li>
+</ul>
+<h3 id="11-4-delivery">11.4 Delivery</h3>
+<p>Delivery 页面分成只读证据和写操作：</p>
+<ul>
+<li>只读：当前 PR package、diff stat、changed files、PR URL、CI evidence。</li>
+<li>写操作：dry-run、prepare、create-pr、ci-status。</li>
+<li>create-pr 永远要求 token 和人工批准，按钮文案必须明确会 push 分支并调用 GitHub CLI 创建 PR。</li>
+</ul>
+<h2 id="12-错误处理">12. 错误处理</h2>
+<p>Route <code>errorElement</code> 只能覆盖路由渲染、loader/action 等错误，不能代替 mutation、poller、event handler 的错误处理。</p>
+<p>错误策略：</p>
+<ul>
+<li>App 级 route error：显示可恢复错误页和返回 Dashboard。</li>
+<li>Page/tab 级 route error：只替换当前页面或 tab。</li>
+<li>Query error：<code>ErrorBanner</code> + <code>refetch</code>。</li>
+<li>Mutation error：表单内错误 + toast。</li>
+<li>Poller error：指数退避到最长 30 秒，并显示“最近刷新失败”。</li>
+<li><code>window.onunhandledrejection</code>：记录到 console，UI 只显示通用错误，不泄漏敏感 payload。</li>
+</ul>
+<p>测试必须覆盖：组件 throw、query reject、mutation unauthorized、poller 连续失败、404 route。</p>
+<h2 id="13-构建与依赖">13. 构建与依赖</h2>
+<p><code>packages/web/package.json</code> 的目标依赖快照如下；本阶段新增运行时依赖只有 <code>react-router</code>，<code>zod</code> 已存在并用于 schema-first RPC 契约。</p>
+<pre><code class="language-json">{
+  &quot;dependencies&quot;: {
+    &quot;@tekon/core&quot;: &quot;workspace:*&quot;,
+    &quot;react&quot;: &quot;^19.2.7&quot;,
+    &quot;react-dom&quot;: &quot;^19.2.7&quot;,
+    &quot;react-router&quot;: &quot;^7.6.0&quot;,
+    &quot;zod&quot;: &quot;^4.4.3&quot;
+  }
+}</code></pre>
+<p><code>vite.config.ts</code> 增加 alias：</p>
+<pre><code class="language-typescript">resolve: {
+  alias: {
+    '@shared': resolve(__dirname, 'src/shared'),
+    '@client': resolve(__dirname, 'src/client'),
+  },
+}</code></pre>
+<p><code>http.ts</code> 变更：</p>
+<ul>
+<li>增加生产构建 SPA fallback，非 <code>/api/</code> 路径返回 <code>dist/index.html</code>。</li>
+<li>增加 JSON body size limit。</li>
+<li>增加基础安全 header。</li>
+<li>不增加 <code>GET /api/session</code>。</li>
+</ul>
+<h2 id="14-测试与验收">14. 测试与验收</h2>
+<h3 id="14-1-测试策略">14.1 测试策略</h3>
+<div class="table-wrap"><table><thead><tr>
+<th>测试类型</th>
+<th>覆盖</th>
+</tr></thead><tbody>
+<tr>
+<td>Characterization API tests</td>
+<td>Phase 0 冻结现有公开 RPC 的安全目标行为，不固化 <code>role.list</code> 返回 system prompt 等已知缺口</td>
+</tr>
+<tr>
+<td>Router handler unit tests</td>
+<td>每个 router 使用 mock <code>ServerContext</code> 覆盖成功和失败</td>
+</tr>
+<tr>
+<td>Contract tests</td>
+<td><code>procedureSpecs</code> 输入输出 schema、unknown path、错误码</td>
+</tr>
+<tr>
+<td>Security tests</td>
+<td>token 不自动下发、Origin/Fetch Metadata、body limit、path escape、redaction</td>
+</tr>
+<tr>
+<td>QueryCache tests</td>
+<td>去重、invalidate、unmount 丢弃、mutation 后刷新</td>
+</tr>
+<tr>
+<td>Component tests</td>
+<td>StatusBadge、RunTable、ApprovalCard、ProgressPanel</td>
+</tr>
+<tr>
+<td>Playwright E2E</td>
+<td>Dashboard → Run Detail → Approval → Delivery Prepare/Create PR fake gh</td>
+</tr>
+<tr>
+<td>Responsive visual check</td>
+<td>桌面和移动截图检查文本不重叠，核心 controls 可操作</td>
+</tr>
+</tbody></table></div>
+<h3 id="14-2-mvp-验收标准">14.2 MVP 验收标准</h3>
+<p>MVP 完成必须满足：</p>
+<ol>
+<li><code>pnpm --filter @tekon/web typecheck</code> 通过。</li>
+<li><code>pnpm --filter @tekon/web test</code> 通过。</li>
+<li><code>pnpm --filter @tekon/web test:e2e</code> 通过。</li>
+<li>页面刷新后 URL 中的 runId、tab、filter 保持。</li>
+<li>未输入 token 时所有写操作失败且错误可理解。</li>
+<li>页面代码无法通过 API 自动读取 token。</li>
+<li><code>role.list</code> 不返回完整 <code>systemPrompt</code>；只有后续 <code>role.detail</code> 在 token + explicit reveal 下才能展示完整内容。</li>
+<li>artifact/gate/audit/review/progress 预览不渲染 HTML。</li>
+<li><code>clean</code>、<code>delivery.createPr</code> 等高危动作有明确 confirm 字段或确认文案测试。</li>
+<li><code>delivery.createPr</code> 在 fake gh E2E 中只有显式批准后才创建 PR。</li>
+<li>HTML 审阅版和 Markdown 源稿同步更新。</li>
+<li>主用户手册仅在用户操作路径改变时更新；本方案阶段不改变启动命令和 token 来源，因此本次只需在最终交付说明中声明无需更新主手册。</li>
+</ol>
+<h2 id="15-实施计划">15. 实施计划</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>阶段</th>
+<th>内容</th>
+<th>验收</th>
+</tr></thead><tbody>
+<tr>
+<td>Phase 0：行为快照</td>
+<td>为现有 API 和 Web E2E 补 characterization tests，同时把 <code>role.list</code> 不返回 <code>systemPrompt</code>、token 不自动下发和高危 confirm 作为安全目标测试</td>
+<td>当前 App 和 root 的保留行为被锁定，已知安全缺口不会被固化</td>
+</tr>
+<tr>
+<td>Phase 1：服务端拆分</td>
+<td>root.ts 拆成 context/dispatch/auth/redaction/mappers/routers，并完成 <code>role.list</code> 摘要化整改</td>
+<td>老 App 继续工作，所有旧测试通过，<code>role.list</code> 不再泄露完整 prompt</td>
+</tr>
+<tr>
+<td>Phase 2：RPC 契约和路由骨架</td>
+<td><code>shared/rpc-contract.ts</code>、typed rpc client、React Router、AppLayout</td>
+<td>空壳页面可导航，schema parse 生效</td>
+</tr>
+<tr>
+<td>Phase 3：核心审阅页</td>
+<td>Dashboard、Runs、Run Detail Overview/Artifacts/Gates/Audit/Progress</td>
+<td>用户可回答“卡在哪、证据是什么、下一步做什么”</td>
+</tr>
+<tr>
+<td>Phase 4：人工控制和交付</td>
+<td>Approvals、Delivery、Demand，补 delivery.dryRun/ciStatus，并为 clean/create-pr 等高危动作补明确 confirm 字段或确认文案校验</td>
+<td>approve/reject/create-pr/ci-status 全链路可测，高危动作不会被单按钮误触发</td>
+</tr>
+<tr>
+<td>Phase 5：配置和评估增量</td>
+<td>Config 摘要页、readiness/demand/workflow/approval eval 页</td>
+<td>不暴露敏感原文，评估页能解释 pass/fail</td>
+</tr>
+</tbody></table></div>
+<p>每个阶段结束都必须运行对应测试，并更新 HTML 审阅版。若阶段改动用户命令或 Web 使用方式，再同步更新 <code>docs/manual/tekon-user-manual.md</code> 和 HTML。</p>
+<h2 id="16-风险与取舍">16. 风险与取舍</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>风险</th>
+<th>判断</th>
+<th>缓解</th>
+</tr></thead><tbody>
+<tr>
+<td>自写 QueryCache 变复杂</td>
+<td>当前 MVP 可控，但继续扩展会接近 TanStack Query 范围</td>
+<td>v1 限定能力；超过边界再单独决策</td>
+</tr>
+<tr>
+<td>read API 聚合敏感信息</td>
+<td>本地工具也可能被浏览器扩展、XSS 或误展示影响</td>
+<td>server-side redaction、纯文本渲染、system prompt 不进 MVP</td>
+</tr>
+<tr>
+<td>服务端拆分引入行为回归</td>
+<td>root.ts 现有职责多，直接拆风险高</td>
+<td>Phase 0 行为快照先行，Phase 1 保行为</td>
+</tr>
+<tr>
+<td>Web 范围膨胀</td>
+<td>一次性做完 eval/config/CI watch 会拖慢核心闭环</td>
+<td>MVP 聚焦 run 审阅、approval、delivery</td>
+</tr>
+<tr>
+<td>progress path 读取不安全</td>
+<td>progress 文件是本地 FS 产物</td>
+<td>只从 DB/audit/run 目录派生路径，拒绝浏览器任意路径</td>
+</tr>
+</tbody></table></div>
+<h2 id="17-当前不变项">17. 当前不变项</h2>
+<ul>
+<li><code>docs/design/tekon-cockpit-mockup.html</code> 继续作为视觉设计稿。</li>
+<li>Web 启动方式仍以主用户手册为准。</li>
+<li><code>.tekon/web-session.json</code> 仍由 <code>tekon init</code> 创建。</li>
+<li>Codex provider、provider snapshot、长任务 timeout 参数和 delivery create-pr 的人工边界沿用现有手册描述。</li>
+<li>本方案不要求立即修改 <code>README.md</code>、<code>CHANGELOG.md</code> 或主用户手册；真正实现代码后再按用户可见行为变化同步。</li>
+</ul>
+      </article>
+    </main>
+  </body>
+</html>

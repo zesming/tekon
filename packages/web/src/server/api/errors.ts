@@ -1,4 +1,8 @@
-export type ApiErrorCode = 'NOT_FOUND' | 'UNAUTHORIZED' | 'BAD_REQUEST';
+export type ApiErrorCode =
+  | 'NOT_FOUND'
+  | 'UNAUTHORIZED'
+  | 'BAD_REQUEST'
+  | 'INTERNAL_ERROR';
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;

@@ -4,7 +4,13 @@ import {
   type Server,
   type ServerResponse,
 } from 'node:http';
-import { dirname, resolve } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+} from 'node:fs';
+import { dirname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -13,7 +19,10 @@ import {
   type ApiCaller,
 } from './api/root.js';
 import { ApiError } from './api/errors.js';
+import { procedureSpecs, type ProcedureName } from '../shared/rpc-contract.js';
 import { resolveProjectRoot } from './project-context.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export interface CreateWebServerOptions {
   projectRoot?: string;
@@ -21,6 +30,8 @@ export interface CreateWebServerOptions {
   port?: number;
   host?: string;
   vite?: boolean;
+  /** Override the static asset directory (defaults to ../../dist relative to this module). */
+  distDir?: string;
 }
 
 export interface RunningWebServer {
@@ -33,9 +44,12 @@ export async function createWebServer(
   options: CreateWebServerOptions,
 ): Promise<RunningWebServer> {
   const projectRoot = resolveProjectRoot(options);
-  const api = await createApiCaller({ projectRoot });
+  const api = await createApiCaller({ projectRoot, env: options.env });
   const vite = options.vite ? await createViteMiddleware() : null;
+  const distDir = options.distDir ?? resolve(__dirname, '../../dist');
   const server = createServer(async (request, response) => {
+    setSecurityHeaders(response);
+
     if (request.url?.startsWith('/api/rpc')) {
       await handleRpc({ api, request, response });
       return;
@@ -49,8 +63,94 @@ export async function createWebServer(
       return;
     }
 
-    response.setHeader('content-type', 'text/html; charset=utf-8');
-    response.end(renderFallbackHtml());
+    if (request.url?.startsWith('/assets/') && !vite) {
+      let urlPath: string;
+      try {
+        urlPath = decodeURIComponent(request.url.slice(1));
+      } catch {
+        response.statusCode = 400;
+        response.end('Bad request: malformed URL encoding');
+        return;
+      }
+
+      // Reject path traversal attempts before normalization resolves them
+      if (urlPath.includes('..')) {
+        response.statusCode = 400;
+        response.end('Bad request');
+        return;
+      }
+
+      const normalizedPath = normalize(urlPath);
+
+      // Reject absolute paths
+      if (normalizedPath.startsWith('/')) {
+        response.statusCode = 400;
+        response.end('Bad request');
+        return;
+      }
+
+      const assetPath = resolve(distDir, normalizedPath);
+
+      // Verify resolved path is within distDir
+      if (!assetPath.startsWith(distDir + '/') && assetPath !== distDir) {
+        response.statusCode = 400;
+        response.end('Bad request');
+        return;
+      }
+
+      // Reject symlinks and verify real path stays within distDir
+      let realDistDir: string;
+      try {
+        realDistDir = realpathSync(distDir);
+      } catch {
+        response.statusCode = 404;
+        response.end('Not found');
+        return;
+      }
+
+      try {
+        const stat = lstatSync(assetPath);
+        if (stat.isSymbolicLink()) {
+          response.statusCode = 400;
+          response.end('Bad request');
+          return;
+        }
+        const realPath = realpathSync(assetPath);
+        if (!realPath.startsWith(realDistDir + '/')) {
+          response.statusCode = 400;
+          response.end('Bad request');
+          return;
+        }
+      } catch {
+        // File doesn't exist — fall through to serveProductionHtml
+      }
+
+      if (existsSync(assetPath)) {
+        const ext = assetPath.split('.').pop();
+        const contentTypes: Record<string, string> = {
+          js: 'application/javascript',
+          css: 'text/css',
+          html: 'text/html',
+          svg: 'image/svg+xml',
+        };
+        response.setHeader(
+          'content-type',
+          contentTypes[ext || ''] || 'application/octet-stream',
+        );
+        response.setHeader(
+          'cache-control',
+          'public, max-age=31536000, immutable',
+        );
+        response.end(readFileSync(assetPath));
+        return;
+      }
+    }
+
+    if (!serveProductionHtml(response, distDir)) {
+      response.statusCode = 404;
+      response.setHeader('content-type', 'text/plain; charset=utf-8');
+      response.end('Not found — build the frontend first (pnpm build)');
+    }
   });
 
   const host = options.host ?? '127.0.0.1';
@@ -104,12 +204,25 @@ async function handleRpc(input: {
     if (typeof body.path !== 'string') {
       throw new ApiError('BAD_REQUEST', 'RPC path is required');
     }
+
+    // Origin + Sec-Fetch-Site check for mutation (token-auth) procedures
+    const spec = procedureSpecs[body.path as ProcedureName];
+    if (spec && spec.auth === 'token') {
+      assertRequestAllowed(input.request);
+    }
+
     const result = await dispatchApiCall(input.api, body.path, body.input);
     writeJson(input.response, 200, { result });
   } catch (error) {
     const code = error instanceof ApiError ? error.code : 'BAD_REQUEST';
     const status =
-      code === 'UNAUTHORIZED' ? 401 : code === 'NOT_FOUND' ? 404 : 400;
+      code === 'UNAUTHORIZED'
+        ? 401
+        : code === 'NOT_FOUND'
+          ? 404
+          : code === 'INTERNAL_ERROR'
+            ? 500
+            : 400;
     writeJson(input.response, status, {
       error: {
         code,
@@ -119,10 +232,18 @@ async function handleRpc(input: {
   }
 }
 
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let totalSize = 0;
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalSize += buf.length;
+    if (totalSize > MAX_BODY_SIZE) {
+      throw new ApiError('BAD_REQUEST', 'Request body too large');
+    }
+    chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw.length === 0 ? {} : JSON.parse(raw);
@@ -148,14 +269,58 @@ async function createViteMiddleware() {
   });
 }
 
-function renderFallbackHtml(): string {
-  return [
-    '<!doctype html>',
-    '<html lang="zh-CN">',
-    '<head><meta charset="utf-8" /><title>Tekon Web</title></head>',
-    '<body><main><h1>Tekon Web</h1></main></body>',
-    '</html>',
-  ].join('');
+function serveProductionHtml(response: ServerResponse, distDir: string): boolean {
+  const indexPath = resolve(distDir, 'index.html');
+  if (!existsSync(indexPath)) {
+    return false;
+  }
+  response.setHeader('content-type', 'text/html; charset=utf-8');
+  response.end(readFileSync(indexPath, 'utf8'));
+  return true;
+}
+
+function setSecurityHeaders(response: ServerResponse): void {
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  // CSP: allow self for scripts/styles, inline styles for Vite dev
+  const csp =
+    process.env.NODE_ENV === 'production'
+      ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+      : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+  response.setHeader('Content-Security-Policy', csp);
+}
+
+function assertOriginAllowed(request: IncomingMessage): void {
+  const origin = request.headers.origin;
+  if (!origin) {
+    // Missing Origin is allowed (local CLI / test requests)
+    return;
+  }
+  const host = request.headers.host;
+  if (host) {
+    try {
+      const originUrl = new URL(origin);
+      if (originUrl.host === host) {
+        return;
+      }
+    } catch {
+      // Malformed origin — fall through to reject
+    }
+  }
+  throw new ApiError('BAD_REQUEST', 'Origin not allowed');
+}
+
+function assertRequestAllowed(request: IncomingMessage): void {
+  // Existing origin check
+  assertOriginAllowed(request);
+
+  // Sec-Fetch-Site check
+  const fetchSite = request.headers['sec-fetch-site'];
+  if (fetchSite === 'cross-site') {
+    throw new ApiError('BAD_REQUEST', 'Cross-site requests are not allowed');
+  }
+  // Allow: same-origin, same-site, none (CLI/test requests)
 }
 
 async function closeServer(server: Server): Promise<void> {
