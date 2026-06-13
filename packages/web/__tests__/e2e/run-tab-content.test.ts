@@ -1,31 +1,7 @@
-import { expect, test } from '@playwright/test';
-
-import { createWebFixtureProject } from '../fixtures/project.js';
-import {
-  createWebServer,
-  type RunningWebServer,
-} from '../../src/server/http.js';
+import { expect, test } from './shared-fixture.js';
 
 test.describe('Run detail tab content', () => {
-  let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
-  let server: RunningWebServer;
-
-  test.beforeEach(async () => {
-    fixture = await createWebFixtureProject();
-    server = await createWebServer({
-      projectRoot: fixture.projectRoot,
-      port: 0,
-      vite: true,
-    });
-    await server.listen();
-  });
-
-  test.afterEach(async () => {
-    await server.close();
-    fixture.cleanup();
-  });
-
-  test('overview tab shows run header and basic info', async ({ page }) => {
+  test('overview tab shows run header and basic info', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/run_1`);
 
     // Run header shows run ID
@@ -35,7 +11,7 @@ test.describe('Run detail tab content', () => {
     await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible();
   });
 
-  test('artifacts tab shows artifact list', async ({ page }) => {
+  test('artifacts tab shows artifact list', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/run_1/artifacts`);
 
     await expect(
@@ -48,7 +24,7 @@ test.describe('Run detail tab content', () => {
     ).toBeVisible();
   });
 
-  test('gates tab shows gate results', async ({ page }) => {
+  test('gates tab shows gate results', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/run_1/gates`);
 
     await expect(page.getByRole('link', { name: 'Gates' })).toBeVisible();
@@ -57,7 +33,7 @@ test.describe('Run detail tab content', () => {
     await expect(page.getByText('human', { exact: true })).toBeVisible();
   });
 
-  test('audit tab shows audit events', async ({ page }) => {
+  test('audit tab shows audit events', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/run_1/audit`);
 
     await expect(page.getByRole('link', { name: 'Audit' })).toBeVisible();
@@ -68,7 +44,7 @@ test.describe('Run detail tab content', () => {
     ).toBeVisible();
   });
 
-  test('progress tab loads without errors', async ({ page }) => {
+  test('progress tab loads without errors', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/run_1/progress`);
 
     await expect(
@@ -76,7 +52,7 @@ test.describe('Run detail tab content', () => {
     ).toBeVisible();
   });
 
-  test('run detail page shows error for non-existent run', async ({ page }) => {
+  test('run detail page shows error for non-existent run', async ({ page, server }) => {
     await page.goto(`${server.url}/runs/non-existent-run-id`);
 
     // Error page or error message should be visible

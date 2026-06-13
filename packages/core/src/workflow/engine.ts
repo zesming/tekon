@@ -1306,7 +1306,7 @@ export function createWorkflowEngine(
   }
 }
 
-function assertSuccessfulAgentRun(result: AgentRunResult): void {
+export function assertSuccessfulAgentRun(result: AgentRunResult): void {
   if (result.timedOut) {
     throw new Error(`agent timed out: provider=${result.provider}`);
   }
@@ -1588,7 +1588,7 @@ async function planFromRepository(
   };
 }
 
-function scopedId(runId: string, id: string) {
+export function scopedId(runId: string, id: string) {
   return `${runId}_${id}`;
 }
 
@@ -1604,7 +1604,7 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
   };
 }
 
-function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
+export function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
   gates: T[],
   nodeId = 'workflow node',
 ): Array<T & { gateKey: string }> {
@@ -1624,7 +1624,7 @@ function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
   return keyed;
 }
 
-function stableGateKey(
+export function stableGateKey(
   gate: Pick<
     GateConfig | WorkflowGateConfig,
     'type' | 'artifactType' | 'commandRef' | 'skipReason'
@@ -1642,7 +1642,7 @@ function stableGateKey(
     .join(':');
 }
 
-function makeSyntheticLease(
+export function makeSyntheticLease(
   repoPath: string,
   runId: string,
   node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'>,
@@ -1660,7 +1660,7 @@ function makeSyntheticLease(
   };
 }
 
-function defaultCommandPolicy(repoPath: string): CommandPolicy {
+export function defaultCommandPolicy(repoPath: string): CommandPolicy {
   return {
     allow: [
       { tool: 'git', args: [] },
@@ -1676,7 +1676,7 @@ function defaultCommandPolicy(repoPath: string): CommandPolicy {
   };
 }
 
-function defaultBuiltInRolesDir(): string {
+export function defaultBuiltInRolesDir(): string {
   const fromModule = resolve(
     dirname(fileURLToPath(import.meta.url)),
     '..',

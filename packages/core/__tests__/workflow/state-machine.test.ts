@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertWorkflowTransition,
   canWorkflowTransition,
+  transitionWorkflowNode,
 } from '../../src/workflow/state-machine.js';
 
 describe('workflow state machine', () => {
@@ -28,5 +29,90 @@ describe('workflow state machine', () => {
     expect(() => assertWorkflowTransition('passed', 'running')).toThrow(
       /illegal workflow transition: passed -> running/u,
     );
+  });
+
+  it('transitionWorkflowNode performs a valid transition and records history', () => {
+    const snapshot = { status: 'pending' as const, revision: 0 };
+    const result = transitionWorkflowNode(snapshot, 'running');
+
+    expect(result.status).toBe('running');
+    expect(result.revision).toBe(0); // non-needs-revision keeps revision unchanged
+    expect(result.updatedAt).toEqual(expect.any(String));
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({
+      from: 'pending',
+      to: 'running',
+      at: expect.any(String),
+    });
+  });
+
+  it('transitionWorkflowNode bumps revision on needs-revision transition', () => {
+    const snapshot = { status: 'running' as const, revision: 2 };
+    const result = transitionWorkflowNode(snapshot, 'needs-revision');
+
+    expect(result.status).toBe('needs-revision');
+    expect(result.revision).toBe(3);
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({
+      from: 'running',
+      to: 'needs-revision',
+    });
+  });
+
+  it('transitionWorkflowNode includes reason in history when provided', () => {
+    const snapshot = { status: 'pending' as const };
+    const result = transitionWorkflowNode(snapshot, 'running', {
+      reason: 'manual trigger',
+    });
+
+    expect(result.history[0].reason).toBe('manual trigger');
+    expect(result.history[0]).toMatchObject({
+      from: 'pending',
+      to: 'running',
+      reason: 'manual trigger',
+    });
+  });
+
+  it('transitionWorkflowNode appends to existing history', () => {
+    const snapshot = {
+      status: 'running' as const,
+      history: [{ from: 'pending' as const, to: 'running' as const, at: '2026-01-01T00:00:00.000Z' }],
+    };
+    const result = transitionWorkflowNode(snapshot, 'awaiting-gate');
+
+    expect(result.history).toHaveLength(2);
+    expect(result.history[0].from).toBe('pending');
+    expect(result.history[1]).toMatchObject({
+      from: 'running',
+      to: 'awaiting-gate',
+    });
+  });
+
+  it('all terminal states have zero outgoing transitions', () => {
+    const terminalStates = ['passed', 'skipped', 'failed'] as const;
+    const allStates = [
+      'pending',
+      'running',
+      'awaiting-gate',
+      'passed',
+      'needs-revision',
+      'blocked',
+      'paused',
+      'interrupted',
+      'skipped',
+      'failed',
+    ] as const;
+
+    for (const terminal of terminalStates) {
+      for (const target of allStates) {
+        expect(canWorkflowTransition(terminal, target)).toBe(false);
+      }
+    }
+  });
+
+  it('throws for invalid source or target status values', () => {
+    expect(() => canWorkflowTransition('completed' as any, 'running')).toThrow();
+    expect(() => canWorkflowTransition('pending', 'success' as any)).toThrow();
+    expect(() => canWorkflowTransition('idle' as any, 'done' as any)).toThrow();
   });
 });

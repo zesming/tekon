@@ -10,9 +10,7 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
-import { expect, test } from '@playwright/test';
-
-import { createWebFixtureProject } from '../fixtures/project.js';
+import { test as sharedTest, expect } from './shared-fixture.js';
 import {
   createWebServer,
   type RunningWebServer,
@@ -96,48 +94,58 @@ async function startAndPrepareRun(
 }
 
 // ---------------------------------------------------------------------------
-// E2E: Create PR requires explicit approval — rigorous gh invocation checks
+// Extended fixtures for this test file
 // ---------------------------------------------------------------------------
 
-test.describe('Create PR requires explicit confirmation', () => {
-  let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
-  let server: RunningWebServer;
-  let remotePath: string;
-  let binDir: string;
+interface CreatePrFixtures {
+  binDir: string;
+  remotePath: string;
+}
 
-  test.beforeEach(async () => {
-    fixture = await createWebFixtureProject();
+const test = sharedTest.extend<CreatePrFixtures>({
+  binDir: async ({}, use) => {
+    const binDir = mkdtempSync(join(tmpdir(), 'tekon-e2e-fake-gh-'));
+    writeFakeGh(binDir);
+    await use(binDir);
+    rmSync(binDir, { recursive: true, force: true });
+  },
 
-    // Set up a bare remote origin so git push works
-    remotePath = mkdtempSync(join(tmpdir(), 'tekon-e2e-remote-'));
+  remotePath: async ({}, use) => {
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-e2e-remote-'));
     execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    await use(remotePath);
+    rmSync(remotePath, { recursive: true, force: true });
+  },
+
+  server: async ({ fixture, binDir, remotePath }, use) => {
+    // Set up a bare remote origin so git push works
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
       cwd: fixture.projectRoot,
     });
 
-    // Set up fake gh CLI
-    binDir = mkdtempSync(join(tmpdir(), 'tekon-e2e-fake-gh-'));
-    writeFakeGh(binDir);
-
     // Start the server with fake gh in PATH
-    server = await createWebServer({
+    const server = await createWebServer({
       projectRoot: fixture.projectRoot,
       port: 0,
       vite: true,
       env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}` },
     });
     await server.listen();
-  });
-
-  test.afterEach(async () => {
+    await use(server);
     await server.close();
-    fixture.cleanup();
-    rmSync(remotePath, { recursive: true, force: true });
-    rmSync(binDir, { recursive: true, force: true });
-  });
+  },
+});
 
+// ---------------------------------------------------------------------------
+// E2E: Create PR requires explicit approval — rigorous gh invocation checks
+// ---------------------------------------------------------------------------
+
+test.describe('Create PR requires explicit confirmation', () => {
   test('fake gh is only invoked after explicit confirmation, never before', async ({
     page,
+    fixture,
+    server,
+    binDir,
   }) => {
     // ── 0. Start a completed run via API so delivery is ready ────────────────
     const runId = await startAndPrepareRun(server.url, fixture.sessionToken);

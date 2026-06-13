@@ -1,32 +1,10 @@
-import { expect, test } from '@playwright/test';
-
-import { createWebFixtureProject } from '../fixtures/project.js';
-import {
-  createWebServer,
-  type RunningWebServer,
-} from '../../src/server/http.js';
+import { expect, test } from './shared-fixture.js';
 
 test.describe('Tekon release dashboard', () => {
-  let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
-  let server: RunningWebServer;
-
-  test.beforeEach(async () => {
-    fixture = await createWebFixtureProject();
-    server = await createWebServer({
-      projectRoot: fixture.projectRoot,
-      port: 0,
-      vite: true,
-    });
-    await server.listen();
-  });
-
-  test.afterEach(async () => {
-    await server.close();
-    fixture.cleanup();
-  });
-
   test('delivery pipeline display, PR preparation, and desktop screenshot', async ({
     page,
+    server,
+    fixture,
   }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 900 });
 

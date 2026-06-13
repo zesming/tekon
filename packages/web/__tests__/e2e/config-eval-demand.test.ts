@@ -1,34 +1,11 @@
-import { expect, test } from '@playwright/test';
-
-import { createWebFixtureProject } from '../fixtures/project.js';
-import {
-  createWebServer,
-  type RunningWebServer,
-} from '../../src/server/http.js';
+import { expect, test } from './shared-fixture.js';
 
 test.describe('Config, Eval, and Demand pages', () => {
-  let fixture: Awaited<ReturnType<typeof createWebFixtureProject>>;
-  let server: RunningWebServer;
-
-  test.beforeEach(async () => {
-    fixture = await createWebFixtureProject();
-    server = await createWebServer({
-      projectRoot: fixture.projectRoot,
-      port: 0,
-      vite: true,
-    });
-    await server.listen();
-  });
-
-  test.afterEach(async () => {
-    await server.close();
-    fixture.cleanup();
-  });
-
   // ── Config page ────────────────────────────────────────────────────────
 
   test('config page loads with Roles, Workflows, and Constraints tabs', async ({
     page,
+    server,
   }) => {
     await page.goto(`${server.url}/config`);
 
@@ -60,6 +37,7 @@ test.describe('Config, Eval, and Demand pages', () => {
 
   test('eval page loads with Readiness, Demand Shape, Approval Summary, and Workflow Selection tabs', async ({
     page,
+    server,
   }) => {
     await page.goto(`${server.url}/eval`);
 
@@ -94,7 +72,7 @@ test.describe('Config, Eval, and Demand pages', () => {
 
   // ── Demand page ────────────────────────────────────────────────────────
 
-  test('demand page loads', async ({ page }) => {
+  test('demand page loads', async ({ page, server }) => {
     await page.goto(`${server.url}/demand`);
 
     // Demand page renders with page title containing "Demand"
