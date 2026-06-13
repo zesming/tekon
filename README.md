@@ -49,7 +49,7 @@
 | 审阅面 | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包 |
 | 交付管理 | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控 |
 | 效果评估 | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性 |
-| Web dashboard | 本地 Vite + React，支持 human approval、run 发起、PR 准备、审阅面 |
+| Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面 |
 
 ## 快速开始
 
@@ -79,6 +79,7 @@ tekon delivery create-pr --approve-human      # 受控创建远端 PR
 tekon delivery ci-status                      # 查询远端 CI
 tekon delivery ci-watch                       # 等待 CI 终态
 tekon eval readiness                          # 评估交付完整度
+tekon ui                                      # 启动 Web Dashboard
 ```
 
 ## 常用命令
@@ -102,6 +103,7 @@ tekon eval readiness                          # 评估交付完整度
 | 等待 CI | `tekon delivery ci-watch` |
 | 评估 readiness | `tekon eval readiness` |
 | 评估样本集 | `tekon eval work-usability --samples <yaml>` |
+| 启动 Web Dashboard | `tekon ui` |
 
 更多命令和详细参数见[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)。
 

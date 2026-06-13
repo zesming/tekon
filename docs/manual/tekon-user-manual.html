@@ -506,13 +506,23 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.17 delivery ci-watch</span><span class="cb-ds">轮询 PR checks 直到终态</span></div><pre><code><span class="c">tekon</span> <span class="a">delivery ci-watch</span> <span class="f">--max-attempts</span> <span class="n">20</span> <span class="f">--interval-ms</span> <span class="n">15000</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.18 eval readiness</span><span class="cb-ds">判断单次 run 交付证据是否完整</span></div><pre><code><span class="c">tekon</span> <span class="a">eval readiness</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.19 eval work-usability</span><span class="cb-ds">评估样本集是否达到试用门槛</span></div><pre><code><span class="c">tekon</span> <span class="a">eval work-usability</span> <span class="f">--samples</span> <span class="pth">/path/to/samples.yaml</span></code></pre></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.20 ui</span><span class="cb-ds">一键启动本地 Web Dashboard</span></div><pre><code><span class="c">tekon</span> <span class="a">ui</span>
+<span class="cm"># 指定端口</span>
+<span class="c">tekon</span> <span class="a">ui</span> <span class="f">--port</span> <span class="n">3001</span>
+<span class="cm"># 跨仓库</span>
+<span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>需要目标仓库已 <code>init</code>（有 <code>.tekon/web-session.json</code>）</li><li>启动后终端输出带 token 的 URL，浏览器打开即可</li><li><code>Ctrl+C</code> 停止服务</li></ul></div></div>
 </div>
 
 <!-- ════ TAB 6: Web Dashboard ════ -->
 <div class="tab-panel" id="p6">
-<div class="section-header"><span class="section-num">SECTION 07</span><h1 class="section-title">Web Dashboard</h1><p class="section-subtitle">本地 Web dashboard，用于审阅和人工决策。</p></div>
+<div class="section-header"><span class="section-num">SECTION 07</span><h1 class="section-title">Web Dashboard</h1><p class="section-subtitle">本地 Web dashboard，用于审阅和人工决策。<code>tekon ui</code> 一键启动。</p></div>
 <h3>启动</h3>
-<pre><code><span class="k">cd</span> <span class="s">~/.tekon</span> <span class="f">&amp;&amp;</span> <span class="k">TEKON_PROJECT_ROOT</span>=<span class="s">/path/to/project</span> <span class="c">npx</span> <span class="a">pnpm</span> <span class="f">--filter</span> <span class="s">@tekon/web</span> <span class="a">dev</span></code></pre>
+<pre><code><span class="c">tekon</span> <span class="a">ui</span>
+<span class="cm"># 指定端口</span>
+<span class="c">tekon</span> <span class="a">ui</span> <span class="f">--port</span> <span class="n">3001</span>
+<span class="cm"># 跨仓库</span>
+<span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre>
+<p>启动后终端输出带 token 的完整 URL，在浏览器打开即可。按 <code>Ctrl+C</code> 停止。</p>
 <p>Web dashboard 适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
 <div class="cl cl-w"><span class="cl-lb">Session Token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
 <p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>

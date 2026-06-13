@@ -839,13 +839,48 @@ tekon eval work-usability --samples /path/to/work-usability-samples.yaml --repor
 tekon eval work-usability record --id tekon-codex-self-bootstrap --expected-provider codex --require-real-provider --require-pr --samples docs/reviews/tekon-codex-samples.yaml
 ```
 
+### 6.20 `ui`
+
+用途：一键启动本地 Web Dashboard。
+
+```bash
+tekon ui
+```
+
+常用参数：
+
+- `--repo <path>`：跨仓库或从其它目录启动时指定目标仓库。
+- `--port <port>`：指定端口，默认 3000。
+
+启动后终端输出带 session token 的完整 URL，在浏览器中打开即可使用。按 `Ctrl+C` 停止服务。
+
+注意：
+
+- 目标仓库必须先执行过 `tekon init`（需要 `.tekon/web-session.json`）。
+- Web 是本地 dashboard，不是远程服务。
+- Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
+
 ## 7. Web Dashboard
 
 启动：
 
 ```bash
-cd ~/.tekon && TEKON_PROJECT_ROOT=/path/to/project npx pnpm --filter @tekon/web dev
+tekon ui
 ```
+
+可指定端口：
+
+```bash
+tekon ui --port 3001
+```
+
+跨仓库使用时显式传目标仓库：
+
+```bash
+tekon ui --repo /path/to/project
+```
+
+启动后终端会输出带 token 的完整 URL，在浏览器中打开即可。按 `Ctrl+C` 停止。
 
 Web dashboard 适合：
 

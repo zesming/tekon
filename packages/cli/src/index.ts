@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   cpSync,
@@ -140,6 +140,9 @@ export async function runCli(
         return 0;
       case 'clean':
         await commandClean(rest, io);
+        return 0;
+      case 'ui':
+        await commandUi(rest, io);
         return 0;
       default:
         io.stderr.write(`unknown command: ${command}\n`);
@@ -2110,6 +2113,76 @@ async function commandClean(argv: string[], io: CliIO) {
   }
   mkdirSync(worktreesDir, { recursive: true });
   io.stdout.write(`cleaned worktrees=${cleaned}\n`);
+}
+
+function resolveTekonRoot(): string {
+  if (process.env.TEKON_HOME) {
+    return resolve(process.env.TEKON_HOME);
+  }
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  const defaultPath = join(home, '.tekon');
+  if (existsSync(defaultPath)) {
+    return defaultPath;
+  }
+  throw new Error(
+    'Cannot find Tekon installation. Set TEKON_HOME env or run the install script.',
+  );
+}
+
+async function commandUi(argv: string[], io: CliIO) {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      port: { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolveProjectRepoPath(args.values.repo);
+  ensureInitialized(repoPath);
+
+  const tokenPath = join(repoPath, '.tekon', 'web-session.json');
+  if (!existsSync(tokenPath)) {
+    throw new Error('web-session.json not found; run "tekon init" first');
+  }
+  const { token } = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
+    token: string;
+  };
+
+  const tekonRoot = resolveTekonRoot();
+  const webDir = join(tekonRoot, 'packages', 'web');
+  if (!existsSync(webDir)) {
+    throw new Error(`web package not found at ${webDir}`);
+  }
+
+  const tsxBin = join(tekonRoot, 'node_modules', '.bin', 'tsx');
+  const port = args.values.port ?? '3000';
+
+  io.stdout.write(`repo=${repoPath}\n`);
+  io.stdout.write(`url=http://localhost:${port}?token=${token}\n`);
+  io.stdout.write('Starting Tekon Web... Press Ctrl+C to stop\n');
+
+  const child = spawn(tsxBin, ['src/server/index.ts'], {
+    cwd: webDir,
+    env: {
+      ...process.env,
+      TEKON_PROJECT_ROOT: repoPath,
+      PORT: port,
+    },
+    stdio: 'inherit',
+    shell: false,
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0 || code === null) {
+        resolve();
+      } else {
+        reject(new Error(`Web server exited with code ${code}`));
+      }
+    });
+  });
 }
 
 function openCommandContext(argv: string[]) {
