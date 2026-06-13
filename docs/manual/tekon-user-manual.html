@@ -109,14 +109,39 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 /* Flow Diagrams */
 .fl{background:var(--code-bg);border:1px solid var(--code-border);border-radius:6px;padding:20px;margin:16px 0 24px;overflow-x:auto}
 .fl svg{display:block;max-width:100%;height:auto}
-/* Scenario Flow SVG */
+/* Flow SVG elements (used by Quick Start / Concepts diagrams) */
 .sf-b{stroke-width:1.2;rx:5}.sf-a{fill:rgba(74,158,122,.1);stroke:var(--jade-dim)}.sf-h{fill:rgba(201,169,110,.1);stroke:var(--gold-dim)}
-.sf-l{font-family:var(--font-mono);font-size:10px;fill:var(--text-primary)}
-.sf-lc{font-family:var(--font-mono);font-size:9px;fill:var(--jade-bright)}
-.sf-lt{font-family:var(--font-display);font-size:11px;font-weight:600;fill:var(--text-bright)}
-.sf-n{font-family:var(--font-mono);font-size:8px;font-weight:700;fill:var(--paper-bright);text-anchor:middle}
-.sf-na{fill:var(--jade-dim)}.sf-nh{fill:var(--gold-dim)}
+.sf-l{font-family:var(--font-body);font-size:9px;fill:var(--text-secondary)}
+.sf-lc{font-family:var(--font-mono);font-size:10px;fill:var(--jade-bright)}
 .sf-ar{stroke:var(--ink-whisper);stroke-width:1.2;fill:none;marker-end:url(#ah)}
+/* Scenario Flow — CSS-based two-row diagrams */
+.sf-wrap{position:relative;padding:16px 0 8px;margin:12px 0}
+.sf-title{font-family:var(--font-display);font-size:13px;font-weight:600;color:var(--text-bright);margin-bottom:16px;padding-left:4px}
+.sf-lane{margin-bottom:12px;position:relative}
+.sf-lane-label{position:absolute;left:0;top:50%;transform:translateY(-50%);font-family:var(--font-mono);font-size:8px;font-weight:700;letter-spacing:0.5px;writing-mode:vertical-lr;text-orientation:mixed;padding:6px 3px;border-radius:2px;z-index:1}
+.sf-lane-label.h{color:var(--gold-bright);background:rgba(201,169,110,.08)}
+.sf-lane-label.a{color:var(--jade-bright);background:rgba(74,158,122,.08)}
+.sf-lane-steps{display:flex;flex-wrap:wrap;gap:0;margin-left:22px;align-items:stretch}
+.sf-step{display:flex;align-items:center;gap:6px;padding:7px 12px 7px 8px;border-radius:4px;border:1px solid;font-size:11px;line-height:1.35;position:relative;white-space:nowrap;margin-right:22px}
+.sf-step.h{border-color:rgba(201,169,110,.25);background:rgba(201,169,110,.08);color:var(--gold-bright)}
+.sf-step.a{border-color:rgba(74,158,122,.25);background:rgba(74,158,122,.08);color:var(--jade-bright)}
+.sf-step .n{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-family:var(--font-mono);font-size:9px;font-weight:700;color:var(--paper-bright);flex-shrink:0}
+.sf-step.h .n{background:var(--gold-dim)}
+.sf-step.a .n{background:var(--jade-dim)}
+.sf-step .t{font-family:var(--font-mono)}
+/* Arrow connector between steps */
+.sf-step::after{content:'→';position:absolute;right:-18px;top:50%;transform:translateY(-50%);color:var(--ink-whisper);font-size:12px;font-family:var(--font-mono)}
+.sf-lane-steps .sf-step:last-child::after{display:none}
+/* Lane divider */
+.sf-divider{height:1px;background:rgba(201,169,110,.1);margin:4px 0 8px 22px;position:relative}
+.sf-divider::before{content:'';position:absolute;left:-4px;top:-2px;width:7px;height:4px;border-left:1px solid var(--vermillion);border-bottom:1px solid var(--vermillion);transform:rotate(-45deg)}
+/* Legend */
+.sf-legend{display:flex;gap:18px;margin-top:10px;margin-left:22px;font-size:10px;color:var(--text-secondary);font-family:var(--font-body)}
+.sf-legend span{display:flex;align-items:center;gap:4px}
+.sf-legend .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.sf-legend .dot.ha{background:rgba(201,169,110,.3)}
+.sf-legend .dot.ag{background:rgba(74,158,122,.3)}
+@media(max-width:840px){.sf-lane-steps{flex-direction:column;gap:4px}.sf-step{margin-right:0}.sf-step::after{display:none}.sf-step::before{content:'↓';position:absolute;left:7px;bottom:-14px;color:var(--ink-whisper);font-size:10px;font-family:var(--font-mono);z-index:1}.sf-lane-steps .sf-step:last-child::before{display:none}}
 /* Scenario Cards */
 .sc{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:7px;padding:20px 24px;margin:16px 0;position:relative;overflow:hidden}
 .sc::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--vermillion),var(--gold-dim))}
@@ -260,83 +285,68 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 
 <!-- ════ TAB 2: 核心场景 ════ -->
 <div class="tab-panel" id="p2">
-<div class="section-header"><span class="section-num">SECTION 03</span><h1 class="section-title">核心用户场景</h1><p class="section-subtitle">四种典型场景。上层金色为人工操作，下层绿色为 Tekon 自动执行。</p></div>
+<div class="section-header"><span class="section-num">SECTION 03</span><h1 class="section-title">核心用户场景</h1><p class="section-subtitle">四种典型场景。金色框为人工操作，绿色框为 Tekon 自动执行。</p></div>
 
 <div class="sc"><div class="sc-lb">SCENARIO A</div><div class="sc-tt">我有一个小功能，希望推进到可审 PR</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
-<div class="fl"><svg viewBox="0 0 900 175" width="100%" height="auto">
-<text x="24" y="18" class="sf-lt">完整交付流程</text>
-<text x="24" y="72" class="sf-l" style="fill:var(--gold-bright);font-weight:700;font-size:9px">Human</text>
-<text x="24" y="140" class="sf-l" style="fill:var(--jade-bright);font-weight:700;font-size:9px">Tekon</text>
-<line x1="76" y1="95" x2="884" y2="95" stroke="var(--ink-whisper)" stroke-width="0.5" stroke-dasharray="4,4"/>
-<!-- Row 1: Human steps -->
-<rect x="76" y="56" width="150" height="34" class="sf-b sf-h"/><circle cx="90" cy="73" r="9" class="sf-nh"/><text x="90" y="76" class="sf-n">3</text><text x="104" y="68" class="sf-lc">审阅需求卡，确认边界</text>
-<rect x="238" y="56" width="150" height="34" class="sf-b sf-h"/><circle cx="252" cy="73" r="9" class="sf-nh"/><text x="252" y="76" class="sf-n">4</text><text x="266" y="68" class="sf-lc">demand approve</text>
-<rect x="400" y="56" width="150" height="34" class="sf-b sf-h"/><circle cx="414" cy="73" r="9" class="sf-nh"/><text x="414" y="76" class="sf-n">6</text><text x="428" y="68" class="sf-lc">status / review</text>
-<rect x="562" y="56" width="160" height="34" class="sf-b sf-h"/><circle cx="576" cy="73" r="9" class="sf-nh"/><text x="576" y="76" class="sf-n">8</text><text x="590" y="68" class="sf-lc">create-pr --approve-human</text>
-<!-- Row 2: Agent steps -->
-<rect x="76" y="124" width="150" height="34" class="sf-b sf-a"/><circle cx="90" cy="141" r="9" class="sf-na"/><text x="90" y="144" class="sf-n">1</text><text x="104" y="136" class="sf-lc">tekon init</text>
-<rect x="238" y="124" width="150" height="34" class="sf-b sf-a"/><circle cx="252" cy="141" r="9" class="sf-na"/><text x="252" y="144" class="sf-n">2</text><text x="266" y="136" class="sf-lc">demand shape</text>
-<rect x="400" y="124" width="150" height="34" class="sf-b sf-a"/><circle cx="414" cy="141" r="9" class="sf-na"/><text x="414" y="144" class="sf-n">5</text><text x="428" y="136" class="sf-lc">tekon run</text>
-<rect x="562" y="124" width="150" height="34" class="sf-b sf-a"/><circle cx="576" cy="141" r="9" class="sf-na"/><text x="576" y="144" class="sf-n">7</text><text x="590" y="136" class="sf-lc">delivery prepare</text>
-<rect x="724" y="124" width="150" height="34" class="sf-b sf-a"/><circle cx="738" cy="141" r="9" class="sf-na"/><text x="738" y="144" class="sf-n">9</text><text x="752" y="136" class="sf-lc">ci-status / eval readiness</text>
-<!-- Arrows: same-row horizontal -->
-<line x1="226" y1="73" x2="236" y2="73" class="sf-ar"/><line x1="388" y1="73" x2="398" y2="73" class="sf-ar"/>
-<line x1="550" y1="73" x2="560" y2="73" class="sf-ar"/>
-<line x1="226" y1="141" x2="236" y2="141" class="sf-ar"/><line x1="388" y1="141" x2="398" y2="141" class="sf-ar"/>
-<line x1="550" y1="141" x2="560" y2="141" class="sf-ar"/><line x1="712" y1="141" x2="722" y2="141" class="sf-ar"/>
-<!-- Cross-row zigzag arrows -->
-<line x1="226" y1="141" x2="226" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="226" y1="110" x2="76" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="76" y1="110" x2="76" y2="73" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="388" y1="73" x2="388" y2="118" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="388" y1="118" x2="400" y2="118" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="400" y1="118" x2="400" y2="141" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="550" y1="141" x2="550" y2="103" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="550" y1="103" x2="562" y2="103" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="562" y1="103" x2="562" y2="73" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="722" y1="73" x2="722" y2="118" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="722" y1="118" x2="724" y2="118" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="724" y1="118" x2="724" y2="141" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-</svg></div>
+<p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
+<div class="sf-wrap">
+<div class="sf-title">完整交付流程 — 从需求到可审 PR</div>
+<div class="sf-lane"><div class="sf-lane-label h">Human</div>
+<div class="sf-lane-steps">
+<span class="sf-step h"><span class="n">3</span><span class="t">审阅需求卡，确认边界和验收标准</span></span>
+<span class="sf-step h"><span class="n">4</span><span class="t">demand approve 批准需求卡</span></span>
+<span class="sf-step h"><span class="n">6</span><span class="t">status / review 查看结果和审阅面</span></span>
+<span class="sf-step h"><span class="n">8</span><span class="t">create-pr --approve-human</span></span>
+</div></div>
+<div class="sf-divider"></div>
+<div class="sf-lane"><div class="sf-lane-label a">Tekon</div>
+<div class="sf-lane-steps">
+<span class="sf-step a"><span class="n">1</span><span class="t">tekon init</span></span>
+<span class="sf-step a"><span class="n">2</span><span class="t">demand shape 需求塑形</span></span>
+<span class="sf-step a"><span class="n">5</span><span class="t">tekon run 执行 workflow</span></span>
+<span class="sf-step a"><span class="n">7</span><span class="t">delivery prepare 生成 PR 包</span></span>
+<span class="sf-step a"><span class="n">9</span><span class="t">ci-status / eval readiness</span></span>
+</div></div>
+<div class="sf-legend"><span><span class="dot ha"></span> 人工操作</span><span><span class="dot ag"></span> Tekon 自动执行</span></div>
+</div>
 </div>
 
 <div class="sc"><div class="sc-lb">SCENARIO B</div><div class="sc-tt">我只想修一个 bug，但需要人工确认风险</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
-<div class="fl"><svg viewBox="0 0 900 175" width="100%" height="auto">
-<text x="24" y="18" class="sf-lt">Bug 修复 + 人工审批流程</text>
-<text x="24" y="72" class="sf-l" style="fill:var(--gold-bright);font-weight:700;font-size:9px">Human</text>
-<text x="24" y="140" class="sf-l" style="fill:var(--jade-bright);font-weight:700;font-size:9px">Tekon</text>
-<line x1="76" y1="95" x2="884" y2="95" stroke="var(--ink-whisper)" stroke-width="0.5" stroke-dasharray="4,4"/>
-<rect x="400" y="60" width="200" height="30" class="sf-b sf-h" rx="3"/><circle cx="414" cy="75" r="8" class="sf-nh"/><text x="414" y="78" class="sf-n">4</text><text x="426" y="70" class="sf-lc">人工判断：approve 或 reject</text>
-<rect x="76" y="128" width="170" height="30" class="sf-b sf-a" rx="3"/><circle cx="90" cy="143" r="8" class="sf-na"/><text x="90" y="146" class="sf-n">1</text><text x="102" y="138" class="sf-lc">bugfix 模板运行</text>
-<rect x="258" y="128" width="200" height="30" class="sf-b sf-a" rx="3"/><circle cx="272" cy="143" r="8" class="sf-na"/><text x="272" y="146" class="sf-n">2</text><text x="284" y="138" class="sf-lc">approval summary</text>
-<rect x="470" y="128" width="200" height="30" class="sf-b sf-a" rx="3"/><circle cx="484" cy="143" r="8" class="sf-na"/><text x="484" y="146" class="sf-n">3</text><text x="496" y="138" class="sf-lc">eval approval-summary</text>
-<line x1="246" y1="143" x2="256" y2="143" class="sf-ar"/>
-<line x1="458" y1="143" x2="468" y2="143" class="sf-ar"/>
-<line x1="670" y1="143" x2="670" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="670" y1="110" x2="400" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="400" y1="110" x2="400" y2="75" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-</svg></div>
+<p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
+<div class="sf-wrap">
+<div class="sf-title">Bug 修复 + 人工审批流程</div>
+<div class="sf-lane"><div class="sf-lane-label h">Human</div>
+<div class="sf-lane-steps">
+<span class="sf-step h"><span class="n">4</span><span class="t">人工判断：resume --approve-human 或 approval reject</span></span>
+</div></div>
+<div class="sf-divider"></div>
+<div class="sf-lane"><div class="sf-lane-label a">Tekon</div>
+<div class="sf-lane-steps">
+<span class="sf-step a"><span class="n">1</span><span class="t">bugfix 模板运行</span></span>
+<span class="sf-step a"><span class="n">2</span><span class="t">approval summary 生成审批摘要</span></span>
+<span class="sf-step a"><span class="n">3</span><span class="t">eval approval-summary 检查完整性</span></span>
+</div></div>
+<div class="sf-legend"><span><span class="dot ha"></span> 人工操作</span><span><span class="dot ag"></span> Tekon 自动执行</span></div>
+</div>
 </div>
 
 <div class="sc"><div class="sc-lb">SCENARIO C</div><div class="sc-tt">我只想补测试</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
-<div class="fl"><svg viewBox="0 0 900 175" width="100%" height="auto">
-<text x="24" y="18" class="sf-lt">测试补齐流程</text>
-<text x="24" y="72" class="sf-l" style="fill:var(--gold-bright);font-weight:700;font-size:9px">Human</text>
-<text x="24" y="140" class="sf-l" style="fill:var(--jade-bright);font-weight:700;font-size:9px">Tekon</text>
-<line x1="76" y1="95" x2="884" y2="95" stroke="var(--ink-whisper)" stroke-width="0.5" stroke-dasharray="4,4"/>
-<rect x="400" y="60" width="180" height="30" class="sf-b sf-h" rx="3"/><circle cx="414" cy="75" r="8" class="sf-nh"/><text x="414" y="78" class="sf-n">3</text><text x="426" y="70" class="sf-lc">查看 gate 是否通过</text>
-<rect x="592" y="60" width="180" height="30" class="sf-b sf-h" rx="3"/><circle cx="606" cy="75" r="8" class="sf-nh"/><text x="606" y="78" class="sf-n">4</text><text x="618" y="70" class="sf-lc">review 检查测试证据</text>
-<rect x="76" y="128" width="200" height="30" class="sf-b sf-a" rx="3"/><circle cx="90" cy="143" r="8" class="sf-na"/><text x="90" y="146" class="sf-n">1</text><text x="102" y="138" class="sf-lc">workflow select 推荐模板</text>
-<rect x="288" y="128" width="200" height="30" class="sf-b sf-a" rx="3"/><circle cx="302" cy="143" r="8" class="sf-na"/><text x="302" y="146" class="sf-n">2</text><text x="314" y="138" class="sf-lc">run --template test-improvement</text>
-<line x1="276" y1="143" x2="286" y2="143" class="sf-ar"/>
-<line x1="580" y1="75" x2="590" y2="75" class="sf-ar"/>
-<line x1="488" y1="143" x2="488" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-<line x1="488" y1="110" x2="400" y2="110" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#ah)"/>
-<line x1="400" y1="110" x2="400" y2="75" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>
-</svg></div>
+<p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
+<div class="sf-wrap">
+<div class="sf-title">测试补齐流程</div>
+<div class="sf-lane"><div class="sf-lane-label h">Human</div>
+<div class="sf-lane-steps">
+<span class="sf-step h"><span class="n">3</span><span class="t">查看 gate 是否通过</span></span>
+<span class="sf-step h"><span class="n">4</span><span class="t">review 检查 artifact 和测试证据</span></span>
+</div></div>
+<div class="sf-divider"></div>
+<div class="sf-lane"><div class="sf-lane-label a">Tekon</div>
+<div class="sf-lane-steps">
+<span class="sf-step a"><span class="n">1</span><span class="t">workflow select 推荐模板</span></span>
+<span class="sf-step a"><span class="n">2</span><span class="t">run --template test-improvement</span></span>
+</div></div>
+<div class="sf-legend"><span><span class="dot ha"></span> 人工操作</span><span><span class="dot ag"></span> Tekon 自动执行</span></div>
+</div>
 </div>
 
 <div class="sc"><div class="sc-lb">SCENARIO D</div><div class="sc-tt">我只想写文档或方案</div>
