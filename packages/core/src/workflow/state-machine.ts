@@ -42,7 +42,7 @@ export const LEGAL_WORKFLOW_NODE_TRANSITIONS: Record<
   blocked: ['running', 'failed'],
   paused: ['running', 'interrupted', 'failed'],
   interrupted: ['running', 'failed'],
-  passed: [],
+  passed: ['needs-revision'],
   skipped: [],
   failed: [],
 };

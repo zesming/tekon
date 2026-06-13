@@ -89,7 +89,19 @@ describe('workflow state machine', () => {
   });
 
   it('all terminal states have zero outgoing transitions', () => {
-    const terminalStates = ['passed', 'skipped', 'failed'] as const;
+    // Note: 'passed' is no longer terminal — it can transition to
+    // 'needs-revision' when an independent review finds changes-requested.
+    const terminalStates = ['skipped', 'failed'] as const;
+    // Verify 'passed' can only go to 'needs-revision'
+    expect(canWorkflowTransition('passed', 'needs-revision')).toBe(true);
+    const nonRevisionTargets = [
+      'pending', 'running', 'awaiting-gate', 'blocked',
+      'paused', 'interrupted', 'skipped', 'failed',
+    ] as const;
+    for (const target of nonRevisionTargets) {
+      expect(canWorkflowTransition('passed', target)).toBe(false);
+    }
+
     const allStates = [
       'pending',
       'running',
