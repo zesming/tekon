@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -559,6 +559,7 @@ export function createWorkflowEngine(
 
     // When an independent-review gate finds changes-requested, rework the
     // target (reviewed) node instead of blocking the review node.
+    // Retries up to maxReworkAttempts (default 5) before falling through to blocked.
     const isChangesRequested =
       result.failureClassification === 'changes-requested' &&
       gate.type === 'independent-review';
@@ -566,16 +567,39 @@ export function createWorkflowEngine(
     if (isChangesRequested) {
       const targetNodeId = await resolveReviewTargetNode(runId, node.id);
       if (targetNodeId) {
-        await attemptChangesRequestedRework(
-          runId,
-          node,
-          gate,
-          result,
-          targetNodeId,
-        );
-        // Re-run the gate to check if the rework fixed the issues
-        result = await runGate(runId, node.id, gate);
-        if (result.status === 'passed' || result.status === 'skipped') {
+        const maxReworkAttempts = gate.maxRetries > 0 ? gate.maxRetries : 5;
+        let reworkAttempt = 0;
+        let reworkPassed = false;
+
+        while (reworkAttempt < maxReworkAttempts && !reworkPassed) {
+          reworkAttempt++;
+          await options.audit.append({
+            runId,
+            type: 'gate.rework.attempt',
+            payload: {
+              nodeId: node.id,
+              targetNodeId,
+              attempt: reworkAttempt,
+              maxAttempts: maxReworkAttempts,
+            },
+          });
+
+          await attemptChangesRequestedRework(
+            runId,
+            node,
+            gate,
+            result,
+            targetNodeId,
+          );
+
+          // Re-run the gate to check if the rework fixed the issues
+          result = await runGate(runId, node.id, gate);
+          if (result.status === 'passed' || result.status === 'skipped') {
+            reworkPassed = true;
+          }
+        }
+
+        if (reworkPassed) {
           await options.repositories.transitionNode(node.id, 'passed');
           await options.audit.append({
             runId,
@@ -585,6 +609,7 @@ export function createWorkflowEngine(
               gateType: gate.type,
               gateKey: gate.gateKey,
               reworkedTargetNodeId: targetNodeId,
+              attempts: reworkAttempt,
             },
           });
           return true;
@@ -613,32 +638,78 @@ export function createWorkflowEngine(
 
   /**
    * Find the target node that a review artifact is reviewing.
-   * Returns the target node ID or null if not found.
+   * Reads the review artifact to extract reviewProcess.targetNodeId.
+   * Falls back to heuristic (latest upstream passed node) if artifact is unreadable.
    */
   async function resolveReviewTargetNode(
     runId: string,
     reviewNodeId: string,
   ): Promise<string | null> {
     try {
+      // Try to read targetNodeId from the review artifact payload
+      const reviewArtifacts = await options.repositories.listArtifacts(
+        runId,
+        reviewNodeId,
+      );
+      const reviewTypes = [
+        'technical-review',
+        'demand-review',
+        'requirement-interface-review',
+      ];
+      const reviewArtifact = reviewArtifacts.find((a) =>
+        reviewTypes.includes(a.type),
+      );
+      if (reviewArtifact) {
+        const artifactRoot = join(
+          options.repoPath,
+          options.dataDir,
+          'runs',
+          runId,
+          'artifacts',
+          reviewNodeId,
+        );
+        const artifactPath = join(artifactRoot, reviewArtifact.path);
+        if (existsSync(artifactPath)) {
+          try {
+            const raw = readFileSync(artifactPath, 'utf8');
+            const payload = JSON.parse(raw);
+            const targetNodeId =
+              payload?.reviewProcess?.targetNodeId as string | undefined;
+            if (targetNodeId) {
+              // Verify the target node exists in this run
+              const targetNode =
+                await options.repositories.getNode(targetNodeId);
+              if (targetNode && targetNode.runId === runId) {
+                return targetNodeId;
+              }
+            }
+          } catch {
+            // JSON parse failed — fall through to heuristic
+          }
+        }
+      }
+    } catch {
+      // Fall through to heuristic
+    }
+
+    // Heuristic fallback: pick the latest upstream passed node
+    try {
       const nodes = await options.repositories.listNodes(runId);
       const reviewNode = nodes.find((n) => n.id === reviewNodeId);
       if (!reviewNode) return null;
 
-      // The review target is the node that produced the artifact being reviewed.
-      // It's typically an upstream node in the same or a prior phase.
       const upstreamNodes = nodes.filter(
         (n) =>
           n.id !== reviewNodeId &&
           n.status === 'passed',
       );
-      // Return the most recently passed upstream node
       if (upstreamNodes.length > 0) {
         return upstreamNodes[upstreamNodes.length - 1].id;
       }
-      return null;
     } catch {
-      return null;
+      // Ignore
     }
+    return null;
   }
 
   /**
@@ -669,6 +740,8 @@ export function createWorkflowEngine(
       },
     });
 
+    const reworkNodeId = `${targetNodeId}_rework`;
+
     // Build rework prompt: original context + review feedback
     const reviewArtifactContent = await loadReviewArtifactContent(
       runId,
@@ -682,9 +755,25 @@ export function createWorkflowEngine(
     // Finalize any existing lease on the review node
     await finalizeExecutionLease(runId, reviewNode.id);
 
+    // Persist the rework node before creating a lease
+    const now = new Date().toISOString();
+    await options.repositories.createNode({
+      id: reworkNodeId,
+      runId,
+      role: targetNode.role,
+      status: 'pending',
+      inputs: [],
+      outputs: [],
+      gates: [],
+      dependencies: [reviewNode.id],
+      createdAt: now,
+      updatedAt: now,
+      phaseId: targetNode.phaseId,
+    });
+
     // Create a fresh lease for the rework
     const reworkLease = await createExecutionLease(runId, {
-      id: `${targetNodeId}_rework`,
+      id: reworkNodeId,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
     });
@@ -695,7 +784,7 @@ export function createWorkflowEngine(
         await agentInputForLease(
           runId,
           {
-            id: `${targetNodeId}_rework`,
+            id: reworkNodeId,
             role: targetNode.role,
             phaseId: targetNode.phaseId,
           },
@@ -706,10 +795,7 @@ export function createWorkflowEngine(
       assertSuccessfulAgentRun(reworkResult);
 
       // After successful rework, transition target back to passed
-      await options.repositories.transitionNode(
-        `${targetNodeId}_rework`,
-        'passed',
-      );
+      await options.repositories.transitionNode(reworkNodeId, 'passed');
       // Also update the original target node
       await options.repositories.transitionNode(targetNodeId, 'passed');
 
@@ -719,14 +805,11 @@ export function createWorkflowEngine(
         payload: {
           reviewNodeId: reviewNode.id,
           targetNodeId,
-          reworkNodeId: `${targetNodeId}_rework`,
+          reworkNodeId,
         },
       });
     } catch (error) {
-      await options.repositories.transitionNode(
-        `${targetNodeId}_rework`,
-        'interrupted',
-      );
+      await options.repositories.transitionNode(reworkNodeId, 'interrupted');
       await options.audit.append({
         runId,
         type: 'gate.rework.failed',

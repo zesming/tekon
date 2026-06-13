@@ -1386,6 +1386,271 @@ describe('gate engine', () => {
     expect(readFileSync(result.outputPath!, 'utf8')).toContain('qa_validation');
     db.close();
   });
+
+  describe('independent review gate with changes-requested', () => {
+    it('returns failed with changes-requested classification when decision is changes-requested', async () => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-changes-req-'));
+      tempDirs.push(repoPath);
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories, repoPath);
+      await repositories.createNode({
+        id: 'rd_implementation_plan',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'passed',
+        outputs: [{ id: 'implementation-plan', type: 'implementation-plan' }],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createNode({
+        id: 'rd_technical_review',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'running',
+        inputs: [
+          {
+            id: 'implementation-plan',
+            type: 'implementation-plan',
+            fromNodeId: 'rd_implementation_plan',
+          },
+        ],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createRoleRun({
+        id: 'role_run_changes_req',
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        role: 'rd',
+        status: 'passed',
+        startedAt: '2026-06-05T00:00:00.100Z',
+        completedAt: '2026-06-05T00:00:00.200Z',
+      });
+      const store = createArtifactStore({ repoPath, repositories });
+      await store.writeArtifact({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        type: 'technical-review',
+        content: JSON.stringify({
+          title: 'Technical review',
+          body: 'Changes requested for the implementation plan.',
+          reviewScope: 'technical-design',
+          reviewProcess: {
+            mode: 'independent-agent',
+            reviewerId: 'rd-review-agent-1',
+            reviewerRole: 'rd',
+            targetNodeId: 'rd_implementation_plan',
+            targetRole: 'rd',
+          },
+          decision: 'changes-requested',
+        }),
+      });
+      const engine = createGateEngine({ repositories });
+
+      const result = await engine.runGate({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        gate: { type: 'independent-review', artifactType: 'technical-review' },
+        cwd: repoPath,
+        outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+        policy: {
+          allow: [],
+          deny: [],
+          requiresHumanApproval: [],
+          cwdScope: [repoPath],
+          network: 'disabled',
+        },
+      });
+
+      expect(result).toMatchObject({
+        gateType: 'independent-review',
+        status: 'failed',
+        failureClassification: 'changes-requested',
+      });
+      db.close();
+    });
+
+    it('returns failed with review-not-approved when decision is blocked', async () => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-blocked-'));
+      tempDirs.push(repoPath);
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories, repoPath);
+      await repositories.createNode({
+        id: 'rd_implementation_plan',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'passed',
+        outputs: [{ id: 'implementation-plan', type: 'implementation-plan' }],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createNode({
+        id: 'rd_technical_review',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'running',
+        inputs: [
+          {
+            id: 'implementation-plan',
+            type: 'implementation-plan',
+            fromNodeId: 'rd_implementation_plan',
+          },
+        ],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createRoleRun({
+        id: 'role_run_blocked',
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        role: 'rd',
+        status: 'passed',
+        startedAt: '2026-06-05T00:00:00.100Z',
+        completedAt: '2026-06-05T00:00:00.200Z',
+      });
+      const store = createArtifactStore({ repoPath, repositories });
+      await store.writeArtifact({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        type: 'technical-review',
+        content: JSON.stringify({
+          title: 'Technical review',
+          body: 'Blocked — the implementation plan has issues.',
+          reviewScope: 'technical-design',
+          reviewProcess: {
+            mode: 'independent-agent',
+            reviewerId: 'rd-review-agent-1',
+            reviewerRole: 'rd',
+            targetNodeId: 'rd_implementation_plan',
+            targetRole: 'rd',
+          },
+          decision: 'blocked',
+        }),
+      });
+      const engine = createGateEngine({ repositories });
+
+      const result = await engine.runGate({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        gate: { type: 'independent-review', artifactType: 'technical-review' },
+        cwd: repoPath,
+        outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+        policy: {
+          allow: [],
+          deny: [],
+          requiresHumanApproval: [],
+          cwdScope: [repoPath],
+          network: 'disabled',
+        },
+      });
+
+      expect(result).toMatchObject({
+        gateType: 'independent-review',
+        status: 'failed',
+        failureClassification: 'review-not-approved',
+      });
+      db.close();
+    });
+
+    it('returns passed when decision is approved', async () => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-approved-'));
+      tempDirs.push(repoPath);
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories, repoPath);
+      await repositories.createNode({
+        id: 'rd_implementation_plan',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'passed',
+        outputs: [{ id: 'implementation-plan', type: 'implementation-plan' }],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createNode({
+        id: 'rd_technical_review',
+        runId: 'run_1',
+        role: 'rd',
+        status: 'running',
+        inputs: [
+          {
+            id: 'implementation-plan',
+            type: 'implementation-plan',
+            fromNodeId: 'rd_implementation_plan',
+          },
+        ],
+        gates: [],
+        dependencies: ['node_1'],
+        createdAt: '2026-06-05T00:00:00.000Z',
+        updatedAt: '2026-06-05T00:00:00.000Z',
+      });
+      await repositories.createRoleRun({
+        id: 'role_run_approved',
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        role: 'rd',
+        status: 'passed',
+        startedAt: '2026-06-05T00:00:00.100Z',
+        completedAt: '2026-06-05T00:00:00.200Z',
+      });
+      const store = createArtifactStore({ repoPath, repositories });
+      await store.writeArtifact({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        type: 'technical-review',
+        content: JSON.stringify({
+          title: 'Technical review',
+          body: 'The implementation plan is approved.',
+          reviewScope: 'technical-design',
+          reviewProcess: {
+            mode: 'independent-agent',
+            reviewerId: 'rd-review-agent-1',
+            reviewerRole: 'rd',
+            targetNodeId: 'rd_implementation_plan',
+            targetRole: 'rd',
+          },
+          decision: 'approved',
+        }),
+      });
+      const engine = createGateEngine({ repositories });
+
+      const result = await engine.runGate({
+        runId: 'run_1',
+        nodeId: 'rd_technical_review',
+        gate: { type: 'independent-review', artifactType: 'technical-review' },
+        cwd: repoPath,
+        outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+        policy: {
+          allow: [],
+          deny: [],
+          requiresHumanApproval: [],
+          cwdScope: [repoPath],
+          network: 'disabled',
+        },
+      });
+
+      expect(result).toMatchObject({
+        gateType: 'independent-review',
+        status: 'passed',
+      });
+      db.close();
+    });
+  });
 });
 
 async function createRunFixture(

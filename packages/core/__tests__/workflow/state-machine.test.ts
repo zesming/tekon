@@ -122,6 +122,46 @@ describe('workflow state machine', () => {
     }
   });
 
+  it('passed node can transition to needs-revision for rework', () => {
+    expect(canWorkflowTransition('passed', 'needs-revision')).toBe(true);
+
+    const node = { status: 'passed' as const, revision: 0 };
+    const result = transitionWorkflowNode(node, 'needs-revision');
+
+    expect(result.status).toBe('needs-revision');
+    expect(result.revision).toBe(1);
+  });
+
+  it('passed node cannot transition to other states', () => {
+    expect(canWorkflowTransition('passed', 'running')).toBe(false);
+    expect(canWorkflowTransition('passed', 'blocked')).toBe(false);
+    expect(canWorkflowTransition('passed', 'failed')).toBe(false);
+    expect(canWorkflowTransition('passed', 'pending')).toBe(false);
+  });
+
+  it('needs-revision to running transition works for re-execution', () => {
+    expect(canWorkflowTransition('needs-revision', 'running')).toBe(true);
+  });
+
+  it('transitionWorkflowNode handles passed → needs-revision → running → passed revision chain', () => {
+    let node = { status: 'passed' as const, revision: 0 };
+
+    // Transition to needs-revision → revision should be 1
+    node = transitionWorkflowNode(node, 'needs-revision');
+    expect(node.status).toBe('needs-revision');
+    expect(node.revision).toBe(1);
+
+    // Transition to running → revision should stay 1
+    node = transitionWorkflowNode(node, 'running');
+    expect(node.status).toBe('running');
+    expect(node.revision).toBe(1);
+
+    // Transition to passed → revision should stay 1
+    node = transitionWorkflowNode(node, 'passed');
+    expect(node.status).toBe('passed');
+    expect(node.revision).toBe(1);
+  });
+
   it('throws for invalid source or target status values', () => {
     expect(() => canWorkflowTransition('completed' as any, 'running')).toThrow();
     expect(() => canWorkflowTransition('pending', 'success' as any)).toThrow();
