@@ -1,13 +1,13 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<meta name="description" content="天工 Tekon — 本地 Agent workflow 框架用户手册"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="天工 Tekon — 本地 Agent workflow 框架用户手册">
 <title>天工 Tekon — User Manual</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════
    天工 TEKON — User Manual  v2.1  2026.06.13
@@ -145,6 +145,17 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 .sf-legend .dot.ag{background:rgba(74,158,122,.25)}
 .sf-legend .dot.op{border:1.5px dashed rgba(201,169,110,.25);background:rgba(201,169,110,.04)}
 @media(max-width:840px){.sf-svg{min-height:160px}}
+/* Scenario description text */
+.sc-desc{font-size:13px;color:var(--text-secondary);margin-bottom:12px}
+.sc-desc-no-mb{font-size:13px;color:var(--text-secondary)}
+/* SVG special fills */
+.sf-done{fill:rgba(74,158,122,.15);stroke:var(--jade-dim)}
+.sf-ar-v{stroke:var(--vermillion)}
+/* Check list in 判断结果 tab */
+.chk-ol{padding-left:0;list-style:none}
+.chk-li{padding-left:28px;position:relative;margin-bottom:8px;font-size:14px}
+/* Hidden screen-reader SVG */
+.sr-svg{position:absolute;width:0;height:0}
 /* Scenario Cards */
 .sc{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:7px;padding:20px 24px;margin:16px 0;position:relative;overflow:hidden}
 .sc::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--vermillion),var(--gold-dim))}
@@ -202,38 +213,38 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
         zesming/tekon
       </a>
       <div class="lang-toggle" id="langToggle">
-        <button class="lang-btn active" data-lang="zh">中</button>
-        <button class="lang-btn" data-lang="en">EN</button>
+        <button type="button" class="lang-btn active" data-lang="zh">中</button>
+        <button type="button" class="lang-btn" data-lang="en">EN</button>
       </div>
       <span class="header-date">2026.06.13</span>
     </div>
-    <button class="mobile-menu-btn" id="menuBtn" aria-label="菜单" aria-expanded="false">☰</button>
+    <button type="button" class="mobile-menu-btn" id="menuBtn" aria-label="菜单" aria-expanded="false">☰</button>
   </div>
 </header>
 
 <div class="layout">
-<nav class="sidebar" id="sidebar">
+<nav class="sidebar" id="sidebar" aria-label="主导航">
   <div class="nav-section"><div class="nav-section-label">认识天工</div>
-    <button class="nav-tab active" data-tab="0"><span class="tab-dot"></span>天工是什么</button>
-    <button class="nav-tab" data-tab="1"><span class="tab-dot"></span>解决什么问题</button>
+    <button type="button" class="nav-tab active" data-tab="0"><span class="tab-dot"></span>天工是什么</button>
+    <button type="button" class="nav-tab" data-tab="1"><span class="tab-dot"></span>解决什么问题</button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label">上手指南</div>
-    <button class="nav-tab" data-tab="2"><span class="tab-dot"></span>核心场景</button>
-    <button class="nav-tab" data-tab="3"><span class="tab-dot"></span>Quick Start</button>
+    <button type="button" class="nav-tab" data-tab="2"><span class="tab-dot"></span>核心场景</button>
+    <button type="button" class="nav-tab" data-tab="3"><span class="tab-dot"></span>Quick Start</button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label">深入理解</div>
-    <button class="nav-tab" data-tab="4"><span class="tab-dot"></span>核心概念</button>
-    <button class="nav-tab" data-tab="5"><span class="tab-dot"></span>命令详解</button>
+    <button type="button" class="nav-tab" data-tab="4"><span class="tab-dot"></span>核心概念</button>
+    <button type="button" class="nav-tab" data-tab="5"><span class="tab-dot"></span>命令详解</button>
   </div>
   <div class="nav-divider"></div>
   <div class="nav-section"><div class="nav-section-label">更多</div>
-    <button class="nav-tab" data-tab="6"><span class="tab-dot"></span>Web Dashboard</button>
-    <button class="nav-tab" data-tab="7"><span class="tab-dot"></span>判断结果</button>
-    <button class="nav-tab" data-tab="8"><span class="tab-dot"></span>常见问题</button>
-    <button class="nav-tab" data-tab="9"><span class="tab-dot"></span>参数速查</button>
-    <button class="nav-tab" data-tab="10"><span class="tab-dot"></span>使用说明</button>
+    <button type="button" class="nav-tab" data-tab="6"><span class="tab-dot"></span>Web Dashboard</button>
+    <button type="button" class="nav-tab" data-tab="7"><span class="tab-dot"></span>判断结果</button>
+    <button type="button" class="nav-tab" data-tab="8"><span class="tab-dot"></span>常见问题</button>
+    <button type="button" class="nav-tab" data-tab="9"><span class="tab-dot"></span>参数速查</button>
+    <button type="button" class="nav-tab" data-tab="10"><span class="tab-dot"></span>使用说明</button>
   </div>
 </nav>
 
@@ -292,7 +303,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 
 <!-- ══ SCENARIO A ══ -->
 <div class="sc"><div class="sc-lb">SCENARIO A</div><div class="sc-tt">我有一个小功能，希望推进到可审 PR</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
+<p class="sc-desc">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
 <div class="sf-wrap">
 <div class="sf-title">完整交付流程 — 从需求到可审 PR（Human ↔ Tekon 交替时序）</div>
 <svg class="sf-svg" viewBox="0 0 920 156" width="100%" height="auto">
@@ -335,7 +346,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 
 <!-- ══ SCENARIO B ══ -->
 <div class="sc"><div class="sc-lb">SCENARIO B</div><div class="sc-tt">我只想修一个 bug，但需要人工确认风险</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
+<p class="sc-desc">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
 <div class="sf-wrap">
 <div class="sf-title">Bug 修复 + 人工审批流程</div>
 <svg class="sf-svg" viewBox="0 0 520 156" width="100%" height="auto">
@@ -361,7 +372,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 
 <!-- ══ SCENARIO C ══ -->
 <div class="sc"><div class="sc-lb">SCENARIO C</div><div class="sc-tt">我只想补测试</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
+<p class="sc-desc">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
 <div class="sf-wrap">
 <div class="sf-title">测试补齐流程 — 人类观察步骤均为可选</div>
 <svg class="sf-svg" viewBox="0 0 520 156" width="100%" height="auto">
@@ -387,9 +398,9 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 
 <!-- ══ SCENARIO D ══ -->
 <div class="sc"><div class="sc-lb">SCENARIO D</div><div class="sc-tt">我只想写文档或方案</div>
-<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：更新用户手册、整理验收报告、写技术方案或产品方案。</p>
+<p class="sc-desc">适用：更新用户手册、整理验收报告、写技术方案或产品方案。</p>
 <div class="tg"><span class="tg-g">docs-update — 文档更新</span><span class="tg-g">plan-only — 只做方案，不执行代码</span><span class="tg-g">standard-delivery — 完整角色链路验证</span></div>
-<p style="font-size:13px;color:var(--text-secondary)"><code>standard-delivery</code> 适合 Tekon 自身 dogfooding 和低风险种子任务。</p>
+<p class="sc-desc-no-mb"><code>standard-delivery</code> 适合 Tekon 自身 dogfooding 和低风险种子任务。</p>
 </div>
 </div>
 
@@ -410,7 +421,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <line x1="545" y1="45" x2="585" y2="45" class="sf-ar"/>
 <rect x="590" y="25" width="110" height="40" class="sf-a" rx="4"/><text x="645" y="43" class="sf-lc">delivery</text><text x="645" y="57" class="sf-l">prepare + pr</text>
 <line x1="700" y1="45" x2="740" y2="45" class="sf-ar"/>
-<rect x="745" y="25" width="60" height="40" class="sf-a" rx="4" style="fill:rgba(74,158,122,.15);stroke:var(--jade-dim)"/><text x="775" y="49" class="sf-lc">Done</text>
+<rect x="745" y="25" width="60" height="40" class="sf-a" rx="4" class="sf-done"/><text x="775" y="49" class="sf-lc">Done</text>
 </svg></div>
 <h3>4.2 初始化目标仓库</h3><pre><code><span class="c">tekon</span> <span class="a">init</span></code></pre>
 <p>初始化会在目标仓库生成 <code>.tekon/</code> 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。</p>
@@ -451,7 +462,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="section-header"><span class="section-num">SECTION 05</span><h1 class="section-title">核心概念</h1><p class="section-subtitle">理解天工的十一个基础构件。</p></div>
 <div class="fl"><svg viewBox="0 0 820 120" width="100%" height="auto">
 <rect x="10" y="35" width="100" height="36" class="sf-h" rx="4"/><text x="60" y="51" class="sf-lc">Demand</text><text x="60" y="65" class="sf-l">需求输入</text>
-<line x1="110" y1="53" x2="150" y2="53" class="sf-ar" style="stroke:var(--vermillion)"/>
+<line x1="110" y1="53" x2="150" y2="53" class="sf-ar sf-ar-v"/>
 <rect x="155" y="35" width="90" height="36" class="sf-b sf-h" rx="4"/><text x="200" y="51" class="sf-lc">PM</text><text x="200" y="65" class="sf-l">需求塑形</text>
 <line x1="245" y1="53" x2="285" y2="53" class="sf-ar"/>
 <rect x="290" y="35" width="80" height="36" class="sf-b sf-a" rx="4"/><text x="330" y="51" class="sf-lc">RD</text><text x="330" y="65" class="sf-l">代码实现</text>
@@ -460,7 +471,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <line x1="495" y1="53" x2="535" y2="53" class="sf-ar"/>
 <rect x="540" y="35" width="90" height="36" class="sf-b sf-h" rx="4"/><text x="585" y="51" class="sf-lc">Reviewer</text><text x="585" y="65" class="sf-l">独立评审</text>
 <line x1="630" y1="53" x2="670" y2="53" class="sf-ar"/>
-<rect x="675" y="35" width="90" height="36" class="sf-b sf-a" rx="4" style="fill:rgba(74,158,122,.15);stroke:var(--jade-dim)"/><text x="720" y="51" class="sf-lc">Delivery</text><text x="720" y="65" class="sf-l">交付准备</text>
+<rect x="675" y="35" width="90" height="36" class="sf-b sf-a" rx="4" class="sf-done"/><text x="720" y="51" class="sf-lc">Delivery</text><text x="720" y="65" class="sf-l">交付准备</text>
 </svg></div>
 <div class="cg">
 <div class="cc"><h4>5.1 Repo</h4><p>目标仓库，即你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。</p></div>
@@ -533,15 +544,15 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <!-- ════ TAB 7: 判断结果 ════ -->
 <div class="tab-panel" id="p7">
 <div class="section-header"><span class="section-num">SECTION 08</span><h1 class="section-title">如何判断结果是否可信</h1><p class="section-subtitle">不要只看"命令退出 0"。建议按顺序看。</p></div>
-<ol style="padding-left:0;list-style:none">
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>1.</strong> <code>status</code>：workflow 是否 passed。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>2.</strong> <code>review</code>：失败项和证据是否能解释。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>3.</strong> Changed Files：影响文件是否符合预期。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>4.</strong> Artifacts：需求、变更、测试、审阅证据是否完整。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>5.</strong> Gate Logs：build/lint/test/security 是否真的跑过。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>6.</strong> PR Package：PR body 是否能让 reviewer 看懂。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>7.</strong> CI Status：远端 checks 是否已记录。</li>
-<li style="padding-left:28px;position:relative;margin-bottom:8px;font-size:14px"><strong>8.</strong> <code>eval readiness</code>：PR/CI 证据是否完整。</li>
+<ol class="chk-ol">
+<li class="chk-li"><strong>1.</strong> <code>status</code>：workflow 是否 passed。</li>
+<li class="chk-li"><strong>2.</strong> <code>review</code>：失败项和证据是否能解释。</li>
+<li class="chk-li"><strong>3.</strong> Changed Files：影响文件是否符合预期。</li>
+<li class="chk-li"><strong>4.</strong> Artifacts：需求、变更、测试、审阅证据是否完整。</li>
+<li class="chk-li"><strong>5.</strong> Gate Logs：build/lint/test/security 是否真的跑过。</li>
+<li class="chk-li"><strong>6.</strong> PR Package：PR body 是否能让 reviewer 看懂。</li>
+<li class="chk-li"><strong>7.</strong> CI Status：远端 checks 是否已记录。</li>
+<li class="chk-li"><strong>8.</strong> <code>eval readiness</code>：PR/CI 证据是否完整。</li>
 </ol>
 <div class="cl cl-w"><span class="cl-lb">重要</span>如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。</div>
 </div>
@@ -604,21 +615,21 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 </main>
 </div>
 
-<nav class="mb-nav" id="mobileNav">
-  <button class="mb-btn active" data-tab="0">01</button>
-  <button class="mb-btn" data-tab="1">02</button>
-  <button class="mb-btn" data-tab="2">03</button>
-  <button class="mb-btn" data-tab="3">04</button>
-  <button class="mb-btn" data-tab="4">05</button>
-  <button class="mb-btn" data-tab="5">06</button>
-  <button class="mb-btn" data-tab="6">07</button>
-  <button class="mb-btn" data-tab="7">08</button>
-  <button class="mb-btn" data-tab="8">09</button>
-  <button class="mb-btn" data-tab="9">10</button>
-  <button class="mb-btn" data-tab="10">11</button>
+<nav class="mb-nav" id="mobileNav" aria-label="移动端导航">
+  <button type="button" class="mb-btn active" data-tab="0">01</button>
+  <button type="button" class="mb-btn" data-tab="1">02</button>
+  <button type="button" class="mb-btn" data-tab="2">03</button>
+  <button type="button" class="mb-btn" data-tab="3">04</button>
+  <button type="button" class="mb-btn" data-tab="4">05</button>
+  <button type="button" class="mb-btn" data-tab="5">06</button>
+  <button type="button" class="mb-btn" data-tab="6">07</button>
+  <button type="button" class="mb-btn" data-tab="7">08</button>
+  <button type="button" class="mb-btn" data-tab="8">09</button>
+  <button type="button" class="mb-btn" data-tab="9">10</button>
+  <button type="button" class="mb-btn" data-tab="10">11</button>
 </nav>
 
-<svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#55556a"/></marker><marker id="ah2d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#3a3a4e"/></marker></defs></svg>
+<svg class="sr-svg" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#55556a"/></marker><marker id="ah2d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#3a3a4e"/></marker></defs></svg>
 
 <script>
 // ═══════════════════════════════════════════════
