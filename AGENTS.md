@@ -63,4 +63,4 @@
 - 每次有实际代码、功能、行为或文档变更的提交前，评估是否需要 bump 版本号：根据本次变更内容判断 bump 级别，修改 `package.json` 的 `version` 字段，并在提交信息中包含 `vX.Y.Z`。
 - 如果变更内容跨多个级别（例如既有新功能又有 bug 修复），以最高级别为准。
 - 不确定 bump 哪个级别时，必须询问用户；不自行猜测。
-- `scripts/install.sh` 和 `scripts/update.sh` 读取 `package.json` 的 `version` 字段展示版本号，与 `git rev-parse --short HEAD` 的短哈希一起显示。
+- `scripts/install.sh` 读取 `package.json` 的 `version` 字段，安装完成时显示 `vX.Y.Z`。

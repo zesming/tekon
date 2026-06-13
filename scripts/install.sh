@@ -89,14 +89,13 @@ exec node "$HOME/.tekon/packages/cli/dist/index.js" "$@"
 SCRIPT
 chmod +x "$TEKON_BIN/tekon"
 
-GIT_REF=$(git rev-parse --short HEAD)
 SEMVER=$(node -e "console.log(require('./package.json').version)")
 
 # ── 完成 ────────────────────────────────────────────
 
 echo ""
 printf "${BOLD}${GREEN}══════════════════════════════════════════${NC}\n"
-printf "${BOLD}${GREEN}  天工 Tekon v${SEMVER} 安装完成  ${NC}${CYAN}${GIT_REF}${NC}\n"
+printf "${BOLD}${GREEN}  天工 Tekon v${SEMVER} 安装完成${NC}\n"
 printf "${BOLD}${GREEN}══════════════════════════════════════════${NC}\n"
 echo ""
 
