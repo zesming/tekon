@@ -173,37 +173,7 @@ async function commandInit(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveRepoPathForInit(args.values.repo);
-  const tekonDir = join(repoPath, '.tekon');
-  mkdirSync(join(tekonDir, 'runs'), { recursive: true });
-  mkdirSync(join(tekonDir, 'roles'), { recursive: true });
-  mkdirSync(join(tekonDir, 'workflows'), { recursive: true });
-  mkdirSync(join(tekonDir, 'worktrees'), { recursive: true });
-  mkdirSync(join(tekonDir, 'eval'), { recursive: true });
-  const webSessionPath = join(tekonDir, 'web-session.json');
-  if (!existsSync(webSessionPath)) {
-    writeFileSync(
-      webSessionPath,
-      JSON.stringify({ token: randomBytes(32).toString('hex') }, null, 2),
-      'utf8',
-    );
-  }
-  writeFileSync(
-    join(tekonDir, 'config.yaml'),
-    stringifyYaml({
-      project: { name: basenameForProject(repoPath), repoPath },
-      storage: { dataDir: '.tekon' },
-      defaultAgent: 'codex',
-    }),
-    'utf8',
-  );
-  const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  db.close();
-  const profilePath = join(tekonDir, 'repo-profile.yaml');
-  if (!existsSync(profilePath)) {
-    writeDefaultRepoProfile(repoPath);
-  }
-  io.stdout.write(`initialized repo=${repoPath}\n`);
+  initializeProject(repoPath, io);
 }
 
 async function commandRun(argv: string[], io: CliIO) {
@@ -225,7 +195,7 @@ async function commandRun(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const positionalDemandText = args.positionals.join(' ').trim();
   const demandFilePath = args.values['demand-file']
     ? resolveDemandShapePath(repoPath, args.values['demand-file'])
@@ -418,7 +388,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     const repoPath = resolveProjectRepoPath(args.values.repo);
     const shouldWrite = !args.values['no-write'];
     if (shouldWrite) {
-      ensureInitialized(repoPath);
+      await ensureInitialized(repoPath, io);
     }
     const paths = shouldWrite
       ? writeDemandShapeFiles({ repoPath, shape })
@@ -460,7 +430,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     const shapeArg = args.values.shape ?? args.positionals[0];
     const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      ensureInitialized(repoPath);
+      await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg, {
       latestMustBeUnapproved: !shapeArg,
@@ -494,7 +464,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     const shapeArg = args.values.shape ?? args.positionals[0];
     const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      ensureInitialized(repoPath);
+      await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg);
     const shape = readDemandShapeFile(shapePath);
@@ -524,7 +494,7 @@ async function commandDemand(argv: string[], io: CliIO) {
 }
 
 async function commandPause(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = openCommandContext(argv);
+  const { repositories, db, runId } = await openCommandContext(argv, io);
   const workflow = await repositories.getWorkflowInstance(runId);
   if (!workflow) {
     db.close();
@@ -554,7 +524,7 @@ async function commandResume(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
   const repositories = createRepositories(db);
@@ -653,7 +623,7 @@ async function commandResume(argv: string[], io: CliIO) {
 }
 
 async function commandCancel(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = openCommandContext(argv);
+  const { repositories, db, runId } = await openCommandContext(argv, io);
   const workflow = await repositories.getWorkflowInstance(runId);
   if (!workflow) {
     db.close();
@@ -716,7 +686,7 @@ async function commandRole(argv: string[], io: CliIO) {
   }
 
   if (subcommand === 'create') {
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const source = join(builtInRolesDir, roleId);
     const target = join(repoPath, '.tekon', 'roles', roleId);
     cpSync(source, target, { recursive: true });
@@ -875,7 +845,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
 
   if (subcommand === 'create') {
     ensureSafeName(name);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const fromName = args.values.from ?? 'standard-delivery';
     ensureSafeName(fromName);
     const source = getWorkflowFilePath(fromName, projectWorkflowsDir);
@@ -906,7 +876,7 @@ async function commandConstraints(argv: string[], io: CliIO) {
 async function commandDelivery(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'prepare') {
-    const { repositories, db, repoPath, runId } = openCommandContext(rest);
+    const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
     const audit = createAuditLogger({ repositories });
     const preparation = await createPullRequestPreparation({
       repoPath,
@@ -939,7 +909,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
     const runId =
@@ -998,7 +968,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const db = openProjectDb(repoPath);
     try {
       migrateDatabase(db);
@@ -1045,7 +1015,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const db = openProjectDb(repoPath);
     try {
       migrateDatabase(db);
@@ -1093,7 +1063,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
   if (subcommand !== 'dry-run') {
     throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
   }
-  const { repositories, db, repoPath, runId } = openCommandContext(rest);
+  const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
   const audit = createAuditLogger({ repositories });
   const evidence = await createDeliveryEvidencePackage({
     repositories,
@@ -1341,7 +1311,7 @@ function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
 }
 
 async function commandStatus(argv: string[], io: CliIO) {
-  const { repositories, db, repoPath, runId } = openCommandContext(argv);
+  const { repositories, db, repoPath, runId } = await openCommandContext(argv, io);
   const workflow = await repositories.getWorkflowInstance(runId);
   if (!workflow) {
     db.close();
@@ -1381,7 +1351,7 @@ async function commandApproval(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const maxContentChars = args.values['max-chars']
       ? Number(args.values['max-chars'])
       : 1_200;
@@ -1439,7 +1409,7 @@ async function commandApproval(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
     try {
@@ -1513,7 +1483,7 @@ async function commandEval(argv: string[], io: CliIO) {
     const shapeArg = args.values.shape ?? args.positionals[0];
     const repoPath = resolveProjectRepoPath(args.values.repo);
     if (!shapeArg) {
-      ensureInitialized(repoPath);
+      await ensureInitialized(repoPath, io);
     }
     const shape = readDemandShapeFile(
       resolveDemandShapePath(repoPath, shapeArg),
@@ -1590,7 +1560,7 @@ async function commandEval(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const maxContentChars = args.values['max-chars']
       ? Number(args.values['max-chars'])
       : 1_200;
@@ -1662,7 +1632,7 @@ async function commandEval(argv: string[], io: CliIO) {
       allowPositionals: true,
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
-    ensureInitialized(repoPath);
+    await ensureInitialized(repoPath, io);
     const samplePath = resolve(
       repoPath,
       args.values.samples ??
@@ -1724,7 +1694,7 @@ async function commandEval(argv: string[], io: CliIO) {
   if (subcommand !== 'readiness') {
     throw new Error(`unknown eval command: ${subcommand ?? ''}`);
   }
-  const { repositories, db, repoPath, runId } = openCommandContext(rest);
+  const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
   const audit = createAuditLogger({ repositories });
   const evaluation = await evaluateWorkReadiness({
     repositories,
@@ -1767,7 +1737,7 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const samplePath = resolve(
     repoPath,
     args.values.samples ??
@@ -1908,7 +1878,7 @@ async function commandReview(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const maxContentChars = args.values['max-chars']
     ? Number(args.values['max-chars'])
     : 1_200;
@@ -2088,7 +2058,7 @@ function formatPreview(preview: {
 }
 
 async function commandLog(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = openCommandContext(argv);
+  const { repositories, db, runId } = await openCommandContext(argv, io);
   const events = await repositories.listAuditEvents(runId);
   for (const event of events) {
     io.stdout.write(
@@ -2107,7 +2077,7 @@ async function commandClean(argv: string[], io: CliIO) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const worktreesDir = join(repoPath, '.tekon', 'worktrees');
   let cleaned = 0;
   if (existsSync(worktreesDir)) {
@@ -2149,7 +2119,7 @@ async function commandUi(argv: string[], io: CliIO) {
   }
 
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
 
   const tokenPath = join(repoPath, '.tekon', 'web-session.json');
   if (!existsSync(tokenPath)) {
@@ -2262,7 +2232,7 @@ async function commandUpdate(argv: string[], io: CliIO) {
   io.stdout.write(`Updated: ${oldVersion} → ${newVersion}\n`);
 }
 
-function openCommandContext(argv: string[]) {
+async function openCommandContext(argv: string[], io: CliIO) {
   const args = parseArgs({
     args: argv,
     options: {
@@ -2272,7 +2242,7 @@ function openCommandContext(argv: string[]) {
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  ensureInitialized(repoPath);
+  await ensureInitialized(repoPath, io);
   const db = openProjectDb(repoPath);
   migrateDatabase(db);
   const runId =
@@ -2554,10 +2524,75 @@ function openProjectDb(repoPath: string) {
   });
 }
 
-function ensureInitialized(repoPath: string) {
-  if (!existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
-    throw new Error(`not initialized: ${repoPath}`);
+function readStdinLine(): Promise<string> {
+  return new Promise((resolve) => {
+    const { stdin } = process;
+    if (!stdin.isTTY) {
+      resolve('');
+      return;
+    }
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    stdin.once('data', (data) => {
+      stdin.pause();
+      resolve(String(data).trim());
+    });
+  });
+}
+
+function initializeProject(repoPath: string, io: CliIO): void {
+  const tekonDir = join(repoPath, '.tekon');
+  mkdirSync(join(tekonDir, 'runs'), { recursive: true });
+  mkdirSync(join(tekonDir, 'roles'), { recursive: true });
+  mkdirSync(join(tekonDir, 'workflows'), { recursive: true });
+  mkdirSync(join(tekonDir, 'worktrees'), { recursive: true });
+  mkdirSync(join(tekonDir, 'eval'), { recursive: true });
+  const webSessionPath = join(tekonDir, 'web-session.json');
+  if (!existsSync(webSessionPath)) {
+    writeFileSync(
+      webSessionPath,
+      JSON.stringify({ token: randomBytes(32).toString('hex') }, null, 2),
+      'utf8',
+    );
   }
+  writeFileSync(
+    join(tekonDir, 'config.yaml'),
+    stringifyYaml({
+      project: { name: basenameForProject(repoPath), repoPath },
+      storage: { dataDir: '.tekon' },
+      defaultAgent: 'codex',
+    }),
+    'utf8',
+  );
+  const db = openProjectDb(repoPath);
+  migrateDatabase(db);
+  db.close();
+  const profilePath = join(tekonDir, 'repo-profile.yaml');
+  if (!existsSync(profilePath)) {
+    writeDefaultRepoProfile(repoPath);
+  }
+  io.stdout.write(`initialized repo=${repoPath}\n`);
+}
+
+async function ensureInitialized(repoPath: string, io: CliIO): Promise<void> {
+  if (existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
+    return;
+  }
+
+  io.stdout.write(`Project not initialized: ${repoPath}\n`);
+  io.stdout.write('Initialize now? [Y/n] ');
+
+  const answer = await readStdinLine();
+  if (!answer || answer.toLowerCase().startsWith('y')) {
+    io.stdout.write('\n');
+    initializeProject(repoPath, io);
+    return;
+  }
+
+  io.stdout.write('\n');
+  throw new Error(
+    `not initialized: ${repoPath}. Run "tekon init" to initialize the project.`,
+  );
 }
 
 function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
