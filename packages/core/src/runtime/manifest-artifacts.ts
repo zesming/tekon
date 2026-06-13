@@ -60,19 +60,19 @@ function resolveExistingManifestPath(
   expectedManifestPath: string,
   outputDir: string,
 ): string | null {
-  const expectedOutputPath = resolveOutputPath(outputDir, expectedManifestPath);
-  if (existsSync(expectedOutputPath)) {
-    return expectedOutputPath;
-  }
-
-  const literalEnvNamePath = resolveOutputPath(
-    outputDir,
+  const candidates = [
+    expectedManifestPath,
     'TEKON_ARTIFACT_MANIFEST',
-  );
-  if (existsSync(literalEnvNamePath)) {
-    return literalEnvNamePath;
+    'manifest.json',
+    'artifact-manifest.json',
+    'artifacts.manifest.json',
+  ];
+  for (const candidate of candidates) {
+    const resolved = resolveOutputPath(outputDir, candidate);
+    if (existsSync(resolved)) {
+      return resolved;
+    }
   }
-
   return null;
 }
 

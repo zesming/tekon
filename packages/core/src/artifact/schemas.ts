@@ -287,13 +287,21 @@ type StructuredPayload = {
 function parseStructuredPayload(content: string): StructuredPayload | null {
   const trimmed = content.trim();
   if (trimmed.startsWith('{')) {
-    return { format: 'json', payload: JSON.parse(trimmed) };
+    try {
+      return { format: 'json', payload: JSON.parse(trimmed) };
+    } catch {
+      // Malformed JSON — fall through to markdown parsing
+    }
   }
 
   if (trimmed.startsWith('---')) {
-    const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u.exec(trimmed);
-    if (match) {
-      return { format: 'yaml', payload: parseYaml(match[1]) };
+    try {
+      const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u.exec(trimmed);
+      if (match) {
+        return { format: 'yaml', payload: parseYaml(match[1]) };
+      }
+    } catch {
+      // Malformed YAML — fall through to markdown parsing
     }
   }
 

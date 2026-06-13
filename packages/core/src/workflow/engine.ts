@@ -1085,15 +1085,14 @@ export function createWorkflowEngine(
         priorNodes: input.priorNodes,
         requiredArtifactTypes: input.requiredArtifactTypes,
       }),
-      '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
-      '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
-      '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
+      `- Write the artifact manifest file to ${join(input.outputDir, 'artifact-manifest.json')}, containing an "artifacts" array with type, path, and summary for each artifact.`,
+      '- Write required artifact files and the manifest file before optional checks or reviews.',
       ...(isCodeChangesRdNode
         ? [
             '- Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
           ]
         : []),
-      '- After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
+      '- After the manifest file is written, stop work and exit immediately.',
       '- Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.',
       '- Manifest format example:',
       manifestExample,

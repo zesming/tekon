@@ -42,6 +42,10 @@ function gateIconSymbol(status: string): string {
     case 'pending':
     case 'running':
       return '◌';
+    case 'skipped':
+      return '⊘';
+    case 'blocked':
+      return '◼';
     default:
       return '—';
   }
@@ -53,6 +57,10 @@ function gateIconClass(status: string): string {
       return 'passed';
     case 'failed':
       return 'failed';
+    case 'skipped':
+      return 'skipped';
+    case 'blocked':
+      return 'blocked';
     default:
       return 'pending';
   }
@@ -93,8 +101,10 @@ export function GatesTab() {
 
   const passedCount = gates.filter((g) => g.status === 'passed').length;
   const failedCount = gates.filter((g) => g.status === 'failed').length;
+  const skippedCount = gates.filter((g) => g.status === 'skipped').length;
+  const blockedCount = gates.filter((g) => g.status === 'blocked').length;
   const pendingCount = gates.filter(
-    (g) => g.status !== 'passed' && g.status !== 'failed',
+    (g) => g.status !== 'passed' && g.status !== 'failed' && g.status !== 'skipped' && g.status !== 'blocked',
   ).length;
 
   return (
@@ -106,6 +116,8 @@ export function GatesTab() {
           <span className="count">
             {passedCount} 通过
             {failedCount > 0 ? ` · ${failedCount} 失败` : ''}
+            {skippedCount > 0 ? ` · ${skippedCount} 已跳过` : ''}
+            {blockedCount > 0 ? ` · ${blockedCount} 已阻塞` : ''}
             {pendingCount > 0 ? ` · ${pendingCount} 待处理` : ''}
           </span>
         </div>
@@ -178,7 +190,9 @@ export function GatesTab() {
                             ? `已阻塞${classification ? ` · ${classification}` : ''}`
                             : gate.status === 'pending'
                               ? '等待中'
-                              : `${gate.nodeId} · ${formatDurationMs(gate.durationMs)}`}
+                              : gate.status === 'skipped'
+                                ? '已跳过'
+                                : `${gate.nodeId} · ${formatDurationMs(gate.durationMs)}`}
                       </div>
                     </div>
                   </div>

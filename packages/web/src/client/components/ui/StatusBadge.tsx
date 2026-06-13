@@ -12,6 +12,8 @@ const statusClassMap: Record<string, string> = {
   paused: 'badge-paused',
   blocked: 'badge-blocked',
   cancelled: 'badge-cancelled',
+  skipped: 'badge-skipped',
+  interrupted: 'badge-interrupted',
 };
 
 const STATUS_LABEL_MAP: Record<string, string> = {
@@ -22,6 +24,8 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   paused: '已暂停',
   blocked: '已阻塞',
   cancelled: '已取消',
+  skipped: '已跳过',
+  interrupted: '已中断',
 };
 
 interface StatusBadgeProps {

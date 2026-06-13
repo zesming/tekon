@@ -524,6 +524,24 @@ table {
   background: #94a3b8;
 }
 
+.badge-skipped {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.badge-skipped::before {
+  background: #cbd5e1;
+}
+
+.badge-interrupted {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.badge-interrupted::before {
+  background: #f97316;
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -828,6 +846,16 @@ tbody tr:last-child td {
 .gate-icon.pending {
   background: var(--pend-bg);
   color: var(--pend);
+}
+
+.gate-icon.skipped {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.gate-icon.blocked {
+  background: var(--blk-bg);
+  color: var(--blk);
 }
 
 .gate-name {

@@ -107,7 +107,9 @@ export function RunDetailPage() {
   const totalGates = surface.gates.length;
   const passedGates = surface.gates.filter((g) => g.status === 'passed').length;
   const failedGates = surface.gates.filter((g) => g.status === 'failed').length;
-  const pendingGates = surface.gates.filter((g) => g.status !== 'passed' && g.status !== 'failed').length;
+  const skippedGates = surface.gates.filter((g) => g.status === 'skipped').length;
+  const blockedGates = surface.gates.filter((g) => g.status === 'blocked').length;
+  const pendingGates = surface.gates.filter((g) => g.status === 'pending').length;
 
   // Find the earliest gate timestamp as a proxy for run start
   const earliestGate = surface.gates.reduce<string | null>((earliest, g) => {
@@ -122,7 +124,7 @@ export function RunDetailPage() {
   }, null);
 
   const isFinished =
-    status === 'passed' || status === 'failed' || status === 'cancelled';
+    status === 'passed' || status === 'failed' || status === 'cancelled' || status === 'interrupted';
   const duration = earliestGate
     ? formatDuration(earliestGate, isFinished ? latestGate ?? undefined : undefined)
     : '—';
