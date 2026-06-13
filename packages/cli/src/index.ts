@@ -304,7 +304,6 @@ function writeGeneralHelp(io: CliIO): void {
   }
 
   lines.push('使用 tekon help <command> 查看特定命令的详细帮助。');
-  lines.push('使用 tekon <command> --help 同样可查看该命令的帮助。');
 
   io.stdout.write(lines.join('\n') + '\n');
 }

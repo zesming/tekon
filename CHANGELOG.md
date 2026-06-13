@@ -1,5 +1,31 @@
 # 变更日志
 
+## v0.5.0
+
+### 新增
+
+- CLI `help` 命令：`tekon help` 输出分组命令概览，`tekon help <command>` 查看子命令详情；`--help`/`-h` 和 `--version`/`-v` 作为全局 flag 支持。
+- Agent 驱动需求澄清：`draft new` 支持调用 Claude Code agent 生成上下文相关澄清问题并精炼需求草案，agent 不可用时自动回退到静态问题；新增 `draft-agent.ts` 模块，包含 PM 角色 prompt、JSON 解析容错、`verification` 字段保留等。
+- Web Dashboard 状态修复：`skipped`（已跳过）、`interrupted`（已中断）、`blocked`（已阻断）状态在 StatusBadge、GatesTab、RunDetailPage、RunTable 中正确显示中文标签和 CSS 样式。
+- Review → rework → re-review 闭环：`independent-review` gate 返回 `changes-requested` 时触发目标节点重新执行（最多 5 次），不再直接阻塞 workflow；`passed` 状态允许向 `needs-revision` 转换；rework 节点 ID 包含 attempt 计数器避免碰撞。
+- AGENTS.md 新增「测试要求」章节：测试先行、提交前全量通过、测试质量检查（正确性/完整性/无冗余）、测试与代码同步、e2e 测试要求。
+
+### 变更
+
+- 真实 provider 默认权限模式从 `on-request` 改为 `on-failure`（Claude Code adapter 映射为 `acceptEdits`），减少 agent 执行时的权限拒绝。
+- Claude Code adapter 自动 `--add-dir` 追加节点 artifact 输出目录到沙箱。
+- Manifest 文件解析增强：`resolveExistingManifestPath` 检查 5 个候选文件名；`parseStructuredPayload` 对 JSON/YAML 解析增加 try/catch 容错。
+- Engine prompt 中 `$TEKON_ARTIFACT_MANIFEST` 环境变量引用替换为实际 manifest 文件路径，避免 agent Bash 调用被拒时无法读取。
+- `draft new` 命令从 `demand shape` 分流，新增 CLI `draft` 命令组（别名 `demand`），子命令 `new`/`shape`/`approve`/`show`。
+
+### 修复
+
+- 修复 `changes-requested` 被错误归类为通用 `review-not-approved` 的问题，现在独立返回 `failureClassification: 'changes-requested'`。
+- 修复 rework 节点未持久化导致 transition 失败的问题。
+- 修复 rework 节点 ID 碰撞（多次重试使用同一 ID）的问题。
+- 修复 `extractDraftShapePatch` 丢失 AI 验收标准 `verification` 字段的问题。
+- 修复 `packages/cli/package.json` 版本号 0.1.0 → 0.5.0，与根 package.json 对齐。
+
 ## 未发布
 
 ### 新增

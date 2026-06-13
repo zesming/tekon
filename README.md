@@ -74,6 +74,8 @@ tekon update
 ```bash
 tekon init                                    # 初始化目标仓库
 tekon workflow preflight                      # 检查命令画像
+tekon help                                     # 查看命令帮助
+tekon draft new                                # 交互式创建需求草案（支持 Agent 澄清）
 tekon demand shape "你的需求描述"               # 塑形需求
 tekon demand approve                          # 批准需求卡
 tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
@@ -93,7 +95,9 @@ tekon ui                                      # 启动 Web Dashboard
 
 | 场景 | 命令 |
 |------|------|
+| 查看命令帮助 | `tekon help` |
 | 初始化目标仓库 | `tekon init` |
+| 创建需求草案 | `tekon draft new` |
 | 塑形需求 | `tekon demand shape "<需求>"` |
 | 批准需求卡 | `tekon demand approve` |
 | 推荐 workflow | `tekon workflow select "<需求>"` |
