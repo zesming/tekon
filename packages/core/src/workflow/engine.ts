@@ -590,6 +590,7 @@ export function createWorkflowEngine(
             gate,
             result,
             targetNodeId,
+            reworkAttempt,
           );
 
           // Re-run the gate to check if the rework fixed the issues
@@ -723,9 +724,12 @@ export function createWorkflowEngine(
     gate: WorkflowGateConfig,
     gateResult: GateResult,
     targetNodeId: string,
+    attempt: number,
   ): Promise<void> {
     const targetNode = await options.repositories.getNode(targetNodeId);
     if (!targetNode) return;
+
+    const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
 
     // Transition target node from passed to needs-revision
     await options.repositories.transitionNode(targetNodeId, 'needs-revision');
@@ -736,11 +740,10 @@ export function createWorkflowEngine(
         reviewNodeId: reviewNode.id,
         targetNodeId,
         gateResultId: gateResult.id,
+        attempt,
         reason: 'Independent review found changes-requested',
       },
     });
-
-    const reworkNodeId = `${targetNodeId}_rework`;
 
     // Build rework prompt: original context + review feedback
     const reviewArtifactContent = await loadReviewArtifactContent(

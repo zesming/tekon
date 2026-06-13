@@ -192,7 +192,7 @@ Return ONLY a JSON object with the fields you are updating (leave unchanged fiel
   "riskLevel": "low|medium|high",
   "riskTags": ["tag1"],
   "acceptanceCriteria": [
-    { "id": "AC-1", "description": "specific criterion" }
+    { "id": "AC-1", "description": "specific criterion", "verification": "how to verify" }
   ],
   "nonGoals": ["specific non-goal"],
   "assumptions": ["specific assumption"],
@@ -302,9 +302,10 @@ function extractDraftShapePatch(
           ac !== null &&
           typeof (ac as Record<string, unknown>).description === 'string',
       )
-      .map((ac: { id?: string; description: string }, i: number) => ({
+      .map((ac: { id?: string; description: string; verification?: string }, i: number) => ({
         id: ac.id ?? `AC-${i + 1}`,
         description: ac.description,
+        verification: typeof ac.verification === 'string' ? ac.verification : '待验证',
       }));
   }
 
