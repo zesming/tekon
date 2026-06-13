@@ -390,7 +390,7 @@ ${flowSVG_workflow()}
 `},
       {num:"08",title:"如何判断结果是否可信",sub:"不要只看"命令退出 0"。建议按顺序看。",
        html:`
-<ol class="scenario-steps" style="list-style:decimal;padding-left:0">
+<ol class="scenario-steps" style="padding-left:0">
 <li style="padding-left:28px"><code>status</code>：workflow 是否 passed。</li>
 <li style="padding-left:28px"><code>review</code>：失败项和证据是否能解释。</li>
 <li style="padding-left:28px">Changed Files：影响文件是否符合预期。</li>
@@ -559,7 +559,7 @@ ${flowSVG_workflow()}
 `},
       {num:"08",title:"How to Judge Results",sub:"Don't just check exit code 0. Go through these in order.",
        html:`
-<ol class="scenario-steps" style="list-style:decimal;padding-left:0">
+<ol class="scenario-steps" style="padding-left:0">
 <li style="padding-left:28px"><code>status</code> — is the workflow passed?</li>
 <li style="padding-left:28px"><code>review</code> — can failures and evidence be explained?</li>
 <li style="padding-left:28px">Changed Files — do they match expectations?</li>
@@ -765,7 +765,7 @@ function switchTab(i){
   sidebar.querySelectorAll('.nav-tab').forEach((el,j)=>el.classList.toggle('active',j===i));
   mobileNav.querySelectorAll('.mobile-nav-btn').forEach((el,j)=>el.classList.toggle('active',j===i));
   container.scrollIntoView({behavior:'smooth',block:'start'});
-  if(window.innerWidth<1025) sidebar.classList.remove('show');
+  if(window.innerWidth<1025){sidebar.classList.remove('show');document.getElementById('menuBtn').setAttribute('aria-expanded','false');}
 }
 
 // Language toggle

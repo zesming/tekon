@@ -41,7 +41,7 @@
 | 能力 | 说明 |
 |------|------|
 | 需求塑形 | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后进入执行 |
-| Workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐 |
+| workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐 |
 | 角色系统 | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略 |
 | 执行隔离 | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>` |
 | Provider 接入 | 支持 mock、Claude Code、Codex，通过 artifact manifest 交付结构化产物 |
@@ -122,7 +122,7 @@ tekon eval readiness                          # 评估交付完整度
 ## 仓库结构
 
 ```text
-packages/core/          Workflow engine、role/gate/artifact/audit/delivery/eval
+packages/core/          workflow engine、role/gate/artifact/audit/delivery/eval
 packages/cli/           tekon CLI
 packages/web/           本地 Web dashboard
 roles/                  内置角色定义
