@@ -17,8 +17,8 @@
 - 中文优先，表达直接、可验证、少空话。
 - 产品文档聚焦用户、价值、场景、边界、指标和风险，不写代码级实现细节。
 - 技术文档聚焦架构、技术选型、权衡、风险、验证和演进路径，不把方案写成零散工具清单。
-- 用户手册必须面向工具使用者，讲清楚“用户怎么发起、会得到什么、如何判断结果、当前不能做什么”，不要写成 Tekon 研发手册或内部实现说明；主用户使用手册路径是 `docs/manual/tekon-user-manual.md`。
-- 涉及当前行业产品、框架、协议、模型、标准或安全风险时，必须配资料链接，并说明“资料内容”和“对 Tekon 的判断依据”。
+- 用户手册必须面向工具使用者，讲清楚"用户怎么发起、会得到什么、如何判断结果、当前不能做什么"，不要写成 Tekon 研发手册或内部实现说明；主用户使用手册路径是 `docs/manual/tekon-user-manual.md`。
+- 涉及当前行业产品、框架、协议、模型、标准或安全风险时，必须配资料链接，并说明"资料内容"和"对 Tekon 的判断依据"。
 - 所有结论要区分事实、推断和建议；推断要说明依据，不把主观判断写成事实。
 - 不提交密钥、token、生产凭证、内部高权限 URL 或任何敏感信息。
 
@@ -38,29 +38,29 @@
 - plan 类和 review 类 subagent 必须使用最高思考等级。
 - 所有最终文档输出之前，包括但不限于文档、技术方案、产品方案、代码，均必须先使用最高思考等级 subagent review。
 - 若当前 runtime 不支持 subagent 或无法设置思考等级，必须明确说明限制，并执行保守人工自检后再交付。
-- review 若检出必须修复项，必须先修复，再启动新一轮最高思考等级 subagent 复查；除非用户明确要求“只审阅不修改”。
+- review 若检出必须修复项，必须先修复，再启动新一轮最高思考等级 subagent 复查；除非用户明确要求"只审阅不修改"。
 - 复查循环持续到 reviewer 明确未检出必须修复项或未检出问题；建议修复项可记录后交给用户决策，不强制无限循环。
 - 如果 reviewer 的意见不正确，不要盲修；应记录反驳依据，并在下一轮复查中说明。
 
 ## 审阅与交付要求
 
-- 任何需要人审阅的文档，都应生成 HTML 审阅版，并在最终回复中给出本地路径。若当前环境有 `/frontend-design:frontend-design` 技能可用，必须使用该 skill 生成 HTML 审阅版，以充分利用其设计能力产出高质量、可读性强的审阅文档。
-- 修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。
-- 文档或代码交付前仍应完成必要审阅；默认不再为每次审阅单独生成 `docs/reviews/` 审阅记录。只有用户明确要求、涉及正式验收/发布决策，或 `.tekon/` 运行产物需要可提交归档时，才将关键结论写入 `docs/reviews/` 或其他可提交文档。
 - 交付前必须做本地验证：文件存在、关键内容非空、无 `TBD/TODO/FIXME/placeholder` 等占位符、链接和章节结构可读。
-- 提交代码、行为或 CLI 命令变更前，必须检查并按需同步更新 `README.md`、`CHANGELOG.md`、`docs/manual/tekon-user-manual.md`、`docs/manual/tekon-user-manual.html`、相关产品/技术/验收 HTML 文档和本指令文件；若判断不需要更新主用户使用手册，必须在最终回复或提交说明中说明理由。
+- 生成 HTML 审阅版时，若当前环境有 `/frontend-design:frontend-design` 技能可用，必须使用该 skill 生成 HTML 审阅版，以充分利用其设计能力产出高质量、可读性强的审阅文档。
+- 修改正式审阅文档源稿时，必须同步更新对应 HTML 审阅版，避免两份文件漂移。
 - 若运行产物位于 `.tekon/` 且不会随 git 提交归档，并且其结论需要作为正式验收、发布决策或用户要求的归档证据，必须把关键验收结论、run id、风险 Gate 结果和 eval 指标摘要写入 `docs/reviews/` 或其他可提交文档。
-- 提交前检查文档更新时，若判断“不需要更新”，应在最终回复或提交说明中简要说明理由。
+- 文档或代码交付前仍应完成必要审阅；默认不再为每次审阅单独生成 `docs/reviews/` 审阅记录。只有用户明确要求、涉及正式验收/发布决策，或 `.tekon/` 运行产物需要可提交归档时，才将关键结论写入 `docs/reviews/` 或其他可提交文档。
+- 提交代码、行为或 CLI 命令变更前，必须检查并按需同步更新 `README.md`、`CHANGELOG.md`、`docs/manual/tekon-user-manual.md`、`docs/manual/tekon-user-manual.html`、相关产品/技术/验收 HTML 文档和本指令文件；若判断不需要更新上述任何文档，必须在最终回复或提交说明中简要说明理由。
+- 修改 `scripts/install.sh` 或 `scripts/update.sh` 后，必须在干净环境中执行一次完整 smoketest，验证脚本能正常完成克隆、安装、构建并显示正确版本号。
 - 修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。
 
 ## 版本号管理
 
-- 版本号以 `package.json` 的 `version` 字段为准一来源，遵循语义化版本（Semantic Versioning）：`MAJOR.MINOR.PATCH`。
+- 版本号以 `package.json` 的 `version` 字段为唯一来源，遵循语义化版本（Semantic Versioning）：`MAJOR.MINOR.PATCH`。
 - 当前为 `0.x` 阶段，版本号含义：
   - **PATCH** (`0.2.1` → `0.2.2`)：bug 修复、文档勘误、review 修复、小幅样式调整、不改变行为的代码清理。
   - **MINOR** (`0.2.0` → `0.3.0`)：新增功能（新 CLI 命令、新 workflow 模板、新 provider 接入、新 gate）、用户手册新增章节、行为有实际变化的改进。
   - **MAJOR** (`0.x.0` → `1.0.0`)：breaking changes（CLI 参数重命名或删除、模板名变更、.tekon 目录结构不兼容）、正式生产发布。
-- 每次提交前评估是否需要 bump 版本号：根据本次变更内容判断 bump 级别，修改 `package.json` 的 `version` 字段，并在提交信息中包含 `vX.Y.Z`。
+- 每次有实际代码、功能、行为或文档变更的提交前，评估是否需要 bump 版本号：根据本次变更内容判断 bump 级别，修改 `package.json` 的 `version` 字段，并在提交信息中包含 `vX.Y.Z`。
 - 如果变更内容跨多个级别（例如既有新功能又有 bug 修复），以最高级别为准。
 - 不确定 bump 哪个级别时，必须询问用户；不自行猜测。
-- `scripts/install.sh` 和 `scripts/update.sh` 通过 `node -e "console.log(require('./package.json').version)"` 读取版本号，与 `git rev-parse --short HEAD` 的短哈希一起显示。
+- `scripts/install.sh` 和 `scripts/update.sh` 读取 `package.json` 的 `version` 字段展示版本号，与 `git rev-parse --short HEAD` 的短哈希一起显示。
