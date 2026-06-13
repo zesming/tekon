@@ -1,33 +1,21 @@
 # 天工（Tekon）用户使用手册
 
-适用对象：希望把研发需求从“口头描述”推进到“可审阅证据、可验证结果、可准备 PR”的个人开发者、技术负责人、研发效能团队和内部工具团队。
-
-名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取“天工”。
-
-适用范围：当前本地 V2 能力。本文只描述用户怎么使用、会得到什么、如何判断结果、遇到问题怎么处理，以及当前不能做什么。
+名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取”天工”。
 
 ## 1. 天工是什么
 
-天工（Tekon）是一个本地 Agent workflow 驾驶系统。它不是聊天机器人，也不是自动上线平台；它更像一个“受控研发工作台”：用户把一个低到中风险的研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。
+天工（Tekon）是一个本地 Agent workflow 框架——一个”受控研发工作台”：用户把研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。
 
-天工的核心目标是增强人类交付能力，而不是替人类做高风险决策。它可以帮助你把需求推进到“可以人工审阅、可以准备 PR、可以继续验证”的状态；合入、上线、权限扩大、生产变更仍然由人控制。
+天工的核心目标是增强人类交付能力。它帮助你把需求推进到”可以人工审阅、可以准备 PR、可以继续验证”的状态；合入、上线、权限扩大、生产变更仍然由人控制。
 
-当前更准确的定位：
+当前定位：
 
-- 一个本地 CLI/Web 工具。
-- 一个受控 workflow 执行器。
-- 一个证据和审阅材料收集器。
-- 一个 PR 准备助手。
-- 一个研发工作样本评估器。
-- 一个支持 mock、Claude Code 和 Codex provider 的本地执行入口。
-
-当前不是：
-
-- 生产级远程多租户平台。
-- 自动 merge / 自动上线系统。
-- 完整 DLP、安全审计或 OS 级沙箱。
-- 能稳定处理所有真实 LLM 任务的生产系统。
-- 飞书 IM 通知机器人；当前只有可复制审批摘要。
+- 本地 CLI/Web 工具。
+- 受控 workflow 执行器。
+- 证据和审阅材料收集器。
+- PR 准备助手。
+- 研发工作样本评估器。
+- 支持 mock、Claude Code 和 Codex provider 的本地执行入口。
 
 ## 2. 天工解决什么问题
 
@@ -53,7 +41,7 @@
 - `test-improvement`：测试补齐。
 - `docs-update`：文档更新。
 - `plan-only`：只做方案，不执行代码改动。
-- `standard-delivery`：标准交付治理流程，包含 PM 内审、PM/RD/QA 外部需求评审、RD 技术评审、QA 测试方案评审、独立变更评审、QA final signoff、QA signoff review 和 PMO checkpoint；当前已具备独立评审、角色范围、AC evidence、QA signoff、节点级 PMO checkpoint 和流程完整性 gate 的本地强约束，但不替代真实人类业务决策。QA validation 不应仅因 PR 创建、delivery package 或下游 PMO/QA signoff 尚未运行而阻塞，最终交付闭环仍由 QA signoff、PMO 和 pre-PR readiness 继续校验。
+- `standard-delivery`：标准交付治理流程，包含 PM/RD/QA/Reviewer/PMO 完整角色链路、独立评审、AC evidence、QA signoff 和流程完整性 gate。
 
 `workflow select` 会给出推荐模板和理由；`eval workflow-selection` 会检查人工选择是否合理。
 
@@ -258,7 +246,7 @@ tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heart
 tekon run --template standard-delivery --agent mock
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，并固定 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir <TEKON_OUTPUT_DIR> exec`。其中 `--add-dir` 由 Tekon 受控追加，只开放本节点 artifact 输出目录；节点通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回 Tekon artifact，`TEKON_ARTIFACT_MANIFEST` 是 manifest 文件路径，不是字面文件名。非 `code-changes` 节点会被要求只写节点 artifact、不修改仓库工作区，Engine 会在 worktree finalize 前拦截这类节点的源码变更；所有需要 artifact 的节点先写 artifact/manifest，再立即退出，不在节点内启动嵌套 subagent 审阅，也不在节点内执行 `git add`、`git commit`、`git push` 或创建 PR。结构化 JSON artifact 必须包含非空 `title` 和 `body` 字段；`demand-card`/`prd` 应使用 `acceptanceCriteria[].id/description`，有效的 `acceptance_criteria[].criterion` 会被兼容归一化；`test-plan` 应使用 `testBasis` 和 `testCases`，有效的 `sourceArtifactsReviewed`/`testScenarios` 会被窄归一化；`test-report`/`ac-evidence`/`qa-release-signoff` 应使用 `criteriaEvidence[].criterionId/status/evidence`，其中 `evidence` 必须是非空字符串；需要 evidence anchor 的场景必须把 `outputPaths`、`gateResultIds` 或 `artifactIds` 放在对应 `criteriaEvidence` 条目内，不能只放在 artifact 顶层；`artifactIds` 只能使用 Artifacts 区展示的真实 `artifact_<uuid>`，不能使用 `nodeId:type` 标签；`gateResultIds` 只能使用 prompt 的 `Prior eligible gate results` 区展示的真实 `gateResultId`，不能使用 `gateKey`、`commandRef`、`outputPath` 或 gate 日志文件名；`qa-release-signoff` 还必须显式包含 `targetRef`、`validatedRef` 和 `overallStatus`，其中 `overallStatus` 只能是 `passed`、`failed` 或 `blocked`，不能用 `decision` 或 `recommendation` 替代；`status` 只能是 `passed`、`failed`、`blocked` 或 `unknown`，`test-report.summary` 如存在必须是字符串。对 `test-report`/`ac-evidence`，若真实 provider 写出对象形式 `summary`、带字符串 `summary` 的 `criteriaEvidence[].evidence` 对象，或用 `id`、`evidenceSummary`、`coverage`、`passed_with_*`/`failed_with_*`/`blocked_with_*` 状态标签表达 QA evidence，Tekon 会窄归一化为 schema 字段；`qa-release-signoff` 不做这类 provider-style QA evidence 字段归一化，应直接按 schema 写完整字段；缺失状态、含糊状态、无 `summary` 的 evidence 对象、只有顶层 anchor，或只有 `criterion` 而无证据字段时仍会失败；`process-checkpoint` 必须使用 `requiredNodes[].nodeId/status`、`artifactEvidence[].nodeId/type`、`gateEvidence[].nodeId/gateType/gateKey/status` 和数字型 `humanDecisionEvidence.pending`，其中 `requiredNodes[].status` 与 `gateEvidence[].status` 只能是 `passed` 或 `skipped`，不能用 `output`、`observedStatus` 或 pending 数组替代 schema 字段；`code-changes` 的 provider-style JSON 如果包含非空 `summary`，或包含有效 `changedFiles`/`verification` 条目，可被归一化为可审阅 artifact，但真实 provider 仍应优先按 Tekon schema 写完整字段。评审类 artifact 必须额外写入合法 `reviewScope`、`reviewProcess`、`decision` 和 `findings` 数组；如果有 finding，每项必须包含合法 `severity` 和 `message`，不能用 `reviewRole`、`reviewedArtifacts` 或数组/对象形式的 `reviewScope` 替代这些 schema 字段；无效 finding `ownerRole` 会被保留到 message，不会放宽核心 review 字段。真实 provider 默认总超时为 1 小时，无 stdout/stderr 或受控输出目录文件进展默认 15 分钟超时；CLI `run` 可用 `--timeout-ms`、`--no-progress-timeout-ms`、`--progress-heartbeat-ms` 显式覆盖，Web dashboard 也提供对应输入项，适合把明确长程任务拉到 2 小时或更长，但 1 小时默认预算和 2 小时级长程预算都仍需 heartbeat、no-progress 与受控 outputDir 产物进展观测共同约束。最终配置会写入 provider snapshot 以支持 resume；命令执行会写入 `*.progress.json`，记录状态、最近输出时间、stdout/stderr 字节数、受控输出目录文件数量和字节数、最近输出目录活动时间、elapsed、总超时、无进展超时、timeoutReason 和 heartbeat 次数。CommandGateway 会排除自身 stdout/stderr/progress 文件，只把 artifact、manifest 等产物文件变化计入进展；diff 级续期和可恢复 job runner 仍是后续增强。若 Codex 超时或非零退出但已写完有效 manifest，adapter 会在必需 artifact 校验通过后把该节点视为完成并继续进入 gate；缺少 workflow 必需 artifact、artifact schema 不合法、path/symlink 边界失败，或非 timeout signal 终止时，该节点会失败。QA validation 会记录 tested ref，QA signoff、PR package 和 readiness 会校验所测对象与交付对象一致。Codex provider 不会自动创建 PR、merge 或上线，远端副作用仍由 `delivery create-pr --approve-human` 控制；该命令中的受控 `git/gh` 命令及前置只读 probe 也会写入 progress JSON，并使用同一 1 小时总超时和 15 分钟无 stdout/stderr 或受控输出目录文件进展超时。
+Codex provider 使用本机 `codex exec` 非交互模式，通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回结构化 artifact。真实 provider 默认总超时 1 小时，无输出或产物进展超时 15 分钟，可用 `--timeout-ms`、`--no-progress-timeout-ms`、`--progress-heartbeat-ms` 覆盖。执行过程会写入 progress JSON 支持 resume，QA validation 会记录 tested ref 确保所测即所得。远端副作用仍由 `delivery create-pr --approve-human` 人工批准后执行。
 
 ### 4.6 查看结果
 
@@ -1075,37 +1063,16 @@ Web dashboard 适合：
 | `--interval-ms <ms>`         | 每次轮询间隔。   |
 | `--backoff <n>`              | 轮询退避倍率。   |
 
-## 11. 当前边界和安全原则
+## 11. 使用说明
 
-必须明确：
+天工的核心设计理念是增强人类交付，合入、上线、权限扩大等关键决策始终由人控制。
 
-- 天工不会自动 merge。
-- 天工不会自动上线。
-- 天工不会自动扩大权限。
-- 天工不会把动态 workflow 非 dry-run 当成已完成能力。
-- 天工当前不是生产级 OS 沙箱。
-- 天工当前不是完整 DLP。
-- 天工当前没有完整的远程多租户权限模型。
-- 天工当前只把远端 CI 查询写回证据，不控制 CI。
-- Codex provider 当前是本机 CLI 集成，不是生产级远程执行平台。
-- 飞书 IM 通知尚未接入；当前是可复制审批摘要。
+适用场景：
 
-推荐使用范围：
-
-- 内部工具。
-- 研发效能工具。
-- 测试补齐。
-- 文档补齐。
+- 内部工具和研发效能工具。
+- 测试补齐和文档补齐。
 - 低风险 bugfix。
 - 可回滚、可人工审阅的中小需求。
-
-不建议当前使用范围：
-
-- 生产数据写入。
-- 支付、权限、合规、隐私等高风险改动。
-- 自动发布。
-- 无人审阅的远端操作。
-- 长时间真实 LLM 任务且缺恢复预案的场景。
 
 ## 12. 每次迭代后的手册更新规则
 
