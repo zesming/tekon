@@ -22,7 +22,7 @@ export function AcceptanceCriteria({ criteria }: AcceptanceCriteriaProps) {
   if (criteria.length === 0) {
     return (
       <p className="text-sm text-muted" style={{ padding: '8px 0' }}>
-        No acceptance criteria defined.
+        未定义验收标准
       </p>
     );
   }
@@ -34,7 +34,7 @@ export function AcceptanceCriteria({ criteria }: AcceptanceCriteriaProps) {
           <span className="ac-id">{criterion.id}</span>
           {criterion.description}
           <span className="ac-verification">
-            验证 Verification: {criterion.verification}
+            验证: {criterion.verification}
           </span>
         </li>
       ))}

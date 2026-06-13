@@ -107,7 +107,7 @@ export function DraftCard({
           )}
           {!isApproved && !shape.readyForRun && (
             <span className="badge badge-pending badge-sm">
-              needs review
+              待审查
             </span>
           )}
         </div>
@@ -167,7 +167,7 @@ export function DraftCard({
             </div>
             <div className="text-sm text-muted">
               <div style={{ marginBottom: 4 }}>
-                Level:{' '}
+                级别:{' '}
                 <strong
                   style={{
                     color:
@@ -183,7 +183,7 @@ export function DraftCard({
               </div>
               {shape.risk.tags.length > 0 && (
                 <div style={{ marginBottom: 4 }}>
-                  Tags:{' '}
+                  标签:{' '}
                   {shape.risk.tags.map((tag) => (
                     <span
                       key={tag}
@@ -222,7 +222,7 @@ export function DraftCard({
           {/* ── Non-Goals (full width) ── */}
           <div className="shape-section" style={{ gridColumn: '1 / -1' }}>
             <div className="shape-section-title">
-              非目标 Non-Goals
+              非目标
             </div>
             <div className="text-sm text-muted">
               {shape.nonGoals.map((goal) => (
@@ -240,7 +240,7 @@ export function DraftCard({
               style={{ gridColumn: '1 / -1' }}
             >
               <div className="shape-section-title">
-                待确认问题 Open Questions (
+                待确认问题 (
                 {shape.openQuestions.length})
               </div>
               <ul className="shape-open-questions">
@@ -258,7 +258,7 @@ export function DraftCard({
               style={{ gridColumn: '1 / -1' }}
             >
               <div className="shape-section-title">
-                假设 Assumptions
+                假设
               </div>
               <div className="text-sm text-muted">
                 {shape.assumptions.map((assumption) => (
@@ -285,7 +285,7 @@ export function DraftCard({
             >
               {approveMutation.isPending
                 ? '⏳ 批准中…'
-                : '✓ 批准需求 Approve'}
+                : '✓ 批准需求'}
             </button>
           )}
           <button

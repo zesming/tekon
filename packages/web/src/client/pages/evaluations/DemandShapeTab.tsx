@@ -74,7 +74,7 @@ export function DemandShapeTab() {
               marginBottom: 4,
             }}
           >
-            Demand Text
+            需求描述
           </label>
           <textarea
             id="demand-shape-text"
@@ -92,7 +92,7 @@ export function DemandShapeTab() {
               onClick={handleEvaluate}
               disabled={shapeMutation.isPending}
             >
-              {shapeMutation.isPending ? '分析中…' : 'Evaluate Shape'}
+              {shapeMutation.isPending ? '分析中…' : '分析需求'}
             </button>
           </div>
           {shapeMutation.error && (
@@ -133,7 +133,7 @@ export function DemandShapeTab() {
                     marginBottom: 4,
                   }}
                 >
-                  Run Text
+                  运行文本
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--text)', margin: 0 }}>
                   {shapeResult.runText}
@@ -153,7 +153,7 @@ export function DemandShapeTab() {
                       marginBottom: 4,
                     }}
                   >
-                    Classification
+                    分类
                   </div>
                   <span className="badge badge-passed">
                     {String((shape as Record<string, unknown>).classification)}
@@ -174,7 +174,7 @@ export function DemandShapeTab() {
                       marginBottom: 4,
                     }}
                   >
-                    Risk
+                    风险
                   </div>
                   <span className="badge badge-pending">
                     {String((shape as Record<string, unknown>).risk)}
@@ -195,7 +195,7 @@ export function DemandShapeTab() {
                       marginBottom: 6,
                     }}
                   >
-                    Acceptance Criteria
+                    验收标准
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
                     {((shape as Record<string, unknown>).acceptanceCriteria as string[]).map(
@@ -222,7 +222,7 @@ export function DemandShapeTab() {
                       marginBottom: 6,
                     }}
                   >
-                    Non-Goals
+                    非目标
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
                     {((shape as Record<string, unknown>).nonGoals as string[]).map(
@@ -245,8 +245,8 @@ export function DemandShapeTab() {
         <div className="card">
           <div className="card-body">
             <p className="text-muted" style={{ textAlign: 'center', padding: '24px 0' }}>
-              Enter demand text and click &quot;Evaluate Shape&quot; to analyze
-              the demand structure and classification.
+              输入需求描述并点击"分析需求"来分析需求结构和分类
+              
             </p>
           </div>
         </div>

@@ -45,7 +45,7 @@ export function DraftPage() {
 
   const handleClarify = async (demandText: string) => {
     if (!token) {
-      addFlash('warning', 'Please set your session token first');
+      addFlash('warning', '请先设置会话令牌');
       return;
     }
 
@@ -53,11 +53,11 @@ export function DraftPage() {
       const result = await shapeMutation.mutate({ demandText, token });
       setShapeResult(result);
       setApproved(false);
-      addFlash('success', '需求已澄清 Demand shaped successfully');
+      addFlash('success', '需求已澄清');
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : 'Failed to shape demand',
+        err instanceof Error ? err.message : '需求分析失败',
       );
     }
   };
@@ -78,10 +78,10 @@ export function DraftPage() {
       {/* ── Page Header ── */}
       <header className="page-header">
         <div>
-          <h1 className="page-title">需求澄清 Demand</h1>
+          <h1 className="page-title">需求澄清</h1>
           <p className="page-subtitle">
-            需求分析与澄清 · Clarify, evaluate, and approve demands before
-            running
+            需求分析与澄清 · 运行前明确需求、评估并批准
+
           </p>
         </div>
       </header>
@@ -100,7 +100,7 @@ export function DraftPage() {
             className="section-title"
             style={{ fontFamily: 'var(--font-d)', fontSize: 15, fontWeight: 600, marginBottom: 12 }}
           >
-            已澄清需求 Clarified Demand
+            已澄清需求
           </div>
 
           <DraftCard
@@ -120,7 +120,7 @@ export function DraftPage() {
               className="text-muted"
               style={{ textAlign: 'center', padding: '24px 0' }}
             >
-              输入需求描述并点击"澄清需求 Clarify"来分析和结构化你的需求。
+              输入需求描述并点击"澄清需求"来分析和结构化你的需求。
             </p>
           </div>
         </div>

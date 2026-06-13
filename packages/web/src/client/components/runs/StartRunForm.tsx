@@ -74,11 +74,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   const handleStart = async () => {
     if (!token) {
-      addFlash('warning', 'Please set your session token first');
+      addFlash('warning', '请先设置会话令牌');
       return;
     }
     if (!demandText.trim()) {
-      addFlash('warning', 'Please enter a demand description');
+      addFlash('warning', '请输入需求描述');
       return;
     }
 
@@ -105,14 +105,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       const result = await startMutation.mutate(input);
       addFlash(
         'success',
-        `Run started: ${result.run.id.slice(0, 12)}`,
+        `运行已启动: ${result.run.id.slice(0, 12)}`,
       );
       setDemandText('');
       setIsOpen(false);
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : 'Failed to start run',
+        err instanceof Error ? err.message : '启动运行失败',
       );
     }
   };
@@ -124,7 +124,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
         style={{ cursor: 'pointer' }}
         onClick={() => setIsOpen((prev) => !prev)}
       >
-        <span className="card-title">✦ 新建运行 New Run</span>
+        <span className="card-title">✦ 新建运行</span>
         <svg
           width="16"
           height="16"
@@ -145,13 +145,13 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
         <div className="card-body">
           {/* Demand */}
           <div className="form-group">
-            <label className="form-label">需求描述 Demand</label>
+            <label className="form-label">需求描述</label>
             <textarea
               className="textarea"
               aria-label="描述你的需求"
               value={demandText}
               onChange={(e) => setDemandText(e.target.value)}
-              placeholder="Describe what you need…"
+              placeholder="描述你的需求…"
             />
           </div>
 
@@ -159,14 +159,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <div className="form-group">
               <label className="form-label">
-                工作流模板 Workflow Template
+                工作流模板
               </label>
               <select
                 className="select"
                 value={template}
                 onChange={(e) => setTemplate(e.target.value)}
               >
-                <option value="">— Default —</option>
+                <option value="">— 默认 —</option>
                 {workflows.map((wf) => (
                   <option key={wf.id} value={wf.id}>
                     {wf.name}
@@ -175,7 +175,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Agent</label>
+              <label className="form-label">执行代理</label>
               <select
                 className="select"
                 value={agent}
@@ -196,7 +196,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             style={{ gridTemplateColumns: '1fr 1fr 1fr' }}
           >
             <div className="form-group">
-              <label className="form-label">超时 Timeout (ms)</label>
+              <label className="form-label">超时 (ms)</label>
               <input
                 className="input"
                 type="number"
@@ -206,14 +206,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             </div>
             <div className="form-group">
               <label className="form-label">
-                无进展超时 No-Progress Timeout (ms)
+                无进展超时 (ms)
               </label>
               <input
                 className="input"
                 type="number"
                 value={noProgressTimeoutMs}
                 onChange={(e) => setNoProgressTimeoutMs(e.target.value)}
-                placeholder="optional"
+                placeholder="可选"
               />
             </div>
             <div className="form-group">
@@ -236,7 +236,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                   checked={allowDirtyBase}
                   onChange={(e) => setAllowDirtyBase(e.target.checked)}
                 />
-                Allow dirty base
+                允许脏工作区
               </label>
             </div>
           </div>
@@ -252,7 +252,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               disabled={startMutation.isPending || !demandText.trim()}
               onClick={handleStart}
             >
-              {startMutation.isPending ? '⏳ Starting…' : '▶ 发起运行 Start Run'}
+              {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
             </button>
           </div>
 

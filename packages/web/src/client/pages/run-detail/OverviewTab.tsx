@@ -37,11 +37,11 @@ export function OverviewTab() {
     () => rpc.call('review.get', { runId: runId! }),
   );
 
-  if (query.isLoading) return <LoadingState message="Loading overview..." />;
+  if (query.isLoading) return <LoadingState message="加载概览中..." />;
   if (query.error)
     return <ErrorBanner error={query.error} onRetry={query.refetch} />;
   if (!query.data)
-    return <EmptyState message="No review data available" />;
+    return <EmptyState message="暂无审阅数据" />;
 
   const surface = query.data;
   const readiness = surface.readiness;
@@ -53,7 +53,7 @@ export function OverviewTab() {
     <>
       {/* ── Readiness Score Card ── */}
       <Card
-        title="工作就绪 Readiness"
+        title="工作就绪"
         headerRight={
           <div className="flex items-center gap-2">
             <span
@@ -106,7 +106,7 @@ export function OverviewTab() {
             >
               {passedChecks.length}
             </div>
-            <div className="text-sm text-muted">Passed</div>
+            <div className="text-sm text-muted">通过</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div
@@ -119,7 +119,7 @@ export function OverviewTab() {
             >
               {failedChecks.length}
             </div>
-            <div className="text-sm text-muted">Failed</div>
+            <div className="text-sm text-muted">失败</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div
@@ -131,7 +131,7 @@ export function OverviewTab() {
             >
               {readiness.checks.length}
             </div>
-            <div className="text-sm text-muted">Total Checks</div>
+            <div className="text-sm text-muted">检查总数</div>
           </div>
         </div>
       </Card>
@@ -139,10 +139,10 @@ export function OverviewTab() {
       {/* ── Failed Checks ── */}
       {failedChecks.length > 0 ? (
         <Card
-          title="失败检查 Failed Checks"
+          title="失败检查"
           headerRight={
             <span className="badge badge-failed badge-sm">
-              {failedChecks.length} failed
+              {failedChecks.length} 失败
             </span>
           }
           compact
@@ -166,10 +166,10 @@ export function OverviewTab() {
 
       {/* ── All Checks ── */}
       <Card
-        title="全部检查 All Checks"
+        title="全部检查"
         headerRight={
           <span className="text-sm text-muted">
-            {passedChecks.length}/{readiness.checks.length} passed
+            {passedChecks.length}/{readiness.checks.length} 通过
           </span>
         }
         compact
@@ -188,14 +188,14 @@ export function OverviewTab() {
       {/* ── Evidence Groups ── */}
       <div className="section">
         <div className="section-title">
-          证据组 Evidence Groups{' '}
+          证据组{' '}
           <span className="count">{surface.evidenceGroups.length}</span>
         </div>
         {surface.evidenceGroups.length === 0 ? (
           <Card>
             <EmptyState
-              message="No evidence groups"
-              hint="Evidence will appear here as the workflow progresses."
+              message="暂无证据组"
+              hint="工作流执行过程中证据将在此显示。"
             />
           </Card>
         ) : (
@@ -251,7 +251,7 @@ export function OverviewTab() {
       {surface.nextCommands.length > 0 ? (
         <div className="section">
           <div className="section-title">
-            下一步命令 Next Commands{' '}
+            后续操作{' '}
             <span className="count">{surface.nextCommands.length}</span>
           </div>
           <Card compact>
@@ -281,7 +281,7 @@ export function OverviewTab() {
       {surface.gateFailureTriage.length > 0 ? (
         <div className="section">
           <div className="section-title">
-            门禁故障诊断 Gate Failure Triage{' '}
+            门禁故障诊断{' '}
             <span className="count">{surface.gateFailureTriage.length}</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -301,14 +301,14 @@ export function OverviewTab() {
                   }}
                 >
                   <span className="text-muted" style={{ fontWeight: 500 }}>
-                    Gate
+                    门禁
                   </span>
                   <span style={{ fontWeight: 600 }}>
                     {triage.gateType}
                     <span className="text-mono text-muted"> ({triage.nodeId})</span>
                   </span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
-                    Classification
+                    分类
                   </span>
                   <span
                     className="badge badge-sm"
@@ -322,17 +322,17 @@ export function OverviewTab() {
                     {triage.classification}
                   </span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
-                    Retry
+                    重试
                   </span>
                   <span>{triage.retry}</span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
-                    Summary
+                    摘要
                   </span>
                   <span style={{ color: 'var(--text-s)' }}>
                     {triage.summary}
                   </span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
-                    Suggested
+                    建议操作
                   </span>
                   <span
                     className="text-mono"

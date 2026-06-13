@@ -46,7 +46,7 @@ export function ReadinessTab() {
   const handleEvaluate = async () => {
     const targetRunId = runId.trim() || latestRunId;
     if (!targetRunId) {
-      setError('Please enter a run ID');
+      setError('请输入运行 ID');
       return;
     }
     setError(null);
@@ -82,13 +82,13 @@ export function ReadinessTab() {
                   marginBottom: 4,
                 }}
               >
-                Run ID
+                运行 ID
               </label>
               <input
                 id="readiness-run-id"
                 className="input"
                 type="text"
-                placeholder={latestRunId || 'Enter run ID…'}
+                placeholder={latestRunId || '输入运行 ID…'}
                 value={runId}
                 onChange={(e) => setRunId(e.target.value)}
                 onKeyDown={(e) => {
@@ -102,7 +102,7 @@ export function ReadinessTab() {
               onClick={handleEvaluate}
               disabled={isLoading}
             >
-              {isLoading ? 'Loading…' : 'Evaluate'}
+              {isLoading ? '加载中…' : '评估'}
             </button>
             {latestRunId && (
               <button
@@ -110,7 +110,7 @@ export function ReadinessTab() {
                 className="btn btn-secondary"
                 onClick={handleUseLatest}
               >
-                Use Latest
+                使用最新
               </button>
             )}
           </div>
@@ -132,7 +132,7 @@ export function ReadinessTab() {
         <div className="card">
           <div className="card-body">
             <p className="text-muted" style={{ textAlign: 'center', padding: '24px 0' }}>
-              Loading readiness evaluation…
+              加载就绪评估中…
             </p>
           </div>
         </div>
@@ -154,7 +154,7 @@ export function ReadinessTab() {
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="card-header">
               <span className="card-title">
-                Readiness Checks
+                就绪检查
                 <span
                   style={{
                     fontFamily: 'var(--font-m)',
@@ -165,7 +165,7 @@ export function ReadinessTab() {
                   }}
                 >
                   {readiness.checks.filter((c) => c.passed).length}/
-                  {readiness.checks.length} passed
+                  {readiness.checks.length} 通过
                 </span>
               </span>
             </div>
@@ -186,7 +186,7 @@ export function ReadinessTab() {
             <div className="card">
               <div className="card-header">
                 <span className="card-title">
-                  Pre-Pull Request Readiness
+                  PR 创建就绪
                   <span
                     className={`badge ${prePrReadiness.ready ? 'badge-passed' : 'badge-failed'}`}
                     style={{ marginLeft: 8 }}
@@ -214,8 +214,7 @@ export function ReadinessTab() {
         <div className="card">
           <div className="card-body">
             <p className="text-muted" style={{ textAlign: 'center', padding: '24px 0' }}>
-              Enter a run ID and click &quot;Evaluate&quot; to view readiness
-              evaluation results.
+              输入运行 ID 并点击"评估"查看就绪评估结果。
             </p>
           </div>
         </div>
