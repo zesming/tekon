@@ -163,13 +163,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-安装脚本会自动完成：克隆仓库 → 安装依赖 → 构建项目 → 配置 `tekon` 命令到 PATH。
-
-安装完成后，执行 `source ~/.zshrc`（或 `~/.bashrc`）使 PATH 生效，即可在任意目录使用：
-
-```bash
-tekon
-```
+安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（>=18）、`npm`。
 
 如需指定安装目录或分支：
 
@@ -177,11 +171,13 @@ tekon
 TEKON_HOME=/opt/tekon TEKON_VERSION=main curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-如果尚未执行 `source ~/.zshrc` 使 PATH 生效，可直接用 `node ~/.tekon/packages/cli/dist/index.js` 替换 `tekon`。
+### 4.1.1 更新
 
-前置依赖：`git`、`node`（>=18）、`npm`。脚本会自动检测，缺少时会给出安装指引。
+```bash
+tekon update
+```
 
-本文默认使用 `tekon` 示例，重点展示普通用户的最短路径。
+自动拉取最新代码、安装依赖、重新构建，完成后输出版本变更。
 
 ### 4.2 初始化目标仓库
 
@@ -859,6 +855,16 @@ tekon ui
 - 目标仓库必须先执行过 `tekon init`（需要 `.tekon/web-session.json`）。
 - Web 是本地 dashboard，不是远程服务。
 - Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
+
+### 6.21 `update`
+
+用途：更新 Tekon 到最新版本。
+
+```bash
+tekon update
+```
+
+拉取最新代码 → 安装依赖 → 重新构建。已是最新版本时直接退出。更新完成后输出旧版本 → 新版本。
 
 ## 7. Web Dashboard
 

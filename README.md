@@ -59,9 +59,15 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-脚本自动完成克隆、安装依赖、构建、配置 PATH。前置依赖：`git`、`node`（>=18）、`npm`。
+脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（>=18）、`npm`。
 
-完成后执行 `source ~/.zshrc`（或 `source ~/.bashrc`），即可使用 `tekon` 命令。
+安装完成后，按脚本输出的提示将 `tekon` 加入 PATH，`source` 对应 rc 文件即可使用。
+
+### 更新
+
+```bash
+tekon update
+```
 
 ### 开始使用
 
@@ -79,6 +85,7 @@ tekon delivery create-pr --approve-human      # 受控创建远端 PR
 tekon delivery ci-status                      # 查询远端 CI
 tekon delivery ci-watch                       # 等待 CI 终态
 tekon eval readiness                          # 评估交付完整度
+tekon update                                  # 更新 Tekon 到最新版本
 tekon ui                                      # 启动 Web Dashboard
 ```
 
@@ -103,6 +110,7 @@ tekon ui                                      # 启动 Web Dashboard
 | 等待 CI | `tekon delivery ci-watch` |
 | 评估 readiness | `tekon eval readiness` |
 | 评估样本集 | `tekon eval work-usability --samples <yaml>` |
+| 更新 Tekon | `tekon update` |
 | 启动 Web Dashboard | `tekon ui` |
 
 更多命令和详细参数见[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)。

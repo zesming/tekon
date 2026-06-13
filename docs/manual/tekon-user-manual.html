@@ -397,7 +397,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="tab-panel" id="p3">
 <div class="section-header"><span class="section-num">SECTION 04</span><h1 class="section-title">Quick Start</h1><p class="section-subtitle">以下示例假设 <code>tekon</code> 已安装到 PATH，并且你正在目标项目根目录执行命令。</p></div>
 <div class="ib"><div class="ib-lb">⬇ 一键安装</div><pre><code><span class="c">curl</span> <span class="f">-fsSL</span> <span class="s">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="f">|</span> <span class="c">bash</span></code></pre></div>
-<p>安装脚本自动完成：克隆仓库 → 安装依赖 → 构建项目 → 配置 <code>tekon</code> 到 PATH。执行 <code>source ~/.zshrc</code>（或 <code>source ~/.bashrc</code>）即可使用。前置依赖：<code>git</code>、<code>node</code> (>=18)、<code>npm</code>。</p>
+<p>安装脚本自动完成克隆、安装依赖、构建，完成后输出 PATH 配置命令。按提示将 <code>tekon</code> 加入 PATH 并 <code>source</code> 对应 rc 文件即可。前置依赖：<code>git</code>、<code>node</code> (>=18)、<code>npm</code>。</p>
+<p>更新到最新版本：<code>tekon update</code></p>
 <div class="fl"><svg viewBox="0 0 820 100" width="100%" height="auto">
 <rect x="10" y="25" width="100" height="40" class="sf-h" rx="4"/><text x="60" y="43" class="sf-lc">init</text><text x="60" y="57" class="sf-l">初始化</text>
 <line x1="110" y1="45" x2="150" y2="45" class="sf-ar"/>
@@ -511,6 +512,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--port</span> <span class="n">3001</span>
 <span class="cm"># 跨仓库</span>
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>需要目标仓库已 <code>init</code>（有 <code>.tekon/web-session.json</code>）</li><li>启动后终端输出带 token 的 URL，浏览器打开即可</li><li><code>Ctrl+C</code> 停止服务</li></ul></div></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.21 update</span><span class="cb-ds">更新 Tekon 到最新版本</span></div><pre><code><span class="c">tekon</span> <span class="a">update</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>拉取最新代码 → 安装依赖 → 重新构建</li><li>已是最新版本时直接退出</li><li>更新完成后输出旧版本 → 新版本</li></ul></div></div>
 </div>
 
 <!-- ════ TAB 6: Web Dashboard ════ -->
