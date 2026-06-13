@@ -2148,6 +2148,11 @@ async function commandUi(argv: string[], io: CliIO) {
   const { token } = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
     token: string;
   };
+  if (!token || typeof token !== 'string') {
+    throw new Error(
+      `Invalid web-session.json at ${tokenPath}; run "tekon init" first`,
+    );
+  }
 
   const tekonRoot = resolveTekonRoot();
   const webDir = join(tekonRoot, 'packages', 'web');
@@ -2156,7 +2161,17 @@ async function commandUi(argv: string[], io: CliIO) {
   }
 
   const tsxBin = join(tekonRoot, 'node_modules', '.bin', 'tsx');
+  if (!existsSync(tsxBin)) {
+    throw new Error(
+      `tsx not found at ${tsxBin}. Run "npx pnpm install" in ${tekonRoot} first.`,
+    );
+  }
   const port = args.values.port ?? '3000';
+  if (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65535) {
+    throw new Error(
+      `Invalid port: ${port}. Must be a number between 1 and 65535.`,
+    );
+  }
 
   io.stdout.write(`repo=${repoPath}\n`);
   io.stdout.write(`url=http://localhost:${port}?token=${token}\n`);
