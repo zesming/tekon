@@ -52,3 +52,15 @@
 - 若运行产物位于 `.tekon/` 且不会随 git 提交归档，并且其结论需要作为正式验收、发布决策或用户要求的归档证据，必须把关键验收结论、run id、风险 Gate 结果和 eval 指标摘要写入 `docs/reviews/` 或其他可提交文档。
 - 提交前检查文档更新时，若判断“不需要更新”，应在最终回复或提交说明中简要说明理由。
 - 修改代码或文档后，优先提交到 git；提交信息使用简洁中文或英文均可，但正文说明以中文为主。
+
+## 版本号管理
+
+- 版本号以 `package.json` 的 `version` 字段为准一来源，遵循语义化版本（Semantic Versioning）：`MAJOR.MINOR.PATCH`。
+- 当前为 `0.x` 阶段，版本号含义：
+  - **PATCH** (`0.2.1` → `0.2.2`)：bug 修复、文档勘误、review 修复、小幅样式调整、不改变行为的代码清理。
+  - **MINOR** (`0.2.0` → `0.3.0`)：新增功能（新 CLI 命令、新 workflow 模板、新 provider 接入、新 gate）、用户手册新增章节、行为有实际变化的改进。
+  - **MAJOR** (`0.x.0` → `1.0.0`)：breaking changes（CLI 参数重命名或删除、模板名变更、.tekon 目录结构不兼容）、正式生产发布。
+- 每次提交前评估是否需要 bump 版本号：根据本次变更内容判断 bump 级别，修改 `package.json` 的 `version` 字段，并在提交信息中包含 `vX.Y.Z`。
+- 如果变更内容跨多个级别（例如既有新功能又有 bug 修复），以最高级别为准。
+- 不确定 bump 哪个级别时，必须询问用户；不自行猜测。
+- `scripts/install.sh` 和 `scripts/update.sh` 通过 `node -e "console.log(require('./package.json').version)"` 读取版本号，与 `git rev-parse --short HEAD` 的短哈希一起显示。
