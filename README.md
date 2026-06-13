@@ -143,8 +143,6 @@ npm run lint:actions
 
 ## 文档入口
 
-- [用户手册 (Markdown)](docs/manual/tekon-user-manual.md)
-- [用户手册 (HTML)](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)
-- [Codex provider smoke](docs/manual/codex-provider-smoke.md)
+- [用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)
 - [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
 - [变更日志](CHANGELOG.md)

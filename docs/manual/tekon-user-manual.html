@@ -191,10 +191,6 @@ td code{font-size:12px}
     <div class="concept-card"><h4>研发工作样本评估器</h4><p>评估真实样本是否达到试用门槛。</p></div>
     <div class="concept-card"><h4>多 Provider 执行入口</h4><p>支持 mock、Claude Code 和 Codex provider。</p></div>
   </div>
-  <h3>当前不是</h3>
-  <div class="tag-list">
-    <span class="tag tag-red">生产级远程多租户平台</span><span class="tag tag-red">自动 merge / 自动上线</span><span class="tag tag-red">完整 DLP / 安全审计</span><span class="tag tag-red">OS 级沙箱</span><span class="tag tag-red">飞书 IM 通知机器人</span>
-  </div>
   <div class="callout callout-info"><span class="callout-label">名称说明</span>天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。</div>
 </section>
 
@@ -518,12 +514,10 @@ delivery ci-watch       → 只读轮询，不 rerun/merge</code></div>
 </section>
 
 <section class="section" id="s11">
-  <div class="section-header"><span class="section-number">SECTION 11</span><h1 class="section-title">当前边界和安全原则</h1></div>
-  <div class="callout callout-warn"><span class="callout-label">必须明确</span><ul style="margin:8px 0 0 0"><li>天工不会自动 merge、不会自动上线、不会自动扩大权限</li><li>天工当前不是生产级 OS 沙箱、不是完整 DLP</li><li>天工当前没有完整的远程多租户权限模型</li><li>飞书 IM 通知尚未接入</li></ul></div>
-  <h3>推荐使用范围</h3>
+  <div class="section-header"><span class="section-number">SECTION 11</span><h1 class="section-title">使用说明</h1></div>
+  <p>天工的核心设计理念是增强人类交付，合入、上线、权限扩大等关键决策始终由人控制。</p>
+  <h3>适用场景</h3>
   <div class="tag-list"><span class="tag tag-jade">内部工具</span><span class="tag tag-jade">研发效能工具</span><span class="tag tag-jade">测试补齐</span><span class="tag tag-jade">文档补齐</span><span class="tag tag-jade">低风险 bugfix</span><span class="tag tag-jade">可回滚的中小需求</span></div>
-  <h3>不建议当前使用范围</h3>
-  <div class="tag-list"><span class="tag tag-red">生产数据写入</span><span class="tag tag-red">支付/权限/合规/隐私等高风险改动</span><span class="tag tag-red">自动发布</span><span class="tag tag-red">无人审阅的远端操作</span></div>
   <h3>手册更新规则</h3>
   <p>后续每次功能、CLI/Web 入口、参数、错误处理、边界或用户流程变化后，都必须评估是否需要更新本手册。当前主手册路径：<code>docs/manual/tekon-user-manual.md</code></p>
   <div class="content-footer"><div class="footer-seal">工</div><div class="footer-text">tekon-user-manual · v2 · 2026.06</div></div>
