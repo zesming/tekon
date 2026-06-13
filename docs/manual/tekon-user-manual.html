@@ -512,7 +512,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="tab-panel" id="p6">
 <div class="section-header"><span class="section-num">SECTION 07</span><h1 class="section-title">Web Dashboard</h1><p class="section-subtitle">本地 Web dashboard，用于审阅和人工决策。</p></div>
 <h3>启动</h3>
-<pre><code><span class="k">TEKON_PROJECT_ROOT</span>=<span class="s">/path/to/project</span> <span class="c">npm exec</span> <span class="f">--yes</span> <span class="f">--</span> <span class="c">pnpm@10.12.1</span> <span class="f">--filter</span> <span class="s">@tekon/web</span> <span class="a">dev</span></code></pre>
+<pre><code><span class="k">cd</span> <span class="s">~/.tekon</span> <span class="f">&amp;&amp;</span> <span class="k">TEKON_PROJECT_ROOT</span>=<span class="s">/path/to/project</span> <span class="c">npx</span> <span class="a">pnpm</span> <span class="f">--filter</span> <span class="s">@tekon/web</span> <span class="a">dev</span></code></pre>
 <p>Web dashboard 适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
 <div class="cl cl-w"><span class="cl-lb">Session Token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
 <p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>

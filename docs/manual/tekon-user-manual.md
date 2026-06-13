@@ -153,7 +153,7 @@
 
 ## 4. Quick Start
 
-以下示例假设 `tekon` 已安装到 PATH，并且你正在目标项目根目录执行命令。没有全局安装时，可用 `node /path/to/tekon/packages/cli/dist/index.js` 替换 `tekon`；从其它目录操作目标仓库时，再显式追加 `--repo /path/to/project`。
+以下示例假设已通过安装脚本将 `tekon` 配置到 PATH，并且你正在目标项目根目录执行命令。从其它目录操作目标仓库时，显式追加 `--repo /path/to/project`。
 
 ### 4.1 安装
 
@@ -177,11 +177,7 @@ tekon
 TEKON_HOME=/opt/tekon TEKON_VERSION=main curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-如果不想配置 PATH，也可以直接用 node 执行：
-
-```bash
-node ~/.tekon/packages/cli/dist/index.js
-```
+如果尚未执行 `source ~/.zshrc` 使 PATH 生效，可直接用 `node ~/.tekon/packages/cli/dist/index.js` 替换 `tekon`。
 
 前置依赖：`git`、`node`（>=18）、`npm`。脚本会自动检测，缺少时会给出安装指引。
 
@@ -848,7 +844,7 @@ tekon eval work-usability record --id tekon-codex-self-bootstrap --expected-prov
 启动：
 
 ```bash
-TEKON_PROJECT_ROOT=/path/to/project npm exec --yes -- pnpm@10.12.1 --filter @tekon/web dev
+cd ~/.tekon && TEKON_PROJECT_ROOT=/path/to/project npx pnpm --filter @tekon/web dev
 ```
 
 Web dashboard 适合：

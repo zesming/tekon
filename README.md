@@ -135,13 +135,18 @@ scripts/                安装和 CI 脚本
 
 ## 开发与验证
 
+在 Tekon 仓库目录（默认为 `~/.tekon`）中执行：
+
 ```bash
-npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
-npm exec --yes -- pnpm@10.12.1 build
-npm exec --yes -- pnpm@10.12.1 typecheck
-npm exec --yes -- pnpm@10.12.1 test -- --run
+cd ~/.tekon
+npx pnpm install --frozen-lockfile
+npx pnpm build
+npx pnpm typecheck
+npx pnpm test -- --run
 npm run lint:actions
 ```
+
+> 如已全局安装 pnpm，可直接用 `pnpm` 替换 `npx pnpm`。
 
 ## 文档
 
