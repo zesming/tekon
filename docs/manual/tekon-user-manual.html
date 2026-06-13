@@ -268,6 +268,118 @@ html.en .section-title{font-family:var(--font-en),var(--font-display),serif}
 
 <script>
 // ═══════════════════════════════════════════════
+//  HELPERS — must be defined before T data
+// ═══════════════════════════════════════════════
+function flowSVG_delivery(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 160" width="100%" height="auto">
+<rect x="10" y="50" width="120" height="40" class="pipe-box highlight" rx="4"/><text x="70" y="68" class="pipe-label">demand shape</text><text x="70" y="82" class="pipe-desc">Shape requirements</text>
+<line x1="130" y1="70" x2="175" y2="70" class="pipe-arrow"/>
+<rect x="180" y="50" width="120" height="40" class="pipe-box" rx="4"/><text x="240" y="68" class="pipe-label">demand approve</text><text x="240" y="82" class="pipe-desc">Human approval</text>
+<line x1="300" y1="70" x2="345" y2="70" class="pipe-arrow"/>
+<rect x="350" y="50" width="100" height="40" class="pipe-box" rx="4"/><text x="400" y="68" class="pipe-label">tekon run</text><text x="400" y="82" class="pipe-desc">Execute workflow</text>
+<line x1="450" y1="70" x2="495" y2="70" class="pipe-arrow"/>
+<rect x="500" y="50" width="110" height="40" class="pipe-box" rx="4"/><text x="555" y="68" class="pipe-label">review</text><text x="555" y="82" class="pipe-desc">Review evidence</text>
+<line x1="610" y1="70" x2="655" y2="70" class="pipe-arrow"/>
+<rect x="660" y="45" width="140" height="50" class="pipe-box highlight" rx="4"/><text x="730" y="63" class="pipe-label">create-pr</text><text x="730" y="80" class="pipe-desc">--approve-human</text>
+<line x1="730" y1="95" x2="730" y2="120" class="pipe-arrow"/>
+<rect x="660" y="120" width="140" height="30" class="pipe-box" rx="4"/><text x="730" y="139" class="pipe-label">ci-status / ci-watch</text>
+</svg></div>`}
+
+function flowSVG_quickstart(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 100" width="100%" height="auto">
+<rect x="10" y="25" width="100" height="40" class="pipe-box highlight" rx="4"/><text x="60" y="43" class="pipe-label">init</text><text x="60" y="57" class="pipe-desc">Initialize</text>
+<line x1="110" y1="45" x2="150" y2="45" class="pipe-arrow"/>
+<rect x="155" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="210" y="43" class="pipe-label">demand shape</text><text x="210" y="57" class="pipe-desc">Shape + approve</text>
+<line x1="265" y1="45" x2="305" y2="45" class="pipe-arrow"/>
+<rect x="310" y="25" width="90" height="40" class="pipe-box" rx="4"/><text x="355" y="43" class="pipe-label">run</text><text x="355" y="57" class="pipe-desc">Execute</text>
+<line x1="400" y1="45" x2="440" y2="45" class="pipe-arrow"/>
+<rect x="445" y="25" width="100" height="40" class="pipe-box" rx="4"/><text x="495" y="43" class="pipe-label">review</text><text x="495" y="57" class="pipe-desc">Review surface</text>
+<line x1="545" y1="45" x2="585" y2="45" class="pipe-arrow"/>
+<rect x="590" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="645" y="43" class="pipe-label">delivery</text><text x="645" y="57" class="pipe-desc">prepare + pr</text>
+<line x1="700" y1="45" x2="740" y2="45" class="pipe-arrow"/>
+<rect x="745" y="25" width="65" height="40" class="pipe-box jade" rx="4"/><text x="777" y="49" class="pipe-label">Done</text></svg></div>`}
+
+function flowSVG_workflow(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 130" width="100%" height="auto">
+<rect x="10" y="45" width="110" height="40" class="flow-box active" rx="4"/><text x="65" y="63" class="flow-label">Demand</text><text x="65" y="77" class="flow-label cn">需求输入</text>
+<line x1="120" y1="65" x2="165" y2="65" class="flow-arrow vermillion"/>
+<rect x="170" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="215" y="63" class="flow-label">PM</text><text x="215" y="77" class="flow-label cn">需求塑形</text>
+<line x1="260" y1="65" x2="305" y2="65" class="flow-arrow"/>
+<rect x="310" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="350" y="63" class="flow-label">RD</text><text x="350" y="77" class="flow-label cn">代码实现</text>
+<line x1="390" y1="65" x2="435" y2="65" class="flow-arrow"/>
+<rect x="440" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="480" y="63" class="flow-label">QA</text><text x="480" y="77" class="flow-label cn">测试验证</text>
+<line x1="520" y1="65" x2="565" y2="65" class="flow-arrow"/>
+<rect x="570" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="615" y="63" class="flow-label">Reviewer</text><text x="615" y="77" class="flow-label cn">独立评审</text>
+<line x1="660" y1="65" x2="705" y2="65" class="flow-arrow"/>
+<rect x="710" y="45" width="90" height="40" class="flow-box jade" rx="4"/><text x="755" y="63" class="flow-label">Delivery</text><text x="755" y="77" class="flow-label cn">交付准备</text>
+</svg></div>`}
+
+function scenarioCard(label,title,desc,steps,extra){
+  let h='<div class="scenario-card"><div class="scenario-label">'+label+'</div><div class="scenario-title">'+title+'</div>';
+  if(desc) h+='<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">'+desc+'</p>';
+  if(extra) h+=extra;
+  if(steps.length){h+='<ol class="scenario-steps">';steps.forEach(s=>h+='<li>'+s+'</li>');h+='</ol>';}
+  h+='</div>';return h;
+}
+
+function cmdBlock(name,desc,code,section){
+  let h='<div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">'+name+'</span><span class="cmd-desc">'+desc+'</span></div>';
+  h+='<pre><code>'+code+'</code></pre>';
+  if(section) h+=section;
+  h+='</div>';return h;
+}
+
+function commandsHTML(){
+  const cmds=[
+    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>','<div class="cmd-section"><div class="cmd-section-title">Parameters</div><ul><li><code>--repo &lt;path&gt;</code> — specify target repo from another directory</li></ul></div><div class="cmd-section"><div class="cmd-section-title">Result</div><ul><li>Creates <code>.tekon/</code>, <code>config.yaml</code>, <code>repo-profile.yaml</code>, <code>web-session.json</code></li></ul></div>'],
+    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>','<div class="cmd-section"><div class="cmd-section-title">Results</div><ul><li><code>resolved</code> — executable</li><li><code>missing</code> — need repo profile</li><li><code>not-applicable</code> — explicitly skipped</li><li><code>not-command-gate</code> — semantic gate</li></ul></div>'],
+    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span>'],
+    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--no-write</code> — preview only</li><li><code>--format json</code> — JSON output</li></ul></div>'],
+    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
+    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Use demand card (default: latest approved)</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span> <span class="str">"demand text"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code> — built-in template</li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
+    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
+    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--run-id</code> / <code>--decision-id</code></li><li><code>--json</code> — structured JSON</li></ul></div>'],
+    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
+    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
+    ['6.11 approval reject','Reject & block workflow','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
+    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>','<div class="cmd-section"><div class="cmd-section-title">Key Sections</div><ul><li>Readiness Failed Checks / Evidence Navigation / Gate Failure Triage</li><li>Delivery / Changed Files / Artifacts / Gate Logs / PR Body / PR Package</li></ul></div>'],
+    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
+    ['6.14 delivery prepare','Generate local PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
+    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>','<div class="cmd-section"><div class="cmd-section-title">Requirements</div><ul><li><code>gh</code> CLI installed & authenticated</li><li>Workflow passed, AC evidence complete, QA signoff satisfied</li></ul></div>'],
+    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
+    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span>'],
+    ['6.18 eval readiness','Evaluate delivery readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
+    ['6.19 eval work-usability','Evaluate sample set','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
+  ];
+  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
+}
+
+function commandsHTML_EN(){
+  const cmds=[
+    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>'],
+    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>'],
+    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"Add unit tests for CLI"</span>'],
+    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"demand text"</span>'],
+    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
+    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Demand card run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code></li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
+    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
+    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>'],
+    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
+    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
+    ['6.11 approval reject','Reject & block','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
+    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>'],
+    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
+    ['6.14 delivery prepare','Generate PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
+    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>'],
+    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
+    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span>'],
+    ['6.18 eval readiness','Evaluate readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
+    ['6.19 eval work-usability','Evaluate samples','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
+  ];
+  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
+}
+
+// ═══════════════════════════════════════════════
 //  DATA — Bilingual Content
 // ═══════════════════════════════════════════════
 const T = {
@@ -613,121 +725,6 @@ ${flowSVG_workflow()}
     ]
   }
 };
-
-// ═══════════════════════════════════════════════
-//  FLOW DIAGRAMS (SVG)
-// ═══════════════════════════════════════════════
-function flowSVG_delivery(){
-  return `<div class="flow-diagram"><svg viewBox="0 0 820 160" width="100%" height="auto">
-<rect x="10" y="50" width="120" height="40" class="pipe-box highlight" rx="4"/><text x="70" y="68" class="pipe-label">demand shape</text><text x="70" y="82" class="pipe-desc">Shape requirements</text>
-<line x1="130" y1="70" x2="175" y2="70" class="pipe-arrow"/>
-<rect x="180" y="50" width="120" height="40" class="pipe-box" rx="4"/><text x="240" y="68" class="pipe-label">demand approve</text><text x="240" y="82" class="pipe-desc">Human approval</text>
-<line x1="300" y1="70" x2="345" y2="70" class="pipe-arrow"/>
-<rect x="350" y="50" width="100" height="40" class="pipe-box" rx="4"/><text x="400" y="68" class="pipe-label">tekon run</text><text x="400" y="82" class="pipe-desc">Execute workflow</text>
-<line x1="450" y1="70" x2="495" y2="70" class="pipe-arrow"/>
-<rect x="500" y="50" width="110" height="40" class="pipe-box" rx="4"/><text x="555" y="68" class="pipe-label">review</text><text x="555" y="82" class="pipe-desc">Review evidence</text>
-<line x1="610" y1="70" x2="655" y2="70" class="pipe-arrow"/>
-<rect x="660" y="45" width="140" height="50" class="pipe-box highlight" rx="4"/><text x="730" y="63" class="pipe-label">create-pr</text><text x="730" y="80" class="pipe-desc">--approve-human</text>
-<line x1="730" y1="95" x2="730" y2="120" class="pipe-arrow"/>
-<rect x="660" y="120" width="140" height="30" class="pipe-box" rx="4"/><text x="730" y="139" class="pipe-label">ci-status / ci-watch</text>
-</svg></div>`}
-
-function flowSVG_quickstart(){
-  return `<div class="flow-diagram"><svg viewBox="0 0 820 100" width="100%" height="auto">
-<rect x="10" y="25" width="100" height="40" class="pipe-box highlight" rx="4"/><text x="60" y="43" class="pipe-label">init</text><text x="60" y="57" class="pipe-desc">Initialize</text>
-<line x1="110" y1="45" x2="150" y2="45" class="pipe-arrow"/>
-<rect x="155" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="210" y="43" class="pipe-label">demand shape</text><text x="210" y="57" class="pipe-desc">Shape + approve</text>
-<line x1="265" y1="45" x2="305" y2="45" class="pipe-arrow"/>
-<rect x="310" y="25" width="90" height="40" class="pipe-box" rx="4"/><text x="355" y="43" class="pipe-label">run</text><text x="355" y="57" class="pipe-desc">Execute</text>
-<line x1="400" y1="45" x2="440" y2="45" class="pipe-arrow"/>
-<rect x="445" y="25" width="100" height="40" class="pipe-box" rx="4"/><text x="495" y="43" class="pipe-label">review</text><text x="495" y="57" class="pipe-desc">Review surface</text>
-<line x1="545" y1="45" x2="585" y2="45" class="pipe-arrow"/>
-<rect x="590" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="645" y="43" class="pipe-label">delivery</text><text x="645" y="57" class="pipe-desc">prepare + pr</text>
-<line x1="700" y1="45" x2="740" y2="45" class="pipe-arrow"/>
-<rect x="745" y="25" width="65" height="40" class="pipe-box jade" rx="4"/><text x="777" y="49" class="pipe-label">Done</text></svg></div>`}
-
-function flowSVG_workflow(){
-  return `<div class="flow-diagram"><svg viewBox="0 0 820 130" width="100%" height="auto">
-<rect x="10" y="45" width="110" height="40" class="flow-box active" rx="4"/><text x="65" y="63" class="flow-label">Demand</text><text x="65" y="77" class="flow-label cn">需求输入</text>
-<line x1="120" y1="65" x2="165" y2="65" class="flow-arrow vermillion"/>
-<rect x="170" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="215" y="63" class="flow-label">PM</text><text x="215" y="77" class="flow-label cn">需求塑形</text>
-<line x1="260" y1="65" x2="305" y2="65" class="flow-arrow"/>
-<rect x="310" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="350" y="63" class="flow-label">RD</text><text x="350" y="77" class="flow-label cn">代码实现</text>
-<line x1="390" y1="65" x2="435" y2="65" class="flow-arrow"/>
-<rect x="440" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="480" y="63" class="flow-label">QA</text><text x="480" y="77" class="flow-label cn">测试验证</text>
-<line x1="520" y1="65" x2="565" y2="65" class="flow-arrow"/>
-<rect x="570" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="615" y="63" class="flow-label">Reviewer</text><text x="615" y="77" class="flow-label cn">独立评审</text>
-<line x1="660" y1="65" x2="705" y2="65" class="flow-arrow"/>
-<rect x="710" y="45" width="90" height="40" class="flow-box jade" rx="4"/><text x="755" y="63" class="flow-label">Delivery</text><text x="755" y="77" class="flow-label cn">交付准备</text>
-</svg></div>`}
-
-// ═══════════════════════════════════════════════
-//  HELPERS
-// ═══════════════════════════════════════════════
-function scenarioCard(label,title,desc,steps,extra){
-  let h='<div class="scenario-card"><div class="scenario-label">'+label+'</div><div class="scenario-title">'+title+'</div>';
-  if(desc) h+='<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">'+desc+'</p>';
-  if(extra) h+=extra;
-  if(steps.length){h+='<ol class="scenario-steps">';steps.forEach(s=>h+='<li>'+s+'</li>');h+='</ol>';}
-  h+='</div>';return h;
-}
-
-function cmdBlock(name,desc,code,section){
-  let h='<div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">'+name+'</span><span class="cmd-desc">'+desc+'</span></div>';
-  h+='<pre><code>'+code+'</code></pre>';
-  if(section) h+=section;
-  h+='</div>';return h;
-}
-
-function commandsHTML(){
-  const cmds=[
-    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>','<div class="cmd-section"><div class="cmd-section-title">Parameters</div><ul><li><code>--repo &lt;path&gt;</code> — specify target repo from another directory</li></ul></div><div class="cmd-section"><div class="cmd-section-title">Result</div><ul><li>Creates <code>.tekon/</code>, <code>config.yaml</code>, <code>repo-profile.yaml</code>, <code>web-session.json</code></li></ul></div>'],
-    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>','<div class="cmd-section"><div class="cmd-section-title">Results</div><ul><li><code>resolved</code> — executable</li><li><code>missing</code> — need repo profile</li><li><code>not-applicable</code> — explicitly skipped</li><li><code>not-command-gate</code> — semantic gate</li></ul></div>'],
-    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span>'],
-    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--no-write</code> — preview only</li><li><code>--format json</code> — JSON output</li></ul></div>'],
-    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
-    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Use demand card (default: latest approved)</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span> <span class="str">"demand text"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code> — built-in template</li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
-    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
-    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--run-id</code> / <code>--decision-id</code></li><li><code>--json</code> — structured JSON</li></ul></div>'],
-    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
-    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
-    ['6.11 approval reject','Reject & block workflow','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
-    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>','<div class="cmd-section"><div class="cmd-section-title">Key Sections</div><ul><li>Readiness Failed Checks / Evidence Navigation / Gate Failure Triage</li><li>Delivery / Changed Files / Artifacts / Gate Logs / PR Body / PR Package</li></ul></div>'],
-    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
-    ['6.14 delivery prepare','Generate local PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
-    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>','<div class="cmd-section"><div class="cmd-section-title">Requirements</div><ul><li><code>gh</code> CLI installed & authenticated</li><li>Workflow passed, AC evidence complete, QA signoff satisfied</li></ul></div>'],
-    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
-    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span>'],
-    ['6.18 eval readiness','Evaluate delivery readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
-    ['6.19 eval work-usability','Evaluate sample set','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
-  ];
-  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
-}
-
-function commandsHTML_EN(){
-  const cmds=[
-    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>'],
-    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>'],
-    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"Add unit tests for CLI"</span>'],
-    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"demand text"</span>'],
-    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
-    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Demand card run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code></li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
-    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
-    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>'],
-    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
-    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
-    ['6.11 approval reject','Reject & block','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
-    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>'],
-    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
-    ['6.14 delivery prepare','Generate PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
-    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>'],
-    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
-    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span>'],
-    ['6.18 eval readiness','Evaluate readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
-    ['6.19 eval work-usability','Evaluate samples','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
-  ];
-  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
-}
 
 // ═══════════════════════════════════════════════
 //  RENDER ENGINE
