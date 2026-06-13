@@ -2140,7 +2140,7 @@ async function commandUi(argv: string[], io: CliIO) {
     throw new Error(`web package not found at ${webDir}`);
   }
 
-  const tsxBin = join(tekonRoot, 'node_modules', '.bin', 'tsx');
+  const tsxBin = join(webDir, 'node_modules', '.bin', 'tsx');
   if (!existsSync(tsxBin)) {
     io.stdout.write('Installing dependencies...\n');
     execFileSync(
