@@ -27,19 +27,22 @@ fi
 
 cd "$TEKON_HOME"
 
-OLD_VERSION=$(git rev-parse --short HEAD)
+OLD_VERSION=$(node -e "console.log(require('./package.json').version)")
 
 log_step "拉取最新代码"
 git fetch origin main --quiet 2>/dev/null
-git checkout main --quiet 2>/dev/null
-git pull origin main --quiet 2>/dev/null
 
-NEW_VERSION=$(git rev-parse --short HEAD)
+TARGET_VERSION=$(git show FETCH_HEAD:package.json | node -e "process.stdin.resume(); let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>console.log(JSON.parse(d).version))")
 
-if [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
-  log_ok "已是最新版本 (${OLD_VERSION})"
+if [ "$OLD_VERSION" = "$TARGET_VERSION" ]; then
+  log_ok "已是最新版本 (v${OLD_VERSION})"
   exit 0
 fi
+
+log_info "更新 v${OLD_VERSION} → v${TARGET_VERSION}..."
+
+git checkout main --quiet 2>/dev/null
+git pull origin main --quiet 2>/dev/null
 
 log_step "安装依赖与构建"
 npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile >/dev/null 2>&1
@@ -56,6 +59,6 @@ fi
 echo ""
 printf "${BOLD}${GREEN}══════════════════════════════════════════${NC}\n"
 printf "${BOLD}${GREEN}  天工 Tekon 更新完成${NC}\n"
-printf "${BOLD}${CYAN}  %s${NC} ${BOLD}→${NC} ${BOLD}${GREEN}%s${NC}\n" "$OLD_VERSION" "$NEW_VERSION"
+printf "${BOLD}${CYAN}  v%s${NC} ${BOLD}→${NC} ${BOLD}${GREEN}v%s${NC}\n" "$OLD_VERSION" "$TARGET_VERSION"
 printf "${BOLD}${GREEN}══════════════════════════════════════════${NC}\n"
 echo ""

@@ -2208,27 +2208,30 @@ async function commandUpdate(argv: string[], io: CliIO) {
     );
   }
 
-  const oldVersion = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
-    cwd: tekonRoot,
-    encoding: 'utf8',
-  }).trim();
+  const currentPkg = JSON.parse(
+    readFileSync(join(tekonRoot, 'package.json'), 'utf8'),
+  ) as { version: string };
+  const oldVersion = currentPkg.version;
 
   execFileSync('git', ['fetch', 'origin', 'main'], {
     cwd: tekonRoot,
     stdio: ['ignore', 'ignore', 'pipe'],
   });
-  const targetVersion = execFileSync(
+  const remotePkgJson = execFileSync(
     'git',
-    ['rev-parse', '--short', 'FETCH_HEAD'],
+    ['show', 'FETCH_HEAD:package.json'],
     { cwd: tekonRoot, encoding: 'utf8' },
-  ).trim();
+  );
+  const targetVersion = (
+    JSON.parse(remotePkgJson) as { version: string }
+  ).version;
 
   if (oldVersion === targetVersion) {
-    io.stdout.write(`Already up to date (${oldVersion})\n`);
+    io.stdout.write(`Already up to date (v${oldVersion})\n`);
     return;
   }
 
-  io.stdout.write(`Updating ${oldVersion} → ${targetVersion}...\n`);
+  io.stdout.write(`Updating v${oldVersion} → v${targetVersion}...\n`);
 
   silentExec('git', ['checkout', 'main'], { cwd: tekonRoot });
   silentExec('git', ['pull', 'origin', 'main'], { cwd: tekonRoot });
@@ -2240,7 +2243,7 @@ async function commandUpdate(argv: string[], io: CliIO) {
     throw new Error(`Build failed: ${cliPath} not found`);
   }
 
-  io.stdout.write(`Updated to ${targetVersion}\n`);
+  io.stdout.write(`Updated to v${targetVersion}\n`);
 }
 
 async function openCommandContext(argv: string[], io: CliIO) {
