@@ -73,6 +73,8 @@
 
 ## 3. 核心用户场景
 
+> 以下流程中标 `◇ 可选` 的步骤属于人类观察操作，不做也不影响流程推进，但建议在关键节点执行以便审阅。
+
 ### 场景 A：我有一个小功能，希望推进到可审 PR
 
 适用例子：
@@ -81,18 +83,17 @@
 - 为 CLI 补一个低风险命令。
 - 给 Web dashboard 增加一个入口。
 
-推荐流程：
+推荐流程（Human ↔ Tekon 交替时序）：
 
-1. `tekon init` 初始化目标仓库。
-2. `demand shape` 把需求写成需求卡。
-3. 人工审阅需求卡。
-4. `demand approve` 批准需求卡。
-5. `run` 发起 workflow。
-6. `status` 和 `review` 查看结果。
-7. `delivery prepare` 生成 PR 准备包。
-8. 人工确认后 `delivery create-pr --approve-human` 创建远端 PR。
-9. `delivery ci-status` 或 `ci-watch` 写回远端 CI 证据。
-10. `eval readiness` 判断 PR/CI 证据是否完整。
+1. **Tekon**: `tekon init` 初始化目标仓库。
+2. **Tekon**: `demand shape` 把需求写成需求卡。
+3. **Human**: 人工审阅需求卡，确认边界和验收标准。
+4. **Human**: `demand approve` 批准需求卡。
+5. **Tekon**: `run` 发起 workflow。
+6. **Human** ◇ 可选: `status` 和 `review` 查看结果和审阅面。
+7. **Tekon**: `delivery prepare` 生成 PR 准备包。
+8. **Human**: 人工确认后 `delivery create-pr --approve-human` 创建远端 PR。
+9. **Tekon**: `delivery ci-status` 或 `ci-watch` 写回远端 CI 证据；`eval readiness` 判断完整性。
 
 ### 场景 B：我只想修一个 bug，但需要人工确认风险
 
@@ -104,10 +105,10 @@
 
 推荐流程：
 
-1. 使用 `bugfix` 模板运行。
-2. 如果触发 human gate，先执行 `approval summary`。
-3. 用 `eval approval-summary` 检查审批摘要是否完整。
-4. 人工判断后选择：
+1. **Tekon**: 使用 `bugfix` 模板运行 workflow。
+2. **Tekon**: 如果触发 human gate，先执行 `approval summary` 生成审批摘要。
+3. **Tekon**: 用 `eval approval-summary` 检查审批摘要是否完整。
+4. **Human**: 人工判断后选择：
    - `resume --approve-human`：批准继续。
    - `approval reject`：拒绝并阻断 workflow。
 
@@ -121,10 +122,10 @@
 
 推荐流程：
 
-1. `workflow select` 确认是否推荐 `test-improvement`。
-2. `run --template test-improvement` 执行。
-3. 看 gate 是否通过。
-4. 用 `review` 检查 artifact 和测试证据。
+1. **Tekon**: `workflow select` 确认是否推荐 `test-improvement`。
+2. **Tekon**: `run --template test-improvement` 执行。
+3. **Human** ◇ 可选: 查看 gate 是否通过。
+4. **Human** ◇ 可选: 用 `review` 检查 artifact 和测试证据。
 
 ### 场景 D：我只想写文档或方案
 

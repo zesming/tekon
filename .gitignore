@@ -22,3 +22,4 @@ playwright-report/
 # Python（如有跨语言依赖）
 __pycache__/
 *.pyc
+.superpowers/
