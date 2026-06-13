@@ -495,7 +495,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.1 init</span><span class="cb-ds">初始化目标仓库</span></div><pre><code><span class="c">tekon</span> <span class="a">init</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--repo &lt;path&gt;</code> — 从其它目录初始化指定仓库时使用</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.2 workflow preflight</span><span class="cb-ds">运行前检查命令画像</span></div><pre><code><span class="c">tekon</span> <span class="a">workflow preflight</span></code></pre><div class="cb-sec"><div class="cb-st">判断结果</div><ul><li><code>resolved</code> — 可执行</li><li><code>missing</code> — 缺命令</li><li><code>not-applicable</code> — 已声明不适用</li><li><code>not-command-gate</code> — 语义 gate</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.3 workflow select</span><span class="cb-ds">根据需求推荐模板</span></div><pre><code><span class="c">tekon</span> <span class="a">workflow select</span> <span class="s">"补齐 CLI 单元测试"</span></code></pre></div>
-<div class="cb"><div class="cb-hd"><span class="cb-nm">6.4 demand shape</span><span class="cb-ds">需求塑形成需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand shape</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.4 demand shape</span><span class="cb-ds">需求塑形成需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand shape</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div><div class="cl cl-i"><span class="cl-lb">交互式替代</span><code>tekon draft new</code> 提供 Agent 驱动的交互式需求澄清（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。需求不明确时推荐优先使用。</div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.5 demand approve</span><span class="cb-ds">人工批准需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand approve</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.6 run</span><span class="cb-ds">发起一次 workflow</span></div><pre><code><span class="cm"># 模板运行</span>
 <span class="c">tekon</span> <span class="a">run</span> <span class="s">"需求文本"</span> <span class="f">--template</span> <span class="s">standard-delivery</span> <span class="f">--agent</span> <span class="s">mock</span>
@@ -524,6 +524,30 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="cm"># 跨仓库</span>
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>需要目标仓库已 <code>init</code>（有 <code>.tekon/web-session.json</code>）</li><li>启动后终端输出带 token 的 URL，浏览器打开即可</li><li><code>Ctrl+C</code> 停止服务</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.21 update</span><span class="cb-ds">更新 Tekon 到最新版本</span></div><pre><code><span class="c">tekon</span> <span class="a">update</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>拉取最新代码 → 安装依赖 → 重新构建</li><li>已是最新版本时直接退出</li><li>更新完成后输出旧版本 → 新版本</li></ul></div></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.22 draft</span><span class="cb-ds">创建和管理需求草案（别名 demand）</span></div><pre><code><span class="cm"># 交互式创建（推荐）—— Agent 驱动需求澄清</span>
+<span class="c">tekon</span> <span class="a">draft new</span>
+
+<span class="cm"># 快速塑形</span>
+<span class="c">tekon</span> <span class="a">draft shape</span> <span class="s">"需求文本"</span>
+
+<span class="cm"># 批准草案</span>
+<span class="c">tekon</span> <span class="a">draft approve</span>
+
+<span class="cm"># 查看草案</span>
+<span class="c">tekon</span> <span class="a">draft show</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li><code>draft new</code> 启动交互式流程：输入需求 → Agent 生成澄清问题 → 用户回答 → Agent 精炼草案</li><li>如果 Agent 不可用，自动回退到静态问题生成</li><li><code>draft</code> 与 <code>demand</code> 等价，子命令互通</li></ul></div><div class="cb-sec"><div class="cb-st">常用参数</div><ul><li><code>--repo &lt;path&gt;</code> — 跨仓库操作时指定目标仓库</li><li><code>--agent claude-code</code> — 显式指定 Agent（<code>draft new</code> 默认使用配置中的默认 Agent）</li><li><code>--no-write</code>（<code>draft shape</code>）— 只预览，不写入文件</li></ul></div></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.23 help</span><span class="cb-ds">查看命令帮助</span></div><pre><code><span class="cm"># 查看所有命令（6 个分组）</span>
+<span class="c">tekon</span> <span class="a">help</span>
+
+<span class="cm"># 查看子命令</span>
+<span class="c">tekon</span> <span class="a">help</span> <span class="s">draft</span>
+
+<span class="cm"># 等效写法</span>
+<span class="c">tekon</span> <span class="a">--help</span>
+<span class="c">tekon</span> <span class="a">-h</span>
+
+<span class="cm"># 查看版本</span>
+<span class="c">tekon</span> <span class="a">--version</span>
+<span class="c">tekon</span> <span class="a">-v</span></code></pre></div>
 </div>
 
 <!-- ════ TAB 6: Web Dashboard ════ -->
@@ -576,7 +600,9 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="section-header"><span class="section-num">SECTION 10</span><h1 class="section-title">参数速查</h1></div>
 <h3>全局常见参数</h3>
 <div class="tbl-w"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
-<tr><td><code>--repo &lt;path&gt;</code></td><td>跨仓库操作时指定目标仓库</td></tr>
+<tr><td><code>--help</code>, <code>-h</code></td><td>查看命令帮助；<code>tekon --help</code> 显示概览，<code>tekon help &lt;cmd&gt;</code> 查看子命令</td></tr>
+	<tr><td><code>--version</code>, <code>-v</code></td><td>输出版本号</td></tr>
+	<tr><td><code>--repo &lt;path&gt;</code></td><td>跨仓库操作时指定目标仓库</td></tr>
 <tr><td><code>--run-id &lt;runId&gt;</code></td><td>指定历史 run</td></tr>
 <tr><td><code>--agent mock|claude-code|codex</code></td><td>选择 provider</td></tr>
 <tr><td><code>--approve-human</code></td><td>明确批准人工 gate 或远端副作用</td></tr>

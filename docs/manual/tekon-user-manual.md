@@ -463,6 +463,8 @@ tekon workflow select "补齐 CLI 单元测试"
 tekon demand shape "需求文本"
 ```
 
+> **交互式替代**：`tekon draft new` 提供 Agent 驱动的交互式需求澄清流程（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。推荐在需求不明确时优先使用。
+
 常用参数：
 
 - `--no-write`：只预览，不写入 `.tekon/demands/`。
@@ -866,6 +868,86 @@ tekon update
 
 拉取最新代码 → 安装依赖 → 重新构建。已是最新版本时直接退出。更新完成后输出旧版本 → 新版本。
 
+### 6.22 `draft`
+
+用途：创建和管理需求草案。`draft` 是 `demand` 的别名，两者等价。
+
+**交互式创建（推荐）**：
+
+```bash
+tekon draft new
+```
+
+`draft new` 会启动交互式需求澄清流程：
+
+1. 输入需求描述后，如果本机已安装 Claude Code，天工会调用 Agent 根据需求内容生成 3-5 个针对性澄清问题。
+2. 用户在终端中逐一回答这些问题。
+3. Agent 根据回答精炼需求草案，补充验收标准、风险标签和边界条件。
+4. 如果 Agent 不可用（未安装 Claude Code 或调用失败），自动回退到静态问题生成和本地更新。
+
+**快速塑形**：
+
+```bash
+tekon draft shape "需求文本"
+```
+
+等同于 `demand shape`，直接将需求文本转为需求卡。
+
+**批准草案**：
+
+```bash
+tekon draft approve
+```
+
+等同于 `demand approve`，批准最近的需求草案。
+
+**查看草案**：
+
+```bash
+tekon draft show
+```
+
+显示最近需求草案的详细信息。
+
+常用参数：
+
+- `--repo <path>`：跨仓库操作时指定目标仓库。
+- `--agent claude-code`：显式指定 Agent（`draft new` 默认使用配置中的默认 Agent）。
+- `--no-write`（`draft shape`）：只预览，不写入文件。
+
+### 6.23 `help`
+
+用途：查看命令帮助。
+
+```bash
+tekon help
+```
+
+输出所有命令的分组概览，包含 6 个分组：项目管理、运行控制、工作流与角色、交付、审阅与评估、工具。
+
+**查看子命令**：
+
+```bash
+tekon help draft
+tekon help workflow
+```
+
+显示指定命令的子命令列表和描述。
+
+**等效写法**：
+
+```bash
+tekon --help        # 等同于 tekon help
+tekon -h            # 等同于 tekon help
+```
+
+**查看版本**：
+
+```bash
+tekon --version     # 输出 v0.5.0
+tekon -v            # 同上
+```
+
 ## 7. Web Dashboard
 
 启动：
@@ -1062,6 +1144,8 @@ Web dashboard 适合：
 
 | 参数                  | 用途                                                                        |
 | --------------------- | --------------------------------------------------------------------------- |
+| `--help`, `-h`        | 查看命令帮助；`tekon --help` 显示命令概览，`tekon help <cmd>` 查看子命令。 |
+| `--version`, `-v`     | 输出版本号。                                                                |
 | `--repo <path>`       | 跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。                    |
 | `--run-id <runId>`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。                   |
 | `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                                |

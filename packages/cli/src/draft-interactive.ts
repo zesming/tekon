@@ -4,6 +4,7 @@ import {
   updateDraftWithAnswers,
 } from '@tekon/core';
 import type { CliIO } from './index.js';
+import type { AgentClarificationConfig } from './draft-agent.js';
 
 export interface InteractiveResult {
   draft: DraftShape;
@@ -11,12 +12,15 @@ export interface InteractiveResult {
   questionsAsked: number;
   /** True if the user interrupted the session with Ctrl+C */
   interrupted: boolean;
+  /** Whether the agent was used for clarification */
+  agentUsed: boolean;
 }
 
 export async function runInteractiveClarification(
   initialDraft: DraftShape,
   readLine: () => Promise<string>,
   stdout: CliIO['stdout'],
+  agentConfig?: AgentClarificationConfig,
 ): Promise<InteractiveResult> {
   // Skip interactive mode when stdin is not a TTY (piped input, scripts, etc.)
   if (!process.stdin.isTTY) {
@@ -25,11 +29,13 @@ export async function runInteractiveClarification(
       answersCount: 0,
       questionsAsked: 0,
       interrupted: false,
+      agentUsed: false,
     };
   }
 
   let currentDraft = initialDraft;
   let interrupted = false;
+  let agentUsed = false;
 
   // Ctrl+C handler: mark interrupted, save partial state
   const sigintHandler = () => {
@@ -86,8 +92,29 @@ export async function runInteractiveClarification(
     }
     stdout.write('──────────────────────────────\n');
 
-    // Generate clarifying questions
-    const questions = generateClarifyingQuestions(currentDraft);
+    // Generate clarifying questions — try agent first, fall back to static
+    let questions: string[] = [];
+    if (agentConfig) {
+      stdout.write('\n正在通过 AI 分析需求，生成针对性问题...');
+      const { generateAgentQuestions, isAgentAvailable } = await import(
+        './draft-agent.js'
+      );
+      if (isAgentAvailable(agentConfig)) {
+        questions = generateAgentQuestions(currentDraft, agentConfig);
+        if (questions.length > 0) {
+          agentUsed = true;
+          stdout.write(' 完成\n');
+        } else {
+          stdout.write('\nAI 分析未产生问题，切换到预设问题。\n');
+        }
+      } else {
+        stdout.write('\nAI 服务不可用，使用预设问题。\n');
+      }
+    }
+
+    if (questions.length === 0) {
+      questions = generateClarifyingQuestions(currentDraft);
+    }
 
     if (questions.length === 0) {
       stdout.write('\n未发现需要澄清的问题，跳过交互模式。\n\n');
@@ -96,6 +123,7 @@ export async function runInteractiveClarification(
         answersCount: 0,
         questionsAsked: 0,
         interrupted: false,
+        agentUsed: false,
       };
     }
 
@@ -131,11 +159,36 @@ export async function runInteractiveClarification(
       answers.push({ question, answer });
     }
 
-    // Update draft with answers
+    // Update draft with answers — try agent first, fall back to static
     if (answeredCount > 0) {
       stdout.write('\n\n正在更新草案');
-      currentDraft = updateDraftWithAnswers(currentDraft, answers);
-      stdout.write(' 完成\n');
+      if (agentUsed) {
+        const { refineDraftWithAgent } = await import('./draft-agent.js');
+        const patch = refineDraftWithAgent(currentDraft, answers, agentConfig!);
+        if (patch) {
+          // Merge agent-refined patch into current draft
+          currentDraft = {
+            ...currentDraft,
+            ...patch,
+            risk: patch.risk
+              ? { ...currentDraft.risk, ...patch.risk }
+              : currentDraft.risk,
+            acceptanceCriteria:
+              patch.acceptanceCriteria ?? currentDraft.acceptanceCriteria,
+            nonGoals: patch.nonGoals ?? currentDraft.nonGoals,
+            assumptions: patch.assumptions ?? currentDraft.assumptions,
+            openQuestions: patch.openQuestions ?? currentDraft.openQuestions,
+          } as DraftShape;
+          stdout.write(' (AI 辅助) 完成\n');
+        } else {
+          // Agent refinement failed, fall back to static
+          currentDraft = updateDraftWithAnswers(currentDraft, answers);
+          stdout.write(' 完成\n');
+        }
+      } else {
+        currentDraft = updateDraftWithAnswers(currentDraft, answers);
+        stdout.write(' 完成\n');
+      }
 
       // Show updated summary
       stdout.write('\n──────── 最终草案概要 ────────\n');
@@ -178,6 +231,7 @@ export async function runInteractiveClarification(
       answersCount: answeredCount,
       questionsAsked: questions.length,
       interrupted,
+      agentUsed,
     };
   } finally {
     process.removeListener('SIGINT', sigintHandler);

@@ -81,14 +81,93 @@ export interface CliIO {
   stderr: { write(chunk: string): void };
 }
 
+interface CommandMeta {
+  name: string;
+  aliases?: string[];
+  description: string;
+  group: string;
+  subcommands?: Array<{ name: string; description: string }>;
+  usage?: string;
+}
+
+const COMMANDS: CommandMeta[] = [
+  // 项目管理
+  { name: 'init', description: '初始化 Tekon 项目', group: '项目管理' },
+  { name: 'draft', aliases: ['demand'], description: '创建和管理需求草案', group: '项目管理', subcommands: [
+    { name: 'new', description: '创建新的需求草案' },
+    { name: 'shape', description: '快速生成需求草案' },
+    { name: 'approve', description: '批准需求草案' },
+    { name: 'show', description: '查看需求草案详情' },
+  ] },
+  // 运行控制
+  { name: 'run', description: '启动一次交付运行', group: '运行控制', usage: 'tekon run [需求文本] [options]' },
+  { name: 'status', description: '查看运行状态', group: '运行控制' },
+  { name: 'pause', description: '暂停运行', group: '运行控制' },
+  { name: 'resume', description: '恢复暂停的运行', group: '运行控制' },
+  { name: 'cancel', description: '取消运行', group: '运行控制' },
+  // 工作流与角色
+  { name: 'workflow', description: '管理工作流模板', group: '工作流与角色', subcommands: [
+    { name: 'list', description: '列出所有工作流模板' },
+    { name: 'show', description: '查看工作流模板详情' },
+    { name: 'create', description: '从模板创建新工作流' },
+    { name: 'select', description: '为需求选择合适的工作流' },
+    { name: 'preflight', description: '检查工作流门的命令可用性' },
+  ] },
+  { name: 'role', description: '管理角色定义', group: '工作流与角色', subcommands: [
+    { name: 'list', description: '列出所有角色' },
+    { name: 'show', description: '查看角色详情' },
+    { name: 'path', description: '显示角色目录路径' },
+    { name: 'create', description: '从内置角色复制创建自定义角色' },
+  ] },
+  { name: 'constraints', description: '查看 Tekon 约束配置', group: '工作流与角色' },
+  // 交付
+  { name: 'delivery', description: '准备和创建交付 PR', group: '交付', subcommands: [
+    { name: 'prepare', description: '准备交付 PR' },
+    { name: 'create-pr', description: '创建 PR' },
+    { name: 'ci-status', description: '查询 PR 的 CI 状态' },
+    { name: 'ci-watch', description: '持续观察 PR 的 CI 状态直到完成' },
+  ] },
+  { name: 'approval', description: '管理人工审批', group: '交付', subcommands: [
+    { name: 'summary', description: '生成审批摘要' },
+    { name: 'reject', description: '拒绝人工审批' },
+  ] },
+  // 审阅与评估
+  { name: 'review', description: '生成运行审阅报告', group: '审阅与评估' },
+  { name: 'eval', description: '评估运行质量与准备度', group: '审阅与评估', subcommands: [
+    { name: 'readiness', description: '评估工作准备度' },
+    { name: 'demand-shape', description: '评估需求草案质量' },
+    { name: 'workflow-selection', description: '评估工作流选择合理性' },
+    { name: 'approval-summary', description: '评估审批摘要质量' },
+    { name: 'work-usability', description: '评估工作可用性' },
+  ] },
+  { name: 'log', description: '查看运行审计日志', group: '审阅与评估' },
+  // 工具
+  { name: 'clean', description: '清理工作树', group: '工具' },
+  { name: 'ui', description: '启动 Web 管理界面', group: '工具' },
+  { name: 'update', description: '更新 Tekon CLI', group: '工具' },
+];
+
 export async function runCli(
   argv: string[] = process.argv.slice(2),
   io: CliIO = process,
 ): Promise<number> {
   try {
     const [command, ...rest] = argv;
+
+    // --help / -h 作为第一个参数显示命令概览
+    if (command === '--help' || command === '-h') {
+      return await commandHelp([], io);
+    }
+
+    // --version / -v 显示版本号
+    if (command === '--version' || command === '-v') {
+      io.stdout.write(`v${getVersion()}\n`);
+      return 0;
+    }
+
     if (!command) {
-      io.stderr.write('usage: tekon <command>\n');
+      io.stderr.write('用法: tekon <command>\n');
+      io.stderr.write('使用 tekon help 查看所有可用命令。\n');
       return 1;
     }
 
@@ -148,8 +227,11 @@ export async function runCli(
       case 'update':
         await commandUpdate(rest, io);
         return 0;
+      case 'help':
+        return await commandHelp(rest, io);
       default:
-        io.stderr.write(`unknown command: ${command}\n`);
+        io.stderr.write(`未知命令: ${command}\n`);
+        io.stderr.write('使用 tekon help 查看可用命令。\n');
         return 1;
     }
   } catch (error) {
@@ -163,6 +245,102 @@ export async function runCli(
 if (import.meta.url === `file://${process.argv[1]}`) {
   const exitCode = await runCli();
   process.exitCode = exitCode;
+}
+
+function getVersion(): string {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function commandHelp(argv: string[], io: CliIO): Promise<number> {
+  const [subcommand] = argv;
+
+  if (subcommand === '--help') {
+    io.stdout.write('tekon help — 显示所有可用命令及其简要说明\n\n');
+    io.stdout.write('用法: tekon help [command]\n\n');
+    io.stdout.write('不指定命令时，显示所有一级命令及分组。\n');
+    io.stdout.write('指定命令时，显示该命令的子命令和用法。\n');
+    return 0;
+  }
+
+  if (subcommand) {
+    return writeCommandHelp(subcommand, io);
+  }
+
+  writeGeneralHelp(io);
+  return 0;
+}
+
+function writeGeneralHelp(io: CliIO): void {
+  const version = getVersion();
+  const lines: string[] = [];
+
+  lines.push(`Tekon CLI v${version} — AI 驱动的软件交付自动化工具`);
+  lines.push('');
+  lines.push('用法: tekon <command> [options]');
+  lines.push('');
+
+  const groups = new Map<string, typeof COMMANDS>();
+  for (const cmd of COMMANDS) {
+    const list = groups.get(cmd.group) ?? [];
+    list.push(cmd);
+    groups.set(cmd.group, list);
+  }
+
+  for (const [group, commands] of groups) {
+    lines.push(`  ${group}`);
+    for (const cmd of commands) {
+      const label = cmd.aliases?.length
+        ? `${cmd.name}（别名: ${cmd.aliases.join(', ')}）`
+        : cmd.name;
+      lines.push(`    ${label.padEnd(22)}${cmd.description}`);
+    }
+    lines.push('');
+  }
+
+  lines.push('使用 tekon help <command> 查看特定命令的详细帮助。');
+
+  io.stdout.write(lines.join('\n') + '\n');
+}
+
+function writeCommandHelp(commandName: string, io: CliIO): number {
+  const cmd = COMMANDS.find(
+    (c) => c.name === commandName || (c.aliases?.includes(commandName) ?? false),
+  );
+
+  if (!cmd) {
+    io.stderr.write(`未知命令: ${commandName}\n`);
+    io.stderr.write('使用 tekon help 查看可用命令。\n');
+    return 1;
+  }
+
+  const lines: string[] = [];
+  const aliasSuffix = cmd.aliases?.length
+    ? `（别名: ${cmd.aliases.join(', ')}）`
+    : '';
+  lines.push(`tekon ${cmd.name} — ${cmd.description}${aliasSuffix}`);
+  lines.push('');
+
+  if (cmd.usage) {
+    lines.push(`用法: ${cmd.usage}`);
+    lines.push('');
+  }
+
+  if (cmd.subcommands?.length) {
+    lines.push('子命令:');
+    for (const sub of cmd.subcommands) {
+      lines.push(`  ${sub.name.padEnd(16)}${sub.description}`);
+    }
+    lines.push('');
+  }
+
+  io.stdout.write(lines.join('\n') + '\n');
+  return 0;
 }
 
 async function commandInit(argv: string[], io: CliIO) {
@@ -255,8 +433,9 @@ async function commandRun(argv: string[], io: CliIO) {
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
   const gateway = createCommandGateway({ repositories });
+  const configDefaultAgent = readConfigDefaultAgent(repoPath);
   const agentRuntime = createAgentAdapter({
-    agent: args.values.agent ?? 'codex',
+    agent: args.values.agent ?? configDefaultAgent ?? 'codex',
     repoPath,
     gateway,
     runtime: providerRuntimeFromCliOptions(args.values),
@@ -417,10 +596,15 @@ async function commandDemand(argv: string[], io: CliIO) {
       const { runInteractiveClarification } = await import(
         './draft-interactive.js'
       );
+      const agentCmd = resolveAgentCommand(repoPath);
+      const agentConfig = agentCmd
+        ? { agentCommand: agentCmd, repoPath }
+        : undefined;
       const result = await runInteractiveClarification(
         shape,
         readStdinLine,
         io.stdout,
+        agentConfig,
       );
       shape = result.draft;
       if (result.interrupted) {
@@ -1377,7 +1561,7 @@ function defaultClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
     noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
-      approval: 'on-request',
+      approval: 'on-failure',
       filesystemScope: [repoPath],
       network: 'restricted',
       tools: {
@@ -1401,7 +1585,7 @@ function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
     noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     permissionProfile: {
       sandbox: 'workspace-write',
-      approval: 'on-request',
+      approval: 'on-failure',
       filesystemScope: [repoPath],
       network: 'restricted',
       tools: {
@@ -2715,6 +2899,30 @@ function initializeProject(repoPath: string, io: CliIO): void {
       '',
     ].join('\n'),
   );
+}
+
+function readConfigDefaultAgent(repoPath: string): string | undefined {
+  try {
+    const configPath = join(repoPath, '.tekon', 'config.yaml');
+    if (!existsSync(configPath)) return undefined;
+    const raw = readFileSync(configPath, 'utf8');
+    const config = parseYaml(raw) as { defaultAgent?: string } | null;
+    return config?.defaultAgent ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveAgentCommand(repoPath: string): string | undefined {
+  const agent = readConfigDefaultAgent(repoPath) ?? 'codex';
+  // Currently only claude-code supports interactive AI clarification
+  // (codex uses different CLI flags not compatible with draft-agent.ts)
+  switch (agent) {
+    case 'claude-code':
+      return 'claude';
+    default:
+      return undefined;
+  }
 }
 
 async function ensureInitialized(repoPath: string, io: CliIO): Promise<void> {

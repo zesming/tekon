@@ -89,7 +89,19 @@ describe('workflow state machine', () => {
   });
 
   it('all terminal states have zero outgoing transitions', () => {
-    const terminalStates = ['passed', 'skipped', 'failed'] as const;
+    // Note: 'passed' is no longer terminal — it can transition to
+    // 'needs-revision' when an independent review finds changes-requested.
+    const terminalStates = ['skipped', 'failed'] as const;
+    // Verify 'passed' can only go to 'needs-revision'
+    expect(canWorkflowTransition('passed', 'needs-revision')).toBe(true);
+    const nonRevisionTargets = [
+      'pending', 'running', 'awaiting-gate', 'blocked',
+      'paused', 'interrupted', 'skipped', 'failed',
+    ] as const;
+    for (const target of nonRevisionTargets) {
+      expect(canWorkflowTransition('passed', target)).toBe(false);
+    }
+
     const allStates = [
       'pending',
       'running',
@@ -108,6 +120,46 @@ describe('workflow state machine', () => {
         expect(canWorkflowTransition(terminal, target)).toBe(false);
       }
     }
+  });
+
+  it('passed node can transition to needs-revision for rework', () => {
+    expect(canWorkflowTransition('passed', 'needs-revision')).toBe(true);
+
+    const node = { status: 'passed' as const, revision: 0 };
+    const result = transitionWorkflowNode(node, 'needs-revision');
+
+    expect(result.status).toBe('needs-revision');
+    expect(result.revision).toBe(1);
+  });
+
+  it('passed node cannot transition to other states', () => {
+    expect(canWorkflowTransition('passed', 'running')).toBe(false);
+    expect(canWorkflowTransition('passed', 'blocked')).toBe(false);
+    expect(canWorkflowTransition('passed', 'failed')).toBe(false);
+    expect(canWorkflowTransition('passed', 'pending')).toBe(false);
+  });
+
+  it('needs-revision to running transition works for re-execution', () => {
+    expect(canWorkflowTransition('needs-revision', 'running')).toBe(true);
+  });
+
+  it('transitionWorkflowNode handles passed → needs-revision → running → passed revision chain', () => {
+    let node = { status: 'passed' as const, revision: 0 };
+
+    // Transition to needs-revision → revision should be 1
+    node = transitionWorkflowNode(node, 'needs-revision');
+    expect(node.status).toBe('needs-revision');
+    expect(node.revision).toBe(1);
+
+    // Transition to running → revision should stay 1
+    node = transitionWorkflowNode(node, 'running');
+    expect(node.status).toBe('running');
+    expect(node.revision).toBe(1);
+
+    // Transition to passed → revision should stay 1
+    node = transitionWorkflowNode(node, 'passed');
+    expect(node.status).toBe('passed');
+    expect(node.revision).toBe(1);
   });
 
   it('throws for invalid source or target status values', () => {

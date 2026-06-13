@@ -209,11 +209,60 @@ describe('tekon cli e2e', () => {
       ['clean', '--repo', repoPath],
       repoPath,
     );
-    expect(cleanOutput).toContain('cleaned worktrees=0');
+    expect(cleanOutput).toContain('清理工作树');
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
   }, 30_000);
+
+  it('help command works without initialized repo and with initialized repo', () => {
+    const cliPath = join(cliPackageRoot, 'dist', 'index.js');
+    const repoPath = createFixtureRepo(tempDirs);
+
+    // Help works without init
+    const helpOutput = runCli(cliPath, ['help'], repoPath);
+    expect(helpOutput).toContain('项目管理');
+    expect(helpOutput).toContain('init');
+    expect(helpOutput).toContain('draft');
+    expect(helpOutput).toContain('run');
+    expect(helpOutput).toContain('status');
+    expect(helpOutput).toContain('工具');
+    expect(helpOutput).toContain('clean');
+    expect(helpOutput).toContain('ui');
+    expect(helpOutput).toContain('update');
+    expect(helpOutput).toContain('用法: tekon <command>');
+
+    // --help alias
+    const dashHelpOutput = runCli(cliPath, ['--help'], repoPath);
+    expect(dashHelpOutput).toBe(helpOutput);
+
+    // -h alias
+    const hOutput = runCli(cliPath, ['-h'], repoPath);
+    expect(hOutput).toBe(helpOutput);
+
+    // --version
+    const versionOutput = runCli(cliPath, ['--version'], repoPath);
+    expect(versionOutput).toMatch(/v\d+\.\d+\.\d+/);
+
+    // -v alias
+    const vOutput = runCli(cliPath, ['-v'], repoPath);
+    expect(vOutput).toBe(versionOutput);
+
+    // help <command>
+    const helpDraftOutput = runCli(cliPath, ['help', 'draft'], repoPath);
+    expect(helpDraftOutput).toContain('new');
+    expect(helpDraftOutput).toContain('shape');
+    expect(helpDraftOutput).toContain('approve');
+    expect(helpDraftOutput).toContain('show');
+
+    // help after init still works
+    const initOutput = runCli(cliPath, ['init', '--repo', repoPath], repoPath);
+    expect(initOutput).toContain('项目初始化完成');
+
+    const helpAfterInitOutput = runCli(cliPath, ['help'], repoPath);
+    expect(helpAfterInitOutput).toContain('项目管理');
+    expect(helpAfterInitOutput).toContain('init');
+  }, 15_000);
 });
 
 function runCli(cliPath: string, args: string[], cwd: string): string {

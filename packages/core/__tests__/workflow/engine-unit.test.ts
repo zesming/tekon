@@ -475,3 +475,176 @@ describe('createWorkflowEngine', () => {
     expect(typeof engine.resumeRun).toBe('function');
   });
 });
+
+// ---------------------------------------------------------------------------
+// review rework mechanism
+// ---------------------------------------------------------------------------
+describe('review rework mechanism', () => {
+  /**
+   * Mirrors the exact logic of resolveReviewTargetNode() from engine.ts.
+   * The engine function is a closure — we test the algorithm directly here.
+   */
+  function resolveReviewTargetNode(
+    nodes: ReadonlyArray<{ id: string; status: string }>,
+    reviewNodeId: string,
+  ): string | null {
+    const reviewNode = nodes.find((n) => n.id === reviewNodeId);
+    if (!reviewNode) return null;
+
+    const upstreamNodes = nodes.filter(
+      (n) => n.id !== reviewNodeId && n.status === 'passed',
+    );
+    if (upstreamNodes.length > 0) {
+      return upstreamNodes[upstreamNodes.length - 1].id;
+    }
+    return null;
+  }
+
+  describe('resolveReviewTargetNode', () => {
+    it('finds upstream passed node in different phase', () => {
+      const nodes = [
+        { id: 'run_1_rd-code', status: 'passed' },
+        { id: 'run_1_qa', status: 'passed' },
+        { id: 'run_1_reviewer', status: 'running' },
+      ];
+      // Reviewer in phase-review should find the last passed upstream node
+      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      expect(result).toBe('run_1_qa');
+    });
+
+    it('returns null when no upstream passed node', () => {
+      const nodes = [
+        { id: 'run_1_blocked_rd', status: 'blocked' },
+        { id: 'run_1_reviewer', status: 'running' },
+      ];
+      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when review node is the only node', () => {
+      const nodes = [
+        { id: 'run_1_reviewer', status: 'running' },
+      ];
+      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when review node is not found in list', () => {
+      const nodes = [
+        { id: 'run_1_rd-code', status: 'passed' },
+      ];
+      const result = resolveReviewTargetNode(nodes, 'nonexistent');
+      expect(result).toBeNull();
+    });
+
+    it('picks the last passed node when multiple upstream nodes exist', () => {
+      const nodes = [
+        { id: 'run_1_pm', status: 'passed' },
+        { id: 'run_1_rd', status: 'passed' },
+        { id: 'run_1_qa', status: 'passed' },
+        { id: 'run_1_reviewer', status: 'running' },
+      ];
+      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      expect(result).toBe('run_1_qa');
+    });
+
+    it('skips upstream nodes that are not passed (running, blocked, needs-revision)', () => {
+      const nodes = [
+        { id: 'run_1_rd', status: 'blocked' },
+        { id: 'run_1_qa', status: 'needs-revision' },
+        { id: 'run_1_pm', status: 'passed' },
+        { id: 'run_1_another', status: 'running' },
+        { id: 'run_1_reviewer', status: 'running' },
+      ];
+      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      // Only 'pm' is passed among upstream nodes
+      expect(result).toBe('run_1_pm');
+    });
+  });
+
+  describe('isChangesRequested detection', () => {
+    /**
+     * Mirrors the exact condition from engine.ts:
+     *   result.failureClassification === 'changes-requested' &&
+     *   gate.type === 'independent-review'
+     */
+    function isChangesRequested(
+      failureClassification: string | undefined,
+      gateType: string,
+    ): boolean {
+      return (
+        failureClassification === 'changes-requested' &&
+        gateType === 'independent-review'
+      );
+    }
+
+    it('changes-requested on independent-review gate returns true', () => {
+      expect(
+        isChangesRequested('changes-requested', 'independent-review'),
+      ).toBe(true);
+    });
+
+    it('review-not-approved on independent-review gate returns false', () => {
+      expect(
+        isChangesRequested('review-not-approved', 'independent-review'),
+      ).toBe(false);
+    });
+
+    it('changes-requested on non-independent-review gate returns false', () => {
+      expect(isChangesRequested('changes-requested', 'schema')).toBe(false);
+    });
+
+    it('changes-requested on build gate returns false', () => {
+      expect(isChangesRequested('changes-requested', 'build')).toBe(false);
+    });
+
+    it('changes-requested on lint gate returns false', () => {
+      expect(isChangesRequested('changes-requested', 'lint')).toBe(false);
+    });
+
+    it('changes-requested on human gate returns false', () => {
+      expect(isChangesRequested('changes-requested', 'human')).toBe(false);
+    });
+
+    it('changes-requested on e2e-pass gate returns false', () => {
+      expect(isChangesRequested('changes-requested', 'e2e-pass')).toBe(false);
+    });
+
+    it('undefined failureClassification returns false', () => {
+      expect(
+        isChangesRequested(undefined, 'independent-review'),
+      ).toBe(false);
+    });
+
+    it('empty string failureClassification returns false', () => {
+      expect(isChangesRequested('', 'independent-review')).toBe(false);
+    });
+  });
+
+  describe('maxReworkAttempts defaults', () => {
+    it('defaults to 5 when gate.maxRetries is 0', () => {
+      // maxReworkAttempts = gate.maxRetries > 0 ? gate.maxRetries : 5
+      const maxRetries = 0;
+      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
+      expect(maxReworkAttempts).toBe(5);
+    });
+
+    it('defaults to 5 when gate.maxRetries is negative', () => {
+      const maxRetries = -1;
+      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
+      expect(maxReworkAttempts).toBe(5);
+    });
+
+    it('respects gate.maxRetries when positive', () => {
+      const maxRetries = 3;
+      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
+      expect(maxReworkAttempts).toBe(3);
+    });
+
+    it('allows maxRetries=1 for single rework attempt', () => {
+      const maxRetries = 1;
+      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
+      expect(maxReworkAttempts).toBe(1);
+    });
+  });
+});

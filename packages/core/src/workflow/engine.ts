@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -557,6 +557,67 @@ export function createWorkflowEngine(
       }
     }
 
+    // When an independent-review gate finds changes-requested, rework the
+    // target (reviewed) node instead of blocking the review node.
+    // Retries up to maxReworkAttempts (default 5) before falling through to blocked.
+    const isChangesRequested =
+      result.failureClassification === 'changes-requested' &&
+      gate.type === 'independent-review';
+
+    if (isChangesRequested) {
+      const targetNodeId = await resolveReviewTargetNode(runId, node.id);
+      if (targetNodeId) {
+        const maxReworkAttempts = gate.maxRetries > 0 ? gate.maxRetries : 5;
+        let reworkAttempt = 0;
+        let reworkPassed = false;
+
+        while (reworkAttempt < maxReworkAttempts && !reworkPassed) {
+          reworkAttempt++;
+          await options.audit.append({
+            runId,
+            type: 'gate.rework.attempt',
+            payload: {
+              nodeId: node.id,
+              targetNodeId,
+              attempt: reworkAttempt,
+              maxAttempts: maxReworkAttempts,
+            },
+          });
+
+          await attemptChangesRequestedRework(
+            runId,
+            node,
+            gate,
+            result,
+            targetNodeId,
+            reworkAttempt,
+          );
+
+          // Re-run the gate to check if the rework fixed the issues
+          result = await runGate(runId, node.id, gate);
+          if (result.status === 'passed' || result.status === 'skipped') {
+            reworkPassed = true;
+          }
+        }
+
+        if (reworkPassed) {
+          await options.repositories.transitionNode(node.id, 'passed');
+          await options.audit.append({
+            runId,
+            type: 'gate.passed-after-rework',
+            payload: {
+              nodeId: node.id,
+              gateType: gate.type,
+              gateKey: gate.gateKey,
+              reworkedTargetNodeId: targetNodeId,
+              attempts: reworkAttempt,
+            },
+          });
+          return true;
+        }
+      }
+    }
+
     await options.repositories.transitionNode(node.id, 'blocked');
     await options.repositories.updateWorkflowInstanceStatus(
       runId,
@@ -574,6 +635,249 @@ export function createWorkflowEngine(
       },
     });
     return false;
+  }
+
+  /**
+   * Find the target node that a review artifact is reviewing.
+   * Reads the review artifact to extract reviewProcess.targetNodeId.
+   * Falls back to heuristic (latest upstream passed node) if artifact is unreadable.
+   */
+  async function resolveReviewTargetNode(
+    runId: string,
+    reviewNodeId: string,
+  ): Promise<string | null> {
+    try {
+      // Try to read targetNodeId from the review artifact payload
+      const reviewArtifacts = await options.repositories.listArtifacts(
+        runId,
+        reviewNodeId,
+      );
+      const reviewTypes = [
+        'technical-review',
+        'demand-review',
+        'requirement-interface-review',
+      ];
+      const reviewArtifact = reviewArtifacts.find((a) =>
+        reviewTypes.includes(a.type),
+      );
+      if (reviewArtifact) {
+        const artifactRoot = join(
+          options.repoPath,
+          options.dataDir,
+          'runs',
+          runId,
+          'artifacts',
+          reviewNodeId,
+        );
+        const artifactPath = join(artifactRoot, reviewArtifact.path);
+        if (existsSync(artifactPath)) {
+          try {
+            const raw = readFileSync(artifactPath, 'utf8');
+            const payload = JSON.parse(raw);
+            const targetNodeId =
+              payload?.reviewProcess?.targetNodeId as string | undefined;
+            if (targetNodeId) {
+              // Verify the target node exists in this run
+              const targetNode =
+                await options.repositories.getNode(targetNodeId);
+              if (targetNode && targetNode.runId === runId) {
+                return targetNodeId;
+              }
+            }
+          } catch {
+            // JSON parse failed — fall through to heuristic
+          }
+        }
+      }
+    } catch {
+      // Fall through to heuristic
+    }
+
+    // Heuristic fallback: pick the latest upstream passed node
+    try {
+      const nodes = await options.repositories.listNodes(runId);
+      const reviewNode = nodes.find((n) => n.id === reviewNodeId);
+      if (!reviewNode) return null;
+
+      const upstreamNodes = nodes.filter(
+        (n) =>
+          n.id !== reviewNodeId &&
+          n.status === 'passed',
+      );
+      if (upstreamNodes.length > 0) {
+        return upstreamNodes[upstreamNodes.length - 1].id;
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  }
+
+  /**
+   * Attempt to rework the target node when an independent review finds
+   * changes-requested. Transitions target to needs-revision, re-executes
+   * its agent with review feedback, and re-runs its gates.
+   */
+  async function attemptChangesRequestedRework(
+    runId: string,
+    reviewNode: ExecutableNode,
+    gate: WorkflowGateConfig,
+    gateResult: GateResult,
+    targetNodeId: string,
+    attempt: number,
+  ): Promise<void> {
+    const targetNode = await options.repositories.getNode(targetNodeId);
+    if (!targetNode) return;
+
+    const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
+
+    // Transition target node from passed to needs-revision
+    await options.repositories.transitionNode(targetNodeId, 'needs-revision');
+    await options.audit.append({
+      runId,
+      type: 'gate.rework.needs-revision',
+      payload: {
+        reviewNodeId: reviewNode.id,
+        targetNodeId,
+        gateResultId: gateResult.id,
+        attempt,
+        reason: 'Independent review found changes-requested',
+      },
+    });
+
+    // Build rework prompt: original context + review feedback
+    const reviewArtifactContent = await loadReviewArtifactContent(
+      runId,
+      reviewNode.id,
+    );
+    const reworkPrompt = buildReviewReworkPrompt(
+      targetNode.role,
+      reviewArtifactContent,
+    );
+
+    // Finalize any existing lease on the review node
+    await finalizeExecutionLease(runId, reviewNode.id);
+
+    // Persist the rework node before creating a lease
+    const now = new Date().toISOString();
+    await options.repositories.createNode({
+      id: reworkNodeId,
+      runId,
+      role: targetNode.role,
+      status: 'pending',
+      inputs: [],
+      outputs: [],
+      gates: [],
+      dependencies: [reviewNode.id],
+      createdAt: now,
+      updatedAt: now,
+      phaseId: targetNode.phaseId,
+    });
+
+    // Create a fresh lease for the rework
+    const reworkLease = await createExecutionLease(runId, {
+      id: reworkNodeId,
+      role: targetNode.role,
+      phaseId: targetNode.phaseId,
+    });
+
+    try {
+      // Re-execute the target node's agent with review feedback
+      const reworkResult = await options.adapter.runAgent(
+        await agentInputForLease(
+          runId,
+          {
+            id: reworkNodeId,
+            role: targetNode.role,
+            phaseId: targetNode.phaseId,
+          },
+          reworkLease,
+          reworkPrompt,
+        ),
+      );
+      assertSuccessfulAgentRun(reworkResult);
+
+      // After successful rework, transition target back to passed
+      await options.repositories.transitionNode(reworkNodeId, 'passed');
+      // Also update the original target node
+      await options.repositories.transitionNode(targetNodeId, 'passed');
+
+      await options.audit.append({
+        runId,
+        type: 'gate.rework.completed',
+        payload: {
+          reviewNodeId: reviewNode.id,
+          targetNodeId,
+          reworkNodeId,
+        },
+      });
+    } catch (error) {
+      await options.repositories.transitionNode(reworkNodeId, 'interrupted');
+      await options.audit.append({
+        runId,
+        type: 'gate.rework.failed',
+        payload: {
+          reviewNodeId: reviewNode.id,
+          targetNodeId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
+    }
+  }
+
+  /** Load the review artifact content for prompt injection. */
+  async function loadReviewArtifactContent(
+    runId: string,
+    reviewNodeId: string,
+  ): Promise<string> {
+    try {
+      const artifacts = await options.repositories.listArtifacts(
+        runId,
+        reviewNodeId,
+      );
+      const reviewArtifact = artifacts.find((a) =>
+        ['technical-review', 'demand-review', 'requirement-interface-review'].includes(
+          a.type,
+        ),
+      );
+      if (reviewArtifact?.summary) {
+        return reviewArtifact.summary;
+      }
+    } catch {
+      // Fall through to default message
+    }
+    return 'Review found changes that need to be addressed.';
+  }
+
+  /**
+   * Build a prompt for reworking a node after review feedback.
+   * Injects the review findings so the agent knows what to fix.
+   */
+  function buildReviewReworkPrompt(
+    role: string,
+    reviewFeedback: string,
+  ): string {
+    const truncated =
+      reviewFeedback.length > 8000
+        ? reviewFeedback.slice(0, 8000) + '\n\n[truncated]'
+        : reviewFeedback;
+
+    return [
+      `# ${role} Rework`,
+      '',
+      'The independent review of your previous output found changes that need to be addressed.',
+      'Fix the identified issues and produce updated artifacts.',
+      '',
+      '## Review Feedback',
+      truncated,
+      '',
+      '## Instructions',
+      '- Address each finding marked as important or blocker.',
+      '- Produce corrected artifact files matching the required types.',
+      '- Write the artifact manifest file before completing.',
+      '- After writing the manifest, stop work and exit.',
+    ].join('\n');
   }
 
   async function runGate(
@@ -1085,15 +1389,14 @@ export function createWorkflowEngine(
         priorNodes: input.priorNodes,
         requiredArtifactTypes: input.requiredArtifactTypes,
       }),
-      '- TEKON_ARTIFACT_MANIFEST is an environment variable containing the manifest file path; write the manifest JSON to $TEKON_ARTIFACT_MANIFEST.',
-      '- Do not create a file literally named TEKON_ARTIFACT_MANIFEST.',
-      '- Write required artifact files and the $TEKON_ARTIFACT_MANIFEST file before optional checks or reviews.',
+      `- Write the artifact manifest file to ${join(input.outputDir, 'artifact-manifest.json')}, containing an "artifacts" array with type, path, and summary for each artifact.`,
+      '- Write required artifact files and the manifest file before optional checks or reviews.',
       ...(isCodeChangesRdNode
         ? [
             '- Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.',
           ]
         : []),
-      '- After the $TEKON_ARTIFACT_MANIFEST file is written, stop work and exit immediately.',
+      '- After the manifest file is written, stop work and exit immediately.',
       '- Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.',
       '- Manifest format example:',
       manifestExample,

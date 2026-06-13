@@ -27,6 +27,7 @@ const STATUS_BADGE: Record<string, string> = {
   pending: 'badge badge-pending',
   blocked: 'badge badge-blocked',
   cancelled: 'badge badge-cancelled',
+  interrupted: 'badge badge-interrupted',
 };
 
 function statusBadge(status: string) {

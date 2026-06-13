@@ -55,6 +55,8 @@ export function createClaudeCodeAdapter(
     async runAgent(input) {
       const startedAt = Date.now();
       const command = buildClaudeCodeCommand(config, { prompt: input.prompt });
+      // Ensure claude can write artifacts to the output directory
+      command.args.push('--add-dir', input.outputDir);
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({
         command,

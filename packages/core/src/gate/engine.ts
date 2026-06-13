@@ -332,7 +332,13 @@ async function runIndependentReviewGate(
       `review decision is ${loaded.payload.decision}`,
       'utf8',
     );
-    return makeGateResult(input, 'failed', 'review-not-approved', outputPath);
+    // Differentiate changes-requested from outright blocked/rejected.
+    // changes-requested triggers rework of the target node; blocked stops the workflow.
+    const classification =
+      loaded.payload.decision === 'changes-requested'
+        ? 'changes-requested'
+        : 'review-not-approved';
+    return makeGateResult(input, 'failed', classification, outputPath);
   }
 
   writeFileSync(
