@@ -336,41 +336,58 @@ function flowSVG_workflow(){
 <rect x="710" y="45" width="90" height="40" class="flow-box jade" rx="4"/><text x="755" y="63" class="flow-label">Delivery</text><text x="755" y="77" class="flow-label cn">交付准备</text>
 </svg></div>`}
 
-function scenarioFlowSVG(title,desc,steps){
-  const H=28,G=6,W=520,LX=28,RX=LX+24,RW=W-52;
-  let h=80,y=24,svg='';
+function scenarioFlowSVG(title,steps){
+  // Two-row horizontal layout: top=Human (gold), bottom=Agent (jade)
+  const BW=156,BH=38,G=10,MX=80,ROW_H=54,ROW_A=122,W=900;
+  let xH=MX,xA=MX,svg='',maxX=MX,prev=null;
+
   // Title
-  svg+=`<text x="${LX}" y="${y}" class="sflow-label title">${title}</text>\n`;
-  y+=18;
-  if(desc){svg+=`<text x="${LX}" y="${y}" class="sflow-label" style="font-size:9.5px;fill:var(--text-secondary)">${desc}</text>\n`;y+=16;}
-  y+=8;
-  // Steps
+  svg+=`<text x="30" y="22" class="sflow-label title">${title}</text>\n`;
+
+  // Row labels
+  svg+=`<text x="24" y="${ROW_H+BH/2+4}" class="sflow-label" style="fill:var(--gold-bright);font-weight:700;font-size:9px">Human</text>\n`;
+  svg+=`<text x="24" y="${ROW_A+BH/2+4}" class="sflow-label" style="fill:var(--jade-bright);font-weight:700;font-size:9px">Tekon</text>\n`;
+
+  // Divider line between rows
+  svg+=`<line x1="${MX}" y1="${ROW_H+BH+14}" x2="${W-20}" y2="${ROW_H+BH+14}" stroke="var(--ink-whisper)" stroke-width="0.5" stroke-dasharray="4,4"/>\n`;
+
   steps.forEach((s,i)=>{
     const isHuman=s.actor==='human';
+    const rowY=isHuman?ROW_H:ROW_A;
     const cls=isHuman?'sflow-human':'sflow-agent';
     const bgCls=isHuman?'human':'agent';
-    const actorLabel=isHuman?'You':'Tekon';
-    const actorColor=isHuman?'var(--gold-bright)':'var(--jade-bright)';
-    const lines=s.label.length>44?[s.label.substring(0,44),s.label.substring(44)]:[s.label];
-    const boxH=lines.length>1?H+14:H;
-    svg+=`<rect x="${LX}" y="${y}" width="${RW}" height="${boxH}" class="sflow-box ${cls}"/>\n`;
-    svg+=`<circle cx="${LX+16}" cy="${y+boxH/2}" r="11" class="sflow-step-bg ${bgCls}"/>\n`;
-    svg+=`<text x="${LX+16}" y="${y+boxH/2+3.5}" class="sflow-step">${i+1}</text>\n`;
-    svg+=`<text x="${LX+34}" y="${y+13}" class="sflow-label" style="fill:${actorColor};font-weight:700;font-size:8.5px">${actorLabel}</text>\n`;
-    svg+=`<text x="${LX+34}" y="${y+25}" class="sflow-label cmd">${lines[0]}</text>\n`;
-    if(lines[1]) svg+=`<text x="${LX+34}" y="${y+38}" class="sflow-label cmd">${lines[1]}</text>\n`;
-    y+=boxH+G;
-    if(i<steps.length-1){svg+=`<line x1="${LX+RW/2}" y1="${y-G+2}" x2="${LX+RW/2}" y2="${y+4}" class="sflow-arrow"/>\n`;y+=8;}
-    h+=boxH+G+(i<steps.length-1?8:0);
+    const curX=isHuman?xH:xA;
+    const shortLabel=s.label.length>32?s.label.substring(0,30)+'…':s.label;
+
+    // Box
+    svg+=`<rect x="${curX}" y="${rowY}" width="${BW}" height="${BH}" class="sflow-box ${cls}"/>\n`;
+    // Step number
+    svg+=`<circle cx="${curX+14}" cy="${rowY+BH/2}" r="9" class="sflow-step-bg ${bgCls}"/>\n`;
+    svg+=`<text x="${curX+14}" y="${rowY+BH/2+3}" class="sflow-step">${i+1}</text>\n`;
+    // Label
+    svg+=`<text x="${curX+28}" y="${rowY+17}" class="sflow-label cmd">${shortLabel}</text>\n`;
+
+    // Arrow from previous step
+    if(prev){
+      const px=prev.isHuman?prev.x:prev.x, py=prev.isHuman?ROW_H:ROW_A;
+      if(prev.isHuman===isHuman){
+        // Same row: straight horizontal
+        svg+=`<line x1="${prev.x+BW}" y1="${py+BH/2}" x2="${curX-2}" y2="${rowY+BH/2}" class="sflow-arrow"/>\n`;
+      }else{
+        // Cross-row: vertical zigzag
+        const midY=(py+rowY+BH)/2;
+        svg+=`<line x1="${prev.x+BW}" y1="${py+BH/2}" x2="${prev.x+BW}" y2="${midY}" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>\n`;
+        svg+=`<line x1="${prev.x+BW}" y1="${midY}" x2="${curX-2}" y2="${midY}" stroke="var(--ink-whisper)" stroke-width="1" fill="none" marker-end="url(#arrowhead)"/>\n`;
+        svg+=`<line x1="${curX-2}" y1="${midY}" x2="${curX-2}" y2="${rowY+BH/2}" stroke="var(--ink-whisper)" stroke-width="1" fill="none"/>\n`;
+      }
+    }
+
+    if(isHuman) xH=curX+BW+G; else xA=curX+BW+G;
+    maxX=Math.max(maxX,isHuman?xH:xA);
+    prev={x:curX,isHuman};
   });
-  // Legend
-  y+=4;h+=20;
-  svg+=`<g class="sflow-legend" transform="translate(${LX},${y})">\n`;
-  svg+=`<rect x="0" y="0" class="sflow-step-bg agent"/><text x="14" y="9">Tekon / Agent</text>\n`;
-  svg+=`<rect x="110" y="0" class="sflow-step-bg human"/><text x="124" y="9">You / Human</text>\n`;
-  svg+=`</g>\n`;
-  h+=20;
-  return `<div class="flow-diagram"><svg viewBox="0 0 ${W} ${h}" width="100%" height="auto">\n${svg}</svg></div>`;
+
+  return `<div class="flow-diagram"><svg viewBox="0 0 ${W} ${ROW_A+BH+24}" width="100%" height="auto" style="min-width:${Math.min(W,maxX+40)}px">\n${svg}</svg></div>`;
 }
 
 function scenarioCard(label,title,desc,steps,extra){
@@ -475,7 +492,7 @@ ${flowSVG_delivery()}
 <h3>2.5 需要判断一次 run 是否真的可交付</h3>
 <p><code>eval readiness</code> 评估单个 run 的交付证据是否完整。<code>eval work-usability</code> 评估一组真实样本是否达到试用门槛。</p>
 `},
-      {num:"03",title:"核心用户场景",sub:"五种典型场景，从功能开发到工具评估。图中绿色为 Tekon 自动执行，金色为需人工操作。",
+      {num:"03",title:"核心用户场景",sub:"四种典型场景。上层金色为人工操作，下层绿色为 Tekon 自动执行。",
        html:`
 <div class="scenario-card"><div class="scenario-label">SCENARIO A</div><div class="scenario-title">我有一个小功能，希望推进到可审 PR</div><p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
 ${scenarioFlowSVG('完整交付流程','从需求到可审 PR 的端到端路径',[
@@ -515,15 +532,6 @@ ${scenarioFlowSVG('测试补齐流程','',[
 <p style="font-size:13px;color:var(--text-secondary)"><code>standard-delivery</code> 适合 Tekon 自身 dogfooding 和低风险种子任务。</p>
 </div>
 
-<div class="scenario-card"><div class="scenario-label">SCENARIO E</div><div class="scenario-title">我要判断天工是否已经能用于真实工作</div>
-${scenarioFlowSVG('工作可用性评估流程','',[
-  {label:'挑选 2~3 个真实但低风险的仓库',actor:'human'},
-  {label:'准备 10 个真实或历史需求',actor:'human'},
-  {label:'eval work-usability record — 每次 run 后写入样本',actor:'agent'},
-  {label:'eval work-usability --samples — 评估样本集',actor:'agent'},
-  {label:'把 Markdown/HTML 报告保存到 docs/reviews/',actor:'human'}
-])}
-</div>
 `},
       {num:"04",title:"Quick Start",sub:"以下示例假设 <code>tekon</code> 已安装到 PATH，并且你正在目标项目根目录执行命令。",
        html:`
@@ -687,7 +695,7 @@ ${flowSVG_delivery()}
 <h3>2.5 Is a Run Actually Deliverable?</h3>
 <p><code>eval readiness</code> assesses a single run's evidence completeness. <code>eval work-usability</code> evaluates whether a sample set meets the bar for real-world adoption.</p>
 `},
-      {num:"03",title:"Core Scenarios",sub:"Five typical scenarios. Green = Tekon auto, Gold = human action.",
+      {num:"03",title:"Core Scenarios",sub:"Four typical scenarios. Top row (gold) = Human, bottom row (green) = Tekon.",
        html:`
 <div class="scenario-card"><div class="scenario-label">SCENARIO A</div><div class="scenario-title">Small Feature → Reviewable PR</div><p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Examples: add a filter to an internal tool, add a low-risk CLI command, add an entry to the Web dashboard.</p>
 ${scenarioFlowSVG('End-to-End Delivery Pipeline','',[
@@ -726,15 +734,6 @@ ${scenarioFlowSVG('Test Improvement Flow','',[
 <div class="tag-list"><span class="tag tag-gold">docs-update — Docs only</span><span class="tag tag-gold">plan-only — Plan, no code</span><span class="tag tag-gold">standard-delivery — Full role chain</span></div>
 </div>
 
-<div class="scenario-card"><div class="scenario-label">SCENARIO E</div><div class="scenario-title">Evaluate Tekon Readiness</div>
-${scenarioFlowSVG('Work Usability Evaluation','',[
-  {label:'Pick 2-3 real but low-risk repos',actor:'human'},
-  {label:'Prepare 10 real or historical tasks',actor:'human'},
-  {label:'eval work-usability record — write sample per run',actor:'agent'},
-  {label:'eval work-usability --samples — evaluate sample set',actor:'agent'},
-  {label:'Save Markdown/HTML reports to docs/reviews/',actor:'human'}
-])}
-</div>
 `},
       {num:"04",title:"Quick Start",sub:"Examples assume <code>tekon</code> is in PATH and you're in the target project root.",
        html:`
