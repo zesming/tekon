@@ -2182,6 +2182,24 @@ async function commandUi(argv: string[], io: CliIO) {
   });
 }
 
+function silentExec(cmd: string, args: string[], opts: { cwd: string }) {
+  try {
+    return execFileSync(cmd, args, {
+      ...opts,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    const stderr =
+      error instanceof Error && 'stderr' in error
+        ? String((error as { stderr?: unknown }).stderr ?? '')
+        : '';
+    throw new Error(
+      `${cmd} ${args.join(' ')} failed: ${stderr || (error instanceof Error ? error.message : String(error))}`,
+    );
+  }
+}
+
 async function commandUpdate(argv: string[], io: CliIO) {
   const tekonRoot = resolveTekonRoot();
   if (!existsSync(tekonRoot)) {
@@ -2190,54 +2208,39 @@ async function commandUpdate(argv: string[], io: CliIO) {
     );
   }
 
-  io.stdout.write(`Tekon root: ${tekonRoot}\n`);
-
   const oldVersion = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
     cwd: tekonRoot,
     encoding: 'utf8',
   }).trim();
-  io.stdout.write(`Current version: ${oldVersion}\n`);
 
-  io.stdout.write('Pulling latest changes...\n');
   execFileSync('git', ['fetch', 'origin', 'main'], {
     cwd: tekonRoot,
-    stdio: 'inherit',
+    stdio: ['ignore', 'ignore', 'pipe'],
   });
-  execFileSync('git', ['checkout', 'main'], { cwd: tekonRoot, stdio: 'inherit' });
-  execFileSync('git', ['pull', 'origin', 'main'], {
-    cwd: tekonRoot,
-    stdio: 'inherit',
-  });
+  const targetVersion = execFileSync(
+    'git',
+    ['rev-parse', '--short', 'FETCH_HEAD'],
+    { cwd: tekonRoot, encoding: 'utf8' },
+  ).trim();
 
-  const newVersion = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
-    cwd: tekonRoot,
-    encoding: 'utf8',
-  }).trim();
-
-  if (oldVersion === newVersion) {
+  if (oldVersion === targetVersion) {
     io.stdout.write(`Already up to date (${oldVersion})\n`);
     return;
   }
 
-  io.stdout.write('Installing dependencies...\n');
-  execFileSync(
-    'npm',
-    ['exec', '--yes', '--', 'pnpm@10.12.1', 'install', '--frozen-lockfile'],
-    { cwd: tekonRoot, stdio: 'inherit' },
-  );
+  io.stdout.write(`Updating ${oldVersion} → ${targetVersion}...\n`);
 
-  io.stdout.write('Building...\n');
-  execFileSync('npm', ['exec', '--yes', '--', 'pnpm@10.12.1', 'build'], {
-    cwd: tekonRoot,
-    stdio: 'inherit',
-  });
+  silentExec('git', ['checkout', 'main'], { cwd: tekonRoot });
+  silentExec('git', ['pull', 'origin', 'main'], { cwd: tekonRoot });
+  silentExec('npm', ['exec', '--yes', '--', 'pnpm@10.12.1', 'install', '--frozen-lockfile'], { cwd: tekonRoot });
+  silentExec('npm', ['exec', '--yes', '--', 'pnpm@10.12.1', 'build'], { cwd: tekonRoot });
 
   const cliPath = join(tekonRoot, 'packages', 'cli', 'dist', 'index.js');
   if (!existsSync(cliPath)) {
     throw new Error(`Build failed: ${cliPath} not found`);
   }
 
-  io.stdout.write(`Updated: ${oldVersion} → ${newVersion}\n`);
+  io.stdout.write(`Updated to ${targetVersion}\n`);
 }
 
 async function openCommandContext(argv: string[], io: CliIO) {
