@@ -2142,9 +2142,17 @@ async function commandUi(argv: string[], io: CliIO) {
 
   const tsxBin = join(tekonRoot, 'node_modules', '.bin', 'tsx');
   if (!existsSync(tsxBin)) {
-    throw new Error(
-      `tsx not found at ${tsxBin}. Run "npx pnpm install" in ${tekonRoot} first.`,
+    io.stdout.write('Installing dependencies...\n');
+    execFileSync(
+      'npm',
+      ['exec', '--yes', '--', 'pnpm@10.12.1', 'install', '--frozen-lockfile'],
+      { cwd: tekonRoot, stdio: 'inherit' },
     );
+    if (!existsSync(tsxBin)) {
+      throw new Error(
+        `tsx still not found at ${tsxBin} after install. Check pnpm install output above.`,
+      );
+    }
   }
 
   io.stdout.write(`repo=${repoPath}\n`);
