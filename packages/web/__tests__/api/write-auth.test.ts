@@ -400,19 +400,19 @@ describe('web write authorization', () => {
     }
   });
 
-  it('shapes and approves a demand before starting a Web run', { timeout: 15000 }, async () => {
+  it('shapes and approves a draft before starting a Web run', { timeout: 15000 }, async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     await expect(
-      api.demand.shape({
+      api.draftShape.shape({
         demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
         token: 'wrong-token',
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
-    const shaped = await api.demand.shape({
+    const shaped = await api.draftShape.shape({
       demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
       token: fixture.sessionToken,
     });
@@ -434,7 +434,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
-    const approved = await api.demand.approve({
+    const approved = await api.draftShape.approve({
       shapePath: shaped.shapePath,
       token: fixture.sessionToken,
       actor: 'web-test',
@@ -453,7 +453,7 @@ describe('web write authorization', () => {
     expect(started.run).toMatchObject({ status: 'passed' });
 
     await expect(
-      api.demand.approve({
+      api.draftShape.approve({
         shapePath: join(fixture.projectRoot, 'package.json'),
         token: fixture.sessionToken,
       }),
@@ -462,7 +462,7 @@ describe('web write authorization', () => {
     await api.close();
   });
 
-  it('rejects demand shape symlink escapes in Web write paths', async () => {
+  it('rejects draft shape symlink escapes in Web write paths', async () => {
     const fixture = await createWebFixtureProject();
     const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-web-shape-outside-'));
     cleanupTasks.push(fixture.cleanup);
@@ -471,7 +471,7 @@ describe('web write authorization', () => {
     );
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const shaped = await api.demand.shape({
+    const shaped = await api.draftShape.shape({
       demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
       token: fixture.sessionToken,
     });
@@ -481,7 +481,7 @@ describe('web write authorization', () => {
     symlinkSync(outsideShapePath, shaped.shapePath);
 
     await expect(
-      api.demand.approve({
+      api.draftShape.approve({
         shapePath: shaped.shapePath,
         token: fixture.sessionToken,
       }),
@@ -495,7 +495,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
-    rmSync(join(fixture.projectRoot, '.tekon', 'demands'), {
+    rmSync(join(fixture.projectRoot, '.tekon', 'drafts'), {
       recursive: true,
       force: true,
     });
@@ -504,10 +504,10 @@ describe('web write authorization', () => {
     writeFileSync(outsideDirShapePath, readFileSync(outsideShapePath, 'utf8'));
     symlinkSync(
       outsideDir,
-      join(fixture.projectRoot, '.tekon', 'demands'),
+      join(fixture.projectRoot, '.tekon', 'drafts'),
       'dir',
     );
-    const escapedViaDemandDir = join(
+    const escapedViaDraftDir = join(
       fixture.projectRoot,
       '.tekon',
       'demands',
@@ -515,15 +515,15 @@ describe('web write authorization', () => {
     );
 
     await expect(
-      api.demand.approve({
-        shapePath: escapedViaDemandDir,
+      api.draftShape.approve({
+        shapePath: escapedViaDraftDir,
         token: fixture.sessionToken,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(
       api.project.run({
         demandText: '',
-        demandShapePath: escapedViaDemandDir,
+        demandShapePath: escapedViaDraftDir,
         agent: 'mock',
         token: fixture.sessionToken,
       }),
@@ -532,7 +532,7 @@ describe('web write authorization', () => {
     await api.close();
   });
 
-  it('rejects demand shape writes when demands storage is a symlink', async () => {
+  it('rejects draft shape writes when drafts storage is a symlink', async () => {
     const fixture = await createWebFixtureProject();
     const outsideDir = mkdtempSync(
       join(tmpdir(), 'tekon-web-shape-write-outside-'),
@@ -541,13 +541,13 @@ describe('web write authorization', () => {
     cleanupTasks.push(() =>
       rmSync(outsideDir, { recursive: true, force: true }),
     );
-    const demandsPath = join(fixture.projectRoot, '.tekon', 'demands');
-    rmSync(demandsPath, { recursive: true, force: true });
-    symlinkSync(outsideDir, demandsPath, 'dir');
+    const draftsPath = join(fixture.projectRoot, '.tekon', 'drafts');
+    rmSync(draftsPath, { recursive: true, force: true });
+    symlinkSync(outsideDir, draftsPath, 'dir');
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     await expect(
-      api.demand.shape({
+      api.draftShape.shape({
         demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
         token: fixture.sessionToken,
       }),
@@ -950,7 +950,7 @@ describe('security characterization (documents current behavior, some will chang
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
       await expect(
-        api.demand.shape({
+        api.draftShape.shape({
           demandText: 'should fail with empty token',
           token: '',
         }),
@@ -1020,7 +1020,7 @@ describe('security characterization (documents current behavior, some will chang
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
       await expect(
-        api.demand.shape({
+        api.draftShape.shape({
           demandText: 'should fail without token file',
           token: fixture.sessionToken,
         }),
@@ -1097,21 +1097,21 @@ describe('security characterization (documents current behavior, some will chang
       await api.close();
     });
 
-    it('rejects demand approve when the shape path is outside .tekon/demands/', async () => {
+    it('rejects draft approve when the shape path is outside .tekon/drafts/', async () => {
       const fixture = await createWebFixtureProject();
       cleanupTasks.push(fixture.cleanup);
       const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
       await expect(
-        api.demand.approve({
+        api.draftShape.approve({
           shapePath: join(fixture.projectRoot, 'package.json'),
           token: fixture.sessionToken,
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
       await expect(
-        api.demand.approve({
-          shapePath: '/tmp/outside-demands-dir/shape.json',
+        api.draftShape.approve({
+          shapePath: '/tmp/outside-drafts-dir/shape.json',
           token: fixture.sessionToken,
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
@@ -1128,7 +1128,7 @@ describe('security characterization (documents current behavior, some will chang
       await api.close();
     });
 
-    it('rejects demand operations when the shape path is a symlink escaping the demands directory', async () => {
+    it('rejects draft operations when the shape path is a symlink escaping the drafts directory', async () => {
       const fixture = await createWebFixtureProject();
       const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-sec-symlink-'));
       cleanupTasks.push(fixture.cleanup);
@@ -1137,7 +1137,7 @@ describe('security characterization (documents current behavior, some will chang
       );
       const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-      const shaped = await api.demand.shape({
+      const shaped = await api.draftShape.shape({
         demandText: 'Security test: symlink escape in demand shape path.',
         token: fixture.sessionToken,
       });
@@ -1147,7 +1147,7 @@ describe('security characterization (documents current behavior, some will chang
       symlinkSync(outsidePath, shaped.shapePath);
 
       await expect(
-        api.demand.approve({
+        api.draftShape.approve({
           shapePath: shaped.shapePath,
           token: fixture.sessionToken,
         }),
@@ -1229,12 +1229,12 @@ describe('security characterization (documents current behavior, some will chang
       await api.close();
     });
 
-    it('rejects starting a run with an unapproved demand shape', async () => {
+    it('rejects starting a run with an unapproved draft shape', async () => {
       const fixture = await createWebFixtureProject();
       cleanupTasks.push(fixture.cleanup);
       const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-      const shaped = await api.demand.shape({
+      const shaped = await api.draftShape.shape({
         demandText: 'Security test: run with unapproved demand shape.',
         token: fixture.sessionToken,
       });

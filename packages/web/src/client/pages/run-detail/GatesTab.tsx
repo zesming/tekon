@@ -7,6 +7,13 @@ import type {
   ApiWorkReviewSurface,
 } from '../../../shared/api-types.js';
 
+import {
+  gateTypeLabel,
+  gateStatusLabel,
+  failureLabel,
+  failureSuggestion,
+} from '../../lib/check-labels.js';
+
 import { Card } from '../../components/ui/Card.js';
 import { LoadingState } from '../../components/ui/LoadingState.js';
 import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
@@ -20,10 +27,10 @@ import { StatusBadge } from '../../components/ui/StatusBadge.js';
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  if (seconds < 60) return `${seconds.toFixed(1)} 秒`;
   const mins = Math.floor(seconds / 60);
   const remSec = Math.round(seconds % 60);
-  return `${mins}m ${remSec}s`;
+  return `${mins} 分 ${remSec} 秒`;
 }
 
 function gateIconSymbol(status: string): string {
@@ -70,7 +77,7 @@ export function GatesTab() {
   );
 
   if (gateQuery.isLoading)
-    return <LoadingState message="Loading gates..." />;
+    return <LoadingState message="加载门禁数据中…" />;
   if (gateQuery.error)
     return <ErrorBanner error={gateQuery.error} onRetry={gateQuery.refetch} />;
 
@@ -95,19 +102,19 @@ export function GatesTab() {
       {/* ── Summary ── */}
       <div className="section">
         <div className="section-title">
-          门禁结果 Gates{' '}
+          门禁结果
           <span className="count">
-            {passedCount} passed
-            {failedCount > 0 ? ` · ${failedCount} failed` : ''}
-            {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+            {passedCount} 通过
+            {failedCount > 0 ? ` · ${failedCount} 失败` : ''}
+            {pendingCount > 0 ? ` · ${pendingCount} 待处理` : ''}
           </span>
         </div>
 
         {gates.length === 0 ? (
           <Card>
             <EmptyState
-              message="No gates yet"
-              hint="Gate results will appear here as the workflow runs."
+              message="暂无门禁数据"
+              hint="工作流运行后，门禁结果将显示在此处。"
             />
           </Card>
         ) : (
@@ -116,18 +123,31 @@ export function GatesTab() {
               {gates.map((gate) => {
                 const reviewGate = reviewGateMap.get(gate.id);
                 const triage = triageMap.get(gate.id);
-                const classification =
+                const rawClassification =
                   gate.failureClassification ??
                   reviewGate?.failureClassification ??
                   null;
+                const classification = rawClassification
+                  ? failureLabel(rawClassification)
+                  : null;
+                const suggestion = rawClassification
+                  ? failureSuggestion(rawClassification)
+                  : null;
                 const isFailed = gate.status === 'failed';
+                const isBlocked = gate.status === 'blocked';
+                const hasProblem = isFailed || isBlocked;
 
                 return (
                   <div
                     key={gate.id}
                     className="gate-item"
+                    title={
+                      hasProblem && rawClassification
+                        ? `${gateTypeLabel(gate.gateType)} · 分类: ${rawClassification}${suggestion ? ' — ' + suggestion : ''}`
+                        : gateTypeLabel(gate.gateType)
+                    }
                     style={
-                      isFailed
+                      hasProblem
                         ? {
                             borderColor: '#fecaca',
                             background: 'var(--fail-bg)',
@@ -141,18 +161,24 @@ export function GatesTab() {
                       {gateIconSymbol(gate.status)}
                     </div>
                     <div>
-                      <div className="gate-name">{gate.gateType}</div>
+                      <div className="gate-name">
+                        {gateTypeLabel(gate.gateType)}
+                      </div>
                       <div
                         className="gate-meta"
                         style={
-                          isFailed ? { color: 'var(--fail)' } : undefined
+                          hasProblem
+                            ? { color: 'var(--fail)' }
+                            : undefined
                         }
                       >
                         {isFailed
-                          ? `failed${classification ? ` · ${classification}` : ''}`
-                          : gate.status === 'pending'
-                            ? 'pending'
-                            : `${gate.nodeId} · ${formatDurationMs(gate.durationMs)}`}
+                          ? `失败${classification ? ` · ${classification}` : ''}`
+                          : isBlocked
+                            ? `已阻塞${classification ? ` · ${classification}` : ''}`
+                            : gate.status === 'pending'
+                              ? '等待中'
+                              : `${gate.nodeId} · ${formatDurationMs(gate.durationMs)}`}
                       </div>
                     </div>
                   </div>
@@ -167,35 +193,53 @@ export function GatesTab() {
       {pendingDecisions.length > 0 ? (
         <div className="section">
           <div className="section-title">
-            待决策 Pending Decisions{' '}
+            待决策
             <span className="count">{pendingDecisions.length}</span>
           </div>
           <Card compact>
             <div style={{ padding: '12px 20px' }}>
-              {pendingDecisions.map((decision) => (
-                <div
-                  key={decision.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '10px 0',
-                    borderBottom: '1px solid var(--border-l)',
-                    fontSize: '13px',
-                  }}
-                >
-                  <StatusBadge status="pending" size="sm" />
-                  <span style={{ fontWeight: 600 }}>
-                    {decision.context.request}
-                  </span>
-                  <span className="text-mono text-muted">
-                    {decision.id.slice(0, 12)}…
-                  </span>
-                  <span className="text-sm text-muted" style={{ marginLeft: 'auto' }}>
-                    {decision.context.riskLabel}
-                  </span>
-                </div>
-              ))}
+              {pendingDecisions.map((decision) => {
+                const decisionStatusLabel = gateStatusLabel(decision.status);
+                return (
+                  <div
+                    key={decision.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 0',
+                      borderBottom: '1px solid var(--border-l)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <StatusBadge
+                      status={decision.status}
+                      size="sm"
+                      label={decisionStatusLabel}
+                    />
+                    <span style={{ fontWeight: 600 }}>
+                      {decision.context.request}
+                    </span>
+                    <span
+                      className="text-mono text-muted"
+                      title={decision.id}
+                    >
+                      {decision.id.slice(0, 12)}…
+                    </span>
+                    <span
+                      className="text-sm text-muted"
+                      style={{ marginLeft: 'auto' }}
+                      title={`风险标签: ${decision.context.riskLabel}`}
+                    >
+                      {decision.context.riskLabel === 'normal'
+                        ? '常规'
+                        : decision.context.riskLabel === 'human-control'
+                          ? '人工控制'
+                          : decision.context.riskLabel}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>

@@ -33,7 +33,7 @@ describe('tekon release flow e2e', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
 
     expect(runCli(cliPath, ['init', '--repo', repoPath], repoPath)).toContain(
-      'initialized',
+      '项目初始化完成',
     );
     expect(
       JSON.parse(

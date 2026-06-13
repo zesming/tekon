@@ -7,34 +7,39 @@ import {
 import { relative, resolve } from 'node:path';
 
 import {
-  approveDemandShape,
-  type DemandShape,
-  readDemandShapeFile,
-  renderDemandShapeForRun,
-  shapeDemand,
-  writeDemandShapeFile,
-  writeDemandShapeFiles,
+  approveDraftShape,
+  type DraftShape,
+  readDraftShapeFile,
+  renderDraftShapeForRun,
+  shapeDraft,
+  writeDraftShapeFile,
+  writeDraftShapeFiles,
 } from '@tekon/core';
 
-import type { ServerContext, DemandShapeInput, DemandApproveInput } from '../context.js';
+import type {
+  ServerContext,
+  DraftShapeInput,
+  DraftShapeApproveInput,
+  DraftShapeDetailInput,
+} from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
 import { redactObject } from '../redaction.js';
 
 export function createDemandRouter(context: ServerContext) {
   return {
-    async detail(input: { shapePath: string; token: string }) {
+    async detail(input: DraftShapeDetailInput) {
       assertSessionToken(context.projectContext, input.token);
-      const shapePath = assertDemandShapePathInScope(context, input.shapePath);
-      const shape = readDemandShapeFile(shapePath);
-      return { shape: redactObject(shape) as DemandShape };
+      const shapePath = assertDraftShapePathInScope(context, input.shapePath);
+      const shape = readDraftShapeFile(shapePath);
+      return { shape: redactObject(shape) as DraftShape };
     },
 
-    async shape(shapeInput: DemandShapeInput) {
+    async shape(shapeInput: DraftShapeInput) {
       assertSessionToken(context.projectContext, shapeInput.token);
-      const shape = shapeDemand({ text: shapeInput.demandText });
-      assertDemandShapeStorageInScope(context, { create: true });
-      const paths = writeDemandShapeFiles({
+      const shape = shapeDraft({ text: shapeInput.demandText });
+      assertDraftShapeStorageInScope(context, { create: true });
+      const paths = writeDraftShapeFiles({
         repoPath: context.projectContext.projectRoot,
         shape,
       });
@@ -42,20 +47,20 @@ export function createDemandRouter(context: ServerContext) {
         shape,
         shapePath: paths.jsonPath,
         reviewPath: paths.markdownPath,
-        runText: renderDemandShapeForRun(shape),
+        runText: renderDraftShapeForRun(shape),
       };
     },
 
-    async approve(approveInput: DemandApproveInput) {
+    async approve(approveInput: DraftShapeApproveInput) {
       assertSessionToken(context.projectContext, approveInput.token);
-      const shapePath = assertDemandShapePathInScope(
+      const shapePath = assertDraftShapePathInScope(
         context,
         approveInput.shapePath,
       );
-      const approved = approveDemandShape(readDemandShapeFile(shapePath), {
+      const approved = approveDraftShape(readDraftShapeFile(shapePath), {
         actor: approveInput.actor ?? 'web',
       });
-      writeDemandShapeFile(shapePath, approved);
+      writeDraftShapeFile(shapePath, approved);
       return {
         shape: approved,
         shapePath,
@@ -64,51 +69,51 @@ export function createDemandRouter(context: ServerContext) {
   };
 }
 
-function assertDemandShapePathInScope(
+function assertDraftShapePathInScope(
   context: ServerContext,
   shapePath: string,
 ): string {
   const resolvedPath = resolve(shapePath);
-  const demandsDir = assertDemandShapeStorageInScope(context, {
+  const draftsDir = assertDraftShapeStorageInScope(context, {
     create: false,
   });
-  const pathFromDemands = relative(demandsDir, resolvedPath);
+  const pathFromDrafts = relative(draftsDir, resolvedPath);
   if (
-    pathFromDemands.startsWith('..') ||
-    pathFromDemands === '' ||
-    pathFromDemands.includes('..') ||
-    !pathFromDemands.endsWith('.json')
+    pathFromDrafts.startsWith('..') ||
+    pathFromDrafts === '' ||
+    pathFromDrafts.includes('..') ||
+    !pathFromDrafts.endsWith('.json')
   ) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  if (!existsSync(demandsDir) || !existsSync(resolvedPath)) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (!existsSync(draftsDir) || !existsSync(resolvedPath)) {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   if (lstatSync(resolvedPath).isSymbolicLink()) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  const expectedDemandsDir = realpathSync(demandsDir);
-  const realPathFromDemands = relative(
-    expectedDemandsDir,
+  const expectedDraftsDir = realpathSync(draftsDir);
+  const realPathFromDrafts = relative(
+    expectedDraftsDir,
     realpathSync(resolvedPath),
   );
-  if (realPathFromDemands.startsWith('..') || realPathFromDemands === '') {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (realPathFromDrafts.startsWith('..') || realPathFromDrafts === '') {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   return resolvedPath;
 }
 
-function assertDemandShapeStorageInScope(
+function assertDraftShapeStorageInScope(
   context: ServerContext,
   options: { create: boolean },
 ): string {
   const dataDir = resolve(context.projectContext.dataDir);
-  const demandsDir = resolve(dataDir, 'demands');
+  const draftsDir = resolve(dataDir, 'drafts');
   if (!existsSync(dataDir)) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   if (lstatSync(dataDir).isSymbolicLink()) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   const expectedDataDir = resolve(
     realpathSync(context.projectContext.projectRoot),
@@ -116,22 +121,22 @@ function assertDemandShapeStorageInScope(
   );
   const realDataDir = realpathSync(dataDir);
   if (realDataDir !== expectedDataDir) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  if (existsSync(demandsDir) && lstatSync(demandsDir).isSymbolicLink()) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (existsSync(draftsDir) && lstatSync(draftsDir).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   if (options.create) {
-    mkdirSync(demandsDir, { recursive: true });
+    mkdirSync(draftsDir, { recursive: true });
   }
-  if (!existsSync(demandsDir)) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (!existsSync(draftsDir)) {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  if (lstatSync(demandsDir).isSymbolicLink()) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (lstatSync(draftsDir).isSymbolicLink()) {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  if (realpathSync(demandsDir) !== resolve(realDataDir, 'demands')) {
-    throw new ApiError('BAD_REQUEST', 'Demand shape path is out of scope.');
+  if (realpathSync(draftsDir) !== resolve(realDataDir, 'drafts')) {
+    throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
-  return demandsDir;
+  return draftsDir;
 }

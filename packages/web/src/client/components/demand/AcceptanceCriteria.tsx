@@ -1,11 +1,11 @@
-import type { DemandShape } from '@tekon/core';
+import type { DraftShape } from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 export interface AcceptanceCriteriaProps {
-  criteria: DemandShape['acceptanceCriteria'];
+  criteria: DraftShape['acceptanceCriteria'];
 }
 
 // ---------------------------------------------------------------------------

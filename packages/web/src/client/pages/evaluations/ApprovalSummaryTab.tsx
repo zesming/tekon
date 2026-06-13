@@ -128,7 +128,7 @@ export function ApprovalSummaryTab() {
                   <EvalScoreCard
                     score={eval_.score}
                     ready={eval_.ready}
-                    label={`Approval Evaluation — ${decision.nodeId}`}
+                    label={`审批评估 — ${decision.nodeId}`}
                   />
                 </div>
 

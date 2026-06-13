@@ -1,4 +1,5 @@
 import type { ApiHumanDecision } from '../../../shared/api-types.js';
+import { checkLabel, getReadinessLabel } from '../../lib/check-labels.js';
 
 // ---------------------------------------------------------------------------
 // ApprovalSummary — renders the pre-formatted summary text for a decision
@@ -31,7 +32,7 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
                 letterSpacing: '0.06em',
               }}
             >
-              Readiness Score
+              就绪度评分
             </span>
             <span
               style={{
@@ -41,8 +42,7 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
                 color: evaluation.ready ? 'var(--pass)' : 'var(--fail)',
               }}
             >
-              {Math.round(evaluation.score * 100)}%
-              {evaluation.ready ? ' — ready' : ' — not ready'}
+              {Math.round(evaluation.score * 100)}% — {getReadinessLabel(evaluation.ready)}
             </span>
           </div>
           <div className="readiness-bar">
@@ -75,8 +75,11 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
                   >
                     {check.passed ? '✓' : '✗'}
                   </span>
-                  <span style={{ fontWeight: 600, minWidth: '100px' }}>
-                    {check.id}
+                  <span
+                    style={{ fontWeight: 600, minWidth: '100px' }}
+                    title={check.id}
+                  >
+                    {checkLabel(check.id)}
                   </span>
                   <span style={{ color: 'var(--text-s)', flex: 1 }}>
                     {check.evidence}
@@ -106,7 +109,7 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
               marginBottom: '6px',
             }}
           >
-            Evidence Links
+            证据链接
           </div>
           <div className="link-strip">
             {summary.evidenceLinks.map((link, i) => (

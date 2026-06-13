@@ -39,8 +39,11 @@ export async function createApiCaller(
 
   const context: ServerContext = { db, repositories, audit, projectContext };
 
+  const demandRouter = createDemandRouter(context);
   return {
-    demand: createDemandRouter(context),
+    draftShape: demandRouter,
+    /** @deprecated Use draftShape instead */
+    demand: demandRouter,
     project: createProjectRouter(context),
     delivery: createDeliveryRouter(context),
     artifact: createArtifactRouter(context),

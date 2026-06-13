@@ -9,7 +9,7 @@ import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 // Types
 // ---------------------------------------------------------------------------
 
-type ShapeOutput = RpcProcedureMap['demand.shape']['output'];
+type ShapeOutput = RpcProcedureMap['draftShape.shape']['output'];
 
 // ---------------------------------------------------------------------------
 // DemandShapeTab
@@ -18,7 +18,7 @@ type ShapeOutput = RpcProcedureMap['demand.shape']['output'];
 /**
  * DemandShapeTab — evaluate demand shape/structure.
  *
- * Uses the `demand.shape` procedure to analyze and classify a demand,
+ * Uses the `draftShape.shape` procedure to analyze and classify a demand,
  * returning a structured shape with risk assessment and acceptance criteria.
  */
 export function DemandShapeTab() {
@@ -31,28 +31,28 @@ export function DemandShapeTab() {
 
   // ── Shape mutation ──
   const shapeMutation = useMutation<
-    RpcProcedureMap['demand.shape']['input'],
-    RpcProcedureMap['demand.shape']['output']
-  >((input) => rpc.call('demand.shape', input));
+    RpcProcedureMap['draftShape.shape']['input'],
+    RpcProcedureMap['draftShape.shape']['output']
+  >((input) => rpc.call('draftShape.shape', input));
 
   const handleEvaluate = async () => {
     if (!token) {
-      addFlash('warning', 'Please set your session token first');
+      addFlash('warning', '请先设置会话令牌');
       return;
     }
     if (!demandText.trim()) {
-      addFlash('warning', 'Please enter demand text');
+      addFlash('warning', '请输入需求描述');
       return;
     }
 
     try {
       const result = await shapeMutation.mutate({ demandText: demandText.trim(), token });
       setShapeResult(result);
-      addFlash('success', 'Demand shape evaluated');
+      addFlash('success', '需求分析完成');
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : 'Failed to evaluate demand shape',
+        err instanceof Error ? err.message : '需求分析失败',
       );
     }
   };
@@ -80,7 +80,7 @@ export function DemandShapeTab() {
             id="demand-shape-text"
             className="input"
             rows={4}
-            placeholder="Enter demand description to evaluate its shape…"
+            placeholder="输入需求描述以分析其结构和风险…"
             value={demandText}
             onChange={(e) => setDemandText(e.target.value)}
             style={{ resize: 'vertical', fontFamily: 'var(--font-b)' }}
@@ -92,7 +92,7 @@ export function DemandShapeTab() {
               onClick={handleEvaluate}
               disabled={shapeMutation.isPending}
             >
-              {shapeMutation.isPending ? 'Evaluating…' : 'Evaluate Shape'}
+              {shapeMutation.isPending ? '分析中…' : 'Evaluate Shape'}
             </button>
           </div>
           {shapeMutation.error && (
@@ -109,7 +109,7 @@ export function DemandShapeTab() {
           {/* Shape metadata */}
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="card-header">
-              <span className="card-title">Shape Result</span>
+              <span className="card-title">分析结果</span>
               <span
                 style={{
                   fontSize: 11,

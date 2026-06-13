@@ -160,7 +160,7 @@ export const router = createBrowserRouter([
       },
       { path: 'approvals', element: <ApprovalsPage /> },
       { path: 'delivery', element: <DeliveryPage /> },
-      { path: 'demand', element: <DemandPage /> },
+      { path: 'demand', element: <DraftPage /> },
       {
         path: 'config',
         element: <ConfigPage />,

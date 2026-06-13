@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { demandShapeSchema } from '@tekon/core';
+import { draftShapeSchema } from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -61,16 +61,22 @@ export const projectRunInputSchema = z.object({
   progressHeartbeatMs: z.number().optional(),
 });
 
-export const demandShapeInputSchema = z.object({
+export const draftShapeInputSchema = z.object({
   demandText: z.string(),
   token: z.string().min(1),
 });
 
-export const demandApproveInputSchema = z.object({
+/** @deprecated Use {@link draftShapeInputSchema} instead */
+export const demandShapeInputSchema = draftShapeInputSchema;
+
+export const draftShapeApproveInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
   actor: z.string().optional(),
 });
+
+/** @deprecated Use {@link draftShapeApproveInputSchema} instead */
+export const demandApproveInputSchema = draftShapeApproveInputSchema;
 
 export const projectCleanInputSchema = z.object({
   runId: z.string().min(1),
@@ -460,26 +466,38 @@ export const projectCleanOutputSchema = z.object({
   removedRunDir: z.boolean(),
 });
 
-export const demandShapeOutputSchema = z.object({
-  shape: demandShapeSchema,
+export const draftShapeOutputSchema = z.object({
+  shape: draftShapeSchema,
   shapePath: z.string(),
   reviewPath: z.string(),
   runText: z.string(),
 });
 
-export const demandDetailInputSchema = z.object({
+/** @deprecated Use {@link draftShapeOutputSchema} instead */
+export const demandShapeOutputSchema = draftShapeOutputSchema;
+
+export const draftShapeDetailInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
 });
 
-export const demandDetailOutputSchema = z.object({
-  shape: demandShapeSchema,
+/** @deprecated Use {@link draftShapeDetailInputSchema} instead */
+export const demandDetailInputSchema = draftShapeDetailInputSchema;
+
+export const draftShapeDetailOutputSchema = z.object({
+  shape: draftShapeSchema,
 });
 
-export const demandApproveOutputSchema = z.object({
-  shape: demandShapeSchema,
+/** @deprecated Use {@link draftShapeDetailOutputSchema} instead */
+export const demandDetailOutputSchema = draftShapeDetailOutputSchema;
+
+export const draftShapeApproveOutputSchema = z.object({
+  shape: draftShapeSchema,
   shapePath: z.string(),
 });
+
+/** @deprecated Use {@link draftShapeApproveOutputSchema} instead */
+export const demandApproveOutputSchema = draftShapeApproveOutputSchema;
 
 export const deliveryPrepareOutputSchema = z.object({
   runId: z.string(),
@@ -638,16 +656,35 @@ export const procedureSpecs = {
     output: projectCleanOutputSchema,
   },
 
+  'draftShape.shape': {
+    auth: 'token' as const,
+    input: draftShapeInputSchema,
+    output: draftShapeOutputSchema,
+  },
+  'draftShape.detail': {
+    auth: 'token' as const,
+    input: draftShapeDetailInputSchema,
+    output: draftShapeDetailOutputSchema,
+  },
+  'draftShape.approve': {
+    auth: 'token' as const,
+    input: draftShapeApproveInputSchema,
+    output: draftShapeApproveOutputSchema,
+  },
+
+  /** @deprecated Use `draftShape.shape` instead */
   'demand.shape': {
     auth: 'token' as const,
     input: demandShapeInputSchema,
     output: demandShapeOutputSchema,
   },
+  /** @deprecated Use `draftShape.detail` instead */
   'demand.detail': {
     auth: 'token' as const,
     input: demandDetailInputSchema,
     output: demandDetailOutputSchema,
   },
+  /** @deprecated Use `draftShape.approve` instead */
   'demand.approve': {
     auth: 'token' as const,
     input: demandApproveInputSchema,

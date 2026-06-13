@@ -13,7 +13,7 @@ import { DeliveryTab } from './pages/run-detail/DeliveryTab.js';
 import { ProgressTab } from './pages/run-detail/ProgressTab.js';
 import { ApprovalsPage } from './pages/ApprovalsPage.js';
 import { DeliveryPage } from './pages/DeliveryPage.js';
-import { DemandPage } from './pages/DemandPage.js';
+import { DraftPage } from './pages/DraftPage.js';
 import { ConfigPage } from './pages/ConfigPage.js';
 import { RolesTab } from './pages/config/RolesTab.js';
 import { WorkflowsTab } from './pages/config/WorkflowsTab.js';
@@ -60,7 +60,7 @@ export const router = createBrowserRouter([
       },
       { path: 'approvals', element: <ApprovalsPage /> },
       { path: 'delivery', element: <DeliveryPage /> },
-      { path: 'demand', element: <DemandPage /> },
+      { path: 'demand', element: <DraftPage /> },
       {
         path: 'config',
         element: <ConfigPage />,

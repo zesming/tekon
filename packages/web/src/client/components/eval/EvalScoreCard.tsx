@@ -50,12 +50,12 @@ export function EvalScoreCard({ score, ready, label }: EvalScoreCardProps) {
           {clampedScore}
         </div>
 
-        {/* Ready / Partial badge */}
+        {/* 就绪 / 未就绪 状态标记 */}
         <span
           className={`badge ${ready ? 'badge-passed' : 'badge-failed'}`}
           style={{ marginBottom: 16 }}
         >
-          {ready ? 'Ready' : 'Not Ready'}
+          {ready ? '就绪' : '未就绪'}
         </span>
 
         {/* Progress bar */}

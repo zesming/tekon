@@ -30,7 +30,7 @@ describe('runCli in-process', () => {
     const io = createMemoryIo();
 
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
-    expect(io.takeStdout()).toContain('initialized');
+    expect(io.takeStdout()).toContain('项目初始化完成');
     const sessionPath = join(repoPath, '.tekon', 'web-session.json');
     expect(existsSync(sessionPath)).toBe(true);
     expect(JSON.parse(readFileSync(sessionPath, 'utf8'))).toEqual({
@@ -44,7 +44,7 @@ describe('runCli in-process', () => {
     await expect(
       runCli(
         [
-          'demand',
+          'draft',
           'shape',
           '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
           '--write',
@@ -89,7 +89,7 @@ describe('runCli in-process', () => {
     const workflowSelectionOutput = io.takeStdout();
     expect(workflowSelectionOutput).toContain('ready=false');
     expect(workflowSelectionOutput).toContain(
-      'failed=selected-template-fits-demand',
+      'failed=selected-template-fits-draft',
     );
 
     await expect(
@@ -106,10 +106,10 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('demand file must be approved');
+    expect(io.takeStderr()).toContain('draft file must be approved');
 
     await expect(
-      runCli(['demand', 'approve', shapePath!, '--actor', 'tester'], io),
+      runCli(['draft', 'approve', shapePath!, '--actor', 'tester'], io),
     ).resolves.toBe(0);
     expect(io.takeStdout()).toContain('approved=true');
 
@@ -627,7 +627,7 @@ describe('runCli in-process', () => {
     expect(workflowListOutput).toContain('plan-only');
   }, 30_000);
 
-  it('infers current repo, latest demand shape, latest run, and pending decision by default', async () => {
+  it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
     const originalCwd = process.cwd();
@@ -636,7 +636,7 @@ describe('runCli in-process', () => {
     try {
       const activeRepoPath = process.cwd();
       await expect(runCli(['init'], io)).resolves.toBe(0);
-      expect(io.takeStdout()).toContain(`initialized repo=${activeRepoPath}`);
+	      expect(io.takeStdout()).toContain('项目初始化完成');
       const nestedDir = join(activeRepoPath, 'src', 'feature');
       mkdirSync(nestedDir, { recursive: true });
       process.chdir(nestedDir);
@@ -644,7 +644,7 @@ describe('runCli in-process', () => {
       await expect(
         runCli(
           [
-            'demand',
+            'draft',
             'shape',
             '给 Web dashboard 增加审批摘要展示，要求 e2e 通过。',
           ],
@@ -655,10 +655,10 @@ describe('runCli in-process', () => {
       expect(shapeOutput).toContain('approved=false');
       const shapePath = /shapePath=(\S+)/u.exec(shapeOutput)?.[1];
       expect(shapePath).toBeTruthy();
-      expect(shapePath).toContain(`${activeRepoPath}/.tekon/demands/`);
+      expect(shapePath).toContain(`${activeRepoPath}/.tekon/drafts/`);
 
       await expect(
-        runCli(['demand', 'approve', '--actor', 'tester'], io),
+        runCli(['draft', 'approve', '--actor', 'tester'], io),
       ).resolves.toBe(0);
       expect(io.takeStdout()).toContain('approved=true');
 
@@ -786,7 +786,7 @@ describe('runCli in-process', () => {
       await expect(runCli(['init'], io)).resolves.toBe(0);
       io.takeStdout();
       await expect(
-        runCli(['demand', 'shape', '给示例模块增加审阅入口'], io),
+        runCli(['draft', 'shape', '给示例模块增加审阅入口'], io),
       ).resolves.toBe(0);
       const shapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
       expect(shapePath).toBeTruthy();
@@ -803,12 +803,12 @@ describe('runCli in-process', () => {
         ),
       ).resolves.toBe(0);
       const repoRootRelativeOutput = io.takeStdout();
-      expect(repoRootRelativeOutput).toContain('demandShapeId=');
+      expect(repoRootRelativeOutput).toContain('draftId=');
 
       const cwdRelativeShapePath = relative(nestedDir, shapePath!);
       await expect(
         runCli(
-          ['demand', 'approve', cwdRelativeShapePath, '--actor', 'tester'],
+          ['draft', 'approve', cwdRelativeShapePath, '--actor', 'tester'],
           io,
         ),
       ).resolves.toBe(0);
@@ -818,7 +818,7 @@ describe('runCli in-process', () => {
     }
   }, 15_000);
 
-  it('does not approve historical demand shapes by default when the latest shape is already approved', async () => {
+  it('does not approve historical draft shapes by default when the latest shape is already approved', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
     const originalCwd = process.cwd();
@@ -829,7 +829,7 @@ describe('runCli in-process', () => {
       io.takeStdout();
 
       await expect(
-        runCli(['demand', 'shape', '旧的未批准需求'], io),
+        runCli(['draft', 'shape', '旧的未批准需求'], io),
       ).resolves.toBe(0);
       const historicalShapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
       expect(historicalShapePath).toBeTruthy();
@@ -847,25 +847,25 @@ describe('runCli in-process', () => {
       );
 
       await expect(
-        runCli(['demand', 'shape', '最新且已经批准的需求'], io),
+        runCli(['draft', 'shape', '最新且已经批准的需求'], io),
       ).resolves.toBe(0);
       const latestShapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
       expect(latestShapePath).toBeTruthy();
       await expect(
-        runCli(['demand', 'approve', '--shape', latestShapePath!], io),
+        runCli(['draft', 'approve', '--shape', latestShapePath!], io),
       ).resolves.toBe(0);
       io.takeStdout();
 
-      await expect(runCli(['demand', 'approve'], io)).resolves.toBe(1);
+      await expect(runCli(['draft', 'approve'], io)).resolves.toBe(1);
       expect(io.takeStderr()).toContain(
-        'latest demand shape is already approved',
+        'latest draft shape is already approved',
       );
       expect(
         JSON.parse(readFileSync(historicalShapePath!, 'utf8')).approved,
       ).toBe(false);
 
       await expect(
-        runCli(['demand', 'approve', '--shape', historicalShapePath!], io),
+        runCli(['draft', 'approve', '--shape', historicalShapePath!], io),
       ).resolves.toBe(0);
       expect(io.takeStdout()).toContain('approved=true');
     } finally {
@@ -935,7 +935,7 @@ describe('runCli in-process', () => {
     expect(summaryOutput).toContain(`--repo ${repoPath}`);
   }, 15_000);
 
-  it('keeps cwd-relative demand shape paths working from repo subdirectories', async () => {
+  it('keeps cwd-relative draft shape paths working from repo subdirectories', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
     const originalCwd = process.cwd();
@@ -945,11 +945,11 @@ describe('runCli in-process', () => {
       await expect(runCli(['init'], io)).resolves.toBe(0);
       io.takeStdout();
       await expect(
-        runCli(['demand', 'shape', '给示例模块增加参数默认值'], io),
+        runCli(['draft', 'shape', '给示例模块增加参数默认值'], io),
       ).resolves.toBe(0);
       const shapePath = /shapePath=(\S+)/u.exec(io.takeStdout())?.[1];
       expect(shapePath).toBeTruthy();
-      await expect(runCli(['demand', 'approve', shapePath!], io)).resolves.toBe(
+      await expect(runCli(['draft', 'approve', shapePath!], io)).resolves.toBe(
         0,
       );
       io.takeStdout();

@@ -12,6 +12,7 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
 import { CheckList } from '../../components/eval/CheckList.js';
+import { buildFailedChecksSummary } from '../../lib/check-labels.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -147,11 +148,17 @@ export function OverviewTab() {
           compact
           className="mb-6"
         >
+          <div className="failed-checks-summary">
+            {buildFailedChecksSummary(
+              failedChecks.map((c) => ({ id: c.id, severity: c.severity })),
+            )}
+          </div>
           <CheckList
             items={failedChecks.map((c) => ({
               id: c.id,
               passed: c.passed,
               evidence: c.evidence,
+              severity: c.severity,
             }))}
           />
         </Card>
@@ -173,6 +180,7 @@ export function OverviewTab() {
             id: c.id,
             passed: c.passed,
             evidence: c.evidence,
+            severity: c.severity,
           }))}
         />
       </Card>

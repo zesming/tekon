@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { ApiHumanDecision } from '../../../shared/api-types.js';
 import { ApprovalSummary } from './ApprovalSummary.js';
 import { DecisionForm } from './DecisionForm.js';
+import { getRiskLabel } from '../../lib/check-labels.js';
 
 // ---------------------------------------------------------------------------
 // DecisionCard — renders a single pending human decision
@@ -68,13 +69,18 @@ export function DecisionCard({
             {decision.id}
           </div>
         </div>
-        <span className={`risk-label ${riskClass(risk)}`}>{risk || 'unknown'}</span>
+        <span
+          className={`risk-label ${riskClass(risk)}`}
+          title={risk || 'unknown'}
+        >
+          {getRiskLabel(risk)}
+        </span>
       </div>
 
       {/* Meta grid: command, node role, readiness score */}
       <div className="approval-meta">
         <div className="approval-meta-item">
-          <div className="approval-meta-label">Exact Command</div>
+          <div className="approval-meta-label">执行命令</div>
           <div
             className="approval-meta-value text-mono"
             style={{ fontSize: '12px', wordBreak: 'break-all' }}
@@ -83,13 +89,13 @@ export function DecisionCard({
           </div>
         </div>
         <div className="approval-meta-item">
-          <div className="approval-meta-label">Node Role</div>
+          <div className="approval-meta-label">节点角色</div>
           <div className="approval-meta-value">
             {context.nodeRole ?? '—'}
           </div>
         </div>
         <div className="approval-meta-item">
-          <div className="approval-meta-label">Readiness Score</div>
+          <div className="approval-meta-label">就绪度评分</div>
           <div
             className="approval-meta-value"
             style={{

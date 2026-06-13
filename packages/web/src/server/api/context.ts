@@ -1,6 +1,6 @@
 import type {
   AuditLogger,
-  DemandShape,
+  DraftShape,
   HumanApprovalSummary,
   ApprovalSummaryEvaluation,
   TekonDatabase,
@@ -34,21 +34,28 @@ export interface ProjectRunInput {
   progressHeartbeatMs?: number;
 }
 
-export interface DemandShapeInput {
+export interface DraftShapeInput {
   demandText: string;
   token: string;
 }
 
-export interface DemandApproveInput {
+export interface DraftShapeApproveInput {
   shapePath: string;
   token: string;
   actor?: string;
 }
 
-export interface DemandDetailInput {
+export interface DraftShapeDetailInput {
   shapePath: string;
   token: string;
 }
+
+/** @deprecated Use {@link DraftShapeInput} instead */
+export type DemandShapeInput = DraftShapeInput;
+/** @deprecated Use {@link DraftShapeApproveInput} instead */
+export type DemandApproveInput = DraftShapeApproveInput;
+/** @deprecated Use {@link DraftShapeDetailInput} instead */
+export type DemandDetailInput = DraftShapeDetailInput;
 
 export interface DeliveryCreatePrInput extends TokenRunInput {
   approveHuman: true;
@@ -158,18 +165,34 @@ export interface HumanDecisionOutput {
 }
 
 export interface ApiCaller {
+  draftShape: {
+    detail(input: DraftShapeDetailInput): Promise<{
+      shape: DraftShape;
+    }>;
+    shape(input: DraftShapeInput): Promise<{
+      shape: DraftShape;
+      shapePath: string;
+      reviewPath: string;
+      runText: string;
+    }>;
+    approve(input: DraftShapeApproveInput): Promise<{
+      shape: DraftShape;
+      shapePath: string;
+    }>;
+  };
+  /** @deprecated Use {@link ApiCaller.draftShape} instead */
   demand: {
     detail(input: DemandDetailInput): Promise<{
-      shape: DemandShape;
+      shape: DraftShape;
     }>;
-    shape(input: DemandShapeInput): Promise<{
-      shape: DemandShape;
+    shape(input: DraftShapeInput): Promise<{
+      shape: DraftShape;
       shapePath: string;
       reviewPath: string;
       runText: string;
     }>;
     approve(input: DemandApproveInput): Promise<{
-      shape: DemandShape;
+      shape: DraftShape;
       shapePath: string;
     }>;
   };

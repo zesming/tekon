@@ -99,6 +99,7 @@ export async function runCli(
       case 'run':
         await commandRun(rest, io);
         return 0;
+      case 'draft':
       case 'demand':
         await commandDemand(rest, io);
         return 0;
@@ -187,6 +188,7 @@ async function commandRun(argv: string[], io: CliIO) {
       'dry-run': { type: 'boolean', default: false },
       'allow-dirty-base': { type: 'boolean', default: false },
       'save-as': { type: 'string' },
+      'draft-file': { type: 'string' },
       'demand-file': { type: 'string' },
       'timeout-ms': { type: 'string' },
       'no-progress-timeout-ms': { type: 'string' },
@@ -197,8 +199,8 @@ async function commandRun(argv: string[], io: CliIO) {
   const repoPath = resolveProjectRepoPath(args.values.repo);
   await ensureInitialized(repoPath, io);
   const positionalDemandText = args.positionals.join(' ').trim();
-  const demandFilePath = args.values['demand-file']
-    ? resolveDemandShapePath(repoPath, args.values['demand-file'])
+  const demandFilePath = (args.values['draft-file'] ?? args.values['demand-file'])
+    ? resolveDemandShapePath(repoPath, (args.values['draft-file'] ?? args.values['demand-file']))
     : positionalDemandText
       ? null
       : resolveDemandShapePath(repoPath, undefined, {
@@ -209,14 +211,14 @@ async function commandRun(argv: string[], io: CliIO) {
     : null;
   if (shapedDemand && !shapedDemand.approved) {
     throw new Error(
-      `demand file must be approved before run: ${demandFilePath}`,
+      `draft file must be approved before run: ${demandFilePath}`,
     );
   }
   const demandText = shapedDemand
     ? renderDemandShapeForRun(shapedDemand)
     : positionalDemandText;
   if (!demandText) {
-    throw new Error('run demand text is required');
+    throw new Error('run draft text is required');
   }
   const allowDirtyBase = Boolean(args.values['allow-dirty-base']);
 
@@ -372,6 +374,106 @@ function createDynamicMockAdapter(demandText: string) {
 
 async function commandDemand(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
+
+  if (subcommand === 'new') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        'no-interactive': { type: 'boolean', default: false },
+        json: { type: 'boolean', default: false },
+      },
+      allowPositionals: true,
+    });
+    const demandText = args.positionals.join(' ').trim();
+    if (!demandText) {
+      throw new Error(
+        '请提供需求文本。示例: tekon draft new "新增用户认证系统，支持 OAuth2.0 和邮箱密码登录"',
+      );
+    }
+
+    // Spinner while initial shaping
+    process.stderr.write('正在分析需求');
+    const spinnerChars = ['.', '..', '...'];
+    let spinnerIdx = 0;
+    const spinnerInterval = setInterval(() => {
+      process.stderr.write(
+        `\r正在分析需求${spinnerChars[spinnerIdx % spinnerChars.length]}`,
+      );
+      spinnerIdx++;
+    }, 300);
+
+    const initialShape = shapeDemand({ text: demandText });
+
+    clearInterval(spinnerInterval);
+    process.stderr.write('\r正在分析需求 完成\n');
+
+    const repoPath = resolveProjectRepoPath(args.values.repo);
+    await ensureInitialized(repoPath, io);
+
+    // Interactive clarification (skip with --no-interactive or non-TTY)
+    let shape = initialShape;
+    if (!args.values['no-interactive']) {
+      const { runInteractiveClarification } = await import(
+        './draft-interactive.js'
+      );
+      const result = await runInteractiveClarification(
+        shape,
+        readStdinLine,
+        io.stdout,
+      );
+      shape = result.draft;
+      if (result.interrupted) {
+        io.stdout.write('\n交互已取消，保留已填写的内容。\n');
+      }
+    }
+
+    // Write files
+    const paths = writeDemandShapeFiles({ repoPath, shape });
+
+    // Human-readable output
+    if (args.values.json) {
+      io.stdout.write(
+        `${JSON.stringify({ shape, ...paths }, null, 2)}\n`,
+      );
+      return;
+    }
+
+    const categoryMap: Record<string, string> = {
+      feature: '功能', bugfix: '缺陷修复', test: '测试',
+      docs: '文档', refactor: '重构', other: '其他',
+    };
+    const riskMap: Record<string, string> = {
+      low: '低风险', medium: '中风险', high: '高风险',
+    };
+
+    const lines: string[] = [];
+    lines.push('📄 需求草案已保存');
+    lines.push(`   文件: ${paths.markdownPath}`);
+    lines.push('');
+    lines.push(`标题: ${shape.title}`);
+    lines.push(`类别: ${categoryMap[shape.category] ?? shape.category}`);
+    lines.push(`风险: ${riskMap[shape.risk.level] ?? shape.risk.level}`);
+    lines.push(`模板: ${shape.recommendedTemplate}`);
+    lines.push(`审批: ${shape.approved ? '已审批' : '未审批'}`);
+
+    if (shape.acceptanceCriteria.length > 0) {
+      lines.push('', '验收标准:');
+      for (const ac of shape.acceptanceCriteria) {
+        lines.push(`  ${ac.id}: ${ac.description}`);
+      }
+    }
+
+    lines.push('', '后续操作:');
+    lines.push('  tekon draft review      评审草案');
+    lines.push('  tekon draft approve     批准后即可执行');
+    lines.push(`  tekon run --draft-file ${paths.jsonPath}    发起运行`);
+    lines.push('');
+
+    io.stdout.write(`${lines.join('\n')}\n`);
+    return;
+  }
+
   if (subcommand === 'shape') {
     const args = parseArgs({
       args: rest,
@@ -401,7 +503,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     }
     io.stdout.write(
       [
-        `demandShapeId=${shape.id}`,
+        `draftId=${shape.id}`,
         `readyForRun=${shape.readyForRun}`,
         `approved=${shape.approved}`,
         `category=${shape.category}`,
@@ -441,7 +543,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     writeDemandShapeFile(shapePath, approved);
     io.stdout.write(
       [
-        `demandShapeId=${approved.id}`,
+        `draftId=${approved.id}`,
         `approved=${approved.approved}`,
         `approvedBy=${approved.approvedBy ?? ''}`,
         `approvedAt=${approved.approvedAt ?? ''}`,
@@ -471,7 +573,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     const evaluation = evaluateDemandShape(shape);
     io.stdout.write(
       [
-        `demandShapeId=${shape.id}`,
+        `draftId=${shape.id}`,
         `title=${shape.title}`,
         `category=${shape.category}`,
         `risk=${shape.risk.level}`,
@@ -490,7 +592,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     return;
   }
 
-  throw new Error(`unknown demand command: ${subcommand ?? ''}`);
+  throw new Error(`unknown draft command: ${subcommand ?? ''}`);
 }
 
 async function commandPause(argv: string[], io: CliIO) {
@@ -1470,7 +1572,7 @@ async function commandApproval(argv: string[], io: CliIO) {
 
 async function commandEval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
-  if (subcommand === 'demand-shape') {
+  if (subcommand === 'demand-shape' || subcommand === 'draft-shape') {
     const args = parseArgs({
       args: rest,
       options: {
@@ -1493,7 +1595,7 @@ async function commandEval(argv: string[], io: CliIO) {
       args.values.json
         ? `${JSON.stringify(evaluation, null, 2)}\n`
         : [
-            `demandShapeId=${shape.id}`,
+            `draftId=${shape.id}`,
             `ready=${evaluation.ready}`,
             `score=${evaluation.score.toFixed(2)}`,
             `failed=${evaluation.checks
@@ -1727,6 +1829,7 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
       samples: { type: 'string' },
       'run-id': { type: 'string' },
       id: { type: 'string' },
+      'draft-type': { type: 'string' },
       'demand-type': { type: 'string' },
       'expected-provider': { type: 'string' },
       'expected-pr-url': { type: 'string' },
@@ -1776,7 +1879,7 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
     const sample: WorkUsabilitySample = {
       id: args.values.id ?? runId,
       runId,
-      ...(args.values['demand-type']
+      ...((args.values['draft-type'] ?? args.values['demand-type'])
         ? {
             demandType: args.values[
               'demand-type'
@@ -2341,7 +2444,7 @@ function resolveDemandShapePath(
   if (shapeArg) {
     const shapePath = resolveExplicitPath(repoPath, shapeArg);
     if (!existsSync(shapePath)) {
-      throw new Error(`demand shape file not found: ${shapePath}`);
+      throw new Error(`draft shape file not found: ${shapePath}`);
     }
     return shapePath;
   }
@@ -2349,19 +2452,19 @@ function resolveDemandShapePath(
   const candidates = listDemandShapeCandidates(repoPath);
   if (candidates.length === 0) {
     throw new Error(
-      `no demand shape files found in ${join(repoPath, '.tekon', 'demands')}`,
+      `no draft shape files found in ${join(repoPath, '.tekon', 'drafts')}`,
     );
   }
 
   const latest = candidates[0];
   if (options.latestMustBeApproved && !latest.shape.approved) {
     throw new Error(
-      `latest demand shape is not approved: ${latest.path}; run tekon demand approve or pass --demand-file <path>`,
+      `latest draft shape is not approved: ${latest.path}; run tekon draft approve or pass --draft-file <path>`,
     );
   }
   if (options.latestMustBeUnapproved && latest.shape.approved) {
     throw new Error(
-      `latest demand shape is already approved: ${latest.path}; pass --shape <path> to approve a historical demand shape`,
+      `latest draft shape is already approved: ${latest.path}; pass --shape <path> to approve a historical draft shape`,
     );
   }
 
@@ -2384,33 +2487,46 @@ function listDemandShapeCandidates(repoPath: string): Array<{
   shape: DemandShape;
   mtimeMs: number;
 }> {
-  const demandsDir = join(repoPath, '.tekon', 'demands');
-  if (!existsSync(demandsDir)) {
-    return [];
+  const candidates: Array<{
+    path: string;
+    shape: DemandShape;
+    mtimeMs: number;
+  }> = [];
+
+  const dirs = [
+    join(repoPath, '.tekon', 'drafts'),
+    join(repoPath, '.tekon', 'demands'),
+  ];
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir)) {
+      if (!entry.endsWith('.json')) continue;
+      const shapePath = join(dir, entry);
+      try {
+        candidates.push({
+          path: shapePath,
+          shape: readDemandShapeFile(shapePath),
+          mtimeMs: statSync(shapePath).mtimeMs,
+        });
+      } catch {
+        // Skip unreadable files
+      }
+    }
   }
-  return readdirSync(demandsDir)
-    .filter((entry) => entry.endsWith('.json'))
-    .map((entry) => {
-      const shapePath = join(demandsDir, entry);
-      return {
-        path: shapePath,
-        shape: readDemandShapeFile(shapePath),
-        mtimeMs: statSync(shapePath).mtimeMs,
-      };
-    })
-    .sort((left, right) => {
-      const createdCompare = right.shape.createdAt.localeCompare(
-        left.shape.createdAt,
-      );
-      if (createdCompare !== 0) {
-        return createdCompare;
-      }
-      const mtimeCompare = right.mtimeMs - left.mtimeMs;
-      if (mtimeCompare !== 0) {
-        return mtimeCompare;
-      }
-      return right.path.localeCompare(left.path);
-    });
+
+  return candidates.sort((left, right) => {
+    const createdCompare = right.shape.createdAt.localeCompare(
+      left.shape.createdAt,
+    );
+    if (createdCompare !== 0) {
+      return createdCompare;
+    }
+    const mtimeCompare = right.mtimeMs - left.mtimeMs;
+    if (mtimeCompare !== 0) {
+      return mtimeCompare;
+    }
+    return right.path.localeCompare(left.path);
+  });
 }
 
 function selectLatestRunId(db: TekonDatabase): string | null {
@@ -2585,7 +2701,18 @@ function initializeProject(repoPath: string, io: CliIO): void {
   if (!existsSync(profilePath)) {
     writeDefaultRepoProfile(repoPath);
   }
-  io.stdout.write(`initialized repo=${repoPath}\n`);
+  io.stdout.write(
+    [
+      '项目初始化完成',
+      `仓库路径: ${repoPath}`,
+      '',
+      '后续操作:',
+      '  tekon draft new <需求描述>  创建需求草稿',
+      '  tekon role list               查看可用角色',
+      '  tekon workflow list           查看可用工作流',
+      '',
+    ].join('\n'),
+  );
 }
 
 async function ensureInitialized(repoPath: string, io: CliIO): Promise<void> {

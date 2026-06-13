@@ -32,10 +32,10 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   // ── Fetch demand detail when shapePath is provided ──
   const { data: demandDetail } = useQuery<
-    RpcProcedureMap['demand.detail']['output']
+    RpcProcedureMap['draftShape.detail']['output']
   >(
-    shapePath && token ? `demand.detail:${shapePath}` : null,
-    () => rpc.call('demand.detail', { shapePath, token: token! }),
+    shapePath && token ? `draftShape.detail:${shapePath}` : null,
+    () => rpc.call('draftShape.detail', { shapePath, token: token! }),
   );
 
   // ── Local form state ──

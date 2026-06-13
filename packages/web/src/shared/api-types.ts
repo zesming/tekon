@@ -23,8 +23,17 @@ import {
   deliveryCreatePrOutputSchema,
   deliveryDryRunOutputSchema,
   deliveryPrepareOutputSchema,
+  draftShapeApproveInputSchema,
+  draftShapeApproveOutputSchema,
+  draftShapeDetailInputSchema,
+  draftShapeDetailOutputSchema,
+  draftShapeInputSchema,
+  draftShapeOutputSchema,
+  // Deprecated — kept for backward compatibility
   demandApproveInputSchema,
   demandApproveOutputSchema,
+  demandDetailInputSchema,
+  demandDetailOutputSchema,
   demandShapeInputSchema,
   demandShapeOutputSchema,
   artifactListOutputSchema,
@@ -134,8 +143,16 @@ export type ApiWorkflowItem = z.infer<typeof workflowItemSchema>;
 export type TokenRunInput = z.infer<typeof tokenRunInputSchema>;
 export type ProjectRunInput = z.infer<typeof projectRunInputSchema>;
 export type ProjectDetailInput = z.infer<typeof projectDetailInputSchema>;
-export type DemandShapeInput = z.infer<typeof demandShapeInputSchema>;
-export type DemandApproveInput = z.infer<typeof demandApproveInputSchema>;
+export type DraftShapeInput = z.infer<typeof draftShapeInputSchema>;
+export type DraftShapeApproveInput = z.infer<typeof draftShapeApproveInputSchema>;
+export type DraftShapeDetailInput = z.infer<typeof draftShapeDetailInputSchema>;
+
+/** @deprecated Use {@link DraftShapeInput} instead */
+export type DemandShapeInput = DraftShapeInput;
+/** @deprecated Use {@link DraftShapeApproveInput} instead */
+export type DemandApproveInput = DraftShapeApproveInput;
+/** @deprecated Use {@link DraftShapeDetailInput} instead */
+export type DemandDetailInput = DraftShapeDetailInput;
 export type DeliveryCreatePrInput = z.infer<typeof deliveryCreatePrInputSchema>;
 export type DeliveryCiStatusInput = z.infer<typeof deliveryCiStatusInputSchema>;
 export type DecisionInput = z.infer<typeof decisionInputSchema>;
@@ -153,8 +170,16 @@ export type ProjectDetailOutput = z.infer<typeof projectDetailOutputSchema>;
 export type RunWrapperOutput = z.infer<typeof runWrapperOutputSchema>;
 export type ProjectCleanOutput = z.infer<typeof projectCleanOutputSchema>;
 
-export type DemandShapeOutput = z.infer<typeof demandShapeOutputSchema>;
-export type DemandApproveOutput = z.infer<typeof demandApproveOutputSchema>;
+export type DraftShapeOutput = z.infer<typeof draftShapeOutputSchema>;
+export type DraftShapeDetailOutput = z.infer<typeof draftShapeDetailOutputSchema>;
+export type DraftShapeApproveOutput = z.infer<typeof draftShapeApproveOutputSchema>;
+
+/** @deprecated Use {@link DraftShapeOutput} instead */
+export type DemandShapeOutput = DraftShapeOutput;
+/** @deprecated Use {@link DraftShapeDetailOutput} instead */
+export type DemandDetailOutput = DraftShapeDetailOutput;
+/** @deprecated Use {@link DraftShapeApproveOutput} instead */
+export type DemandApproveOutput = DraftShapeApproveOutput;
 
 export type DeliveryPrepareOutput = z.infer<
   typeof deliveryPrepareOutputSchema

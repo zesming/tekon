@@ -84,7 +84,7 @@ export function DecisionForm({
             ? '处理中...'
             : pendingAction === 'approve'
               ? '确认批准?'
-              : '✓ Approve'}
+              : '✓ 批准'}
         </button>
         <button
           type="button"
@@ -96,7 +96,7 @@ export function DecisionForm({
             ? '处理中...'
             : pendingAction === 'reject'
               ? '确认拒绝?'
-              : '✗ Reject'}
+              : '✗ 拒绝'}
         </button>
       </div>
     </div>

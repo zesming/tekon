@@ -25,7 +25,7 @@ describe('tekon cli e2e', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
 
     const initOutput = runCli(cliPath, ['init', '--repo', repoPath], repoPath);
-    expect(initOutput).toContain('initialized');
+    expect(initOutput).toContain('项目初始化完成');
     expect(existsSync(join(repoPath, '.tekon', 'config.yaml'))).toBe(true);
     expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
     expect(existsSync(join(repoPath, '.tekon', 'web-session.json'))).toBe(true);

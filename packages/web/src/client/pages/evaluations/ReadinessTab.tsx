@@ -146,7 +146,7 @@ export function ReadinessTab() {
             <EvalScoreCard
               score={readiness.score}
               ready={readiness.ready}
-              label="Work Readiness Score"
+              label="工作就绪度"
             />
           </div>
 
@@ -191,7 +191,7 @@ export function ReadinessTab() {
                     className={`badge ${prePrReadiness.ready ? 'badge-passed' : 'badge-failed'}`}
                     style={{ marginLeft: 8 }}
                   >
-                    {prePrReadiness.ready ? 'Ready' : 'Not Ready'}
+                    {prePrReadiness.ready ? '就绪' : '未就绪'}
                   </span>
                 </span>
               </div>
