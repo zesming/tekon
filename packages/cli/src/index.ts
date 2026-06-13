@@ -1881,9 +1881,8 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
       runId,
       ...((args.values['draft-type'] ?? args.values['demand-type'])
         ? {
-            demandType: args.values[
-              'demand-type'
-            ] as WorkUsabilitySample['demandType'],
+            demandType: (args.values['draft-type'] ??
+              args.values['demand-type']) as WorkUsabilitySample['demandType'],
           }
         : {}),
       ...(provider
@@ -2184,11 +2183,11 @@ async function commandClean(argv: string[], io: CliIO) {
   const worktreesDir = join(repoPath, '.tekon', 'worktrees');
   let cleaned = 0;
   if (existsSync(worktreesDir)) {
+    cleaned = readdirSync(worktreesDir).length;
     rmSync(worktreesDir, { force: true, recursive: true });
-    cleaned = 0;
   }
   mkdirSync(worktreesDir, { recursive: true });
-  io.stdout.write(`cleaned worktrees=${cleaned}\n`);
+  io.stdout.write(`清理工作树: ${cleaned} 个\n`);
 }
 
 function resolveTekonRoot(): string {
@@ -2666,6 +2665,9 @@ function readStdinLine(): Promise<string> {
     stdin.once('data', (data) => {
       stdin.pause();
       resolve(String(data).trim());
+    });
+    stdin.once('close', () => {
+      resolve('');
     });
   });
 }

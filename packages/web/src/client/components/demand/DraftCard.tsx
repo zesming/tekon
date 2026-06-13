@@ -131,7 +131,7 @@ export function DraftCard({
               <span
                 className={`shape-tag ${RISK_CLASS[shape.risk.level]}`}
               >
-                {riskLabel}
+                {getRiskLabel(shape.risk.level)}
               </span>
               <span className="shape-tag template">
                 {shape.recommendedTemplate}
