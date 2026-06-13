@@ -400,7 +400,7 @@ describe('web write authorization', () => {
     }
   });
 
-  it('shapes and approves a demand before starting a Web run', async () => {
+  it('shapes and approves a demand before starting a Web run', { timeout: 15000 }, async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });

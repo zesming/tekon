@@ -28,8 +28,13 @@ describe('workflow engine role prompt integration', () => {
   it('injects role system prompt, skills, tools, knowledge, and project context into agent input', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-prompt-repo-'));
     const rolesDir = mkdtempSync(join(tmpdir(), 'tekon-engine-prompt-roles-'));
-    tempDirs.push(repoPath, rolesDir);
+    const userHome = mkdtempSync(join(tmpdir(), 'tekon-engine-prompt-home-'));
+    tempDirs.push(repoPath, rolesDir, userHome);
     writeRoleFixture(rolesDir);
+    // Isolate from the real ~/.tekon/roles/ so the test fixture "Test RD" is
+    // not overridden by the machine-local "Research and Development" role.
+    const savedHome = process.env.HOME;
+    process.env.HOME = userHome;
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -92,14 +97,18 @@ describe('workflow engine role prompt integration', () => {
       },
     });
 
-    expect(prompts[0]).toContain('# Role: Test RD');
-    expect(prompts[0]).toContain('RD system instructions');
-    expect(prompts[0]).toContain('skill body');
-    expect(prompts[0]).toContain('knowledge body');
-    expect(prompts[0]).toContain('repoPath:');
-    expect(prompts[0]).toContain('修改任务重试逻辑');
-    expect(prompts[0]).toContain('Execute workflow node');
-    db.close();
+    try {
+      expect(prompts[0]).toContain('# Role: Test RD');
+      expect(prompts[0]).toContain('RD system instructions');
+      expect(prompts[0]).toContain('skill body');
+      expect(prompts[0]).toContain('knowledge body');
+      expect(prompts[0]).toContain('repoPath:');
+      expect(prompts[0]).toContain('修改任务重试逻辑');
+      expect(prompts[0]).toContain('Execute workflow node');
+    } finally {
+      process.env.HOME = savedHome;
+      db.close();
+    }
   });
 
   it('adds artifact boundary and exit instructions for nodes with required artifacts', async () => {
