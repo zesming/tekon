@@ -67,20 +67,23 @@
 
 ## 快速开始
 
-仓库使用 `pnpm@10.12.1`。在 Tekon 源码仓库根目录安装依赖并构建：
+### 安装 Tekon
+
+一键安装：
 
 ```bash
-npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
-npm exec --yes -- pnpm@10.12.1 build
+curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-构建后，本地 CLI 入口是：
+安装脚本会自动克隆仓库、安装依赖、构建项目，并将 `tekon` 命令配置到 PATH。完成后执行 `source ~/.zshrc`（或 `~/.bashrc`）即可使用。
 
-```bash
-node packages/cli/dist/index.js
-```
+前置依赖：`git`、`node`（>=18）、`npm`。
 
-如果 `tekon` 已在 `PATH` 中，以下命令可直接使用 `tekon`。示例默认在目标项目根目录执行；跨仓库操作时追加 `--repo /path/to/project`。
+详细说明见 [scripts/install.sh](scripts/install.sh)。
+
+### 开始使用
+
+以下示例默认在目标项目根目录执行；跨仓库操作时追加 `--repo /path/to/project`。
 
 初始化目标仓库：
 

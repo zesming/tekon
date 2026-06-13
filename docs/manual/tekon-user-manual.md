@@ -166,24 +166,35 @@
 
 以下示例假设 `tekon` 已安装到 PATH，并且你正在目标项目根目录执行命令。没有全局安装时，可用 `node /path/to/tekon/packages/cli/dist/index.js` 替换 `tekon`；从其它目录操作目标仓库时，再显式追加 `--repo /path/to/project`。
 
-### 4.1 安装和构建
+### 4.1 安装
+
+一键安装（推荐）：
 
 ```bash
-npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
-npm exec --yes -- pnpm@10.12.1 build
+curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-构建后 CLI 路径：
+安装脚本会自动完成：克隆仓库 → 安装依赖 → 构建项目 → 配置 `tekon` 命令到 PATH。
 
-```bash
-node packages/cli/dist/index.js
-```
-
-如果将 CLI 安装到 PATH，命令名是：
+安装完成后，执行 `source ~/.zshrc`（或 `~/.bashrc`）使 PATH 生效，即可在任意目录使用：
 
 ```bash
 tekon
 ```
+
+如需指定安装目录或分支：
+
+```bash
+TEKON_HOME=/opt/tekon TEKON_VERSION=main curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
+```
+
+如果不想配置 PATH，也可以直接用 node 执行：
+
+```bash
+node ~/.tekon/packages/cli/dist/index.js
+```
+
+前置依赖：`git`、`node`（>=18）、`npm`。脚本会自动检测，缺少时会给出安装指引。
 
 本文默认使用 `tekon` 示例，重点展示普通用户的最短路径。
 
