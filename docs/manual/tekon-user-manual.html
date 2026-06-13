@@ -336,7 +336,7 @@ function flowSVG_workflow(){
 <rect x="710" y="45" width="90" height="40" class="flow-box jade" rx="4"/><text x="755" y="63" class="flow-label">Delivery</text><text x="755" y="77" class="flow-label cn">交付准备</text>
 </svg></div>`}
 
-function scenarioFlowSVG(title,steps){
+function scenarioFlowSVG(title,desc,steps){
   // Two-row horizontal layout: top=Human (gold), bottom=Agent (jade)
   const BW=156,BH=38,G=10,MX=80,ROW_H=54,ROW_A=122,W=900;
   let xH=MX,xA=MX,svg='',maxX=MX,prev=null;
