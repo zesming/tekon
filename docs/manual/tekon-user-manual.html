@@ -385,7 +385,7 @@ function commandsHTML_EN(){
 const T = {
   zh: {
     sections: [
-      {num:"01",title:"天工是什么",sub:"天工（Tekon）是一个本地 Agent workflow 框架——一个"受控研发工作台"。",
+      {num:"01",title:"天工是什么",sub:"天工（Tekon）是一个本地 Agent workflow 框架——一个“受控研发工作台”。",
        html:`
 <p>天工（Tekon）是一个本地 Agent workflow 框架——一个"受控研发工作台"：用户把研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。</p>
 <p>天工的核心目标是<strong>增强人类交付能力</strong>。它帮助你把需求推进到"可以人工审阅、可以准备 PR、可以继续验证"的状态；合入、上线、权限扩大、生产变更仍然由人控制。</p>
@@ -500,7 +500,7 @@ ${flowSVG_workflow()}
 <div class="callout callout-warn"><span class="callout-label">Session Token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
 <p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>
 `},
-      {num:"08",title:"如何判断结果是否可信",sub:"不要只看"命令退出 0"。建议按顺序看。",
+      {num:"08",title:"如何判断结果是否可信",sub:"不要只看“命令退出 0”。建议按顺序看。",
        html:`
 <ol class="scenario-steps" style="padding-left:0">
 <li style="padding-left:28px"><code>status</code>：workflow 是否 passed。</li>
