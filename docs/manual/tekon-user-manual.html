@@ -1,564 +1,826 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>天工 Tekon — 用户使用手册</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>天工 Tekon — User Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet"/>
 <style>
-:root {
-  --ink-deepest: #08090d; --ink-deep: #0e1018; --ink-mid: #161822;
-  --ink-light: #1e2030; --ink-faint: #282a3a; --ink-whisper: #353849;
-  --vermillion: #c43a31; --vermillion-bright: #e8503a; --vermillion-glow: #ff6b52; --vermillion-deep: #8b1a12;
-  --gold: #c9a96e; --gold-bright: #e8c88a; --gold-dim: #8a7a4e;
-  --jade: #4a9e7a; --jade-bright: #5ec49a; --jade-dim: #2a6e52;
-  --paper: #e8e0d0; --paper-bright: #f2ece0; --paper-dim: #c8bfae; --paper-faint: #a89e8e;
-  --text-primary: #d8d0c2; --text-secondary: #9a9488; --text-dim: #6a655e; --text-bright: #f0e8da;
-  --code-bg: #0c0d14; --code-border: #2a2c3e;
-  --sidebar-w: 280px; --header-h: 64px; --content-max: 900px;
-  --font-display: 'Noto Serif SC','Songti SC',serif;
-  --font-body: 'LXGW WenKai','PingFang SC','Microsoft YaHei',sans-serif;
-  --font-mono: 'JetBrains Mono','Fira Code','Consolas',monospace;
-  --ease-out-expo: cubic-bezier(0.16,1,0.3,1); --ease-spring: cubic-bezier(0.34,1.56,0.64,1);
+:root{
+  --ink-deepest:#08090d;--ink-deep:#0e1018;--ink-mid:#161822;--ink-light:#1e2030;
+  --ink-faint:#282a3a;--ink-whisper:#353849;
+  --vermillion:#c43a31;--vermillion-bright:#e8503a;--vermillion-glow:#ff6b52;--vermillion-deep:#8b1a12;
+  --gold:#c9a96e;--gold-bright:#e8c88a;--gold-dim:#8a7a4e;
+  --jade:#4a9e7a;--jade-bright:#5ec49a;--jade-dim:#2a6e52;
+  --paper:#e8e0d0;--paper-bright:#f2ece0;--paper-dim:#c8bfae;--paper-faint:#a89e8e;
+  --text-primary:#d8d0c2;--text-secondary:#9a9488;--text-dim:#6a655e;--text-bright:#f0e8da;
+  --code-bg:#0c0d14;--code-border:#2a2c3e;
+  --sidebar-w:260px;--header-h:60px;--content-max:880px;
+  --font-display:'Noto Serif SC','Songti SC',serif;
+  --font-en:'Playfair Display','Georgia',serif;
+  --font-body:'LXGW WenKai','PingFang SC','Microsoft YaHei',sans-serif;
+  --font-mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+  --ease-out-expo:cubic-bezier(0.16,1,0.3,1);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px;scroll-behavior:smooth;scroll-padding-top:calc(var(--header-h) + 24px)}
+html{font-size:16px}
 body{font-family:var(--font-body);background:var(--ink-deepest);color:var(--text-primary);line-height:1.8;overflow-x:hidden;min-height:100vh}
 body::before{content:'';position:fixed;inset:0;opacity:.035;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;pointer-events:none;z-index:9999}
-::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--ink-whisper);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:var(--gold-dim)}
 ::selection{background:var(--vermillion);color:var(--paper-bright)}
-.site-header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:rgba(8,9,13,.88);backdrop-filter:blur(20px)saturate(1.2);-webkit-backdrop-filter:blur(20px)saturate(1.2);border-bottom:1px solid rgba(201,169,110,.08);z-index:1000;display:flex;align-items:center;padding:0 32px}
+
+/* Header */
+.site-header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:rgba(8,9,13,.9);backdrop-filter:blur(20px)saturate(1.2);-webkit-backdrop-filter:blur(20px)saturate(1.2);border-bottom:1px solid rgba(201,169,110,.08);z-index:1000;display:flex;align-items:center;padding:0 24px}
 .header-inner{display:flex;align-items:center;justify-content:space-between;width:100%}
-.brand{display:flex;align-items:center;gap:16px}
-.brand-seal{width:40px;height:40px;background:var(--vermillion);border-radius:4px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:900;font-size:18px;color:var(--paper-bright);letter-spacing:-1px;box-shadow:0 2px 12px rgba(196,58,49,.3);transform:rotate(-2deg);position:relative}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-seal{width:36px;height:36px;background:var(--vermillion);border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:900;font-size:16px;color:var(--paper-bright);box-shadow:0 2px 10px rgba(196,58,49,.3);transform:rotate(-2deg);position:relative;flex-shrink:0}
 .brand-seal::after{content:'';position:absolute;inset:2px;border:1px solid rgba(255,255,255,.15);border-radius:2px}
 .brand-text{display:flex;flex-direction:column;line-height:1.2}
-.brand-zh{font-family:var(--font-display);font-weight:700;font-size:17px;color:var(--text-bright);letter-spacing:2px}
-.brand-en{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--gold);letter-spacing:3px;text-transform:uppercase}
-.header-meta{display:flex;align-items:center;gap:20px;font-size:12px;color:var(--text-dim);font-family:var(--font-mono)}
-.header-badge{padding:4px 10px;border:1px solid var(--ink-whisper);border-radius:3px;font-size:11px;color:var(--text-secondary);letter-spacing:.5px}
+.brand-zh{font-family:var(--font-display);font-weight:700;font-size:15px;color:var(--text-bright);letter-spacing:2px}
+.brand-en{font-family:var(--font-mono);font-size:9px;font-weight:500;color:var(--gold);letter-spacing:2.5px;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:16px}
+.lang-toggle{display:flex;border:1px solid var(--ink-whisper);border-radius:3px;overflow:hidden}
+.lang-btn{padding:5px 12px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-mono);font-size:11px;cursor:pointer;transition:all .2s;letter-spacing:.5px}
+.lang-btn.active{background:var(--vermillion);color:var(--paper-bright)}
+.lang-btn:hover:not(.active){color:var(--text-primary);background:rgba(201,169,110,.06)}
+.header-badge{padding:3px 10px;border:1px solid var(--ink-whisper);border-radius:3px;font-size:10px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:.5px}
+.mobile-menu-btn{display:none;background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;padding:4px 8px}
+
+/* Layout */
 .layout{display:flex;margin-top:var(--header-h);min-height:calc(100vh - var(--header-h))}
-.sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:var(--header-h);left:0;bottom:0;background:var(--ink-deep);border-right:1px solid rgba(201,169,110,.06);overflow-y:auto;padding:24px 0;z-index:100}
-.nav-group{margin-bottom:8px}
-.nav-group-label{font-family:var(--font-display);font-size:11px;font-weight:600;color:var(--gold-dim);letter-spacing:3px;text-transform:uppercase;padding:12px 24px 8px;display:flex;align-items:center;gap:8px}
-.nav-group-label::before{content:'';width:3px;height:12px;background:var(--gold-dim);border-radius:1px;opacity:.5}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 24px 9px 34px;cursor:pointer;color:var(--text-secondary);font-size:14px;transition:all .2s ease;position:relative;user-select:none;border-left:2px solid transparent;text-decoration:none}
-.nav-item:hover{color:var(--text-primary);background:rgba(201,169,110,.03)}
-.nav-item.active{color:var(--gold-bright);background:rgba(201,169,110,.06);border-left-color:var(--gold)}
-.nav-item .nav-num{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--text-dim);min-width:20px;opacity:.6}
-.nav-item.active .nav-num{color:var(--gold);opacity:1}
-.nav-divider{height:1px;background:rgba(201,169,110,.06);margin:12px 24px}
+
+/* Sidebar */
+.sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:var(--header-h);left:0;bottom:0;background:var(--ink-deep);border-right:1px solid rgba(201,169,110,.06);overflow-y:auto;padding:16px 0;z-index:100}
+.sidebar.show{display:block!important}
+.nav-section{margin-bottom:4px}
+.nav-section-label{font-family:var(--font-display);font-size:10px;font-weight:600;color:var(--gold-dim);letter-spacing:2.5px;text-transform:uppercase;padding:10px 20px 6px;display:flex;align-items:center;gap:6px;opacity:.7}
+.nav-section-label::before{content:'';width:3px;height:10px;background:var(--gold-dim);border-radius:1px;opacity:.5}
+.nav-tab{display:flex;align-items:center;gap:8px;padding:8px 20px 8px 28px;cursor:pointer;color:var(--text-secondary);font-size:13px;transition:all .15s ease;border-left:2px solid transparent;user-select:none;text-decoration:none}
+.nav-tab:hover{color:var(--text-primary);background:rgba(201,169,110,.025)}
+.nav-tab.active{color:var(--gold-bright);background:rgba(201,169,110,.05);border-left-color:var(--gold)}
+.nav-tab .tab-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-whisper);flex-shrink:0;transition:background .2s}
+.nav-tab.active .tab-dot{background:var(--vermillion);box-shadow:0 0 6px rgba(196,58,49,.4)}
+.nav-tab .tab-num{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);min-width:16px;opacity:.5}
+.nav-tab.active .tab-num{color:var(--gold);opacity:1}
+.nav-divider{height:1px;background:rgba(201,169,110,.05);margin:8px 20px}
+
+/* Content Area */
 .content-area{margin-left:var(--sidebar-w);flex:1;min-height:calc(100vh - var(--header-h))}
-.content-inner{max-width:var(--content-max);margin:0 auto;padding:48px 48px 120px}
-.section{margin-bottom:80px;scroll-margin-top:calc(var(--header-h) + 24px)}
-.section-header{margin-bottom:40px;padding-bottom:32px;border-bottom:1px solid rgba(201,169,110,.1);position:relative}
-.section-header::after{content:'';position:absolute;bottom:-1px;left:0;width:60px;height:2px;background:var(--vermillion)}
-.section-number{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--vermillion);letter-spacing:2px;margin-bottom:8px;display:block}
-.section-title{font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--text-bright);line-height:1.3;letter-spacing:1px}
-.section-subtitle{font-size:15px;color:var(--text-secondary);margin-top:12px;line-height:1.7}
-h3{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--text-bright);margin:48px 0 20px;padding-left:16px;border-left:3px solid var(--vermillion);line-height:1.4}
-h4{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--gold-bright);margin:32px 0 14px}
-p{margin-bottom:16px;font-size:15px;line-height:1.9;color:var(--text-primary)}
+
+/* Tab Panels */
+.tab-panel{display:none;max-width:var(--content-max);margin:0 auto;padding:40px 44px 100px;animation:fadeSlideIn .35s var(--ease-out-expo)}
+.tab-panel.active{display:block}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* Section Header */
+.section-header{margin-bottom:36px;padding-bottom:28px;border-bottom:1px solid rgba(201,169,110,.1);position:relative}
+.section-header::after{content:'';position:absolute;bottom:-1px;left:0;width:48px;height:2px;background:var(--vermillion)}
+.section-num{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--vermillion);letter-spacing:2px;margin-bottom:6px;display:block}
+.section-title{font-family:var(--font-display);font-size:30px;font-weight:700;color:var(--text-bright);line-height:1.3;letter-spacing:1px}
+.section-subtitle{font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.7}
+h3{font-family:var(--font-display);font-size:20px;font-weight:600;color:var(--text-bright);margin:40px 0 16px;padding-left:14px;border-left:3px solid var(--vermillion);line-height:1.4}
+h4{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--gold-bright);margin:28px 0 12px}
+p{margin-bottom:14px;font-size:14px;line-height:1.85;color:var(--text-primary)}
 strong{color:var(--text-bright);font-weight:600}
-a{color:var(--gold-bright);text-decoration:none;border-bottom:1px solid rgba(201,169,110,.2);transition:border-color .2s}
-a:hover{border-bottom-color:var(--gold-bright)}
-ul,ol{margin:12px 0 20px 0;padding-left:24px}
-li{margin-bottom:8px;font-size:15px;line-height:1.8;color:var(--text-primary)}
+ul,ol{margin:10px 0 18px 0;padding-left:22px}
+li{margin-bottom:6px;font-size:14px;line-height:1.8;color:var(--text-primary)}
 li::marker{color:var(--gold-dim)}
-code:not(pre code){font-family:var(--font-mono);font-size:13px;background:rgba(201,169,110,.08);color:var(--gold-bright);padding:2px 7px;border-radius:3px;border:1px solid rgba(201,169,110,.1);white-space:nowrap}
-pre{background:var(--code-bg);border:1px solid var(--code-border);border-radius:6px;padding:20px 24px;margin:16px 0 24px;overflow-x:auto;position:relative}
-pre::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--vermillion),var(--gold-dim),transparent);border-radius:6px 6px 0 0;opacity:.6}
-pre code{font-family:var(--font-mono);font-size:13px;line-height:1.7;color:var(--text-primary);background:none;border:none;padding:0;white-space:pre-wrap;word-break:break-word}
-.kw{color:var(--vermillion-bright)}.cmd{color:var(--jade-bright)}.arg{color:var(--gold-bright)}.str{color:#a8d4a0}.cmt{color:var(--text-dim);font-style:italic}.flag{color:#80b4f0}.path{color:var(--paper-dim)}.num{color:#d4a0d4}
-.table-wrap{overflow-x:auto;margin:16px 0 28px;border-radius:6px;border:1px solid var(--ink-faint)}
-table{width:100%;border-collapse:collapse;font-size:14px}
-thead{background:rgba(201,169,110,.06)}
-th{font-family:var(--font-display);font-weight:600;color:var(--gold-bright);text-align:left;padding:12px 16px;border-bottom:1px solid var(--ink-faint);white-space:nowrap;font-size:13px;letter-spacing:.5px}
-td{padding:10px 16px;border-bottom:1px solid rgba(40,42,58,.5);color:var(--text-primary);vertical-align:top}
+code:not(pre code){font-family:var(--font-mono);font-size:12px;background:rgba(201,169,110,.08);color:var(--gold-bright);padding:2px 6px;border-radius:3px;border:1px solid rgba(201,169,110,.1);white-space:nowrap}
+pre{background:var(--code-bg);border:1px solid var(--code-border);border-radius:5px;padding:16px 20px;margin:14px 0 20px;overflow-x:auto;position:relative}
+pre::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--vermillion),var(--gold-dim),transparent);border-radius:5px 5px 0 0;opacity:.5}
+pre code{font-family:var(--font-mono);font-size:12.5px;line-height:1.65;color:var(--text-primary);background:none;border:none;padding:0;white-space:pre-wrap;word-break:break-word}
+.cmd{color:var(--jade-bright)}.arg{color:var(--gold-bright)}.str{color:#a8d4a0}.flag{color:#80b4f0}.path{color:var(--paper-dim)}.cmt{color:var(--text-dim);font-style:italic}.kw{color:var(--vermillion-bright)}.num{color:#d4a0d4}
+
+/* Tables */
+.table-wrap{overflow-x:auto;margin:14px 0 24px;border-radius:5px;border:1px solid var(--ink-faint)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:rgba(201,169,110,.05)}
+th{font-family:var(--font-display);font-weight:600;color:var(--gold-bright);text-align:left;padding:10px 14px;border-bottom:1px solid var(--ink-faint);white-space:nowrap;font-size:12px;letter-spacing:.5px}
+td{padding:8px 14px;border-bottom:1px solid rgba(40,42,58,.4);color:var(--text-primary);vertical-align:top}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(201,169,110,.02)}
-td code{font-size:12px}
-.callout{border-radius:6px;padding:16px 20px;margin:20px 0;font-size:14px;line-height:1.7;border-left:3px solid}
-.callout-warn{background:rgba(196,58,49,.06);border-color:var(--vermillion)}
-.callout-info{background:rgba(74,158,122,.06);border-color:var(--jade)}
-.callout-tip{background:rgba(201,169,110,.06);border-color:var(--gold)}
-.callout-label{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;display:block}
+tr:hover td{background:rgba(201,169,110,.015)}
+td code{font-size:11px}
+
+/* Callouts */
+.callout{border-radius:5px;padding:14px 18px;margin:16px 0;font-size:13px;line-height:1.7;border-left:3px solid}
+.callout-warn{background:rgba(196,58,49,.05);border-color:var(--vermillion)}
+.callout-info{background:rgba(74,158,122,.05);border-color:var(--jade)}
+.callout-tip{background:rgba(201,169,110,.05);border-color:var(--gold)}
+.callout-label{font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;display:block}
 .callout-warn .callout-label{color:var(--vermillion-bright)}
 .callout-info .callout-label{color:var(--jade-bright)}
 .callout-tip .callout-label{color:var(--gold-bright)}
-.scenario-card{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:8px;padding:24px 28px;margin:20px 0;position:relative;overflow:hidden}
-.scenario-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:linear-gradient(180deg,var(--vermillion),var(--gold-dim))}
-.scenario-label{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--vermillion-bright);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
-.scenario-title{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--text-bright);margin-bottom:12px}
+
+/* Flow Diagrams */
+.flow-diagram{margin:20px 0 28px;padding:24px;background:var(--code-bg);border:1px solid var(--code-border);border-radius:6px;overflow-x:auto}
+.flow-diagram svg{display:block;max-width:100%;height:auto}
+.flow-box{fill:var(--ink-mid);stroke:var(--ink-whisper);stroke-width:1;rx:4}
+.flow-box.active{fill:rgba(196,58,49,.12);stroke:var(--vermillion);stroke-width:1.5}
+.flow-box.gold{fill:rgba(201,169,110,.08);stroke:var(--gold-dim)}
+.flow-box.jade{fill:rgba(74,158,122,.08);stroke:var(--jade-dim)}
+.flow-label{font-family:var(--font-mono);font-size:11px;fill:var(--text-primary);text-anchor:middle}
+.flow-label.title{font-family:var(--font-display);font-size:12px;font-weight:600;fill:var(--text-bright)}
+.flow-label.cn{font-family:var(--font-body);font-size:9px;fill:var(--text-secondary)}
+.flow-arrow{stroke:var(--gold-dim);stroke-width:1;fill:none;marker-end:url(#arrowhead)}
+.flow-arrow.vermillion{stroke:var(--vermillion)}
+/* Pipeline specific */
+.pipe-box{fill:var(--ink-mid);stroke:var(--ink-whisper);stroke-width:1;rx:3}
+.pipe-box.highlight{fill:rgba(196,58,49,.1);stroke:var(--vermillion);stroke-width:1.5}
+.pipe-label{font-family:var(--font-mono);font-size:10px;fill:var(--gold-bright);text-anchor:middle}
+.pipe-desc{font-family:var(--font-body);font-size:9px;fill:var(--text-secondary);text-anchor:middle}
+.pipe-arrow{stroke:var(--ink-whisper);stroke-width:1.5;fill:none;marker-end:url(#arrowhead)}
+
+/* Concept Grid */
+.concept-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin:18px 0 28px}
+.concept-card{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:5px;padding:18px;transition:all .2s ease}
+.concept-card:hover{border-color:var(--gold-dim);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.concept-card h4{margin:0 0 6px;font-size:15px}
+.concept-card p{font-size:12.5px;color:var(--text-secondary);margin:0;line-height:1.7}
+
+/* Scenario Cards */
+.scenario-card{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:7px;padding:20px 24px;margin:16px 0;position:relative;overflow:hidden}
+.scenario-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:linear-gradient(180deg,var(--vermillion),var(--gold-dim))}
+.scenario-label{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--vermillion-bright);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px}
+.scenario-title{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--text-bright);margin-bottom:8px}
 .scenario-steps{counter-reset:step;list-style:none;padding-left:0}
-.scenario-steps li{counter-increment:step;padding-left:32px;position:relative;margin-bottom:10px}
-.scenario-steps li::before{content:counter(step);position:absolute;left:0;top:2px;width:20px;height:20px;background:var(--ink-faint);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--gold)}
-.concept-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin:20px 0 32px}
-.concept-card{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:6px;padding:20px;transition:all .25s ease}
-.concept-card:hover{border-color:var(--gold-dim);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2)}
-.concept-card h4{margin:0 0 8px;font-size:16px}
-.concept-card p{font-size:13px;color:var(--text-secondary);margin:0;line-height:1.7}
-.flow-diagram{background:var(--code-bg);border:1px solid var(--code-border);border-radius:6px;padding:24px;margin:20px 0 28px;overflow-x:auto}
-.flow-diagram code{font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--jade-bright);white-space:pre;background:none;border:none;padding:0}
-.content-footer{margin-top:64px;padding-top:32px;border-top:1px solid rgba(201,169,110,.08);text-align:center}
-.footer-seal{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;background:var(--vermillion-deep);border-radius:50%;font-family:var(--font-display);font-size:22px;font-weight:900;color:rgba(232,224,208,.3);border:2px solid rgba(196,58,49,.2);margin-bottom:12px}
-.footer-text{font-size:12px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:1px}
-.tag-list{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 20px}
-.tag{font-family:var(--font-mono);font-size:11px;padding:4px 10px;border-radius:3px;border:1px solid}
-.tag-red{border-color:var(--vermillion-deep);color:var(--vermillion-bright);background:rgba(196,58,49,.08)}
-.tag-gold{border-color:var(--gold-dim);color:var(--gold-bright);background:rgba(201,169,110,.08)}
-.tag-jade{border-color:var(--jade-dim);color:var(--jade-bright);background:rgba(74,158,122,.08)}
-.cmd-block{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:8px;margin:20px 0 28px;overflow:hidden}
-.cmd-block-header{background:rgba(201,169,110,.04);padding:10px 20px;border-bottom:1px solid var(--ink-faint);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cmd-block-header .cmd-name{font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--jade-bright)}
-.cmd-block-header .cmd-desc{font-size:13px;color:var(--text-secondary);margin-left:auto}
+.scenario-steps li{counter-increment:step;padding-left:28px;position:relative;margin-bottom:7px;font-size:13px}
+.scenario-steps li::before{content:counter(step);position:absolute;left:0;top:1px;width:18px;height:18px;background:var(--ink-faint);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:9px;font-weight:700;color:var(--gold)}
+
+/* Command Block */
+.cmd-block{background:var(--ink-mid);border:1px solid var(--ink-faint);border-radius:6px;margin:16px 0 24px;overflow:hidden}
+.cmd-block-header{background:rgba(201,169,110,.03);padding:8px 16px;border-bottom:1px solid var(--ink-faint);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cmd-block-header .cmd-name{font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--jade-bright)}
+.cmd-block-header .cmd-desc{font-size:12px;color:var(--text-secondary);margin-left:auto}
 .cmd-block pre{margin:0;border:none;border-radius:0}
 .cmd-block pre::before{display:none}
-.cmd-section{padding:16px 20px;border-top:1px solid var(--ink-faint)}
-.cmd-section-title{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
-.deco-line{width:40px;height:1px;background:var(--gold-dim);margin:32px 0;opacity:.4}
-.install-banner{background:linear-gradient(135deg,var(--ink-mid),rgba(196,58,49,.08));border:1px solid rgba(196,58,49,.15);border-radius:8px;padding:24px 28px;margin:20px 0 28px;position:relative;overflow:hidden}
-.install-banner::after{content:'';position:absolute;top:-40px;right:-40px;width:120px;height:120px;background:radial-gradient(circle,rgba(196,58,49,.1),transparent 70%);border-radius:50%;pointer-events:none}
-.install-banner-label{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--vermillion-bright);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px}
+.cmd-section{padding:12px 16px;border-top:1px solid var(--ink-faint)}
+.cmd-section-title{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+
+/* Tags */
+.tag-list{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 16px}
+.tag{font-family:var(--font-mono);font-size:10px;padding:3px 9px;border-radius:3px;border:1px solid}
+.tag-red{border-color:var(--vermillion-deep);color:var(--vermillion-bright);background:rgba(196,58,49,.06)}
+.tag-gold{border-color:var(--gold-dim);color:var(--gold-bright);background:rgba(201,169,110,.06)}
+.tag-jade{border-color:var(--jade-dim);color:var(--jade-bright);background:rgba(74,158,122,.06)}
+
+/* Install Banner */
+.install-banner{background:linear-gradient(135deg,var(--ink-mid),rgba(196,58,49,.06));border:1px solid rgba(196,58,49,.12);border-radius:6px;padding:20px 24px;margin:18px 0 24px;position:relative;overflow:hidden}
+.install-banner::after{content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;background:radial-gradient(circle,rgba(196,58,49,.08),transparent 70%);border-radius:50%;pointer-events:none}
+.install-label{font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--vermillion-bright);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px}
 .install-banner pre{margin:0;background:var(--ink-deepest)}
-.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(8,9,13,.95);backdrop-filter:blur(16px);border-top:1px solid var(--ink-faint);z-index:1000;overflow-x:auto;padding:8px;gap:4px}
-.mobile-nav-btn{flex-shrink:0;padding:8px 14px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-body);font-size:12px;cursor:pointer;border-radius:4px;white-space:nowrap}
-.mobile-nav-btn.active{background:var(--ink-faint);color:var(--gold-bright)}
-.mobile-menu-toggle{display:none;background:none;border:none;color:var(--text-secondary);font-size:24px;cursor:pointer;padding:4px 8px}
-.sidebar.show{display:block!important;position:fixed;top:var(--header-h);left:0;bottom:0;z-index:200;box-shadow:8px 0 32px rgba(0,0,0,.4)}
-@media (max-width:1024px){.sidebar{display:none}.content-area{margin-left:0}.content-inner{padding:32px 24px 100px}.mobile-menu-toggle{display:block}.mobile-nav{display:flex}.section-title{font-size:26px}h3{font-size:19px}}
-@media (max-width:640px){.content-inner{padding:24px 16px 100px}.section-title{font-size:22px}.header-meta{display:none}.site-header{padding:0 16px}.concept-grid{grid-template-columns:1fr}pre{padding:14px 16px}pre code{font-size:12px}}
+
+/* Footer */
+.content-footer{margin-top:56px;padding-top:28px;border-top:1px solid rgba(201,169,110,.07);text-align:center}
+.footer-seal{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;background:var(--vermillion-deep);border-radius:50%;font-family:var(--font-display);font-size:19px;font-weight:900;color:rgba(232,224,208,.25);border:2px solid rgba(196,58,49,.15);margin-bottom:10px}
+.footer-text{font-size:11px;color:var(--text-dim);font-family:var(--font-mono);letter-spacing:1px}
+
+/* Decorative */
+.deco-line{width:36px;height:1px;background:var(--gold-dim);margin:28px 0;opacity:.35}
+
+/* Mobile Nav */
+.mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(8,9,13,.96);backdrop-filter:blur(16px);border-top:1px solid var(--ink-faint);z-index:1000;overflow-x:auto;padding:6px 8px;gap:2px}
+.mobile-nav-btn{flex-shrink:0;padding:6px 10px;border:none;background:transparent;color:var(--text-secondary);font-family:var(--font-mono);font-size:10px;cursor:pointer;border-radius:3px;white-space:nowrap}
+.mobile-nav-btn.active{background:rgba(196,58,49,.15);color:var(--vermillion-bright)}
+
+/* EN mode overrides */
+html.en .brand-zh{font-size:13px}
+html.en h3{font-family:var(--font-en),var(--font-display),serif}
+html.en .section-title{font-family:var(--font-en),var(--font-display),serif}
+
+/* Responsive */
+@media(max-width:1024px){
+  .sidebar{display:none}
+  .sidebar.show{display:block!important;position:fixed;top:var(--header-h);left:0;bottom:0;z-index:200;box-shadow:8px 0 32px rgba(0,0,0,.4)}
+  .content-area{margin-left:0}
+  .tab-panel{padding:28px 20px 90px}
+  .mobile-menu-btn{display:block}
+  .mobile-nav{display:flex}
+  .section-title{font-size:24px}
+}
+@media(max-width:640px){
+  .tab-panel{padding:20px 14px 90px}
+  .section-title{font-size:20px}
+  h3{font-size:17px}
+  .header-badge{display:none}
+  .site-header{padding:0 14px}
+  .concept-grid{grid-template-columns:1fr}
+  pre{padding:12px 14px}
+  pre code{font-size:11px}
+}
 </style>
 </head>
 <body>
+
 <header class="site-header">
   <div class="header-inner">
     <div class="brand">
       <div class="brand-seal">天工</div>
-      <div class="brand-text"><span class="brand-zh">天工开物</span><span class="brand-en">Tekon Manual</span></div>
+      <div class="brand-text">
+        <span class="brand-zh" data-i18n="天工 Tekon"></span>
+        <span class="brand-en">Tekon Manual</span>
+      </div>
     </div>
-    <button class="mobile-menu-toggle" id="menuToggle" aria-label="菜单">☰</button>
-    <div class="header-meta"><span class="header-badge">V2 · PUBLIC</span><span>2026.06</span></div>
+    <div class="header-right">
+      <div class="lang-toggle" id="langToggle">
+        <button class="lang-btn active" data-lang="zh">中</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <span class="header-badge">V2</span>
+    </div>
+    <button class="mobile-menu-btn" id="menuBtn" aria-label="Menu">☰</button>
   </div>
 </header>
+
 <div class="layout">
 <nav class="sidebar" id="sidebar">
-  <div class="nav-group">
-    <div class="nav-group-label">认识天工</div>
-    <a class="nav-item active" href="#s01"><span class="nav-num">01</span> 天工是什么</a>
-    <a class="nav-item" href="#s02"><span class="nav-num">02</span> 解决什么问题</a>
+  <div class="nav-section"><div class="nav-section-label" data-i18n="Overview">认识天工</div>
+    <a class="nav-tab active" data-tab="0"><span class="tab-dot"></span><span data-i18n="What is Tekon">天工是什么</span></a>
+    <a class="nav-tab" data-tab="1"><span class="tab-dot"></span><span data-i18n="Problems Solved">解决什么问题</span></a>
   </div>
   <div class="nav-divider"></div>
-  <div class="nav-group">
-    <div class="nav-group-label">上手指南</div>
-    <a class="nav-item" href="#s03"><span class="nav-num">03</span> 核心用户场景</a>
-    <a class="nav-item" href="#s04"><span class="nav-num">04</span> Quick Start</a>
+  <div class="nav-section"><div class="nav-section-label" data-i18n="Getting Started">上手指南</div>
+    <a class="nav-tab" data-tab="2"><span class="tab-dot"></span><span data-i18n="Scenarios">核心场景</span></a>
+    <a class="nav-tab" data-tab="3"><span class="tab-dot"></span><span data-i18n="Quick Start">Quick Start</span></a>
   </div>
   <div class="nav-divider"></div>
-  <div class="nav-group">
-    <div class="nav-group-label">深入理解</div>
-    <a class="nav-item" href="#s05"><span class="nav-num">05</span> 核心概念</a>
-    <a class="nav-item" href="#s06"><span class="nav-num">06</span> 命令详解</a>
+  <div class="nav-section"><div class="nav-section-label" data-i18n="Deep Dive">深入理解</div>
+    <a class="nav-tab" data-tab="4"><span class="tab-dot"></span><span data-i18n="Core Concepts">核心概念</span></a>
+    <a class="nav-tab" data-tab="5"><span class="tab-dot"></span><span data-i18n="Command Reference">命令详解</span></a>
   </div>
   <div class="nav-divider"></div>
-  <div class="nav-group">
-    <div class="nav-group-label">更多</div>
-    <a class="nav-item" href="#s07"><span class="nav-num">07</span> Web Dashboard</a>
-    <a class="nav-item" href="#s08"><span class="nav-num">08</span> 如何判断结果</a>
-    <a class="nav-item" href="#s09"><span class="nav-num">09</span> 常见问题处理</a>
-    <a class="nav-item" href="#s10"><span class="nav-num">10</span> 参数速查</a>
-    <a class="nav-item" href="#s11"><span class="nav-num">11</span> 边界与安全</a>
+  <div class="nav-section"><div class="nav-section-label" data-i18n="More">更多</div>
+    <a class="nav-tab" data-tab="6"><span class="tab-dot"></span><span data-i18n="Web Dashboard">Web Dashboard</span></a>
+    <a class="nav-tab" data-tab="7"><span class="tab-dot"></span><span data-i18n="Judging Results">判断结果</span></a>
+    <a class="nav-tab" data-tab="8"><span class="tab-dot"></span><span data-i18n="FAQ">常见问题</span></a>
+    <a class="nav-tab" data-tab="9"><span class="tab-dot"></span><span data-i18n="Parameters">参数速查</span></a>
+    <a class="nav-tab" data-tab="10"><span class="tab-dot"></span><span data-i18n="Usage Notes">使用说明</span></a>
   </div>
 </nav>
-<main class="content-area"><div class="content-inner">
 
-<section class="section" id="s01">
-  <div class="section-header"><span class="section-number">SECTION 01</span><h1 class="section-title">天工是什么</h1><p class="section-subtitle">天工（Tekon）是一个本地 Agent workflow 驾驶系统——一个"受控研发工作台"。</p></div>
-  <p>天工（Tekon）不是聊天机器人，也不是自动上线平台。用户把一个低到中风险的研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。</p>
-  <p>天工的核心目标是<strong>增强人类交付能力</strong>，而不是替人类做高风险决策。它可以帮助你把需求推进到"可以人工审阅、可以准备 PR、可以继续验证"的状态；合入、上线、权限扩大、生产变更仍然由人控制。</p>
-  <div class="deco-line"></div>
-  <h3>当前定位</h3>
-  <div class="concept-grid">
-    <div class="concept-card"><h4>本地 CLI/Web 工具</h4><p>在你自己的机器上运行，不依赖远程服务。</p></div>
-    <div class="concept-card"><h4>受控 Workflow 执行器</h4><p>按固定流程拆解、执行、验证研发任务。</p></div>
-    <div class="concept-card"><h4>证据与审阅收集器</h4><p>统一收集 artifact、gate 日志、审计事件。</p></div>
-    <div class="concept-card"><h4>PR 准备助手</h4><p>帮你生成可审阅材料和 PR 准备包。</p></div>
-    <div class="concept-card"><h4>研发工作样本评估器</h4><p>评估真实样本是否达到试用门槛。</p></div>
-    <div class="concept-card"><h4>多 Provider 执行入口</h4><p>支持 mock、Claude Code 和 Codex provider。</p></div>
-  </div>
-  <div class="callout callout-info"><span class="callout-label">名称说明</span>天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。</div>
-</section>
-
-<section class="section" id="s02">
-  <div class="section-header"><span class="section-number">SECTION 02</span><h1 class="section-title">天工解决什么问题</h1><p class="section-subtitle">五个核心痛点，天工逐一应对。</p></div>
-  <h3>2.1 需求进入研发前不清楚</h3>
-  <p>真实工作里，很多需求只有一句话。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 <code>demand shape</code>，先把需求塑形成需求卡，包含：需求标题和正文、推荐 workflow 模板、风险等级和风险标签、非目标、开放问题、验收标准。用户可以先审阅和批准需求卡，再发起执行。</p>
-  <h3>2.2 不知道该选什么 Workflow</h3>
-  <div class="tag-list"><span class="tag tag-jade">standard-feature</span><span class="tag tag-jade">bugfix</span><span class="tag tag-jade">test-improvement</span><span class="tag tag-jade">docs-update</span><span class="tag tag-jade">plan-only</span><span class="tag tag-jade">standard-delivery</span></div>
-  <p><code>standard-delivery</code> 是标准交付治理流程，包含 PM 内审、PM/RD/QA 外部需求评审、RD 技术评审、QA 测试方案评审、独立变更评审、QA final signoff、QA signoff review 和 PMO checkpoint。<code>workflow select</code> 会给出推荐模板和理由；<code>eval workflow-selection</code> 会检查人工选择是否合理。</p>
-  <h3>2.3 Agent 输出不可审阅</h3>
-  <p>天工要求 provider 输出结构化 artifact，并把 gate、日志、审计事件和 PR 包统一组织。用户可通过 <code>review</code> 或 Web dashboard 查看：readiness 失败项、证据入口、Gate 失败诊断、影响文件和 diff、Artifact 正文预览、Gate 日志、PR 准备包、下一步命令建议。</p>
-  <h3>2.4 远端副作用需要人控制</h3>
-  <div class="flow-diagram"><code>delivery dry-run        → 只看交付计划
-delivery prepare        → 只生成本地 PR 包
-delivery create-pr --approve-human → 人工批准后才 push
-delivery ci-status      → 只读查询 PR checks
-delivery ci-watch       → 只读轮询，不 rerun/merge</code></div>
-  <h3>2.5 需要判断一次 run 是否真的可交付</h3>
-  <p><code>eval readiness</code> 评估单个 run 的交付证据是否完整。<code>eval work-usability</code> 评估一组真实样本是否达到试用门槛。</p>
-</section>
-
-<section class="section" id="s03">
-  <div class="section-header"><span class="section-number">SECTION 03</span><h1 class="section-title">核心用户场景</h1><p class="section-subtitle">五种典型场景，从功能开发到工具评估。</p></div>
-  <div class="scenario-card">
-    <div class="scenario-label">SCENARIO A</div><div class="scenario-title">我有一个小功能，希望推进到可审 PR</div>
-    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px">适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。</p>
-    <ol class="scenario-steps"><li><code>tekon init</code> 初始化目标仓库</li><li><code>demand shape</code> 把需求写成需求卡</li><li>人工审阅需求卡</li><li><code>demand approve</code> 批准需求卡</li><li><code>run</code> 发起 workflow</li><li><code>status</code> 和 <code>review</code> 查看结果</li><li><code>delivery prepare</code> 生成 PR 准备包</li><li>人工确认后 <code>delivery create-pr --approve-human</code></li><li><code>delivery ci-status</code> 或 <code>ci-watch</code> 写回远端 CI 证据</li><li><code>eval readiness</code> 判断 PR/CI 证据是否完整</li></ol>
-  </div>
-  <div class="scenario-card">
-    <div class="scenario-label">SCENARIO B</div><div class="scenario-title">我只想修一个 bug，但需要人工确认风险</div>
-    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px">适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。</p>
-    <ol class="scenario-steps"><li>使用 <code>bugfix</code> 模板运行</li><li>如果触发 human gate，先执行 <code>approval summary</code></li><li>用 <code>eval approval-summary</code> 检查审批摘要是否完整</li><li>人工判断：<code>resume --approve-human</code> 批准继续，或 <code>approval reject</code> 拒绝并阻断</li></ol>
-  </div>
-  <div class="scenario-card">
-    <div class="scenario-label">SCENARIO C</div><div class="scenario-title">我只想补测试</div>
-    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px">适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。</p>
-    <ol class="scenario-steps"><li><code>workflow select</code> 确认是否推荐 <code>test-improvement</code></li><li><code>run --template test-improvement</code> 执行</li><li>看 gate 是否通过</li><li>用 <code>review</code> 检查 artifact 和测试证据</li></ol>
-  </div>
-  <div class="scenario-card">
-    <div class="scenario-label">SCENARIO D</div><div class="scenario-title">我只想写文档或方案</div>
-    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:14px">适用：更新用户手册、整理验收报告、写技术方案或产品方案。</p>
-    <div class="tag-list"><span class="tag tag-gold">docs-update — 文档更新</span><span class="tag tag-gold">plan-only — 只做方案</span><span class="tag tag-gold">standard-delivery — 验证完整角色链路</span></div>
-    <p style="font-size:14px;color:var(--text-secondary);margin-top:12px"><code>standard-delivery</code> 当前适合 Tekon 自身 dogfooding 和低风险种子任务。</p>
-  </div>
-  <div class="scenario-card">
-    <div class="scenario-label">SCENARIO E</div><div class="scenario-title">我要判断天工是否已经能用于真实工作</div>
-    <ol class="scenario-steps"><li>挑选 2~3 个真实但低风险的仓库</li><li>准备 10 个真实或历史需求</li><li>每次 run 后用 <code>eval work-usability record</code> 写入样本清单</li><li>用 <code>eval work-usability --samples</code> 评估样本集</li><li>把 Markdown/HTML 报告保存到 <code>docs/reviews/</code></li></ol>
-  </div>
-</section>
-
-<section class="section" id="s04">
-  <div class="section-header"><span class="section-number">SECTION 04</span><h1 class="section-title">Quick Start</h1><p class="section-subtitle">以下示例假设 <code>tekon</code> 已安装到 PATH，并且你正在目标项目根目录执行命令。</p></div>
-  <div class="callout callout-info"><span class="callout-label">命令约定</span>没有全局安装时，可用 <code>node ~/.tekon/packages/cli/dist/index.js</code> 替换 <code>tekon</code>；从其它目录操作目标仓库时，再显式追加 <code>--repo /path/to/project</code>。</div>
-
-  <h3>4.1 安装</h3>
-  <div class="install-banner">
-    <div class="install-banner-label">⬇ 一键安装（推荐）</div>
-    <pre><code><span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="str">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="flag">|</span> <span class="cmd">bash</span></code></pre>
-  </div>
-  <p>安装脚本会自动完成：克隆仓库 → 安装依赖 → 构建项目 → 配置 <code>tekon</code> 命令到 PATH。</p>
-  <p>安装完成后，执行 <code>source ~/.zshrc</code>（或 <code>~/.bashrc</code>）使 PATH 生效，即可在任意目录使用：</p>
-  <pre><code><span class="cmd">tekon</span></code></pre>
-  <p>如需指定安装目录或分支：</p>
-  <pre><code><span class="kw">TEKON_HOME</span>=<span class="str">/opt/tekon</span> <span class="kw">TEKON_VERSION</span>=<span class="str">main</span> <span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="str">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="flag">|</span> <span class="cmd">bash</span></code></pre>
-  <p>如果不想配置 PATH，也可以直接用 node 执行：</p>
-  <pre><code><span class="cmd">node</span> <span class="path">~/.tekon/packages/cli/dist/index.js</span></code></pre>
-  <div class="callout callout-tip"><span class="callout-label">前置依赖</span>需要 <code>git</code>、<code>node</code>（>=18）、<code>npm</code>。安装脚本会自动检测，缺少时会给出安装指引。</div>
-  <p>本文默认使用 <code>tekon</code> 示例，重点展示普通用户的最短路径。</p>
-
-  <h3>4.2 初始化目标仓库</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
-  <p>初始化会在目标仓库生成 <code>.tekon/</code> 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。</p>
-
-  <h3>4.3 检查目标仓库命令画像</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
-  <div class="table-wrap"><table><thead><tr><th>状态</th><th>含义</th></tr></thead><tbody>
-    <tr><td><code>resolved</code></td><td>该 gate 命令已解析</td></tr>
-    <tr><td><code>missing</code></td><td>目标仓库缺少对应命令，需要补 repo profile</td></tr>
-    <tr><td><code>not-applicable</code></td><td>用户显式声明不适用</td></tr>
-    <tr><td><code>not-command-gate</code></td><td>schema、role-scope、QA signoff 等语义 gate，不需要 repo profile 命令</td></tr>
-    <tr><td><code>suggestedCommand</code></td><td>天工从 <code>package.json</code> 推断的候选命令</td></tr>
-  </tbody></table></div>
-
-  <h3>4.4 塑形需求</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span></code></pre>
-  <p>命令会输出 <code>shapePath</code> 和 <code>reviewPath</code>。先读 Markdown 审阅稿，确认需求边界后批准：</p>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
-  <p>可选：评估需求卡质量。</p>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
-
-  <h3>4.5 发起运行</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">run</span></code></pre>
-  <p>输出里会有 <code>runId</code>。后续常规命令默认读取最近一次 run。</p>
-  <p>长程任务可显式放大外层预算：</p>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--timeout-ms</span> <span class="num">7200000</span> <span class="flag">--no-progress-timeout-ms</span> <span class="num">1200000</span> <span class="flag">--progress-heartbeat-ms</span> <span class="num">30000</span></code></pre>
-  <p>未传 <code>--template</code> 时默认运行 <code>standard-delivery</code>；未传 <code>--agent</code> 时默认使用 Codex provider。离线回归可显式切到 mock：</p>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
-  <div class="callout callout-info"><span class="callout-label">Codex provider 说明</span>Codex 使用本机 <code>codex --profile internal --sandbox workspace-write --ask-for-approval on-request --add-dir &lt;TEKON_OUTPUT_DIR&gt; exec</code>，通过 <code>TEKON_OUTPUT_DIR</code> / <code>$TEKON_ARTIFACT_MANIFEST</code> 写回 artifact。真实 provider 默认总超时 1 小时，无进展超时 15 分钟。QA validation 会记录 tested ref，QA signoff/PR package/readiness 会校验所测即所得。</div>
-
-  <h3>4.6 查看结果</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">status</span>
-<span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
-  <div class="callout callout-tip"><span class="callout-label">提示</span>PR/CI 证据尚未写回前，<code>eval readiness</code> 通常会因 <code>pr-prepared</code>、<code>pr-created</code> 或 <code>remote-ci-passed</code> 失败而保持 <code>ready=false</code>。</div>
-
-  <h3>4.7 准备 PR 材料</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
-  <p>当前只支持 <code>standard-delivery</code> 治理 run，只生成本地 PR 包，不 push。生成前会执行 pre-PR readiness 校验。</p>
-
-  <h3>4.8 创建远端 PR</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
-  <div class="callout callout-warn"><span class="callout-label">注意</span>产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。不会绕过 pre-PR readiness、QA signoff 和所测即所得校验。</div>
-
-  <h3>4.9 查询远端 CI</h3>
-  <pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>
-<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span>
-<span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
-
-  <h3>4.10 默认上下文规则</h3>
-  <p>天工的常规 CLI 使用方式是"进入目标仓库根目录后执行短命令"。</p>
-  <h4>Repo</h4><p>优先使用 <code>--repo</code>；不传时从当前目录向上查找 <code>.tekon/config.yaml</code>，找不到时使用当前 Git 仓库根目录。</p>
-  <h4>Demand shape</h4><p><code>demand shape</code> 默认写入 <code>.tekon/demands/</code>；<code>demand approve</code> 默认批准最近需求卡。</p>
-  <h4>Run</h4><p><code>run</code> 没有需求文本时默认读取最近已批准需求卡；<code>status</code>、<code>review</code>、<code>eval readiness</code>、<code>delivery prepare</code> 默认使用最近一次 run。</p>
-  <h4>Human decision</h4><p><code>approval summary</code>、<code>approval reject</code>、<code>resume --approve-human</code> 默认使用最近的 pending human decision。</p>
-  <div class="callout callout-tip"><span class="callout-label">显式传参的三种情况</span><strong>1.</strong> 从其它目录操作目标仓库时传 <code>--repo</code>；<strong>2.</strong> 查看历史对象时传 <code>--run-id</code> 等；<strong>3.</strong> 高危动作保留 <code>--approve-human</code>。</div>
-</section>
-
-<section class="section" id="s05">
-  <div class="section-header"><span class="section-number">SECTION 05</span><h1 class="section-title">核心概念</h1><p class="section-subtitle">理解天工的十一个基础构件。</p></div>
-  <div class="concept-grid">
-    <div class="concept-card"><h4>5.1 Repo</h4><p>目标仓库，即你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。</p></div>
-    <div class="concept-card"><h4>5.2 .tekon/</h4><p>天工在目标仓库中的运行态目录。保存配置、SQLite 数据库、run artifact、gate 日志、worktree 等。通常不提交。</p></div>
-    <div class="concept-card"><h4>5.3 Run</h4><p>一次 workflow 执行。每个 run 有唯一 <code>runId</code>。查看状态、审阅、准备 PR 都围绕 run id。</p></div>
-    <div class="concept-card"><h4>5.4 Workflow</h4><p>一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>、<code>standard-delivery</code>。</p></div>
-    <div class="concept-card"><h4>5.5 Role</h4><p>执行节点的角色：PM、RD、QA、Reviewer、PMO。决定 prompt、知识和工具策略。</p></div>
-    <div class="concept-card"><h4>5.6 Gate</h4><p>验证关卡：build、lint、test、schema、security-scan、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness。</p></div>
-    <div class="concept-card"><h4>5.7 Provider</h4><p>执行节点的 agent 后端：<code>mock</code>、<code>claude-code</code>、<code>codex</code>。真实 provider 需提供 artifact manifest。</p></div>
-    <div class="concept-card"><h4>5.8 Artifact</h4><p>结构化产物：需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI 状态。人工审阅和自动评估的主要证据。</p></div>
-    <div class="concept-card"><h4>5.9 Review Surface</h4><p>聚合审阅面。CLI 命令是 <code>review</code>，Web dashboard 也使用同一套数据。</p></div>
-    <div class="concept-card"><h4>5.10 Readiness</h4><p>单次 run 的工作就绪度评估。回答："这次 run 的 workflow、gate、artifact、PR、CI 证据是否完整？"</p></div>
-    <div class="concept-card"><h4>5.11 Work Usability</h4><p>样本集级评估。回答："天工是否已在足够多真实样本上表现稳定？"</p></div>
-  </div>
-  <div class="deco-line"></div>
-  <h3>Workflow 执行流程概览</h3>
-  <div class="flow-diagram"><code>需求 → demand shape → 需求卡 → approve
-              ↓
-        workflow select
-              ↓
- ┌──────── run ────────┐
- │ PM → RD → QA → Reviewer → PMO │
- │  ↓    ↓    ↓       ↓      ↓  │
- │ gate gate gate    gate   gate │
- └──────────────────────────┘
-              ↓
- review → delivery prepare → create-pr
-        → ci-watch → eval readiness</code></div>
-</section>
-
-<section class="section" id="s06">
-  <div class="section-header"><span class="section-number">SECTION 06</span><h1 class="section-title">命令详解</h1><p class="section-subtitle">天工 CLI 全部命令的参数、用法和故障处理。</p></div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.1 init</span><span class="cmd-desc">初始化目标仓库</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">常用参数</div><ul><li><code>--repo &lt;path&gt;</code> — 从其它目录初始化指定仓库时使用。</li></ul></div>
-    <div class="cmd-section"><div class="cmd-section-title">结果</div><ul><li>创建 <code>.tekon/</code>、<code>config.yaml</code>、<code>repo-profile.yaml</code>、<code>web-session.json</code></li></ul></div>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.2 workflow preflight</span><span class="cmd-desc">运行前检查命令画像</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">判断结果</div><ul><li><code>resolved</code> — 可执行</li><li><code>missing</code> — 缺命令</li><li><code>not-applicable</code> — 已声明不适用</li><li><code>not-command-gate</code> — 语义 gate</li></ul></div>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.3 workflow select</span><span class="cmd-desc">根据需求推荐模板</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span></code></pre>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.4 demand shape</span><span class="cmd-desc">需求塑形成需求卡</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">常用参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.5 demand approve</span><span class="cmd-desc">人工批准需求卡</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">demand approve</span></code></pre>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.6 run</span><span class="cmd-desc">发起一次 workflow</span></div>
-    <pre><code><span class="cmt"># 模板运行</span>
-<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"需求文本"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>
-
-<span class="cmt"># 需求卡运行</span>
-<span class="cmd">tekon</span> <span class="arg">run</span>
-
-<span class="cmt"># Codex provider</span>
-<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--agent</span> <span class="str">codex</span>
-
-<span class="cmt"># 动态 dry-run</span>
-<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span> <span class="str">"需求文本"</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">常用参数</div><ul><li><code>--template &lt;name&gt;</code> — 使用内置模板</li><li><code>--agent mock|claude-code|codex</code> — 选择 provider</li><li><code>--allow-dirty-base</code> — 允许基于未提交改动运行</li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code> — 超时控制</li></ul></div>
-  </div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.7 status</span><span class="cmd-desc">查看 run 当前状态</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">status</span></code></pre></div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.8 approval summary</span><span class="cmd-desc">生成可复制审批摘要</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">approval summary</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">常用参数</div><ul><li><code>--run-id</code> / <code>--decision-id</code> — 指定审批项</li><li><code>--json</code> — 输出结构化 JSON</li></ul></div>
-  </div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.9 eval approval-summary</span><span class="cmd-desc">检查审批摘要完整性</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">eval approval-summary</span></code></pre></div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.10 resume --approve-human</span><span class="cmd-desc">批准 human gate 并继续</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">注意</div><ul><li>只在你已审阅风险和证据后使用</li><li>会按 run 创建时落库的 provider 快照恢复</li><li>同一 run 有多个 pending decision 时必须传 <code>--decision-id</code></li></ul></div>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.11 approval reject</span><span class="cmd-desc">拒绝并阻断 workflow</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">approval reject</span></code></pre>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.12 review</span><span class="cmd-desc">看完整审阅材料</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">重点章节</div><ul><li>Readiness Failed Checks / Evidence Navigation / Gate Failure Triage</li><li>Delivery / Changed Files / Artifacts / Gate Logs / PR Body / PR Package</li><li>Next Commands — 下一步建议</li></ul></div>
-  </div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.13 delivery dry-run</span><span class="cmd-desc">只看交付计划，无副作用</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">delivery dry-run</span></code></pre></div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.14 delivery prepare</span><span class="cmd-desc">生成本地 PR 准备包</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">结果</div><ul><li><code>pr-package.md</code> / <code>pr-body.md</code></li><li><code>delivery-package</code> artifact + 审计事件</li></ul></div>
-  </div>
-
-  <div class="cmd-block">
-    <div class="cmd-block-header"><span class="cmd-name">6.15 delivery create-pr</span><span class="cmd-desc">人工批准后创建远端 PR</span></div>
-    <pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
-    <div class="cmd-section"><div class="cmd-section-title">必要条件</div><ul><li>已安装并认证 <code>gh</code></li><li>workflow passed、AC evidence 完整、QA signoff 满足</li></ul></div>
-  </div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.16 delivery ci-status</span><span class="cmd-desc">只读查询 PR checks</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span></code></pre></div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.17 delivery ci-watch</span><span class="cmd-desc">轮询 PR checks 直到终态</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span></code></pre></div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.18 eval readiness</span><span class="cmd-desc">判断单次 run 交付证据是否完整</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre></div>
-
-  <div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">6.19 eval work-usability</span><span class="cmd-desc">评估样本集是否达到试用门槛</span></div><pre><code><span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span></code></pre></div>
-</section>
-
-<section class="section" id="s07">
-  <div class="section-header"><span class="section-number">SECTION 07</span><h1 class="section-title">Web Dashboard</h1><p class="section-subtitle">本地 Web dashboard，用于审阅和人工决策。</p></div>
-  <h3>启动</h3>
-  <pre><code><span class="kw">TEKON_PROJECT_ROOT</span>=<span class="path">/path/to/project</span> <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="flag">--filter</span> <span class="str">@tekon/web</span> <span class="arg">dev</span></code></pre>
-  <p>Web dashboard 适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
-  <div class="callout callout-warn"><span class="callout-label">写操作需要 session token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
-</section>
-
-<section class="section" id="s08">
-  <div class="section-header"><span class="section-number">SECTION 08</span><h1 class="section-title">如何判断结果是否可信</h1><p class="section-subtitle">不要只看"命令退出 0"。建议按顺序看。</p></div>
-  <ol class="scenario-steps" style="list-style:decimal;padding-left:0">
-    <li style="padding-left:32px"><code>status</code>：workflow 是否 passed。</li>
-    <li style="padding-left:32px"><code>review</code>：失败项和证据是否能解释。</li>
-    <li style="padding-left:32px">Changed Files：影响文件是否符合预期。</li>
-    <li style="padding-left:32px">Artifacts：需求、变更、测试、审阅证据是否完整。</li>
-    <li style="padding-left:32px">Gate Logs：build/lint/test/security 是否真的跑过。</li>
-    <li style="padding-left:32px">PR Package：PR body 是否能让 reviewer 看懂。</li>
-    <li style="padding-left:32px">CI Status：远端 checks 是否已记录。</li>
-    <li style="padding-left:32px"><code>eval readiness</code>：PR/CI 证据是否完整。</li>
-  </ol>
-  <div class="callout callout-warn"><span class="callout-label">重要</span>如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。</div>
-</section>
-
-<section class="section" id="s09">
-  <div class="section-header"><span class="section-number">SECTION 09</span><h1 class="section-title">常见问题处理</h1></div>
-  <h3>9.1 workflow preflight 显示 missing command</h3><p>原因：目标仓库没有配置对应命令。处理：看 <code>suggestedCommand</code> → 写入 <code>.tekon/repo-profile.yaml</code> → 再跑 <code>workflow preflight</code>。</p>
-  <h3>9.2 run 拒绝 dirty base</h3><p>原因：有未提交业务改动。处理：先提交/stash，或追加 <code>--allow-dirty-base</code>。</p>
-  <h3>9.3 pending human gate</h3><p>处理：<code>approval summary</code> → <code>eval approval-summary</code> → <code>resume --approve-human</code> 或 <code>approval reject</code>。</p>
-  <h3>9.4 readiness 不通过</h3><p>常见原因：workflow 没 passed、pending gate、验证 gate 失败、security scan 失败。处理：先看 <code>review</code> 的 failed checks。</p>
-  <h3>9.5 delivery create-pr 失败</h3><p>常见原因：没有 <code>gh</code>、认证失败、工作区 dirty、PR 已存在。</p>
-  <h3>9.6 ci-status 查询失败</h3><p>常见原因：run 没有 PR URL、selector 不对。处理：用 <code>--selector</code> 明确指定。</p>
-  <h3>9.7 Artifact 被拒绝入库</h3><p>原因：产物命中密钥模式。处理：删除密钥内容，使用安全摘要。</p>
-  <h3>9.8 Web 写操作被拒绝</h3><p>处理：重新执行 <code>init</code> 生成 token → 确认 <code>TEKON_PROJECT_ROOT</code> 正确。</p>
-  <h3>9.9 Codex provider 运行失败</h3><p>处理：先验证 <code>codex --version</code> → 查看 <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下产物。不要把失败降级成 mock 通过。</p>
-</section>
-
-<section class="section" id="s10">
-  <div class="section-header"><span class="section-number">SECTION 10</span><h1 class="section-title">参数速查</h1></div>
-  <h3>全局常见参数</h3>
-  <div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
-    <tr><td><code>--repo &lt;path&gt;</code></td><td>跨仓库操作时指定目标仓库</td></tr>
-    <tr><td><code>--run-id &lt;runId&gt;</code></td><td>指定历史 run</td></tr>
-    <tr><td><code>--agent mock|claude-code|codex</code></td><td>选择 provider</td></tr>
-    <tr><td><code>--approve-human</code></td><td>明确批准人工 gate 或远端副作用</td></tr>
-    <tr><td><code>--allow-dirty-base</code></td><td>允许基于未提交改动运行</td></tr>
-    <tr><td><code>--shape &lt;path&gt;</code></td><td>指定需求卡路径</td></tr>
-    <tr><td><code>--decision-id &lt;id&gt;</code></td><td>指定人工决策</td></tr>
-  </tbody></table></div>
-  <h3>run 参数</h3>
-  <div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
-    <tr><td><code>--template &lt;name&gt;</code></td><td>使用内置模板</td></tr>
-    <tr><td><code>--demand-file &lt;path&gt;</code></td><td>指定需求卡</td></tr>
-    <tr><td><code>--dynamic</code> / <code>--dry-run</code></td><td>动态 workflow 预览</td></tr>
-    <tr><td><code>--timeout-ms &lt;ms&gt;</code></td><td>覆盖 provider 总超时</td></tr>
-    <tr><td><code>--no-progress-timeout-ms &lt;ms&gt;</code></td><td>覆盖无进展超时</td></tr>
-    <tr><td><code>--progress-heartbeat-ms &lt;ms&gt;</code></td><td>覆盖 heartbeat 间隔</td></tr>
-  </tbody></table></div>
-  <h3>delivery ci-watch 参数</h3>
-  <div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
-    <tr><td><code>--selector &lt;prUrl或branch&gt;</code></td><td>指定 PR 或分支</td></tr>
-    <tr><td><code>--max-attempts &lt;n&gt;</code></td><td>最大轮询次数</td></tr>
-    <tr><td><code>--interval-ms &lt;ms&gt;</code></td><td>每次轮询间隔</td></tr>
-    <tr><td><code>--backoff &lt;n&gt;</code></td><td>轮询退避倍率</td></tr>
-  </tbody></table></div>
-</section>
-
-<section class="section" id="s11">
-  <div class="section-header"><span class="section-number">SECTION 11</span><h1 class="section-title">使用说明</h1></div>
-  <p>天工的核心设计理念是增强人类交付，合入、上线、权限扩大等关键决策始终由人控制。</p>
-  <h3>适用场景</h3>
-  <div class="tag-list"><span class="tag tag-jade">内部工具</span><span class="tag tag-jade">研发效能工具</span><span class="tag tag-jade">测试补齐</span><span class="tag tag-jade">文档补齐</span><span class="tag tag-jade">低风险 bugfix</span><span class="tag tag-jade">可回滚的中小需求</span></div>
-  <h3>手册更新规则</h3>
-  <p>后续每次功能、CLI/Web 入口、参数、错误处理、边界或用户流程变化后，都必须评估是否需要更新本手册。当前主手册路径：<code>docs/manual/tekon-user-manual.md</code></p>
-  <div class="content-footer"><div class="footer-seal">工</div><div class="footer-text">tekon-user-manual · v2 · 2026.06</div></div>
-</section>
-
-</div></main>
+<main class="content-area"><div id="tabContainer"></div></main>
 </div>
 
-<nav class="mobile-nav" id="mobileNav">
-  <button class="mobile-nav-btn active" data-target="s01">01</button>
-  <button class="mobile-nav-btn" data-target="s02">02</button>
-  <button class="mobile-nav-btn" data-target="s03">03</button>
-  <button class="mobile-nav-btn" data-target="s04">04</button>
-  <button class="mobile-nav-btn" data-target="s05">05</button>
-  <button class="mobile-nav-btn" data-target="s06">06</button>
-  <button class="mobile-nav-btn" data-target="s07">07</button>
-  <button class="mobile-nav-btn" data-target="s08">08</button>
-  <button class="mobile-nav-btn" data-target="s09">09</button>
-  <button class="mobile-nav-btn" data-target="s10">10</button>
-  <button class="mobile-nav-btn" data-target="s11">11</button>
-</nav>
+<nav class="mobile-nav" id="mobileNav"></nav>
 
 <script>
-(function(){
-  var sections=document.querySelectorAll('.section[id]');
-  var navItems=document.querySelectorAll('.nav-item');
-  var mobileBtns=document.querySelectorAll('.mobile-nav-btn');
-  var sidebar=document.getElementById('sidebar');
-  var menuToggle=document.getElementById('menuToggle');
-  function updateActive(){
-    var current=sections[0].id;
-    var st=window.scrollY+100;
-    sections.forEach(function(s){if(s.offsetTop<=st)current=s.id});
-    navItems.forEach(function(item){item.classList.toggle('active',item.getAttribute('href')==='#'+current)});
-    mobileBtns.forEach(function(btn){btn.classList.toggle('active',btn.dataset.target===current)});
+// ═══════════════════════════════════════════════
+//  DATA — Bilingual Content
+// ═══════════════════════════════════════════════
+const T = {
+  zh: {
+    sections: [
+      {num:"01",title:"天工是什么",sub:"天工（Tekon）是一个本地 Agent workflow 框架——一个"受控研发工作台"。",
+       html:`
+<p>天工（Tekon）是一个本地 Agent workflow 框架——一个"受控研发工作台"：用户把研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。</p>
+<p>天工的核心目标是<strong>增强人类交付能力</strong>。它帮助你把需求推进到"可以人工审阅、可以准备 PR、可以继续验证"的状态；合入、上线、权限扩大、生产变更仍然由人控制。</p>
+<div class="deco-line"></div>
+<h3>当前定位</h3>
+<div class="concept-grid">
+<div class="concept-card"><h4>本地 CLI/Web 工具</h4><p>在你自己的机器上运行，不依赖远程服务。</p></div>
+<div class="concept-card"><h4>受控 Workflow 执行器</h4><p>按固定流程拆解、执行、验证研发任务。</p></div>
+<div class="concept-card"><h4>证据与审阅收集器</h4><p>统一收集 artifact、gate 日志、审计事件。</p></div>
+<div class="concept-card"><h4>PR 准备助手</h4><p>帮你生成可审阅材料和 PR 准备包。</p></div>
+<div class="concept-card"><h4>研发工作样本评估器</h4><p>评估真实样本是否达到试用门槛。</p></div>
+<div class="concept-card"><h4>多 Provider 执行入口</h4><p>支持 mock、Claude Code 和 Codex provider。</p></div>
+</div>
+<div class="callout callout-info"><span class="callout-label">名称说明</span>天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。</div>
+`},
+      {num:"02",title:"天工解决什么问题",sub:"五个核心痛点，天工逐一应对。",
+       html:`
+<h3>2.1 需求进入研发前不清楚</h3>
+<p>真实工作里，很多需求只有一句话。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 <code>demand shape</code>，先把需求塑形成需求卡，包含：需求标题和正文、推荐 workflow 模板、风险等级和风险标签、非目标、开放问题、验收标准。用户可以先审阅和批准需求卡，再发起执行。</p>
+<h3>2.2 不知道该选什么 Workflow</h3>
+<div class="tag-list">${['standard-feature','bugfix','test-improvement','docs-update','plan-only','standard-delivery'].map(t=>`<span class="tag tag-jade">${t}</span>`).join('')}</div>
+<p><code>standard-delivery</code> 是标准交付治理流程，包含 PM/RD/QA/Reviewer/PMO 完整角色链路、独立评审、AC evidence、QA signoff 和流程完整性 gate。<code>workflow select</code> 给出推荐模板和理由；<code>eval workflow-selection</code> 检查选择是否合理。</p>
+<h3>2.3 Agent 输出不可审阅</h3>
+<p>天工要求 provider 输出结构化 artifact，并把 gate、日志、审计事件和 PR 包统一组织。用户通过 <code>review</code> 或 Web dashboard 查看：readiness 失败项、证据入口、Gate 失败诊断、影响文件和 diff、Artifact 正文、Gate 日志、PR 准备包、下一步建议。</p>
+<h3>2.4 远端副作用需要人控制</h3>
+<p>真实 push、创建 PR、等待远端 CI 都属于有副作用或外部依赖的动作。天工把这些动作拆开：</p>
+${flowSVG_delivery()}
+<h3>2.5 需要判断一次 run 是否真的可交付</h3>
+<p><code>eval readiness</code> 评估单个 run 的交付证据是否完整。<code>eval work-usability</code> 评估一组真实样本是否达到试用门槛。</p>
+`},
+      {num:"03",title:"核心用户场景",sub:"五种典型场景，从功能开发到工具评估。",
+       html:`
+${scenarioCard('SCENARIO A','我有一个小功能，希望推进到可审 PR','适用：给内部工具增加筛选条件、为 CLI 补低风险命令、给 Web dashboard 增加入口。',[
+  '<code>tekon init</code> 初始化目标仓库','<code>demand shape</code> 把需求写成需求卡','人工审阅需求卡','<code>demand approve</code> 批准需求卡',
+  '<code>run</code> 发起 workflow','<code>status</code> 和 <code>review</code> 查看结果','<code>delivery prepare</code> 生成 PR 准备包',
+  '人工确认后 <code>delivery create-pr --approve-human</code>','<code>delivery ci-status</code> 或 <code>ci-watch</code> 写回远端 CI 证据','<code>eval readiness</code> 判断 PR/CI 证据是否完整'
+])}
+${scenarioCard('SCENARIO B','我只想修一个 bug，但需要人工确认风险','适用：修改已有逻辑分支、修复低风险接口问题、调整内部工具状态处理。',[
+  '使用 <code>bugfix</code> 模板运行','如果触发 human gate，先执行 <code>approval summary</code>',
+  '用 <code>eval approval-summary</code> 检查审批摘要是否完整','人工判断：<code>resume --approve-human</code> 批准继续，或 <code>approval reject</code> 拒绝并阻断'
+])}
+${scenarioCard('SCENARIO C','我只想补测试','适用：为模块补单测、为失败路径补回归测试、为 CLI/Web API 增加覆盖。',[
+  '<code>workflow select</code> 确认是否推荐 <code>test-improvement</code>','<code>run --template test-improvement</code> 执行','看 gate 是否通过','用 <code>review</code> 检查 artifact 和测试证据'
+])}
+${scenarioCard('SCENARIO D','我只想写文档或方案','适用：更新用户手册、整理验收报告、写技术方案或产品方案。',[],'<div class="tag-list"><span class="tag tag-gold">docs-update — 文档更新</span><span class="tag tag-gold">plan-only — 只做方案</span><span class="tag tag-gold">standard-delivery — 验证完整角色链路</span></div>')}
+${scenarioCard('SCENARIO E','我要判断天工是否已经能用于真实工作','',[
+  '挑选 2~3 个真实但低风险的仓库','准备 10 个真实或历史需求','每次 run 后用 <code>eval work-usability record</code> 写入样本清单','用 <code>eval work-usability --samples</code> 评估样本集','把 Markdown/HTML 报告保存到 <code>docs/reviews/</code>'
+])}
+`},
+      {num:"04",title:"Quick Start",sub:"以下示例假设 <code>tekon</code> 已安装到 PATH，并且你正在目标项目根目录执行命令。",
+       html:`
+<div class="install-banner"><div class="install-label">⬇ 一键安装</div><pre><code><span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="str">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="flag">|</span> <span class="cmd">bash</span></code></pre></div>
+<p>安装脚本自动完成：克隆仓库 → 安装依赖 → 构建项目 → 配置 <code>tekon</code> 到 PATH。执行 <code>source ~/.zshrc</code> 即可使用。前置依赖：<code>git</code>、<code>node</code>(>=18)、<code>npm</code>。</p>
+<pre><code><span class="kw">TEKON_HOME</span>=<span class="str">/opt/tekon</span> <span class="kw">TEKON_VERSION</span>=<span class="str">main</span> <span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="str">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="flag">|</span> <span class="cmd">bash</span></code></pre>
+${flowSVG_quickstart()}
+<h3>4.2 初始化目标仓库</h3><pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
+<p>初始化会在目标仓库生成 <code>.tekon/</code> 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。</p>
+<h3>4.3 检查命令画像</h3><pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
+<div class="table-wrap"><table><thead><tr><th>状态</th><th>含义</th></tr></thead><tbody>
+<tr><td><code>resolved</code></td><td>该 gate 命令已解析</td></tr>
+<tr><td><code>missing</code></td><td>目标仓库缺少对应命令</td></tr>
+<tr><td><code>not-applicable</code></td><td>用户显式声明不适用</td></tr>
+<tr><td><code>not-command-gate</code></td><td>schema、role-scope、QA signoff 等语义 gate</td></tr>
+<tr><td><code>suggestedCommand</code></td><td>天工从 package.json 推断的候选命令</td></tr>
+</tbody></table></div>
+<h3>4.4 塑形需求</h3>
+<pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span>
+<span class="cmd">tekon</span> <span class="arg">demand approve</span>
+<span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
+<h3>4.5 发起运行</h3>
+<pre><code><span class="cmd">tekon</span> <span class="arg">run</span>
+<span class="cmt"># 长程任务超时控制</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--timeout-ms</span> <span class="num">7200000</span> <span class="flag">--no-progress-timeout-ms</span> <span class="num">1200000</span>
+<span class="cmt"># 使用 mock provider 离线回归</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
+<div class="callout callout-info"><span class="callout-label">Provider 说明</span>默认使用 Codex provider。真实 provider 通过 <code>TEKON_OUTPUT_DIR</code> 写回结构化 artifact，默认总超时 1 小时，可用 <code>--timeout-ms</code> 等参数覆盖。远端副作用仍由 <code>delivery create-pr --approve-human</code> 人工批准后执行。</div>
+<h3>4.6 查看结果</h3><pre><code><span class="cmd">tekon</span> <span class="arg">status</span>
+<span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
+<h3>4.7 准备 PR</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
+<p>当前只支持 <code>standard-delivery</code> 治理 run，只生成本地 PR 包，生成前会执行 pre-PR readiness 校验。</p>
+<h3>4.8 创建远端 PR</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
+<h3>4.9 查询远端 CI</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>
+<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span>
+<span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
+<h3>4.10 默认上下文规则</h3>
+<p>天工的常规 CLI 使用方式是"进入目标仓库根目录后执行短命令"。默认推断：<code>--repo</code> 从当前目录向上查找 <code>.tekon/config.yaml</code>；<code>demand shape/approve</code> 默认操作最近需求卡；<code>run/status/review/delivery prepare</code> 默认使用最近一次 run；<code>approval summary/approve/reject/resume</code> 默认使用最近的 pending human decision。</p>
+<div class="callout callout-tip"><span class="callout-label">显式传参的三种情况</span><strong>1.</strong> 跨目录操作时传 <code>--repo</code>；<strong>2.</strong> 查看历史对象时传 <code>--run-id</code> 等；<strong>3.</strong> 高危动作保留 <code>--approve-human</code>。</div>
+`},
+      {num:"05",title:"核心概念",sub:"理解天工的十一个基础构件。",
+       html:`
+${flowSVG_workflow()}
+<div class="concept-grid">
+<div class="concept-card"><h4>5.1 Repo</h4><p>目标仓库，即你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。</p></div>
+<div class="concept-card"><h4>5.2 .tekon/</h4><p>天工在目标仓库中的运行态目录。保存配置、SQLite 数据库、run artifact、gate 日志、worktree 等。通常不提交。</p></div>
+<div class="concept-card"><h4>5.3 Run</h4><p>一次 workflow 执行。每个 run 有唯一 <code>runId</code>。查看状态、审阅、准备 PR 都围绕 run id。</p></div>
+<div class="concept-card"><h4>5.4 Workflow</h4><p>一组有顺序和依赖的角色节点。内置模板：<code>standard-feature</code>、<code>bugfix</code>、<code>test-improvement</code>、<code>docs-update</code>、<code>plan-only</code>、<code>standard-delivery</code>。</p></div>
+<div class="concept-card"><h4>5.5 Role</h4><p>执行节点的角色：PM、RD、QA、Reviewer、PMO。决定 prompt、知识和工具策略。</p></div>
+<div class="concept-card"><h4>5.6 Gate</h4><p>验证关卡：build、lint、test、schema、security-scan、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness。</p></div>
+<div class="concept-card"><h4>5.7 Provider</h4><p>执行节点的 agent 后端：<code>mock</code>、<code>claude-code</code>、<code>codex</code>。真实 provider 需提供 artifact manifest。</p></div>
+<div class="concept-card"><h4>5.8 Artifact</h4><p>结构化产物：需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI 状态。</p></div>
+<div class="concept-card"><h4>5.9 Review Surface</h4><p>聚合审阅面。CLI 命令是 <code>review</code>，Web dashboard 也使用同一套数据。</p></div>
+<div class="concept-card"><h4>5.10 Readiness</h4><p>单次 run 的工作就绪度评估。回答："workflow、gate、artifact、PR、CI 证据是否完整？"</p></div>
+<div class="concept-card"><h4>5.11 Work Usability</h4><p>样本集级评估。回答："天工是否已在足够多真实样本上表现稳定？"</p></div>
+</div>`},
+      {num:"06",title:"命令详解",sub:"天工 CLI 全部命令的参数、用法和故障处理。",
+       html:commandsHTML()},
+      {num:"07",title:"Web Dashboard",sub:"本地 Web dashboard，用于审阅和人工决策。",
+       html:`
+<h3>启动</h3>
+<pre><code><span class="kw">TEKON_PROJECT_ROOT</span>=<span class="str">/path/to/project</span> <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="flag">--filter</span> <span class="str">@tekon/web</span> <span class="arg">dev</span></code></pre>
+<p>Web dashboard 适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
+<div class="callout callout-warn"><span class="callout-label">Session Token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
+<p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>
+`},
+      {num:"08",title:"如何判断结果是否可信",sub:"不要只看"命令退出 0"。建议按顺序看。",
+       html:`
+<ol class="scenario-steps" style="list-style:decimal;padding-left:0">
+<li style="padding-left:28px"><code>status</code>：workflow 是否 passed。</li>
+<li style="padding-left:28px"><code>review</code>：失败项和证据是否能解释。</li>
+<li style="padding-left:28px">Changed Files：影响文件是否符合预期。</li>
+<li style="padding-left:28px">Artifacts：需求、变更、测试、审阅证据是否完整。</li>
+<li style="padding-left:28px">Gate Logs：build/lint/test/security 是否真的跑过。</li>
+<li style="padding-left:28px">PR Package：PR body 是否能让 reviewer 看懂。</li>
+<li style="padding-left:28px">CI Status：远端 checks 是否已记录。</li>
+<li style="padding-left:28px"><code>eval readiness</code>：PR/CI 证据是否完整。</li>
+</ol>
+<div class="callout callout-warn"><span class="callout-label">重要</span>如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。</div>
+`},
+      {num:"09",title:"常见问题处理",sub:"",
+       html:`
+<h3>9.1 workflow preflight 显示 missing command</h3><p>原因：目标仓库没有配置对应命令。处理：看 <code>suggestedCommand</code> → 写入 <code>.tekon/repo-profile.yaml</code> → 再跑 <code>workflow preflight</code>。</p>
+<h3>9.2 run 拒绝 dirty base</h3><p>原因：有未提交业务改动。处理：先提交/stash，或追加 <code>--allow-dirty-base</code>。</p>
+<h3>9.3 pending human gate</h3><p>处理：<code>approval summary</code> → <code>eval approval-summary</code> → <code>resume --approve-human</code> 或 <code>approval reject</code>。</p>
+<h3>9.4 readiness 不通过</h3><p>常见原因：workflow 没 passed、pending gate、验证 gate 失败、security scan 失败。处理：先看 <code>review</code> 的 failed checks。</p>
+<h3>9.5 delivery create-pr 失败</h3><p>常见原因：没有 <code>gh</code>、认证失败、工作区 dirty、PR 已存在。</p>
+<h3>9.6 ci-status 查询失败</h3><p>常见原因：run 没有 PR URL、selector 不对。处理：用 <code>--selector</code> 明确指定。</p>
+<h3>9.7 Artifact 被拒绝入库</h3><p>原因：产物命中密钥模式。处理：删除密钥内容，使用安全摘要。</p>
+<h3>9.8 Web 写操作被拒绝</h3><p>处理：重新执行 <code>init</code> 生成 token → 确认 <code>TEKON_PROJECT_ROOT</code> 正确。</p>
+<h3>9.9 Codex provider 运行失败</h3><p>处理：先验证 <code>codex --version</code> → 查看 <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下产物。不要把失败降级成 mock 通过。</p>
+`},
+      {num:"10",title:"参数速查",sub:"",
+       html:`
+<h3>全局常见参数</h3>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
+<tr><td><code>--repo &lt;path&gt;</code></td><td>跨仓库操作时指定目标仓库</td></tr>
+<tr><td><code>--run-id &lt;runId&gt;</code></td><td>指定历史 run</td></tr>
+<tr><td><code>--agent mock|claude-code|codex</code></td><td>选择 provider</td></tr>
+<tr><td><code>--approve-human</code></td><td>明确批准人工 gate 或远端副作用</td></tr>
+<tr><td><code>--allow-dirty-base</code></td><td>允许基于未提交改动运行</td></tr>
+<tr><td><code>--shape &lt;path&gt;</code></td><td>指定需求卡路径</td></tr>
+<tr><td><code>--decision-id &lt;id&gt;</code></td><td>指定人工决策</td></tr>
+</tbody></table></div>
+<h3>run 参数</h3>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
+<tr><td><code>--template &lt;name&gt;</code></td><td>使用内置模板</td></tr>
+<tr><td><code>--demand-file &lt;path&gt;</code></td><td>指定需求卡</td></tr>
+<tr><td><code>--dynamic / --dry-run</code></td><td>动态 workflow 预览</td></tr>
+<tr><td><code>--timeout-ms &lt;ms&gt;</code></td><td>覆盖 provider 总超时</td></tr>
+<tr><td><code>--no-progress-timeout-ms &lt;ms&gt;</code></td><td>覆盖无进展超时</td></tr>
+<tr><td><code>--progress-heartbeat-ms &lt;ms&gt;</code></td><td>覆盖 heartbeat 间隔</td></tr>
+</tbody></table></div>
+<h3>delivery ci-watch 参数</h3>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>用途</th></tr></thead><tbody>
+<tr><td><code>--selector &lt;prUrl或branch&gt;</code></td><td>指定 PR 或分支</td></tr>
+<tr><td><code>--max-attempts &lt;n&gt;</code></td><td>最大轮询次数</td></tr>
+<tr><td><code>--interval-ms &lt;ms&gt;</code></td><td>每次轮询间隔</td></tr>
+<tr><td><code>--backoff &lt;n&gt;</code></td><td>轮询退避倍率</td></tr>
+</tbody></table></div>
+`},
+      {num:"11",title:"使用说明",sub:"天工的核心设计理念是增强人类交付，合入、上线、权限扩大等关键决策始终由人控制。",
+       html:`
+<h3>适用场景</h3>
+<div class="tag-list"><span class="tag tag-jade">内部工具</span><span class="tag tag-jade">研发效能工具</span><span class="tag tag-jade">测试补齐</span><span class="tag tag-jade">文档补齐</span><span class="tag tag-jade">低风险 bugfix</span><span class="tag tag-jade">可回滚的中小需求</span></div>
+<h3>手册更新规则</h3>
+<p>后续每次功能、CLI/Web 入口、参数、错误处理、边界或用户流程变化后，都必须评估是否需要更新本手册。当前主手册路径：<code>docs/manual/tekon-user-manual.md</code></p>
+<div class="content-footer"><div class="footer-seal">工</div><div class="footer-text">tekon-user-manual · v2 · 2026.06</div></div>
+`}
+    ]
+  },
+  en: {
+    sections: [
+      {num:"01",title:"What is Tekon",sub:"Tekon is a local Agent workflow framework — a \"governed development workbench\".",
+       html:`
+<p>Tekon is a local Agent workflow framework — a "governed development workbench". You hand a development task to Tekon, and it breaks it down by role, executes in isolated worktrees, runs verification gates, collects artifacts and audit trails, and produces reviewable materials and PR packages.</p>
+<p>Its core mission is to <strong>augment human delivery capability</strong>. It advances your task to a state where it can be reviewed, PR-ready, and ready for further verification — while merge, deploy, and permission escalation remain under human control.</p>
+<div class="deco-line"></div>
+<h3>Current Positioning</h3>
+<div class="concept-grid">
+<div class="concept-card"><h4>Local CLI/Web Tool</h4><p>Runs on your own machine. No remote services required.</p></div>
+<div class="concept-card"><h4>Governed Workflow Executor</h4><p>Breaks down, executes, and verifies tasks through fixed workflows.</p></div>
+<div class="concept-card"><h4>Evidence & Review Collector</h4><p>Unified collection of artifacts, gate logs, and audit events.</p></div>
+<div class="concept-card"><h4>PR Preparation Assistant</h4><p>Generates reviewable materials and PR packages.</p></div>
+<div class="concept-card"><h4>Work Sample Evaluator</h4><p>Evaluates whether real-world samples meet adoption thresholds.</p></div>
+<div class="concept-card"><h4>Multi-Provider Runtime</h4><p>Supports mock, Claude Code, and Codex providers.</p></div>
+</div>
+<div class="callout callout-info"><span class="callout-label">Name</span>Tekon combines "Tech" + "Kong". The Chinese name 天工 references <em>Tiangong Kaiwu</em>, a classic Chinese encyclopedia of craftsmanship.</div>
+`},
+      {num:"02",title:"Problems Solved",sub:"Five core pain points, addressed one by one.",
+       html:`
+<h3>2.1 Vague Requirements</h3>
+<p>Real-world tasks often come as one-liners. Tekon's <code>demand shape</code> turns them into structured demand cards with: title, recommended template, risk level, non-goals, open questions, and acceptance criteria. Review and approve before execution.</p>
+<h3>2.2 Which Workflow to Use?</h3>
+<div class="tag-list">${['standard-feature','bugfix','test-improvement','docs-update','plan-only','standard-delivery'].map(t=>`<span class="tag tag-jade">${t}</span>`).join('')}</div>
+<p><code>standard-delivery</code> is the full governance pipeline with PM/RD/QA/Reviewer/PMO roles, independent review, AC evidence, and QA signoff. <code>workflow select</code> recommends the best template; <code>eval workflow-selection</code> validates the choice.</p>
+<h3>2.3 Unreviewable Agent Output</h3>
+<p>Tekon requires structured artifacts and organizes gates, logs, audit events, and PR packages into a unified review surface accessible via <code>review</code> or the Web dashboard.</p>
+<h3>2.4 Controlled Side Effects</h3>
+${flowSVG_delivery()}
+<h3>2.5 Is a Run Actually Deliverable?</h3>
+<p><code>eval readiness</code> assesses a single run's evidence completeness. <code>eval work-usability</code> evaluates whether a sample set meets the bar for real-world adoption.</p>
+`},
+      {num:"03",title:"Core Scenarios",sub:"Five typical scenarios, from feature development to tool evaluation.",
+       html:`
+${scenarioCardEN('SCENARIO A','Small Feature → Reviewable PR','Examples: add a filter to an internal tool, add a low-risk CLI command, add an entry to the Web dashboard.',[
+  '<code>tekon init</code> — initialize the repo','<code>demand shape</code> — create a demand card','Review the card','<code>demand approve</code>','<code>run</code> — execute the workflow',
+  '<code>status</code> / <code>review</code> — check results','<code>delivery prepare</code> — generate PR package',
+  '<code>delivery create-pr --approve-human</code>','<code>delivery ci-status</code> / <code>ci-watch</code>','<code>eval readiness</code>'
+])}
+${scenarioCardEN('SCENARIO B','Bug Fix with Human Gate','Examples: modify an existing logic branch, fix a low-risk API issue.',[
+  'Run with <code>bugfix</code> template','If human gate triggers: <code>approval summary</code>',
+  '<code>eval approval-summary</code>','Decide: <code>resume --approve-human</code> or <code>approval reject</code>'
+])}
+${scenarioCardEN('SCENARIO C','Test Coverage','Examples: add unit tests, add regression tests, increase coverage for CLI/Web API.',[
+  '<code>workflow select</code> — confirm <code>test-improvement</code>','<code>run --template test-improvement</code>','Check gates','<code>review</code> — inspect artifacts'
+])}
+${scenarioCardEN('SCENARIO D','Documentation & Planning','Examples: update manuals, organize review reports, write technical/product plans.',[],'<div class="tag-list"><span class="tag tag-gold">docs-update — Docs only</span><span class="tag tag-gold">plan-only — Plan, no code</span><span class="tag tag-gold">standard-delivery — Full role chain</span></div>')}
+${scenarioCardEN('SCENARIO E','Evaluate Tekon Readiness','',[
+  'Pick 2-3 real but low-risk repos','Prepare 10 real or historical tasks','Record each run with <code>eval work-usability record</code>',
+  'Evaluate with <code>eval work-usability --samples</code>','Save reports to <code>docs/reviews/</code>'
+])}
+`},
+      {num:"04",title:"Quick Start",sub:"Examples assume <code>tekon</code> is in PATH and you're in the target project root.",
+       html:`
+<div class="install-banner"><div class="install-label">⬇ One-Line Install</div><pre><code><span class="cmd">curl</span> <span class="flag">-fsSL</span> <span class="str">https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh</span> <span class="flag">|</span> <span class="cmd">bash</span></code></pre></div>
+<p>The script clones the repo, installs dependencies, builds, and adds <code>tekon</code> to PATH. Run <code>source ~/.zshrc</code> afterwards. Prerequisites: <code>git</code>, <code>node</code>(>=18), <code>npm</code>.</p>
+${flowSVG_quickstart()}
+<h3>4.2 Initialize Repo</h3><pre><code><span class="cmd">tekon</span> <span class="arg">init</span></code></pre>
+<h3>4.3 Check Command Profile</h3><pre><code><span class="cmd">tekon</span> <span class="arg">workflow preflight</span></code></pre>
+<h3>4.4 Shape & Approve Demand</h3>
+<pre><code><span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"Add approval summary display to Web dashboard with e2e passing"</span>
+<span class="cmd">tekon</span> <span class="arg">demand approve</span>
+<span class="cmd">tekon</span> <span class="arg">eval demand-shape</span></code></pre>
+<h3>4.5 Run</h3>
+<pre><code><span class="cmd">tekon</span> <span class="arg">run</span>
+<span class="cmt"># Long-running task with timeout control</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--timeout-ms</span> <span class="num">7200000</span> <span class="flag">--no-progress-timeout-ms</span> <span class="num">1200000</span>
+<span class="cmt"># Mock provider for offline regression</span>
+<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span></code></pre>
+<div class="callout callout-info"><span class="callout-label">Provider</span>Defaults to Codex. Real providers write structured artifacts via <code>TEKON_OUTPUT_DIR</code>. Default timeout: 1h. Remote side effects only via <code>delivery create-pr --approve-human</code>.</div>
+<h3>4.6 View Results</h3><pre><code><span class="cmd">tekon</span> <span class="arg">status</span> ; <span class="cmd">tekon</span> <span class="arg">review</span></code></pre>
+<h3>4.7 Prepare PR</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery prepare</span></code></pre>
+<h3>4.8 Create PR</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span></code></pre>
+<h3>4.9 CI Status</h3><pre><code><span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>
+<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span>
+<span class="cmd">tekon</span> <span class="arg">eval readiness</span></code></pre>
+<h3>4.10 Default Context Rules</h3>
+<p>Commands auto-detect the target repo, latest run, latest demand card, and latest pending decision. Explicit flags needed only for: cross-directory operations (<code>--repo</code>), historical objects (<code>--run-id</code>), and high-risk actions (<code>--approve-human</code>).</p>
+`},
+      {num:"05",title:"Core Concepts",sub:"Eleven building blocks of Tekon.",
+       html:`
+${flowSVG_workflow()}
+<div class="concept-grid">
+<div class="concept-card"><h4>5.1 Repo</h4><p>The target repository Tekon operates on.</p></div>
+<div class="concept-card"><h4>5.2 .tekon/</h4><p>Runtime directory: config, SQLite DB, artifacts, gate logs, worktrees. Not committed.</p></div>
+<div class="concept-card"><h4>5.3 Run</h4><p>A single workflow execution with unique <code>runId</code>.</p></div>
+<div class="concept-card"><h4>5.4 Workflow</h4><p>Ordered role nodes. Templates: <code>standard-feature</code>, <code>bugfix</code>, <code>test-improvement</code>, <code>docs-update</code>, <code>plan-only</code>, <code>standard-delivery</code>.</p></div>
+<div class="concept-card"><h4>5.5 Role</h4><p>PM, RD, QA, Reviewer, PMO — determines prompt, knowledge, and tool policy.</p></div>
+<div class="concept-card"><h4>5.6 Gate</h4><p>Verification checkpoints: build, lint, test, schema, security-scan, human, independent-review, role-scope, ac-evidence, qa-signoff, process-completeness.</p></div>
+<div class="concept-card"><h4>5.7 Provider</h4><p>Agent backend: <code>mock</code>, <code>claude-code</code>, <code>codex</code>.</p></div>
+<div class="concept-card"><h4>5.8 Artifact</h4><p>Structured outputs: demand cards, change descriptions, test reports, review reports, PR packages, CI status.</p></div>
+<div class="concept-card"><h4>5.9 Review Surface</h4><p>Unified review view via CLI <code>review</code> or Web dashboard.</p></div>
+<div class="concept-card"><h4>5.10 Readiness</h4><p>Per-run delivery completeness: "Are workflow, gates, artifacts, PR, and CI evidence all complete?"</p></div>
+<div class="concept-card"><h4>5.11 Work Usability</h4><p>Sample-set evaluation: "Has Tekon performed stably on enough real samples?"</p></div>
+</div>`},
+      {num:"06",title:"Command Reference",sub:"All CLI commands with parameters, usage, and troubleshooting.",
+       html:commandsHTML_EN()},
+      {num:"07",title:"Web Dashboard",sub:"Local dashboard for review and human decisions.",
+       html:`
+<h3>Launch</h3>
+<pre><code><span class="kw">TEKON_PROJECT_ROOT</span>=<span class="str">/path/to/project</span> <span class="cmd">npm exec</span> <span class="flag">--yes</span> <span class="flag">--</span> <span class="cmd">pnpm@10.12.1</span> <span class="flag">--filter</span> <span class="str">@tekon/web</span> <span class="arg">dev</span></code></pre>
+<p>Suitable for: project overview, run list, historical runs, readiness/evidence/diff/artifacts/gate logs/PR packages, human approval, controlled template runs, delivery prepare and create-pr.</p>
+<div class="callout callout-warn"><span class="callout-label">Session Token</span>Write operations require <code>.tekon/web-session.json</code> generated by <code>init</code>. The token must not be committed.</div>
+`},
+      {num:"08",title:"How to Judge Results",sub:"Don't just check exit code 0. Go through these in order.",
+       html:`
+<ol class="scenario-steps" style="list-style:decimal;padding-left:0">
+<li style="padding-left:28px"><code>status</code> — is the workflow passed?</li>
+<li style="padding-left:28px"><code>review</code> — can failures and evidence be explained?</li>
+<li style="padding-left:28px">Changed Files — do they match expectations?</li>
+<li style="padding-left:28px">Artifacts — are requirements, changes, tests, and reviews complete?</li>
+<li style="padding-left:28px">Gate Logs — did build/lint/test/security actually run?</li>
+<li style="padding-left:28px">PR Package — can a reviewer understand the PR body?</li>
+<li style="padding-left:28px">CI Status — are remote checks recorded?</li>
+<li style="padding-left:28px"><code>eval readiness</code> — is PR/CI evidence complete?</li>
+</ol>
+<div class="callout callout-warn"><span class="callout-label">Important</span>If any step is unclear, do not proceed to create a PR or approve high-risk actions.</div>
+`},
+      {num:"09",title:"FAQ",sub:"",
+       html:`
+<h3>9.1 preflight shows missing command</h3><p>Check <code>suggestedCommand</code> → write to <code>.tekon/repo-profile.yaml</code> → re-run <code>workflow preflight</code>.</p>
+<h3>9.2 Run rejected: dirty base</h3><p>Commit/stash unrelated changes, or add <code>--allow-dirty-base</code>.</p>
+<h3>9.3 Pending human gate</h3><p><code>approval summary</code> → <code>eval approval-summary</code> → <code>resume --approve-human</code> or <code>approval reject</code>.</p>
+<h3>9.4 Readiness fails</h3><p>Common: workflow not passed, pending gates, verification gate failure, security scan failure. Check <code>review</code> failed checks first.</p>
+<h3>9.5 create-pr fails</h3><p>Common: no <code>gh</code> CLI, auth failure, dirty worktree, PR already exists.</p>
+<h3>9.6 ci-status fails</h3><p>Common: run has no PR URL, wrong selector. Use <code>--selector</code> to specify.</p>
+<h3>9.7 Artifact rejected</h3><p>The artifact matched a key/token pattern. Remove secrets and use safe summaries.</p>
+<h3>9.8 Web write rejected</h3><p>Re-run <code>init</code> to generate token → verify <code>TEKON_PROJECT_ROOT</code>.</p>
+<h3>9.9 Codex provider fails</h3><p>Verify <code>codex --version</code> → check artifacts in <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code>. Don't downgrade to mock.</p>
+`},
+      {num:"10",title:"Parameter Reference",sub:"",
+       html:`
+<h3>Global Parameters</h3>
+<div class="table-wrap"><table><thead><tr><th>Flag</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>--repo &lt;path&gt;</code></td><td>Target repo for cross-directory operations</td></tr>
+<tr><td><code>--run-id &lt;runId&gt;</code></td><td>Specify a historical run</td></tr>
+<tr><td><code>--agent mock|claude-code|codex</code></td><td>Select provider</td></tr>
+<tr><td><code>--approve-human</code></td><td>Explicitly approve a gate or remote side effect</td></tr>
+<tr><td><code>--allow-dirty-base</code></td><td>Allow running with uncommitted changes</td></tr>
+<tr><td><code>--shape &lt;path&gt;</code></td><td>Specify demand card path</td></tr>
+<tr><td><code>--decision-id &lt;id&gt;</code></td><td>Specify a human decision</td></tr>
+</tbody></table></div>
+<h3>run Parameters</h3>
+<div class="table-wrap"><table><thead><tr><th>Flag</th><th>Purpose</th></tr></thead><tbody>
+<tr><td><code>--template &lt;name&gt;</code></td><td>Use a built-in template</td></tr>
+<tr><td><code>--dynamic / --dry-run</code></td><td>Dynamic workflow preview</td></tr>
+<tr><td><code>--timeout-ms &lt;ms&gt;</code></td><td>Override provider total timeout</td></tr>
+<tr><td><code>--no-progress-timeout-ms &lt;ms&gt;</code></td><td>Override no-progress timeout</td></tr>
+<tr><td><code>--progress-heartbeat-ms &lt;ms&gt;</code></td><td>Override heartbeat interval</td></tr>
+</tbody></table></div>
+`},
+      {num:"11",title:"Usage Notes",sub:"Tekon's core design philosophy is to augment human delivery. Merge, deploy, and permission escalation always remain under human control.",
+       html:`
+<h3>Suitable For</h3>
+<div class="tag-list"><span class="tag tag-jade">Internal tools</span><span class="tag tag-jade">Dev productivity</span><span class="tag tag-jade">Test coverage</span><span class="tag tag-jade">Documentation</span><span class="tag tag-jade">Low-risk bugfixes</span><span class="tag tag-jade">Reviewable small/medium features</span></div>
+<div class="content-footer"><div class="footer-seal">工</div><div class="footer-text">tekon-user-manual · v2 · 2026.06</div></div>
+`}
+    ]
   }
-  menuToggle.addEventListener('click',function(){sidebar.classList.toggle('show')});
-  navItems.forEach(function(item){item.addEventListener('click',function(){sidebar.classList.remove('show')})});
-  document.addEventListener('click',function(e){if(!sidebar.contains(e.target)&&e.target!==menuToggle&&!menuToggle.contains(e.target))sidebar.classList.remove('show')});
-  window.addEventListener('scroll',updateActive,{passive:true});
-  updateActive();
+};
+
+// ═══════════════════════════════════════════════
+//  FLOW DIAGRAMS (SVG)
+// ═══════════════════════════════════════════════
+function flowSVG_delivery(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 160" width="100%" height="auto">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
+<rect x="10" y="50" width="120" height="40" class="pipe-box highlight" rx="4"/><text x="70" y="68" class="pipe-label">demand shape</text><text x="70" y="82" class="pipe-desc">Shape requirements</text>
+<line x1="130" y1="70" x2="175" y2="70" class="pipe-arrow"/>
+<rect x="180" y="50" width="120" height="40" class="pipe-box" rx="4"/><text x="240" y="68" class="pipe-label">demand approve</text><text x="240" y="82" class="pipe-desc">Human approval</text>
+<line x1="300" y1="70" x2="345" y2="70" class="pipe-arrow"/>
+<rect x="350" y="50" width="100" height="40" class="pipe-box" rx="4"/><text x="400" y="68" class="pipe-label">tekon run</text><text x="400" y="82" class="pipe-desc">Execute workflow</text>
+<line x1="450" y1="70" x2="495" y2="70" class="pipe-arrow"/>
+<rect x="500" y="50" width="110" height="40" class="pipe-box" rx="4"/><text x="555" y="68" class="pipe-label">review</text><text x="555" y="82" class="pipe-desc">Review evidence</text>
+<line x1="610" y1="70" x2="655" y2="70" class="pipe-arrow"/>
+<rect x="660" y="45" width="140" height="50" class="pipe-box highlight" rx="4"/><text x="730" y="63" class="pipe-label">create-pr</text><text x="730" y="80" class="pipe-desc">--approve-human</text>
+<line x1="730" y1="95" x2="730" y2="120" class="pipe-arrow"/>
+<rect x="660" y="120" width="140" height="30" class="pipe-box" rx="4"/><text x="730" y="139" class="pipe-label">ci-status / ci-watch</text>
+</svg></div>`}
+
+function flowSVG_quickstart(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 100" width="100%" height="auto">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
+<rect x="10" y="25" width="100" height="40" class="pipe-box highlight" rx="4"/><text x="60" y="43" class="pipe-label">init</text><text x="60" y="57" class="pipe-desc">Initialize</text>
+<line x1="110" y1="45" x2="150" y2="45" class="pipe-arrow"/>
+<rect x="155" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="210" y="43" class="pipe-label">demand shape</text><text x="210" y="57" class="pipe-desc">Shape + approve</text>
+<line x1="265" y1="45" x2="305" y2="45" class="pipe-arrow"/>
+<rect x="310" y="25" width="90" height="40" class="pipe-box" rx="4"/><text x="355" y="43" class="pipe-label">run</text><text x="355" y="57" class="pipe-desc">Execute</text>
+<line x1="400" y1="45" x2="440" y2="45" class="pipe-arrow"/>
+<rect x="445" y="25" width="100" height="40" class="pipe-box" rx="4"/><text x="495" y="43" class="pipe-label">review</text><text x="495" y="57" class="pipe-desc">Review surface</text>
+<line x1="545" y1="45" x2="585" y2="45" class="pipe-arrow"/>
+<rect x="590" y="25" width="110" height="40" class="pipe-box" rx="4"/><text x="645" y="43" class="pipe-label">delivery</text><text x="645" y="57" class="pipe-desc">prepare + pr</text>
+<line x1="700" y1="45" x2="740" y2="45" class="pipe-arrow"/>
+<rect x="745" y="25" width="65" height="40" class="pipe-box jade" rx="4"/><text x="777" y="49" class="pipe-label">Done</text></svg></div>`}
+
+function flowSVG_workflow(){
+  return `<div class="flow-diagram"><svg viewBox="0 0 820 130" width="100%" height="auto">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#8a7a4e"/></marker></defs>
+<rect x="10" y="45" width="110" height="40" class="flow-box active" rx="4"/><text x="65" y="63" class="flow-label">Demand</text><text x="65" y="77" class="flow-label cn">需求输入</text>
+<line x1="120" y1="65" x2="165" y2="65" class="flow-arrow vermillion"/>
+<rect x="170" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="215" y="63" class="flow-label">PM</text><text x="215" y="77" class="flow-label cn">需求塑形</text>
+<line x1="260" y1="65" x2="305" y2="65" class="flow-arrow"/>
+<rect x="310" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="350" y="63" class="flow-label">RD</text><text x="350" y="77" class="flow-label cn">代码实现</text>
+<line x1="390" y1="65" x2="435" y2="65" class="flow-arrow"/>
+<rect x="440" y="45" width="80" height="40" class="flow-box" rx="4"/><text x="480" y="63" class="flow-label">QA</text><text x="480" y="77" class="flow-label cn">测试验证</text>
+<line x1="520" y1="65" x2="565" y2="65" class="flow-arrow"/>
+<rect x="570" y="45" width="90" height="40" class="flow-box gold" rx="4"/><text x="615" y="63" class="flow-label">Reviewer</text><text x="615" y="77" class="flow-label cn">独立评审</text>
+<line x1="660" y1="65" x2="705" y2="65" class="flow-arrow"/>
+<rect x="710" y="45" width="90" height="40" class="flow-box jade" rx="4"/><text x="755" y="63" class="flow-label">Delivery</text><text x="755" y="77" class="flow-label cn">交付准备</text>
+</svg></div>`}
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function scenarioCard(label,title,desc,steps,extra){
+  let h='<div class="scenario-card"><div class="scenario-label">'+label+'</div><div class="scenario-title">'+title+'</div>';
+  if(desc) h+='<p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">'+desc+'</p>';
+  if(extra) h+=extra;
+  if(steps.length){h+='<ol class="scenario-steps">';steps.forEach(s=>h+='<li>'+s+'</li>');h+='</ol>';}
+  h+='</div>';return h;
+}
+function scenarioCardEN(label,title,desc,steps,extra){
+  return scenarioCard(label,title,desc,steps,extra);
+}
+
+function cmdBlock(name,desc,code,section){
+  let h='<div class="cmd-block"><div class="cmd-block-header"><span class="cmd-name">'+name+'</span><span class="cmd-desc">'+desc+'</span></div>';
+  h+='<pre><code>'+code+'</code></pre>';
+  if(section) h+=section;
+  h+='</div>';return h;
+}
+
+function commandsHTML(){
+  const cmds=[
+    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>','<div class="cmd-section"><div class="cmd-section-title">Parameters</div><ul><li><code>--repo &lt;path&gt;</code> — specify target repo from another directory</li></ul></div><div class="cmd-section"><div class="cmd-section-title">Result</div><ul><li>Creates <code>.tekon/</code>, <code>config.yaml</code>, <code>repo-profile.yaml</code>, <code>web-session.json</code></li></ul></div>'],
+    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>','<div class="cmd-section"><div class="cmd-section-title">Results</div><ul><li><code>resolved</code> — executable</li><li><code>missing</code> — need repo profile</li><li><code>not-applicable</code> — explicitly skipped</li><li><code>not-command-gate</code> — semantic gate</li></ul></div>'],
+    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"补齐 CLI 单元测试"</span>'],
+    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"需求文本"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--no-write</code> — preview only</li><li><code>--format json</code> — JSON output</li></ul></div>'],
+    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
+    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Use demand card (default: latest approved)</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span> <span class="str">"demand text"</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code> — built-in template</li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
+    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
+    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--run-id</code> / <code>--decision-id</code></li><li><code>--json</code> — structured JSON</li></ul></div>'],
+    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
+    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
+    ['6.11 approval reject','Reject & block workflow','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
+    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>','<div class="cmd-section"><div class="cmd-section-title">Key Sections</div><ul><li>Readiness Failed Checks / Evidence Navigation / Gate Failure Triage</li><li>Delivery / Changed Files / Artifacts / Gate Logs / PR Body / PR Package</li></ul></div>'],
+    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
+    ['6.14 delivery prepare','Generate local PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
+    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>','<div class="cmd-section"><div class="cmd-section-title">Requirements</div><ul><li><code>gh</code> CLI installed & authenticated</li><li>Workflow passed, AC evidence complete, QA signoff satisfied</li></ul></div>'],
+    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
+    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span> <span class="flag">--interval-ms</span> <span class="num">15000</span>'],
+    ['6.18 eval readiness','Evaluate delivery readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
+    ['6.19 eval work-usability','Evaluate sample set','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
+  ];
+  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
+}
+
+function commandsHTML_EN(){
+  const cmds=[
+    ['6.1 init','Initialize repo','<span class="cmd">tekon</span> <span class="arg">init</span>'],
+    ['6.2 workflow preflight','Check command profile','<span class="cmd">tekon</span> <span class="arg">workflow preflight</span>'],
+    ['6.3 workflow select','Recommend template','<span class="cmd">tekon</span> <span class="arg">workflow select</span> <span class="str">"Add unit tests for CLI"</span>'],
+    ['6.4 demand shape','Shape demand card','<span class="cmd">tekon</span> <span class="arg">demand shape</span> <span class="str">"demand text"</span>'],
+    ['6.5 demand approve','Approve demand card','<span class="cmd">tekon</span> <span class="arg">demand approve</span>'],
+    ['6.6 run','Execute workflow','<span class="cmt"># Template run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="str">"demand text"</span> <span class="flag">--template</span> <span class="str">standard-delivery</span> <span class="flag">--agent</span> <span class="str">mock</span>\n\n<span class="cmt"># Demand card run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span>\n\n<span class="cmt"># Dynamic dry-run</span>\n<span class="cmd">tekon</span> <span class="arg">run</span> <span class="flag">--dynamic</span> <span class="flag">--dry-run</span>','<div class="cmd-section"><div class="cmd-section-title">Flags</div><ul><li><code>--template &lt;name&gt;</code></li><li><code>--agent mock|claude-code|codex</code></li><li><code>--allow-dirty-base</code></li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code></li></ul></div>'],
+    ['6.7 status','View run status','<span class="cmd">tekon</span> <span class="arg">status</span>'],
+    ['6.8 approval summary','Generate approval summary','<span class="cmd">tekon</span> <span class="arg">approval summary</span>'],
+    ['6.9 eval approval-summary','Check summary completeness','<span class="cmd">tekon</span> <span class="arg">eval approval-summary</span>'],
+    ['6.10 resume','Approve human gate','<span class="cmd">tekon</span> <span class="arg">resume</span> <span class="flag">--approve-human</span>'],
+    ['6.11 approval reject','Reject & block','<span class="cmd">tekon</span> <span class="arg">approval reject</span>'],
+    ['6.12 review','Full review surface','<span class="cmd">tekon</span> <span class="arg">review</span>'],
+    ['6.13 delivery dry-run','Preview delivery plan','<span class="cmd">tekon</span> <span class="arg">delivery dry-run</span>'],
+    ['6.14 delivery prepare','Generate PR package','<span class="cmd">tekon</span> <span class="arg">delivery prepare</span>'],
+    ['6.15 delivery create-pr','Create remote PR','<span class="cmd">tekon</span> <span class="arg">delivery create-pr</span> <span class="flag">--approve-human</span>'],
+    ['6.16 delivery ci-status','Query PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-status</span>'],
+    ['6.17 delivery ci-watch','Poll PR checks','<span class="cmd">tekon</span> <span class="arg">delivery ci-watch</span> <span class="flag">--max-attempts</span> <span class="num">20</span>'],
+    ['6.18 eval readiness','Evaluate readiness','<span class="cmd">tekon</span> <span class="arg">eval readiness</span>'],
+    ['6.19 eval work-usability','Evaluate samples','<span class="cmd">tekon</span> <span class="arg">eval work-usability</span> <span class="flag">--samples</span> <span class="path">/path/to/samples.yaml</span>']
+  ];
+  return cmds.map(c=>cmdBlock(c[0],c[1],c[2],c[3]||'')).join('');
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER ENGINE
+// ═══════════════════════════════════════════════
+let currentLang='zh';
+let currentTab=0;
+const container=document.getElementById('tabContainer');
+const sidebar=document.getElementById('sidebar');
+const mobileNav=document.getElementById('mobileNav');
+
+function renderTabs(){
+  const data=T[currentLang].sections;
+  // Content panels
+  container.innerHTML=data.map((s,i)=>`<div class="tab-panel${i===currentTab?' active':''}" id="panel${i}">
+    <div class="section-header"><span class="section-num">SECTION ${s.num}</span><h1 class="section-title">${s.title}</h1><p class="section-subtitle">${s.sub}</p></div>
+    ${s.html}
+  </div>`).join('');
+  // Update nav
+  sidebar.querySelectorAll('.nav-tab').forEach((el,i)=>{el.classList.toggle('active',i===currentTab)});
+  // Mobile nav
+  mobileNav.innerHTML=data.map((s,i)=>`<button class="mobile-nav-btn${i===currentTab?' active':''}" data-tab="${i}">${s.num}</button>`).join('');
+  bindEvents();
+}
+
+function bindEvents(){
+  // Sidebar tabs
+  sidebar.querySelectorAll('.nav-tab').forEach(el=>{el.onclick=()=>switchTab(parseInt(el.dataset.tab))});
+  // Mobile tabs
+  mobileNav.querySelectorAll('.mobile-nav-btn').forEach(el=>{el.onclick=()=>switchTab(parseInt(el.dataset.tab))});
+}
+
+function switchTab(i){
+  currentTab=i;
+  document.querySelectorAll('.tab-panel').forEach((p,j)=>p.classList.toggle('active',j===i));
+  sidebar.querySelectorAll('.nav-tab').forEach((el,j)=>el.classList.toggle('active',j===i));
+  mobileNav.querySelectorAll('.mobile-nav-btn').forEach((el,j)=>el.classList.toggle('active',j===i));
+  container.scrollIntoView({behavior:'smooth',block:'start'});
+  if(window.innerWidth<1025) sidebar.classList.remove('show');
+}
+
+// Language toggle
+document.getElementById('langToggle').addEventListener('click',function(e){
+  const btn=e.target.closest('.lang-btn');
+  if(!btn||btn.classList.contains('active'))return;
+  currentLang=btn.dataset.lang;
+  this.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b===btn));
+  document.documentElement.lang=currentLang==='zh'?'zh-CN':'en';
+  document.documentElement.classList.toggle('en',currentLang==='en');
+  // Update nav i18n labels
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.dataset.i18n;
+    el.textContent=currentLang==='zh'?key:getEnLabel(key);
+  });
+  localStorage.setItem('tekon-lang',currentLang);
+  renderTabs();
+});
+
+function getEnLabel(key){
+  const map={
+    'Overview':'Overview','What is Tekon':'What is Tekon','Problems Solved':'Problems Solved',
+    'Getting Started':'Getting Started','Scenarios':'Scenarios','Quick Start':'Quick Start',
+    'Deep Dive':'Deep Dive','Core Concepts':'Core Concepts','Command Reference':'Command Reference',
+    'More':'More','Web Dashboard':'Web Dashboard','Judging Results':'Judging Results',
+    'FAQ':'FAQ','Parameters':'Parameters','Usage Notes':'Usage Notes',
+    '天工 Tekon':'天工 Tekon'
+  };
+  return map[key]||key;
+}
+
+// Mobile menu
+document.getElementById('menuBtn').addEventListener('click',()=>sidebar.classList.toggle('show'));
+document.addEventListener('click',function(e){
+  if(!sidebar.contains(e.target)&&e.target!==document.getElementById('menuBtn')&&!document.getElementById('menuBtn').contains(e.target)){
+    sidebar.classList.remove('show');
+  }
+});
+
+// Init
+(function(){
+  const saved=localStorage.getItem('tekon-lang');
+  if(saved==='en'){
+    currentLang='en';
+    document.documentElement.lang='en';
+    document.documentElement.classList.add('en');
+    document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang==='en'));
+  }
+  renderTabs();
 })();
 </script>
 </body>

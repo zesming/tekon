@@ -4,6 +4,8 @@
 
 天工的核心思路是"受控研发工作台"：让 Agent 承担可自动化的执行和整理工作，让人保留需求批准、风险确认、PR 创建、合入和上线等关键控制权。
 
+> 📖 **用户手册** — [中文版 / 中](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) ｜ [English / EN](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（页面内可切换语言 / built-in language toggle）
+
 ## 项目定位
 
 天工解决 AI 辅助研发进入真实工作流后的几个核心问题：
@@ -141,8 +143,7 @@ npm exec --yes -- pnpm@10.12.1 test -- --run
 npm run lint:actions
 ```
 
-## 文档入口
+## 文档
 
-- [用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)
 - [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
 - [变更日志](CHANGELOG.md)
