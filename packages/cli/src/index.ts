@@ -2141,6 +2141,13 @@ async function commandUi(argv: string[], io: CliIO) {
     },
     allowPositionals: true,
   });
+  const port = args.values.port ?? '3000';
+  if (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65535) {
+    throw new Error(
+      `Invalid port: ${port}. Must be a number between 1 and 65535.`,
+    );
+  }
+
   const repoPath = resolveProjectRepoPath(args.values.repo);
   ensureInitialized(repoPath);
 
@@ -2167,12 +2174,6 @@ async function commandUi(argv: string[], io: CliIO) {
   if (!existsSync(tsxBin)) {
     throw new Error(
       `tsx not found at ${tsxBin}. Run "npx pnpm install" in ${tekonRoot} first.`,
-    );
-  }
-  const port = args.values.port ?? '3000';
-  if (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65535) {
-    throw new Error(
-      `Invalid port: ${port}. Must be a number between 1 and 65535.`,
     );
   }
 
