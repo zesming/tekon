@@ -79,7 +79,7 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
     return (
       <div className="card">
         <div className="card-body">
-          <p className="text-muted text-sm">Loading runs…</p>
+          <p className="text-muted text-sm">加载运行列表...</p>
         </div>
       </div>
     );
@@ -90,7 +90,7 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
       <div className="card">
         <div className="card-body">
           <p className="text-muted text-sm">
-            No runs found. Start a new run to begin.
+            暂无运行记录。启动新运行后将在此显示。
           </p>
         </div>
       </div>

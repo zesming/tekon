@@ -120,11 +120,14 @@ const COMMANDS: CommandMeta[] = [
     { name: 'path', description: '显示角色目录路径' },
     { name: 'create', description: '从内置角色复制创建自定义角色' },
   ] },
-  { name: 'constraints', description: '查看 Tekon 约束配置', group: '工作流与角色' },
+  { name: 'constraints', description: '查看 Tekon 约束配置', group: '工作流与角色', subcommands: [
+    { name: 'show', description: '显示约束配置内容' },
+  ] },
   // 交付
   { name: 'delivery', description: '准备和创建交付 PR', group: '交付', subcommands: [
     { name: 'prepare', description: '准备交付 PR' },
     { name: 'create-pr', description: '创建 PR' },
+    { name: 'dry-run', description: '预览交付计划，不产生远端副作用' },
     { name: 'ci-status', description: '查询 PR 的 CI 状态' },
     { name: 'ci-watch', description: '持续观察 PR 的 CI 状态直到完成' },
   ] },
@@ -390,20 +393,22 @@ async function commandRun(argv: string[], io: CliIO) {
     : null;
   if (shapedDemand && !shapedDemand.approved) {
     throw new Error(
-      `draft file must be approved before run: ${demandFilePath}`,
+      `需求草案必须先批准才能运行: ${demandFilePath}`,
     );
   }
   const demandText = shapedDemand
     ? renderDemandShapeForRun(shapedDemand)
     : positionalDemandText;
   if (!demandText) {
-    throw new Error('run draft text is required');
+    throw new Error(
+      '请提供需求文本或已批准的需求卡。示例: tekon run "你的需求" 或先执行 tekon draft new 创建需求草案。',
+    );
   }
   const allowDirtyBase = Boolean(args.values['allow-dirty-base']);
 
   if (args.values.dynamic) {
     if (!args.values['dry-run']) {
-      throw new Error('dynamic workflow currently requires --dry-run');
+      throw new Error('动态工作流当前必须使用 --dry-run 参数运行');
     }
     const preview = await generateDynamicWorkflow({
       demandText,
@@ -453,20 +458,28 @@ async function commandRun(argv: string[], io: CliIO) {
       builtInRolesDir: getBuiltInRolesDir(),
     });
 
+    const templateName = args.values.template ?? 'standard-delivery';
     const result = await engine.startRun({
       demandText,
       mode: 'template',
-      templateName: args.values.template ?? 'standard-delivery',
+      templateName,
     });
     const pendingHuman = (
       await repositories.listHumanDecisions(result.runId)
     ).filter((decision) => decision.status === 'pending');
     io.stdout.write(
       [
-        `runId=${result.runId}`,
-        `status=${result.workflow.status}`,
-        pendingHuman.length > 0 ? 'humanGate=pending' : 'humanGate=none',
-      ].join(' ') + '\n',
+        '🚀 运行已启动',
+        `  Run ID: ${result.runId}`,
+        `  状态: ${result.workflow.status}`,
+        `  模板: ${templateName}`,
+        pendingHuman.length > 0 ? '  人工确认: pending' : '',
+        '',
+        '后续操作:',
+        '  tekon status          查看运行状态',
+        '  tekon review          查看审阅面板',
+        '',
+      ].filter((l) => l !== '').join('\n') + '\n',
     );
   });
 }
@@ -648,7 +661,7 @@ async function commandDemand(argv: string[], io: CliIO) {
     }
 
     lines.push('', '后续操作:');
-    lines.push('  tekon draft review      评审草案');
+    lines.push('  tekon draft show        查看草案详情');
     lines.push('  tekon draft approve     批准后即可执行');
     lines.push(`  tekon run --draft-file ${paths.jsonPath}    发起运行`);
     lines.push('');
@@ -775,14 +788,14 @@ async function commandDemand(argv: string[], io: CliIO) {
     return;
   }
 
-  throw new Error(`unknown draft command: ${subcommand ?? ''}`);
+  throw new Error(`未知的 draft 子命令: ${subcommand ?? ''}。请使用 tekon help draft 查看可用子命令。`);
 }
 
 async function commandPause(argv: string[], io: CliIO) {
   await withCommandCtx(argv, io, async ({ repos: repositories, runId }) => {
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
-      throw new Error(`run not found: ${runId}`);
+      throw new Error(`未找到运行: ${runId}`);
     }
     if (workflow.currentNodeId) {
       await repositories.transitionNode(workflow.currentNodeId, 'paused');
@@ -826,19 +839,19 @@ async function commandResume(argv: string[], io: CliIO) {
       args.positionals[0] ??
       selectLatestRunId(db);
     if (!runId) {
-      throw new Error('run id could not be inferred; pass --run-id <runId>');
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
     }
     const audit = createAuditLogger({ repositories });
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
-      throw new Error(`run not found: ${runId}`);
+      throw new Error(`未找到运行: ${runId}`);
     }
 
     const gateway = createCommandGateway({ repositories });
     const runProvider = await repositories.getRunProviderConfig(runId);
     if (!runProvider) {
       throw new Error(
-        `run ${runId} has no provider snapshot; cannot resume safely`,
+        `运行 ${runId} 没有 provider 快照，无法安全恢复。请确认该运行是否正常启动过。`,
       );
     }
     const agentRuntime = createAgentAdapterFromSnapshot({
@@ -850,7 +863,7 @@ async function commandResume(argv: string[], io: CliIO) {
     if (args.values['approve-human']) {
       if (!decisionContext?.decisionId) {
         throw new Error(
-          'pending human decision could not be inferred; pass --run-id and --decision-id',
+          '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
         );
       }
       const decision = await repositories.getHumanDecision(
@@ -858,12 +871,12 @@ async function commandResume(argv: string[], io: CliIO) {
       );
       if (!decision || decision.runId !== runId) {
         throw new Error(
-          `human decision not found: ${decisionContext.decisionId}`,
+          `未找到人工决策: ${decisionContext.decisionId}`,
         );
       }
       if (decision.status !== 'pending') {
         throw new Error(
-          `decision is already ${decision.status}: ${decisionContext.decisionId}`,
+          `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
         );
       }
       const humanGate = createHumanGate({ repositories });
@@ -897,7 +910,7 @@ async function commandCancel(argv: string[], io: CliIO) {
   await withCommandCtx(argv, io, async ({ repos: repositories, runId }) => {
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
-      throw new Error(`run not found: ${runId}`);
+      throw new Error(`未找到运行: ${runId}`);
     }
     if (workflow.currentNodeId) {
       await repositories.transitionNode(workflow.currentNodeId, 'interrupted');
@@ -933,13 +946,13 @@ async function commandRole(argv: string[], io: CliIO) {
   }
 
   if (!roleId) {
-    throw new Error('role id is required');
+    throw new Error('角色 ID 不能为空。请使用 tekon role list 查看可用角色。');
   }
   ensureSafeName(roleId);
   const validRoles = ['pm', 'rd', 'qa', 'reviewer', 'pmo'] as const;
   if (!validRoles.includes(roleId as (typeof validRoles)[number])) {
     throw new Error(
-      `invalid role id: ${roleId} (expected one of: ${validRoles.join(', ')})`,
+      `无效的角色 ID: ${roleId}。可选值为: ${validRoles.join(', ')}`,
     );
   }
   const role = roleId as (typeof validRoles)[number];
@@ -970,21 +983,21 @@ async function commandRole(argv: string[], io: CliIO) {
     const resolvedBuiltInDir = realpathSync(builtInRolesDir);
     const resolvedSource = realpathSync(source);
     if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
-      throw new Error(`role id escapes built-in roles directory: ${roleId}`);
+      throw new Error(`角色 ID 试图逃逸内置角色目录: ${roleId}`);
     }
     const repoRolesDir = join(repoPath, '.tekon', 'roles');
     mkdirSync(repoRolesDir, { recursive: true });
     const resolvedRolesDir = realpathSync(repoRolesDir);
     const resolvedTarget = resolve(resolvedRolesDir, roleId);
     if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
-      throw new Error(`role id escapes project roles directory: ${roleId}`);
+      throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
     }
     cpSync(resolvedSource, resolvedTarget, { recursive: true });
     io.stdout.write(`${resolvedTarget}\n`);
     return;
   }
 
-  throw new Error(`unknown role command: ${subcommand ?? ''}`);
+  throw new Error(`未知的 role 子命令: ${subcommand ?? ''}。请使用 tekon help role 查看可用子命令。`);
 }
 
 async function commandWorkflow(argv: string[], io: CliIO) {
@@ -1122,7 +1135,7 @@ async function commandWorkflow(argv: string[], io: CliIO) {
   }
 
   if (!name) {
-    throw new Error('workflow name is required');
+    throw new Error('工作流名称不能为空。请使用 tekon help workflow 查看用法。');
   }
 
   if (subcommand === 'show') {
@@ -1150,13 +1163,13 @@ async function commandWorkflow(argv: string[], io: CliIO) {
     return;
   }
 
-  throw new Error(`unknown workflow command: ${subcommand ?? ''}`);
+  throw new Error(`未知的 workflow 子命令: ${subcommand ?? ''}。请使用 tekon help workflow 查看可用子命令。`);
 }
 
 async function commandConstraints(argv: string[], io: CliIO) {
   const [subcommand] = argv;
   if (subcommand !== 'show') {
-    throw new Error(`unknown constraints command: ${subcommand ?? ''}`);
+    throw new Error(`未知的 constraints 子命令: ${subcommand ?? ''}。请使用 tekon help constraints 查看可用子命令。`);
   }
   io.stdout.write(
     readFileSync(join(getRepoRoot(), 'constraints.yaml'), 'utf8'),
@@ -1204,7 +1217,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       const runId =
         args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
       if (!runId) {
-        throw new Error('run id could not be inferred; pass --run-id <runId>');
+        throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
       }
       const audit = createAuditLogger({ repositories });
       const preparation = await createPullRequestPreparation({
@@ -1231,14 +1244,18 @@ async function commandDelivery(argv: string[], io: CliIO) {
         approvedBy: 'cli',
       });
       const delivery = await repositories.getDeliveryPullRequest(runId);
+      const prUrl = result.prUrl ?? delivery?.prUrl ?? '';
       io.stdout.write(
         [
-          `runId=${runId}`,
-          `deliveryStatus=${delivery?.status ?? 'unknown'}`,
-          `requiresHumanApproval=${result.requiresHumanApproval}`,
-          `prUrl=${result.prUrl ?? delivery?.prUrl ?? ''}`,
-          `failureStage=${delivery?.failureStage ?? ''}`,
-        ].join(' ') + '\n',
+          '✅ PR 已创建',
+          `   URL:    ${prUrl}`,
+          `   分支:   ${preparation.branch} → ${preparation.baseBranch}`,
+          `   runId=${runId}`,
+          `   deliveryStatus=${delivery?.status ?? 'unknown'}`,
+          `   requiresHumanApproval=${result.requiresHumanApproval}`,
+          `   prUrl=${prUrl}`,
+          `   failureStage=${delivery?.failureStage ?? ''}`,
+        ].join('\n') + '\n',
       );
     });
     return;
@@ -1262,7 +1279,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       const runId =
         args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
       if (!runId) {
-        throw new Error('run id could not be inferred; pass --run-id <runId>');
+        throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
       }
       const repositories = createRepositories(db);
       const audit = createAuditLogger({ repositories });
@@ -1309,7 +1326,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
       const runId =
         args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
       if (!runId) {
-        throw new Error('run id could not be inferred; pass --run-id <runId>');
+        throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
       }
       const repositories = createRepositories(db);
       const audit = createAuditLogger({ repositories });
@@ -1348,7 +1365,7 @@ async function commandDelivery(argv: string[], io: CliIO) {
   }
 
   if (subcommand !== 'dry-run') {
-    throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
+    throw new Error(`未知的 delivery 子命令: ${subcommand ?? ''}。请使用 tekon help delivery 查看可用子命令。`);
   }
   await withCommandCtx(rest, io, async ({ repos: repositories, repoPath, runId }) => {
     const audit = createAuditLogger({ repositories });
@@ -1418,7 +1435,7 @@ function createAgentAdapter(input: {
     };
   }
 
-  throw new Error(`unsupported agent: ${input.agent}`);
+  throw new Error(`不支持的 agent 类型: ${input.agent}。目前支持的 agent 有: mock, claude-code, codex`);
 }
 
 type ProviderRuntimeOverrides = Partial<
@@ -1466,11 +1483,11 @@ function parsePositiveIntOption(
     return undefined;
   }
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`${name} must be a positive integer`);
+    throw new Error(`${name} 必须是正整数`);
   }
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
+    throw new Error(`${name} 必须是正整数`);
   }
   return parsed;
 }
@@ -1498,7 +1515,7 @@ function createAgentAdapterFromSnapshot(input: {
     );
     if (!parsed.success || parsed.data.provider !== 'claude-code') {
       throw new Error(
-        `run ${input.snapshot.runId} has a non-replayable claude-code provider snapshot`,
+        `运行 ${input.snapshot.runId} 的 claude-code provider 快照无法恢复，可能已损坏或版本不兼容`,
       );
     }
     return {
@@ -1514,7 +1531,7 @@ function createAgentAdapterFromSnapshot(input: {
     );
     if (!parsed.success || parsed.data.provider !== 'codex') {
       throw new Error(
-        `run ${input.snapshot.runId} has a non-replayable codex provider snapshot`,
+        `运行 ${input.snapshot.runId} 的 codex provider 快照无法恢复，可能已损坏或版本不兼容`,
       );
     }
     return {
@@ -1524,7 +1541,7 @@ function createAgentAdapterFromSnapshot(input: {
     };
   }
 
-  throw new Error('custom agent provider snapshots cannot be resumed safely');
+  throw new Error('自定义 agent provider 的快照无法安全恢复，目前仅支持 mock、claude-code 和 codex');
 }
 
 function summarizeAgentConfig(
@@ -1601,7 +1618,7 @@ async function commandStatus(argv: string[], io: CliIO) {
   await withCommandCtx(argv, io, async ({ repos: repositories, repoPath, runId }) => {
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
-      throw new Error(`run not found: ${runId}`);
+      throw new Error(`未找到运行: ${runId}`);
     }
     const gates = await repositories.listGateResults(runId);
     const artifacts = await repositories.listArtifacts(runId);
@@ -1642,7 +1659,7 @@ async function commandApproval(argv: string[], io: CliIO) {
       ? Number(args.values['max-chars'])
       : 1_200;
     if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
-      throw new Error('--max-chars must be a positive number');
+      throw new Error('--max-chars 必须是正数');
     }
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
@@ -1709,17 +1726,17 @@ async function commandApproval(argv: string[], io: CliIO) {
       });
       if (!decisionId) {
         throw new Error(
-          'pending human decision could not be inferred; pass --run-id and --decision-id',
+          '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
         );
       }
       const audit = createAuditLogger({ repositories });
       const decision = await repositories.getHumanDecision(decisionId);
       if (!decision || decision.runId !== runId) {
-        throw new Error(`human decision not found: ${decisionId}`);
+        throw new Error(`未找到人工决策: ${decisionId}`);
       }
       if (decision.status !== 'pending') {
         throw new Error(
-          `decision is already ${decision.status}: ${decisionId}`,
+          `决策 ${decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
         );
       }
       const rejected = await createHumanGate({ repositories }).rejectHumanGate(
@@ -1751,7 +1768,7 @@ async function commandApproval(argv: string[], io: CliIO) {
     return;
   }
 
-  throw new Error(`unknown approval command: ${subcommand ?? ''}`);
+  throw new Error(`未知的 approval 子命令: ${subcommand ?? ''}。请使用 tekon help approval 查看可用子命令。`);
 }
 
 async function commandEval(argv: string[], io: CliIO) {
@@ -1851,7 +1868,7 @@ async function commandEval(argv: string[], io: CliIO) {
       ? Number(args.values['max-chars'])
       : 1_200;
     if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
-      throw new Error('--max-chars must be a positive number');
+      throw new Error('--max-chars 必须是正数');
     }
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
@@ -1925,7 +1942,7 @@ async function commandEval(argv: string[], io: CliIO) {
         join('.tekon', 'eval', 'work-usability-samples.yaml'),
     );
     if (!existsSync(samplePath)) {
-      throw new Error(`work usability sample file not found: ${samplePath}`);
+      throw new Error(`未找到工作可用性评估样本文件: ${samplePath}。请先创建该文件或使用 --samples 参数指定正确路径。`);
     }
     const sampleSet = workUsabilitySampleSetSchema.parse(
       parseYaml(readFileSync(samplePath, 'utf8')),
@@ -1978,7 +1995,7 @@ async function commandEval(argv: string[], io: CliIO) {
   }
 
   if (subcommand !== 'readiness') {
-    throw new Error(`unknown eval command: ${subcommand ?? ''}`);
+    throw new Error(`未知的 eval 子命令: ${subcommand ?? ''}。请使用 tekon help eval 查看可用子命令。`);
   }
   await withCommandCtx(rest, io, async ({ repos: repositories, repoPath, runId }) => {
     const audit = createAuditLogger({ repositories });
@@ -2042,11 +2059,11 @@ async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
     const runId =
       args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
     if (!runId) {
-      throw new Error('run id could not be inferred; pass --run-id <runId>');
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
     }
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
-      throw new Error(`run not found: ${runId}`);
+      throw new Error(`未找到运行: ${runId}`);
     }
     const [providerConfig, deliveryPr] = await Promise.all([
       repositories.getRunProviderConfig(runId),
@@ -2169,13 +2186,13 @@ async function commandReview(argv: string[], io: CliIO) {
     ? Number(args.values['max-chars'])
     : 1_200;
   if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
-    throw new Error('--max-chars must be a positive number');
+    throw new Error('--max-chars 必须是正数');
   }
   await withProjectContext(repoPath, async ({ db, repos: repositories }) => {
     const runId =
       args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
     if (!runId) {
-      throw new Error('run id could not be inferred; pass --run-id <runId>');
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
     }
     const audit = createAuditLogger({ repositories });
     const surface = await createWorkReviewSurface({
@@ -2380,7 +2397,7 @@ function resolveTekonRoot(): string {
     return defaultPath;
   }
   throw new Error(
-    'Cannot find Tekon installation. Set TEKON_HOME env or run the install script.',
+    '未找到 Tekon 安装目录。请设置 TEKON_HOME 环境变量，或运行安装脚本: curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash',
   );
 }
 
@@ -2396,7 +2413,7 @@ async function commandUi(argv: string[], io: CliIO) {
   const port = args.values.port ?? '3000';
   if (!/^\d+$/u.test(port) || Number(port) < 1 || Number(port) > 65535) {
     throw new Error(
-      `Invalid port: ${port}. Must be a number between 1 and 65535.`,
+      `无效的端口号: ${port}。必须是 1 到 65535 之间的数字。`,
     );
   }
 
@@ -2405,21 +2422,21 @@ async function commandUi(argv: string[], io: CliIO) {
 
   const tokenPath = join(repoPath, '.tekon', 'web-session.json');
   if (!existsSync(tokenPath)) {
-    throw new Error('web-session.json not found; run "tekon init" first');
+    throw new Error('未找到 web-session.json 文件，请先运行 "tekon init" 初始化项目');
   }
   const { token } = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
     token: string;
   };
   if (!token || typeof token !== 'string') {
     throw new Error(
-      `Invalid web-session.json at ${tokenPath}; run "tekon init" first`,
+      `${tokenPath} 中的 web-session.json 格式无效，请重新运行 "tekon init"`,
     );
   }
 
   const tekonRoot = resolveTekonRoot();
   const webDir = join(tekonRoot, 'packages', 'web');
   if (!existsSync(webDir)) {
-    throw new Error(`web package not found at ${webDir}`);
+    throw new Error(`未找到 web 包目录: ${webDir}。请确认 Tekon 安装是否完整。`);
   }
 
   const tsxBin = join(webDir, 'node_modules', '.bin', 'tsx');
@@ -2432,7 +2449,7 @@ async function commandUi(argv: string[], io: CliIO) {
     );
     if (!existsSync(tsxBin)) {
       throw new Error(
-        `tsx still not found at ${tsxBin} after install. Check pnpm install output above.`,
+        `安装后仍未找到 tsx: ${tsxBin}。请检查上方 pnpm install 的输出信息。`,
       );
     }
   }
@@ -2458,7 +2475,7 @@ async function commandUi(argv: string[], io: CliIO) {
       if (code === 0 || code === null) {
         resolve();
       } else {
-        reject(new Error(`Web server exited with code ${code}`));
+        reject(new Error(`Web 服务器异常退出，退出码: ${code}`));
       }
     });
   });
@@ -2477,7 +2494,7 @@ function silentExec(cmd: string, args: string[], opts: { cwd: string }) {
         ? String((error as { stderr?: unknown }).stderr ?? '')
         : '';
     throw new Error(
-      `${cmd} ${args.join(' ')} failed: ${stderr || (error instanceof Error ? error.message : String(error))}`,
+      `命令执行失败: ${cmd} ${args.join(' ')}。错误信息: ${stderr || (error instanceof Error ? error.message : String(error))}`,
     );
   }
 }
@@ -2486,7 +2503,7 @@ async function commandUpdate(_argv: string[], io: CliIO) {
   const tekonRoot = resolveTekonRoot();
   if (!existsSync(tekonRoot)) {
     throw new Error(
-      'Tekon not installed. Run: curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash',
+      'Tekon 未安装。请先运行安装脚本: curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash',
     );
   }
 
@@ -2509,11 +2526,11 @@ async function commandUpdate(_argv: string[], io: CliIO) {
   ).version;
 
   if (oldVersion === targetVersion) {
-    io.stdout.write(`Already up to date (v${oldVersion})\n`);
+    io.stdout.write(`已是最新版本 (v${oldVersion})\n`);
     return;
   }
 
-  io.stdout.write(`Updating v${oldVersion} → v${targetVersion}...\n`);
+  io.stdout.write(`正在更新 v${oldVersion} → v${targetVersion}...\n`);
 
   silentExec('git', ['checkout', 'main'], { cwd: tekonRoot });
   silentExec('git', ['pull', 'origin', 'main'], { cwd: tekonRoot });
@@ -2522,10 +2539,10 @@ async function commandUpdate(_argv: string[], io: CliIO) {
 
   const cliPath = join(tekonRoot, 'packages', 'cli', 'dist', 'index.js');
   if (!existsSync(cliPath)) {
-    throw new Error(`Build failed: ${cliPath} not found`);
+    throw new Error(`构建失败: 未找到 ${cliPath}。请检查构建输出。`);
   }
 
-  io.stdout.write(`Updated to v${targetVersion}\n`);
+  io.stdout.write(`已更新到 v${targetVersion}\n`);
 }
 
 function resolveRepoPathForInit(repoArg?: string): string {
@@ -2596,7 +2613,7 @@ function resolveDemandShapePath(
   if (shapeArg) {
     const shapePath = resolveExplicitPath(repoPath, shapeArg);
     if (!existsSync(shapePath)) {
-      throw new Error(`draft shape file not found: ${shapePath}`);
+      throw new Error(`未找到需求草案文件: ${shapePath}`);
     }
     return shapePath;
   }
@@ -2604,19 +2621,19 @@ function resolveDemandShapePath(
   const candidates = listDemandShapeCandidates(repoPath);
   if (candidates.length === 0) {
     throw new Error(
-      `no draft shape files found in ${join(repoPath, '.tekon', 'drafts')}`,
+      `在 ${join(repoPath, '.tekon', 'drafts')} 目录下未找到需求草案文件。请先使用 tekon draft new 创建需求草案。`,
     );
   }
 
   const latest = candidates[0];
   if (options.latestMustBeApproved && !latest.shape.approved) {
     throw new Error(
-      `latest draft shape is not approved: ${latest.path}; run tekon draft approve or pass --draft-file <path>`,
+      `最新的需求草案尚未批准: ${latest.path}。请运行 tekon draft approve 或使用 --draft-file <path> 指定已批准的草案。`,
     );
   }
   if (options.latestMustBeUnapproved && latest.shape.approved) {
     throw new Error(
-      `latest draft shape is already approved: ${latest.path}; pass --shape <path> to approve a historical draft shape`,
+      `最新的需求草案已经批准: ${latest.path}。如需批准历史草案，请使用 --shape <path> 参数指定。`,
     );
   }
 
@@ -2729,7 +2746,7 @@ function assertUnambiguousPendingDecisionForRun(
   const pendingCount = countPendingHumanDecisionsForRun(db, runId);
   if (pendingCount > 1) {
     throw new Error(
-      `multiple pending human decisions found for run ${runId}; pass --decision-id <decisionId>`,
+      `运行 ${runId} 存在多个待审批的人工决策，请使用 --decision-id <decisionId> 参数指定`,
     );
   }
 }
@@ -2746,11 +2763,11 @@ async function resolveHumanDecisionContext(input: {
       input.explicitDecisionId,
     );
     if (!decision) {
-      throw new Error(`human decision not found: ${input.explicitDecisionId}`);
+      throw new Error(`未找到人工决策: ${input.explicitDecisionId}`);
     }
     if (input.explicitRunId && decision.runId !== input.explicitRunId) {
       throw new Error(
-        `decision ${decision.id} belongs to run ${decision.runId}, not ${input.explicitRunId}`,
+        `决策 ${decision.id} 属于运行 ${decision.runId}，而非 ${input.explicitRunId}`,
       );
     }
     return { runId: decision.runId, decisionId: decision.id };
@@ -2765,7 +2782,7 @@ async function resolveHumanDecisionContext(input: {
       .at(-1);
     if (!pendingDecision && input.requireDecision) {
       throw new Error(
-        `run has no pending human decision: ${input.explicitRunId}`,
+        `运行 ${input.explicitRunId} 没有待审批的人工决策`,
       );
     }
     return {
@@ -2788,13 +2805,13 @@ async function resolveHumanDecisionContext(input: {
 
   if (input.requireDecision) {
     throw new Error(
-      'pending human decision could not be inferred; pass --run-id and --decision-id',
+      '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
     );
   }
 
   const runId = selectLatestRunId(input.db);
   if (!runId) {
-    throw new Error('run id could not be inferred; pass --run-id <runId>');
+    throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
   }
   return { runId };
 }
@@ -2843,7 +2860,7 @@ async function withCommandCtx<T>(
     const runId =
       args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
     if (!runId) {
-      throw new Error('run id could not be inferred; pass --run-id <runId>');
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
     }
     return fn({ db, repos, repoPath, runId });
   });
@@ -2945,8 +2962,8 @@ async function ensureInitialized(repoPath: string, io: CliIO): Promise<void> {
     return;
   }
 
-  io.stdout.write(`Project not initialized: ${repoPath}\n`);
-  io.stdout.write('Initialize now? [Y/n] ');
+  io.stdout.write(`项目尚未初始化: ${repoPath}\n`);
+  io.stdout.write('是否立即初始化？[Y/n] ');
 
   const answer = await readStdinLine();
   if (!answer || answer.toLowerCase().startsWith('y')) {
@@ -2957,7 +2974,7 @@ async function ensureInitialized(repoPath: string, io: CliIO): Promise<void> {
 
   io.stdout.write('\n');
   throw new Error(
-    `not initialized: ${repoPath}. Run "tekon init" to initialize the project.`,
+    `项目未初始化: ${repoPath}。请运行 "tekon init" 初始化项目。`,
   );
 }
 
@@ -2973,7 +2990,7 @@ function assertCleanBase(repoPath: string, allowDirtyBase: boolean): void {
 
   if (meaningfulDirtyLines.length > 0 && !allowDirtyBase) {
     throw new Error(
-      'dirty base worktree requires --allow-dirty-base before tekon run',
+      '工作树存在未跟踪变更，请使用 --allow-dirty-base 确认后再运行 tekon run',
     );
   }
 }
@@ -3022,6 +3039,6 @@ function getWorkflowFilePath(name: string, projectWorkflowsDir: string) {
 
 function ensureSafeName(name: string) {
   if (!/^[a-zA-Z0-9_-]+$/u.test(name)) {
-    throw new Error(`invalid name: ${name}`);
+    throw new Error(`名称无效: ${name}。名称只能包含字母、数字、下划线和短横线。`);
   }
 }

@@ -1,5 +1,30 @@
 # 变更日志
 
+## v0.5.2
+
+### 修复（全面审查第二轮）
+
+**UX CLI 改进:**
+- `draft new` 删除不存在的 `tekon draft review` 命令提示
+- `tekon run` 输出增加中文上下文（🚀 运行已启动）和后续操作提示
+- `delivery create-pr` 输出增加可读 PR URL 格式（✅ PR 已创建）
+- 错误消息系统性国际化（约 30 处英文→中文）
+- `delivery dry-run` 加入帮助子命令列表
+- `constraints` 子命令帮助完善
+- `update` 命令输出改中文
+
+**UX Web 改进:**
+- Session token 自动从 URL 读取并存入 `sessionStorage`
+- Sidebar 底部从 API 动态读取项目名称和路径
+- RunControls "View details" 按钮添加导航行为
+- NotFoundPage 增加"返回 Dashboard"链接
+- Flash 消息统一为中文
+- `LoadingState`/`EmptyState` 默认消息改中文
+
+**测试质量:**
+- `engine-unit.test.ts` 19 个假测试修复：提取 `resolveReviewTargetNode` 等纯函数为导出函数，直接测试源码
+- 新增 engine 纯函数单元测试
+
 ## v0.5.1
 
 ### 修复（全面审查第一轮）

@@ -84,11 +84,11 @@ export function ApprovalsPage() {
           note: note || undefined,
           token,
         });
-        flash.addFlash('success', `Decision ${decisionId} approved`);
+        flash.addFlash('success', `决策 ${decisionId} 已批准`);
       } catch (err) {
         flash.addFlash(
           'error',
-          `Approve failed: ${err instanceof Error ? err.message : String(err)}`,
+          `审批失败: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },
@@ -111,11 +111,11 @@ export function ApprovalsPage() {
           note: note || undefined,
           token,
         });
-        flash.addFlash('success', `Decision ${decisionId} rejected`);
+        flash.addFlash('success', `决策 ${decisionId} 已拒绝`);
       } catch (err) {
         flash.addFlash(
           'error',
-          `Reject failed: ${err instanceof Error ? err.message : String(err)}`,
+          `拒绝失败: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },
@@ -200,8 +200,8 @@ export function ApprovalsPage() {
           message="没有待处理审批"
           hint={
             latestRunId
-              ? 'All human gates for the latest run have been decided.'
-              : 'No active run found. Start a run to see approvals here.'
+              ? '最新运行的所有人工审批节点均已决策。'
+              : '暂无活跃运行。启动运行后将在此显示审批。'
           }
         />
       ) : null}

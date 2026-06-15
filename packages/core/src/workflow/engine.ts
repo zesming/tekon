@@ -659,14 +659,15 @@ export function createWorkflowEngine(
     // When an independent-review gate finds changes-requested, rework the
     // target (reviewed) node instead of blocking the review node.
     // Retries up to maxReworkAttempts (default 5) before falling through to blocked.
-    const isChangesRequested =
-      result.failureClassification === 'changes-requested' &&
-      gate.type === 'independent-review';
+    const shouldRework = isChangesRequested(
+      result.failureClassification,
+      gate.type,
+    );
 
-    if (isChangesRequested) {
+    if (shouldRework) {
       const targetNodeId = await resolveReviewTargetNode(runId, node.id);
       if (targetNodeId) {
-        const maxReworkAttempts = gate.maxRetries > 0 ? gate.maxRetries : 5;
+        const maxReworkAttempts = resolveMaxReworkAttempts(gate.maxRetries);
         let reworkAttempt = 0;
         let reworkPassed = false;
 
@@ -802,17 +803,7 @@ export function createWorkflowEngine(
     // Heuristic fallback: pick the latest upstream passed node
     try {
       const nodes = await options.repositories.listNodes(runId);
-      const reviewNode = nodes.find((n) => n.id === reviewNodeId);
-      if (!reviewNode) return null;
-
-      const upstreamNodes = nodes.filter(
-        (n) =>
-          n.id !== reviewNodeId &&
-          n.status === 'passed',
-      );
-      if (upstreamNodes.length > 0) {
-        return upstreamNodes[upstreamNodes.length - 1].id;
-      }
+      return resolveReviewTargetNodeByHeuristic(nodes, reviewNodeId);
     } catch {
       // Ignore
     }
@@ -2349,4 +2340,49 @@ export function defaultBuiltInRolesDir(): string {
     return fromModule;
   }
   return resolve(process.cwd(), 'roles');
+}
+
+/**
+ * Heuristic for finding the review target when no explicit targetNodeId is
+ * available: pick the last (most recent) upstream node whose status is
+ * 'passed'. Returns null when no such node exists or when the review node
+ * itself is not found in the list.
+ */
+export function resolveReviewTargetNodeByHeuristic(
+  nodes: ReadonlyArray<{ id: string; status: string }>,
+  reviewNodeId: string,
+): string | null {
+  const reviewNode = nodes.find((n) => n.id === reviewNodeId);
+  if (!reviewNode) return null;
+
+  const upstreamNodes = nodes.filter(
+    (n) => n.id !== reviewNodeId && n.status === 'passed',
+  );
+  if (upstreamNodes.length > 0) {
+    return upstreamNodes[upstreamNodes.length - 1].id;
+  }
+  return null;
+}
+
+/**
+ * Returns true when a gate failure should trigger the changes-requested
+ * rework flow: only independent-review gates with a changes-requested
+ * classification qualify.
+ */
+export function isChangesRequested(
+  failureClassification: string | null | undefined,
+  gateType: string,
+): boolean {
+  return (
+    failureClassification === 'changes-requested' &&
+    gateType === 'independent-review'
+  );
+}
+
+/**
+ * Resolves the maximum number of rework attempts for a changes-requested
+ * cycle. Falls back to 5 when gate.maxRetries is zero or negative.
+ */
+export function resolveMaxReworkAttempts(maxRetries: number): number {
+  return maxRetries > 0 ? maxRetries : 5;
 }

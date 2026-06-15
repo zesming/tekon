@@ -47,11 +47,11 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
-    const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+    const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       standardRunOutput,
     )?.[1];
     expect(standardRunId).toBeTruthy();
-    expect(standardRunOutput).toContain('status=passed');
+    expect(standardRunOutput).toContain('状态: passed');
     expect(
       existsSync(join(repoPath, '.tekon', 'runs', standardRunId!, 'artifacts')),
     ).toBe(true);
@@ -88,10 +88,10 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
-    const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
     expect(runId).toBeTruthy();
-    expect(runOutput).toContain('status=paused');
-    expect(runOutput).toContain('humanGate=pending');
+    expect(runOutput).toContain('状态: paused');
+    expect(runOutput).toContain('人工确认: pending');
     expect(existsSync(join(repoPath, '.tekon', 'runs', runId!))).toBe(true);
 
     const statusOutput = runCli(

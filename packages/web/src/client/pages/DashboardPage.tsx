@@ -347,7 +347,7 @@ export function DashboardPage() {
         className="mb-6"
       >
         {detailQuery.isLoading ? (
-          <LoadingState message="Loading runs..." />
+          <LoadingState message="加载运行列表..." />
         ) : detailQuery.error ? (
           <div style={{ padding: '16px' }}>
             <ErrorBanner error={detailQuery.error} onRetry={detailQuery.refetch} />

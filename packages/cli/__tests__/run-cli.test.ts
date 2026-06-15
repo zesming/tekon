@@ -106,7 +106,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('draft file must be approved');
+    expect(io.takeStderr()).toContain('需求草案必须先批准才能运行');
 
     await expect(
       runCli(['draft', 'approve', shapePath!, '--actor', 'tester'], io),
@@ -132,7 +132,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    expect(io.takeStdout()).toContain('status=passed');
+    expect(io.takeStdout()).toContain('状态: passed');
 
     await expect(
       runCli(
@@ -167,11 +167,11 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     const standardOutput = io.takeStdout();
-    const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+    const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       standardOutput,
     )?.[1];
     expect(standardRunId).toBeTruthy();
-    expect(standardOutput).toContain('status=passed');
+    expect(standardOutput).toContain('状态: passed');
 
     await expect(
       runCli(
@@ -189,9 +189,9 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     const gatedOutput = io.takeStdout();
-    const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
+    const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
-    expect(gatedOutput).toContain('humanGate=pending');
+    expect(gatedOutput).toContain('人工确认: pending');
 
     await expect(
       runCli(['status', '--run-id', gatedRunId!, '--repo', repoPath], io),
@@ -270,7 +270,7 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(0);
     const rejectableOutput = io.takeStdout();
-    const rejectableRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+    const rejectableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       rejectableOutput,
     )?.[1];
     expect(rejectableRunId).toBeTruthy();
@@ -667,11 +667,11 @@ describe('runCli in-process', () => {
 
       await expect(runCli(['run', '--agent', 'mock'], io)).resolves.toBe(0);
       const standardOutput = io.takeStdout();
-      const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+      const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         standardOutput,
       )?.[1];
       expect(standardRunId).toBeTruthy();
-      expect(standardOutput).toContain('status=passed');
+      expect(standardOutput).toContain('状态: passed');
 
       await expect(runCli(['status'], io)).resolves.toBe(0);
       expect(io.takeStdout()).toContain(`runId=${standardRunId}`);
@@ -699,9 +699,9 @@ describe('runCli in-process', () => {
         ),
       ).resolves.toBe(0);
       const gatedOutput = io.takeStdout();
-      const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
+      const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
       expect(gatedRunId).toBeTruthy();
-      expect(gatedOutput).toContain('humanGate=pending');
+      expect(gatedOutput).toContain('人工确认: pending');
 
       await expect(runCli(['approval', 'summary'], io)).resolves.toBe(0);
       const approvalSummaryOutput = io.takeStdout();
@@ -746,11 +746,11 @@ describe('runCli in-process', () => {
         ),
       ).resolves.toBe(0);
       const resumableOutput = io.takeStdout();
-      const resumableRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+      const resumableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         resumableOutput,
       )?.[1];
       expect(resumableRunId).toBeTruthy();
-      expect(resumableOutput).toContain('humanGate=pending');
+      expect(resumableOutput).toContain('人工确认: pending');
 
       await expect(runCli(['resume', '--approve-human'], io)).resolves.toBe(0);
       const resumeOutput = io.takeStdout();
@@ -858,7 +858,7 @@ describe('runCli in-process', () => {
 
       await expect(runCli(['draft', 'approve'], io)).resolves.toBe(1);
       expect(io.takeStderr()).toContain(
-        'latest draft shape is already approved',
+        '最新的需求草案已经批准',
       );
       expect(
         JSON.parse(readFileSync(historicalShapePath!, 'utf8')).approved,
@@ -894,7 +894,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    const standardRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+    const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       io.takeStdout(),
     )?.[1];
     expect(standardRunId).toBeTruthy();
@@ -919,7 +919,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(gatedRunId).toBeTruthy();
 
     await expect(
@@ -970,7 +970,7 @@ describe('runCli in-process', () => {
           io,
         ),
       ).resolves.toBe(0);
-      expect(io.takeStdout()).toContain('status=passed');
+      expect(io.takeStdout()).toContain('状态: passed');
     } finally {
       process.chdir(originalCwd);
     }
@@ -1007,7 +1007,7 @@ describe('runCli in-process', () => {
       ),
     ).resolves.toBe(1);
     expect(io.takeStderr()).toContain(
-      'dirty base worktree requires --allow-dirty-base',
+      '工作树存在未跟踪变更，请使用 --allow-dirty-base',
     );
 
     await expect(
@@ -1026,7 +1026,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    expect(io.takeStdout()).toContain('status=passed');
+    expect(io.takeStdout()).toContain('状态: passed');
   });
 
   it('prints repo profile fix guidance for missing workflow commands', async () => {
@@ -1127,7 +1127,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
     const db = openTekonDatabase({
@@ -1150,7 +1150,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('multiple pending human decisions');
+    expect(io.takeStderr()).toContain('存在多个待审批的人工决策');
 
     await expect(
       runCli(
@@ -1158,7 +1158,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('multiple pending human decisions');
+    expect(io.takeStderr()).toContain('存在多个待审批的人工决策');
 
     await expect(
       runCli(
@@ -1166,7 +1166,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('multiple pending human decisions');
+    expect(io.takeStderr()).toContain('存在多个待审批的人工决策');
 
     await expect(
       runCli(
@@ -1245,7 +1245,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(0);
-    const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
     const db = openTekonDatabase({
@@ -1260,7 +1260,7 @@ describe('runCli in-process', () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain('has no provider snapshot');
+    expect(io.takeStderr()).toContain('没有 provider 快照');
     expect(await repositories.listHumanDecisions(runId!)).toContainEqual(
       expect.objectContaining({ status: 'pending' }),
     );
@@ -1302,8 +1302,8 @@ describe('runCli in-process', () => {
         ),
       ).resolves.toBe(0);
       const runOutput = io.takeStdout();
-      expect(runOutput).toContain('status=passed');
-      const runId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
+      expect(runOutput).toContain('状态: passed');
+      const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
       expect(runId).toBeTruthy();
 
       const db = openTekonDatabase({
