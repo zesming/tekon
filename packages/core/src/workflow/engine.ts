@@ -715,8 +715,17 @@ export function createWorkflowEngine(
 
   /**
    * Attempt to rework the target node when an independent review finds
-   * changes-requested. Transitions target to needs-revision, re-executes
-   * its agent with review feedback, and re-runs its gates.
+   * changes-requested.
+   *
+   * Full rework flow:
+   * 1. Transition target from passed to needs-revision
+   * 2. Create a rework node that reuses the target's inputs/outputs/gates
+   * 3. Run the target node's agent with review feedback (writing artifacts
+   *    to the target node's output directory so they overwrite the originals)
+   * 4. Run all target node gates on the rework node to validate output
+   * 5. Finalize the rework lease (commit code-changes if any)
+   * 6. Re-execute the review node's agent to produce a fresh review artifact
+   * 7. Transition review node to awaiting-gate for caller to verify
    */
   async function attemptChangesRequestedRework(
     runId: string,
@@ -731,7 +740,7 @@ export function createWorkflowEngine(
 
     const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
 
-    // Transition target node from passed to needs-revision
+    // --- Step 1: Transition target to needs-revision ---
     await options.repositories.transitionNode(targetNodeId, 'needs-revision');
     await options.audit.append({
       runId,
@@ -745,34 +754,53 @@ export function createWorkflowEngine(
       },
     });
 
-    // Build rework prompt: original context + review feedback
-    const reviewArtifactContent = await loadReviewArtifactContent(
+    // Build rework prompt with full role context + review feedback
+    const reviewFeedback = await loadReviewArtifactContent(
       runId,
       reviewNode.id,
     );
-    const reworkPrompt = buildReviewReworkPrompt(
-      targetNode.role,
-      reviewArtifactContent,
+    const targetInputs = targetNode.inputs as WorkflowArtifactInputRef[];
+    const targetOutputs = targetNode.outputs as WorkflowArtifactOutputRef[];
+    const targetGates = targetNode.gates as WorkflowGateConfig[];
+    const reworkPrompt = await buildReworkNodePrompt(
+      runId,
+      targetNode,
+      targetInputs,
+      reviewFeedback,
     );
 
-    // Finalize any existing lease on the review node
+    // Finalize any existing lease on the review node before creating new ones
     await finalizeExecutionLease(runId, reviewNode.id);
 
-    // Persist the rework node before creating a lease
+    // --- Step 2: Create rework node reusing target's inputs/outputs/gates ---
     const now = new Date().toISOString();
     await options.repositories.createNode({
       id: reworkNodeId,
       runId,
       role: targetNode.role,
       status: 'pending',
-      inputs: [],
-      outputs: [],
-      gates: [],
+      inputs: targetInputs,
+      outputs: targetOutputs,
+      gates: targetGates,
       dependencies: [reviewNode.id],
       createdAt: now,
       updatedAt: now,
       phaseId: targetNode.phaseId,
     });
+
+    // --- Step 3: Run rework agent ---
+    // Create a role run for tracking
+    const reworkRoleRunId = `role_run_${randomUUID()}`;
+    await options.repositories.createRoleRun({
+      id: reworkRoleRunId,
+      runId,
+      nodeId: reworkNodeId,
+      role: targetNode.role,
+      status: 'running',
+      startedAt: now,
+    });
+
+    await options.repositories.transitionNode(reworkNodeId, 'running');
 
     // Create a fresh lease for the rework
     const reworkLease = await createExecutionLease(runId, {
@@ -782,7 +810,9 @@ export function createWorkflowEngine(
     });
 
     try {
-      // Re-execute the target node's agent with review feedback
+      // Run the target's agent with review feedback.
+      // Pass targetNodeId so artifacts are written to the target's output
+      // directory and stored under the target's node ID (overwriting originals).
       const reworkResult = await options.adapter.runAgent(
         await agentInputForLease(
           runId,
@@ -790,26 +820,19 @@ export function createWorkflowEngine(
             id: reworkNodeId,
             role: targetNode.role,
             phaseId: targetNode.phaseId,
+            inputs: targetInputs,
+            outputs: targetOutputs,
+            gates: targetGates,
           },
           reworkLease,
           reworkPrompt,
+          targetNodeId,
         ),
       );
       assertSuccessfulAgentRun(reworkResult);
-
-      // After successful rework, transition target back to passed
-      await options.repositories.transitionNode(reworkNodeId, 'passed');
-      // Also update the original target node
-      await options.repositories.transitionNode(targetNodeId, 'passed');
-
-      await options.audit.append({
-        runId,
-        type: 'gate.rework.completed',
-        payload: {
-          reviewNodeId: reviewNode.id,
-          targetNodeId,
-          reworkNodeId,
-        },
+      await options.repositories.markRoleRunCompleted({
+        roleRunId: reworkRoleRunId,
+        completedAt: new Date().toISOString(),
       });
     } catch (error) {
       await options.repositories.transitionNode(reworkNodeId, 'interrupted');
@@ -819,11 +842,152 @@ export function createWorkflowEngine(
         payload: {
           reviewNodeId: reviewNode.id,
           targetNodeId,
+          reworkNodeId,
           error: error instanceof Error ? error.message : String(error),
         },
       });
       throw error;
     }
+
+    // --- Step 4: Run target node's gates on rework node ---
+    await options.repositories.transitionNode(reworkNodeId, 'awaiting-gate');
+    const configuredTargetGates = gatesWithStableKeys(targetGates, reworkNodeId);
+    for (const targetGate of configuredTargetGates) {
+      const gatePassed = await runGateWithRepair(
+        runId,
+        {
+          id: reworkNodeId,
+          role: targetNode.role,
+          phaseId: targetNode.phaseId,
+          inputs: targetInputs,
+          outputs: targetOutputs,
+          gates: targetGates,
+          dependsOn: [reviewNode.id],
+        },
+        targetGate,
+      );
+      if (!gatePassed) {
+        // Rework output failed target gates — rework attempt failed.
+        // Caller will retry or block.
+        return;
+      }
+    }
+
+    // --- Step 5: Finalize rework lease (commits code-changes if any) ---
+    try {
+      await finalizeExecutionLease(runId, reworkNodeId);
+    } catch (error) {
+      await options.repositories.transitionNode(reworkNodeId, 'interrupted');
+      await options.audit.append({
+        runId,
+        type: 'gate.rework.lease.finalize.failed',
+        payload: {
+          reviewNodeId: reviewNode.id,
+          targetNodeId,
+          reworkNodeId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
+    }
+
+    // Rework output validated — mark rework node and target as passed
+    await options.repositories.transitionNode(reworkNodeId, 'passed');
+    await options.repositories.transitionNode(targetNodeId, 'passed');
+
+    // --- Step 6: Re-execute review node to produce fresh review artifact ---
+    // The review node transitions awaiting-gate → needs-revision → running
+    // (state machine requires needs-revision as intermediate step).
+    await options.repositories.transitionNode(reviewNode.id, 'needs-revision');
+    await options.repositories.transitionNode(reviewNode.id, 'running');
+
+    const reviewReRunRoleRunId = `role_run_${randomUUID()}`;
+    await options.repositories.createRoleRun({
+      id: reviewReRunRoleRunId,
+      runId,
+      nodeId: reviewNode.id,
+      role: reviewNode.role,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    });
+
+    const reviewReRunLease = await createExecutionLease(runId, {
+      id: reviewNode.id,
+      role: reviewNode.role,
+      phaseId: reviewNode.phaseId,
+    });
+
+    try {
+      const reviewResult = await options.adapter.runAgent(
+        await agentInputForLease(
+          runId,
+          reviewNode,
+          reviewReRunLease,
+          await buildNodePrompt(runId, reviewNode),
+        ),
+      );
+      assertSuccessfulAgentRun(reviewResult);
+      await options.repositories.markRoleRunCompleted({
+        roleRunId: reviewReRunRoleRunId,
+        completedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      // Review agent failed — cannot produce fresh review.
+      // Target rework itself was valid, so keep target as passed.
+      await options.repositories.transitionNode(
+        reviewNode.id,
+        'interrupted',
+      );
+      await options.audit.append({
+        runId,
+        type: 'gate.rework.review.re-execute.failed',
+        payload: {
+          reviewNodeId: reviewNode.id,
+          targetNodeId,
+          reworkNodeId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      // Let the while-loop caller exhaust retries and mark review blocked.
+      return;
+    }
+
+    // --- Step 7: Run review node gates, then transition to awaiting-gate ---
+    await options.repositories.transitionNode(reviewNode.id, 'awaiting-gate');
+    const reviewGates = gatesWithStableKeys(reviewNode.gates, reviewNode.id);
+    for (const reviewGate of reviewGates) {
+      const reviewGatePassed = await runGateWithRepair(
+        runId,
+        reviewNode,
+        reviewGate,
+      );
+      if (!reviewGatePassed) {
+        // Review gate failed — the fresh review still found issues or was
+        // invalid. The caller's while-loop will check the gate result and
+        // decide whether to retry or block.
+        return;
+      }
+    }
+
+    try {
+      await finalizeExecutionLease(runId, reviewNode.id);
+    } catch {
+      // Lease finalize failed for review re-run — non-fatal for rework flow.
+    }
+
+    // Review re-execution complete. Node is in 'awaiting-gate'; caller will
+    // re-run the independent-review gate to verify the new review artifact.
+
+    await options.audit.append({
+      runId,
+      type: 'gate.rework.completed',
+      payload: {
+        reviewNodeId: reviewNode.id,
+        targetNodeId,
+        reworkNodeId,
+        attempt,
+      },
+    });
   }
 
   /** Load the review artifact content for prompt injection. */
@@ -851,33 +1015,84 @@ export function createWorkflowEngine(
   }
 
   /**
-   * Build a prompt for reworking a node after review feedback.
-   * Injects the review findings so the agent knows what to fix.
+   * Build a full role prompt for reworking a node after review feedback.
+   * Includes prior node context, demand context, input artifact summaries,
+   * and the review findings so the agent knows what to fix.
    */
-  function buildReviewReworkPrompt(
-    role: string,
+  async function buildReworkNodePrompt(
+    runId: string,
+    targetNode: Node,
+    targetInputs: WorkflowArtifactInputRef[],
     reviewFeedback: string,
-  ): string {
+  ): Promise<string> {
+    const role = loadRole({
+      role: targetNode.role,
+      repoPath: options.repoPath,
+      builtInRolesDir:
+        options.builtInRolesDir ?? defaultBuiltInRolesDir(),
+      userHome: options.userHome,
+    });
+    const workflow = await mustGetWorkflow(runId);
+    const demand = await mustGetDemand(workflow.demandId);
+    const reworkNodeForArtifacts: ExecutableNode = {
+      id: targetNode.id,
+      role: targetNode.role,
+      phaseId: targetNode.phaseId,
+      inputs: targetInputs,
+      outputs: (targetNode.outputs ?? []) as WorkflowArtifactOutputRef[],
+      gates: (targetNode.gates ?? []) as WorkflowGateConfig[],
+      dependsOn: targetNode.dependencies ?? [],
+    };
+    const artifacts = await artifactSummariesForNode(
+      runId,
+      reworkNodeForArtifacts,
+    );
+    const allNodes = await options.repositories.listNodes(runId);
+    const priorNodes = allNodes.filter((n) => n.id !== targetNode.id);
+    const priorNodeLines = priorNodes.map((item) =>
+      [
+        `- ${item.id} role=${item.role} status=${item.status}`,
+        item.outputs.length > 0
+          ? `outputs=${item.outputs.map((output) => output.type).join(',')}`
+          : 'outputs=none',
+      ].join(' '),
+    );
     const truncated =
       reviewFeedback.length > 8000
         ? reviewFeedback.slice(0, 8000) + '\n\n[truncated]'
         : reviewFeedback;
-
-    return [
-      `# ${role} Rework`,
-      '',
-      'The independent review of your previous output found changes that need to be addressed.',
-      'Fix the identified issues and produce updated artifacts.',
-      '',
-      '## Review Feedback',
-      truncated,
-      '',
-      '## Instructions',
-      '- Address each finding marked as important or blocker.',
-      '- Produce corrected artifact files matching the required types.',
-      '- Write the artifact manifest file before completing.',
-      '- After writing the manifest, stop work and exit.',
-    ].join('\n');
+    return buildRolePrompt({
+      role,
+      taskInstruction: [
+        `Demand title: ${demand.title}`,
+        'Demand body:',
+        demand.body,
+        '',
+        `Rework node ${targetNode.id} after independent review found changes-requested.`,
+        priorNodeLines.length > 0
+          ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
+          : 'Prior workflow nodes: none.',
+        '',
+        '## Review Feedback',
+        truncated,
+        '',
+        '## Instructions',
+        '- Address each finding marked as important or blocker.',
+        '- Produce corrected artifact files matching the required types.',
+        '- Write the artifact manifest file before completing.',
+        '- After writing the manifest, stop work and exit.',
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
+      projectContext: {
+        runId,
+        nodeId: targetNode.id,
+        projectId: workflow.projectId,
+        repoPath: options.repoPath,
+        dataDir: options.dataDir,
+      },
+      artifactSummaries: artifacts,
+    });
   }
 
   async function runGate(
@@ -1164,14 +1379,16 @@ export function createWorkflowEngine(
     },
     lease: WorktreeLease,
     prompt: string,
+    reworkTargetNodeId?: string,
   ): Promise<AgentRunInput> {
     const workflow = await mustGetWorkflow(runId);
+    const effectiveNodeId = reworkTargetNodeId ?? node.id;
     const outputDir = join(
       options.repoPath,
       options.dataDir,
       'runs',
       runId,
-      node.id,
+      effectiveNodeId,
     );
     const requiredArtifactTypes = requiredArtifactTypesForNode(node);
     const allNodes = await options.repositories.listNodes(runId);
@@ -1210,7 +1427,7 @@ export function createWorkflowEngine(
       commandPolicy: defaultCommandPolicy(lease.worktreePath),
       runContext: {
         runId,
-        nodeId: node.id,
+        nodeId: effectiveNodeId,
         projectId: workflow.projectId,
         repoPath: lease.worktreePath,
         dataDir: options.dataDir,
