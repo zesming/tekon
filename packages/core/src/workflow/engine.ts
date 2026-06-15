@@ -502,28 +502,31 @@ export function createWorkflowEngine(
     runId: string,
     node: ExecutableNode,
     gate: WorkflowGateConfig,
+    gateOpts?: { forceRerun?: boolean },
   ): Promise<boolean> {
-    const existingResult = await latestGateResult(
-      runId,
-      node.id,
-      gate.type,
-      gate.gateKey,
-      gate.type === 'human' && isFirstHumanGate(node.gates, gate.gateKey),
-    );
-    if (
-      existingResult?.status === 'passed' ||
-      existingResult?.status === 'skipped'
-    ) {
-      await options.audit.append({
+    if (!gateOpts?.forceRerun) {
+      const existingResult = await latestGateResult(
         runId,
-        type: 'gate.previously-passed',
-        payload: {
+        node.id,
+        gate.type,
+        gate.gateKey,
+        gate.type === 'human' && isFirstHumanGate(node.gates, gate.gateKey),
+      );
+      if (
+        existingResult?.status === 'passed' ||
+        existingResult?.status === 'skipped'
+      ) {
+        await options.audit.append({
+          runId,
+          type: 'gate.previously-passed',
+          payload: {
           nodeId: node.id,
           gateType: gate.type,
           gateKey: gate.gateKey,
         },
       });
       return true;
+      }
     }
 
     if (gate.type === 'qa-signoff') {
@@ -768,15 +771,8 @@ export function createWorkflowEngine(
         reviewTypes.includes(a.type),
       );
       if (reviewArtifact) {
-        const artifactRoot = join(
-          options.repoPath,
-          options.dataDir,
-          'runs',
-          runId,
-          'artifacts',
-          reviewNodeId,
-        );
-        const artifactPath = join(artifactRoot, reviewArtifact.path);
+        // reviewArtifact.path is relative to repoPath (e.g. ".tekon/runs/...")
+        const artifactPath = resolve(options.repoPath, reviewArtifact.path);
         if (existsSync(artifactPath)) {
           try {
             const raw = readFileSync(artifactPath, 'utf8');
@@ -960,14 +956,16 @@ export function createWorkflowEngine(
       throw error;
     }
 
-    // --- Step 4: Run target node's gates on rework node ---
+    // --- Step 4: Run target node's gates using targetNodeId ---
+    // Artifacts were written to the target node's output directory,
+    // so gates must look up artifacts by targetNodeId.
     await options.repositories.transitionNode(reworkNodeId, 'awaiting-gate');
-    const configuredTargetGates = gatesWithStableKeys(targetGates, reworkNodeId);
+    const configuredTargetGates = gatesWithStableKeys(targetGates, targetNodeId);
     for (const targetGate of configuredTargetGates) {
       const gatePassed = await runGateWithRepair(
         runId,
         {
-          id: reworkNodeId,
+          id: targetNodeId,
           role: targetNode.role,
           phaseId: targetNode.phaseId,
           inputs: targetInputs,
@@ -976,6 +974,7 @@ export function createWorkflowEngine(
           dependsOn: [reviewNode.id],
         },
         targetGate,
+        { forceRerun: true },
       );
       if (!gatePassed) {
         // Rework output failed target gates — rework attempt failed.
@@ -1002,11 +1001,25 @@ export function createWorkflowEngine(
       throw error;
     }
 
-    // Rework output validated — mark rework node and target as passed
+    // Rework output validated — mark rework node as passed,
+    // then transition target through proper states:
+    // needs-revision → running → awaiting-gate → passed
     await checkedTransitionNode(
       runId,
       reworkNodeId,
       'passed',
+      'node.transition.checked',
+    );
+    await checkedTransitionNode(
+      runId,
+      targetNodeId,
+      'running',
+      'node.transition.checked',
+    );
+    await checkedTransitionNode(
+      runId,
+      targetNodeId,
+      'awaiting-gate',
       'node.transition.checked',
     );
     await checkedTransitionNode(
@@ -1083,22 +1096,10 @@ export function createWorkflowEngine(
       return;
     }
 
-    // --- Step 7: Run review node gates, then transition to awaiting-gate ---
+    // --- Step 7: Put review node back to awaiting-gate ---
+    // Do NOT run review gates here — the caller's while loop will
+    // re-run the independent-review gate and handle retries/blocking.
     await options.repositories.transitionNode(reviewNode.id, 'awaiting-gate');
-    const reviewGates = gatesWithStableKeys(reviewNode.gates, reviewNode.id);
-    for (const reviewGate of reviewGates) {
-      const reviewGatePassed = await runGateWithRepair(
-        runId,
-        reviewNode,
-        reviewGate,
-      );
-      if (!reviewGatePassed) {
-        // Review gate failed — the fresh review still found issues or was
-        // invalid. The caller's while-loop will check the gate result and
-        // decide whether to retry or block.
-        return;
-      }
-    }
 
     try {
       await finalizeExecutionLease(runId, reviewNode.id);

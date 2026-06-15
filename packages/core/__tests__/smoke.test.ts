@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -12,9 +14,12 @@ import {
   validateWorkflowConstraints,
 } from '../src/index.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+
 describe('@tekon/core', () => {
   it('exports the core package version marker', () => {
-    expect(TEKON_CORE_VERSION).toBe('0.5.0');
+    expect(TEKON_CORE_VERSION).toBe(pkg.version);
   });
 
   it('exports phase 2 role system APIs', () => {
