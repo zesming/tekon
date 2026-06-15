@@ -25,7 +25,7 @@ import { ApprovalSummaryTab } from './pages/evaluations/ApprovalSummaryTab.js';
 import { WorkflowSelectionTab } from './pages/evaluations/WorkflowSelectionTab.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 
-function RouteError({ scope }: { scope: string }) {
+function RouteError({ scope: _scope }: { scope: string }) {
   const error = useRouteError();
   const navigate = useNavigate();
   return (

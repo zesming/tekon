@@ -15,6 +15,20 @@ export class ApiClientError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Session token management
+// ---------------------------------------------------------------------------
+
+let rpcSessionToken: string | null = null;
+
+/**
+ * Set the session token used for authenticated RPC calls.
+ * Called by AuthProvider when the user enters/changes the token.
+ */
+export function setRpcSessionToken(token: string | null): void {
+  rpcSessionToken = token;
+}
+
+// ---------------------------------------------------------------------------
 // Server response shapes
 // ---------------------------------------------------------------------------
 
@@ -47,9 +61,16 @@ export const rpc = {
   ): Promise<RpcProcedureMap[P]['output']> {
     const input = args[0];
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (rpcSessionToken) {
+      headers['x-session-token'] = rpcSessionToken;
+    }
+
     const response = await fetch('/api/rpc', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ path: procedure, input }),
     });
 

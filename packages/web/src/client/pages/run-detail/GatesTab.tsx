@@ -92,9 +92,6 @@ export function GatesTab() {
   const gates = gateQuery.data?.gates ?? [];
   const pendingDecisions = gateQuery.data?.pendingDecisions ?? [];
   const reviewGates = reviewQuery.data?.gates ?? [];
-  const triageMap = new Map(
-    (reviewQuery.data?.gateFailureTriage ?? []).map((t) => [t.gateId, t]),
-  );
 
   // Merge classification from review surface into gate list
   const reviewGateMap = new Map(reviewGates.map((g) => [g.id, g]));
@@ -134,7 +131,6 @@ export function GatesTab() {
             <div className="gate-grid">
               {gates.map((gate) => {
                 const reviewGate = reviewGateMap.get(gate.id);
-                const triage = triageMap.get(gate.id);
                 const rawClassification =
                   gate.failureClassification ??
                   reviewGate?.failureClassification ??

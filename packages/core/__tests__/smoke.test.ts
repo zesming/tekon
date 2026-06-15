@@ -14,7 +14,7 @@ import {
 
 describe('@tekon/core', () => {
   it('exports the core package version marker', () => {
-    expect(TEKON_CORE_VERSION).toBe('0.1.0');
+    expect(TEKON_CORE_VERSION).toBe('0.5.0');
   });
 
   it('exports phase 2 role system APIs', () => {

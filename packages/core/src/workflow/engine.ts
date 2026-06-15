@@ -26,7 +26,6 @@ import type {
   GateConfig,
   GateResult,
   Node,
-  Phase,
   Role,
   WorkflowInstance,
 } from '../types/domain.js';
@@ -170,6 +169,19 @@ export function createWorkflowEngine(
         throw new Error(`run not found: ${runId}`);
       }
 
+      const terminalStatuses: ReadonlyArray<string> = [
+        'passed',
+        'failed',
+        'cancelled',
+      ];
+      if (terminalStatuses.includes(existing.status)) {
+        return {
+          error: `cannot resume run in terminal status: ${existing.status}`,
+          runId,
+          workflow: existing,
+        } as unknown as WorkflowEngineResult;
+      }
+
       await options.repositories.updateWorkflowInstanceStatus(runId, 'running');
       await options.audit.append({
         runId,
@@ -182,6 +194,31 @@ export function createWorkflowEngine(
       return { runId, workflow };
     },
   };
+
+  /**
+   * Checked transition: reads current node status, validates legality,
+   * performs the transition, and writes an audit event.
+   * Throws if the transition is illegal from the current state.
+   */
+  async function checkedTransitionNode(
+    runId: string,
+    nodeId: string,
+    to: Parameters<typeof assertWorkflowTransition>[1],
+    auditType: string,
+    auditPayload: Record<string, unknown> = {},
+  ): Promise<void> {
+    const current = await options.repositories.getNode(nodeId);
+    if (!current) {
+      throw new Error(`node not found: ${nodeId}`);
+    }
+    assertWorkflowTransition(current.status, to);
+    await options.repositories.transitionNode(nodeId, to);
+    await options.audit.append({
+      runId,
+      type: auditType,
+      payload: { nodeId, from: current.status, to, ...auditPayload },
+    });
+  }
 
   async function executePlan(
     runId: string,
@@ -289,8 +326,13 @@ export function createWorkflowEngine(
         current.status === 'blocked'
           ? current.status
           : 'pending';
-      assertWorkflowTransition(fromStatus, 'running');
-      await options.repositories.transitionNode(node.id, 'running');
+      await checkedTransitionNode(
+        runId,
+        node.id,
+        'running',
+        'node.transition.checked',
+        { fromStatus },
+      );
       await options.repositories.updateWorkflowInstanceStatus(
         runId,
         'running',
@@ -313,19 +355,33 @@ export function createWorkflowEngine(
           startedAt: new Date().toISOString(),
         });
         const lease = await createExecutionLease(runId, node);
-        const agentResult = await options.adapter.runAgent(
-          await agentInputForLease(
-            runId,
-            node,
-            lease,
-            await buildNodePrompt(runId, node),
-          ),
-        );
-        assertSuccessfulAgentRun(agentResult);
-        await options.repositories.markRoleRunCompleted({
-          roleRunId,
-          completedAt: new Date().toISOString(),
-        });
+        let agentSucceeded = false;
+        try {
+          const agentResult = await options.adapter.runAgent(
+            await agentInputForLease(
+              runId,
+              node,
+              lease,
+              await buildNodePrompt(runId, node),
+            ),
+          );
+          assertSuccessfulAgentRun(agentResult);
+          agentSucceeded = true;
+          await options.repositories.markRoleRunCompleted({
+            roleRunId,
+            completedAt: new Date().toISOString(),
+          });
+        } finally {
+          if (!agentSucceeded) {
+            await options.repositories.transitionNode(node.id, 'interrupted');
+            await options.repositories.updateWorkflowInstanceStatus(
+              runId,
+              'interrupted',
+              node.id,
+            );
+            await finalizeExecutionLease(runId, node.id).catch(() => {});
+          }
+        }
       } catch (error) {
         await options.repositories.transitionNode(node.id, 'interrupted');
         await options.repositories.updateWorkflowInstanceStatus(
@@ -344,14 +400,37 @@ export function createWorkflowEngine(
         return false;
       }
 
-      await options.repositories.transitionNode(node.id, 'awaiting-gate');
+      await checkedTransitionNode(
+        runId,
+        node.id,
+        'awaiting-gate',
+        'node.transition.checked',
+      );
     }
     const configuredGates = gatesWithStableKeys(node.gates, node.id);
-    for (const gate of configuredGates) {
-      const passed = await runGateWithRepair(runId, node, gate);
-      if (!passed) {
-        return false;
+    try {
+      for (const gate of configuredGates) {
+        const passed = await runGateWithRepair(runId, node, gate);
+        if (!passed) {
+          return false;
+        }
       }
+    } catch (error) {
+      await options.repositories.transitionNode(node.id, 'interrupted');
+      await options.repositories.updateWorkflowInstanceStatus(
+        runId,
+        'interrupted',
+        node.id,
+      );
+      await options.audit.append({
+        runId,
+        type: 'gate.execution.error',
+        payload: {
+          nodeId: node.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return false;
     }
 
     try {
@@ -375,13 +454,13 @@ export function createWorkflowEngine(
       return false;
     }
 
-    await options.repositories.transitionNode(node.id, 'passed');
-    await appendPmoNodeCheckpoint(runId, node);
-    await options.audit.append({
+    await checkedTransitionNode(
       runId,
-      type: 'node.passed',
-      payload: { nodeId: node.id },
-    });
+      node.id,
+      'passed',
+      'node.passed',
+    );
+    await appendPmoNodeCheckpoint(runId, node);
     return true;
   }
 
@@ -465,12 +544,9 @@ export function createWorkflowEngine(
     }
 
     if (result.status === 'blocked' && gate.type === 'human') {
-      await options.repositories.transitionNode(node.id, 'paused');
-      await options.repositories.updateWorkflowInstanceStatus(
-        runId,
-        'paused',
-        node.id,
-      );
+      // The gate engine's runGate already calls requestHumanGate() which
+      // creates the human decision and transitions the node to 'paused'.
+      // We only need to emit the audit event here for observability.
       await options.audit.append({
         runId,
         type: 'human.gate.pending',
@@ -480,70 +556,92 @@ export function createWorkflowEngine(
     }
 
     if (gate.autoFix && gate.maxRetries > 0) {
-      await options.repositories.transitionNode(node.id, 'needs-revision');
-      await finalizeExecutionLease(runId, node.id);
-      const repairNode = await gateEngine.createAutoFixRepairNode({
-        failedGateResult: result,
-        fixerRole: node.role,
-      });
-      await options.audit.append({
-        runId,
-        type: 'gate.repair.created',
-        payload: {
-          nodeId: node.id,
-          repairNodeId: repairNode.id,
-          gateResultId: result.id,
-        },
-      });
-      await options.repositories.transitionNode(repairNode.id, 'running');
-      try {
-        const repairLease = await createExecutionLease(runId, {
-          id: repairNode.id,
-          role: repairNode.role,
-          phaseId: repairNode.phaseId,
+      let retryAttempt = 0;
+      let repairPassed = false;
+
+      while (retryAttempt < gate.maxRetries && !repairPassed) {
+        retryAttempt++;
+        await options.repositories.transitionNode(node.id, 'needs-revision');
+        await finalizeExecutionLease(runId, node.id);
+        const repairNode = await gateEngine.createAutoFixRepairNode({
+          failedGateResult: result,
+          fixerRole: node.role,
         });
-        const repairResult = await options.adapter.runAgent(
-          await agentInputForLease(
-            runId,
-            {
-              id: repairNode.id,
-              role: repairNode.role,
-              phaseId: repairNode.phaseId,
-            },
-            repairLease,
-            await buildRepairPrompt(runId, repairNode, result),
-          ),
-        );
-        assertSuccessfulAgentRun(repairResult);
-      } catch (error) {
-        await options.repositories.transitionNode(repairNode.id, 'interrupted');
-        await options.repositories.transitionNode(node.id, 'blocked');
-        await options.repositories.updateWorkflowInstanceStatus(
-          runId,
-          gate.onExhausted === 'pause' ? 'paused' : 'blocked',
-          node.id,
-        );
         await options.audit.append({
           runId,
-          type: 'gate.repair.failed',
+          type: 'gate.repair.created',
           payload: {
             nodeId: node.id,
             repairNodeId: repairNode.id,
             gateResultId: result.id,
-            error: error instanceof Error ? error.message : String(error),
+            attempt: retryAttempt,
+            maxAttempts: gate.maxRetries,
           },
         });
-        return false;
+        await options.repositories.transitionNode(repairNode.id, 'running');
+        let repairSucceeded = false;
+        try {
+          const repairLease = await createExecutionLease(runId, {
+            id: repairNode.id,
+            role: repairNode.role,
+            phaseId: repairNode.phaseId,
+          });
+          try {
+            const repairResult = await options.adapter.runAgent(
+              await agentInputForLease(
+                runId,
+                {
+                  id: repairNode.id,
+                  role: repairNode.role,
+                  phaseId: repairNode.phaseId,
+                },
+                repairLease,
+                await buildRepairPrompt(runId, repairNode, result),
+              ),
+            );
+            assertSuccessfulAgentRun(repairResult);
+            repairSucceeded = true;
+          } finally {
+            if (!repairSucceeded) {
+              await finalizeExecutionLease(runId, repairNode.id).catch(() => {});
+            }
+          }
+        } catch (error) {
+          await options.repositories.transitionNode(repairNode.id, 'interrupted');
+          await options.audit.append({
+            runId,
+            type: 'gate.repair.failed',
+            payload: {
+              nodeId: node.id,
+              repairNodeId: repairNode.id,
+              gateResultId: result.id,
+              attempt: retryAttempt,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+          if (retryAttempt >= gate.maxRetries) {
+            break;
+          }
+          result = await runGate(runId, node.id, gate);
+          if (result.status === 'passed' || result.status === 'skipped') {
+            repairPassed = true;
+          }
+          continue;
+        }
+        await options.repositories.transitionNode(repairNode.id, 'passed');
+        const repairLease = await activeExecutionLease(runId, repairNode.id);
+        if (repairLease) {
+          executionLeases.set(node.id, repairLease);
+        }
+        await options.repositories.transitionNode(node.id, 'running');
+        await options.repositories.transitionNode(node.id, 'awaiting-gate');
+        result = await runGate(runId, node.id, gate);
+        if (result.status === 'passed' || result.status === 'skipped') {
+          repairPassed = true;
+        }
       }
-      await options.repositories.transitionNode(repairNode.id, 'passed');
-      const repairLease = await activeExecutionLease(runId, repairNode.id);
-      if (repairLease) {
-        executionLeases.set(node.id, repairLease);
-      }
-      await options.repositories.transitionNode(node.id, 'running');
-      await options.repositories.transitionNode(node.id, 'awaiting-gate');
-      result = await runGate(runId, node.id, gate);
-      if (result.status === 'passed' || result.status === 'skipped') {
+
+      if (repairPassed) {
         await options.audit.append({
           runId,
           type: 'gate.passed-after-repair',
@@ -551,6 +649,7 @@ export function createWorkflowEngine(
             nodeId: node.id,
             gateType: gate.type,
             gateKey: gate.gateKey,
+            attempts: retryAttempt,
           },
         });
         return true;
@@ -618,22 +717,29 @@ export function createWorkflowEngine(
       }
     }
 
-    await options.repositories.transitionNode(node.id, 'blocked');
-    await options.repositories.updateWorkflowInstanceStatus(
+    const exhaustedNodeStatus =
+      gate.onExhausted === 'pause'
+        ? 'paused'
+        : gate.onExhausted === 'fail'
+          ? 'failed'
+          : 'blocked';
+    await checkedTransitionNode(
       runId,
-      gate.onExhausted === 'pause' ? 'paused' : 'blocked',
       node.id,
-    );
-    await options.audit.append({
-      runId,
-      type: 'gate.failed',
-      payload: {
-        nodeId: node.id,
+      exhaustedNodeStatus,
+      'gate.failed',
+      {
         gateType: gate.type,
         gateKey: gate.gateKey,
         gateResultId: result.id,
+        onExhausted: gate.onExhausted,
       },
-    });
+    );
+    await options.repositories.updateWorkflowInstanceStatus(
+      runId,
+      exhaustedNodeStatus,
+      node.id,
+    );
     return false;
   }
 
@@ -741,18 +847,19 @@ export function createWorkflowEngine(
     const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
 
     // --- Step 1: Transition target to needs-revision ---
-    await options.repositories.transitionNode(targetNodeId, 'needs-revision');
-    await options.audit.append({
+    await checkedTransitionNode(
       runId,
-      type: 'gate.rework.needs-revision',
-      payload: {
+      targetNodeId,
+      'needs-revision',
+      'gate.rework.needs-revision',
+      {
         reviewNodeId: reviewNode.id,
         targetNodeId,
         gateResultId: gateResult.id,
         attempt,
         reason: 'Independent review found changes-requested',
       },
-    });
+    );
 
     // Build rework prompt with full role context + review feedback
     const reviewFeedback = await loadReviewArtifactContent(
@@ -800,7 +907,12 @@ export function createWorkflowEngine(
       startedAt: now,
     });
 
-    await options.repositories.transitionNode(reworkNodeId, 'running');
+    await checkedTransitionNode(
+      runId,
+      reworkNodeId,
+      'running',
+      'node.transition.checked',
+    );
 
     // Create a fresh lease for the rework
     const reworkLease = await createExecutionLease(runId, {
@@ -813,27 +925,35 @@ export function createWorkflowEngine(
       // Run the target's agent with review feedback.
       // Pass targetNodeId so artifacts are written to the target's output
       // directory and stored under the target's node ID (overwriting originals).
-      const reworkResult = await options.adapter.runAgent(
-        await agentInputForLease(
-          runId,
-          {
-            id: reworkNodeId,
-            role: targetNode.role,
-            phaseId: targetNode.phaseId,
-            inputs: targetInputs,
-            outputs: targetOutputs,
-            gates: targetGates,
-          },
-          reworkLease,
-          reworkPrompt,
-          targetNodeId,
-        ),
-      );
-      assertSuccessfulAgentRun(reworkResult);
-      await options.repositories.markRoleRunCompleted({
-        roleRunId: reworkRoleRunId,
-        completedAt: new Date().toISOString(),
-      });
+      let reworkSucceeded = false;
+      try {
+        const reworkResult = await options.adapter.runAgent(
+          await agentInputForLease(
+            runId,
+            {
+              id: reworkNodeId,
+              role: targetNode.role,
+              phaseId: targetNode.phaseId,
+              inputs: targetInputs,
+              outputs: targetOutputs,
+              gates: targetGates,
+            },
+            reworkLease,
+            reworkPrompt,
+            targetNodeId,
+          ),
+        );
+        assertSuccessfulAgentRun(reworkResult);
+        reworkSucceeded = true;
+        await options.repositories.markRoleRunCompleted({
+          roleRunId: reworkRoleRunId,
+          completedAt: new Date().toISOString(),
+        });
+      } finally {
+        if (!reworkSucceeded) {
+          await finalizeExecutionLease(runId, reworkNodeId).catch(() => {});
+        }
+      }
     } catch (error) {
       await options.repositories.transitionNode(reworkNodeId, 'interrupted');
       await options.audit.append({
@@ -892,14 +1012,34 @@ export function createWorkflowEngine(
     }
 
     // Rework output validated — mark rework node and target as passed
-    await options.repositories.transitionNode(reworkNodeId, 'passed');
-    await options.repositories.transitionNode(targetNodeId, 'passed');
+    await checkedTransitionNode(
+      runId,
+      reworkNodeId,
+      'passed',
+      'node.transition.checked',
+    );
+    await checkedTransitionNode(
+      runId,
+      targetNodeId,
+      'passed',
+      'node.transition.checked',
+    );
 
     // --- Step 6: Re-execute review node to produce fresh review artifact ---
     // The review node transitions awaiting-gate → needs-revision → running
     // (state machine requires needs-revision as intermediate step).
-    await options.repositories.transitionNode(reviewNode.id, 'needs-revision');
-    await options.repositories.transitionNode(reviewNode.id, 'running');
+    await checkedTransitionNode(
+      runId,
+      reviewNode.id,
+      'needs-revision',
+      'node.transition.checked',
+    );
+    await checkedTransitionNode(
+      runId,
+      reviewNode.id,
+      'running',
+      'node.transition.checked',
+    );
 
     const reviewReRunRoleRunId = `role_run_${randomUUID()}`;
     await options.repositories.createRoleRun({

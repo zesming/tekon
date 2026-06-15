@@ -1,6 +1,5 @@
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
-import type { GateResult } from '../types/domain.js';
 import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,

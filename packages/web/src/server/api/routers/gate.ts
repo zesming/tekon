@@ -21,7 +21,6 @@ import {
   assertRunInScope,
   listGates,
   listHumanDecisions,
-  mustGetRun,
   type TekonDatabase,
 } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';

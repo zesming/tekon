@@ -1,5 +1,37 @@
 # 变更日志
 
+## v0.5.1
+
+### 修复（全面审查第一轮）
+
+**Critical:**
+- 修复 rework 逻辑缺陷：`changes-requested` rework 后现在会重新运行 target node 的所有 gates 并重新生成 review artifact
+- 修复 rework node 空 `outputs`/`gates` 导致真实 provider 不产出也通过的问题
+
+**Major 引擎正确性:**
+- `resumeRun()` 增加终态拒绝检查，防止恢复已完成/已取消的 run
+- Human gate 幂等处理，防止 resume 时重复创建 pending decision
+- Gate retry 循环完善，正确映射 `block`/`pause`/`fail`
+- Gate 执行增加外层异常处理，防止 `running`/`awaiting-gate` 半状态
+- Lease 生命周期 `try/finally` 管理，失败时正确释放
+- 引入 `checkedTransitionNode` 状态机校验，防止非法状态转换
+
+**Major 安全:**
+- `role create` 增加 `ensureSafeName()` 校验，防止 `../` 路径逃逸
+- Web 读 API（artifact/gate/audit/review/progress）增加 session token 鉴权
+- CLI 不再将 token 放入 URL query string
+- Secret scan 使用 `lstatSync` 跳过 symlink，增加深度和文件数限制
+- `web-session.json` 写入时设置 `mode: 0o600`
+
+**Major DB 连接管理:**
+- 引入 `withProjectContext` 辅助函数，统一 DB 连接生命周期管理
+
+**Major 类型安全:**
+- 移除 `as never` 类型断言，增加 `validRoles` 运行时校验
+- `assertAgentProviderCapabilities` 使用具体类型替代 `unknown`
+- `TEKON_CORE_VERSION` 从 `package.json` 动态读取
+- 清理 20+ 处未使用的 import 和变量
+
 ## v0.5.0
 
 ### 新增

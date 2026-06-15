@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactElement } from 'react';
 
+import { setRpcSessionToken } from '../lib/rpc-client.js';
+
 // ---------------------------------------------------------------------------
 // Auth context types
 // ---------------------------------------------------------------------------
@@ -31,6 +33,7 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
   const [token, setTokenState] = useState<string | null>(null);
 
   const setToken = useCallback((newToken: string | null) => {
+    setRpcSessionToken(newToken);
     setTokenState(newToken);
   }, []);
 

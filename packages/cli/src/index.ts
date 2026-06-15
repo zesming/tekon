@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -428,48 +429,46 @@ async function commandRun(argv: string[], io: CliIO) {
 
   assertCleanBase(repoPath, allowDirtyBase);
 
-  const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  const repositories = createRepositories(db);
-  const audit = createAuditLogger({ repositories });
-  const gateway = createCommandGateway({ repositories });
-  const configDefaultAgent = readConfigDefaultAgent(repoPath);
-  const agentRuntime = createAgentAdapter({
-    agent: args.values.agent ?? configDefaultAgent ?? 'codex',
-    repoPath,
-    gateway,
-    runtime: providerRuntimeFromCliOptions(args.values),
-  });
-  const engine = createWorkflowEngine({
-    repoPath,
-    dataDir: '.tekon',
-    repositories,
-    audit,
-    adapter: agentRuntime.adapter,
-    agentProvider: agentRuntime.provider,
-    agentConfigSummary: agentRuntime.configSummary,
-    gateEngine: createGateEngine({ repositories, gateway }),
-    worktreeManager: createWorktreeManager({ repositories, gateway }),
-    allowDirtyBase,
-    builtInRolesDir: getBuiltInRolesDir(),
-  });
+  await withProjectContext(repoPath, async ({ db, repos: repositories }) => {
+    const audit = createAuditLogger({ repositories });
+    const gateway = createCommandGateway({ repositories });
+    const configDefaultAgent = readConfigDefaultAgent(repoPath);
+    const agentRuntime = createAgentAdapter({
+      agent: args.values.agent ?? configDefaultAgent ?? 'codex',
+      repoPath,
+      gateway,
+      runtime: providerRuntimeFromCliOptions(args.values),
+    });
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: agentRuntime.adapter,
+      agentProvider: agentRuntime.provider,
+      agentConfigSummary: agentRuntime.configSummary,
+      gateEngine: createGateEngine({ repositories, gateway }),
+      worktreeManager: createWorktreeManager({ repositories, gateway }),
+      allowDirtyBase,
+      builtInRolesDir: getBuiltInRolesDir(),
+    });
 
-  const result = await engine.startRun({
-    demandText,
-    mode: 'template',
-    templateName: args.values.template ?? 'standard-delivery',
+    const result = await engine.startRun({
+      demandText,
+      mode: 'template',
+      templateName: args.values.template ?? 'standard-delivery',
+    });
+    const pendingHuman = (
+      await repositories.listHumanDecisions(result.runId)
+    ).filter((decision) => decision.status === 'pending');
+    io.stdout.write(
+      [
+        `runId=${result.runId}`,
+        `status=${result.workflow.status}`,
+        pendingHuman.length > 0 ? 'humanGate=pending' : 'humanGate=none',
+      ].join(' ') + '\n',
+    );
   });
-  const pendingHuman = (
-    await repositories.listHumanDecisions(result.runId)
-  ).filter((decision) => decision.status === 'pending');
-  io.stdout.write(
-    [
-      `runId=${result.runId}`,
-      `status=${result.workflow.status}`,
-      pendingHuman.length > 0 ? 'humanGate=pending' : 'humanGate=none',
-    ].join(' ') + '\n',
-  );
-  db.close();
 }
 
 function createDynamicMockAdapter(demandText: string) {
@@ -780,22 +779,21 @@ async function commandDemand(argv: string[], io: CliIO) {
 }
 
 async function commandPause(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = await openCommandContext(argv, io);
-  const workflow = await repositories.getWorkflowInstance(runId);
-  if (!workflow) {
-    db.close();
-    throw new Error(`run not found: ${runId}`);
-  }
-  if (workflow.currentNodeId) {
-    await repositories.transitionNode(workflow.currentNodeId, 'paused');
-  }
-  const paused = await repositories.updateWorkflowInstanceStatus(
-    runId,
-    'paused',
-    workflow.currentNodeId,
-  );
-  io.stdout.write(`runId=${runId} status=${paused?.status ?? 'paused'}\n`);
-  db.close();
+  await withCommandCtx(argv, io, async ({ repos: repositories, runId }) => {
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${runId}`);
+    }
+    if (workflow.currentNodeId) {
+      await repositories.transitionNode(workflow.currentNodeId, 'paused');
+    }
+    const paused = await repositories.updateWorkflowInstanceStatus(
+      runId,
+      'paused',
+      workflow.currentNodeId,
+    );
+    io.stdout.write(`runId=${runId} status=${paused?.status ?? 'paused'}\n`);
+  });
 }
 
 async function commandResume(argv: string[], io: CliIO) {
@@ -811,122 +809,108 @@ async function commandResume(argv: string[], io: CliIO) {
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
   await ensureInitialized(repoPath, io);
-  const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  const repositories = createRepositories(db);
-  let decisionContext: { runId: string; decisionId?: string } | null = null;
-  try {
-    decisionContext = args.values['approve-human']
-      ? await resolveHumanDecisionContext({
-          db,
-          repositories,
-          explicitRunId: args.values['run-id'] ?? args.positionals[0],
-          explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
-          requireDecision: true,
-        })
-      : null;
-  } catch (error) {
-    db.close();
-    throw error;
-  }
-  const runId =
-    decisionContext?.runId ??
-    args.values['run-id'] ??
-    args.positionals[0] ??
-    selectLatestRunId(db);
-  if (!runId) {
-    db.close();
-    throw new Error('run id could not be inferred; pass --run-id <runId>');
-  }
-  const audit = createAuditLogger({ repositories });
-  const workflow = await repositories.getWorkflowInstance(runId);
-  if (!workflow) {
-    db.close();
-    throw new Error(`run not found: ${runId}`);
-  }
+  await withProjectContext(repoPath, async ({ db, repos: repositories }) => {
+    let decisionContext: { runId: string; decisionId?: string } | null = null;
+    if (args.values['approve-human']) {
+      decisionContext = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
+        requireDecision: true,
+      });
+    }
+    const runId =
+      decisionContext?.runId ??
+      args.values['run-id'] ??
+      args.positionals[0] ??
+      selectLatestRunId(db);
+    if (!runId) {
+      throw new Error('run id could not be inferred; pass --run-id <runId>');
+    }
+    const audit = createAuditLogger({ repositories });
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${runId}`);
+    }
 
-  const gateway = createCommandGateway({ repositories });
-  const runProvider = await repositories.getRunProviderConfig(runId);
-  if (!runProvider) {
-    db.close();
-    throw new Error(
-      `run ${runId} has no provider snapshot; cannot resume safely`,
-    );
-  }
-  const agentRuntime = createAgentAdapterFromSnapshot({
-    snapshot: runProvider,
-    repoPath,
-    gateway,
-  });
-
-  if (args.values['approve-human']) {
-    if (!decisionContext?.decisionId) {
-      db.close();
+    const gateway = createCommandGateway({ repositories });
+    const runProvider = await repositories.getRunProviderConfig(runId);
+    if (!runProvider) {
       throw new Error(
-        'pending human decision could not be inferred; pass --run-id and --decision-id',
+        `run ${runId} has no provider snapshot; cannot resume safely`,
       );
     }
-    const decision = await repositories.getHumanDecision(
-      decisionContext.decisionId,
-    );
-    if (!decision || decision.runId !== runId) {
-      db.close();
-      throw new Error(
-        `human decision not found: ${decisionContext.decisionId}`,
-      );
-    }
-    if (decision.status !== 'pending') {
-      db.close();
-      throw new Error(
-        `decision is already ${decision.status}: ${decisionContext.decisionId}`,
-      );
-    }
-    const humanGate = createHumanGate({ repositories });
-    await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
-    await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
-    await audit.append({
-      runId,
-      type: 'human.gate.approved',
-      payload: { decisionId: decision.id, nodeId: decision.nodeId },
+    const agentRuntime = createAgentAdapterFromSnapshot({
+      snapshot: runProvider,
+      repoPath,
+      gateway,
     });
-  }
 
-  const engine = createWorkflowEngine({
-    repoPath,
-    dataDir: '.tekon',
-    repositories,
-    audit,
-    adapter: agentRuntime.adapter,
-    agentProvider: agentRuntime.provider,
-    agentConfigSummary: agentRuntime.configSummary,
-    gateEngine: createGateEngine({ repositories, gateway }),
-    worktreeManager: createWorktreeManager({ repositories, gateway }),
-    builtInRolesDir: getBuiltInRolesDir(),
+    if (args.values['approve-human']) {
+      if (!decisionContext?.decisionId) {
+        throw new Error(
+          'pending human decision could not be inferred; pass --run-id and --decision-id',
+        );
+      }
+      const decision = await repositories.getHumanDecision(
+        decisionContext.decisionId,
+      );
+      if (!decision || decision.runId !== runId) {
+        throw new Error(
+          `human decision not found: ${decisionContext.decisionId}`,
+        );
+      }
+      if (decision.status !== 'pending') {
+        throw new Error(
+          `decision is already ${decision.status}: ${decisionContext.decisionId}`,
+        );
+      }
+      const humanGate = createHumanGate({ repositories });
+      await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
+      await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
+      await audit.append({
+        runId,
+        type: 'human.gate.approved',
+        payload: { decisionId: decision.id, nodeId: decision.nodeId },
+      });
+    }
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: agentRuntime.adapter,
+      agentProvider: agentRuntime.provider,
+      agentConfigSummary: agentRuntime.configSummary,
+      gateEngine: createGateEngine({ repositories, gateway }),
+      worktreeManager: createWorktreeManager({ repositories, gateway }),
+      builtInRolesDir: getBuiltInRolesDir(),
+    });
+    const result = await engine.resumeRun(runId);
+    io.stdout.write(`runId=${runId} status=${result.workflow.status}\n`);
   });
-  const result = await engine.resumeRun(runId);
-  io.stdout.write(`runId=${runId} status=${result.workflow.status}\n`);
-  db.close();
 }
 
 async function commandCancel(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = await openCommandContext(argv, io);
-  const workflow = await repositories.getWorkflowInstance(runId);
-  if (!workflow) {
-    db.close();
-    throw new Error(`run not found: ${runId}`);
-  }
-  if (workflow.currentNodeId) {
-    await repositories.transitionNode(workflow.currentNodeId, 'interrupted');
-  }
-  const cancelled = await repositories.updateWorkflowInstanceStatus(
-    runId,
-    'cancelled',
-    workflow.currentNodeId,
-  );
-  io.stdout.write(
-    `runId=${runId} status=${cancelled?.status ?? 'cancelled'}\n`,
-  );
-  db.close();
+  await withCommandCtx(argv, io, async ({ repos: repositories, runId }) => {
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${runId}`);
+    }
+    if (workflow.currentNodeId) {
+      await repositories.transitionNode(workflow.currentNodeId, 'interrupted');
+    }
+    const cancelled = await repositories.updateWorkflowInstanceStatus(
+      runId,
+      'cancelled',
+      workflow.currentNodeId,
+    );
+    io.stdout.write(
+      `runId=${runId} status=${cancelled?.status ?? 'cancelled'}\n`,
+    );
+  });
 }
 
 async function commandRole(argv: string[], io: CliIO) {
@@ -951,23 +935,31 @@ async function commandRole(argv: string[], io: CliIO) {
   if (!roleId) {
     throw new Error('role id is required');
   }
+  ensureSafeName(roleId);
+  const validRoles = ['pm', 'rd', 'qa', 'reviewer', 'pmo'] as const;
+  if (!validRoles.includes(roleId as (typeof validRoles)[number])) {
+    throw new Error(
+      `invalid role id: ${roleId} (expected one of: ${validRoles.join(', ')})`,
+    );
+  }
+  const role = roleId as (typeof validRoles)[number];
 
   if (subcommand === 'show') {
-    const role = loadRole({ role: roleId as never, repoPath, builtInRolesDir });
+    const loadedRole = loadRole({ role, repoPath, builtInRolesDir });
     io.stdout.write(
       [
-        `role=${role.role}`,
-        `name=${role.agent.name ?? role.role}`,
-        `source=${role.source}`,
-        `skills=${role.skills.map((skill) => skill.id).join(',')}`,
+        `role=${loadedRole.role}`,
+        `name=${loadedRole.agent.name ?? loadedRole.role}`,
+        `source=${loadedRole.source}`,
+        `skills=${loadedRole.skills.map((skill) => skill.id).join(',')}`,
       ].join('\n') + '\n',
     );
     return;
   }
 
   if (subcommand === 'path') {
-    const role = loadRole({ role: roleId as never, repoPath, builtInRolesDir });
-    io.stdout.write(`${role.roleDir}\n`);
+    const loadedRole = loadRole({ role, repoPath, builtInRolesDir });
+    io.stdout.write(`${loadedRole.roleDir}\n`);
     return;
   }
 
@@ -975,8 +967,20 @@ async function commandRole(argv: string[], io: CliIO) {
     await ensureInitialized(repoPath, io);
     const source = join(builtInRolesDir, roleId);
     const target = join(repoPath, '.tekon', 'roles', roleId);
-    cpSync(source, target, { recursive: true });
-    io.stdout.write(`${target}\n`);
+    const resolvedBuiltInDir = realpathSync(builtInRolesDir);
+    const resolvedSource = realpathSync(source);
+    if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
+      throw new Error(`role id escapes built-in roles directory: ${roleId}`);
+    }
+    const repoRolesDir = join(repoPath, '.tekon', 'roles');
+    mkdirSync(repoRolesDir, { recursive: true });
+    const resolvedRolesDir = realpathSync(repoRolesDir);
+    const resolvedTarget = resolve(resolvedRolesDir, roleId);
+    if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
+      throw new Error(`role id escapes project roles directory: ${roleId}`);
+    }
+    cpSync(resolvedSource, resolvedTarget, { recursive: true });
+    io.stdout.write(`${resolvedTarget}\n`);
     return;
   }
 
@@ -1162,25 +1166,25 @@ async function commandConstraints(argv: string[], io: CliIO) {
 async function commandDelivery(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'prepare') {
-    const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
-    const audit = createAuditLogger({ repositories });
-    const preparation = await createPullRequestPreparation({
-      repoPath,
-      repositories,
-      audit,
-      runId,
+    await withCommandCtx(rest, io, async ({ repos: repositories, repoPath, runId }) => {
+      const audit = createAuditLogger({ repositories });
+      const preparation = await createPullRequestPreparation({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+      });
+      io.stdout.write(
+        [
+          `runId=${runId}`,
+          `branch=${preparation.branch}`,
+          `baseBranch=${preparation.baseBranch}`,
+          `packagePath=${preparation.packagePath}`,
+          `prBodyPath=${preparation.prBodyPath}`,
+          `requiresHumanApproval=${preparation.requiresHumanApproval}`,
+        ].join(' ') + '\n',
+      );
     });
-    io.stdout.write(
-      [
-        `runId=${runId}`,
-        `branch=${preparation.branch}`,
-        `baseBranch=${preparation.baseBranch}`,
-        `packagePath=${preparation.packagePath}`,
-        `prBodyPath=${preparation.prBodyPath}`,
-        `requiresHumanApproval=${preparation.requiresHumanApproval}`,
-      ].join(' ') + '\n',
-    );
-    db.close();
     return;
   }
 
@@ -1196,50 +1200,47 @@ async function commandDelivery(argv: string[], io: CliIO) {
     });
     const repoPath = resolveProjectRepoPath(args.values.repo);
     await ensureInitialized(repoPath, io);
-    const db = openProjectDb(repoPath);
-    migrateDatabase(db);
-    const runId =
-      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
-    if (!runId) {
-      db.close();
-      throw new Error('run id could not be inferred; pass --run-id <runId>');
-    }
-    const repositories = createRepositories(db);
-    const audit = createAuditLogger({ repositories });
-    const preparation = await createPullRequestPreparation({
-      repoPath,
-      repositories,
-      audit,
-      runId,
+    await withProjectContext(repoPath, async ({ db, repos: repositories }) => {
+      const runId =
+        args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+      if (!runId) {
+        throw new Error('run id could not be inferred; pass --run-id <runId>');
+      }
+      const audit = createAuditLogger({ repositories });
+      const preparation = await createPullRequestPreparation({
+        repoPath,
+        repositories,
+        audit,
+        runId,
+      });
+      const body = readFileSync(preparation.prBodyPath, 'utf8');
+      const result = await createScmDelivery({
+        repoPath,
+        repositories,
+        audit,
+        outputDir: join(repoPath, '.tekon', 'runs', runId, 'delivery', 'scm'),
+      }).createPr({
+        runId,
+        title: preparation.title,
+        body,
+        bodyPath: preparation.prBodyPath,
+        branch: preparation.branch,
+        baseBranch: preparation.baseBranch,
+        dryRun: false,
+        humanApproved: Boolean(args.values['approve-human']),
+        approvedBy: 'cli',
+      });
+      const delivery = await repositories.getDeliveryPullRequest(runId);
+      io.stdout.write(
+        [
+          `runId=${runId}`,
+          `deliveryStatus=${delivery?.status ?? 'unknown'}`,
+          `requiresHumanApproval=${result.requiresHumanApproval}`,
+          `prUrl=${result.prUrl ?? delivery?.prUrl ?? ''}`,
+          `failureStage=${delivery?.failureStage ?? ''}`,
+        ].join(' ') + '\n',
+      );
     });
-    const body = readFileSync(preparation.prBodyPath, 'utf8');
-    const result = await createScmDelivery({
-      repoPath,
-      repositories,
-      audit,
-      outputDir: join(repoPath, '.tekon', 'runs', runId, 'delivery', 'scm'),
-    }).createPr({
-      runId,
-      title: preparation.title,
-      body,
-      bodyPath: preparation.prBodyPath,
-      branch: preparation.branch,
-      baseBranch: preparation.baseBranch,
-      dryRun: false,
-      humanApproved: Boolean(args.values['approve-human']),
-      approvedBy: 'cli',
-    });
-    const delivery = await repositories.getDeliveryPullRequest(runId);
-    io.stdout.write(
-      [
-        `runId=${runId}`,
-        `deliveryStatus=${delivery?.status ?? 'unknown'}`,
-        `requiresHumanApproval=${result.requiresHumanApproval}`,
-        `prUrl=${result.prUrl ?? delivery?.prUrl ?? ''}`,
-        `failureStage=${delivery?.failureStage ?? ''}`,
-      ].join(' ') + '\n',
-    );
-    db.close();
     return;
   }
 
@@ -1349,30 +1350,30 @@ async function commandDelivery(argv: string[], io: CliIO) {
   if (subcommand !== 'dry-run') {
     throw new Error(`unknown delivery command: ${subcommand ?? ''}`);
   }
-  const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
-  const audit = createAuditLogger({ repositories });
-  const evidence = await createDeliveryEvidencePackage({
-    repositories,
-    audit,
-    runId,
-    riskGates: ['human'],
+  await withCommandCtx(rest, io, async ({ repos: repositories, repoPath, runId }) => {
+    const audit = createAuditLogger({ repositories });
+    const evidence = await createDeliveryEvidencePackage({
+      repositories,
+      audit,
+      runId,
+      riskGates: ['human'],
+    });
+    const pr = await createScmDelivery({ repoPath }).createPr({
+      title: `Tekon delivery ${runId}`,
+      body: `Run ${runId} status=${evidence.workflowStatus}`,
+      branch: `tekon-delivery/${runId}`,
+      dryRun: true,
+    });
+    io.stdout.write(
+      [
+        `runId=${runId}`,
+        `workflowStatus=${evidence.workflowStatus}`,
+        `artifacts=${evidence.artifacts.length}`,
+        `prDryRun=${pr.dryRun}`,
+        `requiresHumanApproval=${pr.requiresHumanApproval}`,
+      ].join(' ') + '\n',
+    );
   });
-  const pr = await createScmDelivery({ repoPath }).createPr({
-    title: `Tekon delivery ${runId}`,
-    body: `Run ${runId} status=${evidence.workflowStatus}`,
-    branch: `tekon-delivery/${runId}`,
-    dryRun: true,
-  });
-  io.stdout.write(
-    [
-      `runId=${runId}`,
-      `workflowStatus=${evidence.workflowStatus}`,
-      `artifacts=${evidence.artifacts.length}`,
-      `prDryRun=${pr.dryRun}`,
-      `requiresHumanApproval=${pr.requiresHumanApproval}`,
-    ].join(' ') + '\n',
-  );
-  db.close();
 }
 
 function createAgentAdapter(input: {
@@ -1597,29 +1598,28 @@ function defaultCodexConfig(repoPath: string): AgentAdapterConfig {
 }
 
 async function commandStatus(argv: string[], io: CliIO) {
-  const { repositories, db, repoPath, runId } = await openCommandContext(argv, io);
-  const workflow = await repositories.getWorkflowInstance(runId);
-  if (!workflow) {
-    db.close();
-    throw new Error(`run not found: ${runId}`);
-  }
-  const gates = await repositories.listGateResults(runId);
-  const artifacts = await repositories.listArtifacts(runId);
-  const pendingHuman = (await repositories.listHumanDecisions(runId)).filter(
-    (decision) => decision.status === 'pending',
-  );
-  io.stdout.write(
-    [
-      `runId=${runId}`,
-      `repo=${repoPath}`,
-      `status=${workflow.status}`,
-      `currentNode=${workflow.currentNodeId ?? 'none'}`,
-      `gates=${gates.length}`,
-      `artifacts=${artifacts.length}`,
-      `pendingHumanDecisions=${pendingHuman.length}`,
-    ].join(' ') + '\n',
-  );
-  db.close();
+  await withCommandCtx(argv, io, async ({ repos: repositories, repoPath, runId }) => {
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${runId}`);
+    }
+    const gates = await repositories.listGateResults(runId);
+    const artifacts = await repositories.listArtifacts(runId);
+    const pendingHuman = (await repositories.listHumanDecisions(runId)).filter(
+      (decision) => decision.status === 'pending',
+    );
+    io.stdout.write(
+      [
+        `runId=${runId}`,
+        `repo=${repoPath}`,
+        `status=${workflow.status}`,
+        `currentNode=${workflow.currentNodeId ?? 'none'}`,
+        `gates=${gates.length}`,
+        `artifacts=${artifacts.length}`,
+        `pendingHumanDecisions=${pendingHuman.length}`,
+      ].join(' ') + '\n',
+    );
+  });
 }
 
 async function commandApproval(argv: string[], io: CliIO) {
@@ -1980,29 +1980,29 @@ async function commandEval(argv: string[], io: CliIO) {
   if (subcommand !== 'readiness') {
     throw new Error(`unknown eval command: ${subcommand ?? ''}`);
   }
-  const { repositories, db, repoPath, runId } = await openCommandContext(rest, io);
-  const audit = createAuditLogger({ repositories });
-  const evaluation = await evaluateWorkReadiness({
-    repositories,
-    audit,
-    runId,
-    repoPath,
+  await withCommandCtx(rest, io, async ({ repos: repositories, repoPath, runId }) => {
+    const audit = createAuditLogger({ repositories });
+    const evaluation = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId,
+      repoPath,
+    });
+    const deliveryPr = await repositories.getDeliveryPullRequest(runId);
+    io.stdout.write(
+      [
+        `runId=${runId}`,
+        `ready=${evaluation.ready}`,
+        `score=${evaluation.score.toFixed(2)}`,
+        `prCreated=${deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl)}`,
+        `prUrl=${deliveryPr?.prUrl ?? ''}`,
+        `failed=${evaluation.checks
+          .filter((check) => !check.passed)
+          .map((check) => check.id)
+          .join(',')}`,
+      ].join(' ') + '\n',
+    );
   });
-  const deliveryPr = await repositories.getDeliveryPullRequest(runId);
-  io.stdout.write(
-    [
-      `runId=${runId}`,
-      `ready=${evaluation.ready}`,
-      `score=${evaluation.score.toFixed(2)}`,
-      `prCreated=${deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl)}`,
-      `prUrl=${deliveryPr?.prUrl ?? ''}`,
-      `failed=${evaluation.checks
-        .filter((check) => !check.passed)
-        .map((check) => check.id)
-        .join(',')}`,
-    ].join(' ') + '\n',
-  );
-  db.close();
 }
 
 async function commandWorkUsabilityRecord(argv: string[], io: CliIO) {
@@ -2171,36 +2171,32 @@ async function commandReview(argv: string[], io: CliIO) {
   if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
     throw new Error('--max-chars must be a positive number');
   }
-  const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  const runId =
-    args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
-  if (!runId) {
-    db.close();
-    throw new Error('run id could not be inferred; pass --run-id <runId>');
-  }
-  const repositories = createRepositories(db);
-  const audit = createAuditLogger({ repositories });
-  const surface = await createWorkReviewSurface({
-    repoPath,
-    repositories,
-    audit,
-    runId,
-    maxContentChars,
-    commandDisplay:
-      (args.values.repo ?? args.values['run-id'] ?? args.positionals[0])
-        ? 'explicit'
-        : 'default',
+  await withProjectContext(repoPath, async ({ db, repos: repositories }) => {
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+    if (!runId) {
+      throw new Error('run id could not be inferred; pass --run-id <runId>');
+    }
+    const audit = createAuditLogger({ repositories });
+    const surface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId,
+      maxContentChars,
+      commandDisplay:
+        (args.values.repo ?? args.values['run-id'] ?? args.positionals[0])
+          ? 'explicit'
+          : 'default',
+    });
+
+    if (args.values.json) {
+      io.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
+      return;
+    }
+
+    io.stdout.write(formatReviewSurface(surface));
   });
-
-  if (args.values.json) {
-    io.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
-    db.close();
-    return;
-  }
-
-  io.stdout.write(formatReviewSurface(surface));
-  db.close();
 }
 
 function formatReviewSurface(
@@ -2344,14 +2340,14 @@ function formatPreview(preview: {
 }
 
 async function commandLog(argv: string[], io: CliIO) {
-  const { repositories, db, runId } = await openCommandContext(argv, io);
-  const events = await repositories.listAuditEvents(runId);
-  for (const event of events) {
-    io.stdout.write(
-      `${event.createdAt} ${event.type} ${JSON.stringify(event.payload)}\n`,
-    );
-  }
-  db.close();
+  await withCommandCtx(argv, io, async ({ repos: repositories, runId }) => {
+    const events = await repositories.listAuditEvents(runId);
+    for (const event of events) {
+      io.stdout.write(
+        `${event.createdAt} ${event.type} ${JSON.stringify(event.payload)}\n`,
+      );
+    }
+  });
 }
 
 async function commandClean(argv: string[], io: CliIO) {
@@ -2442,7 +2438,7 @@ async function commandUi(argv: string[], io: CliIO) {
   }
 
   io.stdout.write(`repo=${repoPath}\n`);
-  io.stdout.write(`url=http://localhost:${port}?token=${token}\n`);
+  io.stdout.write(`url=http://localhost:${port}\n`);
   io.stdout.write('Starting Tekon Web... Press Ctrl+C to stop\n');
 
   const child = spawn(tsxBin, ['src/server/index.ts'], {
@@ -2486,7 +2482,7 @@ function silentExec(cmd: string, args: string[], opts: { cwd: string }) {
   }
 }
 
-async function commandUpdate(argv: string[], io: CliIO) {
+async function commandUpdate(_argv: string[], io: CliIO) {
   const tekonRoot = resolveTekonRoot();
   if (!existsSync(tekonRoot)) {
     throw new Error(
@@ -2530,33 +2526,6 @@ async function commandUpdate(argv: string[], io: CliIO) {
   }
 
   io.stdout.write(`Updated to v${targetVersion}\n`);
-}
-
-async function openCommandContext(argv: string[], io: CliIO) {
-  const args = parseArgs({
-    args: argv,
-    options: {
-      repo: { type: 'string' },
-      'run-id': { type: 'string' },
-    },
-    allowPositionals: true,
-  });
-  const repoPath = resolveProjectRepoPath(args.values.repo);
-  await ensureInitialized(repoPath, io);
-  const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  const runId =
-    args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
-  if (!runId) {
-    db.close();
-    throw new Error('run id could not be inferred; pass --run-id <runId>');
-  }
-  return {
-    repoPath,
-    runId,
-    db,
-    repositories: createRepositories(db),
-  };
 }
 
 function resolveRepoPathForInit(repoArg?: string): string {
@@ -2837,6 +2806,49 @@ function openProjectDb(repoPath: string) {
   });
 }
 
+async function withProjectContext<T>(
+  repoPath: string,
+  fn: (ctx: { db: TekonDatabase; repos: TekonRepositories }) => T | Promise<T>,
+): Promise<T> {
+  const db = openProjectDb(repoPath);
+  try {
+    migrateDatabase(db);
+    return await fn({ db, repos: createRepositories(db) });
+  } finally {
+    db.close();
+  }
+}
+
+async function withCommandCtx<T>(
+  argv: string[],
+  io: CliIO,
+  fn: (ctx: {
+    db: TekonDatabase;
+    repos: TekonRepositories;
+    repoPath: string;
+    runId: string;
+  }) => T | Promise<T>,
+): Promise<T> {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      'run-id': { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolveProjectRepoPath(args.values.repo);
+  await ensureInitialized(repoPath, io);
+  return withProjectContext(repoPath, ({ db, repos }) => {
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(db);
+    if (!runId) {
+      throw new Error('run id could not be inferred; pass --run-id <runId>');
+    }
+    return fn({ db, repos, repoPath, runId });
+  });
+}
+
 function readStdinLine(): Promise<string> {
   return new Promise((resolve) => {
     const { stdin } = process;
@@ -2868,7 +2880,7 @@ function initializeProject(repoPath: string, io: CliIO): void {
     writeFileSync(
       webSessionPath,
       JSON.stringify({ token: randomBytes(32).toString('hex') }, null, 2),
-      'utf8',
+      { encoding: 'utf8', mode: 0o600 },
     );
   }
   writeFileSync(
@@ -2881,8 +2893,11 @@ function initializeProject(repoPath: string, io: CliIO): void {
     'utf8',
   );
   const db = openProjectDb(repoPath);
-  migrateDatabase(db);
-  db.close();
+  try {
+    migrateDatabase(db);
+  } finally {
+    db.close();
+  }
   const profilePath = join(tekonDir, 'repo-profile.yaml');
   if (!existsSync(profilePath)) {
     writeDefaultRepoProfile(repoPath);
