@@ -4,6 +4,11 @@ import type {
   GateType,
   Role,
 } from '../types/domain.js';
+import {
+  evaluateConstraints,
+  type ConstraintRule,
+  type DslConstraintContext,
+} from './dsl.js';
 
 export type ConstraintSource = 'constraint';
 export type WorkflowArtifactType = ArtifactType | string;
@@ -86,6 +91,7 @@ export interface ConstraintContext {
 
 export interface ConstraintMutationOptions {
   acceptedSuggestionIds?: string[];
+  dslRules?: ConstraintRule[];
 }
 
 export interface ConstraintValidationResult {
@@ -227,6 +233,68 @@ export function applyConstraintMutations(
         explanation:
           'Injected rollback-plan artifact requirement because data or migration risk is present.',
       });
+    }
+  }
+
+  if (options.dslRules && options.dslRules.length > 0) {
+    const dslContext: DslConstraintContext = {
+      tags: context.tags,
+      riskLevel: context.riskLevel,
+      files: [],
+    };
+    const evaluation = evaluateConstraints(options.dslRules, dslContext);
+    const dslTarget = firstCodeNode(next) ?? flattenNodes(next)[0];
+
+    for (const action of evaluation.required) {
+      if (action.type === 'requiresGate' && dslTarget) {
+        const gateId = `dsl-gate-${action.gateType}${action.gateKey ? `-${action.gateKey}` : ''}`;
+        if (!hasGateId(dslTarget.node, gateId)) {
+          dslTarget.node.gates = [
+            ...(dslTarget.node.gates ?? []),
+            {
+              id: gateId,
+              type: action.gateType as GateType,
+              gateKey: action.gateKey,
+              source,
+              explanation: `DSL rule requires a ${action.gateType} gate.`,
+            },
+          ];
+          mutations.push({
+            id: `dsl-${action.gateType}${action.gateKey ? `-${action.gateKey}` : ''}`,
+            source,
+            targetId: dslTarget.node.id,
+            kind: 'gate',
+            explanation: `Injected ${action.gateType} gate from DSL constraint rule.`,
+          });
+        }
+      }
+
+      if (action.type === 'requirePhase') {
+        const phaseId = `dsl-phase-${action.phaseName}`;
+        if (!next.phases.some((phase) => phase.id === phaseId)) {
+          next.phases.push({
+            id: phaseId,
+            name: action.phaseName,
+            source,
+            explanation: `DSL rule requires a ${action.phaseName} phase.`,
+            nodes: [
+              {
+                id: `dsl-node-${action.phaseName}`,
+                role: 'rd',
+                source,
+                explanation: `DSL rule requires a ${action.phaseName} phase.`,
+              },
+            ],
+          });
+          mutations.push({
+            id: `dsl-phase-${action.phaseName}`,
+            source,
+            targetId: phaseId,
+            kind: 'phase',
+            explanation: `Injected ${action.phaseName} phase from DSL constraint rule.`,
+          });
+        }
+      }
     }
   }
 

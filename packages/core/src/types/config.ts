@@ -186,16 +186,16 @@ export const dynamicWorkflowSpecSchema = z.object({
 });
 export type DynamicWorkflowSpec = z.infer<typeof dynamicWorkflowSpecSchema>;
 
-export const constraintRuleSchema = z.object({
+export const constraintRuleEntrySchema = z.object({
   id: z.string().min(1),
   description: z.string().min(1),
   appliesTo: z.array(roleSchema).optional(),
 });
-export type ConstraintRule = z.infer<typeof constraintRuleSchema>;
+export type ConstraintRuleEntry = z.infer<typeof constraintRuleEntrySchema>;
 
 export const constraintRulesSchema = z.object({
-  hard: z.array(constraintRuleSchema).default([]),
-  conditional: z.array(constraintRuleSchema).default([]),
-  soft: z.array(constraintRuleSchema).default([]),
+  hard: z.array(constraintRuleEntrySchema).default([]),
+  conditional: z.array(constraintRuleEntrySchema).default([]),
+  soft: z.array(constraintRuleEntrySchema).default([]),
 });
 export type ConstraintRules = z.infer<typeof constraintRulesSchema>;

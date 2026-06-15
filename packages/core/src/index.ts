@@ -41,6 +41,8 @@ export * from './workflow/scheduler.js';
 export * from './workflow/engine.js';
 export * from './workflow/dynamic.js';
 export * from './constraint/validator.js';
+export * from './constraint/runtime-policy.js';
+export * from './constraint/dsl.js';
 export * from './delivery/scm.js';
 export * from './delivery/ci-status.js';
 export * from './delivery/evidence.js';

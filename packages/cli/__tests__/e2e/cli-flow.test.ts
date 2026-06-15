@@ -202,7 +202,7 @@ describe('tekon cli e2e', () => {
 
     expect(
       runCli(cliPath, ['constraints', 'show', '--repo', repoPath], repoPath),
-    ).toContain('hard-code-build-lint');
+    ).toContain('code-changes-need-build-test');
 
     const cleanOutput = runCli(
       cliPath,

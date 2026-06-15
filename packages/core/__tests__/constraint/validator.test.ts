@@ -97,19 +97,18 @@ describe('constraint validator', () => {
     });
   });
 
-  it('documents the default constraint rule set in constraints.yaml', () => {
+  it('documents the default constraint rule set in constraints.yaml using the DSL format', () => {
     const constraints = readFileSync(
       new URL('../../../../constraints.yaml', import.meta.url),
       'utf8',
     );
 
-    expect(constraints).toContain('hard-code-build-lint');
-    expect(constraints).toContain('hard-independent-reviewer');
-    expect(constraints).toContain('hard-validation-or-e2e');
-    expect(constraints).toContain('conditional-high-risk-human-gate');
-    expect(constraints).toContain('conditional-security-review');
-    expect(constraints).toContain('conditional-rollback-plan');
-    expect(constraints).toContain('soft-dry-run-preview');
-    expect(constraints).toContain('soft-audit-log');
+    expect(constraints).toContain('code-changes-need-build-test');
+    expect(constraints).toContain('high-risk-needs-human-review');
+    expect(constraints).toContain('security-changes-need-scan');
+    expect(constraints).toContain('requiresGate');
+    expect(constraints).toContain('gateType: build');
+    expect(constraints).toContain('gateType: human');
+    expect(constraints).toContain('gateType: security-scan');
   });
 });

@@ -8,6 +8,19 @@ import { roleSchema, type Role } from '../types/domain.js';
 import { loadSkillsFromRoleDir, type RoleSkill } from './skill-loader.js';
 import type { RoleToolsConfig } from './tool-policy.js';
 
+const humanApprovalRuleSchema = z.object({
+  filePatterns: z.array(z.string().min(1)).optional(),
+  toolPatterns: z.array(z.string().min(1)).optional(),
+  actionTypes: z.array(z.string().min(1)).optional(),
+});
+
+const autonomySchema = z.object({
+  level: z
+    .enum(['assist', 'review-gated', 'auto-pr', 'restricted'])
+    .optional(),
+  riskTolerance: z.enum(['low', 'medium', 'high']).optional(),
+});
+
 const roleAgentConfigSchema = z.object({
   role: roleSchema,
   name: z.string().min(1).optional(),
@@ -16,6 +29,10 @@ const roleAgentConfigSchema = z.object({
   priority: z.number().int().default(0),
   maxSkills: z.number().int().positive().optional(),
   knowledgeFiles: z.array(z.string().min(1)).default([]),
+  autonomy: autonomySchema.optional(),
+  requiresHumanApprovalFor: z.array(humanApprovalRuleSchema).optional(),
+  defaultTimeoutMs: z.number().int().positive().optional(),
+  allowedGateTags: z.array(z.string().min(1)).optional(),
 });
 
 const toolsConfigSchema = z.object({
