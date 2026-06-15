@@ -4,6 +4,7 @@ import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,
 } from './evidence.js';
+import { COMMAND_GATE_TYPES, GOVERNANCE_GATE_TYPES } from '../gate/registry.js';
 
 export interface PrePullRequestReadinessCheck {
   id: string;
@@ -39,7 +40,7 @@ export async function evaluatePrePullRequestReadiness(input: {
   const audit = await input.audit.verify(input.runId);
   const validationGates = latestGateResults(
     gates.filter((gate) =>
-      ['build', 'test', 'lint', 'e2e-pass'].includes(gate.gateType),
+      (COMMAND_GATE_TYPES as readonly string[]).includes(gate.gateType),
     ),
   );
   const satisfiedValidationGates = validationGates.filter(
@@ -184,13 +185,7 @@ function governanceGatesCheck(
     createdAt: string;
   }>,
 ): PrePullRequestReadinessCheck {
-  const requiredGateTypes = [
-    'independent-review',
-    'role-scope',
-    'ac-evidence',
-    'qa-signoff',
-    'process-completeness',
-  ];
+  const requiredGateTypes = GOVERNANCE_GATE_TYPES as readonly string[];
   const latest = latestGateResults(
     gates.filter((gate) => requiredGateTypes.includes(gate.gateType)),
   );

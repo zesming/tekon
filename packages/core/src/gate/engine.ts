@@ -20,6 +20,7 @@ import {
 import { resolveRepoReadableFile } from '../repo/safe-path.js';
 import { runCommandGate, runSecurityScanGate } from './runners.js';
 import { createHumanGate } from './human-gate.js';
+import type { GateRegistry } from './registry.js';
 
 export interface GateEngineRunInput {
   runId: string;
@@ -42,14 +43,46 @@ export interface GateEngine {
 export function createGateEngine(options: {
   repositories: TekonRepositories;
   gateway?: CommandGateway;
+  registry?: GateRegistry;
 }): GateEngine {
   return {
     async runGate(input) {
+      // Skip logic for command gates with explicit skipReason
+      if (input.gate.skipReason && isCommandGate(input.gate.type)) {
+        const result = runSkippedGate(input, input.gate.skipReason);
+        return options.repositories.recordGateResult(result);
+      }
+
+      // Registry-based dispatch (when registry is explicitly provided)
+      if (options.registry) {
+        const definition = options.registry.get(input.gate.type);
+        if (definition) {
+          const runnerInput = {
+            runId: input.runId,
+            nodeId: input.nodeId,
+            gate: input.gate,
+            cwd: input.cwd,
+            artifactRoot: input.artifactRoot,
+            outputDir: input.outputDir,
+            policy: input.policy,
+            repositories: options.repositories,
+            gateway: options.gateway,
+          };
+          const result = await definition.runner(runnerInput);
+          if (definition.handlesOwnPersistence) {
+            return result;
+          }
+          return options.repositories.recordGateResult(result);
+        }
+        // Unknown type in registry — fall through to legacy error
+        const result = makeGateResult(input, 'failed', 'unsupported-gate');
+        return options.repositories.recordGateResult(result);
+      }
+
+      // Fallback: legacy if/else chain for backward compatibility
       let result: GateResult;
 
-      if (input.gate.skipReason && isCommandGate(input.gate.type)) {
-        result = runSkippedGate(input, input.gate.skipReason);
-      } else if (input.gate.type === 'security-scan') {
+      if (input.gate.type === 'security-scan') {
         result = await runSecurityScanGate({
           gateway: options.gateway,
           runId: input.runId,

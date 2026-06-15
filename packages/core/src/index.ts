@@ -28,6 +28,8 @@ export * from './runtime/mock-agent-adapter.js';
 export * from './gate/engine.js';
 export * from './gate/human-gate.js';
 export * from './gate/runners.js';
+export * from './gate/registry.js';
+export * from './gate/helpers.js';
 export * from './role/loader.js';
 export * from './role/skill-loader.js';
 export * from './role/tool-policy.js';
