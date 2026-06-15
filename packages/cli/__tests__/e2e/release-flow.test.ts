@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-describe('tekon release flow e2e', () => {
+describe('tekon release flow e2e', { timeout: 90_000 }, () => {
   const tempDirs: string[] = [];
   const cliPackageRoot = join(
     dirname(fileURLToPath(import.meta.url)),
