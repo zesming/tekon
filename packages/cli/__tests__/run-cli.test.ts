@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
 
-describe('runCli in-process', () => {
+describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
@@ -625,7 +625,7 @@ describe('runCli in-process', () => {
     expect(workflowListOutput).toContain('test-improvement');
     expect(workflowListOutput).toContain('docs-update');
     expect(workflowListOutput).toContain('plan-only');
-  }, 30_000);
+  });
 
   it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);

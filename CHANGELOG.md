@@ -1,5 +1,19 @@
 # 变更日志
 
+## v0.6.0
+
+### 重构
+
+**CLI 模块化拆分:**
+- `packages/cli/src/index.ts` 从 3040 行缩减到 304 行（仅路由入口）
+- 新增 `commands/` 目录：14 个命令文件（init, run, draft, workflow, delivery, approval, eval, review, role, status, ui, help）
+- 新增 `lib/` 目录：5 个工具文件（agent-factory, context, db-helpers, path-utils, utils）
+
+**Workflow Engine 模块化拆分:**
+- `packages/core/src/workflow/engine.ts` 从 2389 行缩减到 335 行（仅编排层）
+- 新增 8 个子模块：execution-plan, node-executor, gate-runner, rework, prompt-builder, lease-service, helpers, workflow-runtime
+- gate-runner ↔ rework 通过 lazy getter 注入解决循环依赖
+
 ## v0.5.2
 
 ### 修复（全面审查第二轮）
