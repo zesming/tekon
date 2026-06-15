@@ -405,7 +405,6 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         }
 
         if (reworkPassed) {
-          await repositories.transitionNode(node.id, 'passed');
           await audit.append({
             runId,
             type: 'gate.passed-after-rework',

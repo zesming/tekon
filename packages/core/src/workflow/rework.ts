@@ -6,6 +6,7 @@ import type { GateResult, Node } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import type { WorktreeLease } from '../types/config.js';
 import {
   buildRolePrompt,
   type RolePromptArtifactSummary,
@@ -42,6 +43,7 @@ export interface ReworkHandlerDeps {
   helpers: WorkflowHelpers;
   promptBuilder: PromptBuilder;
   artifactStore: ArtifactStoreLike;
+  executionLeases: Map<string, WorktreeLease>;
   getCheckedTransition(): CheckedTransitionFn;
   getRunGateWithRepair(): RunGateWithRepairFn;
 }
@@ -74,6 +76,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     helpers,
     promptBuilder,
     artifactStore,
+    executionLeases,
     getCheckedTransition,
     getRunGateWithRepair,
   } = deps;
@@ -385,7 +388,14 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     }
 
     // --- Step 4: Run target node's gates using targetNodeId ---
+    // Gates look up the worktree lease by nodeId. The lease was created
+    // under reworkNodeId, but artifacts were written to targetNodeId.
+    // Temporarily alias the lease so gate-runner finds the rework worktree.
     await repositories.transitionNode(reworkNodeId, 'awaiting-gate');
+    const targetLease = executionLeases.get(reworkNodeId);
+    if (targetLease) {
+      executionLeases.set(targetNodeId, targetLease);
+    }
     const configuredTargetGates = gatesWithStableKeys(targetGates, targetNodeId);
     for (const targetGate of configuredTargetGates) {
       const gatePassed = await runGateWithRepair(
@@ -403,9 +413,11 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         { forceRerun: true },
       );
       if (!gatePassed) {
+        executionLeases.delete(targetNodeId);
         return;
       }
     }
+    executionLeases.delete(targetNodeId);
 
     // --- Step 5: Finalize rework lease ---
     try {

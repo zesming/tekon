@@ -144,6 +144,7 @@ export function createWorkflowEngine(
     helpers,
     promptBuilder,
     artifactStore,
+    executionLeases,
     getCheckedTransition: () => checkedTransitionNode,
     getRunGateWithRepair: () => gateRunnerRef.runGateWithRepair,
   });
