@@ -10,6 +10,8 @@ interface CacheEntry<T = unknown> {
   timestamp: number;
   stale: boolean;
   subscribers: Set<Subscriber>;
+  /** Optional auth scope tag used for scope-based eviction. */
+  scope?: string;
 }
 
 export class QueryCache {
@@ -27,8 +29,13 @@ export class QueryCache {
 
   /**
    * Set cached data for a key and notify subscribers.
+   *
+   * @param key   Cache key
+   * @param data  Data to store
+   * @param error Error (if any)
+   * @param scope Optional auth scope tag for scope-based eviction
    */
-  set<T>(key: string, data: T | undefined, error: Error | null = null): void {
+  set<T>(key: string, data: T | undefined, error: Error | null = null, scope?: string): void {
     let entry = this.cache.get(key);
     if (!entry) {
       entry = {
@@ -37,6 +44,7 @@ export class QueryCache {
         timestamp: Date.now(),
         stale: false,
         subscribers: new Set(),
+        scope,
       };
       this.cache.set(key, entry);
     } else {
@@ -44,6 +52,7 @@ export class QueryCache {
       entry.error = error;
       entry.timestamp = Date.now();
       entry.stale = false;
+      if (scope !== undefined) entry.scope = scope;
     }
     this.notify(key);
   }
@@ -91,6 +100,40 @@ export class QueryCache {
    */
   prefixInvalidate(prefix: string): void {
     this.invalidate(prefix);
+  }
+
+  /**
+   * Remove all cache entries and in-flight promises whose keys end with
+   * `.scope` (i.e. the auth scope suffix). This performs a hard clear —
+   * data is removed entirely, not just marked stale — so that data from
+   * a previous session cannot leak into the next.
+   */
+  clearByScope(scope: string): void {
+    if (!scope) return;
+    const suffix = `.${scope}`;
+
+    // Remove matching cache entries
+    for (const key of [...this.cache.keys()]) {
+      if (key.endsWith(suffix)) {
+        this.cache.delete(key);
+      }
+    }
+
+    // Clear matching in-flight entries
+    for (const key of [...this.inFlight.keys()]) {
+      if (key.endsWith(suffix)) {
+        this.inFlight.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clear all in-flight promises regardless of key. Use this when the
+   * auth token changes to abort stale requests that might write cached
+   * data from the old session.
+   */
+  clearAllInFlight(): void {
+    this.inFlight.clear();
   }
 
   /**

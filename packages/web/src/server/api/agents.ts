@@ -1,77 +1,42 @@
 import {
-  agentAdapterConfigSchema,
-  createClaudeCodeAdapter,
-  createCodexAdapter,
+  createAgentAdapterFromSnapshot,
+  createAgentRuntime,
   createCommandGateway,
   createGateEngine,
-  createMockAgentAdapter,
   createWorkflowEngine,
   createWorktreeManager,
-  type AgentAdapter,
-  type AgentAdapterConfig,
+  type AgentRuntimeResult,
   type CommandGateway,
+  type ProviderRuntimeOverrides,
   type RunProviderConfig,
   type TekonRepositories,
   type AuditLogger,
-  DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
-  DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
-  DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
 } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
 import { ApiError } from './errors.js';
 import { positiveIntOrUndefined } from './common.js';
 
-type ProviderRuntimeOverrides = Partial<
-  Pick<
-    AgentAdapterConfig,
-    'timeoutMs' | 'progressHeartbeatMs' | 'noProgressTimeoutMs'
-  >
->;
-
 export function createWebAgentRuntime(input: {
   agent: string;
   repoPath: string;
   gateway: CommandGateway;
   runtime?: ProviderRuntimeOverrides;
-}): {
-  adapter: AgentAdapter;
-  provider: RunProviderConfig['provider'];
-  configSummary: Record<string, unknown>;
-} {
-  if (input.agent === 'mock') {
-    return {
-      adapter: createMockAgentAdapter(),
-      provider: 'mock',
-      configSummary: { provider: 'mock' },
-    };
-  }
-
-  if (input.agent === 'claude-code') {
-    const config = applyProviderRuntimeOverrides(
-      defaultWebClaudeCodeConfig(input.repoPath),
-      input.runtime,
+}): AgentRuntimeResult {
+  try {
+    return createAgentRuntime({
+      agent: input.agent,
+      repoPath: input.repoPath,
+      gateway: input.gateway,
+      runtime: input.runtime,
+      approvalDefault: 'on-request',
+    });
+  } catch (error) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      error instanceof Error ? error.message : String(error),
     );
-    return {
-      adapter: createClaudeCodeAdapter(config, input.gateway),
-      provider: 'claude-code',
-      configSummary: summarizeAgentConfig(config),
-    };
   }
-
-  if (input.agent === 'codex') {
-    const config = applyProviderRuntimeOverrides(
-      defaultWebCodexConfig(input.repoPath),
-      input.runtime,
-    );
-    return {
-      adapter: createCodexAdapter(config, input.gateway),
-      provider: 'codex',
-      configSummary: summarizeAgentConfig(config),
-    };
-  }
-
-  throw new ApiError('BAD_REQUEST', `Unsupported agent: ${input.agent}`);
 }
 
 export function providerRuntimeFromRunInput(input: {
@@ -108,14 +73,15 @@ export async function resumeWorkflowRun(input: {
       `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
     );
   }
+  const agentRuntime = webAdapterFromSnapshot(gateway, runProvider);
   const engine = createWorkflowEngine({
     repoPath: input.context.projectRoot,
     dataDir: '.tekon',
     repositories: input.repositories,
     audit: input.audit,
-    adapter: createWebAgentAdapterFromSnapshot(gateway, runProvider),
-    agentProvider: runProvider.provider,
-    agentConfigSummary: runProvider.configSummary,
+    adapter: agentRuntime.adapter,
+    agentProvider: agentRuntime.provider,
+    agentConfigSummary: agentRuntime.configSummary,
     gateEngine: createGateEngine({
       repositories: input.repositories,
       gateway,
@@ -139,122 +105,22 @@ export async function assertRunCanResume(input: {
       `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
     );
   }
-  createWebAgentAdapterFromSnapshot(createCommandGateway(), provider);
+  webAdapterFromSnapshot(createCommandGateway(), provider);
 }
 
-function createWebAgentAdapterFromSnapshot(
+function webAdapterFromSnapshot(
   gateway: CommandGateway,
   provider: RunProviderConfig,
 ) {
-  if (provider.provider === 'mock') {
-    return createMockAgentAdapter();
+  try {
+    return createAgentAdapterFromSnapshot({
+      snapshot: provider,
+      gateway,
+    });
+  } catch (error) {
+    throw new ApiError(
+      'BAD_REQUEST',
+      error instanceof Error ? error.message : String(error),
+    );
   }
-  if (provider.provider === 'claude-code') {
-    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
-    if (!parsed.success || parsed.data.provider !== 'claude-code') {
-      throw new ApiError(
-        'BAD_REQUEST',
-        `Run ${provider.runId} has a non-replayable claude-code provider snapshot.`,
-      );
-    }
-    return createClaudeCodeAdapter(parsed.data, gateway);
-  }
-  if (provider.provider === 'codex') {
-    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
-    if (!parsed.success || parsed.data.provider !== 'codex') {
-      throw new ApiError(
-        'BAD_REQUEST',
-        `Run ${provider.runId} has a non-replayable codex provider snapshot.`,
-      );
-    }
-    return createCodexAdapter(parsed.data, gateway);
-  }
-  throw new ApiError(
-    'BAD_REQUEST',
-    'Web resume does not support custom agent adapters yet',
-  );
-}
-
-function applyProviderRuntimeOverrides(
-  config: AgentAdapterConfig,
-  runtime?: ProviderRuntimeOverrides,
-): AgentAdapterConfig {
-  return {
-    ...config,
-    timeoutMs: runtime?.timeoutMs ?? config.timeoutMs,
-    noProgressTimeoutMs:
-      runtime?.noProgressTimeoutMs ?? config.noProgressTimeoutMs,
-    progressHeartbeatMs:
-      runtime?.progressHeartbeatMs ?? config.progressHeartbeatMs,
-  };
-}
-
-function defaultWebClaudeCodeConfig(repoPath: string): AgentAdapterConfig {
-  return {
-    provider: 'claude-code',
-    command: 'claude',
-    args: ['-p'],
-    promptMode: 'stdin',
-    outputFormat: 'json',
-    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
-    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
-    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
-    permissionProfile: {
-      sandbox: 'workspace-write',
-      approval: 'on-request',
-      filesystemScope: [repoPath],
-      network: 'restricted',
-      tools: {
-        allow: ['git', 'npm', 'pnpm'],
-        deny: ['rm', 'sudo', 'git push --force'],
-      },
-    },
-  };
-}
-
-function defaultWebCodexConfig(repoPath: string): AgentAdapterConfig {
-  return {
-    provider: 'codex',
-    command: 'codex',
-    args: [],
-    profile: 'internal',
-    promptMode: 'stdin',
-    outputFormat: 'text',
-    timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
-    progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
-    noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
-    permissionProfile: {
-      sandbox: 'workspace-write',
-      approval: 'on-request',
-      filesystemScope: [repoPath],
-      network: 'restricted',
-      tools: {
-        allow: ['git', 'npm', 'pnpm'],
-        deny: ['rm', 'sudo', 'git push --force'],
-      },
-    },
-  };
-}
-
-function summarizeAgentConfig(
-  config: AgentAdapterConfig,
-): Record<string, unknown> {
-  return {
-    provider: config.provider,
-    command: config.command,
-    args: config.args,
-    profile: config.profile,
-    promptMode: config.promptMode,
-    outputFormat: config.outputFormat,
-    timeoutMs: config.timeoutMs,
-    progressHeartbeatMs: config.progressHeartbeatMs,
-    noProgressTimeoutMs: config.noProgressTimeoutMs,
-    permissionProfile: {
-      sandbox: config.permissionProfile.sandbox,
-      approval: config.permissionProfile.approval,
-      filesystemScope: config.permissionProfile.filesystemScope,
-      network: config.permissionProfile.network,
-      tools: config.permissionProfile.tools,
-    },
-  };
 }

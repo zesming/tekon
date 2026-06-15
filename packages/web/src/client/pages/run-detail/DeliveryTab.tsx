@@ -1,7 +1,8 @@
 import { useParams } from 'react-router';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { ApiWorkReviewSurface } from '../../../shared/api-types.js';
 
 import { Card } from '../../components/ui/Card.js';
@@ -19,9 +20,10 @@ import { CodeBlock } from '../../components/ui/CodeBlock.js';
 
 export function DeliveryTab() {
   const { runId } = useParams<{ runId: string }>();
+  const scope = useAuthScope();
 
   const query = useQuery<ApiWorkReviewSurface>(
-    runId ? `review:${runId}` : null,
+    runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
 

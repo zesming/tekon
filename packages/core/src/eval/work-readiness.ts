@@ -1,6 +1,7 @@
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import { createDeliveryEvidencePackage } from '../delivery/evidence.js';
+import { COMMAND_GATE_TYPES } from '../gate/registry.js';
 
 export type WorkReadinessSeverity = 'required' | 'recommended';
 
@@ -45,7 +46,7 @@ export async function evaluateWorkReadiness(input: {
   const audit = await input.audit.verify(input.runId);
   const validationGates = latestGateResults(
     gates.filter((gate) =>
-      ['build', 'test', 'lint', 'e2e-pass'].includes(gate.gateType),
+      (COMMAND_GATE_TYPES as readonly string[]).includes(gate.gateType),
     ),
   );
   const qaSignoffGates = latestGateResults(

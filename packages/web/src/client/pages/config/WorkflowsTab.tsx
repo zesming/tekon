@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { useQuery } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type {
   WorkflowListOutput,
   ApiWorkflowItem,
@@ -27,7 +28,7 @@ function sourceLabel(path: string): string {
 export function WorkflowsTab() {
   const [selected, setSelected] = useState<ApiWorkflowItem | null>(null);
 
-  const query = useQuery<WorkflowListOutput>('config:workflows', () =>
+  const query = useQuery<WorkflowListOutput>(queryKeys.workflows(), () =>
     rpc.call('workflow.list'),
   );
 

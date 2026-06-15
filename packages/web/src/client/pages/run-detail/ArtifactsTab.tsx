@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type {
   ArtifactListOutput,
   ApiWorkReviewSurface,
@@ -48,16 +49,17 @@ function formatSize(bytes: number): string {
 
 export function ArtifactsTab() {
   const { runId } = useParams<{ runId: string }>();
+  const scope = useAuthScope();
 
   // Fetch artifact list from the dedicated endpoint
   const artifactQuery = useQuery<ArtifactListOutput>(
-    runId ? `artifacts:${runId}` : null,
+    runId ? queryKeys.artifacts(runId) : null,
     () => rpc.call('artifact.list', { runId: runId! }),
   );
 
   // Also fetch review surface to get artifact content previews
   const reviewQuery = useQuery<ApiWorkReviewSurface>(
-    runId ? `review:${runId}` : null,
+    runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
 

@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useQuery } from '../hooks/index.js';
+import { useQuery, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { routes } from '../lib/route-paths.js';
+import { queryKeys } from '../lib/query-keys.js';
 import type {
   ProjectOverviewOutput,
   ProjectDetailOutput,
@@ -69,10 +70,11 @@ function isActiveStatus(status: string): boolean {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const scope = useAuthScope();
 
   // ── 1. Project overview ──────────────────────────────────────────────────
   const overviewQuery = useQuery<ProjectOverviewOutput>(
-    'dashboard:overview',
+    queryKeys.projectOverview(scope),
     () => rpc.call('project.overview'),
   );
 
@@ -81,7 +83,7 @@ export function DashboardPage() {
 
   // ── 2. Project detail (full run list) ────────────────────────────────────
   const detailQuery = useQuery<ProjectDetailOutput>(
-    overviewQuery.data ? `dashboard:detail:${projectId}` : null,
+    overviewQuery.data ? queryKeys.projectDetail(projectId, scope) : null,
     () => rpc.call('project.detail', { projectId }),
   );
 
@@ -97,7 +99,7 @@ export function DashboardPage() {
   const gatesQuery = useQuery<
     Array<{ runId: string; gates: GateListOutput['gates']; pending: GateListOutput['pendingDecisions'] }>
   >(
-    gateRunIdsKey ? `dashboard:gates:${gateRunIdsKey}` : null,
+    gateRunIdsKey ? `gate.results.dashboard.${scope}:${gateRunIdsKey}` : null,
     async () => {
       const results = await Promise.allSettled(
         recentRuns.map(async (run) => {
@@ -129,7 +131,7 @@ export function DashboardPage() {
 
   // ── 4. Audit chain verification for latest run ──────────────────────────
   const auditQuery = useQuery<AuditListOutput>(
-    latestRunId ? `dashboard:audit:${latestRunId}` : null,
+    latestRunId ? queryKeys.auditLog(latestRunId) : null,
     () => rpc.call('audit.list', { runId: latestRunId! }),
   );
 
@@ -347,7 +349,7 @@ export function DashboardPage() {
         className="mb-6"
       >
         {detailQuery.isLoading ? (
-          <LoadingState message="加载运行列表..." />
+          <LoadingState message="Loading runs..." />
         ) : detailQuery.error ? (
           <div style={{ padding: '16px' }}>
             <ErrorBanner error={detailQuery.error} onRetry={detailQuery.refetch} />

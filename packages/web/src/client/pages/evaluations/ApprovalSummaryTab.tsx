@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 import { EvalScoreCard } from '../../components/eval/EvalScoreCard.js';
@@ -25,6 +26,8 @@ type GateListOutput = RpcProcedureMap['gate.list']['output'];
  * which may contain an `approvalEvaluation` in its context with ready/score/checks.
  */
 export function ApprovalSummaryTab() {
+  const scope = useAuthScope();
+
   // ── Local state ──
   const [runId, setRunId] = useState('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export function ApprovalSummaryTab() {
 
   // ── Fetch gate list (includes pending decisions) ──
   const { data: gateData, isLoading, error: queryError, refetch: refetchGate } = useQuery<GateListOutput>(
-    activeRunId ? `gate.list:${activeRunId}` : null,
+    activeRunId ? queryKeys.gateResults(activeRunId, scope) : null,
     () => rpc.call('gate.list', { runId: activeRunId! }),
   );
 

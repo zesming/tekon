@@ -1,5 +1,54 @@
 # 变更日志
 
+## v0.7.0
+
+### 新功能
+
+**Web Cache Token Invalidation:**
+- 新增 `query-keys.ts`：集中式 auth-scoped query key 工厂
+- 新增 `use-auth-scope.ts`：React hook 派生当前 auth scope
+- 扩展 QueryCache：`clearByScope`、`clearAllInFlight`、scope metadata
+- AuthProvider token 变更时自动清除旧 session 缓存和 in-flight 请求
+- 13 个 Web 组件统一使用 queryKeys 工厂，消除分散 key 拼接
+
+**Gate Engine 注册表模式:**
+- 新增 `gate/registry.ts`：GateDefinition + GateMetadata + GateRegistry 接口
+- 新增 `gate/helpers.ts`：提取共享 gate 工具函数
+- Gate runners 拆分为独立文件：command, security, schema, review, semantic, human
+- Engine 支持可选 registry 参数，向后兼容旧 if/else 分派
+- work-readiness 和 pre-pr-readiness 使用 registry 常量替代硬编码 gate 类型
+
+**约束系统增强:**
+- `agent.yaml` 新增 `autonomy`（level + riskTolerance）、`requiresHumanApprovalFor`、`defaultTimeoutMs`、`allowedGateTags` 字段（向后兼容）
+- 新增 `runtime-policy.ts`：compileRoleRuntimePolicy + requiresHumanApproval + canSatisfyGate
+- `constraints.yaml` 升级为有限 DSL：requiresGate / injectGate / requirePhase / requireOutput / suggest
+- 新增 `dsl.ts`：loadConstraintRules + evaluateConstraints（支持 glob pattern matching）
+- validator 集成 DSL 规则（硬编码规则作为 fallback）
+
+**CLI/Web Agent Runtime 去重:**
+- 新增 `core/runtime/agent-runtime.ts`：共享 createAgentRuntime + createAgentAdapterFromSnapshot + defaultProviderConfig
+- CLI agent-factory.ts：thin wrapper，approvalDefault: 'on-failure'
+- Web agents.ts：thin wrapper，approvalDefault: 'on-request'
+- Web gate.ts：去除重复 resume/snapshot 函数
+- CLI 减少 ~130 行重复，Web 减少 ~220 行重复
+
+### 测试
+
+**新增 234 个测试（641 → 875）：**
+- scheduler.test.ts (8): phase 顺序、节点过滤、空 phase、未知 phaseId
+- write-queue.test.ts (14): 串行执行、错误恢复、20 并发 FIFO
+- query-keys.test.ts (25): auth scope 一致性、key 格式、token 隔离
+- query-cache-scope.test.ts (9): clearByScope、clearAllInFlight、token 变更流
+- agent-runtime.test.ts (30): factory/snapshot/config/overrides
+- registry.test.ts (10): 12 gate 类型、metadata、category 过滤
+- runtime-policy.test.ts (17): defaults、pattern matching、gate satisfaction
+- dsl.test.ts (15): loading、validation、evaluation、glob patterns
+- agent-config-extended.test.ts (7): 向后兼容、新字段、非法输入拒绝
+- execution-plan.test.ts (23): templateToPlan、persistPlan、planFromRepository
+- lease-service.test.ts (18): worktree lease、audit events、error handling
+- workflow-runtime.test.ts (32): scopedId、stableGateKey、resolveReviewTarget、isChangesRequested
+- helpers.test.ts (26): mustGetWorkflow/Demand、assertSuccessfulAgentRun
+
 ## v0.6.0
 
 ### 重构

@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 
-import { useQuery, useMutation, useSessionToken } from '../hooks/index.js';
+import { useQuery, useMutation, useSessionToken, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
+import { queryKeys } from '../lib/query-keys.js';
 import type {
   ProjectOverviewOutput,
   ApiWorkReviewSurface,
@@ -20,24 +21,15 @@ import { CodeBlock } from '../components/ui/CodeBlock.js';
 import { DeliveryPipeline } from '../components/delivery/DeliveryPipeline.js';
 import { DiffViewer } from '../components/delivery/DiffViewer.js';
 
-function simpleHash(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  return String(h);
-}
-
-// ---------------------------------------------------------------------------
-// DeliveryPage — full delivery pipeline view for the latest run
-// ---------------------------------------------------------------------------
-
 export function DeliveryPage() {
   const { token } = useSessionToken();
+  const scope = useAuthScope();
   const [showCreatePrConfirm, setShowCreatePrConfirm] = useState(false);
   const [prResult, setPrResult] = useState<DeliveryCreatePrOutput | null>(null);
 
   // ── 1. Project overview → latest run ───────────────────────────────────
   const overviewQuery = useQuery<ProjectOverviewOutput>(
-    'delivery:overview',
+    queryKeys.projectOverview(scope),
     () => rpc.call('project.overview'),
   );
 
@@ -45,13 +37,13 @@ export function DeliveryPage() {
 
   // ── 2. Review surface for latest run ───────────────────────────────────
   const reviewQuery = useQuery<ApiWorkReviewSurface>(
-    latestRunId ? `delivery:review:${latestRunId}` : null,
+    latestRunId ? queryKeys.reviewDetail(latestRunId, scope) : null,
     () => rpc.call('review.get', { runId: latestRunId! }),
   );
 
   // ── 2b. CI status for latest run ──────────────────────────────────────
   const ciStatusQuery = useQuery<DeliveryCiStatusOutput>(
-    latestRunId && token ? `delivery:ciStatus:${latestRunId}:${simpleHash(token)}` : null,
+    latestRunId && token ? queryKeys.deliveryCiStatus(latestRunId, scope) : null,
     () => rpc.call('delivery.ciStatus', { runId: latestRunId!, token: token! }),
   );
 
@@ -65,7 +57,7 @@ export function DeliveryPage() {
     DeliveryPrepareOutput
   >(
     (input) => rpc.call('delivery.prepare', input),
-    { invalidateKeys: [`delivery:review:${latestRunId}`, `delivery:overview`] },
+    { invalidateKeys: ['review.', 'project.overview'] },
   );
 
   const createPrMutation = useMutation<
@@ -73,7 +65,7 @@ export function DeliveryPage() {
     DeliveryCreatePrOutput
   >(
     (input) => rpc.call('delivery.createPr', input),
-    { invalidateKeys: [`delivery:review:${latestRunId}`, `delivery:overview`] },
+    { invalidateKeys: ['review.', 'project.overview'] },
   );
 
   const dryRunMutation = useMutation<
@@ -81,7 +73,7 @@ export function DeliveryPage() {
     DeliveryDryRunOutput
   >(
     (input) => rpc.call('delivery.dryRun', input),
-    { invalidateKeys: [`delivery:review:${latestRunId}`] },
+    { invalidateKeys: ['review.'] },
   );
 
   // ── Derived state ──────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { ReactElement } from 'react';
 
-import { setRpcSessionToken } from '../lib/rpc-client.js';
+import { authScope } from '../lib/query-keys.js';
+import { queryCache } from '../lib/query-cache.js';
 
 // ---------------------------------------------------------------------------
 // Auth context types
@@ -26,47 +27,34 @@ export interface AuthProviderProps {
   children: React.ReactNode;
 }
 
-const SESSION_STORAGE_KEY = 'tekon-session-token';
-
 /**
- * Provides authentication token.
- * Auto-reads ?token=xxx from URL on mount and persists to sessionStorage.
+ * Provides authentication token in memory only (no sessionStorage).
+ *
+ * When the token changes, the provider clears all query-cache entries and
+ * in-flight requests that belong to the previous auth scope so that stale
+ * data from the old session cannot leak into the new one.
  */
 export function AuthProvider({ children }: AuthProviderProps): ReactElement {
-  const [token, setTokenState] = useState<string | null>(() => {
-    // 1. Check URL ?token=xxx first (highest priority)
-    if (typeof window !== 'undefined') {
-      const urlToken = new URLSearchParams(window.location.search).get('token');
-      if (urlToken) {
-        sessionStorage.setItem(SESSION_STORAGE_KEY, urlToken);
-        setRpcSessionToken(urlToken);
-        // Clean the token from URL without reloading
-        const url = new URL(window.location.href);
-        url.searchParams.delete('token');
-        window.history.replaceState({}, '', url.pathname + url.search);
-        return urlToken;
-      }
-      // 2. Fall back to sessionStorage
-      const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
-      if (stored) {
-        setRpcSessionToken(stored);
-        return stored;
-      }
-    }
-    return null;
-  });
+  const [token, setTokenState] = useState<string | null>(null);
+  const prevScopeRef = useRef<string>(authScope(null));
 
   const setToken = useCallback((newToken: string | null) => {
-    setRpcSessionToken(newToken);
     setTokenState(newToken);
-    if (typeof window !== 'undefined') {
-      if (newToken) {
-        sessionStorage.setItem(SESSION_STORAGE_KEY, newToken);
-      } else {
-        sessionStorage.removeItem(SESSION_STORAGE_KEY);
-      }
-    }
   }, []);
+
+  // Detect actual token changes and evict old-session cache entries.
+  useEffect(() => {
+    const newScope = authScope(token);
+    const oldScope = prevScopeRef.current;
+
+    if (oldScope !== newScope) {
+      // Hard-clear all entries that belonged to the previous scope.
+      queryCache.clearByScope(oldScope);
+      // Abort any in-flight requests so they cannot write stale data.
+      queryCache.clearAllInFlight();
+      prevScopeRef.current = newScope;
+    }
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ token, setToken }}>

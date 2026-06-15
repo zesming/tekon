@@ -1,14 +1,5 @@
 import {
-  createCommandGateway,
-  createGateEngine,
   createHumanApprovalSummary,
-  createWorkflowEngine,
-  createWorktreeManager,
-  agentAdapterConfigSchema,
-  createClaudeCodeAdapter,
-  createCodexAdapter,
-  createMockAgentAdapter,
-  type RunProviderConfig,
   type TekonRepositories,
   type AuditLogger,
 } from '@tekon/core';
@@ -18,9 +9,14 @@ import type { ServerContext, DecisionInput } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
 import {
+  assertRunCanResume,
+  resumeWorkflowRun,
+} from '../agents.js';
+import {
   assertRunInScope,
   listGates,
   listHumanDecisions,
+  mustGetRun,
   type TekonDatabase,
 } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';
@@ -181,87 +177,4 @@ async function updateDecision(input: {
   }
 
   return { decision: redactObject(mapHumanDecisionRow(input.db, decision)) as ReturnType<typeof mapHumanDecision> };
-}
-
-async function assertRunCanResume(input: {
-  repositories: TekonRepositories;
-  runId: string;
-}) {
-  const provider = await input.repositories.getRunProviderConfig(input.runId);
-  if (!provider) {
-    throw new ApiError(
-      'BAD_REQUEST',
-      `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
-    );
-  }
-  createWebAgentAdapterFromSnapshot(createCommandGateway(), provider);
-}
-
-async function resumeWorkflowRun(input: {
-  context: WebProjectContext;
-  repositories: TekonRepositories;
-  audit: AuditLogger;
-  runId: string;
-}) {
-  const gateway = createCommandGateway({ repositories: input.repositories });
-  const runProvider = await input.repositories.getRunProviderConfig(
-    input.runId,
-  );
-  if (!runProvider) {
-    throw new ApiError(
-      'BAD_REQUEST',
-      `Run ${input.runId} has no provider snapshot; cannot resume safely.`,
-    );
-  }
-  const engine = createWorkflowEngine({
-    repoPath: input.context.projectRoot,
-    dataDir: '.tekon',
-    repositories: input.repositories,
-    audit: input.audit,
-    adapter: createWebAgentAdapterFromSnapshot(gateway, runProvider),
-    agentProvider: runProvider.provider,
-    agentConfigSummary: runProvider.configSummary,
-    gateEngine: createGateEngine({
-      repositories: input.repositories,
-      gateway,
-    }),
-    worktreeManager: createWorktreeManager({
-      repositories: input.repositories,
-      gateway,
-    }),
-  });
-  return engine.resumeRun(input.runId);
-}
-
-function createWebAgentAdapterFromSnapshot(
-  gateway: ReturnType<typeof createCommandGateway>,
-  provider: RunProviderConfig,
-) {
-  if (provider.provider === 'mock') {
-    return createMockAgentAdapter();
-  }
-  if (provider.provider === 'claude-code') {
-    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
-    if (!parsed.success || parsed.data.provider !== 'claude-code') {
-      throw new ApiError(
-        'BAD_REQUEST',
-        `Run ${provider.runId} has a non-replayable claude-code provider snapshot.`,
-      );
-    }
-    return createClaudeCodeAdapter(parsed.data, gateway);
-  }
-  if (provider.provider === 'codex') {
-    const parsed = agentAdapterConfigSchema.safeParse(provider.configSummary);
-    if (!parsed.success || parsed.data.provider !== 'codex') {
-      throw new ApiError(
-        'BAD_REQUEST',
-        `Run ${provider.runId} has a non-replayable codex provider snapshot.`,
-      );
-    }
-    return createCodexAdapter(parsed.data, gateway);
-  }
-  throw new ApiError(
-    'BAD_REQUEST',
-    'Web resume does not support custom agent adapters yet',
-  );
 }

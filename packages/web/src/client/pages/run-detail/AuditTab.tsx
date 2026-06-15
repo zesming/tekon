@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { useQuery } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { AuditListOutput } from '../../../shared/api-types.js';
 
 import { Card } from '../../components/ui/Card.js';
@@ -61,7 +62,7 @@ export function AuditTab() {
   };
 
   const auditQuery = useQuery<AuditListOutput>(
-    runId ? `audit:${runId}` : null,
+    runId ? queryKeys.auditLog(runId) : null,
     () => rpc.call('audit.list', { runId: runId! }),
   );
 
