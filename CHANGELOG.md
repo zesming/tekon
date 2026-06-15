@@ -1,5 +1,76 @@
 # 变更日志
 
+## v0.6.0
+
+### 重构
+
+**CLI 模块化拆分:**
+- `packages/cli/src/index.ts` 从 3040 行缩减到 304 行（仅路由入口）
+- 新增 `commands/` 目录：14 个命令文件（init, run, draft, workflow, delivery, approval, eval, review, role, status, ui, help）
+- 新增 `lib/` 目录：5 个工具文件（agent-factory, context, db-helpers, path-utils, utils）
+
+**Workflow Engine 模块化拆分:**
+- `packages/core/src/workflow/engine.ts` 从 2389 行缩减到 335 行（仅编排层）
+- 新增 8 个子模块：execution-plan, node-executor, gate-runner, rework, prompt-builder, lease-service, helpers, workflow-runtime
+- gate-runner ↔ rework 通过 lazy getter 注入解决循环依赖
+
+## v0.5.2
+
+### 修复（全面审查第二轮）
+
+**UX CLI 改进:**
+- `draft new` 删除不存在的 `tekon draft review` 命令提示
+- `tekon run` 输出增加中文上下文（🚀 运行已启动）和后续操作提示
+- `delivery create-pr` 输出增加可读 PR URL 格式（✅ PR 已创建）
+- 错误消息系统性国际化（约 30 处英文→中文）
+- `delivery dry-run` 加入帮助子命令列表
+- `constraints` 子命令帮助完善
+- `update` 命令输出改中文
+
+**UX Web 改进:**
+- Session token 自动从 URL 读取并存入 `sessionStorage`
+- Sidebar 底部从 API 动态读取项目名称和路径
+- RunControls "View details" 按钮添加导航行为
+- NotFoundPage 增加"返回 Dashboard"链接
+- Flash 消息统一为中文
+- `LoadingState`/`EmptyState` 默认消息改中文
+
+**测试质量:**
+- `engine-unit.test.ts` 19 个假测试修复：提取 `resolveReviewTargetNode` 等纯函数为导出函数，直接测试源码
+- 新增 engine 纯函数单元测试
+
+## v0.5.1
+
+### 修复（全面审查第一轮）
+
+**Critical:**
+- 修复 rework 逻辑缺陷：`changes-requested` rework 后现在会重新运行 target node 的所有 gates 并重新生成 review artifact
+- 修复 rework node 空 `outputs`/`gates` 导致真实 provider 不产出也通过的问题
+
+**Major 引擎正确性:**
+- `resumeRun()` 增加终态拒绝检查，防止恢复已完成/已取消的 run
+- Human gate 幂等处理，防止 resume 时重复创建 pending decision
+- Gate retry 循环完善，正确映射 `block`/`pause`/`fail`
+- Gate 执行增加外层异常处理，防止 `running`/`awaiting-gate` 半状态
+- Lease 生命周期 `try/finally` 管理，失败时正确释放
+- 引入 `checkedTransitionNode` 状态机校验，防止非法状态转换
+
+**Major 安全:**
+- `role create` 增加 `ensureSafeName()` 校验，防止 `../` 路径逃逸
+- Web 读 API（artifact/gate/audit/review/progress）增加 session token 鉴权
+- CLI 不再将 token 放入 URL query string
+- Secret scan 使用 `lstatSync` 跳过 symlink，增加深度和文件数限制
+- `web-session.json` 写入时设置 `mode: 0o600`
+
+**Major DB 连接管理:**
+- 引入 `withProjectContext` 辅助函数，统一 DB 连接生命周期管理
+
+**Major 类型安全:**
+- 移除 `as never` 类型断言，增加 `validRoles` 运行时校验
+- `assertAgentProviderCapabilities` 使用具体类型替代 `unknown`
+- `TEKON_CORE_VERSION` 从 `package.json` 动态读取
+- 清理 20+ 处未使用的 import 和变量
+
 ## v0.5.0
 
 ### 新增

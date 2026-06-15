@@ -713,13 +713,13 @@ export const procedureSpecs = {
   },
 
   'artifact.list': {
-    auth: 'none' as const,
+    auth: 'session' as const,
     input: runIdInputSchema,
     output: artifactListOutputSchema,
   },
 
   'gate.list': {
-    auth: 'none' as const,
+    auth: 'session' as const,
     input: runIdInputSchema,
     output: gateListOutputSchema,
   },
@@ -735,13 +735,13 @@ export const procedureSpecs = {
   },
 
   'audit.list': {
-    auth: 'none' as const,
+    auth: 'session' as const,
     input: auditListInputSchema,
     output: auditListOutputSchema,
   },
 
   'review.get': {
-    auth: 'none' as const,
+    auth: 'session' as const,
     input: reviewGetInputSchema,
     output: workReviewSurfaceSchema,
   },
@@ -759,7 +759,7 @@ export const procedureSpecs = {
   },
 
   'progress.list': {
-    auth: 'none' as const,
+    auth: 'session' as const,
     input: progressListInputSchema,
     output: progressListOutputSchema,
   },

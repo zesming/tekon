@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Transform, type TransformCallback } from 'node:stream';
 
@@ -79,8 +79,18 @@ function redactMatch(ruleId: string, match: string): string {
   return `[REDACTED_${ruleId.toUpperCase().replace(/-/g, '_')}]`;
 }
 
-function listScannableFiles(root: string): string[] {
+const MAX_SCAN_DEPTH = 10;
+const MAX_SCAN_FILES = 10_000;
+
+function listScannableFiles(
+  root: string,
+  depth = 0,
+  state: { count: number } = { count: 0 },
+): string[] {
   if (!existsSync(root)) {
+    return [];
+  }
+  if (depth > MAX_SCAN_DEPTH) {
     return [];
   }
   const entries = readdirSync(root);
@@ -89,12 +99,19 @@ function listScannableFiles(root: string): string[] {
     if (IGNORED_DIRS.has(entry)) {
       continue;
     }
+    if (state.count >= MAX_SCAN_FILES) {
+      break;
+    }
     const path = join(root, entry);
-    const stat = statSync(path);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) {
+      continue;
+    }
     if (stat.isDirectory()) {
-      files.push(...listScannableFiles(path));
+      files.push(...listScannableFiles(path, depth + 1, state));
     } else if (stat.isFile() && stat.size <= 512_000) {
       files.push(path);
+      state.count++;
     }
   }
   return files;

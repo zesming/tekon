@@ -43,13 +43,6 @@ function formatDuration(startIso: string, endIso?: string): string {
   return `${hours}h ${remMins}m`;
 }
 
-/** Derive agent from demand title or return a fallback. */
-function deriveAgent(surface: ApiWorkReviewSurface): string {
-  // The review surface doesn't directly expose an agent field; use a heuristic
-  // or just display a placeholder. We could add this to the API later.
-  return '—';
-}
-
 // ---------------------------------------------------------------------------
 // RunDetailPage — parent layout with breadcrumb, header, controls, tabs
 // ---------------------------------------------------------------------------
@@ -72,7 +65,7 @@ export function RunDetailPage() {
           <span>›</span>
           <span>{runId ?? '…'}</span>
         </nav>
-        <LoadingState message="Loading run details..." />
+        <LoadingState message="加载运行详情..." />
       </>
     );
   }
@@ -102,14 +95,6 @@ export function RunDetailPage() {
       ? `${runId.slice(0, 8)}…${runId.slice(-4)}`
       : runId
     : '—';
-
-  // Compute total gate counts
-  const totalGates = surface.gates.length;
-  const passedGates = surface.gates.filter((g) => g.status === 'passed').length;
-  const failedGates = surface.gates.filter((g) => g.status === 'failed').length;
-  const skippedGates = surface.gates.filter((g) => g.status === 'skipped').length;
-  const blockedGates = surface.gates.filter((g) => g.status === 'blocked').length;
-  const pendingGates = surface.gates.filter((g) => g.status === 'pending').length;
 
   // Find the earliest gate timestamp as a proxy for run start
   const earliestGate = surface.gates.reduce<string | null>((earliest, g) => {
@@ -148,7 +133,6 @@ export function RunDetailPage() {
           <div className="run-header-meta">
             <StatusBadge status={status} />
             <span>📋 {surface.demand.id || '—'}</span>
-            <span>🤖 {deriveAgent(surface)}</span>
             <span>⏱ {duration}</span>
             <span>📅 {dateDisplay}</span>
           </div>

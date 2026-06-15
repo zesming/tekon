@@ -5,7 +5,10 @@ import {
   defaultBuiltInRolesDir,
   defaultCommandPolicy,
   gatesWithStableKeys,
+  isChangesRequested,
   makeSyntheticLease,
+  resolveMaxReworkAttempts,
+  resolveReviewTargetNodeByHeuristic,
   scopedId,
   stableGateKey,
   createWorkflowEngine,
@@ -480,35 +483,14 @@ describe('createWorkflowEngine', () => {
 // review rework mechanism
 // ---------------------------------------------------------------------------
 describe('review rework mechanism', () => {
-  /**
-   * Mirrors the exact logic of resolveReviewTargetNode() from engine.ts.
-   * The engine function is a closure — we test the algorithm directly here.
-   */
-  function resolveReviewTargetNode(
-    nodes: ReadonlyArray<{ id: string; status: string }>,
-    reviewNodeId: string,
-  ): string | null {
-    const reviewNode = nodes.find((n) => n.id === reviewNodeId);
-    if (!reviewNode) return null;
-
-    const upstreamNodes = nodes.filter(
-      (n) => n.id !== reviewNodeId && n.status === 'passed',
-    );
-    if (upstreamNodes.length > 0) {
-      return upstreamNodes[upstreamNodes.length - 1].id;
-    }
-    return null;
-  }
-
-  describe('resolveReviewTargetNode', () => {
+  describe('resolveReviewTargetNodeByHeuristic', () => {
     it('finds upstream passed node in different phase', () => {
       const nodes = [
         { id: 'run_1_rd-code', status: 'passed' },
         { id: 'run_1_qa', status: 'passed' },
         { id: 'run_1_reviewer', status: 'running' },
       ];
-      // Reviewer in phase-review should find the last passed upstream node
-      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
       expect(result).toBe('run_1_qa');
     });
 
@@ -517,7 +499,7 @@ describe('review rework mechanism', () => {
         { id: 'run_1_blocked_rd', status: 'blocked' },
         { id: 'run_1_reviewer', status: 'running' },
       ];
-      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
       expect(result).toBeNull();
     });
 
@@ -525,7 +507,7 @@ describe('review rework mechanism', () => {
       const nodes = [
         { id: 'run_1_reviewer', status: 'running' },
       ];
-      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
       expect(result).toBeNull();
     });
 
@@ -533,7 +515,7 @@ describe('review rework mechanism', () => {
       const nodes = [
         { id: 'run_1_rd-code', status: 'passed' },
       ];
-      const result = resolveReviewTargetNode(nodes, 'nonexistent');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'nonexistent');
       expect(result).toBeNull();
     });
 
@@ -544,7 +526,7 @@ describe('review rework mechanism', () => {
         { id: 'run_1_qa', status: 'passed' },
         { id: 'run_1_reviewer', status: 'running' },
       ];
-      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
       expect(result).toBe('run_1_qa');
     });
 
@@ -556,28 +538,13 @@ describe('review rework mechanism', () => {
         { id: 'run_1_another', status: 'running' },
         { id: 'run_1_reviewer', status: 'running' },
       ];
-      const result = resolveReviewTargetNode(nodes, 'run_1_reviewer');
+      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
       // Only 'pm' is passed among upstream nodes
       expect(result).toBe('run_1_pm');
     });
   });
 
   describe('isChangesRequested detection', () => {
-    /**
-     * Mirrors the exact condition from engine.ts:
-     *   result.failureClassification === 'changes-requested' &&
-     *   gate.type === 'independent-review'
-     */
-    function isChangesRequested(
-      failureClassification: string | undefined,
-      gateType: string,
-    ): boolean {
-      return (
-        failureClassification === 'changes-requested' &&
-        gateType === 'independent-review'
-      );
-    }
-
     it('changes-requested on independent-review gate returns true', () => {
       expect(
         isChangesRequested('changes-requested', 'independent-review'),
@@ -619,32 +586,27 @@ describe('review rework mechanism', () => {
     it('empty string failureClassification returns false', () => {
       expect(isChangesRequested('', 'independent-review')).toBe(false);
     });
+
+    it('null failureClassification returns false', () => {
+      expect(isChangesRequested(null, 'independent-review')).toBe(false);
+    });
   });
 
-  describe('maxReworkAttempts defaults', () => {
+  describe('resolveMaxReworkAttempts defaults', () => {
     it('defaults to 5 when gate.maxRetries is 0', () => {
-      // maxReworkAttempts = gate.maxRetries > 0 ? gate.maxRetries : 5
-      const maxRetries = 0;
-      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
-      expect(maxReworkAttempts).toBe(5);
+      expect(resolveMaxReworkAttempts(0)).toBe(5);
     });
 
     it('defaults to 5 when gate.maxRetries is negative', () => {
-      const maxRetries = -1;
-      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
-      expect(maxReworkAttempts).toBe(5);
+      expect(resolveMaxReworkAttempts(-1)).toBe(5);
     });
 
     it('respects gate.maxRetries when positive', () => {
-      const maxRetries = 3;
-      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
-      expect(maxReworkAttempts).toBe(3);
+      expect(resolveMaxReworkAttempts(3)).toBe(3);
     });
 
     it('allows maxRetries=1 for single rework attempt', () => {
-      const maxRetries = 1;
-      const maxReworkAttempts = maxRetries > 0 ? maxRetries : 5;
-      expect(maxReworkAttempts).toBe(1);
+      expect(resolveMaxReworkAttempts(1)).toBe(1);
     });
   });
 });

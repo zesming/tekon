@@ -8,7 +8,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  message = 'No data yet',
+  message = '暂无数据',
   hint,
 }: EmptyStateProps) {
   return (

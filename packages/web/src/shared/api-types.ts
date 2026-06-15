@@ -29,13 +29,6 @@ import {
   draftShapeDetailOutputSchema,
   draftShapeInputSchema,
   draftShapeOutputSchema,
-  // Deprecated — kept for backward compatibility
-  demandApproveInputSchema,
-  demandApproveOutputSchema,
-  demandDetailInputSchema,
-  demandDetailOutputSchema,
-  demandShapeInputSchema,
-  demandShapeOutputSchema,
   artifactListOutputSchema,
   gateListOutputSchema,
   humanApprovalSummarySchema,

@@ -1,5 +1,6 @@
 import type { ArtifactStore } from '../artifact/store.js';
 import type {
+  AgentAdapterConfig,
   CommandPolicy,
   RunContext,
   WorktreeLease,
@@ -78,18 +79,9 @@ export interface ProviderCapabilityMapping {
 }
 
 export function assertAgentProviderCapabilities(
-  config: unknown,
+  config: AgentAdapterConfig,
 ): ProviderCapabilityMapping {
-  const candidate = config as {
-    provider?: string;
-    permissionProfile?: {
-      sandbox?: string;
-      approval?: string;
-      filesystemScope?: string[];
-      network?: string;
-      tools?: { allow?: string[]; deny?: string[] };
-    };
-  };
+  const candidate = config;
 
   if (candidate.provider === 'mock') {
     return {

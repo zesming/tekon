@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { useMutation } from '../../hooks/index.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { routes } from '../../lib/route-paths.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -27,6 +29,7 @@ export interface RunControlsProps {
 export function RunControls({ runId, status, compact }: RunControlsProps) {
   const { token } = useSessionToken();
   const { addFlash } = useFlash();
+  const navigate = useNavigate();
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,9 +73,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
     e.stopPropagation();
     try {
       await pauseMutation.mutate({ runId, token });
-      addFlash('success', `Run ${runId.slice(0, 8)} paused`);
+      addFlash('success', `运行 ${runId.slice(0, 8)} 已暂停`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to pause run');
+      addFlash('error', err instanceof Error ? err.message : '暂停失败');
     }
   };
 
@@ -80,9 +83,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
     e.stopPropagation();
     try {
       await resumeMutation.mutate({ runId, token });
-      addFlash('success', `Run ${runId.slice(0, 8)} resumed`);
+      addFlash('success', `运行 ${runId.slice(0, 8)} 已恢复`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to resume run');
+      addFlash('error', err instanceof Error ? err.message : '恢复失败');
     }
   };
 
@@ -102,9 +105,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
 
     try {
       await cancelMutation.mutate({ runId, token });
-      addFlash('success', `Run ${runId.slice(0, 8)} cancelled`);
+      addFlash('success', `运行 ${runId.slice(0, 8)} 已取消`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to cancel run');
+      addFlash('error', err instanceof Error ? err.message : '取消失败');
     }
   };
 
@@ -121,7 +124,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="Pause"
+          title="暂停"
           disabled={isPending}
           onClick={handlePause}
         >
@@ -133,7 +136,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="Resume"
+          title="恢复"
           disabled={isPending}
           onClick={handleResume}
         >
@@ -145,7 +148,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={compact ? 'btn btn-ghost btn-sm' : 'btn btn-danger btn-sm'}
-          title="Cancel"
+          title="取消"
           disabled={isPending}
           onClick={handleCancel}
         >
@@ -157,8 +160,11 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="View details"
-          onClick={(e) => e.stopPropagation()}
+          title="查看详情"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(routes.run(runId));
+          }}
         >
           👁
         </button>

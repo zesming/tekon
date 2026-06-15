@@ -13,7 +13,6 @@ import { delimiter, join } from 'node:path';
 import { test as sharedTest, expect } from './shared-fixture.js';
 import {
   createWebServer,
-  type RunningWebServer,
 } from '../../src/server/http.js';
 
 // ---------------------------------------------------------------------------

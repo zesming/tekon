@@ -23,3 +23,4 @@ playwright-report/
 __pycache__/
 *.pyc
 .superpowers/
+.claude/worktrees/

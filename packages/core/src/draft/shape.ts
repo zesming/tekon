@@ -445,7 +445,7 @@ function isPlanOnlyDraft(text: string): boolean {
 }
 
 function buildTemplateSelectionReasons(
-  text: string,
+  _text: string,
   category: DraftShape['category'],
   recommendedTemplate: ControlledWorkflowTemplateId,
 ): string[] {

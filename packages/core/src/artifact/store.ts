@@ -6,7 +6,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';

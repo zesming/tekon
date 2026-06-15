@@ -106,11 +106,11 @@ describe('tekon release flow e2e', () => {
       ],
       repoPath,
     );
-    const deliveryRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(
+    const deliveryRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       standardOutput,
     )?.[1];
     expect(deliveryRunId).toBeTruthy();
-    expect(standardOutput).toContain('status=passed');
+    expect(standardOutput).toContain('状态: passed');
 
     const gatedOutput = runCli(
       cliPath,
@@ -126,9 +126,9 @@ describe('tekon release flow e2e', () => {
       ],
       repoPath,
     );
-    const gatedRunId = /runId=(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
+    const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
-    expect(gatedOutput).toContain('humanGate=pending');
+    expect(gatedOutput).toContain('人工确认: pending');
 
     const approveOutput = runCli(
       cliPath,

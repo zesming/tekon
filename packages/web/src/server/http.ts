@@ -10,7 +10,7 @@ import {
   readFileSync,
   realpathSync,
 } from 'node:fs';
-import { dirname, normalize, resolve } from 'node:path';
+import { dirname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -47,11 +47,12 @@ export async function createWebServer(
   const api = await createApiCaller({ projectRoot, env: options.env });
   const vite = options.vite ? await createViteMiddleware() : null;
   const distDir = options.distDir ?? resolve(__dirname, '../../dist');
+  const sessionPath = join(projectRoot, '.tekon', 'web-session.json');
   const server = createServer(async (request, response) => {
     setSecurityHeaders(response);
 
     if (request.url?.startsWith('/api/rpc')) {
-      await handleRpc({ api, request, response });
+      await handleRpc({ api, request, response, sessionPath });
       return;
     }
 
@@ -188,6 +189,7 @@ async function handleRpc(input: {
   api: ApiCaller;
   request: IncomingMessage;
   response: ServerResponse;
+  sessionPath: string;
 }): Promise<void> {
   if (input.request.method !== 'POST') {
     writeJson(input.response, 405, {
@@ -205,10 +207,16 @@ async function handleRpc(input: {
       throw new ApiError('BAD_REQUEST', 'RPC path is required');
     }
 
-    // Origin + Sec-Fetch-Site check for mutation (token-auth) procedures
+    // Origin + Sec-Fetch-Site check for mutation (token-auth) and session-auth procedures
     const spec = procedureSpecs[body.path as ProcedureName];
-    if (spec && spec.auth === 'token') {
+    if (spec && (spec.auth === 'token' || spec.auth === 'session')) {
       assertRequestAllowed(input.request);
+    }
+
+    // Session token verification for read (session-auth) procedures
+    if (spec && spec.auth === 'session') {
+      const token = input.request.headers['x-session-token'];
+      assertSessionTokenFromFile(input.sessionPath, typeof token === 'string' ? token : '');
     }
 
     const result = await dispatchApiCall(input.api, body.path, body.input);
@@ -321,6 +329,30 @@ function assertRequestAllowed(request: IncomingMessage): void {
     throw new ApiError('BAD_REQUEST', 'Cross-site requests are not allowed');
   }
   // Allow: same-origin, same-site, none (CLI/test requests)
+}
+
+function assertSessionTokenFromFile(
+  sessionPath: string,
+  providedToken: string,
+): void {
+  if (!providedToken) {
+    throw new ApiError('UNAUTHORIZED', 'Session token is required');
+  }
+
+  let expectedToken: string | undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(sessionPath, 'utf8')) as {
+      token?: unknown;
+    };
+    expectedToken =
+      typeof parsed.token === 'string' ? parsed.token : undefined;
+  } catch {
+    throw new ApiError('UNAUTHORIZED', 'Web session token is not configured');
+  }
+
+  if (!expectedToken || providedToken !== expectedToken) {
+    throw new ApiError('UNAUTHORIZED', 'Invalid session token');
+  }
 }
 
 async function closeServer(server: Server): Promise<void> {

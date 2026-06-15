@@ -1,4 +1,8 @@
-export const TEKON_CORE_VERSION = '0.1.0';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json') as { version: string };
+export const TEKON_CORE_VERSION = pkg.version;
 
 export * from './types/domain.js';
 export * from './types/config.js';

@@ -3,7 +3,7 @@ import {
   generateClarifyingQuestions,
   updateDraftWithAnswers,
 } from '@tekon/core';
-import type { CliIO } from './index.js';
+import type { CliIO } from './lib/context.js';
 import type { AgentClarificationConfig } from './draft-agent.js';
 
 export interface InteractiveResult {

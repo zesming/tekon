@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
+import { useQuery } from '../hooks/index.js';
+import { rpc } from '../lib/rpc-client.js';
 import { routes } from '../lib/route-paths.js';
+import type { ProjectOverviewOutput } from '../../shared/api-types.js';
 
 type NavItem = {
   to: string;
@@ -150,6 +153,14 @@ const navGroups: NavGroup[] = [
 ];
 
 export function Sidebar() {
+  const overviewQuery = useQuery<ProjectOverviewOutput>(
+    'sidebar:project-overview',
+    () => rpc.call('project.overview'),
+  );
+
+  const projectName = overviewQuery.data?.project.name ?? '—';
+  const repoPath = overviewQuery.data?.project.repoPath ?? '';
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -185,8 +196,8 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="project-name">tekon</div>
-        <div className="project-path">~/Projects/tekon</div>
+        <div className="project-name">{projectName}</div>
+        {repoPath ? <div className="project-path">{repoPath}</div> : null}
       </div>
     </aside>
   );
