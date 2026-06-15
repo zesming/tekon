@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMutation, useQuery } from '../../hooks/index.js';
+import { useMutation, useQuery, useAuthScope } from '../../hooks/index.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -26,6 +27,7 @@ const AGENT_OPTIONS = ['codex', 'claude-code', 'mock'] as const;
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
+  const scope = useAuthScope();
   const { addFlash } = useFlash();
   const [searchParams] = useSearchParams();
   const shapePath = searchParams.get('shapePath') ?? '';
@@ -34,7 +36,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { data: demandDetail } = useQuery<
     RpcProcedureMap['draftShape.detail']['output']
   >(
-    shapePath && token ? `draftShape.detail:${shapePath}` : null,
+    shapePath && token ? queryKeys.draftShapeDetail(shapePath) : null,
     () => rpc.call('draftShape.detail', { shapePath, token: token! }),
   );
 
@@ -59,7 +61,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   // ── Fetch workflow templates ──
   const { data: workflowData } = useQuery<
     RpcProcedureMap['workflow.list']['output']
-  >('workflow.list', () => rpc.call('workflow.list'));
+  >(queryKeys.workflows(), () => rpc.call('workflow.list'));
 
   const workflows = workflowData?.workflows ?? [];
 

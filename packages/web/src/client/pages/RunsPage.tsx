@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { useQuery } from '../hooks/index.js';
+import { useQuery, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
+import { queryKeys } from '../lib/query-keys.js';
 import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
 import { FilterBar } from '../components/ui/FilterBar.js';
@@ -29,11 +30,12 @@ const STATUS_FILTERS: FilterOption[] = [
 
 export function RunsPage() {
   const [searchParams] = useSearchParams();
+  const scope = useAuthScope();
 
   // ── Fetch project overview (for header stats) ──
   const { data: overview, isLoading: overviewLoading, error: overviewError, refetch: refetchOverview } = useQuery<
     RpcProcedureMap['project.overview']['output']
-  >('project.overview', () => rpc.call('project.overview'));
+  >(queryKeys.projectOverview(scope), () => rpc.call('project.overview'));
 
   // ── Fetch project detail (for runs list) ──
   // We use the project ID from overview to fetch detail.
@@ -42,7 +44,7 @@ export function RunsPage() {
   const { data: detail, isLoading: detailLoading, error: detailError, refetch: refetchDetail } = useQuery<
     RpcProcedureMap['project.detail']['output']
   >(
-    projectId ? `project.detail:${projectId}` : null,
+    projectId ? queryKeys.projectDetail(projectId, scope) : null,
     () => rpc.call('project.detail', { projectId: projectId! }),
   );
 

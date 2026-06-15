@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
 import { useMutation } from '../../hooks/index.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
-import { routes } from '../../lib/route-paths.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -29,7 +27,6 @@ export interface RunControlsProps {
 export function RunControls({ runId, status, compact }: RunControlsProps) {
   const { token } = useSessionToken();
   const { addFlash } = useFlash();
-  const navigate = useNavigate();
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,7 +38,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
     };
   }, []);
 
-  const invalidateKeys = ['project.detail', 'project.overview', 'review:', 'gate:', 'audit:'];
+  const invalidateKeys = ['project.detail', 'project.overview', 'review.', 'gate.results', 'audit.'];
 
   const pauseMutation = useMutation<
     RpcProcedureMap['project.pause']['input'],
@@ -73,9 +70,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
     e.stopPropagation();
     try {
       await pauseMutation.mutate({ runId, token });
-      addFlash('success', `运行 ${runId.slice(0, 8)} 已暂停`);
+      addFlash('success', `Run ${runId.slice(0, 8)} paused`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : '暂停失败');
+      addFlash('error', err instanceof Error ? err.message : 'Failed to pause run');
     }
   };
 
@@ -83,9 +80,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
     e.stopPropagation();
     try {
       await resumeMutation.mutate({ runId, token });
-      addFlash('success', `运行 ${runId.slice(0, 8)} 已恢复`);
+      addFlash('success', `Run ${runId.slice(0, 8)} resumed`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : '恢复失败');
+      addFlash('error', err instanceof Error ? err.message : 'Failed to resume run');
     }
   };
 
@@ -105,9 +102,9 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
 
     try {
       await cancelMutation.mutate({ runId, token });
-      addFlash('success', `运行 ${runId.slice(0, 8)} 已取消`);
+      addFlash('success', `Run ${runId.slice(0, 8)} cancelled`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : '取消失败');
+      addFlash('error', err instanceof Error ? err.message : 'Failed to cancel run');
     }
   };
 
@@ -124,7 +121,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="暂停"
+          title="Pause"
           disabled={isPending}
           onClick={handlePause}
         >
@@ -136,7 +133,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="恢复"
+          title="Resume"
           disabled={isPending}
           onClick={handleResume}
         >
@@ -148,7 +145,7 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={compact ? 'btn btn-ghost btn-sm' : 'btn btn-danger btn-sm'}
-          title="取消"
+          title="Cancel"
           disabled={isPending}
           onClick={handleCancel}
         >
@@ -160,11 +157,8 @@ export function RunControls({ runId, status, compact }: RunControlsProps) {
         <button
           type="button"
           className={btnClass}
-          title="查看详情"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(routes.run(runId));
-          }}
+          title="View details"
+          onClick={(e) => e.stopPropagation()}
         >
           👁
         </button>

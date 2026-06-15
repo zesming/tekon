@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 import { EvalScoreCard } from '../../components/eval/EvalScoreCard.js';
@@ -25,10 +26,12 @@ type ReviewOutput = RpcProcedureMap['review.get']['output'];
  * score, ready status, and individual check results.
  */
 export function ReadinessTab() {
+  const scope = useAuthScope();
+
   // ── Get latest run from overview to pre-fill runId ──
   const { data: overview } = useQuery<
     RpcProcedureMap['project.overview']['output']
-  >('project.overview', () => rpc.call('project.overview'));
+  >(queryKeys.projectOverview(scope), () => rpc.call('project.overview'));
 
   const latestRunId = overview?.latestRun?.id ?? '';
 
@@ -39,7 +42,7 @@ export function ReadinessTab() {
 
   // ── Fetch review data when activeRunId is set ──
   const { data: review, isLoading, error: queryError, refetch: refetchReview } = useQuery<ReviewOutput>(
-    activeRunId ? `review.get:${activeRunId}` : null,
+    activeRunId ? queryKeys.reviewDetail(activeRunId, scope) : null,
     () => rpc.call('review.get', { runId: activeRunId! }),
   );
 

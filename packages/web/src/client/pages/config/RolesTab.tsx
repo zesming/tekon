@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { useQuery } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type { RoleListOutput, ApiRoleItem } from '../../../shared/api-types.js';
 
 import { Card } from '../../components/ui/Card.js';
@@ -26,7 +27,7 @@ const roleDescriptions: Record<string, string> = {
 export function RolesTab() {
   const [selectedRole, setSelectedRole] = useState<ApiRoleItem | null>(null);
 
-  const query = useQuery<RoleListOutput>('config:roles', () =>
+  const query = useQuery<RoleListOutput>(queryKeys.roles(), () =>
     rpc.call('role.list'),
   );
 

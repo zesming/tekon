@@ -1,8 +1,9 @@
 import { useParams } from 'react-router';
 import type { ReactNode } from 'react';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type {
   ProgressListOutput,
   ApiWorkReviewSurface,
@@ -100,16 +101,17 @@ function InfoNote({ children }: { children: ReactNode }) {
 
 export function ProgressTab() {
   const { runId } = useParams<{ runId: string }>();
+  const scope = useAuthScope();
 
   // Primary data source: progress.list
   const progressQuery = useQuery<ProgressListOutput>(
-    runId ? `progress:${runId}` : null,
+    runId ? queryKeys.progress(runId) : null,
     () => rpc.call('progress.list', { runId: runId! }),
   );
 
   // Fallback/supplementary: review.get for gate timeline
   const reviewQuery = useQuery<ApiWorkReviewSurface>(
-    runId ? `review:${runId}` : null,
+    runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
 

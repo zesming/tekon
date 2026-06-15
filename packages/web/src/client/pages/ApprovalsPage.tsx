@@ -1,9 +1,10 @@
 import { useCallback, useMemo } from 'react';
 
-import { useQuery, useMutation } from '../hooks/index.js';
+import { useQuery, useMutation, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { useAuth } from '../context/auth-context.js';
 import { useFlash } from '../context/flash-context.js';
+import { queryKeys } from '../lib/query-keys.js';
 import type {
   ProjectOverviewOutput,
   GateListOutput,
@@ -23,17 +24,18 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 export function ApprovalsPage() {
   const { token } = useAuth();
   const flash = useFlash();
+  const scope = useAuthScope();
 
   // ── 1. Project overview → latest run ───────────────────────────────────────
   const overviewQuery = useQuery<ProjectOverviewOutput>(
-    'approvals:overview',
+    queryKeys.projectOverview(scope),
     () => rpc.call('project.overview'),
   );
 
   const latestRunId = overviewQuery.data?.latestRun?.id ?? null;
 
   // ── 2. Gate list → pending decisions ───────────────────────────────────────
-  const gateListKey = latestRunId ? `approvals:gates:${latestRunId}` : null;
+  const gateListKey = latestRunId ? queryKeys.gateResults(latestRunId, scope) : null;
   const gatesQuery = useQuery<GateListOutput>(
     gateListKey,
     () => rpc.call('gate.list', { runId: latestRunId! }),
@@ -47,12 +49,10 @@ export function ApprovalsPage() {
   // ── 3. Mutations: approve / reject ─────────────────────────────────────────
   const invalidateKeys = useMemo(
     () => [
-      'approvals:overview',
-      ...(latestRunId ? [`approvals:gates:${latestRunId}`] : []),
-      // Also invalidate the dashboard caches so counts refresh
-      'dashboard:overview',
+      'project.overview',
+      'gate.results',
     ],
-    [latestRunId],
+    [],
   );
 
   const approveMutation = useMutation<DecisionInput, DecisionOutput>(
@@ -84,11 +84,11 @@ export function ApprovalsPage() {
           note: note || undefined,
           token,
         });
-        flash.addFlash('success', `决策 ${decisionId} 已批准`);
+        flash.addFlash('success', `Decision ${decisionId} approved`);
       } catch (err) {
         flash.addFlash(
           'error',
-          `审批失败: ${err instanceof Error ? err.message : String(err)}`,
+          `Approve failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },
@@ -111,11 +111,11 @@ export function ApprovalsPage() {
           note: note || undefined,
           token,
         });
-        flash.addFlash('success', `决策 ${decisionId} 已拒绝`);
+        flash.addFlash('success', `Decision ${decisionId} rejected`);
       } catch (err) {
         flash.addFlash(
           'error',
-          `拒绝失败: ${err instanceof Error ? err.message : String(err)}`,
+          `Reject failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     },
@@ -200,8 +200,8 @@ export function ApprovalsPage() {
           message="没有待处理审批"
           hint={
             latestRunId
-              ? '最新运行的所有人工审批节点均已决策。'
-              : '暂无活跃运行。启动运行后将在此显示审批。'
+              ? 'All human gates for the latest run have been decided.'
+              : 'No active run found. Start a run to see approvals here.'
           }
         />
       ) : null}

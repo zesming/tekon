@@ -1,7 +1,8 @@
 import { useParams } from 'react-router';
 
-import { useQuery } from '../../hooks/index.js';
+import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import type {
   GateListOutput,
   ApiWorkReviewSurface,
@@ -72,15 +73,16 @@ function gateIconClass(status: string): string {
 
 export function GatesTab() {
   const { runId } = useParams<{ runId: string }>();
+  const scope = useAuthScope();
 
   const gateQuery = useQuery<GateListOutput>(
-    runId ? `gates:${runId}` : null,
+    runId ? queryKeys.gateResults(runId, scope) : null,
     () => rpc.call('gate.list', { runId: runId! }),
   );
 
   // Also fetch review surface to get failure triage and classification
   const reviewQuery = useQuery<ApiWorkReviewSurface>(
-    runId ? `review:${runId}` : null,
+    runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
 
@@ -92,6 +94,9 @@ export function GatesTab() {
   const gates = gateQuery.data?.gates ?? [];
   const pendingDecisions = gateQuery.data?.pendingDecisions ?? [];
   const reviewGates = reviewQuery.data?.gates ?? [];
+  const triageMap = new Map(
+    (reviewQuery.data?.gateFailureTriage ?? []).map((t) => [t.gateId, t]),
+  );
 
   // Merge classification from review surface into gate list
   const reviewGateMap = new Map(reviewGates.map((g) => [g.id, g]));
@@ -131,6 +136,7 @@ export function GatesTab() {
             <div className="gate-grid">
               {gates.map((gate) => {
                 const reviewGate = reviewGateMap.get(gate.id);
+                const triage = triageMap.get(gate.id);
                 const rawClassification =
                   gate.failureClassification ??
                   reviewGate?.failureClassification ??
