@@ -138,8 +138,12 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                     className="cell-primary"
                     style={{ maxWidth: 200 }}
                   >
-                    <span className="truncate" style={{ display: 'block' }}>
-                      {run.demandId || '—'}
+                    <span
+                      className="truncate"
+                      style={{ display: 'block' }}
+                      title={run.demandTitle ?? run.demandId}
+                    >
+                      {run.demandTitle || run.demandId || '—'}
                     </span>
                   </td>
                   <td>
@@ -160,6 +164,7 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                       runId={run.id}
                       status={run.status}
                       compact
+                      onView={(id) => navigate(routes.run(id))}
                     />
                   </td>
                 </tr>

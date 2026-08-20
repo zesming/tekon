@@ -10,6 +10,15 @@ import type {
 
 import type { WebProjectContext } from '../project-context.js';
 
+/**
+ * Review surface as returned by the web API: the core surface plus the run's
+ * real provider, enriched at the web layer (report §6.4/P1.4). Null when no
+ * provider snapshot was recorded for the run.
+ */
+export type WorkReviewSurfaceOutput = WorkReviewSurface & {
+  provider: string | null;
+};
+
 export interface ServerContext {
   db: TekonDatabase;
   repositories: TekonRepositories;
@@ -90,6 +99,8 @@ export interface WorkflowOutput {
   id: string;
   projectId: string;
   demandId: string;
+  demandTitle: string | null;
+  provider: string | null;
   status: string;
   currentNodeId: string | null;
   createdAt: string;
@@ -296,7 +307,7 @@ export interface ApiCaller {
     get(input: {
       runId: string;
       maxContentChars?: number;
-    }): Promise<WorkReviewSurface>;
+    }): Promise<WorkReviewSurfaceOutput>;
   };
   role: {
     list(): Promise<{

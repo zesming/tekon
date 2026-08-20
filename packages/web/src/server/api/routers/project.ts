@@ -66,7 +66,7 @@ export function createProjectRouter(context: ServerContext) {
       const latestRun = latest?.run ?? null;
       return {
         project: mapProject(project),
-        latestRun: latestRun ? mapWorkflow(latestRun) : null,
+        latestRun: latestRun ? mapWorkflow(latestRun, { db: context.db }) : null,
         counts: {
           artifacts: latestRun
             ? count(context.db, 'artifacts', latestRun.id)
@@ -109,7 +109,7 @@ export function createProjectRouter(context: ServerContext) {
         runs: listRunsForScopedProjects(
           context.db,
           context.projectContext,
-        ).map(mapWorkflow),
+        ).map((row) => mapWorkflow(row, { db: context.db })),
       };
     },
 
@@ -121,7 +121,9 @@ export function createProjectRouter(context: ServerContext) {
         'paused',
       );
       return {
-        run: mapWorkflow(mustGetRun(context.db, runInput.runId)),
+        run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
+          db: context.db,
+        }),
       };
     },
 
@@ -215,7 +217,9 @@ export function createProjectRouter(context: ServerContext) {
         'cancelled',
       );
       return {
-        run: mapWorkflow(mustGetRun(context.db, runInput.runId)),
+        run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
+          db: context.db,
+        }),
       };
     },
 

@@ -350,4 +350,50 @@ describe('web read API', () => {
 
     await api.close();
   });
+
+  it('enriches runs with demand title and provider (P1.3/P1.4)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // Run list / overview surface the human-readable request title and the
+    // real provider instead of internal ids (report §6.3/§6.4).
+    const overview = await api.project.overview();
+    expect(overview.latestRun).toMatchObject({
+      id: 'run_1',
+      demandId: 'demand_1',
+      demandTitle: 'Add dashboard',
+      provider: 'mock',
+    });
+
+    const detail = await api.project.detail({ projectId: 'project_1' });
+    expect(detail.runs[0]).toMatchObject({
+      id: 'run_1',
+      demandTitle: 'Add dashboard',
+      provider: 'mock',
+    });
+
+    // Run detail (review surface) carries the real provider for deriveAgent.
+    const surface = await api.review.get({ runId: 'run_1' });
+    expect(surface.provider).toBe('mock');
+
+    await api.close();
+  });
+
+  it('run enrichment tolerates a missing provider snapshot', async () => {
+    const fixture = await createWebFixtureProject({
+      includeProviderSnapshot: false,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const overview = await api.project.overview();
+    // Title still resolves; provider is null when no snapshot was recorded.
+    expect(overview.latestRun).toMatchObject({
+      demandTitle: 'Add dashboard',
+      provider: null,
+    });
+
+    await api.close();
+  });
 });

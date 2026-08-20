@@ -29,8 +29,8 @@ test.describe('Run detail tab content', () => {
 
     await expect(page.getByRole('link', { name: 'Gates' })).toBeVisible();
 
-    // Gate type is shown
-    await expect(page.getByText('human', { exact: true })).toBeVisible();
+    // Gate type is shown (localized: the human gate renders as 人工审批).
+    await expect(page.getByText('人工审批', { exact: true })).toBeVisible();
   });
 
   test('audit tab shows audit events', async ({ page, server }) => {

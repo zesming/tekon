@@ -103,7 +103,7 @@ test.describe('Tekon main flow', () => {
     // The approve button uses two-step confirmation:
     // First click → "确认批准?", second click → executes.
     // Without a token the handler fires a flash error.
-    await page.getByRole('button', { name: '✓ Approve' }).click();
+    await page.getByRole('button', { name: '✓ 批准' }).click();
     // Wait for the confirmation state
     await expect(
       page.getByRole('button', { name: '确认批准?' }),

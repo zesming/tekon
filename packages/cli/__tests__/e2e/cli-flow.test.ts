@@ -213,7 +213,9 @@ describe('tekon cli e2e', () => {
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
-  }, 30_000);
+    // Real subprocess init→run→clean flow; 30s was too tight under parallel
+    // test-suite load (observed 31s). Give headroom to avoid flaky timeouts.
+  }, 90_000);
 
   it('help command works without initialized repo and with initialized repo', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');

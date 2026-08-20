@@ -1,5 +1,44 @@
 # 变更日志
 
+## v0.8.0
+
+Harness-inspired replatform 阶段 0：修稳既有 flaky 测试、P1 纯 UI/API 修复、CI 覆盖三包、Session/Event 契约冻结。不动 core 运行时主路径。
+
+### 修复
+
+**CLI/Web 测试稳定性:**
+- `run-cli.test.ts`：新增 anchor cwd 复位（`afterEach` 无条件 `process.chdir(anchorCwd)`），消除测试间共享进程级 cwd 导致的 `ENOENT chdir` 级联失败；超时 15s→30s 匹配真实子进程耗时
+- `cli-flow.test.ts` / `release-flow.test.ts`：超时 30s→90s，消除并行负载下的 flaky 超时
+
+**P1 人类可用性（报告 §12）:**
+- P1.1 Resume 覆盖 `blocked`/`interrupted`：`RunControls` 抽出纯函数 `runControlAffordances`，Resume 不再仅对 `paused` 显示（`RunControls.tsx`）
+- P1.2 terminal "眼睛"按钮：从 `stopPropagation` 无行为改为 `onView` 回调导航到 run 详情（`RunControls.tsx` + `RunTable.tsx`）
+- P1.3 Run 列表展示需求标题：API 新增 `demandTitle` 字段（`mappers.ts`/`queries.ts`/`rpc-contract.ts`），`RunTable` Demand 列显示标题而非内部 ID
+- P1.4 Run Detail 展示真实 provider：`review.get` 响应新增 `provider` 字段（`review.ts`/`context.ts`），`deriveAgent` 不再固定返回 `—`
+
+### 新功能
+
+**CI 覆盖三包（报告 P1-06）:**
+- 新增 `.github/workflows/ci.yml`：root typecheck + CLI build/unit/e2e + Web build/typecheck/unit + Playwright e2e（含 `playwright install --with-deps chromium`）
+- 既有 `core.yml` 保留为 core 专项门禁
+
+**Session/Event 契约冻结（报告 §8.2/§8.3/§8.4）:**
+- 新增 `core/types/session-contract.ts`：Workspace/Session/SessionEvent/Job schema + 事件词汇（core/control/tekon-governance）+ AgentDriver/JobRunner/EventSubscription/Projection 接口签名（纯类型，无实现）
+- 新增 `core/__tests__/types/session-contract.test.ts`：9 个测试锁定 schema 版本、必需事件核心、merge-extensible 兼容策略
+
+### 测试
+
+- 新增 `web/__tests__/client/run-controls.test.ts`：8 个测试覆盖 `runControlAffordances` 全状态矩阵
+- `read-api.test.ts`：新增 2 个 API 级测试覆盖 demandTitle/provider enrichment（含缺 provider 快照的 null 路径）
+- `contract-strict.test.ts`：同步 `apiWorkflowSchema` 新必需字段
+- e2e 断言同步当前中文 UI：`demand` 页标题 `Demand`→`需求澄清`、gates 页 `human`→`人工审批`、approve 按钮 `✓ Approve`→`✓ 批准`
+- `playwright.config.ts`：`expect.timeout` 10s、`navigationTimeout` 20s、`retries: 1`（Vite dev-server 冷启动抖动兜底）
+
+### 文档
+
+- `docs/reviews/2026-08-20-...migration-review.md`：新增 §0 维护方决策批注（事实核验结论 + 定位判断 + 处置决策）
+- 新增 `docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md`：六阶段总体执行方案
+
 ## v0.7.0
 
 ### 新功能

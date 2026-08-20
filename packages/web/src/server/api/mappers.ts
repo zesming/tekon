@@ -20,7 +20,7 @@ import type {
   ProjectRow,
   WorkflowRow,
 } from './rows.js';
-import { getGate, getNode } from './queries.js';
+import { getGate, getNode, demandTitleById, runProviderName } from './queries.js';
 import { redactObject } from './redaction.js';
 
 export function mapProject(project: ProjectRow): ProjectOutput {
@@ -32,11 +32,16 @@ export function mapProject(project: ProjectRow): ProjectOutput {
   };
 }
 
-export function mapWorkflow(run: WorkflowRow): WorkflowOutput {
+export function mapWorkflow(
+  run: WorkflowRow,
+  enrich?: { db: TekonDatabase },
+): WorkflowOutput {
   return {
     id: run.id,
     projectId: run.project_id,
     demandId: run.demand_id,
+    demandTitle: enrich ? demandTitleById(enrich.db, run.demand_id) : null,
+    provider: enrich ? runProviderName(enrich.db, run.id) : null,
     status: run.status,
     currentNodeId: run.current_node_id,
     createdAt: run.created_at,
@@ -49,6 +54,10 @@ export function mapWorkflowFromDomain(run: WorkflowInstance): WorkflowOutput {
     id: run.id,
     projectId: run.projectId,
     demandId: run.demandId,
+    // The domain result of a start/resume/cancel mutation does not carry the
+    // demand title or provider; the client refetches list/detail for those.
+    demandTitle: null,
+    provider: null,
     status: run.status,
     currentNodeId: run.currentNodeId ?? null,
     createdAt: run.createdAt,

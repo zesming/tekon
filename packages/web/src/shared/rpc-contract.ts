@@ -146,6 +146,11 @@ export const apiWorkflowSchema = z
     id: z.string(),
     projectId: z.string(),
     demandId: z.string(),
+    // Human-readable request title + real provider for run lists / detail
+    // (report §6.3/§6.4, P1.3/P1.4). Null when not resolvable (e.g. the
+    // run/resume mutation return path, which maps from the domain object).
+    demandTitle: z.string().nullable(),
+    provider: z.string().nullable(),
     status: z.string(),
     currentNodeId: z.string().nullable(),
     createdAt: z.string(),
@@ -403,6 +408,10 @@ export const reviewEvidenceGroupSchema = z.object({
 export const workReviewSurfaceSchema = z.object({
   runId: z.string(),
   workflowStatus: z.string(),
+  // Real provider recorded for the run (report §6.4/P1.4: Run Detail derived
+  // the agent as a fixed "—"). Optional/nullable: older runs and the core
+  // surface builder do not carry it; the web router enriches from the db.
+  provider: z.string().nullable().optional(),
   demand: z.object({
     id: z.string(),
     title: z.string(),

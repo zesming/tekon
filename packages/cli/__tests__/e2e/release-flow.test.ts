@@ -310,7 +310,9 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     expect(readFileSync(reportMd, 'utf8')).toContain('# Fixture Usability');
     expect(readFileSync(reportHtml, 'utf8')).toContain('Fixture Usability');
     expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
-  }, 30_000);
+    // Real subprocess init→run→delivery flow; 30s was too tight under parallel
+    // test-suite load (observed 34s). Match the describe-level 90s headroom.
+  }, 90_000);
 });
 
 function runCli(

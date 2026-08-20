@@ -75,7 +75,8 @@ test.describe('Config, Eval, and Demand pages', () => {
   test('demand page loads', async ({ page, server }) => {
     await page.goto(`${server.url}/demand`);
 
-    // Demand page renders with page title containing "Demand"
-    await expect(page.locator('.page-title')).toContainText('Demand');
+    // The demand entry point renders the clarification (需求澄清) page.
+    // (UI was localized to Chinese; the title is no longer "Demand".)
+    await expect(page.locator('.page-title')).toContainText('需求澄清');
   });
 });

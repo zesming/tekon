@@ -7,6 +7,7 @@ export const TEKON_CORE_VERSION = pkg.version;
 export * from './types/domain.js';
 export * from './types/config.js';
 export * from './types/events.js';
+export * from './types/session-contract.js';
 export * from './db/connection.js';
 export * from './db/migrations.js';
 export * from './db/repositories.js';

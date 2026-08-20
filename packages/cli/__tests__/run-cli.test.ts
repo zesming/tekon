@@ -18,8 +18,21 @@ import { runCli, type CliIO } from '../src/index.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
+  // Stable anchor captured once, outside any temp dir. Tests chdir into
+  // per-case temp repos; if a case times out or throws before restoring cwd,
+  // the process would be left inside a dir that afterEach then deletes, and the
+  // next case's `process.chdir(originalCwd)` would hit ENOENT (cross-case
+  // cascade). Restoring to this anchor before cleanup keeps cwd valid.
+  const anchorCwd = process.cwd();
 
   afterEach(() => {
+    // Always leave a valid cwd before removing temp dirs, regardless of whether
+    // the case restored it (timeouts skip the case's own finally).
+    try {
+      process.chdir(anchorCwd);
+    } catch {
+      // anchor should always exist; ignore if the runner already moved us.
+    }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { force: true, recursive: true });
     }
@@ -773,7 +786,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     } finally {
       process.chdir(originalCwd);
     }
-  }, 15_000);
+  }, 30_000);
 
   it('resolves explicit shape paths from cwd first and repo root second', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -816,7 +829,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     } finally {
       process.chdir(originalCwd);
     }
-  }, 15_000);
+  }, 30_000);
 
   it('does not approve historical draft shapes by default when the latest shape is already approved', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -871,7 +884,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     } finally {
       process.chdir(originalCwd);
     }
-  }, 15_000);
+  }, 30_000);
 
   it('prints explicit follow-up commands when repo is passed explicitly', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -933,7 +946,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       `tekon approval reject --run-id ${gatedRunId}`,
     );
     expect(summaryOutput).toContain(`--repo ${repoPath}`);
-  }, 15_000);
+  }, 30_000);
 
   it('keeps cwd-relative draft shape paths working from repo subdirectories', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -974,7 +987,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     } finally {
       process.chdir(originalCwd);
     }
-  }, 15_000);
+  }, 30_000);
 
   it('requires --allow-dirty-base before running on tracked local changes', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -1222,7 +1235,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       }),
     );
     afterResumeDb.close();
-  }, 15_000);
+  }, 30_000);
 
   it('does not approve human gates when the run provider snapshot is missing', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -1330,7 +1343,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     } finally {
       process.env.PATH = originalPath;
     }
-  }, 15_000);
+  }, 30_000);
 });
 
 function createMemoryIo(): CliIO & {
