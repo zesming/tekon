@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createHumanGate,
   createRepositories,
+  isWorkflowTerminalError,
   migrateDatabase,
   openTekonDatabase,
 } from '../../src/index.js';
@@ -107,6 +108,123 @@ describe('human gate', () => {
         failureClassification: 'human-rejected',
       }),
     );
+    db.close();
+  });
+
+  it.each([
+    ['cancelled', 'cancelled'],
+    ['passed', 'passed'],
+    ['failed', 'failed'],
+  ] as const)(
+    'M8: approveHumanGate throws WorkflowTerminalError on a %s run without writing',
+    async (terminalStatus) => {
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories);
+      await repositories.updateWorkflowInstanceStatus('run_1', terminalStatus);
+      const decision = await repositories.createHumanDecision({
+        id: 'decision_terminal',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateResultId: null,
+        status: 'pending',
+        note: null,
+        createdAt: '2026-08-21T00:00:00.000Z',
+      });
+      const humanGate = createHumanGate({ repositories });
+
+      await expect(
+        humanGate.approveHumanGate(decision.id, 'cli', 'should fail'),
+      ).rejects.toSatisfy((error) => {
+        expect(isWorkflowTerminalError(error)).toBe(true);
+        expect(error).toMatchObject({
+          code: 'WORKFLOW_TERMINAL',
+          runId: 'run_1',
+          status: terminalStatus,
+        });
+        return true;
+      });
+
+      // Nothing was written.
+      expect(await repositories.getHumanDecision(decision.id)).toMatchObject({
+        status: 'pending',
+        actor: null,
+      });
+      expect(await repositories.getNode('node_1')).toMatchObject({
+        status: 'running',
+      });
+      expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+        status: terminalStatus,
+      });
+      db.close();
+    },
+  );
+
+  it('M8: rejectHumanGate throws WorkflowTerminalError on a cancelled run without writing', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories);
+    await repositories.updateWorkflowInstanceStatus('run_1', 'cancelled');
+    const decision = await repositories.createHumanDecision({
+      id: 'decision_terminal_reject',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: null,
+      status: 'pending',
+      note: null,
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+    const humanGate = createHumanGate({ repositories });
+
+    await expect(
+      humanGate.rejectHumanGate(decision.id, 'cli', 'should fail'),
+    ).rejects.toMatchObject({
+      code: 'WORKFLOW_TERMINAL',
+      runId: 'run_1',
+      status: 'cancelled',
+    });
+
+    expect(await repositories.getHumanDecision(decision.id)).toMatchObject({
+      status: 'pending',
+      actor: null,
+    });
+    expect(await repositories.getNode('node_1')).toMatchObject({
+      status: 'running',
+    });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'cancelled',
+    });
+    db.close();
+  });
+
+  it('M8: approve on a paused (non-terminal) run still works', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories);
+    await repositories.updateWorkflowInstanceStatus('run_1', 'paused', 'node_1');
+    const decision = await repositories.createHumanDecision({
+      id: 'decision_paused',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: null,
+      status: 'pending',
+      note: null,
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+    const humanGate = createHumanGate({ repositories });
+
+    const approved = await humanGate.approveHumanGate(
+      decision.id,
+      'cli',
+      'ok',
+    );
+    expect(approved.status).toBe('approved');
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'running',
+    });
     db.close();
   });
 });

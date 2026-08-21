@@ -102,6 +102,18 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       current.status === 'running' &&
       !completedAgentRun
     ) {
+      // SHOULD4: the previous worker crashed mid-node; mark its leftover
+      // running role_run as interrupted so recovery has a symmetric API.
+      const staleRoleRun = await repositories.getLatestRoleRunForNode(
+        runId,
+        node.id,
+      );
+      if (staleRoleRun?.status === 'running') {
+        await repositories.markRoleRunInterrupted({
+          roleRunId: staleRoleRun.id,
+          interruptedAt: new Date().toISOString(),
+        });
+      }
       await repositories.transitionNode(node.id, 'interrupted');
       await repositories.updateWorkflowInstanceStatus(
         runId,
@@ -193,6 +205,13 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           });
         } finally {
           if (!agentSucceeded) {
+            // P1-05: the agent did not complete — mark this role_run as
+            // interrupted (symmetric to markRoleRunCompleted) so recovery
+            // can distinguish crashed runs from finished ones.
+            await repositories.markRoleRunInterrupted({
+              roleRunId,
+              interruptedAt: new Date().toISOString(),
+            });
             await repositories.transitionNode(node.id, 'interrupted');
             await repositories.updateWorkflowInstanceStatus(
               runId,

@@ -194,6 +194,50 @@ describe('sqlite repositories', () => {
     db.close();
   });
 
+  it('marks a running role run as interrupted with a timestamp', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    await repositories.createNode({
+      id: 'node_1',
+      runId: 'run_1',
+      role: 'rd',
+      status: 'running',
+      gates: [],
+      dependencies: [],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createRoleRun({
+      id: 'role_run_interrupted',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      role: 'rd',
+      status: 'running',
+      startedAt: '2026-06-05T00:00:02.000Z',
+    });
+
+    const interrupted = await repositories.markRoleRunInterrupted({
+      roleRunId: 'role_run_interrupted',
+      interruptedAt: '2026-06-05T00:00:04.000Z',
+    });
+
+    expect(interrupted).toMatchObject({
+      id: 'role_run_interrupted',
+      status: 'interrupted',
+      interruptedAt: '2026-06-05T00:00:04.000Z',
+      completedAt: null,
+    });
+    expect(await repositories.getRoleRun('role_run_interrupted')).toMatchObject(
+      {
+        status: 'interrupted',
+        interruptedAt: '2026-06-05T00:00:04.000Z',
+      },
+    );
+    db.close();
+  });
+
   it('conditionally updates workflow instance status via compare-and-swap', async () => {
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);

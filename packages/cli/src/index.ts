@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { isWorkflowTerminalError } from '@tekon/core';
+
 import { commandApproval, commandCancel, commandPause, commandResume } from './commands/approval.js';
 import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
@@ -174,6 +176,14 @@ export async function runCli(
         return 1;
     }
   } catch (error) {
+    // M5/M8:终态 run 的 resume/approve/reject 抛 WorkflowTerminalError,
+    // 翻译为中文提示(含"终态")并 exit 1,替换旧的"打印终态 exit 0"隐性 bug 行为。
+    if (isWorkflowTerminalError(error)) {
+      io.stderr.write(
+        `运行已处于终态 ${error.status}，无法恢复或审批：runId=${error.runId}\n`,
+      );
+      return 1;
+    }
     io.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,
     );

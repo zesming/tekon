@@ -351,30 +351,35 @@ export function createJobRepository(
     async claimNext(owner) {
       return writeQueue.enqueue(() => {
         const claimedAt = now();
+        // 选出最旧 queued job 的 id,再按该 id 条件写。better-sqlite3 同步执行,
+        // 整个 enqueue 任务串行,select→update 之间无并发写者。以 id 回读被本次
+        // 认领的确切行——不能用 "owner + updated_at desc" 回读:同 worker 认领多个
+        // job 后 owner/status 相同,毫秒级 updated_at 可能相等 → 回读非确定(会
+        // 错回上一个 job)。
+        const target = db
+          .prepare(
+            `select id from jobs
+             where status = 'queued'
+             order by created_at asc, id asc
+             limit 1`,
+          )
+          .get() as { id: string } | undefined;
+        if (!target) {
+          return null;
+        }
         const result = db
           .prepare(
             `update jobs
              set status = 'running', owner = @owner, lease = @now, updated_at = @now
-             where id = (
-               select id from jobs
-               where status = 'queued'
-               order by created_at asc
-               limit 1
-             )
-             and status = 'queued'`,
+             where id = @id and status = 'queued'`,
           )
-          .run({ owner, now: claimedAt });
+          .run({ owner, now: claimedAt, id: target.id });
         if (result.changes !== 1) {
           return null;
         }
         const row = db
-          .prepare(
-            `select * from jobs
-             where owner = @owner and status = 'running'
-             order by updated_at desc
-             limit 1`,
-          )
-          .get({ owner }) as JobRow | undefined;
+          .prepare(`select * from jobs where id = @id`)
+          .get({ id: target.id }) as JobRow | undefined;
         return row ? mapJob(row) : null;
       });
     },

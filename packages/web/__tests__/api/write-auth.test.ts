@@ -725,6 +725,25 @@ describe('project.resume', () => {
 
     await api.close();
   });
+
+  it('rejects project.resume for a terminal run with 400 (transitional WTE mapping)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // run_0 is seeded as 'passed' with a provider snapshot.
+    await expect(
+      api.project.resume({
+        runId: 'run_0',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('terminal status: passed'),
+    });
+
+    await api.close();
+  });
 });
 
 describe('delivery.prepare', () => {

@@ -256,6 +256,10 @@ export interface TekonRepositories {
     roleRunId: string;
     completedAt: string;
   }): Promise<RoleRun | null>;
+  markRoleRunInterrupted(input: {
+    roleRunId: string;
+    interruptedAt: string;
+  }): Promise<RoleRun | null>;
   getLatestRoleRunForNode(
     runId: string,
     nodeId: string,
@@ -828,6 +832,20 @@ export function createRepositories(
            set status = 'passed', completed_at = ?
            where id = ?`,
         ).run(input.completedAt, input.roleRunId);
+        const row = db
+          .prepare('select * from role_runs where id = ?')
+          .get(input.roleRunId) as RoleRunRow | undefined;
+        return row ? mapRoleRun(row) : null;
+      });
+    },
+
+    async markRoleRunInterrupted(input) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update role_runs
+           set status = 'interrupted', interrupted_at = ?
+           where id = ?`,
+        ).run(input.interruptedAt, input.roleRunId);
         const row = db
           .prepare('select * from role_runs where id = ?')
           .get(input.roleRunId) as RoleRunRow | undefined;

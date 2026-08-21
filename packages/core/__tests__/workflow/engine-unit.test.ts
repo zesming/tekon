@@ -2,16 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertSuccessfulAgentRun,
+  createAuditLogger,
+  createRepositories,
+  createWorkflowEngine,
   defaultBuiltInRolesDir,
   defaultCommandPolicy,
   gatesWithStableKeys,
   isChangesRequested,
+  isWorkflowTerminalError,
   makeSyntheticLease,
+  migrateDatabase,
+  openTekonDatabase,
   resolveMaxReworkAttempts,
   resolveReviewTargetNodeByHeuristic,
   scopedId,
   stableGateKey,
-  createWorkflowEngine,
   type WorkflowEngine,
 } from '../../src/index.js';
 
@@ -476,6 +481,64 @@ describe('createWorkflowEngine', () => {
     expect(engine).toBeDefined();
     expect(typeof engine.startRun).toBe('function');
     expect(typeof engine.resumeRun).toBe('function');
+  });
+
+  it('resumeRun throws WorkflowTerminalError for terminal runs (P1-04)', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await repositories.createDemand({
+      id: 'demand_terminal',
+      title: 'Terminal run',
+      body: 'resume must throw.',
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+    await repositories.createProject({
+      id: 'project_terminal',
+      name: 'tekon',
+      repoPath: '/tmp/tekon',
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+    for (const status of ['passed', 'failed', 'cancelled'] as const) {
+      const runId = `run_${status}`;
+      await repositories.createWorkflowInstance({
+        id: runId,
+        projectId: 'project_terminal',
+        demandId: 'demand_terminal',
+        status,
+        createdAt: '2026-08-21T00:00:00.000Z',
+        updatedAt: '2026-08-21T00:00:00.000Z',
+      });
+    }
+    const audit = createAuditLogger({ repositories });
+    const engine = createWorkflowEngine({
+      repoPath: '/tmp/tekon',
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: {} as never,
+    });
+
+    for (const status of ['passed', 'failed', 'cancelled'] as const) {
+      const runId = `run_${status}`;
+      await expect(engine.resumeRun(runId)).rejects.toSatisfy((error) => {
+        expect(isWorkflowTerminalError(error)).toBe(true);
+        expect(error).toMatchObject({
+          code: 'WORKFLOW_TERMINAL',
+          runId,
+          status,
+        });
+        return true;
+      });
+      // No run.resumed audit was appended for the terminal run.
+      const events = await repositories.listAuditEvents(runId);
+      expect(events).toEqual([]);
+    }
+
+    await expect(engine.resumeRun('run_missing')).rejects.toThrow(
+      /run not found/u,
+    );
+    db.close();
   });
 });
 

@@ -11,7 +11,11 @@ import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { WorkflowInstance } from '../types/domain.js';
-import { assertWorkflowTransition } from './state-machine.js';
+import { WorkflowTerminalError } from './errors.js';
+import {
+  assertWorkflowTransition,
+  isTerminalWorkflowStatus,
+} from './state-machine.js';
 import {
   loadWorkflowTemplate,
   type WorkflowTemplate,
@@ -240,17 +244,11 @@ export function createWorkflowEngine(
         throw new Error(`run not found: ${runId}`);
       }
 
-      const terminalStatuses: ReadonlyArray<string> = [
-        'passed',
-        'failed',
-        'cancelled',
-      ];
-      if (terminalStatuses.includes(existing.status)) {
-        return {
-          error: `cannot resume run in terminal status: ${existing.status}`,
-          runId,
-          workflow: existing,
-        } as unknown as WorkflowEngineResult;
+      if (isTerminalWorkflowStatus(existing.status)) {
+        // P1-04: resume on a terminal run is a caller error. Throw a typed
+        // error (CLI/web map it to clean user-facing failures) instead of
+        // returning an error object cast to WorkflowEngineResult.
+        throw new WorkflowTerminalError(runId, existing.status);
       }
 
       await options.repositories.updateWorkflowInstanceStatus(runId, 'running');

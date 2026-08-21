@@ -40,6 +40,7 @@ export * from './role/skill-loader.js';
 export * from './role/tool-policy.js';
 export * from './role/prompt-builder.js';
 export * from './workflow/template.js';
+export * from './workflow/errors.js';
 export * from './workflow/state-machine.js';
 export * from './workflow/scheduler.js';
 export * from './workflow/engine.js';
