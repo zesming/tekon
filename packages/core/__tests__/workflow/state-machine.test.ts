@@ -317,16 +317,32 @@ describe('writeWorkflowTerminal', () => {
     db.close();
   });
 
-  it('writes running to passed and records the terminal node', async () => {
+  it('writes running to passed and clears the current node pointer', async () => {
     const { db, repositories } = makeRepositories();
     await seedRun(repositories, 'running');
 
+    // passed with an explicit null clears current_node_id (the run is done and
+    // no longer points at a node) — matches the legacy
+    // updateWorkflowInstanceStatus(runId, 'passed', null) semantics.
     const result = await writeWorkflowTerminal(
       repositories,
       'run_1',
       'passed',
       null,
     );
+
+    expect(result.written).toBe(true);
+    expect(result.workflow.status).toBe('passed');
+    expect(result.workflow.currentNodeId).toBeNull();
+    db.close();
+  });
+
+  it('leaves the current node pointer unchanged when currentNodeId is omitted', async () => {
+    const { db, repositories } = makeRepositories();
+    await seedRun(repositories, 'running');
+
+    // undefined (omitted) leaves current_node_id as-is.
+    const result = await writeWorkflowTerminal(repositories, 'run_1', 'passed');
 
     expect(result.written).toBe(true);
     expect(result.workflow.status).toBe('passed');

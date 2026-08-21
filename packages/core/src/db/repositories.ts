@@ -408,21 +408,26 @@ export function createRepositories(
 
     async casWorkflowInstanceStatus(runId, expectedFrom, to, currentNodeId) {
       return writeQueue.enqueue(() => {
-        const result = db
-          .prepare(
-            `update workflow_instances
-             set status = @to,
-                 current_node_id = coalesce(@nodeId, current_node_id),
-                 updated_at = @now
-             where id = @runId and status = @expectedFrom`,
-          )
-          .run({
-            to,
-            nodeId: currentNodeId ?? null,
-            now: now(),
-            runId,
-            expectedFrom,
-          });
+        // currentNodeId semantics match updateWorkflowInstanceStatus:
+        //   undefined → leave current_node_id unchanged
+        //   null      → clear it (terminal `passed` clears the pointer)
+        //   string    → set it (terminal `cancelled`/`failed` record the node)
+        const result =
+          currentNodeId === undefined
+            ? db
+                .prepare(
+                  `update workflow_instances
+                   set status = @to, updated_at = @now
+                   where id = @runId and status = @expectedFrom`,
+                )
+                .run({ to, now: now(), runId, expectedFrom })
+            : db
+                .prepare(
+                  `update workflow_instances
+                   set status = @to, current_node_id = @nodeId, updated_at = @now
+                   where id = @runId and status = @expectedFrom`,
+                )
+                .run({ to, nodeId: currentNodeId, now: now(), runId, expectedFrom });
 
         const row = db
           .prepare('select * from workflow_instances where id = ?')

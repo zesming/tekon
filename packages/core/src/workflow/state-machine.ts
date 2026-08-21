@@ -228,7 +228,7 @@ export async function writeWorkflowTerminal(
       runId,
       from,
       to,
-      currentNodeId ?? null,
+      currentNodeId,
     );
     if (result.changed && result.workflow) {
       return { written: true, workflow: result.workflow };

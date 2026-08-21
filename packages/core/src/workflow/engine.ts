@@ -245,11 +245,13 @@ export function createWorkflowEngine(
       // MUST-FIX1: CAS second line of defense — the pre-check above is a
       // bare read; a concurrent cancel/terminal write can land between the
       // read and this write. CAS with the re-read status closes the window.
+      // undefined currentNodeId → leave the pointer as-is (matches the legacy
+      // updateWorkflowInstanceStatus(runId, 'running') two-arg call).
       const casResult = await options.repositories.casWorkflowInstanceStatus(
         runId,
         existing.status,
         'running',
-        null,
+        undefined,
       );
       if (!casResult.changed) {
         const latest = await options.repositories.getWorkflowInstance(runId);
