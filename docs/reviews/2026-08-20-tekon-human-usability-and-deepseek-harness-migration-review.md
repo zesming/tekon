@@ -24,6 +24,17 @@
 - **Harness 接入**：仅经稳定公开边界选择性接入（报告 §7.2/§14），不绑定其 developer-preview 私有 schema。
 - **P0-03 定级修正**：审批绕过属**治理/授权正确性缺陷**（`run` 需 session token、Web 默认绑 `127.0.0.1`，非远程可利用漏洞），但因其破坏"未批准需求不得运行"这一产品核心承诺、且修复成本极低，仍列为最优先必修项。
 
+### 0.4 工程视角批注（2026-08-21 追加，全量落地依据）
+
+维护方决定按报告全量方向推进 replatform，落地以本节判断为准，覆盖/细化下文正文中过于激进或与工程现实冲突之处：
+
+- **分阶段是纪律不是打折**：报告 §10 的六阶段一次做完既不可验收也违背报告 §11「每阶段可运行、防范围失控」。落地按阶段推进，每阶段独立走"设计→评审→实现→e2e→code review→验收→提交"闭环，旧引擎与新链路双轨并存，任一阶段验收不过即停在该阶段。
+- **既有测试债先还**：实测发现 PR 分支基线本身带 flaky/过时测试（CLI `process.chdir` 级联 + 超时过紧、Web e2e 断言停留在英文 UI、Playwright 浏览器版本缺失）。这些与迁移无关，但阻断"全绿"验收，故在阶段 0 先修稳，作为 CI 纳入 CLI/Web/Playwright 的前置。
+- **治理语义零退化是硬约束**：无论 UI 如何对话化，Gate/人工审批/PR 人工批准/audit 哈希链的语义在迁移中不得削弱；`inline 展示 ≠ 取消规则`；未批准 shaped demand 不得经任何路径运行。human-first 为默认交互，但 autonomous/headless 自举链路必须持续可用。
+- **Harness 只做参考架构 + 稳定边界接入**：官方 developer preview 明确警告 breaking changes，不把 Tekon 持久化模型与领域对象绑定其私有 schema；Cordis 可先用轻量 Context/Plugin 契约,不在首阶段全量引入。
+- **每阶段落地明细与验收证据**：见 `docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md`，该方案已过一轮评审 + 维护方自检；各阶段完成后在 `CHANGELOG.md` 记录版本与验证结果。
+- **P1.3/P1.4 等"纯 UI"项实际触达 API 契约**：Run 列表需求标题、Run Detail 真实 provider 需要在 mapper/schema 层补字段（`demandTitle`/`provider`，nullable 向后兼容），已在阶段 0 落地并配 contract/enrichment 测试。
+
 ## 1. 执行摘要
 
 ### 1.1 总体结论
