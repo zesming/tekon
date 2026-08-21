@@ -316,7 +316,11 @@ export interface ApiCaller {
     }>;
     approve(
       input: DecisionInput,
-    ): Promise<{ decision: HumanDecisionOutput }>;
+    ): Promise<{
+      decision: HumanDecisionOutput;
+      sessionId?: string;
+      jobId?: string;
+    }>;
     reject(
       input: DecisionInput,
     ): Promise<{ decision: HumanDecisionOutput }>;

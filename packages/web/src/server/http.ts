@@ -21,6 +21,7 @@ import {
 import { ApiError } from './api/errors.js';
 import { procedureSpecs, type ProcedureName } from '../shared/rpc-contract.js';
 import { resolveProjectRoot } from './project-context.js';
+import { handleSessionEventsSse } from './sse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +51,22 @@ export async function createWebServer(
   const sessionPath = join(projectRoot, '.tekon', 'web-session.json');
   const server = createServer(async (request, response) => {
     setSecurityHeaders(response);
+
+    // SSE: GET /api/sessions/:sessionId/events (design §3.1). Placed after
+    // setSecurityHeaders and before /api/rpc. Reuses the RPC origin/Sec-Fetch
+    // guard and the file-backed session token check; token/origin failures
+    // return a JSON error WITHOUT opening the stream.
+    const sseSessionId = matchSessionEventsPath(request.url);
+    if (sseSessionId !== null) {
+      await handleSseRoute({
+        api,
+        request,
+        response,
+        sessionPath,
+        sessionId: sseSessionId,
+      });
+      return;
+    }
 
     if (request.url?.startsWith('/api/rpc')) {
       await handleRpc({ api, request, response, sessionPath });
@@ -243,6 +260,88 @@ async function handleRpc(input: {
 }
 
 const MAX_BODY_SIZE = 1024 * 1024; // 1MB
+
+/**
+ * Match `GET /api/sessions/:sessionId/events` and return the decoded
+ * sessionId, or null when the path/method does not match. The sessionId
+ * segment must be a single non-empty path component (no slashes).
+ */
+function matchSessionEventsPath(rawUrl: string | undefined): string | null {
+  if (!rawUrl) {
+    return null;
+  }
+  const path = rawUrl.split('?')[0];
+  const match = /^\/api\/sessions\/([^/]+)\/events$/.exec(path);
+  if (!match) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function handleSseRoute(input: {
+  api: ApiCaller;
+  request: IncomingMessage;
+  response: ServerResponse;
+  sessionPath: string;
+  sessionId: string;
+}): Promise<void> {
+  // Only GET establishes a stream.
+  if (input.request.method !== 'GET') {
+    writeJson(input.response, 405, {
+      error: { code: 'BAD_REQUEST', message: 'Only GET is supported' },
+    });
+    return;
+  }
+  // Auth BEFORE opening the stream (design §3.1 step 1): same origin/Sec-Fetch
+  // guard as mutations, then the file-backed session token. Failures return a
+  // JSON error and never switch to text/event-stream.
+  try {
+    assertRequestAllowed(input.request);
+    const token = input.request.headers['x-session-token'];
+    assertSessionTokenFromFile(
+      input.sessionPath,
+      typeof token === 'string' ? token : '',
+    );
+  } catch (error) {
+    const code = error instanceof ApiError ? error.code : 'BAD_REQUEST';
+    const status = code === 'UNAUTHORIZED' ? 401 : 400;
+    writeJson(input.response, status, {
+      error: {
+        code,
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return;
+  }
+
+  // Defense-in-depth (B1): handleSessionEventsSse cleans up and returns on
+  // replay errors rather than throwing, but the createServer callback is async
+  // and Node does not handle a rejected callback promise — a stray throw would
+  // become an unhandled rejection and crash the server. Guard it here too.
+  try {
+    await handleSessionEventsSse({
+      request: input.request,
+      response: input.response,
+      sessionId: input.sessionId,
+      sessions: input.api.sessions,
+      bus: input.api.bus,
+    });
+  } catch {
+    // Headers may already be sent (stream opened); just end the response. If
+    // the failure happened before the stream opened (e.g. getSession threw on a
+    // db error), surface a 500 rather than a misleading empty 200.
+    if (!input.response.headersSent) {
+      input.response.statusCode = 500;
+    }
+    if (!input.response.writableEnded) {
+      input.response.end();
+    }
+  }
+}
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];

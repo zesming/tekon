@@ -543,6 +543,11 @@ export const gateListOutputSchema = z.object({
 
 export const decisionOutputSchema = z.object({
   decision: apiHumanDecisionSchema,
+  // S7d/M9: gate.approve resumes the run asynchronously via the job runner and
+  // returns the bound session + enqueued job so the client can follow it. reject
+  // stays synchronous (blocked) and omits both.
+  sessionId: z.string().optional(),
+  jobId: z.string().optional(),
 });
 
 export const auditListOutputSchema = z.object({

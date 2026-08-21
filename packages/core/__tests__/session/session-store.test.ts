@@ -324,6 +324,10 @@ describe('job repository', () => {
   it('cancels only queued and stale-paused jobs for a run (S3)', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
+    // Explicit cutoff keeps this deterministic: with the default (wall-clock)
+    // cutoff, a hardcoded "fresh" lease is overtaken once real time passes it.
+    // The default-cutoff path is covered by the A1 test below.
+    const cutoff = '2026-08-21T06:00:00.000Z';
     const stale = '2026-08-20T00:00:00.000Z';
     const fresh = '2026-08-21T12:00:00.000Z';
 
@@ -348,7 +352,7 @@ describe('job repository', () => {
     );
     await jobs.enqueue(makeJob(session.id, { id: 'job_except', status: 'queued' }));
 
-    const count = await jobs.cancelStaleActiveJobs('run_1', 'job_except');
+    const count = await jobs.cancelStaleActiveJobs('run_1', 'job_except', cutoff);
     expect(count).toBe(2);
 
     expect(await jobs.get('job_queued')).toMatchObject({
@@ -366,6 +370,42 @@ describe('job repository', () => {
 
     // A run without sessions/jobs is a no-op.
     expect(await jobs.cancelStaleActiveJobs('run_missing')).toBe(0);
+  });
+
+  it('A1: cancelStaleActiveJobs reclaims OLD queued jobs but spares fresh ones', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    // An old queued job (created long ago) is abandoned → reclaimed. A freshly
+    // enqueued queued job (created "now") is a concurrent enqueue in flight and
+    // MUST survive, so a losing concurrent approve/resume cannot cancel the
+    // winner's just-enqueued job (A1 regression).
+    await jobs.enqueue(
+      makeJob(session.id, {
+        id: 'job_old_queued',
+        status: 'queued',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      }),
+    );
+    await jobs.enqueue(
+      makeJob(session.id, {
+        id: 'job_fresh_queued',
+        status: 'queued',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+
+    const cancelled = await jobs.cancelStaleActiveJobs('run_1');
+    expect(cancelled).toBe(1);
+    expect(await jobs.get('job_old_queued')).toMatchObject({
+      status: 'cancelled',
+      abortState: 'stopped',
+    });
+    expect(await jobs.get('job_fresh_queued')).toMatchObject({
+      status: 'queued',
+    });
   });
 
   it('findActiveByRunId returns the newest active job for the run', async () => {

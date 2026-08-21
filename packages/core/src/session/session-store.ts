@@ -62,6 +62,8 @@ export interface JobRepository {
   enqueue(job: JobEnqueueInput): Promise<Job>;
   get(jobId: string): Promise<Job | null>;
   findActiveByRunId(runId: string): Promise<Job | null>;
+  // 回收该 run 下"旧"的可安全清理 job:created_at 早于 cutoff 的 queued,以及
+  // lease 早于 cutoff 的 paused;running/cancelling/新鲜 queued 不动。
   // `leaseCutoffIso` 缺省时沿用 30s 默认(= runner 默认 leaseTtlMs);
   // 自定义 leaseTtlMs 的 runner 应传入 `new Date(now - leaseTtlMs).toISOString()`,
   // 避免 stale 判定与 runner 的租约 TTL 偏离(设计 §2.2 实现注)。
@@ -83,8 +85,10 @@ export interface JobRepository {
 }
 
 /**
- * A paused job whose lease is older than this is treated as abandoned by
- * `cancelStaleActiveJobs` (the runner's default lease TTL is 30s).
+ * `cancelStaleActiveJobs` treats a job as abandoned when it is older than this:
+ * a paused job whose lease predates it, or a queued job whose created_at
+ * predates it. Matches the runner's default lease TTL (30s), comfortably above
+ * the ~200ms poll interval so a just-enqueued job is never mistaken for stale.
  */
 const DEFAULT_STALE_PAUSED_LEASE_MS = 30_000;
 
@@ -352,13 +356,21 @@ export function createJobRepository(
         const cutoff =
           leaseCutoffIso ??
           new Date(Date.now() - DEFAULT_STALE_PAUSED_LEASE_MS).toISOString();
+        // Only reclaim OLD jobs (design §2.2): a queued job younger than the
+        // cutoff is very likely a concurrent enqueue in flight (the runner
+        // polls every ~200ms; the lease TTL cutoff is 30s), NOT an abandoned
+        // one. Without the created_at guard, two concurrent approves/resumes
+        // race: the loser's reclaim cancels the winner's just-enqueued job,
+        // leaving the run stuck at paused with a dead job (the winner already
+        // returned 200). The age guard keeps the fresh job alive so the loser
+        // instead 409s on findActiveByRunId (A1).
         const result = db
           .prepare(
             `update jobs
              set status = 'cancelled', abort_state = 'stopped', updated_at = @now
              where session_id in (select id from sessions where run_id = @runId)
                and (
-                 status = 'queued'
+                 (status = 'queued' and created_at < @cutoff)
                  or (status = 'paused' and lease is not null and lease < @cutoff)
                )
                and (@exceptJobId is null or id != @exceptJobId)`,

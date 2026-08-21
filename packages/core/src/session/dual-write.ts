@@ -228,9 +228,9 @@ export function createSessionDualWriteBridge(deps: {
         const session = await deps.sessions.findSessionByRunId(input.runId);
         if (!session) {
           // 无 session 的旧 run,或 session 尚未创建(如 prepareRun 内的
-          // run.started)。M1:此类事件由 router 在 createSession 后显式补发。
-          // TODO(S5/S7):engine prepareRun 拆分后,web 路径在 createSession
-          // 后显式补发 workflow/started;此处保持静默跳过,不兜底。
+          // run.started)。M1:此类事件由 router 在 createSession 后显式补发
+          // workflow/started(见 web project.ts createSession 后的补发逻辑);
+          // 此处保持静默跳过,不兜底。
           return;
         }
         const event = await deps.sessions.appendEvent({
@@ -362,8 +362,12 @@ export function createDualWriteRepositories(
       return result;
     },
 
-    async updateHumanDecision(decisionId, patch) {
-      const result = await repositories.updateHumanDecision(decisionId, patch);
+    async updateHumanDecision(decisionId, patch, expectedStatus) {
+      const result = await repositories.updateHumanDecision(
+        decisionId,
+        patch,
+        expectedStatus,
+      );
       if (result) {
         await bridge.recordFromRun({
           runId: result.runId,

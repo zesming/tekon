@@ -599,14 +599,14 @@ export const runWrapperOutputSchema = z.object({
 
 **web `gate.ts` approve 分支(M9,替换现有同步 `resumeWorkflowRun` 调用)**:
 
-`updateDecision` 的 approve 分支按以下顺序:
+`updateDecision` 的 approve 分支按以下顺序（**S7d 修正：MF2 的 `findActiveByRunId`→409 与幂等 CAS 必须在 decision 落库之前，否则并发/重复 approve 会先写副作用再撞 409;§0.3-51 的"防御性同改"优先于本列表原顺序**）:
 
 1. (既有)`assertSessionToken` → `assertRunInScope` → decision 存在且 pending → `assertRunCanResume`(provider 快照校验,保留);
-2. **(新增 M8)**`getWorkflowInstance(runId)`;终态(passed/failed/cancelled)→ `ApiError('BAD_REQUEST', \`Run is in terminal status: ${status}\`)`;
-3. (既有)`updateHumanDecision(approved)`、gate result 置 passed、`transitionNode(running→awaiting-gate)`、audit `human.gate.approved`;
-4. **(新增 S3)**`jobs.cancelStaleActiveJobs(runId)`;
+2. **(M8)**`getWorkflowInstance(runId)`;终态(passed/failed/cancelled)→ `ApiError('BAD_REQUEST', \`Run is in terminal status: ${status}\`)`;
+3. **(S3 + MF2,移到落库前)**`jobs.cancelStaleActiveJobs(runId)` → `findActiveByRunId(runId)`,仍有活跃 job → `ApiError('CONFLICT', ...)`(镜像 `project.resume`,防同 run 双活跃 job);
+4. **(SHOULD,幂等 CAS)**`updateHumanDecision(approved, expectedStatus='pending')`;`changes=0`(并发已翻转)→ null → `ApiError('CONFLICT', ...)`,零副作用;随后 gate result 置 passed、`transitionNode(running→awaiting-gate)`、audit `human.gate.approved`;
 5. **(新增)**`findSessionByRunId`,无则现场 `createSession`(profile `'human-web'`)关联;
-6. **(新增 M9)**`jobRunner.enqueue({sessionId, kind: 'workflow-resume'})`(executor 复用 M8 后的安全 `resumeRun`);
+6. **(M9)**`jobRunner.enqueue({sessionId, kind: 'workflow-resume'})`(executor 复用 M8 后的安全 `resumeRun`);
 7. 立即返回 `{decision, sessionId, jobId}`。
 
 `decisionOutputSchema`(`gate.approve`/`gate.reject` 共用输出)加可选 `sessionId`/`jobId`。
@@ -811,3 +811,5 @@ export async function handleSessionEventsSse(input: {
 | D7 | S4 孤儿进程/双跑 worktree | **阶段 1 已知限制**,缓解排阶段 2 前 | §0.2-17、§6 R10 |
 | D8 | S15 markRoleRunFailed | **本阶段不加**(无调用点),只加 markRoleRunInterrupted | §0.2-26、§2.6 |
 | D9 | M9 gate.approve | **异步化(enqueue workflow-resume)**,不保留同步阻塞路径 | §0.2-14、§2.11 |
+| D10 | S7d 复审 A1:`cancelStaleActiveJobs` 无差别清 queued | **queued 分支加 `created_at < cutoff` 年龄阈值**(与 paused 的 lease 阈值对称,cutoff=30s ≫ 200ms 轮询):并发双 approve/resume 时,败者的 reclaim 不再误杀胜者刚入队的新鲜 job(否则 run 卡 paused + 死 job)。败者改由 `findActiveByRunId` 命中 → 409、零副作用。session-store 单测 + web A1 并发用例双向验证 | 复审轮、§2.2 |
+| D11 | S7d 复审 A3:human-gate approve/reject run 级状态写未走 CAS | **web reject 分支改 `casWorkflowInstanceStatus(paused→blocked)`(二道防线,M8 终态检查为一道)**:并发 cancel 已写终态时,reject 的 block 不再覆盖复活;core CLI human-gate 的无条件写为**已知残留**(单进程串行、并发面低,M8 一道防线在位),CAS 化排后续阶段随 CLI 接入 Session 一并处理 | 复审轮、§2.7 MUST-FIX 1 |

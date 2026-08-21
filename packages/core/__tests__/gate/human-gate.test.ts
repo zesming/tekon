@@ -227,6 +227,52 @@ describe('human gate', () => {
     });
     db.close();
   });
+
+  it('updateHumanDecision CAS: expectedStatus mismatch returns null and does not write', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories);
+    await repositories.createHumanDecision({
+      id: 'decision_cas',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: null,
+      status: 'pending',
+      note: null,
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+
+    // First CAS flip (pending → approved) wins.
+    const first = await repositories.updateHumanDecision(
+      'decision_cas',
+      { status: 'approved', actor: 'a', note: null, decidedAt: '2026-08-21T00:00:01.000Z' },
+      'pending',
+    );
+    expect(first).toMatchObject({ status: 'approved', actor: 'a' });
+
+    // Second CAS flip still expecting 'pending' loses: null, no overwrite.
+    const second = await repositories.updateHumanDecision(
+      'decision_cas',
+      { status: 'rejected', actor: 'b', note: null, decidedAt: '2026-08-21T00:00:02.000Z' },
+      'pending',
+    );
+    expect(second).toBeNull();
+    expect(await repositories.getHumanDecision('decision_cas')).toMatchObject({
+      status: 'approved',
+      actor: 'a',
+    });
+
+    // Without expectedStatus the update is unconditional (legacy CLI path).
+    const forced = await repositories.updateHumanDecision('decision_cas', {
+      status: 'rejected',
+      actor: 'c',
+      note: null,
+      decidedAt: '2026-08-21T00:00:03.000Z',
+    });
+    expect(forced).toMatchObject({ status: 'rejected', actor: 'c' });
+    db.close();
+  });
 });
 
 async function createRunFixture(

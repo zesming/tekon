@@ -634,6 +634,7 @@ tekon resume --approve-human
 - 会按 run 创建时落库的 provider 快照恢复。
 - 同一 run 有多个 pending decision 时必须传 `--decision-id <decisionId>`；显式指定后只批准这一条 decision。
 - 旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock。
+- run 已处于终态(`passed`/`failed`/`cancelled`)时，`resume` 会拒绝并以非 0 退出、打印中文提示("运行已处于终态 …，无法恢复"),不会把已结束的运行重新拉起。
 
 ### 6.11 `approval reject`
 
@@ -657,6 +658,7 @@ tekon approval reject
 - workflow 阻断。
 - human gate 分类为 `human-rejected`。
 - `review` 会显示人工拒绝语义，不会误判成命令策略拒绝。
+- run 已处于终态时,`approval reject` 会拒绝并以非 0 退出、打印中文提示,不会把终态运行改写为 blocked(避免"终态→拒绝→阻断→恢复"复活链)。
 
 ### 6.12 `review`
 
@@ -993,6 +995,13 @@ Web dashboard 适合：
 - Web 是本地 dashboard，不是远程服务。
 - token 不应提交。
 - Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
+- **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行，页面上的 run 状态会随之从 `running` 走向 `passed`/`blocked`/`failed`。这意味着：
+  - 发起后不必一直等在原地，可离开再回来查看；状态以 run 列表/详情为准。
+  - 批准一个 human gate 后，运行会在后台自动继续，无需再手动点"恢复"。
+  - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
+  - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
+
+> 事件流(可选，面向集成)：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。当前主要供内部/集成使用,普通用户通过 dashboard 页面即可看到同样的状态变化。
 
 ## 8. 如何判断结果是否可信
 

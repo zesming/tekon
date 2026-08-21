@@ -224,6 +224,14 @@ export interface TekonRepositories {
   updateHumanDecision(
     decisionId: string,
     patch: Pick<HumanDecision, 'status' | 'actor' | 'note' | 'decidedAt'>,
+    /**
+     * Optional CAS guard: when provided, the update only applies if the row's
+     * current status equals `expectedStatus`. A mismatch (concurrent decision
+     * already flipped it) returns null without writing — makes approve/reject
+     * idempotent under a concurrent double-submit (no duplicate audit / node
+     * transitions). Omitted → unconditional update (legacy CLI path).
+     */
+    expectedStatus?: HumanDecision['status'],
   ): Promise<HumanDecision | null>;
   getHumanDecision(decisionId: string): Promise<HumanDecision | null>;
   listHumanDecisions(runId: string): Promise<HumanDecision[]>;
@@ -638,19 +646,29 @@ export function createRepositories(
       });
     },
 
-    async updateHumanDecision(decisionId, patch) {
+    async updateHumanDecision(decisionId, patch, expectedStatus) {
       return writeQueue.enqueue(() => {
-        db.prepare(
-          `update human_decisions
-           set status = @status, actor = @actor, note = @note, decided_at = @decidedAt
-           where id = @decisionId`,
-        ).run({
-          decisionId,
-          status: patch.status,
-          actor: patch.actor ?? null,
-          note: patch.note ?? null,
-          decidedAt: patch.decidedAt ?? null,
-        });
+        // CAS: when expectedStatus is given, only flip if the row still holds
+        // it. changes=0 means a concurrent decision already moved it — return
+        // null so callers treat it as "lost the race", not a spurious success.
+        const result = db
+          .prepare(
+            `update human_decisions
+             set status = @status, actor = @actor, note = @note, decided_at = @decidedAt
+             where id = @decisionId
+               and (@expectedStatus is null or status = @expectedStatus)`,
+          )
+          .run({
+            decisionId,
+            status: patch.status,
+            actor: patch.actor ?? null,
+            note: patch.note ?? null,
+            decidedAt: patch.decidedAt ?? null,
+            expectedStatus: expectedStatus ?? null,
+          });
+        if (expectedStatus != null && result.changes === 0) {
+          return null;
+        }
         const row = db
           .prepare('select * from human_decisions where id = ?')
           .get(decisionId) as HumanDecisionRow | undefined;

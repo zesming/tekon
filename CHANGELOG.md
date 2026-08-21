@@ -1,5 +1,43 @@
 # 变更日志
 
+## v0.9.0
+
+Harness-inspired replatform 阶段 1：Event Spine（session/event/job 持久化 + dual-write）、真实后台 Job Runner（lease/心跳/崩溃恢复/fencing）、SSE 事件端点、AbortSignal + 子进程注册表取消链，以及 P0/P1/评审必修的运行时语义修复。**run / approve / resume 由同步阻塞改为后台 job 异步驱动**——这是面向使用者的行为变化。
+
+### 新功能
+
+**Event Spine 与后台 Job（报告 §8.2/§8.3，设计 §2）:**
+- `core/session/`：`session-store`（Workspace/Session/SessionEvent/Job 持久化 + `listEventsSince` 回放）、`event-bus`（进程内 pub/sub）、`job-runner`（durable 轮询 runner，lease 续租 + stale 恢复 + owner fencing）、`subprocess-registry`（子进程句柄注册，取消链末端）、`dual-write`（AuditLogger/Repositories 包装器：仓储写入与 audit 事件透明投影为 session 事件）、`present`（传输层脱敏 + 限长）
+- migrations v4：新增 `workspaces`/`sessions`/`session_events`/`jobs`/`projection_checkpoints` 五表，旧 15 表不动
+- `nodes.node_order` 持久列：node 顺序确定化（消除跨进程加载顺序不确定）
+
+**Web SSE 事件端点（设计 §3）:**
+- `GET /api/sessions/:sessionId/events`：`x-session-token` 头鉴权（复用 RPC 的 origin/Sec-Fetch 校验）、`sinceSeq`/`Last-Event-ID` 回放、live 推送；**先订阅后回放（M6）消除回放/订阅交界丢事件**；payload 脱敏 + internal 事件不下发（C5）
+
+**运行异步化（设计 §2.5/§2.11）:**
+- `project.run` / `project.resume` / `gate.approve` 改为 enqueue 后台 `workflow-run`/`workflow-resume` job 后立即返回 `{sessionId, jobId}`；工作流由 job runner 出带驱动，取消可中断（P0-02 不回退）
+- `project.run` 的既有同步校验（脏工作区、模板、agent runtime、P0-03 审批双校验、demandText 非空）全部保留在 enqueue 之前
+
+### 修复
+
+**P0/P1 与评审必修（设计 §0.2/§0.3）:**
+- P0-02：resume/approve 不再阻塞，取消可中断后台续跑 job
+- P0-03：服务端强制 shaped draft `approved && readyForRun`，否则 400
+- P1-04/M8：终态 run 的 resume/approve/reject 抛 `WorkflowTerminalError` → CLI exit 1 + 中文提示 / Web 400，不复活
+- P1-07：run 级状态机 validator + 幂等终态写 `writeWorkflowTerminal`（CAS 收敛并发竞态，Gap A）
+- MF1：cancel 经 web 路径单发 `agent/cancel-requested` + `agent/cancelled`，落 session 终态
+- MF2：`project.resume` / `gate.approve` 清理旧 job 后 `findActiveByRunId`，仍有活跃 job → 409（同 run 不允许双活跃 job）
+- MF3：web reject 补终态检查 → 400，`casWorkflowInstanceStatus(paused→blocked)` 防并发 cancel 被覆盖复活
+- 复审 A1：`cancelStaleActiveJobs` 的 queued 分支加 `created_at` 年龄阈值——并发双 approve/resume 时败者不再误杀胜者刚入队的新鲜 job
+- 复审 S1：单活跃 job 护栏从 approve 提升到覆盖 approve + reject——resume job 在途（run 瞬时 `running`）时 reject 不再落 run 级 CAS 失败的误导性 200，改 409
+- gate.approve/reject 决策翻转改幂等 CAS（`expectedStatus='pending'`），并发双提交零重复副作用
+
+### 测试
+
+- core 新增 `phase1/session-job-e2e`（run-to-passed / cancel / crash-recovery 四 journey + audit↔session_events 对账）、`session/*`（store/bus/job-runner/dual-write/present/subprocess-registry 单测）
+- web 新增 `session-sse`（鉴权/回放/live/M6 边界/断连清理/getSession 失败前置于开流）、`gate-approve-async`（异步契约 + MF2 + A1 并发 + S1 reject 活跃 job 409 + P0-02 取消）、`project-run-job`（run 异步契约）；既有 write-auth / e2e 改轮询至终态
+- 提交前全量 `pnpm test` 通过：core 869 / web 185 / cli 37 + Playwright 8
+
 ## v0.8.0
 
 Harness-inspired replatform 阶段 0：修稳既有 flaky 测试、P1 纯 UI/API 修复、CI 覆盖三包、Session/Event 契约冻结。不动 core 运行时主路径。

@@ -422,6 +422,45 @@ describe('dual-write repository mapping (§1.2)', () => {
     expect(result).toBeNull();
     expect(await sessions.listEventsSince(session.id, 0)).toHaveLength(0);
   });
+
+  it('updateHumanDecision CAS mismatch (expectedStatus) writes nothing and emits no event', async () => {
+    const { repositories, dualRepositories, sessions } = setup();
+    await seedRun(repositories);
+    const session = await seedSession(sessions);
+
+    // The decision is already approved; a concurrent writer expecting it to
+    // still be `pending` must CAS-miss → repositories returns null → the
+    // wrapper must NOT emit approval/decided (would be a phantom decision event).
+    await repositories.createHumanDecision({
+      id: 'decision_cas',
+      runId: RUN_ID,
+      nodeId: NODE_ID,
+      gateResultId: null,
+      status: 'approved',
+      actor: 'first-writer',
+      note: null,
+      createdAt: NOW,
+      decidedAt: NOW,
+    });
+
+    const result = await dualRepositories.updateHumanDecision(
+      'decision_cas',
+      {
+        status: 'rejected',
+        actor: 'loser',
+        note: null,
+        decidedAt: NOW,
+      },
+      'pending',
+    );
+    expect(result).toBeNull();
+    // The row is untouched (still approved by the first writer) and no
+    // approval/decided event was emitted for the losing rejection.
+    const row = await repositories.getHumanDecision('decision_cas');
+    expect(row?.status).toBe('approved');
+    expect(row?.actor).toBe('first-writer');
+    expect(await sessions.listEventsSince(session.id, 0)).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -97,11 +97,18 @@ describe('web write authorization', () => {
       token: fixture.sessionToken,
     });
 
+    // S7d/M9: approve flips the decision synchronously and enqueues a
+    // background workflow-resume job (P0-02: resume is no longer blocking).
     expect(result.decision).toMatchObject({
       id: 'decision_1',
       status: 'approved',
       actor: 'human-reviewer',
     });
+    expect(result.sessionId).toBeTruthy();
+    expect(result.jobId).toBeTruthy();
+
+    // The resume job drives run_1 to passed out of band; poll before asserting.
+    await waitForRunStatus(fixture.projectRoot, 'run_1', ['passed']);
 
     const gates = await api.gate.list({ runId: 'run_1' });
     expect(gates.gates).toContainEqual(
@@ -122,6 +129,8 @@ describe('web write authorization', () => {
       ]),
     );
 
+    // Re-approving the same decision is rejected: the decision is no longer
+    // pending (and the run is terminal). Either guard yields 400.
     await expect(
       api.gate.approve({
         runId: 'run_1',
@@ -133,7 +142,7 @@ describe('web write authorization', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     await api.close();
-  });
+  }, 30_000);
 
   it('rejecting a human gate blocks the workflow instead of resuming it', async () => {
     const fixture = await createWebFixtureProject();
