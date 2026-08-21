@@ -24,7 +24,7 @@ Harness-inspired replatform 阶段 1：Event Spine（session/event/job 持久化
 - P0-02：resume/approve 不再阻塞，取消可中断后台续跑 job
 - P0-03：服务端强制 shaped draft `approved && readyForRun`，否则 400
 - P1-04/M8：终态 run 的 resume/approve/reject 抛 `WorkflowTerminalError` → CLI exit 1 + 中文提示 / Web 400，不复活
-- P1-07：run 级状态机 validator + 幂等终态写 `writeWorkflowTerminal`（CAS 收敛并发竞态，Gap A）
+- §12-P1.7：run 级状态机 validator + 幂等终态写 `writeWorkflowTerminal`（CAS 收敛并发竞态，Gap A）。注：报告 §5 的 P1-07（任务续聊/运行中转向）是不同条目，属阶段 2 范围
 - MF1：cancel 经 web 路径单发 `agent/cancel-requested` + `agent/cancelled`，落 session 终态
 - MF2：`project.resume` / `gate.approve` 清理旧 job 后 `findActiveByRunId`，仍有活跃 job → 409（同 run 不允许双活跃 job）
 - MF3：web reject 补终态检查 → 400，`casWorkflowInstanceStatus(paused→blocked)` 防并发 cancel 被覆盖复活

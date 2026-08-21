@@ -563,7 +563,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <p>Web dashboard 适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
 <div class="cl cl-w"><span class="cl-lb">Session Token</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。没有 token 时写操作会被拒绝。token 不应提交。</div>
 <p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>
-<div class="cl cl-w"><span class="cl-lb">后台推进</span>发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"：请求很快返回，工作流在后台执行，run 状态随之从 <code>running</code> 走向 <code>passed</code>/<code>blocked</code>/<code>failed</code>。发起后可离开再回来看；批准 human gate 后运行会自动继续，无需再手动恢复；点"取消"可打断正在后台执行的运行并落到 <code>cancelled</code>；同一运行同一时刻只允许一个后台任务，重复的恢复/批准会被拒绝（提示"已有活跃任务"）。事件流（可选，面向集成）：<code>GET /api/sessions/:sessionId/events</code>（SSE，<code>x-session-token</code> 头鉴权，支持 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放）。</div>
+<div class="cl cl-w"><span class="cl-lb">后台推进</span>发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"：请求很快返回，工作流在后台执行。当前 dashboard 页面<strong>不会自动刷新状态</strong>，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态从 <code>running</code> 走向 <code>passed</code>/<code>blocked</code>/<code>failed</code>）。发起后可离开再回来（刷新查看）；批准 human gate 后运行会自动继续，无需再手动恢复；点"取消"可打断正在后台执行的运行并落到 <code>cancelled</code>；同一运行同一时刻只允许一个后台任务，重复的恢复/批准会被拒绝（提示"已有活跃任务"）。事件流（可选，面向集成）：<code>GET /api/sessions/:sessionId/events</code>（SSE，<code>x-session-token</code> 头鉴权，支持 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放）；dashboard 页面尚未消费该事件流，页面内实时刷新为后续阶段规划。</div>
 </div>
 
 <!-- ════ TAB 7: 判断结果 ════ -->

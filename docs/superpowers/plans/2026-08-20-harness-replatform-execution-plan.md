@@ -67,8 +67,8 @@
 - **P1.1 Resume 覆盖 `blocked/interrupted`**（`RunControls.tsx`，当前仅 `paused` 显示 Resume）。
 - **P1.2 修复 terminal "眼睛"按钮**（当前 `stopPropagation` 无导航行为）。
 - **P1.3 Run 列表展示需求标题与人类状态**（`RunTable` 当前主要展示内部 ID）。
-- **P1.4 Run Detail 展示真实 provider 与准确时长**（修复 `deriveAgent()` 固定返回、用 Gate 时间近似时长）。
-- ADR：确定"模式迁移 + anti-corruption layer"，记录不绑定 Harness 私有 schema。
+- **P1.4 Run Detail 展示真实 provider**（修复 `deriveAgent()` 固定返回）。**注（2026-08-21 复核）**：Run Detail 的「准确时长/时间」半句本阶段未随 provider 一并交付——当前仍用 Gate 时间近似（`RunDetailPage.tsx` earliestGate/latestGate），而运行时间真值在 `workflow_instances.created_at/updated_at`，surface schema 尚未暴露该字段。此半句显式改派**阶段 3**（Run Detail 由事件源时间戳重建时一并修正），不在阶段 0 范围。
+- ADR：确定"模式迁移 + anti-corruption layer"，记录不绑定 Harness 私有 schema。**注（2026-08-21 复核）**：该决策已落在报告 §0.3 维护方处置决策 + 本方案 §0/§1（稳定边界接入、不绑私有 schema），无独立 ADR 文件；如需独立 ADR 载体可后续补建，不阻断阶段推进。
 - Session/Event schema v1 草案（类型定义，不落库）。**已交付**：`packages/core/src/types/session-contract.ts`（Workspace/Session/SessionEvent/Job schema + 事件词汇 + AgentDriver/JobRunner/EventSubscription/Projection 接口签名，无实现），contract-freeze 测试 `packages/core/__tests__/types/session-contract.test.ts`（9 passed）锁定 schema 版本、必需事件核心、merge-extensible 兼容策略。
 - AgentDriver / JobRunner / EventSubscription / Projection **接口签名**（TS interface，无实现）。**已随上条交付**。
 - 5 条 golden journey 的 e2e 骨架。**调整**：§4.1 已固化各 journey 的"转绿阶段"表；按工程原则不预先写 skipped 空壳（死测试），改为在阶段 1-3 各 journey 真正可运行时同步落地真实 e2e，§4.1 表即其规格。

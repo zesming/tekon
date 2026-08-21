@@ -3,8 +3,8 @@
 > 基线:`review/deepseek-harness-migration-2026-08-20` @ `2aa49d4`(v0.8.0,阶段 0 已完成)
 > 契约:`packages/core/src/types/session-contract.ts`(schema v1 冻结草案)
 > 关联:`docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md` §4 阶段 1(约束 C1 治理零退化最高优先)
-> 范围:Event Spine(5 表 + dual-write)+ 真实后台 Job + SSE + AbortSignal/子进程注册表 + **P0-01/02 修复、P0-03 服务端强制、P1-04 修复、P1-05 部分缓解(仅 interrupted + CLI 适配)、P1-07 run 级状态机 validator** + 评审必修 M1–M9、MF1–MF4
-> 不在范围:流式 AgentDriver/turn-step 循环(阶段 2)、Session UI(阶段 3)、CLI 接入 Session(阶段 4)、插件化(阶段 4)、P1-07 的续聊/转向(阶段 2)
+> 范围:Event Spine(5 表 + dual-write)+ 真实后台 Job + SSE + AbortSignal/子进程注册表 + **P0-01/02 修复、P0-03 服务端强制、P1-04 修复、P1-05 部分缓解(仅 interrupted + CLI 适配)、§12-P1.7 run 级状态机 validator** + 评审必修 M1–M9、MF1–MF4
+> 不在范围:流式 AgentDriver/turn-step 循环(阶段 2)、Session UI(阶段 3)、CLI 接入 Session(阶段 4)、插件化(阶段 4)、报告 §5-P1-07 的续聊/转向(阶段 2)
 > 修订:2026-08-21 v3——v2 整合一轮 reviewer 必修 M1–M9 + 建议 S2–S15;**v3 整合二轮 reviewer 必修 MF1(cancel 缺 session 终态/事件)、MF2(resume 不防双活跃 job)、MF3(web reject 复活终态 run)、MF4(audit 单队列化死锁)+ 建议 SHOULD3/4/5/7/9/13/15/16/17/19/20**;**v3.1 整合三轮 reviewer 必修 M1(cancel 赢竞态时 engine passed 写抛通用错→误判 job failed;改 helper 抛 WorkflowTerminalError)、M2(paused-job 处理规格矛盾 + resume 变 cancel + stale-paused 永久 409;改 cancelStaleActiveJobs/requeueStale/resume 守卫)**;**v3.2 整合确认轮 reviewer 必修 Gap A(helper read→write 非原子致 lost-update,改 CAS 条件写 `casWorkflowInstanceStatus`)、Gap B(paused→passed 抛通用错,engine 末写前补 pause 检查)、Gap C(paused 期间 heartbeat 续租未规格化,明文"running/paused 一视同仁续租")**;主 agent 已逐条源码核验属实。§0.3 为 4 项已定裁决;§8 为决策记录。
 >
 > **v3.3 整合最终确认轮 reviewer 必修 MUST-FIX 1(pause/running 恢复等"与 engine 并发的状态写"须全部走 CAS,不止 helper;pause 无条件写会覆盖终态——触验收标准 9;helper `paused→passed` 改返回 written=false 不抛错)、MUST-FIX 2(checkpoint fencing 允许 `paused` 状态,否则 node 执行中 pause 会确定性把 job 打成 failed)**。最终确认轮结论:**v3.2 可进入实施,MUST-FIX 1/2 作首批 test-first 用例**;v3.3 已将两者落到规格。设计冻结,进入实施。
@@ -51,7 +51,7 @@
 - **MF2**——`project.resume`(及 gate.approve 防御性同改)在清理 queued 旧 job 后 `findActiveByRunId`,仍有 `running`/`cancelling` job → **409**,不 enqueue(闭合"同 run 不允许双活跃 job",防双 engine 并发执行、artifact unique 冲突)。
 - **MF3**——web reject 是 `gate.ts` 内联实现、绕过 core `rejectHumanGate`,故在 web reject 分支补 `getWorkflowInstance` 终态检查 → 400(否则 `cancelled → reject → blocked → resume → running` 可复活;§2.11)。
 - **MF4**——S6 audit 单队列化**不得**在 writeQueue 任务内再调 `repositories.appendAuditEvent`(同队列再入队 → 自等待死锁);改为队列任务内**直接 db 写**(logger 注入 `{db, writeQueue}`,§0.2-19/§2.10)。
-- 已整合建议:SHOULD3(SSE flush drain 交接)、SHOULD4(stale-running 路径也置 role_run interrupted)、SHOULD5(e2e 经 dual-write 组合根)、SHOULD7(dual-write 不拦截 workflow status 写入,防完成事件双发)、SHOULD9(CLI reject try/catch 中文)、SHOULD13(settle 前 owner fencing)、SHOULD15(SSE 经 ApiCaller 暴露 sessions/bus + origin 校验)、SHOULD16(pause 正向用例 + cancel 对终态 run 行为变化)、SHOULD17/19(journey B 两次 job + latch adapter)、SHOULD20(`run.demand-shaped` audit 移至 prepareRun 后)。
+- 已整合建议:SHOULD3(SSE flush drain 交接)、SHOULD4(stale-running 路径也置 role_run interrupted)、SHOULD5(e2e 经 dual-write 组合根)、SHOULD7(dual-write 不拦截 workflow status 写入,防完成事件双发)、SHOULD9(CLI reject try/catch 中文)、SHOULD13(settle 前 owner fencing)、SHOULD15(SSE 经 ApiCaller 暴露 sessions/bus + origin 校验)、SHOULD16(pause 正向用例 + cancel 对终态 run 保持幂等成功 200,不覆盖终态)、SHOULD17/19(journey B 两次 job + latch adapter)、SHOULD20(`run.demand-shaped` audit 移至 prepareRun 后)。
 - 二轮 reviewer 判定 M1–M9 主体闭合;MF1–MF4 为规格层缺口,改法已落到 §2/§3/§4;其余 SHOULD 已记录。
 
 
@@ -725,7 +725,7 @@ export async function handleSessionEventsSse(input: {
 | 文件 | 关键断言 |
 |---|---|
 | `__tests__/api/session-sse.test.ts` | 无 token → 401;未知 session → 404;`sinceSeq` 回放排他;回放后 live 事件实时到达;payload 中密钥被脱敏;`Last-Event-ID` 生效;断连后 unsubscribe(无句柄泄漏,可再连);**M6:回放进行中 publish 的事件必达(确定性用例:回放列表插入 sleep + 并发 publish,断言该事件出现在流中且 seq 连续不重)** |
-| `__tests__/api/project-run-job.test.ts` | run RPC 在 2s 内返回且带 sessionId/jobId;后台 job 自动跑完(轮询 job 状态);未批准/未 readyForRun draft → 400(P0-03);pause 非法转移(passed→paused)→ 400 且不改状态;**(SHOULD16)running→paused 正向成功用例**;cancel 经 job runner 杀进程;**(MF1)queued 窗口/无活跃 job cancel → session 落 cancelled 且发 `agent/cancelled`(不只 workflow)**;resume 立即返回并 enqueue resume job;**(MF2)对 running run / live-paused run / 已有活跃 job 的 run resume → 409;(M2)stale-paused run(手动置 lease 过期)resume → cancelStaleActiveJobs 回收后成功 enqueue,不永久 409;M2:对已 cancelled 的 run 重复 cancel → 幂等成功不报错;M8:对终态 run resume → 400;(SHOULD16)cancel 对 passed/failed run → 400(v0.8.0 曾静默成功,行为变化);S12:dirty base 仍同步 400(不产生后台 job)** |
+| `__tests__/api/project-run-job.test.ts` | run RPC 在 2s 内返回且带 sessionId/jobId;后台 job 自动跑完(轮询 job 状态);未批准/未 readyForRun draft → 400(P0-03);pause 非法转移(passed→paused)→ 400 且不改状态;**(SHOULD16)running→paused 正向成功用例**;cancel 经 job runner 杀进程;**(MF1)queued 窗口/无活跃 job cancel → session 落 cancelled 且发 `agent/cancelled`(不只 workflow)**;resume 立即返回并 enqueue resume job;**(MF2)对 running run / live-paused run / 已有活跃 job 的 run resume → 409;(M2)stale-paused run(手动置 lease 过期)resume → cancelStaleActiveJobs 回收后成功 enqueue,不永久 409;M2:对已 cancelled 的 run 重复 cancel → 幂等成功不报错;M8:对终态 run resume → 400;(SHOULD16 / 落地修正)cancel 对 passed/failed run → 幂等成功 200(捕获 `WorkflowTerminalError` 后返回当前 run,不写库、不覆盖终态,与 M2 幂等一致);S12:dirty base 仍同步 400(不产生后台 job)** |
 | `__tests__/api/write-auth.test.ts`(修改) | SSE 路由鉴权与 session-auth 程序一致;**M9/S13:approve 用例改为——approve 立即返回 decision+jobId → 轮询 job 至 done → 再断言 run passed 与 run.resumed audit;`api.close()` 前必须等 job 终态(否则 stop() 切断在跑 job);M8:终态 run approve → 400;(MF3)终态 run reject → 400,且 cancelled→reject→resume 复活链被堵** |
 | `__tests__/api/gate-approve-async.test.ts`(新增) | approve 后 run 处于 awaiting-approval 时 cancel 能中断续跑 job(P0-02 不回退);approve 后旧活跃 job 被置 cancelled(S3) |
 
@@ -812,4 +812,4 @@ export async function handleSessionEventsSse(input: {
 | D8 | S15 markRoleRunFailed | **本阶段不加**(无调用点),只加 markRoleRunInterrupted | §0.2-26、§2.6 |
 | D9 | M9 gate.approve | **异步化(enqueue workflow-resume)**,不保留同步阻塞路径 | §0.2-14、§2.11 |
 | D10 | S7d 复审 A1:`cancelStaleActiveJobs` 无差别清 queued | **queued 分支加 `created_at < cutoff` 年龄阈值**(与 paused 的 lease 阈值对称,cutoff=30s ≫ 200ms 轮询):并发双 approve/resume 时,败者的 reclaim 不再误杀胜者刚入队的新鲜 job(否则 run 卡 paused + 死 job)。败者改由 `findActiveByRunId` 命中 → 409、零副作用。session-store 单测 + web A1 并发用例双向验证 | 复审轮、§2.2 |
-| D11 | S7d 复审 A3:human-gate approve/reject run 级状态写未走 CAS | **web reject 分支改 `casWorkflowInstanceStatus(paused→blocked)`(二道防线,M8 终态检查为一道)**:并发 cancel 已写终态时,reject 的 block 不再覆盖复活;core CLI human-gate 的无条件写为**已知残留**(单进程串行、并发面低,M8 一道防线在位),CAS 化排后续阶段随 CLI 接入 Session 一并处理 | 复审轮、§2.7 MUST-FIX 1 |
+| D11 | S7d 复审 A3:human-gate approve/reject run 级状态写未走 CAS | **web reject 分支改 `casWorkflowInstanceStatus(paused→blocked)`(二道防线,M8 终态检查为一道)**:并发 cancel 已写终态时,reject 的 block 不再覆盖复活;core CLI 的无条件 run 级状态写为**已知残留类**——包含 CLI human-gate(approval.ts approve/reject)、CLI `pause`(approval.ts:216-221)、CLI `cancel`(approval.ts:387-392),均直接 `updateWorkflowInstanceStatus` 不经 validator/CAS,单进程串行、并发面低,M8 一道防线在位;CAS 化整体排后续阶段随 CLI 接入 Session(阶段 4)一并处理 | 复审轮、§2.7 MUST-FIX 1 |
