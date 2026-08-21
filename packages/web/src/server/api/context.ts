@@ -1,8 +1,13 @@
 import type {
   AuditLogger,
   DraftShape,
+  DurableJobRunner,
   HumanApprovalSummary,
   ApprovalSummaryEvaluation,
+  JobRepository,
+  SessionEventBus,
+  SessionEventStore,
+  SubprocessRegistry,
   TekonDatabase,
   TekonRepositories,
   WorkReviewSurface,
@@ -21,9 +26,17 @@ export type WorkReviewSurfaceOutput = WorkReviewSurface & {
 
 export interface ServerContext {
   db: TekonDatabase;
+  /** Dual-write wrapped repositories (S7a): engine/routers get dual-write for free. */
   repositories: TekonRepositories;
+  /** Dual-write wrapped audit logger (S7a). */
   audit: AuditLogger;
   projectContext: WebProjectContext;
+  // Event-spine deps (S7a). Present on every router's context.
+  sessions: SessionEventStore;
+  bus: SessionEventBus;
+  jobs: JobRepository;
+  jobRunner: DurableJobRunner;
+  registry: SubprocessRegistry;
 }
 
 export interface TokenRunInput {
@@ -225,10 +238,26 @@ export interface ApiCaller {
       project: ProjectOutput;
       runs: WorkflowOutput[];
     }>;
-    pause(input: TokenRunInput): Promise<{ run: WorkflowOutput }>;
-    run(input: ProjectRunInput): Promise<{ run: WorkflowOutput }>;
-    resume(input: TokenRunInput): Promise<{ run: WorkflowOutput }>;
-    cancel(input: TokenRunInput): Promise<{ run: WorkflowOutput }>;
+    pause(input: TokenRunInput): Promise<{
+      run: WorkflowOutput;
+      sessionId?: string;
+      jobId?: string;
+    }>;
+    run(input: ProjectRunInput): Promise<{
+      run: WorkflowOutput;
+      sessionId?: string;
+      jobId?: string;
+    }>;
+    resume(input: TokenRunInput): Promise<{
+      run: WorkflowOutput;
+      sessionId?: string;
+      jobId?: string;
+    }>;
+    cancel(input: TokenRunInput): Promise<{
+      run: WorkflowOutput;
+      sessionId?: string;
+      jobId?: string;
+    }>;
     clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
   };
   delivery: {
@@ -343,5 +372,11 @@ export interface ApiCaller {
       }>;
     }>;
   };
+  /**
+   * Event-spine handles exposed for the SSE transport (S8, SHOULD15). http.ts
+   * uses these to serve GET /api/sessions/:id/events after its security checks.
+   */
+  sessions: SessionEventStore;
+  bus: SessionEventBus;
   close(): Promise<void>;
 }

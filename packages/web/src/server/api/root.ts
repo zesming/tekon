@@ -1,6 +1,15 @@
 import {
   createAuditLogger,
+  createDualWriteAuditLogger,
+  createDualWriteRepositories,
+  createJobRepository,
   createRepositories,
+  createSessionDualWriteBridge,
+  createSessionEventBus,
+  createSessionEventStore,
+  createSubprocessRegistry,
+  createWriteQueue,
+  createJobRunner,
   openTekonDatabase,
 } from '@tekon/core';
 
@@ -11,6 +20,7 @@ import {
 } from '../project-context.js';
 
 import type { ServerContext, ApiCaller } from './context.js';
+import { createWorkflowJobExecutor } from './job-executor.js';
 import {
   createArtifactRouter,
   createAuditRouter,
@@ -34,10 +44,46 @@ export async function createApiCaller(
   assertProjectDatabaseExists(projectContext);
 
   const db = openTekonDatabase({ filename: projectContext.dbPath });
-  const repositories = createRepositories(db);
-  const audit = createAuditLogger({ repositories });
 
-  const context: ServerContext = { db, repositories, audit, projectContext };
+  // S6/S7a: one shared write queue serializes legacy tables, session_events,
+  // jobs, and the audit hash chain. MF4: audit appends run directly on the
+  // queue (no re-enqueue into repositories → no self-wait deadlock).
+  const writeQueue = createWriteQueue();
+  const repositories = createRepositories(db, writeQueue);
+  const audit = createAuditLogger({ repositories, db, writeQueue });
+  const sessions = createSessionEventStore(db, writeQueue);
+  const jobs = createJobRepository(db, writeQueue);
+  const bus = createSessionEventBus();
+  const registry = createSubprocessRegistry();
+
+  // Dual-write: wrap audit + repositories so engine/routers emit session
+  // events transparently (best-effort; hash chain unchanged, C1/SHOULD5).
+  const bridge = createSessionDualWriteBridge({ sessions, bus });
+  const dualRepositories = createDualWriteRepositories(repositories, bridge);
+  const dualAudit = createDualWriteAuditLogger(audit, bridge);
+
+  const executor = createWorkflowJobExecutor({
+    repositories: dualRepositories,
+    audit: dualAudit,
+    projectContext,
+    sessions,
+    bus,
+    registry,
+  });
+  const jobRunner = createJobRunner({ jobs, sessions, bus, registry, executor });
+  jobRunner.start();
+
+  const context: ServerContext = {
+    db,
+    repositories: dualRepositories,
+    audit: dualAudit,
+    projectContext,
+    sessions,
+    bus,
+    jobs,
+    jobRunner,
+    registry,
+  };
 
   const demandRouter = createDemandRouter(context);
   return {
@@ -53,7 +99,12 @@ export async function createApiCaller(
     role: createRoleRouter(context),
     workflow: createWorkflowRouter(context),
     progress: createProgressRouter(context),
+    sessions,
+    bus,
     async close() {
+      // Stop the runner (waits up to 5s for in-flight jobs to settle) before
+      // closing the db, so no job writes to a closed handle (R9).
+      await jobRunner.stop();
       db.close();
     },
   };

@@ -228,9 +228,11 @@ async function handleRpc(input: {
         ? 401
         : code === 'NOT_FOUND'
           ? 404
-          : code === 'INTERNAL_ERROR'
-            ? 500
-            : 400;
+          : code === 'CONFLICT'
+            ? 409
+            : code === 'INTERNAL_ERROR'
+              ? 500
+              : 400;
     writeJson(input.response, status, {
       error: {
         code,

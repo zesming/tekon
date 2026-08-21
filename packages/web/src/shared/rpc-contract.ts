@@ -469,6 +469,10 @@ export const projectDetailOutputSchema = z.object({
 
 export const runWrapperOutputSchema = z.object({
   run: apiWorkflowSchema,
+  // S7b: run/resume enqueue a background job and return immediately; pause/
+  // cancel resolve the active job. Optional so legacy shapes still validate.
+  sessionId: z.string().optional(),
+  jobId: z.string().optional(),
 });
 
 export const projectCleanOutputSchema = z.object({

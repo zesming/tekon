@@ -75,6 +75,31 @@ async function startAndPrepareRun(
   };
   const runId = runBody.result.run.id;
 
+  // 1b. project.run is async (S7b): it enqueues a background job and returns
+  // immediately. Poll the run status via RPC until the mock agent completes it
+  // (passed) before preparing delivery — do not weaken the downstream asserts.
+  const deadline = Date.now() + 20_000;
+  for (;;) {
+    const overviewResponse = await fetch(`${baseUrl}/api/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'project.overview',
+      }),
+    });
+    if (overviewResponse.ok) {
+      const overviewBody = (await overviewResponse.json()) as {
+        result: { latestRun: { id: string; status: string } | null };
+      };
+      const run = overviewBody.result.latestRun;
+      if (run && run.id === runId && run.status === 'passed') break;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`run ${runId} did not reach passed within 20s`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
   // 2. Prepare delivery (creates pr-body.md and pr-package.md)
   const prepareResponse = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',

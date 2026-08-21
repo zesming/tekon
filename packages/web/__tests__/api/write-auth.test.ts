@@ -21,6 +21,40 @@ import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
 
 const cleanupTasks: Array<() => void> = [];
 
+/**
+ * S7b: project.run/resume now enqueue a background job and return immediately.
+ * Poll the run row until it reaches a terminal/target status before asserting
+ * downstream effects (delivery, artifacts). Reads directly from the db so it
+ * does not depend on scoped-project query shaping.
+ */
+async function waitForRunStatus(
+  projectRoot: string,
+  runId: string,
+  statuses: string[],
+  timeoutMs = 20_000,
+): Promise<string> {
+  const db = openTekonDatabase({ filename: join(projectRoot, '.tekon', 'tekon.sqlite') });
+  try {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const row = db
+        .prepare('select status from workflow_instances where id = ?')
+        .get(runId) as { status: string } | undefined;
+      if (row && statuses.includes(row.status)) {
+        return row.status;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `run ${runId} did not reach ${statuses.join('/')} in ${timeoutMs}ms (last: ${row?.status ?? 'missing'})`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  } finally {
+    db.close();
+  }
+}
+
 afterEach(() => {
   for (const cleanup of cleanupTasks.splice(0)) {
     cleanup();
@@ -301,10 +335,9 @@ describe('web write authorization', () => {
       token: fixture.sessionToken,
     });
 
-    expect(started.run).toMatchObject({
-      status: 'passed',
-      currentNodeId: null,
-    });
+    // Run is enqueued as a background job; poll until it passes.
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     const overview = await api.project.overview();
     expect(overview.latestRun).toMatchObject({ id: started.run.id });
@@ -368,10 +401,8 @@ describe('web write authorization', () => {
         token: fixture.sessionToken,
       });
 
-      expect(started.run).toMatchObject({
-        status: 'passed',
-        currentNodeId: null,
-      });
+      expect(started.jobId).toBeTruthy();
+      await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
       const db = openTekonDatabase({
         filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
@@ -450,7 +481,8 @@ describe('web write authorization', () => {
       agent: 'mock',
       token: fixture.sessionToken,
     });
-    expect(started.run).toMatchObject({ status: 'passed' });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     await expect(
       api.draftShape.approve({
@@ -600,6 +632,8 @@ describe('web write authorization', () => {
       agent: 'mock',
       token: fixture.sessionToken,
     });
+
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     const result = await api.delivery.createPr({
       runId: started.run.id,
@@ -837,7 +871,7 @@ describe('delivery.dryRun', () => {
       token: fixture.sessionToken,
     });
 
-    expect(started.run.status).toBe('passed');
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     // Snapshot artifact and audit counts before calling dryRun
     const artifactsBefore = await api.artifact.list({ runId: started.run.id });
