@@ -153,10 +153,19 @@ export function createProjectRouter(context: ServerContext) {
             assertDraftShapePathInScope(context, runInput.demandShapePath),
           )
         : null;
+      // P0-03 (S7c): a shaped demand must be BOTH approved AND readyForRun
+      // (openQuestions cleared). The approval state comes from the server-read
+      // file, never a client boolean. Free-text runs (no shapePath) are exempt.
       if (shapedDraft && !shapedDraft.approved) {
         throw new ApiError(
           'BAD_REQUEST',
           'Draft shape must be approved before run.',
+        );
+      }
+      if (shapedDraft && !shapedDraft.readyForRun) {
+        throw new ApiError(
+          'BAD_REQUEST',
+          'Draft shape has open questions; resolve them (readyForRun) before run.',
         );
       }
       const demandText = shapedDraft
@@ -209,6 +218,21 @@ export function createProjectRouter(context: ServerContext) {
         ...(workflowSpec ? { workflowSpec } : { templateName }),
       });
       const runId = prepared.runId;
+
+      // SHOULD20: record the P0-03 approval evidence in the audit chain (needs
+      // runId, so it lands after prepareRun). This audit type is intentionally
+      // not mapped to a session event (S9 unmapped list) — it stays governance.
+      if (shapedDraft) {
+        await context.audit.append({
+          runId,
+          type: 'run.demand-shaped',
+          payload: {
+            shapePath: runInput.demandShapePath,
+            approved: shapedDraft.approved,
+            readyForRun: shapedDraft.readyForRun,
+          },
+        });
+      }
 
       // M1: create the session, then explicitly append the opening events
       // (dual-write can't backfill them — no session existed at run.started).

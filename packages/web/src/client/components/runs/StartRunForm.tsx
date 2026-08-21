@@ -65,6 +65,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   const workflows = workflowData?.workflows ?? [];
 
+  // P0-03 (S7c): when a shaped draft is loaded, the server rejects unless it is
+  // approved AND readyForRun. Mirror that in the UI so submit is disabled with
+  // an explanation instead of surfacing a server 400 (UI guidance, not the
+  // security boundary — the server file check is authoritative).
+  const draft = demandDetail?.shape;
+  const draftNotReady = Boolean(
+    shapePath && draft && !(draft.approved && draft.readyForRun),
+  );
+
   // ── Start run mutation ──
   const startMutation = useMutation<
     RpcProcedureMap['project.run']['input'],
@@ -88,6 +97,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       demandText: demandText.trim(),
       token,
     };
+
+    // P0-03 (S7c): forward the shaped-draft path so the server enforces
+    // approved + readyForRun against the file (not a client boolean). Without
+    // this the client silently dropped the path and ran as free text.
+    if (shapePath) input.demandShapePath = shapePath;
 
     if (template) input.template = template;
     if (agent) input.agent = agent;
@@ -251,12 +265,23 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={startMutation.isPending || !demandText.trim()}
+              disabled={
+                startMutation.isPending || !demandText.trim() || draftNotReady
+              }
               onClick={handleStart}
             >
               {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
             </button>
           </div>
+
+          {draftNotReady && (
+            <p
+              className="text-sm"
+              style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
+            >
+              该需求草案尚未批准或仍有待澄清问题，需先在草案页批准并清空开放问题后再发起运行。
+            </p>
+          )}
 
           {startMutation.error && (
             <p

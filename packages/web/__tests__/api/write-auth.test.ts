@@ -494,6 +494,41 @@ describe('web write authorization', () => {
     await api.close();
   });
 
+  it('P0-03: rejects an approved-but-not-readyForRun shaped demand (openQuestions remain)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // A terse demand with no scope/acceptance keywords leaves openQuestions →
+    // readyForRun=false.
+    const shaped = await api.draftShape.shape({
+      demandText: '改一下',
+      token: fixture.sessionToken,
+    });
+    expect(shaped.shape.readyForRun).toBe(false);
+    expect(shaped.shape.openQuestions.length).toBeGreaterThan(0);
+
+    // Approve it (approved=true) but openQuestions still stand → not readyForRun.
+    const approved = await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+    expect(approved.shape).toMatchObject({ approved: true, readyForRun: false });
+
+    // Server must reject: approved is not sufficient, readyForRun is required.
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
   it('rejects draft shape symlink escapes in Web write paths', async () => {
     const fixture = await createWebFixtureProject();
     const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-web-shape-outside-'));
