@@ -30,6 +30,15 @@ const builtInArtifactTypes: ArtifactType[] = [
 export function createMockAgentAdapter(): AgentAdapter {
   return {
     async runAgent(input) {
+      if (input.signal?.aborted) {
+        return {
+          provider: 'mock',
+          exitCode: null,
+          durationMs: 0,
+          outputFiles: [],
+          cancelled: true,
+        };
+      }
       const startedAt = Date.now();
       mkdirSync(input.outputDir, { recursive: true });
       const transcriptPath = join(input.outputDir, 'mock-agent-transcript.txt');

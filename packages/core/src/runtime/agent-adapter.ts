@@ -37,6 +37,11 @@ export interface AgentRunInput {
   }>;
   artifactStore?: ArtifactStore;
   requiredArtifactTypes?: ArtifactType[];
+  /**
+   * 取消信号（阶段 1 取消传播链，设计 §2.8）。adapter 应在信号 abort 时
+   * 尽快中断子进程并返回 `cancelled: true` 的结果。
+   */
+  signal?: AbortSignal;
 }
 
 export interface AgentRunResult {
@@ -46,6 +51,8 @@ export interface AgentRunResult {
   outputFiles: string[];
   artifacts?: Artifact[];
   timedOut?: boolean;
+  /** adapter 因 signal abort 提前返回时置 true（exitCode 为 null）。 */
+  cancelled?: boolean;
   tokenUsage?: {
     inputTokens?: number;
     outputTokens?: number;

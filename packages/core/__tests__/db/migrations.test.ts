@@ -45,10 +45,98 @@ describe('database migrations', () => {
         'worktree_leases',
         'delivery_pull_requests',
         'run_provider_configs',
+        'workspaces',
+        'sessions',
+        'session_events',
+        'jobs',
+        'projection_checkpoints',
       ]),
     );
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal');
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
+
+    db.close();
+  });
+
+  it('creates the phase-1 event spine tables and indexes without touching legacy tables', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+
+    // Exactly the 15 legacy tables plus the 5 new event-spine tables.
+    // (sqlite_sequence is an internal bookkeeping table created by the
+    // session_events autoincrement primary key, not a Tekon table.)
+    const tables = db
+      .prepare(
+        "select name from sqlite_master where type = 'table' and name not like 'sqlite_%'",
+      )
+      .all()
+      .map((row: { name: string }) => row.name)
+      .sort();
+    expect(tables).toEqual([
+      'artifacts',
+      'audit_events',
+      'delivery_pull_requests',
+      'demands',
+      'gate_results',
+      'human_decisions',
+      'jobs',
+      'nodes',
+      'phases',
+      'projection_checkpoints',
+      'projects',
+      'role_runs',
+      'run_locks',
+      'run_provider_configs',
+      'schema_migrations',
+      'session_events',
+      'sessions',
+      'workflow_instances',
+      'workspaces',
+      'worktree_leases',
+    ]);
+
+    const indexNames = db
+      .prepare("select name from sqlite_master where type = 'index'")
+      .all()
+      .map((row: { name: string }) => row.name);
+    expect(indexNames).toEqual(
+      expect.arrayContaining([
+        'idx_sessions_run_id',
+        'idx_session_events_session_seq',
+        'idx_jobs_status_created',
+      ]),
+    );
+
+    // session_events.seq is unique per session, but reusable across sessions.
+    db.prepare(
+      `insert into session_events (session_id, seq, type, version, timestamp)
+       values ('s1', 1, 'turn/start', 1, '2026-08-21T00:00:00.000Z')`,
+    ).run();
+    expect(() =>
+      db
+        .prepare(
+          `insert into session_events (session_id, seq, type, version, timestamp)
+           values ('s1', 1, 'turn/end', 1, '2026-08-21T00:00:01.000Z')`,
+        )
+        .run(),
+    ).toThrow();
+    expect(() =>
+      db
+        .prepare(
+          `insert into session_events (session_id, seq, type, version, timestamp)
+           values ('s2', 1, 'turn/start', 1, '2026-08-21T00:00:00.000Z')`,
+        )
+        .run(),
+    ).not.toThrow();
+
+    const versions = db
+      .prepare('select version from schema_migrations')
+      .all() as Array<{ version: number }>;
+    expect(versions).toHaveLength(1);
+    expect(versions[0].version).toBe(4);
 
     db.close();
   });
@@ -80,7 +168,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(3);
+    expect(versions[0].version).toBe(4);
 
     db.close();
   });
@@ -194,6 +282,11 @@ describe('database migrations', () => {
         'worktree_leases',
         'delivery_pull_requests',
         'run_provider_configs',
+        'workspaces',
+        'sessions',
+        'session_events',
+        'jobs',
+        'projection_checkpoints',
       ]),
     );
 
@@ -213,7 +306,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(3);
+    expect(versions[0].version).toBe(4);
 
     db.close();
   });

@@ -193,6 +193,60 @@ describe('sqlite repositories', () => {
     });
     db.close();
   });
+
+  it('conditionally updates workflow instance status via compare-and-swap', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+
+    const matched = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'running',
+      'paused',
+      'node_2',
+    );
+    expect(matched.changed).toBe(true);
+    expect(matched.workflow).toMatchObject({
+      status: 'paused',
+      currentNodeId: 'node_2',
+    });
+
+    // expectedFrom no longer matches — nothing is written.
+    const mismatched = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'running',
+      'cancelled',
+      'node_3',
+    );
+    expect(mismatched.changed).toBe(false);
+    expect(mismatched.workflow).toMatchObject({
+      status: 'paused',
+      currentNodeId: 'node_2',
+    });
+
+    // Omitting currentNodeId keeps the existing node.
+    const resumed = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'paused',
+      'running',
+    );
+    expect(resumed.changed).toBe(true);
+    expect(resumed.workflow).toMatchObject({
+      status: 'running',
+      currentNodeId: 'node_2',
+    });
+
+    const missing = await repositories.casWorkflowInstanceStatus(
+      'run_missing',
+      'running',
+      'paused',
+    );
+    expect(missing.changed).toBe(false);
+    expect(missing.workflow).toBeNull();
+
+    db.close();
+  });
 });
 
 async function seedRun(repositories: ReturnType<typeof createRepositories>) {

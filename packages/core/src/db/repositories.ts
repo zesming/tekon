@@ -193,6 +193,12 @@ export interface TekonRepositories {
     status: WorkflowStatus,
     currentNodeId?: string | null,
   ): Promise<WorkflowInstance | null>;
+  casWorkflowInstanceStatus(
+    runId: string,
+    expectedFrom: WorkflowStatus,
+    to: WorkflowStatus,
+    currentNodeId?: string | null,
+  ): Promise<{ changed: boolean; workflow: WorkflowInstance | null }>;
   createPhase(phase: Phase): Promise<Phase>;
   listPhases(runId: string): Promise<Phase[]>;
   createNode(node: NodeInput): Promise<Node>;
@@ -392,6 +398,34 @@ export function createRepositories(
           .prepare('select * from workflow_instances where id = ?')
           .get(runId) as WorkflowInstanceRow | undefined;
         return row ? mapWorkflowInstance(row) : null;
+      });
+    },
+
+    async casWorkflowInstanceStatus(runId, expectedFrom, to, currentNodeId) {
+      return writeQueue.enqueue(() => {
+        const result = db
+          .prepare(
+            `update workflow_instances
+             set status = @to,
+                 current_node_id = coalesce(@nodeId, current_node_id),
+                 updated_at = @now
+             where id = @runId and status = @expectedFrom`,
+          )
+          .run({
+            to,
+            nodeId: currentNodeId ?? null,
+            now: now(),
+            runId,
+            expectedFrom,
+          });
+
+        const row = db
+          .prepare('select * from workflow_instances where id = ?')
+          .get(runId) as WorkflowInstanceRow | undefined;
+        return {
+          changed: result.changes === 1,
+          workflow: row ? mapWorkflowInstance(row) : null,
+        };
       });
     },
 

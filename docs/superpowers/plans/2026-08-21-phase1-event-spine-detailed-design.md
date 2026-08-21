@@ -220,11 +220,13 @@ export interface JobRepository {
   // S3：按 created_at DESC 取最新活跃 job；join sessions.run_id，
   // status in (queued,running,paused,cancelling)
   findActiveByRunId(runId: string): Promise<Job | null>;
-  // S3：enqueue resume/approve 前清理同 run 旧活跃 job（queued/paused → cancelled/stopped）
   // S3/M2：enqueue resume/approve 前清理同 run 可安全清理的旧 job。
   // 只清 (a) queued（owner 必为 null，直接 cancelled/stopped）
   //      (b) stale paused（lease 已过期，owner 是死进程，cancelled/stopped）
   // live paused / running / cancelling 一律不动 —— 交给 resume 守卫判 409（M2）。
+  // 实现注(S1 落地):stale 判据的 lease cutoff 应与 runner 的 leaseTtlMs 一致;
+  //   S1 暂用模块常量 30s(= 默认 leaseTtlMs)。S4 落地 runner 可配 TTL 时,
+  //   须把 cutoff 提为参数/注入,避免自定义 TTL 时 stale 判定偏离。
   cancelStaleActiveJobs(runId: string, exceptJobId?: string): Promise<number>;
   claimNext(owner: string): Promise<Job | null>;           // 原子 claim，SQL 见下
   updateJob(jobId: string, patch: Partial<Pick<Job, 'status' | 'owner' | 'lease' | 'abortState' | 'checkpoint'>>): Promise<Job | null>;

@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createCommandGateway,
   createRepositories,
+  createSubprocessRegistry,
   migrateDatabase,
   openTekonDatabase,
 } from '../../src/index.js';
@@ -1053,6 +1054,241 @@ describe('command gateway', () => {
     } finally {
       processKill.mockRestore();
     }
+  });
+
+  it('kills the spawned child with SIGKILL when the abort signal fires', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-abort-'));
+    tempDirs.push(cwd);
+    const killSignals: NodeJS.Signals[] = [];
+    const controller = new AbortController();
+    const processKill = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+    });
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.pid = 4321;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = ((signal?: NodeJS.Signals) => {
+          killSignals.push(signal ?? 'SIGTERM');
+          setImmediate(() => {
+            child.stdout.end();
+            child.stderr.end();
+            child.emit('close', null, 'SIGKILL');
+          });
+          return true;
+        }) as ChildProcessWithoutNullStreams['kill'];
+        return child;
+      },
+    });
+
+    try {
+      const resultPromise = gateway.run({
+        command: { tool: 'node', args: ['long-running.js'] },
+        cwd,
+        signal: controller.signal,
+        policy: {
+          allow: [{ tool: 'node', args: [] }],
+          deny: [],
+          cwdScope: [cwd],
+          network: 'disabled',
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      controller.abort();
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({ status: 'executed', signal: 'SIGKILL' });
+      expect(processKill).toHaveBeenCalledWith(-4321, 'SIGKILL');
+      expect(killSignals).toContain('SIGKILL');
+    } finally {
+      processKill.mockRestore();
+    }
+  });
+
+  it('does not kill the child when the signal aborts after the command settled', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-abort-settled-'));
+    tempDirs.push(cwd);
+    const killSignals: NodeJS.Signals[] = [];
+    const controller = new AbortController();
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = ((signal?: NodeJS.Signals) => {
+          killSignals.push(signal ?? 'SIGTERM');
+          return true;
+        }) as ChildProcessWithoutNullStreams['kill'];
+        setImmediate(() => {
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      },
+    });
+
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['script.js'] },
+      cwd,
+      signal: controller.signal,
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(killSignals).toEqual([]);
+  });
+
+  it('registers the spawned child under the registry key and unregisters it on settle', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-registry-'));
+    tempDirs.push(cwd);
+    const registry = createSubprocessRegistry();
+    const registerSpy = vi.spyOn(registry, 'register');
+    const unregisterSpy = vi.spyOn(registry, 'unregister');
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.pid = 4242;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
+        setImmediate(() => {
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      },
+    });
+
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['script.js'] },
+      cwd,
+      registry,
+      registryKey: 'run-1',
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'executed', exitCode: 0 });
+    expect(registerSpy).toHaveBeenCalledTimes(1);
+    expect(registerSpy).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ pid: 4242 }),
+    );
+    expect(unregisterSpy).toHaveBeenCalledTimes(1);
+    expect(unregisterSpy).toHaveBeenCalledWith(
+      'run-1',
+      registerSpy.mock.calls[0]?.[1],
+    );
+    expect(registry.list('run-1')).toEqual([]);
+  });
+
+  it('lets registry killAll reach the running child through the registered handle', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-registry-kill-'));
+    tempDirs.push(cwd);
+    const registry = createSubprocessRegistry();
+    const killSignals: NodeJS.Signals[] = [];
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback();
+          },
+        });
+        child.kill = ((signal?: NodeJS.Signals) => {
+          killSignals.push(signal ?? 'SIGTERM');
+          setImmediate(() => {
+            child.stdout.end();
+            child.stderr.end();
+            child.emit('close', null, 'SIGKILL');
+          });
+          return true;
+        }) as ChildProcessWithoutNullStreams['kill'];
+        return child;
+      },
+    });
+
+    const resultPromise = gateway.run({
+      command: { tool: 'node', args: ['long-running.js'] },
+      cwd,
+      registry,
+      registryKey: 'run-2',
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(registry.list('run-2')).toHaveLength(1);
+    expect(registry.killAll('run-2', 'SIGKILL')).toBe(1);
+    expect(killSignals).toContain('SIGKILL');
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({ status: 'executed', signal: 'SIGKILL' });
+    expect(registry.list('run-2')).toEqual([]);
+  });
+
+  it('does not spawn and returns a cancelled rejection when the signal is already aborted', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-pre-aborted-'));
+    tempDirs.push(cwd);
+    let spawnCalls = 0;
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        spawnCalls += 1;
+        throw new Error('spawn should not be called');
+      },
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await gateway.run({
+      command: { tool: 'node', args: ['script.js'] },
+      cwd,
+      signal: controller.signal,
+      policy: {
+        allow: [{ tool: 'node', args: [] }],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', cancelled: true });
+    expect(spawnCalls).toBe(0);
   });
 });
 

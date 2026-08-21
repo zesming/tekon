@@ -13,6 +13,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { CommandInvocation } from '../types/domain.js';
 import type { CommandPolicy } from '../types/config.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import type { SubprocessRegistry } from '../session/subprocess-registry.js';
 import {
   createSecretRedactionTransform,
   redactSecrets,
@@ -41,7 +42,7 @@ export type CommandGatewayResult =
       timeoutReason?: 'total' | 'no-progress';
       durationMs: number;
     }
-  | { status: 'rejected'; reason: string }
+  | { status: 'rejected'; reason: string; cancelled?: boolean }
   | { status: 'blocked-for-approval'; decisionId: string };
 
 export interface CommandGatewayRunInput {
@@ -57,6 +58,15 @@ export interface CommandGatewayRunInput {
   nodeId?: string;
   progressIntervalMs?: number;
   noProgressTimeoutMs?: number;
+  /**
+   * 取消信号（阶段 1 取消传播链，设计 §2.8）。abort 时向子进程发送 SIGKILL；
+   * 若 spawn 前信号已 aborted，则不起进程，直接返回带 `cancelled: true` 的 rejected 结果。
+   */
+  signal?: AbortSignal;
+  /** 子进程注册表；与 registryKey 同时传入时，spawn 后注册、settle 时注销。 */
+  registry?: SubprocessRegistry;
+  /** 注册表 key，通常为 runId（S7：gate 命令与 agent 子进程共用同一 key）。 */
+  registryKey?: string;
 }
 
 export type CommandEnvironmentMode = 'safe-default' | 'inherit' | 'exact';
@@ -110,6 +120,9 @@ export function createCommandGateway(
         noProgressTimeoutMs: input.noProgressTimeoutMs,
         stdin: input.stdin,
         spawnImpl,
+        signal: input.signal,
+        registry: input.registry,
+        registryKey: input.registryKey,
       });
     },
   };
@@ -317,7 +330,17 @@ async function runProcess(input: {
   progressIntervalMs: number;
   stdin?: string;
   spawnImpl: SpawnImpl;
+  signal?: AbortSignal;
+  registry?: SubprocessRegistry;
+  registryKey?: string;
 }): Promise<CommandGatewayResult> {
+  if (input.signal?.aborted) {
+    return {
+      status: 'rejected',
+      reason: 'command cancelled before spawn',
+      cancelled: true,
+    };
+  }
   mkdirSync(input.outputDir, { recursive: true });
   const commandId = `${Date.now()}-${randomUUID()}`;
   const stdoutPath = join(input.outputDir, `${commandId}.stdout.log`);
@@ -368,6 +391,17 @@ async function runProcess(input: {
     };
   }
 
+  const registryHandle =
+    input.registry && input.registryKey
+      ? {
+          pid: child.pid,
+          kill: (signal: NodeJS.Signals) => killChildProcess(child, signal),
+        }
+      : null;
+  if (registryHandle && input.registry && input.registryKey) {
+    input.registry.register(input.registryKey, registryHandle);
+  }
+
   child.stdout.on('data', (chunk: unknown) => {
     progress.recordOutput('stdout', chunk);
   });
@@ -383,6 +417,14 @@ async function runProcess(input: {
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
     let timeoutReason: 'total' | 'no-progress' | undefined;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
+    if (input.signal) {
+      input.signal.addEventListener('abort', () => {
+        // settle 后不再杀进程，避免 PID 回收误伤无关进程。
+        if (!settled) {
+          killChildProcess(child, 'SIGKILL');
+        }
+      });
+    }
     const recordOutputDirProgress = () => {
       const activity = outputDirMonitor.sample();
       if (activity) {
@@ -445,6 +487,9 @@ async function runProcess(input: {
         return;
       }
       settled = true;
+      if (registryHandle && input.registry && input.registryKey) {
+        input.registry.unregister(input.registryKey, registryHandle);
+      }
       clearInterval(progressInterval);
       if (noProgressInterval) {
         clearInterval(noProgressInterval);

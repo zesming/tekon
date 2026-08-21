@@ -1,6 +1,6 @@
 import type { TekonDatabase } from './connection.js';
 
-const WORK_USABLE_SCHEMA_VERSION = 3;
+const WORK_USABLE_SCHEMA_VERSION = 4;
 
 export function migrateDatabase(db: TekonDatabase): void {
   const migrate = db.transaction(() => {
@@ -168,6 +168,67 @@ export function migrateDatabase(db: TekonDatabase): void {
         provider text not null,
         config_summary text not null,
         created_at text not null
+      );
+
+      create table if not exists workspaces (
+        id text primary key,
+        root text not null,
+        repo text,
+        branch_policy text,
+        permission_profile text,
+        created_at text not null
+      );
+
+      create table if not exists sessions (
+        id text primary key,
+        workspace_id text not null references workspaces(id),
+        title text,
+        profile text not null,
+        status text not null,
+        run_id text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create index if not exists idx_sessions_run_id on sessions(run_id);
+
+      create table if not exists session_events (
+        id integer primary key autoincrement,
+        session_id text not null,
+        seq integer not null,
+        type text not null,
+        version integer not null,
+        timestamp text not null,
+        payload text not null default '{}',
+        visibility text not null default 'ui-only',
+        model_visible integer not null default 0,
+        source_event_seqs text not null default '[]',
+        correlation_id text,
+        unique(session_id, seq)
+      );
+      create index if not exists idx_session_events_session_seq
+        on session_events(session_id, seq);
+
+      create table if not exists jobs (
+        id text primary key,
+        session_id text not null,
+        kind text not null,
+        status text not null,
+        owner text,
+        lease text,
+        abort_state text not null default 'none',
+        checkpoint text,
+        payload text not null default '{}',
+        created_at text not null,
+        updated_at text not null
+      );
+      create index if not exists idx_jobs_status_created on jobs(status, created_at);
+
+      create table if not exists projection_checkpoints (
+        session_id text not null,
+        projection_name text not null,
+        last_seq integer not null,
+        updated_at text not null,
+        primary key (session_id, projection_name)
       );
     `);
 
