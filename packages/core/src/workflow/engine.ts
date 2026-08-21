@@ -8,6 +8,7 @@ import type { TekonRepositories } from '../db/repositories.js';
 import { createGateEngine, type GateEngine } from '../gate/engine.js';
 import type { AgentAdapter, AgentRunResult } from '../runtime/agent-adapter.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
+import type { SubprocessRegistry } from '../session/subprocess-registry.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { WorkflowInstance } from '../types/domain.js';
@@ -15,6 +16,7 @@ import { WorkflowTerminalError } from './errors.js';
 import {
   assertWorkflowTransition,
   isTerminalWorkflowStatus,
+  writeWorkflowTerminal,
 } from './state-machine.js';
 import {
   loadWorkflowTemplate,
@@ -66,6 +68,10 @@ export interface WorkflowEngineResult {
 }
 
 export interface WorkflowEngine {
+  prepareRun(
+    input: WorkflowEngineStartInput,
+  ): Promise<{ runId: string; workflow: WorkflowInstance }>;
+  executePreparedRun(runId: string): Promise<WorkflowInstance>;
   startRun(input: WorkflowEngineStartInput): Promise<WorkflowEngineResult>;
   resumeRun(runId: string): Promise<WorkflowEngineResult>;
 }
@@ -84,6 +90,31 @@ export interface CreateWorkflowEngineOptions {
   agentConfigSummary?: Record<string, unknown>;
   builtInRolesDir?: string;
   userHome?: string;
+  /**
+   * Job-level abort signal (S5). When aborted, executePlan settles the run
+   * `cancelled` at the next node boundary; node-executor aborts the agent.
+   * Absent = legacy synchronous behavior (CLI).
+   */
+  signal?: AbortSignal;
+  /**
+   * Pause predicate (S5). When it returns true, executePlan settles the run
+   * `paused` at the next node boundary (without killing subprocesses).
+   */
+  isPauseRequested?: () => boolean;
+  /**
+   * Node-boundary checkpoint hook (S5 fencing point). Invoked once per
+   * completed node, before the next node starts.
+   */
+  onNodeCheckpoint?: (nodeId: string) => Promise<void>;
+  /**
+   * Subprocess registry (S7 seam): stored so the web executor can wire it,
+   * but NOT yet forwarded to the fallback gateEngine gateway. Killing
+   * gate-command children on cancel needs registryKey threaded to each
+   * gateway.run() at the gate-command spawn site (runCommandGate), which
+   * lands in S7 (D6). Agent subprocesses are already killable via
+   * AgentRunInput.signal + command-gateway registryKey (S3).
+   */
+  registry?: SubprocessRegistry;
 }
 
 export function createWorkflowEngine(
@@ -93,6 +124,12 @@ export function createWorkflowEngine(
     options.gateEngine ??
     createGateEngine({
       repositories: options.repositories,
+      // S7 note: the subprocess registry is threaded to *agent* subprocesses
+      // via AgentRunInput.signal + command-gateway registryKey (S3). Killing
+      // gate-command subprocesses on cancel needs the registryKey on each
+      // gateway.run() call at the gate-command spawn site (runCommandGate),
+      // which the web executor wires in S7 (D6). The engine accepts `registry`
+      // so that seam exists; createCommandGateway itself takes no registry.
       gateway: createCommandGateway({ repositories: options.repositories }),
     });
   const artifactStore = createArtifactStore({
@@ -179,62 +216,16 @@ export function createWorkflowEngine(
     promptBuilder,
     gateRunner,
     getCheckedTransition: () => checkedTransitionNode,
+    signal: options.signal,
   });
 
   return {
+    prepareRun,
+    executePreparedRun,
+
     async startRun(input) {
-      const template =
-        input.workflowSpec ??
-        loadWorkflowTemplate({
-          name: input.templateName ?? 'standard-delivery',
-        });
-      const runId = `run_${randomUUID()}`;
-      const projectId = `project_${randomUUID()}`;
-      const demandId = `demand_${randomUUID()}`;
-      const now = new Date().toISOString();
-
-      mkdirSync(join(options.repoPath, options.dataDir, 'runs', runId), {
-        recursive: true,
-      });
-      await options.repositories.createDemand({
-        id: demandId,
-        title: input.demandText.slice(0, 80),
-        body: input.demandText,
-        source: input.mode,
-        createdAt: now,
-      });
-      await options.repositories.createProject({
-        id: projectId,
-        name: 'tekon',
-        repoPath: options.repoPath,
-        createdAt: now,
-      });
-      await options.repositories.createWorkflowInstance({
-        id: runId,
-        projectId,
-        demandId,
-        status: 'running',
-        createdAt: now,
-        updatedAt: now,
-      });
-      if (options.agentProvider) {
-        await options.repositories.recordRunProviderConfig({
-          runId,
-          provider: options.agentProvider,
-          configSummary: options.agentConfigSummary ?? {},
-          createdAt: now,
-        });
-      }
-
-      const plan = templateToPlan(template, runId);
-      await persistPlan(runId, plan, options.repositories);
-      await options.audit.append({
-        runId,
-        type: 'run.started',
-        payload: { templateId: template.id, mode: input.mode },
-      });
-
-      const workflow = await executePlan(runId, plan);
+      const { runId } = await prepareRun(input);
+      const workflow = await executePreparedRun(runId);
       return { runId, workflow };
     },
 
@@ -251,7 +242,26 @@ export function createWorkflowEngine(
         throw new WorkflowTerminalError(runId, existing.status);
       }
 
-      await options.repositories.updateWorkflowInstanceStatus(runId, 'running');
+      // MUST-FIX1: CAS second line of defense — the pre-check above is a
+      // bare read; a concurrent cancel/terminal write can land between the
+      // read and this write. CAS with the re-read status closes the window.
+      const casResult = await options.repositories.casWorkflowInstanceStatus(
+        runId,
+        existing.status,
+        'running',
+        null,
+      );
+      if (!casResult.changed) {
+        const latest = await options.repositories.getWorkflowInstance(runId);
+        if (!latest) {
+          throw new Error(`run not found: ${runId}`);
+        }
+        if (isTerminalWorkflowStatus(latest.status)) {
+          throw new WorkflowTerminalError(runId, latest.status);
+        }
+        // Non-terminal (e.g. already `running` from a concurrent resume):
+        // continue idempotently with the latest state.
+      }
       await options.audit.append({
         runId,
         type: 'run.resumed',
@@ -263,6 +273,73 @@ export function createWorkflowEngine(
       return { runId, workflow };
     },
   };
+
+  /**
+   * prepareRun (S5): persist the run (demand/project/instance/plan) and emit
+   * the `run.started` audit event without invoking the adapter. Returns the
+   * freshly created instance (status `running`).
+   */
+  async function prepareRun(
+    input: WorkflowEngineStartInput,
+  ): Promise<{ runId: string; workflow: WorkflowInstance }> {
+    const template =
+      input.workflowSpec ??
+      loadWorkflowTemplate({
+        name: input.templateName ?? 'standard-delivery',
+      });
+    const runId = `run_${randomUUID()}`;
+    const projectId = `project_${randomUUID()}`;
+    const demandId = `demand_${randomUUID()}`;
+    const now = new Date().toISOString();
+
+    mkdirSync(join(options.repoPath, options.dataDir, 'runs', runId), {
+      recursive: true,
+    });
+    await options.repositories.createDemand({
+      id: demandId,
+      title: input.demandText.slice(0, 80),
+      body: input.demandText,
+      source: input.mode,
+      createdAt: now,
+    });
+    await options.repositories.createProject({
+      id: projectId,
+      name: 'tekon',
+      repoPath: options.repoPath,
+      createdAt: now,
+    });
+    await options.repositories.createWorkflowInstance({
+      id: runId,
+      projectId,
+      demandId,
+      status: 'running',
+      createdAt: now,
+      updatedAt: now,
+    });
+    if (options.agentProvider) {
+      await options.repositories.recordRunProviderConfig({
+        runId,
+        provider: options.agentProvider,
+        configSummary: options.agentConfigSummary ?? {},
+        createdAt: now,
+      });
+    }
+
+    const plan = templateToPlan(template, runId);
+    await persistPlan(runId, plan, options.repositories);
+    await options.audit.append({
+      runId,
+      type: 'run.started',
+      payload: { templateId: template.id, mode: input.mode },
+    });
+
+    return { runId, workflow: await helpers.mustGetWorkflow(runId) };
+  }
+
+  async function executePreparedRun(runId: string): Promise<WorkflowInstance> {
+    const plan = await planFromRepository(runId, options.repositories);
+    return executePlan(runId, plan);
+  }
 
   /**
    * Checked transition: reads current node status, validates legality,
@@ -295,6 +372,15 @@ export function createWorkflowEngine(
   ): Promise<WorkflowInstance> {
     for (const phase of plan.phases) {
       for (const node of phase.nodes) {
+        // S5: node-boundary cancel/pause checks (before any node work).
+        if (options.signal?.aborted) {
+          await settleCancelled(runId, node.id);
+          return helpers.mustGetWorkflow(runId);
+        }
+        if (options.isPauseRequested?.()) {
+          return settlePaused(runId, node.id);
+        }
+
         const persisted = await options.repositories.getNode(node.id);
         if (persisted?.status === 'passed' || persisted?.status === 'skipped') {
           continue;
@@ -316,19 +402,77 @@ export function createWorkflowEngine(
         if (!completed) {
           return helpers.mustGetWorkflow(runId);
         }
+
+        // S5: node-boundary checkpoint (fencing point).
+        await options.onNodeCheckpoint?.(node.id);
       }
     }
 
-    const passed = await options.repositories.updateWorkflowInstanceStatus(
+    // Gap B: all nodes finished — re-check cancel/pause before writing
+    // `passed`. Without this, a pause landing in the window between the
+    // last node's top-check and the passed write would either hit an
+    // illegal paused→passed transition or be silently overwritten.
+    if (options.signal?.aborted) {
+      await settleCancelled(runId, null);
+      return helpers.mustGetWorkflow(runId);
+    }
+    if (options.isPauseRequested?.()) {
+      return settlePaused(runId, null);
+    }
+
+    const { written, workflow } = await writeWorkflowTerminal(
+      options.repositories,
       runId,
       'passed',
       null,
     );
-    await options.audit.append({
+    if (written) {
+      // Duplicate execution must not produce duplicate completion events.
+      await options.audit.append({
+        runId,
+        type: 'run.passed',
+        payload: {},
+      });
+    }
+    return workflow;
+  }
+
+  /**
+   * S5: settle the run as `cancelled` via the idempotent terminal writer
+   * (M2). A concurrent cancel that already landed is a no-op
+   * (written=false); a conflicting terminal status throws
+   * WorkflowTerminalError for the upper executor to converge.
+   */
+  async function settleCancelled(
+    runId: string,
+    nodeId: string | null,
+  ): Promise<void> {
+    await writeWorkflowTerminal(options.repositories, runId, 'cancelled', nodeId);
+  }
+
+  /**
+   * S5 / MUST-FIX1: settle the run as `paused` via CAS (expectedFrom =
+   * `running`). If the CAS loses (a concurrent cancel/terminal write won),
+   * return the current workflow without overwriting it — pause losing to
+   * cancel is the correct outcome.
+   */
+  async function settlePaused(
+    runId: string,
+    nodeId: string | null,
+  ): Promise<WorkflowInstance> {
+    const result = await options.repositories.casWorkflowInstanceStatus(
       runId,
-      type: 'run.passed',
-      payload: {},
-    });
-    return passed ?? (await helpers.mustGetWorkflow(runId));
+      'running',
+      'paused',
+      nodeId,
+    );
+    if (result.changed && result.workflow) {
+      return result.workflow;
+    }
+    const latest = await options.repositories.getWorkflowInstance(runId);
+    if (!latest) {
+      throw new Error(`workflow instance not found: ${runId}`);
+    }
+    return latest;
   }
 }

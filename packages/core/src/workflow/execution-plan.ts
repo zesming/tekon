@@ -80,7 +80,7 @@ export async function persistPlan(
       createdAt: now,
       updatedAt: now,
     });
-    for (const node of phase.nodes) {
+    for (const [nodeIndex, node] of phase.nodes.entries()) {
       await repositories.createNode({
         id: node.id,
         runId,
@@ -91,6 +91,7 @@ export async function persistPlan(
         outputs: node.outputs,
         gates: node.gates.map((gate) => gate as GateConfig),
         dependencies: node.dependsOn,
+        order: nodeIndex,
         createdAt: now,
         updatedAt: now,
       });

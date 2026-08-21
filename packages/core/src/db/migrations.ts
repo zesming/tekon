@@ -234,6 +234,12 @@ export function migrateDatabase(db: TekonDatabase): void {
 
     addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
     addColumnIfMissing(db, 'nodes', 'outputs', "text not null default '[]'");
+    // node_order gives same-phase nodes a deterministic execution order.
+    // Without it listNodes falls back to created_at (identical across a
+    // phase's nodes — persistPlan stamps one timestamp) then the random
+    // id UUID, which scrambles rd→qa ordering and breaks cross-node
+    // promotion. Default 0 keeps legacy rows stable (id tiebreaker).
+    addColumnIfMissing(db, 'nodes', 'node_order', 'integer not null default 0');
     addColumnIfMissing(db, 'gate_results', 'gate_key', 'text');
     addColumnIfMissing(db, 'worktree_leases', 'base_head', 'text');
 

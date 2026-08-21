@@ -31,6 +31,14 @@ import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 
+/**
+ * Intra-phase order for dynamically created rework nodes. Original plan nodes
+ * use small array-index orders (0..N via persistPlan); this large offset keeps
+ * rework nodes sorted after them on a planFromRepository resume, matching the
+ * legacy "appended at the end of the phase" behavior.
+ */
+const DYNAMIC_NODE_ORDER_OFFSET = 1_000_000;
+
 export interface ReworkHandlerDeps {
   repoPath: string;
   dataDir: string;
@@ -311,6 +319,12 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       outputs: targetOutputs,
       gates: targetGates,
       dependencies: [reviewNode.id],
+      // Dynamic rework nodes are created after the original plan nodes and
+      // must sort after them within the phase on a planFromRepository resume.
+      // Original nodes use small array-index orders (0..N); a large offset
+      // keeps rework nodes last, with created_at/id ordering successive
+      // rework nodes by creation time (see listNodes ordering).
+      order: DYNAMIC_NODE_ORDER_OFFSET,
       createdAt: now,
       updatedAt: now,
       phaseId: targetNode.phaseId,

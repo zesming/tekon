@@ -1,9 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   assertSuccessfulAgentRun,
   createAuditLogger,
+  createMockAgentAdapter,
   createRepositories,
+  createSubprocessRegistry,
   createWorkflowEngine,
   defaultBuiltInRolesDir,
   defaultCommandPolicy,
@@ -17,7 +23,10 @@ import {
   resolveReviewTargetNodeByHeuristic,
   scopedId,
   stableGateKey,
+  type AgentRunInput,
+  type CreateWorkflowEngineOptions,
   type WorkflowEngine,
+  type WorkflowTemplate,
 } from '../../src/index.js';
 
 // ---------------------------------------------------------------------------
@@ -671,5 +680,235 @@ describe('review rework mechanism', () => {
     it('allows maxRetries=1 for single rework attempt', () => {
       expect(resolveMaxReworkAttempts(1)).toBe(1);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S5: prepareRun split + signal/pause/checkpoint wiring (design §2.6, §4.2)
+// ---------------------------------------------------------------------------
+describe('S5 engine prepareRun / signal / pause', () => {
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  // Minimal two-node template: node_a (pm, demand-card) → node_b (rd, code-changes).
+  const minimalTemplate: WorkflowTemplate = {
+    id: 'minimal-s5-test',
+    name: 'Minimal S5 Test',
+    version: 1,
+    retryPolicy: {
+      maxAttempts: 1,
+      backoffMs: 0,
+      strategy: 'fixed',
+      onExhausted: 'block',
+    },
+    phases: [
+      {
+        id: 'phase_1',
+        name: 'Phase 1',
+        dependsOn: [],
+        parallel: false,
+        nodes: [
+          {
+            id: 'node_a',
+            role: 'pm',
+            inputs: [],
+            outputs: [{ id: 'out_a', type: 'demand-card' }],
+            gates: [],
+            dependsOn: [],
+          },
+          {
+            id: 'node_b',
+            role: 'rd',
+            inputs: [
+              { id: 'in_a', fromNodeId: 'node_a', type: 'demand-card' },
+            ],
+            outputs: [{ id: 'out_b', type: 'code-changes' }],
+            gates: [],
+            dependsOn: ['node_a'],
+          },
+        ],
+      },
+    ],
+  };
+
+  function setupHarness(
+    overrides: Partial<CreateWorkflowEngineOptions> = {},
+  ) {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-s5-engine-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const mock = createMockAgentAdapter();
+    const runAgentSpy = vi.fn((input: AgentRunInput) => mock.runAgent(input));
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: { runAgent: (input) => runAgentSpy(input) },
+      ...overrides,
+    });
+    return { engine, repositories, audit, runAgentSpy, mock, db };
+  }
+
+  function startInput() {
+    return {
+      demandText: 'S5 test demand',
+      mode: 'template' as const,
+      workflowSpec: minimalTemplate,
+    };
+  }
+
+  it('prepareRun persists the run without invoking the adapter; executePreparedRun runs it', async () => {
+    const { engine, runAgentSpy } = setupHarness();
+
+    const { runId, workflow } = await engine.prepareRun(startInput());
+    expect(workflow.status).toBe('running');
+    expect(runAgentSpy).not.toHaveBeenCalled();
+
+    const executed = await engine.executePreparedRun(runId);
+    expect(executed.status).toBe('passed');
+    expect(runAgentSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('startRun still executes the full workflow (CLI compatibility)', async () => {
+    const { engine, runAgentSpy } = setupHarness();
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('passed');
+    expect(runAgentSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('signal aborted before execution settles the run cancelled (idempotent re-run)', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { engine, repositories } = setupHarness({ signal: controller.signal });
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('cancelled');
+
+    // Idempotent: a second executePreparedRun on the cancelled run must not throw.
+    const second = await engine.executePreparedRun(result.runId);
+    expect(second.status).toBe('cancelled');
+
+    const events = await repositories.listAuditEvents(result.runId);
+    expect(events.some((event) => event.type === 'run.passed')).toBe(false);
+  });
+
+  it('signal abort during node execution cancels the run, interrupts the role_run, and propagates the signal into the agent input', async () => {
+    const controller = new AbortController();
+    const mock = createMockAgentAdapter();
+    const seenSignals: AbortSignal[] = [];
+    const { engine, repositories } = setupHarness({
+      signal: controller.signal,
+      adapter: {
+        runAgent: async (input) => {
+          seenSignals.push(input.signal!);
+          if (!controller.signal.aborted) {
+            // Cancel arrives while the agent is running.
+            controller.abort();
+          }
+          // mock adapter sees the aborted signal and returns cancelled:true.
+          return mock.runAgent(input);
+        },
+      },
+    });
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('cancelled');
+
+    const firstNodeId = scopedId(result.runId, 'node_a');
+    const roleRun = await repositories.getLatestRoleRunForNode(
+      result.runId,
+      firstNodeId,
+    );
+    expect(roleRun?.status).toBe('interrupted');
+    const node = await repositories.getNode(firstNodeId);
+    expect(node?.status).toBe('interrupted');
+    // The engine propagated its signal into the agent input.
+    expect(seenSignals[0]).toBe(controller.signal);
+  });
+
+  it('pause request stops the run at a node boundary without killing subprocesses', async () => {
+    let pauseRequested = false;
+    const checkpointSpy = vi.fn(async () => {
+      if (!pauseRequested) {
+        pauseRequested = true;
+      }
+    });
+    const registry = createSubprocessRegistry();
+    const killAllSpy = vi.spyOn(registry, 'killAll');
+    const { engine, runAgentSpy } = setupHarness({
+      isPauseRequested: () => pauseRequested,
+      onNodeCheckpoint: checkpointSpy,
+      registry,
+    });
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('paused');
+    // node_b never started.
+    expect(runAgentSpy).toHaveBeenCalledTimes(1);
+    // Only node_a completed and checkpointed.
+    expect(checkpointSpy).toHaveBeenCalledTimes(1);
+    // Pause must not kill subprocesses (only cancel does).
+    expect(killAllSpy).not.toHaveBeenCalled();
+  });
+
+  it('onNodeCheckpoint is invoked once per completed node on a full run', async () => {
+    const checkpointSpy = vi.fn(async () => {});
+    const { engine } = setupHarness({ onNodeCheckpoint: checkpointSpy });
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('passed');
+    expect(checkpointSpy).toHaveBeenCalledTimes(2);
+    expect(checkpointSpy.mock.calls[0][0]).toContain('node_a');
+    expect(checkpointSpy.mock.calls[1][0]).toContain('node_b');
+  });
+
+  it('Gap B: pause requested after the last node top-check is caught before the passed write', async () => {
+    let pauseRequested = false;
+    const { engine, repositories } = setupHarness({
+      isPauseRequested: () => pauseRequested,
+      onNodeCheckpoint: async (nodeId) => {
+        if (nodeId.endsWith('node_b')) {
+          // Pause lands after the last node's top-check passed but before
+          // the executePlan tail writes `passed`.
+          pauseRequested = true;
+        }
+      },
+    });
+
+    const result = await engine.startRun(startInput());
+    expect(result.workflow.status).toBe('paused');
+
+    const events = await repositories.listAuditEvents(result.runId);
+    expect(events.some((event) => event.type === 'run.passed')).toBe(false);
+  });
+
+  it('MUST-FIX1: paused→passed returns written=false; run stays paused with no run.passed audit', async () => {
+    const { engine, repositories } = setupHarness();
+
+    const { runId } = await engine.prepareRun(startInput());
+    // Simulate a concurrent pause that landed after all nodes finished:
+    // every node is already passed, the workflow was flipped to paused.
+    const nodes = await repositories.listNodes(runId);
+    expect(nodes.length).toBeGreaterThan(0);
+    for (const node of nodes) {
+      await repositories.transitionNode(node.id, 'passed');
+    }
+    await repositories.updateWorkflowInstanceStatus(runId, 'paused');
+
+    const result = await engine.executePreparedRun(runId);
+    expect(result.status).toBe('paused');
+
+    const events = await repositories.listAuditEvents(runId);
+    expect(events.some((event) => event.type === 'run.passed')).toBe(false);
   });
 });

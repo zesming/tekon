@@ -119,6 +119,23 @@ export const gateConfigSchema = z.object({
   requiresHumanApproval: z.boolean().default(false),
   maxRetries: z.number().int().min(0).default(0),
   timeoutMs: z.number().int().positive().optional(),
+  // Persisted so planFromRepository faithfully reconstructs the gate: the
+  // gate-runner reads autoFix + onExhausted to drive the auto-fix/repair and
+  // exhaustion paths. Without these the reconstructed plan silently loses the
+  // repair behavior (rd/qa in-memory plan had them; a resumed/prepared run
+  // did not). retryPolicy is kept for fidelity (schema-loose passthrough).
+  autoFix: z.boolean().optional(),
+  onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
+  retryPolicy: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).optional(),
+      maxRetries: z.number().int().min(0).max(9).optional(),
+      backoffMs: z.number().int().min(0).optional(),
+      strategy: z.enum(['fixed', 'exponential']).optional(),
+      onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 export type GateConfig = z.infer<typeof gateConfigSchema>;
 
@@ -152,6 +169,9 @@ export const nodeSchema = z.object({
   outputs: z.array(nodeArtifactOutputRefSchema).default([]),
   gates: z.array(gateConfigSchema).default([]),
   dependencies: z.array(z.string()).default([]),
+  // Intra-phase execution order (persisted). Defaults to 0 so legacy rows
+  // and callers that omit it stay stable (id tiebreaker in listNodes).
+  order: z.number().int().min(0).default(0),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });

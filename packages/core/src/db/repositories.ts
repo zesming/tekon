@@ -43,6 +43,7 @@ type NodeRow = {
   outputs: string;
   gates: string;
   dependencies: string;
+  node_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -462,9 +463,9 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into nodes (
-             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, created_at, updated_at
+             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
            ) values (
-             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @createdAt, @updatedAt
+             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
            )`,
         ).run({
           ...node,
@@ -473,6 +474,7 @@ export function createRepositories(
           outputs: JSON.stringify(node.outputs),
           gates: JSON.stringify(node.gates),
           dependencies: JSON.stringify(node.dependencies),
+          nodeOrder: node.order,
         });
         return node;
       });
@@ -492,7 +494,7 @@ export function createRepositories(
            from nodes n
            left join phases p on p.id = n.phase_id
            where n.run_id = ?
-           order by coalesce(p.phase_order, 999999), n.created_at, n.id`,
+           order by coalesce(p.phase_order, 999999), n.node_order, n.created_at, n.id`,
         )
         .all(runId) as NodeRow[];
       return rows.map(mapNode);
@@ -922,6 +924,7 @@ function mapNode(row: NodeRow): Node {
     outputs: JSON.parse(row.outputs) as unknown,
     gates: JSON.parse(row.gates) as unknown,
     dependencies: JSON.parse(row.dependencies) as unknown,
+    order: row.node_order ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });

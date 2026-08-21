@@ -16,6 +16,8 @@ import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
+import { isWorkflowTerminalError } from './errors.js';
+import { writeWorkflowTerminal } from './state-machine.js';
 
 export interface NodeExecutorDeps {
   repositories: TekonRepositories;
@@ -26,6 +28,12 @@ export interface NodeExecutorDeps {
   promptBuilder: PromptBuilder;
   gateRunner: GateRunner;
   getCheckedTransition(): CheckedTransitionFn;
+  /**
+   * S5: job-level abort signal. When aborted, the agent run is short-
+   * circuited and the workflow settles `cancelled` (M2 idempotent) instead
+   * of `interrupted`. Absent = legacy behavior.
+   */
+  signal?: AbortSignal;
 }
 
 export interface NodeExecutor {
@@ -187,16 +195,44 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           startedAt: new Date().toISOString(),
         });
         const lease = await leaseService.createExecutionLease(runId, node);
+        if (deps.signal?.aborted) {
+          // S5: cancel arrived before the agent started — short-circuit
+          // without invoking the adapter.
+          await repositories.markRoleRunInterrupted({
+            roleRunId,
+            interruptedAt: new Date().toISOString(),
+          });
+          await repositories.transitionNode(node.id, 'interrupted');
+          await writeWorkflowTerminal(
+            repositories,
+            runId,
+            'cancelled',
+            node.id,
+          );
+          await leaseService
+            .finalizeExecutionLease(runId, node.id)
+            .catch(() => {});
+          await audit.append({
+            runId,
+            type: 'node.interrupted',
+            payload: { nodeId: node.id, error: 'aborted before agent start' },
+          });
+          return false;
+        }
         let agentSucceeded = false;
         try {
-          const agentResult = await adapter.runAgent(
-            await helpers.agentInputForLease(
-              runId,
-              node,
-              lease,
-              await promptBuilder.buildNodePrompt(runId, node),
-            ),
+          const agentInput = await helpers.agentInputForLease(
+            runId,
+            node,
+            lease,
+            await promptBuilder.buildNodePrompt(runId, node),
           );
+          if (deps.signal) {
+            // S5: propagate the job-level signal into the agent run so the
+            // adapter can short-circuit / kill its subprocess.
+            agentInput.signal = deps.signal;
+          }
+          const agentResult = await adapter.runAgent(agentInput);
           assertSuccessfulAgentRun(agentResult);
           agentSucceeded = true;
           await repositories.markRoleRunCompleted({
@@ -213,23 +249,53 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
               interruptedAt: new Date().toISOString(),
             });
             await repositories.transitionNode(node.id, 'interrupted');
-            await repositories.updateWorkflowInstanceStatus(
-              runId,
-              'interrupted',
-              node.id,
-            );
+            if (deps.signal?.aborted) {
+              // S5: abort path — the workflow settles `cancelled` via the
+              // idempotent terminal writer (M2), not `interrupted`.
+              await writeWorkflowTerminal(
+                repositories,
+                runId,
+                'cancelled',
+                node.id,
+              );
+            } else {
+              await repositories.updateWorkflowInstanceStatus(
+                runId,
+                'interrupted',
+                node.id,
+              );
+            }
             await leaseService
               .finalizeExecutionLease(runId, node.id)
               .catch(() => {});
           }
         }
       } catch (error) {
+        // A terminal-status conflict must propagate to the executor (which
+        // maps it to job cancelled), never be swallowed into `interrupted`.
+        if (isWorkflowTerminalError(error)) {
+          throw error;
+        }
         await repositories.transitionNode(node.id, 'interrupted');
-        await repositories.updateWorkflowInstanceStatus(
-          runId,
-          'interrupted',
-          node.id,
-        );
+        if (deps.signal?.aborted) {
+          // S5: the finally block above (or the pre-agent check) already
+          // settled the run via writeWorkflowTerminal; this second call is
+          // the idempotent no-op path (written=false). If the failure
+          // happened before the inner try (e.g. lease creation), this is
+          // the sole cancel write.
+          await writeWorkflowTerminal(
+            repositories,
+            runId,
+            'cancelled',
+            node.id,
+          );
+        } else {
+          await repositories.updateWorkflowInstanceStatus(
+            runId,
+            'interrupted',
+            node.id,
+          );
+        }
         await audit.append({
           runId,
           type: 'node.interrupted',
