@@ -400,4 +400,65 @@ describe('job repository', () => {
     expect(active).not.toHaveProperty('payload');
     expect(await jobs.findActiveByRunId('run_missing')).toBeNull();
   });
+
+  it('cancelStaleActiveJobs honors a custom lease cutoff (S4 parameterization)', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const staleLease = '2020-01-01T00:00:00.000Z';
+    const freshLease = new Date().toISOString();
+
+    await jobs.enqueue(
+      makeJob(session.id, { id: 'job_paused_old', status: 'paused', owner: 'w1', lease: staleLease }),
+    );
+    await jobs.enqueue(
+      makeJob(session.id, { id: 'job_paused_new', status: 'paused', owner: 'w1', lease: freshLease }),
+    );
+
+    // Custom cutoff (1s ago): only the 2020 lease is stale; the fresh one is not.
+    const count = await jobs.cancelStaleActiveJobs(
+      'run_1',
+      undefined,
+      new Date(Date.now() - 1000).toISOString(),
+    );
+    expect(count).toBe(1);
+    expect(await jobs.get('job_paused_old')).toMatchObject({
+      status: 'cancelled',
+      abortState: 'stopped',
+    });
+    expect(await jobs.get('job_paused_new')).toMatchObject({ status: 'paused' });
+
+    // Without a custom cutoff the 30s default applies: the fresh paused lease
+    // is not stale, so only the queued job is cancelled.
+    await jobs.enqueue(
+      makeJob(session.id, { id: 'job_queued', status: 'queued' }),
+    );
+    expect(await jobs.cancelStaleActiveJobs('run_1')).toBe(1);
+    expect(await jobs.get('job_queued')).toMatchObject({
+      status: 'cancelled',
+      abortState: 'stopped',
+    });
+    expect(await jobs.get('job_paused_new')).toMatchObject({ status: 'paused' });
+  });
+});
+
+describe('session run id lookup', () => {
+  it('getRunIdBySessionId resolves the runId backing a session', async () => {
+    const { sessions } = setupStore();
+    const { session } = await seedSession(sessions, '/tmp/tekon', 'run_xyz');
+
+    expect(await sessions.getRunIdBySessionId(session.id)).toBe('run_xyz');
+    expect(await sessions.getRunIdBySessionId('sess_missing')).toBeNull();
+  });
+
+  it('getRunIdBySessionId returns null for a session with no run', async () => {
+    const { sessions } = setupStore();
+    const workspace = await sessions.getOrCreateDefaultWorkspace('/repo/norun');
+    const session = await sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'no run',
+      profile: 'human-web',
+      runId: null,
+    });
+    expect(await sessions.getRunIdBySessionId(session.id)).toBeNull();
+  });
 });

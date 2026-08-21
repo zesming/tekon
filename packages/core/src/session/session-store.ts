@@ -33,6 +33,12 @@ export interface SessionEventStore {
   }): Promise<Session>;
   getSession(sessionId: string): Promise<Session | null>;
   findSessionByRunId(runId: string): Promise<Session | null>;
+  /**
+   * Reverse lookup: the runId a session is associated with, or null when the
+   * session has no run (or does not exist). The job runner uses this to map a
+   * job's sessionId to the runId key used by the subprocess registry.
+   */
+  getRunIdBySessionId(sessionId: string): Promise<string | null>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
   appendEvent(input: {
     sessionId: string;
@@ -56,7 +62,14 @@ export interface JobRepository {
   enqueue(job: JobEnqueueInput): Promise<Job>;
   get(jobId: string): Promise<Job | null>;
   findActiveByRunId(runId: string): Promise<Job | null>;
-  cancelStaleActiveJobs(runId: string, exceptJobId?: string): Promise<number>;
+  // `leaseCutoffIso` 缺省时沿用 30s 默认(= runner 默认 leaseTtlMs);
+  // 自定义 leaseTtlMs 的 runner 应传入 `new Date(now - leaseTtlMs).toISOString()`,
+  // 避免 stale 判定与 runner 的租约 TTL 偏离(设计 §2.2 实现注)。
+  cancelStaleActiveJobs(
+    runId: string,
+    exceptJobId?: string,
+    leaseCutoffIso?: string,
+  ): Promise<number>;
   claimNext(owner: string): Promise<Job | null>;
   updateJob(
     jobId: string,
@@ -190,6 +203,13 @@ export function createSessionEventStore(
         .prepare('select * from sessions where run_id = ? order by created_at desc limit 1')
         .get(runId) as SessionRow | undefined;
       return row ? mapSession(row) : null;
+    },
+
+    async getRunIdBySessionId(sessionId) {
+      const row = db
+        .prepare('select run_id from sessions where id = ?')
+        .get(sessionId) as { run_id: string | null } | undefined;
+      return row?.run_id ?? null;
     },
 
     async updateSessionStatus(sessionId, status) {
@@ -327,11 +347,11 @@ export function createJobRepository(
       return row ? mapJob(row) : null;
     },
 
-    async cancelStaleActiveJobs(runId, exceptJobId) {
+    async cancelStaleActiveJobs(runId, exceptJobId, leaseCutoffIso) {
       return writeQueue.enqueue(() => {
-        const cutoff = new Date(
-          Date.now() - DEFAULT_STALE_PAUSED_LEASE_MS,
-        ).toISOString();
+        const cutoff =
+          leaseCutoffIso ??
+          new Date(Date.now() - DEFAULT_STALE_PAUSED_LEASE_MS).toISOString();
         const result = db
           .prepare(
             `update jobs
