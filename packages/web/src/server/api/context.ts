@@ -65,6 +65,7 @@ export interface ProjectRunInput {
   demandText: string;
   token: string;
   mode?: 'workflow' | 'goal';
+  profile?: 'human-web' | 'autonomous-delivery';
   template?: string;
   agent?: string;
   allowDirtyBase?: boolean;

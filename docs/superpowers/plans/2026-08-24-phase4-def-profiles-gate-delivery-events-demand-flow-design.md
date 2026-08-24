@@ -72,8 +72,9 @@
 
 #### 1.2.3 操作面 guard（review-only）
 
-- **web**：dispatch.ts 统一 guard（决策 D2）。session 关联操作（cancel/pause/approve/reject/delivery）查 `findSessionByRunId(runId).profile`，review-only → 403。session 创建操作（project.run）不 guard（review-only 不应由 run 创建）。
-- **CLI**：run/cancel/pause/approval/delivery 执行前查 profile，review-only → 报错退出。
+> **实现级订正（4d 落地，2026-08-24）**：`canMutate` 策略原语已实现并测试（review-only → false），但 review-only **enforcement 本轮递延**，且 project.run 的 `profile` 入参**不接受 `review-only`**。理由：起一次 run 本身就是 mutation，run 无法创建只读会话——4a-4e 没有任何路径能产生 review-only session。为一个尚不可达的状态在 dispatch.ts 建 guard 属投机式通用化（正是评审 M3 批评的装饰化反模式）。待出现真正的 review-only 入口（如只读会话浏览的独立创建路径）时，再在 dispatch.ts 用 `canMutate(session.profile)` 统一 guard 落地。**当前交付 `canMutate` 原语 + 测试，enforcement 递延**——`review-only` 目前只是策略层已就绪、入口未开。
+- （原计划，待入口就绪后落地）**web**：dispatch.ts 统一 guard；session 关联的 mutation（cancel/pause/approve/reject/delivery）查 `getSession/findSessionByRunId(runId).profile`，review-only → 403。
+- （原计划）**CLI**：mutation 命令执行前查 profile，review-only → 报错退出。
 
 #### 1.2.4 profile 赋值
 

@@ -55,6 +55,12 @@ export const projectRunInputSchema = z.object({
   // 4b: 'goal' runs the built-in single-node goal template (ignores template);
   // omitted/'workflow' keeps the governed delivery-workflow path.
   mode: z.enum(['workflow', 'goal']).optional(),
+  // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
+  // (never PR creation — governance red line). Omitted → human-web. review-only
+  // is intentionally NOT accepted here: starting a run is itself a mutation, so
+  // a run cannot create a read-only session; review-only enforcement is
+  // deferred until a dedicated review-only entry point exists (design §1.2.3).
+  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
   template: z.string().optional(),
   agent: z.string().optional(),
   allowDirtyBase: z.boolean().optional(),

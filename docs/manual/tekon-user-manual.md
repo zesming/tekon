@@ -1014,6 +1014,7 @@ Session UI 适合：
 - Web 是本地 dashboard，不是远程服务。
 - token 不应提交。
 - Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
+- **发起运行时可选 Profile**：新建运行表单的 `Profile` 下拉默认 `human-web`（人工驱动，不自动推进人工点）。选 `autonomous-delivery` 后，运行**通过（passed）时会自动准备交付**（打包证据、生成 PR 准备包、进入待审批状态）；**但绝不自动创建 PR**——创建远端 PR 始终需要人工在交付面板显式批准。此边界是硬约束，不因 Profile 放宽。自动准备只在长驻的 Web/服务模式下触发；CLI `tekon run` 跑完即退出，交付仍走显式 `tekon delivery prepare`。
 - **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行。
   - **Session UI（默认）会通过事件流实时反映进展**：发起后无需手动刷新，中间栏会随后台执行追加事件、右侧审批卡片在门禁触发时自动出现、决策后运行自动继续。
   - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。

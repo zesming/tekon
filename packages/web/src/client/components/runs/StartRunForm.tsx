@@ -45,6 +45,9 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const [demandText, setDemandText] = useState('');
   const [template, setTemplate] = useState('');
   const [agent, setAgent] = useState<string>(AGENT_OPTIONS[0]);
+  const [profile, setProfile] = useState<'human-web' | 'autonomous-delivery'>(
+    'human-web',
+  );
   const [timeoutMs, setTimeoutMs] = useState('3600000');
   const [noProgressTimeoutMs, setNoProgressTimeoutMs] = useState('');
   const [allowDirtyBase, setAllowDirtyBase] = useState(false);
@@ -105,6 +108,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
     if (template) input.template = template;
     if (agent) input.agent = agent;
+    if (profile !== 'human-web') input.profile = profile;
     if (allowDirtyBase) input.allowDirtyBase = true;
 
     const parsedTimeout = Number(timeoutMs);
@@ -202,6 +206,23 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                     {a}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Profile</label>
+              <select
+                className="select"
+                value={profile}
+                onChange={(e) =>
+                  setProfile(
+                    e.target.value as 'human-web' | 'autonomous-delivery',
+                  )
+                }
+              >
+                <option value="human-web">human-web（默认）</option>
+                <option value="autonomous-delivery">
+                  autonomous-delivery（通过后自动准备交付，不自动创建 PR）
+                </option>
               </select>
             </div>
           </div>

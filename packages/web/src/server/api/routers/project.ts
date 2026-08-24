@@ -188,6 +188,9 @@ export function createProjectRouter(context: ServerContext) {
           : workflowSpec
             ? { workflowSpec }
             : { templateName }),
+        // 4d: explicit per-run profile (autonomy is never inferred). Omitted →
+        // SessionService falls back to the composition-root default (human-web).
+        ...(runInput.profile ? { profile: runInput.profile } : {}),
         engine: {
           agent: runInput.agent ?? 'codex',
           allowDirtyBase: Boolean(runInput.allowDirtyBase),

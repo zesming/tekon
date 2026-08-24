@@ -371,4 +371,92 @@ describe('project.run background job (S7b)', () => {
 
     await api.close();
   }, 30_000);
+
+  // 4d: autonomous-delivery profile auto-PREPARES delivery when a run passes,
+  // but NEVER creates a PR (governance red line: PR creation stays human).
+  it('autonomous-delivery auto-prepares delivery on pass but never creates a PR', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const started = await api.project.run({
+      demandText: 'Autonomous delivery should auto-prepare after pass.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      profile: 'autonomous-delivery',
+      token: fixture.sessionToken,
+    });
+    await waitFor(
+      () => runStatus(fixture.projectRoot, started.run.id) === 'passed',
+    );
+
+    // The auto-prepare job (enqueued off agent/status passed) drives the
+    // delivery row to `prepared` out of band.
+    await waitFor(() => {
+      const status = deliveryStatus(fixture.projectRoot, started.run.id);
+      return status === 'prepared';
+    });
+
+    // Red line: the delivery row must NOT advance past prepared — no PR was
+    // created, no PR URL was recorded.
+    const db = openTekonDatabase({
+      filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const row = db
+        .prepare(
+          'select status, pr_url from delivery_pull_requests where run_id = ?',
+        )
+        .get(started.run.id) as
+        | { status: string; pr_url: string | null }
+        | undefined;
+      expect(row?.status).toBe('prepared');
+      expect(row?.pr_url ?? null).toBeNull();
+    } finally {
+      db.close();
+    }
+
+    await api.close();
+  }, 30_000);
+
+  it('human-web profile does NOT auto-prepare delivery on pass', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const started = await api.project.run({
+      demandText: 'Human-web must not auto-prepare.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      // profile omitted → human-web
+      token: fixture.sessionToken,
+    });
+    await waitFor(
+      () => runStatus(fixture.projectRoot, started.run.id) === 'passed',
+    );
+
+    // Give the (non-existent) auto-prepare a chance to (not) run, then assert no
+    // delivery row was created by any listener.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(deliveryStatus(fixture.projectRoot, started.run.id)).toBeUndefined();
+
+    await api.close();
+  }, 30_000);
 });
+
+function deliveryStatus(
+  projectRoot: string,
+  runId: string,
+): string | undefined {
+  const db = openTekonDatabase({
+    filename: join(projectRoot, '.tekon', 'tekon.sqlite'),
+  });
+  try {
+    const row = db
+      .prepare('select status from delivery_pull_requests where run_id = ?')
+      .get(runId) as { status: string } | undefined;
+    return row?.status;
+  } finally {
+    db.close();
+  }
+}

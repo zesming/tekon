@@ -15,6 +15,7 @@ import {
   createWorkflowJobExecutor,
   createAutomationJobExecutor,
   createRoutingJobExecutor,
+  canAutoPrepareDelivery,
   createWorktreeManager,
   createWriteQueue,
   createJobRunner,
@@ -190,6 +191,29 @@ export async function createApiCaller(
     }, 500);
     if (typeof timer.unref === 'function') timer.unref();
     readinessDebounce.set(event.sessionId, timer);
+  });
+
+  // 4d: autonomous-delivery auto-prepare. When a run passes (run.passed →
+  // agent/status{status:passed}), if its session's profile is
+  // autonomous-delivery, enqueue a delivery-auto-prepare job. The automation
+  // executor packages evidence + writes the `prepared` row + emits
+  // delivery/prepared — but NEVER creates a PR (governance red line). Long-
+  // lived server only (web/headless): CLI is run-to-exit and does not wire this.
+  bus.subscribeAll((event) => {
+    if (event.type !== 'agent/status') return;
+    if ((event.payload as { status?: string }).status !== 'passed') return;
+    void (async () => {
+      try {
+        const session = await sessions.getSession(event.sessionId);
+        if (!session || !canAutoPrepareDelivery(session.profile)) return;
+        await jobRunner.enqueue({
+          sessionId: event.sessionId,
+          kind: 'delivery-auto-prepare',
+        });
+      } catch (error) {
+        console.error('[auto-prepare] enqueue failed:', error);
+      }
+    })();
   });
 
   // 4a: SessionService owns the run/resume/cancel/pause orchestration; the

@@ -44,6 +44,13 @@ export interface SessionServiceStartRunInput<TEngineInput = SessionServiceEngine
   /** Passed verbatim to deps.createEngine. */
   engine: TEngineInput;
   /**
+   * 4d: per-run session profile override (human-web | autonomous-delivery |
+   * review-only). Falls back to deps.sessionProfile when omitted. Autonomy is
+   * never inferred — the caller (web project.run / CLI --profile) states it
+   * explicitly, so a run only becomes autonomous when asked.
+   */
+  profile?: string;
+  /**
    * Hook invoked after prepareRun (runId exists) and before createSession.
    * The web router uses it to append the `run.demand-shaped` governance
    * audit (P0-03 approval evidence), which is intentionally NOT mapped to a
@@ -161,6 +168,9 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     input: SessionServiceStartRunInput<TEngineInput>,
   ): Promise<SessionServiceStartRunResult> {
     const runKind = input.mode === 'goal' ? 'goal' : 'workflow';
+    // 4d: per-run profile override (explicit autonomy only); falls back to the
+    // composition root's default.
+    const profile = input.profile ?? SESSION_PROFILE;
     const engine = await deps.createEngine(input.engine);
     // 4b: goal mode ignores any provided template/workflowSpec and uses the
     // built-in single-node goal template (design §3.3 precedence).
@@ -194,13 +204,13 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     const session = await sessions.createSession({
       workspaceId: workspace.id,
       title: input.demandText.slice(0, 80),
-      profile: SESSION_PROFILE,
+      profile,
       runId,
     });
     const created = await sessions.appendEvent({
       sessionId: session.id,
       type: 'session/created',
-      payload: { runId, profile: SESSION_PROFILE },
+      payload: { runId, profile },
     });
     bus.publish(created);
     const started = await sessions.appendEvent({
