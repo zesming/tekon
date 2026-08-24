@@ -29,7 +29,7 @@ Harness-inspired replatform 阶段 4（4a–4c）：把 run 编排收敛为**共
 ### 已知边界（诚实标注）
 
 - 取消链完整仅保证 **CLI 持有方**（同进程 SIGINT / CLI await 观察循环）；CLI 取消一个 **Web 持有**的 run 时，workflow 状态经 CAS 护栏诚实变 cancelled，但 Web 侧 Agent 子进程会跑到引擎下次终态写入抛错才停（可能空耗剩余节点 token）。消除此空耗需把同一观察 hook 加进 web jobRunner，列为后续。
-- goal run 默认不接 delivery（standard-delivery 的 pre-PR readiness 检查对 goal 恒 false）；服务端 `assertPrePullRequestReady` 已强制，UI/CLI 不暴露 goal run 的 delivery 入口作为纵深防御。
+- goal run 默认不接 delivery（standard-delivery 的 pre-PR readiness 检查对 goal 恒 false）；权威硬 guard 是**服务端** `assertPrePullRequestReady`（goal run 恒红、无法创建 PR）。UI/CLI 层的 delivery 入口尚未按 kind 收窄（Delivery tab 与 `tekon delivery` 对所有 run 无条件可见），纵深防御的 UI/CLI guard 待后续补齐——治理不退化由服务端保证。
 - 4d（profiles）、4e（Gate/Delivery 事件订阅）、4f（Demand→澄清/plan flow）单列后续设计，不在本次范围。
 
 ### 测试

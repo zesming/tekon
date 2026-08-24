@@ -96,7 +96,7 @@
 ### 3.4 goal run 与 gate/delivery 边界
 
 - gate：goal node 的 gates 由 `startRun` 参数决定（空=纯 agent goal；非空=goal+治理）。gate 引擎零改动（`runGate` 只需 runId/nodeId/gate/cwd）。
-- delivery：goal run 默认不接 delivery（§0.2）。`pre-pr-readiness.ts:70-71` 的 standard-delivery 硬编码检查对 goal run 恒 false——本设计**不放宽**该检查，改为 web/CLI 在 goal run 上**不暴露 delivery 入口**（UI/CLI 层 guard），并在设计中显式声明"goal run 要交付请改用 workflow 模板"。
+- delivery：goal run 默认不接 delivery（§0.2）。`pre-pr-readiness.ts:70-71` 的 standard-delivery 硬编码检查对 goal run 恒 false——本设计**不放宽**该检查，改为 web/CLI 在 goal run 上**不暴露 delivery 入口**（UI/CLI 层 guard），并在设计中显式声明"goal run 要交付请改用 workflow 模板"。**落地状态（4c 复核订正）**：权威硬 guard 已由服务端 `assertPrePullRequestReady` 保证（goal run 恒红、无法创建 PR）；UI/CLI 层的入口收窄（Delivery tab / `tekon delivery` 按 kind 隐藏）**尚未实现**，作为纵深防御项递延至 4d/UI 层，不影响 4a-4c 会话化闭环的治理正确性。
 
 ### 3.5 4b 测试
 
