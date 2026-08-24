@@ -119,6 +119,11 @@ describe('session contract v1 (frozen draft)', () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
+  // 4e: readiness/evaluated is a governance event (delivery readiness projection).
+  it('includes the 4e readiness/evaluated governance event', () => {
+    expect(TEKON_GOVERNANCE_EVENT_TYPES).toContain('readiness/evaluated');
+  });
+
   it('validates session and job shapes', () => {
     expect(() =>
       sessionSchema.parse({

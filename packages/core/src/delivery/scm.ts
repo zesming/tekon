@@ -72,6 +72,27 @@ export function createScmDelivery(
       const baseBranch = input.baseBranch ?? 'main';
       assertSafeGitBranchRef(input.branch, 'branch');
       assertSafeGitBranchRef(baseBranch, 'baseBranch');
+      // 4e: idempotency guard. If a PR was already created for this run, return
+      // the existing state WITHOUT re-running git push / gh pr create. Without
+      // this, a repeat createPr (retry, double-submit, or an at-least-once
+      // automation trigger) pushes again and re-invokes `gh pr create` — the
+      // recovery path (recoverExistingPrUrl) only papers over the second create
+      // AFTER the redundant push. The short-circuit is keyed on the persisted
+      // terminal `created` status, so an in-flight/failed run still proceeds.
+      if (options.repositories && input.runId) {
+        const existing = await options.repositories.getDeliveryPullRequest(
+          input.runId,
+        );
+        if (existing?.status === 'created' && existing.prUrl) {
+          return {
+            dryRun: false,
+            requiresHumanApproval: false,
+            commands: [],
+            status: await getScmStatus(options, input.branch),
+            prUrl: existing.prUrl,
+          };
+        }
+      }
       const gateway = options.gateway ?? createCommandGateway();
       const bodyArg = input.bodyPath
         ? ['--body-file', input.bodyPath]

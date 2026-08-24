@@ -158,6 +158,9 @@ export const TEKON_GOVERNANCE_EVENT_TYPES = [
   'delivery/prepared',
   'delivery/pr-created',
   'evaluation/completed',
+  // 4e: emitted after pre-PR readiness is (re-)evaluated off a gate/result
+  // event, so UI/delivery can react to readiness changes without polling.
+  'readiness/evaluated',
 ] as const;
 
 export type CoreSessionEventType = (typeof CORE_SESSION_EVENT_TYPES)[number];

@@ -110,6 +110,8 @@
 - **delivery 事件化**：新增 `readiness/evaluated` 事件 + 生产者 + 去抖投影；`createPr` 幂等守卫。
 - **bus 约束**：同步 fan-out，重活丢 job，listener 不阻塞 SSE/job 发射。
 
+> **实现级收窄（4e 落地订正，2026-08-24）**：4e 交付 **bus subscribeAll+异常隔离**、**`readiness/evaluated` 事件+去抖投影（web/headless）**、**`createPr` 幂等守卫** 三项高价值、低风险机制（delivery 事件化的核心价值）。**validation-only 旁路 gate（§2.2.2）本轮递延**：它是"预检"优化（权威路径仍在 node 边界同步跑 gate，不依赖旁路），却需把 node 的 worktree lease/cwd/outputDir/gate 配置解析线程进 automation-executor（materially 扩面），且带 N2 stale-latest 竞态需谨慎处理——收益（预检提前）与成本/风险不相称（依 CLAUDE.md「方案规模相称」「不要当英雄」）。旁路 gate 单列后续（4e-bis 或并入 4d/UI 增强），届时以 schema gate + worktree-cwd + 写前查 latest 为约束落地。**递延不影响治理正确性**：gate 判定的权威路径未变。
+
 ### 2.2 最小机制
 
 #### 2.2.1 bus 全局订阅 + 异常隔离

@@ -156,6 +156,11 @@ export async function withCliSessionContext<T>(
       createDualWriteRepositories(repositories, bridge);
     const dualAudit = createDualWriteAuditLogger(audit, bridge);
 
+    // 4e: CLI uses the plain workflow executor (no routing/automation). CLI is
+    // run-to-exit and never enqueues automation kinds (delivery-auto-prepare /
+    // readiness-evaluate are long-lived-server features, wired only in web/
+    // headless — design §1.4/§2.2). Autonomous delivery from CLI stays explicit
+    // via `tekon delivery prepare`.
     const executor = createWorkflowJobExecutor({
       repositories: dualRepositories,
       audit: dualAudit,

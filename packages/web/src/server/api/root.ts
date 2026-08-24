@@ -13,6 +13,8 @@ import {
   createSubprocessRegistry,
   createWorkflowEngine,
   createWorkflowJobExecutor,
+  createAutomationJobExecutor,
+  createRoutingJobExecutor,
   createWorktreeManager,
   createWriteQueue,
   createJobRunner,
@@ -143,8 +145,52 @@ export async function createApiCaller(
     // step/start, tool/*, assistant/message, agent/error, step/end via it.
     agentEventSink: bridge,
   });
-  const jobRunner = createJobRunner({ jobs, sessions, bus, registry, executor });
+  // 4d/4e: automation kinds (delivery-auto-prepare, readiness-evaluate) run
+  // through a separate lightweight executor that never touches workflow/session
+  // terminal state (M1). The routing executor dispatches by job kind so the
+  // durable runner stays single-executor.
+  const automationExecutor = createAutomationJobExecutor({
+    repositories: dualRepositories,
+    audit: dualAudit,
+    sessions,
+    bus,
+    projectRoot: projectContext.projectRoot,
+  });
+  const jobRunner = createJobRunner({
+    jobs,
+    sessions,
+    bus,
+    registry,
+    executor: createRoutingJobExecutor({
+      workflow: executor,
+      automation: automationExecutor,
+    }),
+  });
   jobRunner.start();
+
+  // 4e: readiness projection. When a gate result lands, (re-)evaluate pre-PR
+  // readiness off the event stream so the UI/delivery can react without
+  // polling. Debounced per session (a node emits several gate results in a
+  // burst); the enqueue is fire-and-forget — a projection failure must never
+  // destabilize the publisher (the bus already isolates listener throws, but
+  // the async enqueue is guarded too). Long-lived server only: the durable
+  // runner keeps polling, so the enqueued job is always drained here.
+  const readinessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+  bus.subscribeAll((event) => {
+    if (event.type !== 'gate/result') return;
+    const existing = readinessDebounce.get(event.sessionId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      readinessDebounce.delete(event.sessionId);
+      void jobRunner
+        .enqueue({ sessionId: event.sessionId, kind: 'readiness-evaluate' })
+        .catch((error) => {
+          console.error('[readiness] enqueue failed:', error);
+        });
+    }, 500);
+    if (typeof timer.unref === 'function') timer.unref();
+    readinessDebounce.set(event.sessionId, timer);
+  });
 
   // 4a: SessionService owns the run/resume/cancel/pause orchestration; the
   // project router degrades to auth + input assembly + mapping.
@@ -195,8 +241,11 @@ export async function createApiCaller(
     sessions,
     bus,
     async close() {
-      // Stop the runner (waits up to 5s for in-flight jobs to settle) before
-      // closing the db, so no job writes to a closed handle (R9).
+      // Clear pending readiness debounce timers first so none fires an enqueue
+      // against a closing db/runner (R9). Then stop the runner (waits up to 5s
+      // for in-flight jobs) before closing the db.
+      for (const timer of readinessDebounce.values()) clearTimeout(timer);
+      readinessDebounce.clear();
       await jobRunner.stop();
       db.close();
     },
