@@ -1,14 +1,4 @@
 import {
-  createClaudeCodeAdapter,
-} from './claude-code-adapter.js';
-import {
-  createCodexAdapter,
-} from './codex-adapter.js';
-import {
-  createMockAgentAdapter,
-} from './mock-agent-adapter.js';
-import {
-  agentAdapterConfigSchema,
   DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
   DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
   DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
@@ -17,6 +7,10 @@ import {
 import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import type { RunProviderConfig } from '../types/domain.js';
+// Note: createBuiltInProviderRegistry is imported at call-time inside the
+// factory functions below to avoid a module-init cycle (provider-registry.ts
+// imports the helpers exported from this module).
+import { createBuiltInProviderRegistry } from './provider-registry.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -55,112 +49,37 @@ export interface AgentSnapshotInput {
 
 /**
  * Create an agent adapter from a high-level agent name and configuration.
- * This is the single factory shared by CLI and Web runtimes.
+ * This is the single factory shared by CLI and Web runtimes. Delegates to the
+ * provider registry (phase 2 S1); the registry is imported lazily to avoid a
+ * cycle (provider-registry imports the helpers defined in this module).
  */
 export function createAgentRuntime(
   config: AgentRuntimeConfig,
 ): AgentRuntimeResult {
-  if (config.agent === 'mock') {
-    return {
-      adapter: createMockAgentAdapter(),
-      provider: 'mock',
-      configSummary: { provider: 'mock' },
-    };
-  }
-
-  if (config.agent === 'claude-code') {
-    const providerConfig = applyProviderRuntimeOverrides(
-      defaultProviderConfig('claude-code', config.repoPath, {
-        approvalDefault: config.approvalDefault,
-      }),
-      config.runtime,
+  const def = createBuiltInProviderRegistry().get(config.agent);
+  if (!def) {
+    throw new Error(
+      `Unsupported agent: ${config.agent}. Supported agents: mock, claude-code, codex`,
     );
-    return {
-      adapter: createClaudeCodeAdapter(providerConfig, config.gateway),
-      provider: 'claude-code',
-      configSummary: summarizeAgentConfig(providerConfig),
-    };
   }
-
-  if (config.agent === 'codex') {
-    const providerConfig = applyProviderRuntimeOverrides(
-      defaultProviderConfig('codex', config.repoPath, {
-        approvalDefault: config.approvalDefault,
-      }),
-      config.runtime,
-    );
-    return {
-      adapter: createCodexAdapter(providerConfig, config.gateway),
-      provider: 'codex',
-      configSummary: summarizeAgentConfig(providerConfig),
-    };
-  }
-
-  throw new Error(
-    `Unsupported agent: ${config.agent}. Supported agents: mock, claude-code, codex`,
-  );
+  return def.create(config);
 }
 
 /**
  * Restore an agent adapter from a persisted RunProviderConfig snapshot.
  * Used by both CLI resume and Web resume to safely reconstruct adapters.
+ * Delegates to the provider registry (phase 2 S1/S2).
  */
 export function createAgentAdapterFromSnapshot(
   input: AgentSnapshotInput,
 ): AgentRuntimeResult {
-  const { snapshot, gateway } = input;
-
-  if (snapshot.provider === 'mock') {
-    return {
-      adapter: createMockAgentAdapter(),
-      provider: 'mock',
-      configSummary: snapshot.configSummary,
-    };
+  const def = createBuiltInProviderRegistry().get(input.snapshot.provider);
+  if (!def) {
+    throw new Error(
+      'Custom agent provider snapshots cannot be safely replayed; only mock, claude-code, and codex are supported.',
+    );
   }
-
-  if (snapshot.provider === 'claude-code') {
-    const parsed = agentAdapterConfigSchema.safeParse(
-      snapshot.configSummary,
-    );
-    if (!parsed.success || parsed.data.provider !== 'claude-code') {
-      throw new Error(
-        `Run ${snapshot.runId} has a non-replayable claude-code provider snapshot; it may be corrupted or from an incompatible version.`,
-      );
-    }
-    const config = applyProviderRuntimeOverrides(
-      parsed.data,
-      input.runtime,
-    );
-    return {
-      adapter: createClaudeCodeAdapter(config, gateway),
-      provider: 'claude-code',
-      configSummary: summarizeAgentConfig(config),
-    };
-  }
-
-  if (snapshot.provider === 'codex') {
-    const parsed = agentAdapterConfigSchema.safeParse(
-      snapshot.configSummary,
-    );
-    if (!parsed.success || parsed.data.provider !== 'codex') {
-      throw new Error(
-        `Run ${snapshot.runId} has a non-replayable codex provider snapshot; it may be corrupted or from an incompatible version.`,
-      );
-    }
-    const config = applyProviderRuntimeOverrides(
-      parsed.data,
-      input.runtime,
-    );
-    return {
-      adapter: createCodexAdapter(config, gateway),
-      provider: 'codex',
-      configSummary: summarizeAgentConfig(config),
-    };
-  }
-
-  throw new Error(
-    'Custom agent provider snapshots cannot be safely replayed; only mock, claude-code, and codex are supported.',
-  );
+  return def.restore(input);
 }
 
 /**

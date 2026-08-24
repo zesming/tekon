@@ -140,7 +140,7 @@ node-executor 用它包住 :235 的调用;**rework.ts:360 与 :510 两处也用�
 | M3 | `tool/result`+`assistant/message` modelVisible=true；assistant/message 为产物元数据合成摘要（非模型原文，2b 才有原文） | present.ts:88、AgentRunResult 无模型文本字段 |
 | M4 | 补 C1 故障注入 + 失败/取消路径 + 闭集断言扩展第四类 + D4 三处清扫 | 评审 M4 |
 | S1(评审) | 护栏在 adapter 工厂（codex/claude-code-adapter），不搬进 registry；测试锁定 definition 走工厂 | codex-adapter.ts:76、claude-code-adapter.ts:52 |
-| S2(评审) | schema_version 存储：`addColumnIfMissing(run_provider_configs, schema_version, integer not null default 1)`；domain.ts:286-292 zod default(1);高版本仅在 web 同步 resume 映射 400,job 路径表现为 job failed | migrations.ts:235-244、engine.ts:321、repositories.ts:371-391 |
+| S2(评审) | schema_version **存于 config_summary JSON blob**（比评审建议的新增列更简单、同样零迁移：旧 blob 无该键→视为 v1）：`create()` stamp `schemaVersion` 进 summary，`restore()` 读 `configSummary.schemaVersion`，缺省=1，高于当前抛 `ProviderSnapshotVersionError`；高版本仅在 web 同步 resume 映射 400，job 路径表现为 job failed | domain.ts:286、repositories.ts:371、provider-registry.ts |
 | S4(评审) | 每 node 生成 stepId=randomUUID() 入 payload + correlationId；不强求 sourceEventSeqs | session-contract.ts |
 | 复审-B | `runAgentWithStepEvents` 包住**三处** runAgent（node-executor:235 + rework:360/:510），rework 加可选 agentEventSink，否则 rework run 的 §13.6 主张不成立 | rework.ts:42-47,360,510 |
 | 复审-driver | driver `events()` 用受背书的 collecting sink（内部 appendEvent 拿 seq + try/catch publish + yield），非伪造 seq；node/rework 路径仍用 bridge sink | session-contract.ts:192、dual-write.ts:215 |
