@@ -14,7 +14,7 @@
 - 客户端能消费 SSE、断线重连、Last-Event-ID replay（服务端已支持，客户端零实现 → 本阶段建）。
 - 客户端能列出/打开 session（新增最小 `session.*` 读 RPC + store `listSessions`）。
 - 三栏 Session UI：session list（左）+ event feed（中）+ 运行控制/审批/卡片（右）。
-- inline approval + tool/diff/artifact/final-result 卡片，复用既有审批与展示组件。
+- inline approval + tool/artifact/error/final-result 卡片，复用既有审批与展示组件（diff 卡递延，见 §0.2）。
 - 运行中 pause/cancel/resume（复用 RunControls，接上此前被丢弃的 sessionId）。
 - 旧 Dashboard 与 run-detail 全部**保留**、移到 `/advanced`（C2 双轨并存，不删）；新 Session UI 成为默认 `/`。
 
@@ -43,7 +43,7 @@
 - **store 读面**（`session-store.ts:26-59`）：有 `getSession`/`findSessionByRunId`/`getRunIdBySessionId`/`listEventsSince`/`latestSeq`；**无 `listWorkspaces`/`listSessions`** → 3a 需补 `listSessions`（只读查询，零迁移）。
 - **死代码**：`use-run-poller.ts`（仅 `hooks/index.ts:3` re-export，无消费者）→ 3a 删除。
 - **状态层**：手写 `QueryCache`（`query-cache.ts`）+ `useQuery`/`useMutation`，**无轮询**、无 React Query。SSE 订阅需新建独立于 QueryCache 的 live store（见 §3 D3）。
-- **复用组件**：`DecisionCard`/`DecisionForm`/`ApprovalSummary`（完整审批 UI）、`RunControls`+`runControlAffordances`（已单测）、`CodeBlock`、`AuditTimeline`（时间线范式）、`ArtifactsTab` 范式、`DiffViewer`（摘要）、`ConfirmButton`、`Card`/`StatusBadge`/`EmptyState` 等原语。
+- **复用组件**：`DecisionCard`/`DecisionForm`/`ApprovalSummary`（完整审批 UI）、`RunControls`+`runControlAffordances`（已单测）、`CodeBlock`、`AuditTimeline`（时间线范式）、`ArtifactsTab` 范式、`ConfirmButton`、`Card`/`StatusBadge`/`EmptyState` 等原语。（`DiffViewer` 存在但只在 delivery 页、读 delivery 投影，本阶段 Session UI **未使用**——见 §0.2。）
 - **e2e harness**：Playwright fixture `createWebFixtureProject`（`__tests__/fixtures/project.ts`）播种 2 run + token=`fixture-session-token`，**不播种 session**；`beforeEach` 猴补 `window.fetch` 仅对 `/api/rpc` 注入 token 头（`shared-fixture.ts:38-61`）。vitest 侧**已有 SSE 测试资产**：`__tests__/api/session-sse.test.ts` 的 `collectSse`/`parseFrames`/`seedSession`。
 
 ## 2. 子步拆分（3a–3d，每步独立 e2e + 提交；顺序依赖，不可并行）
@@ -95,7 +95,7 @@
 - 路由迁移：新 Session UI 挂 `/`（默认）；旧 Dashboard/Runs/Run-detail 全部移到 `/advanced/*`（`App.tsx` 路由 + Sidebar 导航；C2 保留全部旧页面，零删除）。
 - （可选增强，S4）Run detail 的 `RunControls` 眼睛按钮当前有 `canView && onView` 守卫、`RunDetailPage.tsx:157` 不传 onView 故**不渲染**（非冗余、无 bug、与报告 P1-02"Engine 特权核心"无关——原 v1 表述有误已删）；如需可给 RunDetailPage 传 onView 跳转对应 Session Detail，作为锦上添花，非本阶段必做。
 
-**e2e（3d）**：Playwright 断线重连（关流→重连→replay 无重复/无丢失）；`/advanced` 旧页面仍可达且渲染；默认 `/` 为 Session UI。
+**e2e（3d）**：断线重连（关流→重连→replay 无重复/无丢失）由 **vitest `session-stream-reconnect`**（确定性 fake fetch，含 400/401/403/404 不重连、503 重试）覆盖，比浏览器级 Playwright 更稳定可控；`/advanced` 旧页面仍可达且渲染、默认 `/` 为 Session UI 由 Playwright `session-routing` 覆盖。
 
 ## 3. 关键决策（待评审裁定）
 

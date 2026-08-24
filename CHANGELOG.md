@@ -38,10 +38,10 @@ Harness-inspired replatform 阶段 3：Human-first Session UI。第一次把已�
 
 ### 测试
 
-- 新增 core `listSessions`（3）、web api `session-read-api`（4，含 M1 HTTP 200/401 防假绿）、client `session-stream`（11 解析器/reducer）、`session-stream-reconnect`（2 断线重连/Last-Event-ID）、`event-feed`（10 事件映射/turn 分组）、`session-side-panel`（7 右栏派生）。
+- 新增 core `listSessions`（3）、web api `session-read-api`（4，含 M1 HTTP 200/401 防假绿）、client `session-stream`（11 解析器/reducer）、`session-stream-reconnect`（7 断线重连/Last-Event-ID/致命状态 400·401·403·404 不重连/503 重试）、`event-feed`（13 事件映射/turn 分组）、`session-side-panel`（15 右栏派生/终态状态/final-result 卡）。
 - 新增 Playwright：`session-feed`（2，真实 mock-agent run→建流→replay→live→feed 有序）、`session-approval`（1，human-gate run→inline 卡片→两步批准→gate.approve→清空）、`session-routing`（1，`/`=Session UI、`/advanced`=旧 Cockpit 保留）。
 - e2e fixture 新增 `feature-approval.yaml`（human gate 模板）；既有 12 Playwright 路径同步到 `/advanced/*`。
-- 提交前全量 `pnpm test` 通过：core 894 / web 219 / cli 37 / 聚合 1150 + Playwright 11+5-flaky-then-pass。
+- 提交前全量 `pnpm test` 通过：core 894 / web 235 / cli 37 / 聚合 1166 + Playwright 11+5-flaky-then-pass（含 code review 修复的 +12、报告完整性终审的 +3 单测）。
 
 ## v0.10.0
 
