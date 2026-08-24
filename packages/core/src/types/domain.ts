@@ -186,6 +186,12 @@ export const workflowInstanceSchema = z.object({
   // 4b: 'workflow' (a governed delivery workflow) | 'goal' (a lightweight
   // single-node agent goal). Default keeps every legacy/omitted row a workflow.
   kind: z.enum(['workflow', 'goal']).default('workflow'),
+  // 4c: run-scoped "allow a dirty worktree as the base" policy. Persisted on
+  // the run so the async job executor (and cross-process resume) can rebuild
+  // the engine with the same lease policy the run was started with — the
+  // executor builds a fresh engine from the provider snapshot and would
+  // otherwise silently drop this flag. Default false keeps legacy rows strict.
+  allowDirtyBase: z.boolean().default(false),
   currentNodeId: z.string().nullable().optional(),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,

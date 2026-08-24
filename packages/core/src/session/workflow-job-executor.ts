@@ -93,6 +93,11 @@ export function createWorkflowJobExecutor(deps: {
         `Run ${runId} has no provider snapshot; cannot execute job safely.`,
       );
     }
+    // 4c: restore the run's lease policy. The engine is rebuilt fresh here
+    // (not the prepareRun engine), so allow-dirty-base — persisted on the run
+    // — must be read back and threaded, or a dirty-base run would fail lease
+    // creation in the background job even though it was started with the flag.
+    const instance = await repositories.getWorkflowInstance(runId);
     const adapter = createAgentAdapterFromSnapshot({ snapshot, gateway });
     return createWorkflowEngine({
       repoPath: projectContext.projectRoot,
@@ -102,6 +107,7 @@ export function createWorkflowJobExecutor(deps: {
       adapter: adapter.adapter,
       agentProvider: adapter.provider,
       agentConfigSummary: adapter.configSummary,
+      allowDirtyBase: instance?.allowDirtyBase ?? false,
       gateEngine: createGateEngine({ repositories, gateway }),
       worktreeManager: createWorktreeManager({ repositories, gateway }),
       registry,

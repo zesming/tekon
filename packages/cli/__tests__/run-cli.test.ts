@@ -1344,6 +1344,127 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       process.env.PATH = originalPath;
     }
   }, 30_000);
+
+  // 4b/4c: `tekon run --goal` runs the built-in single-node goal template
+  // through the same async session/job path as a workflow run, and persists the
+  // run as kind='goal'.
+  it('runs a goal-mode run to passed and persists kind=goal', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        ['run', '做一个轻量一次性任务', '--goal', '--agent', 'mock', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const runOutput = io.takeStdout();
+    expect(runOutput).toContain('状态: passed');
+    expect(runOutput).toContain('模板: goal');
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
+    expect(runId).toBeTruthy();
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const inst = db
+        .prepare('select kind from workflow_instances where id = ?')
+        .get(runId) as { kind: string } | undefined;
+      expect(inst?.kind).toBe('goal');
+    } finally {
+      db.close();
+    }
+  }, 30_000);
+
+  // 4c (design §8 decision 2): a CLI run produces a session labeled 'cli' bound
+  // to the run, with the opening lifecycle events — proof the CLI goes through
+  // the same Session API as web (not the legacy in-process engine call).
+  it('produces a cli-profile session bound to the run with opening events', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '会话化验证任务',
+          '--template',
+          'standard-delivery',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const session = db
+        .prepare('select id, profile, status from sessions where run_id = ?')
+        .get(runId) as
+        | { id: string; profile: string; status: string }
+        | undefined;
+      expect(session).toBeTruthy();
+      expect(session!.profile).toBe('cli');
+      const eventTypes = (
+        db
+          .prepare(
+            'select type from session_events where session_id = ? order by seq',
+          )
+          .all(session!.id) as Array<{ type: string }>
+      ).map((r) => r.type);
+      // Opening events appended by SessionService.startRun, then the executor's
+      // turn boundary — proof the run flowed through the session/job path.
+      expect(eventTypes).toContain('session/created');
+      expect(eventTypes).toContain('workflow/started');
+      expect(eventTypes).toContain('user/message');
+      expect(eventTypes).toContain('turn/start');
+    } finally {
+      db.close();
+    }
+  }, 30_000);
+
+  // 4c: --goal and --template are mutually exclusive (goal ignores templates).
+  it('rejects --goal combined with --template', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '冲突参数',
+          '--goal',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain(
+      '--goal 模式下不能同时指定 --template',
+    );
+  });
 });
 
 function createMemoryIo(): CliIO & {

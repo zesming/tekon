@@ -528,9 +528,18 @@ tekon run
 tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
+轻量目标运行（goal 模式）：
+
+```bash
+tekon run "做一个一次性小任务" --goal --agent mock
+```
+
+`--goal` 使用内置单节点 goal 模板执行一次轻量 Agent 目标，不套用完整交付工作流（不产出 code-changes、不进入交付流程）；与 `--template` 互斥。
+
 常用参数：
 
 - `--template <name>`：使用内置模板。
+- `--goal`：轻量目标运行（内置单节点 goal 模板，不接交付）；不能与 `--template` 同时使用。
 - `--demand-file <path>`：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。

@@ -1,5 +1,43 @@
 # 变更日志
 
+## v0.12.0
+
+Harness-inspired replatform 阶段 4（4a–4c）：把 run 编排收敛为**共享 Session API**，让 CLI 与 Web 走同一条 `SessionService` + 后台 Job 路径；并把 workflow 从"唯一入口"降级为可选的 goal plugin。分阶段是纪律不是打折——4d–4f（profiles、Gate/Delivery 事件订阅、Demand→澄清/plan）单列后续设计，不在本次范围。
+
+### 新功能
+
+**SessionService + executor 移入 core（4a，零行为漂移）:**
+- 把 web project router 的 run/resume/cancel/pause 编排抽成 `packages/core` 的 `createSessionService`，`workflow-job-executor` 一并从 web 迁入 core。web 组合根经 `createWebRunEngineFactory` 注入 provider/adapter 构造，router 只保留鉴权/ApiError/redaction/清洁基线断言等 web 专属校验；服务层用判别式 outcome（非抛错）回传校验失败，鉴权与错误映射仍归 router。
+
+**workflow 降级为可选 goal plugin（4b）:**
+- 新增内置单节点 `goal` 模板 + `goal` 角色：`governance: none` 仅豁免"必须有 reviewer 节点"这一条白名单不变量，其余模板不变量照常。goal run 是一次轻量 Agent 目标，不产出 code-changes、不接交付流程。
+- `workflow_instances` 新增 `kind`（`workflow`|`goal`）列（默认 `workflow`，零迁移风险）；`run.started`/`run.resumed`/`run.passed` 审计与 dual-write 事件按 run 真实 kind 派生。
+- 未知 job kind 显式 `throw`→job failed，绝不回落到空 plan 静默写 `run.passed`（§0.3 硬约束）。
+
+**CLI 会话化（4c）:**
+- `tekon run` / `tekon resume` 改走 `SessionService` + 内嵌 job runner，产生 session（profile=`cli`）、会话事件与 dual-write 投影，与 Web 共享同一 Session API。"跑完即退出"语义不变：await job 终态后重读 **workflow 状态**再退出，退出码依 workflow 终态派生。
+- `tekon run --goal`：CLI 侧发起轻量 goal 运行（与 `--template` 互斥）。
+- `tekon pause` / `tekon cancel` 改走 job runner 治理路径：真正杀子进程（`requestCancel → registry.killAll`），不再只改 DB 状态。
+- 跨进程治理（M2）：`requestPause` 跨 owner 持久化 `status='paused'`；CLI 持有方在 `awaitJobTerminal` 轮询里观察自身 job 行——见 `cancelling`→`requestCancel`（abort+killAll）、`paused`→`requestPause`（仅置 in-process pauseFlags，绝不 abort，否则 run 会 settle 成 cancelled 而非 paused）。防"cancel 被吞、run 假 passed"的根本护栏是 `writeWorkflowTerminal` 首步 CAS（与谁持有 run、观察是否及时无关）。
+
+### 行为变化
+
+- `run_provider_config` 快照不再承载 run 级执行策略；`allow-dirty-base` 作为 run 级策略持久化到 `workflow_instances.allow_dirty_base`，后台 Job executor 重建引擎时回读该策略——修复"CLI run 走异步 Job 后 `--allow-dirty-base` 丢失导致 dirty 基线 run 失败"的潜伏缺陷。
+- `resumeRun` 守卫顺序修正：**先判终态**再判 pending 决策——cancelled/passed/failed 的 run 即便残留 pending 决策也一律报"终态"（CLI → 退出码 1 + "终态"提示），不再误报"存在待审批"。
+- `tekon resume --approve-human` 对齐 web `gate.approve`：批准单个决策后驱动 run 前进，不再因**其它**未决决策被 pending 守卫挡回（引擎会在下一个人工 gate 处重新暂停）；裸 `tekon resume` 仍保留 pending 守卫。
+
+### 已知边界（诚实标注）
+
+- 取消链完整仅保证 **CLI 持有方**（同进程 SIGINT / CLI await 观察循环）；CLI 取消一个 **Web 持有**的 run 时，workflow 状态经 CAS 护栏诚实变 cancelled，但 Web 侧 Agent 子进程会跑到引擎下次终态写入抛错才停（可能空耗剩余节点 token）。消除此空耗需把同一观察 hook 加进 web jobRunner，列为后续。
+- goal run 默认不接 delivery（standard-delivery 的 pre-PR readiness 检查对 goal 恒 false）；服务端 `assertPrePullRequestReady` 已强制，UI/CLI 不暴露 goal run 的 delivery 入口作为纵深防御。
+- 4d（profiles）、4e（Gate/Delivery 事件订阅）、4f（Demand→澄清/plan flow）单列后续设计，不在本次范围。
+
+### 测试
+
+- core：`session-service.test.ts`（startRun 建 session/绑 runId/发三事件/enqueue 正确 kind；resume 守卫顺序 + afterApproval；cancel writeWorkflowTerminal 首步 + terminalConflict）、`job-runner.test.ts`（requestPause 跨 owner 持久化 / 队列态不搁浅 / 幂等）。
+- CLI：新增 goal 路径（run→passed + kind=goal）、cli-profile 会话产生断言、`--goal`/`--template` 互斥、`awaitJobTerminal` 观察循环（paused→requestPause、cancelling→requestCancel、终态直返、job 消失抛错）；既有 cli-flow e2e 的"状态: passed/paused"+ 人工确认断言在异步 Job 路径下继续通过。
+- 全量根聚合 1201 passed / Playwright 16（11 clean + 5 flaky-then-pass）/ 三包 typecheck 全绿。
+
 ## v0.11.0
 
 Harness-inspired replatform 阶段 3：Human-first Session UI。第一次把已在事件流里的会话事实（阶段 1/2 的 session/turn/step/tool/assistant/治理事件）接到**客户端**，形成连续叙事交互。默认路由 `/` 改为 Session UI；旧 run-centric Cockpit 完整保留在 `/advanced/*`（双轨并存，零删除）。

@@ -385,6 +385,83 @@ describe('durable job runner', () => {
     });
   });
 
+  it('4c M2: requestPause persists status=paused for a running job owned by ANOTHER worker (cross-owner)', async () => {
+    // Scenario: `tekon pause` (this runner) targets a run held by another
+    // process (owner=worker_web). The pause MUST land on the job row so the
+    // holder can observe it; the in-memory pause flag of THIS runner is
+    // irrelevant (the holder sets its own flag when it observes the row).
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({
+      executor,
+      workerId: 'worker_cli',
+    });
+    const session = await seedSession(sessions, 'run_cross_owner_pause');
+    const foreign = await jobs.enqueue({
+      id: 'job_foreign_running',
+      sessionId: session.id,
+      kind: 'workflow-run',
+      status: 'running',
+      owner: 'worker_web',
+      lease: new Date().toISOString(),
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await runner.requestPause(foreign.id);
+
+    const paused = await jobs.get(foreign.id);
+    expect(paused).toMatchObject({
+      status: 'paused',
+      owner: 'worker_web',
+    });
+  });
+
+  it('4c M2: requestPause on a queued job (owner NULL) stays a no-op — an unclaimed job must not be stranded in paused', async () => {
+    // claimNext only picks `queued` jobs; persisting `paused` on an unclaimed
+    // job would strand it forever (requeueStale only touches leased jobs).
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({ executor });
+    const session = await seedSession(sessions, 'run_queued_pause');
+    const queued = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+
+    await runner.requestPause(queued.id);
+
+    expect(await jobs.get(queued.id)).toMatchObject({
+      status: 'queued',
+      owner: null,
+    });
+  });
+
+  it('4c M2: requestPause on a foreign already-paused job is idempotent (stays paused)', async () => {
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({ executor });
+    const session = await seedSession(sessions, 'run_foreign_paused');
+    const foreign = await jobs.enqueue({
+      id: 'job_foreign_paused',
+      sessionId: session.id,
+      kind: 'workflow-run',
+      status: 'paused',
+      owner: 'worker_web',
+      lease: new Date().toISOString(),
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await runner.requestPause(foreign.id);
+
+    expect(await jobs.get(foreign.id)).toMatchObject({
+      status: 'paused',
+      owner: 'worker_web',
+    });
+  });
+
   it('checkpoint persists node:<nodeId> while the job is running', async () => {
     const executor = new ControllableExecutor();
     const { sessions, jobs, runner } = setup({ executor });

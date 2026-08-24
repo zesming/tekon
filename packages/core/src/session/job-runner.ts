@@ -55,7 +55,15 @@ export interface DurableJobRunner extends JobRunner {
   start(): void;
   /** Stop polling and wait for in-flight jobs to settle (5s cap). */
   stop(): Promise<void>;
-  /** Set the in-memory pause flag and persist `status='paused'`. */
+  /**
+   * Set the in-memory pause flag (when this runner owns the job) and persist
+   * `status='paused'` — 4c M2: persistence also applies to jobs owned by
+   * OTHER workers, so a cross-process pause (e.g. `tekon pause` against a
+   * run held by another process) is observable by the holder via its job
+   * row. The in-memory flag is process-local and only set for owned jobs;
+   * the owner===workerId path is byte-identical to the old owner-fenced
+   * version (web single-process semantics unchanged).
+   */
   requestPause(jobId: string): Promise<void>;
   /** Requeue/cancel jobs whose lease is older than `leaseTtlMs`. */
   recoverStale(): Promise<number>;
@@ -318,13 +326,23 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
 
     async requestPause(jobId) {
       const job = await jobs.get(jobId);
-      if (!job || job.owner !== workerId) {
+      if (!job) {
         return;
       }
       if (job.status !== 'running' && job.status !== 'paused') {
+        // Queued jobs (owner NULL) must not be persisted as paused: claimNext
+        // only picks `queued` and requeueStale only touches leased jobs, so a
+        // paused unclaimed job would be stranded.
         return;
       }
-      pauseFlags.add(jobId);
+      // 4c M2: the in-memory pause flag is process-local — only set it when
+      // this runner owns the job. Persistence is owner-independent so the
+      // actual holder (this or another process) can observe `paused` on its
+      // job row and relay it through its own requestPause (pauseFlags only,
+      // never abort — aborting would settle the run cancelled, not paused).
+      if (job.owner === workerId) {
+        pauseFlags.add(jobId);
+      }
       await jobs.updateJob(jobId, { status: 'paused' });
     },
 

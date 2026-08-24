@@ -10,7 +10,7 @@ import type {
   WorkflowEngineStartInput,
 } from '../workflow/engine.js';
 import type { WorkflowTemplate } from '../workflow/template.js';
-import type { WorkflowInstance } from '../types/domain.js';
+import type { WorkflowInstance, WorkflowStatus } from '../types/domain.js';
 
 /**
  * SessionService (phase 4a, design §2.1): the orchestration extracted
@@ -63,7 +63,7 @@ export interface SessionServiceStartRunResult {
 
 export type SessionServiceResumeResult =
   | { outcome: 'pending-decisions'; runId: string }
-  | { outcome: 'terminal'; runId: string; status: string }
+  | { outcome: 'terminal'; runId: string; status: WorkflowStatus }
   | { outcome: 'active-job'; runId: string }
   | {
       outcome: 'enqueued';
@@ -101,7 +101,10 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
   startRun(
     input: SessionServiceStartRunInput<TEngineInput>,
   ): Promise<SessionServiceStartRunResult>;
-  resumeRun(input: { runId: string }): Promise<SessionServiceResumeResult>;
+  resumeRun(input: {
+    runId: string;
+    afterApproval?: boolean;
+  }): Promise<SessionServiceResumeResult>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -133,6 +136,12 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
   createEngine: (
     input: TEngineInput,
   ) => WorkflowEngine | Promise<WorkflowEngine>;
+  /**
+   * 4c: session profile label. Display-only (no behavior attached). Defaults
+   * to 'human-web' so the web composition root is unchanged; CLI passes
+   * 'cli' (design §8 decision 2).
+   */
+  sessionProfile?: string;
 }
 
 export function createSessionService<TEngineInput = SessionServiceEngineInput>(
@@ -141,9 +150,10 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
   const { sessions, jobs, jobRunner, bus, repositories, projectRoot } = deps;
 
   // 4a: web is the only consumer and always runs template-mode workflows.
-  // 4c parameterizes the session profile. 4b: `goal` mode selects the built-in
-  // goal template and a distinct job kind so the run reads as a goal end-to-end.
-  const SESSION_PROFILE = 'human-web';
+  // 4c parameterizes the session profile (CLI passes 'cli'). 4b: `goal` mode
+  // selects the built-in goal template and a distinct job kind so the run
+  // reads as a goal end-to-end.
+  const SESSION_PROFILE = deps.sessionProfile ?? 'human-web';
   const RUN_MODE = 'template' as const;
   const GOAL_TEMPLATE_NAME = 'goal';
 
@@ -230,11 +240,14 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
 
   async function resumeRun(input: {
     runId: string;
+    afterApproval?: boolean;
   }): Promise<SessionServiceResumeResult> {
-    const pendingHuman = await repositories.listHumanDecisions(input.runId);
-    if (pendingHuman.some((decision) => decision.status === 'pending')) {
-      return { outcome: 'pending-decisions', runId: input.runId };
-    }
+    // Terminal is the strictly stronger stop condition: a passed/failed/
+    // cancelled run can never be resumed, regardless of any lingering pending
+    // decision. Check it FIRST so a cancelled run with an orphaned pending
+    // decision reports `terminal` (CLI → "终态" exit 1), not `pending-decisions`
+    // (M5). A non-terminal run with pending decisions still falls through to
+    // the pending-decisions guard below.
     const workflow = await repositories.getWorkflowInstance(input.runId);
     if (
       workflow &&
@@ -245,6 +258,18 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         runId: input.runId,
         status: workflow.status,
       };
+    }
+    // `afterApproval` mirrors web's gate.approve path: the caller has just
+    // approved one decision and wants to drive the run forward. Web's
+    // gate.approve enqueues resume WITHOUT a pending-decision guard — the engine
+    // re-pauses at the next unresolved human gate. A bare resume (tekon resume /
+    // project.resume) keeps the guard so it fails loudly instead of silently
+    // no-op-advancing a run that is still waiting on a human.
+    if (!input.afterApproval) {
+      const pendingHuman = await repositories.listHumanDecisions(input.runId);
+      if (pendingHuman.some((decision) => decision.status === 'pending')) {
+        return { outcome: 'pending-decisions', runId: input.runId };
+      }
     }
     // No two active jobs per run. Reclaim queued + stale-paused jobs, then
     // reject if a live job is still running/cancelling/paused.

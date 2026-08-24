@@ -504,7 +504,10 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">run</span>
 
 <span class="cm"># 动态 dry-run</span>
-<span class="c">tekon</span> <span class="a">run</span> <span class="f">--dynamic</span> <span class="f">--dry-run</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--template &lt;name&gt;</code> — 使用内置模板</li><li><code>--agent mock|claude-code|codex</code> — 选择 provider</li><li><code>--allow-dirty-base</code> — 允许基于未提交改动运行</li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code> — 超时控制</li></ul></div></div>
+<span class="c">tekon</span> <span class="a">run</span> <span class="f">--dynamic</span> <span class="f">--dry-run</span> <span class="s">"需求文本"</span>
+
+<span class="cm"># 轻量目标运行（goal 模式，单节点，不接交付）</span>
+<span class="c">tekon</span> <span class="a">run</span> <span class="s">"一次性小任务"</span> <span class="f">--goal</span> <span class="f">--agent</span> mock</code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--template &lt;name&gt;</code> — 使用内置模板</li><li><code>--goal</code> — 轻量目标运行（内置单节点 goal 模板，不接交付）；与 <code>--template</code> 互斥</li><li><code>--agent mock|claude-code|codex</code> — 选择 provider</li><li><code>--allow-dirty-base</code> — 允许基于未提交改动运行</li><li><code>--timeout-ms</code> / <code>--no-progress-timeout-ms</code> / <code>--progress-heartbeat-ms</code> — 超时控制</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.7 status</span><span class="cb-ds">查看 run 当前状态</span></div><pre><code><span class="c">tekon</span> <span class="a">status</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.8 approval summary</span><span class="cb-ds">生成可复制审批摘要</span></div><pre><code><span class="c">tekon</span> <span class="a">approval summary</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--run-id</code> / <code>--decision-id</code> — 指定审批项</li><li><code>--json</code> — 输出结构化 JSON</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.9 eval approval-summary</span><span class="cb-ds">检查审批摘要完整性</span></div><pre><code><span class="c">tekon</span> <span class="a">eval approval-summary</span></code></pre></div>
@@ -609,6 +612,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <tr><td><code>--agent mock|claude-code|codex</code></td><td>选择 provider</td></tr>
 <tr><td><code>--approve-human</code></td><td>明确批准人工 gate 或远端副作用</td></tr>
 <tr><td><code>--allow-dirty-base</code></td><td>允许基于未提交改动运行</td></tr>
+<tr><td><code>--goal</code></td><td>轻量目标运行（单节点 goal 模板，不接交付）；与 <code>--template</code> 互斥</td></tr>
 <tr><td><code>--shape &lt;path&gt;</code></td><td>指定需求卡路径</td></tr>
 <tr><td><code>--decision-id &lt;id&gt;</code></td><td>指定人工决策</td></tr>
 </tbody></table></div>

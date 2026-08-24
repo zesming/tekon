@@ -251,6 +251,16 @@ export function migrateDatabase(db: TekonDatabase): void {
       'kind',
       "text not null default 'workflow'",
     );
+    // 4c: run-scoped allow-dirty-base policy. Stored as 0/1 (SQLite has no
+    // boolean); default 0 keeps every legacy row strict about a clean base.
+    // The async job executor reads it to rebuild the engine with the same
+    // lease policy the run was started with.
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'allow_dirty_base',
+      'integer not null default 0',
+    );
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

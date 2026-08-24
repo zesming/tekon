@@ -2,25 +2,18 @@ import { parseArgs } from 'node:util';
 
 import {
   createAuditLogger,
-  createCommandGateway,
-  createGateEngine,
   createHumanGate,
   createHumanApprovalSummary,
   createRepositories,
-  createWorktreeManager,
-  createWorkflowEngine,
   evaluateHumanApprovalSummary,
   migrateDatabase,
+  WorkflowTerminalError,
 } from '@tekon/core';
 
-import {
-  createAgentAdapterFromSnapshot,
-} from '../lib/agent-factory.js';
 import type { CliIO } from '../lib/context.js';
 import {
   ensureInitialized,
   openProjectDb,
-  withCommandCtx,
   withProjectContext,
 } from '../lib/context.js';
 import {
@@ -29,8 +22,11 @@ import {
 } from '../lib/db-helpers.js';
 import { resolveProjectRepoPath } from '../lib/path-utils.js';
 import {
-  getBuiltInRolesDir,
-} from '../lib/utils.js';
+  awaitJobTerminal,
+  exitCodeForWorkflowStatus,
+  withCliSessionContext,
+  withSessionCommandCtx,
+} from '../lib/session-context.js';
 import {
   formatApprovalSummary,
 } from './review.js';
@@ -197,16 +193,29 @@ export async function commandApproval(
 export async function commandPause(
   argv: string[],
   io: CliIO,
-) {
-  await withCommandCtx(
+): Promise<number> {
+  // 4c (design §4.3): pause goes through SessionService (CAS running→paused
+  // + jobRunner.requestPause). When the run is held by another process, the
+  // core requestPause persists `paused` on the job row so the holder observes
+  // and relays it (pauseFlags only, never abort).
+  await withSessionCommandCtx(
     argv,
     io,
-    async ({ repos: repositories, runId }) => {
+    async ({ repositories, runId, sessionService }) => {
       const workflow =
         await repositories.getWorkflowInstance(runId);
       if (!workflow) {
         throw new Error(`未找到运行: ${runId}`);
       }
+      const result = await sessionService.requestPause({ runId });
+      if (result.outcome === 'paused') {
+        io.stdout.write(`runId=${runId} status=paused\n`);
+        return;
+      }
+      // illegal-transition: the run is not `running` (terminal/blocked) and no
+      // active job exists — no process holds it. Retain the legacy direct-DB
+      // pause semantics (CLI pause on a finished run historically succeeds;
+      // the cli-flow e2e pauses a passed run).
       if (workflow.currentNodeId) {
         await repositories.transitionNode(
           workflow.currentNodeId,
@@ -224,12 +233,13 @@ export async function commandPause(
       );
     },
   );
+  return 0;
 }
 
 export async function commandResume(
   argv: string[],
   io: CliIO,
-) {
+): Promise<number> {
   const args = parseArgs({
     args: argv,
     options: {
@@ -242,157 +252,169 @@ export async function commandResume(
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
   await ensureInitialized(repoPath, io);
-  await withProjectContext(
-    repoPath,
-    async ({ db, repos: repositories }) => {
-      let decisionContext: {
-        runId: string;
-        decisionId?: string;
-      } | null = null;
-      if (args.values['approve-human']) {
-        decisionContext = await resolveHumanDecisionContext(
-          {
-            db,
-            repositories,
-            explicitRunId:
-              args.values['run-id'] ??
-              args.positionals[0],
-            explicitDecisionId:
-              args.values['decision-id'] ??
-              args.positionals[1],
-            requireDecision: true,
-          },
-        );
-      }
-      const runId =
-        decisionContext?.runId ??
-        args.values['run-id'] ??
-        args.positionals[0] ??
-        selectLatestRunId(db);
-      if (!runId) {
-        throw new Error(
-          '无法推断运行 ID，请使用 --run-id <runId> 指定',
-        );
-      }
-      const audit = createAuditLogger({ repositories });
-      const workflow =
-        await repositories.getWorkflowInstance(runId);
-      if (!workflow) {
-        throw new Error(`未找到运行: ${runId}`);
-      }
-
-      const gateway = createCommandGateway({
+  // 4c §4.2.1 (S5): resume goes through SessionService + an embedded job
+  // runner, same shape as `run` — the resumed job is awaited to a terminal
+  // state before the process exits.
+  return withCliSessionContext(repoPath, io, async (ctx) => {
+    const { db, repositories, audit, sessionService, jobs, jobRunner } =
+      ctx;
+    let decisionContext: {
+      runId: string;
+      decisionId?: string;
+    } | null = null;
+    if (args.values['approve-human']) {
+      decisionContext = await resolveHumanDecisionContext({
+        db,
         repositories,
+        explicitRunId:
+          args.values['run-id'] ??
+          args.positionals[0],
+        explicitDecisionId:
+          args.values['decision-id'] ??
+          args.positionals[1],
+        requireDecision: true,
       });
-      const runProvider =
-        await repositories.getRunProviderConfig(runId);
-      if (!runProvider) {
-        throw new Error(
-          `运行 ${runId} 没有 provider 快照，无法安全恢复。请确认该运行是否正常启动过。`,
-        );
-      }
-      const agentRuntime = createAgentAdapterFromSnapshot({
-        snapshot: runProvider,
-        repoPath,
-        gateway,
-      });
-
-      if (args.values['approve-human']) {
-        if (!decisionContext?.decisionId) {
-          throw new Error(
-            '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
-          );
-        }
-        const decision =
-          await repositories.getHumanDecision(
-            decisionContext.decisionId,
-          );
-        if (!decision || decision.runId !== runId) {
-          throw new Error(
-            `未找到人工决策: ${decisionContext.decisionId}`,
-          );
-        }
-        if (decision.status !== 'pending') {
-          throw new Error(
-            `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
-          );
-        }
-        const humanGate = createHumanGate({
-          repositories,
-        });
-        await humanGate.approveHumanGate(
-          decision.id,
-          'cli',
-          'approved by CLI',
-        );
-        await repositories.transitionNode(
-          decision.nodeId,
-          'awaiting-gate',
-        );
-        await audit.append({
-          runId,
-          type: 'human.gate.approved',
-          payload: {
-            decisionId: decision.id,
-            nodeId: decision.nodeId,
-          },
-        });
-      }
-
-      const engine = createWorkflowEngine({
-        repoPath,
-        dataDir: '.tekon',
-        repositories,
-        audit,
-        adapter: agentRuntime.adapter,
-        agentProvider: agentRuntime.provider,
-        agentConfigSummary: agentRuntime.configSummary,
-        gateEngine: createGateEngine({
-          repositories,
-          gateway,
-        }),
-        worktreeManager: createWorktreeManager({
-          repositories,
-          gateway,
-        }),
-        builtInRolesDir: getBuiltInRolesDir(),
-      });
-      const result = await engine.resumeRun(runId);
-      io.stdout.write(
-        `runId=${runId} status=${result.workflow.status}\n`,
+    }
+    const runId =
+      decisionContext?.runId ??
+      args.values['run-id'] ??
+      args.positionals[0] ??
+      selectLatestRunId(db);
+    if (!runId) {
+      throw new Error(
+        '无法推断运行 ID，请使用 --run-id <runId> 指定',
       );
-    },
-  );
+    }
+    const workflow =
+      await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`未找到运行: ${runId}`);
+    }
+
+    // Provider snapshot pre-check: without it the executor would fail the
+    // resumed job asynchronously. Keep the synchronous, specific error
+    // (asserted by run-cli.test.ts).
+    const runProvider =
+      await repositories.getRunProviderConfig(runId);
+    if (!runProvider) {
+      throw new Error(
+        `运行 ${runId} 没有 provider 快照，无法安全恢复。请确认该运行是否正常启动过。`,
+      );
+    }
+
+    if (args.values['approve-human']) {
+      if (!decisionContext?.decisionId) {
+        throw new Error(
+          '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
+        );
+      }
+      const decision =
+        await repositories.getHumanDecision(
+          decisionContext.decisionId,
+        );
+      if (!decision || decision.runId !== runId) {
+        throw new Error(
+          `未找到人工决策: ${decisionContext.decisionId}`,
+        );
+      }
+      if (decision.status !== 'pending') {
+        throw new Error(
+          `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
+        );
+      }
+      const humanGate = createHumanGate({
+        repositories,
+      });
+      await humanGate.approveHumanGate(
+        decision.id,
+        'cli',
+        'approved by CLI',
+      );
+      await repositories.transitionNode(
+        decision.nodeId,
+        'awaiting-gate',
+      );
+      await audit.append({
+        runId,
+        type: 'human.gate.approved',
+        payload: {
+          decisionId: decision.id,
+          nodeId: decision.nodeId,
+        },
+      });
+    }
+
+    // When --approve-human just approved a decision, mirror web's gate.approve:
+    // drive the run forward without re-blocking on other pending decisions (the
+    // engine re-pauses at the next human gate). A bare resume keeps the guard.
+    const result = await sessionService.resumeRun({
+      runId,
+      afterApproval: args.values['approve-human'],
+    });
+    if (result.outcome === 'pending-decisions') {
+      throw new Error(
+        '运行存在待审批的人工决策，请先使用 tekon resume --approve-human 批准或 tekon approval reject 拒绝。',
+      );
+    }
+    if (result.outcome === 'terminal') {
+      throw new WorkflowTerminalError(runId, result.status);
+    }
+    if (result.outcome === 'active-job') {
+      throw new Error(
+        '运行已有活跃任务，请先使用 tekon cancel 取消或等待其完成。',
+      );
+    }
+
+    jobRunner.start();
+    const onSigint = () => {
+      void jobRunner
+        .requestCancel(result.jobId, 'cli SIGINT')
+        .catch(() => {});
+    };
+    process.on('SIGINT', onSigint);
+    try {
+      await awaitJobTerminal({
+        jobs,
+        jobRunner,
+        jobId: result.jobId,
+      });
+    } finally {
+      process.removeListener('SIGINT', onSigint);
+    }
+
+    const latest = await repositories.getWorkflowInstance(runId);
+    const status = latest?.status ?? 'unknown';
+    io.stdout.write(`runId=${runId} status=${status}\n`);
+    return exitCodeForWorkflowStatus(status);
+  });
 }
 
 export async function commandCancel(
   argv: string[],
   io: CliIO,
-) {
-  await withCommandCtx(
+): Promise<number> {
+  // 4c (design §4.3): cancel goes through SessionService. Its first step is
+  // writeWorkflowTerminal(runId, 'cancelled') — the CAS guard that makes a
+  // racing engine completion throw instead of writing a false `passed`,
+  // regardless of which process holds the run. When another process holds
+  // the run, jobRunner.requestCancel persists `cancelling` on the job row;
+  // the holder's observation loop relays it to its in-process abort+killAll.
+  await withSessionCommandCtx(
     argv,
     io,
-    async ({ repos: repositories, runId }) => {
+    async ({ repositories, runId, sessionService }) => {
       const workflow =
         await repositories.getWorkflowInstance(runId);
       if (!workflow) {
         throw new Error(`未找到运行: ${runId}`);
       }
-      if (workflow.currentNodeId) {
-        await repositories.transitionNode(
-          workflow.currentNodeId,
-          'interrupted',
-        );
-      }
-      const cancelled =
-        await repositories.updateWorkflowInstanceStatus(
-          runId,
-          'cancelled',
-          workflow.currentNodeId,
-        );
+      await sessionService.requestCancel({ runId });
+      const latest =
+        await repositories.getWorkflowInstance(runId);
       io.stdout.write(
-        `runId=${runId} status=${cancelled?.status ?? 'cancelled'}\n`,
+        `runId=${runId} status=${latest?.status ?? 'cancelled'}\n`,
       );
     },
   );
+  return 0;
 }

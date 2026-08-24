@@ -3,46 +3,42 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
-  createAuditLogger,
-  createCommandGateway,
-  createGateEngine,
-  createWorktreeManager,
-  createWorkflowEngine,
   generateDynamicWorkflow,
   readDemandShapeFile,
   renderDemandShapeForRun,
   saveDynamicTemplate,
 } from '@tekon/core';
 
-import {
-  createAgentAdapter,
-  providerRuntimeFromCliOptions,
-} from '../lib/agent-factory.js';
+import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
 import type { CliIO } from '../lib/context.js';
 import {
   ensureInitialized,
-  withProjectContext,
 } from '../lib/context.js';
+import {
+  awaitJobTerminal,
+  exitCodeForWorkflowStatus,
+  withCliSessionContext,
+} from '../lib/session-context.js';
 import {
   resolveDemandShapePath,
   resolveProjectRepoPath,
 } from '../lib/path-utils.js';
 import {
   assertCleanBase,
-  getBuiltInRolesDir,
   readConfigDefaultAgent,
 } from '../lib/utils.js';
 
 export async function commandRun(
   argv: string[],
   io: CliIO,
-) {
+): Promise<number> {
   const args = parseArgs({
     args: argv,
     options: {
       repo: { type: 'string' },
       template: { type: 'string' },
       agent: { type: 'string' },
+      goal: { type: 'boolean', default: false },
       dynamic: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       'allow-dirty-base': { type: 'boolean', default: false },
@@ -112,72 +108,85 @@ export async function commandRun(
           .join(',')}`,
       ].join(' ') + '\n',
     );
-    return;
+    return 0;
   }
 
   assertCleanBase(repoPath, allowDirtyBase);
 
-  await withProjectContext(
-    repoPath,
-    async ({ db, repos: repositories }) => {
-      const audit = createAuditLogger({ repositories });
-      const gateway = createCommandGateway({ repositories });
-      const configDefaultAgent = readConfigDefaultAgent(repoPath);
-      const agentRuntime = createAgentAdapter({
+  // 4c (design §4.2): run goes through SessionService + an embedded job
+  // runner. The job is awaited to a terminal state before the process exits
+  // ("跑完即退出" preserved); the printed status is the WORKFLOW status (the
+  // executor settles the job `done` when the engine pauses at a gate), and
+  // the exit code follows the workflow's terminal status.
+  const isGoal = Boolean(args.values.goal);
+  if (isGoal && args.values.template) {
+    throw new Error('--goal 模式下不能同时指定 --template');
+  }
+  const templateName = isGoal
+    ? 'goal'
+    : (args.values.template ?? 'standard-delivery');
+  const configDefaultAgent = readConfigDefaultAgent(repoPath);
+
+  return withCliSessionContext(repoPath, io, async (ctx) => {
+    const result = await ctx.sessionService.startRun({
+      demandText,
+      ...(isGoal
+        ? { mode: 'goal' as const }
+        : { templateName }),
+      engine: {
         agent:
           args.values.agent ?? configDefaultAgent ?? 'codex',
-        repoPath,
-        gateway,
-        runtime: providerRuntimeFromCliOptions(args.values),
-      });
-      const engine = createWorkflowEngine({
-        repoPath,
-        dataDir: '.tekon',
-        repositories,
-        audit,
-        adapter: agentRuntime.adapter,
-        agentProvider: agentRuntime.provider,
-        agentConfigSummary: agentRuntime.configSummary,
-        gateEngine: createGateEngine({
-          repositories,
-          gateway,
-        }),
-        worktreeManager: createWorktreeManager({
-          repositories,
-          gateway,
-        }),
         allowDirtyBase,
-        builtInRolesDir: getBuiltInRolesDir(),
-      });
+        runtime: providerRuntimeFromCliOptions(args.values),
+      },
+    });
 
-      const templateName =
-        args.values.template ?? 'standard-delivery';
-      const result = await engine.startRun({
-        demandText,
-        mode: 'template',
-        templateName,
+    ctx.jobRunner.start();
+    // S9: same-process cancel chain — Ctrl+C aborts the in-process controller
+    // and kills this process's subprocesses (registry.killAll) instead of
+    // waiting for the job lease to expire.
+    const onSigint = () => {
+      void ctx.jobRunner
+        .requestCancel(result.jobId, 'cli SIGINT')
+        .catch(() => {});
+    };
+    process.on('SIGINT', onSigint);
+    try {
+      await awaitJobTerminal({
+        jobs: ctx.jobs,
+        jobRunner: ctx.jobRunner,
+        jobId: result.jobId,
       });
-      const pendingHuman = (
-        await repositories.listHumanDecisions(result.runId)
-      ).filter((decision) => decision.status === 'pending');
-      io.stdout.write(
-        [
-          '🚀 运行已启动',
-          `  Run ID: ${result.runId}`,
-          `  状态: ${result.workflow.status}`,
-          `  模板: ${templateName}`,
-          pendingHuman.length > 0 ? '  人工确认: pending' : '',
-          '',
-          '后续操作:',
-          '  tekon status          查看运行状态',
-          '  tekon review          查看审阅面板',
-          '',
-        ]
-          .filter((l) => l !== '')
-          .join('\n') + '\n',
-      );
-    },
-  );
+    } finally {
+      process.removeListener('SIGINT', onSigint);
+    }
+
+    // S3: re-read the workflow instance — job terminal ≠ workflow terminal.
+    const workflow = await ctx.repositories.getWorkflowInstance(
+      result.runId,
+    );
+    const status = workflow?.status ?? result.workflow.status;
+    const pendingHuman = (
+      await ctx.repositories.listHumanDecisions(result.runId)
+    ).filter((decision) => decision.status === 'pending');
+    io.stdout.write(
+      [
+        '🚀 运行已启动',
+        `  Run ID: ${result.runId}`,
+        `  状态: ${status}`,
+        `  模板: ${templateName}`,
+        pendingHuman.length > 0 ? '  人工确认: pending' : '',
+        '',
+        '后续操作:',
+        '  tekon status          查看运行状态',
+        '  tekon review          查看审阅面板',
+        '',
+      ]
+        .filter((l) => l !== '')
+        .join('\n') + '\n',
+    );
+    return exitCodeForWorkflowStatus(status);
+  });
 }
 
 export function createDynamicMockAdapter(demandText: string) {

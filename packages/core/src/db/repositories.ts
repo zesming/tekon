@@ -70,6 +70,7 @@ type WorkflowInstanceRow = {
   demand_id: string;
   status: WorkflowInstance['status'];
   kind: WorkflowInstance['kind'];
+  allow_dirty_base: number | null;
   current_node_id: string | null;
   created_at: string;
   updated_at: string;
@@ -358,9 +359,13 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into workflow_instances (
-             id, project_id, demand_id, status, kind, current_node_id, created_at, updated_at
-           ) values (@id, @projectId, @demandId, @status, @kind, @currentNodeId, @createdAt, @updatedAt)`,
-        ).run({ ...instance, currentNodeId: instance.currentNodeId ?? null });
+             id, project_id, demand_id, status, kind, allow_dirty_base, current_node_id, created_at, updated_at
+           ) values (@id, @projectId, @demandId, @status, @kind, @allowDirtyBase, @currentNodeId, @createdAt, @updatedAt)`,
+        ).run({
+          ...instance,
+          allowDirtyBase: instance.allowDirtyBase ? 1 : 0,
+          currentNodeId: instance.currentNodeId ?? null,
+        });
         return instance;
       });
     },
@@ -964,6 +969,7 @@ function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
     demandId: row.demand_id,
     status: row.status,
     kind: row.kind ?? 'workflow',
+    allowDirtyBase: row.allow_dirty_base === 1,
     currentNodeId: row.current_node_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

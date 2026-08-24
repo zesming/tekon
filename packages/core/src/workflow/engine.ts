@@ -334,6 +334,11 @@ export function createWorkflowEngine(
       demandId,
       status: 'running',
       kind: input.kind ?? 'workflow',
+      // 4c: persist the lease policy on the run so the async job executor
+      // rebuilds its engine with the same allow-dirty-base the run was
+      // started with (the executor builds a fresh engine from the provider
+      // snapshot and cannot otherwise recover this flag).
+      allowDirtyBase: options.allowDirtyBase ?? false,
       createdAt: now,
       updatedAt: now,
     });

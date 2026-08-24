@@ -117,8 +117,7 @@ export async function runCli(
         await commandInit(rest, io);
         return 0;
       case 'run':
-        await commandRun(rest, io);
-        return 0;
+        return await commandRun(rest, io);
       case 'draft':
       case 'demand':
         await commandDemand(rest, io);
@@ -130,8 +129,7 @@ export async function runCli(
         await commandPause(rest, io);
         return 0;
       case 'resume':
-        await commandResume(rest, io);
-        return 0;
+        return await commandResume(rest, io);
       case 'cancel':
         await commandCancel(rest, io);
         return 0;

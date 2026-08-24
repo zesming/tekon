@@ -80,6 +80,7 @@ tekon demand shape "你的需求描述"               # 塑形需求
 tekon demand approve                          # 批准需求卡
 tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
 tekon run --template standard-delivery --agent mock  # 使用 mock provider 回归
+tekon run "一次性小任务" --goal --agent mock    # 轻量目标运行（单节点 goal 模板，不接交付）
 tekon status                                  # 查看状态
 tekon review                                  # 查看审阅面
 tekon delivery prepare                        # 生成 PR 准备包
