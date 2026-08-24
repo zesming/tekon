@@ -35,7 +35,18 @@
 - **每阶段落地明细与验收证据**：见 `docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md`，该方案已过一轮评审 + 维护方自检；各阶段完成后在 `CHANGELOG.md` 记录版本与验证结果。
 - **P1.3/P1.4 等"纯 UI"项实际触达 API 契约**：Run 列表需求标题、Run Detail 真实 provider 需要在 mapper/schema 层补字段（`demandTitle`/`provider`，nullable 向后兼容），已在阶段 0 落地并配 contract/enrichment 测试。
 
-## 1. 执行摘要
+### 0.5 工程视角批注（2026-08-24 追加，阶段 2–5 落地依据）
+
+阶段 0+1 已交付并合入证据链（v0.9.0，PR #10，CI 六项全绿）。以下批注针对**剩余阶段 2–5**，基于对当前代码的实测摸底（非报告推断），沿用 §0.4 的"分阶段是纪律不是打折"原则，覆盖/细化下文正文与 §10 阶段划分中与工程现实冲突之处：
+
+- **阶段 2 契约已冻结，风险纯在实现**：`AgentDriver`/`AgentHandle`/`AgentRuntimeEvent`/`UserMessage`/`AgentOutcome`/`PauseResult` 已在 `packages/core/src/types/session-contract.ts:185-266` 冻结导出，**零实现者**。故阶段 2 = 对既定契约做实现 + legacy `runAgent()` 桥接，不需要再设计接口。最大实现难点是 `AgentHandle.pause()` 语义：当前 engine 只在 node 边界响应 pause（`engine.ts:382`），从不中断执行中的 subprocess——mid-step pause 的 `interruptible` 需诚实反映"当前工具不可中断则返回 interruptible:false，在下一个 checkpoint 生效"，不假装能瞬停。
+- **事件词汇 12 缺 7，且模型可见历史近乎为空**：核心 12 类事件只发射了 5 类（`step/*`、`assistant/chunk`、`tool/*`、`plan/updated`、`todo/updated` 全缺）；`assistant/message` 目前是合成的 "Run passed."、`user/message` 仅为需求文本，`buildModelVisibleView`（`present.ts:88`）无消费者。阶段 2 的 §13.6"模型上下文可从 log 重建"是从极低基线起步，须把真实 assistant/tool 内容写入事件流才有意义——这是阶段 2 的核心价值，不是附带项。
+- **legacy 桥接是阶段 2 的安全底座，先于流式**：`node-executor.ts:235` 每 node 一次 `await adapter.runAgent()`。先把"一次旧调用 = 一个 step（emit step/start + tool/call 摘要 + tool/result + step/end + assistant/message）"桥好，既立刻补齐事件词汇、又不必重写 Codex/Claude adapter；真正的增量流式（assistant/chunk 逐块）作为桥接之上的可选增强，Codex/Claude 是否支持增量输出需先验证 provider 能力，不能假设。
+- **provider 已有 registry 范式可复用**：gate 侧 `gate/registry.ts` 是仓内已验证的插件边界；provider 目前是 `agent-runtime.ts:60-164` 两处重复 if/else。阶段 2 的 provider registry 化应照搬 gate registry 模式，而非新造抽象。provider snapshot/version contract 是 greenfield（当前只有 zod 校验、无版本 pin），须新增版本兼容矩阵防升级静默破坏 replay。
+- **阶段 3 客户端完全没有会话读路径**：客户端无 SSE 消费者、无 `session.*` RPC，全部页面从 legacy 表聚合（`review.get`）渲染；`use-run-poller.ts` 是死代码。阶段 3 不是"加个 feed 组件"，而要新建：① SSE 客户端（EventSource + 断线重连 + Last-Event-ID replay，服务端已支持）；② session list/detail 读投影或 RPC；③ 三栏 Session UI。工作量与阶段 1 相当或更大，须再拆子步（如 3a 读路径/SSE 客户端、3b Feed/Composer、3c inline approval/cards、3d 断线重连+旧 Dashboard 移 `/advanced`），每子步独立 e2e。旧 Dashboard **保留**移到 `/advanced`，不删（C2）。
+- **阶段 4 CLI 接入 Session 是重活,不是"共享构造器"**：CLI 目前完全在 event spine 之外——无 session、无 dual-write、无 job、同步阻塞跑到底（`run.ts:155`）。P1-05 的"CLI/Web/Headless 同一 Session API"需要给 CLI 建 headless session/job 模式（或改走同一 runner），是实质迁移。profiles 除 `sessions.profile` 列存在外全 greenfield。delivery 已与 engine 解耦，只需事件订阅接线；gate 已有 registry。故阶段 4 真正的重量在 workflow 降级为可选 plugin + CLI 会话化两项。
+- **阶段 5 只碰稳定边界,legacy 清理可独立先行**：Harness/Cordis 当前零集成，阶段 5 的 bridge 是 greenfield，须 pin 版本 + adapter contract test + anti-corruption layer，**绝不绑定其 developer-preview 私有 schema**（§7.2）。但 legacy 清理（死代码 `use-run-poller.ts`、deprecated `demand.*` 别名层、`job/status` 词汇归位）与定位无关、价值即时、风险低，可在任一阶段顺带清理，不必等到阶段 5。长 RPC 已在阶段 1 基本退场。
+- **锯齿状智能与 March of Nines 自省**：阶段 2–5 每一项都可能"能 demo 不能生产"。落地必须以真实 e2e（含尾部失败、断线、取消、并发）为验收，不以"页面能点"为准；任一阶段验收不过即停在该阶段，宁可少交付也不留半成品。每阶段完成后照旧走"设计→reviewer 评审→实现（e2e 绿）→code review→全功能 e2e→报告完成度复审→提交 PR + 清理临时产物"闭环。
 
 ### 1.1 总体结论
 
