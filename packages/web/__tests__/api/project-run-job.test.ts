@@ -292,6 +292,21 @@ describe('project.run background job (S7b)', () => {
         .get(started.sessionId!) as { payload: string } | undefined;
       expect(startEvent).toBeTruthy();
       expect(JSON.parse(startEvent!.payload).kind).toBe('goal');
+      // The run-completion event (dual-write maps run.passed → agent/status)
+      // must also carry kind:'goal', not the hardcoded 'workflow' default —
+      // locks the dual-write `asString(p.kind) || 'workflow'` derivation so a
+      // kind-column read regression cannot silently fall back to 'workflow'.
+      const passedEvent = db
+        .prepare(
+          `select payload from session_events
+           where session_id = ? and type = 'agent/status'
+           order by seq desc limit 1`,
+        )
+        .get(started.sessionId!) as { payload: string } | undefined;
+      expect(passedEvent).toBeTruthy();
+      const passedPayload = JSON.parse(passedEvent!.payload);
+      expect(passedPayload.status).toBe('passed');
+      expect(passedPayload.kind).toBe('goal');
     } finally {
       db.close();
     }

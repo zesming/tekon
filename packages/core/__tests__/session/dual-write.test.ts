@@ -543,6 +543,24 @@ describe('S9 显式不映射清单', () => {
       expect(mapped, auditType).not.toBeNull();
     }
   });
+
+  // 4b/N4: when the audit payload carries kind:'goal', the run-level session
+  // events (started/resumed/passed) must propagate it — NOT fall back to the
+  // hardcoded 'workflow' default. Locks the `asString(p.kind) || 'workflow'`
+  // derivation so a goal run reads as a goal end-to-end in the event feed.
+  it.each([
+    { auditType: 'run.started', auditPayload: { templateId: 'goal', mode: 'template', kind: 'goal' } },
+    { auditType: 'run.resumed', auditPayload: { kind: 'goal' } },
+    { auditType: 'run.passed', auditPayload: { kind: 'goal' } },
+  ])('propagates kind:goal through $auditType', ({ auditType, auditPayload }) => {
+    const mapped = mapAuditEventToSessionEvent({
+      runId: RUN_ID,
+      auditType,
+      auditPayload,
+    });
+    expect(mapped).not.toBeNull();
+    expect((mapped!.payload as { kind?: string }).kind).toBe('goal');
+  });
 });
 
 // ---------------------------------------------------------------------------
