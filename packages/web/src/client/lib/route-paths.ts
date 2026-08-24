@@ -4,6 +4,8 @@
 
 export const routes = {
   home: '/',
+  sessions: '/sessions',
+  session: (sessionId: string) => `/sessions/${encodeURIComponent(sessionId)}` as const,
   runs: '/runs',
   run: (runId: string) => `/runs/${encodeURIComponent(runId)}` as const,
   review: (runId: string) => `/runs/${encodeURIComponent(runId)}/review` as const,

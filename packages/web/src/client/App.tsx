@@ -3,6 +3,8 @@ import { createBrowserRouter, useRouteError, useNavigate } from 'react-router';
 import { AppLayout } from './layouts/AppLayout.js';
 
 import { DashboardPage } from './pages/DashboardPage.js';
+import { SessionsPage } from './pages/SessionsPage.js';
+import { SessionDetailPage } from './pages/SessionDetailPage.js';
 import { RunsPage } from './pages/RunsPage.js';
 import { RunDetailPage } from './pages/RunDetailPage.js';
 import { OverviewTab } from './pages/run-detail/OverviewTab.js';
@@ -43,6 +45,12 @@ export const router = createBrowserRouter([
     errorElement: <RouteError scope="app" />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'sessions', element: <SessionsPage /> },
+      {
+        path: 'sessions/:sessionId',
+        element: <SessionDetailPage />,
+        errorElement: <RouteError scope="session-detail" />,
+      },
       { path: 'runs', element: <RunsPage /> },
       {
         path: 'runs/:runId',

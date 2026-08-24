@@ -1,0 +1,165 @@
+/* ---------------------------------------------------------------------------
+ * Phase 3: Human-first Session UI — list, three-column detail, event feed.
+ * Minimal, token-based styling; the signature is the continuous feed narrative.
+ * ------------------------------------------------------------------------- */
+
+/* Session list */
+.session-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.session-list-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.session-list-link:hover {
+  background: var(--surface-2, #f8fafc);
+}
+.session-list-title {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-list-run {
+  font-size: 12px;
+}
+
+/* Composer */
+.session-composer {
+  margin-top: 16px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface-1, #fff);
+}
+.session-composer-input {
+  width: 100%;
+  resize: vertical;
+}
+.session-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.session-composer-hint {
+  font-size: 12px;
+}
+.session-composer-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+/* Three-column detail */
+.session-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .session-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.session-feed-col {
+  min-width: 0;
+}
+
+/* Connection indicator */
+.session-conn {
+  font-size: 12px;
+}
+.session-conn-live {
+  color: var(--success, #16a34a);
+}
+.session-conn-reconnecting {
+  color: var(--warning, #d97706);
+}
+.session-conn-closed,
+.session-conn-connecting {
+  color: var(--text-t, #94a3b8);
+}
+
+/* Event feed */
+.event-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.feed-empty {
+  padding: 32px;
+  text-align: center;
+}
+.feed-turn {
+  border-left: 2px solid var(--border, #e2e8f0);
+  padding-left: 12px;
+}
+.feed-turn-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-t, #94a3b8);
+  margin-bottom: 6px;
+}
+.feed-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+}
+.feed-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.feed-kind {
+  font-size: 11px;
+  color: var(--text-t, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.feed-author {
+  font-weight: 700;
+}
+.feed-author-user {
+  color: var(--accent, #2563eb);
+}
+.feed-author-assistant {
+  color: var(--text-p, #0f172a);
+}
+.feed-title {
+  color: var(--text-s, #475569);
+}
+.feed-seq {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-t, #94a3b8);
+}
+.feed-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2, #f1f5f9);
+  color: var(--text-s, #475569);
+}
+.feed-tag-warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+.feed-row-error .feed-title {
+  color: var(--danger, #dc2626);
+}

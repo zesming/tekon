@@ -34,6 +34,9 @@ export const test = base.extend<SharedFixtures>({
 
 // Inject the session token into the browser before each page loads.
 // The RPC client reads this token for authenticated read/write endpoints.
+// Phase 3 (S3): widened to also cover the SSE path /api/sessions/:id/events,
+// which the session-stream client hits via fetch (not EventSource). Both are
+// string-URL fetches so this string-input patch applies.
 test.beforeEach(async ({ page, fixture, server }) => {
   await page.addInitScript(
     ({ token }) => {
@@ -46,7 +49,7 @@ test.beforeEach(async ({ page, fixture, server }) => {
       ) {
         if (
           typeof input === 'string' &&
-          input.includes('/api/rpc') &&
+          (input.includes('/api/rpc') || input.includes('/api/sessions')) &&
           token
         ) {
           const headers = new Headers(init?.headers);

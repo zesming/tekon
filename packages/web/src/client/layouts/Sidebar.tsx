@@ -40,6 +40,21 @@ const navGroups: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        to: routes.sessions,
+        label: '会话 Sessions',
+        icon: (
+          <svg
+            className="nav-icon"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path d="M2 4h14v9H7l-4 3v-3H2z" />
+          </svg>
+        ),
+      },
     ],
   },
   {
