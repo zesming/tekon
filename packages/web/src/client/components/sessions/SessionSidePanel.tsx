@@ -25,6 +25,7 @@ const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
   artifact: '产物',
   tool: '工具',
   error: '错误',
+  result: '结果',
 };
 
 export function SessionSidePanel({ events }: { events: StreamEvent[] }) {

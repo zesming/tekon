@@ -15,8 +15,8 @@ Harness-inspired replatform 阶段 3：Human-first Session UI。第一次把已�
 - `use-session-stream` hook：live 累积 + `connState`（连接/实时/重连/关闭）+ 状态翻转事件 invalidate `session.list`。
 
 **三栏 Session UI（3b/3c）:**
-- Session 列表（`/`）+ composer（起新 run；不注入运行中消息——follow-up/steer 递延 2b）。
-- Session Detail（`/sessions/:id`）：中栏 event feed（`describeEvent` 把 15+ 事件类型映射为连续叙事，按 turn 分组，合成 assistant 标"摘要"、截断标"已截断"，未知类型降级不崩）；右栏 = 运行控制（复用 RunControls）+ inline 审批（复用 DecisionCard，上下文从 `gate.list` 补全，approve/reject 走既有 `gate.approve/reject`，治理语义不变）+ tool/artifact/error 卡片。
+- Session 列表（`/`）+ composer（起新 run；不注入运行中消息——follow-up/steer 递延 2b）+ workspace 只读占位（顶栏显示 `session.list` 回传的默认 workspaceId，多 workspace 管理递延后续阶段）。
+- Session Detail（`/sessions/:id`）：中栏 event feed（`describeEvent` 把 15+ 事件类型映射为连续叙事，按 turn 分组，合成 assistant 标"摘要"、截断标"已截断"，未知类型降级不崩）；右栏 = 运行控制（复用 RunControls）+ inline 审批（复用 DecisionCard，上下文从 `gate.list` 补全，approve/reject 走既有 `gate.approve/reject`，治理语义不变）+ tool/artifact/error 卡片 + run 达终态后的 final-result 收尾卡（终态状态 + artifact/error 计数）。
 
 **token 接线修复（3a，顺带还债）:**
 - `AuthProvider` 同步 `setRpcSessionToken`：修复 `auth:'session'` 读 RPC 在生产中因 token 头从未发送而全部 401 的预存缺陷（此前仅被 e2e fetch 猴补掩盖）。补 HTTP 层 200/401 测试（不经猴补）防假绿。
@@ -30,7 +30,7 @@ Harness-inspired replatform 阶段 3：Human-first Session UI。第一次把已�
 - `assistant/message` 仍是产物元数据合成（非模型原文，阶段 2 M3）；feed 显式标"摘要"。真正逐块流式 `assistant/chunk` 递延 2b。
 - composer 不支持运行中 follow-up/steer（`AgentHandle` 相应方法在 2b 才实现，现抛 `NotSupportedYet`），UI 诚实提示。
 - 写操作（inline approve/reject）需在顶栏输入会话令牌（服务端校验请求体 token）；只读会话浏览在配置了令牌后即可。
-- workspace picker 为占位（当前单默认 workspace）；多 workspace 管理递延后续阶段。行级 diff 递延（当前复用 diff 摘要）。
+- workspace picker 为只读占位（当前单默认 workspace）；多 workspace 管理递延后续阶段。diff 卡片本阶段不做（会话事件流无 diff 数据源；diff 在 delivery 投影里，随阶段 4 delivery 事件订阅补 diff 事件后再做）。
 
 ### 删除
 

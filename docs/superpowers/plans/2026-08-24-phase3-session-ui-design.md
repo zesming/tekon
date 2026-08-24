@@ -1,6 +1,6 @@
 # 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
 
-- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**3a-3d 全部实现完成（v0.11.0）**
+- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**3a-3d 全部实现完成（v0.11.0）**。报告完整性终审后补齐 final-result 卡与 workspace 只读占位、并订正 diff 卡递延措辞（见 §0.2、§3c）。
 - v1→v2 修订：M1（rpc token 死代码/生产 401 顺带修复）、M2（session.list 服务端解析 workspace）、S1（inline 卡片走 gate.list 补全）、S2（3c e2e 经 project.run 真实建 session）、S3（D1 措辞订正）、S4（删除错误的眼睛按钮/P1-02 引用）、S5（3a e2e 分层）、S6（session.list 刷新机制）、N1-N3（计数/契约订正）
 - 权威上游：报告 §10 阶段 3、§13.1/13.4/13.7/13.9/13.10；`docs/reviews/2026-08-20-...-review.md` §0.5 阶段 3 批注（工程视角，落地以此为准）
 - 前序：阶段 0（v0.8.0）、阶段 1（v0.9.0 Event Spine + SSE 服务端）、阶段 2（v0.10.0 Agent Loop 事件 + 模型可见 replay）均已合入 PR#10、CI 绿
@@ -22,8 +22,8 @@
 
 - **真正的 follow-up/steer 运行中转向**：依赖阶段 2b 的 `AgentHandle.followUp/steer`（当前抛 `NotSupportedYet`）。本阶段 composer 只支持"新起 session/run"与"对 paused/blocked run 的 resume/approve"，**不注入运行中消息**。UI 对不可用动作显示禁用态 + 诚实提示，不假装能转向。
 - **真实模型散文流式**：`assistant/message` 是产物元数据合成（阶段 2 M3），`assistant/chunk` 无生产者（2b）。feed 必须诚实标注"摘要"，不渲染成模型原文逐字流。
-- **行级 diff**：现 `DiffViewer` 只有摘要（branch/stat/changedFiles）；行级 diff 卡片递延（本阶段复用摘要卡）。
-- **多 workspace 管理 UI**：当前一 run 一 session、单默认 workspace。workspace picker 降级为占位（列出默认 workspace 即可），完整多 workspace 递延阶段 4/5。
+- **行级 diff 及 diff 卡片**：会话事件流本身不携带任何 diff 数据（`artifact/created` 只有 `{artifactId,type,summary,sha256}`，无 diff 正文）；现 `DiffViewer` 只存在于 delivery 页并读 delivery 投影。故 Session UI **本阶段不提供 diff 卡片**（含摘要 diff），递延阶段 4「Delivery 订阅 readiness/artifact events」时补 diff 事件数据源后再做。
+- **多 workspace 管理 UI**：当前一 run 一 session、单默认 workspace。workspace picker 本阶段为**只读占位**（`SessionsPage` 顶栏渲染 `session.list` 回传的 workspaceId、禁用态），完整多 workspace 切换/管理递延阶段 4/5。
 - **CLI 会话化**：阶段 4。本阶段只动 web 客户端 + 最小读 RPC。
 
 ### 0.3 硬约束（治理零退化，贯穿全阶段）
@@ -81,10 +81,10 @@
 
 **e2e（3b）**：Playwright 真实跑一个 mock-agent run（参照 `create-pr-approval.test.ts:55-101` 经 `project.run` 建 session + 事件），断言：① （S5 从 3a 移入）Session Detail 建流→初始 replay→`connState` 达 live；② feed 出现 user/message → step/tool/assistant → turn/end 且顺序正确、合成标注可见。需扩展 fixture 的 fetch 猴补 URL 匹配 `/api/rpc` → `/api/rpc|/api/sessions`（`shared-fixture.ts:49`）。
 
-### 3c — inline approval + tool/diff/artifact/final-result 卡片
+### 3c — inline approval + tool/artifact/error/final-result 卡片
 
 - 右栏：`approval/requested` 事件 → 渲染 `DecisionCard`/`DecisionForm`（复用）。事件载荷只有 `{runId,nodeId,decisionId,request}`（`dual-write.ts:352-359`），**审批完整上下文（riskLabel/approvalSummary/证据）经 `gate.list` 按 runId 拉 pendingDecisions、按 decisionId 匹配补全**（S1：`session.get` 只有元信息，补不了 decision 上下文；`gate.list` 是唯一带 `approvalSummary` 的现有 RPC，`routers/gate.ts:18-44`），approve/reject 调既有 `gate.approve/reject`（语义/CAS/审计不变，§0.3）。
-- 卡片：tool（CodeBlock）、artifact（ArtifactsTab 范式 + `artifact/created` 事件）、diff（DiffViewer 摘要）、final-result（turn/end + 交付摘要）。
+- 卡片:tool（CodeBlock）、artifact（ArtifactsTab 范式 + `artifact/created` 事件）、error（`agent/error`）、final-result（run 达终态后合成一张收尾卡:终态状态 + 已见 artifact/error 计数——数据均来自事件流现有字段;更丰富的交付/PR 摘要需 delivery 事件订阅,递延阶段 4）。**diff 卡片本阶段不做**（事件流无 diff 数据源,见 §0.2）。
 - 运行控制：pause/cancel/resume 复用 `RunControls` + `runControlAffordances`，接上 sessionId；cancel 走既有 `agent/cancel-requested`+`agent/cancelled` 事件链，UI 显示确认态（报告 §11"取消语义不完整"缓解：明确 interruptibility）。
 
 **e2e（3c）**：Playwright **经 `project.run` 起一个带 human gate 的模板**真实建 session + 经 dual-write 发 `approval/requested`（S2：fixture run_1 用裸 repositories 播种、无 session、无 approval 事件，不能复用）。**注意（实测）**：fixture 现有 `project-feature.yaml` 只有 build/lint/schema gate、**无 human gate**（`fixtures/project.ts:54-85`），built-in 模板是 `<repo>/workflows/*.yaml` 运行时加载（`template.ts:487`）。故 3c 须**向 fixture 写入一个含 `type: human`/`requiresHumanApproval` 节点的模板**（如 `project-feature-approval.yaml`），非复用现成文件——这是 3c 的实打实 fixture 负担。断言 inline 卡片出现、approve 后 run 推进、事件流反映决策。
@@ -118,7 +118,7 @@
 | web client `session-stream` 解析器单测 | 多帧/半包/心跳跳过/CRLF/去重/seq 单调/Last-Event-ID | 3a |
 | Playwright `session-feed.e2e` | （含 S5 从 3a 移入）建流→初始 replay→connState live；mock-agent run → feed 出现 user/step/tool/assistant/turn 且有序 + 合成标注；放开 fetch 猴补 URL | 3b |
 | Playwright `session-approval.e2e` | 经 project.run 起 human-gate 模板真实建 session → inline 卡片（gate.list 补全）→ approve → run 推进 | 3c |
-| Playwright `session-reconnect.e2e` | 断流→重连→replay 无重复无丢失；`/advanced` 旧页可达 | 3d |
+| vitest `session-stream-reconnect`（确定性 fake fetch）| 断流→重连带 Last-Event-ID→replay 无重复无丢失；致命状态 400/401/403/404 不重连；503 重试。`/advanced` 旧页可达由 `session-routing.e2e` 覆盖 | 3d |
 | 回归 | 既有 12 Playwright + 全量 vitest 不破（旧页迁移到 /advanced 后断言路径更新） | 3d |
 
 ## 5. 风险与缓解

@@ -26,6 +26,7 @@ export function SessionsPage() {
   >(queryKeys.sessionList(scope), () => rpc.call('session.list'));
 
   const sessions = data?.sessions ?? [];
+  const workspaceId = data?.workspaceId ?? null;
 
   return (
     <>
@@ -37,6 +38,23 @@ export function SessionsPage() {
           </p>
         </div>
         <div className="page-actions">
+          {/* Workspace picker placeholder: today there is exactly one (the
+              default) workspace, so this is a read-only indicator rather than a
+              selector. Multi-workspace management is deferred to a later phase;
+              session.list already returns the workspaceId this shows. */}
+          {workspaceId ? (
+            <label className="workspace-picker" title="当前工作区（暂只支持默认工作区）">
+              <span className="workspace-picker-label">工作区</span>
+              <select
+                className="workspace-picker-select"
+                value={workspaceId}
+                disabled
+                aria-label="工作区 Workspace"
+              >
+                <option value={workspaceId}>{workspaceId}</option>
+              </select>
+            </label>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary btn-sm"

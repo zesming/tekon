@@ -148,6 +148,51 @@ describe('deriveSessionSidePanel', () => {
     expect(state.cards.map((c) => c.kind)).toEqual(['artifact', 'tool', 'error']);
   });
 
+  // Report item 6 "final-result card": when a run reaches a terminal status,
+  // synthesize a summary card from data that genuinely exists in the stream
+  // (terminal status + artifact/error counts). No terminal status → no card.
+  it('appends a final-result card only once the run is terminal', () => {
+    const running = deriveSessionSidePanel([
+      ev('workflow/started', { runId: 'run_1' }, 1),
+      ev('artifact/created', { artifactType: 'code-changes', artifactId: 'a1' }, 2),
+    ]);
+    expect(running.cards.some((c) => c.kind === 'result')).toBe(false);
+
+    const passed = deriveSessionSidePanel([
+      ev('workflow/started', { runId: 'run_1' }, 1),
+      ev('artifact/created', { artifactType: 'code-changes', artifactId: 'a1' }, 2),
+      ev('turn/end', { runId: 'run_1', status: 'passed' }, 3),
+    ]);
+    const result = passed.cards.find((c) => c.kind === 'result');
+    expect(result).toBeDefined();
+    expect(result!.title).toContain('passed');
+    // The summary reflects the one artifact and zero errors seen.
+    expect(result!.detail).toContain('产物 1');
+    // It sorts last (highest seq) so it reads as the run's closing line.
+    expect(passed.cards[passed.cards.length - 1].kind).toBe('result');
+  });
+
+  it('does not add a final-result card for paused/blocked (non-terminal) runs', () => {
+    for (const status of ['paused', 'blocked', 'interrupted']) {
+      const state = deriveSessionSidePanel([
+        ev('workflow/started', { runId: 'run_1' }, 1),
+        ev('turn/end', { runId: 'run_1', status }, 2),
+      ]);
+      expect(state.cards.some((c) => c.kind === 'result')).toBe(false);
+    }
+  });
+
+  it('surfaces error count in the final-result card of a failed run', () => {
+    const failed = deriveSessionSidePanel([
+      ev('agent/error', { message: 'boom' }, 1),
+      ev('turn/end', { runId: 'run_1', status: 'failed' }, 2),
+    ]);
+    const result = failed.cards.find((c) => c.kind === 'result');
+    expect(result).toBeDefined();
+    expect(result!.title).toContain('failed');
+    expect(result!.detail).toContain('错误 1');
+  });
+
   it('returns an empty, safe state for no events', () => {
     const state: SidePanelState = deriveSessionSidePanel([]);
     expect(state.runId).toBeNull();

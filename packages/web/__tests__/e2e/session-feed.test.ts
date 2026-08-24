@@ -100,9 +100,21 @@ test('Sessions list shows the started session and links to its detail', async ({
 
   // Phase 3 3d: the session list is the default route `/`.
   await page.goto(server.url);
+
+  // Report item 1: the workspace picker placeholder renders the current
+  // (default) workspace as a read-only indicator.
+  await expect(page.getByLabel('工作区 Workspace')).toBeVisible({
+    timeout: 15_000,
+  });
+
   const link = page.locator(`a[href="/sessions/${sessionId}"]`);
   await expect(link).toBeVisible({ timeout: 15_000 });
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/sessions/${sessionId}$`));
   await expect(page.locator('.event-feed')).toBeVisible({ timeout: 15_000 });
+
+  // Report item 6: a passed run closes the right rail with a final-result card.
+  await expect(page.locator('.session-card-result')).toBeVisible({
+    timeout: 15_000,
+  });
 });

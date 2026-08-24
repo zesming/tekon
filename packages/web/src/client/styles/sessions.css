@@ -200,3 +200,34 @@
 .session-card-error .session-card-title {
   color: var(--danger, #dc2626);
 }
+
+/* Final-result card: the run's closing summary line (report item 6). */
+.session-card-result {
+  border-left: 3px solid var(--accent, #6366f1);
+}
+.session-card-result .session-card-title {
+  font-weight: 700;
+}
+
+/* Workspace picker placeholder (report item 1): read-only until multi-workspace
+   management lands in a later phase. */
+.workspace-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.workspace-picker-label {
+  color: var(--text-t, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.workspace-picker-select {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #334155);
+  background: var(--surface, #1e293b);
+  color: var(--text, #e2e8f0);
+  cursor: not-allowed;
+}

@@ -7,9 +7,13 @@ import type { StreamEvent } from './session-stream.js';
  * reject (governance semantics unchanged — the client is just a new entry point).
  */
 
+// Run statuses that mean the run is finished (matches core's
+// TERMINAL_WORKFLOW_STATUSES). Only these get a final-result summary card.
+const TERMINAL_RUN_STATUSES = new Set(['passed', 'failed', 'cancelled']);
+
 export interface SidePanelCard {
   seq: number;
-  kind: 'artifact' | 'tool' | 'error';
+  kind: 'artifact' | 'tool' | 'error' | 'result';
   title: string;
   detail?: string;
 }
@@ -114,6 +118,24 @@ export function deriveSessionSidePanel(
   const pendingDecisionIds = [...pending.keys()];
   if (pendingDecisionIds.length > 0) {
     runStatus = 'awaiting-approval';
+  }
+
+  // Report item 6 "final-result card": once the run is terminal, close the rail
+  // with a summary synthesized from data that genuinely exists in the stream —
+  // the terminal status plus the artifact/error counts already collected. (A
+  // richer delivery/PR summary needs delivery-event subscription, deferred to
+  // phase 4; turn/end carries only {runId, status} today.) Sorted last via a
+  // seq above every real event so it reads as the closing line.
+  if (runStatus && TERMINAL_RUN_STATUSES.has(runStatus)) {
+    const artifactCount = cards.filter((c) => c.kind === 'artifact').length;
+    const errorCount = cards.filter((c) => c.kind === 'error').length;
+    const lastSeq = cards.reduce((max, c) => Math.max(max, c.seq), 0);
+    cards.push({
+      seq: lastSeq + 1,
+      kind: 'result',
+      title: `运行结束 · ${runStatus}`,
+      detail: `产物 ${artifactCount} · 错误 ${errorCount}`,
+    });
   }
 
   return {
