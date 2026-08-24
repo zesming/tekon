@@ -7,6 +7,7 @@ import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import { createGateEngine, type GateEngine } from '../gate/engine.js';
 import type { AgentAdapter, AgentRunResult } from '../runtime/agent-adapter.js';
+import type { AgentEventSink } from '../runtime/agent-step-events.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { SubprocessRegistry } from '../session/subprocess-registry.js';
 import type { WorktreeLease } from '../types/config.js';
@@ -115,6 +116,13 @@ export interface CreateWorkflowEngineOptions {
    * AgentRunInput.signal + command-gateway registryKey (S3).
    */
   registry?: SubprocessRegistry;
+  /**
+   * Phase 2 S3: optional best-effort sink for agent-loop step events, threaded
+   * into node-executor and rework. The web executor wires the dual-write
+   * bridge; CLI omits it (no session events). MUST be best-effort (never throw)
+   * — C1 governance zero-regression.
+   */
+  agentEventSink?: AgentEventSink;
 }
 
 export function createWorkflowEngine(
@@ -188,6 +196,7 @@ export function createWorkflowEngine(
     executionLeases,
     getCheckedTransition: () => checkedTransitionNode,
     getRunGateWithRepair: () => gateRunnerRef.runGateWithRepair,
+    agentEventSink: options.agentEventSink,
   });
   reworkHandlerRef = reworkHandler;
 
@@ -217,6 +226,7 @@ export function createWorkflowEngine(
     gateRunner,
     getCheckedTransition: () => checkedTransitionNode,
     signal: options.signal,
+    agentEventSink: options.agentEventSink,
   });
 
   return {

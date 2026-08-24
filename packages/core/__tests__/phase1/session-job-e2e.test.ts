@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   createAuditLogger,
+  buildModelVisibleView,
   createCommandGateway,
   createDualWriteAuditLogger,
   createDualWriteRepositories,
@@ -212,6 +213,9 @@ function createHarness(input: {
       }),
       registry,
       signal,
+      // Phase 2 S3: mirror the web executor — agent-loop step events flow
+      // through the same dual-write bridge (best-effort).
+      agentEventSink: bridge,
     });
   };
 
@@ -249,12 +253,8 @@ function createHarness(input: {
     switch (workflow.status) {
       case 'passed':
         await sessions.updateSessionStatus(sessionId, 'done');
-        await emit(
-          sessionId,
-          'assistant/message',
-          { runId, text: `Run ${runId} passed.` },
-          true,
-        );
+        // D4 (phase 2 S3): synthetic "Run passed." removed — real per-node
+        // assistant/message now comes from the step-event bridge.
         await emit(sessionId, 'turn/end', { runId, status: 'passed' });
         return { status: 'done' };
       case 'paused': {
@@ -420,12 +420,18 @@ async function enqueueRun(
     for (const event of [
       { type: 'session/created', payload: { runId, sessionId: session.id } },
       { type: 'workflow/started', payload: { runId, kind: 'workflow' } },
-      { type: 'user/message', payload: { runId, text: demandText } },
+      // Mirror the web router: the user's message is model-visible (§13.6).
+      {
+        type: 'user/message',
+        payload: { runId, text: demandText },
+        modelVisible: true,
+      },
     ]) {
       const appended = await h.sessions.appendEvent({
         sessionId: session.id,
         type: event.type,
         payload: event.payload,
+        modelVisible: (event as { modelVisible?: boolean }).modelVisible ?? false,
       });
       h.bus.publish(appended);
     }
@@ -565,14 +571,27 @@ describe('phase 1 session/job e2e (S9)', () => {
       'user/message',
       'turn/start',
       'turn/end',
-      'assistant/message',
       'job/status',
+    ]);
+    // Phase 2 S3: agent-loop step events are appended directly by the step-event
+    // bridge (runAgentWithStepEvents), NOT via audit mapping. Literal enum (not
+    // a `step/`/`tool/` prefix match) so a future unknown subtype still trips the
+    // leak guard. assistant/message moved here from lifecycleTypes — after D4 it
+    // is emitted per node by the bridge, not as a run-level synthetic message.
+    const agentLoopTypes = new Set([
+      'step/start',
+      'step/end',
+      'tool/call',
+      'tool/result',
+      'assistant/message',
+      'agent/error',
     ]);
     for (const sessionType of Object.keys(sessionTypeCounts)) {
       expect(
         projectionTypes.has(sessionType) ||
           repositoryProjectionTypes.has(sessionType) ||
-          lifecycleTypes.has(sessionType),
+          lifecycleTypes.has(sessionType) ||
+          agentLoopTypes.has(sessionType),
       ).toBe(true);
     }
 
@@ -792,6 +811,67 @@ describe('phase 1 session/job e2e (S9)', () => {
     });
 
     await h2.close();
+  }, 30_000);
+
+  it('journey 5 (§13.6): model-visible history is reconstructable from the event log', async () => {
+    const repoPath = createGitRepo();
+    const h = createHarness({ repoPath, adapter: createMockAgentAdapter() });
+
+    const controller = new AbortController();
+    const prep = await h.buildEngine('pending', controller.signal).prepareRun({
+      demandText: 'Reconstruct model-visible history from the event log.',
+      mode: 'template',
+      workflowSpec: singleNodeWorkflow(),
+    });
+    const runId = prep.runId;
+    const { sessionId } = await enqueueRun(h, runId, 'workflow-run');
+    h.jobRunner.start();
+
+    await waitFor(() => {
+      const row = h.db
+        .prepare('select status from workflow_instances where id = ?')
+        .get(runId) as { status: string } | undefined;
+      return row?.status === 'passed';
+    });
+
+    // Reconstruct the model-visible view from the full event log (what the
+    // model would see on replay). NB: this proves the log is *reconstructable*
+    // into a model-visible view — not that the agent's live context was derived
+    // from it (promptBuilder still reads repositories; wiring is a later phase).
+    const all = await h.sessions.listEventsSince(sessionId, 0);
+    const view = buildModelVisibleView(all);
+    const viewTypes = view.map((e) => e.type);
+
+    // §13.6 three elements present: user/message + per-node assistant/message +
+    // tool/result, all model-visible.
+    expect(viewTypes).toContain('user/message');
+    expect(viewTypes).toContain('assistant/message');
+    expect(viewTypes).toContain('tool/result');
+
+    // Non-vacuous: the assistant/message carries real node content (nodeId +
+    // role + artifacts), not a synthetic run-level string. The executable node
+    // id is namespaced with the runId, so match the node suffix.
+    const assistant = view.find((e) => e.type === 'assistant/message')!;
+    expect(String(assistant.payload.nodeId)).toContain('rd-node');
+    expect(assistant.payload.role).toBe('rd');
+    expect(Array.isArray(assistant.payload.artifacts)).toBe(true);
+
+    // Ordering: user/message precedes the node's assistant/message.
+    expect(viewTypes.indexOf('user/message')).toBeLessThan(
+      viewTypes.indexOf('assistant/message'),
+    );
+
+    // Disconnect/resume replay property: splitting the log at an arbitrary seq
+    // k and concatenating [0..k] ∪ (k..end] reproduces the full model-visible
+    // view (SSE reconnect via sinceSeq loses/duplicates nothing).
+    const k = all[Math.floor(all.length / 2)].seq;
+    const head = await h.sessions.listEventsSince(sessionId, 0);
+    const headUpToK = head.filter((e) => e.seq <= k);
+    const tailAfterK = await h.sessions.listEventsSince(sessionId, k);
+    const stitched = buildModelVisibleView([...headUpToK, ...tailAfterK]);
+    expect(stitched.map((e) => e.seq)).toEqual(view.map((e) => e.seq));
+
+    await h.close();
   }, 30_000);
 });
 

@@ -69,6 +69,10 @@ export async function createApiCaller(
     sessions,
     bus,
     registry,
+    // Phase 2 S3: agent-loop step events flow through the same bridge as the
+    // dual-write projections (best-effort; C1). node-executor/rework emit
+    // step/start, tool/*, assistant/message, agent/error, step/end via it.
+    agentEventSink: bridge,
   });
   const jobRunner = createJobRunner({ jobs, sessions, bus, registry, executor });
   jobRunner.start();

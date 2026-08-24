@@ -7,6 +7,10 @@ import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
 import {
+  runAgentWithStepEvents,
+  type AgentEventSink,
+} from '../runtime/agent-step-events.js';
+import {
   type ExecutableNode,
   type CheckedTransitionFn,
   gatesWithStableKeys,
@@ -34,6 +38,13 @@ export interface NodeExecutorDeps {
    * of `interrupted`. Absent = legacy behavior.
    */
   signal?: AbortSignal;
+  /**
+   * Phase 2 S3: optional best-effort sink for agent-loop step events
+   * (step/start, tool/*, assistant/message, agent/error, step/end). The web
+   * executor wires the dual-write bridge; CLI passes nothing → no events. MUST
+   * be best-effort (never throw) — C1 governance zero-regression.
+   */
+  agentEventSink?: AgentEventSink;
 }
 
 export interface NodeExecutor {
@@ -232,7 +243,17 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
             // adapter can short-circuit / kill its subprocess.
             agentInput.signal = deps.signal;
           }
-          const agentResult = await adapter.runAgent(agentInput);
+          const agentResult = await runAgentWithStepEvents(
+            adapter,
+            agentInput,
+            {
+              runId,
+              nodeId: node.id,
+              role: node.role,
+              promptSummary: agentInput.prompt,
+            },
+            deps.agentEventSink,
+          );
           assertSuccessfulAgentRun(agentResult);
           agentSucceeded = true;
           await repositories.markRoleRunCompleted({

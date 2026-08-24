@@ -7,6 +7,7 @@ import {
   isWorkflowTerminalError,
   redactSecrets,
   writeWorkflowTerminal,
+  type AgentEventSink,
   type AuditLogger,
   type JobExecutionContext,
   type JobExecutor,
@@ -39,6 +40,8 @@ export function createWorkflowJobExecutor(deps: {
   sessions: SessionEventStore;
   bus: SessionEventBus;
   registry: SubprocessRegistry;
+  /** Phase 2 S3: best-effort agent-loop event sink (the dual-write bridge). */
+  agentEventSink?: AgentEventSink;
 }): JobExecutor {
   const { repositories, audit, projectContext, sessions, bus, registry } = deps;
 
@@ -101,6 +104,7 @@ export function createWorkflowJobExecutor(deps: {
       signal: ctx.signal,
       isPauseRequested: () => ctx.pauseRequested(),
       onNodeCheckpoint: (nodeId) => ctx.checkpoint(nodeId),
+      agentEventSink: deps.agentEventSink,
     });
   }
 
@@ -174,12 +178,10 @@ export function createWorkflowJobExecutor(deps: {
     switch (workflow.status) {
       case 'passed': {
         await sessions.updateSessionStatus(sessionId, 'done');
-        await emit(
-          sessionId,
-          'assistant/message',
-          { runId, text: `Run ${runId} passed.` },
-          { modelVisible: true },
-        );
+        // D4 (phase 2 S3): the synthetic "Run passed." assistant/message is
+        // removed — each executed node now emits a real (artifact-synthesized)
+        // assistant/message via the step-event bridge. turn/end still marks the
+        // run boundary.
         await emit(sessionId, 'turn/end', { runId, status: 'passed' });
         return { status: 'done' };
       }

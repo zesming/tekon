@@ -34,6 +34,8 @@ export * from './runtime/codex-adapter.js';
 export * from './runtime/mock-agent-adapter.js';
 export * from './runtime/agent-runtime.js';
 export * from './runtime/provider-registry.js';
+export * from './runtime/agent-step-events.js';
+export * from './runtime/legacy-agent-driver.js';
 export * from './gate/engine.js';
 export * from './gate/human-gate.js';
 export * from './gate/runners.js';
