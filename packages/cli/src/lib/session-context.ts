@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   createAuditLogger,
+  createAutomationJobExecutor,
   createCommandGateway,
   createDualWriteAuditLogger,
   createDualWriteRepositories,
@@ -10,6 +11,7 @@ import {
   createJobRepository,
   createJobRunner,
   createRepositories,
+  createRoutingJobExecutor,
   createSessionDualWriteBridge,
   createSessionEventBus,
   createSessionEventStore,
@@ -136,7 +138,18 @@ export async function withCliSessionContext<T>(
     const audit = createAuditLogger({ repositories, db, writeQueue });
     const sessions = createSessionEventStore(db, writeQueue);
     const jobs = createJobRepository(db, writeQueue);
-    const bus = createSessionEventBus();
+    const bus = createSessionEventBus({
+      // S3: safety net for an unexpected synchronous throw in a listener (every
+      // listener self-catches, but a bug that escapes must surface, not be
+      // swallowed by per-listener isolation).
+      onError: (error) => {
+        io.stderr.write(
+          `[session bus] listener error: ${
+            error instanceof Error ? error.message : String(error)
+          }\n`,
+        );
+      },
+    });
     const registry = createSubprocessRegistry();
 
     // Dual-write: engine/executor writes transparently emit session events
@@ -156,11 +169,19 @@ export async function withCliSessionContext<T>(
       createDualWriteRepositories(repositories, bridge);
     const dualAudit = createDualWriteAuditLogger(audit, bridge);
 
-    // 4e: CLI uses the plain workflow executor (no routing/automation). CLI is
-    // run-to-exit and never enqueues automation kinds (delivery-auto-prepare /
-    // readiness-evaluate are long-lived-server features, wired only in web/
-    // headless — design §1.4/§2.2). Autonomous delivery from CLI stays explicit
-    // via `tekon delivery prepare`.
+    // 4e (review M1): CLI is run-to-exit and never *enqueues* automation kinds
+    // (delivery-auto-prepare / readiness-evaluate are long-lived-server
+    // features, wired only in web/headless — design §1.4/§2.2), and it does NOT
+    // install the auto-prepare/readiness listeners. BUT the jobs table is shared
+    // across processes: a web-enqueued automation job left `queued` (server
+    // stopped before draining) will be claimed by the CLI runner's poll
+    // (claimNext has no kind filter). Routing it through the automation executor
+    // keeps that stray job isolated (idempotent, never touches session/run
+    // terminal state); the plain workflow executor would set session 'active'
+    // before its kind switch, throw on the unknown kind, and flip the session to
+    // 'failed' — polluting an already-`passed` run's session cross-process.
+    // Autonomous delivery from CLI still stays explicit via `tekon delivery
+    // prepare`; routing only defends against inherited jobs.
     const executor = createWorkflowJobExecutor({
       repositories: dualRepositories,
       audit: dualAudit,
@@ -170,12 +191,22 @@ export async function withCliSessionContext<T>(
       registry,
       agentEventSink: bridge,
     });
+    const automationExecutor = createAutomationJobExecutor({
+      repositories: dualRepositories,
+      audit: dualAudit,
+      sessions,
+      bus,
+      projectRoot: repoPath,
+    });
     const jobRunner = createJobRunner({
       jobs,
       sessions,
       bus,
       registry,
-      executor,
+      executor: createRoutingJobExecutor({
+        workflow: executor,
+        automation: automationExecutor,
+      }),
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
     });
 

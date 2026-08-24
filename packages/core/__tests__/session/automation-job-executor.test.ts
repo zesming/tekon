@@ -1,17 +1,25 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  createArtifactStore,
   createAutomationJobExecutor,
   createAuditLogger,
   createJobRepository,
   createJobRunner,
   createRepositories,
+  createRoutingJobExecutor,
   createSessionEventBus,
   createSessionEventStore,
   createSubprocessRegistry,
+  createWorkflowJobExecutor,
   createWriteQueue,
   migrateDatabase,
   openTekonDatabase,
+  type AuditLogger,
   type DurableJobRunner,
   type Session,
   type SessionEventStore,
@@ -24,6 +32,7 @@ import {
 // an already-passed run's session to failed. These tests pin that isolation.
 
 const runners: DurableJobRunner[] = [];
+const tempDirs: string[] = [];
 
 afterEach(async () => {
   for (const runner of runners.splice(0)) {
@@ -33,9 +42,12 @@ afterEach(async () => {
       // best-effort cleanup
     }
   }
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { force: true, recursive: true });
+  }
 });
 
-function setup() {
+function setup(projectRoot = '/tmp/tekon-automation-test') {
   const db = openTekonDatabase({ filename: ':memory:' });
   migrateDatabase(db);
   const writeQueue = createWriteQueue();
@@ -50,7 +62,7 @@ function setup() {
     audit,
     sessions,
     bus,
-    projectRoot: '/tmp/tekon-automation-test',
+    projectRoot,
   });
   const runner = createJobRunner({
     jobs,
@@ -95,6 +107,141 @@ async function seedRun(
     kind,
     createdAt: now,
     updatedAt: now,
+  });
+}
+
+// Seeds a run that passes assertPrePullRequestReady (mirrors the pr-package
+// fixture): passed run + delivery node + prd/test-report/qa-signoff artifacts +
+// the full governance + qa gate set. createPullRequestPreparation does no git
+// I/O, so no real remote is needed — only the repoPath for the package artifact.
+async function seedDeliveryReadyRun(
+  repositories: TekonRepositories,
+  audit: AuditLogger,
+  repoPath: string,
+  runId: string,
+): Promise<void> {
+  const now = '2026-06-05T00:00:00.000Z';
+  await repositories.createDemand({
+    id: `demand_${runId}`,
+    title: 'Add retry action',
+    body: 'Add a safe retry action for failed tasks.',
+    createdAt: now,
+  });
+  await repositories.createProject({
+    id: `project_${runId}`,
+    name: 'fixture',
+    repoPath,
+    createdAt: now,
+  });
+  await repositories.createWorkflowInstance({
+    id: runId,
+    projectId: `project_${runId}`,
+    demandId: `demand_${runId}`,
+    status: 'passed',
+    kind: 'workflow',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await repositories.createNode({
+    id: 'node_delivery',
+    runId,
+    role: 'pmo',
+    status: 'passed',
+    gates: [],
+    dependencies: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  const store = createArtifactStore({ repoPath, repositories });
+  await audit.append({
+    runId,
+    type: 'run.started',
+    payload: { templateId: 'standard-delivery', mode: 'template' },
+    createdAt: '2026-06-05T00:00:00.100Z',
+  });
+  await store.writeArtifact({
+    runId,
+    nodeId: 'node_delivery',
+    type: 'prd',
+    content: JSON.stringify({
+      title: 'PRD',
+      body: 'Retry requirements.',
+      acceptanceCriteria: [{ id: 'AC-1', description: 'Retry can be validated.' }],
+    }),
+  });
+  await store.writeArtifact({
+    runId,
+    nodeId: 'node_delivery',
+    type: 'test-report',
+    content: JSON.stringify({
+      title: 'Test report',
+      body: 'passed',
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: 'Unit validation passed.',
+          gateResultIds: ['gate_1'],
+        },
+      ],
+    }),
+  });
+  await store.writeArtifact({
+    runId,
+    nodeId: 'node_delivery',
+    type: 'qa-release-signoff',
+    content: JSON.stringify({
+      title: 'QA signoff',
+      body: 'QA validated the delivered branch.',
+      targetRef: `branch:tekon-delivery/${runId}`,
+      validatedRef: `branch:tekon-delivery/${runId}`,
+      overallStatus: 'passed',
+      criteriaEvidence: [
+        {
+          criterionId: 'AC-1',
+          status: 'passed',
+          evidence: `QA validation passed for branch:tekon-delivery/${runId}.`,
+          gateResultIds: ['gate_1'],
+        },
+      ],
+    }),
+  });
+  await audit.append({
+    runId,
+    type: 'qa.validation.ref',
+    payload: { nodeId: 'node_delivery', ref: `branch:tekon-delivery/${runId}` },
+    createdAt: '2026-06-05T00:00:01.250Z',
+  });
+  const gates: Array<[string, string, string?]> = [
+    ['gate_1', 'test'],
+    ['gate_e2e', 'e2e-pass', 'skipped'],
+    ['gate_security', 'security-scan'],
+    ['gate_independent-review', 'independent-review'],
+    ['gate_role-scope', 'role-scope'],
+    ['gate_ac-evidence', 'ac-evidence'],
+    ['gate_process-completeness', 'process-completeness'],
+    ['gate_qa_signoff', 'qa-signoff'],
+  ];
+  for (const [index, [id, gateType, status]] of gates.entries()) {
+    await repositories.recordGateResult({
+      id,
+      runId,
+      nodeId: 'node_delivery',
+      gateType,
+      status: status ?? 'passed',
+      durationMs: 1,
+      retries: 0,
+      ...(status === 'skipped'
+        ? { failureClassification: 'not-applicable' }
+        : {}),
+      createdAt: `2026-06-05T00:00:01.${100 + index}Z`,
+    });
+  }
+  await audit.append({
+    runId,
+    type: 'run.passed',
+    payload: {},
+    createdAt: '2026-06-05T00:00:02.000Z',
   });
 }
 
@@ -146,6 +293,80 @@ async function waitForJob(
 }
 
 describe('automation job executor (4d/4e)', () => {
+  // Review M1 regression: a runner wired with the routing executor (as the CLI
+  // now is) must send an automation-kind job to the automation executor, NOT
+  // the workflow executor. The workflow executor sets session 'active' before
+  // its kind switch and would throw on the unknown kind → flip the session to
+  // 'failed', polluting an already-passed run's session cross-process. This
+  // reproduces "web enqueues delivery-auto-prepare, leaves it queued, CLI runner
+  // claims it".
+  it('M1 cross-process: routing executor keeps a stray automation job off the workflow path', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-routing-m1-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+    const repositories = createRepositories(db, writeQueue);
+    const audit = createAuditLogger({ repositories, db, writeQueue });
+    const sessions = createSessionEventStore(db, writeQueue);
+    const jobs = createJobRepository(db, writeQueue);
+    const bus = createSessionEventBus();
+    const registry = createSubprocessRegistry();
+    const routing = createRoutingJobExecutor({
+      workflow: createWorkflowJobExecutor({
+        repositories,
+        audit,
+        projectContext: { projectRoot: repoPath },
+        sessions,
+        bus,
+        registry,
+      }),
+      automation: createAutomationJobExecutor({
+        repositories,
+        audit,
+        sessions,
+        bus,
+        projectRoot: repoPath,
+      }),
+    });
+    const runner = createJobRunner({
+      jobs,
+      sessions,
+      bus,
+      registry,
+      executor: routing,
+      pollIntervalMs: 5,
+      heartbeatMs: 30,
+      leaseTtlMs: 30_000,
+      workerId: 'worker_routing_m1',
+    });
+    runners.push(runner);
+
+    // A run that passed and whose session is done — the state a web run leaves
+    // behind. The delivery-auto-prepare job is NOT delivery-ready, so it fails
+    // inside the automation executor (self-caught).
+    await seedRun(repositories, 'run_m1', 'passed');
+    const session = await seedSession(sessions, 'run_m1');
+    await sessions.updateSessionStatus(session.id, 'done');
+
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'delivery-auto-prepare',
+    });
+    runner.start();
+    expect(await waitForJob(jobs, job.id)).toBe('failed');
+
+    // Session stays done, run stays passed — the workflow executor's
+    // active→failed pollution path was never taken (no turn/start emitted).
+    expect((await sessions.findSessionByRunId('run_m1'))?.status).toBe('done');
+    expect((await repositories.getWorkflowInstance('run_m1'))?.status).toBe(
+      'passed',
+    );
+    const types = await eventTypes(sessions, session.id);
+    expect(types).not.toContain('turn/start');
+    expect(types).toContain('agent/error');
+  }, 15_000);
+
   it('M1 isolation: a failed delivery-auto-prepare leaves the run passed and session done', async () => {
     const { repositories, sessions, jobs, runner } = setup();
     // A passed run whose session is done — the state after a workflow run
@@ -196,6 +417,86 @@ describe('automation job executor (4d/4e)', () => {
     const types = await eventTypes(sessions, session.id);
     expect(types).not.toContain('delivery/prepared');
   });
+
+  it('auto-prepares a delivery-ready run: writes prepared + emits delivery/prepared, never created', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-auto-prepare-'));
+    tempDirs.push(repoPath);
+    const { repositories, audit, sessions, jobs, runner } = setup(repoPath);
+    await seedDeliveryReadyRun(repositories, audit, repoPath, 'run_ready_prep');
+    const session = await seedSession(sessions, 'run_ready_prep');
+    await sessions.updateSessionStatus(session.id, 'done');
+
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'delivery-auto-prepare',
+    });
+    runner.start();
+    expect(await waitForJob(jobs, job.id)).toBe('done');
+
+    // The delivery row is `prepared` — never `created` (governance red line:
+    // auto-prepare must NEVER create a PR).
+    const delivery = await repositories.getDeliveryPullRequest('run_ready_prep');
+    expect(delivery?.status).toBe('prepared');
+    expect(delivery?.prUrl).toBeNull();
+    const types = await eventTypes(sessions, session.id);
+    expect(types).toContain('delivery/prepared');
+    expect(types).not.toContain('delivery/pr-created');
+    // Run stays passed, session stays done.
+    expect(
+      (await repositories.getWorkflowInstance('run_ready_prep'))?.status,
+    ).toBe('passed');
+    expect((await sessions.findSessionByRunId('run_ready_prep'))?.status).toBe(
+      'done',
+    );
+  }, 15_000);
+
+  it('S2: re-preparing a failed delivery row preserves a prior human approval', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-auto-prepare-s2-'));
+    tempDirs.push(repoPath);
+    const { repositories, audit, sessions, jobs, runner } = setup(repoPath);
+    await seedDeliveryReadyRun(repositories, audit, repoPath, 'run_s2');
+    const session = await seedSession(sessions, 'run_s2');
+    await sessions.updateSessionStatus(session.id, 'done');
+
+    // A prior delivery attempt was human-approved, then failed at push/create.
+    // (approve → push failed leaves status=failed with the approval recorded.)
+    const seededAt = '2026-06-05T00:00:03.000Z';
+    await repositories.upsertDeliveryPullRequest({
+      id: 'delivery_pr_run_s2',
+      runId: 'run_s2',
+      branch: 'tekon-delivery/run_s2',
+      baseBranch: 'main',
+      title: 'prior attempt',
+      bodyPath: null,
+      remoteName: null,
+      remoteUrl: null,
+      status: 'failed',
+      prUrl: null,
+      approvedBy: 'release-manager',
+      approvedAt: seededAt,
+      branchPushedAt: null,
+      prCreatedAt: null,
+      failureStage: 'push',
+      lastError: 'push rejected',
+      attemptCount: 1,
+      createdAt: seededAt,
+      updatedAt: seededAt,
+    });
+
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'delivery-auto-prepare',
+    });
+    runner.start();
+    expect(await waitForJob(jobs, job.id)).toBe('done');
+
+    // Auto-prepare re-prepared (failed → prepared) but did NOT revoke the human
+    // approval — nulling it would silently force re-approval (S2).
+    const delivery = await repositories.getDeliveryPullRequest('run_s2');
+    expect(delivery?.status).toBe('prepared');
+    expect(delivery?.approvedBy).toBe('release-manager');
+    expect(delivery?.approvedAt).toBe(seededAt);
+  }, 15_000);
 
   it('readiness-evaluate emits readiness/evaluated with checks', async () => {
     const { repositories, sessions, jobs, runner } = setup();

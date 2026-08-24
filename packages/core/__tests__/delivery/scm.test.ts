@@ -554,6 +554,23 @@ describe('scm delivery', () => {
         (c) => c.command.tool === 'git' && c.command.args[0] === 'push',
       ),
     ).toBe(false);
+
+    // S5: a dry-run probe against the already-created PR reports dryRun:true
+    // (honoring the caller) and still runs no write command.
+    const callsBeforeDryRun = calls.length;
+    const third = await delivery.createPr({ ...createArgs, dryRun: true });
+    expect(third.dryRun).toBe(true);
+    expect(third.prUrl).toBe('https://github.example/tekon/pull/9');
+    expect(third.commands).toEqual([]);
+    expect(
+      calls
+        .slice(callsBeforeDryRun)
+        .some(
+          (c) =>
+            (c.command.tool === 'gh' && c.command.args[0] === 'pr') ||
+            (c.command.tool === 'git' && c.command.args[0] === 'push'),
+        ),
+    ).toBe(false);
     db.close();
   }, 15_000);
 

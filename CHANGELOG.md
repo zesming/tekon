@@ -33,14 +33,14 @@ Harness-inspired replatform 阶段 4（4d–4f）：把 `sessions.profile` 从�
 
 - **4f-1（澄清事件化）递延**：澄清发生在 run 前、session 尚未创建，`clarification/*` 事件挂靠哪个 session、draft 与 session 如何绑定是独立设计问题，不在本轮范围。与 4e 旁路 gate、4d review-only enforcement 同属"原语已备、消费入口待专门设计"的诚实收窄。
 - 旁路 gate（schema-only 放开）在 4e 递延——复用 stableGateKey / 写前查 latest / 过滤 human gate 的机制已在设计中定稿，实现单列。
-- auto-prepare 仅长驻服务特性；CLI 显式 `delivery prepare` 不变。
+- auto-prepare 仅长驻服务特性；CLI 显式 `delivery prepare` 不变。CLI 未提供 `--profile` 标志（M2 决策下它对 CLI 行为惰性，会是装饰性标志）——CLI 自治交付通过 `tekon delivery prepare` 显式进行。
 
 ### 测试
 
-- core：`profile-policy.test.ts`（5）、`automation-job-executor.test.ts`（3，含 goal-skip / 幂等 / 自捕获）、`event-bus.test.ts`（+3 subscribeAll/onError 隔离）、`scm.test.ts`（+1 createPr 幂等）、`types/session-contract.test.ts`（+1 readiness/evaluated）、`draft/shape.test.ts`（+2 计划生成/审批正交 + 重新生成使审批失效）。
-- web：`project-run-job.test.ts`（+2 autonomous auto-prepare vs human-web 不 prepare）、`write-auth.test.ts`（+3 计划审批门控 + 向后兼容旧 draft 仍 run + plan-approve 无计划报 400）。
+- core：`profile-policy.test.ts`（5）、`automation-job-executor.test.ts`（6，含 M1 跨进程路由隔离 / M1 同进程隔离 / goal-skip / delivery-ready 自动 prepare 只到 prepared 不 created / S2 保留人工审批 / 幂等）、`event-bus.test.ts`（+3 subscribeAll/onError 隔离）、`scm.test.ts`（+1 createPr 幂等 + dry-run 尊重调用方）、`types/session-contract.test.ts`（+1 readiness/evaluated）、`draft/shape.test.ts`（+2 计划生成/审批正交 + 重新生成使审批失效）。
+- web：`project-run-job.test.ts`（+3 autonomous auto-prepare vs human-web 不 prepare + gate/result 去抖 readiness 链路）、`write-auth.test.ts`（+3 计划审批门控 + 向后兼容旧 draft 仍 run + plan-approve 无计划报 400）。
 - CLI：`cli-flow.test.ts`（+1 e2e：draft plan→plan-approve 门控 + 旧 draft 无计划仍 passed）。
-- 全量根聚合 1225 passed（108 文件）/ 三包 typecheck 全绿。
+- 全量根聚合 1229 passed（108 文件）/ Playwright 11 passed + 5 flaky-then-pass（与 v0.12.0 基线一致）/ 三包 typecheck 全绿。
 
 ## v0.12.0
 

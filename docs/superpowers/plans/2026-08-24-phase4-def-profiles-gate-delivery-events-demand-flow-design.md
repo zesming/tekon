@@ -240,6 +240,16 @@
 - **D3 — plan 审批（评审 M3 修正后）**：拆 **4f-1**（澄清事件化，直接实现）+ **4f-2**（plan 产物 + 审批）。4f-2 中：`draftShape.generatePlan` 显式生成 plan 产物置 `hasPlan=true`；`draftShape.planApprove` 独立动作置 `planApproved=true`；`approveDraftShape`（需求审批）**不触碰** `planApproved`（两审批正交）；`project.run` 检查 `hasPlan && planApproved!==true → 拒绝`（**有 plan 的 draft 审批点真实生效；无 plan 的旧 draft 恒豁免，向后兼容**）。依据：原 D3"approve 默认置 true"使审批点装饰化（评审 M3），改为独立审批动作 + hasPlan 门控，既强制新流程又零破坏旧路径。
 
 > **评审响应记录（design review round 1，2026-08-24）**：opus reviewer 检出 3 must-fix（M1 executor 隔离、M2 CLI 生命周期、M3 plan 审批不可达）+ 若干机制点（N1-N7）。本设计已据此修订：M1→§1.2.2a（job-runner kind→executor 路由，自动化 kind 走轻量 executor 不污染 session/run 状态）；M2→§1.4（取消 CLI auto-prepare e2e，auto-prepare 收窄为长驻服务特性，CLI 显式 prepare 不变）；M3→§3.2.2 + D3（拆 4f-1/4f-2，独立审批动作 + hasPlan 门控）；N1/N2/N3/N4→§2.2.2（旁路 gate 复用 stableGateKey、写前查 latest 防 stale、过滤 human gate、只对 schema gate 开放）；N5→§1.2.1（删死代码 `canAutoAdvanceGate`）；N6/N7→§8 handoff 补 session-service/project.ts + 异步 enqueue catch。摸底锚点经 reviewer 抽查 15+ 处全部属实。
+
+> **评审响应记录（code review round，2026-08-24，v0.13.0 实现后）**：opus reviewer 对已实现代码（`7f20f30..HEAD`，含 4d/4e/4f-2）复查，检出 1 must-fix + 6 should-fix，均已核实并处理：
+> - **M1（必须修复，已修）**：CLI `session-context.ts` 只做了"不装 listener"（M2 决策的后半句），**漏了 §8 handoff 明列的"kind→executor 注入"前半句**——CLI 仍注入 plain workflow executor。后果：web enqueue 的 `delivery-auto-prepare`/`readiness-evaluate` job 若滞留 `queued`（web 服务在 drain 前停止/崩溃），会被 CLI runner 的 `claimNext`（无 kind 过滤）认领，plain workflow executor 在 kind switch 前先置 session `active`、遇未知 kind 抛错、catch 置 session `failed`——把已 `passed` 的 run 的 session 跨进程污染成 `failed`。这正是 round-2 设计（§本节上方 line 96）所依赖的"M1 隔离"未被实际接线的漏洞。**修复**：CLI 组合根改注入 `createRoutingJobExecutor({workflow, automation})`（automation executor deps 均在手），保持不装 listener。**回归锁定**：`automation-job-executor.test.ts` 新增"M1 cross-process：routing executor keeps a stray automation job off the workflow path"（passed/done session + stray delivery-auto-prepare job → job failed 但 session 恒 done、run 恒 passed、无 turn/start）。
+> - **S1（已修）**：automation executor 的 `getRunIdBySessionId` 移入 try/catch——store 出错也 emit agent/error 而非抛出到 runner（否则 job 失败但丢领域事件）。
+> - **S2（已修）**：auto-prepare 的 delivery upsert 不再无条件清空 `approvedBy`/`approvedAt`；改 `existing?.X ?? null` 保留已存在的人工审批（re-prepare 一个 `failed` 但已审批的 delivery 行时不静默撤销审批）。新增 S2 单测锁定。
+> - **S3（已修）**：web/CLI 两个组合根的 `createSessionEventBus` 补 `onError`（listener 意外同步抛错的安全网，不再被静默吞掉）。
+> - **S5（已修）**：`createPr` 幂等短路返回改 `dryRun: input.dryRun === true`（尊重调用方 dry-run 语义；无副作用，commands 恒空）。scm 幂等测试补 dry-run 断言。
+> - **S6（已修）**：新增 web 集成测试锁定 gate/result→去抖→enqueue 链路（standard-delivery run 的多个 gate/result 合并为严格更少的 readiness-evaluate job + 至少 1 个 readiness/evaluated 事件）。
+> - **S4（记录偏差，不实现）**：设计 §1.2.4 列出 CLI `tekon run --profile`。但 M2 决策下 CLI 不装 auto-prepare listener，`--profile autonomous-delivery` 在 CLI 只会写入 session.profile 而无任何行为——是装饰性标志（与本设计删 `canAutoAdvanceGate`、不接线 review-only 同类）。故**不实现 CLI --profile**，在此记录为对设计 §1.2.4 的有意偏差：CLI 侧 autonomous 自动化收窄为"长驻服务特性"，CLI 通过 `tekon delivery prepare` 显式交付。
+> - reviewer 另确认 12 项关键约束（治理红线、假通过陷阱、executor 隔离 web 路径、bus 异常隔离、4f-2 双侧门控一致、正交性、createPr 幂等、auto-prepare 不误触发、goal 不 prepare、测试质量、递延诚实标注、版本号）全部守住。
 - **D4 — readiness/evaluated 消费者**：**本阶段只发事件 + CLI 可查**，web UI 实时展示列为**可选增强**（不阻塞 4e 交付）。依据：方案规模与任务相称，UI 实时投影可独立迭代。
 
 ## 7. 验收（每子步独立 e2e）

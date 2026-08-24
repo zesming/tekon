@@ -85,7 +85,10 @@ export function createScmDelivery(
         );
         if (existing?.status === 'created' && existing.prUrl) {
           return {
-            dryRun: false,
+            // S5: honor the caller's dryRun. A dry-run probe against an
+            // already-created PR should report dryRun:true (no side effects
+            // either way — commands is empty).
+            dryRun: input.dryRun === true,
             requiresHumanApproval: false,
             commands: [],
             status: await getScmStatus(options, input.branch),

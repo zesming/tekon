@@ -117,7 +117,14 @@ export async function createApiCaller(
   const audit = createAuditLogger({ repositories, db, writeQueue });
   const sessions = createSessionEventStore(db, writeQueue);
   const jobs = createJobRepository(db, writeQueue);
-  const bus = createSessionEventBus();
+  const bus = createSessionEventBus({
+    // S3: safety net for an unexpected synchronous throw in a listener. Every
+    // listener already self-catches, but a bug that escapes must surface to
+    // stderr rather than be swallowed by the bus's per-listener isolation.
+    onError: (error) => {
+      console.error('[session bus] listener error:', error);
+    },
+  });
   const registry = createSubprocessRegistry();
 
   // Dual-write: wrap audit + repositories so engine/routers emit session

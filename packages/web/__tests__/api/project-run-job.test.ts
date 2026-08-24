@@ -442,6 +442,80 @@ describe('project.run background job (S7b)', () => {
 
     await api.close();
   }, 30_000);
+
+  // 4e/S6: the readiness projection debounces per session — a burst of
+  // gate/result events (a standard-delivery run emits several) must coalesce
+  // into far fewer readiness-evaluate jobs, and the chain must actually fire
+  // (at least one readiness/evaluated event lands).
+  it('debounces gate/result into fewer readiness-evaluate jobs and emits readiness/evaluated', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const started = await api.project.run({
+      demandText: 'Readiness projection should debounce gate results.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    await waitFor(
+      () => runStatus(fixture.projectRoot, started.run.id) === 'passed',
+    );
+    // Let the trailing debounce window (500ms) fire its enqueue and settle.
+    await waitFor(() => {
+      const db = openTekonDatabase({
+        filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+      });
+      try {
+        const readiness = db
+          .prepare(
+            `select count(*) as n from session_events where type = 'readiness/evaluated'`,
+          )
+          .get() as { n: number };
+        return readiness.n >= 1;
+      } finally {
+        db.close();
+      }
+    });
+
+    const db = openTekonDatabase({
+      filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const gateResults = (
+        db
+          .prepare(
+            `select count(*) as n from session_events where type = 'gate/result'`,
+          )
+          .get() as { n: number }
+      ).n;
+      const readinessJobs = (
+        db
+          .prepare(`select count(*) as n from jobs where kind = 'readiness-evaluate'`)
+          .get() as { n: number }
+      ).n;
+      const readinessEvents = (
+        db
+          .prepare(
+            `select count(*) as n from session_events where type = 'readiness/evaluated'`,
+          )
+          .get() as { n: number }
+      ).n;
+
+      // The chain fired: at least one readiness job ran and emitted an event.
+      expect(readinessJobs).toBeGreaterThanOrEqual(1);
+      expect(readinessEvents).toBeGreaterThanOrEqual(1);
+      // Debounce coalesced: a standard-delivery run emits several gate/result
+      // events, but the per-session debounce must produce strictly fewer
+      // readiness jobs than gate results (no 1:1 storm).
+      expect(gateResults).toBeGreaterThan(1);
+      expect(readinessJobs).toBeLessThan(gateResults);
+    } finally {
+      db.close();
+    }
+
+    await api.close();
+  }, 30_000);
 });
 
 function deliveryStatus(

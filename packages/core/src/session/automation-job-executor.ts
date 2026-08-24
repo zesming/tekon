@@ -82,8 +82,13 @@ export function createAutomationJobExecutor(deps: {
       remoteUrl: existing?.remoteUrl ?? null,
       status: 'prepared',
       prUrl: existing?.prUrl ?? null,
-      approvedBy: null,
-      approvedAt: null,
+      // S2: preserve a prior human approval. This upsert also runs when a
+      // previous delivery attempt is `failed` (existing.status === 'failed'
+      // above), and a failed attempt may have carried a human approval
+      // (approve → push/create failed). Nulling it would silently revoke that
+      // approval; keep it (re-preparing is fail-safe, not an approval reset).
+      approvedBy: existing?.approvedBy ?? null,
+      approvedAt: existing?.approvedAt ?? null,
       branchPushedAt: existing?.branchPushedAt ?? null,
       prCreatedAt: existing?.prCreatedAt ?? null,
       failureStage: null,
@@ -124,12 +129,13 @@ export function createAutomationJobExecutor(deps: {
   return {
     async execute(ctx: JobExecutionContext) {
       const { job } = ctx;
-      const runId = await sessions.getRunIdBySessionId(job.sessionId);
-      if (!runId) {
-        // No run bound — nothing to automate. Not a run/session failure.
-        return { status: 'failed' as JobStatus };
-      }
+      let runId: string | null = null;
       try {
+        runId = await sessions.getRunIdBySessionId(job.sessionId);
+        if (!runId) {
+          // No run bound — nothing to automate. Not a run/session failure.
+          return { status: 'failed' as JobStatus };
+        }
         switch (job.kind) {
           case 'delivery-auto-prepare':
             return await runDeliveryAutoPrepare(runId, job.sessionId);
@@ -141,6 +147,10 @@ export function createAutomationJobExecutor(deps: {
       } catch (error) {
         // M1: automation failure is isolated — record + emit, but DO NOT touch
         // workflow/session terminal state. Only the job row settles failed.
+        // getRunIdBySessionId is inside the try (S1) so even a store error emits
+        // agent/error rather than throwing out to the runner (which would settle
+        // the job failed without the domain event). runId may be null if the
+        // store read itself failed.
         const message = redactSecrets(
           error instanceof Error ? error.message : String(error),
         ).content;
