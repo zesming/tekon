@@ -34,7 +34,7 @@
 - 一次性契约：`AgentAdapter.runAgent(): Promise<AgentRunResult>` @ `packages/core/src/runtime/agent-adapter.ts:63`。
 - 流式契约已冻结、零实现：`AgentDriver`/`AgentHandle`/`AgentRuntimeEvent` @ `packages/core/src/types/session-contract.ts:190-237`。
 - provider if/else（两处重复）：`agent-runtime.ts:60-102`（createAgentRuntime）、`:108-164`（createAgentAdapterFromSnapshot）。
-- node 执行 agent 调用点（评审复审：**三处，非单点**）：`node-executor.ts:235`（主执行）、`rework.ts:360`（rework 重跑）、`rework.ts:510`（review 重跑）。三处都是真实 agent 执行（产产物、影响 workflow），共享单元 `runAgentWithStepEvents` 必须**同时包住三处**，否则经历 rework 的 run 的 §13.6 "完整 replay" 主张不成立。`ReworkHandlerDeps`（rework.ts:42-47）已注入 `adapter`，同法加可选 `agentEventSink`，由 engine 线程化（与 node-executor 一致）。外包 role_run + lease 记账（node-executor.ts:188-272）。
+- node 执行 agent 调用点（评审复审：**三处，非单点**；实现期 code review 又发现第 4 处 gate-repair）：`node-executor.ts:235`（主执行）、`rework.ts:360`（rework 重跑）、`rework.ts:510`（review 重跑）、`gate-runner.ts:297`（gate-repair 自动修复，a54d22e 补接）。四处都是真实 agent 执行（产产物、影响 workflow），共享单元 `runAgentWithStepEvents` 必须**同时包住四处**，否则经历 rework 或 gate 修复的 run 的 §13.6 "完整 replay" 主张不成立。`ReworkHandlerDeps`（rework.ts:42-47）与 `GateRunnerDeps` 已注入 `adapter`，同法加可选 `agentEventSink`，由 engine 线程化（与 node-executor 一致）。外包 role_run + lease 记账（node-executor.ts:188-272）。唯一不包的是 `dynamic.ts:150`（CLI `--dynamic --dry-run` 预览，mock adapter 写 fixture，随 CLI 事件流整体递延阶段 4）。
 - 事件缺口：核心 12 缺 `step/*`、`assistant/chunk`、`tool/*`、`plan/updated`、`todo/updated`；`assistant/message` 合成 @ `job-executor.ts:179-182`。
 - 脱敏/present：`present.ts:44 presentEvent`、`:88 buildModelVisibleView`（无消费者）；spill TODO @ `present.ts:27`。
 - provider 快照：`recordRunProviderConfig` @ `engine.ts:321`，restore zod 校验 @ `agent-runtime.ts:122-149`，**无 version pin**。
@@ -116,12 +116,12 @@ node-executor 用它包住 :235 的调用;**rework.ts:360 与 :510 两处也用�
 | --- | --- |
 | `core/__tests__/runtime/provider-registry.test.ts`（新） | S1 注册/查找/未知；**每个内建 definition 的 create/restore 用危险 permissionProfile 构造 → 断言 `assertAgentProviderCapabilities` 抛错**（评审 S1，护栏在 adapter 工厂内，锁定 registry 未绕过）；S2 version 往返 + 缺失=v1 兼容 + version=999 抛 `ProviderSnapshotVersionError` |
 | `core/__tests__/runtime/legacy-agent-driver.test.ts`（新） | S5 driver start→events→whenIdle；cancel 中断；pause interruptible=false；followUp/steer 抛 NotSupportedYet |
-| `core/__tests__/phase2/agent-loop-events.e2e.test.ts`（新） | S3+S4：一次 run → step/start→tool/call→tool/result→assistant/message→step/end 序列；modelVisible replay（§13.6，断言 payload 含 nodeId/role/产物引用 + 顺序一致 + 断线 0..k∪k..end==0..end） |
-| **`core/__tests__/phase2/agent-event-c1.test.ts`（新，治理红线）** | **C1 故障注入**（评审 M4-1）：注入 sink（appendEvent reject / bus subscriber 抛错）→ 断言 node 仍 passed、workflow 仍 passed、无异常逃出 node-executor |
+| `core/__tests__/runtime/agent-step-events.test.ts`（新，实现期定名） | S3+S4 单元：success 序列 step/start→tool/call→tool/result→assistant/message→step/end；cancel 只发 step/end{cancelled}；failure(exitCode≠0 / timedOut) 发 agent/error+step/end{failed}；throw 重抛；C1 抛错 sink 不穿破；无 sink。（原设计设想的 `phase2/agent-loop-events.e2e.test.ts` 拆为此单测 + 下面 session-job-e2e journey 5，覆盖等价） |
+| **C1 故障注入**（并入 `agent-step-events.test.ts` 与 `session-job-e2e.test.ts`，评审 M4-1；原设想 `phase2/agent-event-c1.test.ts`） | 注入 sink（appendEvent reject / bus subscriber 抛错）→ 断言 node 仍 passed、workflow 仍 passed、无异常逃出 node-executor；另 `engine-gate-repair.e2e.test.ts` 断言 gate-repair 也发 step 事件 |
 | **失败/取消路径**（并入 agent-loop-events 或 node-executor 单测，评审 M4-2） | adapter exitCode=1/timedOut → 发 `agent/error`+`step/end{failed}` 且 node 仍走既有 interrupted 记账；signal abort → **未发** `agent/error`、发 `step/end{cancelled}` |
 | **`session-job-e2e.test.ts` 改**（评审 M4-3/M4-4） | ① 闭集泄漏断言（:549-577）**有意识扩展**第四类"agent-loop 事件"，**字面枚举** `step/start, step/end, tool/call, tool/result`（**禁用 `startsWith('step/')` 前缀匹配**，否则未来子类型泄漏不报错）；D4 后 `assistant/message` 从 lifecycleTypes **移入**第四类（它现在来自 agent-loop 而非生命周期）；注释说明理由。② D4：移除合成 assistant/message 后,harness 镜像 settleByStatus（:252-257）与精确文本断言（:255 `Run ${runId} passed.`）改为"N node → N assistant/message,无 run 级合成";**harness buildEngine（:198-214，已有 bridge 实例 :194）必须传 `agentEventSink`**,否则事件不发、断言必挂 |
 | 既有 `agent-runtime` / CLI run | 回归：registry 化透明，CLI 仍绿（无 sink→无事件） |
-| Playwright | 回归：UI 未变，8 项仍绿 |
+| Playwright | 回归：UI 未变，12 项仍绿 |
 
 ## 5. 待决问题 — 评审已裁定
 
@@ -142,7 +142,7 @@ node-executor 用它包住 :235 的调用;**rework.ts:360 与 :510 两处也用�
 | S1(评审) | 护栏在 adapter 工厂（codex/claude-code-adapter），不搬进 registry；测试锁定 definition 走工厂 | codex-adapter.ts:76、claude-code-adapter.ts:52 |
 | S2(评审) | schema_version **存于 config_summary JSON blob**（比评审建议的新增列更简单、同样零迁移：旧 blob 无该键→视为 v1）：`create()` stamp `schemaVersion` 进 summary，`restore()` 读 `configSummary.schemaVersion`，缺省=1，高于当前抛 `ProviderSnapshotVersionError`；高版本仅在 web 同步 resume 映射 400，job 路径表现为 job failed | domain.ts:286、repositories.ts:371、provider-registry.ts |
 | S4(评审) | 每 node 生成 stepId=randomUUID() 入 payload + correlationId；不强求 sourceEventSeqs | session-contract.ts |
-| 复审-B | `runAgentWithStepEvents` 包住**三处** runAgent（node-executor:235 + rework:360/:510），rework 加可选 agentEventSink，否则 rework run 的 §13.6 主张不成立 | rework.ts:42-47,360,510 |
+| 复审-B | `runAgentWithStepEvents` 包住**三处** runAgent（node-executor:235 + rework:360/:510），rework 加可选 agentEventSink，否则 rework run 的 §13.6 主张不成立。**实现期 code review 补第 4 处 gate-runner:297（gate-repair），同一主张要求四处全包（见 §1）** | rework.ts:42-47,360,510；gate-runner.ts:297 |
 | 复审-driver | driver `events()` 用受背书的 collecting sink（内部 appendEvent 拿 seq + try/catch publish + yield），非伪造 seq；node/rework 路径仍用 bridge sink | session-contract.ts:192、dual-write.ts:215 |
 | 复审-fail | 失败路径 node 级 agent/error 与 job-executor run 级 agent/error 双发是既有非回归；测试断言 nodeId 存在 + run 级不变，不写总数断言 | job-executor.ts:203 |
 | 复审-NIT | M1 检查顺序（先 cancel 后 assert）；闭集第四类字面枚举非前缀；assistant/message 移入第四类；harness buildEngine 传 sink | helpers.ts:286、session-job-e2e.test.ts |

@@ -13,7 +13,7 @@ Harness-inspired replatform 阶段 2（2a）：流式 Agent Loop 兼容层 + Pro
 - `ProviderSnapshotVersionError` + `schemaVersion`（存于 config_summary JSON，零迁移）：缺省=1（旧快照兼容），高于当前版本抛错，防 provider 升级静默破坏 replay/resume。
 
 **Agent Loop 事件桥（报告 §8.3/§8.4/§P0-04 桥接部分）:**
-- 新增 `agent-step-events.ts`：`runAgentWithStepEvents` 单一拥有 `step/start → (tool/call → tool/result → assistant/message | agent/error) → step/end` 序列，包住 node-executor 与 rework/review 三处 agent 调用；事件经 dual-write bridge best-effort 发射（C1 治理零回归）。
+- 新增 `agent-step-events.ts`：`runAgentWithStepEvents` 单一拥有 `step/start → (tool/call → tool/result → assistant/message | agent/error) → step/end` 序列，包住 **4 处**真实 agent 调用（node-executor 主执行、rework 重跑、review 重跑、gate-repair 自动修复），确保经历 rework 或 gate 修复的 run 也有完整 §13.6 replay；事件经 dual-write bridge best-effort 发射（C1 治理零回归）。
 - 新增 `legacy-agent-driver.ts`：冻结的 `AgentDriver`/`AgentHandle` 契约的首个实现（legacy 桥接，一次 runAgent = 一个 step）；`followUp`/`steer`/`resume` 抛 `NotSupportedYet`（递延 2b）。
 - 补齐会话事件词汇：`step/start`、`step/end`、`tool/call`、`tool/result`、真实的 `assistant/message`（取代合成的 "Run passed."）；`tool/result` 与 `assistant/message` 标 `modelVisible`。
 
@@ -27,12 +27,14 @@ Harness-inspired replatform 阶段 2（2a）：流式 Agent Loop 兼容层 + Pro
 - 2a 的 `assistant/message` 由产物元数据合成，**非模型原文**；真正的增量 `assistant/chunk` 逐块流式依赖 provider 增量输出能力，递延阶段 2b。
 - `followUp`/`steer`（运行中转向）、细粒度 tool 事件、spill reference 递延阶段 2b。
 - dashboard 客户端尚未消费事件流（阶段 3）；`tool/call` 为 node 级摘要（`summaryLevel:'node'`）。
+- §13.6 replay 覆盖跑过 agent 的 node（含 rework/gate-repair）；从 gate 断点恢复（resumeFromGate）不重跑 agent、不发 step 事件，故升级前已完成的 node 视图不含其 step/tool/assistant 事件——这是恢复语义，非缺陷。CLI 路径当前不接事件流（阶段 4），`--dynamic --dry-run` 预览的 `dynamic.ts` agent 调用不发 step 事件。
+- `AgentDriver.cancel()` 对真实 provider 的中断依赖 adapter 透传 `signal`（现 codex/claude-code adapter 未透传），driver 尚无生产调用方，完整 provider→driver cancel 接线递延 2b（web job 路径的取消经 `ctx.signal` 独立生效，不受影响）。
 
 ### 测试
 
 - 新增 `runtime/provider-registry.test.ts`（10：注册/未知/能力护栏/版本往返/缺失兼容/高版本抛错）、`runtime/agent-step-events.test.ts`（7：三分支 + C1 故障注入 + 无 sink）、`runtime/legacy-agent-driver.test.ts`（5：序列 + seq 单调 + cancel + pause + NotSupportedYet）。
 - `phase1/session-job-e2e` 新增 journey 5（§13.6 模型可见 replay：三要素 + 顺序 + 真实 payload + 断线拼接一致）；harness 镜像 web 路径（agentEventSink + user/message modelVisible + 移除合成消息）；闭集泄漏断言扩展第四类 agent-loop 事件。
-- 提交前全量 `pnpm test` 通过：core 892 / web 185 / cli 37 + Playwright 8。
+- 提交前全量 `pnpm test` 通过：core 892 / web 185 / cli 37 + Playwright 12。
 
 ## v0.9.0
 
@@ -70,7 +72,7 @@ Harness-inspired replatform 阶段 1：Event Spine（session/event/job 持久化
 
 - core 新增 `phase1/session-job-e2e`（run-to-passed / cancel / crash-recovery 四 journey + audit↔session_events 对账）、`session/*`（store/bus/job-runner/dual-write/present/subprocess-registry 单测）
 - web 新增 `session-sse`（鉴权/回放/live/M6 边界/断连清理/getSession 失败前置于开流）、`gate-approve-async`（异步契约 + MF2 + A1 并发 + S1 reject 活跃 job 409 + P0-02 取消）、`project-run-job`（run 异步契约）；既有 write-auth / e2e 改轮询至终态
-- 提交前全量 `pnpm test` 通过：core 869 / web 185 / cli 37 + Playwright 8
+- 提交前全量 `pnpm test` 通过：core 869 / web 185 / cli 37 + Playwright 12
 
 ## v0.8.0
 

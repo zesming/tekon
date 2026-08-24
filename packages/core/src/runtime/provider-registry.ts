@@ -76,6 +76,10 @@ const mockDefinition: ProviderDefinition = {
     };
   },
   restore(input) {
+    // No assertSnapshotVersion here: the mock provider has no versioned config
+    // shape (its summary is a constant `{ provider: 'mock' }`), so there is
+    // nothing an incompatible future version could break. Real providers
+    // (claude-code/codex) DO validate on restore. Mock is test-only.
     return {
       adapter: createMockAgentAdapter(),
       provider: 'mock',
