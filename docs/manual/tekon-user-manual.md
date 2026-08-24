@@ -506,6 +506,37 @@ tekon demand approve
 - 批准需求卡不等于批准 PR 创建。
 - 批准需求卡不绕过后续 gate。
 
+### 6.5.1 `draft plan` / `draft plan-approve`（可选计划审批）
+
+用途：在需求批准之外，为需求卡显式生成一份「计划产物」并单独审批。计划审批与需求审批相互独立——需求审批确认「要不要做」，计划审批确认「按这个计划做」。这一步是可选的：不生成计划的需求卡（含所有旧需求卡）不受计划审批点约束。
+
+生成计划：
+
+```bash
+tekon draft plan
+```
+
+- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
+- 结果：需求卡标记 `hasPlan=true`、`planApproved=false`。计划内容是该需求卡的验收标准、推荐模板与 Non-goals 的结构化快照。
+- 重新生成计划会使之前的计划审批失效（`planApproved` 重置为 false）。
+
+审批计划：
+
+```bash
+tekon draft plan-approve
+```
+
+- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
+- `--actor <name>`：记录计划审批操作者。
+- 前置：必须先 `draft plan` 生成计划，否则报错。
+- 结果：需求卡标记 `planApproved=true`，写入审批人与时间。
+
+对运行的影响：
+
+- **已生成计划的需求卡**：必须先 `draft plan-approve`，否则 `tekon run`（及 Web 发起运行）拒绝执行。
+- **未生成计划的需求卡**：不受影响，`approve` 后即可运行（向后兼容）。
+- 计划审批同样不等于批准 PR 创建，也不绕过后续 gate。
+
 ### 6.6 `run`
 
 用途：发起一次 workflow。

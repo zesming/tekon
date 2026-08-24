@@ -150,6 +150,16 @@ export function createProjectRouter(context: ServerContext) {
           'Draft shape has open questions; resolve them (readyForRun) before run.',
         );
       }
+      // 4f-2: a draft with a generated plan must be plan-approved before run.
+      // Old drafts (no hasPlan) are exempt — the existing approve→run path is
+      // unaffected. This makes the plan approval point real (non-decorative):
+      // once a plan exists, run is gated on its explicit approval.
+      if (shapedDraft?.hasPlan && shapedDraft.planApproved !== true) {
+        throw new ApiError(
+          'BAD_REQUEST',
+          'Draft has a generated plan that must be approved before run (tekon draft plan-approve).',
+        );
+      }
       const demandText = shapedDraft
         ? renderDraftShapeForRun(shapedDraft)
         : runInput.demandText.trim();

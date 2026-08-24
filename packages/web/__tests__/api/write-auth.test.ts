@@ -538,6 +538,134 @@ describe('web write authorization', () => {
     await api.close();
   });
 
+  it('4f-2: a draft with a generated plan must be plan-approved before run', { timeout: 20000 }, async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    // A freshly shaped draft has no plan → the plan gate is not engaged.
+    expect(shaped.shape.hasPlan).toBeUndefined();
+
+    // Demand approval (approved=true) is orthogonal to plan approval.
+    await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+
+    // Generate a plan: hasPlan=true, but planApproved stays false. The demand
+    // approval is untouched (the two approvals are orthogonal).
+    const planned = await api.draftShape.generatePlan({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+    });
+    expect(planned.shape).toMatchObject({
+      hasPlan: true,
+      planApproved: false,
+      approved: true,
+    });
+
+    // Wrong token is rejected before any mutation (auth stays first).
+    await expect(
+      api.draftShape.generatePlan({
+        shapePath: shaped.shapePath,
+        token: 'wrong-token',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    // A plan exists but is not plan-approved → project.run must reject, even
+    // though the demand itself is approved + readyForRun.
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    // Plan-approve (a separate action from demand approve).
+    const planApproved = await api.draftShape.planApprove({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+    expect(planApproved.shape).toMatchObject({
+      planApproved: true,
+      planApprovedBy: 'web-test',
+    });
+
+    // Now the run is admitted and drives to passed.
+    const started = await api.project.run({
+      demandText: '',
+      demandShapePath: shaped.shapePath,
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
+
+    await api.close();
+  });
+
+  it('4f-2 backward-compat: a draft that never generated a plan runs without a plan gate', { timeout: 20000 }, async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // This mirrors every pre-4f-2 draft: shape → approve → run. No generatePlan
+    // call is ever made, so hasPlan is absent and the plan gate stays disengaged.
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    expect(shaped.shape.hasPlan).toBeUndefined();
+
+    await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+
+    // The唯一回归点 lock: an old draft (no hasPlan) is admitted straight through.
+    const started = await api.project.run({
+      demandText: '',
+      demandShapePath: shaped.shapePath,
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
+
+    await api.close();
+  });
+
+  it('4f-2: plan-approve without a generated plan is rejected (400)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+
+    // No generatePlan call → planApprove has nothing to approve → 400 (not 500).
+    await expect(
+      api.draftShape.planApprove({
+        shapePath: shaped.shapePath,
+        token: fixture.sessionToken,
+        actor: 'web-test',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
   it('rejects draft shape symlink escapes in Web write paths', async () => {
     const fixture = await createWebFixtureProject();
     const outsideDir = mkdtempSync(join(tmpdir(), 'tekon-web-shape-outside-'));

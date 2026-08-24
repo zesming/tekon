@@ -86,6 +86,19 @@ export interface DraftShapeApproveInput {
   actor?: string;
 }
 
+// 4f-2: plan flow. generatePlan freezes the plan view (no actor); planApprove
+// is a separate approval carrying the approving actor.
+export interface DraftShapeGeneratePlanInput {
+  shapePath: string;
+  token: string;
+}
+
+export interface DraftShapePlanApproveInput {
+  shapePath: string;
+  token: string;
+  actor?: string;
+}
+
 export interface DraftShapeDetailInput {
   shapePath: string;
   token: string;
@@ -219,6 +232,15 @@ export interface ApiCaller {
       runText: string;
     }>;
     approve(input: DraftShapeApproveInput): Promise<{
+      shape: DraftShape;
+      shapePath: string;
+    }>;
+    // 4f-2: plan flow.
+    generatePlan(input: DraftShapeGeneratePlanInput): Promise<{
+      shape: DraftShape;
+      shapePath: string;
+    }>;
+    planApprove(input: DraftShapePlanApproveInput): Promise<{
       shape: DraftShape;
       shapePath: string;
     }>;

@@ -73,6 +73,15 @@ export async function commandRun(
       `需求草案必须先批准才能运行: ${demandFilePath}`,
     );
   }
+  // 4f-2: a draft with a generated plan (hasPlan) must be plan-approved before
+  // run. Old drafts (no hasPlan) are exempt — the existing approve→run path is
+  // unaffected. This mirrors the web project.run gate so `tekon draft
+  // plan-approve` is a real, enforced step and not decorative.
+  if (shapedDemand?.hasPlan && shapedDemand.planApproved !== true) {
+    throw new Error(
+      `需求草案已生成计划，必须先审批计划才能运行（tekon draft plan-approve）: ${demandFilePath}`,
+    );
+  }
   const demandText = shapedDemand
     ? renderDemandShapeForRun(shapedDemand)
     : positionalDemandText;

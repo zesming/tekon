@@ -217,6 +217,127 @@ describe('tekon cli e2e', () => {
     // test-suite load (observed 31s). Give headroom to avoid flaky timeouts.
   }, 90_000);
 
+  it('draft plan → plan-approve gates run; old draft without a plan still runs', () => {
+    const cliPath = join(cliPackageRoot, 'dist', 'index.js');
+    const repoPath = createFixtureRepo(tempDirs);
+    runCli(cliPath, ['init', '--repo', repoPath], repoPath);
+
+    // Create + approve a draft (demand approval).
+    const newOutput = runCli(
+      cliPath,
+      [
+        'draft',
+        'new',
+        '给示例模块增加批量导出能力，要求本地 e2e 通过。',
+        '--no-interactive',
+        '--json',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const draftPlanPath = (
+      JSON.parse(newOutput) as { jsonPath: string }
+    ).jsonPath;
+    expect(existsSync(draftPlanPath)).toBe(true);
+    runCli(
+      cliPath,
+      ['draft', 'approve', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+
+    // Generate a plan → hasPlan=true, planApproved=false.
+    const planOutput = runCli(
+      cliPath,
+      ['draft', 'plan', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+    expect(planOutput).toContain('hasPlan=true');
+    expect(planOutput).toContain('planApproved=false');
+
+    // A plan exists but is not plan-approved → run is rejected.
+    expect(() =>
+      runCli(
+        cliPath,
+        [
+          'run',
+          '--draft-file',
+          draftPlanPath,
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        repoPath,
+      ),
+    ).toThrow(/审批计划/u);
+
+    // Plan-approve, then the run is admitted.
+    const planApproveOutput = runCli(
+      cliPath,
+      ['draft', 'plan-approve', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+    expect(planApproveOutput).toContain('planApproved=true');
+
+    const runOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '--draft-file',
+        draftPlanPath,
+        '--template',
+        'standard-delivery',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(runOutput).toContain('状态: passed');
+
+    // Backward compat: a draft that never generated a plan (no hasPlan) runs
+    // straight through after demand approval — the plan gate stays disengaged.
+    const oldDraftOutput = runCli(
+      cliPath,
+      [
+        'draft',
+        'new',
+        '给示例模块增加批量导入能力，要求本地 e2e 通过。',
+        '--no-interactive',
+        '--json',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const oldDraftPath = (
+      JSON.parse(oldDraftOutput) as { jsonPath: string }
+    ).jsonPath;
+    runCli(
+      cliPath,
+      ['draft', 'approve', oldDraftPath, '--repo', repoPath],
+      repoPath,
+    );
+    const oldRunOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '--draft-file',
+        oldDraftPath,
+        '--template',
+        'standard-delivery',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(oldRunOutput).toContain('状态: passed');
+  }, 30_000);
+
   it('help command works without initialized repo and with initialized repo', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
     const repoPath = createFixtureRepo(tempDirs);
@@ -255,6 +376,8 @@ describe('tekon cli e2e', () => {
     expect(helpDraftOutput).toContain('new');
     expect(helpDraftOutput).toContain('shape');
     expect(helpDraftOutput).toContain('approve');
+    expect(helpDraftOutput).toContain('plan');
+    expect(helpDraftOutput).toContain('plan-approve');
     expect(helpDraftOutput).toContain('show');
 
     // help after init still works

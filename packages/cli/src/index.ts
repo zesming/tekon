@@ -35,6 +35,8 @@ const COMMANDS: CommandMeta[] = [
     { name: 'new', description: '创建新的需求草案' },
     { name: 'shape', description: '快速生成需求草案' },
     { name: 'approve', description: '批准需求草案' },
+    { name: 'plan', description: '为需求草案生成计划产物' },
+    { name: 'plan-approve', description: '批准需求草案的计划' },
     { name: 'show', description: '查看需求草案详情' },
   ] },
   // 运行控制

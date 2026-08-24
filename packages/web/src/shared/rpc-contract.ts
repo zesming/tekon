@@ -87,6 +87,20 @@ export const draftShapeApproveInputSchema = z.object({
 /** @deprecated Use {@link draftShapeApproveInputSchema} instead */
 export const demandApproveInputSchema = draftShapeApproveInputSchema;
 
+// 4f-2: plan flow. generatePlan freezes the draft's plan view (hasPlan=true);
+// planApprove is a SEPARATE approval from demand approve. planApprove carries an
+// actor (who approved the plan); generatePlan does not.
+export const draftShapeGeneratePlanInputSchema = z.object({
+  shapePath: z.string().min(1),
+  token: z.string().min(1),
+});
+
+export const draftShapePlanApproveInputSchema = z.object({
+  shapePath: z.string().min(1),
+  token: z.string().min(1),
+  actor: z.string().optional(),
+});
+
 export const projectCleanInputSchema = z.object({
   runId: z.string().min(1),
   token: z.string().min(1),
@@ -521,6 +535,18 @@ export const draftShapeApproveOutputSchema = z.object({
 /** @deprecated Use {@link draftShapeApproveOutputSchema} instead */
 export const demandApproveOutputSchema = draftShapeApproveOutputSchema;
 
+// 4f-2: generatePlan / planApprove both return the updated shape + its path,
+// mirroring the approve output shape.
+export const draftShapeGeneratePlanOutputSchema = z.object({
+  shape: draftShapeSchema,
+  shapePath: z.string(),
+});
+
+export const draftShapePlanApproveOutputSchema = z.object({
+  shape: draftShapeSchema,
+  shapePath: z.string(),
+});
+
 export const deliveryPrepareOutputSchema = z.object({
   runId: z.string(),
   branch: z.string(),
@@ -727,6 +753,19 @@ export const procedureSpecs = {
     auth: 'token' as const,
     input: draftShapeApproveInputSchema,
     output: draftShapeApproveOutputSchema,
+  },
+  // 4f-2: plan flow. generatePlan freezes the plan view; planApprove is a
+  // SEPARATE approval from demand approve. project.run gates a run on plan
+  // approval only when hasPlan is set (old drafts exempt — backward compatible).
+  'draftShape.generatePlan': {
+    auth: 'token' as const,
+    input: draftShapeGeneratePlanInputSchema,
+    output: draftShapeGeneratePlanOutputSchema,
+  },
+  'draftShape.planApprove': {
+    auth: 'token' as const,
+    input: draftShapePlanApproveInputSchema,
+    output: draftShapePlanApproveOutputSchema,
   },
 
   /** @deprecated Use `draftShape.shape` instead */

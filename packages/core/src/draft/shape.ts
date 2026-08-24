@@ -55,6 +55,16 @@ export const draftShapeSchema = z
     approved: z.boolean(),
     approvedBy: z.string().nullable().optional(),
     approvedAt: z.string().datetime().nullable().optional(),
+    // 4f-2: plan flow. `hasPlan` marks that an explicit plan view was generated
+    // for this draft (acceptanceCriteria + recommendedTemplate + nonGoals frozen
+    // as a plan); `planApproved` is a SEPARATE approval from demand `approved`
+    // (计划审批 vs 需求审批, orthogonal). project.run gates a run on plan
+    // approval ONLY when hasPlan is set — old drafts (no hasPlan) are exempt, so
+    // the existing approve→run path is unaffected (backward compatible).
+    hasPlan: z.boolean().optional(),
+    planApproved: z.boolean().optional(),
+    planApprovedBy: z.string().nullable().optional(),
+    planApprovedAt: z.string().datetime().nullable().optional(),
     createdAt: z.string().datetime(),
   })
   .strict();
@@ -218,6 +228,46 @@ export function approveDraftShape(
     approved: true,
     approvedBy: input.actor,
     approvedAt: input.approvedAt ?? new Date().toISOString(),
+  });
+}
+
+/**
+ * 4f-2: generate an explicit plan view for the draft. The plan artifact is the
+ * shape's own acceptanceCriteria + recommendedTemplate + nonGoals, now frozen
+ * as a reviewable plan (hasPlan=true). Deliberately does NOT touch demand
+ * `approved` or `planApproved` — generating a plan and approving it are
+ * distinct steps.
+ */
+export function markDraftPlanGenerated(shape: DraftShape): DraftShape {
+  return draftShapeSchema.parse({
+    ...shape,
+    hasPlan: true,
+    // Regenerating a plan invalidates any prior plan approval (the plan changed).
+    planApproved: false,
+    planApprovedBy: null,
+    planApprovedAt: null,
+  });
+}
+
+/**
+ * 4f-2: approve the plan. Orthogonal to demand `approveDraftShape` — a run with
+ * a generated plan (hasPlan) must be plan-approved before it can run
+ * (project.run enforces this; old drafts without hasPlan are exempt).
+ */
+export function planApproveDraftShape(
+  shape: DraftShape,
+  input: { actor: string; approvedAt?: string },
+): DraftShape {
+  if (!shape.hasPlan) {
+    throw new Error(
+      'cannot plan-approve a draft with no generated plan; run generatePlan first',
+    );
+  }
+  return draftShapeSchema.parse({
+    ...shape,
+    planApproved: true,
+    planApprovedBy: input.actor,
+    planApprovedAt: input.approvedAt ?? new Date().toISOString(),
   });
 }
 

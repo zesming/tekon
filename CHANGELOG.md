@@ -1,5 +1,47 @@
 # 变更日志
 
+## v0.13.0
+
+Harness-inspired replatform 阶段 4（4d–4f）：把 `sessions.profile` 从纯展示字段变成**真实行为分支**（4d），把 Gate/Delivery 生命周期做成**事件订阅 + readiness 投影**（4e），并给需求卡加上**独立的计划产物与计划审批点**（4f-2）。三者各自独立可交付，且共同守住同一条红线——高自治可以自动准备交付，但**合入、PR 创建、人工审批 gate 仍须人工**，不因 profile 削弱。
+
+### 新功能
+
+**profiles 策略层（4d，autonomous-delivery 自动准备交付，红线不越）:**
+- 新增 `packages/core/src/session/profile-policy.ts`（纯函数，无 IO）：`SessionProfile = 'human-web' | 'autonomous-delivery' | 'review-only'`；`canAutoPrepareDelivery`（仅 autonomous-delivery 为真）、`canMutate`（review-only 为假）。
+- `project.run` 接受显式 per-run `profile`（`human-web` | `autonomous-delivery`；自治永不被推断）；Web StartRunForm 加 Profile 下拉。省略时回落组合根默认 `human-web`。
+- autonomous-delivery 的真实新自动化：run 抵达 `passed` 时，组合根 listener 查 session profile，为真则 enqueue `delivery-auto-prepare` job——打包证据 + 写 `prepared` 行 + 发 `delivery/prepared`，**绝不创建 PR**（治理红线）。仅长驻服务（Web/headless）接线；CLI 跑完即退出，不接此自动化。
+- **executor 隔离（M1）**：自动化 job kind（`delivery-auto-prepare`、`readiness-evaluate`）走独立轻量 executor（`createRoutingJobExecutor` 按 job kind 派发），绝不触碰 workflow/session 终态；自捕获错误（发 `agent/error`、返回 failed，绝不抛出污染 run 状态）。
+- review-only：`canMutate` 原语已备并测，但**入口尚未接线**（发起 run 本身即是 mutation，当前无只读入口）；review-only 未纳入 `project.run` schema，避免装饰性 guard。enforcement 待专门只读入口设计。
+
+**Gate/Delivery 事件订阅（4e）:**
+- `event-bus.ts` 加 `subscribeAll(listener)` + `SessionEventBusOptions.onError`，publish 内 `safeInvoke` try/catch 隔离——单个 listener 抛错不再中断 fan-out 或传播给 publisher。
+- readiness 投影：gate result 落库时（`gate/result` 事件）按 session 去抖 500ms 后 enqueue `readiness-evaluate` job，评估 pre-PR readiness 并发 `readiness/evaluated` 事件，UI/交付无需轮询即可反应。新增事件类型 `readiness/evaluated`。
+- `createPr` 幂等：分支断言后查 `delivery_pull_requests`，已 `created` 且有 prUrl 直接短路返回，重复调用不再重复建 PR。
+
+**需求卡计划产物 + 独立计划审批（4f-2）:**
+- draft shape schema 加可选 `hasPlan` / `planApproved` / `planApprovedBy` / `planApprovedAt`（`.strict()` 下加已知可选字段不影响旧 draft 文件读取）。
+- `markDraftPlanGenerated`（显式生成计划产物，置 `hasPlan=true`；重新生成使旧计划审批失效）+ `planApproveDraftShape`（独立计划审批，未生成计划则抛错）。`approveDraftShape`（需求审批）**不触碰** `planApproved`——两审批正交。
+- 新 RPC `draftShape.generatePlan` / `draftShape.planApprove`；新 CLI 子命令 `tekon draft plan` / `tekon draft plan-approve`。
+- **`project.run` 与 CLI `run` 双侧门控（非装饰）**：`hasPlan && planApproved !== true` → 拒绝。语义：**已生成计划的需求卡必须先计划审批才能 run**；**未生成计划的需求卡（含所有旧 draft）恒豁免**，既有 approve→run 路径零破坏。
+
+### 行为变化
+
+- `sessions.profile` 不再是纯展示：`autonomous-delivery` 会在 run 通过后自动准备交付（不创建 PR）；其余 profile 行为不变。
+- 已生成计划（`hasPlan`）的需求卡：`tekon run` 与 Web 发起运行在计划审批前一律拒绝。未生成计划的需求卡不受影响。
+
+### 已知边界（诚实标注）
+
+- **4f-1（澄清事件化）递延**：澄清发生在 run 前、session 尚未创建，`clarification/*` 事件挂靠哪个 session、draft 与 session 如何绑定是独立设计问题，不在本轮范围。与 4e 旁路 gate、4d review-only enforcement 同属"原语已备、消费入口待专门设计"的诚实收窄。
+- 旁路 gate（schema-only 放开）在 4e 递延——复用 stableGateKey / 写前查 latest / 过滤 human gate 的机制已在设计中定稿，实现单列。
+- auto-prepare 仅长驻服务特性；CLI 显式 `delivery prepare` 不变。
+
+### 测试
+
+- core：`profile-policy.test.ts`（5）、`automation-job-executor.test.ts`（3，含 goal-skip / 幂等 / 自捕获）、`event-bus.test.ts`（+3 subscribeAll/onError 隔离）、`scm.test.ts`（+1 createPr 幂等）、`types/session-contract.test.ts`（+1 readiness/evaluated）、`draft/shape.test.ts`（+2 计划生成/审批正交 + 重新生成使审批失效）。
+- web：`project-run-job.test.ts`（+2 autonomous auto-prepare vs human-web 不 prepare）、`write-auth.test.ts`（+3 计划审批门控 + 向后兼容旧 draft 仍 run + plan-approve 无计划报 400）。
+- CLI：`cli-flow.test.ts`（+1 e2e：draft plan→plan-approve 门控 + 旧 draft 无计划仍 passed）。
+- 全量根聚合 1225 passed（108 文件）/ 三包 typecheck 全绿。
+
 ## v0.12.0
 
 Harness-inspired replatform 阶段 4（4a–4c）：把 run 编排收敛为**共享 Session API**，让 CLI 与 Web 走同一条 `SessionService` + 后台 Job 路径；并把 workflow 从"唯一入口"降级为可选的 goal plugin。分阶段是纪律不是打折——4d–4f（profiles、Gate/Delivery 事件订阅、Demand→澄清/plan）单列后续设计，不在本次范围。

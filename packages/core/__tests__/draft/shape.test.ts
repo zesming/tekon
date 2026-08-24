@@ -8,6 +8,8 @@ import {
   approveDraftShape,
   evaluateDraftShape,
   evaluateWorkflowSelection,
+  markDraftPlanGenerated,
+  planApproveDraftShape,
   readDraftShapeFile,
   renderDraftShapeForRun,
   selectWorkflowTemplateForDraft,
@@ -82,6 +84,59 @@ describe('draft shape', () => {
       'Recommended template: bugfix',
     );
     expect(renderDraftShapeForRun(approved)).toContain('Human approved: yes');
+  });
+
+  // 4f-2: plan generation + plan approval are distinct from demand approval.
+  it('generates a plan then requires a separate plan approval', () => {
+    const shape = shapeDraft({
+      id: 'shape_plan',
+      createdAt: '2026-06-08T00:00:00.000Z',
+      text: '修复失败',
+    });
+    // A fresh shape has no plan → run gate is not engaged (backward compatible).
+    expect(shape.hasPlan).toBeUndefined();
+
+    const planned = markDraftPlanGenerated(shape);
+    expect(planned.hasPlan).toBe(true);
+    // Generating a plan does NOT approve it, and does NOT touch demand approval.
+    expect(planned.planApproved).toBe(false);
+    expect(planned.approved).toBe(false);
+
+    // Cannot plan-approve without a generated plan.
+    expect(() =>
+      planApproveDraftShape(shape, { actor: 'tester' }),
+    ).toThrow(/no generated plan/u);
+
+    const planApproved = planApproveDraftShape(planned, {
+      actor: 'tester',
+      approvedAt: '2026-06-08T00:00:02.000Z',
+    });
+    expect(planApproved).toMatchObject({
+      hasPlan: true,
+      planApproved: true,
+      planApprovedBy: 'tester',
+    });
+    // Plan approval is orthogonal — demand `approved` is still whatever it was.
+    expect(planApproved.approved).toBe(false);
+  });
+
+  it('regenerating a plan invalidates a prior plan approval', () => {
+    const planned = planApproveDraftShape(
+      markDraftPlanGenerated(
+        shapeDraft({
+          id: 'shape_replan',
+          createdAt: '2026-06-08T00:00:00.000Z',
+          text: '修复失败',
+        }),
+      ),
+      { actor: 'tester' },
+    );
+    expect(planned.planApproved).toBe(true);
+
+    const replanned = markDraftPlanGenerated(planned);
+    expect(replanned.hasPlan).toBe(true);
+    expect(replanned.planApproved).toBe(false);
+    expect(replanned.planApprovedBy).toBeNull();
   });
 
   it('selects controlled workflow templates for test, docs, and plan-only drafts', () => {

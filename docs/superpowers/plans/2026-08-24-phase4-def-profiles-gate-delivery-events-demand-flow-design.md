@@ -186,6 +186,10 @@
 
 **收窄退路**：4f-2 若工作量超预期，可只交付 4f-1；4f-2 单列。4f-1 与 4f-2 相互独立，4f-1 不依赖 4f-2。
 
+> **实现状态（2026-08-24，v0.13.0）**：本轮**仅交付 4f-2**（plan 产物 + 独立 plan 审批 + `project.run`/CLI `run` 双侧门控 + 向后兼容锁定）。**4f-1（澄清事件化）递延**——它需要"draft/session 生命周期"这一前置：澄清发生在 run 前、session 尚未创建（session 由 `startRun` 创建），把 `clarification/requested/answered` 挂到哪个 sessionId 上、draft 与 session 如何绑定，是一个独立设计问题，不在本轮 4f-2 范围内。递延与 4e 旁路 gate、4d review-only enforcement 同属"原语已备、消费入口待专门设计"的诚实收窄，非缺口。
+>
+> **实现对设计的一处扩张（已评审依据）**：设计原文件清单（§8）只列 web `project.run` 门控，但 CLI `run`（`cli/commands/run.ts`）走独立 draft 读取路径、不经 web router。若只在 web 加门控，CLI `tekon draft plan-approve` 将沦为装饰命令（与 M3 批评"审批点装饰化"同类问题）。故实现时在 CLI `run.ts` 补了对称门控（`shapedDemand.hasPlan && planApproved!==true → 抛错`），并加 CLI e2e 锁定（plan→plan-approve 前 run 被拒、后 run 通过、旧 draft 无 plan 仍绿）。此扩张是对 M3 非装饰原则的贯彻，不改变设计判断，仅补齐 CLI 侧执行点。
+
 ### 3.3 数据结构与事件
 - 新事件类型：`clarification/requested`、`clarification/answered`（4f-1）。
 - draft shape schema 扩展 `hasPlan?:boolean` + `planApproved?:boolean`（4f-2，均可选，旧文件读取安全）。

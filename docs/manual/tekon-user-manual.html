@@ -497,6 +497,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.3 workflow select</span><span class="cb-ds">根据需求推荐模板</span></div><pre><code><span class="c">tekon</span> <span class="a">workflow select</span> <span class="s">"补齐 CLI 单元测试"</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.4 demand shape</span><span class="cb-ds">需求塑形成需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand shape</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div><div class="cl cl-i"><span class="cl-lb">交互式替代</span><code>tekon draft new</code> 提供 Agent 驱动的交互式需求澄清（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。需求不明确时推荐优先使用。</div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.5 demand approve</span><span class="cb-ds">人工批准需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand approve</span></code></pre></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.5.1 draft plan / plan-approve</span><span class="cb-ds">可选：生成计划产物并单独审批</span></div><pre><code><span class="cm"># 生成计划产物（hasPlan=true, planApproved=false）</span>
+<span class="c">tekon</span> <span class="a">draft plan</span>
+
+<span class="cm"># 审批计划（独立于需求审批）</span>
+<span class="c">tekon</span> <span class="a">draft plan-approve</span> <span class="f">--actor</span> <span class="s">你的名字</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>计划审批与需求审批相互独立：需求审批确认「要不要做」，计划审批确认「按这个计划做」。</li><li><strong>已生成计划</strong>的需求卡必须先 <code>draft plan-approve</code>，否则 <code>run</code> 拒绝执行。</li><li><strong>未生成计划</strong>的需求卡（含所有旧需求卡）不受约束，<code>approve</code> 后即可运行（向后兼容）。</li><li>重新 <code>draft plan</code> 会使之前的计划审批失效。计划审批不等于批准 PR 创建，也不绕过后续 gate。</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.6 run</span><span class="cb-ds">发起一次 workflow</span></div><pre><code><span class="cm"># 模板运行</span>
 <span class="c">tekon</span> <span class="a">run</span> <span class="s">"需求文本"</span> <span class="f">--template</span> <span class="s">standard-delivery</span> <span class="f">--agent</span> <span class="s">mock</span>
 
