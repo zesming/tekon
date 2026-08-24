@@ -176,16 +176,23 @@ export async function createApiCaller(
   });
   jobRunner.start();
 
-  // 4e: readiness projection. When a gate result lands, (re-)evaluate pre-PR
-  // readiness off the event stream so the UI/delivery can react without
-  // polling. Debounced per session (a node emits several gate results in a
-  // burst); the enqueue is fire-and-forget — a projection failure must never
-  // destabilize the publisher (the bus already isolates listener throws, but
-  // the async enqueue is guarded too). Long-lived server only: the durable
-  // runner keeps polling, so the enqueued job is always drained here.
+  // 4e: readiness projection. When a gate result lands OR a human decision is
+  // decided, (re-)evaluate pre-PR readiness off the event stream so the UI/
+  // delivery can react without polling. Both `gate/result` and `approval/
+  // decided` feed it: a human approve/reject changes gate status
+  // (updateGateResultStatus), which readiness reflects — subscribing to both
+  // makes the report §10 "readiness/approval events" literal (an approval no
+  // longer leaves the projection stale until the next gate/result). Debounced
+  // per session (a node emits several gate results in a burst); the enqueue is
+  // fire-and-forget — a projection failure must never destabilize the publisher
+  // (the bus already isolates listener throws, but the async enqueue is guarded
+  // too). Long-lived server only: the durable runner keeps polling, so the
+  // enqueued job is always drained here.
   const readinessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
   bus.subscribeAll((event) => {
-    if (event.type !== 'gate/result') return;
+    if (event.type !== 'gate/result' && event.type !== 'approval/decided') {
+      return;
+    }
     const existing = readinessDebounce.get(event.sessionId);
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {

@@ -15,7 +15,7 @@ Harness-inspired replatform 阶段 4（4d–4f）：把 `sessions.profile` 从�
 
 **Gate/Delivery 事件订阅（4e）:**
 - `event-bus.ts` 加 `subscribeAll(listener)` + `SessionEventBusOptions.onError`，publish 内 `safeInvoke` try/catch 隔离——单个 listener 抛错不再中断 fan-out 或传播给 publisher。
-- readiness 投影：gate result 落库时（`gate/result` 事件）按 session 去抖 500ms 后 enqueue `readiness-evaluate` job，评估 pre-PR readiness 并发 `readiness/evaluated` 事件，UI/交付无需轮询即可反应。新增事件类型 `readiness/evaluated`。
+- readiness 投影：gate result 落库时（`gate/result` 事件）**或人工决策落定时**（`approval/decided` 事件）按 session 去抖 500ms 后 enqueue `readiness-evaluate` job，评估 pre-PR readiness 并发 `readiness/evaluated` 事件，UI/交付无需轮询即可反应（订阅 approval 事件使报告 §10「readiness/approval events」名副其实——审批改变 gate 状态后投影不再陈旧到下一个 gate/result）。新增事件类型 `readiness/evaluated`。
 - `createPr` 幂等：分支断言后查 `delivery_pull_requests`，已 `created` 且有 prUrl 直接短路返回，重复调用不再重复建 PR。
 
 **需求卡计划产物 + 独立计划审批（4f-2）:**
@@ -38,7 +38,7 @@ Harness-inspired replatform 阶段 4（4d–4f）：把 `sessions.profile` 从�
 ### 测试
 
 - core：`profile-policy.test.ts`（5）、`automation-job-executor.test.ts`（6，含 M1 跨进程路由隔离 / M1 同进程隔离 / goal-skip / delivery-ready 自动 prepare 只到 prepared 不 created / S2 保留人工审批 / 幂等）、`event-bus.test.ts`（+3 subscribeAll/onError 隔离）、`scm.test.ts`（+1 createPr 幂等 + dry-run 尊重调用方）、`types/session-contract.test.ts`（+1 readiness/evaluated）、`draft/shape.test.ts`（+2 计划生成/审批正交 + 重新生成使审批失效）。
-- web：`project-run-job.test.ts`（+3 autonomous auto-prepare vs human-web 不 prepare + gate/result 去抖 readiness 链路）、`write-auth.test.ts`（+3 计划审批门控 + 向后兼容旧 draft 仍 run + plan-approve 无计划报 400）。
+- web：`project-run-job.test.ts`（+3 autonomous auto-prepare vs human-web 不 prepare + gate/result 去抖 readiness 链路）、`write-auth.test.ts`（+3 计划审批门控 + 向后兼容旧 draft 仍 run + plan-approve 无计划报 400）、`gate-approve-async.test.ts`（+1 approval/decided 触发 readiness 投影）。
 - CLI：`cli-flow.test.ts`（+1 e2e：draft plan→plan-approve 门控 + 旧 draft 无计划仍 passed）。
 - 全量根聚合 1229 passed（108 文件）/ Playwright 11 passed + 5 flaky-then-pass（与 v0.12.0 基线一致）/ 三包 typecheck 全绿。
 

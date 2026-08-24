@@ -250,6 +250,8 @@
 > - **S6（已修）**：新增 web 集成测试锁定 gate/result→去抖→enqueue 链路（standard-delivery run 的多个 gate/result 合并为严格更少的 readiness-evaluate job + 至少 1 个 readiness/evaluated 事件）。
 > - **S4（记录偏差，不实现）**：设计 §1.2.4 列出 CLI `tekon run --profile`。但 M2 决策下 CLI 不装 auto-prepare listener，`--profile autonomous-delivery` 在 CLI 只会写入 session.profile 而无任何行为——是装饰性标志（与本设计删 `canAutoAdvanceGate`、不接线 review-only 同类）。故**不实现 CLI --profile**，在此记录为对设计 §1.2.4 的有意偏差：CLI 侧 autonomous 自动化收窄为"长驻服务特性"，CLI 通过 `tekon delivery prepare` 显式交付。
 > - reviewer 另确认 12 项关键约束（治理红线、假通过陷阱、executor 隔离 web 路径、bus 异常隔离、4f-2 双侧门控一致、正交性、createPr 幂等、auto-prepare 不误触发、goal 不 prepare、测试质量、递延诚实标注、版本号）全部守住。
+
+> **报告完整性终审响应记录（2026-08-24，v0.13.0）**：opus reviewer 对报告 §10 六点 + 工程批注 §0.6 六子步逐条核对，判定"**阶段 4 报告完整性通过，未检出必须修复项**"——已交付项均有代码 + 锁定测试，四项递延（4f-1、旁路 gate、review-only enforcement、CLI `--profile`）全部在设计文档 + CHANGELOG「已知边界」双重诚实标注，无静默缺口，CHANGELOG 无夸大、未复发历史越界表述。**唯一可选建议已采纳**：报告 §10 字面承诺"readiness/**approval** events"，但初版 readiness listener 只订阅 `gate/result`，human 审批后到下一个 gate/result 之间投影短暂陈旧（治理零影响——权威检查 `assertPrePullRequestReady` 直读 DB）。**已收口**：readiness listener 同时订阅 `approval/decided`（`web/root.ts`，同一去抖路径），使报告 §10 承诺名副其实；新增 `gate-approve-async.test.ts` 测试锁定"approve → readiness-evaluate job 入队"（未绑 session 时该测试超时失败，证明是 approval/decided 路径触发，非假通过）。
 - **D4 — readiness/evaluated 消费者**：**本阶段只发事件 + CLI 可查**，web UI 实时展示列为**可选增强**（不阻塞 4e 交付）。依据：方案规模与任务相称，UI 实时投影可独立迭代。
 
 ## 7. 验收（每子步独立 e2e）

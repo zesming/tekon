@@ -49,6 +49,18 @@ function jobStatus(projectRoot: string, jobId: string): string | undefined {
   }
 }
 
+function jobCountByKind(projectRoot: string, kind: string): number {
+  const db = openDb(projectRoot);
+  try {
+    const row = db
+      .prepare('select count(*) as n from jobs where kind = ?')
+      .get(kind) as { n: number };
+    return row.n;
+  } finally {
+    db.close();
+  }
+}
+
 /** Force run_1 into a terminal status while leaving decision_1 pending, so the
  * approve/reject terminal guard (M8/MF3) is the first thing hit. */
 function setRunStatus(projectRoot: string, runId: string, status: string): void {
@@ -487,6 +499,55 @@ describe('gate.approve async resume (S7d)', () => {
     expect(
       audits.events.some((e) => e.type === 'human.gate.rejected'),
     ).toBe(false);
+
+    await api.close();
+  }, 30_000);
+
+  // 4e (report §10): a human decision must (re-)trigger the readiness
+  // projection — the report promised "readiness/approval events", and an
+  // approval changes gate status, so readiness should reflect it without
+  // waiting for the next gate/result. The readiness listener subscribes to
+  // approval/decided (debounced 500ms) and enqueues a readiness-evaluate job.
+  it('gate.approve triggers a readiness-evaluate projection off approval/decided', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    // A session bound to run_1 is required so the dual-write bridge can resolve
+    // run_1 → session and publish approval/decided to the bus (findSessionByRunId
+    // must hit). Without it the event is dropped and nothing triggers readiness.
+    const seedDb = openDb(fixture.projectRoot);
+    try {
+      const nowIso = new Date().toISOString();
+      seedDb
+        .prepare(
+          `insert into workspaces (id, root, created_at)
+           values (@id, @root, @now)
+           on conflict(id) do nothing`,
+        )
+        .run({ id: 'ws_seed', root: fixture.projectRoot, now: nowIso });
+      seedDb
+        .prepare(
+          `insert into sessions (id, workspace_id, title, profile, status, run_id, created_at, updated_at)
+           values (@id, 'ws_seed', null, 'human-web', 'idle', 'run_1', @now, @now)`,
+        )
+        .run({ id: 'sess_seed', now: nowIso });
+    } finally {
+      seedDb.close();
+    }
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    await api.gate.approve({
+      runId: 'run_1',
+      decisionId: 'decision_1',
+      actor: 'human-reviewer',
+      token: fixture.sessionToken,
+    });
+
+    // The approval (approval/decided) fires the debounced readiness listener,
+    // which enqueues a readiness-evaluate job. Wait for it to appear.
+    await waitFor(() => jobCountByKind(fixture.projectRoot, 'readiness-evaluate') >= 1);
+    expect(jobCountByKind(fixture.projectRoot, 'readiness-evaluate')).toBeGreaterThanOrEqual(1);
 
     await api.close();
   }, 30_000);
