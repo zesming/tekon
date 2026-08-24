@@ -96,4 +96,71 @@ describe('openSessionStream reconnect', () => {
     // No token → no auth header (the e2e monkeypatch/production AuthContext adds it).
     expect(calls[0]['x-session-token']).toBeUndefined();
   });
+
+  // S1: a fatal client status (guard rejection / bad token / unknown session)
+  // must not trigger an infinite reconnect loop that hammers the server with the
+  // same doomed request.
+  it.each([400, 401, 403, 404])(
+    'stops (closed, no reconnect) on a fatal %i response',
+    async (status) => {
+      const states: string[] = [];
+      let call = 0;
+      const fetchImpl = vi.fn(async () => {
+        call += 1;
+        return { ok: false, status, body: null } as unknown as Response;
+      }) as unknown as typeof fetch;
+
+      const handle = openSessionStream({
+        sessionId: 's1',
+        token: 'bad',
+        fetchImpl,
+        baseBackoffMs: 1,
+        maxBackoffMs: 2,
+        onEvent: () => {},
+        onStateChange: (s) => states.push(s),
+      });
+
+      await vi.waitFor(() => {
+        expect(states).toContain('closed');
+      }, { timeout: 2000 });
+      // Give any (erroneous) scheduled reconnect a chance to fire.
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Exactly one request was made; the stream did not retry.
+      expect(call).toBe(1);
+      expect(states).not.toContain('reconnecting');
+      handle.close();
+    },
+  );
+
+  // A transient server error (5xx) IS retried — contrast with the fatal case.
+  it('reconnects on a transient 503 response', async () => {
+    const states: string[] = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call += 1;
+      if (call === 1) return { ok: false, status: 503, body: null } as unknown as Response;
+      return new Promise<Response>(() => {}); // hang on the retry so we can settle
+    }) as unknown as typeof fetch;
+
+    const handle = openSessionStream({
+      sessionId: 's1',
+      token: 'tok',
+      fetchImpl,
+      baseBackoffMs: 1,
+      maxBackoffMs: 2,
+      onEvent: () => {},
+      onStateChange: (s) => states.push(s),
+    });
+
+    await vi.waitFor(() => {
+      expect(call).toBeGreaterThanOrEqual(2);
+    }, { timeout: 2000 });
+    // Snapshot before close() (which legitimately emits 'closed').
+    const before = [...states];
+    handle.close();
+
+    expect(before).toContain('reconnecting');
+    expect(before).not.toContain('closed'); // the 503 itself did not close the stream
+  });
 });

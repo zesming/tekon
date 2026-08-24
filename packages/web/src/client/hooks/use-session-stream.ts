@@ -30,6 +30,10 @@ const SESSION_LIST_REFRESH_EVENTS = new Set([
   'turn/end',
   'workflow/node-ended',
   'workflow/started',
+  // Run-level terminal (dual-write maps run.passed → agent/status) and the web
+  // cancel path (agent/cancelled) also flip the list status badge.
+  'agent/status',
+  'agent/cancelled',
 ]);
 
 export interface UseSessionStreamResult {

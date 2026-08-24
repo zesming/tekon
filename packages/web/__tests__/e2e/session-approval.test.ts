@@ -120,4 +120,12 @@ test('inline approval: approve a pending human decision from the session UI', as
       { timeout: 20_000, intervals: [200, 500, 1000] },
     )
     .toBe('cleared');
+
+  // S3: clearing the decision is necessary but not sufficient — prove approval
+  // actually unblocked the workflow. With the mock agent the run should advance
+  // past the human gate through the reviewer node to a terminal 'passed'.
+  const finalStatus = await waitForStatus(server.url, runId, fixture.sessionToken, [
+    'passed',
+  ]);
+  expect(finalStatus).toBe('passed');
 });

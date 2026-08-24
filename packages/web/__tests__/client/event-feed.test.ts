@@ -78,6 +78,32 @@ describe('describeEvent', () => {
     expect(row.body).toContain('boom');
   });
 
+  // S2: agent lifecycle events must have real labels, not fall through to the
+  // raw-type 'generic' row (which reads like debug noise).
+  it('labels agent/status with the run status instead of a generic row', () => {
+    const row = describeEvent(ev('agent/status', { runId: 'run_1', status: 'passed' }));
+    expect(row.kind).toBe('step');
+    expect(row.title).toContain('passed');
+    expect(row.title).not.toBe('agent/status');
+  });
+
+  it('labels cancel-requested and cancelled as governance rows', () => {
+    const requested = describeEvent(ev('agent/cancel-requested', { runId: 'run_1' }));
+    expect(requested.kind).toBe('governance');
+    expect(requested.title).not.toBe('agent/cancel-requested');
+
+    const cancelled = describeEvent(ev('agent/cancelled', { runId: 'run_1' }));
+    expect(cancelled.kind).toBe('governance');
+    expect(cancelled.title).not.toBe('agent/cancelled');
+  });
+
+  it('renders agent/steered as user-authored steering prose', () => {
+    const row = describeEvent(ev('agent/steered', { text: 'focus on the parser' }));
+    expect(row.kind).toBe('message');
+    expect(row.author).toBe('user');
+    expect(row.body).toContain('focus on the parser');
+  });
+
   it('degrades an unknown/future event type to a generic row without throwing', () => {
     const row = describeEvent(ev('some/future-type', { foo: 1 }));
     expect(row.kind).toBe('generic');

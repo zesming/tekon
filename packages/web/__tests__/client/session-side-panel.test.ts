@@ -74,6 +74,71 @@ describe('deriveSessionSidePanel', () => {
     expect(paused.runStatus).toBe('awaiting-approval');
   });
 
+  // M1: terminal/paused lifecycle signals must drive runStatus so RunControls
+  // shows the right affordances (resume reachable, no pause/cancel on a
+  // finished run).
+  it('maps turn/end status to a terminal run status', () => {
+    const passed = deriveSessionSidePanel([
+      ev('workflow/started', { runId: 'run_1' }, 1),
+      ev('step/start', { nodeId: 'rd' }, 2),
+      ev('turn/end', { runId: 'run_1', status: 'passed' }, 3),
+    ]);
+    expect(passed.runStatus).toBe('passed');
+
+    const failed = deriveSessionSidePanel([
+      ev('step/start', { nodeId: 'rd' }, 1),
+      ev('turn/end', { runId: 'run_1', status: 'failed' }, 2),
+    ]);
+    expect(failed.runStatus).toBe('failed');
+  });
+
+  it('surfaces paused so resume becomes reachable', () => {
+    const paused = deriveSessionSidePanel([
+      ev('workflow/started', { runId: 'run_1' }, 1),
+      ev('step/start', { nodeId: 'rd' }, 2),
+      ev('turn/end', { runId: 'run_1', status: 'paused' }, 3),
+    ]);
+    expect(paused.runStatus).toBe('paused');
+  });
+
+  it('ignores the no-op "terminal" turn/end marker', () => {
+    // job-executor emits turn/end {status:'terminal'} when the run was already
+    // terminal; it must not clobber the real prior status.
+    const state = deriveSessionSidePanel([
+      ev('turn/end', { runId: 'run_1', status: 'cancelled' }, 1),
+      ev('turn/end', { runId: 'run_1', status: 'terminal' }, 2),
+    ]);
+    expect(state.runStatus).toBe('cancelled');
+  });
+
+  it('maps agent/status and agent/cancelled to a terminal status', () => {
+    expect(
+      deriveSessionSidePanel([ev('agent/status', { status: 'passed' }, 1)])
+        .runStatus,
+    ).toBe('passed');
+    expect(
+      deriveSessionSidePanel([ev('agent/cancelled', { runId: 'run_1' }, 1)])
+        .runStatus,
+    ).toBe('cancelled');
+  });
+
+  it('awaiting-approval overrides a paused turn/end while the decision is pending', () => {
+    // A run pauses BECAUSE of a pending human gate → awaiting-approval wins;
+    // once decided, a later terminal turn/end takes over.
+    const pending = deriveSessionSidePanel([
+      ev('approval/requested', { runId: 'run_1', decisionId: 'd1' }, 1),
+      ev('turn/end', { runId: 'run_1', status: 'paused' }, 2),
+    ]);
+    expect(pending.runStatus).toBe('awaiting-approval');
+
+    const decidedThenDone = deriveSessionSidePanel([
+      ev('approval/requested', { runId: 'run_1', decisionId: 'd1' }, 1),
+      ev('approval/decided', { runId: 'run_1', decisionId: 'd1' }, 2),
+      ev('turn/end', { runId: 'run_1', status: 'passed' }, 3),
+    ]);
+    expect(decidedThenDone.runStatus).toBe('passed');
+  });
+
   it('collects artifact/tool/error cards in order', () => {
     const state = deriveSessionSidePanel([
       ev('artifact/created', { artifactType: 'code-changes', artifactId: 'a1' }, 3),

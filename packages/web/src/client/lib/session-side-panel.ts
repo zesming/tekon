@@ -59,6 +59,27 @@ export function deriveSessionSidePanel(
         if (id) pending.delete(id);
         break;
       }
+      // Terminal / paused lifecycle signals (M1). Without these the derived
+      // status stays 'running' forever, so RunControls shows pause/cancel on a
+      // finished run and resume is never reachable. turn/end carries the
+      // authoritative final status; 'terminal' is a no-status-change marker
+      // (job-executor emits it when the run was already terminal) → ignore it.
+      case 'turn/end': {
+        const status = str(p, 'status');
+        if (status && status !== 'terminal') {
+          runStatus = status;
+        }
+        break;
+      }
+      case 'agent/status': {
+        const status = str(p, 'status');
+        if (status) runStatus = status;
+        break;
+      }
+      case 'agent/cancelled':
+        // A queued job cancelled before executor start emits no turn/end.
+        runStatus = 'cancelled';
+        break;
       case 'artifact/created':
         cards.push({
           seq: event.seq,

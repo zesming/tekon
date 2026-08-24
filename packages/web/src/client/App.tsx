@@ -34,7 +34,7 @@ function RouteError({ scope: _scope }: { scope: string }) {
     <div className="error-page">
       <h2>Something went wrong</h2>
       <p>{error instanceof Error ? error.message : 'Unknown error'}</p>
-      <button onClick={() => navigate('/')}>返回 Dashboard</button>
+      <button onClick={() => navigate('/')}>返回首页</button>
     </div>
   );
 }

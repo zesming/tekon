@@ -115,6 +115,16 @@ export type StreamConnState =
   | 'reconnecting'
   | 'closed';
 
+/**
+ * HTTP statuses that will never recover on retry: an origin/Sec-Fetch guard
+ * rejection (400), a bad/missing session token (401/403), or an unknown session
+ * (404). Every 400 on this route comes from the request guard (there is no
+ * transient 400), so treating it as fatal cannot wrongly kill a retryable
+ * stream. Reconnecting on any of these just hammers the server with the same
+ * doomed request, so we go straight to 'closed' instead.
+ */
+const FATAL_STREAM_STATUSES = new Set([400, 401, 403, 404]);
+
 export interface OpenSessionStreamOptions {
   sessionId: string;
   token: string | null;
@@ -151,6 +161,13 @@ export function openSessionStream(
   let controller: AbortController | null = null;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function markClosed(): void {
+    closed = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    controller?.abort();
+    options.onStateChange('closed');
+  }
+
   async function connect(): Promise<void> {
     if (closed) return;
     controller = new AbortController();
@@ -170,6 +187,13 @@ export function openSessionStream(
         signal: controller.signal,
       });
       if (!response.ok || !response.body) {
+        // A fatal client error (bad token, unknown session) will never recover
+        // on retry — stop rather than hammer the server. Anything else (5xx,
+        // network drop) is transient → fall through to backoff reconnect.
+        if (FATAL_STREAM_STATUSES.has(response.status)) {
+          markClosed();
+          return;
+        }
         throw new Error(`stream failed: ${response.status}`);
       }
       attempt = 0;
@@ -213,10 +237,7 @@ export function openSessionStream(
 
   return {
     close(): void {
-      closed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      controller?.abort();
-      options.onStateChange('closed');
+      markClosed();
     },
   };
 }

@@ -119,6 +119,32 @@ export function describeEvent(event: StreamEvent): FeedRow {
         title: 'Agent 错误',
         body: asText(p, 'message', 'error') ?? '',
       };
+    // Agent lifecycle (S2). Without these, terminal/cancel signals fall through
+    // to the raw-type 'generic' row, which reads like debug noise in the feed.
+    case 'agent/status': {
+      const status = asText(p, 'status');
+      return {
+        ...base,
+        kind: 'step',
+        title: status ? `运行状态 · ${status}` : '运行状态',
+      };
+    }
+    case 'agent/cancel-requested':
+      return { ...base, kind: 'governance', title: '已请求取消' };
+    case 'agent/cancelled':
+      return { ...base, kind: 'governance', title: '已取消' };
+    case 'agent/steered':
+      // NOTE: agent/steered is declared in the session contract but has no
+      // emitter yet — the payload field name (text/message/guidance) is a
+      // forward-looking guess. asText degrades to an empty body if none match;
+      // revisit when a steer path actually emits this event.
+      return {
+        ...base,
+        kind: 'message',
+        author: 'user',
+        title: '你 You · 转向',
+        body: asText(p, 'text', 'message', 'guidance') ?? '',
+      };
     case 'gate/result': {
       const gate = asText(p, 'gateType', 'gateKey') ?? 'gate';
       const status = asText(p, 'status') ?? '';
