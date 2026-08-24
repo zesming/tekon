@@ -1,0 +1,15 @@
+id: goal
+name: Goal
+version: 1
+# 4b: lightweight single-node goal run. `governance: none` opts out ONLY of the
+# required-reviewer-node invariant (whitelist exemption); every other template
+# invariant still applies. Gates are empty by default — the caller may inject
+# governance gates per run. A goal run is a plain agent goal, not a delivery
+# workflow (it does not produce code-changes and is not eligible for delivery).
+governance: none
+phases:
+  - id: goal
+    name: Goal
+    nodes:
+      - id: goal-execute
+        role: goal

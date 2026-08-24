@@ -88,19 +88,20 @@ export function mapAuditEventToSessionEvent(input: {
           runId,
           templateId: asString(p.templateId),
           mode: asString(p.mode),
-          kind: 'workflow',
+          // 4b: run kind ('workflow' | 'goal'); default keeps legacy behavior.
+          kind: asString(p.kind) || 'workflow',
         },
       };
     case 'run.resumed':
       return {
         type: 'workflow/started',
-        payload: { runId, resumed: true, kind: 'workflow' },
+        payload: { runId, resumed: true, kind: asString(p.kind) || 'workflow' },
       };
     case 'run.passed':
-      // D4:run 级完成统一用 agent/status(payload 加 kind:'workflow')。
+      // D4:run 级完成统一用 agent/status(payload 加 kind)。
       return {
         type: 'agent/status',
-        payload: { runId, status: 'passed', kind: 'workflow' },
+        payload: { runId, status: 'passed', kind: asString(p.kind) || 'workflow' },
       };
     case 'node.started':
       return {

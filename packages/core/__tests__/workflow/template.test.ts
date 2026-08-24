@@ -329,6 +329,59 @@ phases:
     ).toThrow(/conflicting output/u);
   });
 
+  // 4b: `governance: none` is a WHITELIST exemption for lightweight goal runs.
+  // It must exempt ONLY the required-reviewer invariant, and must not leak to
+  // templates that omit the field (default 'standard').
+  it('allows a reviewer-less single-node template only when governance is none', () => {
+    const goal = parseWorkflowTemplate(`
+id: goal
+name: Goal
+governance: none
+phases:
+  - id: goal
+    name: Goal
+    nodes:
+      - id: goal-execute
+        role: goal
+`);
+    expect(goal.id).toBe('goal');
+    expect(goal.phases).toHaveLength(1);
+    expect(goal.phases[0].nodes[0]).toMatchObject({ role: 'goal', gates: [] });
+  });
+
+  it('still requires a reviewer node when governance is standard/omitted (exemption does not leak)', () => {
+    // Same shape as the goal template but WITHOUT the governance marker.
+    expect(() =>
+      parseWorkflowTemplate(`
+id: goal-without-marker
+phases:
+  - id: goal
+    nodes:
+      - id: goal-execute
+        role: goal
+`),
+    ).toThrow(/reviewer/u);
+
+    // An explicit governance: standard must also still enforce it.
+    expect(() =>
+      parseWorkflowTemplate(`
+id: standard-no-reviewer
+governance: standard
+phases:
+  - id: code
+    nodes:
+      - id: rd-code
+        role: rd
+`),
+    ).toThrow(/reviewer/u);
+  });
+
+  it('loads the built-in goal template from disk', () => {
+    const template = loadWorkflowTemplate({ name: 'goal' });
+    expect(template.id).toBe('goal');
+    expect(template.phases[0].nodes[0].role).toBe('goal');
+  });
+
   it('rejects duplicate effective gate keys within the same node', () => {
     expect(() =>
       parseWorkflowTemplate(`

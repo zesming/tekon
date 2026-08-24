@@ -254,4 +254,106 @@ describe('project.run background job (S7b)', () => {
 
     await api.close();
   }, 30_000);
+
+  // 4b: goal mode runs the built-in single-node goal template end-to-end.
+  it('runs a goal-mode run to passed via the built-in goal template', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const started = await api.project.run({
+      demandText: 'Do a lightweight one-off task.',
+      mode: 'goal',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.sessionId).toBeTruthy();
+    expect(started.jobId).toBeTruthy();
+
+    await waitFor(
+      () => runStatus(fixture.projectRoot, started.run.id) === 'passed',
+    );
+
+    // The run is persisted as kind='goal' and the opening workflow/started
+    // event carries kind:'goal' (not 'workflow').
+    const db = openTekonDatabase({
+      filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const inst = db
+        .prepare('select kind from workflow_instances where id = ?')
+        .get(started.run.id) as { kind: string } | undefined;
+      expect(inst?.kind).toBe('goal');
+      const startEvent = db
+        .prepare(
+          `select payload from session_events
+           where session_id = ? and type = 'workflow/started' limit 1`,
+        )
+        .get(started.sessionId!) as { payload: string } | undefined;
+      expect(startEvent).toBeTruthy();
+      expect(JSON.parse(startEvent!.payload).kind).toBe('goal');
+    } finally {
+      db.close();
+    }
+
+    await api.close();
+  }, 30_000);
+
+  // 4b (§0.3 hard constraint): an unknown job kind must FAIL, never fall through
+  // to executePreparedRun and silently settle run.passed. This seeds an
+  // unknown-kind job on a genuinely prepared (non-terminal, non-empty plan) run
+  // so the assertion pins the kind-dispatch path, not the no-runId guard.
+  it('fails an unknown job kind instead of silently passing the run', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // A real prepared run + session (kind bound, plan persisted), then flip the
+    // run back to running so it is non-terminal when the bogus job claims it.
+    const started = await api.project.run({
+      demandText: 'Prepared run for the unknown-kind guard.',
+      template: 'standard-delivery',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    await waitFor(
+      () => runStatus(fixture.projectRoot, started.run.id) === 'passed',
+    );
+
+    const db = openTekonDatabase({
+      filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      db.prepare(`update workflow_instances set status = 'running' where id = ?`)
+        .run(started.run.id);
+      const nowIso = new Date().toISOString();
+      db.prepare(
+        `insert into jobs (id, session_id, kind, status, owner, lease, abort_state, checkpoint, payload, created_at, updated_at)
+         values (@id, @sessionId, 'bogus-kind', 'queued', null, null, 'none', null, '{}', @now, @now)`,
+      ).run({ id: 'job_bogus', sessionId: started.sessionId!, now: nowIso });
+    } finally {
+      db.close();
+    }
+
+    // The durable runner claims + executes the bogus job; the executor's
+    // explicit dispatch throws → job failed, and the run is NOT written passed
+    // by this path (it is left running, since the bogus job cannot advance it).
+    await waitFor(() => {
+      const check = openTekonDatabase({
+        filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
+      });
+      try {
+        const job = check
+          .prepare('select status from jobs where id = ?')
+          .get('job_bogus') as { status: string } | undefined;
+        return job?.status === 'failed';
+      } finally {
+        check.close();
+      }
+    });
+    // The bogus job did not settle the run passed.
+    expect(runStatus(fixture.projectRoot, started.run.id)).toBe('running');
+
+    await api.close();
+  }, 30_000);
 });

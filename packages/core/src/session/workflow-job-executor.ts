@@ -127,10 +127,22 @@ export function createWorkflowJobExecutor(deps: {
 
       try {
         const engine = await buildEngine(runId, ctx);
-        const workflow: WorkflowInstance =
-          job.kind === 'workflow-resume'
-            ? (await engine.resumeRun(runId)).workflow
-            : await engine.executePreparedRun(runId);
+        // 4b: explicit kind dispatch. An unknown kind MUST throw here (→ caught
+        // below → job failed), never fall through to executePreparedRun — a
+        // fall-through on an unprepared/empty plan would settle run.passed and
+        // produce a silent false pass (design §0.3 hard constraint).
+        let workflow: WorkflowInstance;
+        switch (job.kind) {
+          case 'workflow-run':
+          case 'goal-run':
+            workflow = await engine.executePreparedRun(runId);
+            break;
+          case 'workflow-resume':
+            workflow = (await engine.resumeRun(runId)).workflow;
+            break;
+          default:
+            throw new Error(`Unknown job kind: ${job.kind}`);
+        }
 
         return await settleByWorkflowStatus(job.sessionId, runId, workflow, ctx);
       } catch (error) {

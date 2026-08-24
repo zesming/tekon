@@ -61,6 +61,13 @@ export interface WorkflowEngineStartInput {
   mode: 'template' | 'dynamic';
   templateName?: string;
   workflowSpec?: WorkflowTemplate;
+  /**
+   * 4b: run kind, orthogonal to `mode` (which is the PLAN SOURCE). 'workflow'
+   * (default) is a governed delivery workflow; 'goal' is a lightweight
+   * single-node agent goal. Persisted on the instance so completion/resume
+   * events carry the right kind.
+   */
+  kind?: 'workflow' | 'goal';
 }
 
 export interface WorkflowEngineResult {
@@ -278,7 +285,7 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'run.resumed',
-        payload: {},
+        payload: { kind: existing.kind },
       });
 
       const plan = await planFromRepository(runId, options.repositories);
@@ -326,6 +333,7 @@ export function createWorkflowEngine(
       projectId,
       demandId,
       status: 'running',
+      kind: input.kind ?? 'workflow',
       createdAt: now,
       updatedAt: now,
     });
@@ -343,7 +351,11 @@ export function createWorkflowEngine(
     await options.audit.append({
       runId,
       type: 'run.started',
-      payload: { templateId: template.id, mode: input.mode },
+      payload: {
+        templateId: template.id,
+        mode: input.mode,
+        kind: input.kind ?? 'workflow',
+      },
     });
 
     return { runId, workflow: await helpers.mustGetWorkflow(runId) };
@@ -444,7 +456,7 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'run.passed',
-        payload: {},
+        payload: { kind: workflow.kind },
       });
     }
     return workflow;

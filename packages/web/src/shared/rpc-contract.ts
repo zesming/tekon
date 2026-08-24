@@ -52,6 +52,9 @@ export const tokenRunInputSchema = z.object({
 export const projectRunInputSchema = z.object({
   demandText: z.string(),
   token: z.string().min(1),
+  // 4b: 'goal' runs the built-in single-node goal template (ignores template);
+  // omitted/'workflow' keeps the governed delivery-workflow path.
+  mode: z.enum(['workflow', 'goal']).optional(),
   template: z.string().optional(),
   agent: z.string().optional(),
   allowDirtyBase: z.boolean().optional(),

@@ -26,6 +26,7 @@ import {
   type RunProviderConfig,
   runProviderConfigSchema,
   type WorkflowInstance,
+  type WorkflowInstanceInput,
   type WorkflowStatus,
   workflowInstanceSchema,
 } from '../types/domain.js';
@@ -68,6 +69,7 @@ type WorkflowInstanceRow = {
   project_id: string;
   demand_id: string;
   status: WorkflowInstance['status'];
+  kind: WorkflowInstance['kind'];
   current_node_id: string | null;
   created_at: string;
   updated_at: string;
@@ -183,7 +185,9 @@ export interface TekonRepositories {
   getDemand(demandId: string): Promise<Demand | null>;
   createProject(project: Project): Promise<Project>;
   getProject(projectId: string): Promise<Project | null>;
-  createWorkflowInstance(instance: WorkflowInstance): Promise<WorkflowInstance>;
+  createWorkflowInstance(
+    instance: WorkflowInstanceInput,
+  ): Promise<WorkflowInstance>;
   getWorkflowInstance(runId: string): Promise<WorkflowInstance | null>;
   recordRunProviderConfig(
     config: RunProviderConfig,
@@ -354,8 +358,8 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into workflow_instances (
-             id, project_id, demand_id, status, current_node_id, created_at, updated_at
-           ) values (@id, @projectId, @demandId, @status, @currentNodeId, @createdAt, @updatedAt)`,
+             id, project_id, demand_id, status, kind, current_node_id, created_at, updated_at
+           ) values (@id, @projectId, @demandId, @status, @kind, @currentNodeId, @createdAt, @updatedAt)`,
         ).run({ ...instance, currentNodeId: instance.currentNodeId ?? null });
         return instance;
       });
@@ -959,6 +963,7 @@ function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
     projectId: row.project_id,
     demandId: row.demand_id,
     status: row.status,
+    kind: row.kind ?? 'workflow',
     currentNodeId: row.current_node_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

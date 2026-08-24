@@ -242,6 +242,15 @@ export function migrateDatabase(db: TekonDatabase): void {
     addColumnIfMissing(db, 'nodes', 'node_order', 'integer not null default 0');
     addColumnIfMissing(db, 'gate_results', 'gate_key', 'text');
     addColumnIfMissing(db, 'worktree_leases', 'base_head', 'text');
+    // 4b: run kind ('workflow' | 'goal'). Default 'workflow' keeps every legacy
+    // row a workflow run; dual-write reads it so run.resumed/run.passed events
+    // carry the right kind without threading mode through the engine.
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'kind',
+      "text not null default 'workflow'",
+    );
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

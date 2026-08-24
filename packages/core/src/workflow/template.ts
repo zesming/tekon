@@ -170,6 +170,12 @@ const rawWorkflowTemplateSchema = z
     id: z.string().min(1),
     name: z.string().min(1).optional(),
     version: z.number().int().positive().default(1),
+    // 4b: governance mode. 'standard' (default) keeps every governance
+    // invariant (notably the required reviewer node). 'none' is a WHITELIST
+    // opt-out for lightweight `goal` runs (single agent node, optional gates);
+    // it exempts ONLY the reviewer-node requirement and nothing else. Existing
+    // delivery templates omit the field → 'standard' → unchanged.
+    governance: z.enum(['standard', 'none']).default('standard'),
     retry: workflowRetryPolicySchema.optional(),
     retryPolicy: workflowRetryPolicySchema.optional(),
     phases: z.array(rawPhaseSchema).min(1),
@@ -311,7 +317,7 @@ function normalizeWorkflowTemplate(
     });
   }
 
-  if (!hasReviewer) {
+  if (!hasReviewer && rawTemplate.governance !== 'none') {
     throw new Error('Workflow template must include a reviewer node');
   }
 

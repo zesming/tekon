@@ -156,15 +156,26 @@ export function createProjectRouter(context: ServerContext) {
       if (!demandText) {
         throw new ApiError('BAD_REQUEST', 'Demand text is required.');
       }
-      const templateName = runInput.template?.trim() || 'standard-delivery';
-      assertSafeName(templateName, 'template');
+      const isGoal = runInput.mode === 'goal';
       // S12: every synchronous validation stays before enqueue — a dirty base
       // must 400 here, not degrade into a background job failure.
       assertCleanBase(
         context.projectContext.projectRoot,
         Boolean(runInput.allowDirtyBase),
       );
-      const workflowSpec = loadProjectWorkflowIfPresent(context, templateName);
+      // 4b: goal mode ignores template/workflowSpec (SessionService uses the
+      // built-in goal template). Workflow mode resolves the template + any
+      // project workflow override as before.
+      const templateName = isGoal
+        ? undefined
+        : runInput.template?.trim() || 'standard-delivery';
+      if (templateName) {
+        assertSafeName(templateName, 'template');
+      }
+      const workflowSpec =
+        !isGoal && templateName
+          ? loadProjectWorkflowIfPresent(context, templateName)
+          : null;
       // 4a: SessionService owns the prepareRun → session → events → enqueue
       // orchestration. The router keeps token/scope, draft-shape validation,
       // clean-base, project-workflow loading, ApiError, and mapping. The
@@ -172,7 +183,11 @@ export function createProjectRouter(context: ServerContext) {
       // session event) rides the onPrepared hook so it stays in the audit chain.
       const result = await context.sessionService.startRun({
         demandText,
-        ...(workflowSpec ? { workflowSpec } : { templateName }),
+        ...(isGoal
+          ? { mode: 'goal' as const }
+          : workflowSpec
+            ? { workflowSpec }
+            : { templateName }),
         engine: {
           agent: runInput.agent ?? 'codex',
           allowDirtyBase: Boolean(runInput.allowDirtyBase),

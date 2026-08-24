@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const isoDateStringSchema = z.string().datetime();
 
-export const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo']);
+export const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo', 'goal']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const workflowStatusSchema = z.enum([
@@ -183,11 +183,19 @@ export const workflowInstanceSchema = z.object({
   projectId: z.string().min(1),
   demandId: z.string().min(1),
   status: workflowStatusSchema,
+  // 4b: 'workflow' (a governed delivery workflow) | 'goal' (a lightweight
+  // single-node agent goal). Default keeps every legacy/omitted row a workflow.
+  kind: z.enum(['workflow', 'goal']).default('workflow'),
   currentNodeId: z.string().nullable().optional(),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });
 export type WorkflowInstance = z.infer<typeof workflowInstanceSchema>;
+/**
+ * Creation input: `kind` is optional (schema defaults it to 'workflow'), so
+ * legacy callers/fixtures that omit it keep compiling and get a workflow run.
+ */
+export type WorkflowInstanceInput = z.input<typeof workflowInstanceSchema>;
 
 export const roleRunSchema = z.object({
   id: z.string().min(1),

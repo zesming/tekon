@@ -64,6 +64,7 @@ export interface TokenRunInput {
 export interface ProjectRunInput {
   demandText: string;
   token: string;
+  mode?: 'workflow' | 'goal';
   template?: string;
   agent?: string;
   allowDirtyBase?: boolean;

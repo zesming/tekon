@@ -31,6 +31,12 @@ export type SessionServiceEngineInput = unknown;
 
 export interface SessionServiceStartRunInput<TEngineInput = SessionServiceEngineInput> {
   demandText: string;
+  /**
+   * 4b: run kind. 'workflow' (default) runs a governed delivery workflow;
+   * 'goal' runs the built-in single-node goal template. Orthogonal to the
+   * engine's plan-source `mode` ('template'|'dynamic').
+   */
+  mode?: 'workflow' | 'goal';
   /** Used for prepareRun when no workflowSpec is given. */
   templateName?: string;
   /** Project workflow override; takes precedence over templateName for prepareRun. */
@@ -135,22 +141,35 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
   const { sessions, jobs, jobRunner, bus, repositories, projectRoot } = deps;
 
   // 4a: web is the only consumer and always runs template-mode workflows.
-  // 4b parameterizes mode/kind; 4c parameterizes the session profile.
+  // 4c parameterizes the session profile. 4b: `goal` mode selects the built-in
+  // goal template and a distinct job kind so the run reads as a goal end-to-end.
   const SESSION_PROFILE = 'human-web';
   const RUN_MODE = 'template' as const;
-  const RUN_KIND = 'workflow';
+  const GOAL_TEMPLATE_NAME = 'goal';
 
   async function startRun(
     input: SessionServiceStartRunInput<TEngineInput>,
   ): Promise<SessionServiceStartRunResult> {
+    const runKind = input.mode === 'goal' ? 'goal' : 'workflow';
     const engine = await deps.createEngine(input.engine);
-    const prepareInput: WorkflowEngineStartInput = {
-      demandText: input.demandText,
-      mode: RUN_MODE,
-      ...(input.workflowSpec
-        ? { workflowSpec: input.workflowSpec }
-        : { templateName: input.templateName }),
-    };
+    // 4b: goal mode ignores any provided template/workflowSpec and uses the
+    // built-in single-node goal template (design §3.3 precedence).
+    const prepareInput: WorkflowEngineStartInput =
+      runKind === 'goal'
+        ? {
+            demandText: input.demandText,
+            mode: RUN_MODE,
+            templateName: GOAL_TEMPLATE_NAME,
+            kind: 'goal',
+          }
+        : {
+            demandText: input.demandText,
+            mode: RUN_MODE,
+            kind: 'workflow',
+            ...(input.workflowSpec
+              ? { workflowSpec: input.workflowSpec }
+              : { templateName: input.templateName }),
+          };
     // prepareRun persists the run (ms-level) without running the agent.
     const prepared = await engine.prepareRun(prepareInput);
     const runId = prepared.runId;
@@ -179,9 +198,12 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       type: 'workflow/started',
       payload: {
         runId,
-        templateId: input.workflowSpec?.id ?? input.templateName,
+        templateId:
+          runKind === 'goal'
+            ? GOAL_TEMPLATE_NAME
+            : input.workflowSpec?.id ?? input.templateName,
         mode: RUN_MODE,
-        kind: RUN_KIND,
+        kind: runKind,
       },
     });
     bus.publish(started);
@@ -195,7 +217,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
 
     const job = await jobRunner.enqueue({
       sessionId: session.id,
-      kind: 'workflow-run',
+      kind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
     });
 
     return {

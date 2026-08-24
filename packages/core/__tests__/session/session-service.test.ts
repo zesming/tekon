@@ -193,10 +193,11 @@ describe('SessionService.startRun', () => {
       status: 'queued',
     });
 
-    // prepareRun received the templateName (no workflowSpec).
+    // prepareRun received the templateName (no workflowSpec) + kind:'workflow'.
     expect(engine.prepareRun).toHaveBeenCalledWith({
       demandText: 'Do the thing.',
       mode: 'template',
+      kind: 'workflow',
       templateName: 'standard-delivery',
     });
   });
@@ -224,6 +225,7 @@ describe('SessionService.startRun', () => {
     expect(engine.prepareRun).toHaveBeenCalledWith({
       demandText: 'Spec run.',
       mode: 'template',
+      kind: 'workflow',
       workflowSpec,
     });
     const events = await env.sessions.listEventsSince(result.sessionId, 0);
@@ -231,6 +233,44 @@ describe('SessionService.startRun', () => {
       templateId: 'project-feature',
       runId: 'run_spec',
     });
+  });
+
+  // 4b: goal mode ignores template/workflowSpec, uses the built-in goal
+  // template, enqueues a goal-run job, and tags events kind:'goal'.
+  it('runs goal mode via the goal template, ignoring any template/workflowSpec', async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: 'run_goal',
+      projectId: 'proj_1',
+      demandId: 'demand_1',
+      status: 'running',
+      kind: 'goal',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const service = makeService(env, engine);
+
+    const result = await service.startRun({
+      demandText: 'Lightweight goal.',
+      mode: 'goal',
+      // Both provided but must be ignored in goal mode.
+      templateName: 'standard-delivery',
+      workflowSpec: { id: 'ignored' } as WorkflowTemplate,
+      engine: null,
+    });
+
+    expect(engine.prepareRun).toHaveBeenCalledWith({
+      demandText: 'Lightweight goal.',
+      mode: 'template',
+      templateName: 'goal',
+      kind: 'goal',
+    });
+    const events = await env.sessions.listEventsSince(result.sessionId, 0);
+    expect(events[1].type).toBe('workflow/started');
+    expect(events[1].payload).toMatchObject({ kind: 'goal', templateId: 'goal' });
+    const job = await env.jobs.get(result.jobId);
+    expect(job?.kind).toBe('goal-run');
   });
 
   it('calls onPrepared after prepareRun but before createSession', async () => {
