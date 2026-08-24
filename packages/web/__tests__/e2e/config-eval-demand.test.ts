@@ -7,7 +7,7 @@ test.describe('Config, Eval, and Demand pages', () => {
     page,
     server,
   }) => {
-    await page.goto(`${server.url}/config`);
+    await page.goto(`${server.url}/advanced/config`);
 
     await expect(page.getByText('Config', { exact: true })).toBeVisible();
 
@@ -39,7 +39,7 @@ test.describe('Config, Eval, and Demand pages', () => {
     page,
     server,
   }) => {
-    await page.goto(`${server.url}/eval`);
+    await page.goto(`${server.url}/advanced/eval`);
 
     await expect(
       page.getByText('Evaluations', { exact: true }),
@@ -73,7 +73,7 @@ test.describe('Config, Eval, and Demand pages', () => {
   // ── Demand page ────────────────────────────────────────────────────────
 
   test('demand page loads', async ({ page, server }) => {
-    await page.goto(`${server.url}/demand`);
+    await page.goto(`${server.url}/advanced/demand`);
 
     // The demand entry point renders the clarification (需求澄清) page.
     // (UI was localized to Chinese; the title is no longer "Demand".)

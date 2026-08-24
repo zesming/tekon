@@ -9,7 +9,7 @@ test.describe('Tekon release dashboard', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
 
     // ── 1. Navigate to /runs/run_1/delivery (delivery tab) ────────────────
-    await page.goto(`${server.url}/runs/run_1/delivery`);
+    await page.goto(`${server.url}/advanced/runs/run_1/delivery`);
 
     // Breadcrumb renders
     await expect(page.getByText('运行列表 Runs')).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('Tekon release dashboard', () => {
     ).toBeVisible();
 
     // ── 2. Navigate to the top-level /delivery page ───────────────────────
-    await page.goto(`${server.url}/delivery`);
+    await page.goto(`${server.url}/advanced/delivery`);
 
     await expect(
       page.getByRole('heading', { name: 'Delivery' }),

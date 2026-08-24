@@ -23,8 +23,23 @@ const navGroups: NavGroup[] = [
     label: '',
     items: [
       {
-        to: routes.home,
-        label: 'Dashboard',
+        to: routes.sessions,
+        label: '会话 Sessions',
+        icon: (
+          <svg
+            className="nav-icon"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path d="M2 4h14v9H7l-4 3v-3H2z" />
+          </svg>
+        ),
+      },
+      {
+        to: routes.advanced,
+        label: '高级 Advanced',
         icon: (
           <svg
             className="nav-icon"
@@ -37,21 +52,6 @@ const navGroups: NavGroup[] = [
             <rect x="11" y="1" width="6" height="6" rx="1" />
             <rect x="1" y="11" width="6" height="6" rx="1" />
             <rect x="11" y="11" width="6" height="6" rx="1" />
-          </svg>
-        ),
-      },
-      {
-        to: routes.sessions,
-        label: '会话 Sessions',
-        icon: (
-          <svg
-            className="nav-icon"
-            viewBox="0 0 18 18"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path d="M2 4h14v9H7l-4 3v-3H2z" />
           </svg>
         ),
       },

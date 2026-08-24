@@ -1,6 +1,6 @@
 # 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
 
-- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT；待复审
+- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**3a-3d 全部实现完成（v0.11.0）**
 - v1→v2 修订：M1（rpc token 死代码/生产 401 顺带修复）、M2（session.list 服务端解析 workspace）、S1（inline 卡片走 gate.list 补全）、S2（3c e2e 经 project.run 真实建 session）、S3（D1 措辞订正）、S4（删除错误的眼睛按钮/P1-02 引用）、S5（3a e2e 分层）、S6（session.list 刷新机制）、N1-N3（计数/契约订正）
 - 权威上游：报告 §10 阶段 3、§13.1/13.4/13.7/13.9/13.10；`docs/reviews/2026-08-20-...-review.md` §0.5 阶段 3 批注（工程视角，落地以此为准）
 - 前序：阶段 0（v0.8.0）、阶段 1（v0.9.0 Event Spine + SSE 服务端）、阶段 2（v0.10.0 Agent Loop 事件 + 模型可见 replay）均已合入 PR#10、CI 绿

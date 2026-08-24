@@ -98,7 +98,8 @@ test('Sessions list shows the started session and links to its detail', async ({
   const { runId, sessionId } = await startRun(server.url, fixture.sessionToken);
   await waitForRunPassed(server.url, runId, fixture.sessionToken);
 
-  await page.goto(`${server.url}/sessions`);
+  // Phase 3 3d: the session list is the default route `/`.
+  await page.goto(server.url);
   const link = page.locator(`a[href="/sessions/${sessionId}"]`);
   await expect(link).toBeVisible({ timeout: 15_000 });
   await link.click();

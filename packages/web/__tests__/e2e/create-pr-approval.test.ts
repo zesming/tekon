@@ -182,7 +182,7 @@ test.describe('Create PR requires explicit confirmation', () => {
     expect(readGhLog(binDir)).toBe('');
 
     // ── 1. Navigate to the delivery page ───────────────────────────────────
-    await page.goto(`${server.url}/delivery`);
+    await page.goto(`${server.url}/advanced/delivery`);
 
     // Wait for the page to load
     await expect(

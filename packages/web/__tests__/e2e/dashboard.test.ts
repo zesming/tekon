@@ -6,14 +6,16 @@ test.describe('Tekon main flow', () => {
     server,
   }) => {
     // ── 1. Dashboard page loads with sidebar ──────────────────────────────
-    await page.goto(server.url);
+    // Phase 3 3d: the legacy Cockpit dashboard moved to /advanced (the default
+    // route `/` is now the human-first Session UI).
+    await page.goto(`${server.url}/advanced`);
 
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     await expect(page.getByText('Tekon', { exact: true })).toBeVisible();
     await expect(page.getByText('Cockpit', { exact: true })).toBeVisible();
 
     // Sidebar navigation items are present
-    await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();
     await expect(page.getByRole('link', { name: '运行列表' })).toBeVisible();
     await expect(page.getByRole('link', { name: '审批队列' })).toBeVisible();
 
@@ -21,9 +23,9 @@ test.describe('Tekon main flow', () => {
     await expect(page.getByText('运行 Runs')).toBeVisible();
     await expect(page.getByText('通过率 Pass Rate')).toBeVisible();
 
-    // ── 2. Navigate to /runs → run list renders ───────────────────────────
+    // ── 2. Navigate to /advanced/runs → run list renders ──────────────────
     await page.getByRole('link', { name: '运行列表' }).click();
-    await page.waitForURL('**/runs');
+    await page.waitForURL('**/advanced/runs');
 
     await expect(
       page.getByRole('heading', { name: '运行管理 Runs' }),
@@ -33,9 +35,9 @@ test.describe('Tekon main flow', () => {
     await expect(page.getByText('run_1', { exact: true })).toBeVisible();
     await expect(page.getByText('run_0', { exact: true })).toBeVisible();
 
-    // ── 3. Click a run → navigate to /runs/:runId ─────────────────────────
+    // ── 3. Click a run → navigate to /advanced/runs/:runId ────────────────
     await page.getByText('run_1', { exact: true }).click();
-    await page.waitForURL('**/runs/run_1');
+    await page.waitForURL('**/advanced/runs/run_1');
 
     // Breadcrumb renders and run header shows the run ID
     await expect(page.getByText('运行列表 Runs')).toBeVisible();

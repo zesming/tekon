@@ -972,7 +972,15 @@ tekon ui --repo /path/to/project
 
 启动后终端会输出带 token 的完整 URL，在浏览器中打开即可。按 `Ctrl+C` 停止。
 
-Web dashboard 适合：
+打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
+
+Session UI 适合：
+
+- 在左侧会话列表选择或用输入框发起一个新会话（运行）。
+- 在会话详情中间栏**实时**查看事件流：用户消息、步骤开始/结束、工具调用与结果、Agent 消息（当前为产物元数据合成的**摘要**，非模型原文）、错误。断线会自动重连并续播，不丢事件。
+- 在右侧就地处理 human approval（inline 审批卡片，展示风险、命令、就绪度与证据），并暂停/取消/恢复运行。
+
+旧 Dashboard（`/advanced`）适合：
 
 - 查看项目 overview。
 - 查看 run 列表。
@@ -990,18 +998,20 @@ Web dashboard 适合：
 /path/to/project/.tekon/web-session.json
 ```
 
+在页面顶栏"Session token"输入框粘贴该 token 后，才能执行发起运行、批准/拒绝审批等写操作；只读浏览（会话列表、事件流）在配置令牌后加载。
+
 注意：
 
 - Web 是本地 dashboard，不是远程服务。
 - token 不应提交。
 - Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
-- **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行。当前 dashboard 页面**不会自动刷新状态**，需要刷新页面或重新进入 run 列表/详情来查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。这意味着：
-  - 发起后不必一直等在原地，可离开再回来；查看最新状态请刷新页面，以 run 列表/详情为准。
-  - 批准一个 human gate 后，运行会在后台自动继续，无需再手动点"恢复"；刷新页面查看是否已推进。
+- **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行。
+  - **Session UI（默认）会通过事件流实时反映进展**：发起后无需手动刷新，中间栏会随后台执行追加事件、右侧审批卡片在门禁触发时自动出现、决策后运行自动继续。
+  - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
   - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
   - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
 
-> 事件流(可选，面向集成)：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流现在包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`），进入模型上下文的内容可从事件日志重建。当前主要供内部/集成使用；dashboard 页面尚未消费该事件流，普通用户通过刷新页面查看状态变化（页面内实时刷新为后续阶段规划）。
+> 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批），进入模型上下文的内容可从事件日志重建。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
 
 ## 8. 如何判断结果是否可信
 

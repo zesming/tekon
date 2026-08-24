@@ -44,16 +44,18 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     errorElement: <RouteError scope="app" />,
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'sessions', element: <SessionsPage /> },
+      // Phase 3 3d: human-first Session UI is the default entry.
+      { index: true, element: <SessionsPage /> },
       {
         path: 'sessions/:sessionId',
         element: <SessionDetailPage />,
         errorElement: <RouteError scope="session-detail" />,
       },
-      { path: 'runs', element: <RunsPage /> },
+      // Legacy run-centric Cockpit, preserved under /advanced (report C2).
+      { path: 'advanced', element: <DashboardPage /> },
+      { path: 'advanced/runs', element: <RunsPage /> },
       {
-        path: 'runs/:runId',
+        path: 'advanced/runs/:runId',
         element: <RunDetailPage />,
         errorElement: <RouteError scope="run-detail" />,
         children: [
@@ -66,11 +68,11 @@ export const router = createBrowserRouter([
           { path: 'progress', element: <ProgressTab /> },
         ],
       },
-      { path: 'approvals', element: <ApprovalsPage /> },
-      { path: 'delivery', element: <DeliveryPage /> },
-      { path: 'demand', element: <DraftPage /> },
+      { path: 'advanced/approvals', element: <ApprovalsPage /> },
+      { path: 'advanced/delivery', element: <DeliveryPage /> },
+      { path: 'advanced/demand', element: <DraftPage /> },
       {
-        path: 'config',
+        path: 'advanced/config',
         element: <ConfigPage />,
         children: [
           { index: true, element: <RolesTab /> },
@@ -80,7 +82,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        path: 'eval',
+        path: 'advanced/eval',
         element: <EvaluationsPage />,
         children: [
           { index: true, element: <ReadinessTab /> },

@@ -1,5 +1,48 @@
 # 变更日志
 
+## v0.11.0
+
+Harness-inspired replatform 阶段 3：Human-first Session UI。第一次把已在事件流里的会话事实（阶段 1/2 的 session/turn/step/tool/assistant/治理事件）接到**客户端**，形成连续叙事交互。默认路由 `/` 改为 Session UI；旧 run-centric Cockpit 完整保留在 `/advanced/*`（双轨并存，零删除）。
+
+### 新功能
+
+**会话读路径（报告 §10 阶段 3，3a）:**
+- core `SessionEventStore.listSessions(workspaceId)`：按 `created_at desc, rowid desc` 稳定排序的纯 SELECT（零迁移），返回 `SessionListEntry`（Session + run_id 列）。
+- web `session.list` / `session.get` RPC（`auth:'session'`）：`session.list` 无客户端入参，服务端经 `getOrCreateDefaultWorkspace(projectRoot)` 解析 workspace 并回传 workspaceId；`session.get` 经 `getRunIdBySessionId` 组合 runId（不改冻结 Session 契约）。事件本身走既有 SSE 端点（初始快照 = `sinceSeq=0` replay），不新增 `session.events` RPC。
+
+**SSE 客户端 + 实时会话（3a/3b/3d）:**
+- `lib/session-stream.ts`：`fetch` + `ReadableStream` 手写 SSE 客户端（非 `EventSource`——后者无法设置 `x-session-token` 头，query-param token 会泄漏进日志）。纯函数 `createSseParser`/`mergeEventsBySeq`/`lastEventId` 单测覆盖（半包/心跳/CRLF/去重/seq 单调/Last-Event-ID）；断线指数退避重连 + `Last-Event-ID` 续播（服务端 0..k∪k..end 拼接零丢失/零重复）。
+- `use-session-stream` hook：live 累积 + `connState`（连接/实时/重连/关闭）+ 状态翻转事件 invalidate `session.list`。
+
+**三栏 Session UI（3b/3c）:**
+- Session 列表（`/`）+ composer（起新 run；不注入运行中消息——follow-up/steer 递延 2b）。
+- Session Detail（`/sessions/:id`）：中栏 event feed（`describeEvent` 把 15+ 事件类型映射为连续叙事，按 turn 分组，合成 assistant 标"摘要"、截断标"已截断"，未知类型降级不崩）；右栏 = 运行控制（复用 RunControls）+ inline 审批（复用 DecisionCard，上下文从 `gate.list` 补全，approve/reject 走既有 `gate.approve/reject`，治理语义不变）+ tool/artifact/error 卡片。
+
+**token 接线修复（3a，顺带还债）:**
+- `AuthProvider` 同步 `setRpcSessionToken`：修复 `auth:'session'` 读 RPC 在生产中因 token 头从未发送而全部 401 的预存缺陷（此前仅被 e2e fetch 猴补掩盖）。补 HTTP 层 200/401 测试（不经猴补）防假绿。
+
+### 行为变化
+
+- 默认路由 `/` 从旧 Dashboard 改为 Human-first Session UI；旧 Dashboard/Runs/Run-detail/Approvals/Delivery/Draft/Config/Eval 全部移到 `/advanced/*`（保留不删，报告 C2）。侧栏新增"会话 Sessions"（默认）与"高级 Advanced"两个入口。
+
+### 已知边界（诚实标注）
+
+- `assistant/message` 仍是产物元数据合成（非模型原文，阶段 2 M3）；feed 显式标"摘要"。真正逐块流式 `assistant/chunk` 递延 2b。
+- composer 不支持运行中 follow-up/steer（`AgentHandle` 相应方法在 2b 才实现，现抛 `NotSupportedYet`），UI 诚实提示。
+- 写操作（inline approve/reject）需在顶栏输入会话令牌（服务端校验请求体 token）；只读会话浏览在配置了令牌后即可。
+- workspace picker 为占位（当前单默认 workspace）；多 workspace 管理递延后续阶段。行级 diff 递延（当前复用 diff 摘要）。
+
+### 删除
+
+- 删死代码 `hooks/use-run-poller.ts`（无消费者；实时更新由 SSE 取代）。
+
+### 测试
+
+- 新增 core `listSessions`（3）、web api `session-read-api`（4，含 M1 HTTP 200/401 防假绿）、client `session-stream`（11 解析器/reducer）、`session-stream-reconnect`（2 断线重连/Last-Event-ID）、`event-feed`（10 事件映射/turn 分组）、`session-side-panel`（7 右栏派生）。
+- 新增 Playwright：`session-feed`（2，真实 mock-agent run→建流→replay→live→feed 有序）、`session-approval`（1，human-gate run→inline 卡片→两步批准→gate.approve→清空）、`session-routing`（1，`/`=Session UI、`/advanced`=旧 Cockpit 保留）。
+- e2e fixture 新增 `feature-approval.yaml`（human gate 模板）；既有 12 Playwright 路径同步到 `/advanced/*`。
+- 提交前全量 `pnpm test` 通过：core 894 / web 219 / cli 37 / 聚合 1150 + Playwright 11+5-flaky-then-pass。
+
 ## v0.10.0
 
 Harness-inspired replatform 阶段 2（2a）：流式 Agent Loop 兼容层 + Provider Registry + Snapshot 版本契约 + 会话事件词汇补齐。让**真实 agent 产出**（每 node 的 step/tool/assistant 事件）进入会话事件流，并可从 event log 重建模型可见历史（报告 §13.6）。无 breaking change，事件为向后兼容的加法。
