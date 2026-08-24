@@ -1001,7 +1001,7 @@ Web dashboard 适合：
   - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
   - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
 
-> 事件流(可选，面向集成)：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。当前主要供内部/集成使用；dashboard 页面尚未消费该事件流，普通用户通过刷新页面查看状态变化（页面内实时刷新为后续阶段规划）。
+> 事件流(可选，面向集成)：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流现在包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`），进入模型上下文的内容可从事件日志重建。当前主要供内部/集成使用；dashboard 页面尚未消费该事件流，普通用户通过刷新页面查看状态变化（页面内实时刷新为后续阶段规划）。
 
 ## 8. 如何判断结果是否可信
 

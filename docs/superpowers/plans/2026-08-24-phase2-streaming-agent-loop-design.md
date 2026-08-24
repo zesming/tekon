@@ -1,6 +1,6 @@
 # Tekon 阶段 2 详细设计 — 流式 Agent Loop 兼容层 + Provider Registry + 事件词汇补全
 
-> 状态：**v3，已整合两轮 reviewer 评审（v1 的 M1–M4 + v2 复审的 R1 改写/rework 三处/driver seq/失败双发/NIT），待复审确认后进入实施**
+> 状态：**已实施(S1–S6 完成,v0.10.0)**;两轮 designer 评审的 M1–M4 + D1–D5 + 复审项全部落地,每步 test-first、e2e 绿。
 > 前置：阶段 0（v0.8.0）、阶段 1（v0.9.0，Event Spine + 后台 Job + SSE）已合入 PR #10。
 > 依据：报告 §8.3 事件词汇、§8.4 AgentDriver 契约、§10 阶段 2、§12-P0.5、§13.3/§13.6；`docs/reviews/...migration-review.md` §0.5 工程视角批注；explorer 实测代码摸底。
 
