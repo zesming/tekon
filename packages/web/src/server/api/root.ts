@@ -1,26 +1,40 @@
 import {
   createAuditLogger,
+  createCommandGateway,
   createDualWriteAuditLogger,
   createDualWriteRepositories,
+  createGateEngine,
   createJobRepository,
   createRepositories,
   createSessionDualWriteBridge,
   createSessionEventBus,
   createSessionEventStore,
+  createSessionService,
   createSubprocessRegistry,
+  createWorkflowEngine,
+  createWorkflowJobExecutor,
+  createWorktreeManager,
   createWriteQueue,
   createJobRunner,
   openTekonDatabase,
+  type AuditLogger,
+  type SubprocessRegistry,
+  type TekonRepositories,
+  type WorkflowEngine,
 } from '@tekon/core';
 
 import {
   assertProjectDatabaseExists,
   createProjectContext,
   type ResolveProjectRootInput,
+  type WebProjectContext,
 } from '../project-context.js';
 
-import type { ServerContext, ApiCaller } from './context.js';
-import { createWorkflowJobExecutor } from './job-executor.js';
+import {
+  createWebAgentRuntime,
+  providerRuntimeFromRunInput,
+} from './agents.js';
+import type { ServerContext, ApiCaller, WebRunEngineInput } from './context.js';
 import {
   createArtifactRouter,
   createAuditRouter,
@@ -37,6 +51,52 @@ import {
 
 export type { ApiCaller } from './context.js';
 export { dispatchApiCall } from './dispatch.js';
+
+/**
+ * 4a: the web run-engine factory injected into SessionService. It encapsulates
+ * the web provider/adapter construction (moved verbatim from the project
+ * router's run handler): command gateway → web agent runtime → workflow
+ * engine with gate/worktree managers. The service only calls the factory;
+ * web-specific validation errors (ApiError from createWebAgentRuntime /
+ * providerRuntimeFromRunInput) propagate through it unchanged.
+ */
+function createWebRunEngineFactory(deps: {
+  projectContext: WebProjectContext;
+  repositories: TekonRepositories;
+  audit: AuditLogger;
+  registry: SubprocessRegistry;
+}): (input: WebRunEngineInput) => WorkflowEngine {
+  return (input) => {
+    const gateway = createCommandGateway({
+      repositories: deps.repositories,
+    });
+    const agentRuntime = createWebAgentRuntime({
+      agent: input.agent,
+      repoPath: deps.projectContext.projectRoot,
+      gateway,
+      runtime: providerRuntimeFromRunInput(input),
+    });
+    return createWorkflowEngine({
+      repoPath: deps.projectContext.projectRoot,
+      dataDir: '.tekon',
+      repositories: deps.repositories,
+      audit: deps.audit,
+      adapter: agentRuntime.adapter,
+      agentProvider: agentRuntime.provider,
+      agentConfigSummary: agentRuntime.configSummary,
+      allowDirtyBase: input.allowDirtyBase,
+      registry: deps.registry,
+      gateEngine: createGateEngine({
+        repositories: deps.repositories,
+        gateway,
+      }),
+      worktreeManager: createWorktreeManager({
+        repositories: deps.repositories,
+        gateway,
+      }),
+    });
+  };
+}
 
 export async function createApiCaller(
   input: ResolveProjectRootInput,
@@ -86,6 +146,24 @@ export async function createApiCaller(
   const jobRunner = createJobRunner({ jobs, sessions, bus, registry, executor });
   jobRunner.start();
 
+  // 4a: SessionService owns the run/resume/cancel/pause orchestration; the
+  // project router degrades to auth + input assembly + mapping.
+  const sessionService = createSessionService<WebRunEngineInput>({
+    sessions,
+    jobs,
+    jobRunner,
+    bus,
+    repositories: dualRepositories,
+    audit: dualAudit,
+    projectRoot: projectContext.projectRoot,
+    createEngine: createWebRunEngineFactory({
+      projectContext,
+      repositories: dualRepositories,
+      audit: dualAudit,
+      registry,
+    }),
+  });
+
   const context: ServerContext = {
     db,
     repositories: dualRepositories,
@@ -96,6 +174,7 @@ export async function createApiCaller(
     jobs,
     jobRunner,
     registry,
+    sessionService,
   };
 
   const demandRouter = createDemandRouter(context);

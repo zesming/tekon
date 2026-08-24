@@ -19,6 +19,8 @@ export * from './artifact/store.js';
 export * from './audit/logger.js';
 export * from './session/subprocess-registry.js';
 export * from './session/job-runner.js';
+export * from './session/session-service.js';
+export * from './session/workflow-job-executor.js';
 export * from './session/dual-write.js';
 export * from './session/present.js';
 export * from './runtime/command-gateway.js';

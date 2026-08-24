@@ -11,15 +11,9 @@ import {
 import { join, relative, resolve } from 'node:path';
 
 import {
-  createCommandGateway,
-  createGateEngine,
-  createWorkflowEngine,
-  createWorktreeManager,
-  isWorkflowTerminalError,
   loadWorkflowTemplateFile,
   readDraftShapeFile,
   renderDraftShapeForRun,
-  writeWorkflowTerminal,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -46,10 +40,6 @@ import {
   mapWorkflow,
   mapWorkflowFromDomain,
 } from '../mappers.js';
-import {
-  createWebAgentRuntime,
-  providerRuntimeFromRunInput,
-} from '../agents.js';
 
 export function createProjectRouter(context: ServerContext) {
   return {
@@ -117,32 +107,24 @@ export function createProjectRouter(context: ServerContext) {
     async pause(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      // M7 order: token → scope → write. CAS running→paused so a concurrent
-      // terminal/cancel write is not clobbered (MUST-FIX1). If the CAS does not
-      // apply and the run is not already paused, it is an illegal transition
-      // (e.g. passed→paused) → 400 (§4.4), without overwriting the real status.
-      const cas = await context.repositories.casWorkflowInstanceStatus(
-        runInput.runId,
-        'running',
-        'paused',
-      );
-      if (!cas.changed && cas.workflow && cas.workflow.status !== 'paused') {
+      // M7 order: token → scope → write. SessionService does the CAS
+      // running→paused (MUST-FIX1: no clobber of a concurrent terminal/cancel);
+      // the router maps an illegal transition (e.g. passed→paused) to 400.
+      const result = await context.sessionService.requestPause({
+        runId: runInput.runId,
+      });
+      if (result.outcome === 'illegal-transition') {
         throw new ApiError(
           'BAD_REQUEST',
-          `Cannot pause a run in status: ${cas.workflow.status}`,
+          `Cannot pause a run in status: ${result.workflowStatus}`,
         );
       }
-      const active = await context.jobs.findActiveByRunId(runInput.runId);
-      if (active) {
-        await context.jobRunner.requestPause(active.id);
-      }
-      const session = await context.sessions.findSessionByRunId(runInput.runId);
       return {
         run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
           db: context.db,
         }),
-        ...(session ? { sessionId: session.id } : {}),
-        ...(active ? { jobId: active.id } : {}),
+        ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+        ...(result.jobId ? { jobId: result.jobId } : {}),
       };
     },
 
@@ -176,15 +158,6 @@ export function createProjectRouter(context: ServerContext) {
       }
       const templateName = runInput.template?.trim() || 'standard-delivery';
       assertSafeName(templateName, 'template');
-      const gateway = createCommandGateway({
-        repositories: context.repositories,
-      });
-      const agentRuntime = createWebAgentRuntime({
-        agent: runInput.agent ?? 'codex',
-        repoPath: context.projectContext.projectRoot,
-        gateway,
-        runtime: providerRuntimeFromRunInput(runInput),
-      });
       // S12: every synchronous validation stays before enqueue — a dirty base
       // must 400 here, not degrade into a background job failure.
       assertCleanBase(
@@ -192,218 +165,102 @@ export function createProjectRouter(context: ServerContext) {
         Boolean(runInput.allowDirtyBase),
       );
       const workflowSpec = loadProjectWorkflowIfPresent(context, templateName);
-      const engine = createWorkflowEngine({
-        repoPath: context.projectContext.projectRoot,
-        dataDir: '.tekon',
-        repositories: context.repositories,
-        audit: context.audit,
-        adapter: agentRuntime.adapter,
-        agentProvider: agentRuntime.provider,
-        agentConfigSummary: agentRuntime.configSummary,
-        allowDirtyBase: Boolean(runInput.allowDirtyBase),
-        registry: context.registry,
-        gateEngine: createGateEngine({
-          repositories: context.repositories,
-          gateway,
-        }),
-        worktreeManager: createWorktreeManager({
-          repositories: context.repositories,
-          gateway,
-        }),
-      });
-      // prepareRun persists the run (ms-level) without running the agent.
-      const prepared = await engine.prepareRun({
+      // 4a: SessionService owns the prepareRun → session → events → enqueue
+      // orchestration. The router keeps token/scope, draft-shape validation,
+      // clean-base, project-workflow loading, ApiError, and mapping. The
+      // demand-shaped governance audit (P0-03 evidence, intentionally not a
+      // session event) rides the onPrepared hook so it stays in the audit chain.
+      const result = await context.sessionService.startRun({
         demandText,
-        mode: 'template',
         ...(workflowSpec ? { workflowSpec } : { templateName }),
-      });
-      const runId = prepared.runId;
-
-      // SHOULD20: record the P0-03 approval evidence in the audit chain (needs
-      // runId, so it lands after prepareRun). This audit type is intentionally
-      // not mapped to a session event (S9 unmapped list) — it stays governance.
-      if (shapedDraft) {
-        await context.audit.append({
-          runId,
-          type: 'run.demand-shaped',
-          payload: {
-            shapePath: runInput.demandShapePath,
-            approved: shapedDraft.approved,
-            readyForRun: shapedDraft.readyForRun,
-          },
-        });
-      }
-
-      // M1: create the session, then explicitly append the opening events
-      // (dual-write can't backfill them — no session existed at run.started).
-      const workspace = await context.sessions.getOrCreateDefaultWorkspace(
-        context.projectContext.projectRoot,
-      );
-      const session = await context.sessions.createSession({
-        workspaceId: workspace.id,
-        title: demandText.slice(0, 80),
-        profile: 'human-web',
-        runId,
-      });
-      const created = await context.sessions.appendEvent({
-        sessionId: session.id,
-        type: 'session/created',
-        payload: { runId, profile: 'human-web' },
-      });
-      context.bus.publish(created);
-      const started = await context.sessions.appendEvent({
-        sessionId: session.id,
-        type: 'workflow/started',
-        payload: {
-          runId,
-          templateId: workflowSpec?.id ?? templateName,
-          mode: 'template',
-          kind: 'workflow',
+        engine: {
+          agent: runInput.agent ?? 'codex',
+          allowDirtyBase: Boolean(runInput.allowDirtyBase),
+          ...(runInput.timeoutMs !== undefined
+            ? { timeoutMs: runInput.timeoutMs }
+            : {}),
+          ...(runInput.noProgressTimeoutMs !== undefined
+            ? { noProgressTimeoutMs: runInput.noProgressTimeoutMs }
+            : {}),
+          ...(runInput.progressHeartbeatMs !== undefined
+            ? { progressHeartbeatMs: runInput.progressHeartbeatMs }
+            : {}),
         },
-      });
-      context.bus.publish(started);
-      const userMessage = await context.sessions.appendEvent({
-        sessionId: session.id,
-        type: 'user/message',
-        payload: { text: demandText },
-        modelVisible: true,
-      });
-      context.bus.publish(userMessage);
-
-      const job = await context.jobRunner.enqueue({
-        sessionId: session.id,
-        kind: 'workflow-run',
+        onPrepared: shapedDraft
+          ? async (runId) => {
+              await context.audit.append({
+                runId,
+                type: 'run.demand-shaped',
+                payload: {
+                  shapePath: runInput.demandShapePath,
+                  approved: shapedDraft.approved,
+                  readyForRun: shapedDraft.readyForRun,
+                },
+              });
+            }
+          : undefined,
       });
 
       return {
-        run: mapWorkflowFromDomain(prepared.workflow),
-        sessionId: session.id,
-        jobId: job.id,
+        run: mapWorkflowFromDomain(result.workflow),
+        sessionId: result.sessionId,
+        jobId: result.jobId,
       };
     },
 
     async resume(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      const pendingHuman = await context.repositories.listHumanDecisions(
-        runInput.runId,
-      );
-      if (pendingHuman.some((decision) => decision.status === 'pending')) {
+      // 4a: SessionService owns the resume orchestration (pending-decision
+      // guard, M8 terminal guard, MF2 single-active-job guard, session backfill,
+      // enqueue). The router maps each outcome to ApiError/response.
+      const result = await context.sessionService.resumeRun({
+        runId: runInput.runId,
+      });
+      if (result.outcome === 'pending-decisions') {
         throw new ApiError(
           'BAD_REQUEST',
           'Run has pending human decisions; approve or reject the gate first.',
         );
       }
-      // M8: a terminal run cannot be resumed.
-      const workflow = await context.repositories.getWorkflowInstance(
-        runInput.runId,
-      );
-      if (
-        workflow &&
-        ['passed', 'failed', 'cancelled'].includes(workflow.status)
-      ) {
+      if (result.outcome === 'terminal') {
         throw new ApiError(
           'BAD_REQUEST',
-          `Run is in terminal status: ${workflow.status}`,
+          `Run is in terminal status: ${result.status}`,
         );
       }
-      // MF2: no two active jobs per run. Reclaim queued + stale-paused jobs,
-      // then reject if a live job is still running/cancelling/paused.
-      await context.jobs.cancelStaleActiveJobs(runInput.runId);
-      const active = await context.jobs.findActiveByRunId(runInput.runId);
-      if (active) {
+      if (result.outcome === 'active-job') {
         throw new ApiError(
           'CONFLICT',
           'Run already has an active job; cancel it or wait for it to finish.',
         );
       }
-      let session = await context.sessions.findSessionByRunId(runInput.runId);
-      if (!session) {
-        const workspace = await context.sessions.getOrCreateDefaultWorkspace(
-          context.projectContext.projectRoot,
-        );
-        session = await context.sessions.createSession({
-          workspaceId: workspace.id,
-          title: null,
-          profile: 'human-web',
-          runId: runInput.runId,
-        });
-      }
-      const job = await context.jobRunner.enqueue({
-        sessionId: session.id,
-        kind: 'workflow-resume',
-      });
       return {
         run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
           db: context.db,
         }),
-        sessionId: session.id,
-        jobId: job.id,
+        sessionId: result.sessionId,
+        jobId: result.jobId,
       };
     },
 
     async cancel(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      // MF1: the web cancel route is the single emission point for
-      // agent/cancel-requested + agent/cancelled. writeWorkflowTerminal is
-      // idempotent — a repeat cancel returns written=false and re-emits nothing.
-      let written = false;
-      try {
-        const result = await writeWorkflowTerminal(
-          context.repositories,
-          runInput.runId,
-          'cancelled',
-        );
-        written = result.written;
-      } catch (error) {
-        if (isWorkflowTerminalError(error)) {
-          // Already in a different terminal status (passed/failed): nothing to
-          // cancel, return the current run.
-          return {
-            run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
-              db: context.db,
-            }),
-          };
-        }
-        throw error;
-      }
-      const session = await context.sessions.findSessionByRunId(runInput.runId);
-      if (!written) {
-        return {
-          run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
-            db: context.db,
-          }),
-          ...(session ? { sessionId: session.id } : {}),
-        };
-      }
-      if (session) {
-        const requested = await context.sessions.appendEvent({
-          sessionId: session.id,
-          type: 'agent/cancel-requested',
-          payload: { runId: runInput.runId },
-        });
-        context.bus.publish(requested);
-      }
-      const active = await context.jobs.findActiveByRunId(runInput.runId);
-      if (active) {
-        await context.jobRunner.requestCancel(active.id, 'web cancel');
-      }
-      if (session) {
-        await context.sessions.updateSessionStatus(session.id, 'cancelled');
-        const cancelled = await context.sessions.appendEvent({
-          sessionId: session.id,
-          type: 'agent/cancelled',
-          payload: { runId: runInput.runId },
-        });
-        context.bus.publish(cancelled);
-      }
+      // 4a: SessionService owns the cancel orchestration. MF1: it is the single
+      // emission point for agent/cancel-requested + agent/cancelled;
+      // writeWorkflowTerminal is idempotent and runs FIRST (the CAS guard that
+      // makes a racing engine completion throw instead of writing false passed).
+      // The router only maps the result to a response.
+      const result = await context.sessionService.requestCancel({
+        runId: runInput.runId,
+      });
       return {
         run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
           db: context.db,
         }),
-        ...(session ? { sessionId: session.id } : {}),
-        ...(active ? { jobId: active.id } : {}),
+        ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+        ...(result.jobId ? { jobId: result.jobId } : {}),
       };
     },
 

@@ -1,42 +1,46 @@
-import {
-  createAgentAdapterFromSnapshot,
-  createCommandGateway,
-  createGateEngine,
-  createWorkflowEngine,
-  createWorktreeManager,
-  isWorkflowTerminalError,
-  redactSecrets,
-  writeWorkflowTerminal,
-  type AgentEventSink,
-  type AuditLogger,
-  type JobExecutionContext,
-  type JobExecutor,
-  type JobStatus,
-  type SessionEventBus,
-  type SessionEventStore,
-  type SubprocessRegistry,
-  type TekonRepositories,
-  type WorkflowInstance,
-} from '@tekon/core';
-
-import type { WebProjectContext } from '../project-context.js';
+import { createAgentAdapterFromSnapshot } from '../runtime/agent-runtime.js';
+import type { AgentEventSink } from '../runtime/agent-step-events.js';
+import { createCommandGateway } from '../runtime/command-gateway.js';
+import { createWorktreeManager } from '../runtime/worktree-manager.js';
+import { redactSecrets } from '../security/secrets.js';
+import type { AuditLogger } from '../audit/logger.js';
+import type { TekonRepositories } from '../db/repositories.js';
+import { createGateEngine } from '../gate/engine.js';
+import type { JobExecutionContext, JobExecutor } from './job-runner.js';
+import type { SessionEventBus } from './event-bus.js';
+import type { SessionEventStore } from './session-store.js';
+import type { SubprocessRegistry } from './subprocess-registry.js';
+import type { JobStatus } from '../types/session-contract.js';
+import type { WorkflowInstance } from '../types/domain.js';
+import { isWorkflowTerminalError } from '../workflow/errors.js';
+import { writeWorkflowTerminal } from '../workflow/state-machine.js';
+import { createWorkflowEngine } from '../workflow/engine.js';
 
 /**
- * Web-side JobExecutor (design §2.5). Each background job maps its session to
- * a runId, builds the workflow engine from the run's persisted provider
- * snapshot, drives executePreparedRun / resumeRun with the job's abort signal +
- * pause predicate + checkpoint hook, then maps the resulting workflow status to
- * a job status and emits the session lifecycle events.
+ * The project context fields the workflow job executor actually consumes.
+ * Web's WebProjectContext extends this; CLI (4c) can supply its own.
+ */
+export interface RunProjectContext {
+  projectRoot: string;
+}
+
+/**
+ * Workflow JobExecutor (design §2.2, moved from web in 4a). Each background
+ * job maps its session to a runId, builds the workflow engine from the run's
+ * persisted provider snapshot, drives executePreparedRun / resumeRun with the
+ * job's abort signal + pause predicate + checkpoint hook, then maps the
+ * resulting workflow status to a job status and emits the session lifecycle
+ * events.
  *
  * Every path is caught: the executor never throws out to the runner (the
  * runner's own catch-all would otherwise mark the job failed without emitting
  * turn/end). MF1: the signal-aborted path only idempotently sets the session to
- * cancelled — `agent/cancelled` is emitted once, by the web cancel route.
+ * cancelled — `agent/cancelled` is emitted once, by the cancel route.
  */
 export function createWorkflowJobExecutor(deps: {
   repositories: TekonRepositories;
   audit: AuditLogger;
-  projectContext: WebProjectContext;
+  projectContext: RunProjectContext;
   sessions: SessionEventStore;
   bus: SessionEventBus;
   registry: SubprocessRegistry;
@@ -133,7 +137,7 @@ export function createWorkflowJobExecutor(deps: {
         if (ctx.signal.aborted) {
           // Abort raced the run to completion. Settle the workflow cancelled
           // (idempotent, M2) and the session cancelled — but do NOT emit
-          // agent/cancelled (MF1: single emission from the web cancel route).
+          // agent/cancelled (MF1: single emission from the cancel route).
           await writeWorkflowTerminal(repositories, runId, 'cancelled', null).catch(
             () => {},
           );

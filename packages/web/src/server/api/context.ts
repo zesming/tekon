@@ -7,6 +7,7 @@ import type {
   JobRepository,
   SessionEventBus,
   SessionEventStore,
+  SessionService,
   SubprocessRegistry,
   TekonDatabase,
   TekonRepositories,
@@ -14,6 +15,20 @@ import type {
 } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
+
+/**
+ * Per-request knobs for the web run-engine factory (4a). The factory is
+ * injected into SessionService at the composition root and encapsulates the
+ * web provider/adapter construction (createWebAgentRuntime +
+ * providerRuntimeFromRunInput + gate/worktree managers).
+ */
+export interface WebRunEngineInput {
+  agent: string;
+  allowDirtyBase: boolean;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
+}
 
 /**
  * Review surface as returned by the web API: the core surface plus the run's
@@ -37,6 +52,8 @@ export interface ServerContext {
   jobs: JobRepository;
   jobRunner: DurableJobRunner;
   registry: SubprocessRegistry;
+  /** 4a: extracted run/resume/cancel/pause orchestration. */
+  sessionService: SessionService<WebRunEngineInput>;
 }
 
 export interface TokenRunInput {
