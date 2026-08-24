@@ -26,7 +26,7 @@ describe('web read API', () => {
       audit: 2,
       pendingApprovals: 1,
       roles: 1,
-      workflows: 1,
+      workflows: 2,
     });
     await expect(
       api.project.detail({ projectId: 'project_1' }),
@@ -150,7 +150,10 @@ describe('web read API', () => {
       roles: [expect.objectContaining({ id: 'rd' })],
     });
     await expect(api.workflow.list()).resolves.toMatchObject({
-      workflows: [expect.objectContaining({ id: 'project-feature' })],
+      workflows: expect.arrayContaining([
+        expect.objectContaining({ id: 'project-feature' }),
+        expect.objectContaining({ id: 'feature-approval' }),
+      ]),
     });
 
     await api.close();
@@ -183,12 +186,22 @@ describe('web read API', () => {
 
     const result = await api.workflow.list();
 
-    expect(result.workflows).toHaveLength(1);
-    expect(result.workflows[0]).toMatchObject({
-      id: 'project-feature',
-      name: 'Project Feature',
-      path: expect.stringContaining('.tekon/workflows/project-feature.yaml'),
-    });
+    // Two templates: the base project-feature + the human-gate feature-approval
+    // (added for the phase 3 3c inline-approval e2e).
+    expect(result.workflows).toHaveLength(2);
+    expect(result.workflows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'project-feature',
+          name: 'Project Feature',
+          path: expect.stringContaining('.tekon/workflows/project-feature.yaml'),
+        }),
+        expect.objectContaining({
+          id: 'feature-approval',
+          path: expect.stringContaining('.tekon/workflows/feature-approval.yaml'),
+        }),
+      ]),
+    );
 
     await api.close();
   });

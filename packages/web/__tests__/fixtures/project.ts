@@ -85,6 +85,48 @@ export async function createWebFixtureProject(
     ].join('\n'),
   );
 
+  // Phase 3 3c: a minimal human-gate template so a Web run through project.run
+  // creates a pending human decision (dual-write emits approval/requested),
+  // which the Session UI's inline approval consumes. The base project-feature
+  // template has no human gate, so 3c cannot reuse it (review S2).
+  writeFileSync(
+    join(tekonDir, 'workflows', 'feature-approval.yaml'),
+    [
+      'id: feature-approval',
+      'name: Feature with Human Approval',
+      'version: 1',
+      'phases:',
+      '  - id: rd',
+      '    nodes:',
+      '      - id: rd',
+      '        role: rd',
+      '        outputs:',
+      '          - code:code-changes',
+      '        gates:',
+      '          - type: build',
+      '            commandRef: build',
+      '          - type: lint',
+      '            commandRef: lint',
+      '          - type: human',
+      '            gateKey: approve-rd',
+      '            requiresHumanApproval: true',
+      '  - id: review',
+      '    dependsOn:',
+      '      - rd',
+      '    nodes:',
+      '      - id: reviewer',
+      '        role: reviewer',
+      '        inputs:',
+      '          - code:code-changes',
+      '        outputs:',
+      '          - review:review-report',
+      '        gates:',
+      '          - type: schema',
+      '            artifactType: review-report',
+      '',
+    ].join('\n'),
+  );
+
   const sessionToken = 'fixture-session-token';
   writeFileSync(
     join(tekonDir, 'config.yaml'),

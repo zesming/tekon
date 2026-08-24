@@ -163,3 +163,40 @@
 .feed-row-error .feed-title {
   color: var(--danger, #dc2626);
 }
+
+/* Right rail: run controls, inline approvals, result cards */
+.session-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.session-side-approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.session-side-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.session-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.session-card-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-t, #94a3b8);
+}
+.session-card-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-card-error .session-card-title {
+  color: var(--danger, #dc2626);
+}

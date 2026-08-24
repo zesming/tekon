@@ -8,6 +8,7 @@ import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { EventFeed } from '../components/sessions/EventFeed.js';
+import { SessionSidePanel } from '../components/sessions/SessionSidePanel.js';
 
 // Phase 3 3b: Session Detail — three-column shell. Left: session metadata.
 // Middle: live event feed (SSE). Right: run controls + inline approval/cards
@@ -67,12 +68,7 @@ export function SessionDetailPage() {
           <EventFeed events={events} />
         </main>
         <aside className="session-side-col">
-          {/* 3c fills this with run controls + inline approval + cards. */}
-          <div className="card">
-            <div className="card-body text-muted">
-              运行控制与审批卡片将在此处显示（3c）。
-            </div>
-          </div>
+          <SessionSidePanel events={events} />
         </aside>
       </div>
     </div>
