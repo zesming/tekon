@@ -68,22 +68,29 @@ export function createLegacyAgentDriver(
     const buffered: AgentRuntimeEvent[] = [];
     let outcome: AgentOutcome | undefined;
 
-    // Collecting sink: append (→ seq) + best-effort publish + buffer.
+    // Collecting sink: append (→ seq) + best-effort publish + buffer. Fully
+    // best-effort (review N2): an appendEvent failure is swallowed so it can
+    // never break the run; that event is simply absent from the buffer (seq
+    // gap), consistent with the AgentEventSink best-effort contract.
     const sink: AgentEventSink = {
       async recordFromRun(input) {
-        const event = await deps.sessions.appendEvent({
-          sessionId,
-          type: input.type,
-          payload: input.payload,
-          modelVisible: input.modelVisible,
-          correlationId: input.correlationId,
-        });
         try {
+          const event = await deps.sessions.appendEvent({
+            sessionId,
+            type: input.type,
+            payload: input.payload,
+            modelVisible: input.modelVisible,
+            correlationId: input.correlationId,
+          });
           deps.bus.publish(event);
+          buffered.push({
+            type: event.type,
+            seq: event.seq,
+            payload: event.payload,
+          });
         } catch {
-          // best-effort publish (C1).
+          // best-effort: never propagate (C1).
         }
-        buffered.push({ type: event.type, seq: event.seq, payload: event.payload });
       },
     };
 
@@ -140,9 +147,14 @@ export function createLegacyAgentDriver(
         return { paused: false, interruptible: false };
       },
       async cancel(): Promise<void> {
-        // Cancellation flows through the AbortSignal passed into the run: abort
-        // it so the adapter kills its subprocess (phase-1 cancel chain) and the
-        // run settles cancelled.
+        // Abort the run's signal. NB (review S2): whether this actually kills a
+        // subprocess depends on the adapter propagating input.signal to its
+        // gateway.run — the current codex/claude-code adapters do NOT, so for
+        // real providers cancel is only effective once wired through a
+        // signal-aware gateway (as the web job path does via ctx.signal). The
+        // mock adapter observes the signal directly. Full driver→provider
+        // cancel wiring is a phase-2b task; today the driver has no production
+        // caller.
         controller.abort();
       },
       whenIdle(): Promise<AgentOutcome> {

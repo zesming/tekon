@@ -7,6 +7,10 @@ import type {
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import {
+  runAgentWithStepEvents,
+  type AgentEventSink,
+} from '../runtime/agent-step-events.js';
 import type { GateEngine } from '../gate/engine.js';
 import type { WorktreeLease } from '../types/config.js';
 import { loadRepoProfile, repoProfileCommandResolution } from '../repo/profile.js';
@@ -40,6 +44,13 @@ export interface GateRunnerDeps {
   executionLeases: Map<string, WorktreeLease>;
   getCheckedTransition(): CheckedTransitionFn;
   getReworkHandler(): ReworkHandler;
+  /**
+   * Phase 2 S3 (review S1): best-effort agent-loop event sink. The gate-repair
+   * agent (runGateWithRepair) is a real agent execution — it emits step events
+   * too, so a run that went through gate repair has a complete model-visible
+   * replay (§13.6). Threaded from the engine like node-executor/rework.
+   */
+  agentEventSink?: AgentEventSink;
 }
 
 export interface GateRunner {
@@ -280,21 +291,26 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             phaseId: repairNode.phaseId,
           });
           try {
-            const repairResult = await adapter.runAgent(
-              await helpers.agentInputForLease(
+            const repairInput = await helpers.agentInputForLease(
+              runId,
+              {
+                id: repairNode.id,
+                role: repairNode.role,
+                phaseId: repairNode.phaseId,
+              },
+              repairLease,
+              await promptBuilder.buildRepairPrompt(runId, repairNode, result),
+            );
+            const repairResult = await runAgentWithStepEvents(
+              adapter,
+              repairInput,
+              {
                 runId,
-                {
-                  id: repairNode.id,
-                  role: repairNode.role,
-                  phaseId: repairNode.phaseId,
-                },
-                repairLease,
-                await promptBuilder.buildRepairPrompt(
-                  runId,
-                  repairNode,
-                  result,
-                ),
-              ),
+                nodeId: repairNode.id,
+                role: repairNode.role,
+                promptSummary: repairInput.prompt,
+              },
+              deps.agentEventSink,
             );
             assertSuccessfulAgentRun(repairResult);
             repairSucceeded = true;

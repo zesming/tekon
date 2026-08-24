@@ -31,6 +31,18 @@ describe('workflow engine gate repair e2e', () => {
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
 
+    // Phase 2 S3 (review S1): capture agent-loop events so we can prove the
+    // gate-repair agent execution also emits step events (not just node/rework).
+    const stepEvents: Array<{ type: string; nodeId: unknown }> = [];
+    const agentEventSink = {
+      async recordFromRun(input: {
+        type: string;
+        payload?: Record<string, unknown>;
+      }) {
+        stepEvents.push({ type: input.type, nodeId: input.payload?.nodeId });
+      },
+    };
+
     const engine = createWorkflowEngine({
       repoPath,
       dataDir: '.tekon',
@@ -38,6 +50,7 @@ describe('workflow engine gate repair e2e', () => {
       audit,
       adapter: createMockAgentAdapter(),
       gateEngine: createFailOnceGateEngine(repositories),
+      agentEventSink,
     });
 
     const result = await engine.startRun({
@@ -144,6 +157,13 @@ describe('workflow engine gate repair e2e', () => {
       ]),
     );
     expect(result.workflow.status).toBe('passed');
+
+    // review S1: the gate-repair agent run emitted step events too (so a run
+    // that went through repair has a complete model-visible replay, §13.6).
+    const repairStepStarts = stepEvents.filter(
+      (e) => e.type === 'step/start' && String(e.nodeId).startsWith('repair_gate_'),
+    );
+    expect(repairStepStarts.length).toBeGreaterThanOrEqual(1);
 
     db.close();
   });

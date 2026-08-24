@@ -7,9 +7,10 @@ import {
 import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import type { RunProviderConfig } from '../types/domain.js';
-// Note: createBuiltInProviderRegistry is imported at call-time inside the
-// factory functions below to avoid a module-init cycle (provider-registry.ts
-// imports the helpers exported from this module).
+// There is a module cycle with provider-registry (it imports the config
+// helpers exported below). It is safe at runtime because neither module calls
+// the other's exports during evaluation — the live binding is resolved before
+// the first factory call, not at import time.
 import { createBuiltInProviderRegistry } from './provider-registry.js';
 
 // ── Types ──────────────────────────────────────────────────────────────

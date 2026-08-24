@@ -58,7 +58,15 @@ export async function createApiCaller(
 
   // Dual-write: wrap audit + repositories so engine/routers emit session
   // events transparently (best-effort; hash chain unchanged, C1/SHOULD5).
-  const bridge = createSessionDualWriteBridge({ sessions, bus });
+  const bridge = createSessionDualWriteBridge({
+    sessions,
+    bus,
+    // best-effort projection stays best-effort (C1), but surface failures to
+    // stderr rather than a silent black hole (review N4). Never throws.
+    onError: (error) => {
+      console.error('[session dual-write] event projection failed:', error);
+    },
+  });
   const dualRepositories = createDualWriteRepositories(repositories, bridge);
   const dualAudit = createDualWriteAuditLogger(audit, bridge);
 
