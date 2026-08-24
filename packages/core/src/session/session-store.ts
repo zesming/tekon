@@ -23,6 +23,14 @@ import {
  */
 export type JobEnqueueInput = Job & { payload?: Record<string, unknown> };
 
+/**
+ * A session as surfaced to the Session List read-path (phase 3 3a). The frozen
+ * `Session` schema has no runId (session-contract.ts), so the list entry
+ * extends it with the run_id column value — carried through, not persisted
+ * separately. Used by the web `session.list` RPC.
+ */
+export type SessionListEntry = Session & { runId: string | null };
+
 export interface SessionEventStore {
   getOrCreateDefaultWorkspace(root: string): Promise<Workspace>;
   createSession(input: {
@@ -33,6 +41,12 @@ export interface SessionEventStore {
   }): Promise<Session>;
   getSession(sessionId: string): Promise<Session | null>;
   findSessionByRunId(runId: string): Promise<Session | null>;
+  /**
+   * List a workspace's sessions newest-first (created_at desc) for the Session
+   * List UI. Pure SELECT, zero migration; returns [] for an unknown workspace.
+   * Carries run_id from the column (SessionListEntry).
+   */
+  listSessions(workspaceId: string): Promise<SessionListEntry[]>;
   /**
    * Reverse lookup: the runId a session is associated with, or null when the
    * session has no run (or does not exist). The job runner uses this to map a
@@ -207,6 +221,19 @@ export function createSessionEventStore(
         .prepare('select * from sessions where run_id = ? order by created_at desc limit 1')
         .get(runId) as SessionRow | undefined;
       return row ? mapSession(row) : null;
+    },
+
+    async listSessions(workspaceId) {
+      const rows = db
+        .prepare(
+          // created_at desc, then rowid desc as a stable tiebreak so sessions
+          // created within the same millisecond keep a deterministic
+          // insertion-newest-first order (rowid is monotonic on this rowid
+          // table; `id text primary key` does not remove it).
+          'select * from sessions where workspace_id = ? order by created_at desc, rowid desc',
+        )
+        .all(workspaceId) as SessionRow[];
+      return rows.map((row) => ({ ...mapSession(row), runId: row.run_id }));
     },
 
     async getRunIdBySessionId(sessionId) {

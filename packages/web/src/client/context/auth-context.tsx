@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 
 import { authScope } from '../lib/query-keys.js';
 import { queryCache } from '../lib/query-cache.js';
+import { setRpcSessionToken } from '../lib/rpc-client.js';
 
 // ---------------------------------------------------------------------------
 // Auth context types
@@ -46,6 +47,14 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
   useEffect(() => {
     const newScope = authScope(token);
     const oldScope = prevScopeRef.current;
+
+    // Keep the RPC client's token in sync so authenticated (auth:'session')
+    // procedures and the SSE client actually send x-session-token. Without
+    // this, setRpcSessionToken has no caller and every auth:'session' read
+    // 401s in production (masked by the e2e fetch monkeypatch). Set it every
+    // render — cheap, and covers the initial mount where the scope is
+    // unchanged but the token was just entered.
+    setRpcSessionToken(token);
 
     if (oldScope !== newScope) {
       // Hard-clear all entries that belonged to the previous scope.

@@ -501,4 +501,56 @@ describe('session run id lookup', () => {
     });
     expect(await sessions.getRunIdBySessionId(session.id)).toBeNull();
   });
+
+  // Phase 3 3a: read-path for the Session List UI. listSessions is a pure
+  // SELECT scoped to a workspace, newest-first, carrying run_id from the column
+  // (the frozen Session schema has no runId, so the list entry extends it).
+  it('listSessions returns a workspace\'s sessions newest-first with runId', async () => {
+    const { sessions } = setupStore();
+    const workspace = await sessions.getOrCreateDefaultWorkspace('/repo/list');
+    const first = await sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'first',
+      profile: 'human-web',
+      runId: 'run_first',
+    });
+    const second = await sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'second',
+      profile: 'human-web',
+      runId: null,
+    });
+
+    const listed = await sessions.listSessions(workspace.id);
+    expect(listed.map((s) => s.id)).toEqual([second.id, first.id]);
+    // runId is carried through from the run_id column (NIT-1), including null.
+    const byId = new Map(listed.map((s) => [s.id, s.runId]));
+    expect(byId.get(first.id)).toBe('run_first');
+    expect(byId.get(second.id)).toBeNull();
+    // The frozen Session fields are present too.
+    expect(listed[0]).toMatchObject({
+      workspaceId: workspace.id,
+      title: 'second',
+      profile: 'human-web',
+      status: 'active',
+    });
+  });
+
+  it('listSessions is scoped to the workspace and returns [] for an unknown one', async () => {
+    const { sessions } = setupStore();
+    const wsA = await sessions.getOrCreateDefaultWorkspace('/repo/scoped-a');
+    const wsB = await sessions.getOrCreateDefaultWorkspace('/repo/scoped-b');
+    await sessions.createSession({
+      workspaceId: wsA.id,
+      title: 'a-only',
+      profile: 'human-web',
+      runId: 'run_a',
+    });
+
+    expect((await sessions.listSessions(wsA.id)).map((s) => s.title)).toEqual([
+      'a-only',
+    ]);
+    expect(await sessions.listSessions(wsB.id)).toEqual([]);
+    expect(await sessions.listSessions('ws_does_not_exist')).toEqual([]);
+  });
 });

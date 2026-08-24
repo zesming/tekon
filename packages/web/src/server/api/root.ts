@@ -32,6 +32,7 @@ import {
   createRoleRouter,
   createWorkflowRouter,
   createProgressRouter,
+  createSessionRouter,
 } from './routers/index.js';
 
 export type { ApiCaller } from './context.js';
@@ -111,6 +112,7 @@ export async function createApiCaller(
     role: createRoleRouter(context),
     workflow: createWorkflowRouter(context),
     progress: createProgressRouter(context),
+    session: createSessionRouter(context),
     sessions,
     bus,
     async close() {

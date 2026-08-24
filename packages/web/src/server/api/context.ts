@@ -376,6 +376,34 @@ export interface ApiCaller {
       }>;
     }>;
   };
+  /** Phase 3 3a: session read-path (Session List + Detail metadata). */
+  session: {
+    list(): Promise<{
+      workspaceId: string;
+      sessions: Array<{
+        id: string;
+        workspaceId: string;
+        title: string | null;
+        profile: string;
+        status: string;
+        runId: string | null;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    }>;
+    get(input: { sessionId: string }): Promise<{
+      session: {
+        id: string;
+        workspaceId: string;
+        title: string | null;
+        profile: string;
+        status: string;
+        runId: string | null;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }>;
+  };
   /**
    * Event-spine handles exposed for the SSE transport (S8, SHOULD15). http.ts
    * uses these to serve GET /api/sessions/:id/events after its security checks.

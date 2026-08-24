@@ -1,0 +1,222 @@
+import type { PresentedEvent } from '@tekon/core';
+
+/**
+ * Phase 3 3a: SSE client for the session event stream.
+ *
+ * We use fetch + ReadableStream rather than the native EventSource because
+ * EventSource cannot set the `x-session-token` request header (W3C spec), and
+ * putting the token in the URL would leak it into access logs / history — a
+ * secret-leak regression (design D1). The trade-off is that we hand-roll frame
+ * parsing and reconnection, both of which are pure and unit-tested below.
+ */
+
+/** A presented session event as it arrives over the wire (server strips seq-less internal fields). */
+export type StreamEvent = PresentedEvent;
+
+export interface SseFrame {
+  id?: string;
+  event?: string;
+  data?: string;
+}
+
+/**
+ * Incremental SSE frame parser. `push` accepts an arbitrary chunk (which may
+ * split a frame mid-line) and returns whatever complete frames are now
+ * available, buffering the rest. Comment/heartbeat lines (starting ":") are
+ * ignored. Tolerates both LF and CRLF.
+ */
+export function createSseParser(): { push(chunk: string): SseFrame[] } {
+  let buffer = '';
+  return {
+    push(chunk: string): SseFrame[] {
+      buffer += chunk.replace(/\r\n/g, '\n');
+      const frames: SseFrame[] = [];
+      let sep: number;
+      // Frames are separated by a blank line ("\n\n").
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const rawFrame = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        const frame = parseFrameLines(rawFrame);
+        if (frame) {
+          frames.push(frame);
+        }
+      }
+      return frames;
+    },
+  };
+}
+
+function parseFrameLines(raw: string): SseFrame | null {
+  const frame: SseFrame = {};
+  let hasField = false;
+  for (const line of raw.split('\n')) {
+    if (line === '' || line.startsWith(':')) {
+      // Blank line inside a block or comment/heartbeat — skip.
+      continue;
+    }
+    const colon = line.indexOf(':');
+    const field = colon === -1 ? line : line.slice(0, colon);
+    // SSE spec: a single leading space after the colon is stripped.
+    let value = colon === -1 ? '' : line.slice(colon + 1);
+    if (value.startsWith(' ')) {
+      value = value.slice(1);
+    }
+    if (field === 'id') {
+      frame.id = value;
+      hasField = true;
+    } else if (field === 'event') {
+      frame.event = value;
+      hasField = true;
+    } else if (field === 'data') {
+      frame.data = frame.data === undefined ? value : `${frame.data}\n${value}`;
+      hasField = true;
+    }
+  }
+  return hasField ? frame : null;
+}
+
+/**
+ * Merge freshly-arrived events into an accumulated list: dedupe by seq (a
+ * reconnect replays an overlapping tail), keep the first occurrence of any
+ * seq, and return sorted ascending by seq. Pure — the hook holds the state.
+ */
+export function mergeEventsBySeq(
+  existing: readonly StreamEvent[],
+  incoming: readonly StreamEvent[],
+): StreamEvent[] {
+  const bySeq = new Map<number, StreamEvent>();
+  for (const event of existing) {
+    if (!bySeq.has(event.seq)) {
+      bySeq.set(event.seq, event);
+    }
+  }
+  for (const event of incoming) {
+    if (!bySeq.has(event.seq)) {
+      bySeq.set(event.seq, event);
+    }
+  }
+  return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+}
+
+/** The Last-Event-ID to resume from: the max seq seen, or 0 for a full replay. */
+export function lastEventId(events: readonly StreamEvent[]): number {
+  let max = 0;
+  for (const event of events) {
+    if (event.seq > max) {
+      max = event.seq;
+    }
+  }
+  return max;
+}
+
+export type StreamConnState =
+  | 'connecting'
+  | 'live'
+  | 'reconnecting'
+  | 'closed';
+
+export interface OpenSessionStreamOptions {
+  sessionId: string;
+  token: string | null;
+  /** Called with the parsed event for each incoming data frame. */
+  onEvent(event: StreamEvent): void;
+  onStateChange(state: StreamConnState): void;
+  /** Resume point for the first connection (default 0 = full replay). */
+  sinceSeq?: number;
+  /** Overridable for tests; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
+  /** Base backoff in ms (default 500); grows exponentially, capped. */
+  baseBackoffMs?: number;
+  maxBackoffMs?: number;
+}
+
+/**
+ * Open a resilient SSE stream to GET /api/sessions/:id/events. Returns a
+ * `close()` that aborts the fetch and stops reconnection. On disconnect it
+ * reconnects with exponential backoff, resuming from the max seq seen via the
+ * `Last-Event-ID` header (server stitches 0..k ∪ k..end with no loss/dup).
+ *
+ * Note: uses a string URL (not a Request object) so the e2e fetch monkeypatch,
+ * which only rewrites string inputs matching /api/rpc|/api/sessions, applies.
+ */
+export function openSessionStream(
+  options: OpenSessionStreamOptions,
+): { close(): void } {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const baseBackoff = options.baseBackoffMs ?? 500;
+  const maxBackoff = options.maxBackoffMs ?? 10_000;
+  let closed = false;
+  let attempt = 0;
+  let maxSeq = options.sinceSeq ?? 0;
+  let controller: AbortController | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function connect(): Promise<void> {
+    if (closed) return;
+    controller = new AbortController();
+    options.onStateChange(attempt === 0 ? 'connecting' : 'reconnecting');
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    if (options.token) {
+      headers['x-session-token'] = options.token;
+    }
+    if (maxSeq > 0) {
+      headers['Last-Event-ID'] = String(maxSeq);
+    }
+    const url = `/api/sessions/${encodeURIComponent(options.sessionId)}/events`;
+    try {
+      const response = await fetchImpl(url, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`stream failed: ${response.status}`);
+      }
+      attempt = 0;
+      options.onStateChange('live');
+      const parser = createSseParser();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+          if (frame.data === undefined) continue;
+          try {
+            const event = JSON.parse(frame.data) as StreamEvent;
+            if (typeof event.seq === 'number' && event.seq > maxSeq) {
+              maxSeq = event.seq;
+            }
+            options.onEvent(event);
+          } catch {
+            // Ignore an unparseable frame rather than tearing down the stream.
+          }
+        }
+      }
+    } catch {
+      // fall through to reconnect (unless closed)
+    }
+    if (closed) return;
+    scheduleReconnect();
+  }
+
+  function scheduleReconnect(): void {
+    options.onStateChange('reconnecting');
+    const delay = Math.min(maxBackoff, baseBackoff * 2 ** attempt);
+    attempt += 1;
+    retryTimer = setTimeout(() => {
+      void connect();
+    }, delay);
+  }
+
+  void connect();
+
+  return {
+    close(): void {
+      closed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      controller?.abort();
+      options.onStateChange('closed');
+    },
+  };
+}

@@ -8,3 +8,4 @@ export { createReviewRouter } from './review.js';
 export { createRoleRouter } from './role.js';
 export { createWorkflowRouter } from './workflow.js';
 export { createProgressRouter } from './progress.js';
+export { createSessionRouter } from './session.js';

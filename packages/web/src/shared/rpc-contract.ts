@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { draftShapeSchema } from '@tekon/core';
+import { draftShapeSchema, sessionStatusSchema } from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -628,6 +628,36 @@ export const progressListOutputSchema = z.object({
   progressFiles: z.array(progressFileSchema),
 });
 
+// Phase 3 3a: session read-path. A session entry mirrors the core Session
+// metadata plus the run_id column (the frozen Session schema has no runId).
+// Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
+export const apiSessionSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  title: z.string().nullable(),
+  profile: z.string(),
+  status: sessionStatusSchema,
+  runId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+// session.list takes no client input: the server resolves the current
+// workspace from projectRoot and returns its id (M2 — the client has no
+// workspaceId to supply).
+export const sessionListOutputSchema = z.object({
+  workspaceId: z.string(),
+  sessions: z.array(apiSessionSchema),
+});
+
+export const sessionGetInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const sessionGetOutputSchema = z.object({
+  session: apiSessionSchema,
+});
+
 // ---------------------------------------------------------------------------
 // Procedure specs — the single source of truth for every RPC endpoint
 // ---------------------------------------------------------------------------
@@ -780,6 +810,19 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: progressListInputSchema,
     output: progressListOutputSchema,
+  },
+
+  // Phase 3 3a: session read-path. Both are auth:'session' (require the
+  // x-session-token header) — the client's rpc-client must send it (M1 fix).
+  'session.list': {
+    auth: 'session' as const,
+    input: z.undefined(),
+    output: sessionListOutputSchema,
+  },
+  'session.get': {
+    auth: 'session' as const,
+    input: sessionGetInputSchema,
+    output: sessionGetOutputSchema,
   },
 } as const;
 
