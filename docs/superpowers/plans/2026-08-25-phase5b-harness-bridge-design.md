@@ -180,7 +180,7 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 - 适配器内常量 `TESTED_DSH_VERSION = '0.1.1-rc.2'`（唯一事实源）。
 - **运行时版本 gate**：adapter 工厂创建时 spawn `dsh --version`，stdout trim 后与常量**精确比较**；不等 → 抛 `DshVersionGateError`，**显式失败**（错误信息含实测版本、已测版本、升级指引），绝不静默降级。
 - **restore 路径同样过 gate(评审 S1)**:`provider-registry.ts` 的 `create()` 与 `restore()` 是两条路径。resume 旧 run 时若用户已升级 dsh,restore 也必须重跑版本 gate。此外 create 时把 gate 通过的 dsh 版本写入 `configSummary`,restore 时比对当前二进制版本,不一致即拒绝 replay(比纯运行时 gate 更严——防"snapshot 记旧版、当前是新版"的静默 replay)。
-- escape hatch：config `dsh.allowVersion`（或 env `TEKON_DSH_ALLOW_VERSION`）显式接受未测版本，此时打 warning 日志但放行。默认严格。
+- escape hatch：env `TEKON_DSH_ALLOW_VERSION` 显式接受未测版本,此时打 warning 日志但放行。默认严格。（仅 env 通道;不做 config 键,YAGNI——避免 tekonConfigSchema 为一个 experimental provider 增字段。）
 
 ### 5.2 capability probe（契约探测，不跑模型）
 
@@ -218,9 +218,9 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 | --- | --- | --- | --- |
 | 审批 | on-request,非交互下自动拒绝 | `ask` 但 headless 无 answerer → fail-closed(dsh-user-approval 源码证据) | **等价** |
 | 文件系统 | worktree + `--add-dir outputDir` 可写 | workspaceRoot=cwd=worktree,不含 outputDir | **dsh 更受限**(非弱化;也是 §4.4 artifact 失败的根因) |
-| 网络 | workspace-write 默认**禁网**;Tekon `permissionProfileSchema.network` 默认 `disabled`(`config.ts:39`) | 工具面含 **web search**(§2.4),疑似有网络出口,**未实测确认** | **未验证,疑似 dsh 更宽松** |
+| 网络 | workspace-write 默认**禁网**;Tekon `permissionProfileSchema.network` 默认 `disabled`(`config.ts:39`) | **任何模式都无法禁网**(§18.1 四处官方 README 实证);沙箱 file-effects only | **dsh 更宽松,已实测确认(非疑似)** |
 
-- **网络轴是硬约束相邻的未决项(评审 M1,实现前必须闭合)**:实现 PR 前必须用 `--dump-default-config` 或一次无 key 探测确认 dsh workspace-write 沙箱的网络出口策略。三种收敛:(a) 找到 dsh 网络限制手段(env/patch)并钉死禁网 → 网络轴收敛为等价;(b) 无法限制则默认 posture 降为 `read-only` 并在 manual 写明"dsh-headless 联网,仅适用于可接受出口的场景";(c) 维护方书面接受"dsh 网络轴宽松于 codex"。**在网络轴闭合前,不得对外宣称 posture 与 codex 等价。**
+- **网络轴已闭合(决策 c,§17 决策 3 修订)**:§18.1 探针证实 dsh 无任何禁网手段,决策 1(禁网对齐 codex)不可实现。维护方知情后书面接受"dsh 网络轴宽松于 codex"。工程落地:adapter permission profile **诚实声明 `network: 'enabled'`**,并因 `assertAgentProviderCapabilities` 会拒绝该值,走**显式知情确认**构造路径(config 携带确认位才放行,否则照常抛错)——全局护栏对其它 provider 与误配 dsh 仍生效,弱化仅在显式确认下对 dsh 单一 provider 生效。**manual 第一屏红字**标注联网事实。**绝不谎报 restricted。**
 - `DSH_PERMISSION_MODE` 由适配器**显式设置**,不继承 ambient env;拒绝 `danger-full-access`（该模式 approval=never,弱于任何现有 provider）;`DSH_HOME` 钉到 Tekon 隔离目录,不碰用户 `~/.dsh`,不读其私有 session。
 - **subagent 面差异(评审 S6)**:dsh 工具面含 `tool-ralph`(maxRounds 64 subagent),codex exec 无 subagent 面。若 subagent 在同一沙箱内运行则不构成弱化,但自治面确有差异,此处记录,不含糊称"工具面等价"。
 - Tekon 自身的治理链（workflow、gate、人工审批、PR 创建受控）在 bridge 之上**原样生效**：gate 包的是 run 结果与交付物，与 agent 内部动作的关系和 codex/claude 场景同构。
@@ -323,6 +323,7 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 - `packages/core/src/runtime/provider-registry.ts` — 注册 `dsh-headless`（snapshotVersion 1）
 - `packages/core/src/types/config.ts` — provider 枚举 ×2 加 `'dsh-headless'`
 - `packages/core/src/types/domain.ts` — `runProviderConfigSchema.provider` 加值
+- `packages/core/src/eval/work-usability.ts` — `workUsabilitySampleSchema.expectedProvider` 枚举(:37)加值(实现自查补全:原 §14.1 遗漏的第 5 处 provider 枚举;`.strict()` 下 eval 样本若期望 dsh-headless run 会被拒,故必须同步)
 - `packages/core/src/runtime/agent-runtime.ts`（评审 S2 补全）— (1) `SupportedAgent` 类型联合(:27)加 `'dsh-headless'`;(2) `createAgentRuntime` 错误信息(:64 "Supported agents: ...")更新;(3) `defaultProviderConfig` 未知 agent 抛错处(:147-150)加 dsh-headless 分支;(4) restore 白名单纳入 `dsh-headless`
 - `packages/core/src/runtime/agent-adapter.ts`（评审 S2）— `AgentRunResult.provider` 联合类型(:48)加值
 - `packages/core/__tests__/runtime/provider-registry.test.ts` — 四 built-in 断言
@@ -338,12 +339,12 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 5. L1 fixture 契约测试常驻通过；L2 在装了 dsh 的机器上手动通过；L3 在有 API key 时手动通过并留证；
 6. manual 章节写明：experimental、一次性边界、无 artifact、需自行安装 dsh、治理 posture 与 codex 等价。
 
-### 14.3 未决问题（需拍板）
+### 14.3 未决问题（已全部拍板，见 §17）
 
-1. `DSH_PERMISSION_MODE` 默认值：建议 `workspace-write`（与 codex 等价、有用），还是首期更保守的 `read-only`（安全但几乎做不了交付）？
-2. 实体 adapter 与骨架的取舍：本设计建议"骨架必交付、实体 adapter 同 PR 可选第二步"；是否直接只落骨架（§11），等 dsh GA？
-3. L2/L3 是否写入发布 checklist 强制项（建议是）。
-4. 是否允许 config 覆盖 dsh 默认模型（首期建议不暴露，YAGNI）。
+1. `DSH_PERMISSION_MODE` 默认值 → **定为 `workspace-write`**（adapter 显式钉死,不继承 ambient;`read-only` 几乎做不了任何事,而 goal run 需要工作区可写）。
+2. 实体 adapter 与骨架的取舍 → **定为骨架 + 完整实体 adapter**（用户知情决策 §17.1）。
+3. L2/L3 是否写入发布 checklist 强制项 → **是**(§5.3 已列;发布前手动 L2,有 key 时 L3 留证)。
+4. 是否允许 config 覆盖 dsh 默认模型 → **不暴露**（YAGNI,§16 S7)。
 
 ---
 
@@ -385,10 +386,49 @@ opus reviewer 对照代码库与迁移评审报告逐条核实,检出 3 must-fix
 
 1. **交付形态 = 骨架 + 完整实体 adapter**。理由(维护方原话):"不等 GA 了,每出一个新版本我们都 follow 一下进行适配就好了,GA 不知道啥时候才能用上,所以实现完整的能力。" → 接受 rc churn 的 follow-each-release 维护模型,落地完整 dsh-headless provider(默认关闭、experimental),不止步于骨架。
 2. **版本 = MINOR 0.14.0**(含 5a 清理 + 5b)。
-3. **dsh 网络 posture = 与 codex/claude 保持一致**。codex workspace-write 默认禁网、Tekon `permissionProfileSchema.network` 默认 disabled → **dsh 也必须禁网**。这把 §7 M1 网络轴从"未决"收敛为"必须钉死禁网以对齐 codex";实现前须实测 dsh 是否有禁网手段(env/config/patch),若 dsh workspace-write 无法关闭网络出口,则该差异必须在 adapter 层显式处理或在 manual 硬标注(见 §18 实测待办)。
+3. **dsh 网络 posture —— 知情后修订为"接受不受限网络出口"**。初始决策 3 是"与 codex 保持一致（禁网）",但 §18.1 探针证实 **dsh 任何沙箱模式都无法限制网络出口,该决策事实上不可实现**。维护方在获知此结论后明确改判(原话):"好吧,那网络出口这块就不严格对标了,落地完整的 adapter,接受网络出口吧。" → **最终决策:落地完整 adapter,接受 dsh 网络出口不受限**。工程落地必须诚实:
+   - adapter 的 permission profile **诚实声明 `network: 'enabled'`**（绝不谎报 `restricted`）;
+   - 由于 `assertAgentProviderCapabilities` 会拒绝 `network ∉ {disabled,restricted}` 的 provider,dsh adapter 必须走一条**显式确认**的构造路径——只有当 config 显式携带"我已知情接受 dsh 不受限网络"的确认位时才放行,否则照常抛错。这保证:(a) 全局能力护栏对其它 provider 与"误配 dsh"仍然生效(不静默弱化);(b) 弱化仅在显式知情确认下、仅对 dsh 一个 provider 生效——符合"人工控制、显式授权"的治理线;
+   - manual **第一屏红字**标注 dsh-headless 联网、网络轴弱于 codex、仅适用于可接受出口的场景;
+   - **网络轴闭合方式 = (c) 维护方书面接受"dsh 网络轴宽松于 codex"**（§7 三选一中的 c),本记录即书面依据。
 
-## 18. 完整实体 adapter 的实现前实测待办（因决策 1 落地实体,这些"待探测"必须先闭合）
+## 18. 实现前实测结论（explorer 探针，2026-08-25，4 处官方 README + tarball 源码核实）
 
-1. **网络禁用手段**(决策 3 硬前置):实测 dsh sandbox 是否支持关闭网络出口(候选:`DSH_*` env、sandbox-policy 配置、profile patch)。目标是让 dsh 与 codex workspace-write 的禁网 posture 对齐。若无手段 → adapter 层能否拦截(如剥离 web-search 工具的 profile)或诚实标注差异。
-2. **outputDir 可写手段**(决定实体 adapter 是否突破 goal-only):实测 dsh sandbox 是否有 codex `--add-dir` 等价机制,把 worktree 外的 `outputDir` 加进可写集。若有 → 实体 adapter 可用于交付 workflow;若无 → 实体 adapter 仍 goal-only,manual 第一屏硬标注,且 artifact 节点确定性失败须在 adapter 层转为清晰错误(非静默)。
-3. 两项实测结论写入本设计 + CHANGELOG + manual,作为完整能力的诚实边界。
+> 探针经 `npm pack` 解包 dsh + 16 个子包只读核实（GitHub 域名被本机网络策略拦截，但 tarball 是发布产物本身，证据强度等同官方源码）。仓库 `github.com/deepseek-ai/deepseek-harness`。
+
+### 18.1 网络禁用手段 —— **不存在（决策性发现）**
+
+- dsh 沙箱是 **"file effects only"**：`DSH_PERMISSION_MODE` 的三档（read-only/workspace-write/danger-full-access）**只管文件写效果,不管网络**。四处官方 README 明文：`dsh-bash-sandbox/README.md:22` "Network stays unrestricted"；同 README:85、`dsh-sandbox-policy/README.md:68`、`dsh-sandbox/README.md` 均重申"network restriction absent / outside vocabulary"。
+- 无任何 flag / `DSH_*` env / config 可关网络出口。bash 工具可 curl 任意地址；web_search 走服务端 DeepSeek 检索（`fetch:false` 仅禁了 agent 直接 fetch，未禁 bash 联网）。
+- 沙箱是 same-world confinement（bwrap/Landlock/Seatbelt），**明确不支持 container/microVM**。要断网只能 Tekon 在 **OS 层**（netns/防火墙/容器）自行隔离——而 Tekon 对 codex 并不这么做（codex 靠自身 `--sandbox` 声明式断网）。
+- **与决策 3 的冲突**：决策 3（网络对齐 codex 禁网）在事实上**不可实现**——dsh 无手段,Tekon 能力护栏 `assertAgentProviderCapabilities`(agent-adapter.ts:117-123)又会拒绝一个网络无法证明受控的 provider（`network ∉ {disabled,restricted}` 即抛错）。诚实声明 `enabled` 会被护栏挡下,声明 `restricted` 是谎报。→ 见 §17 决策 3 的**知情后修订**。
+
+### 18.2 outputDir 可写手段（add-dir 等价物）—— **不存在**
+
+- `dsh-sandbox-policy/README.md:68`："One primary workspace root per session ... extra writable roots are **not** part of `SandboxExecutionPolicy`"。workspaceRoot = session cwd（不可变）。
+- 无 codex `--add-dir` 等价机制。→ 证实设计 §4.4 判断：worktree 外的 `outputDir` 不可写,**实体 adapter 对交付类 workflow 零节点可用,仅 goal / 无 outputs 节点可用**。
+
+### 18.3 其它护栏事实（供 adapter 实现钉死）
+
+- **沙箱**：`DSH_PERMISSION_MODE` env 控制（非 flag),默认 `workspace-write`；adapter 必须**显式设 `workspace-write`**（不继承 ambient),拒绝 `danger-full-access`（=去沙箱+approval never）。
+- **审批**：headless **无 answerer,`ask` 策略 fail-closed 自动拒绝**升级请求（`dsh-user-approval/README.md:268`）→ 与 codex on-request 非交互自动拒绝**等价**（§7 审批轴结论不变）。
+- **逃逸面在 env/config 不在 flag**：无 `--yolo`,但 `DSH_PERMISSION_MODE=danger-full-access` 一行即解除沙箱+审批;`--patch` 可注入任意配置覆盖;`DSH_TOOLS_MODE` Code Mode。adapter 对策：显式钉 `DSH_PERMISSION_MODE=workspace-write`、拒绝所有 launcher flag（含 `--patch`,§4.3 M3）、gateway safe-default env 不继承用户 env。
+- **DSH_HOME**：优先级 显式 > `$DSH_HOME` > `~/.dsh`;adapter 钉到 **worktree 之外**的 per-run 隔离目录(`<repoPath>/<dataDir>/runs/<runId>/<nodeId>-dsh-home`,见 §19 S2)。
+- **遥测**：默认 `DISABLED`（`dsh-base/cordis.patch.yml:148`);gateway `envMode='exact'` 下 ambient `DSH_TELEMETRY_MODE` 也不会透传。
+- **模型/凭证**：默认 `deepseek-v4-flash`;`DEEPSEEK_API_KEY`（env > `$DSH_HOME/.credentials.yaml` > `.env`）。
+- **版本**：`--version` 输出 `0.1.1-rc.2`（pin 锚点确认）。
+
+## 19. 实现后修订（code review 修复，2026-08-25）
+
+reviewer(最高思考)对实现逐条核实,检出 1 must-fix + 6 should-fix,已全部据实修复:
+
+- **M1(defaultCommandPolicy 缺 dsh)**:`workflow-runtime.ts` 的 `defaultCommandPolicy` allow 列表原只有 git/pnpm/npm/claude/codex,漏了 `dsh` → gateway 对每次真实 dsh run 报 "command does not match allow policy",实体 adapter 100% 失败(测试因注入自定义 policy 掩盖了断点)。已补 `{ tool: 'dsh', args: [] }`(与 codex 接入时对称),并加真实 defaultCommandPolicy + 名为 dsh 的 fake 二进制回归测试锁死。
+- **S1(escape hatch 未接线,§5.1)**:registry create/restore 现读 `process.env.TEKON_DSH_ALLOW_VERSION` 透传给 adapter options,并接 `onWarn → console.warn`。错误信息指引的 env 通道现真实可用。
+- **S2(DSH_HOME 位置,§4.2)**:原实现把 DSH_HOME 钉在 worktree 内(`<worktree>/.tekon/dsh-home`),agent 沙箱工具可写 dsh profile → 跨 run 提权风险(§18.3 逃逸面同理)。**复查发现首次修复无效**——用 `runContext.repoPath` 构造,而 workflow run 里 `runContext.repoPath === lease.worktreePath`(helpers.ts:229),DSH_HOME 仍在沙箱根内。**二次修复**:改用 `lease.repoPath`(主 repo,恒在 worktree 外)构造 `<mainRepo>/<dataDir>/runs/<runId>/<nodeId>-dsh-home`;测试用 main≠worktree 的 lease 断言 DSH_HOME 真的不以 worktreePath 开头(非平凡断言)。
+- **S3(改名二进制丢契约,§4.3)**:原 `buildDshHeadlessCommand` 对非 `dsh` basename 走 fake 分支,丢 `--profile headless`/白名单/prompt。改为**对任何 command 都构造 `[--profile headless, ...safeArgs, prompt]` 且都过 `assertSafeDshArgs`**;仅版本探测保留 real-binary(basename==='dsh')判断。
+- **S4(web 无法选 dsh,§6)**:`StartRunForm` AGENT_OPTIONS 加 `dsh-headless`(带 experimental·联网·仅 goal 内联标签)。
+- **S5(manual 第一屏,§17 决策3)**:manual §1(md + html)provider 入口补 dsh-headless + 红字联网/仅 goal 警示,不再只在 §5.7。
+- **S6(版本 gate 接线测试)**:补 4 用例——drift 版本 spawn 前 reject、allowVersion 放行 + warning、探测缓存一次、fake command 不探测。
+- **N1/N3/N4**:CHANGELOG "safe-default" 措辞订正为 `exact`;`assertSafeDshArgs` 增拒 `--version`;artifact ingestion 注释订正(只读 outputDir,不摄取 worktree 内文件)。N2(exit1 映射)补测试。
+
+修复后:全 dsh 测试 56 passed(3 skip);全量根聚合复跑见提交说明。残留风险(设计已记录、修复项无法消除):同版本静默行为漂移只有手动 L3 能抓(§12 S4 盲区);dsh profile 同名覆盖语义未实测(S2 依据,已用 worktree 外隔离规避);L3 live run 从未在本环境执行(无 dsh/无 key),生产正确性依赖 fixture + 手动验收。

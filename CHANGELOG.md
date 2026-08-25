@@ -2,9 +2,23 @@
 
 ## v0.14.0
 
-Harness-inspired replatform 阶段 5a：**legacy 清理**。把已废弃的 `demand.*` 兼容别名层彻底移除,统一到 `draft` 词汇;并把 runner 自发的 `job/status` 加入 CONTROL_EVENT_TYPES(S9 对账排除,只对 §1.2 映射类型计数相等)。纯清理与词汇收敛,无新用户能力;`draftShape` RPC 命名空间、`tekon draft` 命令、需求卡文件格式均不变。
+Harness-inspired replatform 阶段 5：**legacy 清理（5a）+ Harness bridge（5b）**。5a 移除已废弃的 `demand.*` 兼容别名层;5b 新增 experimental 的 `dsh-headless` provider——经 `dsh --profile headless "<task>"` 子进程边界接入 DeepSeek Harness,默认关闭、零回归面。
 
-### 移除（breaking：仅影响直接调用已废弃别名的外部集成）
+### 新功能（5b：dsh-headless provider，experimental，默认关闭）
+
+- 新增内置 provider `dsh-headless`(`packages/core/src/runtime/dsh-headless-adapter.ts`):经 `dsh --profile headless "<task>"` 一次性子进程边界执行(argv → stdout/stderr/exit-code),实现 `AgentAdapter`,插入既有 provider-registry。默认 provider 仍是 `codex`,不选即完全 inert(不 spawn、不探测)。
+- **版本 pin + capability probe**(`dsh-bridge-probe.ts`):钉死 `TESTED_DSH_VERSION='0.1.1-rc.2'`;运行时首个 real-dsh run 前 spawn `dsh --version` 精确比对,不符抛 `DshVersionGateError` 显式失败(escape hatch `allowVersion` 放行 + warning);capability probe 校验 headless `--help` stdout 契约锚点与 `--dump-default-config` 必需插件 id 集。
+- **contract test 三层**:L1 fixture 契约测试(2026-08-25 实测 `--version`/`--help`/`--dump-default-config` 存为 fixture,CI 常驻);L2 live probe(`DSH_CLI_PATH` 未设置即 skip);L3 live run(发布 checklist 手动,需 `DEEPSEEK_API_KEY`)。
+- provider 枚举扩展 `'dsh-headless'`:`config.ts`(×2)、`domain.ts`、`eval/work-usability.ts`、`agent-adapter.ts`、`agent-runtime.ts`(SupportedAgent/错误信息/defaultProviderConfig/restore 白名单)。
+
+### 治理与诚实边界（5b，据探针实测 + 用户知情决策）
+
+- **网络出口不受限,弱于 codex(诚实标注,非等价)**:探针经 4 处官方 README 实证 dsh 沙箱只管文件写效果,任何模式都无法禁网;codex `workspace-write` 默认禁网。用户知情后决策"接受 dsh 网络出口"。工程落地:permission profile **诚实声明 `network: 'enabled'`**(绝不谎报 `restricted`);能力护栏 `assertAgentProviderCapabilities` 仅对 `provider==='dsh-headless' && acknowledgeUnrestrictedNetwork===true` 放行 `enabled`——全局护栏对 codex/claude 与误配 dsh 仍 fail-closed,弱化仅在显式确认下对 dsh 单一 provider 生效。
+- **仅 goal / 无产物节点可用**:dsh 单一工作区可写根(=cwd),无 codex `--add-dir` 等价机制,无法写 worktree 外产物目录 → standard-delivery 等交付类 workflow 每个产物节点确定性失败(mirror 现有 `missingRequiredArtifactTypes` 强制,不假成功)。manual 第一屏红字标注。
+- **护栏**:`DSH_PERMISSION_MODE=workspace-write` 显式钉死(不继承 ambient,envMode='exact' 子进程只拿显式 env);拒绝 `danger-full-access`;拒绝所有 launcher flag(`--profile`/`--patch`/`--dump-*`/`--version`/`web`/`plugin`,与 codex arg 白名单对称);`DSH_HOME` 钉到 **worktree 之外**的 per-run 隔离目录(`<dataDir>/runs/<runId>/<nodeId>-dsh-home`,agent 沙箱工具无法跨 run 污染 dsh profile/session,不碰 `~/.dsh`);`dsh` 已加入 `defaultCommandPolicy` allow 列表(与 codex/claude 对称);`DEEPSEEK_API_KEY` 仅存在时透传,不写入任何持久化(snapshot configSummary 脱敏,测试断言);版本 escape hatch `TEKON_DSH_ALLOW_VERSION` env 接线(放行未测版本 + stderr warning)。
+- 不加任何 npm 依赖(与 codex/claude 先例一致,PATH 探测);用户自行安装 `@deepseek-ai/dsh`。
+
+### 移除（5a，breaking：仅影响直接调用已废弃别名的外部集成）
 
 - **`demand.*` RPC 别名删除**:`rpc-contract.ts` 移除 3 个 `demand.*` procedure(`demand.shape`/`demand.approve`/`demand.detail`)与 6 个别名 schema;`root.ts` 移除 `demand: demandRouter` 挂载(保留 `draftShape: demandRouter`,同一实现);`context.ts` 移除 `ApiCaller.demand`。所有能力经 `draftShape.*` 命名空间提供,行为等价。
 - **`demand*` 核心别名删除**:`packages/core/src/draft/shape.ts` 移除 13 个 `@deprecated` `demand*` 兼容导出;`packages/core/src/demand/shape.ts`(纯 re-export 垫片)删除。
@@ -17,8 +31,9 @@ Harness-inspired replatform 阶段 5a：**legacy 清理**。把已废弃的 `dem
 
 ### 测试
 
-- core:`demand/shape.test.ts` 删除(对应 shim 已删);`types/session-contract.test.ts` +1(`job/status` ∈ CONTROL_EVENT_TYPES)。
-- 全量根聚合 1228 passed(107 文件)/ 三包 typecheck 全绿。别名删除后无残留引用(全仓 grep 校验)。
+- 5a core:`demand/shape.test.ts` 删除(对应 shim 已删);`types/session-contract.test.ts` +1(`job/status` ∈ CONTROL_EVENT_TYPES)。
+- 5b core:`dsh-bridge-probe.test.ts`(13,版本解析/gate/help+config 契约)、`dsh-headless-adapter.test.ts`(27,命令构造/launcher flag 拒绝/网络 ack 护栏/danger-full-access 拒绝/结果映射四终态/版本 gate 接线四态/env 钉死+DSH_HOME worktree 外+key 透传/goal-only artifact 失败/零 spawn 回归锁)、`dsh-bridge-contract.test.ts`(L1 fixture 常驻 + L2 opt-in skip)、`provider-registry.test.ts`(+四 built-in + dsh snapshot 往返 + ack 剥离 fail-closed)、`engine-unit.test.ts`(+dsh ∈ defaultCommandPolicy 回归锁);`agent-runtime.test.ts` 错误信息断言同步。
+- 全量根聚合 1274 passed(110 文件)/ 三包 typecheck 全绿。5a 别名删除后无残留公开别名引用(全仓 grep);5b 不选 dsh 时零 spawn(gateway spy 锁定)。
 
 ## v0.13.0
 

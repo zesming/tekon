@@ -45,7 +45,7 @@ export interface AgentRunInput {
 }
 
 export interface AgentRunResult {
-  provider: 'mock' | 'claude-code' | 'codex' | 'custom';
+  provider: 'mock' | 'claude-code' | 'codex' | 'dsh-headless' | 'custom';
   exitCode: number | null;
   durationMs: number;
   outputFiles: string[];
@@ -114,8 +114,20 @@ export function assertAgentProviderCapabilities(
   const allow = profile.tools?.allow ?? [];
   const deny = profile.tools?.deny ?? [];
   const network = profile.network;
+  // Network egress must be provably contained (disabled/restricted) for every
+  // provider — EXCEPT a dsh-headless config that has explicitly acknowledged
+  // unrestricted egress (phase 5b, design §17 decision 3 / §18.1). dsh's
+  // sandbox governs file effects only; no flag/env can disable network, so an
+  // honest declaration is `enabled`. We accept that ONLY behind the explicit
+  // acknowledgment bit so the guard stays fail-closed for codex/claude and for
+  // a misconfigured dsh; a lie of `restricted` is never how dsh passes.
+  const acknowledgedUnrestrictedNetwork =
+    candidate.provider === 'dsh-headless' &&
+    candidate.acknowledgeUnrestrictedNetwork === true;
   const hasSupportedNetworkMode =
-    network === 'disabled' || network === 'restricted';
+    network === 'disabled' ||
+    network === 'restricted' ||
+    (network === 'enabled' && acknowledgedUnrestrictedNetwork);
   if (!hasSupportedNetworkMode) {
     throw new Error(
       'cannot prove safe provider controls for real agent execution',
@@ -148,10 +160,16 @@ export function assertAgentProviderCapabilities(
     approval,
     filesystemScope,
     network: {
-      mode: network as 'disabled' | 'restricted',
+      mode: network as 'disabled' | 'restricted' | 'enabled',
       enforcement: 'declared',
       allowHosts: [],
-      evidence: ['provider permission profile declares network control'],
+      evidence: acknowledgedUnrestrictedNetwork
+        ? [
+            'dsh headless sandbox governs file effects only; network egress is ' +
+              'unrestricted and explicitly acknowledged (no dsh mechanism can ' +
+              'contain it — design §18.1)',
+          ]
+        : ['provider permission profile declares network control'],
     },
     toolAllow: allow,
     toolDeny: deny,

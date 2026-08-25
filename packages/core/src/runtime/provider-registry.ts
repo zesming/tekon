@@ -1,5 +1,9 @@
 import { createClaudeCodeAdapter } from './claude-code-adapter.js';
 import { createCodexAdapter } from './codex-adapter.js';
+import {
+  createDshHeadlessAdapter,
+  dshHeadlessProviderConfig,
+} from './dsh-headless-adapter.js';
 import { createMockAgentAdapter } from './mock-agent-adapter.js';
 import { agentAdapterConfigSchema } from '../types/config.js';
 import type {
@@ -46,7 +50,7 @@ export class ProviderSnapshotVersionError extends Error {
 
 export interface ProviderDefinition {
   /** Provider name (matches RunProviderConfig.provider). */
-  name: 'mock' | 'claude-code' | 'codex';
+  name: 'mock' | 'claude-code' | 'codex' | 'dsh-headless';
   /**
    * Current snapshot schema version. Bump when `summarizeAgentConfig`'s shape
    * changes in a way older code cannot parse. Persisted snapshots default to 1
@@ -173,6 +177,80 @@ const codexDefinition: ProviderDefinition = {
   },
 };
 
+const dshHeadlessDefinition: ProviderDefinition = {
+  name: 'dsh-headless',
+  snapshotVersion: 1,
+  create(config) {
+    const providerConfig = applyProviderRuntimeOverrides(
+      dshHeadlessProviderConfig(config.repoPath, {
+        approvalDefault: config.approvalDefault,
+      }),
+      config.runtime,
+    );
+    return {
+      adapter: createDshHeadlessAdapter(
+        providerConfig,
+        config.gateway,
+        dshVersionGateOptions(),
+      ),
+      provider: 'dsh-headless',
+      // S2: stamp the snapshot schema version (see claude-code create()).
+      configSummary: {
+        ...summarizeAgentConfig(providerConfig),
+        // Persist the ack so a restored snapshot reconstructs an equivalent
+        // adapter (the guard re-checks it). Never a substitute for the honest
+        // `network: 'enabled'` value, which summarizeAgentConfig also keeps.
+        acknowledgeUnrestrictedNetwork:
+          providerConfig.acknowledgeUnrestrictedNetwork === true,
+        schemaVersion: dshHeadlessDefinition.snapshotVersion,
+      },
+    };
+  },
+  restore(input) {
+    assertSnapshotVersion(input.snapshot, this.snapshotVersion);
+    const parsed = agentAdapterConfigSchema.safeParse(
+      input.snapshot.configSummary,
+    );
+    if (!parsed.success || parsed.data.provider !== 'dsh-headless') {
+      throw new Error(
+        `Run ${input.snapshot.runId} has a non-replayable dsh-headless provider snapshot; it may be corrupted or from an incompatible version.`,
+      );
+    }
+    const config = applyProviderRuntimeOverrides(parsed.data, input.runtime);
+    return {
+      adapter: createDshHeadlessAdapter(
+        config,
+        input.gateway,
+        dshVersionGateOptions(),
+      ),
+      provider: 'dsh-headless',
+      configSummary: {
+        ...summarizeAgentConfig(config),
+        acknowledgeUnrestrictedNetwork:
+          config.acknowledgeUnrestrictedNetwork === true,
+        schemaVersion: dshHeadlessDefinition.snapshotVersion,
+      },
+    };
+  },
+};
+
+/**
+ * Version-gate options for the dsh adapter, wiring the documented escape hatch
+ * (design §5.1, review S1): env `TEKON_DSH_ALLOW_VERSION` explicitly accepts an
+ * untested dsh version, logging a warning to stderr. Read at construction so
+ * both create() and restore() honor it. Default (unset) = strict gate.
+ */
+function dshVersionGateOptions(): {
+  allowVersion?: string;
+  onWarn: (message: string) => void;
+} {
+  const allowVersion = process.env.TEKON_DSH_ALLOW_VERSION;
+  return {
+    ...(allowVersion ? { allowVersion } : {}),
+    onWarn: (message) => console.warn(`[dsh bridge] ${message}`),
+  };
+}
+
 /**
  * S2: reject a snapshot whose schemaVersion exceeds what this build supports.
  * A missing schemaVersion (older snapshots) is treated as version 1 — backward
@@ -198,6 +276,7 @@ const BUILT_IN: ProviderDefinition[] = [
   mockDefinition,
   claudeCodeDefinition,
   codexDefinition,
+  dshHeadlessDefinition,
 ];
 
 export function createBuiltInProviderRegistry(): ProviderRegistry {

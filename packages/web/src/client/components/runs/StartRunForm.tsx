@@ -20,7 +20,15 @@ export interface StartRunFormProps {
 // Component
 // ---------------------------------------------------------------------------
 
-const AGENT_OPTIONS = ['codex', 'claude-code', 'mock'] as const;
+const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
+
+/** Human-facing labels; dsh-headless carries its experimental caveat inline. */
+const AGENT_LABELS: Record<string, string> = {
+  codex: 'codex',
+  'claude-code': 'claude-code',
+  mock: 'mock',
+  'dsh-headless': 'dsh-headless（experimental · 联网 · 仅 goal）',
+};
 
 /**
  * Collapsible "New Run" form with demand, template, agent, timeout fields.
@@ -203,7 +211,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               >
                 {AGENT_OPTIONS.map((a) => (
                   <option key={a} value={a}>
-                    {a}
+                    {AGENT_LABELS[a] ?? a}
                   </option>
                 ))}
               </select>

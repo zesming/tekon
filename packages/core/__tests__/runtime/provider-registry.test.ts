@@ -41,14 +41,16 @@ function makeSnapshot(
 // ── Tests ──────────────────────────────────────────────────────────────
 
 describe('provider registry (S1)', () => {
-  it('registers the three built-in providers', () => {
+  it('registers the four built-in providers', () => {
     const registry = createBuiltInProviderRegistry();
     expect(registry.has('mock')).toBe(true);
     expect(registry.has('claude-code')).toBe(true);
     expect(registry.has('codex')).toBe(true);
+    expect(registry.has('dsh-headless')).toBe(true);
     expect(registry.list().map((d) => d.name).sort()).toEqual([
       'claude-code',
       'codex',
+      'dsh-headless',
       'mock',
     ]);
   });
@@ -201,5 +203,63 @@ describe('provider snapshot version contract (S2)', () => {
     expect(() =>
       createAgentAdapterFromSnapshot({ snapshot: future, gateway: stubGateway }),
     ).toThrow(ProviderSnapshotVersionError);
+  });
+});
+
+describe('dsh-headless provider registration (phase 5b)', () => {
+  it('create() stamps the unrestricted-network ack + schemaVersion, keeps no api key', () => {
+    const result = createAgentRuntime({
+      agent: 'dsh-headless',
+      repoPath: '/tmp/repo',
+      gateway: stubGateway,
+    });
+    expect(result.provider).toBe('dsh-headless');
+    expect(result.configSummary.provider).toBe('dsh-headless');
+    expect(result.configSummary.acknowledgeUnrestrictedNetwork).toBe(true);
+    expect(result.configSummary.schemaVersion).toBe(1);
+    // The honest network value survives; no credential is ever summarized.
+    const profile = result.configSummary.permissionProfile as {
+      network: string;
+    };
+    expect(profile.network).toBe('enabled');
+    expect(JSON.stringify(result.configSummary)).not.toMatch(/DEEPSEEK_API_KEY/);
+  });
+
+  it('restore() round-trips a dsh-headless snapshot through the capability guard', () => {
+    const created = createAgentRuntime({
+      agent: 'dsh-headless',
+      repoPath: '/tmp/repo',
+      gateway: stubGateway,
+    });
+    const restored = createAgentAdapterFromSnapshot({
+      snapshot: makeSnapshot({
+        provider: 'dsh-headless',
+        configSummary: created.configSummary,
+      }),
+      gateway: stubGateway,
+    });
+    expect(restored.provider).toBe('dsh-headless');
+    expect(restored.configSummary.acknowledgeUnrestrictedNetwork).toBe(true);
+  });
+
+  it('restore() rejects a dsh-headless snapshot whose network ack was stripped (fail-closed)', () => {
+    const created = createAgentRuntime({
+      agent: 'dsh-headless',
+      repoPath: '/tmp/repo',
+      gateway: stubGateway,
+    });
+    const tampered = {
+      ...(created.configSummary as Record<string, unknown>),
+      acknowledgeUnrestrictedNetwork: false,
+    };
+    expect(() =>
+      createAgentAdapterFromSnapshot({
+        snapshot: makeSnapshot({
+          provider: 'dsh-headless',
+          configSummary: tampered,
+        }),
+        gateway: stubGateway,
+      }),
+    ).toThrow(/prove safe|network/i);
   });
 });

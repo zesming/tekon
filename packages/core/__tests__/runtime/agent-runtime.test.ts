@@ -182,7 +182,7 @@ describe('defaultProviderConfig', () => {
   it('throws for mock agent (mock has no config)', () => {
     expect(() =>
       defaultProviderConfig('mock', '/tmp/repo'),
-    ).toThrow(/only supports claude-code and codex/);
+    ).toThrow(/only supports claude-code, codex, and dsh-headless/);
   });
 });
 

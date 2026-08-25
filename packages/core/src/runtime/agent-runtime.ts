@@ -12,6 +12,7 @@ import type { RunProviderConfig } from '../types/domain.js';
 // the other's exports during evaluation — the live binding is resolved before
 // the first factory call, not at import time.
 import { createBuiltInProviderRegistry } from './provider-registry.js';
+import { dshHeadlessProviderConfig } from './dsh-headless-adapter.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export type ProviderRuntimeOverrides = Partial<
 
 export type ApprovalDefault = 'on-failure' | 'on-request';
 
-export type SupportedAgent = 'mock' | 'claude-code' | 'codex';
+export type SupportedAgent = 'mock' | 'claude-code' | 'codex' | 'dsh-headless';
 
 export interface AgentRuntimeConfig {
   agent: string;
@@ -60,7 +61,7 @@ export function createAgentRuntime(
   const def = createBuiltInProviderRegistry().get(config.agent);
   if (!def) {
     throw new Error(
-      `Unsupported agent: ${config.agent}. Supported agents: mock, claude-code, codex`,
+      `Unsupported agent: ${config.agent}. Supported agents: mock, claude-code, codex, dsh-headless`,
     );
   }
   return def.create(config);
@@ -77,7 +78,7 @@ export function createAgentAdapterFromSnapshot(
   const def = createBuiltInProviderRegistry().get(input.snapshot.provider);
   if (!def) {
     throw new Error(
-      'Custom agent provider snapshots cannot be safely replayed; only mock, claude-code, and codex are supported.',
+      'Custom agent provider snapshots cannot be safely replayed; only mock, claude-code, codex, and dsh-headless are supported.',
     );
   }
   return def.restore(input);
@@ -142,8 +143,14 @@ export function defaultProviderConfig(
     };
   }
 
+  if (agent === 'dsh-headless') {
+    // Delegates to the adapter module so the unrestricted-network ack and the
+    // dsh-specific promptMode/profile live in one place (phase 5b).
+    return dshHeadlessProviderConfig(repoPath, { approvalDefault: approval });
+  }
+
   throw new Error(
-    `defaultProviderConfig only supports claude-code and codex, got: ${agent}`,
+    `defaultProviderConfig only supports claude-code, codex, and dsh-headless, got: ${agent}`,
   );
 }
 
@@ -179,6 +186,9 @@ export function summarizeAgentConfig(
     profile: config.profile,
     promptMode: config.promptMode,
     outputFormat: config.outputFormat,
+    // Persisted so a dsh-headless snapshot round-trips through the capability
+    // guard on restore (phase 5b). Undefined for every other provider.
+    acknowledgeUnrestrictedNetwork: config.acknowledgeUnrestrictedNetwork,
     timeoutMs: config.timeoutMs,
     progressHeartbeatMs: config.progressHeartbeatMs,
     noProgressTimeoutMs: config.noProgressTimeoutMs,

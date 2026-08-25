@@ -418,7 +418,7 @@ describe('defaultCommandPolicy', () => {
     expect(policy).toHaveProperty('network');
   });
 
-  it('allows common dev tools: git, pnpm, npm, claude, codex', () => {
+  it('allows common dev tools: git, pnpm, npm, claude, codex, dsh', () => {
     const policy = defaultCommandPolicy('/repo');
     const allowedTools = policy.allow.map((entry) => entry.tool);
     expect(allowedTools).toContain('git');
@@ -426,6 +426,9 @@ describe('defaultCommandPolicy', () => {
     expect(allowedTools).toContain('npm');
     expect(allowedTools).toContain('claude');
     expect(allowedTools).toContain('codex');
+    // dsh-headless provider (phase 5b): without this, every real dsh run is
+    // rejected by the gateway allow-policy. Regression lock for review M1.
+    expect(allowedTools).toContain('dsh');
   });
 
   it('has empty deny list', () => {

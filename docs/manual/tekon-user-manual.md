@@ -15,7 +15,8 @@
 - 证据和审阅材料收集器。
 - PR 准备助手。
 - 研发工作样本评估器。
-- 支持 mock、Claude Code 和 Codex provider 的本地执行入口。
+- 支持 mock、Claude Code 和 Codex provider 的本地执行入口；另含 experimental 的 dsh-headless（DeepSeek Harness）provider。
+  - ⚠️ **dsh-headless 使用前必读**：默认关闭；agent 子进程**网络出口不受限**（弱于 codex，dsh 无法禁网）；**仅适用于 `--goal` 运行**（无法写产物目录，交付类 workflow 节点会失败）；需自行安装 `@deepseek-ai/dsh` 并配 `DEEPSEEK_API_KEY`。详见 §5.7。
 
 ## 2. 天工解决什么问题
 
@@ -363,6 +364,10 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
 - `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
 - `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
 - `codex`：本机 Codex CLI adapter，使用 `codex --profile internal ... exec` 非交互执行，需本机 Codex CLI 已安装并认证 internal profile。
+- `dsh-headless`（**experimental，默认关闭**）：本机 DeepSeek Harness（`dsh`）adapter，经 `dsh --profile headless "<task>"` 一次性子进程边界执行。**使用前必读的三条硬边界：**
+  - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
+  - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制,无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
+  - 一次性、无流式、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.1-rc.2`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 
@@ -575,6 +580,7 @@ tekon run "做一个一次性小任务" --goal --agent mock
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。
 - `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
+- `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的三条硬边界）。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
 - `--repo <path>`：只在跨仓库运行时使用。

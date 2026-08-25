@@ -161,6 +161,7 @@ export function defaultCommandPolicy(repoPath: string): CommandPolicy {
       { tool: 'npm', args: [] },
       { tool: 'claude', args: [] },
       { tool: 'codex', args: [] },
+      { tool: 'dsh', args: [] },
     ],
     deny: [],
     requiresHumanApproval: [],

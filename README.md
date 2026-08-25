@@ -44,7 +44,7 @@
 | workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐 |
 | 角色系统 | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略 |
 | 执行隔离 | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>` |
-| Provider 接入 | 支持 mock、Claude Code、Codex，通过 artifact manifest 交付结构化产物 |
+| Provider 接入 | 支持 mock、Claude Code、Codex，以及 experimental 的 dsh-headless（DeepSeek Harness，默认关闭、网络不受限、仅 goal 可用），通过 artifact manifest 交付结构化产物 |
 | Gate 与证据 | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness |
 | 审阅面 | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包 |
 | 交付管理 | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控 |

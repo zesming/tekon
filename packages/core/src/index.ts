@@ -35,6 +35,8 @@ export * from './draft/shape.js';
 export * from './runtime/agent-adapter.js';
 export * from './runtime/claude-code-adapter.js';
 export * from './runtime/codex-adapter.js';
+export * from './runtime/dsh-headless-adapter.js';
+export * from './runtime/dsh-bridge-probe.js';
 export * from './runtime/mock-agent-adapter.js';
 export * from './runtime/agent-runtime.js';
 export * from './runtime/provider-registry.js';

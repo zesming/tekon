@@ -299,7 +299,7 @@ export type DeliveryPullRequest = z.infer<typeof deliveryPullRequestSchema>;
 
 export const runProviderConfigSchema = z.object({
   runId: z.string().min(1),
-  provider: z.enum(['mock', 'claude-code', 'codex', 'custom']),
+  provider: z.enum(['mock', 'claude-code', 'codex', 'dsh-headless', 'custom']),
   configSummary: z.record(z.string(), z.unknown()).default({}),
   createdAt: isoDateStringSchema,
 });
