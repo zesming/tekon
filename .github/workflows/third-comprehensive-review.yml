@@ -1,0 +1,140 @@
+name: Third comprehensive review
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    if: contains(github.event.head_commit.message, '[third-review]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Apply safe review fixes and generate draft report
+        id: draft
+        continue-on-error: true
+        run: python3 scripts/run_third_comprehensive_review.py
+
+      - name: Install dependencies
+        id: install
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Format review-touched files
+        id: format
+        continue-on-error: true
+        run: |
+          npm exec --yes -- pnpm@10.12.1 exec prettier --write \
+            packages/web/src/client \
+            docs/reviews/2026-08-25-tekon-harness-replatform-third-review.md
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 build
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 typecheck
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 lint
+
+      - name: Core unit and e2e
+        id: core_tests
+        continue-on-error: true
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e
+
+      - name: CLI unit and e2e
+        id: cli_tests
+        continue-on-error: true
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+
+      - name: Web unit
+        id: web_tests
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:unit
+
+      - name: Playwright
+        id: playwright
+        continue-on-error: true
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
+
+      - name: Finalize report with validation outcomes
+        env:
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          CORE_TEST_OUTCOME: ${{ steps.core_tests.outcome }}
+          CLI_TEST_OUTCOME: ${{ steps.cli_tests.outcome }}
+          WEB_TEST_OUTCOME: ${{ steps.web_tests.outcome }}
+          PLAYWRIGHT_OUTCOME: ${{ steps.playwright.outcome }}
+        run: |
+          python3 scripts/run_third_comprehensive_review.py
+          npm exec --yes -- pnpm@10.12.1 exec prettier --write \
+            packages/web/src/client \
+            docs/reviews/2026-08-25-tekon-harness-replatform-third-review.md
+
+      - name: Commit and push report and safe fixes
+        run: |
+          set -euo pipefail
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git add -- \
+            packages/web/src/client \
+            docs/reviews/2026-08-25-tekon-harness-replatform-third-review.md
+          git rm -f -- \
+            .github/workflows/third-comprehensive-review.yml \
+            scripts/run_third_comprehensive_review.py
+          git diff --cached --check
+          git commit -m "docs: add third comprehensive Harness replatform review"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
+
+      - name: Fail if validation did not pass
+        if: always()
+        env:
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          CORE_TEST_OUTCOME: ${{ steps.core_tests.outcome }}
+          CLI_TEST_OUTCOME: ${{ steps.cli_tests.outcome }}
+          WEB_TEST_OUTCOME: ${{ steps.web_tests.outcome }}
+          PLAYWRIGHT_OUTCOME: ${{ steps.playwright.outcome }}
+        run: |
+          set -euo pipefail
+          for value in \
+            "$INSTALL_OUTCOME" \
+            "$BUILD_OUTCOME" \
+            "$TYPECHECK_OUTCOME" \
+            "$LINT_OUTCOME" \
+            "$CORE_TEST_OUTCOME" \
+            "$CLI_TEST_OUTCOME" \
+            "$WEB_TEST_OUTCOME" \
+            "$PLAYWRIGHT_OUTCOME"; do
+            test "$value" = "success"
+          done
