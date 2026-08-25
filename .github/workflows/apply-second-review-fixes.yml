@@ -63,6 +63,20 @@ jobs:
             docs/reviews/2026-08-20-tekon-human-usability-and-deepseek-harness-migration-review.md \
             docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md
 
+      - name: Normalize review markdown
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for filename in (
+              "docs/reviews/2026-08-20-tekon-human-usability-and-deepseek-harness-migration-review.md",
+              "docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md",
+          ):
+              path = Path(filename)
+              lines = path.read_text(encoding="utf-8").splitlines()
+              path.write_text("\n".join(line.rstrip() for line in lines) + "\n", encoding="utf-8")
+          PY
+
       - name: Build and typecheck
         run: |
           npm exec --yes -- pnpm@10.12.1 build
