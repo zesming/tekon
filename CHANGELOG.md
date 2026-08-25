@@ -11,7 +11,7 @@
   - 新增 `repositories.updateWorkflowInstanceStatusIfActive`（条件 UPDATE：`status not in ('passed','failed','cancelled')`）；真正的中断（非 fence）写 `interrupted` 也经此守卫，绝不覆盖终态。
   - **首轮 code review 追加检出 M1/M2/M3**：同一漏洞在 agent 成功后的路径仍有裸写——gates catch、finalize catch（`node-executor.ts`）与 gate-runner repair/exhausted 写入（`gate-runner.ts`）。已补 ownership-lost stand-down：gate-runner 新增 `getSignal()` dep，在 gate 失败后、repair 循环每轮、exhausted settle 前三处 fence 检查；node-executor gates/finalize catch 加同构守卫。
   - **次轮 code review 追加检出 S6**：gate-runner repair 循环的 `finally` 在 fence 下仍无条件 `finalizeExecutionLease`，会 `git branch -f` 强制把僵尸 repair worktree promote 到 run branch、回退新 owner 已交付的分支（git 层代码丢失，与 S1 同源）。已加 fence 守卫跳过。rework.ts 同类 finalize（S7）、repair 成功后回写主节点的极窄窗口（S8）不回退 workflow 终态，记录为后续。
-  - 回归测试：`engine-recovery.e2e.test.ts` 新增「被 fence 的执行器不得回退新 owner 的终态」（agent throw 路径）与「gates 阶段被 fence 不得回退终态」（agent 成功 + gate 阶段 fence，覆盖 M1/M2/M3）；`repositories.test.ts` 新增守卫单测。三者均已验证移除守卫即失败，非假通过。
+  - 回归测试：`engine-recovery.e2e.test.ts` 新增「被 fence 的执行器不得回退新 owner 的终态」（agent throw 路径）与「gates 阶段被 fence 不得回退终态」（agent 成功 + gate 阶段 fence，覆盖 M1/M2/M3 的 (a) 检查）；`engine-gate-repair.e2e.test.ts` 新增「repair 阶段被 fence」（autoFix gate 持续失败驱动 repair，覆盖 repair-loop (b) + exhausted-settle (c) 检查）；`repositories.test.ts` 新增守卫单测。均已验证移除守卫即失败，非假通过。
 
 ### 测试（补红线锁）
 
