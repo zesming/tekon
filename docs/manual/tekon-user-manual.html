@@ -272,7 +272,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="tab-panel" id="p1">
 <div class="section-header"><span class="section-num">SECTION 02</span><h1 class="section-title">天工解决什么问题</h1><p class="section-subtitle">五个核心痛点，天工逐一应对。</p></div>
 <h3>2.1 需求进入研发前不清楚</h3>
-<p>真实工作里，很多需求只有一句话。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 <code>demand shape</code>，先把需求塑形成需求卡，包含：需求标题和正文、推荐 workflow 模板、风险等级和风险标签、非目标、开放问题、验收标准。用户可以先审阅和批准需求卡，再发起执行。</p>
+<p>真实工作里，很多需求只有一句话。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 <code>draft shape</code>，先把需求塑形成需求卡，包含：需求标题和正文、推荐 workflow 模板、风险等级和风险标签、非目标、开放问题、验收标准。用户可以先审阅和批准需求卡，再发起执行。</p>
 <h3>2.2 不知道该选什么 Workflow</h3>
 <div class="tg"><span class="tg-j">standard-feature</span><span class="tg-j">bugfix</span><span class="tg-j">test-improvement</span><span class="tg-j">docs-update</span><span class="tg-j">plan-only</span><span class="tg-j">standard-delivery</span></div>
 <p><code>standard-delivery</code> 是标准交付治理流程，包含 PM/RD/QA/Reviewer/PMO 完整角色链路、独立评审、AC evidence、QA signoff 和流程完整性 gate。<code>workflow select</code> 会给出推荐模板和理由；<code>eval workflow-selection</code> 会检查人工选择是否合理。</p>
@@ -281,9 +281,9 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <h3>2.4 远端副作用需要人控制</h3>
 <p>真实 push、创建 PR、等待远端 CI 都属于有副作用或外部依赖的动作。天工把这些动作拆开：</p>
 <div class="fl"><svg viewBox="0 0 820 160" width="100%" height="auto">
-<rect x="10" y="50" width="120" height="40" class="sf-h" rx="4"/><text x="70" y="68" class="sf-lc">demand shape</text><text x="70" y="82" class="sf-l">塑形需求</text>
+<rect x="10" y="50" width="120" height="40" class="sf-h" rx="4"/><text x="70" y="68" class="sf-lc">draft shape</text><text x="70" y="82" class="sf-l">塑形需求</text>
 <line x1="130" y1="70" x2="175" y2="70" class="sf-ar"/>
-<rect x="180" y="50" width="120" height="40" class="sf-h" rx="4"/><text x="240" y="68" class="sf-lc">demand approve</text><text x="240" y="82" class="sf-l">人工批准</text>
+<rect x="180" y="50" width="120" height="40" class="sf-h" rx="4"/><text x="240" y="68" class="sf-lc">draft approve</text><text x="240" y="82" class="sf-l">人工批准</text>
 <line x1="300" y1="70" x2="345" y2="70" class="sf-ar"/>
 <rect x="350" y="50" width="100" height="40" class="sf-a" rx="4"/><text x="400" y="68" class="sf-lc">tekon run</text><text x="400" y="82" class="sf-l">执行 workflow</text>
 <line x1="450" y1="70" x2="495" y2="70" class="sf-ar"/>
@@ -314,12 +314,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
   <text x="12" y="130" class="sf-ll sf-ll-a">Tekon</text>
   <!-- T1: Tekon init -->
   <g transform="translate(109,124)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-a"/><circle cx="-26" cy="-7" r="6" fill="var(--jade-dim)"/><text x="-26" y="-4.5" class="sf-n">1</text><text y="-2" class="sf-tm sf-tm-a">tekon init</text><text y="9" class="sf-ts">初始化仓库</text></g>
-  <!-- T2: Tekon demand shape -->
-  <g transform="translate(203,124)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-a"/><circle cx="-26" cy="-7" r="6" fill="var(--jade-dim)"/><text x="-26" y="-4.5" class="sf-n">2</text><text y="-2" class="sf-tm sf-tm-a">demand shape</text><text y="9" class="sf-ts">需求塑形</text></g>
+  <!-- T2: Tekon draft shape -->
+  <g transform="translate(203,124)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-a"/><circle cx="-26" cy="-7" r="6" fill="var(--jade-dim)"/><text x="-26" y="-4.5" class="sf-n">2</text><text y="-2" class="sf-tm sf-tm-a">draft shape</text><text y="9" class="sf-ts">需求塑形</text></g>
   <!-- T3: Human 审阅需求卡 -->
   <g transform="translate(297,46)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-h"/><circle cx="-26" cy="-7" r="6" fill="var(--gold-dim)"/><text x="-26" y="-4.5" class="sf-n">3</text><text y="-2" class="sf-tm sf-tm-h">审阅需求卡</text><text y="9" class="sf-ts">确认边界标准</text></g>
-  <!-- T4: Human demand approve -->
-  <g transform="translate(391,46)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-h"/><circle cx="-26" cy="-7" r="6" fill="var(--gold-dim)"/><text x="-26" y="-4.5" class="sf-n">4</text><text y="-2" class="sf-tm sf-tm-h">demand approve</text><text y="9" class="sf-ts">批准需求卡</text></g>
+  <!-- T4: Human draft approve -->
+  <g transform="translate(391,46)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-h"/><circle cx="-26" cy="-7" r="6" fill="var(--gold-dim)"/><text x="-26" y="-4.5" class="sf-n">4</text><text y="-2" class="sf-tm sf-tm-h">draft approve</text><text y="9" class="sf-ts">批准需求卡</text></g>
   <!-- T5: Tekon run -->
   <g transform="translate(485,124)"><rect x="-36" y="-17" width="72" height="34" rx="4" class="sf-bx-a"/><circle cx="-26" cy="-7" r="6" fill="var(--jade-dim)"/><text x="-26" y="-4.5" class="sf-n">5</text><text y="-2" class="sf-tm sf-tm-a">tekon run</text><text y="9" class="sf-ts">执行workflow</text></g>
   <!-- T6: Human review (OPTIONAL) -->
@@ -413,7 +413,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="fl"><svg viewBox="0 0 820 100" width="100%" height="auto">
 <rect x="10" y="25" width="100" height="40" class="sf-h" rx="4"/><text x="60" y="43" class="sf-lc">init</text><text x="60" y="57" class="sf-l">初始化</text>
 <line x1="110" y1="45" x2="150" y2="45" class="sf-ar"/>
-<rect x="155" y="25" width="110" height="40" class="sf-h" rx="4"/><text x="210" y="43" class="sf-lc">demand shape</text><text x="210" y="57" class="sf-l">塑形 + 批准</text>
+<rect x="155" y="25" width="110" height="40" class="sf-h" rx="4"/><text x="210" y="43" class="sf-lc">draft shape</text><text x="210" y="57" class="sf-l">塑形 + 批准</text>
 <line x1="265" y1="45" x2="305" y2="45" class="sf-ar"/>
 <rect x="310" y="25" width="90" height="40" class="sf-a" rx="4"/><text x="355" y="43" class="sf-lc">run</text><text x="355" y="57" class="sf-l">执行</text>
 <line x1="400" y1="45" x2="440" y2="45" class="sf-ar"/>
@@ -434,8 +434,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <tr><td><code>suggestedCommand</code></td><td>天工从 package.json 推断的候选命令</td></tr>
 </tbody></table></div>
 <h3>4.4 塑形需求</h3>
-<pre><code><span class="c">tekon</span> <span class="a">demand shape</span> <span class="s">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span>
-<span class="c">tekon</span> <span class="a">demand approve</span>
+<pre><code><span class="c">tekon</span> <span class="a">draft shape</span> <span class="s">"给 Web dashboard 增加审批摘要展示，要求 e2e 通过"</span>
+<span class="c">tekon</span> <span class="a">draft approve</span>
 <span class="c">tekon</span> <span class="a">eval demand-shape</span></code></pre>
 <h3>4.5 发起运行</h3>
 <pre><code><span class="c">tekon</span> <span class="a">run</span>
@@ -453,7 +453,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">delivery ci-watch</span> <span class="f">--max-attempts</span> <span class="n">20</span> <span class="f">--interval-ms</span> <span class="n">15000</span>
 <span class="c">tekon</span> <span class="a">eval readiness</span></code></pre>
 <h3>4.10 默认上下文规则</h3>
-<p>天工的常规 CLI 使用方式是"进入目标仓库根目录后执行短命令"。默认推断规则：<code>--repo</code> 从当前目录向上查找 <code>.tekon/config.yaml</code>；<code>demand shape/approve</code> 默认操作最近需求卡；<code>run/status/review/delivery prepare</code> 默认使用最近一次 run；<code>approval summary/approve/reject/resume</code> 默认使用最近的 pending human decision。</p>
+<p>天工的常规 CLI 使用方式是"进入目标仓库根目录后执行短命令"。默认推断规则：<code>--repo</code> 从当前目录向上查找 <code>.tekon/config.yaml</code>；<code>draft shape/approve</code> 默认操作最近需求卡；<code>run/status/review/delivery prepare</code> 默认使用最近一次 run；<code>approval summary/approve/reject/resume</code> 默认使用最近的 pending human decision。</p>
 <div class="cl cl-t"><span class="cl-lb">显式传参的三种情况</span><strong>1.</strong> 跨目录操作时传 <code>--repo</code>；<strong>2.</strong> 查看历史对象时传 <code>--run-id</code> 等；<strong>3.</strong> 高危动作保留 <code>--approve-human</code>。</div>
 </div>
 
@@ -495,8 +495,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.1 init</span><span class="cb-ds">初始化目标仓库</span></div><pre><code><span class="c">tekon</span> <span class="a">init</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--repo &lt;path&gt;</code> — 从其它目录初始化指定仓库时使用</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.2 workflow preflight</span><span class="cb-ds">运行前检查命令画像</span></div><pre><code><span class="c">tekon</span> <span class="a">workflow preflight</span></code></pre><div class="cb-sec"><div class="cb-st">判断结果</div><ul><li><code>resolved</code> — 可执行</li><li><code>missing</code> — 缺命令</li><li><code>not-applicable</code> — 已声明不适用</li><li><code>not-command-gate</code> — 语义 gate</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.3 workflow select</span><span class="cb-ds">根据需求推荐模板</span></div><pre><code><span class="c">tekon</span> <span class="a">workflow select</span> <span class="s">"补齐 CLI 单元测试"</span></code></pre></div>
-<div class="cb"><div class="cb-hd"><span class="cb-nm">6.4 demand shape</span><span class="cb-ds">需求塑形成需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand shape</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div><div class="cl cl-i"><span class="cl-lb">交互式替代</span><code>tekon draft new</code> 提供 Agent 驱动的交互式需求澄清（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。需求不明确时推荐优先使用。</div></div>
-<div class="cb"><div class="cb-hd"><span class="cb-nm">6.5 demand approve</span><span class="cb-ds">人工批准需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">demand approve</span></code></pre></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.4 draft shape</span><span class="cb-ds">需求塑形成需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">draft shape</span> <span class="s">"需求文本"</span></code></pre><div class="cb-sec"><div class="cb-st">参数</div><ul><li><code>--no-write</code> — 只预览</li><li><code>--format json</code> — 输出 JSON</li></ul></div><div class="cl cl-i"><span class="cl-lb">交互式替代</span><code>tekon draft new</code> 提供 Agent 驱动的交互式需求澄清（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。需求不明确时推荐优先使用。</div></div>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.5 draft approve</span><span class="cb-ds">人工批准需求卡</span></div><pre><code><span class="c">tekon</span> <span class="a">draft approve</span></code></pre></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.5.1 draft plan / plan-approve</span><span class="cb-ds">可选：生成计划产物并单独审批</span></div><pre><code><span class="cm"># 生成计划产物（hasPlan=true, planApproved=false）</span>
 <span class="c">tekon</span> <span class="a">draft plan</span>
 
@@ -532,7 +532,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="cm"># 跨仓库</span>
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>需要目标仓库已 <code>init</code>（有 <code>.tekon/web-session.json</code>）</li><li>启动后终端输出带 token 的 URL，浏览器打开即可</li><li><code>Ctrl+C</code> 停止服务</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.21 update</span><span class="cb-ds">更新 Tekon 到最新版本</span></div><pre><code><span class="c">tekon</span> <span class="a">update</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li>拉取最新代码 → 安装依赖 → 重新构建</li><li>已是最新版本时直接退出</li><li>更新完成后输出旧版本 → 新版本</li></ul></div></div>
-<div class="cb"><div class="cb-hd"><span class="cb-nm">6.22 draft</span><span class="cb-ds">创建和管理需求草案（别名 demand）</span></div><pre><code><span class="cm"># 交互式创建（推荐）—— Agent 驱动需求澄清</span>
+<div class="cb"><div class="cb-hd"><span class="cb-nm">6.22 draft</span><span class="cb-ds">创建和管理需求草案</span></div><pre><code><span class="cm"># 交互式创建（推荐）—— Agent 驱动需求澄清</span>
 <span class="c">tekon</span> <span class="a">draft new</span>
 
 <span class="cm"># 快速塑形</span>
@@ -542,7 +542,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">draft approve</span>
 
 <span class="cm"># 查看草案</span>
-<span class="c">tekon</span> <span class="a">draft show</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li><code>draft new</code> 启动交互式流程：输入需求 → Agent 生成澄清问题 → 用户回答 → Agent 精炼草案</li><li>如果 Agent 不可用，自动回退到静态问题生成</li><li><code>draft</code> 与 <code>demand</code> 等价，子命令互通</li></ul></div><div class="cb-sec"><div class="cb-st">常用参数</div><ul><li><code>--repo &lt;path&gt;</code> — 跨仓库操作时指定目标仓库</li><li><code>--agent claude-code</code> — 显式指定 Agent（<code>draft new</code> 默认使用配置中的默认 Agent）</li><li><code>--no-write</code>（<code>draft shape</code>）— 只预览，不写入文件</li></ul></div></div>
+<span class="c">tekon</span> <span class="a">draft show</span></code></pre><div class="cb-sec"><div class="cb-st">说明</div><ul><li><code>draft new</code> 启动交互式流程：输入需求 → Agent 生成澄清问题 → 用户回答 → Agent 精炼草案</li><li>如果 Agent 不可用，自动回退到静态问题生成</li></ul></div><div class="cb-sec"><div class="cb-st">常用参数</div><ul><li><code>--repo &lt;path&gt;</code> — 跨仓库操作时指定目标仓库</li><li><code>--agent claude-code</code> — 显式指定 Agent（<code>draft new</code> 默认使用配置中的默认 Agent）</li><li><code>--no-write</code>（<code>draft shape</code>）— 只预览，不写入文件</li></ul></div></div>
 <div class="cb"><div class="cb-hd"><span class="cb-nm">6.23 help</span><span class="cb-ds">查看命令帮助</span></div><pre><code><span class="cm"># 查看所有命令（6 个分组）</span>
 <span class="c">tekon</span> <span class="a">help</span>
 

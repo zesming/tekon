@@ -21,7 +21,7 @@
 
 ### 2.1 需求进入研发前不清楚
 
-真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 `demand shape`，先把需求塑形成需求卡，包含：
+真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 `draft shape`，先把需求塑形成需求卡，包含：
 
 - 需求标题和正文。
 - 推荐 workflow 模板。
@@ -86,9 +86,9 @@
 推荐流程（Human ↔ Tekon 交替时序）：
 
 1. **Tekon**: `tekon init` 初始化目标仓库。
-2. **Tekon**: `demand shape` 把需求写成需求卡。
+2. **Tekon**: `draft shape` 把需求写成需求卡。
 3. **Human**: 人工审阅需求卡，确认边界和验收标准。
-4. **Human**: `demand approve` 批准需求卡。
+4. **Human**: `draft approve` 批准需求卡。
 5. **Tekon**: `run` 发起 workflow。
 6. **Human** ◇ 可选: `status` 和 `review` 查看结果和审阅面。
 7. **Tekon**: `delivery prepare` 生成 PR 准备包。
@@ -204,13 +204,13 @@ tekon workflow preflight
 ### 4.4 塑形需求
 
 ```bash
-tekon demand shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
+tekon draft shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
 ```
 
 命令会输出 `shapePath` 和 `reviewPath`。先读 Markdown 审阅稿，确认需求边界后批准：
 
 ```bash
-tekon demand approve
+tekon draft approve
 ```
 
 可选：评估需求卡质量。
@@ -291,7 +291,7 @@ tekon eval readiness
 天工的常规 CLI 使用方式是“进入目标仓库根目录后执行短命令”。默认推断规则如下：
 
 - Repo：优先使用 `--repo`；不传时从当前目录向上查找 `.tekon/config.yaml`，找不到时使用当前 Git 仓库根目录。
-- Demand shape：`demand shape` 默认写入 `.tekon/demands/`；`demand approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
+- Demand shape：`draft shape` 默认写入 `.tekon/demands/`；`draft approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
 - Run：`run` 没有需求文本且没有 `--demand-file` 时，默认读取最近需求卡，且该需求卡必须已批准；`status`、`review`、`eval readiness`、`delivery prepare` 等默认使用最近一次 run。
 - Human decision：`approval summary`、`eval approval-summary`、`approval reject` 和 `resume --approve-human` 默认使用最近的 pending human decision；如果同一 run 同时存在多个 pending decision，必须显式传 `--decision-id`。
 
@@ -314,7 +314,7 @@ tekon eval readiness
 - run artifact。
 - gate 日志。
 - worktree。
-- demand shape 文件。
+- draft shape 文件。
 - Web session token。
 
 通常不提交 `.tekon/`。重要结论应写入 `docs/reviews/` 或其它可提交文档。
@@ -455,12 +455,12 @@ tekon workflow select "补齐 CLI 单元测试"
 - 不会自动保存 workflow。
 - 人可以覆盖推荐，但建议用 `eval workflow-selection` 检查。
 
-### 6.4 `demand shape`
+### 6.4 `draft shape`
 
 用途：把原始需求转成可审阅需求卡。
 
 ```bash
-tekon demand shape "需求文本"
+tekon draft shape "需求文本"
 ```
 
 > **交互式替代**：`tekon draft new` 提供 Agent 驱动的交互式需求澄清流程（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。推荐在需求不明确时优先使用。
@@ -483,12 +483,12 @@ tekon demand shape "需求文本"
 - 如果 `openQuestions` 不为空，建议先补充需求；也可以在明确接受风险后批准。
 - 如果推荐模板不符合预期，先用 `workflow select` 和 `eval workflow-selection` 核对原因。
 
-### 6.5 `demand approve`
+### 6.5 `draft approve`
 
 用途：人工批准需求卡进入执行阶段。
 
 ```bash
-tekon demand approve
+tekon draft approve
 ```
 
 常用参数：
@@ -912,7 +912,7 @@ tekon update
 
 ### 6.22 `draft`
 
-用途：创建和管理需求草案。`draft` 是 `demand` 的别名，两者等价。
+用途：创建和管理需求草案。
 
 **交互式创建（推荐）**：
 
@@ -933,7 +933,7 @@ tekon draft new
 tekon draft shape "需求文本"
 ```
 
-等同于 `demand shape`，直接将需求文本转为需求卡。
+等同于 `draft shape`，直接将需求文本转为需求卡。
 
 **批准草案**：
 
@@ -941,7 +941,7 @@ tekon draft shape "需求文本"
 tekon draft approve
 ```
 
-等同于 `demand approve`，批准最近的需求草案。
+等同于 `draft approve`，批准最近的需求草案。
 
 **查看草案**：
 
@@ -1229,7 +1229,7 @@ Session UI 适合：
 | `--no-progress-timeout-ms <ms>` | 覆盖无 stdout/stderr 或受控输出目录文件进展超时，用来判断任务是否卡死。 |
 | `--progress-heartbeat-ms <ms>`  | 覆盖 progress JSON heartbeat 间隔。                                     |
 
-### `demand shape` 参数
+### `draft shape` 参数
 
 | 参数            | 用途                                           |
 | --------------- | ---------------------------------------------- |

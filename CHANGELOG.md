@@ -1,5 +1,25 @@
 # 变更日志
 
+## v0.14.0
+
+Harness-inspired replatform 阶段 5a：**legacy 清理**。把已废弃的 `demand.*` 兼容别名层彻底移除,统一到 `draft` 词汇;并把 runner 自发的 `job/status` 加入 CONTROL_EVENT_TYPES(S9 对账排除,只对 §1.2 映射类型计数相等)。纯清理与词汇收敛,无新用户能力;`draftShape` RPC 命名空间、`tekon draft` 命令、需求卡文件格式均不变。
+
+### 移除（breaking：仅影响直接调用已废弃别名的外部集成）
+
+- **`demand.*` RPC 别名删除**:`rpc-contract.ts` 移除 3 个 `demand.*` procedure(`demand.shape`/`demand.approve`/`demand.detail`)与 6 个别名 schema;`root.ts` 移除 `demand: demandRouter` 挂载(保留 `draftShape: demandRouter`,同一实现);`context.ts` 移除 `ApiCaller.demand`。所有能力经 `draftShape.*` 命名空间提供,行为等价。
+- **`demand*` 核心别名删除**:`packages/core/src/draft/shape.ts` 移除 13 个 `@deprecated` `demand*` 兼容导出;`packages/core/src/demand/shape.ts`(纯 re-export 垫片)删除。
+- **CLI `demand` 命令别名删除**:`index.ts` 移除 `aliases:['demand']` 与 `case 'demand'` 分派;内部 `demand*` 标识统一 rename 为 `draft*`(draft.ts/eval.ts/run.ts/workflow.ts/path-utils.ts,约 36 处),CLI 用户面命令 `tekon draft ...` 不变。
+- **Web `Demand*` 组件别名删除**:`DemandForm.tsx`/`DemandShapeCard.tsx`/`DemandPage.tsx` 删除;`DraftForm`/`DraftPage` 移除 `DemandForm`/`DemandPage` 兼容别名导出。`AcceptanceCriteria.tsx` 保留(DraftCard 在用)。
+
+### 行为变化
+
+- runner 自发的 `job/status` session_event 归入 `CONTROL_EVENT_TYPES`:S9 会话-run 事件对账排除该类型,只对 §1.2 映射类型做计数相等断言(runner 生命周期事件不参与 run 事件计数)。
+
+### 测试
+
+- core:`demand/shape.test.ts` 删除(对应 shim 已删);`types/session-contract.test.ts` +1(`job/status` ∈ CONTROL_EVENT_TYPES)。
+- 全量根聚合 1228 passed(107 文件)/ 三包 typecheck 全绿。别名删除后无残留引用(全仓 grep 校验)。
+
 ## v0.13.0
 
 Harness-inspired replatform 阶段 4（4d–4f）：把 `sessions.profile` 从纯展示字段变成**真实行为分支**（4d），把 Gate/Delivery 生命周期做成**事件订阅 + readiness 投影**（4e），并给需求卡加上**独立的计划产物与计划审批点**（4f-2）。三者各自独立可交付，且共同守住同一条红线——高自治可以自动准备交付，但**合入、PR 创建、人工审批 gate 仍须人工**，不因 profile 削弱。

@@ -142,6 +142,10 @@ export const CONTROL_EVENT_TYPES = [
   'agent/cancel-requested',
   'agent/cancelled',
   'job/checkpointed',
+  // Emitted by the durable job runner (notifySettled) when a job reaches a
+  // terminal state; payload {jobId, kind, status}. Same family as
+  // job/checkpointed — runner lifecycle, not agent-loop content.
+  'job/status',
 ] as const;
 
 /** Tekon governance extensions (layered on the same append-only log). */

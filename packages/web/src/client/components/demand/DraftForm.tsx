@@ -74,13 +74,3 @@ export function DraftForm({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Backward-compatible deprecated exports
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use DraftFormProps instead */
-export type DemandFormProps = DraftFormProps;
-
-/** @deprecated Use DraftForm instead */
-export const DemandForm = DraftForm;

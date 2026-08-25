@@ -22,8 +22,8 @@
 
 ```
 需求输入
-  -> demand shape 生成需求卡
-  -> demand approve 人工批准
+  -> draft shape 生成需求卡
+  -> draft approve 人工批准
   -> workflow select / run 选择并执行模板
   -> role agent 在隔离 worktree 中产出 artifact
   -> build / lint / test / security-scan / human gate 验证
@@ -40,7 +40,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 需求塑形 | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后进入执行 |
+| 需求塑形 | `tekon draft shape` 生成需求卡和 Markdown 审阅稿，`draft approve` 批准后进入执行 |
 | workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐 |
 | 角色系统 | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略 |
 | 执行隔离 | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>` |
@@ -76,8 +76,8 @@ tekon init                                    # 初始化目标仓库
 tekon workflow preflight                      # 检查命令画像
 tekon help                                     # 查看命令帮助
 tekon draft new                                # 交互式创建需求草案（支持 Agent 澄清）
-tekon demand shape "你的需求描述"               # 塑形需求
-tekon demand approve                          # 批准需求卡
+tekon draft shape "你的需求描述"               # 塑形需求
+tekon draft approve                          # 批准需求卡
 tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
 tekon run --template standard-delivery --agent mock  # 使用 mock provider 回归
 tekon run "一次性小任务" --goal --agent mock    # 轻量目标运行（单节点 goal 模板，不接交付）
@@ -99,8 +99,8 @@ tekon ui                                      # 启动 Web Dashboard
 | 查看命令帮助 | `tekon help` |
 | 初始化目标仓库 | `tekon init` |
 | 创建需求草案 | `tekon draft new` |
-| 塑形需求 | `tekon demand shape "<需求>"` |
-| 批准需求卡 | `tekon demand approve` |
+| 塑形需求 | `tekon draft shape "<需求>"` |
+| 批准需求卡 | `tekon draft approve` |
 | 推荐 workflow | `tekon workflow select "<需求>"` |
 | 检查命令画像 | `tekon workflow preflight` |
 | 发起运行 | `tekon run` |

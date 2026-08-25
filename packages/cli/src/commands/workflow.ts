@@ -9,9 +9,9 @@ import { parseArgs } from 'node:util';
 import {
   evaluateWorkflowSelection,
   loadRepoProfile,
-  readDemandShapeFile,
+  readDraftShapeFile,
   repoProfileCommandGuidance,
-  selectWorkflowTemplateForDemand,
+  selectWorkflowTemplateForDraft,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -60,12 +60,12 @@ export async function commandWorkflow(
         ? null
         : resolveDemandShapePath(repoPath);
     const shape = shapePath
-      ? readDemandShapeFile(shapePath)
+      ? readDraftShapeFile(shapePath)
       : null;
     const demandText = shape
       ? shape.rawText
       : positionalDemandText;
-    const selection = selectWorkflowTemplateForDemand({
+    const selection = selectWorkflowTemplateForDraft({
       text: demandText,
       ...(shape ? { category: shape.category } : {}),
     });

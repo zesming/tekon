@@ -4,8 +4,8 @@ import { parseArgs } from 'node:util';
 
 import {
   generateDynamicWorkflow,
-  readDemandShapeFile,
-  renderDemandShapeForRun,
+  readDraftShapeFile,
+  renderDraftShapeForRun,
   saveDynamicTemplate,
 } from '@tekon/core';
 
@@ -66,7 +66,7 @@ export async function commandRun(
             latestMustBeApproved: true,
           });
   const shapedDemand = demandFilePath
-    ? readDemandShapeFile(demandFilePath)
+    ? readDraftShapeFile(demandFilePath)
     : null;
   if (shapedDemand && !shapedDemand.approved) {
     throw new Error(
@@ -83,7 +83,7 @@ export async function commandRun(
     );
   }
   const demandText = shapedDemand
-    ? renderDemandShapeForRun(shapedDemand)
+    ? renderDraftShapeForRun(shapedDemand)
     : positionalDemandText;
   if (!demandText) {
     throw new Error(

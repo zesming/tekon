@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { readDemandShapeFile, type DemandShape } from '@tekon/core';
+import { readDraftShapeFile, type DraftShape } from '@tekon/core';
 
 export function findUp(
   startDir: string,
@@ -108,12 +108,12 @@ export function listDemandShapeCandidates(
   repoPath: string,
 ): Array<{
   path: string;
-  shape: DemandShape;
+  shape: DraftShape;
   mtimeMs: number;
 }> {
   const candidates: Array<{
     path: string;
-    shape: DemandShape;
+    shape: DraftShape;
     mtimeMs: number;
   }> = [];
 
@@ -129,7 +129,7 @@ export function listDemandShapeCandidates(
       try {
         candidates.push({
           path: shapePath,
-          shape: readDemandShapeFile(shapePath),
+          shape: readDraftShapeFile(shapePath),
           mtimeMs: statSync(shapePath).mtimeMs,
         });
       } catch {

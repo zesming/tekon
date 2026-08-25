@@ -31,7 +31,7 @@ interface CommandMeta {
 const COMMANDS: CommandMeta[] = [
   // 项目管理
   { name: 'init', description: '初始化 Tekon 项目', group: '项目管理' },
-  { name: 'draft', aliases: ['demand'], description: '创建和管理需求草案', group: '项目管理', subcommands: [
+  { name: 'draft', description: '创建和管理需求草案', group: '项目管理', subcommands: [
     { name: 'new', description: '创建新的需求草案' },
     { name: 'shape', description: '快速生成需求草案' },
     { name: 'approve', description: '批准需求草案' },
@@ -121,7 +121,6 @@ export async function runCli(
       case 'run':
         return await commandRun(rest, io);
       case 'draft':
-      case 'demand':
         await commandDemand(rest, io);
         return 0;
       case 'status':

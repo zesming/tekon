@@ -1,14 +1,14 @@
 import { parseArgs } from 'node:util';
 
 import {
-  approveDemandShape,
-  evaluateDemandShape,
+  approveDraftShape,
+  evaluateDraftShape,
   markDraftPlanGenerated,
   planApproveDraftShape,
-  readDemandShapeFile,
-  shapeDemand,
-  writeDemandShapeFile,
-  writeDemandShapeFiles,
+  readDraftShapeFile,
+  shapeDraft,
+  writeDraftShapeFile,
+  writeDraftShapeFiles,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -53,7 +53,7 @@ export async function commandDemand(
       spinnerIdx++;
     }, 300);
 
-    const initialShape = shapeDemand({ text: demandText });
+    const initialShape = shapeDraft({ text: demandText });
 
     clearInterval(spinnerInterval);
     process.stderr.write('\r正在分析需求 完成\n');
@@ -84,7 +84,7 @@ export async function commandDemand(
     }
 
     // Write files
-    const paths = writeDemandShapeFiles({ repoPath, shape });
+    const paths = writeDraftShapeFiles({ repoPath, shape });
 
     // Human-readable output
     if (args.values.json) {
@@ -153,14 +153,14 @@ export async function commandDemand(
       allowPositionals: true,
     });
     const demandText = args.positionals.join(' ').trim();
-    const shape = shapeDemand({ text: demandText });
+    const shape = shapeDraft({ text: demandText });
     const repoPath = resolveProjectRepoPath(args.values.repo);
     const shouldWrite = !args.values['no-write'];
     if (shouldWrite) {
       await ensureInitialized(repoPath, io);
     }
     const paths = shouldWrite
-      ? writeDemandShapeFiles({ repoPath, shape })
+      ? writeDraftShapeFiles({ repoPath, shape })
       : null;
     if (args.values.format === 'json') {
       io.stdout.write(
@@ -204,13 +204,13 @@ export async function commandDemand(
     const shapePath = resolveDemandShapePath(repoPath, shapeArg, {
       latestMustBeUnapproved: !shapeArg,
     });
-    const approved = approveDemandShape(
-      readDemandShapeFile(shapePath),
+    const approved = approveDraftShape(
+      readDraftShapeFile(shapePath),
       {
         actor: args.values.actor ?? 'cli',
       },
     );
-    writeDemandShapeFile(shapePath, approved);
+    writeDraftShapeFile(shapePath, approved);
     io.stdout.write(
       [
         `draftId=${approved.id}`,
@@ -241,8 +241,8 @@ export async function commandDemand(
       await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg);
-    const planned = markDraftPlanGenerated(readDemandShapeFile(shapePath));
-    writeDemandShapeFile(shapePath, planned);
+    const planned = markDraftPlanGenerated(readDraftShapeFile(shapePath));
+    writeDraftShapeFile(shapePath, planned);
     io.stdout.write(
       [
         `draftId=${planned.id}`,
@@ -275,10 +275,10 @@ export async function commandDemand(
       await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg);
-    const approved = planApproveDraftShape(readDemandShapeFile(shapePath), {
+    const approved = planApproveDraftShape(readDraftShapeFile(shapePath), {
       actor: args.values.actor ?? 'cli',
     });
-    writeDemandShapeFile(shapePath, approved);
+    writeDraftShapeFile(shapePath, approved);
     io.stdout.write(
       [
         `draftId=${approved.id}`,
@@ -307,8 +307,8 @@ export async function commandDemand(
       await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg);
-    const shape = readDemandShapeFile(shapePath);
-    const evaluation = evaluateDemandShape(shape);
+    const shape = readDraftShapeFile(shapePath);
+    const evaluation = evaluateDraftShape(shape);
     io.stdout.write(
       [
         `draftId=${shape.id}`,

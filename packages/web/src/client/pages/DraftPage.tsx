@@ -128,10 +128,3 @@ export function DraftPage() {
     </>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Backward-compatible deprecated export
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use DraftPage instead */
-export const DemandPage = DraftPage;

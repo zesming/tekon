@@ -75,17 +75,11 @@ export const draftShapeInputSchema = z.object({
   token: z.string().min(1),
 });
 
-/** @deprecated Use {@link draftShapeInputSchema} instead */
-export const demandShapeInputSchema = draftShapeInputSchema;
-
 export const draftShapeApproveInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
   actor: z.string().optional(),
 });
-
-/** @deprecated Use {@link draftShapeApproveInputSchema} instead */
-export const demandApproveInputSchema = draftShapeApproveInputSchema;
 
 // 4f-2: plan flow. generatePlan freezes the draft's plan view (hasPlan=true);
 // planApprove is a SEPARATE approval from demand approve. planApprove carries an
@@ -509,31 +503,19 @@ export const draftShapeOutputSchema = z.object({
   runText: z.string(),
 });
 
-/** @deprecated Use {@link draftShapeOutputSchema} instead */
-export const demandShapeOutputSchema = draftShapeOutputSchema;
-
 export const draftShapeDetailInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
 });
 
-/** @deprecated Use {@link draftShapeDetailInputSchema} instead */
-export const demandDetailInputSchema = draftShapeDetailInputSchema;
-
 export const draftShapeDetailOutputSchema = z.object({
   shape: draftShapeSchema,
 });
-
-/** @deprecated Use {@link draftShapeDetailOutputSchema} instead */
-export const demandDetailOutputSchema = draftShapeDetailOutputSchema;
 
 export const draftShapeApproveOutputSchema = z.object({
   shape: draftShapeSchema,
   shapePath: z.string(),
 });
-
-/** @deprecated Use {@link draftShapeApproveOutputSchema} instead */
-export const demandApproveOutputSchema = draftShapeApproveOutputSchema;
 
 // 4f-2: generatePlan / planApprove both return the updated shape + its path,
 // mirroring the approve output shape.
@@ -766,25 +748,6 @@ export const procedureSpecs = {
     auth: 'token' as const,
     input: draftShapePlanApproveInputSchema,
     output: draftShapePlanApproveOutputSchema,
-  },
-
-  /** @deprecated Use `draftShape.shape` instead */
-  'demand.shape': {
-    auth: 'token' as const,
-    input: demandShapeInputSchema,
-    output: demandShapeOutputSchema,
-  },
-  /** @deprecated Use `draftShape.detail` instead */
-  'demand.detail': {
-    auth: 'token' as const,
-    input: demandDetailInputSchema,
-    output: demandDetailOutputSchema,
-  },
-  /** @deprecated Use `draftShape.approve` instead */
-  'demand.approve': {
-    auth: 'token' as const,
-    input: demandApproveInputSchema,
-    output: demandApproveOutputSchema,
   },
 
   'delivery.prepare': {

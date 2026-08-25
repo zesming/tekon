@@ -104,13 +104,6 @@ export interface DraftShapeDetailInput {
   token: string;
 }
 
-/** @deprecated Use {@link DraftShapeInput} instead */
-export type DemandShapeInput = DraftShapeInput;
-/** @deprecated Use {@link DraftShapeApproveInput} instead */
-export type DemandApproveInput = DraftShapeApproveInput;
-/** @deprecated Use {@link DraftShapeDetailInput} instead */
-export type DemandDetailInput = DraftShapeDetailInput;
-
 export interface DeliveryCreatePrInput extends TokenRunInput {
   approveHuman: true;
 }
@@ -241,22 +234,6 @@ export interface ApiCaller {
       shapePath: string;
     }>;
     planApprove(input: DraftShapePlanApproveInput): Promise<{
-      shape: DraftShape;
-      shapePath: string;
-    }>;
-  };
-  /** @deprecated Use {@link ApiCaller.draftShape} instead */
-  demand: {
-    detail(input: DemandDetailInput): Promise<{
-      shape: DraftShape;
-    }>;
-    shape(input: DraftShapeInput): Promise<{
-      shape: DraftShape;
-      shapePath: string;
-      reviewPath: string;
-      runText: string;
-    }>;
-    approve(input: DemandApproveInput): Promise<{
       shape: DraftShape;
       shapePath: string;
     }>;

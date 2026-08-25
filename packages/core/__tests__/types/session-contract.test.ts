@@ -124,6 +124,12 @@ describe('session contract v1 (frozen draft)', () => {
     expect(TEKON_GOVERNANCE_EVENT_TYPES).toContain('readiness/evaluated');
   });
 
+  // job/status is emitted by the durable job runner when a job settles; it
+  // belongs to the control family alongside job/checkpointed.
+  it('includes the job/status control event', () => {
+    expect(CONTROL_EVENT_TYPES).toContain('job/status');
+  });
+
   it('validates session and job shapes', () => {
     expect(() =>
       sessionSchema.parse({
