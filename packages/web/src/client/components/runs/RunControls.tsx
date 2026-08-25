@@ -53,7 +53,6 @@ export function runControlAffordances(status: string): RunControlAffordances {
   };
 }
 
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -62,7 +61,12 @@ export function runControlAffordances(status: string): RunControlAffordances {
  * Pause / Resume / Cancel action buttons for a workflow run.
  * Only renders the actions that are valid for the current status.
  */
-export function RunControls({ runId, status, compact, onView }: RunControlsProps) {
+export function RunControls({
+  runId,
+  status,
+  compact,
+  onView,
+}: RunControlsProps) {
   const { token } = useSessionToken();
   const { addFlash } = useFlash();
 
@@ -76,31 +80,28 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
     };
   }, []);
 
-  const invalidateKeys = ['project.detail', 'project.overview', 'review.', 'gate.results', 'audit.'];
+  const invalidateKeys = [
+    'project.detail',
+    'project.overview',
+    'review.',
+    'gate.results',
+    'audit.',
+  ];
 
   const pauseMutation = useMutation<
     RpcProcedureMap['project.pause']['input'],
     RpcProcedureMap['project.pause']['output']
-  >(
-    (input) => rpc.call('project.pause', input),
-    { invalidateKeys },
-  );
+  >((input) => rpc.call('project.pause', input), { invalidateKeys });
 
   const resumeMutation = useMutation<
     RpcProcedureMap['project.resume']['input'],
     RpcProcedureMap['project.resume']['output']
-  >(
-    (input) => rpc.call('project.resume', input),
-    { invalidateKeys },
-  );
+  >((input) => rpc.call('project.resume', input), { invalidateKeys });
 
   const cancelMutation = useMutation<
     RpcProcedureMap['project.cancel']['input'],
     RpcProcedureMap['project.cancel']['output']
-  >(
-    (input) => rpc.call('project.cancel', input),
-    { invalidateKeys },
-  );
+  >((input) => rpc.call('project.cancel', input), { invalidateKeys });
 
   if (!token) return null;
 
@@ -110,7 +111,10 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
       await pauseMutation.mutate({ runId, token });
       addFlash('success', `Run ${runId.slice(0, 8)} paused`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to pause run');
+      addFlash(
+        'error',
+        err instanceof Error ? err.message : 'Failed to pause run',
+      );
     }
   };
 
@@ -120,7 +124,10 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
       await resumeMutation.mutate({ runId, token });
       addFlash('success', `Run ${runId.slice(0, 8)} resumed`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to resume run');
+      addFlash(
+        'error',
+        err instanceof Error ? err.message : 'Failed to resume run',
+      );
     }
   };
 
@@ -142,7 +149,10 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
       await cancelMutation.mutate({ runId, token });
       addFlash('success', `Run ${runId.slice(0, 8)} cancelled`);
     } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : 'Failed to cancel run');
+      addFlash(
+        'error',
+        err instanceof Error ? err.message : 'Failed to cancel run',
+      );
     }
   };
 
@@ -151,8 +161,11 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
     resumeMutation.isPending ||
     cancelMutation.isPending;
 
-  const btnClass = compact ? 'btn btn-ghost btn-sm' : 'btn btn-secondary btn-sm';
-  const { canPause, canResume, canCancel, canView } = runControlAffordances(status);
+  const btnClass = compact
+    ? 'btn btn-ghost btn-sm'
+    : 'btn btn-secondary btn-sm';
+  const { canPause, canResume, canCancel, canView } =
+    runControlAffordances(status);
 
   return (
     <div className="flex gap-2" style={{ alignItems: 'center' }}>
@@ -161,6 +174,7 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
           type="button"
           className={btnClass}
           title="Pause"
+          aria-label="暂停运行"
           disabled={isPending}
           onClick={handlePause}
         >
@@ -173,6 +187,7 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
           type="button"
           className={btnClass}
           title="Resume"
+          aria-label="恢复运行"
           disabled={isPending}
           onClick={handleResume}
         >
@@ -183,8 +198,13 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
       {canCancel && (
         <button
           type="button"
-          className={compact ? 'btn btn-ghost btn-sm' : 'btn btn-danger btn-sm'}
+          className={
+            compact ? 'btn btn-ghost btn-sm' : 'btn btn-danger btn-sm'
+          }
           title="Cancel"
+          aria-label={
+            pendingAction === 'cancel' ? '确认取消运行' : '请求取消运行'
+          }
           disabled={isPending}
           onClick={handleCancel}
         >
@@ -197,6 +217,7 @@ export function RunControls({ runId, status, compact, onView }: RunControlsProps
           type="button"
           className={btnClass}
           title="View details"
+          aria-label="查看运行详情"
           onClick={(e) => {
             e.stopPropagation();
             onView(runId);
