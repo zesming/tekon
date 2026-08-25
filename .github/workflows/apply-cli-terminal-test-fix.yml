@@ -1,0 +1,63 @@
+name: Apply CLI terminal test fix
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, '[apply-cli-terminal-test-fix]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Apply test correction
+        run: python3 scripts/apply_cli_terminal_test_fix.py
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Format test
+        run: npm exec --yes -- pnpm@10.12.1 exec prettier --write packages/cli/__tests__/run-cli.test.ts
+
+      - name: Build Core and CLI
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli build
+
+      - name: Run full CLI unit suite
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
+
+      - name: Run CLI e2e suite
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+
+      - name: Diff check
+        run: git diff --check
+
+      - name: Commit and push correction
+        run: |
+          set -euo pipefail
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git add -- packages/cli/__tests__/run-cli.test.ts
+          git rm -f -- \
+            .github/workflows/apply-cli-terminal-test-fix.yml \
+            scripts/apply_cli_terminal_test_fix.py
+          git diff --cached --check
+          git commit -m "test: enforce monotonic terminal CLI behavior"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
