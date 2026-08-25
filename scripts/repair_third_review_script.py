@@ -17,5 +17,18 @@ if text.count(call_marker) != 1:
         f'expected one ambiguous rework-agent catch patch call, found {text.count(call_marker)}',
     )
 text = text.replace(call_marker, replacement, 1)
+
+# The staged patch intentionally replaces direct ownership checks with a local
+# helper, but a blind textual replacement would also rewrite the helper body
+# itself into infinite recursion. Restore the generated helper immediately
+# before gate-runner.ts is written.
+write_marker = '''text = text.replace(\n    "isJobOwnershipLostAbort(deps.getSignal?.())",\n    "ownershipLost()",\n)\nwrite("packages/core/src/workflow/gate-runner.ts", text)\n'''
+write_replacement = '''text = text.replace(\n    "isJobOwnershipLostAbort(deps.getSignal?.())",\n    "ownershipLost()",\n)\ntext = text.replace(\n    "const ownershipLost = (): boolean =>\\n    ownershipLost();",\n    "const ownershipLost = (): boolean =>\\n    isJobOwnershipLostAbort(deps.getSignal?.());",\n    1,\n)\nwrite("packages/core/src/workflow/gate-runner.ts", text)\n'''
+if text.count(write_marker) != 1:
+    raise RuntimeError(
+        f'expected one gate-runner write marker, found {text.count(write_marker)}',
+    )
+text = text.replace(write_marker, write_replacement, 1)
+
 path.write_text(text, encoding='utf-8')
-print('Repaired ambiguous rework-agent catch patch selection.')
+print('Repaired staged patch selection and generated ownership helper.')
