@@ -315,19 +315,25 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 - `packages/core/src/runtime/dsh-headless-adapter.ts` — adapter + 命令构造 + env 护栏
 - `packages/core/src/runtime/dsh-bridge-probe.ts` — 版本 gate + capability probe + 常量
 - `packages/core/__tests__/runtime/dsh-headless-adapter.test.ts`
+- `packages/core/__tests__/runtime/dsh-bridge-probe.test.ts`（probe 纯函数单测）
 - `packages/core/__tests__/runtime/dsh-bridge-contract.test.ts`（L1 fixture + L2 opt-in）
 - `packages/core/__tests__/fixtures/dsh/` — 2026-08-25 实测输出 fixture
 
 修改：
 
-- `packages/core/src/runtime/provider-registry.ts` — 注册 `dsh-headless`（snapshotVersion 1）
-- `packages/core/src/types/config.ts` — provider 枚举 ×2 加 `'dsh-headless'`
+- `packages/core/src/runtime/provider-registry.ts` — 注册 `dsh-headless`（snapshotVersion 1）+ 版本 escape hatch 接线（`dshVersionGateOptions` 读 `TEKON_DSH_ALLOW_VERSION`）
+- `packages/core/src/runtime/index` 导出：`packages/core/src/index.ts` re-export 两个新模块
+- `packages/core/src/workflow/workflow-runtime.ts` — `defaultCommandPolicy` allow 列表加 `{ tool: 'dsh' }`（评审 M1；否则 gateway 拒每次真实 dsh run）
+- `packages/core/src/types/config.ts` — provider 枚举 ×2 加 `'dsh-headless'` + 新增 `acknowledgeUnrestrictedNetwork` 字段
 - `packages/core/src/types/domain.ts` — `runProviderConfigSchema.provider` 加值
 - `packages/core/src/eval/work-usability.ts` — `workUsabilitySampleSchema.expectedProvider` 枚举(:37)加值(实现自查补全:原 §14.1 遗漏的第 5 处 provider 枚举;`.strict()` 下 eval 样本若期望 dsh-headless run 会被拒,故必须同步)
-- `packages/core/src/runtime/agent-runtime.ts`（评审 S2 补全）— (1) `SupportedAgent` 类型联合(:27)加 `'dsh-headless'`;(2) `createAgentRuntime` 错误信息(:64 "Supported agents: ...")更新;(3) `defaultProviderConfig` 未知 agent 抛错处(:147-150)加 dsh-headless 分支;(4) restore 白名单纳入 `dsh-headless`
-- `packages/core/src/runtime/agent-adapter.ts`（评审 S2）— `AgentRunResult.provider` 联合类型(:48)加值
-- `packages/core/__tests__/runtime/provider-registry.test.ts` — 四 built-in 断言
-- `docs/manual/tekon-user-manual.md` + `.html` — experimental provider 章节
+- `packages/core/src/runtime/agent-runtime.ts`（评审 S2 补全）— (1) `SupportedAgent` 类型联合(:27)加 `'dsh-headless'`;(2) `createAgentRuntime` 错误信息(:64 "Supported agents: ...")更新;(3) `defaultProviderConfig` 未知 agent 抛错处(:147-150)加 dsh-headless 分支(委托 `dshHeadlessProviderConfig`);(4) restore 白名单纳入 `dsh-headless`;(5) `summarizeAgentConfig` 持久化 ack 位
+- `packages/core/src/runtime/agent-adapter.ts`（评审 S2）— `AgentRunResult.provider` 联合类型(:48)加值 + 网络 ack 护栏 carve-out（仅 dsh-headless+ack 放行 `network:'enabled'`）
+- `packages/web/src/client/components/runs/StartRunForm.tsx`（评审 S4）— AGENT_OPTIONS 加 `dsh-headless` + experimental 内联标签
+- `packages/core/__tests__/runtime/provider-registry.test.ts` — 四 built-in 断言 + dsh snapshot 往返/ack 剥离 fail-closed
+- `packages/core/__tests__/runtime/agent-runtime.test.ts` — 错误信息断言同步
+- `packages/core/__tests__/workflow/engine-unit.test.ts`（评审 M1 回归锁）— 断言 `dsh ∈ defaultCommandPolicy`
+- `docs/manual/tekon-user-manual.md` + `.html` — experimental provider 章节（§1 第一屏红字 + §5.7 + `--agent` flag）
 - `README.md` / `CHANGELOG.md` / `package.json`（MINOR bump：新 provider）
 
 ### 14.2 验收标准
@@ -337,7 +343,7 @@ ACL 全部活在 `dsh-headless-adapter.ts` 一个文件内，对外只暴露 `Ag
 3. 版本 gate：PATH 上 dsh 版本 ≠ pin 时，`tekon run --provider dsh-headless` 显式报错退出，错误信息含实测/已测版本；
 4. `danger-full-access` 配置被工厂拒绝；
 5. L1 fixture 契约测试常驻通过；L2 在装了 dsh 的机器上手动通过；L3 在有 API key 时手动通过并留证；
-6. manual 章节写明：experimental、一次性边界、无 artifact、需自行安装 dsh、治理 posture 与 codex 等价。
+6. manual 章节写明：experimental、一次性边界、无 artifact、需自行安装 dsh、**治理 posture 网络轴弱于 codex(不受限)、审批轴等价、文件系统轴 dsh 更受限**(按 §7 M1 三轴订正,绝不宣称笼统"等价")。
 
 ### 14.3 未决问题（已全部拍板，见 §17）
 
@@ -431,4 +437,4 @@ reviewer(最高思考)对实现逐条核实,检出 1 must-fix + 6 should-fix,已
 - **S6(版本 gate 接线测试)**:补 4 用例——drift 版本 spawn 前 reject、allowVersion 放行 + warning、探测缓存一次、fake command 不探测。
 - **N1/N3/N4**:CHANGELOG "safe-default" 措辞订正为 `exact`;`assertSafeDshArgs` 增拒 `--version`;artifact ingestion 注释订正(只读 outputDir,不摄取 worktree 内文件)。N2(exit1 映射)补测试。
 
-修复后:全 dsh 测试 56 passed(3 skip);全量根聚合复跑见提交说明。残留风险(设计已记录、修复项无法消除):同版本静默行为漂移只有手动 L3 能抓(§12 S4 盲区);dsh profile 同名覆盖语义未实测(S2 依据,已用 worktree 外隔离规避);L3 live run 从未在本环境执行(无 dsh/无 key),生产正确性依赖 fixture + 手动验收。
+修复后:5b 触及的四个测试文件 57 passed(3 skip);全量根聚合 1275 passed(3 skip)。残留风险(设计已记录、修复项无法消除):同版本静默行为漂移只有手动 L3 能抓(§12 S4 盲区);dsh profile 同名覆盖语义未实测(S2 依据,已用 worktree 外隔离规避);L3 live run 从未在本环境执行(无 dsh/无 key),生产正确性依赖 fixture + 手动验收。

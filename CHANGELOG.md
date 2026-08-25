@@ -33,7 +33,7 @@ Harness-inspired replatform 阶段 5：**legacy 清理（5a）+ Harness bridge�
 
 - 5a core:`demand/shape.test.ts` 删除(对应 shim 已删);`types/session-contract.test.ts` +1(`job/status` ∈ CONTROL_EVENT_TYPES)。
 - 5b core:`dsh-bridge-probe.test.ts`(13,版本解析/gate/help+config 契约)、`dsh-headless-adapter.test.ts`(27,命令构造/launcher flag 拒绝/网络 ack 护栏/danger-full-access 拒绝/结果映射四终态/版本 gate 接线四态/env 钉死+DSH_HOME worktree 外+key 透传/goal-only artifact 失败/零 spawn 回归锁)、`dsh-bridge-contract.test.ts`(L1 fixture 常驻 + L2 opt-in skip)、`provider-registry.test.ts`(+四 built-in + dsh snapshot 往返 + ack 剥离 fail-closed)、`engine-unit.test.ts`(+dsh ∈ defaultCommandPolicy 回归锁);`agent-runtime.test.ts` 错误信息断言同步。
-- 全量根聚合 1274 passed(110 文件)/ 三包 typecheck 全绿。5a 别名删除后无残留公开别名引用(全仓 grep);5b 不选 dsh 时零 spawn(gateway spy 锁定)。
+- 全量根聚合 1275 passed(110 文件)/ 三包 typecheck 全绿。5a 别名删除后无残留公开别名引用(全仓 grep);5b 不选 dsh 时零 spawn(gateway spy 锁定)。
 
 ## v0.13.0
 
