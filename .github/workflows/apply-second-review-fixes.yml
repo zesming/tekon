@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Repair staged review script
+        run: python3 scripts/patch_second_review_script.py
+
       - name: Apply reviewed changes
         run: python3 scripts/apply_second_review_fixes.py
 
@@ -120,7 +123,10 @@ jobs:
             packages/web/src/client/pages/SessionDetailPage.tsx \
             docs/reviews/2026-08-20-tekon-human-usability-and-deepseek-harness-migration-review.md \
             docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md
-          git rm -- .github/workflows/apply-second-review-fixes.yml scripts/apply_second_review_fixes.py
+          git rm -- \
+            .github/workflows/apply-second-review-fixes.yml \
+            scripts/apply_second_review_fixes.py \
+            scripts/patch_second_review_script.py
           git diff --cached --check
           git commit -m "fix: address second Harness replatform review"
           git push origin HEAD:review/deepseek-harness-migration-2026-08-20
