@@ -4,12 +4,11 @@ path = Path(__file__).with_name('apply_second_review_fixes.py')
 text = path.read_text(encoding='utf-8')
 start_marker = '''insert_before_last(
     "packages/cli/__tests__/approval-terminal.test.ts",'''
-end_marker = '''
-
-# ---------------------------------------------------------------------------
-# 2. Workflow terminality'''
+next_operation = '''
+regex_replace_once(
+    "packages/cli/src/commands/approval.ts",'''
 start = text.index(start_marker)
-end = text.index(end_marker, start)
+end = text.index(next_operation, start)
 replacement = """replace_once(
     \"packages/cli/__tests__/approval-terminal.test.ts\",
     \"});\\n\\nfunction createMemoryIo\",
@@ -34,6 +33,7 @@ replacement = """replace_once(
 
 function createMemoryIo''',
 )
+
 """
 path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
 print('Repaired approval-terminal test insertion in the staged review script.')
