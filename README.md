@@ -51,6 +51,19 @@
 | 效果评估 | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性 |
 | Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面 |
 
+## 当前边界与实验性特性
+
+Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里程碑**阶段。为避免过度宣称，以下能力的现状明确如下：
+
+- **默认发起 = 受控交付全链路**：Web「开始会话」与 `tekon run`（默认 `standard-delivery`）会进入 PM/RD/QA/Reviewer 完整交付流程，而非轻量对话。轻量协作会话（Collaborate）为后续方向。
+- **Session feed 非完整模型 streaming**：中间栏的 Agent 消息当前为「产物元数据合成的摘要」（DSH headless 会展示官方最终 assistant 文本），**不是逐块的模型原文增量**（`assistant/chunk`）。真流式为后续里程碑。
+- **follow-up / steer 未开放**：进入 Session 后暂不能继续追问或中途转向，Composer 仅用于发起新 run。
+- **Event log 是迁移期 best-effort projection**：`session_events` 为 best-effort 双写投影，**`workflow_instances` / `jobs` 等旧表仍是事实源**；迁移期个别事件可能缺失，不保证从 event log 完整重建。
+- **automation（自动准备交付 / readiness）仅长驻进程内触发**：由 CLI 完成的 run 不会触发另一 Web 进程的 automation；CLI 交付仍走显式 `tekon delivery prepare`。
+- **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
+- **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
+- **Workspace 为单项目占位**：暂不支持多 workspace 切换/增删。
+
 ## 快速开始
 
 ### 安装

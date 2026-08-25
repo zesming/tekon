@@ -30,6 +30,16 @@ export interface RunProjectContext {
 }
 
 /**
+ * The minimal workflow-engine surface the job executor drives. buildEngine
+ * returns the full engine; this narrows it to what execute() consumes so the
+ * engineFactory test seam can supply a lightweight fake.
+ */
+export interface WorkflowJobEngine {
+  executePreparedRun(runId: string): Promise<WorkflowInstance>;
+  resumeRun(runId: string): Promise<{ workflow: WorkflowInstance }>;
+}
+
+/**
  * Workflow JobExecutor (design §2.2, moved from web in 4a). Each background
  * job maps its session to a runId, builds the workflow engine from the run's
  * persisted provider snapshot, drives executePreparedRun / resumeRun with the
@@ -51,6 +61,17 @@ export function createWorkflowJobExecutor(deps: {
   registry: SubprocessRegistry;
   /** Phase 2 S3: best-effort agent-loop event sink (the dual-write bridge). */
   agentEventSink?: AgentEventSink;
+  /**
+   * Test seam: override how the workflow engine is built for a run. Defaults to
+   * the production buildEngine (provider snapshot → real engine). Injecting a
+   * fake engine lets tests drive settleByWorkflowStatus with a chosen workflow
+   * status (e.g. a non-terminal status, to lock the §0.3 fake-pass guard)
+   * without a full agent run.
+   */
+  engineFactory?: (
+    runId: string,
+    ctx: JobExecutionContext,
+  ) => Promise<WorkflowJobEngine>;
 }): JobExecutor {
   const { repositories, audit, projectContext, sessions, bus, registry } = deps;
 
@@ -134,7 +155,7 @@ export function createWorkflowJobExecutor(deps: {
       await emit(job.sessionId, 'turn/start', { runId, kind: job.kind });
 
       try {
-        const engine = await buildEngine(runId, ctx);
+        const engine = await (deps.engineFactory ?? buildEngine)(runId, ctx);
         // 4b: explicit kind dispatch. An unknown kind MUST throw here (→ caught
         // below → job failed), never fall through to executePreparedRun — a
         // fall-through on an unprepared/empty plan would settle run.passed and

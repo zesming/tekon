@@ -194,4 +194,39 @@ describe('runAgentWithStepEvents (S3)', () => {
     expect(assistant.payload.text).toBe('This is the provider final answer.');
     expect(assistant.payload.synthetic).toBe(false);
   });
+
+  // F-08: durable step events must be redacted BEFORE they are written to the
+  // session store — presentation-layer redaction is not a substitute.
+  it('F-08: redacts secrets in the durable step/start prompt summary', async () => {
+    const { sink, events } = collectingSink();
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    const meta = { ...META, promptSummary: `use key ${secret} to auth` };
+    const adapter = adapterReturning({ exitCode: 0 });
+
+    await runAgentWithStepEvents(adapter, INPUT, meta, sink);
+
+    const start = events.find((event) => event.type === 'step/start')!;
+    const summary = JSON.stringify(start.payload);
+    expect(summary).not.toContain(secret);
+    expect(summary).toContain('REDACTED');
+  });
+
+  it('F-08: redacts secrets in the durable agent/error message when the adapter throws', async () => {
+    const { sink, events } = collectingSink();
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    const adapter: AgentAdapter = {
+      async runAgent() {
+        throw new Error(`provider rejected token ${secret}`);
+      },
+    };
+
+    await expect(
+      runAgentWithStepEvents(adapter, INPUT, META, sink),
+    ).rejects.toThrow();
+
+    const error = events.find((event) => event.type === 'agent/error')!;
+    const serialized = JSON.stringify(error.payload);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).toContain('REDACTED');
+  });
 });

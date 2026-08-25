@@ -519,3 +519,52 @@ Advanced 不只是隐藏旧页面，而应成为明确的 Deliver/Operations 模
 - Event log 仍是迁移期 projection。
 
 本轮结论：**基础设施阶段有条件通过，产品整体不通过。**
+
+---
+
+## 附：实施方批注（2026-08-25）
+
+> 本节由实施方在收到本报告后追加。评估方法：两个最高思考等级 subagent 独立核验（其一验证报告 §3 F-01~F-09 修复是否真实落地、是否引入回归；其二对 §4 P0-01~P0-04 与 P1-01~P1-07 逐条做事实核验 + 本轮取舍），再由我逐条查证代码交叉复核。合并策略采纳报告 §11 **方案 1**（以「Event Spine / Durable Job / Session UI foundation」基础设施里程碑合并 + 诚实披露局限）——该方案**不要求**完成 P0-01~P0-04 产品里程碑。
+
+### 与报告的一致与分歧
+
+**高度一致**：报告 §3 的 F-01~F-09 修复经独立验证整体真实、可保留（F-02/F-03/F-06/F-07/F-09 为完整真修复；F-04/F-05/F-08 代码正确但回归测试偏弱）；§4 绝大多数 P0/P1 的**技术描述属实**；§11 方案 1 的披露清单当前满足度约 90%。本轮据此采纳方案 1。
+
+**一处分歧（P0-04 描述与代码相反）**：报告称 goal 模式「可改代码却默认无 Gate/Artifact……promoted 到 run branch 而无 review」。核验代码后判定**不成立**：`workflows/goal.yaml` 无 outputs → `nodeAllowsSourceChanges=false`（`lease-service.ts:168-174`）→ `finalizeExecutionLease`（`lease-service.ts:108-123`）在 promote **之前**调用 `inspectLeaseSourceChanges`，检出任何非 `.tekon` 源码改动（dirty 或 committed，`worktree-manager.ts:244-291`）即 `throw "not allowed to modify repository source files"`，`promoteLeaseToRunBranch` 不可达；该守卫早于本 PR 且有单测（`lease-service.test.ts`）。即当前行为**已是 fail-closed**，等效于报告建议的「goal 默认 read-only」。故 P0-04 无需改代码。
+
+**一处降级（P1-05 非安全漏洞）**：报告将「delivery approval 未绑定内容身份」列为可复用过期审批的风险。机制属实（`scm.ts:707-712`、`automation-job-executor.ts:85-91` 保留旧 `approvedBy/approvedAt`），但**无任何代码路径消费 persisted approval 来绕过 fresh 人工确认**：create-pr 副作用在 CLI（`delivery.ts` 需 `--approve-human`）与 Web（`delivery.ts` 需 `approveHuman===true`，且每次点击弹确认）都要求当次人工动作。真实影响是**审计可信度 + eval metric 误报**（`work-usability.ts:477` 可能把 stale approval 当 current），非权限提升。因此从「安全阻断」降级为「可信度硬化」。
+
+### 逐条处置（本轮 / 递延）
+
+| ID | 报告严重级 | 事实核验 | 本轮处置 | 依据 |
+| --- | --- | --- | --- | --- |
+| **F-01 残留** | （验证方新检出 High） | **属实** | **本轮必修** | F-01 把 node-executor ownership-lost 分支的 fail-safe `writeWorkflowTerminal` 换成无守卫 `updateWorkflowInstanceStatus('interrupted')`（`node-executor.ts:220/291/322`）+ 无守卫 `transitionNode('interrupted')`。被 fence 的 zombie worker 可把新 owner 已写的终态 `passed` 回退成 `interrupted`，破坏终态单调性。 |
+| P0-01 真流式 Agent Loop | 阻断 | 属实 | **递延**（里程碑 A） | `runAgent(): Promise<AgentRunResult>` 一次性黑盒；但 manual `:1026/:1061` 已诚实标注「合成摘要非模型原文」「逐块流式为后续规划」，无虚假宣称。 |
+| P0-02 follow-up/steer composer | 阻断 | 属实 | **递延**（里程碑 A） | `legacy-agent-driver.ts` follow-up/steer/resume 抛 NotSupported；SessionComposer 已提示「转向在 2b 提供」。 |
+| P0-03 默认启动 standard-delivery | 阻断 | 属实 | **递延 + 补披露** | 双轨（Collaborate/Deliver）是里程碑 B。本轮仅在 manual 加一句「默认发起=受控交付全链路」。 |
+| P0-04 goal 无治理改代码 | 阻断 | **不成立** | **无需改代码** | fail-closed 守卫已存在且有单测（见上）。可选：`roles/goal/system.md` 提示词微调，避免诱导 agent 改码致 run 失败。 |
+| P1-01 event log 非事实源 | — | 属实 | **递延 + 补披露** | canonicalization 是里程碑 C。文档未称其 canonical；本轮补一句「event log 是迁移期 best-effort projection，旧表仍是事实源」。 |
+| P1-02 automation 进程内 bus | — | 属实 | **递延**（里程碑 C） | auto-prepare 边界已在 manual `:1054` 披露；不产生假成功（绝不建 PR）。 |
+| P1-03 startRun 非原子 | — | 属实 | **递延** | 失败留可检测 partial state，非回归；无 idempotency 为 pre-existing 模式。 |
+| P1-04 tekon ui 手工 token | — | 属实 | **递延** | bootstrap nonce 是新 UX 机制；token 流程已文档化。 |
+| P1-05 approval 未绑内容身份 | — | 属实但影响被高估 | **披露 + 递延硬化** | 非安全洞（见上）。完整内容指纹绑定需 schema 迁移 + body 内容哈希，触及治理敏感的交付审批路径，与本 PR 里程碑不相称，且 reviewer 判为可选非阻塞。本轮仅在 CHANGELOG/manual 披露「审批记录尚未绑定内容指纹，重新准备后旧审批标记会保留」，硬化留待交付治理里程碑。 |
+| P1-06 workspace 单占位 | — | 属实 | **递延** | `CHANGELOG.md:148` 已诚实披露为只读占位。 |
+| P1-07 长 Session 无虚拟化 | — | 属实 | **递延** | 前端性能工程，非回归；典型 run 事件量可控。 |
+
+### 本轮实际交付范围（据上表收敛）
+
+1. **必修**：node-executor ownership-lost 无守卫写入回归（终态单调性红线）+ 跨 worker zombie 回归测试。**首轮 code review 追加检出 M1/M2/M3**：同一漏洞在 agent 成功后的 gates catch、finalize catch、gate-runner repair/exhausted 路径仍有裸写；已补 ownership-lost stand-down（node-executor gates/finalize catch + gate-runner 三处），并新增「gates 阶段被 fence」回归测试（已验证移除守卫即失败）。
+2. **补测试锁**：F-04（engine 非终态 → job failed + `agent/error`，fake-pass 红线）、F-08（durable 事件写前脱敏）。
+3. **诚实披露**：P0-03、P1-01、P1-05 各补一句；同步 README/CHANGELOG/manual §11 披露清单至 100%。
+4. **第二轮 code review 追加**：S6（gate-runner repair 循环 finally 在 fence 下不再 finalize lease——避免僵尸 `git branch -f` 强制回退新 owner 已交付的 run branch，与 S1 同源），本轮一并修复。
+
+P1-05 的内容指纹硬化、其余递延项均属报告 §10 里程碑 A/B/C，且已在代码 / CHANGELOG / manual 诚实标注未开放，**不作为本 PR 缺口**，留待后续里程碑。
+
+### 记录为后续（第二轮 review 提出，非本轮红线）
+
+以下为交付分支 git 层残留与极窄窗口的状态不一致，**不回退 workflow 终态**（本轮红线已封闭），成本/风险与本 PR 里程碑不相称，记录待后续处理：
+
+- **S7**：`rework.ts` 的 4 处 `finalizeExecutionLease` 同样未感知 fence（与 S6 同源，但 rework 仅 `changes-requested` + `independent-review` 可达，更窄）。修复需给 rework 线程 `getSignal` 并区分 success-path promote 与 cleanup finalize，避免误伤合法 rework 提升。
+- **S8**：`gate-runner.ts` repair 成功后回写主节点的 `transitionNode(node.id,'running'/'awaiting-gate')` 为裸写；fence 落在"repair 成功后、回写前"极窄窗口时可能把 `passed` 节点回退成 `awaiting-gate`（workflow 行不动，仍 `passed`），造成节点/workflow 状态短暂不一致。
+- **S9**：`engine-recovery.e2e.test.ts` 的 gates-fence 用例（gate engine 返回 failed result，节点 gate 无 autoFix → exhausted）驱动 fence 检查 (a)（runGate 非 passed 后）+ M1/M2 兜底；但 (b) repair-loop 顶部检查、exhausted-settle 前检查（`gate-runner.ts` exhausted 分支）、以及 M1/M2 catch 的抛错路径**未被单独驱动**（gate engine 返回 failed 而非抛错，且模板 gate 无 autoFix）。建议后续补 gate engine 抛错变体（单独锁 M1）+ autoFix gate + repair agent 抛错变体（锁 (b)/M2）+ exhausted 路径 fence 变体。
+- **S2**：`node-executor.ts` SHOULD4 stale-running 分支未加 fence early-return（该行仍为裸写）；其触发条件（节点 `running` + active lease + 无 completed run）在正常时序下与 workflow 终态互斥（不回退终态），仅极窄的解冻窗口内可能误伤新 owner 在途 role_run。

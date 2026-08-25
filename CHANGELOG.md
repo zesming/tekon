@@ -1,5 +1,28 @@
 # 变更日志
 
+## v0.14.1
+
+第二轮全面复审（`docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md`）循环评估后的收敛修复。经两个最高思考等级 subagent（验证 F-01~F-09 修复真实性 + P0/P1 逐条取舍）+ 交叉复核，按报告 §11「方案 1」以基础设施里程碑推进：修复一处必修回归、补两处 fake-pass/脱敏红线测试锁、诚实披露产品边界。
+
+### 修复（必修，正确性红线）
+
+- **修复 F-01 引入的终态单调性回归（High）**：`node-executor.ts` 三处 ownership-lost 分支（预 agent / finally / catch）此前用无守卫的 `updateWorkflowInstanceStatus('interrupted')` + `transitionNode('interrupted')` 写共享 node/workflow 行。当一个僵尸 worker 被新 owner fence（job 已被 recoverStale 重领并写 `passed`）时，其 abort 收尾会把新 owner 的终态 `passed` 回退成 `interrupted`，破坏终态单调性。
+  - ownership-lost（`isJobOwnershipLostAbort`）分支现**完全跳过共享 node/workflow 写入 + 不 finalize lease**，仅清理自身 `role_run` 后 stand down（新 owner 权威；避免僵尸 finalize 把半成品 promote 到共享 run branch）。
+  - 新增 `repositories.updateWorkflowInstanceStatusIfActive`（条件 UPDATE：`status not in ('passed','failed','cancelled')`）；真正的中断（非 fence）写 `interrupted` 也经此守卫，绝不覆盖终态。
+  - **首轮 code review 追加检出 M1/M2/M3**：同一漏洞在 agent 成功后的路径仍有裸写——gates catch、finalize catch（`node-executor.ts`）与 gate-runner repair/exhausted 写入（`gate-runner.ts`）。已补 ownership-lost stand-down：gate-runner 新增 `getSignal()` dep，在 gate 失败后、repair 循环每轮、exhausted settle 前三处 fence 检查；node-executor gates/finalize catch 加同构守卫。
+  - **次轮 code review 追加检出 S6**：gate-runner repair 循环的 `finally` 在 fence 下仍无条件 `finalizeExecutionLease`，会 `git branch -f` 强制把僵尸 repair worktree promote 到 run branch、回退新 owner 已交付的分支（git 层代码丢失，与 S1 同源）。已加 fence 守卫跳过。rework.ts 同类 finalize（S7）、repair 成功后回写主节点的极窄窗口（S8）不回退 workflow 终态，记录为后续。
+  - 回归测试：`engine-recovery.e2e.test.ts` 新增「被 fence 的执行器不得回退新 owner 的终态」（agent throw 路径）与「gates 阶段被 fence 不得回退终态」（agent 成功 + gate 阶段 fence，覆盖 M1/M2/M3）；`repositories.test.ts` 新增守卫单测。三者均已验证移除守卫即失败，非假通过。
+
+### 测试（补红线锁）
+
+- **F-04 fake-pass 锁**：`workflow-job-executor.ts` 加 `engineFactory` 测试注入 seam；`automation-job-executor.test.ts` 新增「engine 返回非终态 → job failed + `agent/error`（不静默映射 done/idle）」，并已验证反向（default 分支改回 done）会令该测试失败。
+- **F-08 写前脱敏锁**：`agent-step-events.test.ts` 新增「durable `step/start` promptSummary 与 `agent/error` 消息在写入前脱敏」两条断言。
+
+### 文档（诚实披露产品边界，方案 1 前提）
+
+- README 新增「当前边界与实验性特性」章节；`docs/manual/tekon-user-manual.md`（及 `.html`）同步披露：默认发起=`standard-delivery` 受控交付全链路、Session feed 非完整模型 streaming、follow-up/steer 未开放、event log 为迁移期 best-effort projection（旧表仍是事实源）、automation 仅长驻进程内触发、交付审批记录未绑定内容指纹、goal 模式为实验性且默认拒绝源码改动、workspace 为单项目占位。
+- 复审报告追加「实施方批注」：逐条 P0/P1 事实核验 + 本轮/递延处置；其中 **P0-04 判定为描述不准**（goal 改源码会被 `finalizeExecutionLease` fail-closed 拒绝，已有单测，不 promote），**P1-05 判定非安全洞**（create-pr 始终要求当次人工批准）。
+
 ## v0.14.0
 
 Harness-inspired replatform 阶段 5：**legacy 清理（5a）+ Harness bridge（5b）**。5a 移除已废弃的 `demand.*` 兼容别名层;5b 新增 experimental 的 `dsh-headless` provider——经 `dsh --profile headless "<task>"` 子进程边界接入 DeepSeek Harness,默认关闭、零回归面。

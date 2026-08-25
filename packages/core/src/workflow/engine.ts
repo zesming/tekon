@@ -220,6 +220,7 @@ export function createWorkflowEngine(
     executionLeases,
     getCheckedTransition: () => checkedTransitionNode,
     getReworkHandler: () => reworkHandlerRef,
+    getSignal: () => options.signal,
     agentEventSink: options.agentEventSink,
   });
   gateRunnerRef = gateRunner;

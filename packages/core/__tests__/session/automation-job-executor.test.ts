@@ -523,4 +523,76 @@ describe('automation job executor (4d/4e)', () => {
     expect(typeof payload.ready).toBe('boolean');
     expect(Array.isArray(payload.checks)).toBe(true);
   });
+
+  // F-04 (§0.3 fake-pass guard): if the engine ever returns a non-terminal
+  // workflow status (running/pending — a contract breach), the executor MUST
+  // fail loudly (job failed + agent/error preserving the status), never map it
+  // to done/idle. Locks the default branch of settleByWorkflowStatus so a
+  // future refactor cannot silently reintroduce a false pass.
+  it('F-04: a non-terminal engine result fails the job and emits agent/error (no fake pass)', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-fakepass-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+    const repositories = createRepositories(db, writeQueue);
+    const audit = createAuditLogger({ repositories, db, writeQueue });
+    const sessions = createSessionEventStore(db, writeQueue);
+    const jobs = createJobRepository(db, writeQueue);
+    const bus = createSessionEventBus();
+    const registry = createSubprocessRegistry();
+
+    await seedRun(repositories, 'run_fakepass', 'running');
+    const session = await seedSession(sessions, 'run_fakepass');
+
+    const executor = createWorkflowJobExecutor({
+      repositories,
+      audit,
+      projectContext: { projectRoot: repoPath },
+      sessions,
+      bus,
+      registry,
+      // Contract-breaching engine: returns a still-`running` workflow.
+      engineFactory: async () => ({
+        async executePreparedRun() {
+          return (await repositories.getWorkflowInstance('run_fakepass'))!;
+        },
+        async resumeRun() {
+          return {
+            workflow: (await repositories.getWorkflowInstance('run_fakepass'))!,
+          };
+        },
+      }),
+    });
+    const runner = createJobRunner({
+      jobs,
+      sessions,
+      bus,
+      registry,
+      executor,
+      pollIntervalMs: 5,
+      heartbeatMs: 30,
+      leaseTtlMs: 30_000,
+      workerId: 'worker_fakepass',
+    });
+    runners.push(runner);
+
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+    runner.start();
+
+    // The non-terminal status must settle the job as failed, NOT done.
+    expect(await waitForJob(jobs, job.id)).toBe('failed');
+    const types = await eventTypes(sessions, session.id);
+    expect(types).toContain('agent/error');
+    expect((await sessions.findSessionByRunId('run_fakepass'))?.status).toBe(
+      'failed',
+    );
+    // The unexpected status is preserved in the durable event trail.
+    const events = await sessions.listEventsSince(session.id, 0);
+    const errorEvent = events.find((e) => e.type === 'agent/error');
+    expect(JSON.stringify(errorEvent?.payload)).toContain('running');
+  }, 15_000);
 });

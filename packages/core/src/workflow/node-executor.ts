@@ -20,7 +20,7 @@ import type { PromptBuilder } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
-import { isJobCancellationAbort } from '../session/job-runner.js';
+import { isJobCancellationAbort, isJobOwnershipLostAbort } from '../session/job-runner.js';
 
 export interface NodeExecutorDeps {
   repositories: TekonRepositories;
@@ -207,6 +207,22 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
             roleRunId,
             interruptedAt: new Date().toISOString(),
           });
+          // Ownership-lost fencing: another owner recovered this job and is
+          // authoritative. This fenced executor must NOT touch the shared node
+          // or workflow rows — doing so could revert the new owner's terminal
+          // state (terminal-state monotonicity). Clean up only our own
+          // role_run (done above) and stand down.
+          if (isJobOwnershipLostAbort(deps.signal)) {
+            await audit.append({
+              runId,
+              type: 'node.interrupted',
+              payload: {
+                nodeId: node.id,
+                error: 'job ownership lost before agent start (fenced)',
+              },
+            });
+            return false;
+          }
           await repositories.transitionNode(node.id, 'interrupted');
           const cancelled = isJobCancellationAbort(deps.signal);
           if (cancelled) {
@@ -217,7 +233,9 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
               node.id,
             );
           } else {
-            await repositories.updateWorkflowInstanceStatus(
+            // Genuine interrupt (no fencing signal): guard the write so it can
+            // never overwrite a terminal status.
+            await repositories.updateWorkflowInstanceStatusIfActive(
               runId,
               'interrupted',
               node.id,
@@ -233,7 +251,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
               nodeId: node.id,
               error: cancelled
                 ? 'cancelled before agent start'
-                : 'job ownership lost before agent start',
+                : 'interrupted before agent start',
             },
           });
           return false;
@@ -277,26 +295,35 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
               roleRunId,
               interruptedAt: new Date().toISOString(),
             });
-            await repositories.transitionNode(node.id, 'interrupted');
-            if (isJobCancellationAbort(deps.signal)) {
-              // S5: abort path — the workflow settles `cancelled` via the
-              // idempotent terminal writer (M2), not `interrupted`.
-              await writeWorkflowTerminal(
-                repositories,
-                runId,
-                'cancelled',
-                node.id,
-              );
-            } else {
-              await repositories.updateWorkflowInstanceStatus(
-                runId,
-                'interrupted',
-                node.id,
-              );
+            // Ownership-lost fencing: the new owner is authoritative. Stand
+            // down without side effects — do NOT touch shared node/workflow
+            // rows (would revert its terminal state) and do NOT finalize the
+            // lease (commit + promote would push this stale worktree onto the
+            // run branch the new owner already owns). Our own role_run is
+            // marked interrupted above.
+            if (!isJobOwnershipLostAbort(deps.signal)) {
+              await repositories.transitionNode(node.id, 'interrupted');
+              if (isJobCancellationAbort(deps.signal)) {
+                // S5: abort path — the workflow settles `cancelled` via the
+                // idempotent terminal writer (M2), not `interrupted`.
+                await writeWorkflowTerminal(
+                  repositories,
+                  runId,
+                  'cancelled',
+                  node.id,
+                );
+              } else {
+                // Genuine interrupt: guarded write never overwrites terminal.
+                await repositories.updateWorkflowInstanceStatusIfActive(
+                  runId,
+                  'interrupted',
+                  node.id,
+                );
+              }
+              await leaseService
+                .finalizeExecutionLease(runId, node.id)
+                .catch(() => {});
             }
-            await leaseService
-              .finalizeExecutionLease(runId, node.id)
-              .catch(() => {});
           }
         }
       } catch (error) {
@@ -304,6 +331,20 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         // maps it to job cancelled), never be swallowed into `interrupted`.
         if (isWorkflowTerminalError(error)) {
           throw error;
+        }
+        // Ownership-lost fencing: stand down without touching shared node or
+        // workflow rows — the recovering owner is authoritative and may have
+        // already settled a terminal status we must not revert.
+        if (isJobOwnershipLostAbort(deps.signal)) {
+          await audit.append({
+            runId,
+            type: 'node.interrupted',
+            payload: {
+              nodeId: node.id,
+              error: 'job ownership lost (fenced)',
+            },
+          });
+          return false;
         }
         await repositories.transitionNode(node.id, 'interrupted');
         if (isJobCancellationAbort(deps.signal)) {
@@ -319,7 +360,8 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
             node.id,
           );
         } else {
-          await repositories.updateWorkflowInstanceStatus(
+          // Genuine interrupt: guarded write never overwrites terminal.
+          await repositories.updateWorkflowInstanceStatusIfActive(
             runId,
             'interrupted',
             node.id,
@@ -352,8 +394,23 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         }
       }
     } catch (error) {
+      // Ownership-lost fencing: a stale executor whose gate work raced a new
+      // owner's completion must NOT write node/workflow state — the new owner
+      // (which may have already settled `passed`) is authoritative.
+      if (isJobOwnershipLostAbort(deps.signal)) {
+        await audit.append({
+          runId,
+          type: 'gate.execution.error',
+          payload: {
+            nodeId: node.id,
+            error: 'job ownership lost during gates (fenced)',
+          },
+        });
+        return false;
+      }
       await repositories.transitionNode(node.id, 'interrupted');
-      await repositories.updateWorkflowInstanceStatus(
+      // Guarded: never overwrite a terminal status settled by another writer.
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'interrupted',
         node.id,
@@ -373,8 +430,23 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       await helpers.recordQaValidationRef(runId, node);
       await leaseService.finalizeExecutionLease(runId, node.id);
     } catch (error) {
+      // Ownership-lost fencing: same stand-down as above. The new owner already
+      // finalized/promoted this node's lease; this stale executor must not
+      // touch shared node/workflow rows.
+      if (isJobOwnershipLostAbort(deps.signal)) {
+        await audit.append({
+          runId,
+          type: 'worktree.lease.finalize.failed',
+          payload: {
+            nodeId: node.id,
+            error: 'job ownership lost during finalize (fenced)',
+          },
+        });
+        return false;
+      }
       await repositories.transitionNode(node.id, 'interrupted');
-      await repositories.updateWorkflowInstanceStatus(
+      // Guarded: never overwrite a terminal status settled by another writer.
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'interrupted',
         node.id,

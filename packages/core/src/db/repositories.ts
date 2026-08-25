@@ -199,6 +199,17 @@ export interface TekonRepositories {
     status: WorkflowStatus,
     currentNodeId?: string | null,
   ): Promise<WorkflowInstance | null>;
+  /**
+   * Guarded status write: applies only when the run is NOT already terminal
+   * (passed/failed/cancelled). Used by interrupt/abort recovery so a stale or
+   * fenced executor can never revert a terminal run to a non-terminal status
+   * (terminal-state monotonicity). Returns the current row regardless.
+   */
+  updateWorkflowInstanceStatusIfActive(
+    runId: string,
+    status: WorkflowStatus,
+    currentNodeId?: string | null,
+  ): Promise<WorkflowInstance | null>;
   casWorkflowInstanceStatus(
     runId: string,
     expectedFrom: WorkflowStatus,
@@ -414,6 +425,36 @@ export function createRepositories(
              set status = ?, current_node_id = ?, updated_at = ?
              where id = ?`,
           ).run(status, currentNodeId, now(), runId);
+        }
+
+        const row = db
+          .prepare('select * from workflow_instances where id = ?')
+          .get(runId) as WorkflowInstanceRow | undefined;
+        return row ? mapWorkflowInstance(row) : null;
+      });
+    },
+
+    async updateWorkflowInstanceStatusIfActive(runId, status, currentNodeId) {
+      return writeQueue.enqueue(() => {
+        // Terminal-state monotonicity guard: the UPDATE is scoped with a
+        // `status not in (terminal)` predicate so a stale/fenced executor's
+        // interrupt write can never clobber a run another owner has already
+        // settled to passed/failed/cancelled. When the run is terminal the
+        // UPDATE matches 0 rows and the current (terminal) row is returned.
+        if (currentNodeId === undefined) {
+          db.prepare(
+            `update workflow_instances
+             set status = @status, updated_at = @now
+             where id = @runId
+               and status not in ('passed', 'failed', 'cancelled')`,
+          ).run({ status, now: now(), runId });
+        } else {
+          db.prepare(
+            `update workflow_instances
+             set status = @status, current_node_id = @nodeId, updated_at = @now
+             where id = @runId
+               and status not in ('passed', 'failed', 'cancelled')`,
+          ).run({ status, nodeId: currentNodeId, now: now(), runId });
         }
 
         const row = db

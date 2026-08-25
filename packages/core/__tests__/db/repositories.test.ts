@@ -291,6 +291,56 @@ describe('sqlite repositories', () => {
 
     db.close();
   });
+
+  it('updateWorkflowInstanceStatusIfActive refuses to overwrite a terminal status (terminal-state monotonicity)', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+
+    // Active run: the guarded write applies.
+    const active = await repositories.updateWorkflowInstanceStatusIfActive(
+      'run_1',
+      'interrupted',
+      'node_2',
+    );
+    expect(active).toMatchObject({
+      status: 'interrupted',
+      currentNodeId: 'node_2',
+    });
+
+    // Drive the run to a terminal status, as a recovering owner would.
+    await repositories.updateWorkflowInstanceStatus('run_1', 'passed', null);
+
+    // A fenced/stale executor's interrupt write MUST NOT revert `passed`.
+    const afterTerminal =
+      await repositories.updateWorkflowInstanceStatusIfActive(
+        'run_1',
+        'interrupted',
+        'node_2',
+      );
+    expect(afterTerminal).toMatchObject({ status: 'passed' });
+
+    // Same guard for failed/cancelled terminals.
+    await repositories.createWorkflowInstance({
+      id: 'run_cancelled',
+      projectId: 'project_1',
+      demandId: 'demand_1',
+      status: 'cancelled',
+      currentNodeId: null,
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    const afterCancelled =
+      await repositories.updateWorkflowInstanceStatusIfActive(
+        'run_cancelled',
+        'interrupted',
+        'node_1',
+      );
+    expect(afterCancelled).toMatchObject({ status: 'cancelled' });
+
+    db.close();
+  });
 });
 
 async function seedRun(repositories: ReturnType<typeof createRepositories>) {

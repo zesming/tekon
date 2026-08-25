@@ -763,6 +763,8 @@ tekon delivery prepare
 - `delivery-package` artifact。
 - `delivery.pr-prepared` 审计事件。
 
+> ⚠️ **当前边界（审批记录未绑定内容指纹）**：`create-pr` 本身**每次都要求当次 `--approve-human` 人工批准**（安全边界不变）。但当一次交付失败后自动/手动重新准备时，会**保留上一次的 `approvedBy/approvedAt` 记录**；若此时分支 HEAD、PR body 或证据包已变化，审批记录可能与当前内容不再一致（审计可信度问题，非绕过人工批准）。绑定内容哈希使旧审批自动失效的能力留待交付治理里程碑。
+
 ### 6.15 `delivery create-pr`
 
 用途：人工批准后创建远端 PR。
@@ -1020,6 +1022,8 @@ tekon ui --repo /path/to/project
 
 打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
 
+> ⚠️ **当前边界**：从会话输入框「开始会话」发起的运行，默认走 `standard-delivery` **受控交付全链路**（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。
+
 Session UI 适合：
 
 - 在左侧会话列表选择或用输入框发起一个新会话（运行）。
@@ -1058,7 +1062,9 @@ Session UI 适合：
   - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
   - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
 
-> 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批），进入模型上下文的内容可从事件日志重建。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
+> 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
+>
+> **事件日志定位（迁移期）**：`session_events` 目前是 best-effort 的**投影**，用于会话叙事与 SSE 回放；**`workflow_instances` / `jobs` 等旧表仍是运行状态的事实源**。迁移期个别事件可能因写入失败而缺失，因此不应把 event log 当作可 100% 完整重建的权威日志。canonical event log（事务化 outbox + 投影不变量）为后续阶段规划。
 
 ## 8. 如何判断结果是否可信
 
