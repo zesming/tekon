@@ -204,7 +204,11 @@ export function createSessionEventStore(
         db.prepare(
           `insert into sessions (id, workspace_id, title, profile, status, run_id, created_at, updated_at)
            values (@id, @workspaceId, @title, @profile, @status, @runId, @createdAt, @updatedAt)`,
-        ).run({ ...session, title: session.title ?? null, runId: input.runId ?? null });
+        ).run({
+          ...session,
+          title: session.title ?? null,
+          runId: input.runId ?? null,
+        });
         return session;
       });
     },
@@ -218,7 +222,9 @@ export function createSessionEventStore(
 
     async findSessionByRunId(runId) {
       const row = db
-        .prepare('select * from sessions where run_id = ? order by created_at desc limit 1')
+        .prepare(
+          'select * from sessions where run_id = ? order by created_at desc limit 1',
+        )
         .get(runId) as SessionRow | undefined;
       return row ? mapSession(row) : null;
     },
@@ -253,44 +259,51 @@ export function createSessionEventStore(
 
     async appendEvent(input) {
       return writeQueue.enqueue(() => {
-        const maxRow = db
-          .prepare(
-            'select coalesce(max(seq), 0) as max_seq from session_events where session_id = ?',
-          )
-          .get(input.sessionId) as { max_seq: number };
-        const event = sessionEventSchema.parse({
-          sessionId: input.sessionId,
-          seq: maxRow.max_seq + 1,
-          type: input.type,
-          version: SESSION_EVENT_SCHEMA_VERSION,
-          timestamp: now(),
-          payload: input.payload ?? {},
-          visibility: input.visibility ?? 'ui-only',
-          modelVisible: input.modelVisible ?? false,
-          sourceEventSeqs: input.sourceEventSeqs ?? [],
-          correlationId: input.correlationId ?? null,
+        // The process-local WriteQueue cannot serialize writes from a separate
+        // CLI/Web process. BEGIN IMMEDIATE acquires the database writer lock
+        // before max(seq) is read, making allocation + insert one cross-process
+        // critical section. busy_timeout handles short-lived contention.
+        const append = db.transaction(() => {
+          const maxRow = db
+            .prepare(
+              'select coalesce(max(seq), 0) as max_seq from session_events where session_id = ?',
+            )
+            .get(input.sessionId) as { max_seq: number };
+          const event = sessionEventSchema.parse({
+            sessionId: input.sessionId,
+            seq: maxRow.max_seq + 1,
+            type: input.type,
+            version: SESSION_EVENT_SCHEMA_VERSION,
+            timestamp: now(),
+            payload: input.payload ?? {},
+            visibility: input.visibility ?? 'ui-only',
+            modelVisible: input.modelVisible ?? false,
+            sourceEventSeqs: input.sourceEventSeqs ?? [],
+            correlationId: input.correlationId ?? null,
+          });
+          db.prepare(
+            `insert into session_events (
+               session_id, seq, type, version, timestamp, payload,
+               visibility, model_visible, source_event_seqs, correlation_id
+             ) values (
+               @sessionId, @seq, @type, @version, @timestamp, @payload,
+               @visibility, @modelVisible, @sourceEventSeqs, @correlationId
+             )`,
+          ).run({
+            sessionId: event.sessionId,
+            seq: event.seq,
+            type: event.type,
+            version: event.version,
+            timestamp: event.timestamp,
+            payload: JSON.stringify(event.payload),
+            visibility: event.visibility,
+            modelVisible: event.modelVisible ? 1 : 0,
+            sourceEventSeqs: JSON.stringify(event.sourceEventSeqs),
+            correlationId: event.correlationId,
+          });
+          return event;
         });
-        db.prepare(
-          `insert into session_events (
-             session_id, seq, type, version, timestamp, payload,
-             visibility, model_visible, source_event_seqs, correlation_id
-           ) values (
-             @sessionId, @seq, @type, @version, @timestamp, @payload,
-             @visibility, @modelVisible, @sourceEventSeqs, @correlationId
-           )`,
-        ).run({
-          sessionId: event.sessionId,
-          seq: event.seq,
-          type: event.type,
-          version: event.version,
-          timestamp: event.timestamp,
-          payload: JSON.stringify(event.payload),
-          visibility: event.visibility,
-          modelVisible: event.modelVisible ? 1 : 0,
-          sourceEventSeqs: JSON.stringify(event.sourceEventSeqs),
-          correlationId: event.correlationId,
-        });
-        return event;
+        return append.immediate();
       });
     },
 
@@ -358,9 +371,9 @@ export function createJobRepository(
     },
 
     async get(jobId) {
-      const row = db
-        .prepare('select * from jobs where id = ?')
-        .get(jobId) as JobRow | undefined;
+      const row = db.prepare('select * from jobs where id = ?').get(jobId) as
+        | JobRow
+        | undefined;
       return row ? mapJob(row) : null;
     },
 
@@ -474,9 +487,9 @@ export function createJobRepository(
             `update jobs set ${sets.join(', ')} where id = @jobId`,
           ).run(params);
         }
-        const row = db
-          .prepare('select * from jobs where id = ?')
-          .get(jobId) as JobRow | undefined;
+        const row = db.prepare('select * from jobs where id = ?').get(jobId) as
+          | JobRow
+          | undefined;
         return row ? mapJob(row) : null;
       });
     },

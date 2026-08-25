@@ -27,14 +27,9 @@ import {
   withCliSessionContext,
   withSessionCommandCtx,
 } from '../lib/session-context.js';
-import {
-  formatApprovalSummary,
-} from './review.js';
+import { formatApprovalSummary } from './review.js';
 
-export async function commandApproval(
-  argv: string[],
-  io: CliIO,
-) {
+export async function commandApproval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
   if (subcommand === 'summary') {
     const args = parseArgs({
@@ -48,36 +43,29 @@ export async function commandApproval(
       },
       allowPositionals: true,
     });
-    const repoPath = resolveProjectRepoPath(
-      args.values.repo,
-    );
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     await ensureInitialized(repoPath, io);
     const maxContentChars = args.values['max-chars']
       ? Number(args.values['max-chars'])
       : 1_200;
-    if (
-      !Number.isFinite(maxContentChars) ||
-      maxContentChars <= 0
-    ) {
+    if (!Number.isFinite(maxContentChars) || maxContentChars <= 0) {
       throw new Error('--max-chars 必须是正数');
     }
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
     try {
       const repositories = createRepositories(db);
-      const { runId, decisionId } =
-        await resolveHumanDecisionContext({
-          db,
-          repositories,
-          explicitRunId:
-            args.values['run-id'] ?? args.positionals[0],
-          explicitDecisionId: args.values['decision-id'],
-        });
+      const { runId, decisionId } = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'],
+      });
       const explicitCommandDisplay = Boolean(
         args.values.repo ??
-          args.values['run-id'] ??
-          args.positionals[0] ??
-          args.values['decision-id'],
+        args.values['run-id'] ??
+        args.positionals[0] ??
+        args.values['decision-id'],
       );
       const audit = createAuditLogger({ repositories });
       const summary = await createHumanApprovalSummary({
@@ -87,12 +75,9 @@ export async function commandApproval(
         runId,
         decisionId,
         maxContentChars,
-        commandDisplay: explicitCommandDisplay
-          ? 'explicit'
-          : 'default',
+        commandDisplay: explicitCommandDisplay ? 'explicit' : 'default',
       });
-      const evaluation =
-        evaluateHumanApprovalSummary(summary);
+      const evaluation = evaluateHumanApprovalSummary(summary);
       io.stdout.write(
         args.values.json
           ? `${JSON.stringify({ summary, evaluation }, null, 2)}\n`
@@ -116,37 +101,28 @@ export async function commandApproval(
       },
       allowPositionals: true,
     });
-    const repoPath = resolveProjectRepoPath(
-      args.values.repo,
-    );
+    const repoPath = resolveProjectRepoPath(args.values.repo);
     await ensureInitialized(repoPath, io);
     const db = openProjectDb(repoPath);
     migrateDatabase(db);
     try {
       const repositories = createRepositories(db);
-      const { runId, decisionId } =
-        await resolveHumanDecisionContext({
-          db,
-          repositories,
-          explicitRunId:
-            args.values['run-id'] ?? args.positionals[0],
-          explicitDecisionId:
-            args.values['decision-id'] ??
-            args.positionals[1],
-          requireDecision: true,
-        });
+      const { runId, decisionId } = await resolveHumanDecisionContext({
+        db,
+        repositories,
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
+        requireDecision: true,
+      });
       if (!decisionId) {
         throw new Error(
           '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
         );
       }
       const audit = createAuditLogger({ repositories });
-      const decision =
-        await repositories.getHumanDecision(decisionId);
+      const decision = await repositories.getHumanDecision(decisionId);
       if (!decision || decision.runId !== runId) {
-        throw new Error(
-          `未找到人工决策: ${decisionId}`,
-        );
+        throw new Error(`未找到人工决策: ${decisionId}`);
       }
       if (decision.status !== 'pending') {
         throw new Error(
@@ -169,8 +145,7 @@ export async function commandApproval(
           actor: args.values.actor ?? 'cli',
         },
       });
-      const workflow =
-        await repositories.getWorkflowInstance(runId);
+      const workflow = await repositories.getWorkflowInstance(runId);
       io.stdout.write(
         [
           `runId=${runId}`,
@@ -190,47 +165,31 @@ export async function commandApproval(
   );
 }
 
-export async function commandPause(
-  argv: string[],
-  io: CliIO,
-): Promise<number> {
-  // 4c (design §4.3): pause goes through SessionService (CAS running→paused
-  // + jobRunner.requestPause). When the run is held by another process, the
-  // core requestPause persists `paused` on the job row so the holder observes
-  // and relays it (pauseFlags only, never abort).
+export async function commandPause(argv: string[], io: CliIO): Promise<number> {
   await withSessionCommandCtx(
     argv,
     io,
     async ({ repositories, runId, sessionService }) => {
-      const workflow =
-        await repositories.getWorkflowInstance(runId);
+      const workflow = await repositories.getWorkflowInstance(runId);
       if (!workflow) {
         throw new Error(`未找到运行: ${runId}`);
       }
       const result = await sessionService.requestPause({ runId });
       if (result.outcome === 'paused') {
-        io.stdout.write(`runId=${runId} status=paused\n`);
+        io.stdout.write(`runId=${runId} status=paused
+`);
         return;
       }
-      // illegal-transition: the run is not `running` (terminal/blocked) and no
-      // active job exists — no process holds it. Retain the legacy direct-DB
-      // pause semantics (CLI pause on a finished run historically succeeds;
-      // the cli-flow e2e pauses a passed run).
-      if (workflow.currentNodeId) {
-        await repositories.transitionNode(
-          workflow.currentNodeId,
-          'paused',
-        );
+
+      const status = result.workflowStatus ?? workflow.status;
+      if (
+        status === 'passed' ||
+        status === 'failed' ||
+        status === 'cancelled'
+      ) {
+        throw new WorkflowTerminalError(runId, status);
       }
-      const paused =
-        await repositories.updateWorkflowInstanceStatus(
-          runId,
-          'paused',
-          workflow.currentNodeId,
-        );
-      io.stdout.write(
-        `runId=${runId} status=${paused?.status ?? 'paused'}\n`,
-      );
+      throw new Error(`运行 ${runId} 当前状态为 ${status}，无法暂停。`);
     },
   );
   return 0;
@@ -256,8 +215,7 @@ export async function commandResume(
   // runner, same shape as `run` — the resumed job is awaited to a terminal
   // state before the process exits.
   return withCliSessionContext(repoPath, io, async (ctx) => {
-    const { db, repositories, audit, sessionService, jobs, jobRunner } =
-      ctx;
+    const { db, repositories, audit, sessionService, jobs, jobRunner } = ctx;
     let decisionContext: {
       runId: string;
       decisionId?: string;
@@ -266,12 +224,8 @@ export async function commandResume(
       decisionContext = await resolveHumanDecisionContext({
         db,
         repositories,
-        explicitRunId:
-          args.values['run-id'] ??
-          args.positionals[0],
-        explicitDecisionId:
-          args.values['decision-id'] ??
-          args.positionals[1],
+        explicitRunId: args.values['run-id'] ?? args.positionals[0],
+        explicitDecisionId: args.values['decision-id'] ?? args.positionals[1],
         requireDecision: true,
       });
     }
@@ -281,12 +235,9 @@ export async function commandResume(
       args.positionals[0] ??
       selectLatestRunId(db);
     if (!runId) {
-      throw new Error(
-        '无法推断运行 ID，请使用 --run-id <runId> 指定',
-      );
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
     }
-    const workflow =
-      await repositories.getWorkflowInstance(runId);
+    const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow) {
       throw new Error(`未找到运行: ${runId}`);
     }
@@ -294,8 +245,7 @@ export async function commandResume(
     // Provider snapshot pre-check: without it the executor would fail the
     // resumed job asynchronously. Keep the synchronous, specific error
     // (asserted by run-cli.test.ts).
-    const runProvider =
-      await repositories.getRunProviderConfig(runId);
+    const runProvider = await repositories.getRunProviderConfig(runId);
     if (!runProvider) {
       throw new Error(
         `运行 ${runId} 没有 provider 快照，无法安全恢复。请确认该运行是否正常启动过。`,
@@ -308,14 +258,11 @@ export async function commandResume(
           '无法推断待审批的人工决策，请使用 --run-id 和 --decision-id 参数指定',
         );
       }
-      const decision =
-        await repositories.getHumanDecision(
-          decisionContext.decisionId,
-        );
+      const decision = await repositories.getHumanDecision(
+        decisionContext.decisionId,
+      );
       if (!decision || decision.runId !== runId) {
-        throw new Error(
-          `未找到人工决策: ${decisionContext.decisionId}`,
-        );
+        throw new Error(`未找到人工决策: ${decisionContext.decisionId}`);
       }
       if (decision.status !== 'pending') {
         throw new Error(
@@ -325,15 +272,8 @@ export async function commandResume(
       const humanGate = createHumanGate({
         repositories,
       });
-      await humanGate.approveHumanGate(
-        decision.id,
-        'cli',
-        'approved by CLI',
-      );
-      await repositories.transitionNode(
-        decision.nodeId,
-        'awaiting-gate',
-      );
+      await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
+      await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
       await audit.append({
         runId,
         type: 'human.gate.approved',
@@ -367,9 +307,7 @@ export async function commandResume(
 
     jobRunner.start();
     const onSigint = () => {
-      void jobRunner
-        .requestCancel(result.jobId, 'cli SIGINT')
-        .catch(() => {});
+      void jobRunner.requestCancel(result.jobId, 'cli SIGINT').catch(() => {});
     };
     process.on('SIGINT', onSigint);
     try {
@@ -403,14 +341,12 @@ export async function commandCancel(
     argv,
     io,
     async ({ repositories, runId, sessionService }) => {
-      const workflow =
-        await repositories.getWorkflowInstance(runId);
+      const workflow = await repositories.getWorkflowInstance(runId);
       if (!workflow) {
         throw new Error(`未找到运行: ${runId}`);
       }
       await sessionService.requestCancel({ runId });
-      const latest =
-        await repositories.getWorkflowInstance(runId);
+      const latest = await repositories.getWorkflowInstance(runId);
       io.stdout.write(
         `runId=${runId} status=${latest?.status ?? 'cancelled'}\n`,
       );

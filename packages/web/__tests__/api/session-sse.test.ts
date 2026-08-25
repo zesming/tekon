@@ -14,7 +14,10 @@ import {
 } from '@tekon/core';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
-import { createWebServer, type RunningWebServer } from '../../src/server/http.js';
+import {
+  createWebServer,
+  type RunningWebServer,
+} from '../../src/server/http.js';
 import { handleSessionEventsSse } from '../../src/server/sse.js';
 
 // S8: SSE endpoint GET /api/sessions/:sessionId/events (design §3.1).
@@ -399,20 +402,21 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // (loss) and not double-send it (the boundary event is > maxReplayedSeq).
     const realList = s.store.listEventsSince.bind(s.store);
     let injected = false;
-    (s.store as { listEventsSince: SessionEventStore['listEventsSince'] }).listEventsSince =
-      async (sid: string, since: number) => {
-        const events = await realList(sid, since);
-        if (!injected) {
-          injected = true;
-          const boundary = await s.store.appendEvent({
-            sessionId,
-            type: 'agent/status',
-            payload: { at: 'boundary' },
-          }); // seq 2, published while flushing=true
-          s.bus.publish(boundary);
-        }
-        return events;
-      };
+    (
+      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
+    ).listEventsSince = async (sid: string, since: number) => {
+      const events = await realList(sid, since);
+      if (!injected) {
+        injected = true;
+        const boundary = await s.store.appendEvent({
+          sessionId,
+          type: 'agent/status',
+          payload: { at: 'boundary' },
+        }); // seq 2, published while flushing=true
+        s.bus.publish(boundary);
+      }
+      return events;
+    };
 
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
     await handleSessionEventsSse({
@@ -449,16 +453,17 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // buffer. seenSeqs must suppress the buffered copy → seq 2 ships exactly once.
     const realList = s.store.listEventsSince.bind(s.store);
     let injected = false;
-    (s.store as { listEventsSince: SessionEventStore['listEventsSince'] }).listEventsSince =
-      async (sid: string, since: number) => {
-        const events = await realList(sid, since);
-        if (!injected) {
-          injected = true;
-          const dup = events.find((e) => e.seq === 2);
-          if (dup) s.bus.publish(dup); // republish an already-replayed event
-        }
-        return events;
-      };
+    (
+      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
+    ).listEventsSince = async (sid: string, since: number) => {
+      const events = await realList(sid, since);
+      if (!injected) {
+        injected = true;
+        const dup = events.find((e) => e.seq === 2);
+        if (dup) s.bus.publish(dup); // republish an already-replayed event
+      }
+      return events;
+    };
 
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
     await handleSessionEventsSse({
@@ -491,12 +496,13 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // and unsubscribes — a later publish must not be written.
     const realList = s.store.listEventsSince.bind(s.store);
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
-    (s.store as { listEventsSince: SessionEventStore['listEventsSince'] }).listEventsSince =
-      async (sid: string, since: number) => {
-        const events = await realList(sid, since);
-        fake.close(); // client disconnects mid-replay
-        return events;
-      };
+    (
+      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
+    ).listEventsSince = async (sid: string, since: number) => {
+      const events = await realList(sid, since);
+      fake.close(); // client disconnects mid-replay
+      return events;
+    };
 
     await handleSessionEventsSse({
       request: fake.request,
@@ -563,10 +569,11 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // opened first, headers would be committed and a 500 impossible.
     const headers: string[] = [];
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
-    (fake.response as unknown as { setHeader(k: string, v: string): void }).setHeader =
-      (k: string) => {
-        headers.push(k.toLowerCase());
-      };
+    (
+      fake.response as unknown as { setHeader(k: string, v: string): void }
+    ).setHeader = (k: string) => {
+      headers.push(k.toLowerCase());
+    };
     const throwingStore = {
       ...s.store,
       getSession: async () => {
@@ -589,5 +596,47 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // status was never forced to 200 by the handler itself.
     expect(headers).not.toContain('content-type');
     expect(fake.frames()).toHaveLength(0);
+  });
+
+  it('catches up an event committed without a process-local bus publish', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
+    await handleSessionEventsSse({
+      request: fake.request,
+      response: fake.response,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+      catchUpMs: 5,
+    });
+
+    // Deliberately do not publish to the local bus: this models a separate CLI
+    // process writing to the shared SQLite event store.
+    await s.store.appendEvent({
+      sessionId,
+      type: 'assistant/message',
+      payload: { text: 'written by another process' },
+      modelVisible: true,
+    });
+
+    const deadline = Date.now() + 2_000;
+    while (
+      !fake.frames().some((frame) => frame.event === 'assistant/message')
+    ) {
+      if (Date.now() >= deadline) {
+        throw new Error('cross-process SSE catch-up did not deliver the event');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(fake.frames().filter((frame) => frame.id === '1')).toHaveLength(1);
+    fake.close();
   });
 });

@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   createJobRepository,
@@ -14,6 +17,14 @@ import {
   type SessionEventStore,
   type Workspace,
 } from '../../src/index.js';
+
+const tempDirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 function setupStore() {
   const db = openTekonDatabase({ filename: ':memory:' });
@@ -65,9 +76,18 @@ describe('session event store', () => {
     const { session: a } = await seedSession(sessions, '/repo/a');
     const { session: b } = await seedSession(sessions, '/repo/b');
 
-    const e1 = await sessions.appendEvent({ sessionId: a.id, type: 'turn/start' });
-    const e2 = await sessions.appendEvent({ sessionId: a.id, type: 'turn/end' });
-    const e3 = await sessions.appendEvent({ sessionId: b.id, type: 'turn/start' });
+    const e1 = await sessions.appendEvent({
+      sessionId: a.id,
+      type: 'turn/start',
+    });
+    const e2 = await sessions.appendEvent({
+      sessionId: a.id,
+      type: 'turn/end',
+    });
+    const e3 = await sessions.appendEvent({
+      sessionId: b.id,
+      type: 'turn/start',
+    });
     const e4 = await sessions.appendEvent({
       sessionId: a.id,
       type: 'agent/status',
@@ -174,6 +194,44 @@ describe('session event store', () => {
       .get(session.id, 'other') as { last_seq: number };
     expect(other.last_seq).toBe(1);
   });
+  it('allocates monotonic event seqs across independent database connections', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-session-seq-'));
+    tempDirs.push(dir);
+    const filename = join(dir, 'tekon.sqlite');
+    const dbA = openTekonDatabase({ filename });
+    const dbB = openTekonDatabase({ filename });
+    try {
+      migrateDatabase(dbA);
+      migrateDatabase(dbB);
+      const storeA = createSessionEventStore(dbA, createWriteQueue());
+      const storeB = createSessionEventStore(dbB, createWriteQueue());
+      const workspace = await storeA.getOrCreateDefaultWorkspace(dir);
+      const session = await storeA.createSession({
+        workspaceId: workspace.id,
+        title: 'two connections',
+        profile: 'human-web',
+        runId: null,
+      });
+
+      const appended = await Promise.all(
+        Array.from({ length: 40 }, (_, index) =>
+          (index % 2 === 0 ? storeA : storeB).appendEvent({
+            sessionId: session.id,
+            type: 'agent/status',
+            payload: { index },
+          }),
+        ),
+      );
+      const seqs = appended.map((event) => event.seq).sort((a, b) => a - b);
+      expect(seqs).toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
+      expect(
+        (await storeA.listEventsSince(session.id, 0)).map((event) => event.seq),
+      ).toEqual(seqs);
+    } finally {
+      dbA.close();
+      dbB.close();
+    }
+  });
 });
 
 describe('job repository', () => {
@@ -261,7 +319,12 @@ describe('job repository', () => {
     const fresh = '2026-08-21T12:00:00.000Z';
 
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_running', status: 'running', owner: 'w1', lease: stale }),
+      makeJob(session.id, {
+        id: 'job_running',
+        status: 'running',
+        owner: 'w1',
+        lease: stale,
+      }),
     );
     await jobs.enqueue(
       makeJob(session.id, {
@@ -273,7 +336,12 @@ describe('job repository', () => {
       }),
     );
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_paused', status: 'paused', owner: 'w1', lease: stale }),
+      makeJob(session.id, {
+        id: 'job_paused',
+        status: 'paused',
+        owner: 'w1',
+        lease: stale,
+      }),
     );
     await jobs.enqueue(
       makeJob(session.id, {
@@ -285,7 +353,12 @@ describe('job repository', () => {
       }),
     );
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_live', status: 'running', owner: 'w1', lease: fresh }),
+      makeJob(session.id, {
+        id: 'job_live',
+        status: 'running',
+        owner: 'w1',
+        lease: fresh,
+      }),
     );
     await jobs.enqueue(makeJob(session.id, { id: 'job_queued' }));
 
@@ -333,13 +406,28 @@ describe('job repository', () => {
 
     await jobs.enqueue(makeJob(session.id, { id: 'job_queued' }));
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_stale_paused', status: 'paused', owner: 'w1', lease: stale }),
+      makeJob(session.id, {
+        id: 'job_stale_paused',
+        status: 'paused',
+        owner: 'w1',
+        lease: stale,
+      }),
     );
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_live_paused', status: 'paused', owner: 'w1', lease: fresh }),
+      makeJob(session.id, {
+        id: 'job_live_paused',
+        status: 'paused',
+        owner: 'w1',
+        lease: fresh,
+      }),
     );
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_running', status: 'running', owner: 'w1', lease: fresh }),
+      makeJob(session.id, {
+        id: 'job_running',
+        status: 'running',
+        owner: 'w1',
+        lease: fresh,
+      }),
     );
     await jobs.enqueue(
       makeJob(session.id, {
@@ -350,9 +438,15 @@ describe('job repository', () => {
         abortState: 'requested',
       }),
     );
-    await jobs.enqueue(makeJob(session.id, { id: 'job_except', status: 'queued' }));
+    await jobs.enqueue(
+      makeJob(session.id, { id: 'job_except', status: 'queued' }),
+    );
 
-    const count = await jobs.cancelStaleActiveJobs('run_1', 'job_except', cutoff);
+    const count = await jobs.cancelStaleActiveJobs(
+      'run_1',
+      'job_except',
+      cutoff,
+    );
     expect(count).toBe(2);
 
     expect(await jobs.get('job_queued')).toMatchObject({
@@ -363,9 +457,13 @@ describe('job repository', () => {
       status: 'cancelled',
       abortState: 'stopped',
     });
-    expect(await jobs.get('job_live_paused')).toMatchObject({ status: 'paused' });
+    expect(await jobs.get('job_live_paused')).toMatchObject({
+      status: 'paused',
+    });
     expect(await jobs.get('job_running')).toMatchObject({ status: 'running' });
-    expect(await jobs.get('job_cancelling')).toMatchObject({ status: 'cancelling' });
+    expect(await jobs.get('job_cancelling')).toMatchObject({
+      status: 'cancelling',
+    });
     expect(await jobs.get('job_except')).toMatchObject({ status: 'queued' });
 
     // A run without sessions/jobs is a no-op.
@@ -448,10 +546,20 @@ describe('job repository', () => {
     const freshLease = new Date().toISOString();
 
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_paused_old', status: 'paused', owner: 'w1', lease: staleLease }),
+      makeJob(session.id, {
+        id: 'job_paused_old',
+        status: 'paused',
+        owner: 'w1',
+        lease: staleLease,
+      }),
     );
     await jobs.enqueue(
-      makeJob(session.id, { id: 'job_paused_new', status: 'paused', owner: 'w1', lease: freshLease }),
+      makeJob(session.id, {
+        id: 'job_paused_new',
+        status: 'paused',
+        owner: 'w1',
+        lease: freshLease,
+      }),
     );
 
     // Custom cutoff (1s ago): only the 2020 lease is stale; the fresh one is not.
@@ -465,7 +573,9 @@ describe('job repository', () => {
       status: 'cancelled',
       abortState: 'stopped',
     });
-    expect(await jobs.get('job_paused_new')).toMatchObject({ status: 'paused' });
+    expect(await jobs.get('job_paused_new')).toMatchObject({
+      status: 'paused',
+    });
 
     // Without a custom cutoff the 30s default applies: the fresh paused lease
     // is not stale, so only the queued job is cancelled.
@@ -477,7 +587,9 @@ describe('job repository', () => {
       status: 'cancelled',
       abortState: 'stopped',
     });
-    expect(await jobs.get('job_paused_new')).toMatchObject({ status: 'paused' });
+    expect(await jobs.get('job_paused_new')).toMatchObject({
+      status: 'paused',
+    });
   });
 });
 
@@ -505,7 +617,7 @@ describe('session run id lookup', () => {
   // Phase 3 3a: read-path for the Session List UI. listSessions is a pure
   // SELECT scoped to a workspace, newest-first, carrying run_id from the column
   // (the frozen Session schema has no runId, so the list entry extends it).
-  it('listSessions returns a workspace\'s sessions newest-first with runId', async () => {
+  it("listSessions returns a workspace's sessions newest-first with runId", async () => {
     const { sessions } = setupStore();
     const workspace = await sessions.getOrCreateDefaultWorkspace('/repo/list');
     const first = await sessions.createSession({

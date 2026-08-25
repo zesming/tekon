@@ -1,4 +1,10 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -171,9 +177,12 @@ describe('dsh-headless adapter', () => {
     ['--help'],
   ])('rejects launcher control arg %j (mirrors codex arg guard)', (arg) => {
     expect(() =>
-      buildDshHeadlessCommand({ ...ackConfig('/tmp/repo'), args: [arg] }, {
-        prompt: 'task',
-      }),
+      buildDshHeadlessCommand(
+        { ...ackConfig('/tmp/repo'), args: [arg] },
+        {
+          prompt: 'task',
+        },
+      ),
     ).toThrow(/dsh .*controlled by Tekon|launcher/i);
   });
 
@@ -218,7 +227,10 @@ describe('dsh-headless adapter', () => {
     // Fake "dsh": echo the final assistant text to stdout and exit 0. Used as
     // config.command, so the adapter's `--profile headless <prompt>` framing
     // lands as the fake's ignored positional argv.
-    const fakeDsh = writeFakeDsh(repoPath, "echo 'final assistant answer'; exit 0");
+    const fakeDsh = writeFakeDsh(
+      repoPath,
+      "echo 'final assistant answer'; exit 0",
+    );
     const adapter = createDshHeadlessAdapter(
       { ...ackConfig(repoPath), command: fakeDsh, args: [] },
       createCommandGateway(),
@@ -227,6 +239,7 @@ describe('dsh-headless adapter', () => {
     expect(result).toMatchObject({
       provider: 'dsh-headless',
       exitCode: 0,
+      assistantText: 'final assistant answer',
       timedOut: false,
     });
     // stdout captured to an output file.

@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import type { AgentAdapter, AgentRunInput, AgentRunResult } from './agent-adapter.js';
+import type {
+  AgentAdapter,
+  AgentRunInput,
+  AgentRunResult,
+} from './agent-adapter.js';
 import type { Role } from '../types/domain.js';
+import { redactSecrets } from '../security/secrets.js';
 
 /**
  * Minimal event sink for agent-loop step events (phase 2 S3). The dual-write
@@ -33,7 +38,7 @@ export interface StepEventMeta {
 /** Truncate + collapse a string for a step-event payload field. */
 function summarize(text: string | undefined, max = 500): string | undefined {
   if (!text) return undefined;
-  const oneLine = text.replace(/\s+/g, ' ').trim();
+  const oneLine = redactSecrets(text.replace(/\s+/g, ' ').trim()).content;
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
 
@@ -99,7 +104,9 @@ export async function runAgentWithStepEvents(
       stepId,
       nodeId: meta.nodeId,
       role: meta.role,
-      error: error instanceof Error ? error.message : String(error),
+      error: redactSecrets(
+        error instanceof Error ? error.message : String(error),
+      ).content,
     });
     await emit('step/end', {
       stepId,
@@ -140,14 +147,15 @@ export async function runAgentWithStepEvents(
     return result;
   }
 
-  // Success path: node-level tool summary + synthesized assistant message.
-  // NB (design M3): AgentRunResult carries NO model prose — the assistant
-  // message is synthesized from artifact/output metadata, not the model's
-  // words. Real model output requires provider incremental streaming (2b).
+  // Success path: node-level tool summary plus the provider's final
+  // assistant prose when it exposes a documented boundary (currently DSH
+  // headless stdout). Other providers remain explicitly synthesized.
   const artifactRefs = (result.artifacts ?? []).map((a) => ({
     type: a.type,
     path: a.path,
   }));
+  const assistantText = result.assistantText?.trim();
+  const syntheticText = `[${meta.role}] completed: ${artifactRefs.length} artifact(s), exit ${result.exitCode ?? 'n/a'}.`;
   await emit(
     'tool/call',
     {
@@ -155,6 +163,7 @@ export async function runAgentWithStepEvents(
       nodeId: meta.nodeId,
       role: meta.role,
       provider: result.provider,
+      name: result.provider,
       summaryLevel: 'node',
     },
     false,
@@ -165,9 +174,11 @@ export async function runAgentWithStepEvents(
       stepId,
       nodeId: meta.nodeId,
       provider: result.provider,
+      name: result.provider,
       exitCode: result.exitCode,
       outputFiles: result.outputFiles,
       artifacts: artifactRefs,
+      summary: `${result.outputFiles.length} output file(s), ${artifactRefs.length} artifact(s)`,
       summaryLevel: 'node',
     },
     true,
@@ -178,7 +189,8 @@ export async function runAgentWithStepEvents(
       stepId,
       nodeId: meta.nodeId,
       role: meta.role,
-      text: `[${meta.role}] completed: ${artifactRefs.length} artifact(s), exit ${result.exitCode ?? 'n/a'}.`,
+      text: assistantText ?? syntheticText,
+      synthetic: !assistantText,
       artifacts: artifactRefs,
       tokenUsage: result.tokenUsage,
     },

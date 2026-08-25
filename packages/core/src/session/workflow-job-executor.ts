@@ -69,10 +69,7 @@ export function createWorkflowJobExecutor(deps: {
     }
   }
 
-  async function buildEngine(
-    runId: string,
-    ctx: JobExecutionContext,
-  ) {
+  async function buildEngine(runId: string, ctx: JobExecutionContext) {
     // Wrap the gateway so every subprocess it spawns (agent, gate commands,
     // worktree git) registers under runId and honors the job's abort signal.
     // This is the last hop of the cancel chain (D6): jobRunner.requestCancel →
@@ -150,15 +147,23 @@ export function createWorkflowJobExecutor(deps: {
             throw new Error(`Unknown job kind: ${job.kind}`);
         }
 
-        return await settleByWorkflowStatus(job.sessionId, runId, workflow, ctx);
+        return await settleByWorkflowStatus(
+          job.sessionId,
+          runId,
+          workflow,
+          ctx,
+        );
       } catch (error) {
         if (ctx.signal.aborted) {
           // Abort raced the run to completion. Settle the workflow cancelled
           // (idempotent, M2) and the session cancelled — but do NOT emit
           // agent/cancelled (MF1: single emission from the cancel route).
-          await writeWorkflowTerminal(repositories, runId, 'cancelled', null).catch(
-            () => {},
-          );
+          await writeWorkflowTerminal(
+            repositories,
+            runId,
+            'cancelled',
+            null,
+          ).catch(() => {});
           await sessions.updateSessionStatus(job.sessionId, 'cancelled');
           await emit(job.sessionId, 'turn/end', { runId, status: 'cancelled' });
           return { status: 'cancelled' as JobStatus };
@@ -229,11 +234,19 @@ export function createWorkflowJobExecutor(deps: {
         return { status: 'failed' };
       }
       default: {
-        // running/pending should not be a terminal engine return; treat as done
-        // to avoid a stuck job, but surface it via turn/end.
-        await sessions.updateSessionStatus(sessionId, 'idle');
-        await emit(sessionId, 'turn/end', { runId, status: workflow.status });
-        return { status: 'done' };
+        // A background executor returning running/pending is a contract breach.
+        // Never convert it to `done`: that creates a false-success job while the
+        // workflow itself is still non-terminal. Fail loudly and preserve the
+        // unexpected status in the durable event trail.
+        const message = `Workflow engine returned non-terminal status: ${workflow.status}`;
+        await sessions.updateSessionStatus(sessionId, 'failed');
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: workflow.status,
+          message,
+        });
+        await emit(sessionId, 'turn/end', { runId, status: 'failed' });
+        return { status: 'failed' };
       }
     }
   }

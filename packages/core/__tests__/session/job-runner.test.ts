@@ -161,7 +161,8 @@ async function seedSession(
   sessions: SessionEventStore,
   runId = 'run_1',
 ): Promise<Session> {
-  const workspace = await sessions.getOrCreateDefaultWorkspace('/tmp/tekon-test');
+  const workspace =
+    await sessions.getOrCreateDefaultWorkspace('/tmp/tekon-test');
   return sessions.createSession({
     workspaceId: workspace.id,
     title: 'test',
@@ -784,8 +785,14 @@ describe('durable job runner', () => {
     const { sessions, jobs, runner } = setup({ executor });
     const session = await seedSession(sessions);
 
-    const a = await runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
-    const b = await runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+    const a = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+    const b = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
 
     runner.start();
     await waitFor(() => executor.started.length === 2);
@@ -794,5 +801,98 @@ describe('durable job runner', () => {
     executor.release(b.id);
     await waitFor(async () => (await jobs.get(a.id))?.status === 'done');
     await waitFor(async () => (await jobs.get(b.id))?.status === 'done');
+  });
+
+  it('owner poll relays a cross-process pause into its process-local pause flag', async () => {
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, bus, registry, runner } = setup({
+      executor,
+      workerId: 'worker_web',
+      pollIntervalMs: 5,
+    });
+    const requester = createJobRunner({
+      jobs,
+      sessions,
+      bus,
+      registry: createSubprocessRegistry(),
+      executor: immediateExecutor(),
+      pollIntervalMs: 5,
+      heartbeatMs: 30,
+      leaseTtlMs: 30_000,
+      workerId: 'worker_cli',
+    });
+    runners.push(requester);
+    const session = await seedSession(sessions, 'run_cross_process_pause');
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const ownerContext = executor.ctxFor(job.id);
+    expect(ownerContext?.pauseRequested()).toBe(false);
+
+    await requester.requestPause(job.id);
+
+    await waitFor(() => ownerContext?.pauseRequested() === true);
+    expect(await jobs.get(job.id)).toMatchObject({
+      status: 'paused',
+      owner: 'worker_web',
+    });
+
+    executor.release(job.id, { status: 'done' });
+    await waitFor(async () => (await jobs.get(job.id))?.status === 'done');
+  });
+
+  it('owner poll relays a cross-process cancel and cancellation wins a racing done result', async () => {
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, bus, registry, runner } = setup({
+      executor,
+      workerId: 'worker_web',
+      pollIntervalMs: 5,
+    });
+    const ownerKill = vi.spyOn(registry, 'killAll');
+    const requester = createJobRunner({
+      jobs,
+      sessions,
+      bus,
+      registry: createSubprocessRegistry(),
+      executor: immediateExecutor(),
+      pollIntervalMs: 5,
+      heartbeatMs: 30,
+      leaseTtlMs: 30_000,
+      workerId: 'worker_cli',
+    });
+    runners.push(requester);
+    const session = await seedSession(sessions, 'run_cross_process_cancel');
+    const job = await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const ownerContext = executor.ctxFor(job.id);
+
+    await requester.requestCancel(job.id, 'external cli cancel');
+    await waitFor(() => ownerContext?.signal.aborted === true);
+    expect(ownerKill).toHaveBeenCalledWith(
+      'run_cross_process_cancel',
+      'SIGKILL',
+    );
+    expect(await jobs.get(job.id)).toMatchObject({
+      status: 'cancelling',
+      abortState: 'propagated',
+      owner: 'worker_web',
+    });
+
+    // Deliberately return done after cancellation to exercise the settle fence.
+    executor.release(job.id, { status: 'done' });
+    await waitFor(async () => (await jobs.get(job.id))?.status === 'cancelled');
+    expect(await jobs.get(job.id)).toMatchObject({
+      status: 'cancelled',
+      abortState: 'stopped',
+    });
   });
 });

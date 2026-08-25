@@ -50,6 +50,8 @@ export interface AgentRunResult {
   durationMs: number;
   outputFiles: string[];
   artifacts?: Artifact[];
+  /** Final assistant prose when the provider exposes a documented boundary. */
+  assistantText?: string;
   timedOut?: boolean;
   /** adapter 因 signal abort 提前返回时置 true（exitCode 为 null）。 */
   cancelled?: boolean;

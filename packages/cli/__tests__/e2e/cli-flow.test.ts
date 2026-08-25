@@ -147,19 +147,23 @@ describe('tekon cli e2e', () => {
     expect(resumeOutput).toContain(`runId=${runId}`);
     expect(resumeOutput).toContain('status=passed');
 
-    const pauseOutput = runCli(
-      cliPath,
-      ['pause', '--run-id', runId!, '--repo', repoPath],
-      repoPath,
-    );
-    expect(pauseOutput).toContain('status=paused');
+    // Terminal states are monotonic: a passed run cannot be revived as paused.
+    expect(() =>
+      runCli(
+        cliPath,
+        ['pause', '--run-id', runId!, '--repo', repoPath],
+        repoPath,
+      ),
+    ).toThrow();
 
+    // Cancel is idempotent against a different terminal outcome: it reports the
+    // existing passed status instead of mutating the run.
     const cancelOutput = runCli(
       cliPath,
       ['cancel', '--run-id', runId!, '--repo', repoPath],
       repoPath,
     );
-    expect(cancelOutput).toContain('status=cancelled');
+    expect(cancelOutput).toContain('status=passed');
 
     expect(
       runCli(cliPath, ['role', 'list', '--repo', repoPath], repoPath),
@@ -236,9 +240,8 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
-    const draftPlanPath = (
-      JSON.parse(newOutput) as { jsonPath: string }
-    ).jsonPath;
+    const draftPlanPath = (JSON.parse(newOutput) as { jsonPath: string })
+      .jsonPath;
     expect(existsSync(draftPlanPath)).toBe(true);
     runCli(
       cliPath,
@@ -312,9 +315,8 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
-    const oldDraftPath = (
-      JSON.parse(oldDraftOutput) as { jsonPath: string }
-    ).jsonPath;
+    const oldDraftPath = (JSON.parse(oldDraftOutput) as { jsonPath: string })
+      .jsonPath;
     runCli(
       cliPath,
       ['draft', 'approve', oldDraftPath, '--repo', repoPath],

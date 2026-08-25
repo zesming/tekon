@@ -43,7 +43,10 @@ export function SessionsPage() {
               selector. Multi-workspace management is deferred to a later phase;
               session.list already returns the workspaceId this shows. */}
           {workspaceId ? (
-            <label className="workspace-picker" title="当前工作区（暂只支持默认工作区）">
+            <label
+              className="workspace-picker"
+              title="当前工作区（暂只支持默认工作区）"
+            >
               <span className="workspace-picker-label">工作区</span>
               <select
                 className="workspace-picker-select"
@@ -51,7 +54,7 @@ export function SessionsPage() {
                 disabled
                 aria-label="工作区 Workspace"
               >
-                <option value={workspaceId}>{workspaceId}</option>
+                <option value={workspaceId}>当前项目</option>
               </select>
             </label>
           ) : null}
@@ -79,16 +82,21 @@ export function SessionsPage() {
       ) : (
         <ul className="session-list">
           {sessions.map((session) => (
-            <li key={session.id} className="session-list-item">
-              <NavLink to={routes.session(session.id)} className="session-list-link">
+            <li
+              key={session.id}
+              className="session-list-item"
+              title={session.runId ? `关联运行 ${session.runId}` : undefined}
+            >
+              <NavLink
+                to={routes.session(session.id)}
+                className="session-list-link"
+              >
                 <span className="session-list-title">
                   {session.title ?? session.id}
                 </span>
                 <StatusBadge status={session.status} size="sm" />
                 {session.runId ? (
-                  <span className="session-list-run text-muted">
-                    run {session.runId}
-                  </span>
+                  <span className="session-list-run text-muted">交付运行</span>
                 ) : null}
               </NavLink>
             </li>

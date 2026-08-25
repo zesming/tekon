@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -9,6 +10,7 @@ import {
   DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
 } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
+import { redactSecrets } from '../security/secrets.js';
 import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
@@ -56,6 +58,22 @@ const DSH_SAFE_ENV_KEYS = [
   'LC_ALL',
   'SHELL',
 ] as const;
+
+const MAX_ASSISTANT_TEXT_CHARS = 16_000;
+
+function readFinalAssistantText(path: string): string | undefined {
+  try {
+    const raw = readFileSync(path, 'utf8').trim();
+    if (!raw) return undefined;
+    const bounded =
+      raw.length > MAX_ASSISTANT_TEXT_CHARS
+        ? `${raw.slice(0, MAX_ASSISTANT_TEXT_CHARS)}…`
+        : raw;
+    return redactSecrets(bounded).content;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface BuiltDshHeadlessCommand extends CommandInvocation {
   stdin?: undefined;
@@ -335,6 +353,10 @@ export function createDshHeadlessAdapter(
           ...artifactOutputFiles,
         ],
         artifacts,
+        assistantText:
+          result.exitCode === 0
+            ? readFinalAssistantText(result.stdoutPath)
+            : undefined,
         timedOut: result.timedOut,
       };
     },

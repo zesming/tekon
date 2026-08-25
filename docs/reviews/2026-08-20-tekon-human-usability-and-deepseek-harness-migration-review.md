@@ -1,8 +1,10 @@
 # Tekon 人类可用性审查与 DeepSeek Harness 模式迁移评估
 
-> 审查日期：2026-08-20  
-> 审查基线：`main@df38520c5a990d067de38d107e9ded63835a83f8`  
-> 审查范围：`packages/core`、`packages/cli`、`packages/web`、数据库模型、运行时、Workflow/Gate/Delivery、现有技术方案与历史评审、近期 PR，以及 DeepSeek Harness 官方仓库和架构文档。  
+> 第二轮实现复审见：[2026-08-25 Tekon Harness Replatform 第二轮全面复审](./2026-08-25-tekon-harness-replatform-second-review.md)。
+
+> 审查日期：2026-08-20
+> 审查基线：`main@df38520c5a990d067de38d107e9ded63835a83f8`
+> 审查范围：`packages/core`、`packages/cli`、`packages/web`、数据库模型、运行时、Workflow/Gate/Delivery、现有技术方案与历史评审、近期 PR，以及 DeepSeek Harness 官方仓库和架构文档。
 > 审查方式：静态代码审查、数据流追踪、交互链路复盘、历史 PR/文档交叉验证、外部框架对照。当前执行环境无法可靠下载完整仓库并安装依赖，因此本报告不声称重新跑通本地构建、单测或 E2E；运行结论以代码事实、仓库现有 CI 配置和历史验证记录为依据。
 
 ## 0. 维护方决策批注（2026-08-20 复核后追加）
@@ -90,19 +92,19 @@ Tekon 当前已经具备一套相对完整的 **Agent 自动交付治理底盘**
 
 ### 1.2 评估评分
 
-| 维度 | 当前评分 | 说明 |
-| --- | ---: | --- |
-| Agent 自动执行底盘 | 7.5/10 | Workflow、Gate、Artifact、Worktree、Delivery 具备较完整骨架 |
-| 确定性治理与审计 | 8/10 | 硬门禁、证据、哈希审计和显式 PR 审批是可保留资产 |
-| 架构可扩展性 | 4/10 | 局部已有 registry，但 Agent provider、运行时和数据模型仍由核心集中控制 |
-| 人类任务输入体验 | 2/10 | 用户需要理解模板、Agent、毫秒超时、脏工作区等实现细节 |
-| 运行过程可见性 | 1.5/10 | 无会话流、无模型流、无工具调用流；Progress 主要展示遥测元数据 |
-| 人类可干预性 | 2/10 | 缺少 steer/follow-up；暂停/取消未形成真实中断链路 |
-| 输出可读性 | 2/10 | 结果分散在多个后端实体页签，Run 列表甚至主要展示 ID |
-| Web 发布信心 | 3/10 | Web/CLI 不在当前主 CI 中，且存在若干 P0/P1 语义问题 |
-| Harness 模式适配度 | 8.5/10 | Session/Event/Plugin/Capability/Profile 与当前缺口高度匹配 |
-| 直接依赖 Harness 内部 API | 4/10 | 官方明确处于 developer preview，存在破坏性兼容变更风险 |
-| 分阶段模式迁移可行性 | 8/10 | 可通过双写事件、兼容适配器和新旧 UI 并存逐步迁移 |
+| 维度                      | 当前评分 | 说明                                                                   |
+| ------------------------- | -------: | ---------------------------------------------------------------------- |
+| Agent 自动执行底盘        |   7.5/10 | Workflow、Gate、Artifact、Worktree、Delivery 具备较完整骨架            |
+| 确定性治理与审计          |     8/10 | 硬门禁、证据、哈希审计和显式 PR 审批是可保留资产                       |
+| 架构可扩展性              |     4/10 | 局部已有 registry，但 Agent provider、运行时和数据模型仍由核心集中控制 |
+| 人类任务输入体验          |     2/10 | 用户需要理解模板、Agent、毫秒超时、脏工作区等实现细节                  |
+| 运行过程可见性            |   1.5/10 | 无会话流、无模型流、无工具调用流；Progress 主要展示遥测元数据          |
+| 人类可干预性              |     2/10 | 缺少 steer/follow-up；暂停/取消未形成真实中断链路                      |
+| 输出可读性                |     2/10 | 结果分散在多个后端实体页签，Run 列表甚至主要展示 ID                    |
+| Web 发布信心              |     3/10 | Web/CLI 不在当前主 CI 中，且存在若干 P0/P1 语义问题                    |
+| Harness 模式适配度        |   8.5/10 | Session/Event/Plugin/Capability/Profile 与当前缺口高度匹配             |
+| 直接依赖 Harness 内部 API |     4/10 | 官方明确处于 developer preview，存在破坏性兼容变更风险                 |
+| 分阶段模式迁移可行性      |     8/10 | 可通过双写事件、兼容适配器和新旧 UI 并存逐步迁移                       |
 
 ## 2. 当前产品为什么“Agent 能用，人不能用”
 
@@ -705,18 +707,18 @@ interface AgentHandle {
 
 ### 8.5 Tekon 现有能力如何保留
 
-| 当前能力 | 迁移后角色 |
-| --- | --- |
-| Workflow Template | `tekon-workflow` plugin；可由 profile 默认启用，也可由用户在 Session 内开启 |
-| Role 文件夹 | Agent preset/persona/skills plugin，不再强制每个任务都暴露角色概念 |
-| Gate Engine | `tekon-gate` capability；消费 tool/artifact/workflow events，产出 gate events |
-| Artifact Store | Session attachment/artifact capability；保留版本、SHA256 和类型 |
-| Worktree Manager | workspace/fs capability 的隔离实现 |
-| Command Gateway | shell/tool pre/post policy 与 approval pipeline |
-| Audit hash chain | 对 durable session event segment 做哈希或签名投影 |
-| Demand Shaping | 首轮 clarification/plan plugin，而不是单独页面和文件跳转 |
-| Delivery/PR | Session 内 inline delivery card + `tekon-delivery` plugin |
-| Evaluation | session projection/evaluation plugin；高级 Inspector 展示 |
+| 当前能力          | 迁移后角色                                                                    |
+| ----------------- | ----------------------------------------------------------------------------- |
+| Workflow Template | `tekon-workflow` plugin；可由 profile 默认启用，也可由用户在 Session 内开启   |
+| Role 文件夹       | Agent preset/persona/skills plugin，不再强制每个任务都暴露角色概念            |
+| Gate Engine       | `tekon-gate` capability；消费 tool/artifact/workflow events，产出 gate events |
+| Artifact Store    | Session attachment/artifact capability；保留版本、SHA256 和类型               |
+| Worktree Manager  | workspace/fs capability 的隔离实现                                            |
+| Command Gateway   | shell/tool pre/post policy 与 approval pipeline                               |
+| Audit hash chain  | 对 durable session event segment 做哈希或签名投影                             |
+| Demand Shaping    | 首轮 clarification/plan plugin，而不是单独页面和文件跳转                      |
+| Delivery/PR       | Session 内 inline delivery card + `tekon-delivery` plugin                     |
+| Evaluation        | session projection/evaluation plugin；高级 Inspector 展示                     |
 
 ## 9. 推荐 Web 产品形态
 
@@ -844,17 +846,17 @@ Inspector tabs：
 
 ## 11. 迁移风险与缓解
 
-| 风险 | 影响 | 缓解 |
-| --- | --- | --- |
-| Harness developer preview API 变化 | 上游升级破坏 Tekon | 参考模式优先；只依赖稳定边界；pin 版本；anti-corruption layer |
-| 双写数据不一致 | Session 与旧表状态冲突 | 单一 event append transaction；projection checksum；对账工具 |
-| 事件 schema 膨胀 | 难以兼容和查询 | 事件最小化；version；required/ignorable；projection ownership |
-| 人类 UI 稀释硬门禁 | 交互方便但治理退化 | Gate 继续是 capability；inline 展示不等于取消规则 |
-| 实时输出泄露敏感信息 | 安全回归 | server-side redaction；spill；权限分层；敏感字段测试 |
-| 重构范围失控 | 长期停留在半成品 | golden journey 驱动；每阶段可运行；旧 Cockpit 并存 |
-| 取消语义不完整 | 用户误判危险任务已停止 | 明确 interruptibility；process handle；checkpoint；状态确认 |
-| Cordis/插件系统复杂度 | 调试与认知成本上升 | 可先实现轻量 Context/Plugin contract；无需首阶段完整引入 Cordis |
-| 旧 Workflow 资产丢失 | 自举能力退化 | 以 plugin 包装，保留模板、Role、Gate 和 Artifact 格式 |
+| 风险                               | 影响                   | 缓解                                                            |
+| ---------------------------------- | ---------------------- | --------------------------------------------------------------- |
+| Harness developer preview API 变化 | 上游升级破坏 Tekon     | 参考模式优先；只依赖稳定边界；pin 版本；anti-corruption layer   |
+| 双写数据不一致                     | Session 与旧表状态冲突 | 单一 event append transaction；projection checksum；对账工具    |
+| 事件 schema 膨胀                   | 难以兼容和查询         | 事件最小化；version；required/ignorable；projection ownership   |
+| 人类 UI 稀释硬门禁                 | 交互方便但治理退化     | Gate 继续是 capability；inline 展示不等于取消规则               |
+| 实时输出泄露敏感信息               | 安全回归               | server-side redaction；spill；权限分层；敏感字段测试            |
+| 重构范围失控                       | 长期停留在半成品       | golden journey 驱动；每阶段可运行；旧 Cockpit 并存              |
+| 取消语义不完整                     | 用户误判危险任务已停止 | 明确 interruptibility；process handle；checkpoint；状态确认     |
+| Cordis/插件系统复杂度              | 调试与认知成本上升     | 可先实现轻量 Context/Plugin contract；无需首阶段完整引入 Cordis |
+| 旧 Workflow 资产丢失               | 自举能力退化           | 以 plugin 包装，保留模板、Role、Gate 和 Artifact 格式           |
 
 ## 12. 立即修复清单
 

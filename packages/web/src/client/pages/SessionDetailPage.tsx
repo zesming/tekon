@@ -28,9 +28,8 @@ export function SessionDetailPage() {
   // Fire unconditionally; the RPC client / SSE client supply the token (3a).
   const { data, error, refetch } = useQuery<
     RpcProcedureMap['session.get']['output']
-  >(
-    sessionId ? queryKeys.sessionDetail(sessionId, scope) : null,
-    () => rpc.call('session.get', { sessionId: sessionId! }),
+  >(sessionId ? queryKeys.sessionDetail(sessionId, scope) : null, () =>
+    rpc.call('session.get', { sessionId: sessionId! }),
   );
 
   const { events, connState } = useSessionStream(sessionId);
@@ -41,14 +40,12 @@ export function SessionDetailPage() {
     <div className="session-detail">
       <header className="page-header">
         <div>
-          <h1 className="page-title">
-            {session?.title ?? sessionId}
-          </h1>
+          <h1 className="page-title">{session?.title ?? sessionId}</h1>
           <p className="page-subtitle">
             {session ? (
               <>
                 <StatusBadge status={session.status} size="sm" />
-                {session.runId ? ` · run ${session.runId}` : ''}
+                {session.runId ? ' · 已关联交付运行' : ''}
               </>
             ) : (
               '加载中…'

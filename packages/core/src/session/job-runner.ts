@@ -109,6 +109,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pending = new Set<Promise<void>>();
   let pollTimer: NodeJS.Timeout | null = null;
   let stopped = true;
+  let pollInFlight = false;
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -166,27 +167,40 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     failure: unknown,
   ): Promise<void> {
     clearHeartbeat(job.id);
-    controllers.delete(job.id);
-    pauseFlags.delete(job.id);
+    const controller = controllers.get(job.id);
 
-    // SHOULD13: re-read and fence on ownership before writing the terminal
-    // state. A zombie executor whose lease expired (job requeued / reclaimed /
-    // cancelled underneath it) must not flip the job to done/failed.
+    // Re-read and fence on ownership before writing a terminal state. A zombie
+    // executor whose lease was reclaimed must not flip a job owned elsewhere.
     const current = await jobs.get(job.id);
     if (!current || current.owner !== workerId) {
+      controllers.delete(job.id);
+      pauseFlags.delete(job.id);
       return;
     }
 
-    const terminalStatus: JobStatus = failure
-      ? 'failed'
-      : result && SETTLEABLE_STATUSES.includes(result.status)
-        ? result.status
-        : 'failed';
+    // A cancellation persisted by another process is authoritative even when
+    // the executor races to return `done`. Without this fence a web-owned job
+    // can overwrite `cancelling` with `done` before its process-local observer
+    // notices the control request.
+    const cancelRequested =
+      current.status === 'cancelling' ||
+      current.abortState === 'requested' ||
+      current.abortState === 'propagated' ||
+      controller?.signal.aborted === true;
+    const terminalStatus: JobStatus = cancelRequested
+      ? 'cancelled'
+      : failure
+        ? 'failed'
+        : result && SETTLEABLE_STATUSES.includes(result.status)
+          ? result.status
+          : 'failed';
 
     await jobs.updateJob(job.id, {
       status: terminalStatus,
       abortState: 'stopped',
     });
+    controllers.delete(job.id);
+    pauseFlags.delete(job.id);
     await notifySettled(
       current.sessionId,
       job.id,
@@ -243,13 +257,61 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     void task.finally(() => pending.delete(task));
   }
 
+  async function syncOwnedControls(): Promise<void> {
+    for (const [jobId, controller] of controllers) {
+      const current = await jobs.get(jobId);
+      if (!current || current.owner !== workerId) {
+        // Ownership changed: fence the local execution and kill only processes
+        // registered in this process. The new owner will continue from durable
+        // state; the zombie must stop touching the workspace.
+        if (!controller.signal.aborted) {
+          controller.abort();
+          const runId = current
+            ? await sessions.getRunIdBySessionId(current.sessionId)
+            : null;
+          if (runId) registry.killAll(runId, 'SIGKILL');
+        }
+        pauseFlags.delete(jobId);
+        continue;
+      }
+
+      if (current.status === 'paused') {
+        pauseFlags.add(jobId);
+      }
+
+      const cancelRequested =
+        current.status === 'cancelling' ||
+        current.abortState === 'requested' ||
+        current.abortState === 'propagated';
+      if (!cancelRequested) continue;
+
+      if (!controller.signal.aborted) {
+        controller.abort();
+        const runId = await sessions.getRunIdBySessionId(current.sessionId);
+        if (runId) registry.killAll(runId, 'SIGKILL');
+      }
+      if (current.abortState !== 'propagated') {
+        await jobs.updateJob(jobId, { abortState: 'propagated' });
+      }
+    }
+  }
+
   async function poll(): Promise<void> {
-    if (stopped) {
+    if (stopped || pollInFlight) {
       return;
     }
-    const job = await jobs.claimNext(workerId);
-    if (job) {
-      spawnJob(job);
+    pollInFlight = true;
+    try {
+      // Process-local AbortControllers and registries cannot be mutated by a
+      // second CLI/Web process. Observe the durable job row on every owner poll
+      // and relay foreign pause/cancel requests into this process first.
+      await syncOwnedControls();
+      const job = await jobs.claimNext(workerId);
+      if (job) {
+        spawnJob(job);
+      }
+    } finally {
+      pollInFlight = false;
     }
   }
 
@@ -316,7 +378,15 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         status: 'cancelling',
         abortState: 'requested',
       });
-      controllers.get(jobId)?.abort();
+
+      // A requester in another process can only persist the request. The owner
+      // poll relays it to that process's AbortController and subprocess
+      // registry, then advances abortState to propagated.
+      if (job.owner !== workerId) {
+        return;
+      }
+      const controller = controllers.get(jobId);
+      controller?.abort();
       const runId = await sessions.getRunIdBySessionId(job.sessionId);
       if (runId) {
         registry.killAll(runId, 'SIGKILL');

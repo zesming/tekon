@@ -40,7 +40,10 @@ export interface FeedGroup {
   rows: FeedRow[];
 }
 
-function asText(payload: Record<string, unknown>, ...keys: string[]): string | undefined {
+function asText(
+  payload: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
   for (const key of keys) {
     const value = payload[key];
     if (typeof value === 'string' && value.length > 0) {
@@ -81,12 +84,19 @@ export function describeEvent(event: StreamEvent): FeedRow {
         author: 'assistant',
         title: 'Agent',
         body: asText(p, 'text', 'message') ?? '',
-        // Phase 2 M3: synthesized from artifact metadata, not real model prose.
-        synthetic: true,
+        // Old events omit the flag and remain conservatively labelled as
+        // synthesized; providers with a documented final-output boundary emit
+        // synthetic:false.
+        synthetic: p.synthetic !== false,
       };
     case 'tool/call': {
       const name = asText(p, 'name', 'tool') ?? 'tool';
-      return { ...base, kind: 'tool', title: `调用 ${name}`, body: asText(p, 'command', 'summary') };
+      return {
+        ...base,
+        kind: 'tool',
+        title: `调用 ${name}`,
+        body: asText(p, 'command', 'summary'),
+      };
     }
     case 'tool/result': {
       const name = asText(p, 'name', 'tool');
@@ -148,7 +158,11 @@ export function describeEvent(event: StreamEvent): FeedRow {
     case 'gate/result': {
       const gate = asText(p, 'gateType', 'gateKey') ?? 'gate';
       const status = asText(p, 'status') ?? '';
-      return { ...base, kind: 'governance', title: `门禁 ${gate} · ${status}`.trim() };
+      return {
+        ...base,
+        kind: 'governance',
+        title: `门禁 ${gate} · ${status}`.trim(),
+      };
     }
     case 'artifact/created': {
       const kind = asText(p, 'artifactType', 'type') ?? 'artifact';

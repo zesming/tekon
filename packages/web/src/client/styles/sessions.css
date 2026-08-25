@@ -144,6 +144,14 @@
 .feed-title {
   color: var(--text-s, #475569);
 }
+.feed-message-body {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-p, #0f172a);
+}
 .feed-seq {
   margin-left: auto;
   font-size: 11px;

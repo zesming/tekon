@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { NavLink } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 
 import { useQuery } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
@@ -168,6 +168,9 @@ const navGroups: NavGroup[] = [
 ];
 
 export function Sidebar() {
+  const { pathname } = useLocation();
+  const advancedMode = pathname.startsWith(routes.advanced);
+  const visibleGroups = advancedMode ? navGroups : [navGroups[0]!];
   const overviewQuery = useQuery<ProjectOverviewOutput>(
     'sidebar:project-overview',
     () => rpc.call('project.overview'),
@@ -182,14 +185,18 @@ export function Sidebar() {
         <div className="brand-mark">T</div>
         <div>
           <div className="brand-name">Tekon</div>
-          <div className="brand-tag">Cockpit</div>
+          <div className="brand-tag">
+            {advancedMode ? 'Cockpit' : 'Workspace'}
+          </div>
         </div>
       </div>
 
       <nav className="sidebar-nav">
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div className="nav-group" key={group.label || 'root'}>
-            {group.label ? <div className="nav-label">{group.label}</div> : null}
+            {group.label ? (
+              <div className="nav-label">{group.label}</div>
+            ) : null}
             {group.items.map((item) => (
               <NavLink
                 key={item.to}

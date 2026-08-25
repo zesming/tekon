@@ -47,7 +47,12 @@ function adapterReturning(result: Partial<AgentRunResult>): AgentAdapter {
 }
 
 const INPUT = { prompt: 'do the thing' } as unknown as AgentRunInput;
-const META = { runId: 'run_1', nodeId: 'node_1', role: 'rd' as const, promptSummary: 'do the thing' };
+const META = {
+  runId: 'run_1',
+  nodeId: 'node_1',
+  role: 'rd' as const,
+  promptSummary: 'do the thing',
+};
 
 // ── Tests ──────────────────────────────────────────────────────────────
 
@@ -79,6 +84,11 @@ describe('runAgentWithStepEvents (S3)', () => {
     expect(events.at(-1)!.payload.status).toBe('passed');
     // all events share one correlationId (stepId groups the node's step).
     expect(assistant.payload.stepId).toBe(events[0].payload.stepId);
+    expect(assistant.payload.synthetic).toBe(true);
+    expect(events.find((e) => e.type === 'tool/call')?.payload.name).toBe(
+      'mock',
+    );
+    expect(toolResult.payload.summary).toContain('1 artifact');
   });
 
   it('cancel path emits ONLY step/end{cancelled}, never agent/error (MF1)', async () => {
@@ -150,13 +160,38 @@ describe('runAgentWithStepEvents (S3)', () => {
     };
     const adapter = adapterReturning({ exitCode: 0, outputFiles: ['x'] });
 
-    const result = await runAgentWithStepEvents(adapter, INPUT, META, throwingSink);
+    const result = await runAgentWithStepEvents(
+      adapter,
+      INPUT,
+      META,
+      throwingSink,
+    );
     expect(result.exitCode).toBe(0); // run succeeded despite sink failure
   });
 
   it('no sink → no events, result unchanged', async () => {
     const adapter = adapterReturning({ exitCode: 0 });
-    const result = await runAgentWithStepEvents(adapter, INPUT, META, undefined);
+    const result = await runAgentWithStepEvents(
+      adapter,
+      INPUT,
+      META,
+      undefined,
+    );
     expect(result.exitCode).toBe(0);
+  });
+
+  it('uses documented provider assistant text instead of a synthetic summary', async () => {
+    const { sink, events } = collectingSink();
+    const adapter = adapterReturning({
+      assistantText: 'This is the provider final answer.',
+    });
+
+    await runAgentWithStepEvents(adapter, INPUT, META, sink);
+
+    const assistant = events.find(
+      (event) => event.type === 'assistant/message',
+    )!;
+    expect(assistant.payload.text).toBe('This is the provider final answer.');
+    expect(assistant.payload.synthetic).toBe(false);
   });
 });

@@ -143,6 +143,25 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     expect(decision).toMatchObject({ status: 'pending', actor: null });
     db.close();
   });
+  it('M5: tekon pause on a cancelled run exits 1 and cannot revive the terminal status', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['pause', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('终态');
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    expect(
+      await createRepositories(db).getWorkflowInstance(runId),
+    ).toMatchObject({
+      status: 'cancelled',
+    });
+    db.close();
+  });
 });
 
 function createMemoryIo(): CliIO & {
@@ -186,9 +205,13 @@ function createFixtureRepo(tempDirs: string[]): string {
     cwd: repoPath,
   });
   execFileSync('npm', ['init', '-y'], { cwd: repoPath });
-  execFileSync('npm', ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'], {
-    cwd: repoPath,
-  });
+  execFileSync(
+    'npm',
+    ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'],
+    {
+      cwd: repoPath,
+    },
+  );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
   return repoPath;

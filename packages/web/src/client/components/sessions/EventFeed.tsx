@@ -1,8 +1,5 @@
 import { CodeBlock } from '../ui/CodeBlock.js';
-import {
-  groupEventsByTurn,
-  type FeedRow,
-} from '../../lib/event-feed.js';
+import { groupEventsByTurn, type FeedRow } from '../../lib/event-feed.js';
 import type { StreamEvent } from '../../lib/session-stream.js';
 
 // Phase 3 3b: renders the session event stream as a continuous narrative.
@@ -30,20 +27,30 @@ function FeedRowView({ row }: { row: FeedRow }) {
         ) : (
           <span className="feed-kind">{KIND_LABEL[row.kind]}</span>
         )}
-        <span className="feed-title">{row.kind === 'message' ? '' : row.title}</span>
+        <span className="feed-title">
+          {row.kind === 'message' ? '' : row.title}
+        </span>
         {row.synthetic ? (
           <span className="feed-tag" title="由产物元数据合成，非模型原文">
             摘要
           </span>
         ) : null}
         {row.truncated ? (
-          <span className="feed-tag feed-tag-warn" title="服务端已截断（spill 递延 2b）">
+          <span
+            className="feed-tag feed-tag-warn"
+            title="服务端已截断（spill 递延 2b）"
+          >
             已截断
           </span>
         ) : null}
-        <span className="feed-seq">#{row.seq}</span>
       </div>
-      {row.body ? <CodeBlock content={row.body} truncated /> : null}
+      {row.body ? (
+        row.kind === 'message' ? (
+          <div className="feed-message-body">{row.body}</div>
+        ) : (
+          <CodeBlock content={row.body} truncated />
+        )
+      ) : null}
     </div>
   );
 }
@@ -66,7 +73,7 @@ export function EventFeed({ events }: { events: StreamEvent[] }) {
           aria-label={group.turnSeq ? `回合 ${group.turnSeq}` : '会话开始'}
         >
           {group.turnSeq ? (
-            <div className="feed-turn-label">回合 · turn @{group.turnSeq}</div>
+            <div className="feed-turn-label">任务回合</div>
           ) : null}
           {group.rows.map((row) => (
             <FeedRowView row={row} key={row.seq} />
