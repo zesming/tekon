@@ -26,7 +26,8 @@ export function SessionComposer() {
     invalidateKeys: ['session.list', 'project.detail', 'project.overview'],
   });
 
-  const canSend = Boolean(token) && text.trim().length > 0 && !startMutation.isPending;
+  const canSend =
+    Boolean(token) && text.trim().length > 0 && !startMutation.isPending;
 
   const handleSend = async () => {
     if (!canSend || !token) return;
@@ -49,9 +50,11 @@ export function SessionComposer() {
     <div className="session-composer">
       <textarea
         className="input session-composer-input"
-        aria-label="新会话需求"
+        aria-label="新建受控交付任务"
         placeholder={
-          token ? '描述你要交付的需求，开始一个新会话…' : '请先在顶栏设置会话令牌'
+          token
+            ? '描述需要受控交付的需求（将运行 PM / RD / QA / Reviewer 全链路）…'
+            : '请先在顶栏设置会话令牌'
         }
         value={text}
         disabled={!token}
@@ -60,7 +63,7 @@ export function SessionComposer() {
       />
       <div className="session-composer-actions">
         <span className="text-muted session-composer-hint">
-          运行中转向（follow-up/steer）在 2b 提供，当前仅支持开始新会话
+          当前入口会启动 standard-delivery 受控交付全链路；轻量协作、会话内追问与转向尚未开放
         </span>
         <button
           type="button"
