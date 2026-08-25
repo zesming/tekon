@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Repair staged fencing script
+        run: python3 scripts/repair_job_fencing_script.py
+
       - name: Apply fencing fix
         run: python3 scripts/apply_job_fencing_fix.py
 
@@ -70,7 +73,8 @@ jobs:
             docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md
           git rm -f -- \
             .github/workflows/apply-job-fencing-fix.yml \
-            scripts/apply_job_fencing_fix.py
+            scripts/apply_job_fencing_fix.py \
+            scripts/repair_job_fencing_script.py
           git diff --cached --check
           git commit -m "fix: separate cancellation from ownership fencing"
           git push origin HEAD:review/deepseek-harness-migration-2026-08-20
