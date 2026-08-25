@@ -596,15 +596,19 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       'Fixture Work Usability',
     );
 
+    // The human-approved run is already passed. Terminal status is monotonic:
+    // pause must fail instead of reviving it as paused.
     await expect(
       runCli(['pause', '--run-id', gatedRunId!, '--repo', repoPath], io),
-    ).resolves.toBe(0);
-    expect(io.takeStdout()).toContain('status=paused');
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('终态');
 
+    // Cancel is idempotent against a different terminal outcome and reports
+    // the authoritative status without mutating the passed workflow.
     await expect(
       runCli(['cancel', '--run-id', gatedRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
-    expect(io.takeStdout()).toContain('status=cancelled');
+    expect(io.takeStdout()).toContain('status=passed');
 
     for (const argv of [
       ['role', 'list', '--repo', repoPath],
@@ -649,7 +653,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     try {
       const activeRepoPath = process.cwd();
       await expect(runCli(['init'], io)).resolves.toBe(0);
-	      expect(io.takeStdout()).toContain('项目初始化完成');
+      expect(io.takeStdout()).toContain('项目初始化完成');
       const nestedDir = join(activeRepoPath, 'src', 'feature');
       mkdirSync(nestedDir, { recursive: true });
       process.chdir(nestedDir);
@@ -712,7 +716,9 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ),
       ).resolves.toBe(0);
       const gatedOutput = io.takeStdout();
-      const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
+      const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
+        gatedOutput,
+      )?.[1];
       expect(gatedRunId).toBeTruthy();
       expect(gatedOutput).toContain('人工确认: pending');
 
@@ -870,9 +876,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       io.takeStdout();
 
       await expect(runCli(['draft', 'approve'], io)).resolves.toBe(1);
-      expect(io.takeStderr()).toContain(
-        '最新的需求草案已经批准',
-      );
+      expect(io.takeStderr()).toContain('最新的需求草案已经批准');
       expect(
         JSON.parse(readFileSync(historicalShapePath!, 'utf8')).approved,
       ).toBe(false);
@@ -932,7 +936,9 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         io,
       ),
     ).resolves.toBe(0);
-    const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
+      io.takeStdout(),
+    )?.[1];
     expect(gatedRunId).toBeTruthy();
 
     await expect(
@@ -1357,7 +1363,15 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
 
     await expect(
       runCli(
-        ['run', '做一个轻量一次性任务', '--goal', '--agent', 'mock', '--repo', repoPath],
+        [
+          'run',
+          '做一个轻量一次性任务',
+          '--goal',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
         io,
       ),
     ).resolves.toBe(0);
@@ -1461,9 +1475,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         io,
       ),
     ).resolves.toBe(1);
-    expect(io.takeStderr()).toContain(
-      '--goal 模式下不能同时指定 --template',
-    );
+    expect(io.takeStderr()).toContain('--goal 模式下不能同时指定 --template');
   });
 });
 
