@@ -50,7 +50,11 @@ export function SessionDetailPage() {
             ) : (
               '加载中…'
             )}
-            <span className={`session-conn session-conn-${connState}`}>
+            <span
+              className={`session-conn session-conn-${connState}`}
+              role="status"
+              aria-live="polite"
+            >
               {' · '}
               {CONN_LABEL[connState] ?? connState}
             </span>

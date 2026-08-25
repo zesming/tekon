@@ -1,5 +1,23 @@
 # 变更日志
 
+## v0.14.2
+
+第三轮复审循环评估后的收敛。第三轮报告由 `scripts/run_third_comprehensive_review.py` 正则静态分析器生成（逐行匹配使 `re.S` 失效，系统性误报）；两个最高思考等级 subagent 独立核验 + 交叉印证后，仅采纳其中唯一被证实的真实低成本缺口（UX-01 可访问性），并推翻多处误报。
+
+### 可访问性（第三轮 UX-01，两个 reviewer 共识确认的真实缺口）
+
+- **live region**：`SessionDetailPage.tsx` 连接状态 `.session-conn`、`EventFeed.tsx` 空态 `feed-empty` 加 `role="status" aria-live="polite"`，使连接状态（连接中/实时/重连中/已关闭）与"等待事件"对屏幕阅读器非打断式可感知。新增 Playwright 断言锁定该属性（已验证移除即失败）。
+- **reduced-motion**：`reset.css` 补全局 `@media (prefers-reduced-motion: reduce)`，压制 `pulse`/`viewFadeIn`/`flashSlideIn`/`overlayFadeIn` 等动画与 `transition`/`animation`/`scroll-behavior`（含 delay），尊重系统减动画偏好。
+
+### 复审结论（追加到第三轮报告实施方批注）
+
+- **推翻误报**：REG-01（称 durable event redaction 回归）——F-08 脱敏完整存在 `agent-step-events.ts:41/:107` 且测试全绿，分析器逐行匹配漏检；P1-04（称 bootstrap nonce 已闭环）——nonce 从未实现，分析器 `open\s*\(` 误匹配 React `setIsOpen`；CODE-01——分析器扫到自己脚本的正则字符串；UX-01 响应式降级——`sessions.css:73-77` 已有窄屏单列降级。报告 §4 声称的 aria-live 改动从未提交到分支。
+- **维持已披露的诚实递延**：P0-01/02/03、P1-01/02/03/05/06 均为报告 §10 里程碑级产品能力，前两轮已在 README/manual 诚实披露"未开放/迁移期 projection/仅长驻进程/审批未绑内容指纹"，本轮无新动作。P0-04 goal 治理已闭环（fail-closed，属实）。
+
+### 清理
+
+- 删除本轮评审的一次性自动化脚手架：`scripts/{run_third_comprehensive_review,apply_third_review_fixes,repair_third_review_script}.py` 与 `.github/workflows/{third-comprehensive-review,apply-third-review-fixes}.yml`。原因：`apply-third-review-fixes.yml` 由 push 触发、持 `contents:write`，仅以 commit message marker 作弱 gate 即自动运行 923 行分析器脚本改码提交，风险面大于收益；脚手架已完成一次性用途，审计产物（第三轮报告）保留在 `docs/reviews/`。
+
 ## v0.14.1
 
 第二轮全面复审（`docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md`）循环评估后的收敛修复。经两个最高思考等级 subagent（验证 F-01~F-09 修复真实性 + P0/P1 逐条取舍）+ 交叉复核，按报告 §11「方案 1」以基础设施里程碑推进：修复一处必修回归、补两处 fake-pass/脱敏红线测试锁、诚实披露产品边界。

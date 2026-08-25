@@ -88,6 +88,14 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
   await expect(page.locator('.session-conn-live')).toBeVisible({
     timeout: 15_000,
   });
+
+  // UX-01 (third-review): the connection status is an accessible live region so
+  // screen readers announce connecting/live/reconnecting/closed transitions.
+  await expect(page.locator('.session-conn')).toHaveAttribute('role', 'status');
+  await expect(page.locator('.session-conn')).toHaveAttribute(
+    'aria-live',
+    'polite',
+  );
 });
 
 test('Sessions list shows the started session and links to its detail', async ({

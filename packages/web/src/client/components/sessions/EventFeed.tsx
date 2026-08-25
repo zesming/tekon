@@ -58,7 +58,7 @@ function FeedRowView({ row }: { row: FeedRow }) {
 export function EventFeed({ events }: { events: StreamEvent[] }) {
   if (events.length === 0) {
     return (
-      <div className="feed-empty text-muted">
+      <div className="feed-empty text-muted" role="status" aria-live="polite">
         等待事件… Waiting for session events.
       </div>
     );

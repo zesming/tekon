@@ -2295,3 +2295,22 @@ tbody tr:last-child td {
   background: var(--accent-bg);
   color: var(--accent);
 }
+
+/*
+ * Accessibility (third-review UX-01): respect the OS "reduce motion" setting.
+ * Neutralizes the pulse / fade / slide animations and transitions declared
+ * above so vestibular-sensitive users get a still, non-animated UI. Scoped to
+ * a media query so default motion is unchanged for everyone else.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
