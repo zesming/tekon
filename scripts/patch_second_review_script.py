@@ -1,20 +1,39 @@
 from pathlib import Path
-import re
 
 path = Path(__file__).with_name('apply_second_review_fixes.py')
 text = path.read_text(encoding='utf-8')
-pattern = re.compile(
-    r'''insert_before_last\(\n    "packages/cli/__tests__/approval-terminal\.test\.ts",\n    "\}\);",\n    r'''\n  it\('M5: tekon pause on a cancelled run exits 1 and cannot revive the terminal status'.*?\n''',\n\)''',
-    re.S,
+start_marker = '''insert_before_last(
+    "packages/cli/__tests__/approval-terminal.test.ts",'''
+end_marker = '''
+
+# ---------------------------------------------------------------------------
+# 2. Workflow terminality'''
+start = text.index(start_marker)
+end = text.index(end_marker, start)
+replacement = """replace_once(
+    \"packages/cli/__tests__/approval-terminal.test.ts\",
+    \"});\\n\\nfunction createMemoryIo\",
+    r'''  it('M5: tekon pause on a cancelled run exits 1 and cannot revive the terminal status', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['pause', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('终态');
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    expect(await createRepositories(db).getWorkflowInstance(runId)).toMatchObject({
+      status: 'cancelled',
+    });
+    db.close();
+  });
+});
+
+function createMemoryIo''',
 )
-match = pattern.search(text)
-if not match:
-    raise RuntimeError('approval-terminal insertion block not found')
-block = match.group(0)
-body_start = block.index("r'''\n") + len("r'''\n")
-body_end = block.rindex("\n''',")
-test_body = block[body_start:body_end]
-replacement = '''replace_once(\n    "packages/cli/__tests__/approval-terminal.test.ts",\n    """});\\n\\nfunction createMemoryIo""",\n    r\'\'\'''' + test_body + '''});\n\nfunction createMemoryIo\n\'\'\',\n)'''
-updated = text[:match.start()] + replacement + text[match.end():]
-path.write_text(updated, encoding='utf-8')
+"""
+path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
 print('Repaired approval-terminal test insertion in the staged review script.')
