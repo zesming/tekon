@@ -114,8 +114,9 @@ PR 当前 CI 覆盖：
 - owner poll 每轮同步自己持有 Job 的 durable control state；
 - foreign pause 转成本地 pause flag；
 - foreign cancel 转成本地 AbortSignal + `registry.killAll()`；
-- owner 变化时本地 zombie executor 被 fence；
-- 增加双 Runner 测试。
+- owner 变化时使用独立 abort reason，避免误判成用户取消；
+- 同一 worker 重领同一 job 时使用 execution-generation token fence zombie；
+- 增加双 Runner 与 crash-resume 回归验证。
 
 ### F-02 cancelling 与 executor done 竞态会把 Job 写回 done
 

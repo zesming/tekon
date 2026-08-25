@@ -6,7 +6,12 @@ import { redactSecrets } from '../security/secrets.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import { createGateEngine } from '../gate/engine.js';
-import type { JobExecutionContext, JobExecutor } from './job-runner.js';
+import {
+  isJobCancellationAbort,
+  isJobOwnershipLostAbort,
+  type JobExecutionContext,
+  type JobExecutor,
+} from './job-runner.js';
 import type { SessionEventBus } from './event-bus.js';
 import type { SessionEventStore } from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
@@ -154,7 +159,12 @@ export function createWorkflowJobExecutor(deps: {
           ctx,
         );
       } catch (error) {
-        if (ctx.signal.aborted) {
+        // Lease/owner loss fences a stale executor. It must not write workflow
+        // or session terminal state; the new owner is authoritative.
+        if (isJobOwnershipLostAbort(ctx.signal)) {
+          return { status: 'failed' as JobStatus };
+        }
+        if (isJobCancellationAbort(ctx.signal)) {
           // Abort raced the run to completion. Settle the workflow cancelled
           // (idempotent, M2) and the session cancelled — but do NOT emit
           // agent/cancelled (MF1: single emission from the cancel route).
@@ -194,9 +204,14 @@ export function createWorkflowJobExecutor(deps: {
     workflow: WorkflowInstance,
     ctx: JobExecutionContext,
   ): Promise<{ status: JobStatus; summary?: string }> {
-    // Aborted mid-flight: engine returned a cancelled/paused workflow because
-    // it hit the signal at a node boundary.
-    if (ctx.signal.aborted || workflow.status === 'cancelled') {
+    // Ownership loss is a silent fencing outcome for this stale executor.
+    // The current owner will emit the authoritative lifecycle events.
+    if (isJobOwnershipLostAbort(ctx.signal)) {
+      return { status: 'failed' };
+    }
+
+    // User cancellation remains authoritative over an engine result.
+    if (isJobCancellationAbort(ctx.signal) || workflow.status === 'cancelled') {
       await sessions.updateSessionStatus(sessionId, 'cancelled');
       await emit(sessionId, 'turn/end', { runId, status: 'cancelled' });
       return { status: 'cancelled' };

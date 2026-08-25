@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type {
-  ArtifactType,
-} from '../types/domain.js';
+import type { ArtifactType } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
@@ -22,6 +20,7 @@ import type { PromptBuilder } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
+import { isJobCancellationAbort } from '../session/job-runner.js';
 
 export interface NodeExecutorDeps {
   repositories: TekonRepositories;
@@ -49,10 +48,7 @@ export interface NodeExecutorDeps {
 
 export interface NodeExecutor {
   executeNode(runId: string, node: ExecutableNode): Promise<boolean>;
-  appendPmoNodeCheckpoint(
-    runId: string,
-    node: ExecutableNode,
-  ): Promise<void>;
+  appendPmoNodeCheckpoint(runId: string, node: ExecutableNode): Promise<void>;
   hasMissingArtifactDependency(
     runId: string,
     node: ExecutableNode,
@@ -207,26 +203,38 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         });
         const lease = await leaseService.createExecutionLease(runId, node);
         if (deps.signal?.aborted) {
-          // S5: cancel arrived before the agent started — short-circuit
-          // without invoking the adapter.
           await repositories.markRoleRunInterrupted({
             roleRunId,
             interruptedAt: new Date().toISOString(),
           });
           await repositories.transitionNode(node.id, 'interrupted');
-          await writeWorkflowTerminal(
-            repositories,
-            runId,
-            'cancelled',
-            node.id,
-          );
+          const cancelled = isJobCancellationAbort(deps.signal);
+          if (cancelled) {
+            await writeWorkflowTerminal(
+              repositories,
+              runId,
+              'cancelled',
+              node.id,
+            );
+          } else {
+            await repositories.updateWorkflowInstanceStatus(
+              runId,
+              'interrupted',
+              node.id,
+            );
+          }
           await leaseService
             .finalizeExecutionLease(runId, node.id)
             .catch(() => {});
           await audit.append({
             runId,
             type: 'node.interrupted',
-            payload: { nodeId: node.id, error: 'aborted before agent start' },
+            payload: {
+              nodeId: node.id,
+              error: cancelled
+                ? 'cancelled before agent start'
+                : 'job ownership lost before agent start',
+            },
           });
           return false;
         }
@@ -270,7 +278,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
               interruptedAt: new Date().toISOString(),
             });
             await repositories.transitionNode(node.id, 'interrupted');
-            if (deps.signal?.aborted) {
+            if (isJobCancellationAbort(deps.signal)) {
               // S5: abort path — the workflow settles `cancelled` via the
               // idempotent terminal writer (M2), not `interrupted`.
               await writeWorkflowTerminal(
@@ -298,7 +306,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           throw error;
         }
         await repositories.transitionNode(node.id, 'interrupted');
-        if (deps.signal?.aborted) {
+        if (isJobCancellationAbort(deps.signal)) {
           // S5: the finally block above (or the pre-agent check) already
           // settled the run via writeWorkflowTerminal; this second call is
           // the idempotent no-op path (written=false). If the failure
@@ -338,11 +346,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
     const configuredGates = gatesWithStableKeys(node.gates, node.id);
     try {
       for (const gate of configuredGates) {
-        const passed = await gateRunner.runGateWithRepair(
-          runId,
-          node,
-          gate,
-        );
+        const passed = await gateRunner.runGateWithRepair(runId, node, gate);
         if (!passed) {
           return false;
         }
@@ -386,12 +390,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       return false;
     }
 
-    await checkedTransitionNode(
-      runId,
-      node.id,
-      'passed',
-      'node.passed',
-    );
+    await checkedTransitionNode(runId, node.id, 'passed', 'node.passed');
     await appendPmoNodeCheckpoint(runId, node);
     return true;
   }

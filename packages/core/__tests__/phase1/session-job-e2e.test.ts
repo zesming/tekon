@@ -23,6 +23,8 @@ import {
   createWorkflowEngine,
   createWorktreeManager,
   createWriteQueue,
+  isJobCancellationAbort,
+  isJobOwnershipLostAbort,
   isWorkflowTerminalError,
   mapAuditEventToSessionEvent,
   MAPPED_AUDIT_EVENT_TYPES,
@@ -172,7 +174,10 @@ interface Harness {
   registry: ReturnType<typeof createSubprocessRegistry>;
   /** Dual-write repositories (same instance the web context.repositories uses). */
   repositories: ReturnType<typeof createDualWriteRepositories>;
-  buildEngine: (runId: string, signal: AbortSignal) => ReturnType<typeof createWorkflowEngine>;
+  buildEngine: (
+    runId: string,
+    signal: AbortSignal,
+  ) => ReturnType<typeof createWorkflowEngine>;
   close: () => Promise<void>;
 }
 
@@ -243,9 +248,12 @@ function createHarness(input: {
     sessionId: string,
     runId: string,
     workflow: WorkflowInstance,
-    aborted: boolean,
+    signal: AbortSignal,
   ): Promise<{ status: JobStatus }> => {
-    if (aborted || workflow.status === 'cancelled') {
+    if (isJobOwnershipLostAbort(signal)) {
+      return { status: 'failed' };
+    }
+    if (isJobCancellationAbort(signal) || workflow.status === 'cancelled') {
       await sessions.updateSessionStatus(sessionId, 'cancelled');
       await emit(sessionId, 'turn/end', { runId, status: 'cancelled' });
       return { status: 'cancelled' };
@@ -290,7 +298,10 @@ function createHarness(input: {
         return { status: 'failed' };
       }
       await sessions.updateSessionStatus(ctx.job.sessionId, 'active');
-      await emit(ctx.job.sessionId, 'turn/start', { runId, kind: ctx.job.kind });
+      await emit(ctx.job.sessionId, 'turn/start', {
+        runId,
+        kind: ctx.job.kind,
+      });
       try {
         const engine = buildEngine(runId, ctx.signal);
         const workflow: WorkflowInstance =
@@ -301,10 +312,13 @@ function createHarness(input: {
           ctx.job.sessionId,
           runId,
           workflow,
-          ctx.signal.aborted,
+          ctx.signal,
         );
       } catch (error) {
-        if (ctx.signal.aborted) {
+        if (isJobOwnershipLostAbort(ctx.signal)) {
+          return { status: 'failed' };
+        }
+        if (isJobCancellationAbort(ctx.signal)) {
           await writeWorkflowTerminal(
             dualRepositories,
             runId,
@@ -319,7 +333,10 @@ function createHarness(input: {
           return { status: 'cancelled' };
         }
         if (isWorkflowTerminalError(error)) {
-          await emit(ctx.job.sessionId, 'turn/end', { runId, status: 'terminal' });
+          await emit(ctx.job.sessionId, 'turn/end', {
+            runId,
+            status: 'terminal',
+          });
           return { status: 'cancelled' };
         }
         await sessions.updateSessionStatus(ctx.job.sessionId, 'failed');
@@ -367,7 +384,11 @@ function createHarness(input: {
 async function cancelRun(h: Harness, runId: string): Promise<boolean> {
   let written = false;
   try {
-    const result = await writeWorkflowTerminal(h.repositories, runId, 'cancelled');
+    const result = await writeWorkflowTerminal(
+      h.repositories,
+      runId,
+      'cancelled',
+    );
     written = result.written;
   } catch (error) {
     if (isWorkflowTerminalError(error)) return false;
@@ -431,7 +452,8 @@ async function enqueueRun(
         sessionId: session.id,
         type: event.type,
         payload: event.payload,
-        modelVisible: (event as { modelVisible?: boolean }).modelVisible ?? false,
+        modelVisible:
+          (event as { modelVisible?: boolean }).modelVisible ?? false,
       });
       h.bus.publish(appended);
     }
@@ -555,8 +577,11 @@ describe('phase 1 session/job e2e (S9)', () => {
     const projectionTypes = new Set(
       [...new Set(mappedPresent)].map(
         (t) =>
-          mapAuditEventToSessionEvent({ runId, auditType: t, auditPayload: {} })!
-            .type,
+          mapAuditEventToSessionEvent({
+            runId,
+            auditType: t,
+            auditPayload: {},
+          })!.type,
       ),
     );
     const repositoryProjectionTypes = new Set([
@@ -606,7 +631,9 @@ describe('phase 1 session/job e2e (S9)', () => {
         .all(sessionId) as Array<{ payload: string }>
     ).filter((r) => {
       try {
-        return (JSON.parse(r.payload) as { status?: string }).status === 'passed';
+        return (
+          (JSON.parse(r.payload) as { status?: string }).status === 'passed'
+        );
       } catch {
         return false;
       }
@@ -723,7 +750,9 @@ describe('phase 1 session/job e2e (S9)', () => {
       return row?.status === 'passed';
     });
     // The same job row was requeued and settled done (not duplicated).
-    await waitFor(async () => (await h.jobs.get('job_crashed_a'))?.status === 'done');
+    await waitFor(
+      async () => (await h.jobs.get('job_crashed_a'))?.status === 'done',
+    );
 
     await h.close();
   }, 30_000);
@@ -876,7 +905,10 @@ describe('phase 1 session/job e2e (S9)', () => {
 });
 
 /** True if the run's latest role_run is interrupted (SHOULD4). */
-async function repoRoleRunInterrupted(h: Harness, runId: string): Promise<boolean> {
+async function repoRoleRunInterrupted(
+  h: Harness,
+  runId: string,
+): Promise<boolean> {
   const rows = h.db
     .prepare(
       `select status from role_runs where run_id = ? order by started_at desc`,

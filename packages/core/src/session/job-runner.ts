@@ -5,6 +5,26 @@ import type { SessionEventBus } from './event-bus.js';
 import type { JobRepository, SessionEventStore } from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
 
+/** Abort reason used only when a runner loses the durable job lease/owner. */
+export const JOB_ABORT_REASON_OWNERSHIP_LOST =
+  'tekon:job-ownership-lost' as const;
+
+/** True when an AbortSignal fences a stale executor rather than user cancel. */
+export function isJobOwnershipLostAbort(
+  signal: AbortSignal | undefined,
+): boolean {
+  return Boolean(
+    signal?.aborted && signal.reason === JOB_ABORT_REASON_OWNERSHIP_LOST,
+  );
+}
+
+/** User cancellation excludes the internal ownership-loss fencing signal. */
+export function isJobCancellationAbort(
+  signal: AbortSignal | undefined,
+): boolean {
+  return Boolean(signal?.aborted && !isJobOwnershipLostAbort(signal));
+}
+
 /**
  * Thrown when a job operation detects that the job is no longer owned by this
  * runner (owner changed) or is in a status that forbids the operation. The
@@ -104,6 +124,9 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
 
   // In-memory execution state, keyed by jobId.
   const controllers = new Map<string, AbortController>();
+  // A durable owner string is insufficient when the same worker reclaims a
+  // stale job. The process-local token fences the older executor generation.
+  const executionTokens = new Map<string, symbol>();
   const pauseFlags = new Set<string>();
   const heartbeats = new Map<string, NodeJS.Timeout>();
   const pending = new Set<Promise<void>>();
@@ -165,28 +188,31 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     job: Job,
     result: { status: JobStatus; summary?: string } | undefined,
     failure: unknown,
+    executionToken: symbol,
   ): Promise<void> {
+    // Same-worker stale recovery can reclaim the same job id with the same
+    // durable owner. Token equality is therefore checked before touching the
+    // current controller, heartbeat or terminal row.
+    if (executionTokens.get(job.id) !== executionToken) {
+      return;
+    }
+
     clearHeartbeat(job.id);
     const controller = controllers.get(job.id);
 
-    // Re-read and fence on ownership before writing a terminal state. A zombie
-    // executor whose lease was reclaimed must not flip a job owned elsewhere.
     const current = await jobs.get(job.id);
     if (!current || current.owner !== workerId) {
       controllers.delete(job.id);
+      executionTokens.delete(job.id);
       pauseFlags.delete(job.id);
       return;
     }
 
-    // A cancellation persisted by another process is authoritative even when
-    // the executor races to return `done`. Without this fence a web-owned job
-    // can overwrite `cancelling` with `done` before its process-local observer
-    // notices the control request.
     const cancelRequested =
       current.status === 'cancelling' ||
       current.abortState === 'requested' ||
       current.abortState === 'propagated' ||
-      controller?.signal.aborted === true;
+      isJobCancellationAbort(controller?.signal);
     const terminalStatus: JobStatus = cancelRequested
       ? 'cancelled'
       : failure
@@ -200,6 +226,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       abortState: 'stopped',
     });
     controllers.delete(job.id);
+    executionTokens.delete(job.id);
     pauseFlags.delete(job.id);
     await notifySettled(
       current.sessionId,
@@ -210,17 +237,14 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   }
 
   async function runJob(job: Job): Promise<void> {
+    const executionToken = Symbol(job.id);
     const controller = new AbortController();
+    executionTokens.set(job.id, executionToken);
     controllers.set(job.id, controller);
 
-    // Gap C: the heartbeat follows whether the background task is in flight,
-    // NOT job.status — running/paused/cancelling all renew until the executor
-    // settles. Pausing must never stop lease renewal, otherwise a live paused
-    // job would look stale and get requeued (a live paused job is always
-    // heartbeating, so a paused job with an expired lease is necessarily a
-    // crashed worker).
     const heartbeat = setInterval(() => {
-      if (!heartbeats.has(job.id)) {
+      if (executionTokens.get(job.id) !== executionToken) {
+        clearInterval(heartbeat);
         return;
       }
       void jobs.updateJob(job.id, { lease: nowIso() }).catch(() => {});
@@ -233,8 +257,15 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     const ctx: JobExecutionContext = {
       job,
       signal: controller.signal,
-      pauseRequested: () => pauseFlags.has(job.id),
-      checkpoint: (nodeId) => writeCheckpoint(job.id, `node:${nodeId}`),
+      pauseRequested: () =>
+        executionTokens.get(job.id) === executionToken &&
+        pauseFlags.has(job.id),
+      checkpoint: (nodeId) => {
+        if (executionTokens.get(job.id) !== executionToken) {
+          throw new JobFencingError(job.id, 'execution generation changed');
+        }
+        return writeCheckpoint(job.id, `node:${nodeId}`);
+      },
     };
 
     let result: { status: JobStatus; summary?: string } | undefined;
@@ -242,10 +273,9 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     try {
       result = await executor.execute(ctx);
     } catch (error) {
-      // Runner catch-all: an executor throw settles the job as failed.
       failure = error;
     }
-    await settle(job, result, failure);
+    await settle(job, result, failure, executionToken);
   }
 
   function spawnJob(job: Job): void {
@@ -265,12 +295,17 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         // registered in this process. The new owner will continue from durable
         // state; the zombie must stop touching the workspace.
         if (!controller.signal.aborted) {
-          controller.abort();
+          controller.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
           const runId = current
             ? await sessions.getRunIdBySessionId(current.sessionId)
             : null;
           if (runId) registry.killAll(runId, 'SIGKILL');
         }
+        // Invalidate this local generation immediately. A same-worker reclaim
+        // may install a new controller/token for the same durable job id.
+        executionTokens.delete(jobId);
+        clearHeartbeat(jobId);
+        controllers.delete(jobId);
         pauseFlags.delete(jobId);
         continue;
       }
@@ -462,6 +497,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         clearHeartbeat(jobId);
       }
       controllers.clear();
+      executionTokens.clear();
       pauseFlags.clear();
     },
 
