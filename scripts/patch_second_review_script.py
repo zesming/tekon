@@ -34,5 +34,11 @@ function createMemoryIo''',
 )
 
 """
-path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
-print('Repaired approval-terminal test insertion in the staged review script.')
+text = text[:start] + replacement + text[end:]
+old = """      if (['passed', 'failed', 'cancelled'].includes(status)) {\\n        throw new WorkflowTerminalError(runId, status);\\n      }"""
+new = """      if (\\n        status === 'passed' ||\\n        status === 'failed' ||\\n        status === 'cancelled'\\n      ) {\\n        throw new WorkflowTerminalError(runId, status);\\n      }"""
+if text.count(old) != 1:
+    raise RuntimeError(f'expected one terminal-status expression, found {text.count(old)}')
+text = text.replace(old, new, 1)
+path.write_text(text, encoding='utf-8')
+print('Repaired staged review script and explicit terminal status narrowing.')
