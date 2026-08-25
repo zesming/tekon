@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Repair staged patch selection
+        run: python3 scripts/repair_third_review_script.py
+
       - name: Validate and apply reviewed changes
         run: |
           python3 -m py_compile scripts/apply_third_review_fixes.py
@@ -88,7 +91,8 @@ jobs:
             docs/reviews/2026-08-25-tekon-harness-replatform-second-review.md
           git rm -f -- \
             .github/workflows/apply-third-review-fixes.yml \
-            scripts/apply_third_review_fixes.py
+            scripts/apply_third_review_fixes.py \
+            scripts/repair_third_review_script.py
           git diff --cached --check
           git commit -m "fix: close third-review ownership fencing gaps"
           git push origin HEAD:review/deepseek-harness-migration-2026-08-20
