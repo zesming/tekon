@@ -21,26 +21,42 @@ jobs:
           ref: review/deepseek-harness-migration-2026-08-20
           fetch-depth: 0
 
-      - name: Restore UTF-8 text
+      - name: Restore UTF-8 bytes
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           path = Path('docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md')
-          text = path.read_text(encoding='utf-8')
-          raw = bytearray()
-          for char in text:
-              code = ord(char)
-              if code <= 0xFF:
-                  raw.append(code)
+          encoded = path.read_bytes()
+          cp1252_undefined = {0x81, 0x8D, 0x8F, 0x90, 0x9D}
+          restored = bytearray()
+          index = 0
+
+          while index < len(encoded):
+              first = encoded[index]
+              if first < 0x80 or first in cp1252_undefined:
+                  restored.append(first)
+                  index += 1
+                  continue
+              if first & 0xE0 == 0xC0:
+                  width = 2
+              elif first & 0xF0 == 0xE0:
+                  width = 3
+              elif first & 0xF8 == 0xF0:
+                  width = 4
               else:
-                  encoded = char.encode('cp1252')
-                  if len(encoded) != 1:
-                      raise RuntimeError(f'cannot reverse character U+{code:04X}')
-                  raw.extend(encoded)
-          fixed = bytes(raw).decode('utf-8')
-          expected = '# Tekon Harness Replatform '
-          if not fixed.startswith(expected) or '第七轮全面复审' not in fixed.splitlines()[0]:
+                  raise RuntimeError(f'unexpected byte 0x{first:02x} at {index}')
+              character = encoded[index:index + width].decode('utf-8')
+              original = character.encode('cp1252')
+              if len(original) != 1:
+                  raise RuntimeError(
+                      f'expected one recovered byte for U+{ord(character):04X}'
+                  )
+              restored.extend(original)
+              index += width
+
+          fixed = bytes(restored).decode('utf-8')
+          if not fixed.startswith('# Tekon Harness Replatform 第七轮全面复审'):
               raise RuntimeError('encoding repair did not restore the expected title')
           path.write_text(fixed, encoding='utf-8')
           PY
@@ -54,6 +70,7 @@ jobs:
           assert '整体不通过' in text
           assert 'F7-P0-01' in text
           assert 'aefa08e144ef0b8381355ed913e95064f22ae718' in text
+          assert '[readiness] enqueue failed' in text
           PY
           git config user.name "openai-review-agent"
           git config user.email "openai-review-agent@users.noreply.github.com"
