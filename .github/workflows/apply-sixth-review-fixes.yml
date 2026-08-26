@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Repair workspace-scoped Session patch
+        run: python3 scripts/repair_sixth_review_fixes.py
+
       - name: Apply reviewed fixes
         run: python3 scripts/apply_sixth_review_fixes.py
 
@@ -95,7 +98,8 @@ jobs:
             README.md
           git rm -f -- \
             .github/workflows/apply-sixth-review-fixes.yml \
-            scripts/apply_sixth_review_fixes.py
+            scripts/apply_sixth_review_fixes.py \
+            scripts/repair_sixth_review_fixes.py
           git diff --cached --check
           git commit -m "fix: separate run execution from automation control"
           git push origin HEAD:review/deepseek-harness-migration-2026-08-20
