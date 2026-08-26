@@ -25,9 +25,10 @@ jobs:
         run: |
           set -euo pipefail
           cat .tmp/seventh-report/part-* \
-            | base64 --decode \
+            | base64 --decode --ignore-garbage \
             > docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md
           actual="$(sha256sum docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md | awk '{print $1}')"
+          echo "decoded sha256=$actual"
           test "$actual" = "3f094bbc8bb238b49383c1c43bd37147dc9673d760090abf56c3fb814a8ce2bc"
 
       - name: Verify and commit authoritative report
