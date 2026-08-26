@@ -1,0 +1,188 @@
+name: Sixth review visual audit
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    if: contains(github.event.head_commit.message, '[sixth-review-visual-audit]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Build core
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+
+      - name: Install Chromium
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
+
+      - name: Create visual audit spec
+        run: |
+          cat > packages/web/__tests__/e2e/sixth-review-visual-audit.test.ts <<'TS'
+          import { test, expect } from './shared-fixture.js';
+
+          test.setTimeout(60_000);
+
+          async function startRun(baseUrl: string, token: string) {
+            const response = await fetch(`${baseUrl}/api/rpc`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-session-token': token,
+              },
+              body: JSON.stringify({
+                path: 'project.run',
+                input: {
+                  demandText: '实现一个带测试与独立审阅的示例功能，用于第六轮视觉走查。',
+                  template: 'standard-delivery',
+                  agent: 'mock',
+                  token,
+                },
+              }),
+            });
+            expect(response.ok).toBe(true);
+            const body = (await response.json()) as {
+              result: { run: { id: string }; sessionId?: string };
+            };
+            expect(body.result.sessionId).toBeTruthy();
+            return {
+              runId: body.result.run.id,
+              sessionId: body.result.sessionId!,
+            };
+          }
+
+          async function waitForPassed(baseUrl: string, runId: string, token: string) {
+            const deadline = Date.now() + 30_000;
+            while (Date.now() < deadline) {
+              const response = await fetch(`${baseUrl}/api/rpc`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-session-token': token,
+                },
+                body: JSON.stringify({ path: 'project.overview' }),
+              });
+              if (response.ok) {
+                const body = (await response.json()) as {
+                  result: { latestRun: { id: string; status: string } | null };
+                };
+                if (
+                  body.result.latestRun?.id === runId &&
+                  body.result.latestRun.status === 'passed'
+                ) {
+                  return;
+                }
+              }
+              await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+            throw new Error(`run ${runId} did not pass`);
+          }
+
+          async function setUiToken(page: import('@playwright/test').Page, token: string) {
+            const input = page.getByLabel('Session token');
+            await expect(input).toBeVisible();
+            await input.fill(token);
+          }
+
+          test('capture controlled-delivery product surfaces', async ({
+            page,
+            server,
+            fixture,
+          }) => {
+            const { runId, sessionId } = await startRun(
+              server.url,
+              fixture.sessionToken,
+            );
+            await waitForPassed(server.url, runId, fixture.sessionToken);
+
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.goto(server.url);
+            await setUiToken(page, fixture.sessionToken);
+            await expect(
+              page.getByRole('heading', { name: '受控交付' }),
+            ).toBeVisible();
+            await page.screenshot({
+              path: '../../visual-audit/01-delivery-list-desktop.png',
+              fullPage: true,
+            });
+
+            await page.goto(`${server.url}/sessions/${sessionId}`);
+            await setUiToken(page, fixture.sessionToken);
+            await expect(page.locator('.event-feed')).toBeVisible();
+            await expect(page.locator('.session-card-result')).toBeVisible();
+            await page.screenshot({
+              path: '../../visual-audit/02-delivery-detail-desktop.png',
+              fullPage: true,
+            });
+
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.goto(server.url);
+            await setUiToken(page, fixture.sessionToken);
+            await expect(
+              page.getByRole('heading', { name: '受控交付' }),
+            ).toBeVisible();
+            await page.screenshot({
+              path: '../../visual-audit/03-delivery-list-mobile.png',
+              fullPage: true,
+            });
+
+            await page.goto(`${server.url}/sessions/${sessionId}`);
+            await setUiToken(page, fixture.sessionToken);
+            await expect(page.locator('.event-feed')).toBeVisible();
+            await page.screenshot({
+              path: '../../visual-audit/04-delivery-detail-mobile.png',
+              fullPage: true,
+            });
+
+            await page.setViewportSize({ width: 1440, height: 1000 });
+            await page.goto(`${server.url}/advanced`);
+            await setUiToken(page, fixture.sessionToken);
+            await page.screenshot({
+              path: '../../visual-audit/05-advanced-cockpit-desktop.png',
+              fullPage: true,
+            });
+          });
+          TS
+          mkdir -p visual-audit
+
+      - name: Capture screenshots
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright test __tests__/e2e/sixth-review-visual-audit.test.ts --project=chromium --retries=0
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sixth-review-visual-audit
+          path: visual-audit
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove temporary visual audit workflow
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f packages/web/__tests__/e2e/sixth-review-visual-audit.test.ts
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git rm -f .github/workflows/sixth-review-visual-audit.yml
+          git commit -m "chore: remove sixth review visual audit workflow"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
