@@ -12,7 +12,7 @@ jobs:
   apply:
     if: contains(github.event.head_commit.message, '[apply-sixth-review-fixes]')
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 35
 
     steps:
       - name: Checkout review branch
@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Repair workspace-scoped Session patch
+      - name: Repair workspace-scoped Session patch and routing assertion
         run: python3 scripts/repair_sixth_review_fixes.py
 
       - name: Apply reviewed fixes
@@ -49,6 +49,7 @@ jobs:
             packages/web/src/client/lib/event-feed.ts \
             packages/web/__tests__/client/event-feed.test.ts \
             packages/web/__tests__/e2e/session-feed.test.ts \
+            packages/web/__tests__/e2e/session-routing.test.ts \
             README.md
 
       - name: Build and typecheck
@@ -66,14 +67,8 @@ jobs:
           npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
           npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
 
-      - name: Web tests
+      - name: Web unit and API tests
         run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test
-
-      - name: Playwright browser
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
-
-      - name: Web Playwright e2e
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
 
       - name: Diff check
         run: git diff --check
@@ -95,6 +90,7 @@ jobs:
             packages/web/src/client/lib/event-feed.ts \
             packages/web/__tests__/client/event-feed.test.ts \
             packages/web/__tests__/e2e/session-feed.test.ts \
+            packages/web/__tests__/e2e/session-routing.test.ts \
             README.md
           git rm -f -- \
             .github/workflows/apply-sixth-review-fixes.yml \

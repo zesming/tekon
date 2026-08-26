@@ -1,7 +1,8 @@
 from pathlib import Path
 
-path = Path(__file__).with_name('apply_sixth_review_fixes.py')
-text = path.read_text(encoding='utf-8')
+root = Path(__file__).resolve().parents[1]
+patch_path = Path(__file__).with_name('apply_sixth_review_fixes.py')
+text = patch_path.read_text(encoding='utf-8')
 
 old_where = "                 where run_id = ?\\n                 order by created_at asc, rowid asc\\n"
 new_where = "                 where run_id = ? and workspace_id = ?\\n                 order by created_at asc, rowid asc\\n"
@@ -14,6 +15,16 @@ new_get = ".get(input.runId, input.workspaceId) as SessionRow | undefined;"
 if text.count(old_get) != 1:
     raise RuntimeError(f'expected one staged Session get, found {text.count(old_get)}')
 text = text.replace(old_get, new_get, 1)
+patch_path.write_text(text, encoding='utf-8')
 
-path.write_text(text, encoding='utf-8')
-print('Scoped canonical run Sessions to their Workspace.')
+routing_path = root / 'packages/web/__tests__/e2e/session-routing.test.ts'
+routing = routing_path.read_text(encoding='utf-8')
+old_heading = "page.getByRole('heading', { name: '会话 Sessions' })"
+new_heading = "page.getByRole('heading', { name: '受控交付' })"
+if routing.count(old_heading) != 1:
+    raise RuntimeError(
+        f'expected one stale routing heading assertion, found {routing.count(old_heading)}',
+    )
+routing_path.write_text(routing.replace(old_heading, new_heading, 1), encoding='utf-8')
+
+print('Scoped canonical run Sessions and updated the routing UX assertion.')
