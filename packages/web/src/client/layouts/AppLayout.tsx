@@ -22,6 +22,7 @@ export function AppLayout() {
   const sidebarRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
   const previousPathRef = useRef(pathname);
+  const focusMainAfterCloseRef = useRef(false);
 
   const closeNav = useCallback((restoreToggle = true) => {
     setNavOpen(false);
@@ -31,14 +32,14 @@ export function AppLayout() {
   }, []);
 
   // A route selected from the drawer should reveal the destination and move
-  // focus to the new main landmark. This avoids leaving focus on a link that
-  // has just become hidden off-canvas.
+  // focus to the new main landmark. Record that intent before closing; the
+  // drawer cleanup performs the focus only after it removes `inert` from main.
   useEffect(() => {
     if (previousPathRef.current !== pathname) {
       previousPathRef.current = pathname;
       if (navOpen) {
+        focusMainAfterCloseRef.current = true;
         setNavOpen(false);
-        requestAnimationFrame(() => mainRef.current?.focus());
       }
     }
   }, [navOpen, pathname]);
@@ -118,7 +119,13 @@ export function AppLayout() {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
-      if (main) main.inert = false;
+      if (main) {
+        main.inert = false;
+        if (focusMainAfterCloseRef.current) {
+          focusMainAfterCloseRef.current = false;
+          requestAnimationFrame(() => main.focus());
+        }
+      }
     };
   }, [closeNav, navOpen]);
 
