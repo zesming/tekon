@@ -1,0 +1,64 @@
+name: Repair seventh review report encoding
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: contains(github.event.head_commit.message, '[repair-seventh-report-encoding]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Restore UTF-8 text
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md')
+          text = path.read_text(encoding='utf-8')
+          raw = bytearray()
+          for char in text:
+              code = ord(char)
+              if code <= 0xFF:
+                  raw.append(code)
+              else:
+                  encoded = char.encode('cp1252')
+                  if len(encoded) != 1:
+                      raise RuntimeError(f'cannot reverse character U+{code:04X}')
+                  raw.extend(encoded)
+          fixed = bytes(raw).decode('utf-8')
+          expected = '# Tekon Harness Replatform '
+          if not fixed.startswith(expected) or '第七轮全面复审' not in fixed.splitlines()[0]:
+              raise RuntimeError('encoding repair did not restore the expected title')
+          path.write_text(fixed, encoding='utf-8')
+          PY
+
+      - name: Verify and commit repaired report
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md').read_text(encoding='utf-8')
+          assert '整体不通过' in text
+          assert 'F7-P0-01' in text
+          assert 'aefa08e144ef0b8381355ed913e95064f22ae718' in text
+          PY
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git add docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md
+          git rm -f .github/workflows/repair-seventh-report-encoding.yml
+          git diff --cached --check
+          git commit -m "docs: repair seventh-round report UTF-8 encoding"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
