@@ -1,0 +1,37 @@
+/* Mobile navigation is a modal drawer. These rules intentionally live after
+   reset.css so they override the base z-index and fixed 232px desktop sidebar
+   without expanding the already-large global stylesheet further. */
+.nav-drawer-close {
+  display: none;
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sidebar-active);
+  font-size: 24px;
+  line-height: 1;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: min(280px, 85vw);
+    min-width: 0;
+    z-index: 103;
+  }
+
+  .nav-drawer-close {
+    display: inline-flex;
+  }
+
+  .nav-overlay {
+    z-index: 102;
+  }
+
+  .topbar {
+    z-index: 101;
+  }
+}

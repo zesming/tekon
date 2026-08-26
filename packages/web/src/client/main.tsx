@@ -9,6 +9,7 @@ import './styles/tokens.css';
 import './styles/reset.css';
 import './styles/utilities.css';
 import './styles/sessions.css';
+import './styles/mobile-drawer.css';
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

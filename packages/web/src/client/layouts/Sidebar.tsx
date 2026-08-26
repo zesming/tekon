@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router';
 
 import { useQuery } from '../hooks/index.js';
@@ -167,60 +167,83 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function Sidebar({ open = false }: { open?: boolean }) {
-  const { pathname } = useLocation();
-  const advancedMode = pathname.startsWith(routes.advanced);
-  const visibleGroups = advancedMode ? navGroups : [navGroups[0]!];
-  const overviewQuery = useQuery<ProjectOverviewOutput>(
-    'sidebar:project-overview',
-    () => rpc.call('project.overview'),
-  );
+type SidebarProps = {
+  open?: boolean;
+  onClose?: () => void;
+};
 
-  const projectName = overviewQuery.data?.project.name ?? '—';
-  const repoPath = overviewQuery.data?.project.repoPath ?? '';
+export const Sidebar = forwardRef<HTMLElement, SidebarProps>(
+  function Sidebar({ open = false, onClose }, ref) {
+    const { pathname } = useLocation();
+    const advancedMode = pathname.startsWith(routes.advanced);
+    const visibleGroups = advancedMode ? navGroups : [navGroups[0]!];
+    const overviewQuery = useQuery<ProjectOverviewOutput>(
+      'sidebar:project-overview',
+      () => rpc.call('project.overview'),
+    );
 
-  return (
-    <aside id="app-sidebar" className={`sidebar${open ? ' open' : ''}`}>
-      <div className="sidebar-brand">
-        <div className="brand-mark">T</div>
-        <div>
-          <div className="brand-name">Tekon</div>
-          <div className="brand-tag">
-            {advancedMode ? 'Cockpit' : 'Workspace'}
+    const projectName = overviewQuery.data?.project.name ?? '—';
+    const repoPath = overviewQuery.data?.project.repoPath ?? '';
+
+    return (
+      <aside
+        id="app-sidebar"
+        ref={ref}
+        className={`sidebar${open ? ' open' : ''}`}
+        aria-label="主导航"
+        role={open ? 'dialog' : undefined}
+        aria-modal={open ? 'true' : undefined}
+        tabIndex={-1}
+      >
+        <div className="sidebar-brand">
+          <div className="brand-mark">T</div>
+          <div>
+            <div className="brand-name">Tekon</div>
+            <div className="brand-tag">
+              {advancedMode ? 'Cockpit' : 'Workspace'}
+            </div>
           </div>
+          <button
+            type="button"
+            className="nav-drawer-close"
+            aria-label="关闭侧边导航"
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
-      </div>
 
-      <nav className="sidebar-nav">
-        {visibleGroups.map((group) => (
-          <div className="nav-group" key={group.label || 'root'}>
-            {group.label ? (
-              <div className="nav-label">{group.label}</div>
-            ) : null}
-            {group.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === routes.home}
-                className={({ isActive }) =>
-                  `nav-item${isActive ? ' active' : ''}`
-                }
-              >
-                {item.icon}
-                {item.label}
-                {item.badge !== undefined ? (
-                  <span className="nav-badge">{item.badge}</span>
-                ) : null}
-              </NavLink>
-            ))}
-          </div>
-        ))}
-      </nav>
+        <nav className="sidebar-nav">
+          {visibleGroups.map((group) => (
+            <div className="nav-group" key={group.label || 'root'}>
+              {group.label ? (
+                <div className="nav-label">{group.label}</div>
+              ) : null}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === routes.home}
+                  className={({ isActive }) =>
+                    `nav-item${isActive ? ' active' : ''}`
+                  }
+                >
+                  {item.icon}
+                  {item.label}
+                  {item.badge !== undefined ? (
+                    <span className="nav-badge">{item.badge}</span>
+                  ) : null}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
 
-      <div className="sidebar-footer">
-        <div className="project-name">{projectName}</div>
-        {repoPath ? <div className="project-path">{repoPath}</div> : null}
-      </div>
-    </aside>
-  );
-}
+        <div className="sidebar-footer">
+          <div className="project-name">{projectName}</div>
+          {repoPath ? <div className="project-path">{repoPath}</div> : null}
+        </div>
+      </aside>
+    );
+  },
+);
