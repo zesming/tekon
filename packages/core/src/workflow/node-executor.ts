@@ -130,7 +130,10 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         });
       }
       await repositories.transitionNode(node.id, 'interrupted');
-      await repositories.updateWorkflowInstanceStatus(
+      // F4-P0-05: guarded write — never revert a run another owner already
+      // settled terminal. The stale-running-detected path is reachable by a
+      // worker resuming a job whose previous owner crashed mid-node.
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'interrupted',
         node.id,
@@ -156,7 +159,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       } else if (current.status === 'running') {
         await repositories.transitionNode(node.id, 'awaiting-gate');
       }
-      await repositories.updateWorkflowInstanceStatus(
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'running',
         node.id,
@@ -427,6 +430,24 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
     }
 
     try {
+      // F4-P0-03 (4.3.4): fence the SUCCESS path too. The catch below only
+      // guards ownership-lost when finalize THROWS; when finalize SUCCEEDS
+      // while fenced, a stale executor would promote its worktree onto the run
+      // branch the recovering owner already owns (promoteLeaseToRunBranch uses
+      // `git branch -f`, no expected-old-SHA CAS) and transition the node to
+      // `passed`, reverting/overwriting the new owner's authoritative state.
+      // Stand down before any finalize/promote/transition side effects.
+      if (isJobOwnershipLostAbort(deps.signal)) {
+        await audit.append({
+          runId,
+          type: 'worktree.lease.finalize.failed',
+          payload: {
+            nodeId: node.id,
+            error: 'job ownership lost before finalize (fenced)',
+          },
+        });
+        return false;
+      }
       await helpers.recordQaValidationRef(runId, node);
       await leaseService.finalizeExecutionLease(runId, node.id);
     } catch (error) {

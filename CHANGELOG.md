@@ -1,5 +1,23 @@
 # 变更日志
 
+## v0.14.3
+
+第四轮全面复审（`docs/reviews/2026-08-25-tekon-harness-replatform-fourth-review.md`）循环评估后的收敛修复。本轮报告不同于第三轮的正则分析器产物，是一份扎实的架构级复审并主动纠正了第三轮误判。经一个动态 workflow（5 项 F4-P0 各由「首审 + 对手方复核」两个最高思考等级 subagent 独立回代码核验 + 交叉印证 + 三线取舍 + 首席综合，共 12 个 agent）+ 独立 code review 复核收敛。
+
+### 并发正确性修复（真实低成本缺口，与既有 ownership fencing 一致）
+
+- **F4-P0-02（CONFIRMED）**：`workflow/engine.ts` executePlan 的两处裸 `if(signal.aborted){settleCancelled}`（节点边界 + 全节点完成后）加 `isJobOwnershipLostAbort` 分类。此前被 fence 的旧 worker 会在 plan 边界把新 owner 仍在执行的 run 写成 `cancelled`（终态 CAS from=running 合法），新 owner 随后写 `passed` 撞终态抛错、交付被丢弃。现 ownership-lost 站队不写共享 workflow 行，仅用户 cancel 才 settle `cancelled`。
+- **F4-P0-03（成功路径守卫）**：`workflow/node-executor.ts` 成功路径 `finalizeExecutionLease` 之前加 ownership-lost 守卫 stand down。此前守卫只在 catch 里，finalize 成功时 fenced 旧 worker 会 commit + `promoteLeaseToRunBranch`（`git branch -f` 无 expected-old-SHA CAS）静默覆盖新 owner 已推进的交付分支。
+- **F4-P0-05（终态单调守卫）**：`workflow/node-executor.ts:133`（stale-running 写 interrupted）与 `:159`（resume-at-gate 写 running）由无守护 `updateWorkflowInstanceStatus` 改用 `updateWorkflowInstanceStatusIfActive`，堵住回退他人已 settle 的终态；合法路径行为不变，零新增 API。
+
+新增两条真锁回归测试（`engine-recovery.e2e.test.ts`：plan 边界 fence 不写 cancelled；成功路径 fence 时 spy worktreeManager 的 commit/promote 零调用），已验证移除对应守卫即 fail。
+
+### 复审结论（追加到第四轮报告实施方批注）
+
+- **确认报告 §2 主动纠正第三轮误判准确**（写前脱敏 / Goal fail-closed / 响应式断点已存在 / delivery approval 降级），是有良好信誉的复审。
+- **确认本轮已提交的两处 §3 源码改动无回归**：RunControls 图标按钮补 `aria-label`、SessionComposer 文案改为诚实描述 standard-delivery 全链路。
+- **诚实递延（已披露，交用户决策）**：F4-P0-01（jobs 写 owner 谓词）、F4-P0-04（stop() 两阶段 quiesce）、F4-P0-03 的 `--force-with-lease`、F4-P0-05 的 node 行 CAS——均为触发需 ≥30s 心跳饥饿的尾部竞争或无正确性后果的资源泄漏；§6.4 RunControls 控制真源、§6.3 更丰富 Final Result 为增量增强；产品主闭环 PRODUCT-P0-01/02/03（真流式 / follow-up-steer / 双轨）为里程碑级能力，前三轮已披露。
+
 ## v0.14.2
 
 第三轮复审循环评估后的收敛。第三轮报告由 `scripts/run_third_comprehensive_review.py` 正则静态分析器生成（逐行匹配使 `re.S` 失效，系统性误报）；两个最高思考等级 subagent 独立核验 + 交叉印证后，仅采纳其中唯一被证实的真实低成本缺口（UX-01 可访问性），并推翻多处误报。

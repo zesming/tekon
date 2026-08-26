@@ -877,3 +877,44 @@ user message
 
 > **不通过。**  
 > 最新可访问性和诚实披露改动可以保留；第三轮报告中的误判已经纠正；但新发现的 ownership/generation、success-path fencing 与 shutdown quiescence 问题属于合并阻断，不能用文档披露或绿色现有测试替代修复。
+
+---
+
+## 附：实施方批注（2026-08-26，第四轮收敛）
+
+> 本节由实施方在收到本报告后追加。评审方法：本报告不同于第三轮的正则分析器产物，是一份扎实的架构级复审，**主动纠正了第三轮的误判（§2）**，并提出 5 项并发正确性阻断项（F4-P0-01~05）。为逐条核验，我委派一个动态 workflow（5 项 F4-P0 各由「首审 + 对手方复核」两个最高思考等级 subagent 独立回代码验证并交叉印证 + 一个三线取舍 subagent + 一个首席综合 subagent，共 12 个 agent），再由我复核。共识与处置如下。
+
+### 决定性前提：本仓库的跨进程多 owner 竞争是「真实但苛刻的尾部风险」，非常态并发
+
+**事实（已回代码确认）**：CLI（`session-context.ts` workerId=`cli-<pid>`）与 web（`root.ts` 默认 `web-<pid>`）各自 `createJobRunner`，对同一 SQLite（WAL，无跨语句事务）并发 poll/claim——多 owner 部署形态真实存在。但唯一 reclaim 路径 `requeueStale` 只取 `lease < now-30s`，而 heartbeat 每 10s 续租；`claimNext` 只认领 `queued`。**故第二 owner 只在旧 worker 事件循环停顿 ≥30s（GC / 长同步 git / SIGSTOP / swap thrash）后复活时才出现**——功能上等同「卡死的 worker 复活」，不是日常 200ms 调度抖动。旧 worker 复活后还有两道进程内闸（`executionTokens` + `syncOwnedControls` 观察到 owner 变更即 `abort(OWNERSHIP_LOST)`）。
+
+**判断（推断，高置信）**：因此各 F4-P0 项应定性为「机制真实 + 触发需 ≥30s 心跳饥饿 + 亚毫秒交错」→ 多数为 PARTIAL/尾部风险，个别落到共享终态写/交付内容的为真实低成本正确性缺口。据此按前三轮一致的原则（基础设施里程碑 + 诚实披露，不盲吞报告全部 P0 为本 PR 阻断，但真实低成本正确性硬化必须做）收敛。
+
+### 逐条核验共识与本轮处置
+
+| 项 | 报告级别 | 核验共识 | 本轮处置 |
+| --- | --- | --- | --- |
+| **F4-P0-02** ownership-lost 在 plan 边界被当 cancel | High | **CONFIRMED / medium**（两审一致 + 复核确认） | **已修**：`engine.ts` executePlan 两处裸 `if(signal.aborted){settleCancelled}`（节点边界 + 全节点完成后）加 `isJobOwnershipLostAbort` 分类——ownership-lost 站队不写共享 workflow 行，仅用户 cancel 才 settle `cancelled`。+ 真锁回归测试（revert 即 fail）。 |
+| **F4-P0-03** 成功路径缺一致 fence（4.3.4） | Critical | **PARTIAL / medium**（4.3.3 REFUTED；4.3.1/4.3.4 成立，含 `git branch -f` 无 CAS 的内容级回退） | **已修低成本部分**：`node-executor` 成功路径 `finalizeExecutionLease` 之前加 ownership-lost 守卫 stand down，防止 fenced 旧 worker commit+promote 覆盖新 owner 交付。+ 真锁回归测试（spy worktreeManager 断言 fenced 时 commit/promote 零调用）。`git --force-with-lease` 彻底方案属更大改动，见递延。 |
+| **F4-P0-05** Node 状态 read-validate-unconditional-write | High | **PARTIAL / low**（复核纠正首审：`node-executor:133/:159` 用的是**无守护** `updateWorkflowInstanceStatus`，能回退终态，非纯展示） | **已修核心**：`node-executor:133`（stale-running 写 interrupted）与 `:159`（resume-at-gate 写 running）改用已存在的 `updateWorkflowInstanceStatusIfActive`（终态单调守卫，零新增 API、合法路径行为不变）。其安全契约已由 `repositories.test.ts:295` 锁定；单进程下瞬时回退会被同一 executePlan 自愈，故不另造脆弱 e2e。node 行 `transitionNodeIfFrom` CAS 属更大改动，见递延。 |
+| **F4-P0-01** job 写 TOCTOU（settle/heartbeat 无 owner 谓词） | Critical | **PARTIAL / low**（触发需 ≥30s 心跳饥饿；后果限于 jobs 行不一致，下游 workflow 终态另有 CAS 守护，不致静默双合并） | **递延**（可选硬化）：给 settle/heartbeat 写加 owner 谓词。非本轮阻断。 |
+| **F4-P0-04** stop() 超时未 quiesce | High | **PARTIAL / 实为 low 正确性**（写已关闭 DB 无正确性后果——close 后 prepare 即抛且被 catch 吞、executionTokens 已清；真实残余仅孤儿子进程写 worktree 的资源泄漏） | **递延**（鲁棒性硬化）：两阶段 shutdown（abort controller + killAll + 等待子进程）。非本轮正确性阻断。 |
+
+### 对第三轮误判纠正（§2）的确认
+
+报告 §2 主动撤销的四项，我逐条回代码确认**与我第三轮批注一致、准确诚实**：§2.1 写前脱敏（`agent-step-events.ts:41/:107` redactSecrets 在 sink 前）；§2.3 Goal fail-closed；§2.4 响应式断点已存在；§2.5 delivery approval 降级为治理完整性。这是一份有良好信誉的复审。
+
+### 本轮已提交的两处源码改动（报告 §3 顺手修改）确认
+
+`RunControls` 图标按钮补 `aria-label`（Cancel 动态）、`SessionComposer` 文案改为诚实描述 standard-delivery 全链路——均正确、无回归（无 e2e 断言依赖旧文案）。
+
+### 递延项边界（勿当作缺口）——已披露，交用户决策
+
+- **产品主闭环 PRODUCT-P0-01/02/03**（真流式 / follow-up-steer / Collaborate-Deliver 双轨）：均为报告 §10 里程碑级产品能力，前三轮已在 README/manual 诚实披露「未开放 / 迁移期 projection / 仅长驻进程」，本轮无新动作。
+- **F4-P0-01 / F4-P0-04 / F4-P0-03 的 `--force-with-lease` / F4-P0-05 的 node 行 CAS**：PARTIAL 值得硬化但非本 PR 阻断（触发需 ≥30s 心跳饥饿的尾部竞争，或无正确性后果的资源泄漏）。
+- **§6.4 RunControls 状态取自 best-effort projection**：唯一低成本可修的真实控制完整性项（PARTIAL，非数据损坏）——需引 `project.detail` authoritative 查询作控制真源。**记录交用户决策**（涉及 RPC/query 层布线，与核心正确性修复解耦以保持本轮 PR 聚焦）。
+- **§6.3 更丰富的 Final Result**：增量增强，非里程碑。记录交用户决策。
+
+### 本轮裁决（实施方）
+
+> 采纳报告的真实低成本正确性缺口，**已修 F4-P0-02（CONFIRMED）+ F4-P0-03 成功路径守卫 + F4-P0-05 终态单调守卫**，均补真锁回归测试（revert 即 fail），全量 `pnpm test` 110 files/1292 passed、Playwright 11 passed（5 项预存 flaky retry 通过、session-feed 隔离 2/2）。F4-P0-01/04 及各彻底方案作为已披露的尾部硬化项递延。报告对本 PR「不通过 / REQUEST_CHANGES」的整体产品裁决属实——Tekon 作为普通用户可用产品仍需完成真实流式与双轨，这与前三轮结论一致，本 PR 继续按「基础设施里程碑 + 诚实披露」推进。

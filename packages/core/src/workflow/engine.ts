@@ -10,6 +10,7 @@ import type { AgentAdapter, AgentRunResult } from '../runtime/agent-adapter.js';
 import type { AgentEventSink } from '../runtime/agent-step-events.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { SubprocessRegistry } from '../session/subprocess-registry.js';
+import { isJobOwnershipLostAbort } from '../session/job-runner.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { WorkflowInstance } from '../types/domain.js';
@@ -404,7 +405,17 @@ export function createWorkflowEngine(
     for (const phase of plan.phases) {
       for (const node of phase.nodes) {
         // S5: node-boundary cancel/pause checks (before any node work).
+        // F4-P0-02: classify the abort. An ownership-lost fence means another
+        // owner recovered this job and is authoritative — this stale executor
+        // must stand down WITHOUT writing the shared workflow row (writing
+        // `cancelled` here would terminate a run the new owner is still
+        // executing, and the new owner's later `passed` write would then throw
+        // a terminal conflict, discarding real work). Only a genuine user
+        // cancel settles `cancelled`.
         if (options.signal?.aborted) {
+          if (isJobOwnershipLostAbort(options.signal)) {
+            return helpers.mustGetWorkflow(runId);
+          }
           await settleCancelled(runId, node.id);
           return helpers.mustGetWorkflow(runId);
         }
@@ -443,7 +454,13 @@ export function createWorkflowEngine(
     // `passed`. Without this, a pause landing in the window between the
     // last node's top-check and the passed write would either hit an
     // illegal paused→passed transition or be silently overwritten.
+    // F4-P0-02: same classification as the node boundary — an ownership-lost
+    // fence stands down (the recovering owner writes the terminal state),
+    // only a genuine cancel settles `cancelled`.
     if (options.signal?.aborted) {
+      if (isJobOwnershipLostAbort(options.signal)) {
+        return helpers.mustGetWorkflow(runId);
+      }
       await settleCancelled(runId, null);
       return helpers.mustGetWorkflow(runId);
     }
