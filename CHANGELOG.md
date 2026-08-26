@@ -1,5 +1,21 @@
 # 变更日志
 
+## v0.14.6
+
+第六轮**权威复审**（`docs/reviews/2026-08-26-tekon-harness-replatform-sixth-review.md`，作者推送覆盖了此前实施 Agent 的重建简版）循环评估后的收敛。经动态评估 workflow（前端/UX、后端/并发、报告完整性三视角独立实地核验 + 首席综合）达成一致：本轮唯一必修实现回归是 **F6-P0-01 移动端布局**，其余 F6-P0-02/03/04、F6-P1-01~04、F6-ARCH-01 均为报告自身及 README/手册已诚实披露的长期里程碑或待 ADR 架构决策，诚实递延。设计经 reviewer 循环评审、实现经独立 code review 收敛。
+
+### F6-P0-01 移动端布局修复（真实实现回归，比报告更严重）
+
+- **死 CSS 根因**：`packages/web/src/client/main.tsx` 只 import `tokens/reset/utilities.css`，从不 import `sessions.css`；`styles/index.css`（唯一 @import sessions.css 者）无任何 importer。git 全历史证实 sessions.css **从未被加载**——即整个 Human-first Session UI（默认落地页 SessionsPage / SessionDetailPage / EventFeed / SessionComposer，共 5 个组件使用 sessions 系列类名）自 Phase 3 引入以来一直**近乎无样式渲染**，报告以为生效的 860px 两列折叠是死代码。**修复**：`main.tsx` 增加 `import './styles/sessions.css'`。
+- **无全局响应式根因**：`reset.css` 零 `max-width` 断点；`.sidebar{position:fixed;232px}` + `.main{margin-left:232px}` 在所有宽度恒定；更深的根因是 `#root` 无 CSS、是 `body`（display:flex）下的 block flex-item，其默认 `min-width:auto` 拒绝收缩，令移动端宽 `<select>` 撑爆整页（`.main{flex:1}` 一直是死规则，因父 `#root` 非 flex）。**修复**：`#root{flex:1;min-width:0;display:flex}`（激活既有 `.main{flex:1}` 意图，桌面零回归）+ 文件末尾 `@media(max-width:768px)`：`.main` 归零左边距、侧栏转**可访问抽屉**（TopBar 汉堡按钮 `aria-expanded`/`aria-controls`，遮罩点击/Esc/路由变化关闭，Esc 焦点归还汉堡，关闭态 `visibility:hidden` 移出 tab 序，汉堡 `sticky z-index` 保持可点）、topbar 换行、token input 流式化、Advanced Cockpit flex 行 `flex-wrap`+`min-width:0`、toolbar/filter-group 内 select/input `width:100%` 防溢出。
+- **验证**：新增 `packages/web/__tests__/e2e/mobile-layout.test.ts`（390px 无横向溢出：sessions 列表 + session-detail + /advanced/runs + /advanced；抽屉汉堡开合 + overlay/Esc/路由三种关闭；1440px 无回归：sidebar 常驻、无汉堡、`.main` margin-left:232px）。全量 `pnpm test` 1299 passed/3 skipped；Playwright e2e 全绿；web typecheck 干净。桌面/移动截图人工核验布局正确、抽屉交互正常。
+
+### 诚实递延（交用户决策，勿当本轮缺口）
+
+- **F6-P0-02/03/04**：真 Provider 流式（`legacy-agent-driver` one-shot）、Session 内 follow-up/steer（显式 `NotSupportedYet`）、Collaborate/Deliver 双轨（仅 Deliver 治理 profile）——README/手册已披露的产品里程碑。
+- **F6-P1-01~04**：Feed 叙事聚合、结构化 Final Result、event outbox 持久化边界、长会话规模化——报告标 P1 的 UX/架构演进项。
+- **F6-ARCH-01**：Runtime 所有权模型 ADR（单 owner 推荐 / multi-owner）≡ 第五轮 F5-P0-02~05 递延，待用户拍板。
+
 ## v0.14.5
 
 第六轮全面复审（`docs/reviews/2026-08-26-tekon-harness-replatform-sixth-review.md`）循环评估后的收敛。本轮特殊：核心修复由 CI 自修改评审工作流用正则脚本自动应用于 `3d6836d`（run 执行与 automation 控制分离 + Session/Workspace 身份幂等 + enqueue 绑定校验），且原始报告 `.md` 未随修复落库（与第三轮同型流程缺口）。为此委派动态 workflow（3 个最高思考等级 subagent 分别核验三处核心改动 + 1 个核验 web/README/e2e + 1 个首席综合），对机器生成改动补做审查，以 mutation 反证真锁性。

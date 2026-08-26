@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { useLocation } from 'react-router';
 
 import { useSessionToken } from '../hooks/use-session-token.js';
@@ -6,6 +6,9 @@ import { useSessionToken } from '../hooks/use-session-token.js';
 type TopBarProps = {
   title?: string;
   subtitle?: string;
+  navOpen?: boolean;
+  onToggleNav?: () => void;
+  toggleRef?: RefObject<HTMLButtonElement | null>;
 };
 
 export function TopBar(props: TopBarProps) {
@@ -13,15 +16,31 @@ export function TopBar(props: TopBarProps) {
   const defaultTitle = pathname.startsWith('/advanced')
     ? 'Tekon Cockpit'
     : 'Tekon Workspace';
-  const { title = defaultTitle, subtitle } = props;
+  const { title = defaultTitle, subtitle, navOpen, onToggleNav, toggleRef } =
+    props;
   const { token, setToken } = useSessionToken();
   const [masked, setMasked] = useState(true);
 
   return (
     <div className="topbar">
-      <div>
-        <div className="topbar-title">{title}</div>
-        {subtitle ? <div className="page-subtitle">{subtitle}</div> : null}
+      <div className="topbar-lead">
+        {onToggleNav ? (
+          <button
+            ref={toggleRef}
+            type="button"
+            className="nav-toggle"
+            aria-expanded={navOpen ?? false}
+            aria-controls="app-sidebar"
+            aria-label={navOpen ? '关闭导航' : '打开导航'}
+            onClick={onToggleNav}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+        ) : null}
+        <div>
+          <div className="topbar-title">{title}</div>
+          {subtitle ? <div className="page-subtitle">{subtitle}</div> : null}
+        </div>
       </div>
       <div className="topbar-token">
         <input

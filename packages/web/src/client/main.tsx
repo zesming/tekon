@@ -8,6 +8,7 @@ import { router } from './App.js';
 import './styles/tokens.css';
 import './styles/reset.css';
 import './styles/utilities.css';
+import './styles/sessions.css';
 
 createRoot(document.getElementById('root')!).render(
   <AuthProvider>

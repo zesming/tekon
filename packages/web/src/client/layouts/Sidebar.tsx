@@ -167,7 +167,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ open = false }: { open?: boolean }) {
   const { pathname } = useLocation();
   const advancedMode = pathname.startsWith(routes.advanced);
   const visibleGroups = advancedMode ? navGroups : [navGroups[0]!];
@@ -180,7 +180,7 @@ export function Sidebar() {
   const repoPath = overviewQuery.data?.project.repoPath ?? '';
 
   return (
-    <aside className="sidebar">
+    <aside id="app-sidebar" className={`sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-brand">
         <div className="brand-mark">T</div>
         <div>

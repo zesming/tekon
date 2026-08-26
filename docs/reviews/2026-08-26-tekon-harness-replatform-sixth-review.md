@@ -387,3 +387,51 @@ Human Approval
 > 第六轮并发、身份和控制边界修复正确且应保留，阶段性基础设施质量继续提高；但移动端基本交互、真实 Provider 流式闭环、Session 持续协作、Collaborate / Deliver 双轨、长期会话规模能力和 Runtime 所有权模型仍未达到整体验收标准。
 >
 > 本 PR 可以作为诚实标注边界的基础设施里程碑继续推进，不能被视为普通用户产品或完整 Harness Runtime 已完成。
+
+---
+
+## 附：实施方批注（2026-08-26，对权威报告的收敛）
+
+> 本节由实施方在收到权威报告后追加。我委派一个动态评估 workflow（前端/UX、后端/并发、报告完整性三视角独立实地核验 + 首席综合，共 4 个 subagent），对 §4 全部阻断项逐条分类为「本轮必改代码（A）/ 已闭环（B）/ 已披露里程碑或待 ADR 递延（C）/ 误报（D）」。三视角结论完全一致。
+
+### 一致结论：本轮唯一必修 = F6-P0-01 移动端布局（且比报告更严重）
+
+实地核验证据比报告更硬，暴露一个报告未抓到的额外缺陷：
+
+- `packages/web/src/client/main.tsx:8-10` **只** import `tokens.css / reset.css / utilities.css`；
+- 上线 bundle `dist/assets/index-*.css` 里 `session-columns` 计数为 **0**、`@media` 只有 **1 条**（`reset.css` 的 `prefers-reduced-motion`），主布局是 `.sidebar{position:fixed;width:232px}` + `.main{margin-left:232px}`，**无任何 `max-width` 断点、无汉堡/抽屉导航**；
+- **报告以为生效的 860px 两列折叠（`sessions.css:73 @media(max-width:860px)`）其实是死代码**——`sessions.css` 仅被 `index.css` @import，而 `index.css` **没有任何 importer**（grep src/ 为 0）。所以 390px 下不仅缺全局响应式，连报告假设生效的 Session Detail 折叠也从未加载。
+
+**修复方向（已定，Step 2 出详细设计后 reviewer 循环评审）**：让响应式样式真正被加载（修 `main.tsx` 引入链或把断点写进已加载的 `reset.css`）+ ≤768px 断点 `.main margin-left` 归零 + 侧栏在窄屏转为**可访问抽屉**（TopBar 加带 `aria-expanded` 的汉堡按钮 + 遮罩，受控 open 态，键盘可达、`prefers-reduced-motion` 尊重）。**验收**：390/768px 无横向滚动、内容不被遮挡、导航可访问可达、Session Detail 单列可读、Composer/Feed/审批可操作；新增移动端（390px）Playwright e2e；桌面 1440px 不回归；web build + typecheck + `test:e2e` 全绿（纯 web，core 无需 rebuild）。
+
+#### 实现后的更正与实际根因（v0.14.6，本轮已修）
+
+修复过程中定位到比报告更深、更严重的根因，据此调整了修法：
+
+- **死 CSS 不止让折叠失效——整个 Session UI 一直无样式**：`git log -S` 全历史证实 `sessions.css` 与 `index.css` **从未被入口模块 import**（`index.css` 自身 @import 了 sessions.css，但 index.css 无 importer）。而 `sessions.css` 里的 `.event-feed / .session-columns / .session-composer / .session-list / .session-side ...` 系列类名被 **SessionsPage / SessionDetailPage / SessionSidePanel / EventFeed / SessionComposer 5 个组件**使用——即自 Phase 3 引入 Human-first Session UI 以来，**默认落地页一直近乎无样式渲染**。前几轮 e2e 全绿是因为它们断言 DOM 结构/role/属性，不断言视觉。修法：`main.tsx` 增加 `import './styles/sessions.css'`。
+- **移动端撑爆的真正根因在 `#root`**：`#root` 无任何 CSS，是 `body{display:flex}` 下的 block flex-item，默认 `min-width:auto` 拒绝收缩，令移动端一个宽 `<select>` 撑爆整页；`.main{flex:1}` 一直是死规则（父非 flex）。修法：`#root{flex:1;min-width:0;display:flex}`（激活既有 `.main{flex:1}` 意图，桌面零回归，e2e 1440px `marginLeft==='232px'` 锁定）+ 文件末尾 `@media(max-width:768px)`（放末尾以同特异性 source-order 胜过 base 的 `display:none`）。
+- **抽屉可访问性**：`aria-expanded`/`aria-controls`；遮罩点击 / Esc / 路由变化三种关闭；Esc 关闭后焦点归还汉堡；关闭态 `visibility:hidden` 移出 tab 序；汉堡 `sticky z-index:101` 保持在打开的抽屉之上可点（鼠标用户可用它关闭）。
+- **独立 code review 收敛**：一轮最高思考等级 reviewer 判「代码正确/根因/桌面零回归/e2e 真锁」，提出 2 项必修——(M1) 测试名声称覆盖 session-detail 但函数体未访问该页，已补真实 session-detail 覆盖（`startRun` 建 run → 开详情页 → 断言无横向溢出）；(M2) 版本闸门 bump v0.14.6 + CHANGELOG——均已修。建议项 S1（汉堡被抽屉遮挡）、S3（Esc 无断言）、S4（注释措辞）已顺带落实。
+- **验证**：`mobile-layout.test.ts` 覆盖 sessions 列表 + session-detail + /advanced/runs + /advanced 四页 390px 无横向溢出、抽屉三种关闭、1440px 无回归；全量 `pnpm test` 1299 passed/3 skipped、Playwright e2e 全绿（既有 5 个 + 本测试在全量并发下 flaky-then-pass，隔离重跑 3/3 稳定，属 startRun/SSE 既有 timing）；桌面/移动截图人工核验布局与抽屉交互正常。
+
+### 诚实递延（C 类，勿当本轮缺口）
+
+以下均为报告自身 §8/§10 及 README/手册已诚实披露的**长期里程碑或待 ADR 架构决策**，代码侧多以 typed error / 文档显式标注边界，非本轮实现回归，本轮不做（延续前五轮取舍）：
+
+- **F6-P0-02 真 Provider 流式**：`legacy-agent-driver.ts:132` `await done`（one-shot，阶段 2a 有意边界）；README:59 / 手册:1065 已披露。
+- **F6-P0-03 follow-up/steer/durable inbox**：`legacy-agent-driver.ts:137-176` 显式 `throw NotSupportedYet`；README:60 / 手册:1025 已披露。
+- **F6-P0-04 Collaborate/Deliver 双轨**：`profile-policy.ts:15-24` 仅 3 个 Deliver 治理 profile，无 collaborate；需 ADR 级权限/成本/事件模型设计。
+- **F6-P1-01/02 Feed 叙事聚合 / 结构化 Final Result**、**F6-P1-03 event outbox 持久化边界**、**F6-P1-04 长会话规模化（分页/虚拟化/折叠/搜索）**：均为报告标 P1 的 UX/架构演进项。
+- **F6-ARCH-01 Runtime 所有权模型 ADR**：报告自述「待 ADR 与实现约束落地」，方案 A（单 owner，推荐）/ B（multi-owner）待用户拍板；≡ 第五轮 F5-P0-02~05 递延。
+
+### 已闭环并复核保留（B 类）
+
+CLOSED-01~06（run/automation 分离、Session/Workspace 身份幂等、enqueue 绑定+kind 校验、入口正名、a11y、Event Feed 可读性）均为 `3d6836d`/`0e156b5` 修复，本轮复核代码确认正确保留。
+
+### 报告留档的诚实说明
+
+权威报告 §0 对「原始报告未落库 + 实施 Agent 曾在 `0e156b5` 重建简版」的描述与 git 事实一致（`git log --follow` 证实该文件仅在 `0e156b5` 引入重建版、`ba59c76` 被本权威版覆盖）。实施方接受这一更正：`0e156b5` 里我做的**代码/测试/手册修复**经权威报告 CLOSED-06 认可保留，但我当时**重建的报告文本**范围过窄（只覆盖并发/身份），已被本权威版正确取代。
+
+### 本轮裁决（实施方）
+
+> 与权威报告一致：**不通过**（作为普通用户产品 / 完整 Runtime）。本轮据评估共识只做 F6-P0-01 移动端布局这一处实现级修复（含修复死 CSS 加载链 + 可访问抽屉导航 + 移动端 e2e），其余诚实递延。修复完成后经 reviewer code review + 全功能 e2e（桌面+移动）+ 报告完整性复审放行，提交同 PR。
