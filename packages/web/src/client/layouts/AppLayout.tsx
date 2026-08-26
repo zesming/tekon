@@ -64,13 +64,16 @@ export function AppLayout() {
 
     const sidebar = sidebarRef.current;
     if (!sidebar) return;
+    const sidebarElement = sidebar;
     const previousOverflow = document.body.style.overflow;
     const main = mainRef.current;
     document.body.style.overflow = 'hidden';
     if (main) main.inert = true;
 
     const focusable = () =>
-      [...sidebar.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE)].filter(
+      [
+        ...sidebarElement.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE),
+      ].filter(
         (element) =>
           !element.hasAttribute('disabled') &&
           element.getAttribute('aria-hidden') !== 'true' &&
@@ -79,7 +82,7 @@ export function AppLayout() {
 
     requestAnimationFrame(() => {
       const elements = focusable();
-      (elements[0] ?? sidebar).focus();
+      (elements[0] ?? sidebarElement).focus();
     });
 
     function onKeyDown(event: KeyboardEvent) {
@@ -93,13 +96,16 @@ export function AppLayout() {
       const elements = focusable();
       if (elements.length === 0) {
         event.preventDefault();
-        sidebar.focus();
+        sidebarElement.focus();
         return;
       }
       const first = elements[0]!;
       const last = elements[elements.length - 1]!;
       const active = document.activeElement;
-      if (event.shiftKey && (active === first || !sidebar.contains(active))) {
+      if (
+        event.shiftKey &&
+        (active === first || !sidebarElement.contains(active))
+      ) {
         event.preventDefault();
         last.focus();
       } else if (!event.shiftKey && active === last) {
@@ -133,7 +139,9 @@ export function AppLayout() {
       <div className="main" ref={mainRef} tabIndex={-1}>
         <TopBar
           navOpen={navOpen}
-          onToggleNav={() => (navOpen ? closeNav(true) : setNavOpen(true))}
+          onToggleNav={() =>
+            navOpen ? closeNav(true) : setNavOpen(true)
+          }
           toggleRef={toggleRef}
         />
         <FlashMessages />

@@ -31,7 +31,11 @@ test.describe('mobile navigation accessibility', () => {
     await expect
       .poll(() => page.evaluate(() => document.body.style.overflow))
       .toBe('hidden');
-    await expect.poll(() => main.evaluate((element) => element.inert)).toBe(true);
+    await expect
+      .poll(() =>
+        main.evaluate((element) => (element as HTMLElement).inert),
+      )
+      .toBe(true);
 
     const focusableCount = await sidebar
       .locator('a[href], button:not([disabled])')
@@ -63,7 +67,11 @@ test.describe('mobile navigation accessibility', () => {
     await expect
       .poll(() => page.evaluate(() => document.body.style.overflow))
       .toBe('');
-    await expect.poll(() => main.evaluate((element) => element.inert)).toBe(false);
+    await expect
+      .poll(() =>
+        main.evaluate((element) => (element as HTMLElement).inert),
+      )
+      .toBe(false);
 
     await toggle.click();
     await expect(drawerClose).toBeFocused();
