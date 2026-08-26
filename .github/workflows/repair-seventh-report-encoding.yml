@@ -21,7 +21,7 @@ jobs:
           ref: review/deepseek-harness-migration-2026-08-20
           fetch-depth: 0
 
-      - name: Restore UTF-8 bytes
+      - name: Restore mixed UTF-8 bytes
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -38,6 +38,7 @@ jobs:
                   restored.append(first)
                   index += 1
                   continue
+
               if first & 0xE0 == 0xC0:
                   width = 2
               elif first & 0xF0 == 0xE0:
@@ -46,13 +47,21 @@ jobs:
                   width = 4
               else:
                   raise RuntimeError(f'unexpected byte 0x{first:02x} at {index}')
-              character = encoded[index:index + width].decode('utf-8')
-              original = character.encode('cp1252')
-              if len(original) != 1:
-                  raise RuntimeError(
-                      f'expected one recovered byte for U+{ord(character):04X}'
-                  )
-              restored.extend(original)
+
+              sequence = encoded[index:index + width]
+              character = sequence.decode('utf-8')
+              try:
+                  original = character.encode('cp1252')
+              except UnicodeEncodeError:
+                  # This segment was already valid native Unicode (for example
+                  # Chinese added by a later plain-text update), so preserve it.
+                  restored.extend(sequence)
+              else:
+                  if len(original) != 1:
+                      raise RuntimeError(
+                          f'expected one recovered byte for U+{ord(character):04X}'
+                      )
+                  restored.extend(original)
               index += width
 
           fixed = bytes(restored).decode('utf-8')
@@ -71,6 +80,7 @@ jobs:
           assert 'F7-P0-01' in text
           assert 'aefa08e144ef0b8381355ed913e95064f22ae718' in text
           assert '[readiness] enqueue failed' in text
+          assert '移动端横向溢出已关闭' in text
           PY
           git config user.name "openai-review-agent"
           git config user.email "openai-review-agent@users.noreply.github.com"
