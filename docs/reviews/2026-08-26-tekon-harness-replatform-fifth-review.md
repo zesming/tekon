@@ -957,3 +957,32 @@ DeepSeek Harness 当前仍是 developer preview，因此 Tekon 应继续通过�
 > 最新实施方提交正确修复了第四轮中的几个具体窗口，本轮的 UX/accessibility 小修也应保留；但当前多 owner 模型仍缺少其基础一致性契约，并存在正常并发 resume 生成重复 Job 的新阻断。产品层的真实流式、Session 持续输入和 Collaborate/Deliver 双轨也尚未完成。
 >
 > 下一步不应继续扩充 profile、event 和 projector，而应先决定 single-owner runtime 还是完整 multi-owner，并完成一个真实 Provider 的端到端纵向切片。
+
+---
+
+## 附：实施方批注（2026-08-26，第五轮收敛）
+
+> 本节由实施方在收到本报告后追加。评审方法：本报告是扎实的架构级复审，确认第四轮 F4-P0-02/03/05 已正确闭环，并提出一个不依赖租约过期的正常路径新阻断 F5-P0-01。为逐条核验，我委派动态 workflow（F5-P0-01 首审 + 对手方复核两个最高思考等级 subagent 独立回代码 + 三线取舍 + 首席综合）+ 独立 code review 复核，再由我复核。
+
+### F5-P0-01（CONFIRMED / High）—— 本轮 MUST-FIX，已修
+
+**核验共识**：并发 resume 竞态属实且**不需要 30s 租约饥饿**。`resumeRun`（session-service.ts）的 `findActiveByRunId`（裸 read，不在事务/锁内）与 `enqueue` 之间有 await 间隙；`sessions.run_id` 非 unique、`jobs` 表无 `run_id`/active 唯一约束；CLI 与 web 各开独立 SQLite 连接 + 各自进程内 WriteQueue（只单进程串行化）。两并发 resume 可都见"无 active job"→各 enqueue → 同一 run 被两 executor **真跑**（双 agent 花费 + 两 worktree 各 `promoteLeaseToRunBranch`(`git branch -f`) 到同一 run 分支冲突/相互覆盖）。第四轮的 workflow 终态 CAS 只保证**状态**单调，不阻止**执行**层双跑——故是真实正确性缺口而非纯 UI 噪音。
+
+**处置（已修）**：新增 `JobRepository.enqueueIfNoActiveByRunId`，把 active-check + insert 收进一个 `BEGIN IMMEDIATE` 事务（复用 `appendEvent` 已验证的跨进程临界区范式：写者锁在 check 之前获取，`busy_timeout=5000` 处理短竞争），冲突时返回既有 active job 不第二次 insert。`DurableJobRunner` 加同名包装；`SessionService.resumeRun` 与 **`gate.approve`**（报告未点名的第二个并发 resume 入口，同样有此竞态）均改用原子方法。
+
+**否决报告建议的"仅 sessions.run_id partial unique"**：可 resume 的状态只有 paused，paused run 必由 startRun 生成、session 已存在，resume 走 findSessionByRunId 命中非空、跳过 createSession——故该 unique index 对主导案例零保护。事务方案是根因修复。
+
+**测试**：`session-store.test.ts` 加 3 条——顺序 re-check 真锁（移除 in-tx re-check 即 fail）+ 两连接 file-db 集成断言（诚实标注：better-sqlite3 同步单线程无法在进程内制造真交错，原子性由与 appendEvent 同款 BEGIN IMMEDIATE 保证，此测试锁"两连接收敛到单 active job"）；`resumeRun` 的 active-job 契约由既有测试覆盖。
+
+### 对报告其余部分的处置
+
+- **§2.1 确认第四轮修复正确闭环**（F4-P0-02/03/05）——回代码确认与报告一致。
+- **F5-P0-02/03/04/05 ≡ 第四轮 F4-P0-01/03递延/05递延/04 的重述+扩展**：报告 §2.2/§7.3 自述"单 owner daemon 更推荐、generation/CAS/唯一索引仅多 owner 才必需"，把 F5-P0-02 明标"Critical（IF 多 owner）"——**本质是 single-vs-multi owner 架构决策，交用户拍板，非无条件 code bug**。延续前四轮"基础设施里程碑 + 诚实披露"原则递延。
+- **PRODUCT-P0-01/02/03**（真流式/follow-up-steer/Collaborate-Deliver 双轨）：前四轮已在 README/manual 诚实披露的里程碑递延。
+- **本轮已提交的 a11y 改动**（EventFeed `role=log`、SessionComposer `aria-*`/`role=alert`、RunControls `role=group`+中文标签、SessionDetailPage `aria-atomic`+landmark + e2e 断言）：回代码确认正确、无回归、e2e 有效。
+- **§6.2 visibility/modelVisible 双字段**：属实但**无运行后果**——`'model'` 枚举成员是死值（全库无 `visibility==='model'` 判定门，实际门是 `modelVisible`）。低成本清理项，本轮不动以保持 PR 聚焦，**记录交用户决策**。
+- **§6.5 Workspace/Project 每 run 新建、§7.2 抽象领先纵向闭环、§7.4 PR 过大（实测 181 files/28k 行/83 commits，报告数字准确）、§11 单 owner ADR、Milestone 拆分**：架构/过程建议，**记录交用户决策**，非本 PR 阻断 bug。
+
+### 本轮裁决（实施方）
+
+> 采纳报告唯一新增的真实正确性缺口 **F5-P0-01（CONFIRMED/High），已用原子 `BEGIN IMMEDIATE` enqueue 修复两个 resume 入口 + 真锁回归测试**，全量 `pnpm test` 110 files/1293 passed、Playwright 11 passed（5 预存 flaky retry 通过、session-feed 隔离 2/2）。F5-P0-02~05（单-vs-多 owner 架构决策 + 已披露递延）、产品主闭环、PR 拆分/ADR 记录为交用户决策。报告对本 PR「不通过 / 暂不建议合并」的整体裁决属实——单 owner daemon vs 完整多 owner 是需要用户拍板的架构方向，与前四轮结论一致，本 PR 继续按「基础设施里程碑 + 诚实披露」推进。

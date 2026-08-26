@@ -76,6 +76,24 @@ export interface JobRepository {
   enqueue(job: JobEnqueueInput): Promise<Job>;
   get(jobId: string): Promise<Job | null>;
   findActiveByRunId(runId: string): Promise<Job | null>;
+  /**
+   * F5-P0-01: atomic "enqueue this job unless the run already has an active
+   * job". The active-check and the INSERT run inside one `BEGIN IMMEDIATE`
+   * transaction so two concurrent resumes (CLI + Web, separate connections /
+   * WriteQueues) cannot both observe "no active job" and both enqueue — the
+   * process-local WriteQueue only serializes writes within one process, and the
+   * bare `findActiveByRunId` read in resumeRun sits outside any lock. Same
+   * cross-process critical-section pattern as `appendEvent`'s seq allocation.
+   * Returns `{ outcome: 'active-job', job }` (the existing active job) when one
+   * already exists, else `{ outcome: 'enqueued', job }` (the newly inserted one).
+   */
+  enqueueIfNoActiveByRunId(
+    runId: string,
+    job: JobEnqueueInput,
+  ): Promise<
+    | { outcome: 'enqueued'; job: Job }
+    | { outcome: 'active-job'; job: Job }
+  >;
   // 回收该 run 下"旧"的可安全清理 job:created_at 早于 cutoff 的 queued,以及
   // lease 早于 cutoff 的 paused;running/cancelling/新鲜 queued 不动。
   // `leaseCutoffIso` 缺省时沿用 30s 默认(= runner 默认 leaseTtlMs);
@@ -367,6 +385,49 @@ export function createJobRepository(
           payload: JSON.stringify(job.payload ?? {}),
         });
         return parsed;
+      });
+    },
+
+    async enqueueIfNoActiveByRunId(runId, job) {
+      const parsed = jobSchema.parse(job);
+      const payload = JSON.stringify(job.payload ?? {});
+      return writeQueue.enqueue(() => {
+        // BEGIN IMMEDIATE acquires the database writer lock BEFORE the
+        // active-job check, so a concurrent resume on another connection cannot
+        // slip its INSERT between our check and our INSERT. busy_timeout handles
+        // the short window where the other transaction already holds the lock.
+        const tx = db.transaction(() => {
+          const existing = db
+            .prepare(
+              `select j.* from jobs j
+               join sessions s on s.id = j.session_id
+               where s.run_id = @runId
+                 and j.status in ('queued', 'running', 'paused', 'cancelling')
+               order by j.created_at desc
+               limit 1`,
+            )
+            .get({ runId }) as JobRow | undefined;
+          if (existing) {
+            return { outcome: 'active-job' as const, job: mapJob(existing) };
+          }
+          db.prepare(
+            `insert into jobs (
+               id, session_id, kind, status, owner, lease, abort_state,
+               checkpoint, payload, created_at, updated_at
+             ) values (
+               @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
+               @checkpoint, @payload, @createdAt, @updatedAt
+             )`,
+          ).run({
+            ...parsed,
+            owner: parsed.owner ?? null,
+            lease: parsed.lease ?? null,
+            checkpoint: parsed.checkpoint ?? null,
+            payload,
+          });
+          return { outcome: 'enqueued' as const, job: parsed };
+        });
+        return tx.immediate();
       });
     },
 

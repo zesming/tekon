@@ -373,6 +373,22 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       });
     },
 
+    async enqueueIfNoActiveByRunId(input) {
+      const now = nowIso();
+      return jobs.enqueueIfNoActiveByRunId(input.runId, {
+        id: `job_${randomUUID()}`,
+        sessionId: input.sessionId,
+        kind: input.kind,
+        status: 'queued',
+        owner: null,
+        lease: null,
+        abortState: 'none',
+        checkpoint: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    },
+
     async get(jobId) {
       return jobs.get(jobId);
     },

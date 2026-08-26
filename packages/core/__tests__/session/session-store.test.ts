@@ -591,6 +591,117 @@ describe('job repository', () => {
       status: 'paused',
     });
   });
+
+  it('enqueueIfNoActiveByRunId enqueues when the run has no active job, and rejects when one exists', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    // No active job → enqueued.
+    const first = await jobs.enqueueIfNoActiveByRunId(
+      'run_1',
+      makeJob(session.id, { id: 'job_a', kind: 'workflow-resume' }),
+    );
+    expect(first.outcome).toBe('enqueued');
+    expect(first.job.id).toBe('job_a');
+    expect(await jobs.findActiveByRunId('run_1')).toMatchObject({ id: 'job_a' });
+
+    // An active job now exists → the second call is rejected and returns the
+    // existing active job (NOT a second insert).
+    const second = await jobs.enqueueIfNoActiveByRunId(
+      'run_1',
+      makeJob(session.id, { id: 'job_b', kind: 'workflow-resume' }),
+    );
+    expect(second.outcome).toBe('active-job');
+    expect(second.job.id).toBe('job_a');
+    expect(await jobs.get('job_b')).toBeNull();
+  });
+
+  it('F5-P0-01: enqueueIfNoActiveByRunId yields exactly one active job across two connections', async () => {
+    // Cross-connection integration check for the atomic guard. `:memory:` is
+    // per-connection, so a real two-process setup needs a FILE db opened by two
+    // connections (as CLI + Web would). Note: better-sqlite3 is synchronous, so
+    // a single-thread test cannot force a mid-transaction interleave — the
+    // atomicity itself (check + insert under one BEGIN IMMEDIATE writer lock) is
+    // guaranteed by the same pattern `appendEvent` uses for seq allocation. What
+    // this test pins is that the method, driven from two independent connections
+    // + WriteQueues, still converges to a single active job (the loser observes
+    // the winner's job). The re-check logic is separately locked by the test
+    // above (removing the in-transaction re-check makes that one fail).
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-f5p0-01-'));
+    tempDirs.push(dir);
+    const file = join(dir, 'tekon.sqlite');
+
+    // Connection 1 sets up the schema + a run row + a session bound to the run.
+    const db1 = openTekonDatabase({ filename: file });
+    migrateDatabase(db1);
+    const now = new Date().toISOString();
+    db1
+      .prepare(
+        `insert into projects (id, name, repo_path, created_at)
+         values ('proj_race', 'race', '/tmp/race', @now)`,
+      )
+      .run({ now });
+    db1
+      .prepare(
+        `insert into demands (id, title, body, created_at)
+         values ('demand_race', 't', 'b', @now)`,
+      )
+      .run({ now });
+    db1
+      .prepare(
+        `insert into workflow_instances
+           (id, project_id, demand_id, status, created_at, updated_at)
+         values ('run_race', 'proj_race', 'demand_race', 'paused', @now, @now)`,
+      )
+      .run({ now });
+    const wq1 = createWriteQueue();
+    const sessions1 = createSessionEventStore(db1, wq1);
+    const jobs1 = createJobRepository(db1, wq1);
+    const workspace = await sessions1.getOrCreateDefaultWorkspace('/tmp/race');
+    const session = await sessions1.createSession({
+      workspaceId: workspace.id,
+      title: null,
+      profile: 'human-web',
+      runId: 'run_race',
+    });
+
+    // Connection 2 = a second process sharing the same file, its own WriteQueue.
+    const db2 = openTekonDatabase({ filename: file });
+    const wq2 = createWriteQueue();
+    const jobs2 = createJobRepository(db2, wq2);
+
+    // Both "processes" attempt to resume the same run. Because better-sqlite3 is
+    // synchronous, the two IMMEDIATE transactions serialize at the DB writer
+    // lock; the first commits its job, the second re-checks inside its own lock,
+    // sees the active job, and stands down.
+    const [r1, r2] = await Promise.all([
+      jobs1.enqueueIfNoActiveByRunId(
+        'run_race',
+        makeJob(session.id, { id: 'job_conn1', kind: 'workflow-resume' }),
+      ),
+      jobs2.enqueueIfNoActiveByRunId(
+        'run_race',
+        makeJob(session.id, { id: 'job_conn2', kind: 'workflow-resume' }),
+      ),
+    ]);
+
+    const outcomes = [r1.outcome, r2.outcome].sort();
+    expect(outcomes).toEqual(['active-job', 'enqueued']);
+
+    // Exactly ONE active job exists for the run across both connections.
+    const activeCount = db1
+      .prepare(
+        `select count(*) as n from jobs j
+         join sessions s on s.id = j.session_id
+         where s.run_id = 'run_race'
+           and j.status in ('queued', 'running', 'paused', 'cancelling')`,
+      )
+      .get() as { n: number };
+    expect(activeCount.n).toBe(1);
+
+    db1.close();
+    db2.close();
+  });
 });
 
 describe('session run id lookup', () => {

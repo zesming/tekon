@@ -190,11 +190,21 @@ async function updateDecision(input: {
         runId: existing.run_id,
       });
     }
-    const job = await context.jobRunner.enqueue({
+    // F5-P0-01: same atomic guard as SessionService.resumeRun. gate.approve is
+    // a second concurrent-resume entry point (two approvals, or approval + a
+    // `tekon resume`, could both enqueue a workflow-resume job for one run). The
+    // atomic enqueue re-checks for an active job inside a BEGIN IMMEDIATE
+    // transaction and rejects the loser, so the run is never double-executed.
+    const enqueued = await context.jobRunner.enqueueIfNoActiveByRunId({
+      runId: existing.run_id,
       sessionId: session.id,
       kind: 'workflow-resume',
     });
-    return { ...mappedDecision, sessionId: session.id, jobId: job.id };
+    return {
+      ...mappedDecision,
+      sessionId: session.id,
+      jobId: enqueued.job.id,
+    };
   }
 
   // reject: block the node synchronously; no resume (MF3 guard already applied).

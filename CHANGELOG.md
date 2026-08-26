@@ -1,5 +1,21 @@
 # 变更日志
 
+## v0.14.4
+
+第五轮全面复审（`docs/reviews/2026-08-26-tekon-harness-replatform-fifth-review.md`）循环评估后的收敛修复。报告确认第四轮 F4-P0-02/03/05 已正确闭环，并提出一个不依赖租约过期的正常路径新阻断。经动态 workflow（F5-P0-01 首审 + 对手方复核 + 三线取舍 + 首席综合）+ 独立 code review 复核收敛。
+
+### 并发正确性修复
+
+- **F5-P0-01（CONFIRMED / High）：并发 resume 重复 active job**。`resumeRun` 的 `findActiveByRunId`（裸 read，不在事务）与 `enqueue` 之间无临界区，`sessions.run_id` 非 unique、`jobs` 无 per-run active 约束，CLI 与 web 各开独立 SQLite 连接 + 各自 WriteQueue（仅单进程串行化）。两并发 resume 可都见"无 active job"→各 enqueue → 同一 run 被两 executor 真跑（双 agent 花费 + 两 worktree `git branch -f` 提升到同一 run 分支冲突/覆盖）。第四轮的 workflow 终态 CAS 只护"状态"、不护"执行"。
+  - **修复**：新增 `JobRepository.enqueueIfNoActiveByRunId`，把 active-check + insert 收进一个 `BEGIN IMMEDIATE` 事务（复用 `appendEvent` 已验证的跨进程临界区范式，`busy_timeout` 处理短竞争），冲突返回既有 active job 不二次 insert。`DurableJobRunner` 加同名包装；`SessionService.resumeRun` 与 `gate.approve`（第二个并发 resume 入口，同有此竞态）均改用原子方法。
+  - **否决"仅 sessions.run_id unique"**：paused run 必有既存 session、resume 跳过 createSession，该约束对主导案例零保护；事务方案是根因修复。
+  - 新增测试：顺序 re-check 真锁（移除 in-tx re-check 即 fail）+ 两连接 file-db 集成断言（诚实标注 better-sqlite3 同步单线程无法进程内制造真交错，原子性由 BEGIN IMMEDIATE 保证）。
+
+### 复审结论（追加到第五轮报告实施方批注）
+
+- **确认第四轮 F4-P0-02/03/05 已正确闭环**；确认本轮已提交的 a11y 改动（EventFeed `role=log`、SessionComposer `aria-*`/`role=alert`、RunControls `role=group`+中文标签、SessionDetailPage `aria-atomic`+landmark + e2e）正确无回归。
+- **诚实递延（交用户决策）**：F5-P0-02/03/04/05 ≡ 第四轮 F4-P0-01/03/05/04 递延项的重述+扩展，报告自述其必要性取决于"单 owner daemon vs 完整 multi-owner"架构决策（单 owner 下非必需）——属架构方向，非无条件 bug；§6.2 visibility/modelVisible 死枚举（无运行后果）、§6.5 Workspace/Project、§7 PR 拆分/单 owner ADR 为架构/过程建议；PRODUCT-P0-01/02/03（真流式/follow-up-steer/双轨）为前四轮已披露里程碑。
+
 ## v0.14.3
 
 第四轮全面复审（`docs/reviews/2026-08-25-tekon-harness-replatform-fourth-review.md`）循环评估后的收敛修复。本轮报告不同于第三轮的正则分析器产物，是一份扎实的架构级复审并主动纠正了第三轮误判。经一个动态 workflow（5 项 F4-P0 各由「首审 + 对手方复核」两个最高思考等级 subagent 独立回代码核验 + 交叉印证 + 三线取舍 + 首席综合，共 12 个 agent）+ 独立 code review 复核收敛。

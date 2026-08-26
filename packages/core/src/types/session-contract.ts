@@ -250,6 +250,18 @@ export interface AgentDriver {
  */
 export interface JobRunner {
   enqueue(input: { sessionId: string; kind: string }): Promise<Job>;
+  /**
+   * F5-P0-01: atomically enqueue a job for `runId` only if that run has no
+   * active job. Collapses the resume-path find-active + enqueue into one
+   * cross-process critical section (see JobRepository.enqueueIfNoActiveByRunId).
+   */
+  enqueueIfNoActiveByRunId(input: {
+    runId: string;
+    sessionId: string;
+    kind: string;
+  }): Promise<
+    { outcome: 'enqueued'; job: Job } | { outcome: 'active-job'; job: Job }
+  >;
   get(jobId: string): Promise<Job | null>;
   requestCancel(jobId: string, reason?: string): Promise<void>;
   checkpoint(jobId: string, checkpoint: string): Promise<void>;

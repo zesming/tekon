@@ -281,13 +281,11 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         return { outcome: 'pending-decisions', runId: input.runId };
       }
     }
-    // No two active jobs per run. Reclaim queued + stale-paused jobs, then
-    // reject if a live job is still running/cancelling/paused.
+    // No two active jobs per run. Reclaim queued + stale-paused jobs first.
     await jobs.cancelStaleActiveJobs(input.runId);
-    const active = await jobs.findActiveByRunId(input.runId);
-    if (active) {
-      return { outcome: 'active-job', runId: input.runId };
-    }
+    // Resolve (or create) the run's session before the atomic enqueue. For a
+    // resumable (paused) run the session already exists from startRun; the
+    // createSession branch only fires for the rare no-session case.
     let session = await sessions.findSessionByRunId(input.runId);
     if (!session) {
       const workspace = await sessions.getOrCreateDefaultWorkspace(projectRoot);
@@ -298,15 +296,25 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         runId: input.runId,
       });
     }
-    const job = await jobRunner.enqueue({
+    // F5-P0-01: the active-check + enqueue must be one cross-process critical
+    // section. A bare `findActiveByRunId` then `enqueue` lets two concurrent
+    // resumes (CLI + Web, separate connections) both see "no active job" and
+    // both enqueue, so the same run is executed by two workers (double agent
+    // spend + two worktrees promoted to one run branch). The atomic enqueue
+    // re-checks inside a BEGIN IMMEDIATE transaction and rejects the loser.
+    const result = await jobRunner.enqueueIfNoActiveByRunId({
+      runId: input.runId,
       sessionId: session.id,
       kind: 'workflow-resume',
     });
+    if (result.outcome === 'active-job') {
+      return { outcome: 'active-job', runId: input.runId };
+    }
     return {
       outcome: 'enqueued',
       runId: input.runId,
       sessionId: session.id,
-      jobId: job.id,
+      jobId: result.job.id,
     };
   }
 
