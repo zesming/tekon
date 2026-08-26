@@ -16,14 +16,18 @@ test.describe('mobile navigation accessibility', () => {
 
     const sidebar = page.locator('#app-sidebar');
     const main = page.locator('.main');
-    const toggle = page.getByRole('button', { name: '打开导航' });
+    // Keep a stable element locator: the accessible name intentionally changes
+    // from “打开导航” to “关闭导航” while the drawer is open.
+    const toggle = page.locator('.nav-toggle');
 
+    await expect(toggle).toHaveAttribute('aria-label', '打开导航');
     await toggle.click();
     await expect(sidebar).toBeVisible();
     await expect(sidebar).toHaveAttribute('role', 'dialog');
     await expect(sidebar).toHaveAttribute('aria-modal', 'true');
     await expect(page.locator('.nav-overlay')).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toHaveAttribute('aria-label', '关闭导航');
 
     const drawerClose = page.getByRole('button', { name: '关闭侧边导航' });
     await expect(drawerClose).toBeVisible();
@@ -64,6 +68,7 @@ test.describe('mobile navigation accessibility', () => {
     await expect(sidebar).toBeHidden();
     await expect(toggle).toBeFocused();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toHaveAttribute('aria-label', '打开导航');
     await expect
       .poll(() => page.evaluate(() => document.body.style.overflow))
       .toBe('');
