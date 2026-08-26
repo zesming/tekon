@@ -168,17 +168,22 @@ export function RunControls({
     runControlAffordances(status);
 
   return (
-    <div className="flex gap-2" style={{ alignItems: 'center' }}>
+    <div
+      className="flex gap-2"
+      style={{ alignItems: 'center' }}
+      role="group"
+      aria-label="运行控制"
+    >
       {canPause && (
         <button
           type="button"
           className={btnClass}
-          title="Pause"
+          title="暂停运行"
           aria-label="暂停运行"
           disabled={isPending}
           onClick={handlePause}
         >
-          ⏸
+          {compact ? '⏸' : '暂停'}
         </button>
       )}
 
@@ -186,12 +191,12 @@ export function RunControls({
         <button
           type="button"
           className={btnClass}
-          title="Resume"
+          title="恢复运行"
           aria-label="恢复运行"
           disabled={isPending}
           onClick={handleResume}
         >
-          ▶
+          {compact ? '▶' : '恢复'}
         </button>
       )}
 
@@ -201,14 +206,18 @@ export function RunControls({
           className={
             compact ? 'btn btn-ghost btn-sm' : 'btn btn-danger btn-sm'
           }
-          title="Cancel"
+          title="取消运行"
           aria-label={
             pendingAction === 'cancel' ? '确认取消运行' : '请求取消运行'
           }
           disabled={isPending}
           onClick={handleCancel}
         >
-          {pendingAction === 'cancel' ? '确认取消?' : '✕'}
+          {pendingAction === 'cancel'
+            ? '确认取消？'
+            : compact
+              ? '✕'
+              : '取消'}
         </button>
       )}
 
@@ -216,14 +225,14 @@ export function RunControls({
         <button
           type="button"
           className={btnClass}
-          title="View details"
+          title="查看运行详情"
           aria-label="查看运行详情"
           onClick={(e) => {
             e.stopPropagation();
             onView(runId);
           }}
         >
-          👁
+          {compact ? '👁' : '查看详情'}
         </button>
       )}
     </div>

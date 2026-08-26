@@ -73,6 +73,9 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
   // agent-loop / lifecycle events produced by the mock run.
   const feed = page.locator('.event-feed');
   await expect(feed).toBeVisible({ timeout: 15_000 });
+  await expect(feed).toHaveAttribute('role', 'log');
+  await expect(feed).toHaveAttribute('aria-live', 'polite');
+  await expect(feed).toHaveAttribute('aria-atomic', 'false');
 
   // A user/message row is present (the run's demand text becomes user/message).
   await expect(
@@ -89,12 +92,15 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
     timeout: 15_000,
   });
 
-  // UX-01 (third-review): the connection status is an accessible live region so
-  // screen readers announce connecting/live/reconnecting/closed transitions.
+  // UX-01: connection state is a complete, non-interrupting status update.
   await expect(page.locator('.session-conn')).toHaveAttribute('role', 'status');
   await expect(page.locator('.session-conn')).toHaveAttribute(
     'aria-live',
     'polite',
+  );
+  await expect(page.locator('.session-conn')).toHaveAttribute(
+    'aria-atomic',
+    'true',
   );
 });
 

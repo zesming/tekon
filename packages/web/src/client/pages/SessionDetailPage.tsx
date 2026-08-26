@@ -10,9 +10,8 @@ import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { EventFeed } from '../components/sessions/EventFeed.js';
 import { SessionSidePanel } from '../components/sessions/SessionSidePanel.js';
 
-// Phase 3 3b: Session Detail — three-column shell. Left: session metadata.
-// Middle: live event feed (SSE). Right: run controls + inline approval/cards
-// (filled in 3c; a placeholder for now). The feed is the continuous narrative.
+// Phase 3 3b: Session Detail. The event feed is the continuous narrative;
+// the side rail contains run controls, approvals, artifacts, and result cards.
 
 const CONN_LABEL: Record<string, string> = {
   connecting: '连接中',
@@ -54,6 +53,7 @@ export function SessionDetailPage() {
               className={`session-conn session-conn-${connState}`}
               role="status"
               aria-live="polite"
+              aria-atomic="true"
             >
               {' · '}
               {CONN_LABEL[connState] ?? connState}
@@ -65,10 +65,10 @@ export function SessionDetailPage() {
       {error ? <ErrorBanner error={error} onRetry={refetch} /> : null}
 
       <div className="session-columns">
-        <main className="session-feed-col">
+        <main className="session-feed-col" aria-label="会话活动">
           <EventFeed events={events} />
         </main>
-        <aside className="session-side-col">
+        <aside className="session-side-col" aria-label="运行控制与结果">
           <SessionSidePanel events={events} />
         </aside>
       </div>

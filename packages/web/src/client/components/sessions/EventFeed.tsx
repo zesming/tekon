@@ -65,7 +65,14 @@ export function EventFeed({ events }: { events: StreamEvent[] }) {
   }
   const groups = groupEventsByTurn(events);
   return (
-    <div className="event-feed">
+    <div
+      className="event-feed"
+      role="log"
+      aria-label="会话活动记录"
+      aria-live="polite"
+      aria-relevant="additions text"
+      aria-atomic="false"
+    >
       {groups.map((group, index) => (
         <section
           className="feed-turn"
