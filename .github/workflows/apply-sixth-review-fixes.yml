@@ -1,0 +1,101 @@
+name: Apply sixth review fixes
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, '[apply-sixth-review-fixes]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Apply reviewed fixes
+        run: python3 scripts/apply_sixth_review_fixes.py
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Format changed files
+        run: |
+          npm exec --yes -- pnpm@10.12.1 exec prettier --write \
+            packages/core/src/session/session-store.ts \
+            packages/core/src/types/session-contract.ts \
+            packages/core/__tests__/session/session-store.test.ts \
+            packages/web/src/server/api/routers/gate.ts \
+            packages/web/src/client/layouts/Sidebar.tsx \
+            packages/web/src/client/layouts/TopBar.tsx \
+            packages/web/src/client/pages/SessionsPage.tsx \
+            packages/web/src/client/styles/sessions.css \
+            packages/web/src/client/lib/event-feed.ts \
+            packages/web/__tests__/client/event-feed.test.ts \
+            packages/web/__tests__/e2e/session-feed.test.ts \
+            README.md
+
+      - name: Build and typecheck
+        run: |
+          npm exec --yes -- pnpm@10.12.1 -r build
+          npm exec --yes -- pnpm@10.12.1 -r typecheck
+
+      - name: Core tests
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e
+
+      - name: CLI tests
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+
+      - name: Web tests
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test
+
+      - name: Playwright browser
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
+
+      - name: Web Playwright e2e
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
+
+      - name: Diff check
+        run: git diff --check
+
+      - name: Commit and push reviewed fixes
+        run: |
+          set -euo pipefail
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git add -- \
+            packages/core/src/session/session-store.ts \
+            packages/core/src/types/session-contract.ts \
+            packages/core/__tests__/session/session-store.test.ts \
+            packages/web/src/server/api/routers/gate.ts \
+            packages/web/src/client/layouts/Sidebar.tsx \
+            packages/web/src/client/layouts/TopBar.tsx \
+            packages/web/src/client/pages/SessionsPage.tsx \
+            packages/web/src/client/styles/sessions.css \
+            packages/web/src/client/lib/event-feed.ts \
+            packages/web/__tests__/client/event-feed.test.ts \
+            packages/web/__tests__/e2e/session-feed.test.ts \
+            README.md
+          git rm -f -- \
+            .github/workflows/apply-sixth-review-fixes.yml \
+            scripts/apply_sixth_review_fixes.py
+          git diff --cached --check
+          git commit -m "fix: separate run execution from automation control"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
