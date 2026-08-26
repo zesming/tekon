@@ -47,10 +47,16 @@ export function SessionComposer() {
   };
 
   return (
-    <div className="session-composer">
+    <div className="session-composer" aria-busy={startMutation.isPending}>
       <textarea
         className="input session-composer-input"
         aria-label="新建受控交付任务"
+        aria-describedby={
+          startMutation.error
+            ? 'session-composer-hint session-composer-error'
+            : 'session-composer-hint'
+        }
+        aria-invalid={Boolean(startMutation.error)}
         placeholder={
           token
             ? '描述需要受控交付的需求（将运行 PM / RD / QA / Reviewer 全链路）…'
@@ -62,7 +68,10 @@ export function SessionComposer() {
         rows={3}
       />
       <div className="session-composer-actions">
-        <span className="text-muted session-composer-hint">
+        <span
+          id="session-composer-hint"
+          className="text-muted session-composer-hint"
+        >
           当前入口会启动 standard-delivery 受控交付全链路；轻量协作、会话内追问与转向尚未开放
         </span>
         <button
@@ -71,11 +80,15 @@ export function SessionComposer() {
           disabled={!canSend}
           onClick={handleSend}
         >
-          {startMutation.isPending ? '启动中…' : '开始会话'}
+          {startMutation.isPending ? '正在创建交付…' : '启动受控交付'}
         </button>
       </div>
       {startMutation.error ? (
-        <p className="session-composer-error text-danger">
+        <p
+          id="session-composer-error"
+          className="session-composer-error text-danger"
+          role="alert"
+        >
           {startMutation.error.message}
         </p>
       ) : null}
