@@ -21,34 +21,16 @@ jobs:
           ref: review/deepseek-harness-migration-2026-08-20
           fetch-depth: 0
 
-      - name: Decode authoritative UTF-8 report
+      - name: Compare staged payload parts
         run: |
           set -euo pipefail
-          cat .tmp/seventh-report/part-* \
-            | base64 --decode --ignore-garbage \
-            > docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md
-          actual="$(sha256sum docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md | awk '{print $1}')"
-          echo "decoded sha256=$actual"
-          test "$actual" = "3f094bbc8bb238b49383c1c43bd37147dc9673d760090abf56c3fb814a8ce2bc"
-
-      - name: Verify and commit authoritative report
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md')
-          text = path.read_text(encoding='utf-8')
-          assert text.startswith('# Tekon Harness Replatform 第七轮全面复审')
-          assert '整体不通过' in text
-          assert 'F7-P0-01' in text
-          assert 'aefa08e144ef0b8381355ed913e95064f22ae718' in text
-          assert '[readiness] enqueue failed' in text
-          assert '移动端横向溢出已关闭' in text
-          PY
-          git config user.name "openai-review-agent"
-          git config user.email "openai-review-agent@users.noreply.github.com"
-          git add docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md
-          git rm -rf .tmp/seventh-report .github/workflows/repair-seventh-report-encoding.yml
-          git diff --cached --check
-          git commit -m "docs: install authoritative seventh-round review"
-          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
+          sha256sum .tmp/seventh-report/part-*
+          wc -c .tmp/seventh-report/part-*
+          test "$(sha256sum .tmp/seventh-report/part-00 | awk '{print $1}')" = "1aedfd458008f6088218b3ae428fa83e845e5d7289f7b9f21de0b5980a17c9fc"
+          test "$(sha256sum .tmp/seventh-report/part-01 | awk '{print $1}')" = "c7f6e47452fb3779e3b7d9e9dff7bdafd9b289f8b9e496f4b36c07f8bd754827"
+          test "$(sha256sum .tmp/seventh-report/part-02 | awk '{print $1}')" = "bc263c4afe6b21d317aa1a859376d82393829465c4da3abd58422a50beafaabe"
+          test "$(sha256sum .tmp/seventh-report/part-03 | awk '{print $1}')" = "d1bb4b9a7005c7806f00e2316c90532b2b6ee531dbfcb8ad63dade57d0e75ea2"
+          test "$(sha256sum .tmp/seventh-report/part-04 | awk '{print $1}')" = "aa911589fa46269c4eea73caf3a7dda11902e627ae7d86be5339ad871049a116"
+          test "$(sha256sum .tmp/seventh-report/part-05 | awk '{print $1}')" = "c6bb457e1ae9afc71a35b121dcfbef26324891a9ad2738e7ee29b928941c5672"
+          test "$(sha256sum .tmp/seventh-report/part-06 | awk '{print $1}')" = "00c424b1d86050722c86cadbad43e52cfa2c5a90ee363ef1542b2d7fd4f8fe11"
+          test "$(sha256sum .tmp/seventh-report/part-07 | awk '{print $1}')" = "f89f53e290ab58e05b738b053b015354879f918dd1830ac22c7d2dde8cf978d5"
