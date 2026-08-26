@@ -1,5 +1,25 @@
 # 变更日志
 
+## v0.14.5
+
+第六轮全面复审（`docs/reviews/2026-08-26-tekon-harness-replatform-sixth-review.md`）循环评估后的收敛。本轮特殊：核心修复由 CI 自修改评审工作流用正则脚本自动应用于 `3d6836d`（run 执行与 automation 控制分离 + Session/Workspace 身份幂等 + enqueue 绑定校验），且原始报告 `.md` 未随修复落库（与第三轮同型流程缺口）。为此委派动态 workflow（3 个最高思考等级 subagent 分别核验三处核心改动 + 1 个核验 web/README/e2e + 1 个首席综合），对机器生成改动补做审查，以 mutation 反证真锁性。
+
+### 核验结论：自动应用的核心改动正确、可保留
+
+- **run/automation 分离 = 真实改进，非回归**：`findActiveByRunId` / `cancelStaleActiveJobs` / `enqueueIfNoActiveByRunId` 的 active-job 判定收窄到 `RUN_EXECUTION_JOB_KINDS`（`workflow-run`/`workflow-resume`/`goal-run`）。`requestPause`（先 `running→paused` CAS）、`requestCancel`（先 `writeWorkflowTerminal`）的语义锚点在 workflow-instance 层、都在 job relay 之前，故排除 automation job 不引入 pause/cancel 静默失效；分离前未过滤反而可能对 automation job 施加 workflow 控制或 409 误拒 resume——那才是被修掉的真 bug。
+- **Session/Workspace 身份幂等正确**：`getOrCreateDefaultWorkspace` / `createSession` 改为 `BEGIN IMMEDIATE` 内幂等 get-or-create（与 `appendEvent` 同款跨进程临界区）；三个调用方（startRun/resumeRun/gate.approve）均安全，补齐第五轮 F5-P0-01「无 session 子案例可能建两 session」窗口。session 收敛测试对 pre-fix 无条件 insert 为真锁；workspace 收敛测试因 pre-fix 已是 lookup-then-insert，属回归护栏而非 mutation-killer（跨进程竞态单进程 vitest 无法复现，与 F5-P0-01 同款限制）。
+
+### 本轮补修（CI 自修改工作流遗漏）
+
+- **e2e 断言漂移（必修）**：`packages/web/__tests__/e2e/session-routing.test.ts:33` 仍断言导航项 `会话 Sessions`，但 Sidebar 已改名 `受控交付`（`Sidebar.tsx:27`）——真实浏览器必然超时失败。已改为 `受控交付`。根因：`pnpm test`（vitest）`exclude: __tests__/e2e/**`，Playwright 漂移逃过 CI `pnpm test` gate。已 `git stash` 对比证明 committed 状态该 e2e 确实失败、修复后通过。
+- **测试覆盖缺口**：`event-feed.test.ts` 补 `readiness-evaluate→准备度检查`、`delivery-auto-prepare→交付材料准备` 两条 automation 子分支断言（mutation 反证为真锁）。
+- **手册文案漂移**：`docs/manual/tekon-user-manual.md` + `.html` 的「当前边界」提示仍写「从会话输入框『开始会话』发起」，但该 Composer CTA 第五轮已改名 `启动受控交付`（README 已同步、手册漏改）。已同步两份手册。
+
+### 复审结论
+
+- 保留自动应用的 run/automation 分离 + session 身份幂等 + enqueue 绑定校验；补修上述 2 处。
+- **诚实递延（交用户决策）**：单-vs-多 owner 架构决策、PRODUCT-P0 产品主闭环（真流式/follow-up-steer/双轨）、PR 拆分——延续前五轮，属已披露里程碑 / 架构方向，非本轮缺口。
+
 ## v0.14.4
 
 第五轮全面复审（`docs/reviews/2026-08-26-tekon-harness-replatform-fifth-review.md`）循环评估后的收敛修复。报告确认第四轮 F4-P0-02/03/05 已正确闭环，并提出一个不依赖租约过期的正常路径新阻断。经动态 workflow（F5-P0-01 首审 + 对手方复核 + 三线取舍 + 首席综合）+ 独立 code review 复核收敛。

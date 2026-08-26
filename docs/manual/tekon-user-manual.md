@@ -1022,7 +1022,7 @@ tekon ui --repo /path/to/project
 
 打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
 
-> ⚠️ **当前边界**：从会话输入框「开始会话」发起的运行，默认走 `standard-delivery` **受控交付全链路**（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。
+> ⚠️ **当前边界**：从会话输入框「启动受控交付」发起的运行，默认走 `standard-delivery` **受控交付全链路**（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。
 
 Session UI 适合：
 

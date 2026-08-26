@@ -98,6 +98,19 @@ describe('describeEvent', () => {
     expect(workflow.title).toContain('执行任务');
     expect(workflow.title).not.toBe('job/status');
 
+    // job/status carries the job KIND: automation jobs get their own labels so
+    // a readiness/delivery projection job is never mislabeled as "执行任务".
+    const readinessJob = describeEvent(
+      ev('job/status', { kind: 'readiness-evaluate', status: 'running' }),
+    );
+    expect(readinessJob.kind).toBe('governance');
+    expect(readinessJob.title).toContain('准备度检查');
+    const deliveryJob = describeEvent(
+      ev('job/status', { kind: 'delivery-auto-prepare', status: 'running' }),
+    );
+    expect(deliveryJob.kind).toBe('governance');
+    expect(deliveryJob.title).toContain('交付材料准备');
+
     const readiness = describeEvent(ev('readiness/evaluated', { ready: true }));
     expect(readiness.title).toContain('通过');
     const delivery = describeEvent(ev('delivery/prepared'));

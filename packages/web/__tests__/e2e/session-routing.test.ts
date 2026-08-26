@@ -30,6 +30,6 @@ test('default route is the Session UI; legacy Cockpit lives at /advanced', async
   await expect(page.getByText('run_1', { exact: true })).toBeVisible();
 
   // The sidebar exposes both entry points.
-  await expect(page.getByRole('link', { name: '会话 Sessions' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '受控交付' })).toBeVisible();
   await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();
 });
