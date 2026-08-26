@@ -230,12 +230,11 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.workspace-picker-select {
+.workspace-picker-value {
   font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border, #334155);
-  background: var(--surface, #1e293b);
-  color: var(--text, #e2e8f0);
-  cursor: not-allowed;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #cbd5e1);
+  background: var(--surface-2, #f8fafc);
+  color: var(--text-s, #475569);
 }

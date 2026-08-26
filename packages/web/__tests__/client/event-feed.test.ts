@@ -90,6 +90,20 @@ describe('describeEvent', () => {
     expect(describeEvent(ev('turn/end')).kind).toBe('turn');
   });
 
+  it('renders job and automation lifecycle events as human-readable governance rows', () => {
+    const workflow = describeEvent(
+      ev('job/status', { kind: 'workflow-resume', status: 'running' }),
+    );
+    expect(workflow.kind).toBe('governance');
+    expect(workflow.title).toContain('执行任务');
+    expect(workflow.title).not.toBe('job/status');
+
+    const readiness = describeEvent(ev('readiness/evaluated', { ready: true }));
+    expect(readiness.title).toContain('通过');
+    const delivery = describeEvent(ev('delivery/prepared'));
+    expect(delivery.title).toContain('交付材料');
+  });
+
   it('renders governance events (gate/artifact/approval/node) as governance rows', () => {
     expect(
       describeEvent(ev('gate/result', { gateType: 'build', status: 'passed' }))

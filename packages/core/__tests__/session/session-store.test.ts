@@ -173,6 +173,73 @@ describe('session event store', () => {
     expect(other.root).toBe('/repo/b');
   });
 
+  it('converges default workspace creation across independent connections', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-workspace-race-'));
+    tempDirs.push(dir);
+    const filename = join(dir, 'tekon.sqlite');
+    const dbA = openTekonDatabase({ filename });
+    const dbB = openTekonDatabase({ filename });
+    try {
+      migrateDatabase(dbA);
+      migrateDatabase(dbB);
+      const storeA = createSessionEventStore(dbA, createWriteQueue());
+      const storeB = createSessionEventStore(dbB, createWriteQueue());
+
+      const [a, b] = await Promise.all([
+        storeA.getOrCreateDefaultWorkspace(dir),
+        storeB.getOrCreateDefaultWorkspace(dir),
+      ]);
+
+      expect(a.id).toBe(b.id);
+      const count = dbA
+        .prepare('select count(*) as n from workspaces where root = ?')
+        .get(dir) as { n: number };
+      expect(count.n).toBe(1);
+    } finally {
+      dbA.close();
+      dbB.close();
+    }
+  });
+
+  it('converges one canonical run session across independent connections', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-session-race-'));
+    tempDirs.push(dir);
+    const filename = join(dir, 'tekon.sqlite');
+    const dbA = openTekonDatabase({ filename });
+    const dbB = openTekonDatabase({ filename });
+    try {
+      migrateDatabase(dbA);
+      migrateDatabase(dbB);
+      const storeA = createSessionEventStore(dbA, createWriteQueue());
+      const storeB = createSessionEventStore(dbB, createWriteQueue());
+      const workspace = await storeA.getOrCreateDefaultWorkspace(dir);
+
+      const [a, b] = await Promise.all([
+        storeA.createSession({
+          workspaceId: workspace.id,
+          title: 'first candidate',
+          profile: 'human-web',
+          runId: 'run_same',
+        }),
+        storeB.createSession({
+          workspaceId: workspace.id,
+          title: 'second candidate',
+          profile: 'human-web',
+          runId: 'run_same',
+        }),
+      ]);
+
+      expect(a.id).toBe(b.id);
+      const count = dbA
+        .prepare('select count(*) as n from sessions where run_id = ?')
+        .get('run_same') as { n: number };
+      expect(count.n).toBe(1);
+    } finally {
+      dbA.close();
+      dbB.close();
+    }
+  });
+
   it('upserts projection checkpoints', async () => {
     const { db, sessions } = setupStore();
     const { session } = await seedSession(sessions);
@@ -592,6 +659,80 @@ describe('job repository', () => {
     });
   });
 
+  it('keeps automation jobs outside run execution controls and resume exclusion', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    await jobs.enqueue(
+      makeJob(session.id, {
+        id: 'job_readiness',
+        kind: 'readiness-evaluate',
+        status: 'queued',
+        createdAt: '2020-01-01T00:00:00.000Z',
+        updatedAt: '2020-01-01T00:00:00.000Z',
+      }),
+    );
+
+    // A readiness projection is not the live workflow: it must not receive
+    // run pause/cancel, block resume, or be reclaimed as a stale run job.
+    expect(await jobs.findActiveByRunId('run_1')).toBeNull();
+    expect(await jobs.cancelStaleActiveJobs('run_1')).toBe(0);
+    expect(await jobs.get('job_readiness')).toMatchObject({ status: 'queued' });
+
+    const resumed = await jobs.enqueueIfNoActiveByRunId(
+      'run_1',
+      makeJob(session.id, { id: 'job_resume', kind: 'workflow-resume' }),
+    );
+    expect(resumed.outcome).toBe('enqueued');
+    expect(await jobs.findActiveByRunId('run_1')).toMatchObject({
+      id: 'job_resume',
+      kind: 'workflow-resume',
+    });
+  });
+
+  it('rejects an atomic enqueue whose Session is missing or bound to another run', async () => {
+    const { sessions, jobs } = setupStore();
+    const { workspace } = await seedSession(sessions);
+    const other = await sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'other run',
+      profile: 'human-web',
+      runId: 'run_other',
+    });
+
+    await expect(
+      jobs.enqueueIfNoActiveByRunId(
+        'run_1',
+        makeJob(other.id, { id: 'job_wrong_binding', kind: 'workflow-resume' }),
+      ),
+    ).rejects.toThrow(/bound to run_other/u);
+
+    await expect(
+      jobs.enqueueIfNoActiveByRunId(
+        'run_1',
+        makeJob('sess_missing', {
+          id: 'job_missing_session',
+          kind: 'workflow-resume',
+        }),
+      ),
+    ).rejects.toThrow(/session not found/u);
+  });
+
+  it('rejects automation kinds at the run-execution-only atomic enqueue boundary', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    await expect(
+      jobs.enqueueIfNoActiveByRunId(
+        'run_1',
+        makeJob(session.id, {
+          id: 'job_wrong_kind',
+          kind: 'readiness-evaluate',
+        }),
+      ),
+    ).rejects.toThrow(/only accepts run-execution jobs/u);
+  });
+
   it('enqueueIfNoActiveByRunId enqueues when the run has no active job, and rejects when one exists', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
@@ -603,7 +744,9 @@ describe('job repository', () => {
     );
     expect(first.outcome).toBe('enqueued');
     expect(first.job.id).toBe('job_a');
-    expect(await jobs.findActiveByRunId('run_1')).toMatchObject({ id: 'job_a' });
+    expect(await jobs.findActiveByRunId('run_1')).toMatchObject({
+      id: 'job_a',
+    });
 
     // An active job now exists → the second call is rejected and returns the
     // existing active job (NOT a second insert).

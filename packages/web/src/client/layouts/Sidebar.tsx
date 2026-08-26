@@ -24,7 +24,7 @@ const navGroups: NavGroup[] = [
     items: [
       {
         to: routes.sessions,
-        label: '会话 Sessions',
+        label: '受控交付',
         icon: (
           <svg
             className="nav-icon"

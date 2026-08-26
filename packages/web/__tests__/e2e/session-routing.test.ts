@@ -12,15 +12,15 @@ test('default route is the Session UI; legacy Cockpit lives at /advanced', async
 }) => {
   // Default route → Session UI (not the old dashboard).
   await page.goto(server.url);
-  await expect(
-    page.getByRole('heading', { name: '会话 Sessions' }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // The legacy Cockpit dashboard is preserved under /advanced.
   await page.goto(`${server.url}/advanced`);
-  await expect(
-    page.getByRole('heading', { name: 'Dashboard' }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // Old run list still reachable under /advanced (nothing deleted, C2).
   await page.goto(`${server.url}/advanced/runs`);

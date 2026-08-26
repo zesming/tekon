@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router';
 
 import { useSessionToken } from '../hooks/use-session-token.js';
 
@@ -8,7 +9,11 @@ type TopBarProps = {
 };
 
 export function TopBar(props: TopBarProps) {
-  const { title = 'Tekon Cockpit', subtitle } = props;
+  const { pathname } = useLocation();
+  const defaultTitle = pathname.startsWith('/advanced')
+    ? 'Tekon Cockpit'
+    : 'Tekon Workspace';
+  const { title = defaultTitle, subtitle } = props;
   const { token, setToken } = useSessionToken();
   const [masked, setMasked] = useState(true);
 
@@ -30,6 +35,9 @@ export function TopBar(props: TopBarProps) {
         <button
           type="button"
           className="btn btn-ghost btn-sm"
+          title={masked ? '显示会话令牌' : '隐藏会话令牌'}
+          aria-label={masked ? '显示会话令牌' : '隐藏会话令牌'}
+          aria-pressed={!masked}
           onClick={() => setMasked((prev) => !prev)}
         >
           {masked ? '👁' : '🙈'}

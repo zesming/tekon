@@ -16,6 +16,13 @@ import {
   workspaceSchema,
 } from '../types/session-contract.js';
 
+/** Jobs that drive a workflow/goal and therefore share run controls. */
+const RUN_EXECUTION_JOB_KINDS = new Set<string>([
+  'workflow-run',
+  'workflow-resume',
+  'goal-run',
+]);
+
 /**
  * `jobs.payload` is a runner implementation detail and intentionally outside
  * the frozen `Job` contract (S14). It may be supplied at enqueue time for
@@ -91,8 +98,7 @@ export interface JobRepository {
     runId: string,
     job: JobEnqueueInput,
   ): Promise<
-    | { outcome: 'enqueued'; job: Job }
-    | { outcome: 'active-job'; job: Job }
+    { outcome: 'enqueued'; job: Job } | { outcome: 'active-job'; job: Job }
   >;
   // 回收该 run 下"旧"的可安全清理 job:created_at 早于 cutoff 的 queued,以及
   // lease 早于 cutoff 的 paused;running/cancelling/新鲜 queued 不动。
@@ -181,53 +187,84 @@ export function createSessionEventStore(
   return {
     async getOrCreateDefaultWorkspace(root) {
       return writeQueue.enqueue(() => {
-        const existing = db
-          .prepare('select * from workspaces where root = ?')
-          .get(root) as WorkspaceRow | undefined;
-        if (existing) {
-          return mapWorkspace(existing);
-        }
-        const workspace = workspaceSchema.parse({
-          id: `ws_${randomUUID()}`,
-          root,
-          repo: null,
-          branchPolicy: null,
-          permissionProfile: null,
-          createdAt: now(),
+        // Web and CLI open independent SQLite connections. Acquire the writer
+        // lock before the lookup so first use from two processes converges on
+        // one canonical workspace instead of creating split session lists.
+        const tx = db.transaction(() => {
+          const existing = db
+            .prepare(
+              `select * from workspaces
+               where root = ?
+               order by created_at asc, rowid asc
+               limit 1`,
+            )
+            .get(root) as WorkspaceRow | undefined;
+          if (existing) {
+            return mapWorkspace(existing);
+          }
+          const workspace = workspaceSchema.parse({
+            id: `ws_${randomUUID()}`,
+            root,
+            repo: null,
+            branchPolicy: null,
+            permissionProfile: null,
+            createdAt: now(),
+          });
+          db.prepare(
+            `insert into workspaces (id, root, repo, branch_policy, permission_profile, created_at)
+             values (@id, @root, @repo, @branchPolicy, @permissionProfile, @createdAt)`,
+          ).run({
+            ...workspace,
+            repo: workspace.repo ?? null,
+            branchPolicy: workspace.branchPolicy ?? null,
+            permissionProfile: workspace.permissionProfile ?? null,
+          });
+          return workspace;
         });
-        db.prepare(
-          `insert into workspaces (id, root, repo, branch_policy, permission_profile, created_at)
-           values (@id, @root, @repo, @branchPolicy, @permissionProfile, @createdAt)`,
-        ).run({
-          ...workspace,
-          repo: workspace.repo ?? null,
-          branchPolicy: workspace.branchPolicy ?? null,
-          permissionProfile: workspace.permissionProfile ?? null,
-        });
-        return workspace;
+        return tx.immediate();
       });
     },
 
     async createSession(input) {
-      const session = sessionSchema.parse({
-        id: `sess_${randomUUID()}`,
-        workspaceId: input.workspaceId,
-        title: input.title,
-        profile: input.profile,
-        status: 'active',
-        createdAt: now(),
-        updatedAt: now(),
-      });
       return writeQueue.enqueue(() => {
-        db.prepare(
-          `insert into sessions (id, workspace_id, title, profile, status, run_id, created_at, updated_at)
-           values (@id, @workspaceId, @title, @profile, @status, @runId, @createdAt, @updatedAt)`,
-        ).run({
-          ...session,
-          title: session.title ?? null,
-          runId: input.runId ?? null,
+        // A run has one canonical Session. This is an idempotent get-or-create
+        // under the same cross-process writer lock used by event seq allocation.
+        const tx = db.transaction(() => {
+          if (input.runId) {
+            const existing = db
+              .prepare(
+                `select * from sessions
+                 where run_id = ? and workspace_id = ?
+                 order by created_at asc, rowid asc
+                 limit 1`,
+              )
+              .get(input.runId, input.workspaceId) as SessionRow | undefined;
+            if (existing) {
+              return mapSession(existing);
+            }
+          }
+
+          const createdAt = now();
+          const session = sessionSchema.parse({
+            id: `sess_${randomUUID()}`,
+            workspaceId: input.workspaceId,
+            title: input.title,
+            profile: input.profile,
+            status: 'active',
+            createdAt,
+            updatedAt: createdAt,
+          });
+          db.prepare(
+            `insert into sessions (id, workspace_id, title, profile, status, run_id, created_at, updated_at)
+             values (@id, @workspaceId, @title, @profile, @status, @runId, @createdAt, @updatedAt)`,
+          ).run({
+            ...session,
+            title: session.title ?? null,
+            runId: input.runId ?? null,
+          });
+          return session;
         });
-        return session;
+        return tx.immediate();
       });
     },
 
@@ -241,7 +278,10 @@ export function createSessionEventStore(
     async findSessionByRunId(runId) {
       const row = db
         .prepare(
-          'select * from sessions where run_id = ? order by created_at desc limit 1',
+          `select * from sessions
+           where run_id = ?
+           order by created_at asc, rowid asc
+           limit 1`,
         )
         .get(runId) as SessionRow | undefined;
       return row ? mapSession(row) : null;
@@ -390,20 +430,39 @@ export function createJobRepository(
 
     async enqueueIfNoActiveByRunId(runId, job) {
       const parsed = jobSchema.parse(job);
+      if (!RUN_EXECUTION_JOB_KINDS.has(parsed.kind)) {
+        throw new Error(
+          `enqueueIfNoActiveByRunId only accepts run-execution jobs, got: ${parsed.kind}`,
+        );
+      }
       const payload = JSON.stringify(job.payload ?? {});
       return writeQueue.enqueue(() => {
         // BEGIN IMMEDIATE acquires the database writer lock BEFORE the
         // active-job check, so a concurrent resume on another connection cannot
-        // slip its INSERT between our check and our INSERT. busy_timeout handles
-        // the short window where the other transaction already holds the lock.
+        // slip its INSERT between our check and our INSERT. Automation jobs are
+        // deliberately excluded: readiness/delivery projection work must not
+        // block or receive pause/cancel controls intended for the live workflow.
         const tx = db.transaction(() => {
+          const binding = db
+            .prepare('select run_id from sessions where id = ?')
+            .get(parsed.sessionId) as { run_id: string | null } | undefined;
+          if (!binding) {
+            throw new Error(`session not found: ${parsed.sessionId}`);
+          }
+          if (binding.run_id !== runId) {
+            throw new Error(
+              `session ${parsed.sessionId} is bound to ${binding.run_id ?? 'no run'}, not ${runId}`,
+            );
+          }
+
           const existing = db
             .prepare(
               `select j.* from jobs j
                join sessions s on s.id = j.session_id
                where s.run_id = @runId
+                 and j.kind in ('workflow-run', 'workflow-resume', 'goal-run')
                  and j.status in ('queued', 'running', 'paused', 'cancelling')
-               order by j.created_at desc
+               order by j.created_at desc, j.id desc
                limit 1`,
             )
             .get({ runId }) as JobRow | undefined;
@@ -444,8 +503,9 @@ export function createJobRepository(
           `select j.* from jobs j
            join sessions s on s.id = j.session_id
            where s.run_id = ?
+             and j.kind in ('workflow-run', 'workflow-resume', 'goal-run')
              and j.status in ('queued', 'running', 'paused', 'cancelling')
-           order by j.created_at desc
+           order by j.created_at desc, j.id desc
            limit 1`,
         )
         .get(runId) as JobRow | undefined;
@@ -470,6 +530,7 @@ export function createJobRepository(
             `update jobs
              set status = 'cancelled', abort_state = 'stopped', updated_at = @now
              where session_id in (select id from sessions where run_id = @runId)
+               and kind in ('workflow-run', 'workflow-resume', 'goal-run')
                and (
                  (status = 'queued' and created_at < @cutoff)
                  or (status = 'paused' and lease is not null and lease < @cutoff)

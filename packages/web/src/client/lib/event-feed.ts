@@ -155,6 +155,32 @@ export function describeEvent(event: StreamEvent): FeedRow {
         title: '你 You · 转向',
         body: asText(p, 'text', 'message', 'guidance') ?? '',
       };
+    case 'job/status': {
+      const kind = asText(p, 'kind') ?? 'job';
+      const status = asText(p, 'status') ?? 'updated';
+      const label =
+        kind === 'readiness-evaluate'
+          ? '准备度检查'
+          : kind === 'delivery-auto-prepare'
+            ? '交付材料准备'
+            : '执行任务';
+      return {
+        ...base,
+        kind: 'governance',
+        title: `${label} · ${status}`,
+      };
+    }
+    case 'readiness/evaluated': {
+      const result =
+        p.ready === true ? '通过' : p.ready === false ? '未通过' : '已更新';
+      return {
+        ...base,
+        kind: 'governance',
+        title: `交付准备度 · ${result}`,
+      };
+    }
+    case 'delivery/prepared':
+      return { ...base, kind: 'governance', title: '交付材料已准备' };
     case 'gate/result': {
       const gate = asText(p, 'gateType', 'gateKey') ?? 'gate';
       const status = asText(p, 'status') ?? '';
@@ -174,17 +200,29 @@ export function describeEvent(event: StreamEvent): FeedRow {
       const decision = asText(p, 'decision', 'status') ?? '';
       return { ...base, kind: 'governance', title: `审批 ${decision}`.trim() };
     }
-    case 'workflow/node-started':
-    case 'workflow/node-ended':
-    case 'workflow/started': {
+    case 'workflow/node-started': {
+      const nodeId = asText(p, 'nodeId');
+      return {
+        ...base,
+        kind: 'governance',
+        title: nodeId ? `节点开始 · ${nodeId}` : '节点开始',
+      };
+    }
+    case 'workflow/node-ended': {
       const nodeId = asText(p, 'nodeId');
       const status = asText(p, 'status');
       return {
         ...base,
         kind: 'governance',
-        title: `${event.type}${nodeId ? ` ${nodeId}` : ''}${status ? ` · ${status}` : ''}`,
+        title: `节点结束${nodeId ? ` · ${nodeId}` : ''}${status ? ` · ${status}` : ''}`,
       };
     }
+    case 'workflow/started':
+      return {
+        ...base,
+        kind: 'governance',
+        title: p.resumed === true ? '受控交付已恢复' : '受控交付已开始',
+      };
     case 'session/created':
       return { ...base, kind: 'governance', title: '会话已创建' };
     default:

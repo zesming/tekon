@@ -28,7 +28,10 @@ async function startRun(
   const body = (await response.json()) as {
     result: { run: { id: string }; sessionId?: string };
   };
-  expect(body.result.sessionId, 'project.run must return a sessionId').toBeTruthy();
+  expect(
+    body.result.sessionId,
+    'project.run must return a sessionId',
+  ).toBeTruthy();
   return { runId: body.result.run.id, sessionId: body.result.sessionId! };
 }
 
@@ -84,7 +87,9 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
 
   // Lifecycle/agent-loop rows arrived (step or turn or governance rows).
   await expect(
-    page.locator('.feed-row-step, .feed-row-turn, .feed-row-governance').first(),
+    page
+      .locator('.feed-row-step, .feed-row-turn, .feed-row-governance')
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
 
   // The connection indicator resolves to live (replay complete, streaming).
@@ -115,11 +120,17 @@ test('Sessions list shows the started session and links to its detail', async ({
   // Phase 3 3d: the session list is the default route `/`.
   await page.goto(server.url);
 
-  // Report item 1: the workspace picker placeholder renders the current
-  // (default) workspace as a read-only indicator.
-  await expect(page.getByLabel('工作区 Workspace')).toBeVisible({
-    timeout: 15_000,
-  });
+  // The single workspace is information, not a disabled fake selector.
+  const workspace = page.getByRole('group', { name: '当前工作区' });
+  await expect(workspace).toBeVisible({ timeout: 15_000 });
+  await expect(workspace).toContainText('当前项目');
+  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '启动受控交付' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '显示会话令牌' }),
+  ).toBeVisible();
 
   const link = page.locator(`a[href="/sessions/${sessionId}"]`);
   await expect(link).toBeVisible({ timeout: 15_000 });

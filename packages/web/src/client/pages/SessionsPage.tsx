@@ -12,8 +12,9 @@ import { LoadingState } from '../components/ui/LoadingState.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { SessionComposer } from '../components/sessions/SessionComposer.js';
 
-// Phase 3 3b: Session List + composer. The human-first entry point — sessions
-// are the main axis (workspace/session/message), replacing run-centric reads.
+// Phase 3 3b: controlled-delivery list + composer. Until Collaborate and
+// follow-up exist, this page names the product behavior honestly rather than
+// presenting a full workflow launch as a chat session.
 
 export function SessionsPage() {
   const scope = useAuthScope();
@@ -32,31 +33,24 @@ export function SessionsPage() {
     <>
       <header className="page-header">
         <div>
-          <h1 className="page-title">会话 Sessions</h1>
+          <h1 className="page-title">受控交付</h1>
           <p className="page-subtitle">
-            以会话为主轴查看 Agent 交付 · a continuous, replayable narrative
+            发起并跟踪完整研发交付，查看执行过程、审批与结果
           </p>
         </div>
         <div className="page-actions">
-          {/* Workspace picker placeholder: today there is exactly one (the
-              default) workspace, so this is a read-only indicator rather than a
-              selector. Multi-workspace management is deferred to a later phase;
-              session.list already returns the workspaceId this shows. */}
+          {/* There is one workspace today. Render it as information, not a
+              disabled selector that suggests a choice the product cannot make. */}
           {workspaceId ? (
-            <label
+            <div
               className="workspace-picker"
-              title="当前工作区（暂只支持默认工作区）"
+              role="group"
+              aria-label="当前工作区"
+              title="暂只支持当前项目"
             >
               <span className="workspace-picker-label">工作区</span>
-              <select
-                className="workspace-picker-select"
-                value={workspaceId}
-                disabled
-                aria-label="工作区 Workspace"
-              >
-                <option value={workspaceId}>当前项目</option>
-              </select>
-            </label>
+              <span className="workspace-picker-value">当前项目</span>
+            </div>
           ) : null}
           <button
             type="button"
@@ -76,8 +70,8 @@ export function SessionsPage() {
         <LoadingState />
       ) : sessions.length === 0 ? (
         <EmptyState
-          message="还没有会话"
-          hint="使用上方输入框描述需求，开始你的第一个会话。"
+          message="还没有交付任务"
+          hint="使用上方输入框描述需求，启动第一个受控交付。"
         />
       ) : (
         <ul className="session-list">

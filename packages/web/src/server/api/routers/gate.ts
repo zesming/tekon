@@ -4,11 +4,7 @@ import type { ServerContext, DecisionInput } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
 import { assertRunCanResume } from '../agents.js';
-import {
-  assertRunInScope,
-  listGates,
-  listHumanDecisions,
-} from '../queries.js';
+import { assertRunInScope, listGates, listHumanDecisions } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';
 import { mapGate, mapHumanDecision, mapHumanDecisionRow } from '../mappers.js';
 import { redactObject } from '../redaction.js';
@@ -39,7 +35,10 @@ export function createGateRouter(context: ServerContext) {
         pendingDecisions: pendingDecisions.map((decision, index) =>
           mapHumanDecision(context.db, decision, summaries[index] ?? null),
         ),
-      }) as { gates: ReturnType<typeof mapGate>[]; pendingDecisions: ReturnType<typeof mapHumanDecision>[] };
+      }) as {
+        gates: ReturnType<typeof mapGate>[];
+        pendingDecisions: ReturnType<typeof mapHumanDecision>[];
+      };
     },
 
     async approve(decisionInput: DecisionInput) {
@@ -158,9 +157,11 @@ async function updateDecision(input: {
     });
   }
 
-  const mappedDecision = { decision: redactObject(
-    mapHumanDecisionRow(db, decision),
-  ) as ReturnType<typeof mapHumanDecision> };
+  const mappedDecision = {
+    decision: redactObject(mapHumanDecisionRow(db, decision)) as ReturnType<
+      typeof mapHumanDecision
+    >,
+  };
 
   if (input.status === 'approved') {
     await repositories.transitionNode(existing.node_id, 'running');
@@ -202,7 +203,7 @@ async function updateDecision(input: {
     });
     return {
       ...mappedDecision,
-      sessionId: session.id,
+      sessionId: enqueued.job.sessionId,
       jobId: enqueued.job.id,
     };
   }
@@ -225,10 +226,7 @@ async function updateDecision(input: {
     // The run left paused underneath us (e.g. a concurrent cancel). Do not
     // resurrect a terminal run; the decision + node block still recorded above.
     const current = await repositories.getWorkflowInstance(existing.run_id);
-    if (
-      current &&
-      ['passed', 'failed', 'cancelled'].includes(current.status)
-    ) {
+    if (current && ['passed', 'failed', 'cancelled'].includes(current.status)) {
       throw new ApiError(
         'CONFLICT',
         `Run reached terminal status ${current.status} before the rejection was applied.`,

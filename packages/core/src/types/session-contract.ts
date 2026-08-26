@@ -103,7 +103,9 @@ export const jobSchema = z.object({
   status: jobStatusSchema,
   owner: z.string().nullable(),
   lease: z.string().nullable(),
-  abortState: z.enum(['none', 'requested', 'propagated', 'stopped']).default('none'),
+  abortState: z
+    .enum(['none', 'requested', 'propagated', 'stopped'])
+    .default('none'),
   checkpoint: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -251,8 +253,10 @@ export interface AgentDriver {
 export interface JobRunner {
   enqueue(input: { sessionId: string; kind: string }): Promise<Job>;
   /**
-   * F5-P0-01: atomically enqueue a job for `runId` only if that run has no
-   * active job. Collapses the resume-path find-active + enqueue into one
+   * F5-P0-01/F6: atomically enqueue a run-execution job for `runId` only
+   * if that run has no active run-execution job. Automation/projection jobs are
+   * a separate control domain and do not block pause/resume/cancel. Collapses
+   * the resume-path find-active + enqueue into one
    * cross-process critical section (see JobRepository.enqueueIfNoActiveByRunId).
    */
   enqueueIfNoActiveByRunId(input: {
@@ -270,10 +274,7 @@ export interface JobRunner {
 /** Append-only session event subscription (SSE/WebSocket transport later). */
 export interface EventSubscription {
   /** Replay from `sinceSeq` (exclusive), then stream live events. */
-  subscribe(
-    sessionId: string,
-    sinceSeq: number,
-  ): AsyncIterable<SessionEvent>;
+  subscribe(sessionId: string, sinceSeq: number): AsyncIterable<SessionEvent>;
 }
 
 /** Read-model projected from the event log (report §8.2 Projection). */
