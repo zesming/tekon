@@ -6,6 +6,7 @@ import {
   SESSION_EVENT_SCHEMA_VERSION,
   type EventVisibility,
   type Job,
+  type JobStatus,
   jobSchema,
   type Session,
   sessionSchema,
@@ -29,6 +30,14 @@ const RUN_EXECUTION_JOB_KINDS = new Set<string>([
  * debugging; every read path strips it via `jobSchema.parse`.
  */
 export type JobEnqueueInput = Job & { payload?: Record<string, unknown> };
+
+/** Optional compare-and-set predicate for an atomic job update. */
+export interface JobUpdateCondition {
+  /** Match this durable owner. `null` means the row must still be unclaimed. */
+  owner?: string | null;
+  /** Match one of these current statuses before applying the patch. */
+  statuses?: readonly JobStatus[];
+}
 
 /**
  * A session as surfaced to the Session List read-path (phase 3 3a). The frozen
@@ -111,11 +120,25 @@ export interface JobRepository {
     leaseCutoffIso?: string,
   ): Promise<number>;
   claimNext(owner: string): Promise<Job | null>;
+  /**
+   * Patch a job, optionally as an atomic compare-and-set. A conditional miss
+   * returns null and never mutates the row.
+   */
   updateJob(
     jobId: string,
     patch: Partial<
       Pick<Job, 'status' | 'owner' | 'lease' | 'abortState' | 'checkpoint'>
     >,
+    condition?: JobUpdateCondition,
+  ): Promise<Job | null>;
+  /**
+   * Atomically settle a job only while it is still owned by `owner`. A
+   * concurrent cancellation request wins and is persisted as `cancelled`.
+   */
+  settleOwnedJob(
+    jobId: string,
+    owner: string,
+    desiredStatus: JobStatus,
   ): Promise<Job | null>;
   requeueStale(
     leaseOlderThanIso: string,
@@ -578,10 +601,13 @@ export function createJobRepository(
       });
     },
 
-    async updateJob(jobId, patch) {
+    async updateJob(jobId, patch, condition) {
       return writeQueue.enqueue(() => {
         const sets: string[] = [];
+        const where = ['id = @jobId'];
         const params: Record<string, unknown> = { jobId };
+        let conditional = false;
+
         if (patch.status !== undefined) {
           sets.push('status = @status');
           params.status = patch.status;
@@ -602,12 +628,73 @@ export function createJobRepository(
           sets.push('checkpoint = @checkpoint');
           params.checkpoint = patch.checkpoint;
         }
+
+        if (condition?.owner !== undefined) {
+          conditional = true;
+          if (condition.owner === null) {
+            where.push('owner is null');
+          } else {
+            where.push('owner = @expectedOwner');
+            params.expectedOwner = condition.owner;
+          }
+        }
+        if (condition?.statuses !== undefined) {
+          conditional = true;
+          if (condition.statuses.length === 0) {
+            where.push('0');
+          } else {
+            const placeholders = condition.statuses.map((status, index) => {
+              const key = `expectedStatus${index}`;
+              params[key] = status;
+              return `@${key}`;
+            });
+            where.push(`status in (${placeholders.join(', ')})`);
+          }
+        }
+
         if (sets.length > 0) {
           sets.push('updated_at = @now');
           params.now = now();
-          db.prepare(
-            `update jobs set ${sets.join(', ')} where id = @jobId`,
-          ).run(params);
+          const result = db
+            .prepare(
+              `update jobs set ${sets.join(', ')} where ${where.join(' and ')}`,
+            )
+            .run(params);
+          if (conditional && result.changes !== 1) {
+            return null;
+          }
+        }
+
+        const row = db.prepare('select * from jobs where id = ?').get(jobId) as
+          | JobRow
+          | undefined;
+        return row ? mapJob(row) : null;
+      });
+    },
+
+    async settleOwnedJob(jobId, owner, desiredStatus) {
+      return writeQueue.enqueue(() => {
+        // The owner check, cancellation precedence, and terminal update must be
+        // one SQL statement. A read-then-write sequence lets a stale executor
+        // settle a row after another process has reclaimed it.
+        const result = db
+          .prepare(
+            `update jobs
+             set status = case
+                   when status = 'cancelling'
+                     or abort_state in ('requested', 'propagated')
+                   then 'cancelled'
+                   else @desiredStatus
+                 end,
+                 abort_state = 'stopped',
+                 updated_at = @now
+             where id = @jobId
+               and owner = @owner
+               and status in ('running', 'paused', 'cancelling')`,
+          )
+          .run({ jobId, owner, desiredStatus, now: now() });
+        if (result.changes !== 1) {
+          return null;
         }
         const row = db.prepare('select * from jobs where id = ?').get(jobId) as
           | JobRow
