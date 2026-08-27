@@ -1,6 +1,6 @@
 import { test, expect } from './prod-bootstrap-fixture.js';
 
-test('stripping a bootstrap fragment preserves router history state', async ({
+test('stripping a bootstrap fragment preserves current router history state', async ({
   page,
   server,
   fixture,
@@ -10,17 +10,18 @@ test('stripping a bootstrap fragment preserves router history state', async ({
     timeout: 15_000,
   });
 
-  await page.evaluate(() => {
+  // Model an authenticated launch URL installed into the current entry (rather
+  // than `location.hash = ...`, which intentionally creates a new entry whose
+  // state is null). The hashchange handler must strip the credential without
+  // replacing React Router's current idx/key/usr metadata.
+  await page.evaluate((token) => {
     const current = window.history.state as Record<string, unknown> | null;
     window.history.replaceState(
       { ...current, __tekonHistorySentinel: 'preserved' },
       '',
-      window.location.href,
+      `/#${new URLSearchParams({ token }).toString()}`,
     );
-  });
-
-  await page.evaluate((token) => {
-    window.location.hash = new URLSearchParams({ token }).toString();
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, fixture.sessionToken);
 
   await expect(page.getByLabel('Session token')).toHaveValue(
