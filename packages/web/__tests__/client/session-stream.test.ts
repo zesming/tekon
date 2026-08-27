@@ -70,15 +70,17 @@ describe('SSE frame parser', () => {
     ]);
   });
 
-  it('normalizes a CRLF pair split across network chunks', () => {
+  it('normalizes CRLF pairs split across network chunks', () => {
     const parser = createSseParser();
     expect(parser.push('id: 8\r')).toEqual([]);
     expect(parser.push('\nevent: step/end\r')).toEqual([]);
     expect(parser.push('\ndata: {"seq":8}\r')).toEqual([]);
-    expect(parser.push('\n\r')).toEqual([]);
-    expect(parser.push('\n')).toEqual([
+    // The CR is itself a valid line terminator and completes the blank line;
+    // the LF arriving in the next chunk is the second half of that CRLF pair.
+    expect(parser.push('\n\r')).toEqual([
       { id: '8', event: 'step/end', data: '{"seq":8}' },
     ]);
+    expect(parser.push('\n')).toEqual([]);
   });
 });
 
