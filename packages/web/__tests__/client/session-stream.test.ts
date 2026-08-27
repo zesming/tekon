@@ -100,6 +100,16 @@ describe('event reducer (mergeEventsBySeq)', () => {
     expect(merged.map((e) => e.seq)).toEqual([1, 2, 3]);
   });
 
+  it('appends an ordered batch without changing event identities', () => {
+    const existing = [ev(1), ev(2)];
+    const incoming = [ev(3), ev(4), ev(5)];
+    const merged = mergeEventsBySeq(existing, incoming);
+
+    expect(merged.map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(merged[0]).toBe(existing[0]);
+    expect(merged[2]).toBe(incoming[0]);
+  });
+
   it('dedupes by seq (replay overlap after reconnect)', () => {
     // 0..k then a reconnect replays k..end — the overlap at k must not double.
     const merged = mergeEventsBySeq([ev(1), ev(2), ev(3)], [ev(3), ev(4)]);
@@ -109,6 +119,11 @@ describe('event reducer (mergeEventsBySeq)', () => {
   it('sorts out-of-order arrivals by seq', () => {
     const merged = mergeEventsBySeq([], [ev(3), ev(1), ev(2)]);
     expect(merged.map((e) => e.seq)).toEqual([1, 2, 3]);
+  });
+
+  it('repairs an out-of-order accumulated list before merging', () => {
+    const merged = mergeEventsBySeq([ev(2), ev(1)], [ev(3)]);
+    expect(merged.map((event) => event.seq)).toEqual([1, 2, 3]);
   });
 
   it('keeps the first occurrence on duplicate seq', () => {
