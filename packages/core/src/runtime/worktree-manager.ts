@@ -102,17 +102,14 @@ export function createWorktreeManager(options: {
         })
       ).trim();
 
+      // Create the lease from the immutable OID we persist, not from the
+      // movable branch name. Otherwise another promotion between rev-parse and
+      // worktree add can make the lease's actual base differ from baseHead,
+      // causing the later expected-old-OID CAS to use the wrong generation.
       await runGit(options.gateway, {
         repoPath,
         runId: runSegment,
-        args: [
-          'worktree',
-          'add',
-          '-b',
-          branchName,
-          worktreePath,
-          input.baseRef,
-        ],
+        args: ['worktree', 'add', '-b', branchName, worktreePath, baseHead],
       });
 
       const lease: WorktreeLease = {
