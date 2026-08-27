@@ -4,17 +4,17 @@ const STORAGE_KEY = 'tekon.sessionToken';
  * Resolve the initial session token at app startup (F7-P0-01).
  *
  * `tekon ui` prints a URL with the session token in the fragment
- * (`/#token=<token>`). The fragment is never sent to the server (no Referer,
- * no request URL, no server log), so it is a safe local-single-machine channel
- * to hand the static `.tekon/web-session.json` token to the browser without
- * the user hand-copying it. We read it once, persist to sessionStorage so a
- * refresh keeps the session, and the caller strips the fragment via
- * history.replaceState. sessionStorage (not localStorage) means the token is
- * scoped to the tab and cleared when the tab closes.
+ * (`/#token=<token>`). Browsers do not send the fragment in the HTTP request or
+ * Referer, so it is a practical local bootstrap channel that avoids a manual
+ * copy from `.tekon/web-session.json`. The token is still a long-lived,
+ * JavaScript-readable credential: terminal scrollback and any same-origin XSS
+ * remain relevant, so a one-time nonce / HttpOnly-cookie exchange is tracked as
+ * separate security hardening rather than being implied by this helper.
  *
- * A one-time-consumable nonce exchange (to also keep the token out of shell
- * history / the address bar) is a separate security hardening tracked in a
- * follow-up PR/ADR; this closes the "default Web entry is unusable" blocker.
+ * We persist the captured token to sessionStorage so a refresh keeps the
+ * session, then remove the fragment with history.replaceState. sessionStorage
+ * (not localStorage) keeps the value scoped to the tab and clears it when the
+ * tab closes.
  */
 export function readTokenFromLocation(): string | null {
   if (typeof window === 'undefined') return null;
@@ -53,5 +53,8 @@ export function hashHasToken(): boolean {
 export function stripTokenFragment(): void {
   if (typeof window === 'undefined') return;
   const { pathname, search } = window.location;
-  window.history.replaceState(null, '', pathname + search);
+  // Preserve React Router's history metadata (idx/key/usr). Replacing it with
+  // null makes the current entry look external and can break back/forward
+  // semantics after bootstrap or a same-document token refresh.
+  window.history.replaceState(window.history.state, '', pathname + search);
 }
