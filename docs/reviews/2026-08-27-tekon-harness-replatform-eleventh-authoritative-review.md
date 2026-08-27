@@ -913,3 +913,53 @@ Running 28 tests using 1 worker
 > 最合理的下一步不是继续往本 PR 增加横向抽象，而是冻结当前范围，先以 single-owner daemon ADR 收敛 Runtime，再用独立小 PR 完成一个真实 Provider 的纵向闭环。
 
 本轮未执行 merge、release 或 deploy。
+
+---
+
+## 实施方批注（第十一轮）
+
+> 批注日期：2026-08-27  
+> 批注方：实施侧（主代理 + 三视角评估 workflow：CI 提交核验 / 报告 P0-P1 triage / CI 事实与合并门槛 + 首席综合，均实地读码 / 实跑测试 / gh 核验 CI）  
+> 收敛版本：v0.15.4（PATCH）  
+> 核心裁决：**本轮无任何新的 PR-local 必修代码项**（性质同第八 / 九轮）。报告 §1 已明确 PASS 第十轮 flaky 整改与本轮 CI 三提交；剩余全部为第 4~10 轮已一致披露的架构里程碑，诚实 C 递延。**本轮报告的实质增量是一个合并门槛 / 架构 ADR 决策（single-owner daemon vs 完整 multi-owner），需用户 / 项目拍板，非实施方本轮可单方面写代码收敛的项。**
+
+### 一、本轮 CI 三提交（`6ce9fb5`/`ffc1ecd`/`dad49b0`）实地核验：正确、无回归、测试真锁（判 B 保留）
+
+报告 §4 记录的"本轮直接修改"实际由 CI 自修改工作流提交，报告已判【通过】。实施方独立复核确认：
+
+| 提交 | 代码证据 | 裁决 |
+| --- | --- | --- |
+| `6ce9fb5` main.tsx first-render 前同步 `persistToken(initialToken)` | `main.tsx`：`readTokenFromLocation()` → `persistToken(initialToken)` → `setRpcSessionToken(initialToken)` → `createRoot`。关闭"可见 app 已认证但 sessionStorage 尚未写入"的 cross-doc/reload 窗口。`persistToken(null)` 为 `removeItem` no-op、不误清有效令牌；`AuthProvider` 仍重复 persist/seed 作幂等防御 | **B 已闭环**。这是对我第十轮诊断的**同一 bootstrap 竞态的产品侧硬化**，与我第十轮的 e2e fixture `#token=` fragment 注入**互补非冲突**（前者让生产 sessionStorage 永不落后于内存令牌；后者让测试跨导航不依赖 sessionStorage 交接） |
+| `ffc1ecd` session-stream 有序追加快路径 | `mergeEventsBySeq`：`existingOrdered && incomingOrdered && (incoming[0].seq > existing 末项 ‖ 任一为空)` → 线性 `concat`，否则回退 Map dedupe + sort。11 边界 cross-check probe 证明与 fallback 输出等价（边界 seq 相等走慢路径，保 first-occurrence / replay-overlap 语义） | **B 已闭环**（纯性能优化，防御路径完整覆盖乱序 / 重叠 / 去重，无正确性回归。仍不关闭长会话无界问题——报告 §4.2 已注明） |
+| `dad49b0` 有序追加锁测试 | `session-stream.test.ts`：ordered batch append 保对象身份（`merged[0]===existing[0]`、`merged[2]===incoming[0]`）+ out-of-order existing 修复；原 dedupe / replay-overlap / first-occurrence 保留 | **B 已闭环**（真锁 fast-path 与回退两分支；identity 断言 fallback 亦满足属测试强度 nuance、非正确性 bug） |
+
+验证：本地 web 单测 253 passed（session-stream 15/15、reconnect 7/7）；HEAD `b217419` 与 `dad49b0` 六项 CI check 全 success，Playwright 28 passed / 0 flaky / 0 retry；报告 §12 run id（`33067709999`/`33067709997`/`33065382380`）逐一 gh 核验一致；报告无占位符 / 断链、与 git·CI 事实无矛盾。
+
+### 二、核心增量：合并门槛 / 架构 ADR 决策（needs user decision）
+
+报告 §3.5 / §6 / §9 / §13 的实质主张是：multi-owner authority（持久 `claim_generation`）、Node expected-from/revision CAS、完整 shutdown quiescence 是**当前 Runtime 的正确性问题，而非纯未来功能**。
+
+**实施方核验：该事实前提成立。** 当前 Web 服务端（`packages/web/src/server/api/root.ts:167,177` `createJobRunner().start()`）与 CLI（`packages/cli/src/commands/run.ts:153`、`approval.ts:308`、`lib/session-context.ts:201`）都会构造并启动各自的 `JobRunner`；CLI `session-context.ts` 注释明确"jobs 表跨进程共享"；二者可访问同一 project 的 SQLite 与 Git 工作区，且当前无任何 runtime lock。因此"事实 multi-owner 部署形态可达"属实，report 的正确性关切成立。
+
+**但报告 §9.1 / §13 提出的两条闭合路径本身都是需用户先拍板方向的重大架构改动，不是实施方本轮可单方面低成本收敛的代码**：
+
+- **路径 A（推荐）**：强制 single-owner daemon —— 一个 Tekon Runtime 独占 JobRunner / Agent / Worktree / Subprocess，Web / CLI / IDE 降为本地协议客户端。这需要新的 daemon/client 协议 + runtime lock + shutdown abort/kill/join + 相关 E2E。
+- **路径 B**：完成完整 multi-owner 基础契约 —— `jobs.claim_generation` + owner+generation 条件写 + Node expected-from/revision CAS + Artifact/Audit/Delivery authority + stale-executor 交错测试 + shutdown quiescence。
+- **路径 C**：先合并实验性快照，但必须明确标 experimental、限单进程单用户本地环境、禁止同时运行 Web owner 与 CLI owner、不宣称可发布、冻结超大 PR 后续走小 PR。
+
+报告 §13 自身也判定："最合理的下一步不是继续往本 PR 增加横向抽象，而是冻结当前范围，先以 single-owner daemon ADR 收敛 Runtime，再用独立小 PR 完成一个真实 Provider 的纵向闭环。" 实施方认同：**方向选择（A/B/C）是用户 / 项目层面的架构与合并决策**，与第 4~10 轮反复记录、交用户拍板的 single-owner-vs-multi-owner ADR 是同一决策，本轮不做未经拍板的重大架构重写。
+
+### 三、诚实递延（C，与第 4~10 轮一致，与代码事实一致，勿当本轮缺口）
+
+- **§5 P0-PRODUCT**：真实 Provider 执行期 streaming（`runAgentWithStepEvents` await 后投影、`legacy-agent-driver.events()` 先 `await done`）、follow-up/steer/resume（`NotSupportedYet`，session router 仅 `list`/`get`、`SessionComposer` 仅建 `standard-delivery` run）、durable inbox（无表）、Collaborate/Deliver 后端双轨（profile 仅 mutation/automation surface 差异）。
+- **§6 P0-RUNTIME**：persistent `claim_generation`（无该列）、Node transition CAS（`transitionNode` 无 expected-from/revision）、shutdown quiescence（`stop()` 5s 固定超时）—— 均与上节 ADR 决策同源。
+- **§7 P1-UX / §6 P1-RUNTIME-04**：token 状态化 UX、Narrative Feed、Current-state Inspector、结构化 Final Result、长 Session 端到端有界（`listEventsSince` 无 limit + 客户端 `events[]` 无界）。
+
+以上均为报告 §10 分阶段独立 ADR/PR 里程碑，无倒退、无本应闭环却递延项。
+
+### 四、本轮低成本诚实项
+
+- **版本**：CI 三提交（fix + perf + test）含实质 web 代码变更却未 bump（仍 0.15.3）；随本批注 `0.15.3` → `0.15.4`（PATCH，内部竞态硬化 + 性能优化，无用户可见新功能）+ CHANGELOG。
+- **文档**：本轮改动为 `main.tsx` 令牌持久化时序 + session-stream 内部合并优化 + 报告批注 / 版本，无用户可见行为变化，故 README / manual / AGENTS 无需同步。
+
+> **实施方裁决**：认可报告 §1"第十轮整改通过、本轮三提交通过"与 §13"当前 PR 作为默认 Runtime / 普通用户产品 / 完整 Harness 迁移仍不通过"的双重裁决。本轮无新的 PR-local 必修代码；CI 三提交正确保留（B）；架构 P0/P1 诚实 C 递延。报告的核心增量是一个 **single-owner daemon vs 完整 multi-owner** 的合并门槛 / 架构 ADR 决策——该方向选择交由用户 / 项目拍板，实施方不在本轮做未经决策的重大架构重写。

@@ -1,5 +1,29 @@
 # 变更日志
 
+## v0.15.4
+
+第十一轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-eleventh-authoritative-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（CI 提交核验 / 报告 P0-P1 triage / CI 事实与合并门槛三视角 + 首席综合）达成一致：**本轮无任何新的 PR-local 必修代码项**（性质同第八 / 九轮）。报告 §1 已明确 PASS 第十轮 flaky 整改与本轮 CI 三提交；剩余全部为第 4~10 轮已披露的架构里程碑，诚实 C 递延。本轮相称地做报告批注 + 版本同步，不做未经用户拍板的重大架构重写。
+
+### 已闭环并复核保留（B，本轮 3 个 CI 提交经实地核验正确、无回归、测试真锁）
+
+- `6ce9fb5` **fix(web)**：`main.tsx` 在 first render 前同步 `persistToken(initialToken)`，关闭"可见 app 已认证但 sessionStorage 尚未写入"的 cross-doc/reload 窗口（`persistToken(null)` 为 no-op 不误清；`AuthProvider` 仍幂等重复）。这是对第十轮所诊断的**同一 bootstrap 竞态的产品侧硬化**，与第十轮的 e2e fixture `#token=` fragment 注入互补。
+- `ffc1ecd` **perf(web)**：`session-stream` `mergeEventsBySeq` 增有序追加快路径（existing/incoming 均严格递增且 incoming 首项在 existing 末项之后 → 线性 concat，否则回退 Map dedupe + sort 防御路径）；11 边界 cross-check 证明与 fallback 等价，replay/dup/乱序语义不变。不关闭长会话无界问题。
+- `dad49b0` **test(web)**：锁有序追加路径（对象身份 + out-of-order 修复），真锁非假通过。
+- 验证：本地 web 单测 253 passed；HEAD 六项 CI check 全 success，Playwright 28 passed / 0 flaky / 0 retry。
+
+### 本轮核心增量：合并门槛 / 架构 ADR 决策（交用户 / 项目拍板）
+
+报告 §3.5 / §6 / §9 / §13 主张 multi-owner authority（持久 `claim_generation`）、Node expected-from/revision CAS、完整 shutdown quiescence 是当前 Runtime 的**正确性问题**而非纯未来功能。实施方核验事实前提成立：Web 服务端（`root.ts`）与 CLI（`run.ts`/`approval.ts`/`session-context.ts`）都会 `createJobRunner().start()`，可访问同一 project SQLite/Git 且无 runtime lock = 事实 multi-owner。但报告提出的两条闭合路径——(A) 强制 single-owner daemon（Web/CLI 变客户端）/ (B) 完整 multi-owner generation + Node CAS + 副作用 fencing——**都是需用户先拍板方向的重大架构改动**，报告 §13 自身也判定应"冻结范围 + 先出 single-owner daemon ADR + 独立小 PR"。这与第 4~10 轮反复记录、交用户决策的 single-owner-vs-multi-owner ADR 同源，本轮不做未经拍板的架构重写。
+
+### 诚实递延（C，与第 4~10 轮一致，勿当本轮缺口）
+
+P0-PRODUCT（真实 streaming / follow-up-steer-resume / durable inbox / 双轨）、P0-RUNTIME（persistent generation / Node CAS / shutdown quiescence）、P1-UX（token 状态化 / Narrative Feed / Inspector / 结构化 Final Result）、P1-RUNTIME-04（长 Session 有界化）——报告 §10 分阶段独立 ADR/PR 里程碑，无倒退。
+
+### 版本与文档
+
+- CI 三提交含实质 web 代码变更却未 bump（仍 0.15.3）；随本批注 `0.15.3` → `0.15.4`（PATCH，内部竞态硬化 + 性能优化，无用户可见新功能）。
+- 本轮改动无用户可见行为变化，故 README / manual / AGENTS 无需同步。
+
 ## v0.15.3
 
 第十轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-tenth-authoritative-review.md`，作者推送）循环评估后的收敛。不同于第八 / 九轮"无 PR-local 必修"，本轮存在一个真实、当前 PR 自身可也必须收敛的阻断项：**Web Playwright e2e 首轮 flaky 使整体 CI 失败**（本轮 CI 自修改工作流的 `fa9749f` 启用了 `failOnFlakyTests`，不再把 retry-恢复的 flaky 伪装成绿色）。经动态评估 workflow（flaky 根因 max / 报告 triage / CI 事实核验三视角 + 首席综合 max）达成一致：本轮唯一必修 = flaky 的确定性根因；架构级 P0 / P1 仍为已披露里程碑、诚实 C 递延（报告 §8 自身接受"降格为基础设施里程碑后不必同 PR 全实现"）。
