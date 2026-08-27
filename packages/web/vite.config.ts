@@ -12,5 +12,15 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
+    // The Playwright fixtures create a fresh middleware-mode server for every
+    // test. Pre-transform the small client graph once at server startup so the
+    // first navigation does not pay a route-by-route transform waterfall and
+    // fail before the same page succeeds immediately on retry.
+    warmup: {
+      clientFiles: [
+        './src/client/**/*.{ts,tsx}',
+        './src/client/styles/*.css',
+      ],
+    },
   },
 });
