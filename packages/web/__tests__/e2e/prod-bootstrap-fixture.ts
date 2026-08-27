@@ -6,13 +6,10 @@ import {
   type RunningWebServer,
 } from '../../src/server/http.js';
 
-// F7-P0-01: a fixture that does NOT monkeypatch window.fetch to inject the
-// session token. shared-fixture.ts injects the token before every page load,
-// which masks the production bootstrap — a test using it would pass even with
-// the token bootstrap broken (a fake test). This fixture starts the same
-// server + project but leaves auth entirely to the real client bootstrap
-// (`#token=` fragment → sessionStorage), so the test exercises exactly what a
-// real `tekon ui` user gets.
+// Production-bootstrap fixture: no sessionStorage seed and no request
+// interception. Authentication is left entirely to the real client bootstrap
+// (`#token=` fragment -> sessionStorage), and the production static-server path
+// serves the same built assets a real `tekon ui` launch uses.
 
 type FixtureProject = Awaited<ReturnType<typeof createWebFixtureProject>>;
 
@@ -32,7 +29,6 @@ export const test = base.extend<ProdBootstrapFixtures>({
     const server = await createWebServer({
       projectRoot: fixture.projectRoot,
       port: 0,
-      vite: true,
     });
     await server.listen();
     await use(server);
