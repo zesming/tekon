@@ -9,8 +9,9 @@ import {
 
 // Phase 3 3a: pure-logic tests for the SSE client. The network/reconnect layer
 // is exercised by the 3b Playwright e2e (needs a page to host the stream); here
-// we lock the frame parser (half-packets, heartbeats, CRLF) and the event
-// reducer (dedupe, seq-monotonic, Last-Event-ID) which carry the correctness.
+// we lock the frame parser (half-packets, heartbeats, all legal line endings)
+// and the event reducer (dedupe, seq-monotonic, Last-Event-ID) which carry the
+// correctness.
 
 describe('SSE frame parser', () => {
   it('parses a complete id/event/data frame', () => {
@@ -58,6 +59,27 @@ describe('SSE frame parser', () => {
       { id: '4', event: 'tool/call', data: '{"seq":4}' },
     ]);
   });
+
+  it('tolerates bare CR line endings', () => {
+    const parser = createSseParser();
+    const frames = parser.push(
+      'id: 6\revent: tool/result\rdata: {"seq":6}\r\r',
+    );
+    expect(frames).toEqual([
+      { id: '6', event: 'tool/result', data: '{"seq":6}' },
+    ]);
+  });
+
+  it('normalizes a CRLF pair split across network chunks', () => {
+    const parser = createSseParser();
+    expect(parser.push('id: 8\r')).toEqual([]);
+    expect(parser.push('\nevent: step/end\r')).toEqual([]);
+    expect(parser.push('\ndata: {"seq":8}\r')).toEqual([]);
+    expect(parser.push('\n\r')).toEqual([]);
+    expect(parser.push('\n')).toEqual([
+      { id: '8', event: 'step/end', data: '{"seq":8}' },
+    ]);
+  });
 });
 
 describe('event reducer (mergeEventsBySeq)', () => {
@@ -73,7 +95,7 @@ describe('event reducer (mergeEventsBySeq)', () => {
 
   it('appends new events in seq order', () => {
     const merged = mergeEventsBySeq([ev(1), ev(2)], [ev(3)]);
-    expect(merged.map((e) => e.seq)).toEqual([1, 2, 3]);
+    expect(merged.map((e) => e.seq).toEqual([1, 2, 3]));
   });
 
   it('dedupes by seq (replay overlap after reconnect)', () => {
