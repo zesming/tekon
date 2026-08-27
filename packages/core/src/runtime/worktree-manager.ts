@@ -193,13 +193,11 @@ export function createWorktreeManager(options: {
         input.branchName ??
         deliveryBranchName(assertSafePathSegment(lease.runId));
       const targetRef = assertSafeBranchRef(branchName);
-      const expectedOldOid = (
-        await runGit(options.gateway, {
-          repoPath: lease.repoPath,
-          runId: lease.runId,
-          args: ['rev-parse', '--verify', targetRef],
-        })
-      ).trim();
+      if (!lease.baseHead) {
+        throw new Error(
+          `worktree lease ${lease.id} is missing baseHead; refusing unsafe promotion`,
+        );
+      }
       const leaseHeadOid = (
         await runGit(options.gateway, {
           repoPath: lease.repoPath,
@@ -208,14 +206,15 @@ export function createWorktreeManager(options: {
         })
       ).trim();
 
-      // Compare-and-swap the delivery ref. `git branch -f` unconditionally
-      // overwrites a branch that another worker may have promoted since our
-      // read. update-ref's expected-old OID lets exactly one concurrent
-      // promoter win and makes the loser fail without erasing newer work.
+      // Fence against the ref value this lease was actually created from.
+      // Reading the target immediately before update-ref is not sufficient: a
+      // stale lease can observe a newer promotion and then successfully replace
+      // it. The persisted baseHead is the lease's durable expected-old OID, so
+      // only a promoter based on the current delivery head can win.
       await runGit(options.gateway, {
         repoPath: lease.repoPath,
         runId: lease.runId,
-        args: ['update-ref', targetRef, leaseHeadOid, expectedOldOid],
+        args: ['update-ref', targetRef, leaseHeadOid, lease.baseHead],
       });
       return branchName;
     },
