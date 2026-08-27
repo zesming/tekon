@@ -67,8 +67,8 @@ export interface JobExecutor {
 /**
  * Durable polling job runner (design §2.5). Claims queued jobs atomically,
  * renews a lease while the executor is in flight, recovers stale leases on
- * start, and fences every terminal write on ownership so a zombie executor
- * cannot flip a job that was requeued/cancelled underneath it.
+ * start, and fences every job-row write on ownership so a zombie executor
+ * cannot mutate a job that was requeued/reclaimed underneath it.
  */
 export interface DurableJobRunner extends JobRunner {
   /** Recover stale leases, then poll for queued jobs on an unref'd interval. */
@@ -80,9 +80,7 @@ export interface DurableJobRunner extends JobRunner {
    * `status='paused'` — 4c M2: persistence also applies to jobs owned by
    * OTHER workers, so a cross-process pause (e.g. `tekon pause` against a
    * run held by another process) is observable by the holder via its job
-   * row. The in-memory flag is process-local and only set for owned jobs;
-   * the owner===workerId path is byte-identical to the old owner-fenced
-   * version (web single-process semantics unchanged).
+   * row. The in-memory flag is process-local and only set for owned jobs.
    */
   requestPause(jobId: string): Promise<void>;
   /** Requeue/cancel jobs whose lease is older than `leaseTtlMs`. */
@@ -125,7 +123,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   // In-memory execution state, keyed by jobId.
   const controllers = new Map<string, AbortController>();
   // A durable owner string is insufficient when the same worker reclaims a
-  // stale job. The process-local token fences the older executor generation.
+  // stale job. The process-local token fences the older local generation.
   const executionTokens = new Map<string, symbol>();
   const pauseFlags = new Set<string>();
   const heartbeats = new Map<string, NodeJS.Timeout>();
@@ -155,25 +153,32 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   }
 
   async function writeCheckpoint(jobId: string, value: string): Promise<void> {
-    const updated = await jobs.updateJob(jobId, { checkpoint: value });
-    if (!updated) {
+    // The owner/status predicate is part of the UPDATE. The previous
+    // write-then-check sequence let a stale worker overwrite the new owner's
+    // checkpoint before discovering that ownership had changed.
+    const updated = await jobs.updateJob(
+      jobId,
+      { checkpoint: value },
+      { owner: workerId, statuses: ['running', 'paused'] },
+    );
+    if (updated) {
+      return;
+    }
+
+    const current = await jobs.get(jobId);
+    if (!current) {
       throw new JobFencingError(jobId, 'job not found');
     }
-    if (updated.owner !== workerId) {
+    if (current.owner !== workerId) {
       throw new JobFencingError(
         jobId,
-        `owner is ${updated.owner ?? 'null'}, expected ${workerId}`,
+        `owner is ${current.owner ?? 'null'}, expected ${workerId}`,
       );
     }
-    // MUST-FIX 2: `paused` is allowed — a pause frequently lands while a node
-    // is executing, and rejecting the checkpoint at node completion would turn
-    // the in-flight job into a deterministic failure.
-    if (updated.status !== 'running' && updated.status !== 'paused') {
-      throw new JobFencingError(
-        jobId,
-        `status ${updated.status} is not checkpointable`,
-      );
-    }
+    throw new JobFencingError(
+      jobId,
+      `status ${current.status} is not checkpointable`,
+    );
   }
 
   function clearHeartbeat(jobId: string): void {
@@ -190,30 +195,14 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     failure: unknown,
     executionToken: symbol,
   ): Promise<void> {
-    // Same-worker stale recovery can reclaim the same job id with the same
-    // durable owner. Token equality is therefore checked before touching the
-    // current controller, heartbeat or terminal row.
     if (executionTokens.get(job.id) !== executionToken) {
       return;
     }
 
     clearHeartbeat(job.id);
     const controller = controllers.get(job.id);
-
-    const current = await jobs.get(job.id);
-    if (!current || current.owner !== workerId) {
-      controllers.delete(job.id);
-      executionTokens.delete(job.id);
-      pauseFlags.delete(job.id);
-      return;
-    }
-
-    const cancelRequested =
-      current.status === 'cancelling' ||
-      current.abortState === 'requested' ||
-      current.abortState === 'propagated' ||
-      isJobCancellationAbort(controller?.signal);
-    const terminalStatus: JobStatus = cancelRequested
+    const cancelRequested = isJobCancellationAbort(controller?.signal);
+    const desiredStatus: JobStatus = cancelRequested
       ? 'cancelled'
       : failure
         ? 'failed'
@@ -221,18 +210,26 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
           ? result.status
           : 'failed';
 
-    await jobs.updateJob(job.id, {
-      status: terminalStatus,
-      abortState: 'stopped',
-    });
+    // Owner comparison, cancellation precedence, and terminal mutation happen
+    // in one SQL statement. A stale owner therefore cannot terminalize a job
+    // that another process has reclaimed between a read and a write.
+    const settled = await jobs.settleOwnedJob(
+      job.id,
+      workerId,
+      desiredStatus,
+    );
+
     controllers.delete(job.id);
     executionTokens.delete(job.id);
     pauseFlags.delete(job.id);
+    if (!settled) {
+      return;
+    }
     await notifySettled(
-      current.sessionId,
-      job.id,
-      current.kind,
-      terminalStatus,
+      settled.sessionId,
+      settled.id,
+      settled.kind,
+      settled.status,
     );
   }
 
@@ -247,7 +244,33 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         clearInterval(heartbeat);
         return;
       }
-      void jobs.updateJob(job.id, { lease: nowIso() }).catch(() => {});
+      void jobs
+        .updateJob(
+          job.id,
+          { lease: nowIso() },
+          {
+            owner: workerId,
+            statuses: ['running', 'paused', 'cancelling'],
+          },
+        )
+        .then(async (updated) => {
+          // A conditional miss means the durable row is no longer ours (or is
+          // already terminal). Fence this exact local generation immediately.
+          if (updated || executionTokens.get(job.id) !== executionToken) {
+            return;
+          }
+          const activeController = controllers.get(job.id);
+          if (activeController && !activeController.signal.aborted) {
+            activeController.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
+            const runId = await sessions.getRunIdBySessionId(job.sessionId);
+            if (runId) registry.killAll(runId, 'SIGKILL');
+          }
+          executionTokens.delete(job.id);
+          clearHeartbeat(job.id);
+          controllers.delete(job.id);
+          pauseFlags.delete(job.id);
+        })
+        .catch(() => {});
     }, heartbeatMs);
     if (typeof heartbeat.unref === 'function') {
       heartbeat.unref();
@@ -326,7 +349,11 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         if (runId) registry.killAll(runId, 'SIGKILL');
       }
       if (current.abortState !== 'propagated') {
-        await jobs.updateJob(jobId, { abortState: 'propagated' });
+        await jobs.updateJob(
+          jobId,
+          { abortState: 'propagated' },
+          { owner: workerId, statuses: ['cancelling'] },
+        );
       }
     }
   }
@@ -393,18 +420,13 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       return jobs.get(jobId);
     },
 
-    async requestCancel(jobId, _reason) {
+    async requestCancel(jobId, reason) {
       const job = await jobs.get(jobId);
       if (!job) {
         return;
       }
       // A settled job has nothing to cancel: no controller, no live
-      // subprocess. Returning here keeps repeat-cancel idempotent (M2) and
-      // guards the settle-vs-cancel race — without it a done/failed/cancelled
-      // job would be flipped to `cancelling` (and killAll fired on a finished
-      // run), then linger as "active" (findActiveByRunId → resume 409) until
-      // the next start()'s recoverStale. Design §2.5 step 3 scopes the abort
-      // flow to running/paused only.
+      // subprocess. Returning here keeps repeat-cancel idempotent.
       if (
         job.status === 'done' ||
         job.status === 'failed' ||
@@ -413,58 +435,62 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         return;
       }
       if (job.owner == null) {
-        // M3: a queued job has no controller / subprocess / live lease —
-        // cancel it directly without entering the abort flow (otherwise it
-        // would never reach a terminal state: claimNext only picks queued
-        // jobs and requeueStale only touches leased ones).
-        await jobs.updateJob(jobId, {
-          status: 'cancelled',
-          abortState: 'stopped',
-        });
-        await notifySettled(job.sessionId, jobId, job.kind, 'cancelled');
+        // A queued job has no controller/subprocess. Cancel only if it is still
+        // unclaimed; if claimNext won the race, retry against the live owner.
+        const cancelled = await jobs.updateJob(
+          jobId,
+          { status: 'cancelled', abortState: 'stopped' },
+          { owner: null, statuses: ['queued'] },
+        );
+        if (!cancelled) {
+          return runner.requestCancel(jobId, reason);
+        }
+        await notifySettled(
+          cancelled.sessionId,
+          jobId,
+          cancelled.kind,
+          'cancelled',
+        );
         return;
       }
 
-      await jobs.updateJob(jobId, {
-        status: 'cancelling',
-        abortState: 'requested',
-      });
-
-      // A requester in another process can only persist the request. The owner
-      // poll relays it to that process's AbortController and subprocess
-      // registry, then advances abortState to propagated.
-      if (job.owner !== workerId) {
+      // The status predicate prevents a settle-vs-cancel race from reviving a
+      // terminal job as `cancelling`. Owner is intentionally not constrained:
+      // cross-process cancellation targets the current owner of this job id.
+      const requested = await jobs.updateJob(
+        jobId,
+        { status: 'cancelling', abortState: 'requested' },
+        { statuses: ['running', 'paused', 'cancelling'] },
+      );
+      if (!requested || requested.owner !== workerId) {
         return;
       }
+
       const controller = controllers.get(jobId);
       controller?.abort();
-      const runId = await sessions.getRunIdBySessionId(job.sessionId);
+      const runId = await sessions.getRunIdBySessionId(requested.sessionId);
       if (runId) {
         registry.killAll(runId, 'SIGKILL');
       }
-      await jobs.updateJob(jobId, { abortState: 'propagated' });
+      await jobs.updateJob(
+        jobId,
+        { abortState: 'propagated' },
+        { owner: workerId, statuses: ['cancelling'] },
+      );
     },
 
     async requestPause(jobId) {
-      const job = await jobs.get(jobId);
-      if (!job) {
-        return;
-      }
-      if (job.status !== 'running' && job.status !== 'paused') {
-        // Queued jobs (owner NULL) must not be persisted as paused: claimNext
-        // only picks `queued` and requeueStale only touches leased jobs, so a
-        // paused unclaimed job would be stranded.
-        return;
-      }
-      // 4c M2: the in-memory pause flag is process-local — only set it when
-      // this runner owns the job. Persistence is owner-independent so the
-      // actual holder (this or another process) can observe `paused` on its
-      // job row and relay it through its own requestPause (pauseFlags only,
-      // never abort — aborting would settle the run cancelled, not paused).
-      if (job.owner === workerId) {
+      // Persist pause only while the row remains running/paused. This prevents a
+      // read-then-write race from flipping a concurrently settled job back to
+      // an active `paused` state.
+      const paused = await jobs.updateJob(
+        jobId,
+        { status: 'paused' },
+        { statuses: ['running', 'paused'] },
+      );
+      if (paused?.owner === workerId) {
         pauseFlags.add(jobId);
       }
-      await jobs.updateJob(jobId, { status: 'paused' });
     },
 
     async checkpoint(jobId, value) {
