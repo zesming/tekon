@@ -95,7 +95,7 @@ describe('event reducer (mergeEventsBySeq)', () => {
 
   it('appends new events in seq order', () => {
     const merged = mergeEventsBySeq([ev(1), ev(2)], [ev(3)]);
-    expect(merged.map((e) => e.seq).toEqual([1, 2, 3]));
+    expect(merged.map((e) => e.seq)).toEqual([1, 2, 3]);
   });
 
   it('dedupes by seq (replay overlap after reconnect)', () => {
