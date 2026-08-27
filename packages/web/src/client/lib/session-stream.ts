@@ -28,9 +28,9 @@ export interface SseFrame {
  */
 export function createSseParser(): { push(chunk: string): SseFrame[] } {
   let buffer = '';
-  // A chunk ending in CR is normalized immediately so bare-CR streams dispatch
-  // without waiting for another network read. If the next chunk starts in LF,
-  // that LF completes the already-consumed CRLF pair and must be ignored.
+  // A trailing CR is already a legal line terminator. If the next network
+  // chunk starts in LF, that LF is merely the second half of the same CRLF
+  // pair and must not create an extra blank line.
   let skipLeadingLf = false;
 
   return {
@@ -41,12 +41,27 @@ export function createSseParser(): { push(chunk: string): SseFrame[] } {
         }
         skipLeadingLf = false;
       }
-      if (chunk.endsWith('\r')) {
-        chunk = `${chunk.slice(0, -1)}\n`;
-        skipLeadingLf = true;
+
+      let normalized = '';
+      for (let index = 0; index < chunk.length; index += 1) {
+        const char = chunk[index];
+        if (char !== '\r') {
+          normalized += char;
+          continue;
+        }
+
+        normalized += '\n';
+        if (index + 1 < chunk.length && chunk[index + 1] === '\n') {
+          // CRLF wholly inside this chunk is one line ending.
+          index += 1;
+        } else if (index === chunk.length - 1) {
+          // The CR may be followed by LF in the next chunk. We have already
+          // consumed it as the line ending, so ignore only that leading LF.
+          skipLeadingLf = true;
+        }
       }
 
-      buffer += chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      buffer += normalized;
       const frames: SseFrame[] = [];
       let sep: number;
       // Frames are separated by a blank line ("\n\n") after normalization.
