@@ -107,15 +107,38 @@ function parseFrameLines(raw: string): SseFrame | null {
   return hasField ? frame : null;
 }
 
+function hasStrictlyIncreasingSeq(events: readonly StreamEvent[]): boolean {
+  for (let index = 1; index < events.length; index += 1) {
+    if (events[index]!.seq <= events[index - 1]!.seq) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Merge freshly-arrived events into an accumulated list: dedupe by seq (a
  * reconnect replays an overlapping tail), keep the first occurrence of any
- * seq, and return sorted ascending by seq. Pure — the hook holds the state.
+ * seq, and return sorted ascending by seq. The normal SSE path is an ordered,
+ * non-overlapping append; keep that path linear and allocation-light instead
+ * of rebuilding a Map and sorting the complete history for every frame. Replay
+ * overlap, duplicates, or out-of-order input still use the defensive reducer.
  */
 export function mergeEventsBySeq(
   existing: readonly StreamEvent[],
   incoming: readonly StreamEvent[],
 ): StreamEvent[] {
+  const existingOrdered = hasStrictlyIncreasingSeq(existing);
+  const incomingOrdered = hasStrictlyIncreasingSeq(incoming);
+  const followsExisting =
+    existing.length === 0 ||
+    incoming.length === 0 ||
+    incoming[0]!.seq > existing[existing.length - 1]!.seq;
+
+  if (existingOrdered && incomingOrdered && followsExisting) {
+    return [...existing, ...incoming];
+  }
+
   const bySeq = new Map<number, StreamEvent>();
   for (const event of existing) {
     if (!bySeq.has(event.seq)) {
@@ -177,9 +200,6 @@ export interface OpenSessionStreamOptions {
  * `close()` that aborts the fetch and stops reconnection. On disconnect it
  * reconnects with exponential backoff, resuming from the max seq seen via the
  * `Last-Event-ID` header (server stitches 0..k ∪ k..end with no loss/dup).
- *
- * Note: uses a string URL (not a Request object) so the e2e fetch monkeypatch,
- * which only rewrites string inputs matching /api/rpc|/api/sessions, applies.
  */
 export function openSessionStream(
   options: OpenSessionStreamOptions,
