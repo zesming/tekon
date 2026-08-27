@@ -21,18 +21,35 @@ export interface SseFrame {
 
 /**
  * Incremental SSE frame parser. `push` accepts an arbitrary chunk (which may
- * split a frame mid-line) and returns whatever complete frames are now
- * available, buffering the rest. Comment/heartbeat lines (starting ":") are
- * ignored. Tolerates both LF and CRLF.
+ * split a frame mid-line or between CR and LF) and returns whatever complete
+ * frames are now available, buffering the rest. Comment/heartbeat lines
+ * (starting ":") are ignored. The event-stream grammar accepts LF, CRLF, and
+ * bare CR line endings, including when a CRLF pair crosses chunk boundaries.
  */
 export function createSseParser(): { push(chunk: string): SseFrame[] } {
   let buffer = '';
+  // A chunk ending in CR is normalized immediately so bare-CR streams dispatch
+  // without waiting for another network read. If the next chunk starts in LF,
+  // that LF completes the already-consumed CRLF pair and must be ignored.
+  let skipLeadingLf = false;
+
   return {
     push(chunk: string): SseFrame[] {
-      buffer += chunk.replace(/\r\n/g, '\n');
+      if (skipLeadingLf && chunk.length > 0) {
+        if (chunk.startsWith('\n')) {
+          chunk = chunk.slice(1);
+        }
+        skipLeadingLf = false;
+      }
+      if (chunk.endsWith('\r')) {
+        chunk = `${chunk.slice(0, -1)}\n`;
+        skipLeadingLf = true;
+      }
+
+      buffer += chunk.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       const frames: SseFrame[] = [];
       let sep: number;
-      // Frames are separated by a blank line ("\n\n").
+      // Frames are separated by a blank line ("\n\n") after normalization.
       while ((sep = buffer.indexOf('\n\n')) !== -1) {
         const rawFrame = buffer.slice(0, sep);
         buffer = buffer.slice(sep + 2);
