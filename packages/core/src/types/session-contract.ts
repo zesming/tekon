@@ -1,14 +1,16 @@
 import { z } from 'zod';
 
 /**
- * Session/Event/Agent contract — frozen draft (schema v1).
+ * Session/Event/Agent contract — schema v1.
  *
- * This is the phase-0 "contract freeze" from the Harness-inspired replatform
- * plan (docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md).
- * It defines the target vocabulary and interfaces ONLY — there is no runtime
- * implementation yet, and nothing here is wired into the existing engine. It
- * exists so later phases (1: event spine + jobs, 2: streaming agent loop) build
- * against a stable, reviewed contract instead of inventing shapes ad hoc.
+ * This is the "contract freeze" from the Harness-inspired replatform plan
+ * (docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md). It
+ * defines the shared vocabulary and interfaces. As of phases 1–4 it is wired
+ * into the running engine: SessionService, the job runner, the dual-write
+ * session-event store and the LegacyAgentDriver all build against these types
+ * (the streaming AgentHandle below is provided by the phase-2a legacy bridge as
+ * a one-shot adapter; true incremental streaming / follow-up / steer remain
+ * later-phase work — see the AgentHandle docs).
  *
  * Design provenance:
  * - Event vocabulary mirrors the DeepSeek Harness session model (append-only
@@ -226,9 +228,13 @@ export interface AgentResumeInput {
 
 /**
  * Streaming agent handle — replaces the one-shot
- * `runAgent(): Promise<AgentRunResult>` (report §8.4 / P0-04). Phase 2 will
- * implement this; a legacy bridge will wrap the current adapter as a single
- * opaque step so Codex/Claude adapters need not be rewritten at once.
+ * `runAgent(): Promise<AgentRunResult>` (report §8.4 / P0-04). Phase 2a
+ * provides this via a legacy bridge (LegacyAgentDriver) that wraps the current
+ * adapter as a single opaque step, so Codex/Claude adapters need not be
+ * rewritten at once. Note the bridge is one-shot: events() yields the buffered
+ * sequence once the run settles, and followUp()/steer()/resume() throw
+ * NotSupportedYet — true incremental streaming and in-session follow-up/steer
+ * are later-phase work.
  */
 export interface AgentHandle {
   readonly id: string;

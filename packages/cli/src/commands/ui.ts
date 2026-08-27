@@ -69,7 +69,14 @@ export async function commandUi(
   }
 
   io.stdout.write(`repo=${repoPath}\n`);
-  io.stdout.write(`url=http://localhost:${port}\n`);
+  // F7-P0-01: hand the session token to the browser via the URL fragment. The
+  // fragment is never sent to the server (no Referer / request URL / log), and
+  // the client captures it, persists to sessionStorage, then strips it from
+  // the address bar. Without this the default Web entry 401s until the user
+  // hand-copies the token out of .tekon/web-session.json.
+  io.stdout.write(
+    `url=http://localhost:${port}/#token=${encodeURIComponent(token)}\n`,
+  );
   io.stdout.write(
     'Starting Tekon Web... Press Ctrl+C to stop\n',
   );

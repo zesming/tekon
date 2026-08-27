@@ -900,7 +900,7 @@ tekon ui
 - `--repo <path>`：跨仓库或从其它目录启动时指定目标仓库。
 - `--port <port>`：指定端口，默认 3000。
 
-启动后终端输出带 session token 的完整 URL，在浏览器中打开即可使用。按 `Ctrl+C` 停止服务。
+启动后终端输出形如 `http://localhost:3000/#token=<会话令牌>` 的完整 URL——令牌放在 URL 片段（`#` 之后），不会随请求发往服务端。在浏览器中打开该 URL 即可直接使用：前端会读取片段中的令牌、写入 sessionStorage（当前标签页刷新后仍保持登录）、并把令牌从地址栏清除。按 `Ctrl+C` 停止服务。
 
 注意：
 
@@ -1018,7 +1018,7 @@ tekon ui --port 3001
 tekon ui --repo /path/to/project
 ```
 
-启动后终端会输出带 token 的完整 URL，在浏览器中打开即可。按 `Ctrl+C` 停止。
+启动后终端会输出形如 `http://localhost:3000/#token=<会话令牌>` 的完整 URL（令牌在 URL 片段中，不发往服务端），在浏览器中打开即可直接使用——前端自动读取令牌、写入 sessionStorage（刷新保持）并从地址栏清除。按 `Ctrl+C` 停止。
 
 打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
 
@@ -1042,13 +1042,13 @@ Session UI 适合：
 - 触发 `delivery prepare`。
 - 在人工批准下触发 `delivery create-pr`。
 
-写操作需要 session token。token 在：
+写操作需要 session token。用 `tekon ui` 输出的完整 URL（含 `#token=`）打开时，令牌已自动载入，可直接发起运行、批准/拒绝审批。若你手动访问了不带片段的地址（令牌丢失），token 保存在：
 
 ```text
 /path/to/project/.tekon/web-session.json
 ```
 
-在页面顶栏"Session token"输入框粘贴该 token 后，才能执行发起运行、批准/拒绝审批等写操作；只读浏览（会话列表、事件流）在配置令牌后加载。
+可在页面顶栏"Session token"输入框粘贴该 token 作为兜底；只读浏览（会话列表、事件流）在配置令牌后加载。
 
 注意：
 

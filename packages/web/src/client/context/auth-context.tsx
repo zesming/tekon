@@ -4,6 +4,11 @@ import type { ReactElement } from 'react';
 import { authScope } from '../lib/query-keys.js';
 import { queryCache } from '../lib/query-cache.js';
 import { setRpcSessionToken } from '../lib/rpc-client.js';
+import {
+  hashHasToken,
+  persistToken,
+  stripTokenFragment,
+} from '../lib/session-bootstrap.js';
 
 // ---------------------------------------------------------------------------
 // Auth context types
@@ -26,21 +31,42 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export interface AuthProviderProps {
   children: React.ReactNode;
+  /**
+   * Session token resolved at startup from the URL fragment / sessionStorage
+   * (F7-P0-01). `main.tsx` computes it once and also seeds the RPC client, so
+   * the initial state here matches what the first-paint RPC already sends.
+   */
+  initialToken?: string | null;
 }
 
 /**
- * Provides authentication token in memory only (no sessionStorage).
+ * Provides the session token, hydrated from the startup bootstrap
+ * (`#token=` fragment → sessionStorage) so a page refresh keeps the session
+ * within the tab (F7-P0-01). The token is persisted to sessionStorage on
+ * change (tab-scoped; cleared when the tab closes) and mirrored into the RPC
+ * client so authenticated reads and the SSE stream send `x-session-token`.
  *
  * When the token changes, the provider clears all query-cache entries and
  * in-flight requests that belong to the previous auth scope so that stale
  * data from the old session cannot leak into the new one.
  */
-export function AuthProvider({ children }: AuthProviderProps): ReactElement {
-  const [token, setTokenState] = useState<string | null>(null);
-  const prevScopeRef = useRef<string>(authScope(null));
+export function AuthProvider({
+  children,
+  initialToken = null,
+}: AuthProviderProps): ReactElement {
+  const [token, setTokenState] = useState<string | null>(initialToken);
+  const prevScopeRef = useRef<string>(authScope(initialToken));
 
   const setToken = useCallback((newToken: string | null) => {
     setTokenState(newToken);
+  }, []);
+
+  // Strip the token fragment from the address bar once, after we have captured
+  // it into state (main.tsx already seeded the RPC client). Done in an effect
+  // so state is committed first — replaceState only rewrites the URL, it does
+  // not navigate, so the SPA route is untouched.
+  useEffect(() => {
+    if (hashHasToken()) stripTokenFragment();
   }, []);
 
   // Detect actual token changes and evict old-session cache entries.
@@ -49,12 +75,12 @@ export function AuthProvider({ children }: AuthProviderProps): ReactElement {
     const oldScope = prevScopeRef.current;
 
     // Keep the RPC client's token in sync so authenticated (auth:'session')
-    // procedures and the SSE client actually send x-session-token. Without
-    // this, setRpcSessionToken has no caller and every auth:'session' read
-    // 401s in production (masked by the e2e fetch monkeypatch). Set it every
-    // render — cheap, and covers the initial mount where the scope is
-    // unchanged but the token was just entered.
+    // procedures and the SSE client actually send x-session-token, and persist
+    // it so a refresh keeps the session (F7-P0-01). main.tsx seeds the initial
+    // token before first paint; this covers every later change (manual paste
+    // in the TopBar, or clearing the token).
     setRpcSessionToken(token);
+    persistToken(token);
 
     if (oldScope !== newScope) {
       // Hard-clear all entries that belonged to the previous scope.

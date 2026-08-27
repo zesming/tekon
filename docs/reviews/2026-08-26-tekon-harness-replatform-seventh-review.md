@@ -450,3 +450,38 @@ cursor pagination、bounded replay、virtualization、collapse/search、spill re
 > 但生产浏览器 Token Bootstrap 仍未形成闭环，主流 Provider 仍不是实时可转向 Agent Session，follow-up / steer / durable inbox 与 Collaborate / Deliver 双轨仍缺失；同时 Web 与 CLI 已经构成事实上的 multi-owner Runtime，却没有持久化 generation、Node / Git CAS 与 shutdown quiescence。这些问题分别阻断普通用户产品和 Runtime 正确性。
 >
 > 下一阶段不应继续扩展 Event type、Profile 或 Automation kind。应先完成：**single-owner daemon + 安全浏览器 bootstrap + 一个真实 Provider 的 streaming / follow-up / resume 纵向切片。**
+
+---
+
+## 附：实施方批注（2026-08-27，对第七轮报告的收敛）
+
+> 本节由实施方在收到权威报告后追加。我委派一个动态评估 workflow（产品/bootstrap、Runtime/并发、报告/代码质量三视角独立实地核验 + 首席 max 综合），对 §4/§5/§6 每条逐条分类为「本轮必改代码（A）/ 已闭环（B）/ 已披露里程碑或待 ADR 递延（C）/ 误报（D）」。三视角结论：**报告事实层面全部成立、无占位符、与 git 一致（HEAD 29 提交纯 web、core/cli diff 空、CLOSED-03 四提交均存在），无阻断级误报。**
+
+### 一致结论：本轮做相称最小必修（3 条），其余诚实递延
+
+**必修（A）——本轮改代码：**
+
+1. **F7-P0-01 生产浏览器 Token Bootstrap（硬必修，已实地确认）**：`packages/cli/src/commands/ui.ts:72` 只打印裸 `url=http://localhost:${port}`；`AuthProvider`（`context/auth-context.tsx`）初始 `token=null`、仅内存、无 sessionStorage、刷新丢失（其代码注释自认「auth:session 读在生产 401、被 e2e monkeypatch 掩盖」）；`shared-fixture.ts:40-64` 确实 monkeypatch `window.fetch` 注入 token 掩盖了首屏 401；手册 `md:903/1021` + `html:570` 声称「输出带 session token 的完整 URL」**与实现矛盾**。构成实现回归 + 虚假文档 + 测试掩盖三重问题，默认 Web 入口对普通用户开箱不可用。
+   - **采信「最小诚实 fragment 闭环」而非报告推荐的完整 nonce bootstrap**：底层鉴权本就是 `.tekon/web-session.json` 的静态文件 token（server 侧 `assertSessionTokenFromFile` 校验 + 已有 same-origin/`Sec-Fetch` 守卫），报告推荐的一次性 nonce 是「防 token 落 shell history/日志/Referer」的**正当但非必需的安全硬化**，应走独立 PR/ADR（与报告 §8 Phase A-7 一致）。也**不采信「本轮仅修文档」**——刷新丢失是阻断的组成部分，只改文档等于把虚假承诺改成诚实的「不可用声明」，未解阻断。
+   - **本轮修法**：`ui.ts` 打印 `#token=<token>` fragment URL（fragment 不随请求上送、不进 Referer/服务端日志）；`AuthProvider` 挂载时从 `location.hash` 读初始 token → 写 `sessionStorage`（同标签页刷新保持）→ `history.replaceState` 立即清除 fragment；同步 `md:903/1021` + `html:570` 使文案与实现一致。**验收**：新增一条**不 monkeypatch fetch** 的生产启动 e2e（用 ui 打印的真实 URL 直接打开 → 首屏 `session.list`/SSE 不 401 → 刷新后仍可用 → 断言 token 不出现在 network Referer 头）。
+2. **F7-P0-07 readiness 迟到 enqueue（硬必修·低成本·纯 web）**：`packages/web/src/server/api/root.ts:192/216` 两个 `bus.subscribeAll` 的 unsubscribe 返回值被丢弃，`close()` 只清 debounce 计时器却从不注销监听器 → `stop()` 的 5s 窗口内到达的 `gate/result` 或 `agent/status:passed` 会重装计时器/直接 enqueue，命中 `db.close()` 后的 `[readiness] enqueue failed: The database connection is not open`（即 §6.5 flaky 同根）。**这是可切分的真实 shutdown 竞态（监听器泄漏），非纯 fixture teardown 时序、也非需 ADR 的完整 quiesce**。修法：`close()` 最前注销两个监听器。**验收**：新增 close 时序测试（close 期间/之后 publish `gate/result` + `agent/status:passed`，断言不再有 enqueue failed、db.close 后无 enqueue）。
+3. **§6.6 session-contract 过期注释（低成本勘误）**：`packages/core/src/types/session-contract.ts:8-11` 注释称「no runtime implementation yet / nothing wired into the existing engine」，但已被 SessionService/dual-write/legacy-agent-driver 等 8 个非测试模块接入。改为反映现状。（唯一碰 core src 的改动——纯注释、需 `pnpm --filter @tekon/core build` 验证，零行为影响；不留已知虚假注释。）
+
+**误报（D）**：§6.6「visibility vs modelVisible 重复矛盾」不成立——两字段不同轴（`visibility` 管 UI 展示门控、`modelVisible` 管模型上下文纳入 + 1MB 限长预算 + modelHistory 重建），均独立消费，仅一处注释措辞含糊是 nit，不改状态空间。
+
+### 诚实递延（C，勿当本轮缺口——报告 §8 自身分阶段列出）
+
+以下技术事实**全部成立**，但均为报告 §8 Phase A/B/C/D 自身分阶段列出的**架构决策或长期里程碑**，且多数需跨 core 改动 + ADR，代码/Composer UI/手册已诚实披露边界，延续前六轮取舍（见 MEMORY 历轮 single-vs-multi-owner 用户知情递延）：
+
+- **F7-P0-02 真 Provider 流式**（`legacy-agent-driver.ts:131` one-shot `await done`）、**F7-P0-03 follow-up/steer/resume**（显式 `throw NotSupportedYet` + Composer/手册披露）、**F7-P0-04 Collaborate/Deliver 双轨**（入口已诚实改名，缺轻量轨需 ADR）——Phase B/C。
+- **F7-P1-01/02/03/04**（Feed 叙事化 / Inspector 当前状态投影 / 服务端 DeliveryResult 投影 / 长会话规模化）——Phase C/D，P1 体验/新功能。
+- **F7-P0-05 multi-owner fencing / F7-P0-06 Node·Git 统一 CAS / F7-P0-07 完整 shutdown quiesce（除监听器泄漏外）/ F7-P1-05 StartRun Saga / F7-P1-06 process-local bus / F7-P1-07 durable dual-write**——Phase A 架构红线，≡ 第四/五轮 F4-P0/F5-P0-02~05 递延；进程内 fencing（`executionTokens` + 第四轮 F4-P0-03 ownership-lost abort）与 `workflow_instances` 部分 CAS/单调守卫已提供当前单进程正确性兜底。single-owner daemon vs 完整 multi-owner 仍待用户拍板。
+- **§6.2/6.3/6.4/6.5/6.6（CSS 拆分）**：横向抽象领先纵向、PR 过大（~100+ commits/189+ files）、自修改评审 workflow 应停、flaky 硬化、reset.css 42KB 拆分——流程治理/大重构建议，交用户决策。其中**自修改评审 workflow 应停**与前几轮我的观察一致（本轮第七报告又是它生成、又出现编码/载荷修复提交），强烈建议固化为「评审自动化只读、业务改动走显式可审查提交」。
+
+### 已闭环并复核（B）
+
+CLOSED-01（移动端横向溢出）、CLOSED-02（sessions.css 入口）、CLOSED-03（移动抽屉 modal/键盘/焦点，`df368c61`/`99d6cdf5`/`242c9156`/`aefa08e1`）——实地确认闭环，移动抽屉为忠实 WAI-ARIA modal dialog（focus-trap/inert/scroll-lock/role=dialog/Esc/断点重置），当前 HEAD CI 6/6 全绿。
+
+### 本轮裁决（实施方）
+
+> 与权威报告一致：**整体不通过**（普通用户产品 / 完整 Runtime）。本轮据评估共识做 3 条相称最小必修（F7-P0-01 fragment 诚实闭环 + readiness 监听器注销 + session-contract 注释勘误），**不被报告完整 roadmap 裹挟去做架构级重写**；其余按报告 §8 分阶段诚实递延。修复后经 reviewer code review + 全功能 e2e（桌面+移动+新生产 bootstrap）+ 报告完整性复审放行，提交同 PR。

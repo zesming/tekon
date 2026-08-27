@@ -189,7 +189,7 @@ export async function createApiCaller(
   // too). Long-lived server only: the durable runner keeps polling, so the
   // enqueued job is always drained here.
   const readinessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
-  bus.subscribeAll((event) => {
+  const unsubscribeReadiness = bus.subscribeAll((event) => {
     if (event.type !== 'gate/result' && event.type !== 'approval/decided') {
       return;
     }
@@ -213,7 +213,7 @@ export async function createApiCaller(
   // executor packages evidence + writes the `prepared` row + emits
   // delivery/prepared — but NEVER creates a PR (governance red line). Long-
   // lived server only (web/headless): CLI is run-to-exit and does not wire this.
-  bus.subscribeAll((event) => {
+  const unsubscribeAutoPrepare = bus.subscribeAll((event) => {
     if (event.type !== 'agent/status') return;
     if ((event.payload as { status?: string }).status !== 'passed') return;
     void (async () => {
@@ -277,9 +277,15 @@ export async function createApiCaller(
     sessions,
     bus,
     async close() {
-      // Clear pending readiness debounce timers first so none fires an enqueue
-      // against a closing db/runner (R9). Then stop the runner (waits up to 5s
-      // for in-flight jobs) before closing the db.
+      // F7-P0-07: detach the automation listeners FIRST. Otherwise a
+      // gate/result / approval/decided (re-arms a readiness timer) or an
+      // agent/status:passed (fires an auto-prepare enqueue) arriving during
+      // jobRunner.stop()'s in-flight window would enqueue against the closing
+      // db — the "[readiness] enqueue failed: database connection is not open"
+      // late write. Then clear any pending readiness debounce timers, stop the
+      // runner (waits up to 5s for in-flight jobs), and close the db last.
+      unsubscribeReadiness();
+      unsubscribeAutoPrepare();
       for (const timer of readinessDebounce.values()) clearTimeout(timer);
       readinessDebounce.clear();
       await jobRunner.stop();

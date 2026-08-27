@@ -1,5 +1,31 @@
 # 变更日志
 
+## v0.15.0
+
+第七轮**权威复审**（`docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（产品/bootstrap、Runtime/并发、报告/代码质量三视角独立实地核验 + 首席综合）达成一致：报告事实层面全部成立、无阻断级误报；本轮做 **3 条相称最小必修**，其余 F7-P0-02~06、P1-01~07、§6 治理建议均为报告 §8 自身分阶段列出的架构决策/长期里程碑，诚实递延（不被完整 roadmap 裹挟做架构级重写）。设计经 reviewer 循环评审、实现经独立 code review 收敛。
+
+### F7-P0-01 生产浏览器 Token Bootstrap（默认 Web 入口修复前对普通用户不可用）
+
+- **问题**：`tekon ui` 只打印裸 `http://localhost:${port}`，`AuthProvider` 初始 token=null 且仅内存、刷新丢失，首屏 `session.list`/SSE 全部 401；e2e 用 `window.fetch` monkeypatch 注入 token 掩盖了它；手册声称"输出带 session token 的完整 URL"与实现矛盾。
+- **修复（最小诚实 fragment 闭环）**：`ui.ts` 打印 `#token=<token>` fragment URL（fragment 不随请求上送、不进 Referer/服务端日志）；新增 `session-bootstrap.ts`；`main.tsx` 在 `createRoot` **之前**同步 `setRpcSessionToken(readTokenFromLocation())`（React 子 effect 先于父,必须同步 seed 才能保证首屏 RPC/SSE 带 token）；`AuthProvider` 以此为初始 state、token 变化写 `sessionStorage`（同标签页刷新保持）、挂载后 `history.replaceState` 清除地址栏 fragment；手册 md（3 处）+ html（3 处）文案对齐。完整一次性 nonce 硬化（防 token 落 shell history）走独立后续 PR/ADR（报告 §8 Phase A-7）。
+- **验证**：新增**不 monkeypatch fetch** 的独立 fixture + `prod-bootstrap.test.ts`（#token 首屏不 401 / 刷新 sessionStorage 保持 / token 不进 URL·Referer），mutation 反证为真锁（去掉 main.tsx 同步 seed → 首屏 401 测试 FAIL）。
+
+### F7-P0-07 shutdown 竞态（readiness/auto-prepare 监听器泄漏）
+
+- **问题**：`root.ts` 两个 `bus.subscribeAll` 的 unsubscribe 被丢弃，`close()` 只清 debounce 计时器却从不注销监听器 → `jobRunner.stop()` 的 5s 窗口内到达的 `gate/result`/`approval/decided` 会重装计时器、`agent/status:passed` 同步 enqueue，命中 `db.close()` 后 `[readiness] enqueue failed: database connection is not open`。
+- **修复**：捕获两个 unsubscribe，`close()` 最前注销（stop/db.close 之前）。新增 `close-teardown.test.ts`（close 后 publish 三类事件 + 等 700ms，断言无 late enqueue），mutation 反证为真锁（去掉注销 → FAIL）。
+
+### 代码勘误
+
+- `session-contract.ts` 顶部块 + AgentHandle 块过期注释（"no runtime implementation yet"）改为反映已被 SessionService/dual-write/legacy-agent-driver 接入的现状。
+
+### 诚实递延（交用户决策，勿当本轮缺口——报告 §8 分阶段列出）
+
+- **F7-P0-02/03/04**：真 Provider 流式（one-shot）、follow-up/steer/resume（`NotSupportedYet`）、Collaborate/Deliver 双轨——Phase B/C 里程碑，代码/Composer/手册已披露。
+- **F7-P1-01~04**：Feed 叙事化、Inspector 当前状态投影、服务端 DeliveryResult 投影、长会话规模化——Phase C/D。
+- **F7-P0-05/06、完整 shutdown quiesce、F7-P1-05/06/07**：multi-owner fencing、Node·Git 统一 CAS、StartRun Saga、process-local bus、durable dual-write——Phase A 架构红线，≡ 前四/五轮 F4-P0/F5-P0-02~05 递延，single-owner daemon vs 完整 multi-owner 待用户拍板；进程内 fencing + `workflow_instances` 部分 CAS 已提供当前单进程正确性兜底。
+- **§6.2/6.3/6.4/6.5/6.6（CSS 拆分）**：横向抽象领先纵向、PR 过大、自修改评审 workflow 应停、flaky 硬化、reset.css 拆分——流程治理/大重构建议。误报（D）：§6.6 visibility vs modelVisible 不重复（两字段不同轴）。
+
 ## v0.14.6
 
 第六轮**权威复审**（`docs/reviews/2026-08-26-tekon-harness-replatform-sixth-review.md`，作者推送覆盖了此前实施 Agent 的重建简版）循环评估后的收敛。经动态评估 workflow（前端/UX、后端/并发、报告完整性三视角独立实地核验 + 首席综合）达成一致：本轮唯一必修实现回归是 **F6-P0-01 移动端布局**，其余 F6-P0-02/03/04、F6-P1-01~04、F6-ARCH-01 均为报告自身及 README/手册已诚实披露的长期里程碑或待 ADR 架构决策，诚实递延。设计经 reviewer 循环评审、实现经独立 code review 收敛。
