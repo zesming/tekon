@@ -32,14 +32,39 @@ export const test = base.extend<SharedFixtures>({
     await use(server);
     await server.close();
   },
+
+  // Business journeys use page.goto() to launch many deep routes as fresh
+  // documents. Treat each same-origin hard navigation as a fresh authenticated
+  // `tekon ui` launch by carrying the production #token fragment. This is an
+  // explicit test-launch policy, not evidence that sessionStorage recovery was
+  // exercised on every journey; the dedicated prod-bootstrap suite owns the
+  // refresh/sessionStorage, URL cleanup and Referer assertions.
+  //
+  // Without this policy, cold CI runs intermittently reach the new document
+  // before the previous document's bootstrap state is available and render the
+  // 401 page; retry then passes. failOnFlakyTests correctly rejects that result.
+  page: async ({ page, fixture, server }, use) => {
+    const origin = new URL(server.url).origin;
+    const rawGoto = page.goto.bind(page);
+    page.goto = (async (url, options) => {
+      const target = new URL(url, server.url);
+      if (target.origin === origin) {
+        const hash = new URLSearchParams(target.hash.slice(1));
+        if (!hash.has('token')) {
+          hash.set('token', fixture.sessionToken);
+          target.hash = hash.toString();
+        }
+      }
+      return rawGoto(target.toString(), options);
+    }) as typeof page.goto;
+    await use(page);
+  },
 });
 
-// Establish the same connected state as a real `tekon ui` launch. `main.tsx`
-// resolves and persists the fragment token synchronously before the first React
-// render, so later hard navigations must authenticate from the production
-// sessionStorage fallback without any test-only `page.goto` rewriting.
-// Dedicated bootstrap tests keep the deeper first-paint, refresh, Referer and
-// same-tab hash assertions.
+// Establish the same connected state as a real `tekon ui` launch, then prove
+// that the credential is visible and the fragment is removed before each
+// business journey starts. The page fixture above also authenticates every
+// later hard route launch; SPA navigation and page.reload() do not use it.
 test.beforeEach(async ({ page, fixture, server }) => {
   const fragment = new URLSearchParams({
     token: fixture.sessionToken,
