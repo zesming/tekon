@@ -23,10 +23,12 @@ export const test = base.extend<SharedFixtures>({
   },
 
   server: async ({ fixture }, use) => {
+    // Exercise the production static-server path. The package test:e2e script
+    // builds the client first, so route assertions are never coupled to Vite's
+    // dev-only on-demand transform timing.
     const server = await createWebServer({
       projectRoot: fixture.projectRoot,
       port: 0,
-      vite: true,
     });
     await server.listen();
     await use(server);
@@ -37,10 +39,10 @@ export const test = base.extend<SharedFixtures>({
 // Use the same tab-scoped bootstrap channel as production. The old fixture
 // monkey-patched window.fetch and silently injected x-session-token, which let
 // business E2E bypass main.tsx -> AuthProvider -> RPC/SSE credential wiring.
-// Production-bootstrap tests still own the fragment capture/cleanup assertions;
-// shared business tests seed sessionStorage, then warm the real app shell once
-// so route assertions do not double as cold Vite-compilation timing tests.
-test.beforeEach(async ({ page, fixture, server }) => {
+// Dedicated production-bootstrap tests still own fragment capture/cleanup and
+// bare-URL manual recovery; shared business tests start in the normal connected
+// state and assert the real visible token/auth scope.
+test.beforeEach(async ({ page, fixture }) => {
   await page.addInitScript(
     ({ storageKey, token }) => {
       window.sessionStorage.setItem(storageKey, token);
@@ -50,9 +52,6 @@ test.beforeEach(async ({ page, fixture, server }) => {
       token: fixture.sessionToken,
     },
   );
-
-  await page.goto(server.url);
-  await expect(page.locator('#root')).not.toBeEmpty({ timeout: 30_000 });
 });
 
 export { expect };
