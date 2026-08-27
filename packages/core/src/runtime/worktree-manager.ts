@@ -192,10 +192,30 @@ export function createWorktreeManager(options: {
       const branchName =
         input.branchName ??
         deliveryBranchName(assertSafePathSegment(lease.runId));
+      const targetRef = assertSafeBranchRef(branchName);
+      const expectedOldOid = (
+        await runGit(options.gateway, {
+          repoPath: lease.repoPath,
+          runId: lease.runId,
+          args: ['rev-parse', '--verify', targetRef],
+        })
+      ).trim();
+      const leaseHeadOid = (
+        await runGit(options.gateway, {
+          repoPath: lease.repoPath,
+          runId: lease.runId,
+          args: ['rev-parse', '--verify', lease.branchName],
+        })
+      ).trim();
+
+      // Compare-and-swap the delivery ref. `git branch -f` unconditionally
+      // overwrites a branch that another worker may have promoted since our
+      // read. update-ref's expected-old OID lets exactly one concurrent
+      // promoter win and makes the loser fail without erasing newer work.
       await runGit(options.gateway, {
         repoPath: lease.repoPath,
         runId: lease.runId,
-        args: ['branch', '-f', branchName, lease.branchName],
+        args: ['update-ref', targetRef, leaseHeadOid, expectedOldOid],
       });
       return branchName;
     },
@@ -414,6 +434,22 @@ function assertSafePathSegment(value: string): string {
     throw new Error(`unsafe path segment: ${value}`);
   }
   return value;
+}
+
+function assertSafeBranchRef(branchName: string): string {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/u.test(branchName)) {
+    throw new Error(`unsafe branch name: ${branchName}`);
+  }
+  if (
+    branchName.includes('..') ||
+    branchName.includes('//') ||
+    branchName.endsWith('/') ||
+    branchName.endsWith('.') ||
+    branchName.endsWith('.lock')
+  ) {
+    throw new Error(`unsafe branch name: ${branchName}`);
+  }
+  return `refs/heads/${branchName}`;
 }
 
 function deliveryBranchName(runSegment: string): string {
