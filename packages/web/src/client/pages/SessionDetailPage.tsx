@@ -65,9 +65,9 @@ export function SessionDetailPage() {
       {error ? <ErrorBanner error={error} onRetry={refetch} /> : null}
 
       <div className="session-columns">
-        <main className="session-feed-col" aria-label="会话活动">
+        <section className="session-feed-col" aria-label="会话活动">
           <EventFeed events={events} />
-        </main>
+        </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
           <SessionSidePanel events={events} />
         </aside>
