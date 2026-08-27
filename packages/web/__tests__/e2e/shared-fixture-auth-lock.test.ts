@@ -28,9 +28,8 @@ test('a hard business navigation authenticates from the persisted token without 
     timeout: 15_000,
   });
   await expect(page.getByText(/认证失败/u)).toHaveCount(0);
-  await expect(
-    page.evaluate(() =>
-      window.sessionStorage.getItem('tekon.sessionToken'),
-    ),
-  ).resolves.toBe(fixture.sessionToken);
+  const persistedToken = await page.evaluate(() =>
+    window.sessionStorage.getItem('tekon.sessionToken'),
+  );
+  expect(persistedToken).toBe(fixture.sessionToken);
 });
