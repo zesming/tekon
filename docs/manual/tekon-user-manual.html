@@ -567,7 +567,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--port</span> <span class="n">3001</span>
 <span class="cm"># 跨仓库</span>
 <span class="c">tekon</span> <span class="a">ui</span> <span class="f">--repo</span> <span class="pth">/path/to/project</span></code></pre>
-<p>启动后终端输出形如 <code>http://localhost:3000/#token=&lt;会话令牌&gt;</code> 的完整 URL（令牌在 URL 片段中，不随请求发往服务端），在浏览器打开即可直接使用——前端自动读取令牌、写入 sessionStorage（刷新保持）并从地址栏清除。按 <code>Ctrl+C</code> 停止。</p>
+<p>启动后终端输出形如 <code>http://127.0.0.1:3000/#token=&lt;会话令牌&gt;</code> 的完整 URL（令牌在 URL 片段中，不随请求发往服务端），在浏览器打开即可直接使用——前端自动读取令牌、写入 sessionStorage（刷新保持）并从地址栏清除。按 <code>Ctrl+C</code> 停止。</p>
 <p>打开后默认进入 <strong>Session UI（会话视图）</strong>：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条<strong>连续、可实时刷新的叙事</strong>——左侧会话列表与发起入口，中间栏实时事件流（断线自动重连续播），右侧 inline 审批卡片与暂停/取消/恢复控制。旧的 run-centric Dashboard（overview / run 列表 / run 详情）完整保留在侧栏"高级 Advanced"入口下（<code>/advanced</code>），功能不变。</p>
 <div class="cl cl-w"><span class="cl-lb">当前边界</span>从会话输入框「启动受控交付」发起的运行，默认走 <code>standard-delivery</code> <strong>受控交付全链路</strong>（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。</div>
 <p>旧 Dashboard（<code>/advanced</code>）适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>

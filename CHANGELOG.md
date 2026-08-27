@@ -1,5 +1,30 @@
 # 变更日志
 
+## v0.15.1
+
+第八轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-eighth-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（CLOSED 硬化正确性、Runtime/并发/产品闭环、UI-UX/测试/报告完整性三视角独立实地核验 + 首席综合）**一致判定 `hasMustFix=false`**：报告本身把第七轮整改 + 本轮边界修复 + 移动端全判为【通过】，剩余全部是报告 §8 自身分阶段的已披露长期里程碑 / 待 ADR 架构决策。**本轮无必修代码项**，相称地只做报告批注 + 诚实递延 + 本次版本元数据同步。
+
+### 已闭环并复核保留（CLOSED-01~05）
+
+第七轮整改（`998d2b3`）之上，CI 自修改工作流的 4 个硬化提交经实地读码 + 全量测试确认正确、无新回归，予以保留：
+
+- `5d4a42e`：`stripTokenFragment` 保留 `window.history.state`（不破坏 React Router 前进/后退）；
+- `0871ed7`：`AuthProvider.setToken` 原子同步 seed RPC token + sessionStorage（避免手工兜底/`hashchange` 时新 scope 首请求用旧 token 401）；`hashchange` 监听让已打开标签页接受新 `#token=`；移除误导性裸 URL，`server/index.ts` 只输出唯一带 `#token=` 的启动 URL + 无链接 `Tekon Web ready`；
+- `f37070f`/`ba44ad0`：close bootstrap/teardown 边界（`close()` 先摘 automation 监听器 + 等待 in-flight auto-prepare 回调再关 DB）+ 针对性测试。
+
+本地全量 `pnpm test` 1301 passed/3 skipped，6 条 prod-bootstrap e2e（独立无 monkeypatch fixture）+ 2 条 close-teardown 单测全绿，HEAD CI 6/6 全绿。
+
+### 版本元数据同步
+
+CI 工作流的 4 个硬化提交未 bump 版本；本次随批注把 `0.15.0` → `0.15.1`（PATCH）——均为对 v0.15.0 token bootstrap 的 bug-fix 级硬化，无超出 v0.15.0 的新用户行为。
+
+### 诚实递延（交用户决策，勿当本轮缺口——报告 §8 Phase A/B/C/D 分阶段列出）
+
+- **F8-P0-01/02/03**：真 Provider 执行期增量流、follow-up/steer/resume + durable inbox（显式 `NotSupportedYet`）、Collaborate/Deliver 双轨——Phase B/C 里程碑。
+- **F8-P0-04/05**：事实 multi-owner 缺持久化 `claim_generation` + 统一 Node/Git CAS、完整 shutdown quiescence——Phase A 架构红线，≡ 前四/五/七轮 F4-P0/F5-P0-02~05/F7-P0-05·06 递延，single-owner daemon vs 完整 multi-owner 待用户拍板。
+- **F8-P1-01~05**：token 控件移入连接设置、Feed 叙事化、Inspector 当前状态投影、结构化 DeliveryResult、长会话规模化——Phase C/D。F8-P1-01 技术诉求属实但认证已原子化不再破坏、正确迁移与 CLOSED-04 e2e 耦合，仓促半做有回归风险，故递延。
+- **§6/§7**：PR 规模、停用自修改评审 workflow、缺 multi-owner/大规模测试——流程治理建议。报告字面"`events.map` 事件墙"略夸大（实为 `groupEventsByTurn` + typed 叙事映射），方向成立、属 Phase C。
+
 ## v0.15.0
 
 第七轮**权威复审**（`docs/reviews/2026-08-26-tekon-harness-replatform-seventh-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（产品/bootstrap、Runtime/并发、报告/代码质量三视角独立实地核验 + 首席综合）达成一致：报告事实层面全部成立、无阻断级误报；本轮做 **3 条相称最小必修**，其余 F7-P0-02~06、P1-01~07、§6 治理建议均为报告 §8 自身分阶段列出的架构决策/长期里程碑，诚实递延（不被完整 roadmap 裹挟做架构级重写）。设计经 reviewer 循环评审、实现经独立 code review 收敛。

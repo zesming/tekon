@@ -496,3 +496,41 @@ cursor pagination、bounded replay、append-fast path、virtualization、collaps
 > **但对“普通用户产品 / 完整 Harness-inspired Runtime”的结论仍是不通过。**真实 Provider 仍为 one-shot 后合成事件，follow-up / steer / resume 与 durable inbox 未实现，Collaborate / Deliver 双轨未形成；Web / CLI 事实 multi-owner 仍缺 persistent generation、统一 Node / Git CAS 与完整 shutdown quiescence；长 Session 与 Final Result 也未达到长期使用门槛。
 >
 > 当前 PR 可以作为诚实标注边界的基础设施里程碑冻结并评估合并，不能被描述为“完整迁移已完成”或“普通用户产品已可发布”。下一阶段应停止扩横向抽象，优先完成 **single-owner daemon + 一个真实 Provider 的 streaming / follow-up / resume 纵向切片**。
+
+---
+
+## 附：实施方批注（2026-08-27，对第八轮报告的收敛）
+
+> 本节由实施方在收到权威报告后追加。我委派一个动态评估 workflow（CLOSED 硬化正确性、Runtime/并发/产品闭环、UI-UX/测试/报告完整性三视角独立实地核验 + 首席 max 综合），逐条判定本轮是否存在必须改代码的项。
+
+### 一致结论：本轮无必修代码项（相称地只做批注 + 诚实递延）
+
+三视角 + 首席综合**一致 `hasMustFix=false`**。与前几轮（第六/七轮各有 1 条实现回归必修）不同，**本轮报告本身就把"第七轮整改 + 本轮边界修复 + 移动端"全判为【通过】**，剩余全部是报告 §8 自身分阶段列出的、此前持续存在的已披露里程碑。实施方据此不为凑工作量改代码。
+
+**已闭环并复核保留（B）——CLOSED-01~05**：第七轮整改（`998d2b3`）+ CI 自修改工作流在其上的 4 个硬化提交（`f37070f` bootstrap/teardown edge cases、`5d4a42e` `stripTokenFragment` 保留 `window.history.state`、`ba44ad0` token fragment cleanup 测试、`0871ed7` `setToken` 原子同步 seed RPC+storage / `hashchange` 监听 / 移除误导裸 URL / server 唯一带 token URL）。实地读码逐条确认正确、无新回归：
+- `main.tsx:22-23` 首屏前同步 seed RPC token；`auth-context.tsx:67-71` `setToken` 同步 `setRpcSessionToken`+`persistToken`+`setTokenState`（子组件 query effect 先于父 effect，同步 seed 才能避免新 scope 首请求用旧/null token）；`:103-104` effect 内同名调用为幂等防御性冗余（非矛盾）；`hashchange` 监听依赖稳定 `useCallback([])` 仅注册一次且 unmount 清理（无泄漏）；
+- `session-bootstrap.ts:59` `stripTokenFragment` 保留 `history.state`（不破坏 React Router 前进/后退）；
+- `server/index.ts:27-32` 唯一 `#token=` URL + 无链接 `Tekon Web ready`（消除 localhost vs 127.0.0.1 误点回落 401）；
+- `root.ts` `close()`：先摘 readiness/auto-prepare 监听器 → 清 debounce → `allSettled(automationTasks)`（等待已跨边界的 in-flight 回调）→ `jobRunner.stop()` → `db.close()`。
+- 本地全量 `pnpm test` 1301 passed/3 skipped、6 条 prod-bootstrap e2e（独立无 monkeypatch fixture，真实验证首屏无 401）+ 2 条 close-teardown 单测全绿；当前 HEAD `a6c63aa` CI 6/6 全绿。
+
+**本轮唯一元数据同步（非报告要求，提交卫生）**：CI 工作流的 4 个硬化提交未 bump 版本；实施方本轮随批注把版本从 `0.15.0` bump 到 **`0.15.1`（PATCH）**——这批是对 v0.15.0 token bootstrap 的 bug-fix 级硬化，无超出 v0.15.0 的新用户行为，故 PATCH。
+
+### 诚实递延（C，勿当本轮缺口——报告 §8 Phase A/B/C/D 自身分阶段列出）
+
+以下技术事实**逐条与代码核对成立**，但均为报告自身标注"非本轮制造的新回归、而是此前持续存在的主闭环"的**长期里程碑或待 ADR 架构决策**（且不同于第七轮 F7-P0-07 那种可切分的低成本单点，这些都是架构级工作）：
+
+- **F8-P0-01 真 Provider 执行期增量流**（`agent-step-events.ts:99` `await runAgent` 后合成事件、`legacy-agent-driver.ts` one-shot）——Phase B。
+- **F8-P0-02 follow-up/steer/resume + durable inbox**（`legacy-agent-driver.ts:138/141/176` 显式 `throw NotSupportedYet`，冻结契约）——Phase B。
+- **F8-P0-03 Collaborate/Deliver 双轨**（`profile-policy.ts` 三 profile 仅 automation surface 差异，无独立轻量轨）——Phase C。
+- **F8-P0-04 事实 multi-owner 缺持久化 fencing + 统一 CAS**（无 `claim_generation` 持久列、`executionTokens` 为进程内 symbol、Node/Git 无统一 expected-from/expected-old OID CAS）——Phase A 架构红线，≡ 前四/五/七轮 F4-P0/F5-P0-02~05/F7-P0-05·06 递延，single-owner daemon vs 完整 multi-owner 待用户拍板。
+- **F8-P0-05 完整 shutdown quiescence**（`job-runner.ts:488-518` `stop()` 5s 超时后仅清本地状态，无 shutdown abort/子进程 kill+join/Git side-effect quiesce）——Phase A；本轮 CLOSED-03 已修掉其中可切分的 automation listener 迟到 enqueue 子问题。
+- **F8-P1-01~05**（token 控件移入连接设置、Feed 叙事化、Inspector 当前状态投影、结构化 DeliveryResult、长会话规模化）——Phase C/D，UX/规模里程碑。其中 **F8-P1-01 token 控件**技术诉求属实（逐字符切 auth scope），但 CLOSED-04 后认证已原子化、不再破坏（仅瞬态请求），正确迁移需新建连接设置面板 + draft+Apply + 测试且与刚闭环的 CLOSED-04 e2e 耦合，仓促半做有回归风险，故递延而非本轮硬塞。
+
+**措辞精度（D，不改分类）**：报告 §5 F8-P1-02/03 字面"`events.map` 原始事件墙 / Inspector 纯历史复制"略夸大——`EventFeed` 实为 `groupEventsByTurn` + typed `describeEvent` 叙事映射，`SessionSidePanel` 已含 pending approval + run controls。方向（信息密度仍偏底层、需更强叙事聚合）成立，属 Phase C 递延。
+
+**§6/§7 流程治理建议**：PR 规模（128 commits/197 files/3.1万行）、**停用自修改评审 workflow**、缺 multi-owner/大规模测试——交用户决策。其中"停用自修改评审 workflow"与我前几轮观察一致（本轮报告与这 4 个硬化提交又是它生成/提交的），强烈建议固化"评审自动化只读、业务改动走显式可审查提交"。
+
+### 本轮裁决（实施方）
+
+> 与权威报告一致：**第七轮整改 + 本轮 CI 硬化【通过】；整体普通用户产品 / 完整 Runtime / multi-owner 安全仍【不通过】**。本轮据三视角一致共识**无必修代码项**，相称地只做报告批注 + 诚实递延 + 一处版本元数据同步（0.15.0→0.15.1）；所有剩余 P0/P1 均为报告 §8 分阶段的已披露里程碑/待 ADR，不被完整 roadmap 裹挟去做架构级重写。经 reviewer 完整性复审放行后提交同 PR。
