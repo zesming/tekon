@@ -13,8 +13,6 @@ export interface SharedFixtures {
   server: RunningWebServer;
 }
 
-const SESSION_TOKEN_STORAGE_KEY = 'tekon.sessionToken';
-
 export const test = base.extend<SharedFixtures>({
   fixture: async ({}, use) => {
     const fixture = await createWebFixtureProject();
@@ -36,22 +34,23 @@ export const test = base.extend<SharedFixtures>({
   },
 });
 
-// Use the same tab-scoped bootstrap channel as production. The old fixture
-// monkey-patched window.fetch and silently injected x-session-token, which let
-// business E2E bypass main.tsx -> AuthProvider -> RPC/SSE credential wiring.
-// Dedicated production-bootstrap tests still own fragment capture/cleanup and
-// bare-URL manual recovery; shared business tests start in the normal connected
-// state and assert the real visible token/auth scope.
-test.beforeEach(async ({ page, fixture }) => {
-  await page.addInitScript(
-    ({ storageKey, token }) => {
-      window.sessionStorage.setItem(storageKey, token);
-    },
-    {
-      storageKey: SESSION_TOKEN_STORAGE_KEY,
-      token: fixture.sessionToken,
-    },
+// Establish the same connected state as a real `tekon ui` launch. Seeding
+// sessionStorage before the first real origin proved unreliable in CI: the
+// first attempt could render with an empty AuthProvider while a retry happened
+// to inherit the expected state. Navigate through the production #token
+// bootstrap instead, then prove the visible credential and URL cleanup before
+// each business journey starts. Dedicated bootstrap tests keep the deeper
+// no-401, refresh, Referer and same-tab hash assertions.
+test.beforeEach(async ({ page, fixture, server }) => {
+  const fragment = new URLSearchParams({
+    token: fixture.sessionToken,
+  }).toString();
+  await page.goto(`${server.url}/#${fragment}`);
+  await expect(page.getByLabel('Session token')).toHaveValue(
+    fixture.sessionToken,
+    { timeout: 15_000 },
   );
+  await expect(page).not.toHaveURL(/token=/u);
 });
 
 export { expect };
