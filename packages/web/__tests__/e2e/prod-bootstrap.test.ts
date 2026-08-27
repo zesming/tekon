@@ -114,3 +114,61 @@ test('the token is never sent to the server in a request URL or Referer', async 
   await page.waitForLoadState('networkidle');
   expect(leaks, `token leaked to server: ${leaks.join(', ')}`).toEqual([]);
 });
+
+
+test('an already-open tab accepts a fresh #token fragment without reloading', async ({
+  page,
+  server,
+  fixture,
+}) => {
+  // Start like a real stale/unauthenticated tab. The app is already mounted
+  // before the user pastes the authenticated launch URL.
+  await page.goto(server.url);
+  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByLabel('Session token')).toHaveValue('');
+
+  await page.evaluate(() => {
+    (window as Window & { __tekonBootstrapMarker?: string })
+      .__tekonBootstrapMarker = 'mounted';
+  });
+
+  await page.evaluate((token) => {
+    window.location.hash = new URLSearchParams({ token }).toString();
+  }, fixture.sessionToken);
+
+  await expect(page.getByLabel('Session token')).toHaveValue(
+    fixture.sessionToken,
+  );
+  expect(page.url()).not.toContain('token=');
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { __tekonBootstrapMarker?: string })
+          .__tekonBootstrapMarker,
+    ),
+  ).toBe('mounted');
+
+  const unauthorized: string[] = [];
+  page.on('response', (response) => {
+    if (
+      (response.url().includes('/api/rpc') ||
+        response.url().includes('/api/sessions')) &&
+      response.status() === 401
+    ) {
+      unauthorized.push(response.url());
+    }
+  });
+
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/rpc') && response.status() === 200,
+  );
+  await page.getByRole('button', { name: /刷新/ }).click();
+  await refreshed;
+  expect(
+    unauthorized,
+    `401s after same-document bootstrap: ${unauthorized.join(', ')}`,
+  ).toEqual([]);
+});

@@ -176,6 +176,19 @@ export async function createApiCaller(
   });
   jobRunner.start();
 
+  // Automation listeners launch asynchronous work outside JobRunner. Track
+  // every started task so close() cannot shut the database underneath a
+  // callback that was already running when the listeners were detached.
+  let closing = false;
+  const automationTasks = new Set<Promise<unknown>>();
+  const trackAutomationTask = <T,>(task: Promise<T>): void => {
+    automationTasks.add(task);
+    void task.then(
+      () => automationTasks.delete(task),
+      () => automationTasks.delete(task),
+    );
+  };
+
   // 4e: readiness projection. When a gate result lands OR a human decision is
   // decided, (re-)evaluate pre-PR readiness off the event stream so the UI/
   // delivery can react without polling. Both `gate/result` and `approval/
@@ -190,6 +203,7 @@ export async function createApiCaller(
   // enqueued job is always drained here.
   const readinessDebounce = new Map<string, ReturnType<typeof setTimeout>>();
   const unsubscribeReadiness = bus.subscribeAll((event) => {
+    if (closing) return;
     if (event.type !== 'gate/result' && event.type !== 'approval/decided') {
       return;
     }
@@ -197,11 +211,14 @@ export async function createApiCaller(
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
       readinessDebounce.delete(event.sessionId);
-      void jobRunner
-        .enqueue({ sessionId: event.sessionId, kind: 'readiness-evaluate' })
-        .catch((error) => {
-          console.error('[readiness] enqueue failed:', error);
-        });
+      if (closing) return;
+      trackAutomationTask(
+        jobRunner
+          .enqueue({ sessionId: event.sessionId, kind: 'readiness-evaluate' })
+          .catch((error) => {
+            console.error('[readiness] enqueue failed:', error);
+          }),
+      );
     }, 500);
     if (typeof timer.unref === 'function') timer.unref();
     readinessDebounce.set(event.sessionId, timer);
@@ -214,11 +231,13 @@ export async function createApiCaller(
   // delivery/prepared — but NEVER creates a PR (governance red line). Long-
   // lived server only (web/headless): CLI is run-to-exit and does not wire this.
   const unsubscribeAutoPrepare = bus.subscribeAll((event) => {
+    if (closing) return;
     if (event.type !== 'agent/status') return;
     if ((event.payload as { status?: string }).status !== 'passed') return;
-    void (async () => {
+    const task = (async () => {
       try {
         const session = await sessions.getSession(event.sessionId);
+        if (closing) return;
         if (!session || !canAutoPrepareDelivery(session.profile)) return;
         await jobRunner.enqueue({
           sessionId: event.sessionId,
@@ -228,6 +247,7 @@ export async function createApiCaller(
         console.error('[auto-prepare] enqueue failed:', error);
       }
     })();
+    trackAutomationTask(task);
   });
 
   // 4a: SessionService owns the run/resume/cancel/pause orchestration; the
@@ -277,17 +297,17 @@ export async function createApiCaller(
     sessions,
     bus,
     async close() {
-      // F7-P0-07: detach the automation listeners FIRST. Otherwise a
-      // gate/result / approval/decided (re-arms a readiness timer) or an
-      // agent/status:passed (fires an auto-prepare enqueue) arriving during
-      // jobRunner.stop()'s in-flight window would enqueue against the closing
-      // db — the "[readiness] enqueue failed: database connection is not open"
-      // late write. Then clear any pending readiness debounce timers, stop the
-      // runner (waits up to 5s for in-flight jobs), and close the db last.
+      // Stop admitting automation work, detach listeners, clear timers, and
+      // wait for callbacks that had already crossed the listener boundary.
+      // Unsubscribe alone cannot cancel an async callback suspended in
+      // getSession()/enqueue(); closing SQLite before it settles recreates the
+      // exact late-write race this teardown is meant to prevent.
+      closing = true;
       unsubscribeReadiness();
       unsubscribeAutoPrepare();
       for (const timer of readinessDebounce.values()) clearTimeout(timer);
       readinessDebounce.clear();
+      await Promise.allSettled([...automationTasks]);
       await jobRunner.stop();
       db.close();
     },

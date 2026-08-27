@@ -7,6 +7,7 @@ import { setRpcSessionToken } from '../lib/rpc-client.js';
 import {
   hashHasToken,
   persistToken,
+  readTokenFromLocation,
   stripTokenFragment,
 } from '../lib/session-bootstrap.js';
 
@@ -61,12 +62,26 @@ export function AuthProvider({
     setTokenState(newToken);
   }, []);
 
-  // Strip the token fragment from the address bar once, after we have captured
-  // it into state (main.tsx already seeded the RPC client). Done in an effect
-  // so state is committed first — replaceState only rewrites the URL, it does
-  // not navigate, so the SPA route is untouched.
+  // Capture both the initial bootstrap fragment and later same-document
+  // fragment navigations. A user may paste a fresh `#token=` URL into an
+  // already-open Tekon tab; browsers handle that as a hashchange rather than a
+  // full reload, so a mount-only read would leave the old/null credential in
+  // memory and the secret visible in the address bar. Seed the RPC client
+  // synchronously before the React state update, then strip the fragment.
   useEffect(() => {
-    if (hashHasToken()) stripTokenFragment();
+    const captureTokenFragment = () => {
+      if (!hashHasToken()) return;
+      const fragmentToken = readTokenFromLocation();
+      if (fragmentToken) {
+        setRpcSessionToken(fragmentToken);
+        setTokenState(fragmentToken);
+      }
+      stripTokenFragment();
+    };
+
+    captureTokenFragment();
+    window.addEventListener('hashchange', captureTokenFragment);
+    return () => window.removeEventListener('hashchange', captureTokenFragment);
   }, []);
 
   // Detect actual token changes and evict old-session cache entries.

@@ -36,10 +36,10 @@ export async function commandUi(
       '未找到 web-session.json 文件，请先运行 "tekon init" 初始化项目',
     );
   }
-  const { token } = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
-    token: string;
+  const webSession = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
+    token?: unknown;
   };
-  if (!token || typeof token !== 'string') {
+  if (typeof webSession.token !== 'string' || !webSession.token) {
     throw new Error(
       `${tokenPath} 中的 web-session.json 格式无效，请重新运行 "tekon init"`,
     );
@@ -69,16 +69,11 @@ export async function commandUi(
   }
 
   io.stdout.write(`repo=${repoPath}\n`);
-  // F7-P0-01: hand the session token to the browser via the URL fragment. The
-  // fragment is never sent to the server (no Referer / request URL / log), and
-  // the client captures it, persists to sessionStorage, then strips it from
-  // the address bar. Without this the default Web entry 401s until the user
-  // hand-copies the token out of .tekon/web-session.json.
+  // The child prints the authenticated launch URL only after its socket has
+  // successfully bound. Printing the long-lived token before listen() would
+  // expose it to an unrelated local service if the requested port is occupied.
   io.stdout.write(
-    `url=http://localhost:${port}/#token=${encodeURIComponent(token)}\n`,
-  );
-  io.stdout.write(
-    'Starting Tekon Web... Press Ctrl+C to stop\n',
+    'Starting Tekon Web... The authenticated URL will appear after the server is listening. Press Ctrl+C to stop\n',
   );
 
   const child = spawn(tsxBin, ['src/server/index.ts'], {

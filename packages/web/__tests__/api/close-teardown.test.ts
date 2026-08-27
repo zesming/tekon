@@ -69,4 +69,72 @@ describe('createApiCaller close() automation-listener teardown (F7-P0-07)', () =
       `late enqueue after close: ${JSON.stringify(enqueueFailures)}`,
     ).toEqual([]);
   });
+
+  it('waits for an auto-prepare callback that started before close', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    const workspace = await api.sessions.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
+    const session = await api.sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'shutdown race',
+      profile: 'autonomous-delivery',
+      runId: null,
+    });
+
+    let lookupStartedResolve!: () => void;
+    const lookupStarted = new Promise<void>((resolve) => {
+      lookupStartedResolve = resolve;
+    });
+    let releaseLookup!: () => void;
+    const lookupGate = new Promise<void>((resolve) => {
+      releaseLookup = resolve;
+    });
+    const originalGetSession = api.sessions.getSession.bind(api.sessions);
+    vi.spyOn(api.sessions, 'getSession').mockImplementation(
+      async (sessionId) => {
+        if (sessionId === session.id) {
+          lookupStartedResolve();
+          await lookupGate;
+        }
+        return originalGetSession(sessionId);
+      },
+    );
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.bus.publish(
+      event('agent/status', session.id, { status: 'passed' }),
+    );
+    await lookupStarted;
+
+    let closeFinished = false;
+    const closePromise = api.close().then(() => {
+      closeFinished = true;
+    });
+
+    try {
+      // The callback is suspended inside getSession(). close() must wait for it
+      // instead of closing SQLite underneath it.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      expect(closeFinished).toBe(false);
+    } finally {
+      releaseLookup();
+      await closePromise;
+    }
+
+    const enqueueFailures = errorSpy.mock.calls.filter((args) =>
+      args.some(
+        (arg) =>
+          typeof arg === 'string' &&
+          arg.includes('[auto-prepare] enqueue failed'),
+      ),
+    );
+    expect(
+      enqueueFailures,
+      `in-flight callback wrote after close: ${JSON.stringify(enqueueFailures)}`,
+    ).toEqual([]);
+  });
+
 });
