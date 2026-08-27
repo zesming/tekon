@@ -1,9 +1,10 @@
 import { expect, test } from './shared-fixture.js';
 
 test.describe('Tekon main flow', () => {
-  test('dashboard, run list, run detail tabs, approvals, and token-required operations', async ({
+  test('dashboard, run list, run detail tabs, approvals, and authenticated operations', async ({
     page,
     server,
+    fixture,
   }) => {
     // ── 1. Dashboard page loads with sidebar ──────────────────────────────
     // Phase 3 3d: the legacy Cockpit dashboard moved to /advanced (the default
@@ -13,6 +14,12 @@ test.describe('Tekon main flow', () => {
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     await expect(page.getByText('Tekon', { exact: true })).toBeVisible();
     await expect(page.getByText('Cockpit', { exact: true })).toBeVisible();
+
+    // Shared business journeys use the production sessionStorage bootstrap,
+    // so the visible UI credential and the RPC/SSE credential are the same.
+    await expect(page.getByLabel('Session token')).toHaveValue(
+      fixture.sessionToken,
+    );
 
     // Sidebar navigation items are present
     await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();
@@ -95,27 +102,10 @@ test.describe('Tekon main flow', () => {
     // Pending decision is displayed
     await expect(page.getByText('decision_1', { exact: true })).toBeVisible();
 
-    // ── 7. Approve without token → expect error flash ─────────────────────
-    // Token is not set (auth starts with null token).
-    // The token-warning banner is shown.
+    // ── 7. Connected state exposes approval controls ──────────────────────
     await expect(
       page.getByText('需要提供 token 才能执行审批操作'),
-    ).toBeVisible();
-
-    // The approve button uses two-step confirmation:
-    // First click → "确认批准?", second click → executes.
-    // Without a token the handler fires a flash error.
-    await page.getByRole('button', { name: '✓ 批准' }).click();
-    // Wait for the confirmation state
-    await expect(
-      page.getByRole('button', { name: '确认批准?' }),
-    ).toBeVisible();
-    // Second click triggers the handler which checks token
-    await page.getByRole('button', { name: '确认批准?' }).click();
-
-    // Flash error message appears
-    await expect(
-      page.getByText('请先登录并提供 token'),
-    ).toBeVisible();
+    ).not.toBeVisible();
+    await expect(page.getByRole('button', { name: '✓ 批准' })).toBeEnabled();
   });
 });
