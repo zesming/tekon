@@ -433,10 +433,12 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       // F4-P0-03 (4.3.4): fence the SUCCESS path too. The catch below only
       // guards ownership-lost when finalize THROWS; when finalize SUCCEEDS
       // while fenced, a stale executor would promote its worktree onto the run
-      // branch the recovering owner already owns (promoteLeaseToRunBranch uses
-      // `git branch -f`, no expected-old-SHA CAS) and transition the node to
+      // branch the recovering owner already owns and transition the node to
       // `passed`, reverting/overwriting the new owner's authoritative state.
-      // Stand down before any finalize/promote/transition side effects.
+      // promoteLeaseToRunBranch now uses `git update-ref` expected-old-OID CAS,
+      // which stops the branch overwrite, but the stale executor would still
+      // run finalize/transition side effects; stand down here as defense in
+      // depth before any finalize/promote/transition.
       if (isJobOwnershipLostAbort(deps.signal)) {
         await audit.append({
           runId,

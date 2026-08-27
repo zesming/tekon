@@ -362,10 +362,12 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
           } finally {
             if (!repairSucceeded) {
               // S5 fencing (S6): do NOT finalize a fenced executor's repair
-              // lease — finalize commits + force-promotes (`git branch -f`) the
-              // stale repair worktree onto the run branch the recovering owner
-              // already delivered, reverting its promote. Stand down; the new
-              // owner owns this node's worktree/branch now.
+              // lease — finalize commits + promotes the stale repair worktree
+              // onto the run branch the recovering owner already delivered.
+              // Promotion now uses `git update-ref` expected-old-OID CAS, so the
+              // branch overwrite itself is blocked, but standing down here also
+              // avoids the stale commit/finalize side effects. The new owner
+              // owns this node's worktree/branch now.
               if (!isJobOwnershipLostAbort(deps.getSignal?.())) {
                 await leaseService
                   .finalizeExecutionLease(runId, repairNode.id)

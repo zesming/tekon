@@ -1,5 +1,35 @@
 # 变更日志
 
+## v0.15.2
+
+第九轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-ninth-authoritative-review.md`，作者推送）循环评估后的收敛。本轮同步基线前，远端已领先 15 个提交——CI 自修改工作流在 v0.15.1 之上做了**实质并发/CAS 硬修复**后才发布报告。经动态评估 workflow（CI 提交正确性、Runtime/产品闭环、UI-UX/报告完整性三视角独立实地核验 + 首席综合 max）**一致判定无业务代码逻辑必修项**：报告为 criteria-based（准则式）复述已披露长期里程碑，CI 15 提交已正确关闭其可关闭部分。本轮相称地做报告批注 + B/P/C 诚实标注 + 三项低成本诚实收敛（注释漂移、版本、断链引用），不为凑工作量改任何架构级代码。
+
+### 已闭环并复核保留（B，CI 15 提交经实地核验正确、无新回归、测试真锁）
+
+- `d22ac0f`/`6fe3b2a`（**报告 P0-05 Git 侧**）：`worktree-manager.ts` 分支 promotion 从 `git branch -f` 改用 `git update-ref <targetRef> <leaseHeadOid> <expectedOldOid>` 的 expected-old-OID compare-and-swap——并发 promoter 中恰有一个赢、落败者报错不静默覆盖新工作；expected-old 由 `rev-parse --verify` 读得，首次 promotion 非回归（`ensureRunBranch` 在建租约前预建 delivery ref，targetRef 必存在）。
+- `8288da1`/`f62b84e`/`3fbb0b6`（**报告 P0-04 owner-conditioned write 半**）：`session-store.ts` `updateJob`（owner+status 谓词入 SQL WHERE，`changes!==1` 返回 null 不改行）+ `settleOwnedJob`（单条 SQL 内 owner 检查 + 取消优先 + 终态，消除 read-then-write 窗口）；`job-runner.ts` 所有写入点（checkpoint/heartbeat/settle/pause/cancel）改条件写，heartbeat miss → abort ownership-lost + killAll 自我 fence。`job-owner-fencing.test.ts` 用真实内存 SQLite 锁死 stale owner 不能写/取消优先/终态不被 stale pause 复活。
+- `6642ef0`/`e1afb82`/`12e1198`/`ce434e9`：SSE 行尾单遍逐字符归一化（正确处理跨 chunk 分裂的 CRLF），无回归。
+- `c4fc9e7`（**报告 P1-01 半**）：`TopBar.tsx` 手工 token 改本地 `draftToken` + 350ms debounce 应用，避免每键 `setToken` 反复切 scope/清 cache/重建 RPC·SSE。
+- `fe6c2c3`/`1155c95`：a11y 统一单一 `main` landmark（`AppLayout` 用 `<main>`、`SessionDetailPage` 嵌套 `<main>` 降为 `<section>`）。
+- `d624be0`：首页导航前预热 client graph 以降 flaky。
+
+### 本轮低成本诚实收敛（非业务代码逻辑）
+
+- **注释漂移**：`node-executor.ts` 与 `gate-runner.ts` 的 fencing 注释仍称 promotion 用 `git branch -f`、"no CAS"，与 `d22ac0f` 矛盾。更新为反映现用 `git update-ref` expected-old-OID CAS，并说明 stand-down fencing 与 CAS 正交、仍作为 defense-in-depth 必要（避免 stale executor 的 finalize/transition 副作用）。所守 fencing 逻辑本身正确不变。
+- **版本元数据同步**：CI 15 个含实质 bug 修复/硬化的提交未 bump 版本；本次随批注把 `0.15.1` → `0.15.2`（PATCH）——均为对既有行为的修复级硬化，无超出用户可见的新功能。
+- **报告断链引用**：权威报告第 6 行引用不存在的 `...-ninth-review.md` 详细证据矩阵、第 92 行抬为"最终依据"。改为自引本报告的实施方批注小节，消除悬空引用（不伪造 companion 文件）。
+
+### 部分闭环与诚实递延（P/C，报告 §9 分阶段，勿当本轮缺口）
+
+- **P0-04/P0-05 P（部分）**：Git expected-old CAS + owner/status 条件写已闭环；全库仍无持久化 `claim_generation` 列（fencing 靠 owner 字符串 + 进程内 symbol），`db/repositories.ts` `transitionNode` 无 Node revision/expected-from CAS。后二者为报告 §9 第 1/2 项 single-owner-vs-multi-owner 架构 ADR，≡ 前四/五/七/八轮 F4-P0/F5-P0-02~05/F7-P0-05·06/F8-P0-04 递延；Node expected-from CAS 是剩余最小可切分项但仍属中等成本 schema+call-site 改动，待用户拍板后独立 PR。
+- **P1-01 P**：debounce 已闭环；bootstrap 成立后 token 框状态化（已连接/失败/重连）UX 重构递延（产品级 UI 改动）。
+- **P0-01/02/03/06、P1-02~05 C**：真 Provider 执行期流式 + follow-up/steer/resume（显式 `NotSupportedYet`）、durable inbox、Collaborate/Deliver 双轨、完整 shutdown quiescence、Narrative Feed、当前状态 Inspector、结构化 Final Result、长 Session 端到端有界——报告 §9 分阶段独立 ADR/PR 里程碑，§11 认可诚实标注边界的阶段性基础设施可评估合并。
+- **§7.2 flaky**：报告"green≠一次通过"批评成立且诚实（报告未谎称一次过）；`retries:1` 是长期已披露妥协，非本批新回归，长期消除 SSE/server-readiness/导航竞态后去除。
+
+### 流程治理建议（交用户决策）
+
+自修改评审 workflow 已连续第五轮（第 3/6/7/8/9 轮）在发布报告的同时夹带业务代码提交；报告 §7/§8 自身也建议冻结范围、停用该工作流。建议固化"评审只读、业务改动走显式提交"，并将 single-owner daemon / 完整 multi-owner、真实 Provider、双轨产品、长 Session、安全 nonce 分别进入独立 ADR 与独立 PR。
+
 ## v0.15.1
 
 第八轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-eighth-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（CLOSED 硬化正确性、Runtime/并发/产品闭环、UI-UX/测试/报告完整性三视角独立实地核验 + 首席综合）**一致判定 `hasMustFix=false`**：报告本身把第七轮整改 + 本轮边界修复 + 移动端全判为【通过】，剩余全部是报告 §8 自身分阶段的已披露长期里程碑 / 待 ADR 架构决策。**本轮无必修代码项**，相称地只做报告批注 + 诚实递延 + 本次版本元数据同步。

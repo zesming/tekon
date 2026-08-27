@@ -3,7 +3,7 @@
 > 复审日期：2026-08-27  
 > 复审对象：PR #10 `review/deepseek-harness-migration-2026-08-20`  
 > 上一轮报告：`docs/reviews/2026-08-27-tekon-harness-replatform-eighth-review.md`  
-> 本轮详细证据矩阵：`docs/reviews/2026-08-27-tekon-harness-replatform-ninth-review.md`  
+> 本轮详细证据矩阵：见文末「实施方批注（第九轮）」——本轮无独立明细文件，批注小节即为批注是否成立的证据依据。  
 > 复审维度：产品逻辑、UI 实现、UX 交互、可访问性、整体 Runtime 架构、并发与恢复、代码质量、测试可信度、过度实现与过度设计。
 
 ---
@@ -89,7 +89,7 @@ CLI / Web 启动
 - 有 Profile 或 UI 标签不等于 Collaborate / Deliver 双轨；
 - 有折叠组件不等于长 Session 已端到端有界化。
 
-第九轮详细报告中的“批注主题—代码证据—通过标准”矩阵应作为批注是否成立的最终依据。
+文末「实施方批注（第九轮）」中的"批注主题—代码证据—通过标准"矩阵作为批注是否成立的最终依据。
 
 ---
 
@@ -400,3 +400,48 @@ Independent Review
 > 当前 PR 最多作为诚实标注边界、冻结范围的阶段性基础设施里程碑评估合并；不得宣称完整 Harness 迁移已经完成，也不得宣称普通用户产品已经可发布。
 
 本轮未执行 merge、release 或 deploy。
+
+---
+
+## 实施方批注（第九轮）
+
+> 批注日期：2026-08-27  
+> 批注方：实施侧（主代理 + 三视角评估 workflow high + 首席综合 max，均实地读码 / 实跑测试）  
+> 收敛版本：v0.15.2（PATCH）  
+> 结论：**本轮无业务代码逻辑必修项**——性质同第八轮。报告为 criteria-based（准则式）复述已披露长期里程碑；本轮同步基线前远端已领先 15 提交（CI 自修改工作流的实质并发/CAS 硬修复），已正确关闭报告的可关闭部分。本轮相称地做批注 + B/P/C 诚实标注 + 三项低成本诚实收敛，不为凑工作量改架构级代码。
+
+### 一、CI 15 提交（v0.15.1 → HEAD）实地核验：正确、无新回归、测试真锁（判 B 保留）
+
+| 批注主题 | 代码证据 | 通过标准 | 判定 |
+| --- | --- | --- | --- |
+| **P0-05 Git 侧统一 expected-old OID CAS** | `worktree-manager.ts:196-219`：`rev-parse --verify` 读 `expectedOldOid`/`leaseHeadOid` → `git update-ref <targetRef> <leaseHeadOid> <expectedOldOid>` 替代 `git branch -f`；CAS 失败 update-ref 非 0 退出 → 抛错站定不静默覆盖（`d22ac0f`/`6fe3b2a`） | Git promotion 用 compare-and-swap，并发 promoter 恰一个赢、落败者不擦除新工作；首次 promotion 不回归 | **B 已闭环**（首次 promotion 由 `ensureRunBranch` 在建租约前预建 delivery ref 保证 targetRef 存在，`engine-worktree.e2e` 真实 git 用例覆盖成功路径与首次写入） |
+| **P0-04 owner-conditioned 原子写** | `session-store.ts:604-698`：`updateJob`（owner+status 谓词入 WHERE，`changes!==1` 返回 null）+ `settleOwnedJob`（单 SQL 内 owner 检查 + 取消优先 + 终态，消 read-then-write 窗口）；`job-runner.ts` checkpoint/heartbeat/settle/pause/cancel 全改条件写，heartbeat miss → abort ownership-lost + killAll 自我 fence（`8288da1`/`f62b84e`） | stale owner 无法 heartbeat/checkpoint/settle，取消优先于成功，终态不被 stale pause 复活 | **B 已闭环**（`job-owner-fencing.test.ts` 真实内存 SQLite 真锁 5 用例，非 mock） |
+| SSE 行尾归一化 | `session-stream.ts` 单遍逐字符归一化 `\r`/`\r\n`，处理跨 chunk 分裂 CRLF（`6642ef0`/`e1afb82`/`12e1198`） | CR-only、CRLF、跨 chunk 分裂帧均正确解析、不重复计数空行 | **B 已闭环**（CR-only + split-CRLF 帧测试全绿） |
+| a11y 单一 main landmark | `AppLayout.tsx` 用 `<main id=main-content>`、`SessionDetailPage.tsx` 嵌套 `<main>` 降为 `<section>`（`fe6c2c3`/`1155c95`） | 单一顶层 main landmark，无嵌套/重复 | **B 已闭环**（报告未点名，属额外正确修复） |
+| P1-01 手工 token debounce（半） | `TopBar.tsx:14-42`：`draftToken` + 350ms setTimeout 应用，onChange 只改 draft（`c4fc9e7`） | 手工兜底用本地 draft + 明确应用，不每键 setToken 反复切 scope/清 cache/重建 RPC·SSE | **P 部分**（debounce 已闭环；见下 P 类） |
+| e2e 稳定性 | 首页导航前预热 client graph 降 flaky（`d624be0`） | 降低冷启动/共享 fixture flaky | **B 已闭环**（稳定性改动，非行为变更） |
+
+**误报（D）**：曾疑首次 promotion 因 `rev-parse --verify` 目标 ref 不存在而抛错 —— 为隔离 probe 绕过 `ensureRunBranch` 引导链的无效复现；delivery ref 由 `ensureRunBranch` 保证在建租约前先存在，判 D，记录反驳依据。
+
+### 二、部分闭环诚实标注（P，剩余属架构/产品级递延）
+
+- **P0-04 / P0-05 持久 generation + Node CAS**：owner/status 条件写（P0-04 半）与 Git expected-old CAS（P0-05 Git 侧）**已做**；但全库**无持久化 `claim_generation` 列**（跨进程 fencing 仍靠 owner 字符串 + 进程内 symbol `executionTokens`），`db/repositories.ts` 的 `transitionNode` **无 Node revision/expected-from CAS**（`casWorkflowInstanceStatus` 只 CAS workflow_instance）。后二者为报告 §9 第 1/2 项 single-owner-vs-multi-owner 架构 ADR，≡ 前四/五/七/八轮一致递延。Node expected-from CAS 是剩余最小可切分项，但仍属中等成本 schema + call-site 改动，待用户就 single-owner daemon vs 完整 multi-owner 拍板后进独立 PR。
+- **P1-01 token 状态化 UX**：`draft + debounce`（技术诉求 a）已闭环；bootstrap 成立后 token 框退化为「已连接 / 失败 / 重连」状态（诉求 b）属产品级 UI 重构，递延。
+
+### 三、诚实递延（C，报告 §9 分阶段里程碑，与代码事实一致，勿当本轮缺口）
+
+- **P0-01 / P0-02 / P0-03 / P0-06**：真 Provider 执行期增量流 + follow-up/steer/resume（当前 legacy-agent-driver 一次性 `await done`，`followUp`/`steer`/`resume` 抛显式 `NotSupportedYet`）、durable inbox（无独立 inbox 表）、Collaborate/Deliver 后端双轨（profile 仅 automation surface 差异）、完整 shutdown quiescence（`stop()` 5s 固定超时非 abort/kill/join 证明）——报告 §9 独立 ADR/PR 里程碑，§11 认可诚实标注边界的阶段性基础设施可评估合并。
+- **P1-02 / P1-03 / P1-04 / P1-05**：Narrative Feed、当前状态 Inspector、服务端结构化 Final Result、长 Session 端到端有界（cursor 分页 + bounded replay + virtualization + 性能预算）——报告 §9 第 7/8 项产品完成级里程碑。
+- **§7.2 flaky**：报告「green≠一次通过」批评成立且诚实（报告未谎称一次过）；`retries:1` 是长期已披露妥协，非本批新回归。
+
+### 四、本轮低成本诚实收敛（v0.15.2，非业务代码逻辑）
+
+1. **注释漂移**：`node-executor.ts`（success-path fence）与 `gate-runner.ts`（repair-lease fence）的注释仍称 promotion 用 `git branch -f`、"no CAS"，与 `d22ac0f` 矛盾。已更新为反映现用 `git update-ref` expected-old-OID CAS，并说明 stand-down fencing 与 CAS 正交、仍作 defense-in-depth 必要（避免 stale executor 的 finalize/transition 副作用）。所守 fencing 逻辑本身正确不变。
+2. **版本**：CI 15 个含实质 fix 的提交未 bump；随本批注 `0.15.1` → `0.15.2`（PATCH），CHANGELOG 增补 v0.15.2 汇总。
+3. **断链引用**：本报告第 6 行原引用不存在的 `...-ninth-review.md` 详细矩阵、第 92 行抬为"最终依据"。已改为自引本批注小节，消除悬空引用（不伪造 companion 文件）。
+
+### 五、流程治理建议（交用户决策）
+
+自修改评审 workflow 已连续第五轮（第 3/6/7/8/9 轮）在发布报告的同时夹带业务代码提交；报告 §7/§8 自身也建议冻结范围、停用该工作流。建议固化「评审只读、业务改动走显式提交」，并将 single-owner daemon / 完整 multi-owner、真实 Provider、双轨产品、长 Session、安全 nonce 分别进入独立 ADR 与独立 PR。
+
+> **实施方裁决**：认可报告"整个 PR 未达完整 Harness 迁移 / 普通用户可发布产品"的最终裁决，也认可 §11"当前 PR 最多作为诚实标注边界、冻结范围的阶段性基础设施里程碑评估合并"。本轮 CI 15 提交的并发/CAS 硬修复正确保留（B）；持久 generation + Node CAS、真实 Provider、双轨、长 Session 有界化诚实递延（C）；本轮无业务代码逻辑必修，只做批注 + 三项低成本诚实收敛（v0.15.2）。
