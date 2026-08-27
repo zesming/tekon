@@ -20,7 +20,7 @@ export function AppLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
-  const mainRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const previousPathRef = useRef(pathname);
   const focusMainAfterCloseRef = useRef(false);
 
@@ -143,7 +143,7 @@ export function AppLayout() {
           onClick={() => closeNav(true)}
         />
       ) : null}
-      <div className="main" ref={mainRef} tabIndex={-1}>
+      <main id="main-content" className="main" ref={mainRef} tabIndex={-1}>
         <TopBar
           navOpen={navOpen}
           onToggleNav={() =>
@@ -155,7 +155,7 @@ export function AppLayout() {
         <div className="view">
           <Outlet />
         </div>
-      </div>
+      </main>
     </>
   );
 }
