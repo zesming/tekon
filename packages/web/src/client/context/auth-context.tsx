@@ -58,7 +58,15 @@ export function AuthProvider({
   const [token, setTokenState] = useState<string | null>(initialToken);
   const prevScopeRef = useRef<string>(authScope(initialToken));
 
+  // Token changes can originate from the manual TopBar fallback as well as a
+  // same-document `#token=` navigation. Descendant query effects run before
+  // this provider's passive effect, so seed the imperative RPC client and
+  // storage synchronously before scheduling the React state update. Otherwise
+  // the first request for the new auth scope can still leave with the old/null
+  // credential and cache a 401 under the new scope.
   const setToken = useCallback((newToken: string | null) => {
+    setRpcSessionToken(newToken);
+    persistToken(newToken);
     setTokenState(newToken);
   }, []);
 
@@ -66,15 +74,13 @@ export function AuthProvider({
   // fragment navigations. A user may paste a fresh `#token=` URL into an
   // already-open Tekon tab; browsers handle that as a hashchange rather than a
   // full reload, so a mount-only read would leave the old/null credential in
-  // memory and the secret visible in the address bar. Seed the RPC client
-  // synchronously before the React state update, then strip the fragment.
+  // memory and the secret visible in the address bar.
   useEffect(() => {
     const captureTokenFragment = () => {
       if (!hashHasToken()) return;
       const fragmentToken = readTokenFromLocation();
       if (fragmentToken) {
-        setRpcSessionToken(fragmentToken);
-        setTokenState(fragmentToken);
+        setToken(fragmentToken);
       }
       stripTokenFragment();
     };
@@ -82,7 +88,7 @@ export function AuthProvider({
     captureTokenFragment();
     window.addEventListener('hashchange', captureTokenFragment);
     return () => window.removeEventListener('hashchange', captureTokenFragment);
-  }, []);
+  }, [setToken]);
 
   // Detect actual token changes and evict old-session cache entries.
   useEffect(() => {
@@ -92,8 +98,8 @@ export function AuthProvider({
     // Keep the RPC client's token in sync so authenticated (auth:'session')
     // procedures and the SSE client actually send x-session-token, and persist
     // it so a refresh keeps the session (F7-P0-01). main.tsx seeds the initial
-    // token before first paint; this covers every later change (manual paste
-    // in the TopBar, or clearing the token).
+    // token before first paint; setToken() synchronously covers later changes.
+    // These calls remain idempotent here as a defensive invariant.
     setRpcSessionToken(token);
     persistToken(token);
 

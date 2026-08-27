@@ -27,7 +27,9 @@ await server.listen();
 console.log(
   `url=${server.url}/#token=${encodeURIComponent(sessionToken)}`,
 );
-console.log(`Tekon Web listening on ${server.url}`);
+// Do not print a second bare URL: terminals typically make it clickable and it
+// is easy to mistake for the authenticated launch link above.
+console.log('Tekon Web ready');
 
 const shutdown = async () => {
   await server.close();
