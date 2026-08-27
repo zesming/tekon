@@ -1,4 +1,4 @@
-import { useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { useLocation } from 'react-router';
 
 import { useSessionToken } from '../hooks/use-session-token.js';
@@ -11,6 +11,8 @@ type TopBarProps = {
   toggleRef?: RefObject<HTMLButtonElement | null>;
 };
 
+const TOKEN_APPLY_DELAY_MS = 350;
+
 export function TopBar(props: TopBarProps) {
   const { pathname } = useLocation();
   const defaultTitle = pathname.startsWith('/advanced')
@@ -20,6 +22,24 @@ export function TopBar(props: TopBarProps) {
     props;
   const { token, setToken } = useSessionToken();
   const [masked, setMasked] = useState(true);
+  const [draftToken, setDraftToken] = useState(token ?? '');
+
+  // Bootstrap/hash/manual changes outside this input stay reflected here.
+  useEffect(() => {
+    setDraftToken(token ?? '');
+  }, [token]);
+
+  // Do not change auth scope, clear caches, and refetch on every keystroke.
+  // Pasting still feels immediate, while typing a long token produces one
+  // credential transition after the user pauses.
+  useEffect(() => {
+    const nextToken = draftToken || null;
+    if (nextToken === token) return;
+    const timer = window.setTimeout(() => {
+      setToken(nextToken);
+    }, TOKEN_APPLY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [draftToken, setToken, token]);
 
   return (
     <div className="topbar">
@@ -47,9 +67,11 @@ export function TopBar(props: TopBarProps) {
           className="input"
           type={masked ? 'password' : 'text'}
           aria-label="Session token"
-          value={token ?? ''}
-          onChange={(e) => setToken(e.target.value || null)}
+          value={draftToken}
+          onChange={(e) => setDraftToken(e.target.value)}
           placeholder="Session token"
+          autoComplete="off"
+          spellCheck={false}
         />
         <button
           type="button"
