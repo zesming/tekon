@@ -567,3 +567,64 @@ Event spine、Session store、Job runner 和 SSE 也可以作为未来纵向闭�
 > 本 PR 最多作为范围冻结、边界诚实披露的阶段性基础设施里程碑评估合并；不得宣称完整 Harness 迁移或普通用户产品已经可发布。
 
 本轮未执行 merge、release 或 deploy。
+
+---
+
+## 实施方批注（第十轮）
+
+> 批注日期：2026-08-27  
+> 批注方：实施侧（主代理 + 三视角评估 workflow：flaky 根因 max / 报告 triage / CI 事实核验；首席综合 max，均实地读码 / 本地复现 / 探针实证）  
+> 收敛目标版本：v0.15.3（PATCH）  
+> 核心裁决：**本轮 `hasMustFix=true`，且报告的核心判断准确**——不同于第八 / 九轮"无 PR-local 必修"，本轮存在一个真实、当前 PR 自身可也必须收敛的阻断项：**Web Playwright CI 首轮 flaky 使整体 CI 失败**（§4 / §11）。架构级 P0 / P1 仍为已披露里程碑、诚实 C 递延（报告 §8 自身接受"降格为基础设施里程碑 + 冻结范围后不必同 PR 全实现"）。
+
+### 一、唯一 PR-local 必修：Playwright 首轮 flaky 的确定性根因（对应报告 §4 / §9-1 / §11）
+
+报告只观察到"首次导航 / 首次状态建立未在超时内完成 → retry 立即通过"这一表象，未给出根因。实施方已本地 1:1 复现（`corepack pnpm --dir packages/web test:e2e`，CI=1：22 passed / 5 flaky / exit 1，5 个 journey 与 CI job `98461773572` 完全一致），并用注入探针（sessionStorage / `window.__seedProbe` / RPC token / network trace / error-context 快照）逐层定位到**单一共同根因**：
+
+**跨导航 sessionStorage 令牌 bootstrap 竞态（测试脚手架 artifact，非产品渲染不确定性）。**
+
+| 环节 | 代码证据 | 首轮失败机制 |
+| --- | --- | --- |
+| beforeEach 根导航 | `packages/web/__tests__/e2e/shared-fixture.ts:44-54`：`page.goto(${server.url}/#token=X)` → 令牌经 `AuthProvider` effect 持久化进 sessionStorage | 探针 `PROBE_AFTER_BEFOREEACH` 每次确认根页 `ss=fixture-session-token` |
+| 业务 journey 二次全新导航 | 各 spec 对**新 server** 做全新 `page.goto(/advanced/... 或 /sessions/:id)` | 新文档 `main.tsx:22` 顶层同步 `readTokenFromLocation()`（`session-bootstrap.ts:19-31`：无 fragment 时回落读 sessionStorage）**首轮间歇读到 null** |
+| 令牌未进客户端 | `main.tsx:23 setRpcSessionToken(null)` | 探针实测失败态 `__seedProbe={initialToken:null,ss:null}`、`rootLen 4613`；通过态 `fixture-session-token`、`rootLen 28373` |
+| 首屏 401 | session-auth RPC / SSE 以无 `x-session-token` 发出 → 服务端 `assertSessionTokenFromFile` 抛 `UNAUTHORIZED` | 渲染"认证失败，无法访问 / Session token is required / ↻ 重试"错误页 |
+| 断言超时 | `.event-feed` / `.run-header-id` / `交付管道 Delivery Pipeline` / token 输入框 value 永不出现 | 5 journey 均为各自 spec"第一个跑的 test"（对新 server 首次导航），机制同一，随执行顺序在 5 文件间漂移 |
+
+**关键排除项（证明这不是简单 flush / timeout 问题）**：
+
+1. 单文件 `--repeat-each ≥10/60` 恒过 → 非 per-test 逻辑 bug，是全量套件里"冷 server 首次导航"竞态；
+2. `page.addInitScript` 同步预置 sessionStorage **首轮仍 `ss=null` 失败** → 排除"sessionStorage flush 延迟"修法；
+3. 无 JS 加载错误、脚本 URL 两态一致 → 非 bundle / 加载问题。
+
+**已实证的确定性修复方向（禁止加 retry / 加 timeout 掩盖）**：让令牌在"与断言同一次导航"上经 URL fragment 同步可得——业务 `page.goto` 自带 `#token=` fragment，`main.tsx` 首帧从 hash 同步命中、绕开跨导航 sessionStorage 读空（实证：`#token=` 同导航使该 journey 立即以真实内容通过，`rootLen 28374`）。
+
+**性质说明**：根因位于**测试脚手架的跨导航令牌交接**，不是产品 bootstrap 缺陷——真实 `tekon ui` 启动首屏 URL 一定带 `#token=` fragment，`main.tsx` 同步命中 hash，永不走 sessionStorage 回落，故生产不触发本竞态。修复对象因此是 e2e fixture，属正当修复而非"掩盖产品 bug"。产品侧存在一个**可选硬化**（RC-FLAKY-03，见下 C 类）：401 错误页在令牌稍后可用时无自动重取；生产不触发，本轮不强制。
+
+**裁决：A 必修，随本轮修复。验收标准 = 同一最终 HEAD 本地多次 `test:e2e` 零 retry + CI Web Playwright 首轮无 flaky（`failOnFlakyTests` 下 exit 0）。**
+
+### 二、17 提交（cb972f4..818a1e2）实地核验：正确、无回归（判 B 保留）
+
+| 主题 | 代码证据 | 裁决 |
+| --- | --- | --- |
+| worktree base-OID fencing | `worktree-manager.ts` `promoteLeaseToRunBranch`：`git update-ref <targetRef> <leaseHeadOid> <lease.baseHead>`，用租约创建时持久化的 `lease.baseHead`（`createLease` 从 baseRef rev-parse + worktree add 自 immutable OID；持久化于 `base_head` 列）作 expected-old，替代 promote 前临时读目标 ref → 消 ABA；legacy 缺 `baseHead` 时显式 `throw ... refusing unsafe promotion` fail-closed（`bfe6e3e`/`e669b8a`/`3215b56`） | **B 已闭环**（core 全绿；git 3-arg update-ref 由 git 自身强制 CAS） |
+| failOnFlakyTests | `playwright.config.ts:13 failOnFlakyTests:!!process.env.CI`，本地保留 1 retry 取 trace、CI 拒绝伪绿（`fa9749f`） | **B 正确治理**（正是本轮暴露 RC-FLAKY-01 的关键） |
+| prod-build e2e | 共享 journeys 改对 production build 跑 + 走真实 launch URL bootstrap（去 `window.fetch` monkeypatch）（`7a92e8a`/`18ae3ba`/`499c2e8`/`d3f5f49`） | **B 正确演进**（更贴近生产，暴露真实竞态而非引入新 bug） |
+| 仓库卫生 | `bd41546` 误加根目录 `nonexistent`、`9bf51a7` 删除；当前工作树 clean | **B 已收敛** |
+
+**P（轻，非阻断）**：worktree promotion 的 CAS 测试为 argv-mock + missing-baseHead 级，非真实 git CAS 拒绝用例；报告 §3.1 措辞略强于测试实锁范围。因 git 自身强制 3-arg CAS、生产语义正确，判 P 非 A（可选补真 git 用例或收窄 §3.1 措辞）。
+
+### 三、诚实递延（C，报告 §5 / §6 架构里程碑，报告 §8 自身接受）
+
+- **§5.1~5.7 P0**：真实 Provider 执行期 streaming（`LegacyAgentDriver.events()` 先 `await done` 再逐条 yield）、follow-up / steer / resume（显式 `NotSupportedYet`）、durable inbox（无独立状态机表）、persistent `claim_generation`（无该列，靠 owner 字符串 + 进程内 symbol）、Node transition expected-from / revision CAS（`transitionNode` 无 CAS）、完整 shutdown quiescence（`stop()` 5s 固定超时）、Collaborate / Deliver 后端双轨（profile 仅 surface 差异）。
+- **§6.1~6.5 P1**：token 状态化 UX、Narrative Feed、Current-state Inspector、服务端结构化 Final Result、长 Session 端到端有界。
+- **RC-FLAKY-03（产品侧可选硬化）**：401 错误页在令牌 null→有值时无自动 refetch；生产首屏 fragment 确定故不触发，交用户决策。
+
+以上与第八 / 九轮一致，为报告 §9 分阶段独立 ADR / PR 里程碑，勿当本轮缺口。
+
+### 四、本轮交付低成本诚实项
+
+- **版本**：17 提交含实质代码却未 bump（仍 0.15.2）；本轮 flaky 修复落地代码，随收敛提交 `0.15.2` → `0.15.3`（PATCH，测试脚手架 bug 修复无用户可见新功能）。
+- **文档**：修复仅触及 e2e fixture，无用户可见行为变更，故 README / manual / AGENTS 无需同步（提交说明声明理由）；本报告 + 验证记录无占位符 / 断链、与真实 GitHub Actions 一致。
+
+> **实施方裁决**：认可报告"整体仍不通过 / 当前 PR 最多作为基础设施里程碑评估"的最终裁决，以及"Playwright CI 失败是本 PR 自身必须收敛、不能以架构递延解释"的判断。本轮唯一 PR-local 必修 = Playwright 首轮 flaky 的确定性根因（跨导航 sessionStorage 令牌交接竞态），已定位并给出实证修复方向；架构 P0 / P1 诚实 C 递延；17 提交正确保留（B）。

@@ -1,5 +1,32 @@
 # 变更日志
 
+## v0.15.3
+
+第十轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-tenth-authoritative-review.md`，作者推送）循环评估后的收敛。不同于第八 / 九轮"无 PR-local 必修"，本轮存在一个真实、当前 PR 自身可也必须收敛的阻断项：**Web Playwright e2e 首轮 flaky 使整体 CI 失败**（本轮 CI 自修改工作流的 `fa9749f` 启用了 `failOnFlakyTests`，不再把 retry-恢复的 flaky 伪装成绿色）。经动态评估 workflow（flaky 根因 max / 报告 triage / CI 事实核验三视角 + 首席综合 max）达成一致：本轮唯一必修 = flaky 的确定性根因；架构级 P0 / P1 仍为已披露里程碑、诚实 C 递延（报告 §8 自身接受"降格为基础设施里程碑后不必同 PR 全实现"）。
+
+### 修复：消除 5 个（潜在 10 个）e2e 首轮 flaky 的确定性根因
+
+- **根因（探针实证）**：`packages/web/__tests__/e2e/shared-fixture.ts` 的 `beforeEach` 用根导航 `/#token=` 把令牌写进 sessionStorage（在 `AuthProvider` 的异步 effect 里），随后每个业务 journey 对同一 server 做**不带 fragment 的二次 `page.goto`**。新文档 `main.tsx` 同步读 sessionStorage 时，上一个文档的异步写**首轮间歇尚未提交** → 首帧 RPC/SSE 无 `x-session-token` → 401 → 渲染认证失败错误页 → 断言的 `.event-feed` / `.run-header-id` / `交付管道 Delivery Pipeline` / token 输入框值永不出现；retry（sessionStorage 已提交）通过。这是**测试脚手架的跨导航令牌交接竞态，非产品 bootstrap 缺陷**——真实 `tekon ui` 首屏 URL 一定带 `#token=`，`main.tsx` 同步命中 hash，永不走 sessionStorage 回落。
+- **修复（只改 e2e fixture，不动产品码）**：在 `shared-fixture.ts` override `page` fixture，对指向本 server 的每次跨文档 `page.goto` 自动注入 `#token=<token>` fragment，使 `main.tsx` 首帧同步命中 hash、彻底绕开跨导航 sessionStorage 交接。single-file 改动覆盖全部 10 个 shared-fixture 消费者及未来新增 journey（含首轮 CI 未暴露、但承受同一竞态的 5 个文件），无遗漏；SPA 路由导航与 `page.reload()` 复用已就绪的 sessionStorage、不经过该 wrapper，属已知且安全的边界。
+- **真锁验证**：新增 `shared-fixture-auth-lock.test.ts` —— 先以 document-start init script 清空 sessionStorage 移除回落令牌，再导航业务路由，正向断言 `.run-header-id` 渲染 + 负向断言无 `认证失败` 错误页。已实测：注入禁用时该锁**确定性失败**、启用时通过，非恒绿死测试。
+- **验证**：同一 HEAD 本地 `CI=1 playwright test`（`failOnFlakyTests` 生效）连续 5 轮 exit 0、28 passed、**零 flaky / 零 retry**；根 `pnpm test` 1311 passed / 3 skipped。
+
+### 已闭环并复核保留（B，本轮 17 个 CI 提交经实地核验正确、无回归）
+
+- worktree base-OID fencing（`bfe6e3e`/`e669b8a`/`3215b56`）：promotion 用租约创建时持久化的 `lease.baseHead` 作 expected-old（替代 promote 前临时读目标 ref），消 ABA；legacy 缺 `baseHead` fail-closed；git 3-arg `update-ref` 强制 CAS。
+- `failOnFlakyTests`（`fa9749f`）：本地保留 1 retry 取 trace，CI 拒绝伪绿——正是本轮暴露上述根因的关键。
+- prod-build e2e（`7a92e8a` 等）：共享 journeys 改对 production build 跑 + 走真实 launch URL bootstrap（去 `window.fetch` monkeypatch），更贴近生产。
+- 仓库卫生：`bd41546` 误加根目录 `nonexistent`、`9bf51a7` 删除；工作树 clean。
+
+### 诚实递延（C，报告 §5 / §6 架构里程碑，报告 §8 自身接受）
+
+真实 Provider 执行期 streaming、follow-up / steer / resume（`NotSupportedYet`）、durable inbox、persistent `claim_generation`、Node transition expected-from / revision CAS、完整 shutdown quiescence、Collaborate / Deliver 后端双轨；token 状态化 UX、Narrative Feed、Current-state Inspector、服务端结构化 Final Result、长 Session 端到端有界。另：产品侧 401 页在令牌可用后自动 refetch 属可选硬化（生产首屏 fragment 确定故不触发），本轮不做。
+
+### 版本与文档
+
+- 17 个 CI 提交含实质代码却未 bump（仍 0.15.2）；本轮 flaky 修复落地代码，随收敛 `0.15.2` → `0.15.3`（PATCH，测试脚手架 bug 修复无用户可见新功能）。
+- 修复仅触及 e2e fixture + 版本 / CHANGELOG / 报告批注，无用户可见行为变更，故 README / manual / AGENTS 无需同步。
+
 ## v0.15.2
 
 第九轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-ninth-authoritative-review.md`，作者推送）循环评估后的收敛。本轮同步基线前，远端已领先 15 个提交——CI 自修改工作流在 v0.15.1 之上做了**实质并发/CAS 硬修复**后才发布报告。经动态评估 workflow（CI 提交正确性、Runtime/产品闭环、UI-UX/报告完整性三视角独立实地核验 + 首席综合 max）**一致判定无业务代码逻辑必修项**：报告为 criteria-based（准则式）复述已披露长期里程碑，CI 15 提交已正确关闭其可关闭部分。本轮相称地做报告批注 + B/P/C 诚实标注 + 三项低成本诚实收敛（注释漂移、版本、断链引用），不为凑工作量改任何架构级代码。
