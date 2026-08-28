@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import {
   useQuery,
@@ -31,12 +31,14 @@ const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
   error: '错误',
   result: '结果',
 };
+const DEFAULT_SUPPORTING_CARD_LIMIT = 6;
 
 export function SessionSidePanel({ state }: { state: SidePanelState }) {
   const scope = useAuthScope();
   const { token } = useSessionToken();
   const flash = useFlash();
   const runId = state.runId;
+  const [showAllCards, setShowAllCards] = useState(false);
 
   // Full decision context (risk, command, approvalSummary) lives in gate.list —
   // approval/requested only carries ids (S1). Fetch it when an approval pends.
@@ -104,6 +106,31 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
     .map((id) => gateById.get(id))
     .filter((d): d is NonNullable<typeof d> => Boolean(d));
 
+  // The inspector should answer "what is true now", not repeat the full feed.
+  // Keep terminal results and errors visible, then show only the latest few
+  // supporting artifact/tool cards until the user explicitly expands history.
+  const { visibleCards, hiddenSupportingCount, hasCollapsibleHistory } =
+    useMemo(() => {
+      const results = state.cards.filter((card) => card.kind === 'result');
+      const errors = state.cards.filter((card) => card.kind === 'error');
+      const supporting = state.cards.filter(
+        (card) => card.kind === 'artifact' || card.kind === 'tool',
+      );
+      const hiddenCount = Math.max(
+        0,
+        supporting.length - DEFAULT_SUPPORTING_CARD_LIMIT,
+      );
+      const shownSupporting = showAllCards
+        ? supporting
+        : supporting.slice(-DEFAULT_SUPPORTING_CARD_LIMIT);
+      return {
+        visibleCards: [...results, ...errors, ...shownSupporting],
+        hiddenSupportingCount: hiddenCount,
+        hasCollapsibleHistory:
+          supporting.length > DEFAULT_SUPPORTING_CARD_LIMIT,
+      };
+    }, [showAllCards, state.cards]);
+
   return (
     <div className="session-side">
       {runId ? (
@@ -135,9 +162,9 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
         </div>
       ) : null}
 
-      {state.cards.length > 0 ? (
+      {visibleCards.length > 0 ? (
         <div className="session-side-cards">
-          {state.cards.map((card) => (
+          {visibleCards.map((card) => (
             <div
               className={`card session-card session-card-${card.kind}`}
               key={card.seq}
@@ -155,6 +182,18 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
               </div>
             </div>
           ))}
+          {hasCollapsibleHistory ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm session-side-card-toggle"
+              aria-expanded={showAllCards}
+              onClick={() => setShowAllCards((value) => !value)}
+            >
+              {showAllCards
+                ? '收起工具与产物历史'
+                : `显示另外 ${hiddenSupportingCount} 条工具与产物历史`}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
