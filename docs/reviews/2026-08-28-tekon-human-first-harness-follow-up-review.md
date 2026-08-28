@@ -2,8 +2,10 @@
 
 - **复审日期**：2026-08-28
 - **复审对象**：`review/human-first-harness-2026-08-28@cad6190670c846ba03d0756bf9837e80c01eafb9`
+- **本轮实现提交**：`6da5ee1801f61c8b633f92c42c6dfc12bc41f50c`
 - **对应 PR**：#11
 - **对照基线**：`main@300aea6b9ea5c805303e7e1d302dadabc5531548`
+- **验证快照**：Core #273 `success`；CI #182 `success`（Root、CLI unit/e2e、Web unit/build/typecheck、Playwright）
 - **覆盖维度**：产品逻辑、CLI/Web UI、UX、Session/Runtime 架构、代码实现、测试可信度、DeepSeek Harness 对齐、过度实现与过度设计
 - **结论**：**本轮新增改动总体方向正确，但仍不能通过“面向普通人稳定可用”的产品验收；PR 作为实验性基础设施与低风险 UX 改进可进入代码审阅。**
 
@@ -59,7 +61,7 @@
 | `session.get.lastActivityAt` | **未通过，本轮修复** | 用户版本明确注释 list/get 语义不同；本轮读取事件尾部并与 `updatedAt` 取最新，统一字段合同。 |
 | P1-04 整体关闭 | **不接受** | 行动排序当前范围可关闭，但 unread、changedSinceSeen、全局实时刷新和大规模查询仍缺失。 |
 | 首轮报告 P0-01 表述 | **接受整改意见** | “现有受控交付合同不成立”过强。当前 Deliver 路径文案诚实、流程成立；真正缺失的是 Collaborate 产品轨道，而不是现有 Deliver 全部无效。 |
-| 报告代码依据 | **需修正** | 原批注引用 `packages/core/src/workflow/goal-job-executor.ts`，该文件不存在。Goal 实际由 `workflows/goal.yaml`、Goal role 与 `workflow-job-executor.ts` 的 `goal-run` 分支驱动。 |
+| 报告代码依据 | **需修正，已修正** | 原批注引用 `packages/core/src/workflow/goal-job-executor.ts`，该文件不存在。Goal 实际由 `workflows/goal.yaml`、Goal role 与 `workflow-job-executor.ts` 的 `goal-run` 分支驱动。 |
 
 ---
 
@@ -351,14 +353,19 @@ Tekon 当前 `dsh-headless` 仍固定 `0.1.1-rc.2`、one-shot argv/stdout、仅 
 
 ---
 
-## 12. 验收结论
+## 12. 验证与验收结论
 
 ### PR / 代码合并门
 
 - CLI UX 改进：**通过**；
 - 版本身份改进：**通过**；
 - Session action projection：**本轮补强后通过当前小范围验收**；
-- 最新整改是否引入明显回归：待本轮提交后的 Core/CI 最终结果确认。
+- Root build/typecheck：**通过**；
+- CLI unit/e2e：**通过**；
+- Web build/typecheck/unit：**通过**；
+- Web Playwright e2e：**通过**；
+- Core workflow：**通过**；
+- 最新整改是否引入明显回归：**未发现**。
 
 ### 产品验收门
 

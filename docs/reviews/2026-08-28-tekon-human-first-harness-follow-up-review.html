@@ -13,6 +13,7 @@
 <div class="eyebrow">Tekon · Follow-up Repository Review · 2026-08-28</div>
 <h1>人类可用性与 Harness 架构第二轮全面复审</h1>
 <p>基于 PR #11 最新整改重新评估产品逻辑、CLI/Web UI、UX、Session/Runtime、代码质量、DeepSeek Harness 对齐与过度设计。</p>
+<p>实现提交：<code>6da5ee1801f61c8b633f92c42c6dfc12bc41f50c</code></p>
 <div class="verdict">稳定产品验收：不通过 · 实验性基础设施与低风险改进：可继续审阅</div>
 </header>
 <main class="shell">
@@ -112,6 +113,18 @@
 <li><strong>Collaborate → Deliver</strong>：显式升级、run plan、复用现有治理链。</li>
 <li><strong>Scale and polish</strong>：summary projection、分页、虚拟化、未读和全局实时任务列表。</li>
 </ol>
+</section>
+<section class="card pass">
+<h2>验证结果</h2>
+<div class="grid">
+<div class="metric"><strong>Core #273</strong>success</div>
+<div class="metric"><strong>CI #182</strong>success</div>
+<div class="metric"><strong>Root</strong>build + typecheck 通过</div>
+<div class="metric"><strong>CLI</strong>unit + e2e 通过</div>
+<div class="metric"><strong>Web</strong>build + typecheck + unit 通过</div>
+<div class="metric"><strong>Playwright</strong>浏览器 E2E 通过</div>
+</div>
+<p>未发现本轮增量引入的阻断回归。</p>
 </section>
 <section class="card">
 <h2>最终结论</h2>
