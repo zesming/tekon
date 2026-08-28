@@ -97,6 +97,12 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
     timeout: 15_000,
   });
 
+  // The point-in-time session.get snapshot may still say `active`; the header
+  // must follow the same live lifecycle projection as the controls/result rail.
+  const headerStatus = page.locator('.page-subtitle .badge').first();
+  await expect(headerStatus).toHaveText('已通过', { timeout: 15_000 });
+  await expect(headerStatus).toHaveClass(/badge-passed/u);
+
   // UX-01: connection state is a complete, non-interrupting status update.
   await expect(page.locator('.session-conn')).toHaveAttribute('role', 'status');
   await expect(page.locator('.session-conn')).toHaveAttribute(
