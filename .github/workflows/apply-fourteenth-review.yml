@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
+
       - name: Apply safe scope and version-governance fixes
         run: python3 scripts/run_fourteenth_review.py --apply-fixes
 
@@ -57,8 +60,8 @@ jobs:
           run_check core-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e
           run_check cli-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
           run_check cli-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
-          run_check web-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:unit
-          run_check web-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright test --retries=0
+          run_check web-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test
+          run_check web-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
 
           python3 - <<'PY'
           import json
