@@ -1,6 +1,6 @@
 import type { ServerContext } from '../context.js';
 import { ApiError } from '../errors.js';
-import type { SessionActionKind } from '../../shared/rpc-contract.js';
+import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
 /**
  * Phase 4 P1-04: derive whether a session needs user action and what kind
