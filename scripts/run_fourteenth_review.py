@@ -89,6 +89,8 @@ def detect_implementation_head() -> str:
             continue
         if "[fourteenth-review]" in message:
             continue
+        if message.startswith("fix(review14):"):
+            continue
         return sha
     raise RuntimeError("could not detect implementation head")
 
@@ -298,24 +300,25 @@ def check_static() -> dict[str, dict[str, object]]:
             "severity": "P0",
             "evidence": [
                 evidence("packages/core/src/session/job-runner.ts", r"async stop", "JobRunner.stop"),
-                f"stop 内 abort={shutdown_abort}, kill={shutdown_kill}, join={shutdown_join}",
-                evidence("packages/core/src/session/job-runner.ts", r"STOP_SETTLE_TIMEOUT_MS", "fixed stop timeout"),
+                f"stop 同时具备 abort/kill/join：{'是' if shutdown_quiescence else '否'}",
+                evidence("packages/core/src/session/job-runner.ts", r"STOP_SETTLE_TIMEOUT_MS", "fixed settle timeout"),
             ],
-            "reason": "固定等待后清理 Map 不等于 Agent、Provider 子进程、Gate 命令和 Git side effect 已停止；数据库关闭前必须证明 quiescence。",
+            "reason": "停止领取新任务后还必须 abort executor、kill 子进程、join Agent/Gate/Git 副作用并持久化可恢复状态；固定等待并清 Map 不等于 quiescence。",
         },
         "projection_health": {
             "passed": projection_health,
-            "title": "Projection-only 的健康、回填与降级提示",
+            "title": "Projection health、lag、backfill 与 UI degraded 提示",
             "severity": "P1",
             "evidence": [
-                "当前范围基线已明确 session_events 是 best-effort projection-only",
-                f"持久 projection health / lag / backfill：{'有' if projection_health else '未发现'}",
+                evidence("packages/core/src/session/dual-write.ts", r"best-effort", "best-effort event projection"),
+                f"持久 projection health/backfill：{'有' if projection_health else '无'}",
+                "append 失败不会分配 seq，客户端无法从序号缺口识别丢失",
             ],
-            "reason": "投影写入可失败时，用户需要知道 Feed 是否完整，并需要 durable lag、rebuild/backfill 与 degraded UI。",
+            "reason": "projection-only 可以接受，但必须让运维和用户知道 Feed 是否完整，并提供持久 cursor、lag、重建和降级提示。",
         },
-        "session_state_coherence": {
+        "session_projection": {
             "passed": header_event_status,
-            "title": "Session List / Header / 实时控制状态一致性",
+            "title": "Session List / Detail / Inspector 单一稳定投影",
             "severity": "P1",
             "evidence": [
                 evidence("packages/web/src/client/pages/SessionDetailPage.tsx", r"const session = data", "Session detail header"),
@@ -537,11 +540,11 @@ def write_report(validation_file: Path) -> None:
 
 ## 7. 官方架构对照
 
-- DeepSeek Harness：durable Session Events 是模型历史和恢复的事实源；“model-visible means logged”，Turn/Step 内真实产生 assistant chunk、tool lifecycle 与 inbox claim。  
+- DeepSeek Harness：durable Session Events 是模型历史和恢复的事实源；“model-visible means logged”，Turn/Step 内真实产生 assistant chunk、tool lifecycle 与 inbox claim。
   https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md
-- OpenAI Codex Harness/App Server：长驻双向协议在 item 执行期间产生 UI-ready lifecycle/delta，而不是等待完整结果后投影。  
+- OpenAI Codex Harness/App Server：长驻双向协议在 item 执行期间产生 UI-ready lifecycle/delta，而不是等待完整结果后投影。
   https://openai.com/index/unlocking-the-codex-harness/
-- Semantic Versioning：PATCH 表达向后兼容的 bug fix；纯复审批注不应制造产品更新信号。  
+- Semantic Versioning：PATCH 表达向后兼容的 bug fix；纯复审批注不应制造产品更新信号。
   https://semver.org/
 
 Tekon 继续采用 anti-corruption adapter、而不绑定 Harness preview 内部 schema，是合理选择；但“借鉴模式”不能只复制类型名和事件词汇，必须完成实际执行语义。
@@ -570,6 +573,9 @@ Playwright：**{playwright_summary}**。
 
 未执行 merge、release 或 deploy。
 """
+    # Keep Markdown content free of trailing whitespace so the generated review
+    # can pass `git diff --check` and actually be committed by the workflow.
+    report = "\n".join(line.rstrip() for line in report.splitlines()) + "\n"
     REPORT_PATH.write_text(report, encoding="utf-8")
 
 
