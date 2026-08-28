@@ -9,12 +9,7 @@ import { loadWorkflowTemplate } from '@tekon/core';
 
 export function getVersion(): string {
   try {
-    const pkgPath = join(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      '..',
-      'package.json',
-    );
+    const pkgPath = join(getRepoRoot(), 'package.json');
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
     return pkg.version ?? 'unknown';
   } catch {

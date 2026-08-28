@@ -108,10 +108,9 @@ export async function runCli(
       return 0;
     }
 
+    // 无参数时把 CLI 当作可发现的产品入口，而不是一次用法错误。
     if (!command) {
-      io.stderr.write('用法: tekon <command>\n');
-      io.stderr.write('使用 tekon help 查看所有可用命令。\n');
-      return 1;
+      return await commandHelp([], io, COMMANDS);
     }
 
     switch (command) {
