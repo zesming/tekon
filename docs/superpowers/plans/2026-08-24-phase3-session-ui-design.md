@@ -1,7 +1,5 @@
 # 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
 
-# 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
-
 > ⚠️ **状态口径以 [`docs/technical/tekon-replatform-current-scope.md`](../../technical/tekon-replatform-current-scope.md) 为准**（当前范围基线具状态覆盖优先级）。本文头「3a-3d 全部实现完成」指的是**阶段 3 观察 / 控制切片**（Session list/detail、SSE replay、运行控制、inline approval、移动端布局与基础可访问性），**不代表原始阶段 3 验收整体完成**——运行中 `follow-up`/`steer` 转向、真实模型散文流式、行级 diff 卡片已在 §0.2 显式递延；Narrative Feed / 当前状态 Inspector / 结构化 Final Result 仍为后续里程碑。
 
 - 状态：**3a–3d observer/control UI 切片已完成（v0.11.0）；原始阶段 3 整体未完成**。持续输入、真实模型流、Diff 与完整 Final Result 仍按当前范围基线递延。
