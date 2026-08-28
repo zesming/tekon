@@ -1,0 +1,50 @@
+name: Review 14 post-fix visual
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: contains(github.event.head_commit.message, '[review14-postfix]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Build core and web
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/web build
+
+      - name: Install Chromium
+        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
+
+      - name: Capture screenshots
+        env:
+          REVIEW14_POSTFIX_DIR: ${{ github.workspace }}/review14-postfix-screenshots
+        run: >-
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright test
+          __tests__/e2e/review14-postfix-visual.test.ts --workers=1 --retries=0
+
+      - name: Upload visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: review14-postfix-visual
+          path: review14-postfix-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 7
