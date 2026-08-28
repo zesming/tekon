@@ -2,6 +2,44 @@ import type { ServerContext } from '../context.js';
 import { ApiError } from '../errors.js';
 import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
+type SessionActivityFields = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+};
+
+/**
+ * Session events are a best-effort projection, while sessions.updated_at is a
+ * durable row update. Activity must therefore use whichever timestamp is newer;
+ * otherwise a status-only transition can remain buried when the matching event
+ * projection is delayed or absent.
+ */
+export function effectiveLastActivityAt(
+  session: Pick<SessionActivityFields, 'lastActivityAt' | 'updatedAt'>,
+): string {
+  return session.updatedAt > session.lastActivityAt
+    ? session.updatedAt
+    : session.lastActivityAt;
+}
+
+/** Return a new array ordered by effective activity with stable fallbacks. */
+export function sortSessionsByActivity<T extends SessionActivityFields>(
+  sessions: readonly T[],
+): T[] {
+  return [...sessions].sort((left, right) => {
+    const activityOrder = effectiveLastActivityAt(right).localeCompare(
+      effectiveLastActivityAt(left),
+    );
+    if (activityOrder !== 0) return activityOrder;
+
+    const createdOrder = right.createdAt.localeCompare(left.createdAt);
+    if (createdOrder !== 0) return createdOrder;
+
+    return right.id.localeCompare(left.id);
+  });
+}
+
 /**
  * Phase 4 P1-04: derive whether a session needs user action and what kind
  * from its current status.
@@ -37,7 +75,9 @@ export function createSessionRouter(context: ServerContext) {
       const workspace = await context.sessions.getOrCreateDefaultWorkspace(
         context.projectContext.projectRoot,
       );
-      const sessions = await context.sessions.listSessions(workspace.id);
+      const sessions = sortSessionsByActivity(
+        await context.sessions.listSessions(workspace.id),
+      );
       return {
         workspaceId: workspace.id,
         sessions: sessions.map((session) => {
@@ -51,7 +91,7 @@ export function createSessionRouter(context: ServerContext) {
             runId: session.runId,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
-            lastActivityAt: session.lastActivityAt,
+            lastActivityAt: effectiveLastActivityAt(session),
             needsAction: action.needsAction,
             actionKind: action.actionKind,
           };
@@ -77,10 +117,9 @@ export function createSessionRouter(context: ServerContext) {
           runId,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
-          // get uses updatedAt as lastActivityAt (only status changes bump it);
-          // list aggregates max(session_events.timestamp). No client consumes
-          // get's lastActivityAt today — align the two if a detail view ever
-          // renders activity time (P1-04 review note).
+          // The detail read currently has no latest-event projection. Keep the
+          // durable row timestamp rather than fabricating event parity; the
+          // list endpoint is the authoritative activity-ordering surface.
           lastActivityAt: session.updatedAt,
           needsAction: action.needsAction,
           actionKind: action.actionKind,
