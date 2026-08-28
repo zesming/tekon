@@ -1,5 +1,18 @@
 # 变更日志
 
+## Unreleased（复审记录，不 bump 产品版本）
+
+> 依 `docs/technical/tekon-replatform-current-scope.md` §6 采纳的发布策略：**纯复审报告、批注、措辞订正与验收状态调整不单独抬高产品版本**（`tekon update` 比较根 `package.json` version，误 bump 会让用户全量重装重建却零行为变化）。此类内容记录于此，不再为每轮复审创建新的产品 PATCH。
+
+### 第十三轮权威复审收敛（`docs/reviews/2026-08-28-tekon-harness-replatform-thirteenth-authoritative-review.md`，作者推送，远端领先 2 提交）
+
+- **本轮无产品 / Runtime 代码变更**：`8e39c9c..97ad2f5` = `828edad`（新增范围基线 `docs/technical/tekon-replatform-current-scope.md`）+ `97ad2f5`（报告）。动态评估 workflow（版本策略 / P1 UX 可修性 / P0 架构核验三视角 + 首席 max 综合）+ 独立 reviewer 一致：`hasMustFix=true`（本轮首次有真实 PR-local 可修项）、`needsUserAdrDecision=true`。
+- **A（本轮必做，版本 / 发布治理，接受报告 §4 P1-PROCESS-01）**：纯复审 PATCH bump 会触发真实 `tekon update` 重型流程（`scripts/update.sh:30/35` 比较根版本 → `git pull + pnpm install + pnpm build`）。第 8/9/11/12 轮的 `v0.15.1/0.15.2/0.15.4/0.15.5` 其自述均「无代码变更、无用户可见行为变化」，违反 SemVer PATCH 定义。**处置**：本轮 docs-only 不 bump（已合规）；停止未来纯复审 bump；**不回退已提交的 `0.15.5`**（scope-baseline `828edad` 本身刻意把根版本停在 `0.15.5` 且 §6 策略为前瞻性，回退会与基线锚点自相矛盾且 `0.15.4` 亦为复审 bump，分支未合入 main、churn 属 cosmetic）。
+- **版本身份 reconcile（记录）**：根 `package.json` `version=0.15.x` 是 **`tekon update` 可见的唯一发布身份**；`@tekon/{cli,core,web}` 包版本仍冻结于 `0.7.0`（自 replatform 起未随根版本抬升）。二者需在**正式发布前统一定义单一发布身份**（scope-baseline §6）。在此之前，CLI `--version`（读包 `0.7.0`）与 updater（读根 `0.15.x`）会显示两个数字，属已知待收敛项。
+- **P（完成报告 §3.2 文档状态修复）**：为 `phase2`（`已实施`）/ `phase3`（`3a-3d 全部实现完成`）设计文档头补 banner「状态口径以 `docs/technical/tekon-replatform-current-scope.md` 为准」，明确其为 **切片完成** 而非原始阶段验收整体完成。
+- **C / needs-user-ADR（与第 4~12 轮一致，勿当本轮缺口）**：§5 P0-PRODUCT（真实 Provider streaming / durable inbox / follow-up-steer-resume / Collaborate-Deliver 双轨）、§6 P0-RUNTIME（persistent `claim_generation` / Node CAS / shutdown quiescence）、§6 P0-ARCH-04（Session Event authoritative-log 未来决策，当前 projection-only 已被 scope-baseline §3 明文化并接受）、§4 P1-PRODUCT-02 List 排序/needsAction 服务端稳定投影、P1-OBSERVABILITY-03 projection 健康子系统、P1-AUTH-04 复制深链新标签页认证、§7 P1-UX（Feed/Inspector/Final Result/长会话）——报告自身递延为独立 vertical-slice PR 或待 ADR，代码事实核验全部属实且本轮未改动。P1-PRODUCT-02 的 header-陈旧子项虽真实，但因值域/顺序边界情形非干净一行修，随里程碑做。
+- **验证**：本地 `pnpm test` 1313 passed / 3 skipped、web e2e 28 passed 0 flaky（本轮仅文档变更，确认无回归）。README / manual / AGENTS 无需同步（无代码行为变化）。
+
 ## v0.15.5
 
 第十二轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-twelfth-authoritative-review.md`，作者推送，远端领先 6 提交）循环评估后的收敛。经动态评估 workflow（CI 提交核验 / 报告 P0-P1 triage A-D / 合并门槛与 scope-drift 三视角 + 首席 max 综合）达成一致：**本轮无任何新的 PR-local 必修代码项**（第五个此类轮，性质同第 8/9/11 轮），`needsUserAdrDecision=true`。`c224e33..ef56dfa` 6 个新提交经 `git diff --stat` 核验只改两个 e2e 测试文件 + 报告，无产品/Provider/Session/Runtime/Node/shutdown 代码变更，CI 最终快照 28 项首轮全绿。相称做法 = 报告批注（§15）+ 订正措辞 + 版本同步 + 向用户呈现 ADR 决策，不做未经用户拍板的架构重写。

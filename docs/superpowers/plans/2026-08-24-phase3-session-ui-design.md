@@ -1,6 +1,10 @@
 # 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
 
-- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**3a-3d 全部实现完成（v0.11.0）**。报告完整性终审后补齐 final-result 卡与 workspace 只读占位、并订正 diff 卡递延措辞（见 §0.2、§3c）。
+# 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
+
+> ⚠️ **状态口径以 [`docs/technical/tekon-replatform-current-scope.md`](../../technical/tekon-replatform-current-scope.md) 为准**（当前范围基线具状态覆盖优先级）。本文头「3a-3d 全部实现完成」指的是**阶段 3 观察 / 控制切片**（Session list/detail、SSE replay、运行控制、inline approval、移动端布局与基础可访问性），**不代表原始阶段 3 验收整体完成**——运行中 `follow-up`/`steer` 转向、真实模型散文流式、行级 diff 卡片已在 §0.2 显式递延；Narrative Feed / 当前状态 Inspector / 结构化 Final Result 仍为后续里程碑。
+
+- 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**观察/控制切片 3a-3d 已实现完成（v0.11.0）**。报告完整性终审后补齐 final-result 卡与 workspace 只读占位、并订正 diff 卡递延措辞（见 §0.2、§3c）。
 - v1→v2 修订：M1（rpc token 死代码/生产 401 顺带修复）、M2（session.list 服务端解析 workspace）、S1（inline 卡片走 gate.list 补全）、S2（3c e2e 经 project.run 真实建 session）、S3（D1 措辞订正）、S4（删除错误的眼睛按钮/P1-02 引用）、S5（3a e2e 分层）、S6（session.list 刷新机制）、N1-N3（计数/契约订正）
 - 权威上游：报告 §10 阶段 3、§13.1/13.4/13.7/13.9/13.10；`docs/reviews/2026-08-20-...-review.md` §0.5 阶段 3 批注（工程视角，落地以此为准）
 - 前序：阶段 0（v0.8.0）、阶段 1（v0.9.0 Event Spine + SSE 服务端）、阶段 2（v0.10.0 Agent Loop 事件 + 模型可见 replay）均已合入 PR#10、CI 绿

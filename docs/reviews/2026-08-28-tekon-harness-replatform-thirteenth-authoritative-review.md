@@ -704,3 +704,58 @@ Running 28 tests using 1 worker
 > 推荐现在停止继续扩充本 PR：先以独立小 PR 落实 single-owner daemon，再完成一个真实 Provider 的 streaming → durable inbox → follow-up/steer → recovery 纵向闭环。
 
 本轮未执行 merge、release 或 deploy。
+
+---
+
+## 14. 实施方批注（第十三轮）
+
+> 批注日期：2026-08-28  
+> 实施方 HEAD：`97ad2f5`（已 fast-forward 到远端）→ 本轮收敛提交见文末  
+> 评估方式：动态评估 workflow（3 视角并行：版本策略与 scope-baseline / P1 UX 可修性 / P0 架构核验 + 首席 max 综合）。三视角 + 首席一致 `hasMustFix=true`（**本轮首次有真实 PR-local 可修项**，不同于第 8/9/11/12 轮）、`needsUserAdrDecision=true`。逐条代码事实已由实施方独立复核。
+
+### 14.1 结论：本轮有一个真实 PR-local 必做项（版本 / 发布治理），其余为已披露里程碑 / 待 ADR
+
+`8e39c9c..97ad2f5` 2 个新提交经 `git diff --stat` 核验，是 **`828edad`（新增 `docs/technical/tekon-replatform-current-scope.md` 范围基线）+ `97ad2f5`（本报告）**，无任何产品 / Provider / Session / Runtime / Node / shutdown 代码变更。
+
+**接受报告 §3.1 的全部事实判断**，并**接受报告 §4 P1-PROCESS-01 这一新发现——它订正的正是实施方自己的行为**：纯复审 PATCH bump 会触发真实 `tekon update` 重型流程。这是本轮唯一的 PR-local 必做项，且**是文档 / 版本治理正确性修复，不需要架构 ADR**。
+
+### 14.2 逐条裁决（A/B/P/C/D）
+
+| 报告条目 | 分类 | 理由与证据 |
+| --- | --- | --- |
+| **P1-PROCESS-01（§4）纯复审 PATCH bump 触发 `tekon update` 重型流程 + 根(0.15.5)/包(0.7.0) 双版本身份** | **A（本轮必做，已处置见 §14.3）** | 真实、代码可核验、订正实施方自身行为、无需架构 ADR。核验：`scripts/update.sh:30` 读本地根 `package.json` version、`:35` 读远端根 version、相等即退出否则 `git pull + pnpm install --frozen-lockfile + pnpm build`。第 8/9/11/12 轮的 `v0.15.1/0.15.2/0.15.4/0.15.5` bump 其 CHANGELOG 自述均「无代码变更、无用户可见行为变化」，违反 SemVer PATCH=向后兼容 bug fix 定义，却会让每个用户 `tekon update` 看到「新版本」并全量重装重建。根 `0.15.5` vs `@tekon/{cli,core,web}` `0.7.0` 是两个版本身份。 |
+| 本轮（第十三轮）docs-only 变更未 bump 版本 | **B** | 正确且已合规：`828edad`/`97ad2f5` 保持根 `0.15.5` 未再抬升，符合新采纳的 scope-baseline §6「纯复审文档不单独 bump 产品版本」。 |
+| scope-baseline `docs/technical/tekon-replatform-current-scope.md`（`828edad`，回应实施方第十二轮 §15.3-① path-B 建议） | **B** | 事实准确、代码一致、诚实收敛旧计划过强状态标签。§2 重新基线为 `Phase 0+1 + 2a compat projection + partial Phase 3 + selected experimental 4/5`（与 CHANGELOG 历史一致）；§3 projection-only 与 `dual-write` best-effort 一致；§4 multi-owner 与 `root.ts`+CLI `createJobRunner().start()` 共享 SQLite/Git、`transitionNode` 无 CAS、`claim_generation` 缺失一致；§6 版本策略与 `update.sh` 行为一致。**实质满足报告 §3.2「文档状态是 PR-local 问题」的修复**，具状态覆盖优先级（line 5）。 |
+| phase2（`已实施`）/ phase3（`3a-3d 全部实现完成`）设计文档完成头 | **P（已补 banner，见 §14.3）** | 文档头确实仍称「已实施 / 全部实现完成」，报告 §3.2 正确指出可能被误读为「原始阶段 2/3 验收完成」。但两文档 §0.2 内部已限定递延（phase2 递延 assistant/chunk streaming + followUp/steer 到 2b；phase3 递延 diff card），是 scope-scoped 完成声明；scope-baseline line 5 的状态覆盖优先级技术上已 supersede。补一行指向 baseline 的 banner 是 clearly-right 低风险收尾。 |
+| P1-PRODUCT-02（§4）SessionDetailPage header StatusBadge 陈旧 vs 右栏 live 终态 | **P（本轮不修，随里程碑做）** | 代码准确、真实页面内矛盾（`SessionDetailPage.tsx:28-32` header 从 `session.get` useQuery 取静态 `session.status`、`:42-46` 渲染 StatusBadge，右栏 `:34` 从 `useSessionStream` 派生，无 invalidate 挂到 stream 终态）。但**非干净一行修**：(1) 值域不同（header `SessionStatus` `done` vs 右栏 `runStatus` `passed`），invalidate 后读到不同词汇终态；(2) 事件 / DB 写入无严格顺序保证，单次 invalidate 可能读旧行需 retry/debounce；(3) 中间态（awaiting-approval/input）也要连线。报告自身把整项归 §8.3 里程碑。半吊子修引 bug 比诚实递延更糟。 |
+| P1-PRODUCT-02（§4）List 排序 `created_at desc` 非 `updated_at`/needsAction + 无订阅/轮询 | **C** | 代码准确（`session-store.ts` listSessions `order by created_at desc`；`SessionsPage.tsx:25-27` plain useQuery + 手工 refetch）。正确修复=服务端稳定投影（lastActivityAt/currentPhase/needsAction/terminalSummary）+ workspace-level stream/有界轮询 + 默认排序 `needsAction>active>updatedAt desc`，是产品里程碑级新契约 + 新事件通道，报告 §4/§8.3 递延为独立 vertical-slice PR。 |
+| P1-OBSERVABILITY-03（§4）best-effort projection 失败仅 `console.error`，无 health/backfill/UI 降级提示 | **C** | 代码准确且与 projection-only 设计一致（append 失败静默、不分配 seq 故客户端看不到序号缺口）。真实缺口（passed 的 Run 可能 Feed 静默不完整），但报告要求的持久 projection health + backfill checkpoint + rebuild + UI 提示是完整可观测性子系统，且与 authoritative-log-vs-projection ADR 耦合（scope-baseline §3 明确递延到单独 ADR）。孤立 UI hint 缺可靠触发信号会误导。 |
+| P1-AUTH-04（§4）复制清理后深链到新标签页无认证 | **C** | 代码准确且与实施方第十二轮 §2.2 覆盖边界自述一致。报告自身判「P1 UX，不是当前最高风险」并列 bootstrap-nonce+HttpOnly-cookie / 页内一次性链接 / 重连页面为未来选项——均为新认证机制。默认本地 `tekon ui` 启动仍认证正常，此为明确 scope 的产品边界。 |
+| §5 P0-PRODUCT-01/02/03（one-shot Provider / 无 durable follow-up-steer-resume / 无 Collaborate-Deliver 双轨） | **C（needs-user-ADR）** | 三视角一致核验未变。`runAgentWithStepEvents` await `adapter.runAgent` 后合成事件；`legacy-agent-driver.ts:132` `await done` 一次性、followUp/steer/resume throw `NotSupportedYet`；默认入口诚实称「受控交付」无轻量 Collaborate 后端轨。修复需真实 Provider streaming vertical slice + durable inbox，报告 §8.3/§12 自身递延为独立 PR。 |
+| §6 P0-RUNTIME-01/02/03（无 persistent `claim_generation` / Node 无 CAS / shutdown 无 quiescence） | **C（needs-user-ADR）** | 三视角一致核验未变，自第 4 轮起的待用户 ADR。`claim_generation` grep 空；`transitionNode`（`repositories.ts:566-571`）blind update 无 CAS；`stop()` `STOP_SETTLE_TIMEOUT_MS=5000` race 不 abort/kill/join。事实 multi-owner 成立。报告 §12 路径 A（single-owner daemon）/ 路径 B（完整 multi-owner fencing）均需用户拍板。 |
+| §6 P0-ARCH-04 Session Event authority（projection-only） | **B** | 报告自身接受当前 projection 模式可接受（§6 line 355）。authoritative-log 未来决策与 durable inbox 耦合，属 needs-ADR。 |
+| §7 P1-UX（Feed 事件墙 / Inspector 复制历史 / Final Result 浅 / 长会话无界） | **C** | 三视角一致核验未变，报告自身递延为独立小 PR（§8.3 items 5-6）。 |
+| §3.2「需要决策 ≠ 当前正确 ≠ 可默认合入」+ §13 最终裁决 | **B** | 论证公允准确：未来 ADR 不使当前事实 multi-owner 变正确或可作默认 Runtime 合入；文档写「仅单进程」不能阻止第二进程启动（`root.ts`+CLI 均 `createJobRunner().start()`）。 |
+| §11 CI / Playwright（28 passed 首轮 / 0 flaky / 6/6 绿）+ 生产 bootstrap / 移动端 / Git ref CAS 继续通过 | **B** | 与 docs-only 轮一致，第十轮 flaky 阻断仍闭合。实施方本地复跑 `pnpm test` 1313 passed、web e2e 28 passed 0 flaky（详见 §14.3）。 |
+
+**无 D（误报）**：本轮报告事实经逐条核验全部属实，是扎实的架构级复审。
+
+### 14.3 本轮相称动作（已执行）
+
+1. **版本 / 发布治理（A，P1-PROCESS-01）**：
+   - 本轮 docs-only 变更**不 bump 版本**（已合规）；
+   - **停止未来纯复审 bump**，与 scope-baseline §6 已 codify 的策略一致；
+   - **不回退已提交的 `0.15.5`**：scope-baseline（`828edad`）本身**刻意把根版本停在 `0.15.5`**（其结尾「本基线本身不修改产品版本」）并把 §6 策略定为**前瞻性**（「不再为每一轮复审创建新 PATCH」「根版本与各包版本在正式发布前统一定义单一发布身份」）。回退 `0.15.5→0.15.4` 会与刚提交的基线锚点自相矛盾，且 `0.15.4` 本身也是复审 bump、回退一步并不解决根因；分支未合入 main，版本 churn 是 cosmetic，「冻结 + 前瞻停止 + 记录 reconcile」已止损。故采**记录双版本身份 reconcile**（根 `0.15.x` = updater-visible 身份、`@tekon/*` 冻结于 `0.7.0`、第 8/9/11/12 轮 review-only bump 不应发生、策略现已冻结）而非改写版本值。见 CHANGELOG `Unreleased`。
+2. **文档状态收敛（P，完成 §3.2 修复）**：为 phase2 / phase3 设计文档头补一行 banner「状态口径以 `docs/technical/tekon-replatform-current-scope.md` 为准」。
+3. **P1-PRODUCT-02/OBSERVABILITY-03/AUTH-04 与 §5-§7 架构 P0**：本轮**不修**（报告自身递延为独立 PR / 里程碑 / 待 ADR），仅报告批注。
+4. **验证**：本地 `pnpm test` 1313 passed / 3 skipped、web e2e 28 passed 0 flaky（本轮无代码变更，仅文档，验证确认无回归）。
+
+### 14.4 交用户 / 项目拍板的决策（`needsUserAdrDecision=true`，自第 4 轮起持续呈现）
+
+与第十二轮 §15.3 一致，且本轮 scope-baseline 已把「范围重新基线化（path B）」落为文档基线：
+
+1. **Runtime ownership**（报告 §12）：single-owner daemon（推荐）/ 完整 multi-owner fencing。在代码级 Runtime lock / 第二 owner fail-fast 落地前，当前 PR 不能按默认并发 Runtime 合入 main。
+2. **Provider streaming vertical slice + durable inbox + follow-up/steer/resume**（报告 §5）：需一个真实 Provider 的纵向切片，非更多合成 Event 类型可代替。
+3. **Session Event authoritative log vs projection-only**（报告 §6 P0-ARCH-04）：当前 projection-only 已被 scope-baseline §3 明文化并接受；若未来选 authoritative log，需单独 ADR + 迁移。
+
+README / manual / AGENTS 无需同步：本轮无代码行为变化，仅文档批注、设计文档 banner 与 CHANGELOG `Unreleased` 记录。
