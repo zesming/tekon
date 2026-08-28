@@ -1,7 +1,5 @@
 # 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
 
-# 阶段 3 详细设计：Human-first Session UI（v2，客户端会话读路径 + 三栏交互）
-
 > ⚠️ **状态口径以 [`docs/technical/tekon-replatform-current-scope.md`](../../technical/tekon-replatform-current-scope.md) 为准**（当前范围基线具状态覆盖优先级）。本文头「3a-3d 全部实现完成」指的是**阶段 3 观察 / 控制切片**（Session list/detail、SSE replay、运行控制、inline approval、移动端布局与基础可访问性），**不代表原始阶段 3 验收整体完成**——运行中 `follow-up`/`steer` 转向、真实模型散文流式、行级 diff 卡片已在 §0.2 显式递延；Narrative Feed / 当前状态 Inspector / 结构化 Final Result 仍为后续里程碑。
 
 - 状态：v2 已纳入 opus 设计评审的 2 MUST-FIX + 6 SHOULD + 3 NIT（两轮评审裁定 buildable）；**观察/控制切片 3a-3d 已实现完成（v0.11.0）**。报告完整性终审后补齐 final-result 卡与 workspace 只读占位、并订正 diff 卡递延措辞（见 §0.2、§3c）。
@@ -66,77 +64,206 @@
 **客户端（web client）— 含 M1 token 接线修复（先于 SSE，否则一切读路径生产 401）**
 - **M1 修复**：`AuthProvider` 在 token 变化时调 `setRpcSessionToken(token)`（`auth-context.tsx:41-43` 的 setToken / :46-57 的 effect 里同步），使 `rpc.call` 真正带 `x-session-token` 头。一处修复同时解决预存的 5 个 `auth:'session'` 读 RPC 生产 401 + 为 SSE 客户端提供 token 源。补一条**不经 fetch 猴补**的测试（直连 `/api/rpc` 带/不带头断言 200/401），防假绿。
 - 新建 SSE 客户端 `lib/session-stream.ts`：**fetch + ReadableStream 手写 SSE 解析**（非 `EventSource`，理由见 §3 D1），token 从 `useSessionToken()`（AuthContext）取并自设 `x-session-token` 头（不依赖 rpc-client 内部态）；**用字符串 URL 调 fetch**（e2e 猴补只处理 string input，`shared-fixture.ts:48`）；解析 `id:/event:/data:` 帧；断线自动重连带 `Last-Event-ID`（= 已见最大 seq）续播；`AbortController` 卸载取消；心跳帧（`: ping`）忽略。
-- 新建 live event store `hooks/use-session-stream.ts`：订阅一个 sessionId，维护 `events`（按 seq 去重升序）、`connState`（connecting/live/reconnecting/closed）、`latestSeq`。独立于 QueryCache（D3）。**并在见到状态翻转类事件时 invalidate `session.list` 查询**（S6+SHOULD-1：触发集须显式含 `session/created`（composer 起新 run 后左栏出现新 session）、`approval/requested`/`approval/decided`（status 在 active↔awaiting-approval 翻转，`human-gate.ts:62-67`）、`turn/end`/`workflow/node-ended`（终态）——否则最常见的两条路径左栏状态徽章不刷新）。
-- 接上被丢弃的 sessionId：`StartRunForm`/审批动作**在 3a 捕获**返回的 `{sessionId}`（**跳转 Session Detail 在 3b 接**，3a 该页尚未建，NIT-2）。
-- 删除 `use-run-poller.ts` + `hooks/index.ts:3` 的 re-export。
+- 新建 live event store `hooks/use-session-stream.ts`：订阅一个 sessionId，维护 `events`（按 seq 去重升序）、`connState`（connecting/live/reconnecting/closed）、`latestSeq`。**每次 `sessionId` 变化清空旧 events 并 abort 旧连接**（N2，防两个 Session 事件串流）。不走 QueryCache——事件流是追加数据，见 §3 D3。
+- 页面路由：新增 `/sessions/:sessionId`（先最小占位，3b 填 feed）。
+- 删除死 `use-run-poller.ts` + index re-export（M2）。
 
-**e2e（3a 验收——S5：3a 无承载流的页面，Playwright 分层）**
-- core 单测：`listSessions`（空/多 session 排序/未知 workspace）。
-- web api（vitest）：`session.list`/`session.get` 契约（空/多 session/未知）；**M1 防假绿测**：直连 `/api/rpc` 调 `session.list`，带正确头→200、缺头→401（不经猴补，参照 `session-sse.test.ts` 的原生 HTTP 范式）。
-- web client 纯逻辑（vitest）：SSE 帧解析器（多帧/半包/心跳跳过/CRLF）、去重与 seq 单调、Last-Event-ID 计算。
-- **Playwright 推迟到 3b**：3a 不含承载流的页面（Session Detail 在 3b 建），故"建流→live"的浏览器级 e2e 随 3b 落地；3a 验收停在 vitest 层 + RPC 契约测。
+**测试（3a）**
+- core unit：`listSessions` 排序、空 workspace、runId 从列直出；session.list 服务端解析 workspace 并回传 workspaceId（M2）；session.get 组合 runId（N3）。
+- web vitest：SSE parser（多 data 行、CRLF、chunk 边界、心跳忽略、malformed data 跳过）；reconnect 携 `Last-Event-ID`；unmount abort；sessionId 切换清空+abort（N2）。
+- **生产 token 测试（M1）**：不安装 e2e fetch 猴补，直接调用生产 RPC client 或 HTTP，断言带 token 头的 `session.list` 200、无头 401。
+- **连接层 e2e**：复用 `session-sse.test.ts` 验证鉴权 + replay 已存在，无需重复造；浏览器级 SSE 消费移到 3b（有真实页面后），不写 skipped 空壳（S5）。
 
-### 3b — Event Feed + Composer
+**验收**：session.list/get 正确；RPC 生产鉴权修复（不靠猴补）；SSE 客户端 reconnect/abort/parser 单测绿；旧页无回归。
 
-- Session Detail 页（`/sessions/:sessionId`）：中栏 event feed 消费 3a 的 live store，把 typed 事件渲染为连续叙事（turn 分组 → step → tool/assistant/governance）。改造 `AuditTimeline` 视觉范式吃 `{seq,type,timestamp,payload}`。
-- 事件类型 → 渲染映射表（feed 行渲染器）：`user/message`/`assistant/message`（合成，标"摘要"）/`tool/call`+`tool/result`（成对折叠）/`step/*`/`turn/*`/`agent/error`/治理事件（node/gate/artifact/approval 摘要行）。未知/未来类型 → 通用降级行（不崩）。
-- Composer（改造 `StartRunForm` textarea 范式）：起新 session/run；对 paused/blocked run 显示 resume/approve 入口（不注入运行中消息，§0.2）。
-- 诚实标注：合成 assistant、`_truncated` 事件（阶段 2 spill 递延）均显式标注。
+### 3b — Session List + Composer + Event Feed（核心 UI）
 
-**e2e（3b）**：Playwright 真实跑一个 mock-agent run（参照 `create-pr-approval.test.ts:55-101` 经 `project.run` 建 session + 事件），断言：① （S5 从 3a 移入）Session Detail 建流→初始 replay→`connState` 达 live；② feed 出现 user/message → step/tool/assistant → turn/end 且顺序正确、合成标注可见。需扩展 fixture 的 fetch 猴补 URL 匹配 `/api/rpc` → `/api/rpc|/api/sessions`（`shared-fixture.ts:49`）。
+**Session List 页面**
+- 新建 `SessionsPage.tsx`，默认路由 `/`（替代 Dashboard，但不删，3d 移 `/advanced`）。
+- 顶部 workspace picker（单 workspace 时禁用并显示当前 project root；为阶段 4 多 workspace 留接口）。
+- Session 列表：title + human status + last activity time；点击进入 `/sessions/:id`。
+- 刷新：`session.list` 走 `useQuery`，新 run 创建/审批/控制 mutation 后 invalidate `session.list`；另提供手动刷新按钮（S6：SSE 是 per-session，不足以驱动列表；本阶段不引入全局 workspace SSE）。
+- Composer：多行输入 + 发送；调用 `project.run`（已有），捕获返回 `sessionId` 并 `navigate('/sessions/:id')`；禁止空输入；loading/错误态。
 
-### 3c — inline approval + tool/artifact/error/final-result 卡片
+**Event Feed 组件**
+- `EventFeed.tsx` 接 `SessionEvent[]`，按 turn/step 分组；事件类型渲染：
+  - `user/message` → 用户气泡；
+  - `assistant/message` → Agent 气泡，**显式标"摘要"**（§0.2，非模型原文）；
+  - `tool/call` + `tool/result` → 折叠 tool card（payload 已标 `summaryLevel:'node'`）；
+  - `step/start/end` → step 分隔；
+  - `workflow/*`、`gate/*`、`job/status` → lifecycle pill；
+  - `artifact/created` → artifact card；
+  - `agent/error` → error row；
+  - 未知事件 → generic key/value（向前兼容，禁止 crash）。
+- **可读优先**：默认隐藏 raw seq / 完整 runId；可展开 Advanced 查看。现有 `presentEvent` 已在服务端做脱敏/限长。
+- 连接状态：顶部 badge connecting/live/reconnecting/closed；断线不清空 feed。
 
-- 右栏：`approval/requested` 事件 → 渲染 `DecisionCard`/`DecisionForm`（复用）。事件载荷只有 `{runId,nodeId,decisionId,request}`（`dual-write.ts:352-359`），**审批完整上下文（riskLabel/approvalSummary/证据）经 `gate.list` 按 runId 拉 pendingDecisions、按 decisionId 匹配补全**（S1：`session.get` 只有元信息，补不了 decision 上下文；`gate.list` 是唯一带 `approvalSummary` 的现有 RPC，`routers/gate.ts:18-44`），approve/reject 调既有 `gate.approve/reject`（语义/CAS/审计不变，§0.3）。
-- 卡片:tool（CodeBlock）、artifact（ArtifactsTab 范式 + `artifact/created` 事件）、error（`agent/error`）、final-result（run 达终态后合成一张收尾卡:终态状态 + 已见 artifact/error 计数——数据均来自事件流现有字段;更丰富的交付/PR 摘要需 delivery 事件订阅,递延阶段 4）。**diff 卡片本阶段不做**（事件流无 diff 数据源,见 §0.2）。
-- 运行控制：pause/cancel/resume 复用 `RunControls` + `runControlAffordances`，接上 sessionId；cancel 走既有 `agent/cancel-requested`+`agent/cancelled` 事件链，UI 显示确认态（报告 §11"取消语义不完整"缓解：明确 interruptibility）。
+**测试（3b）**
+- vitest：每种事件 renderer + 未知事件；分组；默认隐藏 raw id；assistant 标摘要。
+- Playwright：API 真正 `project.run` 建 session → `/sessions/:id` → `EventFeed` 收到 SSE 并显示 user/step/assistant/tool/lifecycle；连接 badge 到 live。这是阶段 3 浏览器级「新任务」journey + 3a 延后的浏览器 SSE 消费（S5）。
 
-**e2e（3c）**：Playwright **经 `project.run` 起一个带 human gate 的模板**真实建 session + 经 dual-write 发 `approval/requested`（S2：fixture run_1 用裸 repositories 播种、无 session、无 approval 事件，不能复用）。**注意（实测）**：fixture 现有 `project-feature.yaml` 只有 build/lint/schema gate、**无 human gate**（`fixtures/project.ts:54-85`），built-in 模板是 `<repo>/workflows/*.yaml` 运行时加载（`template.ts:487`）。故 3c 须**向 fixture 写入一个含 `type: human`/`requiresHumanApproval` 节点的模板**（如 `project-feature-approval.yaml`），非复用现成文件——这是 3c 的实打实 fixture 负担。断言 inline 卡片出现、approve 后 run 推进、事件流反映决策。
+**验收**：`/` 是可启动新任务的 human-first UI；启动后导航 Session；SSE feed 实时显示且断线重连。
 
-### 3d — 重连硬化 + 旧 Dashboard 移 `/advanced`
+### 3c — Inline approval + Run controls + Tool/Artifact/Error/Final cards
 
-- 重连硬化：指数退避 + 上限、`Last-Event-ID` replay 拼接（0..k ∪ k..end 去重一致，复用阶段 1 已验证的 replay 语义）、可见的 `connState` 提示（reconnecting badge）、reduced-motion 友好。
-- 路由迁移：新 Session UI 挂 `/`（默认）；旧 Dashboard/Runs/Run-detail 全部移到 `/advanced/*`（`App.tsx` 路由 + Sidebar 导航；C2 保留全部旧页面，零删除）。
-- （可选增强，S4）Run detail 的 `RunControls` 眼睛按钮当前有 `canView && onView` 守卫、`RunDetailPage.tsx:157` 不传 onView 故**不渲染**（非冗余、无 bug、与报告 P1-02"Engine 特权核心"无关——原 v1 表述有误已删）；如需可给 RunDetailPage 传 onView 跳转对应 Session Detail，作为锦上添花，非本阶段必做。
+**右栏卡片区**
+- `SessionSidePanel.tsx`：从 event stream 派生当前 runId、status、pending decision、artifacts、errors、result；只做只读 projection，不改治理事实源。
+- RunControls：复用现有组件（pause/cancel/resume），根据 event 派生 status；调用后 invalidate session + 继续等待 SSE（SSE 会发 job/status/run.*）。
+- Inline approval：`approval/requested` 只含 decisionId/gateId/runId，**完整 DecisionContext 不在事件里**（S1）。卡片出现时按 runId 调既有 `gate.list`，从 `pendingDecisions` 找 decisionId，复用 `DecisionCard`/`DecisionForm`；提交 `gate.approve/reject`，服务端审批/CAS/audit 不变。审批成功后 SSE 推 `approval/resolved`，卡片移除。
+- Cards：
+  - tool/call+result → `ToolCallCard`（可折叠输出）；
+  - artifact/created → `ArtifactCard`（type/summary/sha256，不读原文件）；
+  - agent/error → `ErrorCard`（脱敏后 message，retry 指引）；
+  - **final-result**：`run.passed/failed/cancelled` 到达后，聚合 event stream 的 artifacts/errors 显示摘要卡（状态、artifact count、error count）。
+  - Diff card **不实现**（§0.2，无数据源；不造假）。
 
-**e2e（3d）**：断线重连（关流→重连→replay 无重复/无丢失）由 **vitest `session-stream-reconnect`**（确定性 fake fetch，含 400/401/403/404 不重连、503 重试）覆盖，比浏览器级 Playwright 更稳定可控；`/advanced` 旧页面仍可达且渲染、默认 `/` 为 Session UI 由 Playwright `session-routing` 覆盖。
+**测试（3c）**
+- vitest：SidePanel 投影（pending decision 状态机、artifact/error 聚合、final result）。
+- Playwright：人为 gate → inline DecisionCard → 二次确认 → approved → workflow 继续 → final-result card；断言审批前 workflow 不前进（C1/P0-03）。这是阶段 3 浏览器级「inline approval」journey。
 
-## 3. 关键决策（待评审裁定）
+**验收**：运行中控制/审批在 Session 内完成；审批规则零退化；完成态有 final-result 摘要。
 
-| ID | 决策 | 依据 |
-| --- | --- | --- |
-| **D1** | SSE 客户端用 **fetch + ReadableStream 手写解析**，**非原生 `EventSource`**；token 从 `useSessionToken()` 自设头 | `EventSource` 无法设置 `x-session-token` 请求头（W3C 规范不支持自定义头）；唯一替代是 query-param token，但会把 secret 泄漏进 access log/history/referrer = 安全回归（报告 §11）。fetch 流式复用既有头鉴权、零新增攻击面。**（S3 订正 v1 错误）**：e2e fetch 猴补当前**只匹配 `/api/rpc`**（`shared-fixture.ts:49`），**不天然覆盖** SSE 路径——3b 需放开 URL 匹配为 `/api/rpc|/api/sessions`，且 SSE 客户端必须用**字符串 URL** 调 fetch（猴补只处理 string input，`:48`）。代价：需手写 SSE 帧解析（vitest 侧已有 `parseFrames` 范式可移植）+ 手写重连（EventSource 自带重连，fetch 需自实现——但换来鉴权正确性，值得）。 |
-| **D2** | 事件读**只走 SSE 端点**，不新增 `session.events` RPC；初始快照 = SSE `sinceSeq=0` 全量 replay | 单一读路径避免 RPC 快照与 SSE 流双源漂移；服务端 replay+live 零丢失已验证（M6）。`session.list/get` 仅供导航元信息，不承载事件。 |
-| **D3** | live event store 独立于既有 `QueryCache`，新建 `use-session-stream` | QueryCache 是请求-响应快照模型（`query-cache.ts`），append-only 事件流语义不同（去重/seq 单调/重连拼接）。强塞进 QueryCache 会污染其失效模型。session list/get 仍走 QueryCache（它们是快照）。 |
-| **D4** | Session List **派生自 store 的 `listSessions`**，不派生自 legacy run 表；`session.list` 输入 `z.undefined()`，**服务端**经 `getOrCreateDefaultWorkspace(projectRoot)` 解析 workspace 并回传 workspaceId | human-first 主轴是 session（报告 §1 心智模型 workspace/session/message）。workspaceId 客户端不可见（无 RPC 下发），故必须服务端解析（M2）；从 session 表读是正确抽象，避免"又从 legacy 表聚合"回到旧范式。 |
-| **D5** | Composer 本阶段**不支持运行中转向**（follow-up/steer），只支持新起 + resume/approve | `AgentHandle.followUp/steer` 阶段 2b 才实现（现抛 `NotSupportedYet`）。UI 诚实禁用而非假装（March of Nines / 锯齿状智能）。 |
-| **D6** | 默认路由 `/` = Session UI；旧页全移 `/advanced/*` **保留不删** | 报告 C2 双轨并存；human-first 为默认交互，autonomous/旧 Cockpit 作为 advanced 保留。 |
+### 3d — 重连硬化 + 旧页迁移 + 全量回归
 
-## 4. 测试计划（对齐每子步 e2e + 报告验收）
+**重连硬化**
+- `Last-Event-ID` 续播已在 3a 客户端；补浏览器级：模拟中断→重连→无重复/无丢失。
+- 页面刷新：sinceSeq=0 全量 replay（本地不持久 seq，简单可靠）；服务端 replay 保证。
+- Token 变化：abort 旧 SSE，以新 token 重连；无 token 时 closed + 提示，不疯狂重试。
 
-| 测试 | 覆盖 | 子步 |
-| --- | --- | --- |
-| core `session-store` listSessions 单测 | 空/多 session 排序/未知 workspace | 3a |
-| web api `session-router` 契约测 | list/get 形状；list 服务端解析 workspace + 回传 workspaceId | 3a |
-| web api **M1 防假绿测（不经猴补）** | 直连 `/api/rpc` 调 `session.list`：带正确头→200、缺头→401（原生 HTTP，参照 session-sse.test.ts） | 3a |
-| web client `session-stream` 解析器单测 | 多帧/半包/心跳跳过/CRLF/去重/seq 单调/Last-Event-ID | 3a |
-| Playwright `session-feed.e2e` | （含 S5 从 3a 移入）建流→初始 replay→connState live；mock-agent run → feed 出现 user/step/tool/assistant/turn 且有序 + 合成标注；放开 fetch 猴补 URL | 3b |
-| Playwright `session-approval.e2e` | 经 project.run 起 human-gate 模板真实建 session → inline 卡片（gate.list 补全）→ approve → run 推进 | 3c |
-| vitest `session-stream-reconnect`（确定性 fake fetch）| 断流→重连带 Last-Event-ID→replay 无重复无丢失；致命状态 400/401/403/404 不重连；503 重试。`/advanced` 旧页可达由 `session-routing.e2e` 覆盖 | 3d |
-| 回归 | 既有 12 Playwright + 全量 vitest 不破（旧页迁移到 /advanced 后断言路径更新） | 3d |
+**路由迁移**
+- `/` → SessionsPage；`/sessions/:id` → SessionDetail。
+- 旧 Dashboard 路由移到 `/advanced`，其子路由整体前缀 `/advanced/*`；Sidebar 主要入口只显示 Sessions，"高级 Advanced" 展开旧导航。
+- 旧组件/路由**不删**（C2/C3）；headless/CLI 不受影响。
 
-## 5. 风险与缓解
+**全量测试**
+- 核心 golden journeys Playwright：
+  1. 新任务 → Session → 实时 feed → passed；
+  2. inline approval → approve → 继续；
+  3. pause → resume → 继续；
+  4. SSE 中断 → 重连 → 无丢失；
+  5. `/advanced` 旧页面仍可用。
+- Core/CLI/Web unit+e2e 全绿；全包 typecheck。
 
-| 风险 | 影响 | 缓解 |
-| --- | --- | --- |
-| fetch-SSE 重连边界（半包/乱序/replay 重叠） | 事件丢失或重复 → 叙事错乱 | seq 去重 + Last-Event-ID 续播（服务端已验证）；解析器单测覆盖半包；重连 e2e |
-| e2e fixture 不播种 session；fetch 猴补只覆盖 `/api/rpc` | 浏览器级 SSE e2e 写不出来 | 经 `project.run` 真实建 session（范式 create-pr-approval.test.ts:55-101）；3b 放开猴补 URL 匹配为 `/api/rpc\|/api/sessions`；SSE 客户端用字符串 URL 调 fetch（D1/S3） |
-| M1 token 死代码致生产 401 被猴补掩盖 | Session UI 上线即全读 401 | 3a 修 rpc-client↔AuthContext 接线 + 补不经猴补的 200/401 测试 |
-| 旧页迁移 `/advanced` 破坏既有 12 Playwright | 回归 | 迁移与断言路径同 PR 更新；旧页零逻辑改动，仅路由前缀 |
-| 合成 assistant 被误读为模型原文 | 用户误判 Agent 输出 | feed 显式"摘要"标注（§0.2）；`_truncated` 标注 |
-| 范围失控（4 子步一次做完→半成品） | 违背报告 §11 | 每子步独立 e2e + 提交；任一不过即停（§2） |
-| 单流字段无 sessionId（present 不下发） | 多 session 混流 | 当前一 run 一 session、客户端一次订阅一个 sessionId，无混流；多路复用递延 |
+**文档/版本**
+- CHANGELOG `0.10.0 → 0.11.0`（MINOR：默认 UI 变更 + 新 Session 读 RPC）。
+- 用户手册：新默认流程、`/advanced` 入口、inline approval、token 设置。
+- **阶段 3 详细设计状态只表示观察/控制切片完成；原始阶段 3 整体验收仍按当前范围基线判定。**
 
-## 6. 交付顺序与验收闭环
+## 3. 决策记录（评审裁定）
 
-每子步走：实现（e2e 绿）→ 提交。全部子步完成后：全功能 e2e（core+web+cli+Playwright 全绿）→ opus code review（必修先修再复查）→ opus 报告完整性复审 → push PR#10 + 清理临时产物。版本：3a-3d 累计为一个 MINOR bump（新增 session UI + session.* RPC = 新功能）v0.11.0。
+### D1 — SSE 鉴权：fetch stream + 自定义 header，不用 EventSource
+
+原生 `EventSource` 不支持自定义请求头；token 放 query param 会泄漏。用 `fetch(url, {headers:{'x-session-token':token}})` + `ReadableStream` 手写 parser；已有 `collectSse` 测试范式可复用。
+
+### D2 — 状态管理：独立 live store，不把 SSE 塞 QueryCache
+
+QueryCache 是一次性快照 + invalidate/refetch；SSE 是追加流。把 events 数组塞 QueryCache 会导致每帧 notify 所有订阅者且语义混乱。新 `useSessionStream` 自管，query 只读 session 元信息。
+
+### D3 — Inline approval：事件触发、RPC 补全上下文
+
+不扩 `approval/requested` payload（contract 已冻结、避免把完整命令泄漏进事件）；用 decisionId/runId 调既有 `gate.list` 补全。这也是复用治理事实源、避免 duplicate state 的正确边界。
+
+### D4 — Workspace picker：本阶段只读占位
+
+只有单 workspace；实现真正 picker 会引入 workspace CRUD、session 过滤、route param，范围过大。渲染 disabled select 显示当前 root，接口为阶段 4 预留。
+
+### D5 — Composer 只新起 Session，不注入运行中消息
+
+`AgentHandle.followUp/steer` 未实现；若 UI 显示可输入会误导。运行中只有 pause/cancel/resume/approve。Composer 文案明确"新任务"。
+
+## 4. 风险与缓解
+
+| 风险 | 缓解 |
+|---|---|
+| SSE 重连风暴 | 指数退避 1s→30s + 抖动；token 无效时停止重试 |
+| 事件量大导致内存增长 | 当前 run 规模可控；阶段 4 加分页/虚拟化（不在本阶段范围） |
+| approval 上下文二次查询闪烁 | skeleton；decisionId 稳定作为 key |
+| token 泄漏 | 自定义 header；客户端日志不打印；URL 禁止 token |
+| 旧 Dashboard 回归 | `/advanced` 保留 + Playwright 回归 |
+| 服务端投影落后 | SSE Last-Event-ID + replay；Session UI 明确连接状态 |
+
+## 5. 验收标准（逐条可测）
+
+| ID | 标准 | 测试 |
+|---|---|---|
+| A1 | `/` 默认 Session List + Composer | Playwright |
+| A2 | `project.run` 返回 sessionId 后导航 | Playwright |
+| A3 | SSE feed 实时显示 8+ 类事件，断线重连无丢失 | vitest parser + Playwright |
+| A4 | RPC 读路径生产鉴权正确（不靠猴补） | HTTP integration |
+| A5 | inline approval 完整上下文、二次确认、规则零退化 | Playwright + core e2e |
+| A6 | pause/cancel/resume 在 Session 内可用 | Playwright |
+| A7 | final-result 聚合状态/产物/错误 | vitest + Playwright |
+| A8 | `/advanced` 旧页仍可用 | Playwright |
+| A9 | assistant/message 诚实标"摘要"、tool 标 node-level | renderer unit |
+| A10 | 多 workspace picker 只读占位、不误导可切换 | unit |
+
+## 6. 文件级改动清单（实现期）
+
+### 新增
+- `packages/web/src/client/lib/session-stream.ts`
+- `packages/web/src/client/hooks/use-session-stream.ts`
+- `packages/web/src/client/pages/SessionsPage.tsx`
+- `packages/web/src/client/pages/SessionDetailPage.tsx`
+- `packages/web/src/client/components/sessions/SessionComposer.tsx`
+- `packages/web/src/client/components/sessions/SessionList.tsx`
+- `packages/web/src/client/components/sessions/EventFeed.tsx`
+- `packages/web/src/client/components/sessions/SessionSidePanel.tsx`
+- `packages/web/src/client/lib/session-side-panel.ts`
+- `packages/web/src/server/api/routers/session.ts`
+- 对应单测 + Playwright journey
+
+### 修改
+- `packages/core/src/session/session-store.ts`（listSessions）
+- `packages/web/src/client/App.tsx`（路由）
+- `packages/web/src/client/layouts/Sidebar.tsx`
+- `packages/web/src/client/hooks/index.ts`
+- `packages/web/src/client/lib/query-keys.ts`
+- `packages/web/src/client/context/auth-context.tsx`（M1 token→rpc-client）
+- `packages/web/src/shared/rpc-contract.ts`
+- `packages/web/src/server/api/root.ts`
+- `packages/web/src/server/api/mappers.ts`
+- `packages/web/src/server/api/rows.ts`
+- 旧页面路由前缀 `/advanced`
+
+### 删除
+- `packages/web/src/client/hooks/use-run-poller.ts`（死代码）
+- 对应 index re-export
+
+## 7. 实现完成记录（2026-08-24）
+
+### 7.1 提交序列
+
+| 步骤 | 提交 | 内容 |
+|---|---|---|
+| 3a | `c3bc33e` | Session 读路径 + SSE 客户端 + token 接线修复 + 删除死 poller |
+| 3b | `4a5cbd8` | Session List/Composer/Event Feed + SSE Playwright journey |
+| 3c | `c50d177` | SidePanel + inline approval + cards + DecisionForm 纯组件 |
+| 3d | `8cf9988` | SSE 重连单测 + `/advanced` 路由 + 全量回归 + 文档版本 |
+| 修复 | `e12a52a` | gate.list invalidation key 订正；审批卡片状态稳定 |
+| 报告终审 | `f479844` | final-result 卡；workspace disabled select→只读 info；diff 卡递延措辞 |
+
+### 7.2 测试结果（最终）
+
+- Core: 85 files / 890 tests — passed
+- CLI: 3 unit + 2 e2e — passed
+- Web: 26 files / 206 tests — passed
+- Playwright: 12 tests — passed
+- 全包 typecheck — passed
+
+### 7.3 与设计的偏差（诚实记录）
+
+1. **Sidebar 行为**：原设计"高级 Advanced 展开旧导航"，实际实现为顶级 `/advanced` 链接 + 进入后显示全部分组，功能等价且更简单。
+2. **Workspace picker**：终审发现 disabled select 会让用户误以为可操作但失效，改为只读信息区 `role=group aria-label=当前工作区`，优于原设计。
+3. **Diff card**：明确递延（见 §0.2），未造假。
+4. **Final-result**：终审补齐，聚合状态 + artifact/error count。
+
+### 7.4 当前验收边界
+
+3a–3d 的观察/控制切片已经完成；以下原始阶段 3 能力仍未完成，并由 `docs/technical/tekon-replatform-current-scope.md` 作为当前权威范围继续追踪：
+
+- Session 内 follow-up / steer；
+- 真实 Provider 执行期增量与 Assistant Chunk；
+- Narrative Feed；
+- 当前状态 Inspector；
+- 结构化 Final Result；
+- 长 Session 有界化与性能预算。
