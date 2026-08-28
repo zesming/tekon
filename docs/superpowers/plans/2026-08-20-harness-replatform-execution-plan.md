@@ -1,5 +1,7 @@
 # Tekon Harness-inspired Replatform 总体执行方案
 
+> 当前状态提示（2026-08-28）：本文件保留为长期完整目标与历史执行计划。PR #10 的当前完成范围和验收口径以 [`docs/technical/tekon-replatform-current-scope.md`](../../technical/tekon-replatform-current-scope.md) 为准；当前不是阶段 0–5 全部完成。
+
 > 关联报告：`docs/reviews/2026-08-20-tekon-human-usability-and-deepseek-harness-migration-review.md`
 > 分支：`review/deepseek-harness-migration-2026-08-20`（在 PR#10 上迭代）
 > 起草日期：2026-08-20

@@ -1,7 +1,7 @@
 # Tekon 阶段 2 详细设计 — 流式 Agent Loop 兼容层 + Provider Registry + 事件词汇补全
 
 > ⚠️ **状态口径以 [`docs/technical/tekon-replatform-current-scope.md`](../../technical/tekon-replatform-current-scope.md) 为准**（当前范围基线具状态覆盖优先级）。本文头「已实施」指的是**阶段 2a 兼容切片**（Provider registry + snapshot contract + 一次 legacy `runAgent()` 对应一个 Step 的投影），**不代表原始阶段 2 验收整体完成**——真实 Provider 执行期增量 streaming（assistant/chunk）与运行中 `followUp`/`steer` 已在 §0.2 显式递延到 2b/后续阶段，当前 `AgentHandle.followUp/steer` 仍抛 `NotSupportedYet`。
-> 状态：**阶段 2a 已实施(S1–S6 完成,v0.10.0)**;两轮 designer 评审的 M1–M4 + D1–D5 + 复审项全部落地,每步 test-first、e2e 绿。
+> 状态：**阶段 2a 兼容投影切片已实施（S1–S6，v0.10.0）；原始阶段 2 整体未完成**。真正的 Provider execution-time streaming、durable inbox 与 follow-up/steer/resume 仍属后续独立里程碑。
 > 前置：阶段 0（v0.8.0）、阶段 1（v0.9.0，Event Spine + 后台 Job + SSE）已合入 PR #10。
 > 依据：报告 §8.3 事件词汇、§8.4 AgentDriver 契约、§10 阶段 2、§12-P0.5、§13.3/§13.6；`docs/reviews/...migration-review.md` §0.5 工程视角批注；explorer 实测代码摸底。
 
