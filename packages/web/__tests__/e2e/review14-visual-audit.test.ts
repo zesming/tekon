@@ -63,6 +63,12 @@ async function waitForRunPassed(
   }
 }
 
+async function waitForViewAnimation(page: Parameters<typeof test>[0] extends never ? never : any) {
+  // reset.css animates .view for 300ms. Waiting prevents a mid-fade capture
+  // from looking like a disabled or inaccessible page.
+  await page.waitForTimeout(400);
+}
+
 test('capture the current Session product surfaces for review 14', async ({
   page,
   server,
@@ -86,6 +92,7 @@ test('capture the current Session product surfaces for review 14', async ({
   await expect(page.locator(`a[href="/sessions/${sessionId}"]`)).toBeVisible({
     timeout: 15_000,
   });
+  await waitForViewAnimation(page);
   await page.screenshot({
     path: join(outputDir, '01-sessions-desktop.png'),
     fullPage: true,
@@ -96,6 +103,7 @@ test('capture the current Session product surfaces for review 14', async ({
   await expect(page.locator('.session-card-result')).toBeVisible({
     timeout: 15_000,
   });
+  await waitForViewAnimation(page);
   await page.screenshot({
     path: join(outputDir, '02-session-detail-desktop.png'),
     fullPage: true,
@@ -103,6 +111,14 @@ test('capture the current Session product surfaces for review 14', async ({
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.nav-toggle')).toBeVisible();
+  // Capture the ordinary content state, not an accidentally open navigation
+  // drawer inherited from a previous interaction or responsive transition.
+  const closeButton = page.getByRole('button', { name: '关闭侧边导航' });
+  if (await closeButton.isVisible()) {
+    await closeButton.click();
+  }
+  await expect(page.locator('#main-content')).not.toHaveAttribute('inert', '');
+  await waitForViewAnimation(page);
   await page.screenshot({
     path: join(outputDir, '03-session-detail-mobile.png'),
     fullPage: true,
