@@ -14,7 +14,10 @@ import { SessionComposer } from '../components/sessions/SessionComposer.js';
 
 const ACTION_KIND_LABELS: Record<string, string> = {
   approval: '待审批',
-  input: '待输入',
+  // awaiting-input currently represents a blocked workflow. The product has no
+  // in-session follow-up composer yet, so “待输入” would promise an unavailable
+  // action. Keep the transport value for compatibility and label the real move.
+  input: '待恢复',
   failed: '需处理',
 };
 
@@ -123,12 +126,13 @@ export function SessionsPage() {
                 {session.runId ? (
                   <span className="session-list-run text-muted">交付运行</span>
                 ) : null}
-                <span
+                <time
                   className="session-list-time"
+                  dateTime={session.lastActivityAt}
                   title={session.lastActivityAt}
                 >
                   {formatRelativeTime(session.lastActivityAt)}
-                </span>
+                </time>
               </NavLink>
             </li>
           ))}
