@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tekon 人类可用性与 Harness 架构全面复审</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#5e6878;--line:#d8dee8;--paper:#fff;--soft:#f4f7fb;--accent:#2456a6;--danger:#9f2424;--warn:#8a5400;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:#eef2f7;line-height:1.7}.hero{padding:56px max(24px,calc((100vw - 1120px)/2));background:#14213d;color:#fff}.eyebrow{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;opacity:.72}.hero h1{max-width:900px;margin:.45rem 0 .7rem;font-size:clamp(2rem,4vw,3.6rem);line-height:1.12}.hero p{max-width:800px;margin:0;color:#d9e2f2}.verdict{display:inline-block;margin-top:22px;padding:8px 13px;border:1px solid #ffb4b4;border-radius:999px;background:#4c2027;font-weight:700}.shell{max-width:1120px;margin:0 auto;padding:28px 20px 72px}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,44px);box-shadow:0 14px 38px rgba(27,39,60,.08);margin-bottom:22px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.metric{border:1px solid var(--line);border-radius:12px;padding:18px;background:var(--soft)}.metric strong{display:block;font-size:1.15rem;margin-bottom:4px}.p0{border-left:5px solid var(--danger)}.p1{border-left:5px solid var(--warn)}h2{margin:0 0 18px;font-size:1.55rem}h3{margin:0 0 8px;font-size:1.05rem}p,li{max-width:84ch}ul,ol{padding-left:1.35rem}code{font-family:"SFMono-Regular",Consolas,monospace;padding:.1em .35em;border-radius:5px;background:#edf1f7;font-size:.9em}a{color:var(--accent)}.tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#edf1f7;font-size:.8rem;margin-right:5px}.footer{color:var(--muted);font-size:.88rem}.actions{display:flex;gap:12px;flex-wrap:wrap}.button{display:inline-block;text-decoration:none;padding:9px 13px;border-radius:9px;background:var(--accent);color:#fff;font-weight:700}.button.secondary{background:#e7edf7;color:var(--accent)}@media(max-width:760px){.hero{padding:38px 22px}.shell{padding:18px 12px 48px}.grid{grid-template-columns:1fr}}@media print{body{background:#fff}.hero{background:#fff;color:#000;padding:0 0 24px}.hero p{color:#444}.verdict{background:#fff;color:#000;border-color:#666}.shell{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="hero">
+<div class="eyebrow">Tekon · Independent Repository Review · 2026-08-28</div>
+<h1>人类可用性与 Harness 架构全面复审</h1>
+<p>覆盖产品逻辑、CLI/Web 入口、UX 交互、运行时所有权、Session 事实源、DeepSeek Harness 对齐、代码维护性与过度设计。</p>
+<div class="verdict">稳定产品验收：不通过 · 实验性基础设施：有条件通过</div>
+</header>
+<main class="shell">
+<section class="card">
+<h2>执行结论</h2>
+<p>Tekon 已形成测试较强、边界说明诚实、治理意识较好的本地交付框架，但当前主路径仍是“一次性启动完整 workflow 并观察结果”。它还不是一个人类可以自然进入、持续追问、随时纠偏、逐步升级到受控交付的研发工作台。</p>
+<div class="grid">
+<div class="metric"><strong>产品合同错位</strong>界面叫 Session，实际是一次性 run 观察器；没有 follow-up、steer、durable inbox 或真实 provider streaming。</div>
+<div class="metric"><strong>复杂度收益不对称</strong>已经承担 Session/Event/Job、Profile、Automation、Goal、DSH bridge、兼容驱动与双写投影成本，却没有权威 Session log。</div>
+<div class="metric"><strong>运行权威不成立</strong>Web 与 CLI 都能启动 JobRunner，共享 SQLite/Git 工作区，缺少 single owner 或覆盖全部副作用的持久 fencing。</div>
+<div class="metric"><strong>入口可立即改善</strong>本 PR 已让无参数运行显示成功帮助、把人类路径前置，并统一 CLI 与 updater 的根产品版本。</div>
+</div>
+</section>
+<section class="card p0">
+<h2>P0：必须解决</h2>
+<ol>
+<li><strong>Session 产品合同不成立</strong>：默认启动完整 <code>standard-delivery</code>，Composer 不能在当前会话继续输入，事件在执行完成后合成。</li>
+<li><strong>Runtime 没有单一执行所有者</strong>：Web 与每个 CLI 进程都可能领取同一仓库的工作；数据库 claim 不能约束 Git、文件、artifact 和子进程副作用。</li>
+<li><strong>Shutdown 不是 quiescent shutdown</strong>：最多等待约 5 秒后清理进程内状态，没有证明执行器、子进程和写入均已停止。</li>
+<li><strong>事实源分裂</strong>：<code>session_events</code> 是旧领域写入后的 best-effort projection，不是可重建模型上下文和业务状态的权威 log。</li>
+</ol>
+</section>
+<section class="card p1">
+<h2>P1：重要问题</h2>
+<ul>
+<li>DSH bridge 仍固定 <code>0.1.1-rc.2</code> 的 headless one-shot 边界，而官方已经有 SDK/JSON-RPC 与 ACP profiles。</li>
+<li>Profile、Automation、Goal、兼容 Driver、双写和双 composition root 先于真实消息流、第二次输入、持久 inbox 与恢复，过度实现顺序反了。</li>
+<li>默认完整交付缺少启动前的模式、角色、gate、网络、成本和副作用预览。</li>
+<li>Session 列表应按最近活动和需要用户行动排序，而不是主要按创建时间。</li>
+<li>TopBar 长期暴露 token 字符串，长 Session 也没有分页、虚拟化、摘要和上下文压力合同。</li>
+<li>产品信息架构仍中英混杂，并直接暴露 Session/Event/Job/Profile/Gate 等技术名词。</li>
+<li>合并 gate 与产品验收 gate 没有分离；CI 全绿不能自动关闭递延的 P0。</li>
+</ul>
+</section>
+<section class="card">
+<h2>本 PR 已修复</h2>
+<div class="grid">
+<div class="metric"><strong>无参数成为入口</strong><code>tekon</code> 与 <code>tekon help</code> 输出一致，返回码为 0，不再把首次探索当成错误。</div>
+<div class="metric"><strong>帮助页人类优先</strong>先给出 <code>tekon ui</code>、<code>tekon run "你的需求"</code> 和命令帮助，再展示完整高级命令。</div>
+<div class="metric"><strong>版本身份统一</strong>CLI 改为读取根 <code>package.json</code>，与 installer/updater 使用同一产品版本。</div>
+<div class="metric"><strong>测试与版本</strong>单测锁定新行为；实际行为改进按仓库规则提升到 <code>0.16.0</code>。</div>
+</div>
+</section>
+<section class="card">
+<h2>推荐顺序</h2>
+<ol>
+<li><strong>运行权威</strong>：single-owner daemon、CLI/Web 客户端化、quiescent shutdown。</li>
+<li><strong>Collaborate vertical slice</strong>：真实 streaming、durable inbox、follow-up、steer、cancel、resume 和重启恢复。</li>
+<li><strong>显式升级到 Deliver</strong>：先确认需求卡与 run plan，再进入现有 role/gate/artifact/PR 治理。</li>
+<li><strong>最后恢复横向平台化</strong>：只有纵向闭环通过后，才扩 Profile、Automation、Goal、多 workspace 和 subagent。</li>
+</ol>
+</section>
+<section class="card">
+<h2>验证与审查边界</h2>
+<ul>
+<li>代码与测试以同一原子提交 <code>5b903ee</code> 进入分支；GitHub Actions Core #268 与 CI #177 均通过。</li>
+<li>本环境无法直接克隆仓库执行本地 <code>pnpm test</code>，因此没有伪造本地测试记录。</li>
+<li>没有可访问的部署实例和本地浏览器截图；UI 结论限于信息架构、状态语义、交互闭环、可访问性代码与数据流。</li>
+<li>完整事实、理由、代码依据、外部资料与通过条件见同目录 Markdown 报告。</li>
+</ul>
+<div class="actions"><a class="button" href="2026-08-28-tekon-human-first-harness-architecture-review.md">打开完整 Markdown 报告</a><a class="button secondary" href="../../README.md">返回 README</a></div>
+</section>
+<p class="footer">基线：main@300aea6b9ea5c805303e7e1d302dadabc5531548 · 对应 PR #11 · 生成日期：2026-08-28</p>
+</main>
+</body>
+</html>

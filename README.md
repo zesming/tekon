@@ -82,15 +82,39 @@ curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.
 tekon update
 ```
 
-### 开始使用
+CLI 的 `--version`、帮助页和安装/更新脚本都以根 `package.json` 作为同一个产品版本来源。
+
+### 最短路径（推荐）
+
+进入目标仓库后直接执行：
+
+```bash
+tekon
+```
+
+它会显示三条常用入口。普通使用者优先从本地 Web 开始：
+
+```bash
+tekon ui
+```
+
+需要从命令行直接发起一次受控交付时，也可以写成：
+
+```bash
+tekon run "你的需求"
+```
+
+> 当前 `run` 默认进入 `standard-delivery` 完整治理链路，并不是轻量对话。真实 streaming、同一 Session 内继续追问和中途转向仍属于后续里程碑。
+
+### 受控交付 CLI（高级）
 
 ```bash
 tekon init                                    # 初始化目标仓库
 tekon workflow preflight                      # 检查命令画像
-tekon help                                     # 查看命令帮助
-tekon draft new                                # 交互式创建需求草案（支持 Agent 澄清）
+tekon help                                    # 查看完整命令帮助
+tekon draft new                               # 交互式创建需求草案（支持 Agent 澄清）
 tekon draft shape "你的需求描述"               # 塑形需求
-tekon draft approve                          # 批准需求卡
+tekon draft approve                           # 批准需求卡
 tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
 tekon run --template standard-delivery --agent mock  # 使用 mock provider 回归
 tekon run "一次性小任务" --goal --agent mock    # 轻量目标运行（单节点 goal 模板，不接交付）
@@ -109,7 +133,8 @@ tekon ui                                      # 启动 Web Dashboard
 
 | 场景               | 命令                                         |
 | ------------------ | -------------------------------------------- |
-| 查看命令帮助       | `tekon help`                                 |
+| 查看推荐入口       | `tekon`                                      |
+| 查看完整命令帮助   | `tekon help`                                 |
 | 初始化目标仓库     | `tekon init`                                 |
 | 创建需求草案       | `tekon draft new`                            |
 | 塑形需求           | `tekon draft shape "<需求>"`                 |
@@ -179,4 +204,5 @@ npm run lint:actions
 ## 文档
 
 - [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
+- [人类可用性与 Harness 架构全面复审](docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md)
 - [变更日志](CHANGELOG.md)
