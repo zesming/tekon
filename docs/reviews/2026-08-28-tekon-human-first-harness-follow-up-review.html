@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tekon 调整后人类可用性与 Harness 架构全面复审</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #5d6878;
+      --line: #d9e0ea;
+      --paper: #ffffff;
+      --soft: #f5f7fb;
+      --accent: #245aa8;
+      --danger: #a12a2a;
+      --warning: #8a5700;
+      --success: #196b43;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: #eef2f7; line-height: 1.7; }
+    header {
+      padding: 56px max(24px, calc((100vw - 1160px) / 2));
+      background: #14213d;
+      color: #fff;
+    }
+    header .eyebrow { font-size: .78rem; letter-spacing: .13em; text-transform: uppercase; opacity: .7; }
+    header h1 { max-width: 980px; margin: .5rem 0 .7rem; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.12; }
+    header p { max-width: 880px; margin: 0; color: #dbe4f3; }
+    .verdict { display: inline-block; margin-top: 22px; padding: 8px 13px; border-radius: 999px; border: 1px solid #ffc0c0; background: #4a2127; font-weight: 700; }
+    main { max-width: 1160px; margin: 0 auto; padding: 28px 20px 72px; }
+    nav, section { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 14px 38px rgba(27, 39, 60, .07); margin-bottom: 22px; }
+    nav { padding: 18px 24px; }
+    nav a { margin-right: 18px; white-space: nowrap; }
+    section { padding: clamp(22px, 4vw, 42px); }
+    h2 { margin: 0 0 18px; font-size: 1.55rem; }
+    h3 { margin: 26px 0 8px; font-size: 1.12rem; }
+    p, li { max-width: 88ch; }
+    code { padding: .1em .35em; border-radius: 5px; background: #edf1f7; font-family: "SFMono-Regular", Consolas, monospace; font-size: .9em; }
+    a { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: .94rem; }
+    th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--soft); }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .metric { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+    .metric strong { display: block; margin-bottom: 5px; font-size: 1.06rem; }
+    .p0 { border-left: 5px solid var(--danger); }
+    .p1 { border-left: 5px solid var(--warning); }
+    .fixed { border-left: 5px solid var(--success); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #edf1f7; font-size: .8rem; margin-right: 5px; }
+    .note { padding: 14px 16px; border-radius: 10px; background: #fff8e7; border: 1px solid #f1d99e; }
+    .footer { color: var(--muted); font-size: .88rem; }
+    @media (max-width: 760px) {
+      header { padding: 38px 22px; }
+      main { padding: 18px 12px 48px; }
+      .grid { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+    @media print {
+      body { background: #fff; }
+      header { background: #fff; color: #000; padding: 0 0 24px; }
+      header p { color: #444; }
+      .verdict { background: #fff; color: #000; border-color: #666; }
+      main { max-width: none; padding: 0; }
+      nav, section { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Tekon · Follow-up Repository Review · 2026-08-28</div>
+  <h1>调整后人类可用性与 Harness 架构全面复审</h1>
+  <p>基于用户在 PR #11 后续推送的 Session 行动投影与最近活动排序，重新检查产品逻辑、UI/UX、Runtime、Session 事实源、DeepSeek Harness 对齐、代码质量和过度设计。</p>
+  <div class="verdict">调整有效 · P1-04 部分关闭 · 稳定产品验收仍不通过</div>
+</header>
+<main>
+  <nav aria-label="报告目录">
+    <a href="#summary">执行摘要</a>
+    <a href="#accepted">增量验收</a>
+    <a href="#product">产品与 UX</a>
+    <a href="#runtime">Runtime</a>
+    <a href="#harness">Harness</a>
+    <a href="#overdesign">过度设计</a>
+    <a href="#fixes">本 PR 修复</a>
+    <a href="#verdict">最终裁决</a>
+  </nav>
+
+  <section id="summary">
+    <h2>执行摘要</h2>
+    <p>用户新增的行动徽标、相对时间和最近事件排序方向正确，能帮助人类识别待审批、失败和阻断任务；被复审 HEAD 的 Core 与完整 CI 均已通过。但 P1-04 仍不能完整关闭：排序遗漏 durable <code>sessions.updated_at</code>，blocked workflow 被显示为一个不存在的“待输入”动作，列表页也没有实时订阅或未读游标。</p>
+    <div class="grid">
+      <div class="metric"><strong>产品合同已收窄</strong>当前公开合同是“受控交付”，文案诚实；未实现 Collaborate 不再被简单判成合同欺骗。</div>
+      <div class="metric"><strong>人类闭环仍缺失</strong>无同 Session follow-up/steer、真实 chunk、durable inbox 与恢复，执行中无法补充上下文或纠偏。</div>
+      <div class="metric"><strong>Runtime P0 未变</strong>Web/CLI 仍可成为多 owner，shutdown 不保证 quiescence，领域和文件副作用缺统一权威。</div>
+      <div class="metric"><strong>本 PR 做相称补修</strong>活动时间纳入 durable row update，阻断态改“待恢复”，新增纯函数测试并 bump 0.16.1。</div>
+    </div>
+  </section>
+
+  <section id="accepted">
+    <h2>本轮调整验收</h2>
+    <table>
+      <thead><tr><th>调整项</th><th>裁决</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>无参数 CLI 与人类入口</td><td><strong>通过</strong></td><td>返回 0，并前置 Web、直接运行和完整帮助。</td></tr>
+        <tr><td>产品可见版本统一</td><td><strong>通过</strong></td><td>CLI 与 updater 都读取根 <code>package.json</code>。</td></tr>
+        <tr><td>行动徽标</td><td><strong>部分通过</strong></td><td>待审批/失败成立；“待输入”没有对应输入入口，本 PR 改为“待恢复”。</td></tr>
+        <tr><td>最近活动排序</td><td><strong>部分通过</strong></td><td>用户实现只看事件/createdAt；本 PR补上 durable updatedAt 并重排。</td></tr>
+        <tr><td>P1-04 完整关闭</td><td><strong>不接受</strong></td><td>仍缺实时列表、unread/changedSinceSeen、草稿与运行中行动语义。</td></tr>
+        <tr><td>截图式 UI 验证</td><td><strong>不可复核</strong></td><td>截图没有归档到仓库或 Actions artifact，只能视作一次性观察。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="product" class="p1">
+    <h2>产品逻辑与 UI/UX</h2>
+    <h3>公开的“受控交付”合同已经诚实</h3>
+    <p>首页标题、CTA 和 Composer 都明确说明会启动完整 <code>standard-delivery</code> 链路，并提示轻量协作、追问和转向尚未开放。因此当前问题不是“文案假装已有聊天产品”，而是受控交付工具还不足以成为普通人的日常研发工作台。</p>
+    <h3>持续人类交互仍是产品 P0</h3>
+    <ul>
+      <li>详情页没有当前 Session 输入 Composer；</li>
+      <li><code>followUp</code>、<code>steer</code>、<code>resume</code> 仍不可用；</li>
+      <li>事件主要在 one-shot provider 结束后摘要化；</li>
+      <li>blocked workflow 只能恢复或诊断，不能补充输入后继续同一 Turn。</li>
+    </ul>
+    <h3>列表不是实时行动队列</h3>
+    <p><code>SessionsPage</code> 只有一次查询和手动刷新。详情页的 session stream 可以 invalidate list cache，但用户停留在列表页时没有 workspace stream。建议后续增加 lightweight workspace revision/stream，而不是给当前会闪 loading 的 query hook 粗暴加轮询。</p>
+    <h3>仍缺启动前 Run Plan</h3>
+    <p>完整交付发起前应展示 provider、角色、关键 gate、网络/凭证边界、源码和 PR 副作用，以及成本与时长影响因素。</p>
+    <h3>视觉证据边界</h3>
+    <p class="note">本轮没有可访问的已部署实例，也没有可复核截图，因此不宣称完成像素级布局、动效、焦点顺序或全站跨尺寸视觉验收。</p>
+  </section>
+
+  <section id="runtime" class="p0">
+    <h2>Runtime 与事实源 P0</h2>
+    <h3>没有单一执行所有者</h3>
+    <p>Web 与 CLI 都能启动 JobRunner，共享 SQLite、Git worktree、运行目录和子进程。job owner/status 条件写与 Git CAS 有价值，但没有覆盖 Node、Artifact、Audit、Gate、Delivery、文件写入和 subprocess 的统一持久权威。迁移里已有 <code>run_locks</code> 表，却没有生产 Runtime 协议使用它，容易产生错误安全感。</p>
+    <h3>Shutdown 非 quiescent</h3>
+    <p><code>stop()</code> 最多等待约 5 秒便清理进程内引用；它没有证明 executor、子进程、Git/文件写入和 listener 已经 join。正确顺序应是停止领任务、持久取消/暂停、abort+kill、join 副作用、确认无 late writes，最后释放 owner 和关闭 DB。</p>
+    <h3>Session 事实源仍分裂</h3>
+    <p>旧领域表是事实源，<code>session_events</code> 是 best-effort projection。这对 observability 过渡合理，但不能承担模型历史、durable inbox、fork/resume 和 crash recovery 的权威事实链。本轮活动排序需要同时参考 event 与 session row，正好证明该边界尚未收敛。</p>
+    <p><strong>推荐：</strong>优先 single-owner daemon；Web、CLI 和 IDE 统一做客户端。第二 owner fail-fast，并显示 owner PID、启动时间、socket 和恢复操作。</p>
+  </section>
+
+  <section id="harness">
+    <h2>DeepSeek Harness 对齐</h2>
+    <p>当前 <code>dsh-headless</code> 是 goal-only、one-shot provider bridge，不是 Tekon Runtime 已经“基于 DSH”。Tekon 仍自持 Session、Job、Workflow、Gate、persistence 和 UI。</p>
+    <p>官方现有 <code>sdk</code> JSON-RPC profile 与 <code>acp</code> persistent-agent profile，后者支持 session new/list/resume、语义更新、取消和标准协议控制。下一步应先做边界 ADR：DSH 是 provider、持续 Session Runtime，还是仅作为架构参考。不要同时扩展 Tekon 自己的完整 AgentDriver，又继续加深 headless ACL。</p>
+    <ul>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md">Architecture</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/agent-lifecycle.md">Agent lifecycle</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/persistence.md">Session persistence</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/sdk-app/README.md">SDK profile</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/bundle/acp-app/README.md">ACP profile</a></li>
+    </ul>
+    <p class="note">Harness 官方 Safety 仍明确说明其未经过安全审计，sandbox、approval 与 permission 不保证隔离。Tekon 不能把安全责任外包给 DSH。</p>
+  </section>
+
+  <section id="overdesign" class="p1">
+    <h2>过度实现与代码风险</h2>
+    <table>
+      <thead><tr><th>表面</th><th>当前事实</th><th>判断</th></tr></thead>
+      <tbody>
+        <tr><td><code>run_locks</code></td><td>表存在，生产 Runtime 未使用</td><td>没有形成所有权边界，建议接入或删除。</td></tr>
+        <tr><td><code>LegacyAgentDriver</code></td><td>主要见实现和测试，持续方法不可用</td><td>契约领先生产消费者，冻结扩展。</td></tr>
+        <tr><td>DSH capability probe</td><td>help/config 检查主要在测试，运行时 adapter 只做版本 gate</td><td>文档应区分测试期和运行期保证。</td></tr>
+        <tr><td><code>review-only</code> profile</td><td>有 policy primitive，无公开入口</td><td>装饰性能力，不应继续增加 profile。</td></tr>
+        <tr><td>Profile/Automation/Goal</td><td>已有多套路由/executor</td><td>明显领先 streaming/inbox/ownership 纵向闭环。</td></tr>
+        <tr><td>Web/CLI 双 composition root</td><td>镜像装配并均可持有 Runtime</td><td>single-owner 后应收敛为 daemon root + clients。</td></tr>
+      </tbody>
+    </table>
+    <h3>其它代码与过程问题</h3>
+    <ul>
+      <li>Session list SQL 每次聚合 workspace 全部事件，长 Session 下会成为热路径；</li>
+      <li><code>session.list</code> 与 <code>session.get</code> 的同名 <code>lastActivityAt</code> 语义仍不完全一致；</li>
+      <li>原测试依赖 20ms sleep 强制时间排序，应改注入 clock 或确定性 DB 时间；</li>
+      <li><code>CHANGELOG.md</code> 已超过 100 KB，混入多轮内部复审，应与用户发布说明分离。</li>
+    </ul>
+  </section>
+
+  <section id="fixes" class="fixed">
+    <h2>本复审 PR 已修改</h2>
+    <div class="grid">
+      <div class="metric"><strong>FIX-FU-01</strong>新增 <code>effectiveLastActivityAt()</code>，取 event projection 与 durable updatedAt 较新值，并稳定重排。</div>
+      <div class="metric"><strong>FIX-FU-02</strong>blocked/awaiting-input 的徽标由“待输入”改为“待恢复”，避免承诺不存在的输入入口。</div>
+      <div class="metric"><strong>FIX-FU-03</strong>相对时间改用语义化 <code>&lt;time dateTime&gt;</code>。</div>
+      <div class="metric"><strong>FIX-FU-04</strong>新增纯函数测试，版本 <code>0.16.0 → 0.16.1</code>。</div>
+    </div>
+    <p>README、主手册与旧报告未修改：它们不描述活动排序算法或具体徽标行为；本轮事实集中归档在本报告和新 PR，避免继续放大旧报告与 CHANGELOG。</p>
+  </section>
+
+  <section>
+    <h2>推荐实施顺序</h2>
+    <ol>
+      <li>single-owner daemon、repo lock 与 quiescent shutdown；</li>
+      <li>DSH SDK/ACP vs 自持 Runtime 的边界 ADR 和 vertical spike；</li>
+      <li>authoritative message/inbox、claim、幂等、retry、restart recovery；</li>
+      <li>Collaborate：真实 chunk、follow-up、steer、cancel、resume；</li>
+      <li>显式升级到 Deliver；</li>
+      <li>workspace stream、unread/needs-action、Run Plan、Inspector、Final Result；</li>
+      <li>分页、虚拟化、bounded replay、projection health；</li>
+      <li>删除或接入 dead lock/driver/probe/profile，并瘦身 CHANGELOG。</li>
+    </ol>
+  </section>
+
+  <section id="verdict">
+    <h2>最终裁决</h2>
+    <p><strong>对用户本轮调整：</strong>方向通过，代码增量基本正确；P1-04 只能判“排序与行动徽标子项已关闭”，本 PR 已补修两个具体缺口。</p>
+    <p><strong>对当前仓库整体：</strong>不通过普通人稳定、持续使用的产品验收。阻断项是持续交互、single-owner、quiescent shutdown、权威 Session log 和 DSH Runtime 边界，而不是继续增加事件名或 profile。</p>
+    <p><strong>应保留：</strong>Workflow、Gate、Artifact、Worktree、Audit、Delivery、Human Approval、Independent Review，以及改善后的人类行动列表。</p>
+    <p class="footer">未执行 merge、release 或 deploy。完整逐项证据与验收边界见同名 Markdown 报告。</p>
+  </section>
+</main>
+</body>
+</html>
