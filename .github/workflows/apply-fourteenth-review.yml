@@ -1,0 +1,124 @@
+name: Apply fourteenth Tekon review
+
+on:
+  push:
+    branches:
+      - review/deepseek-harness-migration-2026-08-20
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    if: contains(github.event.head_commit.message, '[fourteenth-review]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: review/deepseek-harness-migration-2026-08-20
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+
+      - name: Apply safe scope and version-governance fixes
+        run: python3 scripts/run_fourteenth_review.py --apply-fixes
+
+      - name: Validate and capture exact results
+        id: validate
+        shell: bash
+        run: |
+          set +e
+          mkdir -p /tmp/fourteenth-validation
+          : > /tmp/fourteenth-validation/results.tsv
+
+          run_check() {
+            local name="$1"
+            shift
+            echo "===== ${name} ====="
+            "$@" 2>&1 | tee "/tmp/fourteenth-validation/${name}.log"
+            local code=${PIPESTATUS[0]}
+            printf '%s\t%s\n' "$name" "$code" >> /tmp/fourteenth-validation/results.tsv
+            return 0
+          }
+
+          run_check root-build npm exec --yes -- pnpm@10.12.1 build
+          run_check root-typecheck npm exec --yes -- pnpm@10.12.1 typecheck
+          run_check root-lint npm exec --yes -- pnpm@10.12.1 lint
+          run_check core-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:unit
+          run_check core-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/core test:e2e
+          run_check cli-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
+          run_check cli-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+          run_check web-unit npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:unit
+          run_check web-e2e npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright test --retries=0
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          rows = []
+          for line in Path('/tmp/fourteenth-validation/results.tsv').read_text().splitlines():
+              if not line.strip():
+                  continue
+              name, code = line.split('\t', 1)
+              rows.append({'name': name, 'exitCode': int(code)})
+          Path('/tmp/fourteenth-validation.json').write_text(
+              json.dumps(
+                  {
+                      'commands': rows,
+                      'playwrightLog': '/tmp/fourteenth-validation/web-e2e.log',
+                  },
+                  ensure_ascii=False,
+                  indent=2,
+              ),
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Generate authoritative report
+        run: |
+          python3 scripts/run_fourteenth_review.py \
+            --write-report \
+            --validation-file /tmp/fourteenth-validation.json
+          git diff --check
+
+      - name: Commit and push review
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "openai-review-agent"
+          git config user.email "openai-review-agent@users.noreply.github.com"
+          git add -- \
+            package.json \
+            CHANGELOG.md \
+            docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md \
+            docs/superpowers/plans/2026-08-24-phase2-streaming-agent-loop-design.md \
+            docs/superpowers/plans/2026-08-24-phase3-session-ui-design.md \
+            docs/reviews/2026-08-28-tekon-harness-replatform-fourteenth-authoritative-review.md
+          git rm -f -- \
+            .github/workflows/apply-fourteenth-review.yml \
+            scripts/run_fourteenth_review.py
+          git diff --cached --check
+          git commit -m "docs: add fourteenth authoritative Tekon review"
+          git push origin HEAD:review/deepseek-harness-migration-2026-08-20
+
+      - name: Fail workflow when validation found failures
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/fourteenth-validation.json').read_text())
+          failed = [row for row in data['commands'] if row['exitCode'] != 0]
+          if failed:
+              raise SystemExit('validation failures: ' + ', '.join(f"{row['name']}={row['exitCode']}" for row in failed))
+          PY
