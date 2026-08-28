@@ -1,0 +1,6 @@
+Usage: dsh --profile headless [options] [task...]
+
+Answer one task, print the final assistant message, and exit.
+
+  task        the task text; multiple words are joined by spaces
+  -h, --help  show this help

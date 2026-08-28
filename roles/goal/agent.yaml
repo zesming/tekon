@@ -1,0 +1,6 @@
+role: goal
+name: Goal Executor
+description: Executes a single free-form agent goal without a fixed delivery workflow.
+injectMode: prepend
+priority: 50
+maxSkills: 4

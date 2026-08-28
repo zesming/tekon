@@ -15,13 +15,14 @@
 - 证据和审阅材料收集器。
 - PR 准备助手。
 - 研发工作样本评估器。
-- 支持 mock、Claude Code 和 Codex provider 的本地执行入口。
+- 支持 mock、Claude Code 和 Codex provider 的本地执行入口；另含 experimental 的 dsh-headless（DeepSeek Harness）provider。
+  - ⚠️ **dsh-headless 使用前必读**：默认关闭；agent 子进程**网络出口不受限**（弱于 codex，dsh 无法禁网）；**仅适用于 `--goal` 运行**（无法写产物目录，交付类 workflow 节点会失败）；需自行安装 `@deepseek-ai/dsh` 并配 `DEEPSEEK_API_KEY`。详见 §5.7。
 
 ## 2. 天工解决什么问题
 
 ### 2.1 需求进入研发前不清楚
 
-真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 `demand shape`，先把需求塑形成需求卡，包含：
+真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 `draft shape`，先把需求塑形成需求卡，包含：
 
 - 需求标题和正文。
 - 推荐 workflow 模板。
@@ -86,9 +87,9 @@
 推荐流程（Human ↔ Tekon 交替时序）：
 
 1. **Tekon**: `tekon init` 初始化目标仓库。
-2. **Tekon**: `demand shape` 把需求写成需求卡。
+2. **Tekon**: `draft shape` 把需求写成需求卡。
 3. **Human**: 人工审阅需求卡，确认边界和验收标准。
-4. **Human**: `demand approve` 批准需求卡。
+4. **Human**: `draft approve` 批准需求卡。
 5. **Tekon**: `run` 发起 workflow。
 6. **Human** ◇ 可选: `status` 和 `review` 查看结果和审阅面。
 7. **Tekon**: `delivery prepare` 生成 PR 准备包。
@@ -204,13 +205,13 @@ tekon workflow preflight
 ### 4.4 塑形需求
 
 ```bash
-tekon demand shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
+tekon draft shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
 ```
 
 命令会输出 `shapePath` 和 `reviewPath`。先读 Markdown 审阅稿，确认需求边界后批准：
 
 ```bash
-tekon demand approve
+tekon draft approve
 ```
 
 可选：评估需求卡质量。
@@ -291,7 +292,7 @@ tekon eval readiness
 天工的常规 CLI 使用方式是“进入目标仓库根目录后执行短命令”。默认推断规则如下：
 
 - Repo：优先使用 `--repo`；不传时从当前目录向上查找 `.tekon/config.yaml`，找不到时使用当前 Git 仓库根目录。
-- Demand shape：`demand shape` 默认写入 `.tekon/demands/`；`demand approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
+- Demand shape：`draft shape` 默认写入 `.tekon/demands/`；`draft approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
 - Run：`run` 没有需求文本且没有 `--demand-file` 时，默认读取最近需求卡，且该需求卡必须已批准；`status`、`review`、`eval readiness`、`delivery prepare` 等默认使用最近一次 run。
 - Human decision：`approval summary`、`eval approval-summary`、`approval reject` 和 `resume --approve-human` 默认使用最近的 pending human decision；如果同一 run 同时存在多个 pending decision，必须显式传 `--decision-id`。
 
@@ -314,7 +315,7 @@ tekon eval readiness
 - run artifact。
 - gate 日志。
 - worktree。
-- demand shape 文件。
+- draft shape 文件。
 - Web session token。
 
 通常不提交 `.tekon/`。重要结论应写入 `docs/reviews/` 或其它可提交文档。
@@ -363,6 +364,10 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
 - `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
 - `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
 - `codex`：本机 Codex CLI adapter，使用 `codex --profile internal ... exec` 非交互执行，需本机 Codex CLI 已安装并认证 internal profile。
+- `dsh-headless`（**experimental，默认关闭**）：本机 DeepSeek Harness（`dsh`）adapter，经 `dsh --profile headless "<task>"` 一次性子进程边界执行。**使用前必读的三条硬边界：**
+  - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
+  - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制,无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
+  - 一次性、无流式、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.1-rc.2`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 
@@ -455,12 +460,12 @@ tekon workflow select "补齐 CLI 单元测试"
 - 不会自动保存 workflow。
 - 人可以覆盖推荐，但建议用 `eval workflow-selection` 检查。
 
-### 6.4 `demand shape`
+### 6.4 `draft shape`
 
 用途：把原始需求转成可审阅需求卡。
 
 ```bash
-tekon demand shape "需求文本"
+tekon draft shape "需求文本"
 ```
 
 > **交互式替代**：`tekon draft new` 提供 Agent 驱动的交互式需求澄清流程（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。推荐在需求不明确时优先使用。
@@ -483,12 +488,12 @@ tekon demand shape "需求文本"
 - 如果 `openQuestions` 不为空，建议先补充需求；也可以在明确接受风险后批准。
 - 如果推荐模板不符合预期，先用 `workflow select` 和 `eval workflow-selection` 核对原因。
 
-### 6.5 `demand approve`
+### 6.5 `draft approve`
 
 用途：人工批准需求卡进入执行阶段。
 
 ```bash
-tekon demand approve
+tekon draft approve
 ```
 
 常用参数：
@@ -505,6 +510,37 @@ tekon demand approve
 
 - 批准需求卡不等于批准 PR 创建。
 - 批准需求卡不绕过后续 gate。
+
+### 6.5.1 `draft plan` / `draft plan-approve`（可选计划审批）
+
+用途：在需求批准之外，为需求卡显式生成一份「计划产物」并单独审批。计划审批与需求审批相互独立——需求审批确认「要不要做」，计划审批确认「按这个计划做」。这一步是可选的：不生成计划的需求卡（含所有旧需求卡）不受计划审批点约束。
+
+生成计划：
+
+```bash
+tekon draft plan
+```
+
+- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
+- 结果：需求卡标记 `hasPlan=true`、`planApproved=false`。计划内容是该需求卡的验收标准、推荐模板与 Non-goals 的结构化快照。
+- 重新生成计划会使之前的计划审批失效（`planApproved` 重置为 false）。
+
+审批计划：
+
+```bash
+tekon draft plan-approve
+```
+
+- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
+- `--actor <name>`：记录计划审批操作者。
+- 前置：必须先 `draft plan` 生成计划，否则报错。
+- 结果：需求卡标记 `planApproved=true`，写入审批人与时间。
+
+对运行的影响：
+
+- **已生成计划的需求卡**：必须先 `draft plan-approve`，否则 `tekon run`（及 Web 发起运行）拒绝执行。
+- **未生成计划的需求卡**：不受影响，`approve` 后即可运行（向后兼容）。
+- 计划审批同样不等于批准 PR 创建，也不绕过后续 gate。
 
 ### 6.6 `run`
 
@@ -528,13 +564,23 @@ tekon run
 tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
+轻量目标运行（goal 模式）：
+
+```bash
+tekon run "做一个一次性小任务" --goal --agent mock
+```
+
+`--goal` 使用内置单节点 goal 模板执行一次轻量 Agent 目标，不套用完整交付工作流（不产出 code-changes、不进入交付流程）；与 `--template` 互斥。
+
 常用参数：
 
 - `--template <name>`：使用内置模板。
+- `--goal`：轻量目标运行（内置单节点 goal 模板，不接交付）；不能与 `--template` 同时使用。
 - `--demand-file <path>`：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。
 - `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
+- `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的三条硬边界）。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
 - `--repo <path>`：只在跨仓库运行时使用。
@@ -634,6 +680,7 @@ tekon resume --approve-human
 - 会按 run 创建时落库的 provider 快照恢复。
 - 同一 run 有多个 pending decision 时必须传 `--decision-id <decisionId>`；显式指定后只批准这一条 decision。
 - 旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock。
+- run 已处于终态(`passed`/`failed`/`cancelled`)时，`resume` 会拒绝并以非 0 退出、打印中文提示("运行已处于终态 …，无法恢复"),不会把已结束的运行重新拉起。
 
 ### 6.11 `approval reject`
 
@@ -657,6 +704,7 @@ tekon approval reject
 - workflow 阻断。
 - human gate 分类为 `human-rejected`。
 - `review` 会显示人工拒绝语义，不会误判成命令策略拒绝。
+- run 已处于终态时,`approval reject` 会拒绝并以非 0 退出、打印中文提示,不会把终态运行改写为 blocked(避免"终态→拒绝→阻断→恢复"复活链)。
 
 ### 6.12 `review`
 
@@ -714,6 +762,8 @@ tekon delivery prepare
 - `.tekon/runs/<runId>/delivery/pr-body.md`
 - `delivery-package` artifact。
 - `delivery.pr-prepared` 审计事件。
+
+> ⚠️ **当前边界（审批记录未绑定内容指纹）**：`create-pr` 本身**每次都要求当次 `--approve-human` 人工批准**（安全边界不变）。但当一次交付失败后自动/手动重新准备时，会**保留上一次的 `approvedBy/approvedAt` 记录**；若此时分支 HEAD、PR body 或证据包已变化，审批记录可能与当前内容不再一致（审计可信度问题，非绕过人工批准）。绑定内容哈希使旧审批自动失效的能力留待交付治理里程碑。
 
 ### 6.15 `delivery create-pr`
 
@@ -850,7 +900,7 @@ tekon ui
 - `--repo <path>`：跨仓库或从其它目录启动时指定目标仓库。
 - `--port <port>`：指定端口，默认 3000。
 
-启动后终端输出带 session token 的完整 URL，在浏览器中打开即可使用。按 `Ctrl+C` 停止服务。
+启动后终端输出形如 `http://127.0.0.1:3000/#token=<会话令牌>` 的完整 URL——令牌放在 URL 片段（`#` 之后），不会随请求发往服务端。在浏览器中打开该 URL 即可直接使用：前端会读取片段中的令牌、写入 sessionStorage（当前标签页刷新后仍保持登录）、并把令牌从地址栏清除。按 `Ctrl+C` 停止服务。
 
 注意：
 
@@ -870,7 +920,7 @@ tekon update
 
 ### 6.22 `draft`
 
-用途：创建和管理需求草案。`draft` 是 `demand` 的别名，两者等价。
+用途：创建和管理需求草案。
 
 **交互式创建（推荐）**：
 
@@ -891,7 +941,7 @@ tekon draft new
 tekon draft shape "需求文本"
 ```
 
-等同于 `demand shape`，直接将需求文本转为需求卡。
+等同于 `draft shape`，直接将需求文本转为需求卡。
 
 **批准草案**：
 
@@ -899,7 +949,7 @@ tekon draft shape "需求文本"
 tekon draft approve
 ```
 
-等同于 `demand approve`，批准最近的需求草案。
+等同于 `draft approve`，批准最近的需求草案。
 
 **查看草案**：
 
@@ -968,9 +1018,19 @@ tekon ui --port 3001
 tekon ui --repo /path/to/project
 ```
 
-启动后终端会输出带 token 的完整 URL，在浏览器中打开即可。按 `Ctrl+C` 停止。
+启动后终端会输出形如 `http://127.0.0.1:3000/#token=<会话令牌>` 的完整 URL（令牌在 URL 片段中，不发往服务端），在浏览器中打开即可直接使用——前端自动读取令牌、写入 sessionStorage（刷新保持）并从地址栏清除。按 `Ctrl+C` 停止。
 
-Web dashboard 适合：
+打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
+
+> ⚠️ **当前边界**：从会话输入框「启动受控交付」发起的运行，默认走 `standard-delivery` **受控交付全链路**（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。
+
+Session UI 适合：
+
+- 在左侧会话列表选择或用输入框发起一个新会话（运行）。
+- 在会话详情中间栏**实时**查看事件流：用户消息、步骤开始/结束、工具调用与结果、Agent 消息（当前为产物元数据合成的**摘要**，非模型原文）、错误。断线会自动重连并续播，不丢事件。
+- 在右侧就地处理 human approval（inline 审批卡片，展示风险、命令、就绪度与证据），并暂停/取消/恢复运行。
+
+旧 Dashboard（`/advanced`）适合：
 
 - 查看项目 overview。
 - 查看 run 列表。
@@ -982,17 +1042,29 @@ Web dashboard 适合：
 - 触发 `delivery prepare`。
 - 在人工批准下触发 `delivery create-pr`。
 
-写操作需要 session token。token 在：
+写操作需要 session token。用 `tekon ui` 输出的完整 URL（含 `#token=`）打开时，令牌已自动载入，可直接发起运行、批准/拒绝审批。若你手动访问了不带片段的地址（令牌丢失），token 保存在：
 
 ```text
 /path/to/project/.tekon/web-session.json
 ```
+
+可在页面顶栏"Session token"输入框粘贴该 token 作为兜底；只读浏览（会话列表、事件流）在配置令牌后加载。
 
 注意：
 
 - Web 是本地 dashboard，不是远程服务。
 - token 不应提交。
 - Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
+- **发起运行时可选 Profile**：新建运行表单的 `Profile` 下拉默认 `human-web`（人工驱动，不自动推进人工点）。选 `autonomous-delivery` 后，运行**通过（passed）时会自动准备交付**（打包证据、生成 PR 准备包、进入待审批状态）；**但绝不自动创建 PR**——创建远端 PR 始终需要人工在交付面板显式批准。此边界是硬约束，不因 Profile 放宽。自动准备只在长驻的 Web/服务模式下触发；CLI `tekon run` 跑完即退出，交付仍走显式 `tekon delivery prepare`。
+- **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行。
+  - **Session UI（默认）会通过事件流实时反映进展**：发起后无需手动刷新，中间栏会随后台执行追加事件、右侧审批卡片在门禁触发时自动出现、决策后运行自动继续。
+  - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
+  - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
+  - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
+
+> 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
+>
+> **事件日志定位（迁移期）**：`session_events` 目前是 best-effort 的**投影**，用于会话叙事与 SSE 回放；**`workflow_instances` / `jobs` 等旧表仍是运行状态的事实源**。迁移期个别事件可能因写入失败而缺失，因此不应把 event log 当作可 100% 完整重建的权威日志。canonical event log（事务化 outbox + 投影不变量）为后续阶段规划。
 
 ## 8. 如何判断结果是否可信
 
@@ -1169,7 +1241,7 @@ Web dashboard 适合：
 | `--no-progress-timeout-ms <ms>` | 覆盖无 stdout/stderr 或受控输出目录文件进展超时，用来判断任务是否卡死。 |
 | `--progress-heartbeat-ms <ms>`  | 覆盖 progress JSON heartbeat 间隔。                                     |
 
-### `demand shape` 参数
+### `draft shape` 参数
 
 | 参数            | 用途                                           |
 | --------------- | ---------------------------------------------- |

@@ -58,12 +58,19 @@ describe('strict output schemas — field drift detection', () => {
       id: 'run_1',
       projectId: 'proj_1',
       demandId: 'dem_1',
+      demandTitle: 'Add approval summary to dashboard',
+      provider: 'codex',
       status: 'running',
       currentNodeId: 'node_1',
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',
     };
     expect(() => apiWorkflowSchema.parse(valid)).not.toThrow();
+
+    // demandTitle / provider are nullable (run/resume mutation path returns null)
+    expect(() =>
+      apiWorkflowSchema.parse({ ...valid, demandTitle: null, provider: null }),
+    ).not.toThrow();
 
     expect(() =>
       apiWorkflowSchema.parse({ ...valid, internalState: 'secret' }),

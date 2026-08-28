@@ -477,6 +477,103 @@ describe('scm delivery', () => {
     db.close();
   }, 15_000);
 
+  // 4e: createPr is idempotent — a second call for a run whose PR is already
+  // `created` returns the existing PR URL without re-running any git/gh command.
+  it('is idempotent: a repeat createPr on an already-created run runs no commands', async () => {
+    const repoPath = createGitRepo(tempDirs);
+    const remotePath = mkdtempSync(join(tmpdir(), 'tekon-remote-'));
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-logs-'));
+    tempDirs.push(remotePath, outputDir);
+    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['remote', 'add', 'origin', remotePath], {
+      cwd: repoPath,
+    });
+    writeFileSync(join(repoPath, 'feature.txt'), 'feature\n', 'utf8');
+    execFileSync('git', ['add', 'feature.txt'], { cwd: repoPath });
+    execFileSync('git', ['commit', '-m', 'feature'], { cwd: repoPath });
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedRun(repositories);
+
+    const stdoutPath = join(outputDir, 'gh-pr.stdout.log');
+    writeFileSync(stdoutPath, 'https://github.example/tekon/pull/9\n', 'utf8');
+    const calls: CommandGatewayRunInput[] = [];
+    const gateway: CommandGateway = {
+      async run(input) {
+        calls.push(input);
+        if (input.command.tool === 'gh') {
+          return executed(stdoutPath, join(outputDir, 'gh.stderr.log'));
+        }
+        return executed(
+          join(outputDir, `${input.command.tool}-${input.command.args[0]}.out`),
+          join(outputDir, `${input.command.tool}-${input.command.args[0]}.err`),
+        );
+      },
+    };
+    const delivery = createScmDelivery({
+      repoPath,
+      repositories,
+      audit,
+      gateway,
+      outputDir,
+    });
+    const createArgs = {
+      runId: 'run_1',
+      title: 'Phase 4 delivery',
+      body: 'Evidence body',
+      branch: 'tekon/phase-4',
+      dryRun: false,
+      humanApproved: true,
+      approvedBy: 'test',
+    };
+
+    const first = await delivery.createPr(createArgs);
+    expect(first.prUrl).toBe('https://github.example/tekon/pull/9');
+    expect(await repositories.getDeliveryPullRequest('run_1')).toMatchObject({
+      status: 'created',
+    });
+    const callsAfterFirst = calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    // Second call: must short-circuit — no new git/gh commands, same URL.
+    const second = await delivery.createPr(createArgs);
+    expect(second.prUrl).toBe('https://github.example/tekon/pull/9');
+    expect(second.commands).toEqual([]);
+    // getStatus may probe (read-only), but NO write command (branch/push/gh pr
+    // create) may run. Assert no gh pr create and no git push after the first.
+    const newCalls = calls.slice(callsAfterFirst);
+    expect(
+      newCalls.some(
+        (c) => c.command.tool === 'gh' && c.command.args[0] === 'pr',
+      ),
+    ).toBe(false);
+    expect(
+      newCalls.some(
+        (c) => c.command.tool === 'git' && c.command.args[0] === 'push',
+      ),
+    ).toBe(false);
+
+    // S5: a dry-run probe against the already-created PR reports dryRun:true
+    // (honoring the caller) and still runs no write command.
+    const callsBeforeDryRun = calls.length;
+    const third = await delivery.createPr({ ...createArgs, dryRun: true });
+    expect(third.dryRun).toBe(true);
+    expect(third.prUrl).toBe('https://github.example/tekon/pull/9');
+    expect(third.commands).toEqual([]);
+    expect(
+      calls
+        .slice(callsBeforeDryRun)
+        .some(
+          (c) =>
+            (c.command.tool === 'gh' && c.command.args[0] === 'pr') ||
+            (c.command.tool === 'git' && c.command.args[0] === 'push'),
+        ),
+    ).toBe(false);
+    db.close();
+  }, 15_000);
+
   it('persists timeout reason and progress path when approved PR creation times out', async () => {
     const repoPath = createGitRepo(tempDirs);
     const outputDir = mkdtempSync(join(tmpdir(), 'tekon-scm-timeout-'));

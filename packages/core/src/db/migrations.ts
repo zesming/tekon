@@ -1,6 +1,6 @@
 import type { TekonDatabase } from './connection.js';
 
-const WORK_USABLE_SCHEMA_VERSION = 3;
+const WORK_USABLE_SCHEMA_VERSION = 4;
 
 export function migrateDatabase(db: TekonDatabase): void {
   const migrate = db.transaction(() => {
@@ -169,12 +169,98 @@ export function migrateDatabase(db: TekonDatabase): void {
         config_summary text not null,
         created_at text not null
       );
+
+      create table if not exists workspaces (
+        id text primary key,
+        root text not null,
+        repo text,
+        branch_policy text,
+        permission_profile text,
+        created_at text not null
+      );
+
+      create table if not exists sessions (
+        id text primary key,
+        workspace_id text not null references workspaces(id),
+        title text,
+        profile text not null,
+        status text not null,
+        run_id text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create index if not exists idx_sessions_run_id on sessions(run_id);
+
+      create table if not exists session_events (
+        id integer primary key autoincrement,
+        session_id text not null,
+        seq integer not null,
+        type text not null,
+        version integer not null,
+        timestamp text not null,
+        payload text not null default '{}',
+        visibility text not null default 'ui-only',
+        model_visible integer not null default 0,
+        source_event_seqs text not null default '[]',
+        correlation_id text,
+        unique(session_id, seq)
+      );
+      create index if not exists idx_session_events_session_seq
+        on session_events(session_id, seq);
+
+      create table if not exists jobs (
+        id text primary key,
+        session_id text not null,
+        kind text not null,
+        status text not null,
+        owner text,
+        lease text,
+        abort_state text not null default 'none',
+        checkpoint text,
+        payload text not null default '{}',
+        created_at text not null,
+        updated_at text not null
+      );
+      create index if not exists idx_jobs_status_created on jobs(status, created_at);
+
+      create table if not exists projection_checkpoints (
+        session_id text not null,
+        projection_name text not null,
+        last_seq integer not null,
+        updated_at text not null,
+        primary key (session_id, projection_name)
+      );
     `);
 
     addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
     addColumnIfMissing(db, 'nodes', 'outputs', "text not null default '[]'");
+    // node_order gives same-phase nodes a deterministic execution order.
+    // Without it listNodes falls back to created_at (identical across a
+    // phase's nodes — persistPlan stamps one timestamp) then the random
+    // id UUID, which scrambles rd→qa ordering and breaks cross-node
+    // promotion. Default 0 keeps legacy rows stable (id tiebreaker).
+    addColumnIfMissing(db, 'nodes', 'node_order', 'integer not null default 0');
     addColumnIfMissing(db, 'gate_results', 'gate_key', 'text');
     addColumnIfMissing(db, 'worktree_leases', 'base_head', 'text');
+    // 4b: run kind ('workflow' | 'goal'). Default 'workflow' keeps every legacy
+    // row a workflow run; dual-write reads it so run.resumed/run.passed events
+    // carry the right kind without threading mode through the engine.
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'kind',
+      "text not null default 'workflow'",
+    );
+    // 4c: run-scoped allow-dirty-base policy. Stored as 0/1 (SQLite has no
+    // boolean); default 0 keeps every legacy row strict about a clean base.
+    // The async job executor reads it to rebuild the engine with the same
+    // lease policy the run was started with.
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'allow_dirty_base',
+      'integer not null default 0',
+    );
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

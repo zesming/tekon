@@ -3,6 +3,8 @@ import { createBrowserRouter, useRouteError, useNavigate } from 'react-router';
 import { AppLayout } from './layouts/AppLayout.js';
 
 import { DashboardPage } from './pages/DashboardPage.js';
+import { SessionsPage } from './pages/SessionsPage.js';
+import { SessionDetailPage } from './pages/SessionDetailPage.js';
 import { RunsPage } from './pages/RunsPage.js';
 import { RunDetailPage } from './pages/RunDetailPage.js';
 import { OverviewTab } from './pages/run-detail/OverviewTab.js';
@@ -32,7 +34,7 @@ function RouteError({ scope: _scope }: { scope: string }) {
     <div className="error-page">
       <h2>Something went wrong</h2>
       <p>{error instanceof Error ? error.message : 'Unknown error'}</p>
-      <button onClick={() => navigate('/')}>返回 Dashboard</button>
+      <button onClick={() => navigate('/')}>返回首页</button>
     </div>
   );
 }
@@ -42,10 +44,18 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     errorElement: <RouteError scope="app" />,
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'runs', element: <RunsPage /> },
+      // Phase 3 3d: human-first Session UI is the default entry.
+      { index: true, element: <SessionsPage /> },
       {
-        path: 'runs/:runId',
+        path: 'sessions/:sessionId',
+        element: <SessionDetailPage />,
+        errorElement: <RouteError scope="session-detail" />,
+      },
+      // Legacy run-centric Cockpit, preserved under /advanced (report C2).
+      { path: 'advanced', element: <DashboardPage /> },
+      { path: 'advanced/runs', element: <RunsPage /> },
+      {
+        path: 'advanced/runs/:runId',
         element: <RunDetailPage />,
         errorElement: <RouteError scope="run-detail" />,
         children: [
@@ -58,11 +68,11 @@ export const router = createBrowserRouter([
           { path: 'progress', element: <ProgressTab /> },
         ],
       },
-      { path: 'approvals', element: <ApprovalsPage /> },
-      { path: 'delivery', element: <DeliveryPage /> },
-      { path: 'demand', element: <DraftPage /> },
+      { path: 'advanced/approvals', element: <ApprovalsPage /> },
+      { path: 'advanced/delivery', element: <DeliveryPage /> },
+      { path: 'advanced/demand', element: <DraftPage /> },
       {
-        path: 'config',
+        path: 'advanced/config',
         element: <ConfigPage />,
         children: [
           { index: true, element: <RolesTab /> },
@@ -72,7 +82,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        path: 'eval',
+        path: 'advanced/eval',
         element: <EvaluationsPage />,
         children: [
           { index: true, element: <ReadinessTab /> },

@@ -451,6 +451,8 @@ const allowedReviewScopesByRole: Record<Role, string[]> = {
   qa: ['requirement-interface', 'test-plan', 'validation', 'release-signoff'],
   reviewer: ['code-change'],
   pmo: ['process-completeness', 'delivery-readiness'],
+  // 4b: the goal role is a plain executor, not a reviewer — no review scopes.
+  goal: [],
 };
 
 const allowedReviewScopesByArtifact: Partial<Record<ArtifactType, string[]>> = {

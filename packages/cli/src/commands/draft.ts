@@ -1,12 +1,14 @@
 import { parseArgs } from 'node:util';
 
 import {
-  approveDemandShape,
-  evaluateDemandShape,
-  readDemandShapeFile,
-  shapeDemand,
-  writeDemandShapeFile,
-  writeDemandShapeFiles,
+  approveDraftShape,
+  evaluateDraftShape,
+  markDraftPlanGenerated,
+  planApproveDraftShape,
+  readDraftShapeFile,
+  shapeDraft,
+  writeDraftShapeFile,
+  writeDraftShapeFiles,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -51,7 +53,7 @@ export async function commandDemand(
       spinnerIdx++;
     }, 300);
 
-    const initialShape = shapeDemand({ text: demandText });
+    const initialShape = shapeDraft({ text: demandText });
 
     clearInterval(spinnerInterval);
     process.stderr.write('\r正在分析需求 完成\n');
@@ -82,7 +84,7 @@ export async function commandDemand(
     }
 
     // Write files
-    const paths = writeDemandShapeFiles({ repoPath, shape });
+    const paths = writeDraftShapeFiles({ repoPath, shape });
 
     // Human-readable output
     if (args.values.json) {
@@ -151,14 +153,14 @@ export async function commandDemand(
       allowPositionals: true,
     });
     const demandText = args.positionals.join(' ').trim();
-    const shape = shapeDemand({ text: demandText });
+    const shape = shapeDraft({ text: demandText });
     const repoPath = resolveProjectRepoPath(args.values.repo);
     const shouldWrite = !args.values['no-write'];
     if (shouldWrite) {
       await ensureInitialized(repoPath, io);
     }
     const paths = shouldWrite
-      ? writeDemandShapeFiles({ repoPath, shape })
+      ? writeDraftShapeFiles({ repoPath, shape })
       : null;
     if (args.values.format === 'json') {
       io.stdout.write(
@@ -202,19 +204,87 @@ export async function commandDemand(
     const shapePath = resolveDemandShapePath(repoPath, shapeArg, {
       latestMustBeUnapproved: !shapeArg,
     });
-    const approved = approveDemandShape(
-      readDemandShapeFile(shapePath),
+    const approved = approveDraftShape(
+      readDraftShapeFile(shapePath),
       {
         actor: args.values.actor ?? 'cli',
       },
     );
-    writeDemandShapeFile(shapePath, approved);
+    writeDraftShapeFile(shapePath, approved);
     io.stdout.write(
       [
         `draftId=${approved.id}`,
         `approved=${approved.approved}`,
         `approvedBy=${approved.approvedBy ?? ''}`,
         `approvedAt=${approved.approvedAt ?? ''}`,
+        `shapePath=${shapePath}`,
+      ].join(' ') + '\n',
+    );
+    return;
+  }
+
+  // 4f-2: generate an explicit plan view for the draft (hasPlan=true). Distinct
+  // from `approve` (需求审批) — a generated plan must be plan-approved before
+  // run. Regenerating invalidates a prior plan approval.
+  if (subcommand === 'plan') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        shape: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const shapeArg = args.values.shape ?? args.positionals[0];
+    const repoPath = resolveProjectRepoPath(args.values.repo);
+    if (!shapeArg) {
+      await ensureInitialized(repoPath, io);
+    }
+    const shapePath = resolveDemandShapePath(repoPath, shapeArg);
+    const planned = markDraftPlanGenerated(readDraftShapeFile(shapePath));
+    writeDraftShapeFile(shapePath, planned);
+    io.stdout.write(
+      [
+        `draftId=${planned.id}`,
+        `hasPlan=${planned.hasPlan}`,
+        `planApproved=${planned.planApproved}`,
+        `shapePath=${shapePath}`,
+        '',
+        '后续操作:',
+        '  tekon draft plan-approve   审批计划后即可执行',
+      ].join('\n') + '\n',
+    );
+    return;
+  }
+
+  // 4f-2: approve the generated plan (planApproved=true). Orthogonal to
+  // `approve`. Fails if no plan was generated (run `tekon draft plan` first).
+  if (subcommand === 'plan-approve') {
+    const args = parseArgs({
+      args: rest,
+      options: {
+        repo: { type: 'string' },
+        shape: { type: 'string' },
+        actor: { type: 'string' },
+      },
+      allowPositionals: true,
+    });
+    const shapeArg = args.values.shape ?? args.positionals[0];
+    const repoPath = resolveProjectRepoPath(args.values.repo);
+    if (!shapeArg) {
+      await ensureInitialized(repoPath, io);
+    }
+    const shapePath = resolveDemandShapePath(repoPath, shapeArg);
+    const approved = planApproveDraftShape(readDraftShapeFile(shapePath), {
+      actor: args.values.actor ?? 'cli',
+    });
+    writeDraftShapeFile(shapePath, approved);
+    io.stdout.write(
+      [
+        `draftId=${approved.id}`,
+        `planApproved=${approved.planApproved}`,
+        `planApprovedBy=${approved.planApprovedBy ?? ''}`,
+        `planApprovedAt=${approved.planApprovedAt ?? ''}`,
         `shapePath=${shapePath}`,
       ].join(' ') + '\n',
     );
@@ -237,8 +307,8 @@ export async function commandDemand(
       await ensureInitialized(repoPath, io);
     }
     const shapePath = resolveDemandShapePath(repoPath, shapeArg);
-    const shape = readDemandShapeFile(shapePath);
-    const evaluation = evaluateDemandShape(shape);
+    const shape = readDraftShapeFile(shapePath);
+    const evaluation = evaluateDraftShape(shape);
     io.stdout.write(
       [
         `draftId=${shape.id}`,
@@ -250,6 +320,11 @@ export async function commandDemand(
         `recommendedTemplate=${shape.recommendedTemplate}`,
         `acceptanceCriteria=${shape.acceptanceCriteria.length}`,
         `openQuestions=${shape.openQuestions.length}`,
+        // 4f-2: only surface plan state for drafts that have a generated plan,
+        // so old drafts (no plan) keep their existing output.
+        shape.hasPlan
+          ? `hasPlan=${shape.hasPlan} planApproved=${shape.planApproved === true}`
+          : '',
         args.values.eval
           ? `evalReady=${evaluation.ready} evalScore=${evaluation.score.toFixed(2)}`
           : '',

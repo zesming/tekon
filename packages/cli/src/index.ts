@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { isWorkflowTerminalError } from '@tekon/core';
+
 import { commandApproval, commandCancel, commandPause, commandResume } from './commands/approval.js';
 import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
@@ -29,10 +31,12 @@ interface CommandMeta {
 const COMMANDS: CommandMeta[] = [
   // 项目管理
   { name: 'init', description: '初始化 Tekon 项目', group: '项目管理' },
-  { name: 'draft', aliases: ['demand'], description: '创建和管理需求草案', group: '项目管理', subcommands: [
+  { name: 'draft', description: '创建和管理需求草案', group: '项目管理', subcommands: [
     { name: 'new', description: '创建新的需求草案' },
     { name: 'shape', description: '快速生成需求草案' },
     { name: 'approve', description: '批准需求草案' },
+    { name: 'plan', description: '为需求草案生成计划产物' },
+    { name: 'plan-approve', description: '批准需求草案的计划' },
     { name: 'show', description: '查看需求草案详情' },
   ] },
   // 运行控制
@@ -115,10 +119,8 @@ export async function runCli(
         await commandInit(rest, io);
         return 0;
       case 'run':
-        await commandRun(rest, io);
-        return 0;
+        return await commandRun(rest, io);
       case 'draft':
-      case 'demand':
         await commandDemand(rest, io);
         return 0;
       case 'status':
@@ -128,8 +130,7 @@ export async function runCli(
         await commandPause(rest, io);
         return 0;
       case 'resume':
-        await commandResume(rest, io);
-        return 0;
+        return await commandResume(rest, io);
       case 'cancel':
         await commandCancel(rest, io);
         return 0;
@@ -174,6 +175,14 @@ export async function runCli(
         return 1;
     }
   } catch (error) {
+    // M5/M8:终态 run 的 resume/approve/reject 抛 WorkflowTerminalError,
+    // 翻译为中文提示(含"终态")并 exit 1,替换旧的"打印终态 exit 0"隐性 bug 行为。
+    if (isWorkflowTerminalError(error)) {
+      io.stderr.write(
+        `运行已处于终态 ${error.status}，无法恢复或审批：runId=${error.runId}\n`,
+      );
+      return 1;
+    }
     io.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,
     );

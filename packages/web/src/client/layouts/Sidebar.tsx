@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { NavLink } from 'react-router';
+import { forwardRef, type ReactNode } from 'react';
+import { NavLink, useLocation } from 'react-router';
 
 import { useQuery } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
@@ -23,8 +23,23 @@ const navGroups: NavGroup[] = [
     label: '',
     items: [
       {
-        to: routes.home,
-        label: 'Dashboard',
+        to: routes.sessions,
+        label: '受控交付',
+        icon: (
+          <svg
+            className="nav-icon"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path d="M2 4h14v9H7l-4 3v-3H2z" />
+          </svg>
+        ),
+      },
+      {
+        to: routes.advanced,
+        label: '高级 Advanced',
         icon: (
           <svg
             className="nav-icon"
@@ -152,53 +167,83 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function Sidebar() {
-  const overviewQuery = useQuery<ProjectOverviewOutput>(
-    'sidebar:project-overview',
-    () => rpc.call('project.overview'),
-  );
+type SidebarProps = {
+  open?: boolean;
+  onClose?: () => void;
+};
 
-  const projectName = overviewQuery.data?.project.name ?? '—';
-  const repoPath = overviewQuery.data?.project.repoPath ?? '';
+export const Sidebar = forwardRef<HTMLElement, SidebarProps>(
+  function Sidebar({ open = false, onClose }, ref) {
+    const { pathname } = useLocation();
+    const advancedMode = pathname.startsWith(routes.advanced);
+    const visibleGroups = advancedMode ? navGroups : [navGroups[0]!];
+    const overviewQuery = useQuery<ProjectOverviewOutput>(
+      'sidebar:project-overview',
+      () => rpc.call('project.overview'),
+    );
 
-  return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div className="brand-mark">T</div>
-        <div>
-          <div className="brand-name">Tekon</div>
-          <div className="brand-tag">Cockpit</div>
-        </div>
-      </div>
+    const projectName = overviewQuery.data?.project.name ?? '—';
+    const repoPath = overviewQuery.data?.project.repoPath ?? '';
 
-      <nav className="sidebar-nav">
-        {navGroups.map((group) => (
-          <div className="nav-group" key={group.label || 'root'}>
-            {group.label ? <div className="nav-label">{group.label}</div> : null}
-            {group.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === routes.home}
-                className={({ isActive }) =>
-                  `nav-item${isActive ? ' active' : ''}`
-                }
-              >
-                {item.icon}
-                {item.label}
-                {item.badge !== undefined ? (
-                  <span className="nav-badge">{item.badge}</span>
-                ) : null}
-              </NavLink>
-            ))}
+    return (
+      <aside
+        id="app-sidebar"
+        ref={ref}
+        className={`sidebar${open ? ' open' : ''}`}
+        aria-label="主导航"
+        role={open ? 'dialog' : undefined}
+        aria-modal={open ? 'true' : undefined}
+        tabIndex={-1}
+      >
+        <div className="sidebar-brand">
+          <div className="brand-mark">T</div>
+          <div>
+            <div className="brand-name">Tekon</div>
+            <div className="brand-tag">
+              {advancedMode ? 'Cockpit' : 'Workspace'}
+            </div>
           </div>
-        ))}
-      </nav>
+          <button
+            type="button"
+            className="nav-drawer-close"
+            aria-label="关闭侧边导航"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
 
-      <div className="sidebar-footer">
-        <div className="project-name">{projectName}</div>
-        {repoPath ? <div className="project-path">{repoPath}</div> : null}
-      </div>
-    </aside>
-  );
-}
+        <nav className="sidebar-nav">
+          {visibleGroups.map((group) => (
+            <div className="nav-group" key={group.label || 'root'}>
+              {group.label ? (
+                <div className="nav-label">{group.label}</div>
+              ) : null}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === routes.home}
+                  className={({ isActive }) =>
+                    `nav-item${isActive ? ' active' : ''}`
+                  }
+                >
+                  {item.icon}
+                  {item.label}
+                  {item.badge !== undefined ? (
+                    <span className="nav-badge">{item.badge}</span>
+                  ) : null}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="project-name">{projectName}</div>
+          {repoPath ? <div className="project-path">{repoPath}</div> : null}
+        </div>
+      </aside>
+    );
+  },
+);

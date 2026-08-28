@@ -98,7 +98,7 @@ export const commandPolicySchema = z
 export type CommandPolicy = z.infer<typeof commandPolicySchema>;
 
 export const agentAdapterConfigSchema = z.object({
-  provider: z.enum(['mock', 'claude-code', 'codex', 'custom']),
+  provider: z.enum(['mock', 'claude-code', 'codex', 'dsh-headless', 'custom']),
   command: z.string().min(1).optional(),
   args: z.array(z.string()).default([]),
   profile: z
@@ -108,6 +108,20 @@ export const agentAdapterConfigSchema = z.object({
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
   outputFormat: z.enum(['text', 'json']).default('text'),
   permissionProfile: permissionProfileSchema,
+  /**
+   * Explicit, informed acknowledgment that this provider's network egress
+   * CANNOT be proven restricted (phase 5b). The dsh headless sandbox governs
+   * file effects only — network stays unrestricted in every mode, and there is
+   * no dsh flag/env/config to disable it (design §18.1). The capability guard
+   * (assertAgentProviderCapabilities) refuses `network: 'enabled'` for every
+   * provider EXCEPT a dsh-headless config that carries this acknowledgment set
+   * to true. This keeps the global guard fail-closed for codex/claude and for
+   * any misconfigured dsh, while letting a maintainer opt a single provider
+   * into unrestricted network with eyes open. Never persisted as a substitute
+   * for a truthful `network` value — the profile still honestly declares
+   * `enabled`.
+   */
+  acknowledgeUnrestrictedNetwork: z.boolean().optional(),
   timeoutMs: z
     .number()
     .int()
@@ -158,7 +172,7 @@ export const tekonConfigSchema = z.object({
     dataDir: z.string().min(1).default('.tekon'),
   }),
   defaultAgent: z
-    .enum(['mock', 'claude-code', 'codex', 'custom'])
+    .enum(['mock', 'claude-code', 'codex', 'dsh-headless', 'custom'])
     .default('codex'),
 });
 export type TekonConfig = z.infer<typeof tekonConfigSchema>;

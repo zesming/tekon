@@ -36,10 +36,10 @@ export async function commandUi(
       '未找到 web-session.json 文件，请先运行 "tekon init" 初始化项目',
     );
   }
-  const { token } = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
-    token: string;
+  const webSession = JSON.parse(readFileSync(tokenPath, 'utf8')) as {
+    token?: unknown;
   };
-  if (!token || typeof token !== 'string') {
+  if (typeof webSession.token !== 'string' || !webSession.token) {
     throw new Error(
       `${tokenPath} 中的 web-session.json 格式无效，请重新运行 "tekon init"`,
     );
@@ -69,9 +69,11 @@ export async function commandUi(
   }
 
   io.stdout.write(`repo=${repoPath}\n`);
-  io.stdout.write(`url=http://localhost:${port}\n`);
+  // The child prints the authenticated launch URL only after its socket has
+  // successfully bound. Printing the long-lived token before listen() would
+  // expose it to an unrelated local service if the requested port is occupied.
   io.stdout.write(
-    'Starting Tekon Web... Press Ctrl+C to stop\n',
+    'Starting Tekon Web... The authenticated URL will appear after the server is listening. Press Ctrl+C to stop\n',
   );
 
   const child = spawn(tsxBin, ['src/server/index.ts'], {

@@ -9,7 +9,7 @@ test.describe('Tekon release dashboard', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
 
     // ── 1. Navigate to /runs/run_1/delivery (delivery tab) ────────────────
-    await page.goto(`${server.url}/runs/run_1/delivery`);
+    await page.goto(`${server.url}/advanced/runs/run_1/delivery`);
 
     // Breadcrumb renders
     await expect(page.getByText('运行列表 Runs')).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('Tekon release dashboard', () => {
     ).toBeVisible();
 
     // ── 2. Navigate to the top-level /delivery page ───────────────────────
-    await page.goto(`${server.url}/delivery`);
+    await page.goto(`${server.url}/advanced/delivery`);
 
     await expect(
       page.getByRole('heading', { name: 'Delivery' }),
@@ -47,33 +47,25 @@ test.describe('Tekon release dashboard', () => {
       page.getByText('交付管道 Delivery Pipeline'),
     ).toBeVisible();
 
-    // ── 3. Verify "Prepare PR" button exists ──────────────────────────────
+    // ── 3. Verify authenticated delivery affordances ─────────────────────
+    await expect(page.getByLabel('Session token')).toHaveValue(
+      fixture.sessionToken,
+    );
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeVisible();
 
-    // Button is disabled because the fixture run is paused (not passed) and
-    // no session token is provided.
+    // The fixture run is paused, so readiness keeps Prepare PR disabled even
+    // though the normal connected credential is present.
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeDisabled();
-
-    // Token hint is shown when no token is entered
-    await expect(
-      page.getByText('Session token required for delivery actions'),
-    ).toBeVisible();
-
-    // ── 4. Enter token and verify Prepare PR becomes actionable ───────────
-    // The workflow is paused so canPrepare is still false, but the token hint
-    // should disappear once we provide a token.
-    await page.getByLabel('Session token').fill(fixture.sessionToken);
     await expect(
       page.getByText('Session token required for delivery actions'),
     ).not.toBeVisible();
 
-    // "Create PR" button is visible — disabled because the fixture run has
-    // a paused workflow status (not passed/completed) and readiness checks
-    // are not met, even though PR body/package files exist and no prUrl is set.
+    // "Create PR" remains disabled because the fixture run has a paused
+    // workflow status and readiness checks are not met.
     await expect(
       page.getByRole('button', { name: 'Create PR' }),
     ).toBeVisible();
@@ -81,7 +73,7 @@ test.describe('Tekon release dashboard', () => {
       page.getByRole('button', { name: 'Create PR' }),
     ).toBeDisabled();
 
-    // ── 5. Desktop screenshot ─────────────────────────────────────────────
+    // ── 4. Desktop screenshot ─────────────────────────────────────────────
     await page.screenshot({
       fullPage: true,
       path: testInfo.outputPath('tekon-delivery-desktop.png'),

@@ -7,6 +7,10 @@ import type {
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import {
+  runAgentWithStepEvents,
+  type AgentEventSink,
+} from '../runtime/agent-step-events.js';
 import type { GateEngine } from '../gate/engine.js';
 import type { WorktreeLease } from '../types/config.js';
 import { loadRepoProfile, repoProfileCommandResolution } from '../repo/profile.js';
@@ -26,6 +30,7 @@ import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
+import { isJobOwnershipLostAbort } from '../session/job-runner.js';
 
 export interface GateRunnerDeps {
   repoPath: string;
@@ -40,6 +45,21 @@ export interface GateRunnerDeps {
   executionLeases: Map<string, WorktreeLease>;
   getCheckedTransition(): CheckedTransitionFn;
   getReworkHandler(): ReworkHandler;
+  /**
+   * S5 fencing: the job-level abort signal (same one node-executor consumes).
+   * When it carries an ownership-lost reason, the repair/exhausted paths must
+   * NOT write node/workflow state — a new owner recovered the job and is
+   * authoritative (terminal-state monotonicity). Optional: absent ⇒ no fencing
+   * (legacy/standalone gate runs).
+   */
+  getSignal?(): AbortSignal | undefined;
+  /**
+   * Phase 2 S3 (review S1): best-effort agent-loop event sink. The gate-repair
+   * agent (runGateWithRepair) is a real agent execution — it emits step events
+   * too, so a run that went through gate repair has a complete model-visible
+   * replay (§13.6). Threaded from the engine like node-executor/rework.
+   */
+  agentEventSink?: AgentEventSink;
 }
 
 export interface GateRunner {
@@ -239,6 +259,26 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
       return true;
     }
 
+    // S5 fencing: a non-passed gate result while this executor is fenced
+    // (ownership lost) is almost certainly the fallout of its own gate
+    // subprocess being killed by the recovering owner — not a genuine gate
+    // failure. The repair/exhausted paths below write node/workflow state with
+    // bare UPDATEs; a fenced executor must NOT run them, or it would revert the
+    // new owner's already-settled terminal status. Stand down.
+    if (isJobOwnershipLostAbort(deps.getSignal?.())) {
+      await audit.append({
+        runId,
+        type: 'gate.execution.error',
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+          error: 'job ownership lost during gate (fenced)',
+        },
+      });
+      return false;
+    }
+
     if (result.status === 'blocked' && gate.type === 'human') {
       await audit.append({
         runId,
@@ -254,6 +294,22 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
 
       while (retryAttempt < gate.maxRetries && !repairPassed) {
         retryAttempt++;
+        // S5 fencing: bail before the bare needs-revision write if this
+        // executor lost ownership mid-repair-loop — the recovering owner owns
+        // the node's terminal state now.
+        if (isJobOwnershipLostAbort(deps.getSignal?.())) {
+          await audit.append({
+            runId,
+            type: 'gate.execution.error',
+            payload: {
+              nodeId: node.id,
+              gateType: gate.type,
+              gateKey: gate.gateKey,
+              error: 'job ownership lost during gate repair (fenced)',
+            },
+          });
+          return false;
+        }
         await repositories.transitionNode(node.id, 'needs-revision');
         await leaseService.finalizeExecutionLease(runId, node.id);
         const repairNode = await gateEngine.createAutoFixRepairNode({
@@ -280,29 +336,43 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             phaseId: repairNode.phaseId,
           });
           try {
-            const repairResult = await adapter.runAgent(
-              await helpers.agentInputForLease(
+            const repairInput = await helpers.agentInputForLease(
+              runId,
+              {
+                id: repairNode.id,
+                role: repairNode.role,
+                phaseId: repairNode.phaseId,
+              },
+              repairLease,
+              await promptBuilder.buildRepairPrompt(runId, repairNode, result),
+            );
+            const repairResult = await runAgentWithStepEvents(
+              adapter,
+              repairInput,
+              {
                 runId,
-                {
-                  id: repairNode.id,
-                  role: repairNode.role,
-                  phaseId: repairNode.phaseId,
-                },
-                repairLease,
-                await promptBuilder.buildRepairPrompt(
-                  runId,
-                  repairNode,
-                  result,
-                ),
-              ),
+                nodeId: repairNode.id,
+                role: repairNode.role,
+                promptSummary: repairInput.prompt,
+              },
+              deps.agentEventSink,
             );
             assertSuccessfulAgentRun(repairResult);
             repairSucceeded = true;
           } finally {
             if (!repairSucceeded) {
-              await leaseService
-                .finalizeExecutionLease(runId, repairNode.id)
-                .catch(() => {});
+              // S5 fencing (S6): do NOT finalize a fenced executor's repair
+              // lease — finalize commits + promotes the stale repair worktree
+              // onto the run branch the recovering owner already delivered.
+              // Promotion now uses `git update-ref` expected-old-OID CAS, so the
+              // branch overwrite itself is blocked, but standing down here also
+              // avoids the stale commit/finalize side effects. The new owner
+              // owns this node's worktree/branch now.
+              if (!isJobOwnershipLostAbort(deps.getSignal?.())) {
+                await leaseService
+                  .finalizeExecutionLease(runId, repairNode.id)
+                  .catch(() => {});
+              }
             }
           }
         } catch (error) {
@@ -427,6 +497,22 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         : gate.onExhausted === 'fail'
           ? 'failed'
           : 'blocked';
+    // S5 fencing: a fence that landed mid-repair-loop must not write the
+    // exhausted node/workflow status (bare UPDATE below) over a terminal state
+    // the recovering owner already settled. Stand down.
+    if (isJobOwnershipLostAbort(deps.getSignal?.())) {
+      await audit.append({
+        runId,
+        type: 'gate.execution.error',
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+          error: 'job ownership lost before gate-exhausted settle (fenced)',
+        },
+      });
+      return false;
+    }
     await checkedTransitionNode(
       runId,
       node.id,

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const isoDateStringSchema = z.string().datetime();
 
-export const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo']);
+export const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo', 'goal']);
 export type Role = z.infer<typeof roleSchema>;
 
 export const workflowStatusSchema = z.enum([
@@ -119,6 +119,23 @@ export const gateConfigSchema = z.object({
   requiresHumanApproval: z.boolean().default(false),
   maxRetries: z.number().int().min(0).default(0),
   timeoutMs: z.number().int().positive().optional(),
+  // Persisted so planFromRepository faithfully reconstructs the gate: the
+  // gate-runner reads autoFix + onExhausted to drive the auto-fix/repair and
+  // exhaustion paths. Without these the reconstructed plan silently loses the
+  // repair behavior (rd/qa in-memory plan had them; a resumed/prepared run
+  // did not). retryPolicy is kept for fidelity (schema-loose passthrough).
+  autoFix: z.boolean().optional(),
+  onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
+  retryPolicy: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10).optional(),
+      maxRetries: z.number().int().min(0).max(9).optional(),
+      backoffMs: z.number().int().min(0).optional(),
+      strategy: z.enum(['fixed', 'exponential']).optional(),
+      onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
+    })
+    .passthrough()
+    .optional(),
 });
 export type GateConfig = z.infer<typeof gateConfigSchema>;
 
@@ -152,6 +169,9 @@ export const nodeSchema = z.object({
   outputs: z.array(nodeArtifactOutputRefSchema).default([]),
   gates: z.array(gateConfigSchema).default([]),
   dependencies: z.array(z.string()).default([]),
+  // Intra-phase execution order (persisted). Defaults to 0 so legacy rows
+  // and callers that omit it stay stable (id tiebreaker in listNodes).
+  order: z.number().int().min(0).default(0),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });
@@ -163,11 +183,25 @@ export const workflowInstanceSchema = z.object({
   projectId: z.string().min(1),
   demandId: z.string().min(1),
   status: workflowStatusSchema,
+  // 4b: 'workflow' (a governed delivery workflow) | 'goal' (a lightweight
+  // single-node agent goal). Default keeps every legacy/omitted row a workflow.
+  kind: z.enum(['workflow', 'goal']).default('workflow'),
+  // 4c: run-scoped "allow a dirty worktree as the base" policy. Persisted on
+  // the run so the async job executor (and cross-process resume) can rebuild
+  // the engine with the same lease policy the run was started with — the
+  // executor builds a fresh engine from the provider snapshot and would
+  // otherwise silently drop this flag. Default false keeps legacy rows strict.
+  allowDirtyBase: z.boolean().default(false),
   currentNodeId: z.string().nullable().optional(),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });
 export type WorkflowInstance = z.infer<typeof workflowInstanceSchema>;
+/**
+ * Creation input: `kind` is optional (schema defaults it to 'workflow'), so
+ * legacy callers/fixtures that omit it keep compiling and get a workflow run.
+ */
+export type WorkflowInstanceInput = z.input<typeof workflowInstanceSchema>;
 
 export const roleRunSchema = z.object({
   id: z.string().min(1),
@@ -265,7 +299,7 @@ export type DeliveryPullRequest = z.infer<typeof deliveryPullRequestSchema>;
 
 export const runProviderConfigSchema = z.object({
   runId: z.string().min(1),
-  provider: z.enum(['mock', 'claude-code', 'codex', 'custom']),
+  provider: z.enum(['mock', 'claude-code', 'codex', 'dsh-headless', 'custom']),
   configSummary: z.record(z.string(), z.unknown()).default({}),
   createdAt: isoDateStringSchema,
 });

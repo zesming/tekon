@@ -9,6 +9,8 @@ import { relative, resolve } from 'node:path';
 import {
   approveDraftShape,
   type DraftShape,
+  markDraftPlanGenerated,
+  planApproveDraftShape,
   readDraftShapeFile,
   renderDraftShapeForRun,
   shapeDraft,
@@ -21,6 +23,8 @@ import type {
   DraftShapeInput,
   DraftShapeApproveInput,
   DraftShapeDetailInput,
+  DraftShapeGeneratePlanInput,
+  DraftShapePlanApproveInput,
 } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
@@ -60,6 +64,50 @@ export function createDemandRouter(context: ServerContext) {
       const approved = approveDraftShape(readDraftShapeFile(shapePath), {
         actor: approveInput.actor ?? 'web',
       });
+      writeDraftShapeFile(shapePath, approved);
+      return {
+        shape: approved,
+        shapePath,
+      };
+    },
+
+    // 4f-2: freeze the draft's plan view (hasPlan=true). Regenerating a plan
+    // invalidates a prior plan approval (markDraftPlanGenerated resets
+    // planApproved). Does NOT touch demand `approved` — the two are orthogonal.
+    async generatePlan(planInput: DraftShapeGeneratePlanInput) {
+      assertSessionToken(context.projectContext, planInput.token);
+      const shapePath = assertDraftShapePathInScope(
+        context,
+        planInput.shapePath,
+      );
+      const planned = markDraftPlanGenerated(readDraftShapeFile(shapePath));
+      writeDraftShapeFile(shapePath, planned);
+      return {
+        shape: planned,
+        shapePath,
+      };
+    },
+
+    // 4f-2: approve the plan (planApproved=true). Separate from demand approve.
+    // planApproveDraftShape throws if no plan was generated (hasPlan falsy);
+    // that maps to a 400 so the caller learns to generatePlan first.
+    async planApprove(planApproveInput: DraftShapePlanApproveInput) {
+      assertSessionToken(context.projectContext, planApproveInput.token);
+      const shapePath = assertDraftShapePathInScope(
+        context,
+        planApproveInput.shapePath,
+      );
+      let approved: DraftShape;
+      try {
+        approved = planApproveDraftShape(readDraftShapeFile(shapePath), {
+          actor: planApproveInput.actor ?? 'web',
+        });
+      } catch (error) {
+        throw new ApiError(
+          'BAD_REQUEST',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       writeDraftShapeFile(shapePath, approved);
       return {
         shape: approved,

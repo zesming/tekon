@@ -20,7 +20,15 @@ export interface StartRunFormProps {
 // Component
 // ---------------------------------------------------------------------------
 
-const AGENT_OPTIONS = ['codex', 'claude-code', 'mock'] as const;
+const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
+
+/** Human-facing labels; dsh-headless carries its experimental caveat inline. */
+const AGENT_LABELS: Record<string, string> = {
+  codex: 'codex',
+  'claude-code': 'claude-code',
+  mock: 'mock',
+  'dsh-headless': 'dsh-headless（experimental · 联网 · 仅 goal）',
+};
 
 /**
  * Collapsible "New Run" form with demand, template, agent, timeout fields.
@@ -45,6 +53,9 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const [demandText, setDemandText] = useState('');
   const [template, setTemplate] = useState('');
   const [agent, setAgent] = useState<string>(AGENT_OPTIONS[0]);
+  const [profile, setProfile] = useState<'human-web' | 'autonomous-delivery'>(
+    'human-web',
+  );
   const [timeoutMs, setTimeoutMs] = useState('3600000');
   const [noProgressTimeoutMs, setNoProgressTimeoutMs] = useState('');
   const [allowDirtyBase, setAllowDirtyBase] = useState(false);
@@ -64,6 +75,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   >(queryKeys.workflows(), () => rpc.call('workflow.list'));
 
   const workflows = workflowData?.workflows ?? [];
+
+  // P0-03 (S7c): when a shaped draft is loaded, the server rejects unless it is
+  // approved AND readyForRun. Mirror that in the UI so submit is disabled with
+  // an explanation instead of surfacing a server 400 (UI guidance, not the
+  // security boundary — the server file check is authoritative).
+  const draft = demandDetail?.shape;
+  const draftNotReady = Boolean(
+    shapePath && draft && !(draft.approved && draft.readyForRun),
+  );
 
   // ── Start run mutation ──
   const startMutation = useMutation<
@@ -89,8 +109,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       token,
     };
 
+    // P0-03 (S7c): forward the shaped-draft path so the server enforces
+    // approved + readyForRun against the file (not a client boolean). Without
+    // this the client silently dropped the path and ran as free text.
+    if (shapePath) input.demandShapePath = shapePath;
+
     if (template) input.template = template;
     if (agent) input.agent = agent;
+    if (profile !== 'human-web') input.profile = profile;
     if (allowDirtyBase) input.allowDirtyBase = true;
 
     const parsedTimeout = Number(timeoutMs);
@@ -185,9 +211,26 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               >
                 {AGENT_OPTIONS.map((a) => (
                   <option key={a} value={a}>
-                    {a}
+                    {AGENT_LABELS[a] ?? a}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Profile</label>
+              <select
+                className="select"
+                value={profile}
+                onChange={(e) =>
+                  setProfile(
+                    e.target.value as 'human-web' | 'autonomous-delivery',
+                  )
+                }
+              >
+                <option value="human-web">human-web（默认）</option>
+                <option value="autonomous-delivery">
+                  autonomous-delivery（通过后自动准备交付，不自动创建 PR）
+                </option>
               </select>
             </div>
           </div>
@@ -251,12 +294,23 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={startMutation.isPending || !demandText.trim()}
+              disabled={
+                startMutation.isPending || !demandText.trim() || draftNotReady
+              }
               onClick={handleStart}
             >
               {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
             </button>
           </div>
+
+          {draftNotReady && (
+            <p
+              className="text-sm"
+              style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
+            >
+              该需求草案尚未批准或仍有待澄清问题，需先在草案页批准并清空开放问题后再发起运行。
+            </p>
+          )}
 
           {startMutation.error && (
             <p

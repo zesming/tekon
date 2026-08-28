@@ -22,8 +22,8 @@
 
 ```
 需求输入
-  -> demand shape 生成需求卡
-  -> demand approve 人工批准
+  -> draft shape 生成需求卡
+  -> draft approve 人工批准
   -> workflow select / run 选择并执行模板
   -> role agent 在隔离 worktree 中产出 artifact
   -> build / lint / test / security-scan / human gate 验证
@@ -38,18 +38,31 @@
 
 ## 核心能力
 
-| 能力 | 说明 |
-|------|------|
-| 需求塑形 | `tekon demand shape` 生成需求卡和 Markdown 审阅稿，`demand approve` 批准后进入执行 |
-| workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐 |
-| 角色系统 | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略 |
-| 执行隔离 | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>` |
-| Provider 接入 | 支持 mock、Claude Code、Codex，通过 artifact manifest 交付结构化产物 |
-| Gate 与证据 | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness |
-| 审阅面 | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包 |
-| 交付管理 | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控 |
-| 效果评估 | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性 |
-| Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面 |
+| 能力          | 说明                                                                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 需求塑形      | `tekon draft shape` 生成需求卡和 Markdown 审阅稿，`draft approve` 批准后进入执行                                                                                |
+| workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐                                                                                                                   |
+| 角色系统      | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略                                                                                                   |
+| 执行隔离      | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>`                                                                                                      |
+| Provider 接入 | 支持 mock、Claude Code、Codex，以及 experimental 的 dsh-headless（DeepSeek Harness，默认关闭、网络不受限、仅 goal 可用），通过 artifact manifest 交付结构化产物 |
+| Gate 与证据   | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness                                  |
+| 审阅面        | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包                                                                                         |
+| 交付管理      | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控                                                                                       |
+| 效果评估      | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性                                                                           |
+| Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面                                                                  |
+
+## 当前边界与实验性特性
+
+Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里程碑**阶段。为避免过度宣称，以下能力的现状明确如下：
+
+- **默认发起 = 受控交付全链路**：Web「启动受控交付」与 `tekon run`（默认 `standard-delivery`）会进入 PM/RD/QA/Reviewer 完整交付流程，而非轻量对话。轻量协作会话（Collaborate）为后续方向。
+- **Session feed 非完整模型 streaming**：中间栏的 Agent 消息当前为「产物元数据合成的摘要」（DSH headless 会展示官方最终 assistant 文本），**不是逐块的模型原文增量**（`assistant/chunk`）。真流式为后续里程碑。
+- **follow-up / steer 未开放**：进入 Session 后暂不能继续追问或中途转向，Composer 仅用于发起新 run。
+- **Event log 是迁移期 best-effort projection**：`session_events` 为 best-effort 双写投影，**`workflow_instances` / `jobs` 等旧表仍是事实源**；迁移期个别事件可能缺失，不保证从 event log 完整重建。
+- **automation（自动准备交付 / readiness）仅长驻进程内触发**：由 CLI 完成的 run 不会触发另一 Web 进程的 automation；CLI 交付仍走显式 `tekon delivery prepare`。
+- **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
+- **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
+- **Workspace 为单项目占位**：暂不支持多 workspace 切换/增删。
 
 ## 快速开始
 
@@ -76,10 +89,11 @@ tekon init                                    # 初始化目标仓库
 tekon workflow preflight                      # 检查命令画像
 tekon help                                     # 查看命令帮助
 tekon draft new                                # 交互式创建需求草案（支持 Agent 澄清）
-tekon demand shape "你的需求描述"               # 塑形需求
-tekon demand approve                          # 批准需求卡
+tekon draft shape "你的需求描述"               # 塑形需求
+tekon draft approve                          # 批准需求卡
 tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
 tekon run --template standard-delivery --agent mock  # 使用 mock provider 回归
+tekon run "一次性小任务" --goal --agent mock    # 轻量目标运行（单节点 goal 模板，不接交付）
 tekon status                                  # 查看状态
 tekon review                                  # 查看审阅面
 tekon delivery prepare                        # 生成 PR 准备包
@@ -93,29 +107,29 @@ tekon ui                                      # 启动 Web Dashboard
 
 ## 常用命令
 
-| 场景 | 命令 |
-|------|------|
-| 查看命令帮助 | `tekon help` |
-| 初始化目标仓库 | `tekon init` |
-| 创建需求草案 | `tekon draft new` |
-| 塑形需求 | `tekon demand shape "<需求>"` |
-| 批准需求卡 | `tekon demand approve` |
-| 推荐 workflow | `tekon workflow select "<需求>"` |
-| 检查命令画像 | `tekon workflow preflight` |
-| 发起运行 | `tekon run` |
-| 查看状态 | `tekon status` |
-| 查看审阅面 | `tekon review` |
-| 审批摘要 | `tekon approval summary` |
-| 批准 human gate | `tekon resume --approve-human` |
-| 拒绝 human gate | `tekon approval reject` |
-| 生成 PR 包 | `tekon delivery prepare` |
-| 创建 PR | `tekon delivery create-pr --approve-human` |
-| 查询 CI | `tekon delivery ci-status` |
-| 等待 CI | `tekon delivery ci-watch` |
-| 评估 readiness | `tekon eval readiness` |
-| 评估样本集 | `tekon eval work-usability --samples <yaml>` |
-| 更新 Tekon | `tekon update` |
-| 启动 Web Dashboard | `tekon ui` |
+| 场景               | 命令                                         |
+| ------------------ | -------------------------------------------- |
+| 查看命令帮助       | `tekon help`                                 |
+| 初始化目标仓库     | `tekon init`                                 |
+| 创建需求草案       | `tekon draft new`                            |
+| 塑形需求           | `tekon draft shape "<需求>"`                 |
+| 批准需求卡         | `tekon draft approve`                        |
+| 推荐 workflow      | `tekon workflow select "<需求>"`             |
+| 检查命令画像       | `tekon workflow preflight`                   |
+| 发起运行           | `tekon run`                                  |
+| 查看状态           | `tekon status`                               |
+| 查看审阅面         | `tekon review`                               |
+| 审批摘要           | `tekon approval summary`                     |
+| 批准 human gate    | `tekon resume --approve-human`               |
+| 拒绝 human gate    | `tekon approval reject`                      |
+| 生成 PR 包         | `tekon delivery prepare`                     |
+| 创建 PR            | `tekon delivery create-pr --approve-human`   |
+| 查询 CI            | `tekon delivery ci-status`                   |
+| 等待 CI            | `tekon delivery ci-watch`                    |
+| 评估 readiness     | `tekon eval readiness`                       |
+| 评估样本集         | `tekon eval work-usability --samples <yaml>` |
+| 更新 Tekon         | `tekon update`                               |
+| 启动 Web Dashboard | `tekon ui`                                   |
 
 更多命令和详细参数见[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)。
 

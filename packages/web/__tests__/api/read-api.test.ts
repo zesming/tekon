@@ -26,7 +26,7 @@ describe('web read API', () => {
       audit: 2,
       pendingApprovals: 1,
       roles: 1,
-      workflows: 1,
+      workflows: 2,
     });
     await expect(
       api.project.detail({ projectId: 'project_1' }),
@@ -150,7 +150,10 @@ describe('web read API', () => {
       roles: [expect.objectContaining({ id: 'rd' })],
     });
     await expect(api.workflow.list()).resolves.toMatchObject({
-      workflows: [expect.objectContaining({ id: 'project-feature' })],
+      workflows: expect.arrayContaining([
+        expect.objectContaining({ id: 'project-feature' }),
+        expect.objectContaining({ id: 'feature-approval' }),
+      ]),
     });
 
     await api.close();
@@ -183,12 +186,22 @@ describe('web read API', () => {
 
     const result = await api.workflow.list();
 
-    expect(result.workflows).toHaveLength(1);
-    expect(result.workflows[0]).toMatchObject({
-      id: 'project-feature',
-      name: 'Project Feature',
-      path: expect.stringContaining('.tekon/workflows/project-feature.yaml'),
-    });
+    // Two templates: the base project-feature + the human-gate feature-approval
+    // (added for the phase 3 3c inline-approval e2e).
+    expect(result.workflows).toHaveLength(2);
+    expect(result.workflows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'project-feature',
+          name: 'Project Feature',
+          path: expect.stringContaining('.tekon/workflows/project-feature.yaml'),
+        }),
+        expect.objectContaining({
+          id: 'feature-approval',
+          path: expect.stringContaining('.tekon/workflows/feature-approval.yaml'),
+        }),
+      ]),
+    );
 
     await api.close();
   });
@@ -347,6 +360,52 @@ describe('web read API', () => {
     expect(truncated.delivery.package).not.toBeNull();
     expect(truncated.delivery.package!.content.length).toBeLessThanOrEqual(5);
     expect(truncated.delivery.package!.truncated).toBe(true);
+
+    await api.close();
+  });
+
+  it('enriches runs with demand title and provider (P1.3/P1.4)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // Run list / overview surface the human-readable request title and the
+    // real provider instead of internal ids (report §6.3/§6.4).
+    const overview = await api.project.overview();
+    expect(overview.latestRun).toMatchObject({
+      id: 'run_1',
+      demandId: 'demand_1',
+      demandTitle: 'Add dashboard',
+      provider: 'mock',
+    });
+
+    const detail = await api.project.detail({ projectId: 'project_1' });
+    expect(detail.runs[0]).toMatchObject({
+      id: 'run_1',
+      demandTitle: 'Add dashboard',
+      provider: 'mock',
+    });
+
+    // Run detail (review surface) carries the real provider for deriveAgent.
+    const surface = await api.review.get({ runId: 'run_1' });
+    expect(surface.provider).toBe('mock');
+
+    await api.close();
+  });
+
+  it('run enrichment tolerates a missing provider snapshot', async () => {
+    const fixture = await createWebFixtureProject({
+      includeProviderSnapshot: false,
+    });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const overview = await api.project.overview();
+    // Title still resolves; provider is null when no snapshot was recorded.
+    expect(overview.latestRun).toMatchObject({
+      demandTitle: 'Add dashboard',
+      provider: null,
+    });
 
     await api.close();
   });

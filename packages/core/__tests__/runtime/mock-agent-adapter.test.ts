@@ -92,6 +92,61 @@ describe('mock agent adapter', () => {
     ]);
     db.close();
   });
+
+  it('returns a cancelled result without writing artifacts when the signal is already aborted', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-mock-agent-cancelled-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createMockAgentAdapter();
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await adapter.runAgent({
+      roleConfig: { role: 'rd' },
+      prompt: 'Implement feature',
+      worktreeLease: {
+        id: 'lease_1',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        role: 'rd',
+        repoPath,
+        worktreePath: repoPath,
+        branchName: 'tekon/run_1/node_1-rd',
+        createdAt: '2026-06-05T00:00:00.000Z',
+      },
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'agent'),
+      commandPolicy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+      runContext: {
+        runId: 'run_1',
+        nodeId: 'node_1',
+        projectId: 'project_1',
+        repoPath,
+        dataDir: '.tekon',
+      },
+      artifactStore,
+      signal: controller.signal,
+    });
+
+    expect(result).toMatchObject({
+      provider: 'mock',
+      exitCode: null,
+      durationMs: 0,
+      cancelled: true,
+    });
+    expect(result.outputFiles).toEqual([]);
+    expect(await repositories.listArtifacts('run_1', 'node_1')).toEqual([]);
+    db.close();
+  });
 });
 
 async function createRunFixture(

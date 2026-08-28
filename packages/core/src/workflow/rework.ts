@@ -6,6 +6,10 @@ import type { GateResult, Node } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
+import {
+  runAgentWithStepEvents,
+  type AgentEventSink,
+} from '../runtime/agent-step-events.js';
 import type { WorktreeLease } from '../types/config.js';
 import {
   buildRolePrompt,
@@ -31,6 +35,14 @@ import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 
+/**
+ * Intra-phase order for dynamically created rework nodes. Original plan nodes
+ * use small array-index orders (0..N via persistPlan); this large offset keeps
+ * rework nodes sorted after them on a planFromRepository resume, matching the
+ * legacy "appended at the end of the phase" behavior.
+ */
+const DYNAMIC_NODE_ORDER_OFFSET = 1_000_000;
+
 export interface ReworkHandlerDeps {
   repoPath: string;
   dataDir: string;
@@ -46,6 +58,13 @@ export interface ReworkHandlerDeps {
   executionLeases: Map<string, WorktreeLease>;
   getCheckedTransition(): CheckedTransitionFn;
   getRunGateWithRepair(): RunGateWithRepairFn;
+  /**
+   * Phase 2 S3: optional best-effort agent-loop event sink, threaded from the
+   * engine (same as node-executor). rework/review re-runs are real agent
+   * executions, so they emit step events too — otherwise a run that went
+   * through rework would have an incomplete model-visible replay (§13.6).
+   */
+  agentEventSink?: AgentEventSink;
 }
 
 export interface ReworkHandler {
@@ -311,6 +330,12 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       outputs: targetOutputs,
       gates: targetGates,
       dependencies: [reviewNode.id],
+      // Dynamic rework nodes are created after the original plan nodes and
+      // must sort after them within the phase on a planFromRepository resume.
+      // Original nodes use small array-index orders (0..N); a large offset
+      // keeps rework nodes last, with created_at/id ordering successive
+      // rework nodes by creation time (see listNodes ordering).
+      order: DYNAMIC_NODE_ORDER_OFFSET,
       createdAt: now,
       updatedAt: now,
       phaseId: targetNode.phaseId,
@@ -343,21 +368,30 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     try {
       let reworkSucceeded = false;
       try {
-        const reworkResult = await adapter.runAgent(
-          await helpers.agentInputForLease(
+        const reworkInput = await helpers.agentInputForLease(
+          runId,
+          {
+            id: reworkNodeId,
+            role: targetNode.role,
+            phaseId: targetNode.phaseId,
+            inputs: targetInputs,
+            outputs: targetOutputs,
+            gates: targetGates,
+          },
+          reworkLease,
+          reworkPrompt,
+          targetNodeId,
+        );
+        const reworkResult = await runAgentWithStepEvents(
+          adapter,
+          reworkInput,
+          {
             runId,
-            {
-              id: reworkNodeId,
-              role: targetNode.role,
-              phaseId: targetNode.phaseId,
-              inputs: targetInputs,
-              outputs: targetOutputs,
-              gates: targetGates,
-            },
-            reworkLease,
-            reworkPrompt,
-            targetNodeId,
-          ),
+            nodeId: reworkNodeId,
+            role: targetNode.role,
+            promptSummary: reworkInput.prompt,
+          },
+          deps.agentEventSink,
         );
         assertSuccessfulAgentRun(reworkResult);
         reworkSucceeded = true;
@@ -493,13 +527,22 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     });
 
     try {
-      const reviewResult = await adapter.runAgent(
-        await helpers.agentInputForLease(
+      const reviewInput = await helpers.agentInputForLease(
+        runId,
+        reviewNode,
+        reviewReRunLease,
+        await promptBuilder.buildNodePrompt(runId, reviewNode),
+      );
+      const reviewResult = await runAgentWithStepEvents(
+        adapter,
+        reviewInput,
+        {
           runId,
-          reviewNode,
-          reviewReRunLease,
-          await promptBuilder.buildNodePrompt(runId, reviewNode),
-        ),
+          nodeId: reviewNode.id,
+          role: reviewNode.role,
+          promptSummary: reviewInput.prompt,
+        },
+        deps.agentEventSink,
       );
       assertSuccessfulAgentRun(reviewResult);
       await repositories.markRoleRunCompleted({

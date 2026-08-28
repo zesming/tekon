@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { draftShapeSchema } from '@tekon/core';
+import { draftShapeSchema, sessionStatusSchema } from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -52,6 +52,15 @@ export const tokenRunInputSchema = z.object({
 export const projectRunInputSchema = z.object({
   demandText: z.string(),
   token: z.string().min(1),
+  // 4b: 'goal' runs the built-in single-node goal template (ignores template);
+  // omitted/'workflow' keeps the governed delivery-workflow path.
+  mode: z.enum(['workflow', 'goal']).optional(),
+  // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
+  // (never PR creation — governance red line). Omitted → human-web. review-only
+  // is intentionally NOT accepted here: starting a run is itself a mutation, so
+  // a run cannot create a read-only session; review-only enforcement is
+  // deferred until a dedicated review-only entry point exists (design §1.2.3).
+  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
   template: z.string().optional(),
   agent: z.string().optional(),
   allowDirtyBase: z.boolean().optional(),
@@ -66,17 +75,25 @@ export const draftShapeInputSchema = z.object({
   token: z.string().min(1),
 });
 
-/** @deprecated Use {@link draftShapeInputSchema} instead */
-export const demandShapeInputSchema = draftShapeInputSchema;
-
 export const draftShapeApproveInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
   actor: z.string().optional(),
 });
 
-/** @deprecated Use {@link draftShapeApproveInputSchema} instead */
-export const demandApproveInputSchema = draftShapeApproveInputSchema;
+// 4f-2: plan flow. generatePlan freezes the draft's plan view (hasPlan=true);
+// planApprove is a SEPARATE approval from demand approve. planApprove carries an
+// actor (who approved the plan); generatePlan does not.
+export const draftShapeGeneratePlanInputSchema = z.object({
+  shapePath: z.string().min(1),
+  token: z.string().min(1),
+});
+
+export const draftShapePlanApproveInputSchema = z.object({
+  shapePath: z.string().min(1),
+  token: z.string().min(1),
+  actor: z.string().optional(),
+});
 
 export const projectCleanInputSchema = z.object({
   runId: z.string().min(1),
@@ -146,6 +163,11 @@ export const apiWorkflowSchema = z
     id: z.string(),
     projectId: z.string(),
     demandId: z.string(),
+    // Human-readable request title + real provider for run lists / detail
+    // (report §6.3/§6.4, P1.3/P1.4). Null when not resolvable (e.g. the
+    // run/resume mutation return path, which maps from the domain object).
+    demandTitle: z.string().nullable(),
+    provider: z.string().nullable(),
     status: z.string(),
     currentNodeId: z.string().nullable(),
     createdAt: z.string(),
@@ -403,6 +425,10 @@ export const reviewEvidenceGroupSchema = z.object({
 export const workReviewSurfaceSchema = z.object({
   runId: z.string(),
   workflowStatus: z.string(),
+  // Real provider recorded for the run (report §6.4/P1.4: Run Detail derived
+  // the agent as a fixed "—"). Optional/nullable: older runs and the core
+  // surface builder do not carry it; the web router enriches from the db.
+  provider: z.string().nullable().optional(),
   demand: z.object({
     id: z.string(),
     title: z.string(),
@@ -460,6 +486,10 @@ export const projectDetailOutputSchema = z.object({
 
 export const runWrapperOutputSchema = z.object({
   run: apiWorkflowSchema,
+  // S7b: run/resume enqueue a background job and return immediately; pause/
+  // cancel resolve the active job. Optional so legacy shapes still validate.
+  sessionId: z.string().optional(),
+  jobId: z.string().optional(),
 });
 
 export const projectCleanOutputSchema = z.object({
@@ -473,31 +503,31 @@ export const draftShapeOutputSchema = z.object({
   runText: z.string(),
 });
 
-/** @deprecated Use {@link draftShapeOutputSchema} instead */
-export const demandShapeOutputSchema = draftShapeOutputSchema;
-
 export const draftShapeDetailInputSchema = z.object({
   shapePath: z.string().min(1),
   token: z.string().min(1),
 });
 
-/** @deprecated Use {@link draftShapeDetailInputSchema} instead */
-export const demandDetailInputSchema = draftShapeDetailInputSchema;
-
 export const draftShapeDetailOutputSchema = z.object({
   shape: draftShapeSchema,
 });
-
-/** @deprecated Use {@link draftShapeDetailOutputSchema} instead */
-export const demandDetailOutputSchema = draftShapeDetailOutputSchema;
 
 export const draftShapeApproveOutputSchema = z.object({
   shape: draftShapeSchema,
   shapePath: z.string(),
 });
 
-/** @deprecated Use {@link draftShapeApproveOutputSchema} instead */
-export const demandApproveOutputSchema = draftShapeApproveOutputSchema;
+// 4f-2: generatePlan / planApprove both return the updated shape + its path,
+// mirroring the approve output shape.
+export const draftShapeGeneratePlanOutputSchema = z.object({
+  shape: draftShapeSchema,
+  shapePath: z.string(),
+});
+
+export const draftShapePlanApproveOutputSchema = z.object({
+  shape: draftShapeSchema,
+  shapePath: z.string(),
+});
 
 export const deliveryPrepareOutputSchema = z.object({
   runId: z.string(),
@@ -530,6 +560,11 @@ export const gateListOutputSchema = z.object({
 
 export const decisionOutputSchema = z.object({
   decision: apiHumanDecisionSchema,
+  // S7d/M9: gate.approve resumes the run asynchronously via the job runner and
+  // returns the bound session + enqueued job so the client can follow it. reject
+  // stays synchronous (blocked) and omits both.
+  sessionId: z.string().optional(),
+  jobId: z.string().optional(),
 });
 
 export const auditListOutputSchema = z.object({
@@ -610,6 +645,36 @@ export const progressListOutputSchema = z.object({
   progressFiles: z.array(progressFileSchema),
 });
 
+// Phase 3 3a: session read-path. A session entry mirrors the core Session
+// metadata plus the run_id column (the frozen Session schema has no runId).
+// Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
+export const apiSessionSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  title: z.string().nullable(),
+  profile: z.string(),
+  status: sessionStatusSchema,
+  runId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+// session.list takes no client input: the server resolves the current
+// workspace from projectRoot and returns its id (M2 — the client has no
+// workspaceId to supply).
+export const sessionListOutputSchema = z.object({
+  workspaceId: z.string(),
+  sessions: z.array(apiSessionSchema),
+});
+
+export const sessionGetInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const sessionGetOutputSchema = z.object({
+  session: apiSessionSchema,
+});
+
 // ---------------------------------------------------------------------------
 // Procedure specs — the single source of truth for every RPC endpoint
 // ---------------------------------------------------------------------------
@@ -671,24 +736,18 @@ export const procedureSpecs = {
     input: draftShapeApproveInputSchema,
     output: draftShapeApproveOutputSchema,
   },
-
-  /** @deprecated Use `draftShape.shape` instead */
-  'demand.shape': {
+  // 4f-2: plan flow. generatePlan freezes the plan view; planApprove is a
+  // SEPARATE approval from demand approve. project.run gates a run on plan
+  // approval only when hasPlan is set (old drafts exempt — backward compatible).
+  'draftShape.generatePlan': {
     auth: 'token' as const,
-    input: demandShapeInputSchema,
-    output: demandShapeOutputSchema,
+    input: draftShapeGeneratePlanInputSchema,
+    output: draftShapeGeneratePlanOutputSchema,
   },
-  /** @deprecated Use `draftShape.detail` instead */
-  'demand.detail': {
+  'draftShape.planApprove': {
     auth: 'token' as const,
-    input: demandDetailInputSchema,
-    output: demandDetailOutputSchema,
-  },
-  /** @deprecated Use `draftShape.approve` instead */
-  'demand.approve': {
-    auth: 'token' as const,
-    input: demandApproveInputSchema,
-    output: demandApproveOutputSchema,
+    input: draftShapePlanApproveInputSchema,
+    output: draftShapePlanApproveOutputSchema,
   },
 
   'delivery.prepare': {
@@ -762,6 +821,19 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: progressListInputSchema,
     output: progressListOutputSchema,
+  },
+
+  // Phase 3 3a: session read-path. Both are auth:'session' (require the
+  // x-session-token header) — the client's rpc-client must send it (M1 fix).
+  'session.list': {
+    auth: 'session' as const,
+    input: z.undefined(),
+    output: sessionListOutputSchema,
+  },
+  'session.get': {
+    auth: 'session' as const,
+    input: sessionGetInputSchema,
+    output: sessionGetOutputSchema,
   },
 } as const;
 

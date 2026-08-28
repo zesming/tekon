@@ -1,13 +1,14 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import type { RunProjectContext } from '@tekon/core';
+
 export interface ResolveProjectRootInput {
   projectRoot?: string;
   env?: NodeJS.ProcessEnv;
 }
 
-export interface WebProjectContext {
-  projectRoot: string;
+export interface WebProjectContext extends RunProjectContext {
   dataDir: string;
   dbPath: string;
   sessionPath: string;

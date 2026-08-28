@@ -21,43 +21,60 @@ export const test = base.extend<SharedFixtures>({
   },
 
   server: async ({ fixture }, use) => {
+    // Exercise the production static-server path. The package test:e2e script
+    // builds the client first, so route assertions are never coupled to Vite's
+    // dev-only on-demand transform timing.
     const server = await createWebServer({
       projectRoot: fixture.projectRoot,
       port: 0,
-      vite: true,
     });
     await server.listen();
     await use(server);
     await server.close();
   },
+
+  // Business journeys use page.goto() to launch many deep routes as fresh
+  // documents. Treat each same-origin hard navigation as a fresh authenticated
+  // `tekon ui` launch by carrying the production #token fragment. This is an
+  // explicit test-launch policy, not evidence that sessionStorage recovery was
+  // exercised on every journey; the dedicated prod-bootstrap suite owns the
+  // refresh/sessionStorage, URL cleanup and Referer assertions.
+  //
+  // Without this policy, cold CI runs intermittently reach the new document
+  // before the previous document's bootstrap state is available and render the
+  // 401 page; retry then passes. failOnFlakyTests correctly rejects that result.
+  page: async ({ page, fixture, server }, use) => {
+    const origin = new URL(server.url).origin;
+    const rawGoto = page.goto.bind(page);
+    page.goto = (async (url, options) => {
+      const target = new URL(url, server.url);
+      if (target.origin === origin) {
+        const hash = new URLSearchParams(target.hash.slice(1));
+        if (!hash.has('token')) {
+          hash.set('token', fixture.sessionToken);
+          target.hash = hash.toString();
+        }
+      }
+      return rawGoto(target.toString(), options);
+    }) as typeof page.goto;
+    await use(page);
+  },
 });
 
-// Inject the session token into the browser before each page loads.
-// The RPC client reads this token for authenticated read/write endpoints.
+// Establish the same connected state as a real `tekon ui` launch, then prove
+// that the credential is visible and the fragment is removed before each
+// business journey starts. The page fixture above also authenticates every
+// later hard route launch; SPA navigation and page.reload() do not use it.
 test.beforeEach(async ({ page, fixture, server }) => {
-  await page.addInitScript(
-    ({ token }) => {
-      // Intercept the rpc-client module's setRpcSessionToken by
-      // monkey-patching the global fetch to inject the token header.
-      const originalFetch = window.fetch;
-      window.fetch = function patchedFetch(
-        input: RequestInfo | URL,
-        init?: RequestInit,
-      ) {
-        if (
-          typeof input === 'string' &&
-          input.includes('/api/rpc') &&
-          token
-        ) {
-          const headers = new Headers(init?.headers);
-          headers.set('x-session-token', token);
-          init = { ...init, headers };
-        }
-        return originalFetch.call(window, input, init);
-      };
-    },
-    { token: fixture.sessionToken },
+  const fragment = new URLSearchParams({
+    token: fixture.sessionToken,
+  }).toString();
+  await page.goto(`${server.url}/#${fragment}`);
+  await expect(page.getByLabel('Session token')).toHaveValue(
+    fixture.sessionToken,
+    { timeout: 15_000 },
   );
+  await expect(page).not.toHaveURL(/token=/u);
 });
 
 export { expect };

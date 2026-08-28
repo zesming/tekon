@@ -26,6 +26,7 @@ import {
   type RunProviderConfig,
   runProviderConfigSchema,
   type WorkflowInstance,
+  type WorkflowInstanceInput,
   type WorkflowStatus,
   workflowInstanceSchema,
 } from '../types/domain.js';
@@ -43,6 +44,7 @@ type NodeRow = {
   outputs: string;
   gates: string;
   dependencies: string;
+  node_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -67,6 +69,8 @@ type WorkflowInstanceRow = {
   project_id: string;
   demand_id: string;
   status: WorkflowInstance['status'];
+  kind: WorkflowInstance['kind'];
+  allow_dirty_base: number | null;
   current_node_id: string | null;
   created_at: string;
   updated_at: string;
@@ -182,7 +186,9 @@ export interface TekonRepositories {
   getDemand(demandId: string): Promise<Demand | null>;
   createProject(project: Project): Promise<Project>;
   getProject(projectId: string): Promise<Project | null>;
-  createWorkflowInstance(instance: WorkflowInstance): Promise<WorkflowInstance>;
+  createWorkflowInstance(
+    instance: WorkflowInstanceInput,
+  ): Promise<WorkflowInstance>;
   getWorkflowInstance(runId: string): Promise<WorkflowInstance | null>;
   recordRunProviderConfig(
     config: RunProviderConfig,
@@ -193,6 +199,23 @@ export interface TekonRepositories {
     status: WorkflowStatus,
     currentNodeId?: string | null,
   ): Promise<WorkflowInstance | null>;
+  /**
+   * Guarded status write: applies only when the run is NOT already terminal
+   * (passed/failed/cancelled). Used by interrupt/abort recovery so a stale or
+   * fenced executor can never revert a terminal run to a non-terminal status
+   * (terminal-state monotonicity). Returns the current row regardless.
+   */
+  updateWorkflowInstanceStatusIfActive(
+    runId: string,
+    status: WorkflowStatus,
+    currentNodeId?: string | null,
+  ): Promise<WorkflowInstance | null>;
+  casWorkflowInstanceStatus(
+    runId: string,
+    expectedFrom: WorkflowStatus,
+    to: WorkflowStatus,
+    currentNodeId?: string | null,
+  ): Promise<{ changed: boolean; workflow: WorkflowInstance | null }>;
   createPhase(phase: Phase): Promise<Phase>;
   listPhases(runId: string): Promise<Phase[]>;
   createNode(node: NodeInput): Promise<Node>;
@@ -217,6 +240,14 @@ export interface TekonRepositories {
   updateHumanDecision(
     decisionId: string,
     patch: Pick<HumanDecision, 'status' | 'actor' | 'note' | 'decidedAt'>,
+    /**
+     * Optional CAS guard: when provided, the update only applies if the row's
+     * current status equals `expectedStatus`. A mismatch (concurrent decision
+     * already flipped it) returns null without writing — makes approve/reject
+     * idempotent under a concurrent double-submit (no duplicate audit / node
+     * transitions). Omitted → unconditional update (legacy CLI path).
+     */
+    expectedStatus?: HumanDecision['status'],
   ): Promise<HumanDecision | null>;
   getHumanDecision(decisionId: string): Promise<HumanDecision | null>;
   listHumanDecisions(runId: string): Promise<HumanDecision[]>;
@@ -249,6 +280,10 @@ export interface TekonRepositories {
   markRoleRunCompleted(input: {
     roleRunId: string;
     completedAt: string;
+  }): Promise<RoleRun | null>;
+  markRoleRunInterrupted(input: {
+    roleRunId: string;
+    interruptedAt: string;
   }): Promise<RoleRun | null>;
   getLatestRoleRunForNode(
     runId: string,
@@ -335,9 +370,13 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into workflow_instances (
-             id, project_id, demand_id, status, current_node_id, created_at, updated_at
-           ) values (@id, @projectId, @demandId, @status, @currentNodeId, @createdAt, @updatedAt)`,
-        ).run({ ...instance, currentNodeId: instance.currentNodeId ?? null });
+             id, project_id, demand_id, status, kind, allow_dirty_base, current_node_id, created_at, updated_at
+           ) values (@id, @projectId, @demandId, @status, @kind, @allowDirtyBase, @currentNodeId, @createdAt, @updatedAt)`,
+        ).run({
+          ...instance,
+          allowDirtyBase: instance.allowDirtyBase ? 1 : 0,
+          currentNodeId: instance.currentNodeId ?? null,
+        });
         return instance;
       });
     },
@@ -395,6 +434,69 @@ export function createRepositories(
       });
     },
 
+    async updateWorkflowInstanceStatusIfActive(runId, status, currentNodeId) {
+      return writeQueue.enqueue(() => {
+        // Terminal-state monotonicity guard: the UPDATE is scoped with a
+        // `status not in (terminal)` predicate so a stale/fenced executor's
+        // interrupt write can never clobber a run another owner has already
+        // settled to passed/failed/cancelled. When the run is terminal the
+        // UPDATE matches 0 rows and the current (terminal) row is returned.
+        if (currentNodeId === undefined) {
+          db.prepare(
+            `update workflow_instances
+             set status = @status, updated_at = @now
+             where id = @runId
+               and status not in ('passed', 'failed', 'cancelled')`,
+          ).run({ status, now: now(), runId });
+        } else {
+          db.prepare(
+            `update workflow_instances
+             set status = @status, current_node_id = @nodeId, updated_at = @now
+             where id = @runId
+               and status not in ('passed', 'failed', 'cancelled')`,
+          ).run({ status, nodeId: currentNodeId, now: now(), runId });
+        }
+
+        const row = db
+          .prepare('select * from workflow_instances where id = ?')
+          .get(runId) as WorkflowInstanceRow | undefined;
+        return row ? mapWorkflowInstance(row) : null;
+      });
+    },
+
+    async casWorkflowInstanceStatus(runId, expectedFrom, to, currentNodeId) {
+      return writeQueue.enqueue(() => {
+        // currentNodeId semantics match updateWorkflowInstanceStatus:
+        //   undefined → leave current_node_id unchanged
+        //   null      → clear it (terminal `passed` clears the pointer)
+        //   string    → set it (terminal `cancelled`/`failed` record the node)
+        const result =
+          currentNodeId === undefined
+            ? db
+                .prepare(
+                  `update workflow_instances
+                   set status = @to, updated_at = @now
+                   where id = @runId and status = @expectedFrom`,
+                )
+                .run({ to, now: now(), runId, expectedFrom })
+            : db
+                .prepare(
+                  `update workflow_instances
+                   set status = @to, current_node_id = @nodeId, updated_at = @now
+                   where id = @runId and status = @expectedFrom`,
+                )
+                .run({ to, nodeId: currentNodeId, now: now(), runId, expectedFrom });
+
+        const row = db
+          .prepare('select * from workflow_instances where id = ?')
+          .get(runId) as WorkflowInstanceRow | undefined;
+        return {
+          changed: result.changes === 1,
+          workflow: row ? mapWorkflowInstance(row) : null,
+        };
+      });
+    },
+
     async createPhase(input) {
       const phase = phaseSchema.parse(input);
       return writeQueue.enqueue(() => {
@@ -424,9 +526,9 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into nodes (
-             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, created_at, updated_at
+             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
            ) values (
-             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @createdAt, @updatedAt
+             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
            )`,
         ).run({
           ...node,
@@ -435,6 +537,7 @@ export function createRepositories(
           outputs: JSON.stringify(node.outputs),
           gates: JSON.stringify(node.gates),
           dependencies: JSON.stringify(node.dependencies),
+          nodeOrder: node.order,
         });
         return node;
       });
@@ -454,7 +557,7 @@ export function createRepositories(
            from nodes n
            left join phases p on p.id = n.phase_id
            where n.run_id = ?
-           order by coalesce(p.phase_order, 999999), n.created_at, n.id`,
+           order by coalesce(p.phase_order, 999999), n.node_order, n.created_at, n.id`,
         )
         .all(runId) as NodeRow[];
       return rows.map(mapNode);
@@ -593,19 +696,29 @@ export function createRepositories(
       });
     },
 
-    async updateHumanDecision(decisionId, patch) {
+    async updateHumanDecision(decisionId, patch, expectedStatus) {
       return writeQueue.enqueue(() => {
-        db.prepare(
-          `update human_decisions
-           set status = @status, actor = @actor, note = @note, decided_at = @decidedAt
-           where id = @decisionId`,
-        ).run({
-          decisionId,
-          status: patch.status,
-          actor: patch.actor ?? null,
-          note: patch.note ?? null,
-          decidedAt: patch.decidedAt ?? null,
-        });
+        // CAS: when expectedStatus is given, only flip if the row still holds
+        // it. changes=0 means a concurrent decision already moved it — return
+        // null so callers treat it as "lost the race", not a spurious success.
+        const result = db
+          .prepare(
+            `update human_decisions
+             set status = @status, actor = @actor, note = @note, decided_at = @decidedAt
+             where id = @decisionId
+               and (@expectedStatus is null or status = @expectedStatus)`,
+          )
+          .run({
+            decisionId,
+            status: patch.status,
+            actor: patch.actor ?? null,
+            note: patch.note ?? null,
+            decidedAt: patch.decidedAt ?? null,
+            expectedStatus: expectedStatus ?? null,
+          });
+        if (expectedStatus != null && result.changes === 0) {
+          return null;
+        }
         const row = db
           .prepare('select * from human_decisions where id = ?')
           .get(decisionId) as HumanDecisionRow | undefined;
@@ -801,6 +914,20 @@ export function createRepositories(
       });
     },
 
+    async markRoleRunInterrupted(input) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          `update role_runs
+           set status = 'interrupted', interrupted_at = ?
+           where id = ?`,
+        ).run(input.interruptedAt, input.roleRunId);
+        const row = db
+          .prepare('select * from role_runs where id = ?')
+          .get(input.roleRunId) as RoleRunRow | undefined;
+        return row ? mapRoleRun(row) : null;
+      });
+    },
+
     async getLatestRoleRunForNode(runId, nodeId) {
       const row = db
         .prepare(
@@ -870,6 +997,7 @@ function mapNode(row: NodeRow): Node {
     outputs: JSON.parse(row.outputs) as unknown,
     gates: JSON.parse(row.gates) as unknown,
     dependencies: JSON.parse(row.dependencies) as unknown,
+    order: row.node_order ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -881,6 +1009,8 @@ function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
     projectId: row.project_id,
     demandId: row.demand_id,
     status: row.status,
+    kind: row.kind ?? 'workflow',
+    allowDirtyBase: row.allow_dirty_base === 1,
     currentNodeId: row.current_node_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

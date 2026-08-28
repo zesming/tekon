@@ -2,6 +2,7 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'BAD_REQUEST'
+  | 'CONFLICT'
   | 'INTERNAL_ERROR';
 
 export class ApiError extends Error {

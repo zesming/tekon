@@ -21,6 +21,40 @@ import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
 
 const cleanupTasks: Array<() => void> = [];
 
+/**
+ * S7b: project.run/resume now enqueue a background job and return immediately.
+ * Poll the run row until it reaches a terminal/target status before asserting
+ * downstream effects (delivery, artifacts). Reads directly from the db so it
+ * does not depend on scoped-project query shaping.
+ */
+async function waitForRunStatus(
+  projectRoot: string,
+  runId: string,
+  statuses: string[],
+  timeoutMs = 20_000,
+): Promise<string> {
+  const db = openTekonDatabase({ filename: join(projectRoot, '.tekon', 'tekon.sqlite') });
+  try {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const row = db
+        .prepare('select status from workflow_instances where id = ?')
+        .get(runId) as { status: string } | undefined;
+      if (row && statuses.includes(row.status)) {
+        return row.status;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `run ${runId} did not reach ${statuses.join('/')} in ${timeoutMs}ms (last: ${row?.status ?? 'missing'})`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  } finally {
+    db.close();
+  }
+}
+
 afterEach(() => {
   for (const cleanup of cleanupTasks.splice(0)) {
     cleanup();
@@ -63,11 +97,18 @@ describe('web write authorization', () => {
       token: fixture.sessionToken,
     });
 
+    // S7d/M9: approve flips the decision synchronously and enqueues a
+    // background workflow-resume job (P0-02: resume is no longer blocking).
     expect(result.decision).toMatchObject({
       id: 'decision_1',
       status: 'approved',
       actor: 'human-reviewer',
     });
+    expect(result.sessionId).toBeTruthy();
+    expect(result.jobId).toBeTruthy();
+
+    // The resume job drives run_1 to passed out of band; poll before asserting.
+    await waitForRunStatus(fixture.projectRoot, 'run_1', ['passed']);
 
     const gates = await api.gate.list({ runId: 'run_1' });
     expect(gates.gates).toContainEqual(
@@ -88,6 +129,8 @@ describe('web write authorization', () => {
       ]),
     );
 
+    // Re-approving the same decision is rejected: the decision is no longer
+    // pending (and the run is terminal). Either guard yields 400.
     await expect(
       api.gate.approve({
         runId: 'run_1',
@@ -99,7 +142,7 @@ describe('web write authorization', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     await api.close();
-  });
+  }, 30_000);
 
   it('rejecting a human gate blocks the workflow instead of resuming it', async () => {
     const fixture = await createWebFixtureProject();
@@ -301,10 +344,9 @@ describe('web write authorization', () => {
       token: fixture.sessionToken,
     });
 
-    expect(started.run).toMatchObject({
-      status: 'passed',
-      currentNodeId: null,
-    });
+    // Run is enqueued as a background job; poll until it passes.
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     const overview = await api.project.overview();
     expect(overview.latestRun).toMatchObject({ id: started.run.id });
@@ -368,10 +410,8 @@ describe('web write authorization', () => {
         token: fixture.sessionToken,
       });
 
-      expect(started.run).toMatchObject({
-        status: 'passed',
-        currentNodeId: null,
-      });
+      expect(started.jobId).toBeTruthy();
+      await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
       const db = openTekonDatabase({
         filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
@@ -450,12 +490,176 @@ describe('web write authorization', () => {
       agent: 'mock',
       token: fixture.sessionToken,
     });
-    expect(started.run).toMatchObject({ status: 'passed' });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     await expect(
       api.draftShape.approve({
         shapePath: join(fixture.projectRoot, 'package.json'),
         token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('P0-03: rejects an approved-but-not-readyForRun shaped demand (openQuestions remain)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // A terse demand with no scope/acceptance keywords leaves openQuestions →
+    // readyForRun=false.
+    const shaped = await api.draftShape.shape({
+      demandText: '改一下',
+      token: fixture.sessionToken,
+    });
+    expect(shaped.shape.readyForRun).toBe(false);
+    expect(shaped.shape.openQuestions.length).toBeGreaterThan(0);
+
+    // Approve it (approved=true) but openQuestions still stand → not readyForRun.
+    const approved = await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+    expect(approved.shape).toMatchObject({ approved: true, readyForRun: false });
+
+    // Server must reject: approved is not sufficient, readyForRun is required.
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    await api.close();
+  });
+
+  it('4f-2: a draft with a generated plan must be plan-approved before run', { timeout: 20000 }, async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    // A freshly shaped draft has no plan → the plan gate is not engaged.
+    expect(shaped.shape.hasPlan).toBeUndefined();
+
+    // Demand approval (approved=true) is orthogonal to plan approval.
+    await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+
+    // Generate a plan: hasPlan=true, but planApproved stays false. The demand
+    // approval is untouched (the two approvals are orthogonal).
+    const planned = await api.draftShape.generatePlan({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+    });
+    expect(planned.shape).toMatchObject({
+      hasPlan: true,
+      planApproved: false,
+      approved: true,
+    });
+
+    // Wrong token is rejected before any mutation (auth stays first).
+    await expect(
+      api.draftShape.generatePlan({
+        shapePath: shaped.shapePath,
+        token: 'wrong-token',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+
+    // A plan exists but is not plan-approved → project.run must reject, even
+    // though the demand itself is approved + readyForRun.
+    await expect(
+      api.project.run({
+        demandText: '',
+        demandShapePath: shaped.shapePath,
+        agent: 'mock',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    // Plan-approve (a separate action from demand approve).
+    const planApproved = await api.draftShape.planApprove({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+    expect(planApproved.shape).toMatchObject({
+      planApproved: true,
+      planApprovedBy: 'web-test',
+    });
+
+    // Now the run is admitted and drives to passed.
+    const started = await api.project.run({
+      demandText: '',
+      demandShapePath: shaped.shapePath,
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
+
+    await api.close();
+  });
+
+  it('4f-2 backward-compat: a draft that never generated a plan runs without a plan gate', { timeout: 20000 }, async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // This mirrors every pre-4f-2 draft: shape → approve → run. No generatePlan
+    // call is ever made, so hasPlan is absent and the plan gate stays disengaged.
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+    expect(shaped.shape.hasPlan).toBeUndefined();
+
+    await api.draftShape.approve({
+      shapePath: shaped.shapePath,
+      token: fixture.sessionToken,
+      actor: 'web-test',
+    });
+
+    // The唯一回归点 lock: an old draft (no hasPlan) is admitted straight through.
+    const started = await api.project.run({
+      demandText: '',
+      demandShapePath: shaped.shapePath,
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+    expect(started.jobId).toBeTruthy();
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
+
+    await api.close();
+  });
+
+  it('4f-2: plan-approve without a generated plan is rejected (400)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const shaped = await api.draftShape.shape({
+      demandText: '给 Web dashboard 增加需求塑形入口，要求 e2e 通过。',
+      token: fixture.sessionToken,
+    });
+
+    // No generatePlan call → planApprove has nothing to approve → 400 (not 500).
+    await expect(
+      api.draftShape.planApprove({
+        shapePath: shaped.shapePath,
+        token: fixture.sessionToken,
+        actor: 'web-test',
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
@@ -601,6 +805,8 @@ describe('web write authorization', () => {
       token: fixture.sessionToken,
     });
 
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
+
     const result = await api.delivery.createPr({
       runId: started.run.id,
       token: fixture.sessionToken,
@@ -725,6 +931,25 @@ describe('project.resume', () => {
 
     await api.close();
   });
+
+  it('rejects project.resume for a terminal run with 400 (transitional WTE mapping)', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // run_0 is seeded as 'passed' with a provider snapshot.
+    await expect(
+      api.project.resume({
+        runId: 'run_0',
+        token: fixture.sessionToken,
+      }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('terminal status: passed'),
+    });
+
+    await api.close();
+  });
 });
 
 describe('delivery.prepare', () => {
@@ -818,7 +1043,7 @@ describe('delivery.dryRun', () => {
       token: fixture.sessionToken,
     });
 
-    expect(started.run.status).toBe('passed');
+    await waitForRunStatus(fixture.projectRoot, started.run.id, ['passed']);
 
     // Snapshot artifact and audit counts before calling dryRun
     const artifactsBefore = await api.artifact.list({ runId: started.run.id });

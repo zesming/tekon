@@ -108,6 +108,35 @@ export function mustGetRun(db: TekonDatabase, runId: string): WorkflowRow {
   return run;
 }
 
+/**
+ * Demand title for a run's demand, for human-readable run lists (report §6.3 /
+ * P1.3: the Demand column showed an internal id instead of the request title).
+ * Returns null when the demand row is missing.
+ */
+export function demandTitleById(
+  db: TekonDatabase,
+  demandId: string,
+): string | null {
+  const row = db
+    .prepare('select title from demands where id = ?')
+    .get(demandId) as { title?: string } | undefined;
+  return row?.title ?? null;
+}
+
+/**
+ * Real provider recorded for a run (report §6.4 / P1.4: Run Detail derived the
+ * agent as a fixed "—"). Returns null when no provider snapshot exists yet.
+ */
+export function runProviderName(
+  db: TekonDatabase,
+  runId: string,
+): string | null {
+  const row = db
+    .prepare('select provider from run_provider_configs where run_id = ?')
+    .get(runId) as { provider?: string } | undefined;
+  return row?.provider ?? null;
+}
+
 export function assertRunInScope(
   db: TekonDatabase,
   context: WebProjectContext,

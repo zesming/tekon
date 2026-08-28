@@ -1,6 +1,6 @@
 import type { ServerContext } from '../context.js';
 import { createWorkReviewSurface, type WorkReviewSurface } from '@tekon/core';
-import { assertRunInScope } from '../queries.js';
+import { assertRunInScope, runProviderName } from '../queries.js';
 import { redactObject, redactTextPreview } from '../redaction.js';
 
 export function createReviewRouter(context: ServerContext) {
@@ -15,7 +15,12 @@ export function createReviewRouter(context: ServerContext) {
         maxContentChars: reviewInput.maxContentChars,
         commandDisplay: 'explicit',
       });
-      return redactReviewSurface(surface);
+      // Enrich with the real provider (report §6.4/P1.4). Provider name is not
+      // sensitive, so it is attached after redaction.
+      return {
+        ...redactReviewSurface(surface),
+        provider: runProviderName(context.db, reviewInput.runId),
+      };
     },
   };
 }

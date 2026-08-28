@@ -44,11 +44,9 @@ function formatDuration(startIso: string, endIso?: string): string {
   return `${hours}h ${remMins}m`;
 }
 
-/** Derive agent from demand title or return a fallback. */
+/** Real provider recorded for the run, or a placeholder when unavailable. */
 function deriveAgent(surface: ApiWorkReviewSurface): string {
-  // The review surface doesn't directly expose an agent field; use a heuristic
-  // or just display a placeholder. We could add this to the API later.
-  return '—';
+  return surface.provider ?? '—';
 }
 
 // ---------------------------------------------------------------------------

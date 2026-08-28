@@ -17,13 +17,13 @@ import {
   createAuditLogger,
   createHumanApprovalSummary,
   createRepositories,
-  evaluateDemandShape,
+  evaluateDraftShape,
   evaluateHumanApprovalSummary,
   evaluateWorkReadiness,
   evaluateWorkUsability,
   evaluateWorkflowSelection,
   migrateDatabase,
-  readDemandShapeFile,
+  readDraftShapeFile,
   renderWorkUsabilityEvaluationReport,
   upsertWorkUsabilitySample,
   workUsabilitySampleSetSchema,
@@ -72,10 +72,10 @@ export async function commandEval(
     if (!shapeArg) {
       await ensureInitialized(repoPath, io);
     }
-    const shape = readDemandShapeFile(
+    const shape = readDraftShapeFile(
       resolveDemandShapePath(repoPath, shapeArg),
     );
-    const evaluation = evaluateDemandShape(shape);
+    const evaluation = evaluateDraftShape(shape);
     io.stdout.write(
       args.values.json
         ? `${JSON.stringify(evaluation, null, 2)}\n`
@@ -118,7 +118,7 @@ export async function commandEval(
         ? null
         : resolveDemandShapePath(repoPath);
     const shape = shapePath
-      ? readDemandShapeFile(shapePath)
+      ? readDraftShapeFile(shapePath)
       : null;
     const demandText = shape
       ? shape.rawText

@@ -193,6 +193,154 @@ describe('sqlite repositories', () => {
     });
     db.close();
   });
+
+  it('marks a running role run as interrupted with a timestamp', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    await repositories.createNode({
+      id: 'node_1',
+      runId: 'run_1',
+      role: 'rd',
+      status: 'running',
+      gates: [],
+      dependencies: [],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createRoleRun({
+      id: 'role_run_interrupted',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      role: 'rd',
+      status: 'running',
+      startedAt: '2026-06-05T00:00:02.000Z',
+    });
+
+    const interrupted = await repositories.markRoleRunInterrupted({
+      roleRunId: 'role_run_interrupted',
+      interruptedAt: '2026-06-05T00:00:04.000Z',
+    });
+
+    expect(interrupted).toMatchObject({
+      id: 'role_run_interrupted',
+      status: 'interrupted',
+      interruptedAt: '2026-06-05T00:00:04.000Z',
+      completedAt: null,
+    });
+    expect(await repositories.getRoleRun('role_run_interrupted')).toMatchObject(
+      {
+        status: 'interrupted',
+        interruptedAt: '2026-06-05T00:00:04.000Z',
+      },
+    );
+    db.close();
+  });
+
+  it('conditionally updates workflow instance status via compare-and-swap', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+
+    const matched = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'running',
+      'paused',
+      'node_2',
+    );
+    expect(matched.changed).toBe(true);
+    expect(matched.workflow).toMatchObject({
+      status: 'paused',
+      currentNodeId: 'node_2',
+    });
+
+    // expectedFrom no longer matches — nothing is written.
+    const mismatched = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'running',
+      'cancelled',
+      'node_3',
+    );
+    expect(mismatched.changed).toBe(false);
+    expect(mismatched.workflow).toMatchObject({
+      status: 'paused',
+      currentNodeId: 'node_2',
+    });
+
+    // Omitting currentNodeId keeps the existing node.
+    const resumed = await repositories.casWorkflowInstanceStatus(
+      'run_1',
+      'paused',
+      'running',
+    );
+    expect(resumed.changed).toBe(true);
+    expect(resumed.workflow).toMatchObject({
+      status: 'running',
+      currentNodeId: 'node_2',
+    });
+
+    const missing = await repositories.casWorkflowInstanceStatus(
+      'run_missing',
+      'running',
+      'paused',
+    );
+    expect(missing.changed).toBe(false);
+    expect(missing.workflow).toBeNull();
+
+    db.close();
+  });
+
+  it('updateWorkflowInstanceStatusIfActive refuses to overwrite a terminal status (terminal-state monotonicity)', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+
+    // Active run: the guarded write applies.
+    const active = await repositories.updateWorkflowInstanceStatusIfActive(
+      'run_1',
+      'interrupted',
+      'node_2',
+    );
+    expect(active).toMatchObject({
+      status: 'interrupted',
+      currentNodeId: 'node_2',
+    });
+
+    // Drive the run to a terminal status, as a recovering owner would.
+    await repositories.updateWorkflowInstanceStatus('run_1', 'passed', null);
+
+    // A fenced/stale executor's interrupt write MUST NOT revert `passed`.
+    const afterTerminal =
+      await repositories.updateWorkflowInstanceStatusIfActive(
+        'run_1',
+        'interrupted',
+        'node_2',
+      );
+    expect(afterTerminal).toMatchObject({ status: 'passed' });
+
+    // Same guard for failed/cancelled terminals.
+    await repositories.createWorkflowInstance({
+      id: 'run_cancelled',
+      projectId: 'project_1',
+      demandId: 'demand_1',
+      status: 'cancelled',
+      currentNodeId: null,
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    const afterCancelled =
+      await repositories.updateWorkflowInstanceStatusIfActive(
+        'run_cancelled',
+        'interrupted',
+        'node_1',
+      );
+    expect(afterCancelled).toMatchObject({ status: 'cancelled' });
+
+    db.close();
+  });
 });
 
 async function seedRun(repositories: ReturnType<typeof createRepositories>) {

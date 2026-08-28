@@ -140,12 +140,6 @@ export type DraftShapeInput = z.infer<typeof draftShapeInputSchema>;
 export type DraftShapeApproveInput = z.infer<typeof draftShapeApproveInputSchema>;
 export type DraftShapeDetailInput = z.infer<typeof draftShapeDetailInputSchema>;
 
-/** @deprecated Use {@link DraftShapeInput} instead */
-export type DemandShapeInput = DraftShapeInput;
-/** @deprecated Use {@link DraftShapeApproveInput} instead */
-export type DemandApproveInput = DraftShapeApproveInput;
-/** @deprecated Use {@link DraftShapeDetailInput} instead */
-export type DemandDetailInput = DraftShapeDetailInput;
 export type DeliveryCreatePrInput = z.infer<typeof deliveryCreatePrInputSchema>;
 export type DeliveryCiStatusInput = z.infer<typeof deliveryCiStatusInputSchema>;
 export type DecisionInput = z.infer<typeof decisionInputSchema>;

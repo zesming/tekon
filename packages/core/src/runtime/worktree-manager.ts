@@ -102,17 +102,14 @@ export function createWorktreeManager(options: {
         })
       ).trim();
 
+      // Create the lease from the immutable OID we persist, not from the
+      // movable branch name. Otherwise another promotion between rev-parse and
+      // worktree add can make the lease's actual base differ from baseHead,
+      // causing the later expected-old-OID CAS to use the wrong generation.
       await runGit(options.gateway, {
         repoPath,
         runId: runSegment,
-        args: [
-          'worktree',
-          'add',
-          '-b',
-          branchName,
-          worktreePath,
-          input.baseRef,
-        ],
+        args: ['worktree', 'add', '-b', branchName, worktreePath, baseHead],
       });
 
       const lease: WorktreeLease = {
@@ -192,10 +189,29 @@ export function createWorktreeManager(options: {
       const branchName =
         input.branchName ??
         deliveryBranchName(assertSafePathSegment(lease.runId));
+      const targetRef = assertSafeBranchRef(branchName);
+      if (!lease.baseHead) {
+        throw new Error(
+          `worktree lease ${lease.id} is missing baseHead; refusing unsafe promotion`,
+        );
+      }
+      const leaseHeadOid = (
+        await runGit(options.gateway, {
+          repoPath: lease.repoPath,
+          runId: lease.runId,
+          args: ['rev-parse', '--verify', lease.branchName],
+        })
+      ).trim();
+
+      // Fence against the ref value this lease was actually created from.
+      // Reading the target immediately before update-ref is not sufficient: a
+      // stale lease can observe a newer promotion and then successfully replace
+      // it. The persisted baseHead is the lease's durable expected-old OID, so
+      // only a promoter based on the current delivery head can win.
       await runGit(options.gateway, {
         repoPath: lease.repoPath,
         runId: lease.runId,
-        args: ['branch', '-f', branchName, lease.branchName],
+        args: ['update-ref', targetRef, leaseHeadOid, lease.baseHead],
       });
       return branchName;
     },
@@ -414,6 +430,22 @@ function assertSafePathSegment(value: string): string {
     throw new Error(`unsafe path segment: ${value}`);
   }
   return value;
+}
+
+function assertSafeBranchRef(branchName: string): string {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/u.test(branchName)) {
+    throw new Error(`unsafe branch name: ${branchName}`);
+  }
+  if (
+    branchName.includes('..') ||
+    branchName.includes('//') ||
+    branchName.endsWith('/') ||
+    branchName.endsWith('.') ||
+    branchName.endsWith('.lock')
+  ) {
+    throw new Error(`unsafe branch name: ${branchName}`);
+  }
+  return `refs/heads/${branchName}`;
 }
 
 function deliveryBranchName(runSegment: string): string {
