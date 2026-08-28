@@ -4,7 +4,10 @@ import { useQuery, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { queryKeys } from '../lib/query-keys.js';
 import { routes } from '../lib/route-paths.js';
-import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
+import type {
+  RpcProcedureMap,
+  SessionActionKind,
+} from '../../shared/rpc-contract.js';
 
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
@@ -12,7 +15,7 @@ import { LoadingState } from '../components/ui/LoadingState.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { SessionComposer } from '../components/sessions/SessionComposer.js';
 
-const ACTION_KIND_LABELS: Record<string, string> = {
+const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
   approval: '待审批',
   input: '待输入',
   failed: '需处理',
@@ -34,7 +37,7 @@ function formatRelativeTime(iso: string): string {
   if (diffMin < 60) return `${diffMin}分钟前`;
   if (diffHours < 24) return `${diffHours}小时前`;
   if (diffDays <= 7) return `${diffDays}天前`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString('zh-CN');
 }
 
 // Phase 3 3b / Phase 4 P1-04: controlled-delivery list + composer.
@@ -116,7 +119,7 @@ export function SessionsPage() {
                   <span
                     className={`session-list-action session-list-action-${session.actionKind}`}
                   >
-                    {ACTION_KIND_LABELS[session.actionKind] ?? '待处理'}
+                    {ACTION_KIND_LABELS[session.actionKind]}
                   </span>
                 ) : null}
                 <StatusBadge status={session.status} size="sm" />

@@ -33,6 +33,7 @@ afterEach(async () => {
 
 function openStore(projectRoot: string): {
   store: SessionEventStore;
+  db: ReturnType<typeof openTekonDatabase>;
   close(): void;
 } {
   const db = openTekonDatabase({
@@ -40,7 +41,41 @@ function openStore(projectRoot: string): {
   });
   const writeQueue = createWriteQueue();
   const store = createSessionEventStore(db, writeQueue);
-  return { store, close: () => db.close() };
+  return { store, db, close: () => db.close() };
+}
+
+function setSessionTime(
+  db: ReturnType<typeof openTekonDatabase>,
+  sessionId: string,
+  timestamp: string,
+): void {
+  db.prepare(
+    'update sessions set created_at = ?, updated_at = ? where id = ?',
+  ).run(timestamp, timestamp, sessionId);
+}
+
+function setSessionUpdatedAt(
+  db: ReturnType<typeof openTekonDatabase>,
+  sessionId: string,
+  timestamp: string,
+): void {
+  db.prepare('update sessions set updated_at = ? where id = ?').run(
+    timestamp,
+    sessionId,
+  );
+}
+
+function setLatestEventTime(
+  db: ReturnType<typeof openTekonDatabase>,
+  sessionId: string,
+  timestamp: string,
+): void {
+  db.prepare(
+    `update session_events
+     set timestamp = ?
+     where session_id = ?
+       and seq = (select max(seq) from session_events where session_id = ?)`,
+  ).run(timestamp, sessionId, sessionId);
 }
 
 /** POST an RPC call over real HTTP, optionally with a session token header. */
@@ -88,96 +123,115 @@ async function postRpc(
 }
 
 describe('web session read API', () => {
-  it('session.list resolves the default workspace server-side, sorts by last activity, and derives action projections', async () => {
+  it('prioritizes sessions needing action, then orders each attention group by latest activity', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
     // Seed sessions directly in the store (fixture seeds runs, not sessions).
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
-    const s1 = await store.createSession({
+    const approval = await store.createSession({
       workspaceId: workspace.id,
       title: 'approval session',
       profile: 'human-web',
       runId: 'run_1',
     });
-    await store.updateSessionStatus(s1.id, 'awaiting-approval');
+    await store.updateSessionStatus(approval.id, 'awaiting-approval');
 
-    const s2 = await store.createSession({
+    const failed = await store.createSession({
       workspaceId: workspace.id,
       title: 'failed session',
       profile: 'human-web',
       runId: 'run_2',
     });
-    await store.updateSessionStatus(s2.id, 'failed');
+    await store.updateSessionStatus(failed.id, 'failed');
 
-    const s3 = await store.createSession({
+    const active = await store.createSession({
       workspaceId: workspace.id,
       title: 'active session',
       profile: 'human-web',
       runId: 'run_3',
     });
 
-    const s4 = await store.createSession({
+    const input = await store.createSession({
       workspaceId: workspace.id,
       title: 'input session',
       profile: 'human-web',
       runId: 'run_4',
     });
-    await store.updateSessionStatus(s4.id, 'awaiting-input');
+    await store.updateSessionStatus(input.id, 'awaiting-input');
 
-    // Ensure event timestamp is strictly newer than the sessions' created_at timestamps.
-    await new Promise((r) => setTimeout(r, 20));
+    // Fixed timestamps keep the test deterministic and prove two independent
+    // semantics: action sessions outrank a newer active session, while
+    // updated_at outranks an older best-effort event projection.
+    setSessionTime(db, approval.id, '2026-08-28T08:00:00.000Z');
+    setSessionUpdatedAt(db, approval.id, '2026-08-28T10:00:00.000Z');
+    setSessionTime(db, failed.id, '2026-08-28T09:00:00.000Z');
+    setSessionTime(db, input.id, '2026-08-28T09:30:00.000Z');
+    setSessionTime(db, active.id, '2026-08-28T11:00:00.000Z');
 
-    // Add an event to s1 (the oldest session) to make it have the latest activity.
-    const event = await store.appendEvent({
-      sessionId: s1.id,
-      type: 'agent/message',
+    await store.appendEvent({
+      sessionId: approval.id,
+      type: 'approval/requested',
       payload: { text: 'needs human decision' },
     });
+    setLatestEventTime(db, approval.id, '2026-08-28T08:30:00.000Z');
+
+    await store.appendEvent({
+      sessionId: active.id,
+      type: 'workflow/node-started',
+      payload: { nodeId: 'rd' },
+    });
+    setLatestEventTime(db, active.id, '2026-08-28T12:00:00.000Z');
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     const result = await api.session.list();
 
     // Client has no workspaceId; the server resolves + returns it (M2).
     expect(result.workspaceId).toBe(workspace.id);
+    expect(result.sessions.map((session) => session.id)).toEqual([
+      approval.id,
+      input.id,
+      failed.id,
+      active.id,
+    ]);
 
-    // s1 has the newest activity (via event), followed by s4, s3, s2 (created_at order).
-    expect(result.sessions[0].id).toBe(s1.id);
     expect(result.sessions[0]).toMatchObject({
-      id: s1.id,
+      id: approval.id,
       title: 'approval session',
       status: 'awaiting-approval',
       runId: 'run_1',
-      lastActivityAt: event.timestamp,
+      // Status-only updated_at is newer than the deliberately old event.
+      lastActivityAt: '2026-08-28T10:00:00.000Z',
       needsAction: true,
       actionKind: 'approval',
     });
 
-    const byId = new Map(result.sessions.map((s) => [s.id, s]));
-    expect(byId.get(s2.id)).toMatchObject({
+    const byId = new Map(result.sessions.map((session) => [session.id, session]));
+    expect(byId.get(failed.id)).toMatchObject({
       status: 'failed',
       needsAction: true,
       actionKind: 'failed',
     });
-    expect(byId.get(s3.id)).toMatchObject({
-      status: 'active',
-      needsAction: false,
-      actionKind: null,
-    });
-    expect(byId.get(s4.id)).toMatchObject({
+    expect(byId.get(input.id)).toMatchObject({
       status: 'awaiting-input',
       needsAction: true,
       actionKind: 'input',
     });
+    expect(byId.get(active.id)).toMatchObject({
+      status: 'active',
+      lastActivityAt: '2026-08-28T12:00:00.000Z',
+      needsAction: false,
+      actionKind: null,
+    });
   });
 
-  it('session.get returns metadata plus the composed runId, lastActivityAt fallback, and action projections', async () => {
+  it('session.get uses the same latest-activity meaning as session.list', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
     const session = await store.createSession({
@@ -187,6 +241,13 @@ describe('web session read API', () => {
       runId: 'run_1',
     });
     await store.updateSessionStatus(session.id, 'awaiting-approval');
+    setSessionTime(db, session.id, '2026-08-28T09:00:00.000Z');
+    setSessionUpdatedAt(db, session.id, '2026-08-28T10:00:00.000Z');
+    await store.appendEvent({
+      sessionId: session.id,
+      type: 'approval/requested',
+    });
+    setLatestEventTime(db, session.id, '2026-08-28T11:00:00.000Z');
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     const result = await api.session.get({ sessionId: session.id });
@@ -195,7 +256,7 @@ describe('web session read API', () => {
       title: 'detail',
       status: 'awaiting-approval',
       runId: 'run_1',
-      lastActivityAt: expect.any(String),
+      lastActivityAt: '2026-08-28T11:00:00.000Z',
       needsAction: true,
       actionKind: 'approval',
     });

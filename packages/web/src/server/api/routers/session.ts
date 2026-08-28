@@ -22,6 +22,47 @@ export function deriveSessionAction(status: string): {
   }
 }
 
+/** Return the newest valid ISO timestamp while preserving the original value. */
+export function latestActivityTimestamp(
+  first: string,
+  ...rest: string[]
+): string {
+  return rest.reduce((latest, candidate) => {
+    const latestMs = Date.parse(latest);
+    const candidateMs = Date.parse(candidate);
+    if (Number.isNaN(candidateMs)) return latest;
+    if (Number.isNaN(latestMs)) return candidate;
+    return candidateMs > latestMs ? candidate : latest;
+  }, first);
+}
+
+/**
+ * Human-attention order for the Session List:
+ *   needs action -> actively running -> idle -> terminal history.
+ * Within the same group, most recent activity stays first.
+ */
+function attentionRank(status: string): number {
+  if (deriveSessionAction(status).needsAction) return 0;
+  if (status === 'active') return 1;
+  if (status === 'idle') return 2;
+  return 3;
+}
+
+export function compareSessionAttention(
+  left: { status: string; lastActivityAt: string },
+  right: { status: string; lastActivityAt: string },
+): number {
+  const rankDifference = attentionRank(left.status) - attentionRank(right.status);
+  if (rankDifference !== 0) return rankDifference;
+
+  const leftMs = Date.parse(left.lastActivityAt);
+  const rightMs = Date.parse(right.lastActivityAt);
+  if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs) && leftMs !== rightMs) {
+    return rightMs - leftMs;
+  }
+  return 0;
+}
+
 /**
  * Phase 3 3a / Phase 4 P1-04: session read-path router. Powers the Session List
  * UI (left rail / SessionsPage) and Session Detail metadata (event bodies come
@@ -38,24 +79,33 @@ export function createSessionRouter(context: ServerContext) {
         context.projectContext.projectRoot,
       );
       const sessions = await context.sessions.listSessions(workspace.id);
+      const projectedSessions = sessions.map((session) => {
+        const action = deriveSessionAction(session.status);
+        return {
+          id: session.id,
+          workspaceId: session.workspaceId,
+          title: session.title,
+          profile: session.profile,
+          status: session.status,
+          runId: session.runId,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          // session-store projects the newest event; updatedAt remains the
+          // authoritative fallback for status-only changes or a missing
+          // best-effort event projection.
+          lastActivityAt: latestActivityTimestamp(
+            session.createdAt,
+            session.lastActivityAt,
+            session.updatedAt,
+          ),
+          needsAction: action.needsAction,
+          actionKind: action.actionKind,
+        };
+      });
+      projectedSessions.sort(compareSessionAttention);
       return {
         workspaceId: workspace.id,
-        sessions: sessions.map((session) => {
-          const action = deriveSessionAction(session.status);
-          return {
-            id: session.id,
-            workspaceId: session.workspaceId,
-            title: session.title,
-            profile: session.profile,
-            status: session.status,
-            runId: session.runId,
-            createdAt: session.createdAt,
-            updatedAt: session.updatedAt,
-            lastActivityAt: session.lastActivityAt,
-            needsAction: action.needsAction,
-            actionKind: action.actionKind,
-          };
-        }),
+        sessions: projectedSessions,
       };
     },
 
@@ -64,8 +114,19 @@ export function createSessionRouter(context: ServerContext) {
       if (!session) {
         throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
       }
-      // Session schema has no runId (frozen contract); compose it (N3).
-      const runId = await context.sessions.getRunIdBySessionId(input.sessionId);
+
+      // Session schema has no runId (frozen contract); compose it (N3). Read
+      // the current event tail as well so list/get expose one lastActivityAt
+      // meaning instead of list=max(event) while get=updatedAt.
+      const [runId, latestSeq] = await Promise.all([
+        context.sessions.getRunIdBySessionId(input.sessionId),
+        context.sessions.latestSeq(input.sessionId),
+      ]);
+      const latestEvents =
+        latestSeq > 0
+          ? await context.sessions.listEventsSince(input.sessionId, latestSeq - 1)
+          : [];
+      const latestEventAt = latestEvents.at(-1)?.timestamp;
       const action = deriveSessionAction(session.status);
       return {
         session: {
@@ -77,11 +138,11 @@ export function createSessionRouter(context: ServerContext) {
           runId,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
-          // get uses updatedAt as lastActivityAt (only status changes bump it);
-          // list aggregates max(session_events.timestamp). No client consumes
-          // get's lastActivityAt today — align the two if a detail view ever
-          // renders activity time (P1-04 review note).
-          lastActivityAt: session.updatedAt,
+          lastActivityAt: latestActivityTimestamp(
+            session.createdAt,
+            session.updatedAt,
+            ...(latestEventAt ? [latestEventAt] : []),
+          ),
           needsAction: action.needsAction,
           actionKind: action.actionKind,
         },
