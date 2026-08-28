@@ -1,14 +1,18 @@
 import { useCallback } from 'react';
 
-import { useQuery, useMutation, useAuthScope, useSessionToken } from '../../hooks/index.js';
+import {
+  useQuery,
+  useMutation,
+  useAuthScope,
+  useSessionToken,
+} from '../../hooks/index.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { queryKeys } from '../../lib/query-keys.js';
-import {
-  deriveSessionSidePanel,
-  type SidePanelCard,
+import type {
+  SidePanelCard,
+  SidePanelState,
 } from '../../lib/session-side-panel.js';
-import type { StreamEvent } from '../../lib/session-stream.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 import type { DecisionInput, DecisionOutput } from '../../../shared/api-types.js';
 
@@ -17,9 +21,9 @@ import { DecisionCard } from '../approvals/DecisionCard.js';
 import { CodeBlock } from '../ui/CodeBlock.js';
 
 // Phase 3 3c: right rail — run controls + inline approval + result cards,
-// driven by the session event stream. inline approval reuses DecisionCard and
-// routes decisions through the existing gate.approve/reject RPCs, so CAS/audit
-// semantics are unchanged (§0.3 — the client is a new entry point, not a bypass).
+// driven by the session event stream. The page owns the pure event projection
+// so the header and right rail consume one coherent live state instead of
+// independently scanning and interpreting the same history.
 
 const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
   artifact: '产物',
@@ -28,11 +32,10 @@ const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
   result: '结果',
 };
 
-export function SessionSidePanel({ events }: { events: StreamEvent[] }) {
+export function SessionSidePanel({ state }: { state: SidePanelState }) {
   const scope = useAuthScope();
   const { token } = useSessionToken();
   const flash = useFlash();
-  const state = deriveSessionSidePanel(events);
   const runId = state.runId;
 
   // Full decision context (risk, command, approvalSummary) lives in gate.list —
@@ -43,7 +46,9 @@ export function SessionSidePanel({ events }: { events: StreamEvent[] }) {
   const { data: gateData, refetch } = useQuery<
     RpcProcedureMap['gate.list']['output']
   >(
-    runId && state.hasPendingApproval ? queryKeys.gateResults(runId, scope) : null,
+    runId && state.hasPendingApproval
+      ? queryKeys.gateResults(runId, scope)
+      : null,
     () => rpc.call('gate.list', { runId: runId! }),
   );
 
@@ -104,7 +109,10 @@ export function SessionSidePanel({ events }: { events: StreamEvent[] }) {
       {runId ? (
         <div className="card session-side-controls">
           <div className="card-body">
-            <RunControls runId={runId} status={state.runStatus ?? 'running'} />
+            <RunControls
+              runId={runId}
+              status={state.runStatus ?? 'running'}
+            />
           </div>
         </div>
       ) : null}
@@ -116,8 +124,12 @@ export function SessionSidePanel({ events }: { events: StreamEvent[] }) {
               key={decision.id}
               decision={decision}
               isPending={isPending}
-              onApprove={(id, note) => decide(approveMutation, 'approved', id, note)}
-              onReject={(id, note) => decide(rejectMutation, 'rejected', id, note)}
+              onApprove={(id, note) =>
+                decide(approveMutation, 'approved', id, note)
+              }
+              onReject={(id, note) =>
+                decide(rejectMutation, 'rejected', id, note)
+              }
             />
           ))}
         </div>
@@ -126,13 +138,20 @@ export function SessionSidePanel({ events }: { events: StreamEvent[] }) {
       {state.cards.length > 0 ? (
         <div className="session-side-cards">
           {state.cards.map((card) => (
-            <div className={`card session-card session-card-${card.kind}`} key={card.seq}>
+            <div
+              className={`card session-card session-card-${card.kind}`}
+              key={card.seq}
+            >
               <div className="card-body">
                 <div className="session-card-head">
-                  <span className="session-card-kind">{CARD_LABEL[card.kind]}</span>
+                  <span className="session-card-kind">
+                    {CARD_LABEL[card.kind]}
+                  </span>
                   <span className="session-card-title">{card.title}</span>
                 </div>
-                {card.detail ? <CodeBlock content={card.detail} truncated /> : null}
+                {card.detail ? (
+                  <CodeBlock content={card.detail} truncated />
+                ) : null}
               </div>
             </div>
           ))}
