@@ -1,137 +1,1051 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tekon 人类可用性与 Harness 架构第二轮全面复审</title>
-<style>
-:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#d8dee9;--paper:#fff;--soft:#f5f7fb;--navy:#16233f;--blue:#2859a8;--red:#a12a2a;--amber:#8b5700;--green:#216e45;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#eef2f7;color:var(--ink);line-height:1.72}.hero{background:linear-gradient(135deg,#111d36,#233f70);color:#fff;padding:58px max(22px,calc((100vw - 1120px)/2))}.eyebrow{font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;opacity:.72}.hero h1{max-width:940px;margin:.5rem 0 .8rem;font-size:clamp(2rem,4vw,3.55rem);line-height:1.12}.hero p{max-width:850px;color:#dce5f5;margin:.35rem 0}.verdict{display:inline-block;margin-top:20px;padding:8px 13px;border:1px solid #ffc0c0;border-radius:999px;background:#4e232b;font-weight:750}.shell{max-width:1120px;margin:0 auto;padding:28px 20px 72px}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);margin-bottom:20px;box-shadow:0 14px 34px rgba(25,38,60,.07)}h2{margin:0 0 17px;font-size:1.55rem}h3{margin:24px 0 7px;font-size:1.08rem}p,li{max-width:88ch}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.metric{padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.metric strong{display:block;margin-bottom:5px}.p0{border-left:5px solid var(--red)}.p1{border-left:5px solid var(--amber)}.pass{border-left:5px solid var(--green)}table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:11px 9px}th{background:var(--soft)}code{font-family:"SFMono-Regular",Consolas,monospace;background:#edf1f7;padding:.1em .35em;border-radius:5px;font-size:.9em}pre{overflow:auto;background:#101827;color:#e9eef8;padding:15px;border-radius:10px}a{color:var(--blue)}.tags{margin:10px 0}.tag{display:inline-block;margin:0 5px 5px 0;padding:3px 8px;border-radius:999px;background:#eaf0fa;color:#244f8d;font-size:.82rem}.small{font-size:.88rem;color:var(--muted)}@media(max-width:760px){.hero{padding:38px 22px}.shell{padding:18px 12px 48px}.grid{grid-template-columns:1fr}.card{border-radius:12px;padding:20px 17px}table{display:block;overflow-x:auto}}@media print{body{background:#fff}.hero{background:#fff;color:#000;padding:0 0 24px}.hero p{color:#444}.verdict{background:#fff;color:#000;border-color:#666}.shell{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid}}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tekon 人类可用性与 Harness 架构第二轮全面复审</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0f172a;
+      --bg-page: #f8fafc;
+      --surface: #ffffff;
+      --surface-subtle: #f1f5f9;
+      --line: #e2e8f0;
+      --line-dark: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-sub: #64748b;
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --accent-border: #bfdbfe;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --success: #15803d;
+      --success-bg: #f0fdf4;
+      --success-border: #bbf7d0;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: var(--bg-page);
+      line-height: 1.75;
+      font-size: 15px;
+    }
+
+    /* Header & Hero */
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #f8fafc;
+      padding: 48px 24px 40px;
+      border-bottom: 1px solid #334155;
+    }
+    .hero-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+    .hero h1 {
+      margin: 0 0 14px;
+      font-size: clamp(1.85rem, 3.5vw, 2.75rem);
+      line-height: 1.2;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+    .hero p {
+      max-width: 860px;
+      margin: 0 0 20px;
+      color: #cbd5e1;
+      font-size: 1.02rem;
+      line-height: 1.65;
+    }
+    .meta-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 12px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 0.82rem;
+      color: #e2e8f0;
+    }
+    .meta-chip code {
+      color: #38bdf8;
+      background: transparent;
+      padding: 0 4px;
+      font-family: var(--font-mono);
+    }
+    .verdict-banner {
+      margin-top: 24px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      background: #450a0a;
+      border: 1px solid #991b1b;
+      color: #fecaca;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.95rem;
+    }
+    .verdict-banner span.tag-fail {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #dc2626;
+      color: #ffffff;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .verdict-banner span.tag-info {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 0.78rem;
+      letter-spacing: 0.05em;
+    }
+
+    /* Layout */
+    .layout {
+      max-width: 1160px;
+      margin: 32px auto 80px;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      gap: 36px;
+      align-items: start;
+    }
+
+    /* Sidebar TOC */
+    .toc-sidebar {
+      position: sticky;
+      top: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+      font-size: 0.88rem;
+    }
+    .toc-title {
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+    }
+    .toc-nav {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .toc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      display: block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .toc-nav a:hover {
+      background: var(--surface-subtle);
+      color: var(--accent);
+    }
+    .toc-subnav {
+      list-style: none;
+      padding-left: 14px;
+      margin: 4px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toc-subnav a {
+      font-size: 0.82rem;
+      color: var(--text-sub);
+    }
+
+    /* Main Content */
+    .content {
+      min-width: 0;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 28px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .card-title {
+      font-size: 1.4rem;
+      font-weight: 750;
+      margin: 0 0 20px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+    h3 {
+      font-size: 1.12rem;
+      font-weight: 700;
+      margin: 24px 0 12px;
+      color: var(--text-main);
+    }
+    h4 {
+      font-size: 1rem;
+      font-weight: 650;
+      margin: 18px 0 8px;
+      color: var(--text-main);
+    }
+    p {
+      margin: 0 0 14px;
+      color: var(--text-main);
+    }
+    ul, ol {
+      margin: 0 0 16px;
+      padding-left: 22px;
+    }
+    li {
+      margin-bottom: 6px;
+    }
+
+    /* Metrics & Highlight Grids */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .metric-box {
+      background: var(--surface-subtle);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .metric-box.danger {
+      border-left: 4px solid var(--danger);
+      background: var(--danger-bg);
+    }
+    .metric-box.warn {
+      border-left: 4px solid var(--warn);
+      background: var(--warn-bg);
+    }
+    .metric-box.success {
+      border-left: 4px solid var(--success);
+      background: var(--success-bg);
+    }
+    .metric-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+    .metric-desc {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Callout & Note Blocks */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      border: 1px solid transparent;
+      font-size: 0.92rem;
+    }
+    .callout-info {
+      background: var(--accent-light);
+      border-color: var(--accent-border);
+      color: #1e3a8a;
+    }
+    .callout-warn {
+      background: var(--warn-bg);
+      border-color: var(--warn-border);
+      color: #78350f;
+    }
+    .callout-danger {
+      background: var(--danger-bg);
+      border-color: var(--danger-border);
+      color: #7f1d1d;
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      margin: 18px 0 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      text-align: left;
+    }
+    th {
+      background: var(--surface-subtle);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      color: var(--text-main);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:nth-child(even) {
+      background: #fafbfc;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .badge-pass {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+    }
+    .badge-warn {
+      background: var(--warn-bg);
+      color: var(--warn);
+      border: 1px solid var(--warn-border);
+    }
+    .badge-fail {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid var(--danger-border);
+    }
+    .badge-info {
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+    .badge-neutral {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+
+    /* Code & Pre */
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+    }
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 14px 0 18px;
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border: none;
+    }
+
+    /* Checklists */
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+      margin: 14px 0;
+    }
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px dashed var(--line);
+      font-size: 0.92rem;
+    }
+    .checklist-item:last-child {
+      border-bottom: none;
+    }
+    .check-icon-no {
+      color: var(--danger);
+      font-weight: 700;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+      .toc-sidebar {
+        display: none;
+      }
+    }
+  </style>
 </head>
 <body>
+
 <header class="hero">
-<div class="eyebrow">Tekon · Follow-up Repository Review · 2026-08-28</div>
-<h1>人类可用性与 Harness 架构第二轮全面复审</h1>
-<p>基于 PR #11 最新整改重新评估产品逻辑、CLI/Web UI、UX、Session/Runtime、代码质量、DeepSeek Harness 对齐与过度设计。</p>
-<p>实现提交：<code>6da5ee1801f61c8b633f92c42c6dfc12bc41f50c</code></p>
-<div class="verdict">稳定产品验收：不通过 · 实验性基础设施与低风险改进：可继续审阅</div>
+  <div class="hero-inner">
+    <div class="eyebrow">Tekon · Follow-up Architecture & Usability Review · 2026-08-28</div>
+    <h1>人类可用性与 Harness 架构第二轮全面复审</h1>
+    <p>基于 PR #11 最新整改重新评估产品逻辑、CLI/Web UI、UX、Session/Runtime 架构、代码质量、DeepSeek Harness 对齐与过度设计。</p>
+    <div class="meta-chips">
+      <div class="meta-chip">复审日期：2026-08-28</div>
+      <div class="meta-chip">复审对象：<code>review/human-first-harness-2026-08-28@cad6190</code></div>
+      <div class="meta-chip">本轮实现提交：<code>6da5ee1801f61c8b</code></div>
+      <div class="meta-chip">对应 PR：#11</div>
+      <div class="meta-chip">对照基线：<code>main@300aea6</code></div>
+      <div class="meta-chip">CI 验证：Core #273 / CI #182 Success (114 files, 1317 passed)</div>
+    </div>
+    <div class="verdict-banner">
+      <span class="tag-fail">产品验收：不通过</span>
+      <span class="tag-info">代码/合并门：可审阅</span>
+      <span>本轮新增改动总体方向正确，但仍不能通过“面向普通人稳定可用”的产品验收；PR 作为实验性基础设施与低风险 UX 改进可进入代码审阅。</span>
+    </div>
+  </div>
 </header>
-<main class="shell">
-<section class="card">
-<h2>执行摘要</h2>
-<div class="grid">
-<div class="metric"><strong>整改真实有效</strong>CLI 无参数入口、帮助首屏、产品版本身份和 Session 行动提示均有实质改善。</div>
-<div class="metric"><strong>P1-04 原实现仅部分闭环</strong>有行动徽标但未行动优先；list/get 的 <code>lastActivityAt</code> 语义不一致。</div>
-<div class="metric"><strong>本轮已补强</strong>行动任务优先、状态更新时间兜底、list/get 统一语义、确定性测试和中文日期。</div>
-<div class="metric"><strong>核心 P0 仍在</strong>无单一 Runtime owner、非 quiescent shutdown、无 authoritative Session log / durable inbox。</div>
-</div>
-</section>
-<section class="card pass">
-<h2>对最新整改的裁决</h2>
-<table>
-<thead><tr><th>项目</th><th>裁决</th><th>理由</th></tr></thead>
-<tbody>
-<tr><td>CLI 无参数入口</td><td><strong>通过</strong></td><td>空命令交给完整帮助并返回 0，首次探索不再是错误。</td></tr>
-<tr><td>人类优先帮助</td><td><strong>通过</strong></td><td><code>tekon ui</code>、直接 run 和高级帮助前置，命令树仍保留。</td></tr>
-<tr><td>产品版本身份</td><td><strong>通过</strong></td><td>CLI 与 installer/updater 都读取根 <code>package.json</code>。</td></tr>
-<tr><td>Session 行动投影</td><td><strong>部分通过，已补强</strong></td><td>用户版本只显示徽标；本轮加入 attention ranking 与可靠活动时间。</td></tr>
-<tr><td>P1-04 整体关闭</td><td><strong>不接受</strong></td><td>未读、全局实时刷新、列表分页和长 Session 查询性能仍未完成。</td></tr>
-<tr><td>首轮 P0-01 措辞</td><td><strong>接受订正</strong></td><td>现有 Deliver 合同基本成立；真正缺失的是 Collaborate 产品轨道。</td></tr>
-</tbody>
-</table>
-</section>
-<section class="card p0">
-<h2>P0：稳定产品仍不能通过的原因</h2>
-<h3>1. Runtime 没有单一执行权威</h3>
-<p>Web 与 CLI 都能启动 JobRunner，并共享 SQLite、Git refs、worktree、运行目录与子进程。Job owner 条件写和 Git CAS 只覆盖局部，无法贯穿 Node、Artifact、Gate、Audit、Delivery、文件和进程副作用。</p>
-<h3>2. Shutdown 不是 quiescent shutdown</h3>
-<p><code>job-runner.stop()</code> 在固定等待后清理进程内状态，无法证明 provider、子进程、Git/文件写入和异步 listener 已全部停止。</p>
-<h3>3. Session Event 仍是 best-effort projection</h3>
-<p>旧领域表先成功，Session Event 追加失败不影响主路径。这对观察面合理，但不能承担模型历史、durable inbox、follow-up/steer、fork、resume 与完整 replay。</p>
-<h3>4. 持续协作轨道尚不存在</h3>
-<p>当前 Deliver 路径文案诚实，但 Composer 只能创建新 run；<code>followUp</code>、<code>steer</code>、<code>resume</code> 仍未生产实现，Provider 事件也不是执行期真实流。</p>
-</section>
-<section class="card p1">
-<h2>P1：产品与实现问题</h2>
-<ul>
-<li><strong>列表非全局实时</strong>：只在 Session detail 的 SSE 事件到达时 invalidate 列表，停留在列表页仍依赖刷新。</li>
-<li><strong>相对时间静止</strong>：“刚刚 / N 分钟前”不会随时间自行推进。</li>
-<li><strong>Deliver 缺少启动前预览</strong>：角色、Gate、Provider、网络、超时、成本影响因素和审批点不可见。</li>
-<li><strong>Token 暴露实现细节</strong>：应最终收敛为连接状态和显式重新授权。</li>
-<li><strong>列表查询随历史增长</strong>：当前 <code>LEFT JOIN + max(timestamp) + group by</code> 每次聚合事件历史。</li>
-<li><strong>长 Session 无有界合同</strong>：分页、虚拟化、摘要、turn 导航和上下文压力仍缺失。</li>
-<li><strong>术语偏工程内部</strong>：Session/Event/Job/Profile/Gate 应退出普通用户主路径。</li>
-<li><strong>DSH bridge 仍是旧 one-shot 边界</strong>：固定 <code>0.1.1-rc.2</code>，尚未重新评估 SDK/ACP。</li>
-</ul>
-</section>
-<section class="card">
-<h2>本轮直接修改</h2>
-<ol>
-<li>服务端排序改为 <code>needsAction → active → idle → terminal</code>，同组按最近活动倒序。</li>
-<li><code>lastActivityAt</code> 同时考虑创建时间、状态更新时间和事件尾部，list/get 语义一致。</li>
-<li>API 测试移除 20ms 定时等待，使用固定 ISO 时间验证排序和 fallback。</li>
-<li>行动标签改为 <code>SessionActionKind</code> 闭集；绝对日期固定 <code>zh-CN</code>。</li>
-<li>重新生成报告，修正“现有合同完全无效”、P1-04 过度关闭和不存在的源码路径引用。</li>
-</ol>
-<pre><code>needsAction
+
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="toc-title">目录导航</div>
+    <ul class="toc-nav">
+      <li><a href="#s1">1. 执行摘要</a></li>
+      <li><a href="#s2">2. 复审方法与范围</a></li>
+      <li><a href="#s3">3. 最新整改逐项裁决</a></li>
+      <li><a href="#s4">4. 产品逻辑与定位</a></li>
+      <li><a href="#s5">5. UI 与 UX 复审</a></li>
+      <li><a href="#s6">6. 框架与 Runtime 架构</a></li>
+      <li><a href="#s7">7. 代码实现与测试质量</a></li>
+      <li><a href="#s8">8. DeepSeek Harness 对齐</a></li>
+      <li><a href="#s9">9. 过度实现与过度设计</a></li>
+      <li><a href="#s10">10. 本轮直接修改</a></li>
+      <li><a href="#s11">11. 推荐实施顺序</a></li>
+      <li><a href="#s12">12. 验证与验收结论</a></li>
+      <li><a href="#s13">13. 复审视角批注</a></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+    <!-- Section 1 -->
+    <section class="card" id="s1">
+      <h2 class="card-title">1. 执行摘要</h2>
+      <p>最新改动真实改善了两件事：</p>
+      <ol>
+        <li>CLI 无参数入口、帮助首屏和产品版本身份已经明显更适合人类使用；</li>
+        <li>Session 列表开始展示最近活动和“待审批 / 待输入 / 需处理”，不再只是静态创建时间列表。</li>
+      </ol>
+      <p>但复核后确认，第二项在用户推送的版本中仍是<strong>部分闭环</strong>：</p>
+      <div class="metric-grid">
+        <div class="metric-box warn">
+          <div class="metric-title">排序未置顶待处理任务</div>
+          <div class="metric-desc">服务端虽然派生了 <code>needsAction</code>，列表却仍主要按最近事件排序，最新的普通运行可能压过待审批任务。</div>
+        </div>
+        <div class="metric-box warn">
+          <div class="metric-title">lastActivityAt 双重语义</div>
+          <div class="metric-desc"><code>session.list.lastActivityAt</code> 使用最新事件，而 <code>session.get.lastActivityAt</code> 仅使用 <code>updatedAt</code>，同一字段存在两种语义。</div>
+        </div>
+        <div class="metric-box warn">
+          <div class="metric-title">更新时间可能被忽略</div>
+          <div class="metric-desc">列表聚合只看事件时间，状态变化的 <code>updated_at</code> 可能被忽略；当 best-effort Event projection 丢失时，行动状态不会可靠置顶。</div>
+        </div>
+        <div class="metric-box warn">
+          <div class="metric-title">列表查询随事件历史全聚合</div>
+          <div class="metric-desc"><code>LEFT JOIN + max(timestamp) + group by</code> 随事件总量增长，每次打开列表都重新聚合完整事件历史。</div>
+        </div>
+      </div>
+      <p>本轮已顺手把前三项可低风险关闭的内容补齐，并把测试从任意 <code>setTimeout(20ms)</code> 改为确定性时间数据。事件聚合性能、未读语义和全局实时列表属于后续规模化工作，不能在报告中写成 P1-04 整体已完成。</p>
+      <div class="callout callout-info">
+        <strong>整体产品判断</strong>：Tekon 当前是一个边界诚实、测试较强的<strong>受控交付执行与观察工具</strong>，还不是一个可持续追问、转向、恢复并逐步升级到交付的通用协作工作台。
+      </div>
+    </section>
+
+    <!-- Section 2 -->
+    <section class="card" id="s2">
+      <h2 class="card-title">2. 复审方法与范围</h2>
+      <p>本轮重新检查了：</p>
+      <ul>
+        <li><strong>产品说明与边界</strong>：<code>README.md</code>、用户手册、当前范围基线、近期评审报告；</li>
+        <li><strong>CLI</strong>：无参数入口、帮助、版本、初始化、run、状态与交付命令；</li>
+        <li><strong>Web</strong>：Session 列表/详情、Composer、EventFeed、Token、RPC/SSE、审批与运行控制；</li>
+        <li><strong>Core</strong>：Session store、Job runner、SessionService、workflow executor、dual-write、AgentDriver、Provider/DSH bridge；</li>
+        <li><strong>测试与发布</strong>：Core/CLI/Web 测试、Playwright、CI、版本与报告一致性；</li>
+        <li><strong>外部基线</strong>：DeepSeek Harness 官方 Architecture、Agent Lifecycle、Persistence、Safety 和最新 prerelease。</li>
+      </ul>
+      <p>这是“仓库级结构覆盖 + 关键产品/运行路径代码级深读”，不宣称逐行审阅每个辅助文件。本轮没有新的本地已部署实例可供全站像素级视觉巡检，因此 UI 判断以实现、契约、已有 Playwright 与用户已记录的截图验证为依据。</p>
+    </section>
+
+    <!-- Section 3 -->
+    <section class="card" id="s3">
+      <h2 class="card-title">3. 对最新整改的逐项裁决</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 220px;">整改项</th>
+              <th style="width: 140px;">裁决</th>
+              <th>理由与依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>CLI 无参数显示帮助并返回 0</strong></td>
+              <td><span class="badge badge-pass">通过</span></td>
+              <td><code>packages/cli/src/index.ts</code> 已把空命令交给 <code>commandHelp</code>，测试锁定与 <code>tekon help</code> 等价。首次探索不再被当作用法错误。</td>
+            </tr>
+            <tr>
+              <td><strong>帮助页前置人类路径</strong></td>
+              <td><span class="badge badge-pass">通过</span></td>
+              <td><code>packages/cli/src/commands/help.ts</code> 首屏先给 <code>tekon ui</code>、直接 run 和高级帮助，完整命令树仍保留。</td>
+            </tr>
+            <tr>
+              <td><strong>CLI / updater 统一产品版本</strong></td>
+              <td><span class="badge badge-pass">通过（用户可见）</span></td>
+              <td><code>packages/cli/src/lib/utils.ts</code> 改读根 <code>package.json</code>；私有 workspace 包仍保留内部 <code>0.7.0</code>，但不再作为 CLI 产品版本展示。</td>
+            </tr>
+            <tr>
+              <td><strong>Session 最近活动排序</strong></td>
+              <td><span class="badge badge-warn">部分通过，已补强</span></td>
+              <td>用户版本按事件最新时间排序，但忽略 status-only <code>updated_at</code>；本轮将两者取最大值。</td>
+            </tr>
+            <tr>
+              <td><strong>needsAction / actionKind</strong></td>
+              <td><span class="badge badge-warn">部分通过，已补强</span></td>
+              <td>用户版本只显示徽标，没有把需人处理的 Session 排到普通活动前；本轮新增稳定 attention ranking。</td>
+            </tr>
+            <tr>
+              <td><strong>session.get.lastActivityAt</strong></td>
+              <td><span class="badge badge-fail">未通过，本轮修复</span></td>
+              <td>用户版本明确注释 list/get 语义不同；本轮读取事件尾部并与 <code>updatedAt</code> 取最新，统一字段合同。</td>
+            </tr>
+            <tr>
+              <td><strong>P1-04 整体关闭</strong></td>
+              <td><span class="badge badge-fail">不接受</span></td>
+              <td>行动排序当前范围可关闭，但 unread、changedSinceSeen、全局实时刷新和大规模查询仍缺失。</td>
+            </tr>
+            <tr>
+              <td><strong>首轮报告 P0-01 表述</strong></td>
+              <td><span class="badge badge-info">接受整改意见</span></td>
+              <td>“现有受控交付合同不成立”过强。当前 Deliver 路径文案诚实、流程成立；真正缺失的是 Collaborate 产品轨道，而不是现有 Deliver 全部无效。</td>
+            </tr>
+            <tr>
+              <td><strong>报告代码依据</strong></td>
+              <td><span class="badge badge-pass">需修正，已修正</span></td>
+              <td>原批注引用 <code>packages/core/src/workflow/goal-job-executor.ts</code>，该文件不存在。Goal 实际由 <code>workflows/goal.yaml</code>、Goal role 与 <code>workflow-job-executor.ts</code> 的 <code>goal-run</code> 分支驱动。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 4 -->
+    <section class="card" id="s4">
+      <h2 class="card-title">4. 产品逻辑与定位</h2>
+      <h3>4.1 已成立的产品合同</h3>
+      <p>Tekon 当前对“受控交付”的描述基本诚实：</p>
+      <ul>
+        <li>默认启动完整 <code>standard-delivery</code>；</li>
+        <li>需求、角色、Gate、Artifact、审批和 PR 创建均有明确边界；</li>
+        <li>PR 创建仍要求显式人工批准；</li>
+        <li>README 和 Composer 已写明它不是轻量对话，也没有同 Session 追问/转向。</li>
+      </ul>
+      <p>因此，本轮不再使用“Session 产品合同完全不成立”这一过强结论。</p>
+
+      <h3>4.2 仍未成立的更大产品目标</h3>
+      <p>如果目标是“人类可自然进入并持续使用的研发工作台”，仍缺少最核心的纵向闭环：</p>
+      <pre><code>提出问题
+→ 看到真实执行期输出
+→ 继续补充 / 纠偏 / 转向
+→ 刷新或重启后恢复
+→ 明确升级为 Deliver
+→ 进入现有治理和 PR 链路</code></pre>
+      <p>当前 Composer 只创建新 run；<code>LegacyAgentDriver.followUp()</code>、<code>steer()</code>、<code>resume()</code> 仍抛 <code>NotSupportedYet</code>；<code>agent-step-events.ts</code> 仍在 <code>runAgent()</code> 完成后合成 step/tool/assistant 事件。这说明 Tekon 已经能“跑一次受控流程”，但还不能“和人持续协作”。</p>
+
+      <h3>4.3 结论</h3>
+      <ul>
+        <li><strong>Deliver 产品轨道</strong>：实验性可用，合同基本成立；</li>
+        <li><strong>Collaborate 产品轨道</strong>：尚未实现；</li>
+        <li><strong>面向普通人的稳定研发工作台</strong>：不通过。</li>
+      </ul>
+    </section>
+
+    <!-- Section 5 -->
+    <section class="card" id="s5">
+      <h2 class="card-title">5. UI 与 UX 复审</h2>
+      <h3>做得更好的部分</h3>
+      <ul>
+        <li>无参数 CLI 入口从错误提示变成可发现首页；</li>
+        <li>Session 列表增加行动徽标与相对时间，信息密度更接近任务中心；</li>
+        <li>受控交付、技术事件开关、状态徽标、移动端抽屉和基础可访问性方向正确；</li>
+        <li>旧 Cockpit 放入 <code>/advanced</code>，默认入口不再直接暴露所有治理内部结构。</li>
+      </ul>
+
+      <h3>仍存在的问题</h3>
+      <h4>P1-UX-01：列表不是全局实时任务中心</h4>
+      <p><code>useSessionStream</code> 只在打开某个 Session detail 时订阅该 Session，并在特定事件到达时 invalidate <code>session.list</code>。用户停留在列表页时没有全局事件订阅，仍依赖手动刷新或其他查询失效。因此“行动任务自动置顶”是<strong>下一次查询时正确</strong>，不是任务中心级实时能力。</p>
+      <p class="callout callout-info">建议：后续由 daemon / workspace event stream 推送轻量 Session summary 变化，而不是为列表页打开每个 Session 的 SSE。</p>
+
+      <h4>P1-UX-02：相对时间不会自行推进</h4>
+      <p><code>SessionsPage</code> 的“刚刚 / N 分钟前”只在 React 重新渲染时计算。长时间停留页面不会自动从“刚刚”更新为“5 分钟前”。这是低严重度体验问题，可用分钟级共享 ticker 解决，不应为每行创建 timer。</p>
+
+      <h4>P1-UX-03：启动完整 Deliver 前缺少预览</h4>
+      <p><code>tekon run "需求"</code> 与 Web 主按钮会直接进入完整链路，用户点击前仍看不到：角色、节点和关键 Gate；Provider、网络、超时和工作区边界；是否会产生多次模型调用；轻量替代路径；潜在人工审批点。</p>
+      <p>建议在启动前提供简洁 run plan；不需要虚假精确的 token/价格估计，只需明确规模和成本影响因素。</p>
+
+      <h4>P1-UX-04：Token 仍是产品表面的一等控件</h4>
+      <p>URL fragment bootstrap 对本地工具合理，但普通用户长期看到 Token 字符串输入框仍暴露实现细节。自动应用虽有 350ms debounce，仍不等于显式确认。建议最终迁移到“已连接 / 连接失败 / 重新授权”的状态化 UI，手工替换放入高级安全设置。</p>
+
+      <h4>P1-UX-05：产品术语仍偏工程内部</h4>
+      <p>Session、Event、Job、Profile、Gate、Advanced 等术语仍直接出现在普通用户路径。建议产品层统一为“任务、过程、审批、结果、交付”，技术词只出现在诊断和高级页。</p>
+    </section>
+
+    <!-- Section 6 -->
+    <section class="card" id="s6">
+      <h2 class="card-title">6. 整体框架与 Runtime 架构</h2>
+      <h3>P0-ARCH-01：执行所有权仍未闭环</h3>
+      <p>事实：Web composition root 会启动 JobRunner；CLI run/resume 也会创建并启动 JobRunner；两者共享项目 SQLite、Git refs、worktree、运行目录和子进程世界；Job owner/status 条件写与 Git ref CAS 只能保护部分写入；Node、Artifact、Gate、Audit、Delivery、文件和子进程没有同一个持久 generation authority。</p>
+      <p><strong>风险</strong>：进程停顿、租约过期和重新领取后，旧执行仍可能在下一次检查前写入共享副作用。</p>
+      <p class="callout callout-warn">建议仍是 <strong>single-owner daemon 优先</strong>：一个 repo 一个 Runtime；CLI/Web/IDE 都是客户端。只有明确需要高可用多 owner 时，才承担完整 generation fencing 成本。</p>
+
+      <h3>P0-ARCH-02：Shutdown 仍非 quiescent</h3>
+      <p><code>job-runner.stop()` 最多等待固定时间后清理进程内 Map。清引用不等于 provider、subprocess、Git/文件写入和异步 listener 已全部停止。</p>
+      <p><strong>通过条件</strong>：停止领取、持久取消/暂停、abort、kill、join、flush、最终状态写入、证明无 late write，然后才关闭 DB/进程。</p>
+
+      <h3>P0-ARCH-03：Session Event 仍是观察投影，不是 Harness 式事实源</h3>
+      <p><code>dual-write.ts</code> 明确采用“旧领域表先成功，Session Event best-effort 追加”。这对迁移期 observability 合理，但不能同时承担模型历史、durable inbox、follow-up/steer 消费记录、crash resume、fork / transcript 与完整 replay。</p>
+      <p>后续必须二选一：(1) 保留旧领域表为治理事实源，把 Session Event 明确限制为 UI projection；或 (2) 让对话域采用 authoritative append-only log，并以事务/outbox 投影到治理域。不要继续让同一 Event 名词同时暗示两种可靠性等级。</p>
+    </section>
+
+    <!-- Section 7 -->
+    <section class="card" id="s7">
+      <h2 class="card-title">7. 代码实现与测试质量</h2>
+      <h3>7.1 本轮新增代码的优点</h3>
+      <ul>
+        <li><code>deriveSessionAction</code> 集中在服务端，客户端没有从零散事件重复推断；</li>
+        <li>RPC schema 明确增加 <code>lastActivityAt / needsAction / actionKind</code>；</li>
+        <li>E2E 覆盖了真实待审批徽标；</li>
+        <li>Core/CI 在用户最新 Head 上均已通过，说明新增路径至少没有破坏现有构建门。</li>
+      </ul>
+
+      <h3>7.2 本轮发现并修复的实现问题</h3>
+      <h4>CODE-01：行动语义未参与排序</h4>
+      <p>用户版本先按事件时间排序，再附加 <code>needsAction</code> 字段；这会让刚产生普通技术事件的 active Session 压过较早的待审批 Session。本轮修复：服务端按 attention rank 排序：</p>
+      <pre><code>needsAction → active → idle → terminal history</code></pre>
+      <p>同一组内继续按 <code>lastActivityAt</code> 降序。</p>
+
+      <h4>CODE-02：lastActivityAt 双重语义</h4>
+      <p>用户版本：list = <code>max(session_events.timestamp)</code>；get = <code>sessions.updated_at</code>。本轮修复：list/get 均取“创建、状态更新时间、最新事件时间”的最大值。这样 status-only 改变和 best-effort event 缺失都不会让行动状态显得陈旧。</p>
+
+      <h4>CODE-03：测试依赖 20ms sleep</h4>
+      <p>新增 Core/API 测试用 <code>setTimeout(20ms)</code> 制造时间顺序，容易在高负载 CI 上形成偶发失败，也没有精确说明测试意图。本轮 API 测试改为直接写入固定 ISO 时间，确定性证明排序与 fallback 合同。</p>
+
+      <h3>7.3 仍需保留的问题</h3>
+      <h4>P1-PERF-01：Session 列表查询随事件历史增长</h4>
+      <p>当前 Core 查询使用 <code>LEFT JOIN session_events + max(e.timestamp) + group by session</code>。现有索引是 <code>(session_id, seq)</code>，不是面向 <code>max(timestamp)</code> 的列表快照索引。随着长 Session 增长，每次列表请求会重新聚合历史事件。</p>
+      <p>推荐方案：在 Session summary 表持久维护 <code>last_activity_at</code>；或使用 <code>(session_id, seq desc)</code> 相关子查询反向扫描取尾，并以 <code>updated_at</code> 作为可靠 fallback。</p>
+    </section>
+
+    <!-- Section 8 -->
+    <section class="card" id="s8">
+      <h2 class="card-title">8. DeepSeek Harness 对齐复审</h2>
+      <p>官方架构把 Session log 作为模型上下文、replay、fork、resume 和 transcript 的来源，并把 durable Session events 与 live Agent events 分离。当前 profiles 包括 web、headless、sdk、sdk-minimal、acp；最新 prerelease 继续增强运行中消息排队、回合导航、token 用量和 ACP 会话控制。</p>
+      <ul>
+        <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md" target="_blank" rel="noopener">Architecture</a></li>
+        <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/agent-lifecycle.md" target="_blank" rel="noopener">Agent lifecycle</a></li>
+        <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/persistence.md" target="_blank" rel="noopener">Persistence</a></li>
+        <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md" target="_blank" rel="noopener">Safety</a></li>
+        <li><a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.1" target="_blank" rel="noopener">dsh-v0.1.2-alpha.1</a></li>
+      </ul>
+      <p>建议做一次小型 ADR 二选一：Tekon 保持 workflow authority、借 SDK/ACP 获取 Agent 能力；或采用 DSH Session authority、Tekon 只叠加 Deliver/governance。不要继续扩展“自建半套 Harness + headless one-shot”。</p>
+    </section>
+
+    <!-- Section 9 -->
+    <section class="card" id="s9">
+      <h2 class="card-title">9. 过度实现与过度设计判断</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 260px;">模块</th>
+              <th style="width: 200px;">当前成本</th>
+              <th style="width: 220px;">尚未兑现的核心收益</th>
+              <th>建议</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>LegacyAgentDriver</code></td>
+              <td>冻结接口、buffer、NotSupported 分支</td>
+              <td>无生产持续会话调用方</td>
+              <td>下一 Collaborate slice 真正使用，否则删除</td>
+            </tr>
+            <tr>
+              <td><code>Profile / Automation</code></td>
+              <td>策略矩阵、listener、额外 job kind</td>
+              <td>轻量协作尚不存在</td>
+              <td>暂停新增 profile 和 automation 类型</td>
+            </tr>
+            <tr>
+              <td><code>Goal mode</code></td>
+              <td>模板、角色、特殊治理边界</td>
+              <td>仍不是持续轻量会话</td>
+              <td>不继续扩展，优先 Collaborate</td>
+            </tr>
+            <tr>
+              <td><code>dual-write</code></td>
+              <td>两套事实词汇与失败语义</td>
+              <td>不能恢复/重建</td>
+              <td>限定为投影，或迁移到 outbox</td>
+            </tr>
+            <tr>
+              <td><code>Web/CLI composition root</code></td>
+              <td>重复装配且均能启动 runner</td>
+              <td>无单一 owner</td>
+              <td>收敛到 daemon composition root</td>
+            </tr>
+            <tr>
+              <td><code>dsh-headless ACL</code></td>
+              <td>版本 probe、环境隔离、one-shot 解析</td>
+              <td>无 streaming，仅 Goal</td>
+              <td>SDK/ACP ADR 后替换或删除</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>结论：代码局部质量不差，问题是<strong>系统级抽象顺序领先于用户闭环</strong>。下一阶段不应继续横向平台化。</p>
+    </section>
+
+    <!-- Section 10 -->
+    <section class="card" id="s10">
+      <h2 class="card-title">10. 本轮直接修改</h2>
+      <ol>
+        <li><strong>Session attention sorting</strong>：待审批、待输入、失败任务优先于普通 active/历史任务；同组按最近活动排序。</li>
+        <li><strong>统一 <code>lastActivityAt</code></strong>：list/get 同时考虑 <code>createdAt</code>、<code>updatedAt</code> 和事件尾部，消除字段双重语义。</li>
+        <li><strong>确定性 API 测试</strong>：移除 20ms 等待，固定时间数据验证行动优先、状态 fallback 和 get/list 一致性。</li>
+        <li><strong>类型与本地化收敛</strong>：行动标签使用 <code>SessionActionKind</code> 闭集，超过 7 天的日期固定使用 <code>zh-CN</code>。</li>
+        <li><strong>重新生成本报告</strong>：纠正 P0-01 过强措辞、P1-04 过度关闭和不存在的 <code>goal-job-executor.ts</code> 引用。</li>
+      </ol>
+      <pre><code>needsAction
 → active
 → idle
 → terminal history</code></pre>
-</section>
-<section class="card">
-<h2>DeepSeek Harness 对齐</h2>
-<p>官方架构把 Session log 作为模型上下文、replay、fork、resume 和 transcript 的来源，并把 durable Session events 与 live Agent events 分离。当前 profiles 包括 web、headless、sdk、sdk-minimal、acp；最新 prerelease 继续增强运行中消息排队、回合导航、token 用量和 ACP 会话控制。</p>
-<div class="tags"><span class="tag">authoritative session log</span><span class="tag">durable inbox</span><span class="tag">streaming</span><span class="tag">SDK / ACP</span><span class="tag">safety boundary</span></div>
-<ul>
-<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md">Architecture</a></li>
-<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/agent-lifecycle.md">Agent lifecycle</a></li>
-<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/persistence.md">Persistence</a></li>
-<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md">Safety</a></li>
-<li><a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.1">dsh-v0.1.2-alpha.1</a></li>
-</ul>
-<p>建议用 ADR 二选一：Tekon 保持 workflow authority、借 SDK/ACP 获取 Agent 能力；或采用 DSH Session authority、Tekon 只叠加 Deliver/governance。不要继续扩展“自建半套 Harness + headless one-shot”。</p>
-</section>
-<section class="card">
-<h2>过度设计裁决</h2>
-<table>
-<thead><tr><th>保留</th><th>冻结扩展</th></tr></thead>
-<tbody>
-<tr><td>Workflow / Gate / Artifact / Audit / Delivery</td><td>新的 Profile 与 Automation 类型</td></tr>
-<tr><td>SessionService 编排</td><td>未被生产持续会话使用的 LegacyAgentDriver</td></tr>
-<tr><td>Provider snapshot、Git CAS、审批边界</td><td>Goal 横向扩展</td></tr>
-<tr><td>竞态和状态机测试</td><td>更多 best-effort dual-write 事件</td></tr>
-<tr><td>现有 Deliver 治理资产</td><td>继续加固旧 dsh-headless ACL 而不做 SDK/ACP ADR</td></tr>
-</tbody>
-</table>
-<p>问题不是局部代码写得差，而是系统级抽象顺序领先于用户纵向闭环。</p>
-</section>
-<section class="card">
-<h2>推荐实施顺序</h2>
-<ol>
-<li><strong>Runtime authority</strong>：single-owner daemon、客户端化、quiescent shutdown。</li>
-<li><strong>Collaborate vertical slice</strong>：真实 streaming、durable inbox、follow-up/steer/cancel/resume、重启恢复。</li>
-<li><strong>Collaborate → Deliver</strong>：显式升级、run plan、复用现有治理链。</li>
-<li><strong>Scale and polish</strong>：summary projection、分页、虚拟化、未读和全局实时任务列表。</li>
-</ol>
-</section>
-<section class="card pass">
-<h2>验证结果</h2>
-<div class="grid">
-<div class="metric"><strong>Core #273</strong>success</div>
-<div class="metric"><strong>CI #182</strong>success</div>
-<div class="metric"><strong>Root</strong>build + typecheck 通过</div>
-<div class="metric"><strong>CLI</strong>unit + e2e 通过</div>
-<div class="metric"><strong>Web</strong>build + typecheck + unit 通过</div>
-<div class="metric"><strong>Playwright</strong>浏览器 E2E 通过</div>
+    </section>
+
+    <!-- Section 11 -->
+    <section class="card" id="s11">
+      <h2 class="card-title">11. 推荐实施顺序</h2>
+      <div class="metric-grid">
+        <div class="metric-box">
+          <div class="metric-title">A. Runtime authority</div>
+          <div class="metric-desc">repo single-owner daemon / lock → CLI/Web 客户端化 → quiescent shutdown → 故障注入验证。</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-title">B. Collaborate vertical slice</div>
+          <div class="metric-desc">真实 streaming → durable inbox → follow-up / steer / cancel / resume → 进程重启恢复 → 真实 Provider E2E。</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-title">C. Collaborate → Deliver</div>
+          <div class="metric-desc">明确模式升级 → run plan 预览与成本影响 → 接入现有 Artifact/Gate/Delivery → outbox 事实源连接。</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-title">D. Scale and polish</div>
+          <div class="metric-desc">Session summary projection 与分页 → turn 导航与虚拟化 → 未读/已读与全局实时任务列表 → 词汇标准化。</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 12 -->
+    <section class="card" id="s12">
+      <h2 class="card-title">12. 验证与验收结论</h2>
+      <h3>PR / 代码合并门</h3>
+      <div class="metric-grid">
+        <div class="metric-box success"><div class="metric-title">CLI UX 改进</div><div class="metric-desc">通过</div></div>
+        <div class="metric-box success"><div class="metric-title">版本身份统一</div><div class="metric-desc">通过</div></div>
+        <div class="metric-box success"><div class="metric-title">Session action 投影</div><div class="metric-desc">补强后通过</div></div>
+        <div class="metric-box success"><div class="metric-title">全套 CI 构建/测试</div><div class="metric-desc">1317 passed (0 failed)</div></div>
+      </div>
+
+      <h3>产品验收门（未关闭条件）</h3>
+      <ul class="checklist">
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>当前 Session 可继续输入、转向并在重启后恢复</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>Provider 输出为执行期真实流</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>Collaborate 与 Deliver 是行为不同的明确轨道</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>一个 repo 有单一 Runtime owner，或全副作用持久 fencing</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>shutdown 可证明无在途执行和 late write</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>对话事实有权威 log / durable inbox</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>长 Session 数据和 DOM 有界</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>DSH 接口选择重新对齐 SDK/ACP 与官方 Safety</span></li>
+        <li class="checklist-item"><span class="check-icon-no">✕</span> <span>产品验收 gate 与 CI/merge gate 分离</span></li>
+      </ul>
+
+      <div class="callout callout-danger" style="margin-top: 20px;">
+        <strong style="font-size: 1.05rem;">最终结论：不通过稳定产品验收；实验性受控交付基础设施与本 PR 的低风险改进可继续合并审阅。</strong><br>
+        本 PR 的合并不能被解释为上述 P0/P1 已自动关闭。
+      </div>
+    </section>
+
+    <!-- Section 13 -->
+    <section class="card" id="s13">
+      <h2 class="card-title">13. 复审视角批注（second-perspective annotation）</h2>
+
+      <h3>13.1 代码实现与引用核验证实</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 100px;">编号</th>
+              <th style="width: 140px;">处置标注</th>
+              <th style="width: 280px;">核验证据（文件:行）</th>
+              <th>理由与说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>CODE-01</strong></td>
+              <td><span class="badge badge-pass">已实现且正确</span></td>
+              <td>
+                <code>packages/web/src/server/api/routers/session.ts:44-64, 105</code><br>
+                <code>packages/web/__tests__/api/session-read-api.test.ts:193-198</code>
+              </td>
+              <td>
+                <strong>核验证实</strong>：作者在提交 <code>6da5ee1</code> 已实现服务端 <code>attentionRank</code> 排序（<code>needsAction</code>=0 → <code>active</code>=1 → <code>idle</code>=2 → <code>terminal</code>=3，同组按 <code>lastActivityAt</code> 降序），并在 <code>session-read-api.test.ts</code> 中通过多状态 session 列表测试锁定。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>CODE-02</strong></td>
+              <td><span class="badge badge-pass">已实现且正确</span></td>
+              <td>
+                <code>packages/web/src/server/api/routers/session.ts:25-37, 96-100, 141-145</code><br>
+                <code>packages/web/__tests__/api/session-read-api.test.ts:200-209, 255-263</code>
+              </td>
+              <td>
+                <strong>核验证实</strong>：作者在 <code>6da5ee1</code> 统一了 <code>session.list</code> 与 <code>session.get</code> 的 <code>lastActivityAt</code> 契约，通过 <code>latestActivityTimestamp</code> 取 <code>createdAt</code>、<code>updatedAt</code> 与最新事件时间的最大值，消除 list/get 双重语义，并在测试中验证一致性。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>CODE-03</strong></td>
+              <td><span class="badge badge-pass">已实现且正确</span></td>
+              <td>
+                <code>packages/web/__tests__/api/session-read-api.test.ts:168-187</code>
+              </td>
+              <td>
+                <strong>核验证实</strong>：作者在 <code>6da5ee1</code> 移除了 API 测试中的 <code>setTimeout(20ms)</code> 竞态依赖，改为写入固定 ISO 时间戳证明行动优先、<code>updated_at</code> fallback 以及 get/list 契约一致性，消除高负载 CI 偶发不稳定。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>CITATION</strong></td>
+              <td><span class="badge badge-pass">已修正</span></td>
+              <td>
+                <code>docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md:485</code><br>
+                <code>docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.html:983-992</code><br>
+                <code>workflows/goal.yaml:1-16</code><br>
+                <code>packages/core/src/session/workflow-job-executor.ts:165-166</code><br>
+                <code>packages/core/src/workflow/engine.ts:71</code><br>
+                <code>packages/core/src/session/profile-policy.ts:10-35</code>
+              </td>
+              <td>
+                <strong>已在首轮报告修正</strong>：确认首轮报告 §13.2 P1-02 引用的 <code>packages/core/src/workflow/goal-job-executor.ts</code> 文件不存在。Goal 模式实际由 <code>workflows/goal.yaml</code> 定义模板、<code>workflow-job-executor.ts</code> 分发 <code>goal-run</code> 以及 <code>engine.ts</code> 的 <code>kind: 'goal'</code> 承接。已在本轮将首轮 md 与 html 的引用替换为真实准确路径。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>13.2 本轮轻量修复项</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 100px;">编号</th>
+              <th style="width: 140px;">处置标注</th>
+              <th style="width: 280px;">核验证据（文件:行）</th>
+              <th>理由与说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>P1-PERF-01</strong></td>
+              <td><span class="badge badge-pass">本轮修</span></td>
+              <td>
+                <code>packages/core/src/session/session-store.ts:322-338</code><br>
+                <code>packages/core/__tests__/session/session-store.test.ts</code>
+              </td>
+              <td>
+                <strong>已完成优化</strong>：<code>listSessions</code> 由全量 <code>LEFT JOIN session_events + group by s.id</code> 改为相关子查询 <code>(select e.timestamp from session_events e where e.session_id = s.id order by e.seq desc limit 1)</code> 反向扫描取尾。<br>
+                <strong>正确性依据</strong>：<code>appendEvent</code> 在同一 <code>BEGIN IMMEDIATE</code> 事务内 <code>seq=max(seq)+1</code> 与 <code>timestamp=now()</code> 同序分配，故 <code>max(seq)</code> 事件恒为最新 timestamp；毫秒 tie 时 seq-desc 比 max(timestamp) 更精确。消除历史事件全聚合 O(N) 开销，语义与返回结构保持不变。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P1-UX-02</strong></td>
+              <td><span class="badge badge-pass">本轮修</span></td>
+              <td>
+                <code>packages/web/src/client/hooks/use-ticker.ts:1-12</code><br>
+                <code>packages/web/src/client/hooks/index.ts</code><br>
+                <code>packages/web/src/client/pages/SessionsPage.tsx:47</code>
+              </td>
+              <td>
+                <strong>已引入共享 ticker</strong>：新增页面级 <code>useTicker(60_000)</code> 定时驱动重渲染，单定时器且卸载时清理，避免为每行创建 timer。<br>
+                <strong>测试范围诚实说明</strong>：本仓库 web vitest 环境为 <code>node</code>（无 jsdom / <code>@testing-library</code>），既有 effect 类 hook 惯例为只测纯逻辑，effect / DOM 交付 Playwright e2e 验证；useTicker 为薄胶水，遵循惯例不引入 jsdom / 不加 renderHook 单测；<code>formatRelativeTime</code> 纯函数保持不变。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>13.3 架构与 UX 演进 ADR 递延项</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 100px;">编号</th>
+              <th style="width: 140px;">处置标注</th>
+              <th style="width: 280px;">核验证据（文件:行）</th>
+              <th>理由与说明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>P0-ARCH-01</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段A）</span></td>
+              <td>
+                <code>packages/web/src/server/api/root.ts:170-178</code><br>
+                <code>packages/cli/src/lib/session-context.ts:50-78</code><br>
+                <code>packages/core/src/db/repositories.ts:569-588</code><br>
+                <code>packages/core/src/session/session-store.ts:25-45</code>
+              </td>
+              <td>
+                事实 multi-owner 成立：Web 与 CLI 均可启动 <code>JobRunner</code> 竞争 SQLite 与 Git。闭环需引入 single-owner daemon（推荐）或全副作用持久 generation authority + fencing，属重大架构决策，归入 §11 阶段 A。与首轮 P0-02 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P0-ARCH-02</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段A）</span></td>
+              <td>
+                <code>packages/core/src/session/job-runner.ts:514-544</code>
+              </td>
+              <td>
+                事实成立：<code>job-runner.stop()</code> 最多等待固定时间后仅清理进程内引用，无跨进程/全副作用的 quiescent join 证明。随 single-owner daemon 在 §11 阶段 A 建立明确 shutdown 契约。与首轮 P0-03 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P0-ARCH-03</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段C）</span></td>
+              <td>
+                <code>packages/core/src/session/dual-write.ts:14-25, 227-249</code><br>
+                <code>docs/technical/tekon-replatform-current-scope.md:§3</code>
+              </td>
+              <td>
+                事实成立：<code>session_events</code> 当前为旧领域写入后的 best-effort projection，旧表仍是交付事实源。当前 projection-only 已在范围基线明文化并被接受；升级为权威 log + transactional outbox 归入 §11 阶段 C。与首轮 P0-04 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P1-UX-01</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段D）</span></td>
+              <td>
+                <code>packages/web/src/client/lib/session-stream.ts:80-120</code><br>
+                <code>packages/web/src/client/pages/SessionsPage.tsx</code>
+              </td>
+              <td>
+                列表页目前未开启全局 SSE 订阅，依赖手动刷新或查询失效。后续由 workspace event stream / daemon 推送 Session summary 变化，归入 §11 阶段 D。与首轮 P1-06 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P1-UX-03</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段C）</span></td>
+              <td>
+                <code>packages/cli/src/commands/run.ts:54-92</code><br>
+                <code>packages/web/src/client/components/sessions/SessionComposer.tsx:29-85</code>
+              </td>
+              <td>
+                默认启动完整交付缺少启动前 run plan 预览（角色、Gate、成本、边界）。随 §11 阶段 C 的需求确认与 Deliver 升级一同落地。与首轮 P1-03 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P1-UX-04</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段D/token ADR）</span></td>
+              <td>
+                <code>packages/web/src/client/layouts/TopBar.tsx:14-42</code><br>
+                <code>docs/technical/tekon-web-architecture.md</code>
+              </td>
+              <td>
+                URL fragment bootstrap 适合本地轻量认证，长期应迁移到状态化连接 UI；避免破坏现有 E2E 测试，随 §11 阶段 D 及 token ADR 统一重构。与首轮 P1-05 同类。
+              </td>
+            </tr>
+            <tr>
+              <td><strong>P1-UX-05</strong></td>
+              <td><span class="badge badge-info">ADR递延（阶段D）</span></td>
+              <td>
+                <code>packages/web/src/client/pages/SessionsPage.tsx</code><br>
+                <code>packages/web/src/client/pages/SessionDetailPage.tsx</code>
+              </td>
+              <td>
+                产品层词汇标准化应在后续里程碑统一建立词汇表与文案测试，避免零散替换引发词汇漂移与断言失败，归入 §11 阶段 D。与首轮 P1-07 同类。
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 </div>
-<p>未发现本轮增量引入的阻断回归。</p>
-</section>
-<section class="card">
-<h2>最终结论</h2>
-<p><strong>本轮不通过稳定产品验收。</strong></p>
-<p>允许的表述是：Tekon 的受控交付轨道已形成测试较强、边界明确的实验性基础设施；最新 CLI 与 Session 列表整改方向正确，并在本轮得到进一步补强。持续协作、单一运行权威、权威 Session log 和长 Session 规模化仍未完成。</p>
-<p class="small">本 PR 的合并只能代表代码/迁移/测试门通过，不能自动代表产品验收门通过。</p>
-</section>
-</main>
+
 </body>
 </html>

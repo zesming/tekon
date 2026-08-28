@@ -386,3 +386,36 @@ Tekon 当前 `dsh-headless` 仍固定 `0.1.1-rc.2`、one-shot argv/stdout、仅 
 # **不通过稳定产品验收；实验性受控交付基础设施与本 PR 的低风险改进可继续合并审阅。**
 
 本 PR 的合并不能被解释为上述 P0/P1 已自动关闭。
+
+---
+
+## 13. 复审视角批注（second-perspective annotation）
+
+### 13.1 代码实现与引用核验证实
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **CODE-01** | **已实现且正确** | `packages/web/src/server/api/routers/session.ts:44-64, 105`<br>`packages/web/__tests__/api/session-read-api.test.ts:193-198` | **核验证实**：作者在提交 `6da5ee1` 已实现服务端 `attentionRank` 排序（`needsAction`=0 → `active`=1 → `idle`=2 → `terminal`=3，同组按 `lastActivityAt` 降序），并在 `session-read-api.test.ts` 中通过多状态 session 列表测试锁定。 |
+| **CODE-02** | **已实现且正确** | `packages/web/src/server/api/routers/session.ts:25-37, 96-100, 141-145`<br>`packages/web/__tests__/api/session-read-api.test.ts:200-209, 255-263` | **核验证实**：作者在 `6da5ee1` 统一了 `session.list` 与 `session.get` 的 `lastActivityAt` 契约，通过 `latestActivityTimestamp` 取 `createdAt`、`updatedAt` 与最新事件时间的最大值，消除 list/get 双重语义，并在测试中验证一致性。 |
+| **CODE-03** | **已实现且正确** | `packages/web/__tests__/api/session-read-api.test.ts:168-187` | **核验证实**：作者在 `6da5ee1` 移除了 API 测试中的 `setTimeout(20ms)` 竞态依赖，改为写入固定 ISO 时间戳证明行动优先、`updated_at` fallback 以及 get/list 契约一致性，消除高负载 CI 偶发不稳定。 |
+| **CITATION** | **已修正** | `docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md:485`<br>`docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.html:983-992`<br>`workflows/goal.yaml:1-16`<br>`packages/core/src/session/workflow-job-executor.ts:165-166`<br>`packages/core/src/workflow/engine.ts:71`<br>`packages/core/src/session/profile-policy.ts:10-35` | **已在首轮报告修正**：确认首轮报告 §13.2 P1-02 引用的 `packages/core/src/workflow/goal-job-executor.ts` 文件不存在。Goal 模式实际由 `workflows/goal.yaml` 定义模板、`workflow-job-executor.ts` 分发 `goal-run` 以及 `engine.ts` 的 `kind: 'goal'` 承接。已在本轮将首轮 md 与 html 的引用替换为真实准确路径。 |
+
+### 13.2 本轮轻量修复项
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **P1-PERF-01** | **本轮修** | `packages/core/src/session/session-store.ts:322-338`<br>`packages/core/__tests__/session/session-store.test.ts` | **已完成优化**：`listSessions` 由全量 `LEFT JOIN session_events + group by s.id` 改为相关子查询 `(select e.timestamp from session_events e where e.session_id = s.id order by e.seq desc limit 1)` 反向扫描取尾。<br>**正确性依据**：`appendEvent` 在同一 `BEGIN IMMEDIATE` 事务内 `seq=max(seq)+1` 与 `timestamp=now()` 同序分配，故 `max(seq)` 事件恒为最新 timestamp；毫秒 tie 时 seq-desc 比 max(timestamp) 更精确。消除历史事件全聚合 O(N) 开销，语义与返回结构保持不变。 |
+| **P1-UX-02** | **本轮修** | `packages/web/src/client/hooks/use-ticker.ts:1-12`<br>`packages/web/src/client/hooks/index.ts`<br>`packages/web/src/client/pages/SessionsPage.tsx:47` | **已引入共享 ticker**：新增页面级 `useTicker(60_000)` 定时驱动重渲染，单定时器且卸载时清理，避免为每行创建 timer。<br>**测试范围诚实说明**：本仓库 web vitest 环境为 `node`（无 jsdom / `@testing-library`），既有 effect 类 hook 惯例为只测纯逻辑，effect / DOM 交付 Playwright e2e 验证；useTicker 为薄胶水，遵循惯例不引入 jsdom / 不加 renderHook 单测；`formatRelativeTime` 纯函数保持不变。 |
+
+### 13.3 架构与 UX 演进 ADR 递延项
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **P0-ARCH-01** | **ADR递延（阶段A）** | `packages/web/src/server/api/root.ts:170-178`<br>`packages/cli/src/lib/session-context.ts:50-78`<br>`packages/core/src/db/repositories.ts:569-588`<br>`packages/core/src/session/session-store.ts:25-45` | 事实 multi-owner 成立：Web 与 CLI 均可启动 `JobRunner` 竞争 SQLite 与 Git。闭环需引入 single-owner daemon（推荐）或全副作用持久 generation authority + fencing，属重大架构决策，归入 §11 阶段 A。与首轮 P0-02 同类。 |
+| **P0-ARCH-02** | **ADR递延（阶段A）** | `packages/core/src/session/job-runner.ts:514-544` | 事实成立：`job-runner.stop()` 最多等待固定时间后仅清理进程内引用，无跨进程/全副作用的 quiescent join 证明。随 single-owner daemon 在 §11 阶段 A 建立明确 shutdown 契约。与首轮 P0-03 同类。 |
+| **P0-ARCH-03** | **ADR递延（阶段C）** | `packages/core/src/session/dual-write.ts:14-25, 227-249`<br>`docs/technical/tekon-replatform-current-scope.md:§3` | 事实成立：`session_events` 当前为旧领域写入后的 best-effort projection，旧表仍是交付事实源。当前 projection-only 已在范围基线明文化并被接受；升级为权威 log + transactional outbox 归入 §11 阶段 C。与首轮 P0-04 同类。 |
+| **P1-UX-01** | **ADR递延（阶段D）** | `packages/web/src/client/lib/session-stream.ts:80-120`<br>`packages/web/src/client/pages/SessionsPage.tsx` | 列表页目前未开启全局 SSE 订阅，依赖手动刷新或查询失效。后续由 workspace event stream / daemon 推送 Session summary 变化，归入 §11 阶段 D。与首轮 P1-06 同类。 |
+| **P1-UX-03** | **ADR递延（阶段C）** | `packages/cli/src/commands/run.ts:54-92`<br>`packages/web/src/client/components/sessions/SessionComposer.tsx:29-85` | 默认启动完整交付缺少启动前 run plan 预览（角色、Gate、成本、边界）。随 §11 阶段 C 的需求确认与 Deliver 升级一同落地。与首轮 P1-03 同类。 |
+| **P1-UX-04** | **ADR递延（阶段D/token ADR）** | `packages/web/src/client/layouts/TopBar.tsx:14-42`<br>`docs/technical/tekon-web-architecture.md` | URL fragment bootstrap 适合本地轻量认证，长期应迁移到状态化连接 UI；避免破坏现有 E2E 测试，随 §11 阶段 D 及 token ADR 统一重构。与首轮 P1-05 同类。 |
+| **P1-UX-05** | **ADR递延（阶段D）** | `packages/web/src/client/pages/SessionsPage.tsx`<br>`packages/web/src/client/pages/SessionDetailPage.tsx` | 产品层词汇标准化应在后续里程碑统一建立词汇表与文案测试，避免零散替换引发词汇漂移与断言失败，归入 §11 阶段 D。与首轮 P1-07 同类。 |
+

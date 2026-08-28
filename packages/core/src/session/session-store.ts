@@ -320,13 +320,24 @@ export function createSessionEventStore(
     },
 
     async listSessions(workspaceId) {
+      // P1-PERF-01: 使用相关子查询按 seq desc limit 1 取尾事件的 timestamp，
+      // 避免全量 left join session_events + group by 的 O(全事件) 聚合代价。
+      // 正确性依据：appendEvent 在同一 BEGIN IMMEDIATE 事务内 seq=max(seq)+1 与
+      // timestamp=now() 同序分配，故 max(seq) 的事件恒为最新 timestamp；
+      // 毫秒 tie 时 seq-desc 比 max(timestamp) 更精确。语义与旧查询一致（无事件回退 created_at）。
+      // 依赖墙钟单调：若发生 NTP step-back，高 seq 事件可能拿到更早的墙钟标签，此时
+      // seq-desc 取的是因果/追加序上最近发生的事件，比 max(timestamp) 更贴近"最近活动"。
       const rows = db
         .prepare(
-          `select s.*, coalesce(max(e.timestamp), s.created_at) as last_activity_at
+          `select s.*,
+             coalesce(
+               (select e.timestamp from session_events e
+                where e.session_id = s.id
+                order by e.seq desc limit 1),
+               s.created_at
+             ) as last_activity_at
            from sessions s
-           left join session_events e on e.session_id = s.id
            where s.workspace_id = ?
-           group by s.id
            order by last_activity_at desc, s.rowid desc`,
         )
         .all(workspaceId) as SessionListRow[];

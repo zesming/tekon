@@ -914,6 +914,18 @@ describe('session run id lookup', () => {
     expect(updatedList[0].lastActivityAt).toBe(event.timestamp);
     expect(updatedList[1].lastActivityAt).toBe(second.createdAt);
 
+    // Appending a second event to `first` advances lastActivityAt to the latest event (seq-desc)
+    await new Promise((r) => setTimeout(r, 20));
+    const event2 = await sessions.appendEvent({
+      sessionId: first.id,
+      type: 'agent/message',
+      payload: { text: 'second activity on first session' },
+    });
+    expect(event2.seq).toBeGreaterThan(event.seq);
+
+    const updatedList2 = await sessions.listSessions(workspace.id);
+    expect(updatedList2[0].lastActivityAt).toBe(event2.timestamp);
+
     // runId is carried through from the run_id column (NIT-1), including null.
     const byId = new Map(updatedList.map((s) => [s.id, s.runId]));
     expect(byId.get(first.id)).toBe('run_first');

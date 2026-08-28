@@ -22,6 +22,19 @@
 - **P1-01 / P1-03 / P1-05 / P1-06 / P1-07 演进递延（阶段 B/C/D）**：DSH bridge SDK/ACP 重新对齐（P1-01）、默认交付前 run plan 预览（P1-03）、Token 输入框重构为连接管理（P1-05）、长会话分页/虚拟化（P1-06）以及中英文案词汇表统一（P1-07）均已诚实归入后续阶段。
 - **P1-08 流程治理采纳**：明确区分 Merge gate 与 Product acceptance gate，避免以 CI 全绿掩盖产品级未决项。
 
+### 第二轮复审收敛与轻量补强（Follow-up Review & Polish）
+
+第二轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-follow-up-review.md`，提交 `6da5ee1`）。复审确认新增改动总体方向正确，可进入代码审阅；本轮完成复审批注追加、首轮虚构引用修正与两项低风险轻量改进，版本保持 `0.16.0`（不 bump）：
+
+- **CODE-01 / CODE-02 / CODE-03 核验通过**：
+  - `CODE-01`：服务端实现 `attentionRank` 排序（`needsAction`→`active`→`idle`→`terminal`），同组按 `lastActivityAt` 降序；
+  - `CODE-02`：统一 `session.list` 与 `session.get` 的 `lastActivityAt` 契约（取 `createdAt`/`updatedAt`/最新事件最大值），消除双重语义；
+  - `CODE-03`：API 测试移除 20ms sleep，改用固定 ISO 时间戳确定性断言。
+- **CITATION 首轮虚构引用修正**：确认首轮报告 §13.2 P1-02 引用的 `goal-job-executor.ts` 不存在，已修正为 `workflows/goal.yaml:1-16` + `workflow-job-executor.ts:165-166`（case 'goal-run'）+ `engine.ts:71`。
+- **P1-PERF-01 Session 列表去全聚合优化**：`packages/core/src/session/session-store.ts` 中 `listSessions` 改为相关子查询 `(select e.timestamp from session_events e where e.session_id = s.id order by e.seq desc limit 1)` 取尾，依据同一事务中 `seq` 与 `timestamp` 同序分配保证最新事件匹配，消除历史事件全量重聚合开销。
+- **P1-UX-02 相对时间共享 ticker**：`packages/web/src/client/hooks/use-ticker.ts` 引入页面级 `useTicker(60_000)` 共享定时器驱动 SessionsPage 相对时间自动推进；诚实说明因 web vitest 为 node 环境（无 jsdom）故遵循既有惯例不加 renderHook 单测，`formatRelativeTime` 纯函数保持不变。
+- **P0-ARCH-01~03 / P1-UX-01/03/04/05 架构 ADR 递延**：确认 multi-owner、shutdown quiescence、Session Event 事实源角色及 UI/UX 演进归入 follow-up 报告 §11 阶段 A-D。
+
 ### 验证
 
 - 本地 `corepack pnpm test` 全量通过：1317 passed / 3 skipped（114 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api` 与 `cli` 测试）；

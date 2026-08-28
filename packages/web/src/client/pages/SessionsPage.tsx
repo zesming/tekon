@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router';
 
-import { useQuery, useAuthScope } from '../hooks/index.js';
+import { useQuery, useAuthScope, useTicker } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { queryKeys } from '../lib/query-keys.js';
 import { routes } from '../lib/route-paths.js';
@@ -44,6 +44,7 @@ function formatRelativeTime(iso: string): string {
 // Displays relative activity time and needsAction badges per session.
 
 export function SessionsPage() {
+  useTicker(60_000);
   const scope = useAuthScope();
 
   // Fire unconditionally like the other read pages: the RPC client supplies the
