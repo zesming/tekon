@@ -76,11 +76,16 @@ test('capture the current Session product surfaces for review 14', async ({
   await waitForRunPassed(server.url, runId, fixture.sessionToken);
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(server.url);
+  // beforeEach has already loaded `/` and cached the pre-run list. A distinct
+  // query string forces a real new document so this audit captures the current
+  // server state instead of a fragment-only navigation reusing stale UI data.
+  await page.goto(`${server.url}/?review14=${Date.now()}`);
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.locator(`a[href="/sessions/${sessionId}"]`)).toBeVisible();
+  await expect(page.locator(`a[href="/sessions/${sessionId}"]`)).toBeVisible({
+    timeout: 15_000,
+  });
   await page.screenshot({
     path: join(outputDir, '01-sessions-desktop.png'),
     fullPage: true,
