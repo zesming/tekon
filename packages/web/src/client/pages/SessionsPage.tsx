@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router';
 
 import { useQuery, useAuthScope, useTicker } from '../hooks/index.js';
+import { formatRelativeTime } from '../lib/relative-time.js';
 import { rpc } from '../lib/rpc-client.js';
 import { queryKeys } from '../lib/query-keys.js';
 import { routes } from '../lib/route-paths.js';
@@ -21,30 +22,11 @@ const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
   failed: '需处理',
 };
 
-function formatRelativeTime(iso: string): string {
-  const date = new Date(iso);
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  if (Number.isNaN(diffMs)) return iso;
-  if (diffMs < 0) return '刚刚';
-
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHours = Math.floor(diffMin / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffSec < 60) return '刚刚';
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays <= 7) return `${diffDays}天前`;
-  return date.toLocaleDateString('zh-CN');
-}
-
 // Phase 3 3b / Phase 4 P1-04: controlled-delivery list + composer.
 // Displays relative activity time and needsAction badges per session.
 
 export function SessionsPage() {
-  useTicker(60_000);
+  const nowMs = useTicker(60_000);
   const scope = useAuthScope();
 
   // Fire unconditionally like the other read pages: the RPC client supplies the
@@ -103,39 +85,47 @@ export function SessionsPage() {
         />
       ) : (
         <ul className="session-list">
-          {sessions.map((session) => (
-            <li
-              key={session.id}
-              className="session-list-item"
-              title={session.runId ? `关联运行 ${session.runId}` : undefined}
-            >
-              <NavLink
-                to={routes.session(session.id)}
-                className="session-list-link"
+          {sessions.map((session) => {
+            const relativeTime = formatRelativeTime(
+              session.lastActivityAt,
+              nowMs,
+            );
+            return (
+              <li
+                key={session.id}
+                className="session-list-item"
+                title={session.runId ? `关联运行 ${session.runId}` : undefined}
               >
-                <span className="session-list-title">
-                  {session.title ?? session.id}
-                </span>
-                {session.needsAction && session.actionKind ? (
-                  <span
-                    className={`session-list-action session-list-action-${session.actionKind}`}
-                  >
-                    {ACTION_KIND_LABELS[session.actionKind]}
-                  </span>
-                ) : null}
-                <StatusBadge status={session.status} size="sm" />
-                {session.runId ? (
-                  <span className="session-list-run text-muted">交付运行</span>
-                ) : null}
-                <span
-                  className="session-list-time"
-                  title={session.lastActivityAt}
+                <NavLink
+                  to={routes.session(session.id)}
+                  className="session-list-link"
                 >
-                  {formatRelativeTime(session.lastActivityAt)}
-                </span>
-              </NavLink>
-            </li>
-          ))}
+                  <span className="session-list-title">
+                    {session.title ?? session.id}
+                  </span>
+                  {session.needsAction && session.actionKind ? (
+                    <span
+                      className={`session-list-action session-list-action-${session.actionKind}`}
+                    >
+                      {ACTION_KIND_LABELS[session.actionKind]}
+                    </span>
+                  ) : null}
+                  <StatusBadge status={session.status} size="sm" />
+                  {session.runId ? (
+                    <span className="session-list-run text-muted">交付运行</span>
+                  ) : null}
+                  <time
+                    className="session-list-time"
+                    dateTime={session.lastActivityAt}
+                    title={session.lastActivityAt}
+                    aria-label={`最近活动：${relativeTime}`}
+                  >
+                    {relativeTime}
+                  </time>
+                </NavLink>
+              </li>
+            );
+          })}
         </ul>
       )}
     </>
