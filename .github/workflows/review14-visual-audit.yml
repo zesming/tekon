@@ -26,8 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
 
-      - name: Build core
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+      - name: Build core and web
+        run: |
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+          npm exec --yes -- pnpm@10.12.1 --filter @tekon/web build
 
       - name: Install Chromium
         run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
