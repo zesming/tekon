@@ -85,12 +85,28 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
     page.locator('.feed-row-message .feed-author-user').first(),
   ).toBeVisible({ timeout: 15_000 });
 
-  // Lifecycle/agent-loop rows arrived (step or turn or governance rows).
+  // Human-relevant lifecycle rows remain visible in the default narrative.
+  await expect(page.locator('[data-event-type="workflow/started"]')).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // Raw worktree/checkpoint/node detail stays available, but no longer floods
+  // the default human-facing narrative.
   await expect(
-    page
-      .locator('.feed-row-step, .feed-row-turn, .feed-row-governance')
-      .first(),
-  ).toBeVisible({ timeout: 15_000 });
+    page.locator('[data-event-type="worktree/leased"]'),
+  ).toHaveCount(0);
+  const technicalToggle = page.getByRole('button', {
+    name: '显示技术事件',
+  });
+  await expect(technicalToggle).toBeVisible();
+  await expect(technicalToggle).toHaveAttribute('aria-pressed', 'false');
+  await technicalToggle.click();
+  await expect(
+    page.locator('[data-event-type="worktree/leased"]').first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '隐藏技术事件' }),
+  ).toHaveAttribute('aria-pressed', 'true');
 
   // The connection indicator resolves to live (replay complete, streaming).
   await expect(page.locator('.session-conn-live')).toBeVisible({
@@ -144,8 +160,22 @@ test('Sessions list shows the started session and links to its detail', async ({
   await expect(page).toHaveURL(new RegExp(`/sessions/${sessionId}$`));
   await expect(page.locator('.event-feed')).toBeVisible({ timeout: 15_000 });
 
-  // Report item 6: a passed run closes the right rail with a final-result card.
-  await expect(page.locator('.session-card-result')).toBeVisible({
-    timeout: 15_000,
+  // A terminal result is the first inspector card; repeated tool/artifact
+  // history is bounded by default instead of duplicating the entire feed.
+  const cards = page.locator('.session-side-cards .session-card');
+  await expect(cards).toHaveCount(7, { timeout: 15_000 });
+  await expect(cards.first()).toHaveClass(/session-card-result/u);
+  await expect(cards.first()).toContainText('运行结束');
+  const cardHistoryToggle = page.getByRole('button', {
+    name: /显示另外 \d+ 条工具与产物历史/u,
   });
+  await expect(cardHistoryToggle).toBeVisible();
+  await expect(cardHistoryToggle).toHaveAttribute('aria-expanded', 'false');
+
+  // Expanding remains available for audit/debug use.
+  await cardHistoryToggle.click();
+  await expect(
+    page.getByRole('button', { name: '收起工具与产物历史' }),
+  ).toHaveAttribute('aria-expanded', 'true');
+  await expect(cards).toHaveCount(39);
 });
