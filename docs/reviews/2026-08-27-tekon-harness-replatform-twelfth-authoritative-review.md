@@ -839,3 +839,66 @@ Running 28 tests using 1 worker
 > 推荐立即冻结该 PR，先正式重新基线化为 partial infrastructure，并用一个独立 ADR/PR 落实 single-owner daemon；随后再以小 PR 完成真实 Provider 的 streaming → durable inbox → follow-up/steer → recovery 纵向闭环。
 
 本轮未执行 merge、release 或 deploy。
+
+---
+
+## 15. 实施方批注（第十二轮）
+
+> 批注日期：2026-08-28  
+> 实施方 HEAD：`ef56dfa`（已 fast-forward 到远端）→ 本轮收敛提交见文末版本记录  
+> 评估方式：动态评估 workflow（3 视角并行 + 首席 max 综合），三视角 + 首席一致 `hasMustFix=false`、`needsUserAdrDecision=true`。逐条代码事实已由实施方独立复核。
+
+### 15.1 结论：本轮为第五个「无新 PR-local 代码必修」轮（与第 8/9/11 轮同类）
+
+`c224e33..ef56dfa` 6 个新提交经 `git diff --stat` 核验，**只改了两个 e2e 测试文件（`shared-fixture.ts`、`shared-fixture-auth-lock.test.ts`）与本报告**，无任何产品 / Provider / Session / Runtime / Node / shutdown 代码变更。最终快照 CI 28 项首轮全绿（报告 §11.1，实施方本地复跑一致）。因此本轮不存在可在不做用户级架构决策的前提下、孤立修复的 PR-local 代码缺陷。
+
+**接受报告对整体验收对象的裁决**：作为「原始完整 Harness replatform 计划」与「默认并发 Web/CLI Runtime 合入 main」，当前 PR 确实不通过；这与实施方自第 4 轮起反复记录、并向用户呈现的判断一致。分歧不在事实，而在**归类**——报告要求把这些计入「本 PR 未通过」，实施方主张它们是「需用户先拍板方向的架构决策 / 已披露里程碑」，二者可在下述 ADR 决策落定后统一。
+
+### 15.2 逐条裁决（A/B/P/C/D）
+
+| 报告条目 | 分类 | 理由与证据 |
+| --- | --- | --- |
+| §8.2 / 本轮 5 个 `test(web)` fixture 提交（`9d3a0f3`/`8b56961`/`0f65b71`/`eabdce1`/`f23a241`） | **B**（本轮唯一真实代码产物，闭环真锁无回归） | `9d3a0f3` 作为反向实验移除第十轮的 `page.goto` `#token` 注入 → 复现 6 flaky；`eabdce1` 以 **`URLSearchParams` 保留 hash 的条件注入**恢复（`shared-fixture.ts:49-59`：先解析已有 hash，仅当 `!hash.has('token')` 才 `set`），严格优于第十轮的无条件 `target.hash` 覆盖。复核确认无隐患：`App.tsx` 用 `createBrowserRouter`（路径路由），所有业务 `page.goto` 均为裸路径无 hash，故 `URLSearchParams('')` 起点为空 → 干净 `#token=`；`beforeEach`（`:72`）唯一带 hash 的 goto 其 fragment 已含 `token=` → 正确跳过不双写；视角担心的 `#/route→#%2Froute=` mangling 在本套件不可达。`auth-lock` 为真锁（revert 注入则 `.run-header-id` 15s 超时 401 失败），非死测试。 |
+| §2.1 接受部分（Git `expected-old` CAS / Job owner-status 条件写 / Token 同步持久 / Event append fast-path 正确保留） | **B** | 与第 9~11 轮共识一致，无回归。 |
+| §8.1 已改善继续通过（受控交付入口 / Session-first 路由 / 移动 drawer focus trap / `role="log"` / token 不进 URL/Referer） | **B** | 前几轮 UX / 可访问性 / 移动端 / token bootstrap 修复正确保留，无回归。 |
+| §8.7 / §11.3 视觉审计与验证边界限制 | **B** | 报告如实声明本轮无新像素级视觉证据、CI 绿不证明未实现能力。诚实的验证边界陈述，无夸大——**实施方本轮同样不声称新的截图级视觉审计**（无可下载 CI 截图 artifact、无可控产品浏览器）。 |
+| §2.2 将第十一轮 `persistToken` 从「完整闭环竞态」降级为「首屏 + refresh 通过；任意深链 hard-nav 覆盖有限」 | **P**（措辞 / 覆盖边界修正，**接受**） | 降级 **正确**。反向实验 `0f65b71`（移除注入）确实复现 `22 passed / 6 flaky / exit 1`，证明广泛业务 E2E 绿依赖每次 hard route launch 注入 `#token`，而非 sessionStorage 恢复。`persistToken` 闭合的是**产品首屏 + refresh**（`prod-bootstrap` 专测独立覆盖），不是任意无 fragment 的 hard deep-link。**实施方据此订正自身第十一轮 CHANGELOG / 记忆中「闭环了同一 bootstrap 竞态」的过强措辞**为「产品首屏 + refresh 恢复路径通过（`prod-bootstrap` 覆盖）；广泛业务 E2E 绿依赖测试启动策略注入 `#token`，任意深链 hard-nav 的 sessionStorage 回落未被广泛 E2E 证明」。fixture 注释（`shared-fixture.ts:38-41`）与 `auth-lock` 标题（`:8`）已如实标注，无需再改测试码。 |
+| §3 P0 范围 / 验收合同漂移（路径 A 坚持原计划 / 路径 B 重新基线化） | **C（needs-user-ADR）** | 事实**为真**：`docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md:14/16/41/108-120` 记录「用户决策：按完整报告方向推进」「同一分支按阶段推进」并把 follow-up/steer/inbox/streaming/diff-card 列入同一 PR；而 `phase2` 头称「已实施 S1–S6 完成」、`phase3` 头称「3a-3d 全部实现完成」，其 §0.2 却**显式递延**同批核心能力到 2b/phase4。但「路径 B 重新基线化」会**覆盖已记录的用户决策**、重定义验收合同 / PR 标题 / README——**实施方不能单方裁定**，须交用户。见 §15.3-①。 |
+| §4 P0 事实 multi-owner 不能只留未来 ADR | **C（needs-user-ADR）** | 自第 4 轮起每轮标记的用户 ADR。`root.ts` + CLI `run.ts`/`approval.ts`/`session-context.ts` 都 `createJobRunner().start()`、共享同一 SQLite/Git 且无 runtime lock 是**事实**；`repositories.ts:569` `transitionNode` 仍为无 CAS 的 `update nodes set status=?, updated_at=? where id=?`；`claim_generation` 列 grep 为空。报告「需要决策 ≠ 当前安全 ≠ 可合入」的**风险论断成立**，但两条闭合路径（single-owner daemon / 完整 multi-owner fencing）都是需用户先拍板方向的重大架构改动。见 §15.3-②。 |
+| §5 P0 Session Event 事实源角色不清晰（best-effort projection vs authoritative log）— **本轮新框定** | **C（needs-user-ADR）** | 本轮最新框定。核验后是**设计选择需明文决定**，非既有 correctness bug：当前 `dual-write.ts` 显式声明 `session_events` 是 best-effort 投影、绝不拖垮治理路径（C1），治理主路径（workflow/gate/audit 旧表）才是事实源——自洽且已披露，不造成治理数据错误。报告的通过条件二选一（projection-only 明文化 / authoritative log）均需 ADR，且与既有 durable-inbox C 递延重合。见 §15.3-③。 |
+| §6 P0 Provider / 持续 Session 仍 one-shot 投影 | **C** | `legacy-agent-driver.ts:132` `await done` 一次性、`followUp`/`steer`/`resume` throw `NotSupportedYet`、session router 仅 list/get、`SessionComposer` 起 `standard-delivery` run——自第 2/3 轮起披露并 C 递延的真实 Provider streaming 里程碑。核验属实且本轮未改动。 |
+| §7 P0 Shutdown 未完成 quiescence | **C** | `STOP_SETTLE_TIMEOUT_MS = 5_000` 清 map 不终止 subprocess/Promise，是第 4~11 轮披露的 shutdown quiescence 里程碑。修复需 executor abort / subprocess kill / join 的实质架构工作。 |
+| §8.3-8.6 Token 顶栏 / Feed 系统事件墙 / Inspector 复制历史 + Final Result 过浅 / 长会话无界 | **C** | 均报告自判 **P1**，属 token 状态化 / Narrative Feed / Inspector 当前状态 / 结构化 Final Result / 长会话 bounded 的产品化里程碑，第 4~11 轮一贯 C 递延（报告 §8/§9 自身接受为独立 PR）。现有实现无回归。 |
+| §9 过度设计（横向抽象领先纵向闭环）+ 冻结 PR 建议 | **C（流程 / 项目决策）** | 观察属实（`AgentDriver` 关键方法未实现、legacy driver 无生产 caller、170+ commits），但属 PR 治理策略建议，需项目 / 用户决策，非可修代码缺陷。 |
+| §1 / §14 最终裁决（整体不通过） | **C** | 裁决所依据的全部阻断项，均为自第 4 轮起报告 §8 自认的独立 ADR/PR 里程碑或待用户拍板项，非本轮可修的 PR-local 代码 bug；CI 最终快照 28 项首轮全绿。 |
+
+**无 D（误报）**：本轮报告的事实陈述经逐条核验全部属实，未发现夸大或错误定位。这与第三轮（机器生成、含 REG-01/P1-04 误报）形成对比——本轮是扎实的架构级复审。
+
+### 15.3 交用户 / 项目拍板的决策（`needsUserAdrDecision=true`，自第 4 轮起持续呈现，本轮报告 §3/§4/§5 进一步收紧）
+
+以下三项都**不是实施方可单方在本 PR 内低成本修复的代码**，而是需要用户 / 项目先定方向的重大决策。实施方不做未经拍板的架构重写（符合 CLAUDE.md「不要当英雄」「Iron Man suit 优先」与相称原则）：
+
+**① 范围合同重新基线化（报告 §3，路径 A vs 路径 B）**
+- **路径 A**：坚持原始完整计划，继续在（或另起 PR）完成阶段 2–5 的真实 Provider、inbox、持续 Session、双轨与 Runtime ownership 全闭环。报告不推荐继续在当前超大 PR 执行。
+- **路径 B（报告推荐）**：新增 scope ADR，把本 PR 正式重命名 / 重新验收为 `Phase 1 + 2a + partial Phase 3 infrastructure`，订正 phase2/3 文档状态为「slice 完成、阶段整体未完成」，为 single-owner / Provider 纵切 / durable inbox / Collaborate / 长 Session 分别建独立 issue/ADR/PR，并删除任何「完整 replatform 已完成」的暗示。
+- 此项会**覆盖已记录的「用户决策：按完整报告方向推进」**，故必须由用户裁定。
+
+**② Runtime ownership（报告 §4，single-owner daemon vs 完整 multi-owner）**
+- **single-owner daemon（报告推荐）**：项目级 Runtime lock，第二 owner fail-fast；长驻 Runtime 独占 JobRunner/Agent/Worktree/Subprocess；Web/CLI/IDE 仅作客户端。
+- **完整 multi-owner fencing**：持久 per-claim authority（`claim_generation` 或 claim token）贯穿 heartbeat/checkpoint/settle + Node transition CAS + Artifact/Audit/Gate/Delivery + Git + subprocess control，配两进程交错测试。
+- 报告的关键论断——「当前部署已允许多 owner，需要决策 ≠ 当前实现安全」——成立；在决策落实前，不能按默认并发 Runtime 合入 main。
+
+**③ Session Event 事实源角色（报告 §5，projection-only vs authoritative log）**
+- **projection-only**：明文规定 Session Event 只是 UI/Audit 投影，不宣称是完整 model history 或 durable command log；resume/inbox 使用独立权威表与事务状态机；投影缺失走 backfill/rebuild。
+- **authoritative log**：模型可见 Event append 不得 best-effort 丢失，与主状态同事务/outbox/commit barrier；模型历史、inbox claim/processed、resume 从 log 派生，旧表逐步降为 projection，并补 crash-repair 与顺序不变量测试。
+- 此项决定与 durable-inbox（§6）耦合，属同一纵向切片的架构决策。
+
+### 15.4 本轮相称动作
+
+- 追加本批注（§15，A/B/P/C/D 分类 + 逐条理由与证据）；
+- **订正实施方自身对 `persistToken` 的过强措辞**（§15.2 的 P 项，同步 CHANGELOG 与记忆）；
+- 版本 `0.15.4 → 0.15.5`（PATCH：文档批注 + 措辞订正，无用户可见行为变化，无代码变更）；
+- 向用户呈现 §15.3 的三项 ADR 决策；
+- **不做未经用户拍板的架构重写，不为凑工作量改代码**（第 8/9/11 轮同类相称做法）。
+
+README / manual / AGENTS 无需同步：本轮无代码行为变化，仅文档批注与版本记账。

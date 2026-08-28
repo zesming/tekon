@@ -1,12 +1,41 @@
 # 变更日志
 
+## v0.15.5
+
+第十二轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-twelfth-authoritative-review.md`，作者推送，远端领先 6 提交）循环评估后的收敛。经动态评估 workflow（CI 提交核验 / 报告 P0-P1 triage A-D / 合并门槛与 scope-drift 三视角 + 首席 max 综合）达成一致：**本轮无任何新的 PR-local 必修代码项**（第五个此类轮，性质同第 8/9/11 轮），`needsUserAdrDecision=true`。`c224e33..ef56dfa` 6 个新提交经 `git diff --stat` 核验只改两个 e2e 测试文件 + 报告，无产品/Provider/Session/Runtime/Node/shutdown 代码变更，CI 最终快照 28 项首轮全绿。相称做法 = 报告批注（§15）+ 订正措辞 + 版本同步 + 向用户呈现 ADR 决策，不做未经用户拍板的架构重写。
+
+### 已闭环并复核保留（B，本轮 5 个 `test(web)` fixture 提交经实地核验正确、无回归、真锁）
+
+- `9d3a0f3` 作为**反向实验**移除第十轮的 `page.goto` `#token` 注入 → 复现 6 flaky（报告 §10.1/§11.2 `22 passed / 6 flaky / exit 1`），证明广泛业务 E2E 绿依赖 route-launch 注入而非 sessionStorage 恢复。
+- `eabdce1` 以 **`URLSearchParams` 保留 hash 的条件注入**恢复（`shared-fixture.ts:49-59`：仅当 `!hash.has('token')` 才 `set`），**严格优于**第十轮的无条件 `target.hash` 覆盖。复核无隐患：`createBrowserRouter` 路径路由 + 所有业务 `page.goto` 裸路径无 hash → 干净 `#token=`；`beforeEach` 唯一带 hash 的 goto 已含 `token=` → 正确跳过不双写。
+- `8b56961`/`0f65b71`/`f23a241` 演化 `shared-fixture-auth-lock.test.ts` 到最终锁：`addInitScript` 清 sessionStorage 后仅靠 fragment 认证，正向断言 `.run-header-id` + 负向断言无「认证失败」。真锁非死测试（revert 注入则 401 超时失败）。fixture 注释（`:38-41`）与 auth-lock 标题（`:8`）已如实标注为「测试启动策略，非 sessionStorage 恢复证据」。
+
+### 订正：`persistToken` 措辞（P，接受报告 §2.2 降级）
+
+第十一轮 CHANGELOG 曾把 `6ce9fb5` 表述为「闭合了同一 bootstrap 竞态」，措辞过强。据本轮反向实验订正为「闭合产品首屏 + refresh 恢复路径（`prod-bootstrap` 专测覆盖）；任意无 fragment 深链 hard-nav 的 sessionStorage 回落未被广泛 E2E 证明」（详见下方 v0.15.4 条目内订正说明）。
+
+### 本轮核心增量：三项交用户 / 项目拍板的 ADR 决策（`needsUserAdrDecision=true`，报告 §3/§4/§5，自第 4 轮起持续呈现，本轮收紧）
+
+1. **范围合同重新基线化**（报告 §3）：路径 A 坚持原始单 PR 完整计划 / 路径 B（推荐）新增 scope ADR 重命名为 `Phase 1 + 2a + partial Phase 3 infrastructure`、订正 phase2/3 文档状态、拆独立小 PR。事实为真（`execution-plan.md` 承诺单 PR 完成阶段 0-5 含 follow-up/steer/inbox/streaming/diff-card，phase2/3 设计头称「已实施/全部完成」却 §0.2 递延同批能力），但路径 B 会覆盖已记录的「用户决策：按完整报告方向推进」，须用户裁定。
+2. **Runtime ownership**（报告 §4）：single-owner daemon（推荐，第二 owner fail-fast）/ 完整 multi-owner fencing（持久 claim authority + Node CAS + 全副作用 fencing + 两进程交错测试）。当前 Web+CLI 共享 SQLite/Git 无 runtime lock = 事实 multi-owner，`transitionNode`（`repositories.ts:569`）无 CAS，`claim_generation` 列不存在——「需要决策 ≠ 当前安全 ≠ 可默认合入 main」论断成立。
+3. **Session Event 事实源角色**（报告 §5，本轮新框定）：projection-only 明文化 / authoritative log（append 不得 best-effort 丢失 + 同事务/outbox）。当前 `dual-write.ts` 显式声明 best-effort 投影不拖垮治理路径（C1）、治理主路径旧表才是事实源，自洽已披露，不造成治理数据错误；authority 角色决定与 durable-inbox 耦合。
+
+### 诚实递延（C，与第 4~11 轮一致，勿当本轮缺口）
+
+P0-PRODUCT（真实 streaming：`legacy-agent-driver:132` `await done` 一次性 / follow-up-steer-resume throw `NotSupportedYet` / durable inbox / 双轨）、P0-RUNTIME（persistent claim_generation / Node CAS / shutdown quiescence：`STOP_SETTLE_TIMEOUT_MS=5000` 不 abort/kill/join）、P1-UX（§8.3-8.6 token 状态化 / Narrative Feed / Inspector 当前状态 / 结构化 Final Result）、P1-RUNTIME-04（长 Session bounded）——均报告 §8/§9 自认独立 ADR/PR 里程碑，核验代码事实全部属实且本轮未改动，无倒退。
+
+### 版本与文档
+
+- `0.15.4` → `0.15.5`（PATCH：报告批注 + `persistToken` 措辞订正，无代码变更、无用户可见行为变化）。
+- README / manual / AGENTS 无需同步：本轮无代码行为变化。
+
 ## v0.15.4
 
 第十一轮**权威复审**（`docs/reviews/2026-08-27-tekon-harness-replatform-eleventh-authoritative-review.md`，作者推送）循环评估后的收敛。经动态评估 workflow（CI 提交核验 / 报告 P0-P1 triage / CI 事实与合并门槛三视角 + 首席综合）达成一致：**本轮无任何新的 PR-local 必修代码项**（性质同第八 / 九轮）。报告 §1 已明确 PASS 第十轮 flaky 整改与本轮 CI 三提交；剩余全部为第 4~10 轮已披露的架构里程碑，诚实 C 递延。本轮相称地做报告批注 + 版本同步，不做未经用户拍板的重大架构重写。
 
 ### 已闭环并复核保留（B，本轮 3 个 CI 提交经实地核验正确、无回归、测试真锁）
 
-- `6ce9fb5` **fix(web)**：`main.tsx` 在 first render 前同步 `persistToken(initialToken)`，关闭"可见 app 已认证但 sessionStorage 尚未写入"的 cross-doc/reload 窗口（`persistToken(null)` 为 no-op 不误清；`AuthProvider` 仍幂等重复）。这是对第十轮所诊断的**同一 bootstrap 竞态的产品侧硬化**，与第十轮的 e2e fixture `#token=` fragment 注入互补。
+- `6ce9fb5` **fix(web)**：`main.tsx` 在 first render 前同步 `persistToken(initialToken)`（`persistToken(null)` 为 no-op 不误清；`AuthProvider` 仍幂等重复）。这硬化了**产品首屏 + refresh 恢复路径**（由 `prod-bootstrap` 专测独立覆盖）。**订正（第十二轮）**：第十一轮曾把此项表述为「闭合了同一 bootstrap 竞态」，措辞过强——第十二轮反向实验（`0f65b71` 移除 e2e fixture 的 `#token` 注入）复现 `22 passed / 6 flaky`，证明广泛业务 E2E 绿依赖每次 hard route launch 注入 `#token`，而非 sessionStorage 恢复；因此该同步持久化闭合的是**产品首屏 + refresh**，任意无 fragment 深链 hard-nav 的 sessionStorage 回落**未被广泛 E2E 证明**。它与第十轮 e2e fixture `#token=` fragment 注入互补，是有价值的产品硬化，但不等于「所有跨文档认证已闭环」。
 - `ffc1ecd` **perf(web)**：`session-stream` `mergeEventsBySeq` 增有序追加快路径（existing/incoming 均严格递增且 incoming 首项在 existing 末项之后 → 线性 concat，否则回退 Map dedupe + sort 防御路径）；11 边界 cross-check 证明与 fallback 等价，replay/dup/乱序语义不变。不关闭长会话无界问题。
 - `dad49b0` **test(web)**：锁有序追加路径（对象身份 + out-of-order 修复），真锁非假通过。
 - 验证：本地 web 单测 253 passed；HEAD 六项 CI check 全 success，Playwright 28 passed / 0 flaky / 0 retry。
