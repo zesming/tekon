@@ -645,8 +645,17 @@ export const progressListOutputSchema = z.object({
   progressFiles: z.array(progressFileSchema),
 });
 
-// Phase 3 3a: session read-path. A session entry mirrors the core Session
-// metadata plus the run_id column (the frozen Session schema has no runId).
+export const sessionActionKindSchema = z.enum([
+  'approval',
+  'input',
+  'failed',
+]);
+
+export type SessionActionKind = z.infer<typeof sessionActionKindSchema>;
+
+// Phase 3 3a / Phase 4 P1-04: session read-path. A session entry mirrors the
+// core Session metadata plus the run_id column, lastActivityAt, and derived
+// needsAction / actionKind projection fields.
 // Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
 export const apiSessionSchema = z.object({
   id: z.string(),
@@ -657,6 +666,9 @@ export const apiSessionSchema = z.object({
   runId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  lastActivityAt: z.string(),
+  needsAction: z.boolean(),
+  actionKind: sessionActionKindSchema.nullable(),
 });
 
 // session.list takes no client input: the server resolves the current

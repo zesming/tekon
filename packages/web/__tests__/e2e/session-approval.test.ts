@@ -79,6 +79,14 @@ test('inline approval: approve a pending human decision from the session UI', as
     'blocked',
   ]);
 
+  // Phase 4 P1-04: SessionsPage lists the session with a "待审批" action badge.
+  await page.goto(`${server.url}/?approvalList=${Date.now()}`);
+  const sessionItem = page.locator(`a[href="/sessions/${sessionId}"]`);
+  await expect(sessionItem).toBeVisible({ timeout: 15_000 });
+  await expect(
+    sessionItem.locator('.session-list-action-approval'),
+  ).toHaveText('待审批');
+
   await page.goto(`${server.url}/sessions/${sessionId}`);
 
   // Enter the session token in the TopBar (mirrors a real user): this populates

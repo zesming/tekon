@@ -868,10 +868,11 @@ describe('session run id lookup', () => {
     expect(await sessions.getRunIdBySessionId(session.id)).toBeNull();
   });
 
-  // Phase 3 3a: read-path for the Session List UI. listSessions is a pure
-  // SELECT scoped to a workspace, newest-first, carrying run_id from the column
-  // (the frozen Session schema has no runId, so the list entry extends it).
-  it("listSessions returns a workspace's sessions newest-first with runId", async () => {
+  // Phase 3 3a / Phase 4 P1-04: read-path for the Session List UI.
+  // listSessions is a pure SELECT scoped to a workspace, ordered by last
+  // activity (coalesce(max(events.timestamp), created_at) desc), carrying
+  // run_id and lastActivityAt from the query (SessionListEntry).
+  it("listSessions returns a workspace's sessions ordered by last activity with runId and lastActivityAt", async () => {
     const { sessions } = setupStore();
     const workspace = await sessions.getOrCreateDefaultWorkspace('/repo/list');
     const first = await sessions.createSession({
@@ -887,18 +888,45 @@ describe('session run id lookup', () => {
       runId: null,
     });
 
-    const listed = await sessions.listSessions(workspace.id);
-    expect(listed.map((s) => s.id)).toEqual([second.id, first.id]);
+    // Without events, both fall back to created_at (second was created after first).
+    const initialList = await sessions.listSessions(workspace.id);
+    expect(initialList.map((s) => s.id)).toEqual([second.id, first.id]);
+    expect(initialList.find((s) => s.id === first.id)?.lastActivityAt).toBe(
+      first.createdAt,
+    );
+    expect(initialList.find((s) => s.id === second.id)?.lastActivityAt).toBe(
+      second.createdAt,
+    );
+
+    // Ensure event timestamp is strictly newer than second.createdAt.
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Appending an event to `first` makes its lastActivityAt newer than `second`.
+    const event = await sessions.appendEvent({
+      sessionId: first.id,
+      type: 'agent/message',
+      payload: { text: 'activity on first session' },
+    });
+
+    const updatedList = await sessions.listSessions(workspace.id);
+    // `first` now sorts ahead of `second` because its last event is newest.
+    expect(updatedList.map((s) => s.id)).toEqual([first.id, second.id]);
+    expect(updatedList[0].lastActivityAt).toBe(event.timestamp);
+    expect(updatedList[1].lastActivityAt).toBe(second.createdAt);
+
     // runId is carried through from the run_id column (NIT-1), including null.
-    const byId = new Map(listed.map((s) => [s.id, s.runId]));
+    const byId = new Map(updatedList.map((s) => [s.id, s.runId]));
     expect(byId.get(first.id)).toBe('run_first');
     expect(byId.get(second.id)).toBeNull();
+
     // The frozen Session fields are present too.
-    expect(listed[0]).toMatchObject({
+    expect(updatedList[0]).toMatchObject({
       workspaceId: workspace.id,
-      title: 'second',
+      title: 'first',
       profile: 'human-web',
       status: 'active',
+      runId: 'run_first',
+      lastActivityAt: event.timestamp,
     });
   });
 

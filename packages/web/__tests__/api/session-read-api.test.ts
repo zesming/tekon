@@ -88,25 +88,53 @@ async function postRpc(
 }
 
 describe('web session read API', () => {
-  it('session.list resolves the default workspace server-side and lists sessions newest-first', async () => {
+  it('session.list resolves the default workspace server-side, sorts by last activity, and derives action projections', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    // Seed two sessions directly in the store (fixture seeds runs, not sessions).
+    // Seed sessions directly in the store (fixture seeds runs, not sessions).
     const { store, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
-    const first = await store.createSession({
+    const s1 = await store.createSession({
       workspaceId: workspace.id,
-      title: 'older',
-      profile: 'human-web',
-      runId: 'run_0',
-    });
-    const second = await store.createSession({
-      workspaceId: workspace.id,
-      title: 'newer',
+      title: 'approval session',
       profile: 'human-web',
       runId: 'run_1',
+    });
+    await store.updateSessionStatus(s1.id, 'awaiting-approval');
+
+    const s2 = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'failed session',
+      profile: 'human-web',
+      runId: 'run_2',
+    });
+    await store.updateSessionStatus(s2.id, 'failed');
+
+    const s3 = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'active session',
+      profile: 'human-web',
+      runId: 'run_3',
+    });
+
+    const s4 = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'input session',
+      profile: 'human-web',
+      runId: 'run_4',
+    });
+    await store.updateSessionStatus(s4.id, 'awaiting-input');
+
+    // Ensure event timestamp is strictly newer than the sessions' created_at timestamps.
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Add an event to s1 (the oldest session) to make it have the latest activity.
+    const event = await store.appendEvent({
+      sessionId: s1.id,
+      type: 'agent/message',
+      payload: { text: 'needs human decision' },
     });
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -114,16 +142,38 @@ describe('web session read API', () => {
 
     // Client has no workspaceId; the server resolves + returns it (M2).
     expect(result.workspaceId).toBe(workspace.id);
-    expect(result.sessions.map((s) => s.id)).toEqual([second.id, first.id]);
+
+    // s1 has the newest activity (via event), followed by s4, s3, s2 (created_at order).
+    expect(result.sessions[0].id).toBe(s1.id);
     expect(result.sessions[0]).toMatchObject({
-      id: second.id,
-      title: 'newer',
-      status: 'active',
+      id: s1.id,
+      title: 'approval session',
+      status: 'awaiting-approval',
       runId: 'run_1',
+      lastActivityAt: event.timestamp,
+      needsAction: true,
+      actionKind: 'approval',
+    });
+
+    const byId = new Map(result.sessions.map((s) => [s.id, s]));
+    expect(byId.get(s2.id)).toMatchObject({
+      status: 'failed',
+      needsAction: true,
+      actionKind: 'failed',
+    });
+    expect(byId.get(s3.id)).toMatchObject({
+      status: 'active',
+      needsAction: false,
+      actionKind: null,
+    });
+    expect(byId.get(s4.id)).toMatchObject({
+      status: 'awaiting-input',
+      needsAction: true,
+      actionKind: 'input',
     });
   });
 
-  it('session.get returns metadata plus the composed runId', async () => {
+  it('session.get returns metadata plus the composed runId, lastActivityAt fallback, and action projections', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
@@ -136,14 +186,18 @@ describe('web session read API', () => {
       profile: 'human-web',
       runId: 'run_1',
     });
+    await store.updateSessionStatus(session.id, 'awaiting-approval');
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     const result = await api.session.get({ sessionId: session.id });
     expect(result.session).toMatchObject({
       id: session.id,
       title: 'detail',
-      status: 'active',
+      status: 'awaiting-approval',
       runId: 'run_1',
+      lastActivityAt: expect.any(String),
+      needsAction: true,
+      actionKind: 'approval',
     });
   });
 

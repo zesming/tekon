@@ -1,5 +1,34 @@
 # 变更日志
 
+## v0.16.0
+
+第十五轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md`，PR #11）。本轮以“面向人类可用”为基准对产品主路径、CLI/Web 入口与运行时架构进行系统性审查，完成人类入口体验优化（FIX-01/02/03）与会话列表行动投影（FIX-04/P1-04），并确立多项架构 ADR 与分阶段推进策略。产品版本统一提升至 `0.16.0`。
+
+### 人类入口与体验改进（FIX-01 ~ FIX-04）
+
+- **FIX-01 无参数成为人类入口**：`tekon` 无参数执行不再视为错误（退出码 1→0），与 `tekon help` 对齐，首屏清晰提供 Web 界面、直接运行和命令帮助三条推荐路径。
+- **FIX-02 帮助页推荐开始方式前置**：帮助页重构为“推荐开始方式”优先（`tekon ui` / `tekon run "你的需求"` / `tekon help <cmd>`），避免新用户被二十余个底层框架命令淹没。
+- **FIX-03 统一 CLI 与 updater 产品版本**：CLI 改为直接读取根 `package.json` 的 `0.16.0`，消除此前 CLI 显示内部包版本 `0.7.0` 与 updater 读取根版本 `0.15.x` 的双重身份漂移。
+- **FIX-04 / P1-04 Session 列表按最近活动排序并补齐行动投影**：
+  - `packages/core/src/session/session-store.ts`：`listSessions` 改用 `LEFT JOIN session_events`，通过 `coalesce(max(e.timestamp), s.created_at)` 派生 `lastActivityAt`，按 `last_activity_at desc, s.rowid desc` 稳定排序；产生新事件的旧会话自动置顶。
+  - `packages/web/src/shared/rpc-contract.ts`：`apiSessionSchema` 扩充 `lastActivityAt`、`needsAction`（布尔）与 `actionKind`（`approval` | `input` | `failed` | `null`）。
+  - `packages/web/src/server/api/routers/session.ts`：在 `session.list` 与 `session.get` 集中派生待处理行动状态（`awaiting-approval`→`approval`、`awaiting-input`→`input`、`failed`→`failed`），不触碰 core 冻结的 `sessionSchema`。
+  - `packages/web/src/client/pages/SessionsPage.tsx`：展示中文相对活动时间（如“12分钟前”/“2小时前”），并在需人类介入时显示“待审批 / 待输入 / 需处理”高亮徽标。
+
+### 架构复审与视角批注（§13 second-perspective annotation）
+
+- **P0-01 措辞订正**：原报告称“产品合同不成立”偏强。对外承诺的“受控交付（standard-delivery）”合同完整成立并有测试真锁；缺失的是尚未宣称的轻量持续协作（Collaborate）能力。界面已在 `SessionComposer.tsx:11-15, 74` 诚实披露；verdict 为 real，归入 §9 阶段 B/C 推进。
+- **P0-02 ~ P0-04 架构 ADR 递延（阶段 A/C）**：Web/CLI 事实 multi-owner（P0-02）、非 quiescent shutdown（P0-03）与 dual-write projection-only 事实源角色（P0-04）全部确认属实；单 owner daemon vs multi-owner generation fencing 留待用户拍板后独立 PR 执行。
+- **P1-01 / P1-03 / P1-05 / P1-06 / P1-07 演进递延（阶段 B/C/D）**：DSH bridge SDK/ACP 重新对齐（P1-01）、默认交付前 run plan 预览（P1-03）、Token 输入框重构为连接管理（P1-05）、长会话分页/虚拟化（P1-06）以及中英文案词汇表统一（P1-07）均已诚实归入后续阶段。
+- **P1-08 流程治理采纳**：明确区分 Merge gate 与 Product acceptance gate，避免以 CI 全绿掩盖产品级未决项。
+
+### 验证
+
+- 本地 `corepack pnpm test` 全量通过：1317 passed / 3 skipped（114 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api` 与 `cli` 测试）；
+- Web Playwright e2e 全量通过：28 passed（含移动端 390px 无横向溢出、内联审批闭环、新增 P1-04 “待审批”行动徽标断言）；
+- P1-04 UI 已做真实浏览器截图核验（桌面 1440px + 移动 390px），行动徽标/状态徽标/时间同行排布无错位、无重叠、无溢出；
+- 三包 build/typecheck 干净。
+
 ## Unreleased（复审记录，不 bump 产品版本）
 
 > 依 `docs/technical/tekon-replatform-current-scope.md` §6 采纳的发布策略：**纯复审报告、批注、措辞订正与验收状态调整不单独抬高产品版本**（`tekon update` 比较根 `package.json` version，误 bump 会让用户全量重装重建却零行为变化）。此类内容记录于此，不再为每轮复审创建新的产品 PATCH。

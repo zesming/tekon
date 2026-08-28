@@ -38,12 +38,14 @@ Tekon 当前已经形成一套测试较强、边界说明较诚实、治理意�
 
 ### 2.2 UI 审查限制
 
-本轮没有可访问的已部署 Tekon 实例，也没有在本地完成浏览器启动与截图采集，因此：
+本轮报告初稿撰写时没有可访问的已部署 Tekon 实例，也未采集浏览器截图，因此原始范围如下：
 
 - 已审查：信息架构、状态语义、交互闭环、可访问性代码、响应式实现、错误文案和数据流。
 - 未声称完成：基于当前浏览器截图的像素级视觉、动效、实际焦点顺序和跨尺寸渲染审计。
 
-任何视觉结论都限定为静态实现审查，不冒充截图实测。
+任何静态审查结论都限定为实现审查，不冒充截图实测。
+
+> **补充（本轮落地后）**：针对本轮实际改动的 P1-04 Session 列表，已在本地用 Playwright 完成桌面 1440px 与移动 390px 的真实浏览器截图核验（见 §11）。该补充仅覆盖 P1-04 触及的列表 UI，不扩展为对全站的跨尺寸像素级审计。
 
 ## 3. 外部基线带来的关键判断
 
@@ -384,6 +386,20 @@ PR #10 自带的最终权威报告结论仍为“不通过完整验收”，但�
 - 测试精确断言 `--version` 与根版本一致。
 - 本次实际行为改进按仓库规则提升到 `0.16.0`。
 
+### FIX-04：Session 列表按最近活动排序并补齐行动投影（P1-04）
+
+原行为：
+
+- `packages/core/src/session/session-store.ts` 的 `listSessions` 仅按 `created_at desc, rowid desc` 静态排序；产生新事件推进或进入人工审批的旧会话被沉在列表后方。
+- RPC `apiSessionSchema` 与 `SessionListEntry` 缺少最近活动时间与待处理标识，列表卡片无法感知哪些会话正在等待人类决策。
+
+新行为：
+
+- `packages/core/src/session/session-store.ts:49-52, 322-338`：`listSessions` 改用 `LEFT JOIN session_events`，以 `coalesce(max(e.timestamp), s.created_at)` 派生 `lastActivityAt`，并按 `last_activity_at desc, s.rowid desc` 排序；会话随事件更新自动置顶。
+- `packages/web/src/shared/rpc-contract.ts:648-671`：`apiSessionSchema` 扩充 `lastActivityAt`、`needsAction` 与 `actionKind`（`approval` | `input` | `failed` | `null`）。
+- `packages/web/src/server/api/routers/session.ts:9-24, 36-60, 62-86`：实现 `deriveSessionAction` 并在服务端 `session.list` / `session.get` 按会话状态集中派生行动语义，不破坏 core 冻结的 `sessionSchema`。
+- `packages/web/src/client/pages/SessionsPage.tsx:15-42, 113-132`：渲染中文相对活动时间（如“12分钟前”/“2小时前”），并在需用户介入时展示“待审批 / 待输入 / 需处理”徽标。
+
 ## 9. 推荐的下一阶段实施顺序
 
 ### 阶段 A：运行权威与安全停机
@@ -416,7 +432,7 @@ PR #10 自带的最终权威报告结论仍为“不通过完整验收”，但�
 
 Tekon 要获得“面向普通人稳定可用”通过，至少需要同时满足：
 
-- [ ] Web/CLI 有一个普通人可理解的默认入口，不要求先理解 role/workflow/gate。
+- [x] Web/CLI 有一个普通人可理解的默认入口，不要求先理解 role/workflow/gate。（本轮 CLI 侧已达成：`tekon` 无参数即给出人类优先帮助，`tekon ui`/`tekon run` 前置——FIX-01/02；Web 侧信息架构中英混杂与技术术语仍待 P1-07 统一。）
 - [ ] 当前 session 可继续输入、转向、取消并在重启后恢复。
 - [ ] Provider 消息和工具事件是执行期真实流，而非完成后合成。
 - [ ] Collaborate 与 Deliver 是明确、可切换、行为不同的产品轨道。
@@ -429,11 +445,11 @@ Tekon 要获得“面向普通人稳定可用”通过，至少需要同时满�
 
 ## 11. 验证状态
 
-- 代码测试已先更新，与实现以同一原子提交 `5b903ee` 进入分支。
-- 该代码提交的 GitHub Actions 已通过：Core #268 = success，CI #177 = success。
-- 本环境无法直接克隆仓库并执行本地 `pnpm test`；因此不伪造本地测试记录，远端 Actions 是本轮代码验证证据。
+- 代码测试均先行更新：FIX-01/02/03 已随首个 CLI 提交 `5b903ee` 进入分支；FIX-04（P1-04）的实现与测试随本轮批注一起以同一提交进入分支。
+- 本轮已在本地执行全量测试并通过：`corepack pnpm test` = **1317 passed / 3 skipped（114 个测试文件）**，覆盖 Core、Web、CLI 全量单测与集成测试；Web Playwright e2e = **28 passed**（含移动端 390px 无横向溢出、内联审批闭环、新增 P1-04 “待审批”行动徽标断言）。
+- GitHub Actions：`5b903ee`（FIX-01/02/03，CLI 人类入口 + 版本身份）对应 Core #268 = success、CI #177 = success；**FIX-04 与本轮批注属于新提交，其 CI 结果以该提交推送后的 Actions run 为准**（上述 #268/#177 不覆盖 FIX-04）。本地全量测试已如上通过。
 - README 已同步人类入口和版本身份；主用户手册 Markdown/HTML 已检查但未修改，因为其中没有描述无参数错误或内部包版本，现有 `tekon help` / `tekon ui` 说明仍然成立。
-- UI 视觉部分未做截图实测，限制已在 §2.2 明示。
+- P1-04 UI 已做真实浏览器截图核验（桌面 1440px + 移动 390px）：Session 列表的行动徽标、状态徽标、交付运行标签与相对活动时间在同一行正确排布，无错位、无重叠、无横向溢出；窄屏下标题按预期省略截断、行动指示保持可见。截图为一次性验证产物，未随仓库归档，结论记于本节。
 
 ## 12. 最终结论
 
@@ -444,3 +460,42 @@ Tekon 要获得“面向普通人稳定可用”通过，至少需要同时满�
 > Tekon 已完成一个测试较强、边界明确的实验性 Session/Event/Job 与受控交付基础设施切片；它尚未完成面向人类的持续协作产品、单一运行权威和权威 Session log。
 
 最优下一步不是继续堆框架，而是用最少的新抽象完成一个真实的 Collaborate → Deliver 纵向闭环，并删除无法服务该闭环的兼容层。
+
+## 13. 复审视角批注（second-perspective annotation）
+
+本节由实施方独立回溯代码、契约与测试后，对报告中 11 项 finding 及 4 项修复进行逐条核验与处置标注。处置标注分为三类：
+- **已修**：已在本 PR 前期提交中闭环并由自动化测试锁定；
+- **本轮修**：已在本 PR 本轮实现中闭环（FIX-04）；
+- **ADR递延**：代码事实成立，属于需用户/架构拍板的跨阶段里程碑（对应 §9 阶段 A–D），在当前切片诚实披露边界，不做未经拍板的超范围重写。
+
+### 13.1 P0 级架构问题批注
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **P0-01** | **ADR递延（阶段B/C）** | `packages/web/src/client/components/sessions/SessionComposer.tsx:11-15, 74`<br>`packages/core/src/runtime/legacy-agent-driver.ts:137-142, 175-177`<br>`packages/core/src/runtime/agent-step-events.ts:99-115` | **措辞订正**：原报告称“Session 产品合同不成立”偏强。对外宣称的“受控交付（standard-delivery）”合同完整成立并有测试真锁；缺失的是未宣称的轻量持续协作（Collaborate）能力。界面已在 `SessionComposer.tsx:74` 诚实披露（“当前入口会启动 standard-delivery 受控交付全链路；轻量协作、会话内追问与转向尚未开放”）。verdict 仍为 **real**，归入 §9 阶段 B（真实流式/durable inbox）与阶段 C（Collaborate→Deliver 升级）。 |
+| **P0-02** | **ADR递延（阶段A）** | `packages/web/src/server/api/root.ts:170-178`<br>`packages/cli/src/lib/session-context.ts:50-78`<br>`packages/core/src/db/repositories.ts:569-588`<br>`packages/core/src/session/session-store.ts:25-45` | 事实 multi-owner 成立：Web 与 CLI 均可启动 `JobRunner` 竞争 SQLite 与 Git。闭环需引入 single-owner daemon（推荐）或全副作用 fencing + Node expected-from CAS，属重大架构决策，归入 §9 阶段 A。 |
+| **P0-03** | **ADR递延（阶段A）** | `packages/core/src/session/job-runner.ts:514-544` | 事实成立：`stop()` 等待 5 秒后清理进程内引用，保障单进程退出，但无跨进程/全副作用的 quiescent join 证明。随 single-owner daemon 在 §9 阶段 A 建立明确 shutdown 契约。 |
+| **P0-04** | **ADR递延（阶段C）** | `packages/core/src/session/dual-write.ts:14-25, 227-249`<br>`docs/technical/tekon-replatform-current-scope.md:§3` | 事实成立：`session_events` 当前为旧领域写入后的 best-effort projection，旧表仍是交付事实源。当前 projection-only 已在范围基线明文化并被接受，不造成治理数据破坏；升级为权威 log + transactional outbox 归入 §9 阶段 C。 |
+
+### 13.2 P1 级演进问题批注
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **P1-01** | **ADR递延（阶段B/D）** | `packages/core/src/runtime/dsh-bridge-probe.ts:15-35`<br>`packages/core/src/runtime/dsh-headless-adapter.ts:23-50` | 精确 pin `0.1.1-rc.2` 是安全 fail-closed 做法。官方 Harness 发布 `0.1.2-alpha.1` 引入 SDK/ACP 后，桥接面需重新评估（Provider vs Session 方向），随 Provider ADR 在阶段 B/D 处理。 |
+| **P1-02** | **ADR递延（阶段B）** | `packages/core/src/session/profile-policy.ts:10-35`<br>`packages/core/src/workflow/goal-job-executor.ts:1-50` | 认可应先做 Collaborate 纵向闭环再做横向平台扩展。下一里程碑冻结 Profile/Automation/Goal 等横向扩展，聚焦阶段 B。 |
+| **P1-03** | **ADR递延（阶段C）** | `packages/cli/src/commands/run.ts:54-92`<br>`packages/web/src/client/components/sessions/SessionComposer.tsx:29-85` | 默认启动完整交付缺少启动前预览属实。在启动前给出 run plan（角色、gate、成本、边界）属高价值增益，随阶段 C 的需求确认与 Deliver 升级一同落地。 |
+| **P1-04** | **本轮修（FIX-04）** | `packages/core/src/session/session-store.ts:49-52, 322-338`<br>`packages/web/src/shared/rpc-contract.ts:648-671`<br>`packages/web/src/server/api/routers/session.ts:9-24, 36-60, 62-86`<br>`packages/web/src/client/pages/SessionsPage.tsx:15-42, 113-132` | **已在本轮完成修复**：`listSessions` 改为 LEFT JOIN session_events 按最近活动排序；`apiSessionSchema` 扩充 `lastActivityAt`、`needsAction` 与 `actionKind` 投影；SessionsPage 展示中文相对时间与待处理徽标。 |
+| **P1-05** | **ADR递延（阶段C/token ADR）** | `packages/web/src/client/layouts/TopBar.tsx:14-42`<br>`docs/technical/tekon-web-architecture.md` | token 常驻输入是本地轻量认证的明文设计（报告 §7.1 自列“应保留”），350ms 防抖是刻意防止输入过程中每按键触发请求的设计。直接改为连接设置弹窗会破坏多条现有 E2E 测试，随 Collaborate 里程碑及安全 token ADR 统一重构。 |
+| **P1-06** | **ADR递延（阶段D）** | `packages/web/src/client/components/sessions/EventFeed.tsx:40-95`<br>`packages/web/src/client/lib/session-stream.ts:80-120` | 长会话分页、游标订阅、虚拟列表与上下文压力可视化属于规模化阶段需求，归入 §9 阶段 D。 |
+| **P1-07** | **ADR递延（阶段C/D）** | `packages/web/src/client/pages/SessionsPage.tsx`<br>`packages/web/src/client/pages/SessionDetailPage.tsx` | 零散逐字符串替换易造成词汇漂移与测试断言失败；应在阶段 C 统一建立产品中文词汇表与文案测试。 |
+| **P1-08** | **已采纳（过程治理）** | `docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md:318-329` | 明确区分 Merge gate（代码/单测/CI 安全）与 Product acceptance gate（产品闭环与架构通过），PR 标题、Release Note 和 UI 徽标保持一致成熟度。 |
+
+### 13.3 修复项批注
+
+| 编号 | 处置标注 | 核验证据（文件:行） | 理由与说明 |
+| --- | --- | --- | --- |
+| **FIX-01** | **已修** | `packages/cli/src/index.ts:111-114`<br>`packages/cli/__tests__/help.test.ts:179-192` | 无参数调用 `tekon` 退出码为 0，友好输出 Web/直接运行/命令帮助三条推荐路径。 |
+| **FIX-02** | **已修** | `packages/cli/src/commands/help.ts:53-57` | 帮助页首屏前置展示 `tekon ui` 与 `tekon run "你的需求"` 推荐开始方式，避免将内部框架命令直接倾倒给用户。 |
+| **FIX-03** | **已修** | `packages/cli/src/lib/utils.ts:10-18`<br>`packages/cli/__tests__/help.test.ts:124-140` | CLI 与 updater 统一读取根 `package.json` 版本（`0.16.0`），消除内部包版本 `0.7.0` 与根版本 `0.15.x` 的双重身份错位。 |
+| **FIX-04** | **本轮修** | `packages/core/src/session/session-store.ts:49-52, 322-338`<br>`packages/web/src/shared/rpc-contract.ts:648-671`<br>`packages/web/src/server/api/routers/session.ts:9-24, 36-60, 62-86`<br>`packages/web/src/client/pages/SessionsPage.tsx:15-42, 113-132` | Session 列表按最近活动排序，补齐 `needsAction`/`actionKind` 投影与相对时间展示（详见 §8 FIX-04）。 |
+

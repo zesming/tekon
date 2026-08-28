@@ -40,12 +40,16 @@ export interface JobUpdateCondition {
 }
 
 /**
- * A session as surfaced to the Session List read-path (phase 3 3a). The frozen
- * `Session` schema has no runId (session-contract.ts), so the list entry
- * extends it with the run_id column value — carried through, not persisted
- * separately. Used by the web `session.list` RPC.
+ * A session as surfaced to the Session List read-path (phase 3 3a / phase 4 P1-04).
+ * The frozen `Session` schema has no runId (session-contract.ts), so the list
+ * entry extends it with the run_id column value and aggregated lastActivityAt
+ * timestamp — carried through, not persisted separately on the session table.
+ * Used by the web `session.list` RPC.
  */
-export type SessionListEntry = Session & { runId: string | null };
+export type SessionListEntry = Session & {
+  runId: string | null;
+  lastActivityAt: string;
+};
 
 export interface SessionEventStore {
   getOrCreateDefaultWorkspace(root: string): Promise<Workspace>;
@@ -58,9 +62,10 @@ export interface SessionEventStore {
   getSession(sessionId: string): Promise<Session | null>;
   findSessionByRunId(runId: string): Promise<Session | null>;
   /**
-   * List a workspace's sessions newest-first (created_at desc) for the Session
-   * List UI. Pure SELECT, zero migration; returns [] for an unknown workspace.
-   * Carries run_id from the column (SessionListEntry).
+   * List a workspace's sessions ordered by last activity desc (most recent
+   * event timestamp, falling back to created_at) for the Session List UI. Pure
+   * SELECT, zero migration; returns [] for an unknown workspace. Carries run_id
+   * and lastActivityAt from the query (SessionListEntry).
    */
   listSessions(workspaceId: string): Promise<SessionListEntry[]>;
   /**
@@ -171,6 +176,10 @@ type SessionRow = {
   run_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type SessionListRow = SessionRow & {
+  last_activity_at: string;
 };
 
 type SessionEventRow = {
@@ -313,14 +322,19 @@ export function createSessionEventStore(
     async listSessions(workspaceId) {
       const rows = db
         .prepare(
-          // created_at desc, then rowid desc as a stable tiebreak so sessions
-          // created within the same millisecond keep a deterministic
-          // insertion-newest-first order (rowid is monotonic on this rowid
-          // table; `id text primary key` does not remove it).
-          'select * from sessions where workspace_id = ? order by created_at desc, rowid desc',
+          `select s.*, coalesce(max(e.timestamp), s.created_at) as last_activity_at
+           from sessions s
+           left join session_events e on e.session_id = s.id
+           where s.workspace_id = ?
+           group by s.id
+           order by last_activity_at desc, s.rowid desc`,
         )
-        .all(workspaceId) as SessionRow[];
-      return rows.map((row) => ({ ...mapSession(row), runId: row.run_id }));
+        .all(workspaceId) as SessionListRow[];
+      return rows.map((row) => ({
+        ...mapSession(row),
+        runId: row.run_id,
+        lastActivityAt: row.last_activity_at,
+      }));
     },
 
     async getRunIdBySessionId(sessionId) {

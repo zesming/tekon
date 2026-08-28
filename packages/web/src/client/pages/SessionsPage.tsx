@@ -12,9 +12,33 @@ import { LoadingState } from '../components/ui/LoadingState.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { SessionComposer } from '../components/sessions/SessionComposer.js';
 
-// Phase 3 3b: controlled-delivery list + composer. Until Collaborate and
-// follow-up exist, this page names the product behavior honestly rather than
-// presenting a full workflow launch as a chat session.
+const ACTION_KIND_LABELS: Record<string, string> = {
+  approval: '待审批',
+  input: '待输入',
+  failed: '需处理',
+};
+
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  if (Number.isNaN(diffMs)) return iso;
+  if (diffMs < 0) return '刚刚';
+
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHours = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSec < 60) return '刚刚';
+  if (diffMin < 60) return `${diffMin}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays <= 7) return `${diffDays}天前`;
+  return date.toLocaleDateString();
+}
+
+// Phase 3 3b / Phase 4 P1-04: controlled-delivery list + composer.
+// Displays relative activity time and needsAction badges per session.
 
 export function SessionsPage() {
   const scope = useAuthScope();
@@ -88,10 +112,23 @@ export function SessionsPage() {
                 <span className="session-list-title">
                   {session.title ?? session.id}
                 </span>
+                {session.needsAction && session.actionKind ? (
+                  <span
+                    className={`session-list-action session-list-action-${session.actionKind}`}
+                  >
+                    {ACTION_KIND_LABELS[session.actionKind] ?? '待处理'}
+                  </span>
+                ) : null}
                 <StatusBadge status={session.status} size="sm" />
                 {session.runId ? (
                   <span className="session-list-run text-muted">交付运行</span>
                 ) : null}
+                <span
+                  className="session-list-time"
+                  title={session.lastActivityAt}
+                >
+                  {formatRelativeTime(session.lastActivityAt)}
+                </span>
               </NavLink>
             </li>
           ))}
