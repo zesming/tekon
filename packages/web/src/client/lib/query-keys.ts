@@ -46,5 +46,7 @@ export const queryKeys = {
   draftShapeDetail: (shapePath: string) => `draftShape.detail.${shapePath}`,
   roles: () => 'roles',
   workflows: () => 'workflows',
+  workflowPlan: (mode?: string, template?: string, agent?: string) =>
+    `workflow.plan.${mode ?? 'default'}.${template ?? 'default'}.${agent ?? 'default'}`,
   settings: () => 'settings',
 };

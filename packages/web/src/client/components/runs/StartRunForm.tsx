@@ -5,6 +5,7 @@ import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { queryKeys } from '../../lib/query-keys.js';
+import { formatTimeout, formatPhaseParallel } from '../../lib/plan-format.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -33,9 +34,8 @@ const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
 };
 
 /**
- * Collapsible "New Run" form with demand, mode, template, agent, and timeout
- * fields. Goal is explicit because dsh-headless cannot satisfy governed
- * workflow artifact contracts.
+ * Collapsible "New Run" form with demand, mode, template, agent, execution plan preview,
+ * unrestricted network confirmation, and timeout fields.
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
@@ -60,6 +60,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const [profile, setProfile] = useState<'human-web' | 'autonomous-delivery'>(
     'human-web',
   );
+  const [acknowledgedNetwork, setAcknowledgedNetwork] = useState(false);
   const [timeoutMs, setTimeoutMs] = useState('3600000');
   const [noProgressTimeoutMs, setNoProgressTimeoutMs] = useState('');
   const [allowDirtyBase, setAllowDirtyBase] = useState(false);
@@ -80,10 +81,34 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   const workflows = workflowData?.workflows ?? [];
 
+  // ── Fetch workflow execution plan preview (T2) ──
+  const effectiveTemplate = mode === 'goal' ? undefined : (template || undefined);
+  const { data: planData } = useQuery<
+    RpcProcedureMap['workflow.plan']['output']
+  >(
+    queryKeys.workflowPlan(mode, effectiveTemplate, agent),
+    () =>
+      rpc.call('workflow.plan', {
+        mode,
+        template: effectiveTemplate,
+        agent,
+      }),
+  );
+
+  // Reset or align network acknowledgement when agent/plan changes
+  const requiresUnrestrictedNetwork = Boolean(
+    planData?.requiresUnrestrictedNetwork || agent === 'dsh-headless',
+  );
+
+  useEffect(() => {
+    if (!requiresUnrestrictedNetwork) {
+      setAcknowledgedNetwork(false);
+    }
+  }, [requiresUnrestrictedNetwork]);
+
   // P0-03 (S7c): when a shaped draft is loaded, the server rejects unless it is
   // approved AND readyForRun. Mirror that in the UI so submit is disabled with
-  // an explanation instead of surfacing a server 400 (UI guidance, not the
-  // security boundary — the server file check is authoritative).
+  // an explanation instead of surfacing a server 400.
   const draft = demandDetail?.shape;
   const draftNotReady = Boolean(
     shapePath && draft && !(draft.approved && draft.readyForRun),
@@ -94,7 +119,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     RpcProcedureMap['project.run']['input'],
     RpcProcedureMap['project.run']['output']
   >((input) => rpc.call('project.run', input), {
-    invalidateKeys: ['project.detail', 'project.overview'],
+    invalidateKeys: ['project.detail', 'project.overview', 'session.list'],
   });
 
   const handleModeChange = (nextMode: RunMode) => {
@@ -103,8 +128,6 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       setTemplate('');
       setProfile('human-web');
     } else if (agent === 'dsh-headless') {
-      // dsh-headless is an official one-shot profile and cannot produce the
-      // artifact/gate contract of a governed workflow.
       setAgent('codex');
     }
   };
@@ -127,22 +150,25 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       addFlash('warning', '请输入需求描述');
       return;
     }
+    if (requiresUnrestrictedNetwork && !acknowledgedNetwork) {
+      addFlash('warning', '联网不受限需知情确认');
+      return;
+    }
 
     const input: RpcProcedureMap['project.run']['input'] = {
       demandText: demandText.trim(),
       token,
     };
 
-    // P0-03 (S7c): forward the shaped-draft path so the server enforces
-    // approved + readyForRun against the file (not a client boolean). Without
-    // this the client silently dropped the path and ran as free text.
     if (shapePath) input.demandShapePath = shapePath;
-
     if (mode === 'goal') input.mode = 'goal';
     if (mode === 'workflow' && template) input.template = template;
     if (agent) input.agent = agent;
     if (mode === 'workflow' && profile !== 'human-web') input.profile = profile;
     if (allowDirtyBase) input.allowDirtyBase = true;
+    if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
+      input.acknowledgeUnrestrictedNetwork = true;
+    }
 
     const parsedTimeout = Number(timeoutMs);
     if (Number.isFinite(parsedTimeout) && parsedTimeout > 0) {
@@ -158,6 +184,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       const result = await startMutation.mutate(input);
       addFlash('success', `运行已启动: ${result.run.id.slice(0, 12)}`);
       setDemandText('');
+      setAcknowledgedNetwork(false);
       setIsOpen(false);
     } catch (err) {
       addFlash(
@@ -166,6 +193,12 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       );
     }
   };
+
+  const isSubmitDisabled =
+    startMutation.isPending ||
+    !demandText.trim() ||
+    draftNotReady ||
+    (requiresUnrestrictedNetwork && !acknowledgedNetwork);
 
   return (
     <div className="card mb-6">
@@ -304,63 +337,260 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               : '受控交付会执行模板中的角色、Artifact 与 Gate；dsh-headless 不支持此模式。'}
           </p>
 
-          {/* Timeout row */}
-          <div
-            className="form-row"
-            style={{ gridTemplateColumns: '1fr 1fr 1fr' }}
-          >
-            <div className="form-group">
-              <label className="form-label" htmlFor="start-run-timeout">
-                超时 (ms)
-              </label>
-              <input
-                id="start-run-timeout"
-                className="input"
-                type="number"
-                value={timeoutMs}
-                onChange={(e) => setTimeoutMs(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label
-                className="form-label"
-                htmlFor="start-run-no-progress-timeout"
+          {/* Execution Plan Preview (T2) */}
+          {planData ? (
+            <div
+              className="run-plan-preview mb-4"
+              role="region"
+              aria-label="执行计划预览"
+              style={{
+                background: 'var(--surface-h)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '14px 16px',
+                marginTop: '12px',
+              }}
+            >
+              <div
+                className="flex items-center justify-between"
+                style={{ marginBottom: '10px' }}
               >
-                无进展超时 (ms)
-              </label>
-              <input
-                id="start-run-no-progress-timeout"
-                className="input"
-                type="number"
-                value={noProgressTimeoutMs}
-                onChange={(e) => setNoProgressTimeoutMs(e.target.value)}
-                placeholder="可选"
-              />
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                  }}
+                >
+                  📋 执行计划预览
+                </span>
+                {planData.requiresUnrestrictedNetwork ? (
+                  <span className="badge badge-blocked badge-sm">
+                    联网不受限
+                  </span>
+                ) : (
+                  <span className="badge badge-passed badge-sm">
+                    网络受控隔离
+                  </span>
+                )}
+              </div>
+
+              {/* Role Chain */}
+              <div style={{ marginBottom: '10px' }}>
+                <span
+                  className="text-sm text-muted"
+                  style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                >
+                  角色链路：
+                </span>
+                <div className="flex gap-2 items-center" style={{ flexWrap: 'wrap' }}>
+                  {planData.roleChain.map((role, idx) => (
+                    <span key={role} className="flex items-center gap-2">
+                      {idx > 0 && (
+                        <span style={{ color: 'var(--text-t)', fontSize: '11px' }}>
+                          →
+                        </span>
+                      )}
+                      <span className="badge-tag accent">{role}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Phases */}
+              {planData.phases && planData.phases.length > 0 && (
+                <div style={{ marginBottom: '10px' }}>
+                  <span
+                    className="text-sm text-muted"
+                    style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                  >
+                    执行阶段：
+                  </span>
+                  <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                    {planData.phases.map((phase) => (
+                      <div
+                        key={phase.id}
+                        style={{
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border-l)',
+                          borderRadius: '6px',
+                          padding: '6px 10px',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div style={{ fontWeight: 600 }}>{phase.name}</div>
+                        <div className="text-muted" style={{ fontSize: '11px' }}>
+                          {formatPhaseParallel(phase.parallel)} · 节点: {phase.nodeIds.join(', ')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Gates */}
+              {planData.gates && planData.gates.length > 0 && (
+                <div>
+                  <span
+                    className="text-sm text-muted"
+                    style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                  >
+                    Gate 审批与控制点：
+                  </span>
+                  <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                    {planData.gates.map((g) => (
+                      <div
+                        key={`${g.nodeId}-${g.type}`}
+                        style={{
+                          background: 'var(--surface)',
+                          border: g.requiresHumanApproval
+                            ? '1px solid var(--blk)'
+                            : '1px solid var(--border-l)',
+                          borderRadius: '6px',
+                          padding: '6px 10px',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span style={{ fontWeight: 600 }}>{g.type}</span>
+                          <span className="text-muted">({g.role})</span>
+                          {g.requiresHumanApproval && (
+                            <span className="badge-tag risk">人工审批</span>
+                          )}
+                        </div>
+                        <div className="text-muted" style={{ fontSize: '11px' }}>
+                          节点: {g.nodeId} · 超时: {formatTimeout(g.timeoutMs)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="form-group">
-              <label className="form-label" style={{ visibility: 'hidden' }}>
-                placeholder
-              </label>
+          ) : null}
+
+          {/* Unrestricted Network Warning & Checkbox (T2) */}
+          {requiresUnrestrictedNetwork && (
+            <div
+              className="mb-4"
+              role="alert"
+              style={{
+                background: 'var(--fail-bg, #fef2f2)',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '12px 14px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: '#991b1b',
+                  marginBottom: '8px',
+                  fontWeight: 600,
+                }}
+              >
+                ⚠ 风险提示：当前执行代理（{agent}）联网不受限，运行环境将具备完整网络访问权限。
+              </div>
               <label
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
-                  fontSize: 12,
+                  gap: 8,
+                  fontSize: '13px',
                   cursor: 'pointer',
-                  color: 'var(--text-s)',
-                  paddingTop: 8,
+                  fontWeight: 600,
+                  color: '#991b1b',
                 }}
               >
                 <input
                   type="checkbox"
-                  checked={allowDirtyBase}
-                  onChange={(e) => setAllowDirtyBase(e.target.checked)}
+                  id="unrestricted-network-ack"
+                  checked={acknowledgedNetwork}
+                  onChange={(e) => setAcknowledgedNetwork(e.target.checked)}
                 />
-                允许脏工作区
+                我已知悉本次运行联网不受限
               </label>
             </div>
-          </div>
+          )}
+
+          {/* Advanced collapsible section */}
+          <details
+            style={{
+              marginBottom: '16px',
+              background: 'var(--surface-h)',
+              border: '1px solid var(--border-l)',
+              borderRadius: '6px',
+              padding: '8px 12px',
+            }}
+          >
+            <summary
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--text-s)',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              ⚙ 高级设置（超时与工作区）
+            </summary>
+            <div
+              className="form-row mt-2"
+              style={{ gridTemplateColumns: '1fr 1fr 1fr', marginTop: '10px' }}
+            >
+              <div className="form-group">
+                <label className="form-label" htmlFor="start-run-timeout">
+                  超时 (ms)
+                </label>
+                <input
+                  id="start-run-timeout"
+                  className="input"
+                  type="number"
+                  value={timeoutMs}
+                  onChange={(e) => setTimeoutMs(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label
+                  className="form-label"
+                  htmlFor="start-run-no-progress-timeout"
+                >
+                  无进展超时 (ms)
+                </label>
+                <input
+                  id="start-run-no-progress-timeout"
+                  className="input"
+                  type="number"
+                  value={noProgressTimeoutMs}
+                  onChange={(e) => setNoProgressTimeoutMs(e.target.value)}
+                  placeholder="可选"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" style={{ visibility: 'hidden' }}>
+                  placeholder
+                </label>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    color: 'var(--text-s)',
+                    paddingTop: 8,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allowDirtyBase}
+                    onChange={(e) => setAllowDirtyBase(e.target.checked)}
+                  />
+                  允许脏工作区
+                </label>
+              </div>
+            </div>
+          </details>
 
           {/* Actions */}
           <div
@@ -370,9 +600,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={
-                startMutation.isPending || !demandText.trim() || draftNotReady
-              }
+              disabled={isSubmitDisabled}
               onClick={handleStart}
             >
               {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
@@ -385,6 +613,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
             >
               该需求草案尚未批准或仍有待澄清问题，需先在草案页批准并清空开放问题后再发起运行。
+            </p>
+          )}
+
+          {requiresUnrestrictedNetwork && !acknowledgedNetwork && (
+            <p
+              className="text-sm"
+              style={{ color: '#991b1b', marginTop: 8 }}
+            >
+              需勾选知情确认框后方可发起不受限网络运行。
             </p>
           )}
 

@@ -48,9 +48,7 @@ test.describe('Tekon release dashboard', () => {
     ).toBeVisible();
 
     // ── 3. Verify authenticated delivery affordances ─────────────────────
-    await expect(page.getByLabel('Session token')).toHaveValue(
-      fixture.sessionToken,
-    );
+    await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeVisible();

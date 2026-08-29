@@ -3,10 +3,14 @@ import { ApiError } from '../errors.js';
 import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
 /**
- * Phase 4 P1-04: derive whether a session needs user action and what kind
- * from its current status.
+ * Phase 4 P1-04 / Phase 5 T3 (P1-UX-02): derive whether a session needs user
+ * action and what kind from its current status and acknowledgedAt timestamp.
+ * A failed session only needs action when unacknowledged (acknowledgedAt is null/undefined).
  */
-export function deriveSessionAction(status: string): {
+export function deriveSessionAction(
+  status: string,
+  acknowledgedAt?: string | null,
+): {
   needsAction: boolean;
   actionKind: SessionActionKind | null;
 } {
@@ -16,7 +20,10 @@ export function deriveSessionAction(status: string): {
     case 'awaiting-input':
       return { needsAction: true, actionKind: 'input' };
     case 'failed':
-      return { needsAction: true, actionKind: 'failed' };
+      if (acknowledgedAt == null) {
+        return { needsAction: true, actionKind: 'failed' };
+      }
+      return { needsAction: false, actionKind: null };
     default:
       return { needsAction: false, actionKind: null };
   }
@@ -41,18 +48,23 @@ export function latestActivityTimestamp(
  *   needs action -> actively running -> idle -> terminal history.
  * Within the same group, most recent activity stays first.
  */
-function attentionRank(status: string): number {
-  if (deriveSessionAction(status).needsAction) return 0;
+function attentionRank(
+  status: string,
+  acknowledgedAt?: string | null,
+): number {
+  if (deriveSessionAction(status, acknowledgedAt).needsAction) return 0;
   if (status === 'active') return 1;
   if (status === 'idle') return 2;
   return 3;
 }
 
 export function compareSessionAttention(
-  left: { status: string; lastActivityAt: string },
-  right: { status: string; lastActivityAt: string },
+  left: { status: string; lastActivityAt: string; acknowledgedAt?: string | null },
+  right: { status: string; lastActivityAt: string; acknowledgedAt?: string | null },
 ): number {
-  const rankDifference = attentionRank(left.status) - attentionRank(right.status);
+  const rankDifference =
+    attentionRank(left.status, left.acknowledgedAt) -
+    attentionRank(right.status, right.acknowledgedAt);
   if (rankDifference !== 0) return rankDifference;
 
   const leftMs = Date.parse(left.lastActivityAt);
@@ -64,13 +76,12 @@ export function compareSessionAttention(
 }
 
 /**
- * Phase 3 3a / Phase 4 P1-04: session read-path router. Powers the Session List
- * UI (left rail / SessionsPage) and Session Detail metadata (event bodies come
- * from the SSE endpoint, not from here — design D2).
+ * Phase 3 3a / Phase 4 P1-04 / Phase 5 T3: session read-path router. Powers
+ * the Session List UI (left rail / SessionsPage) and Session Detail metadata.
  *
  * session.list takes no client input: the client has no workspaceId, so the
- * server resolves the default workspace from projectRoot (the same pattern
- * project.run uses) and returns its id for the workspace picker (M2).
+ * server resolves the default workspace from projectRoot and returns its id
+ * for the workspace picker (M2).
  */
 export function createSessionRouter(context: ServerContext) {
   return {
@@ -80,7 +91,10 @@ export function createSessionRouter(context: ServerContext) {
       );
       const sessions = await context.sessions.listSessions(workspace.id);
       const projectedSessions = sessions.map((session) => {
-        const action = deriveSessionAction(session.status);
+        const action = deriveSessionAction(
+          session.status,
+          session.acknowledgedAt,
+        );
         return {
           id: session.id,
           workspaceId: session.workspaceId,
@@ -88,6 +102,7 @@ export function createSessionRouter(context: ServerContext) {
           profile: session.profile,
           status: session.status,
           runId: session.runId,
+          acknowledgedAt: session.acknowledgedAt,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
           // session-store projects the newest event; updatedAt remains the
@@ -143,6 +158,16 @@ export function createSessionRouter(context: ServerContext) {
           actionKind: action.actionKind,
         },
       };
+    },
+
+    async acknowledge(input: { sessionId: string }) {
+      const acknowledgedAt = await context.sessions.acknowledgeSession(
+        input.sessionId,
+      );
+      if (!acknowledgedAt) {
+        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+      }
+      return { acknowledgedAt };
     },
   };
 }

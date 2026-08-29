@@ -49,6 +49,11 @@ export interface JobUpdateCondition {
 export type SessionListEntry = Session & {
   runId: string | null;
   lastActivityAt: string;
+  /**
+   * P1-UX-02: human-attention state. NULL until a human acknowledges/archives
+   * the session; a failed session stays pinned (needsAction) while this is null.
+   */
+  acknowledgedAt: string | null;
 };
 
 export interface SessionEventStore {
@@ -75,6 +80,13 @@ export interface SessionEventStore {
    */
   getRunIdBySessionId(sessionId: string): Promise<string | null>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
+  /**
+   * P1-UX-02: mark a session as acknowledged/archived by a human. Sets
+   * acknowledged_at to now() (idempotent overwrite). Unknown session ids are a
+   * no-op. The Session List uses this to drop a handled failure out of the
+   * needs-action band. Returns the timestamp written, or null when no row matched.
+   */
+  acknowledgeSession(sessionId: string): Promise<string | null>;
   appendEvent(input: {
     sessionId: string;
     type: string;
@@ -185,6 +197,7 @@ type SessionRow = {
   run_id: string | null;
   created_at: string;
   updated_at: string;
+  acknowledged_at: string | null;
 };
 
 type SessionListRow = SessionRow & {
@@ -354,6 +367,7 @@ export function createSessionEventStore(
         ...mapSession(row),
         runId: row.run_id,
         lastActivityAt: row.last_activity_at,
+        acknowledgedAt: row.acknowledged_at ?? null,
       }));
     },
 
@@ -369,6 +383,18 @@ export function createSessionEventStore(
         db.prepare(
           'update sessions set status = ?, updated_at = ? where id = ?',
         ).run(status, now(), sessionId);
+      });
+    },
+
+    async acknowledgeSession(sessionId) {
+      return writeQueue.enqueue(() => {
+        const acknowledgedAt = now();
+        const info = db
+          .prepare(
+            'update sessions set acknowledged_at = ?, updated_at = ? where id = ?',
+          )
+          .run(acknowledgedAt, acknowledgedAt, sessionId);
+        return info.changes > 0 ? acknowledgedAt : null;
       });
     },
 

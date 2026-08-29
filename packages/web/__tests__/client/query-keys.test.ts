@@ -107,6 +107,12 @@ describe('queryKeys', () => {
       expect(queryKeys.workflows()).toBe('workflows');
     });
 
+    it('workflowPlan includes mode, template, and agent with defaults', () => {
+      expect(queryKeys.workflowPlan()).toBe('workflow.plan.default.default.default');
+      expect(queryKeys.workflowPlan('goal', undefined, 'dsh-headless')).toBe('workflow.plan.goal.default.dsh-headless');
+      expect(queryKeys.workflowPlan('workflow', 'feature-approval', 'codex')).toBe('workflow.plan.workflow.feature-approval.codex');
+    });
+
     it('settings returns static key', () => {
       expect(queryKeys.settings()).toBe('settings');
     });

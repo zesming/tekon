@@ -1,6 +1,14 @@
+import { MouseEvent } from 'react';
 import { NavLink } from 'react-router';
 
-import { useQuery, useAuthScope, useTicker } from '../hooks/index.js';
+import {
+  useQuery,
+  useMutation,
+  useAuthScope,
+  useTicker,
+  useWorkspaceSummaryStream,
+} from '../hooks/index.js';
+import { useFlash } from '../context/flash-context.js';
 import { formatRelativeTime } from '../lib/relative-time.js';
 import { rpc } from '../lib/rpc-client.js';
 import { queryKeys } from '../lib/query-keys.js';
@@ -22,16 +30,17 @@ const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
   failed: '需处理',
 };
 
-// Phase 3 3b / Phase 4 P1-04: controlled-delivery list + composer.
-// Displays relative activity time and needsAction badges per session.
+// Phase 3 3b / Phase 4 P1-04 / T3 / T5: controlled-delivery list + composer.
+// Displays relative activity time, needsAction badges, acknowledge action for failed sessions,
+// and subscribes to workspace summary SSE for real-time list synchronization.
 
 export function SessionsPage() {
   const nowMs = useTicker(60_000);
   const scope = useAuthScope();
+  const { addFlash } = useFlash();
 
   // Fire unconditionally like the other read pages: the RPC client supplies the
-  // session token (3a M1 fix); auth failures surface via ErrorBanner, not a
-  // pre-check on the in-memory token (which the e2e never populates).
+  // session token; auth failures surface via ErrorBanner.
   const { data, isLoading, error, refetch } = useQuery<
     RpcProcedureMap['session.list']['output']
   >(queryKeys.sessionList(scope), () => rpc.call('session.list'));
@@ -39,18 +48,44 @@ export function SessionsPage() {
   const sessions = data?.sessions ?? [];
   const workspaceId = data?.workspaceId ?? null;
 
+  // T5: Subscribe to live workspace summary SSE stream for real-time list invalidation
+  useWorkspaceSummaryStream(workspaceId);
+
+  // T3: Acknowledge mutation for failed sessions
+  const ackMutation = useMutation<
+    RpcProcedureMap['session.acknowledge']['input'],
+    RpcProcedureMap['session.acknowledge']['output']
+  >((input) => rpc.call('session.acknowledge', input), {
+    invalidateKeys: ['session.list'],
+  });
+
+  const handleAcknowledge = async (
+    e: MouseEvent<HTMLButtonElement>,
+    sessionId: string,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await ackMutation.mutate({ sessionId });
+      addFlash('success', '已确认并归档该失败会话');
+    } catch (err) {
+      addFlash(
+        'error',
+        err instanceof Error ? err.message : '确认失败会话失败',
+      );
+    }
+  };
+
   return (
     <>
       <header className="page-header">
         <div>
           <h1 className="page-title">受控交付</h1>
           <p className="page-subtitle">
-            发起并跟踪完整研发交付，查看执行过程、审批与结果
+            发起并跟踪完整研发交付，查看执行过程、阶段审批与交付产物
           </p>
         </div>
         <div className="page-actions">
-          {/* There is one workspace today. Render it as information, not a
-              disabled selector that suggests a choice the product cannot make. */}
           {workspaceId ? (
             <div
               className="workspace-picker"
@@ -90,10 +125,14 @@ export function SessionsPage() {
               session.lastActivityAt,
               nowMs,
             );
+            const isFailedUnacknowledged =
+              (session.status === 'failed' || session.actionKind === 'failed') &&
+              !session.acknowledgedAt;
+
             return (
               <li
                 key={session.id}
-                className="session-list-item"
+                className={`session-list-item${isFailedUnacknowledged ? " session-list-item-with-ack" : ""}`}
                 title={session.runId ? `关联运行 ${session.runId}` : undefined}
               >
                 <NavLink
@@ -123,6 +162,18 @@ export function SessionsPage() {
                     {relativeTime}
                   </time>
                 </NavLink>
+                {isFailedUnacknowledged && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs session-acknowledge-btn"
+                    title="确认并归档"
+                    aria-label="确认并归档失败会话"
+                    disabled={ackMutation.isPending}
+                    onClick={(e) => handleAcknowledge(e, session.id)}
+                  >
+                    ✓ 确认归档
+                  </button>
+                )}
               </li>
             );
           })}

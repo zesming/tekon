@@ -262,6 +262,13 @@ export function migrateDatabase(db: TekonDatabase): void {
       'integer not null default 0',
     );
 
+    // P1-UX-02: human-attention state for the Session List. NULL = unacknowledged
+    // (a failed session keeps needsAction and stays pinned); a timestamp means a
+    // human has acknowledged/archived it, so it drops out of the attention band.
+    // Nullable text with no default keeps every legacy row NULL (unacknowledged),
+    // and addColumnIfMissing keeps the migration idempotent without a table rebuild.
+    addColumnIfMissing(db, 'sessions', 'acknowledged_at', 'text');
+
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',
     ).run(WORK_USABLE_SCHEMA_VERSION, new Date().toISOString());

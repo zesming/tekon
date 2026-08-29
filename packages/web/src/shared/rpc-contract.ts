@@ -68,6 +68,7 @@ export const projectRunInputSchema = z.object({
   timeoutMs: z.number().optional(),
   noProgressTimeoutMs: z.number().optional(),
   progressHeartbeatMs: z.number().optional(),
+  acknowledgeUnrestrictedNetwork: z.boolean().optional(),
 });
 
 export const draftShapeInputSchema = z.object({
@@ -139,6 +140,13 @@ export const deliveryCiStatusInputSchema = z.object({
   runId: z.string().min(1),
   token: z.string().min(1),
   selector: z.string().optional(),
+});
+
+
+export const workflowPlanInputSchema = z.object({
+  template: z.string().optional(),
+  mode: z.enum(['workflow', 'goal']).optional(),
+  agent: z.string().optional(),
 });
 
 export const progressListInputSchema = z.object({
@@ -576,6 +584,29 @@ export const roleListOutputSchema = z.object({
   roles: z.array(roleItemSchema),
 });
 
+
+export const runPlanGateSchema = z.object({
+  nodeId: z.string(),
+  role: z.string(),
+  type: z.string(),
+  requiresHumanApproval: z.boolean(),
+  timeoutMs: z.number().optional(),
+});
+
+export const runPlanPhaseSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  parallel: z.boolean(),
+  nodeIds: z.array(z.string()),
+});
+
+export const runPlanSchema = z.object({
+  roleChain: z.array(z.string()),
+  gates: z.array(runPlanGateSchema),
+  requiresUnrestrictedNetwork: z.boolean(),
+  phases: z.array(runPlanPhaseSummarySchema),
+});
+
 export const workflowListOutputSchema = z.object({
   workflows: z.array(workflowItemSchema),
 });
@@ -669,6 +700,7 @@ export const apiSessionSchema = z.object({
   lastActivityAt: z.string(),
   needsAction: z.boolean(),
   actionKind: sessionActionKindSchema.nullable(),
+  acknowledgedAt: z.string().nullable().optional(),
 });
 
 // session.list takes no client input: the server resolves the current
@@ -685,6 +717,14 @@ export const sessionGetInputSchema = z.object({
 
 export const sessionGetOutputSchema = z.object({
   session: apiSessionSchema,
+});
+
+export const sessionAcknowledgeInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const sessionAcknowledgeOutputSchema = z.object({
+  acknowledgedAt: z.string().nullable(),
 });
 
 // ---------------------------------------------------------------------------
@@ -828,6 +868,11 @@ export const procedureSpecs = {
     input: z.undefined(),
     output: workflowListOutputSchema,
   },
+  'workflow.plan': {
+    auth: 'none' as const,
+    input: workflowPlanInputSchema,
+    output: runPlanSchema,
+  },
 
   'progress.list': {
     auth: 'session' as const,
@@ -846,6 +891,11 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: sessionGetInputSchema,
     output: sessionGetOutputSchema,
+  },
+  'session.acknowledge': {
+    auth: 'session' as const,
+    input: sessionAcknowledgeInputSchema,
+    output: sessionAcknowledgeOutputSchema,
   },
 } as const;
 

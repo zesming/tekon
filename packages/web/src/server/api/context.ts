@@ -12,6 +12,7 @@ import type {
   TekonDatabase,
   TekonRepositories,
   WorkReviewSurface,
+  RunPlan,
 } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
@@ -28,6 +29,7 @@ export interface WebRunEngineInput {
   timeoutMs?: number;
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
+  acknowledgeUnrestrictedNetwork?: boolean;
 }
 
 /**
@@ -73,6 +75,13 @@ export interface ProjectRunInput {
   timeoutMs?: number;
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
+  acknowledgeUnrestrictedNetwork?: boolean;
+}
+
+export interface WorkflowPlanInput {
+  template?: string;
+  mode?: 'workflow' | 'goal';
+  agent?: string;
 }
 
 export interface DraftShapeInput {
@@ -369,6 +378,7 @@ export interface ApiCaller {
     list(): Promise<{
       workflows: Array<{ id: string; name: string; path: string }>;
     }>;
+    plan(input: WorkflowPlanInput): Promise<RunPlan>;
   };
   progress: {
     list(input: { runId: string }): Promise<{
@@ -407,6 +417,10 @@ export interface ApiCaller {
         runId: string | null;
         createdAt: string;
         updatedAt: string;
+        lastActivityAt: string;
+        needsAction: boolean;
+        actionKind: string | null;
+        acknowledgedAt?: string | null;
       }>;
     }>;
     get(input: { sessionId: string }): Promise<{
@@ -419,7 +433,14 @@ export interface ApiCaller {
         runId: string | null;
         createdAt: string;
         updatedAt: string;
+        lastActivityAt: string;
+        needsAction: boolean;
+        actionKind: string | null;
+        acknowledgedAt?: string | null;
       };
+    }>;
+    acknowledge(input: { sessionId: string }): Promise<{
+      acknowledgedAt: string | null;
     }>;
   };
   /**

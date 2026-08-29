@@ -76,7 +76,7 @@ export function SessionDetailPage() {
 
       <div className="session-columns">
         <section className="session-feed-col" aria-label="会话活动">
-          <EventFeed events={events} />
+          <EventFeed key={sessionId ?? 'none'} events={events} />
         </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
           <SessionSidePanel state={liveState} />

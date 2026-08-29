@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  computeEventWindow,
+  DEFAULT_EVENT_WINDOW,
   describeEvent,
   groupEventsByTurn,
   type FeedRow,
@@ -208,5 +210,84 @@ describe('groupEventsByTurn', () => {
     ];
     const groups = groupEventsByTurn(events);
     expect(groups[0].rows.map((r) => r.seq)).toEqual([10, 11, 12]);
+  });
+});
+
+describe("computeEventWindow (T6 event feed DOM windowing)", () => {
+  it("returns all events and zero hidden count when total <= window size", () => {
+    const events = Array.from({ length: 100 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(100);
+    expect(result.visibleEvents[0].seq).toBe(1);
+    expect(result.visibleEvents[99].seq).toBe(100);
+  });
+
+  it("handles empty events list", () => {
+    const result = computeEventWindow([], false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toEqual([]);
+  });
+
+  it("handles exact boundary at window size (250 items)", () => {
+    const events = Array.from({ length: 250 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(250);
+  });
+
+  it("windows to latest 250 and counts hidden earlier events when total > 250 (unexpanded)", () => {
+    const events = Array.from({ length: 300 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(true);
+    expect(result.hiddenEarlierCount).toBe(50);
+    expect(result.visibleEvents).toHaveLength(250);
+    expect(result.visibleEvents[0].seq).toBe(51);
+    expect(result.visibleEvents[249].seq).toBe(300);
+  });
+
+  it("returns all events and clears hidden count when expanded is true", () => {
+    const events = Array.from({ length: 300 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, true, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(300);
+    expect(result.visibleEvents[0].seq).toBe(1);
+    expect(result.visibleEvents[299].seq).toBe(300);
+  });
+
+  it("uses DEFAULT_EVENT_WINDOW (250) by default", () => {
+    expect(DEFAULT_EVENT_WINDOW).toBe(250);
+    const events = Array.from({ length: 251 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false);
+
+    expect(result.hasEarlierEvents).toBe(true);
+    expect(result.hiddenEarlierCount).toBe(1);
+    expect(result.visibleEvents).toHaveLength(250);
+    expect(result.visibleEvents[0].seq).toBe(2);
+  });
+
+  it("respects custom window size", () => {
+    const events = Array.from({ length: 10 }, (_, i) => ({ seq: i + 1 }));
+    const unexpanded = computeEventWindow(events, false, 3);
+
+    expect(unexpanded.hasEarlierEvents).toBe(true);
+    expect(unexpanded.hiddenEarlierCount).toBe(7);
+    expect(unexpanded.visibleEvents).toHaveLength(3);
+    expect(unexpanded.visibleEvents[0].seq).toBe(8);
+    expect(unexpanded.visibleEvents[2].seq).toBe(10);
+
+    const expanded = computeEventWindow(events, true, 3);
+    expect(expanded.hasEarlierEvents).toBe(false);
+    expect(expanded.hiddenEarlierCount).toBe(0);
+    expect(expanded.visibleEvents).toHaveLength(10);
   });
 });

@@ -410,4 +410,61 @@ describe('database migrations', () => {
 
     db.close();
   });
+
+  it('P1-UX-02: adds sessions.acknowledged_at idempotently and defaults legacy rows to NULL (unacknowledged)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+
+    // Column exists on a fresh DB.
+    let cols = db.pragma('table_info(sessions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'acknowledged_at')).toBe(true);
+
+    // Simulate a legacy sessions table created before the column existed, with
+    // an existing failed row.
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      drop table sessions;
+      create table sessions (
+        id text primary key,
+        workspace_id text not null,
+        title text,
+        profile text not null,
+        status text not null,
+        run_id text,
+        created_at text not null,
+        updated_at text not null
+      );
+      create index if not exists idx_sessions_run_id on sessions(run_id);
+      insert into sessions
+        (id, workspace_id, title, profile, status, run_id, created_at, updated_at)
+      values
+        ('legacy_sess', 'ws_1', 'old', 'human-web', 'failed', 'run_legacy',
+         '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z');
+    `);
+    db.pragma('foreign_keys = ON');
+
+    cols = db.pragma('table_info(sessions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'acknowledged_at')).toBe(false);
+
+    // Re-run migration: addColumnIfMissing restores the column without a table
+    // rebuild, and the legacy failed row reads back NULL (unacknowledged).
+    migrateDatabase(db);
+    cols = db.pragma('table_info(sessions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'acknowledged_at')).toBe(true);
+
+    const legacy = db
+      .prepare('select acknowledged_at from sessions where id = ?')
+      .get('legacy_sess') as { acknowledged_at: string | null };
+    expect(legacy.acknowledged_at).toBeNull();
+
+    // Idempotent: running migration a third time does not fail or duplicate.
+    migrateDatabase(db);
+    cols = db.pragma('table_info(sessions)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'acknowledged_at')).toHaveLength(1);
+
+    db.close();
+  });
 });

@@ -514,3 +514,82 @@ Tekon 当前硬编码 `TESTED_DSH_VERSION = '0.1.1-rc.2'`，官方最新 GitHub 
 > Tekon 已形成测试较强、边界逐步诚实的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、quiescent shutdown 和权威 Session 事实链。
 
 本 PR 的合并不得被解释为上述 P0/P1 已自动关闭。
+---
+
+# 附录 A：审阅代理第五轮复核批注（2026-08-29）
+
+> 本附录由审阅代理在收到用户第五轮报告后追加。目的是对报告结论逐项标注「同意 / 补充 / 分歧」，附代码证据与本轮落地判断依据，作为本轮整改的范围划分依据。所有代码行号基于提交 `3dd4330` 的工作树。
+
+## A.1 对 P0 项的复核
+
+### P0-ARCH-01（Runtime 无单一执行所有者）：同意，本轮递延
+
+- **证据核实通过**：Web 端在 [root.ts](../../packages/web/src/server/api/root.ts) `createApiCaller` 内 `new DurableJobRunner(...).start()`；CLI 端在 [session-context.ts](../../packages/cli/src/lib/session-context.ts) 与 [run.ts](../../packages/cli/src/commands/run.ts) 独立构建并 `start()`。两个 composition root 确实各自持有 runner 生命周期，共享同一 SQLite / Git / worktree / `.tekon/runs` / 子进程资源。
+- **补充事实**：`jobs` 表的 owner/lease/CAS 只 fence 了 job 领域状态，未覆盖 Artifact 落盘、Audit 哈希链 append、Git 提交与文件写入。报告判断准确。
+- **本轮判断**：single-owner daemon + repo lock 属侵入性架构重构（5-8 人天，高回归风险），不适合与本轮 UX/产品收敛混在同一 PR。**本轮以 ADR 诚实记录 multi-owner 边界与非全副作用 fencing 限制**，代码递延。
+
+### P0-ARCH-02（Shutdown 非 quiescent）：同意，且本轮可低风险闭环核心序列
+
+- **证据核实通过**：[job-runner.ts](../../packages/core/src/session/job-runner.ts) `stop()` 在 `Promise.race([allSettled, timeout(5s)])` 超时分支下，**既不对在途 controller 调用 `abort()`，也不 `registry.killAll()`**，仅 `clearHeartbeat` + 清空 `controllers/executionTokens/pauseFlags`。随后 CLI/Web 调用方立即 `db.close()`。若在途异步写入超过 5s，late-write 会撞上已关闭的 SQLite 句柄。
+- **与报告的细化分歧（非否定）**：报告称 stop 完全不 abort，需澄清——poll 循环内对 ownership-lost 与 cancel 路径**是**有 abort 的；缺失的是 **stop() 关停路径**在超时后没有主动 abort/kill 在途 job。这一区分不改变结论，但决定了修复点精确落在 `stop()`。
+- **本轮判断**：**本轮做**。在 `stop()` 增加 draining 标记 → 显式 abort 在途 controller → kill 关联子进程 → 等待 write-queue drain → 提供关停后 late-write 屏障，并补故障注入测试。风险低、收益高，是本轮唯一纳入的 P0 代码闭环。
+
+### P0-ARCH-03（Session Event 是 best-effort projection）：同意，本轮以文档定性递延
+
+- **证据核实通过**：[dual-write.ts](../../packages/core/src/session/dual-write.ts) `recordFromRun` 明确注释「无 session 静默跳过；任何失败仅记录、不抛错」。它确实是观察投影，不是权威事实源 / durable inbox。
+- **本轮判断**：改为 event-sourcing 权威日志是 6-10 人天的数据链路重写，会推翻现有 Audit 哈希链契约，**本轮递延**。本轮在技术文档中把 `session_events` 明确定性为「可观测投影」而非权威历史，消除「同时暗示两种角色」的歧义（报告 7.3 的核心诉求）。
+
+### P0-PRODUCT-01（Collaborate 轨道缺失）：同意，本轮保持诚实禁用 + ADR
+
+- **证据核实通过**：[legacy-agent-driver.ts](../../packages/core/src/runtime/legacy-agent-driver.ts) 的 `followUp/steer/resume` 抛 `NotSupportedYet`；SessionDetailPage 无追加输入框。
+- **本轮判断**：真实 streaming + follow-up/steer/resume 是独立产品特性（6-8 人天，强依赖 Provider 协议选型），**本轮递延**。前端保持已有的诚实禁用提示，并产出 DSH SDK/ACP 选型 ADR（同时关闭 P1-ARCH-04 的文档诉求）。
+
+## A.2 对 P1/P2 项的本轮取舍
+
+**本轮纳入（代码 + 测试闭环）：**
+
+- **P1-PRODUCT-02 + P1-SEC-01（合并交付）**：新增人类可读 run plan 预览（角色链路、Gate、网络/沙箱、超时、产物、审批点），并在预览中显式呈现「网络不受限」告警与知情确认，确认事实写入 run 快照/审计。合并交付避免形成孤立的安全剧场 checkbox（报告 8.5 的明确要求）。
+- **P1-UX-02**：`sessions` 增加 `acknowledged_at`，新增 acknowledge RPC 与 UI，已确认的历史失败不再永久置顶。证据：[session.ts](../../packages/web/src/server/api/routers/session.ts) 目前把所有 `failed` 恒定派生为 `needsAction`。
+- **P1-UX-03 / P1-UX-04**：顶栏 Token 输入框改为连接状态徽标 + 连接管理面板；主路径术语统一为产品化中文词汇，工程术语收敛到高级模式。
+- **P1-UX-01（部分）**：workspace 级轻量 summary 刷新（SSE 通知 + 服务端 catch-up 轮询兜底），不引入重型 durable inbox。
+- **P1-UX-05（部分）**：EventFeed 初始渲染窗口 + 超长输出按需展开，限制 DOM 上界；后端 cursor 分页与虚拟化递延。
+- **P2-A11Y-02（部分）**：闭环主路径核心交互（审批表单、连接面板、run plan 预览）的键盘/ARIA/label，全站深度扫描递延。
+- **P2-PROCESS-01**：停止向 CHANGELOG 追加评审过程，历史评审噪声归档，`current.md` 保持单一入口。
+- **P0-ARCH-02**：如 A.1 所述。
+
+**本轮递延（附诚实记录方式）：**
+
+- **P1-DATA-01**：SQLite 不支持 `ALTER TABLE ADD CONSTRAINT`，外键需 4 张表整表重建 + 孤儿数据策略 + 老库升级/回滚 + 全仓 fixture 重构（3-4 人天，高破坏性）。**递延为独立数据迁移专项 PR**，本轮在 ADR/文档记录跟踪。
+- **P1-DSH-01**：`tekon provider preflight` 与精确安装命令解耦于核心引擎，**递延为独立小 PR**（与报告 8.4 建议一致）。
+- **P1-ARCH-04**：以 ADR 落地（并入 P0-PRODUCT-01 的选型 ADR）。
+- **P2-TEST-02**：完整故障注入矩阵依赖 single-owner 重构成型后才有稳定验收面；**本轮仅落地 P0-ARCH-02 相关的 late-write / quiescent 注入用例**作为起点，全矩阵递延。
+
+## A.3 分歧与保留意见
+
+1. 对 P0-ARCH-02，我方将修复精确定位到 `stop()` 关停路径而非「全局无 abort」，以免误改已经正确工作的 poll 循环 abort 逻辑。
+2. 本附录及后续整改**不再复制进 CHANGELOG**，遵循 P2-PROCESS-01 的单一入口原则。本轮报告的整改结论以本附录 + 后续「本轮整改回填」小节为准。
+
+## A.4 本轮范围一句话结论
+
+> 本轮在不承担架构重构与破坏性数据迁移的前提下，闭环「启动透明度、历史失败处理、连接与术语、列表实时性、长会话 DOM 边界、主路径可访问性、安全停机序列」，并对递延项以 ADR/文档诚实定性，避免安全剧场与「哪份才权威」的流程债。
+
+---
+
+# 附录 B：本轮整改回填（2026-08-29，v0.17.0）
+
+本节回填第五轮报告实际落地情况，作为整改证据入口。全量测试 `pnpm test` 通过：125 test files / 1358 passed / 3 skipped；web e2e `pnpm --filter @tekon/web test:e2e` 32 passed。版本 `0.16.0 → 0.17.0`。
+
+## B.1 已闭环项（代码 + 测试）
+
+- **P0-ARCH-02 安全停机（T1）**：`packages/core/src/session/job-runner.ts` 的 `stop()` 重写为确定性终止序列——draining（阻止 claim 新 job）→ 有界等待正常完成 → 对仍在 `controllers` 的在途者 `abort()` + `registry.killAll(runId,'SIGKILL')` → 再次 `await Promise.allSettled([...pending])` 确定性 drain 后返回，调用方之后才 `db.close()`。不误杀依据 `controllers` 成员关系（在途权威标记）。测试：`packages/core/__tests__/session/job-runner.test.ts` 新增 abort+kill 效果、边界完成不误杀（killSpy 未调用）用例。
+- **P1-PRODUCT-02 + P1-SEC-01 run plan 预览 + 网络确认（T2）**：core `packages/core/src/workflow/run-plan.ts` 纯函数投影（角色链/阶段/Gate/超时/网络）；web `workflow.plan`；`project.run` 在 `requiresUnrestrictedNetwork`（agent=`dsh-headless`）且未知情确认时硬拒绝并落审计；`StartRunForm` 预览 + 知情确认勾选 + 未确认禁用提交（无逃生舱）。
+- **P1-UX-02 失败处理语义（T3）**：`migrations.ts` 幂等 `addColumnIfMissing(sessions, acknowledged_at)`；`session-store` `acknowledgeSession`；`session` router 已确认 failed 不置顶、legacy NULL 视为未确认仍置顶；`SessionsPage` 确认/归档动作。
+- **P1-UX-03 / P1-UX-04 连接状态与术语（T4）**：`TopBar` Token 输入框改为「已连接/未连接」状态徽标 + 连接管理面板；主路径术语产品化。
+- **P1-UX-01（部分）实时刷新（T5）**：workspace summary SSE（`GET /api/workspaces/:id/summary/events`）+ 客户端 invalidate；跨进程漏发由服务端 SSE catch-up 轮询兜底（客户端不做定时重取）。
+- **P1-UX-05（部分）长会话 DOM 边界（T6）**：`EventFeed` 默认窗口（250）+「展开更早」+ 超长正文限高按需展开。
+- **P2-A11Y-02（部分）主路径可访问性（T7）**：预览、连接面板、确认动作键盘/ARIA/role/焦点。
+- **P2-PROCESS-01 流程降噪（T8）**：CHANGELOG 停止追加评审过程，仅记录用户可见行为；评审结论留在本报告。
+
+## B.2 递延项（见 ADR-0001）
+
+`docs/technical/adr-0001-runtime-authority-and-collaborate.md` 记录：P0-ARCH-01（single-owner daemon 方向）、P0-ARCH-03（Session Event 事实源角色二选一）、P0-PRODUCT-01（Collaborate 保持诚实禁用）、P1-ARCH-04（Harness SDK/ACP 选型 vertical slice）、P1-DATA-01（外键独立 PR）、P1-DSH-01（provider preflight 独立 PR）、P2-TEST-02（故障注入全矩阵）。

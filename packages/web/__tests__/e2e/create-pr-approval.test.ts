@@ -195,7 +195,9 @@ test.describe('Create PR requires explicit confirmation', () => {
     expect(readGhLog(binDir)).toBe('');
 
     // ── 2. Enter the session token ─────────────────────────────────────────
+    await page.getByRole('button', { name: /连接/ }).click();
     await page.getByLabel('Session token').fill(fixture.sessionToken);
+    await page.getByRole('button', { name: '应用连接' }).click();
 
     // ── PROOF 3: After entering token, fake gh still NOT called ────────────
     expect(readGhLog(binDir)).toBe('');

@@ -146,3 +146,130 @@ export async function handleSessionEventsSse(input: {
   }, catchUpMs);
   catchUpTimer.unref?.();
 }
+
+function computeWorkspaceSignature(
+  sessions: Array<{
+    id: string;
+    status: string;
+    updatedAt: string;
+    lastActivityAt: string;
+    acknowledgedAt: string | null;
+  }>,
+): string {
+  return sessions
+    .map(
+      (s) =>
+        `${s.id}:${s.status}:${s.updatedAt}:${s.lastActivityAt}:${s.acknowledgedAt ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
+
+/**
+ * Phase 5 T5 (P1-UX-01): workspace-level summary SSE stream.
+ * Broadcasts lightweight change frames whenever any session changes state
+ * or receives an event, allowing the client to invalidate session.list without
+ * heavy polling.
+ */
+export async function handleWorkspaceSummarySse(input: {
+  request: IncomingMessage;
+  response: ServerResponse;
+  workspaceId: string;
+  sessions: SessionEventStore;
+  bus: SessionEventBus;
+  heartbeatMs?: number;
+  catchUpMs?: number;
+}): Promise<void> {
+  const { request, response, workspaceId, sessions, bus } = input;
+
+  response.statusCode = 200;
+  response.setHeader('content-type', 'text/event-stream; charset=utf-8');
+  response.setHeader('cache-control', 'no-cache');
+  response.setHeader('connection', 'keep-alive');
+  response.setHeader('x-accel-buffering', 'no');
+  response.flushHeaders?.();
+
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  let catchUpTimer: ReturnType<typeof setInterval> | null = null;
+  let catchUpInFlight = false;
+  let lastSignature = '';
+
+  const writeFrame = (data: {
+    workspaceId: string;
+    sessionId?: string;
+    type?: string;
+    timestamp?: string;
+  }): void => {
+    if (closed || response.writableEnded) return;
+    response.write(
+      `event: workspace/summary\n` +
+        `data: ${JSON.stringify(data)}\n\n`,
+    );
+  };
+
+  // 1. Process-local bus subscription: when ANY session emits an event,
+  // push a lightweight summary frame.
+  const unsubscribe = bus.subscribeAll((event) => {
+    if (closed || response.writableEnded) return;
+    writeFrame({
+      workspaceId,
+      sessionId: event.sessionId,
+      type: event.type,
+      timestamp: event.timestamp,
+    });
+  });
+
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    if (heartbeat) clearInterval(heartbeat);
+    if (catchUpTimer) clearInterval(catchUpTimer);
+    unsubscribe();
+    if (!response.writableEnded) response.end();
+  };
+  request.on('close', cleanup);
+
+  // 2. Cross-process catch-up poll: checks whether any session in the workspace
+  // has newer activity than last seen.
+  const catchUp = async (): Promise<void> => {
+    if (closed || response.writableEnded || catchUpInFlight) return;
+    catchUpInFlight = true;
+    try {
+      const sessionList = await sessions.listSessions(workspaceId);
+      const signature = computeWorkspaceSignature(sessionList);
+      if (lastSignature && signature !== lastSignature) {
+        writeFrame({ workspaceId, timestamp: new Date().toISOString() });
+      }
+      lastSignature = signature;
+    } catch {
+      cleanup();
+    } finally {
+      catchUpInFlight = false;
+    }
+  };
+
+  try {
+    await catchUp();
+  } catch {
+    cleanup();
+    return;
+  }
+
+  if (closed || response.writableEnded) {
+    cleanup();
+    return;
+  }
+
+  const heartbeatMs = input.heartbeatMs ?? 15_000;
+  heartbeat = setInterval(() => {
+    if (!closed && !response.writableEnded) response.write(': ping\n\n');
+  }, heartbeatMs);
+  heartbeat.unref?.();
+
+  const catchUpMs = input.catchUpMs ?? 1_000;
+  catchUpTimer = setInterval(() => {
+    void catchUp();
+  }, catchUpMs);
+  catchUpTimer.unref?.();
+}

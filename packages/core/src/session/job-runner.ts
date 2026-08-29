@@ -97,6 +97,12 @@ export interface CreateJobRunnerDeps {
   heartbeatMs?: number;
   leaseTtlMs?: number;
   workerId?: string;
+  /**
+   * Bounded wait for in-flight jobs to settle on their own during stop(),
+   * before the runner escalates to explicit abort + subprocess kill. Test
+   * override only; production keeps the 5s default.
+   */
+  stopSettleTimeoutMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
@@ -117,6 +123,8 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const heartbeatMs = deps.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const leaseTtlMs = deps.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+  const stopSettleTimeoutMs =
+    deps.stopSettleTimeoutMs ?? STOP_SETTLE_TIMEOUT_MS;
   const workerId =
     deps.workerId ?? `web-${process.pid}-${randomUUID().slice(0, 8)}`;
 
@@ -515,26 +523,57 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       if (!pollTimer && pending.size === 0) {
         return;
       }
+      // Draining: reject new claims immediately. poll() already guards on
+      // `stopped`, so no new job enters `pending` after this point.
       stopped = true;
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
-      // Wait for in-flight jobs to settle, capped at 5s. Jobs that do not
-      // settle in time have their heartbeats cleared below (lease goes stale)
-      // and are recovered by the next start()'s recoverStale().
-      const allSettled = Promise.allSettled([...pending]);
-      let timer: NodeJS.Timeout | undefined;
-      const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STOP_SETTLE_TIMEOUT_MS);
-        if (typeof timer.unref === 'function') {
-          timer.unref();
+
+      // Phase 1: give in-flight jobs a bounded window to settle on their own.
+      // A job that completes normally deletes itself from `controllers` (in
+      // settle()) before its task drains from `pending`, so `controllers`
+      // membership — not elapsed time — is the authoritative "still in-flight"
+      // marker used by phase 2.
+      const settleWithinWindow = Promise.allSettled([...pending]);
+      let settleTimer: NodeJS.Timeout | undefined;
+      const settleWindow = new Promise<void>((resolve) => {
+        settleTimer = setTimeout(resolve, stopSettleTimeoutMs);
+        if (typeof settleTimer.unref === 'function') {
+          settleTimer.unref();
         }
       });
-      await Promise.race([allSettled, timeout]);
-      if (timer) {
-        clearTimeout(timer);
+      await Promise.race([settleWithinWindow, settleWindow]);
+      if (settleTimer) {
+        clearTimeout(settleTimer);
       }
+
+      // Phase 2: escalate. Any controller still present is a genuinely
+      // in-flight job (completed jobs already removed theirs). Abort it and
+      // kill its subprocesses so its executor stops issuing further writes.
+      // Completed-but-not-yet-dequeued jobs are never touched here.
+      for (const [jobId, controller] of controllers) {
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+        const current = await jobs.get(jobId).catch(() => null);
+        const sessionId = current?.sessionId;
+        if (sessionId) {
+          const runId = await sessions
+            .getRunIdBySessionId(sessionId)
+            .catch(() => null);
+          if (runId) registry.killAll(runId, 'SIGKILL');
+        }
+      }
+
+      // Phase 3: deterministic drain barrier. Re-await every pending task so
+      // each aborted executor runs its catch/finally — including its final
+      // synchronous settle() write — and dequeues from `pending` before we
+      // return. Callers only close the (synchronous, better-sqlite3) database
+      // after stop() resolves, so no late write can hit a closed handle.
+      await Promise.allSettled([...pending]);
+
       for (const jobId of [...heartbeats.keys()]) {
         clearHeartbeat(jobId);
       }

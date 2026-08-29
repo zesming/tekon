@@ -11,6 +11,7 @@ import {
 import { join, relative, resolve } from 'node:path';
 
 import {
+  agentRequiresUnrestrictedNetwork,
   loadWorkflowTemplateFile,
   readDraftShapeFile,
   renderDraftShapeForRun,
@@ -186,6 +187,18 @@ export function createProjectRouter(context: ServerContext) {
         !isGoal && templateName
           ? loadProjectWorkflowIfPresent(context, templateName)
           : null;
+
+      // P1-SEC-01: Check unrestricted network precondition
+      const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(
+        runInput.agent,
+      );
+      if (
+        requiresUnrestrictedNetwork &&
+        runInput.acknowledgeUnrestrictedNetwork !== true
+      ) {
+        throw new ApiError("BAD_REQUEST", "联网不受限需知情确认");
+      }
+
       // 4a: SessionService owns the prepareRun → session → events → enqueue
       // orchestration. The router keeps token/scope, draft-shape validation,
       // clean-base, project-workflow loading, ApiError, and mapping. The
@@ -213,20 +226,40 @@ export function createProjectRouter(context: ServerContext) {
           ...(runInput.progressHeartbeatMs !== undefined
             ? { progressHeartbeatMs: runInput.progressHeartbeatMs }
             : {}),
+          ...(runInput.acknowledgeUnrestrictedNetwork !== undefined
+            ? { acknowledgeUnrestrictedNetwork: runInput.acknowledgeUnrestrictedNetwork }
+            : {}),
         },
-        onPrepared: shapedDraft
-          ? async (runId) => {
-              await context.audit.append({
-                runId,
-                type: 'run.demand-shaped',
-                payload: {
-                  shapePath: runInput.demandShapePath,
-                  approved: shapedDraft.approved,
-                  readyForRun: shapedDraft.readyForRun,
-                },
-              });
-            }
-          : undefined,
+        onPrepared:
+          shapedDraft ||
+          (requiresUnrestrictedNetwork && runInput.acknowledgeUnrestrictedNetwork)
+            ? async (runId) => {
+                if (shapedDraft) {
+                  await context.audit.append({
+                    runId,
+                    type: 'run.demand-shaped',
+                    payload: {
+                      shapePath: runInput.demandShapePath,
+                      approved: shapedDraft.approved,
+                      readyForRun: shapedDraft.readyForRun,
+                    },
+                  });
+                }
+                if (
+                  requiresUnrestrictedNetwork &&
+                  runInput.acknowledgeUnrestrictedNetwork
+                ) {
+                  await context.audit.append({
+                    runId,
+                    type: 'run.network-acknowledged',
+                    payload: {
+                      agent: runInput.agent ?? 'codex',
+                      acknowledgeUnrestrictedNetwork: true,
+                    },
+                  });
+                }
+              }
+            : undefined,
       });
 
       return {

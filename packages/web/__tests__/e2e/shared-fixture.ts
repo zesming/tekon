@@ -70,10 +70,9 @@ test.beforeEach(async ({ page, fixture, server }) => {
     token: fixture.sessionToken,
   }).toString();
   await page.goto(`${server.url}/#${fragment}`);
-  await expect(page.getByLabel('Session token')).toHaveValue(
-    fixture.sessionToken,
-    { timeout: 15_000 },
-  );
+  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page).not.toHaveURL(/token=/u);
 });
 

@@ -93,7 +93,9 @@ test('inline approval: approve a pending human decision from the session UI', as
   // AuthContext so the inline approval's body token is set. gate.approve
   // validates the body token server-side (assertSessionToken), so the header
   // monkeypatch alone is not enough for the write.
+  await page.getByRole('button', { name: /连接/ }).click();
   await page.getByLabel('Session token').fill(fixture.sessionToken);
+  await page.getByRole('button', { name: '应用连接' }).click();
 
   // The inline approval card renders (context pulled from gate.list).
   const approvals = page.getByTestId('session-approvals');
