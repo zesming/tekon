@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMutation, useQuery, useAuthScope } from '../../hooks/index.js';
+import { useMutation, useQuery } from '../../hooks/index.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
@@ -39,7 +39,6 @@ const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
-  const scope = useAuthScope();
   const { addFlash } = useFlash();
   const [searchParams] = useSearchParams();
   const shapePath = searchParams.get('shapePath') ?? '';
@@ -170,10 +169,21 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   return (
     <div className="card mb-6">
-      <div
+      <button
+        type="button"
         className="card-header"
-        style={{ cursor: 'pointer' }}
+        aria-expanded={isOpen}
+        aria-controls="start-run-form-body"
         onClick={() => setIsOpen((prev) => !prev)}
+        style={{
+          width: '100%',
+          background: 'transparent',
+          color: 'inherit',
+          borderTop: 0,
+          borderRight: 0,
+          borderLeft: 0,
+          textAlign: 'left',
+        }}
       >
         <span className="card-title">✦ 新建运行</span>
         <svg
@@ -183,6 +193,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
+          aria-hidden="true"
+          focusable="false"
           style={{
             transform: isOpen ? 'rotate(180deg)' : 'none',
             transition: 'transform 0.2s',
@@ -190,16 +202,18 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
         >
           <path d="M4 6l4 4 4-4" />
         </svg>
-      </div>
+      </button>
 
       {isOpen && (
-        <div className="card-body">
+        <div id="start-run-form-body" className="card-body">
           {/* Demand */}
           <div className="form-group">
-            <label className="form-label">需求描述</label>
+            <label className="form-label" htmlFor="start-run-demand">
+              需求描述
+            </label>
             <textarea
+              id="start-run-demand"
               className="textarea"
-              aria-label="描述你的需求"
               value={demandText}
               onChange={(e) => setDemandText(e.target.value)}
               placeholder="描述你的需求…"
@@ -209,8 +223,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           {/* Mode + Template + Agent + Profile */}
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <div className="form-group">
-              <label className="form-label">运行模式</label>
+              <label className="form-label" htmlFor="start-run-mode">
+                运行模式
+              </label>
               <select
+                id="start-run-mode"
                 className="select"
                 value={mode}
                 aria-describedby="run-mode-help"
@@ -221,8 +238,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">工作流模板</label>
+              <label className="form-label" htmlFor="start-run-template">
+                工作流模板
+              </label>
               <select
+                id="start-run-template"
                 className="select"
                 value={template}
                 disabled={mode === 'goal'}
@@ -239,8 +259,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">执行代理</label>
+              <label className="form-label" htmlFor="start-run-agent">
+                执行代理
+              </label>
               <select
+                id="start-run-agent"
                 className="select"
                 value={agent}
                 aria-describedby="run-mode-help"
@@ -254,8 +277,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Profile</label>
+              <label className="form-label" htmlFor="start-run-profile">
+                Profile
+              </label>
               <select
+                id="start-run-profile"
                 className="select"
                 value={profile}
                 disabled={mode === 'goal'}
@@ -284,8 +310,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             style={{ gridTemplateColumns: '1fr 1fr 1fr' }}
           >
             <div className="form-group">
-              <label className="form-label">超时 (ms)</label>
+              <label className="form-label" htmlFor="start-run-timeout">
+                超时 (ms)
+              </label>
               <input
+                id="start-run-timeout"
                 className="input"
                 type="number"
                 value={timeoutMs}
@@ -293,8 +322,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">无进展超时 (ms)</label>
+              <label
+                className="form-label"
+                htmlFor="start-run-no-progress-timeout"
+              >
+                无进展超时 (ms)
+              </label>
               <input
+                id="start-run-no-progress-timeout"
                 className="input"
                 type="number"
                 value={noProgressTimeoutMs}
