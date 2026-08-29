@@ -35,9 +35,18 @@
 - **P1-UX-02 相对时间共享 ticker**：`packages/web/src/client/hooks/use-ticker.ts` 引入页面级 `useTicker(60_000)` 共享定时器驱动 SessionsPage 相对时间自动推进；诚实说明因 web vitest 为 node 环境（无 jsdom）故遵循既有惯例不加 renderHook 单测，`formatRelativeTime` 纯函数保持不变。
 - **P0-ARCH-01~03 / P1-UX-01/03/04/05 架构 ADR 递延**：确认 multi-owner、shutdown quiescence、Session Event 事实源角色及 UI/UX 演进归入 follow-up 报告 §11 阶段 A-D。
 
+### 第三轮复审收敛（Third Review）
+
+第三轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-third-review.md`，提交 `ae09034` + `f657252`）。作者在 `ae09034` 自行收敛了相对时间实现（`useTicker` 返回共享时间戳、抽出 `relative-time.ts` 纯函数显式注入时钟、补确定性边界测试、`<time datetime>` 语义化），经核验无回归。本轮实施方处置：
+
+- **P1-CODE-01 `session.get` 尾事件轻量读取**：`packages/core/src/session/session-store.ts` 新增 `getLatestEventTimestamp()`（`select timestamp ... order by seq desc limit 1`，复用 `(session_id, seq)` 索引，与 `listSessions` 尾事件子查询同语义）；`packages/web/src/server/api/routers/session.ts` get handler 从 `latestSeq` + `listEventsSince(latestSeq-1)` 两步收敛为单步，消除一次 DB 往返与完整事件 payload（含 `JSON.parse`）反序列化；`lastActivityAt` 组合语义不变。报告 §8.2 原以“影响多处测试/fixture”递延，经核验全仓无手写 `SessionEventStore` double（均走真实 SQLite），故本轮闭环。
+- **P1-UX-02（failed 永久置顶）ADR 递延**：移除 `failed` 的 needsAction 会丢失失败警示徽标（功能倒退）；真实闭环需 frozen `sessionSchema` 取舍 + migration + mutation + UI，归入第三轮报告 §12 阶段 D。
+- **P0-ARCH-01~03 / P0-PRODUCT-01 / P1-UX-01/03/04/05 / P1-CODE-02 / P1-ARCH-04 / P1-PRODUCT-02**：自第二轮以来无新代码事实，递延结论与第 4~14 轮一致。
+- **P2-PROCESS-01 采纳**：第三轮报告作为 PR #11 当前权威裁决入口，后续只维护一份 current decision record 与简短 revision log。
+
 ### 验证
 
-- 本地 `corepack pnpm test` 全量通过：1317 passed / 3 skipped（114 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api` 与 `cli` 测试）；
+- 本地 `corepack pnpm test` 全量通过：1322 passed / 3 skipped（115 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api` 与 `cli` 测试）；
 - Web Playwright e2e 全量通过：28 passed（含移动端 390px 无横向溢出、内联审批闭环、新增 P1-04 “待审批”行动徽标断言）；
 - P1-04 UI 已做真实浏览器截图核验（桌面 1440px + 移动 390px），行动徽标/状态徽标/时间同行排布无错位、无重叠、无溢出；
 - 三包 build/typecheck 干净。

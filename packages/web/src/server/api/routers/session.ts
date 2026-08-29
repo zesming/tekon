@@ -117,16 +117,12 @@ export function createSessionRouter(context: ServerContext) {
 
       // Session schema has no runId (frozen contract); compose it (N3). Read
       // the current event tail as well so list/get expose one lastActivityAt
-      // meaning instead of list=max(event) while get=updatedAt.
-      const [runId, latestSeq] = await Promise.all([
+      // meaning instead of list=max(event) while get=updatedAt. The tail read
+      // projects only timestamp (no full-event payload deserialization).
+      const [runId, latestEventAt] = await Promise.all([
         context.sessions.getRunIdBySessionId(input.sessionId),
-        context.sessions.latestSeq(input.sessionId),
+        context.sessions.getLatestEventTimestamp(input.sessionId),
       ]);
-      const latestEvents =
-        latestSeq > 0
-          ? await context.sessions.listEventsSince(input.sessionId, latestSeq - 1)
-          : [];
-      const latestEventAt = latestEvents.at(-1)?.timestamp;
       const action = deriveSessionAction(session.status);
       return {
         session: {

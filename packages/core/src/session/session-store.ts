@@ -86,6 +86,13 @@ export interface SessionEventStore {
   }): Promise<SessionEvent>;
   listEventsSince(sessionId: string, sinceSeq: number): Promise<SessionEvent[]>;
   latestSeq(sessionId: string): Promise<number>;
+  /**
+   * Lightweight tail read for session.get's lastActivityAt: returns only the
+   * tail event's timestamp (max seq, sharing listSessions' seq-desc tail
+   * semantics) without deserializing the full event payload. Null when the
+   * session has no events (or does not exist).
+   */
+  getLatestEventTimestamp(sessionId: string): Promise<string | null>;
   upsertProjectionCheckpoint(
     sessionId: string,
     name: string,
@@ -431,6 +438,21 @@ export function createSessionEventStore(
         )
         .get(sessionId) as { max_seq: number };
       return row.max_seq;
+    },
+
+    async getLatestEventTimestamp(sessionId) {
+      // Tail read via the (session_id, seq) index: reverse-scan to the last
+      // row and project only timestamp, avoiding payload deserialization.
+      // Same seq-desc tail semantics as listSessions' correlated subquery.
+      const row = db
+        .prepare(
+          `select timestamp from session_events
+           where session_id = ?
+           order by seq desc
+           limit 1`,
+        )
+        .get(sessionId) as { timestamp: string } | undefined;
+      return row?.timestamp ?? null;
     },
 
     async upsertProjectionCheckpoint(sessionId, name, lastSeq) {

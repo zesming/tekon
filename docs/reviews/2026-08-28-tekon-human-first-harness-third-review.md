@@ -483,3 +483,52 @@ PR #11 及其前置 replatform 已积累多轮“权威报告 + 实施方批注 
 > Tekon 已形成测试较强、边界较诚实的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、quiescent shutdown 和权威 Session 事实链。
 
 本 PR 的合并不得被解释为上述 P0/P1 已自动关闭。
+
+---
+
+## 14. 实施方视角批注（第三轮）
+
+> 本节为实施方对第三轮报告的评估与处置记录，承接首轮 §13 与第二轮 §13 批注。评估方法：4 个 explorer groundtruth 核验 + 4 个 reviewer（最高思考等级）对抗验证，逐项达成处置共识。批注刻意从简，落实报告 §9.2 P2-PROCESS-01 对过程膨胀的批评。
+
+### 14.1 作者 ae09034 相对时间收敛：核验通过（already-fixed）
+
+报告 §4/§8.4 所述作者自修复经独立核验全部落地且无回归：
+
+- `use-ticker.ts:8-16` 返回共享 `nowMs`（`useState(() => Date.now())` + `setInterval` + 卸载 `clearInterval`）；
+- `relative-time.ts:10-22` 为显式注入时钟的纯函数，分钟/小时/天/7 天边界、未来时间、非法输入与 NaN 时钟均有确定性测试（`relative-time.test.ts`，3 tests）；
+- `SessionsPage.tsx:29,89-125` 顶层单次调用 `useTicker` 并向所有行透传同一 `nowMs`，`<time dateTime={session.lastActivityAt}>` 绑定原始 ISO（非相对时间），`aria-label` 补“最近活动”上下文；
+- `useTicker` 全仓仅 `SessionsPage` 一个调用点，返回值语义变化无遗漏调用方。
+
+裁决：already-fixed，无需补充。
+
+### 14.2 P1-CODE-01（session.get 尾事件反序列化）：本轮修复
+
+报告 §8.2 建议在 `SessionEventStore` 增加轻量尾事件时间戳读取，但作者以“扩展核心接口并影响多处测试/fixture”为由主动递延。经 3 个 agent 独立核验，该递延理由的事实基础不成立：全仓无手写 `SessionEventStore` test double（无 `implements`、无 in-memory fake、无模块 mock），15+ 构造点全部走真实 SQLite `createSessionEventStore`，新增方法对夹具零影响。
+
+处置：本轮修复（与第二轮 P1-PERF-01 同一读路径主题——list 已优化、get 仍浪费，报告自己标注了不对称）。
+
+- `session-store.ts`：接口与实现新增 `getLatestEventTimestamp(sessionId): Promise<string|null>`，SQL 为 `select timestamp ... order by seq desc limit 1`，复用 `idx_session_events_session_seq(session_id, seq)` 索引反向扫描，与 `listSessions` 尾事件子查询同语义；
+- `session.ts` get handler：`latestSeq` + `listEventsSince(latestSeq-1)` 两步收敛为 `getLatestEventTimestamp` 单步，消除一次 DB 往返与完整 payload（含 `JSON.parse`）反序列化；`lastActivityAt` 组合语义 100% 不变（null 走同一 fallback）；
+- 测试：`session-store.test.ts` 新增 2 个测试（无事件→null、多事件→max-seq 尾事件、跨 session 隔离）。
+
+**分歧记录**：2 个对抗验证 reviewer 主张递延（作者书面范围切割 + §9.2 过程膨胀顾虑 + 纯效率无正确性维度）。我尊重该顾虑但选择修复，依据：(a) 递延理由的事实基础（夹具影响）被证伪；(b) “独立小 PR”在此仓现实等价于同分支另一 commit，而递延项历史上搁置 10+ 轮；(c) 30 行带测试闭环是缩短未决清单，恰是 §9.2 支持的方向；(d) 范围纪律通过“只做这一个 core 接口加法、不碰其他任何项”遵守。
+
+### 14.3 P1-UX-02（failed 永久置顶）：ADR 递延
+
+报告 §6.3 建议先定义 `attentionState`/`acknowledgedAt`。核验确认无最小无损闭环：简单移除 `failed` 的 `needsAction` 会丢失失败警示徽标（功能倒退）；真实闭环需 frozen `sessionSchema` 取舍（ADR：SessionEvent 派生 vs 独立表）+ DB migration + `session.acknowledge` mutation + UI 交互，超出复审小修边界。报告排入 §12 阶段 D 合理，递延成立。
+
+### 14.4 其余 P0/P1：无新事实，递延成立
+
+自第二轮（27f809d）以来仅 2 个提交（ae09034 web 相对时间 + f657252 报告），未触碰 core/runtime。抽查确认：P0-ARCH-01（root.ts 与 CLI 仍各自 `start()` JobRunner）、P0-PRODUCT-01（`followUp/steer/resume` 仍抛 `NotSupportedYet`）、P0-ARCH-02/03、P1-UX-01/03/04/05、P1-CODE-02、P1-ARCH-04、P1-PRODUCT-02 代码状态与第一、二轮及第 4~14 轮一致，报告 §12 阶段 A-D 排期成立。P2-TEST-02（多进程/长事件历史/真实 Provider 故障注入验收矩阵）维持前轮递延，与阶段 A 的故障注入工作合并推进。
+
+### 14.5 P2-PROCESS-01：采纳
+
+本报告作为 PR #11 当前权威裁决入口；后续只维护一份 current decision record 与简短 revision log。本轮批注即按此从简。CHANGELOG 不再为复审轮次扩写。
+
+### 14.6 验证与版本
+
+- `corepack pnpm -r typecheck`：3 包 Done；
+- `corepack pnpm test`：1322 passed / 3 skipped（115 个测试文件）；
+- Web Playwright e2e：28 passed；
+- 桌面 1440px + 移动 390px 截图核验 SessionsPage 渲染无错位/重叠/溢出；
+- 版本保持 `0.16.0`（复审 + 低风险读路径优化，不 bump，依 scope §6）。

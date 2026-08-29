@@ -120,6 +120,21 @@
 <p class="decision">最终裁决：本 PR 最新增量可继续合并审阅；Tekon 稳定产品验收仍不通过。</p>
 <p>允许的成熟度表述：Tekon 已形成测试较强、边界较诚实的实验性受控交付执行与观察基础设施；尚未完成持续协作产品、单一 Runtime 权威、quiescent shutdown 和权威 Session 事实链。</p>
 </section>
+<section class="card pass">
+<h2>实施方批注（第三轮）</h2>
+<p class="small">评估方法：4 个 explorer groundtruth 核验 + 4 个 reviewer（最高思考等级）对抗验证，逐项达成处置共识。批注刻意从简，落实 §9.2 P2-PROCESS-01。</p>
+<h3>ae09034 相对时间收敛：核验通过（already-fixed）</h3>
+<p><code>use-ticker.ts</code> 返回共享 <code>nowMs</code>、<code>relative-time.ts</code> 纯函数显式注入时钟、<code>SessionsPage</code> 顶层单次调用并透传同一 <code>nowMs</code>、<code>&lt;time dateTime&gt;</code> 绑定原始 ISO、3 个确定性边界测试。<code>useTicker</code> 全仓仅一个调用点，无回归。</p>
+<h3>P1-CODE-01（session.get 尾事件反序列化）：本轮修复</h3>
+<p>报告 §8.2 以“扩展核心接口并影响多处测试/fixture”为由递延；经 3 个 agent 独立核验，全仓无手写 <code>SessionEventStore</code> test double（15+ 构造点全走真实 SQLite），递延理由的事实基础不成立。本轮修复：<code>session-store.ts</code> 新增 <code>getLatestEventTimestamp()</code>（<code>select timestamp ... order by seq desc limit 1</code>，复用 <code>(session_id,seq)</code> 索引，与 listSessions 同语义）；<code>session.ts</code> get handler 两步收敛为单步，消除一次 DB 往返与完整 payload 反序列化；<code>lastActivityAt</code> 语义不变；新增 2 个单测。</p>
+<p class="small"><strong>分歧记录</strong>：2 个对抗验证 reviewer 主张递延（作者书面范围切割 + §9.2 过程膨胀顾虑）。选择修复的依据：递延事实基础被证伪；“独立小 PR”在此仓等价于同分支另一 commit，递延项历史上搁置 10+ 轮；30 行带测试闭环是缩短未决清单；范围纪律通过“只做这一个 core 接口加法”遵守。</p>
+<h3>P1-UX-02（failed 永久置顶）：ADR 递延</h3>
+<p>无最小无损闭环：移除 <code>failed</code> 的 needsAction 会丢失失败警示徽标（功能倒退）；真实闭环需 frozen <code>sessionSchema</code> 取舍 + migration + mutation + UI，排入 §12 阶段 D 合理。</p>
+<h3>其余 P0/P1：无新事实，递延成立</h3>
+<p>自 27f809d 仅 2 提交（ae09034 + 报告），未触碰 core/runtime。P0-ARCH-01/02/03、P0-PRODUCT-01、P1-UX-01/03/04/05、P1-CODE-02、P1-ARCH-04、P1-PRODUCT-02 代码状态与前两轮及第 4~14 轮一致。P2-TEST-02（故障注入验收矩阵）维持前轮递延，与阶段 A 合并推进。</p>
+<h3>验证与版本</h3>
+<p><code>pnpm -r typecheck</code> 3 包 Done；<code>pnpm test</code> 1322 passed / 3 skipped（115 文件）；Web Playwright e2e 28 passed；桌面 1440px + 移动 390px 截图核验无错位/重叠/溢出。版本保持 <code>0.16.0</code>（复审 + 低风险读路径优化，不 bump）。</p>
+</section>
 </main>
 </body>
 </html>

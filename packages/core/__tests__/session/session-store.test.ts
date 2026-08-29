@@ -959,4 +959,64 @@ describe('session run id lookup', () => {
     expect(await sessions.listSessions(wsB.id)).toEqual([]);
     expect(await sessions.listSessions('ws_does_not_exist')).toEqual([]);
   });
+
+  // getLatestEventTimestamp is the lightweight tail read used by session.get:
+  // it returns only the tail event's timestamp (no payload deserialization),
+  // sharing listSessions' seq-desc tail semantics.
+  it('getLatestEventTimestamp returns null without events and the max-seq event timestamp otherwise', async () => {
+    const { sessions } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    // No events yet: null (caller falls back to created_at/updated_at).
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBeNull();
+    expect(
+      await sessions.getLatestEventTimestamp('session_does_not_exist'),
+    ).toBeNull();
+
+    const first = await sessions.appendEvent({
+      sessionId: session.id,
+      type: 'agent/message',
+      payload: { text: 'first' },
+    });
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBe(
+      first.timestamp,
+    );
+
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await sessions.appendEvent({
+      sessionId: session.id,
+      type: 'tool/result',
+      payload: { text: 'second' },
+    });
+    expect(second.seq).toBeGreaterThan(first.seq);
+    // Tail is the last appended event (seq-desc), same invariant as listSessions.
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBe(
+      second.timestamp,
+    );
+  });
+
+  it('getLatestEventTimestamp is scoped per session', async () => {
+    const { sessions } = setupStore();
+    const { session: a } = await seedSession(sessions, '/repo/a', 'run_a');
+    const { session: b } = await seedSession(sessions, '/repo/b', 'run_b');
+
+    const eventA = await sessions.appendEvent({
+      sessionId: a.id,
+      type: 'agent/message',
+      payload: { text: 'a activity' },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const eventB = await sessions.appendEvent({
+      sessionId: b.id,
+      type: 'agent/message',
+      payload: { text: 'b activity' },
+    });
+
+    expect(await sessions.getLatestEventTimestamp(a.id)).toBe(
+      eventA.timestamp,
+    );
+    expect(await sessions.getLatestEventTimestamp(b.id)).toBe(
+      eventB.timestamp,
+    );
+  });
 });
