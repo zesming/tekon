@@ -282,3 +282,61 @@ PR 已积累多轮权威报告、批注和超长 CHANGELOG，导致当前裁决�
 > Tekon 已形成测试较强、边界逐步诚实的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、quiescent shutdown 和权威 Session 事实链。
 
 本 PR 的合并不得被解释为上述 P0/P1 已自动关闭。
+
+---
+
+## 13. 实施方视角批注（第四轮）
+
+> 本节为实施方对第四轮报告的评估与处置记录。评估方法：5 个 explorer groundtruth 核验 + 5 个 reviewer（最高思考等级）对抗验证（其中 P1-SEC-01 对抗验证因 API 错误重试一次），逐项达成处置共识。批注依 P2-PROCESS-01 从简。
+
+### 13.1 作者 3b26d88 run-mode policy：核验通过（already-fixed）
+
+报告 §1/§5.2/§7/§9 所述作者修复经独立核验全部落地且无回归：
+
+- `run-mode-policy.ts:18-37`：`getRunModePolicyIssue` 纯函数覆盖 3 条不可兼容组合（goal+template、goal+autonomous-delivery、dsh-headless+workflow），无遗漏；
+- CLI `run.ts:123-134`：policy 检查严格先于 `assertCleanBase`（134 行）与 `sessionService.startRun`（141 行），无 Session/Job/Workflow 副作用；`--dynamic` 在 112 行早返，无绕过路径；
+- Web API `project-with-run-mode-policy.ts:21-27`：先 `assertSessionToken` 再策略校验，保持 auth-before-validation；`input.agent` 默认 `'codex'` 与 base router 一致；`ProjectRunInput.mode` 早在基线 `300aea6` 已存在于 `context.ts:67`；
+- `StartRunForm.tsx:101-120,142-146`：`handleModeChange`/`handleAgentChange` 状态机完备（dsh→goal 自动切换、goal→workflow 回退 codex、goal 禁用 template/profile），`handleStart` 双重守卫；
+- 三层测试（Core policy matrix、CLI fail-fast、Web API 非法组合）均为真实集成断言，非 mock-only。
+
+裁决：already-fixed，无需补充。
+
+### 13.2 P1-DATA-01（Session 子表无外键）：整体 ADR 递延 + 注释本轮勘误
+
+报告 §3/§7 所述 FK 缺失事实核验属实：`session_events.session_id`、`jobs.session_id`、`projection_checkpoints.session_id` 均无外键（`migrations.ts:196,213,227`），`appendEvent` 不查 Session 存在性。整体修复需 SQLite 表重建迁移 + 孤儿策略 + 老库升级验证 + 测试 fixture 重构（`migrations.test.ts:115-117` 直接写孤儿子表），规模大，报告排入 §11-D 合理，递延成立。
+
+本轮勘误：报告 §3 指出我在第三轮给 `getLatestEventTimestamp` 写的接口注释称"Session 不存在时返回 null"，但 DB 无 FK，真实语义是"无匹配事件行时返回 null"。已修正 `session-store.ts:89-95` JSDoc 为"Null when no matching event rows exist for the given sessionId"，并注明 P1-DATA-01 引用。零代码行为变化。
+
+### 13.3 P1-SEC-01（dsh 网络不受限未显式确认）：ADR 递延
+
+报告 §4.3/§10 建议将 unrestricted-network 变为显式确认。经对抗验证强化论证：
+
+- **纯 Web checkbox 是剧场不是安全**：本仓既定模式是客户端引导必须镜像服务端权威边界（`allowDirtyBase` 有服务端 honoring），而 dsh ack 在服务端无任何对应物（RPC schema 无字段、wrapper 不校验、core 硬编码 `acknowledgeUnrestrictedNetwork: true`）。只在客户端禁用提交按钮将是全表单第一个无服务端执行的控件，制造"已获同意"假象。
+- **真实修复 = 完整契约**：RPC 字段 + wrapper 校验 + core config 默认改 false + snapshot round-trip + CLI 侧 + 四层测试，~80-120 行，是 provider snapshot 语义变更。
+- **CLI 是 dsh 主使用面却零交互确认基础设施**（全包无 readline/inquirer），非交互 CI 语境下"显式确认"没有诚实的轻量形式。
+- **自然归宿是阶段 B/C**：§11-B 安排 DSH SDK/ACP 评估，§11-C 安排 run plan 网络/权限预览——网络风险同意应与权限/成本预览一起呈现。
+
+当前披露（手册 §5.7"使用前必读"+"选用即接受"）+ 多层既有控制（版本钉死 fail-closed、capability guard、手动安装、API key、Goal-only 限制）使残余风险可接受地递延。
+
+### 13.4 P2-TEST-01（Goal/dsh UI 缺浏览器断言）：本轮修复
+
+报告 §2/§7/§10 明确列为 P2 测试补强项。本轮新增 `packages/web/__tests__/e2e/start-run-form.test.ts`（~60 行），覆盖三组纯前端状态联动：
+
+- (a) 选 dsh-headless → mode 自动切 goal、template/profile 禁用、帮助文案显示约束；
+- (b) 切回 workflow → agent 回退 codex、template/profile 恢复启用；
+- (c) 直接切 goal（非 dsh agent）→ template/profile 禁用、agent 保持不变。
+
+测试不启动真实 run，确定性高（React useState 同步更新，无网络竞争），执行 < 2s。
+
+### 13.5 其余 P0/P1/P2：无新事实，递延成立
+
+自第三轮（ecc1f74）以来仅 2 个提交（3b26d88 run-mode policy + bec0bed 报告/current.md），未触碰 job-runner/dual-write/session-store 底层。P0-ARCH-01/02/03、P0-PRODUCT-01、P1-PRODUCT-02、P1-UX-01/02/03/04/05、P1-CODE-02、P1-ARCH-04、P2-TEST-02 代码状态与前三轮及第 4~14 轮一致。`docs/reviews/current.md` 正确落地 P2-PROCESS-01（稳定入口 + 简短 revision log）。
+
+另：报告 §5.4 末条提及"高级新建运行的折叠标题仍是可点击 `div`，缺键盘按钮语义和 `aria-expanded`"——该 a11y 项在 §5.4 披露但未分配 P 级 ID、未进入 §10 未关闭清单，处于跟踪真空。本轮记录为 **P1-UX-06（折叠标题 a11y）**，随 §11-D 可访问性专项统一推进，不在本轮单独修复（pre-existing，非本轮回归）。
+
+### 13.6 验证与版本
+
+- `corepack pnpm -r typecheck`：3 包 Done；
+- `corepack pnpm test`：1328 passed / 3 skipped（118 个测试文件）；
+- Web Playwright e2e：29 passed（含新增 P2-TEST-01 测试）；
+- 版本保持 `0.16.0`（复审 + 测试补强 + 注释勘误，不 bump）。

@@ -105,6 +105,22 @@
 <p><strong>本 PR 的最新代码和报告可以继续合并审阅；Tekon 仍不通过面向普通人的稳定研发工作台验收。</strong></p>
 <p class="small">本报告没有声称完成独立部署实例的像素级、键盘焦点、屏幕阅读器或多浏览器实测。</p>
 </section>
+<section class="card pass">
+<h2>实施方批注（第四轮）</h2>
+<p class="small">评估方法：5 个 explorer groundtruth + 5 个 reviewer（最高思考等级）对抗验证（P1-SEC-01 对抗验证因 API 错误重试一次），逐项达成共识。批注依 P2-PROCESS-01 从简。</p>
+<h3>作者 3b26d88 run-mode policy：核验通过（already-fixed）</h3>
+<p>Core 纯函数 3 条规则、CLI 副作用前 fail-fast、Web API 鉴权后校验、StartRunForm 状态机完备、三层测试真实有效。无回归。</p>
+<h3>P1-DATA-01（Session 子表无外键）：整体 ADR 递延 + 注释本轮勘误</h3>
+<p>FK 缺失事实属实（session_events/jobs/projection_checkpoints 均无外键）。整体修复需表重建迁移 + 孤儿策略 + 老库升级验证，排入 §11-D。本轮勘误 <code>getLatestEventTimestamp</code> 接口注释（"Session 不存在返回 null" → "无匹配事件行返回 null"），零行为变化。</p>
+<h3>P1-SEC-01（dsh 网络不受限未显式确认）：ADR 递延</h3>
+<p>纯 Web checkbox 是剧场不是安全（全表单第一个无服务端执行的控件）；真实修复需完整契约（RPC+Core+CLI+snapshot，~80-120 行）；CLI 是 dsh 主使用面却零交互确认基础设施。自然归宿是阶段 B/C（SDK/ACP 评估 + run plan 网络/权限预览）。当前手册 §5.7 披露 + 多层既有控制使残余风险可接受递延。</p>
+<h3>P2-TEST-01（Goal/dsh UI 缺浏览器断言）：本轮修复</h3>
+<p>新增 <code>start-run-form.test.ts</code>（~60 行），覆盖 dsh→goal 自动切换、workflow 回退 codex、goal 禁用 template/profile 三组状态联动。不启动真实 run，确定性高，&lt; 2s。</p>
+<h3>其余 P0/P1/P2：无新事实，递延成立</h3>
+<p>ecc1f74..bec0bed 仅 2 提交未触碰底层。P0-ARCH-01/02/03、P0-PRODUCT-01 等与前三轮及第 4~14 轮一致。<code>current.md</code> 正确落地 P2-PROCESS-01。另：§5.4 折叠标题 a11y（可点击 <code>div</code> 缺键盘语义）记录为 P1-UX-06，随 §11-D 可访问性专项推进。</p>
+<h3>验证与版本</h3>
+<p><code>pnpm -r typecheck</code> 3 包 Done；<code>pnpm test</code> 1328 passed / 3 skipped（118 文件）；Web Playwright e2e 29 passed（含新增 P2-TEST-01）。版本保持 <code>0.16.0</code>。</p>
+</section>
 </main>
 </body>
 </html>

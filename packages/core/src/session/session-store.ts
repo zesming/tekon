@@ -89,8 +89,10 @@ export interface SessionEventStore {
   /**
    * Lightweight tail read for session.get's lastActivityAt: returns only the
    * tail event's timestamp (max seq, sharing listSessions' seq-desc tail
-   * semantics) without deserializing the full event payload. Null when the
-   * session has no events (or does not exist).
+   * semantics) without deserializing the full event payload. Null when no
+   * matching event rows exist for the given sessionId. (session_events has no
+   * FK on session_id — see P1-DATA-01 — so "no events" is the real contract,
+   * not "session does not exist".)
    */
   getLatestEventTimestamp(sessionId: string): Promise<string | null>;
   upsertProjectionCheckpoint(

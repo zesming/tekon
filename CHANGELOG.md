@@ -44,10 +44,19 @@
 - **P0-ARCH-01~03 / P0-PRODUCT-01 / P1-UX-01/03/04/05 / P1-CODE-02 / P1-ARCH-04 / P1-PRODUCT-02**：自第二轮以来无新代码事实，递延结论与第 4~14 轮一致。
 - **P2-PROCESS-01 采纳**：第三轮报告作为 PR #11 当前权威裁决入口，后续只维护一份 current decision record 与简短 revision log。
 
+### 第四轮复审收敛（Fourth Review）
+
+第四轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-29-tekon-human-first-harness-fourth-review.md`，提交 `3b26d88` + `bec0bed`）。作者在 `3b26d88` 统一了 Goal 与 dsh-headless 入口契约（Core `run-mode-policy.ts` 纯函数策略、CLI 副作用前 fail-fast、Web API 包装层鉴权后校验、StartRunForm 显式 Workflow/Goal 切换 + 三层测试），经核验无回归。本轮实施方处置：
+
+- **P2-TEST-01 Goal/dsh UI 浏览器断言**：新增 `packages/web/__tests__/e2e/start-run-form.test.ts`（~60 行），覆盖 dsh-headless→goal 自动切换、workflow 回退 codex、goal 禁用 template/profile 三组纯前端状态联动，不启动真实 run。
+- **P1-DATA-01 注释勘误**：`getLatestEventTimestamp` 接口注释从"Session 不存在返回 null"修正为"无匹配事件行返回 null"（DB 无 FK，孤儿事件可存在）；整体 FK 迁移 + 孤儿策略归入第四轮报告 §11-D。
+- **P1-SEC-01（dsh 网络不受限未显式确认）ADR 递延**：纯 Web checkbox 无服务端执行是剧场；真实修复需完整契约（RPC+Core+CLI+snapshot），归入阶段 B/C。
+- **P0-ARCH-01~03 / P0-PRODUCT-01 / P1-UX-01~05 / P1-CODE-02 / P1-ARCH-04 / P2-TEST-02**：自第三轮以来无新代码事实，递延结论与第 4~14 轮一致。
+
 ### 验证
 
-- 本地 `corepack pnpm test` 全量通过：1322 passed / 3 skipped（115 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api` 与 `cli` 测试）；
-- Web Playwright e2e 全量通过：28 passed（含移动端 390px 无横向溢出、内联审批闭环、新增 P1-04 “待审批”行动徽标断言）；
+- 本地 `corepack pnpm test` 全量通过：1328 passed / 3 skipped（118 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api`、`run-mode-policy` 与 `cli` 测试）；
+- Web Playwright e2e 全量通过：29 passed（含移动端 390px 无横向溢出、内联审批闭环、P1-04 "待审批"行动徽标断言、P2-TEST-01 Goal/dsh 状态联动断言）；
 - P1-04 UI 已做真实浏览器截图核验（桌面 1440px + 移动 390px），行动徽标/状态徽标/时间同行排布无错位、无重叠、无溢出；
 - 三包 build/typecheck 干净。
 
