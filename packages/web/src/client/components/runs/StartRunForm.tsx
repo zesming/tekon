@@ -16,6 +16,8 @@ export interface StartRunFormProps {
   defaultOpen?: boolean;
 }
 
+type RunMode = 'workflow' | 'goal';
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -23,15 +25,17 @@ export interface StartRunFormProps {
 const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
 
 /** Human-facing labels; dsh-headless carries its experimental caveat inline. */
-const AGENT_LABELS: Record<string, string> = {
+const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
   codex: 'codex',
   'claude-code': 'claude-code',
   mock: 'mock',
-  'dsh-headless': 'dsh-headless（experimental · 联网 · 仅 goal）',
+  'dsh-headless': 'dsh-headless（experimental · 联网不受限 · 仅 Goal）',
 };
 
 /**
- * Collapsible "New Run" form with demand, template, agent, timeout fields.
+ * Collapsible "New Run" form with demand, mode, template, agent, and timeout
+ * fields. Goal is explicit because dsh-headless cannot satisfy governed
+ * workflow artifact contracts.
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
@@ -51,6 +55,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   // ── Local form state ──
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [demandText, setDemandText] = useState('');
+  const [mode, setMode] = useState<RunMode>('workflow');
   const [template, setTemplate] = useState('');
   const [agent, setAgent] = useState<string>(AGENT_OPTIONS[0]);
   const [profile, setProfile] = useState<'human-web' | 'autonomous-delivery'>(
@@ -89,10 +94,30 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const startMutation = useMutation<
     RpcProcedureMap['project.run']['input'],
     RpcProcedureMap['project.run']['output']
-  >(
-    (input) => rpc.call('project.run', input),
-    { invalidateKeys: ['project.detail', 'project.overview'] },
-  );
+  >((input) => rpc.call('project.run', input), {
+    invalidateKeys: ['project.detail', 'project.overview'],
+  });
+
+  const handleModeChange = (nextMode: RunMode) => {
+    setMode(nextMode);
+    if (nextMode === 'goal') {
+      setTemplate('');
+      setProfile('human-web');
+    } else if (agent === 'dsh-headless') {
+      // dsh-headless is an official one-shot profile and cannot produce the
+      // artifact/gate contract of a governed workflow.
+      setAgent('codex');
+    }
+  };
+
+  const handleAgentChange = (nextAgent: string) => {
+    setAgent(nextAgent);
+    if (nextAgent === 'dsh-headless') {
+      setMode('goal');
+      setTemplate('');
+      setProfile('human-web');
+    }
+  };
 
   const handleStart = async () => {
     if (!token) {
@@ -114,9 +139,10 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     // this the client silently dropped the path and ran as free text.
     if (shapePath) input.demandShapePath = shapePath;
 
-    if (template) input.template = template;
+    if (mode === 'goal') input.mode = 'goal';
+    if (mode === 'workflow' && template) input.template = template;
     if (agent) input.agent = agent;
-    if (profile !== 'human-web') input.profile = profile;
+    if (mode === 'workflow' && profile !== 'human-web') input.profile = profile;
     if (allowDirtyBase) input.allowDirtyBase = true;
 
     const parsedTimeout = Number(timeoutMs);
@@ -131,10 +157,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
     try {
       const result = await startMutation.mutate(input);
-      addFlash(
-        'success',
-        `运行已启动: ${result.run.id.slice(0, 12)}`,
-      );
+      addFlash('success', `运行已启动: ${result.run.id.slice(0, 12)}`);
       setDemandText('');
       setIsOpen(false);
     } catch (err) {
@@ -183,18 +206,31 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             />
           </div>
 
-          {/* Template + Agent row */}
+          {/* Mode + Template + Agent + Profile */}
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <div className="form-group">
-              <label className="form-label">
-                工作流模板
-              </label>
+              <label className="form-label">运行模式</label>
+              <select
+                className="select"
+                value={mode}
+                aria-describedby="run-mode-help"
+                onChange={(e) => handleModeChange(e.target.value as RunMode)}
+              >
+                <option value="workflow">受控交付（Workflow）</option>
+                <option value="goal">一次性任务（Goal）</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">工作流模板</label>
               <select
                 className="select"
                 value={template}
+                disabled={mode === 'goal'}
                 onChange={(e) => setTemplate(e.target.value)}
               >
-                <option value="">— 默认 —</option>
+                <option value="">
+                  {mode === 'goal' ? '— Goal 不使用模板 —' : '— 默认 —'}
+                </option>
                 {workflows.map((wf) => (
                   <option key={wf.id} value={wf.id}>
                     {wf.name}
@@ -207,11 +243,12 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               <select
                 className="select"
                 value={agent}
-                onChange={(e) => setAgent(e.target.value)}
+                aria-describedby="run-mode-help"
+                onChange={(e) => handleAgentChange(e.target.value)}
               >
                 {AGENT_OPTIONS.map((a) => (
                   <option key={a} value={a}>
-                    {AGENT_LABELS[a] ?? a}
+                    {AGENT_LABELS[a]}
                   </option>
                 ))}
               </select>
@@ -221,6 +258,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               <select
                 className="select"
                 value={profile}
+                disabled={mode === 'goal'}
                 onChange={(e) =>
                   setProfile(
                     e.target.value as 'human-web' | 'autonomous-delivery',
@@ -234,6 +272,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               </select>
             </div>
           </div>
+          <p id="run-mode-help" className="text-sm text-muted">
+            {mode === 'goal'
+              ? 'Goal 是单节点一次性任务，不进入 Gate、Artifact 或交付链路。dsh-headless 仅可在此模式使用，且网络访问不受 Tekon 限制。'
+              : '受控交付会执行模板中的角色、Artifact 与 Gate；dsh-headless 不支持此模式。'}
+          </p>
 
           {/* Timeout row */}
           <div
@@ -250,9 +293,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">
-                无进展超时 (ms)
-              </label>
+              <label className="form-label">无进展超时 (ms)</label>
               <input
                 className="input"
                 type="number"

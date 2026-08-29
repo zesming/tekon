@@ -1,5 +1,5 @@
 export { createDemandRouter } from './demand.js';
-export { createProjectRouter } from './project.js';
+export { createProjectRouter } from './project-with-run-mode-policy.js';
 export { createDeliveryRouter } from './delivery.js';
 export { createArtifactRouter } from './artifact.js';
 export { createGateRouter } from './gate.js';

@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 
 import {
   generateDynamicWorkflow,
+  getRunModePolicyIssue,
   readDraftShapeFile,
   renderDraftShapeForRun,
   saveDynamicTemplate,
@@ -11,9 +12,7 @@ import {
 
 import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
 import type { CliIO } from '../lib/context.js';
-import {
-  ensureInitialized,
-} from '../lib/context.js';
+import { ensureInitialized } from '../lib/context.js';
 import {
   awaitJobTerminal,
   exitCodeForWorkflowStatus,
@@ -23,10 +22,7 @@ import {
   resolveDemandShapePath,
   resolveProjectRepoPath,
 } from '../lib/path-utils.js';
-import {
-  assertCleanBase,
-  readConfigDefaultAgent,
-} from '../lib/utils.js';
+import { assertCleanBase, readConfigDefaultAgent } from '../lib/utils.js';
 
 export async function commandRun(
   argv: string[],
@@ -69,9 +65,7 @@ export async function commandRun(
     ? readDraftShapeFile(demandFilePath)
     : null;
   if (shapedDemand && !shapedDemand.approved) {
-    throw new Error(
-      `需求草案必须先批准才能运行: ${demandFilePath}`,
-    );
+    throw new Error(`需求草案必须先批准才能运行: ${demandFilePath}`);
   }
   // 4f-2: a draft with a generated plan (hasPlan) must be plan-approved before
   // run. Old drafts (no hasPlan) are exempt — the existing approve→run path is
@@ -94,9 +88,7 @@ export async function commandRun(
 
   if (args.values.dynamic) {
     if (!args.values['dry-run']) {
-      throw new Error(
-        '动态工作流当前必须使用 --dry-run 参数运行',
-      );
+      throw new Error('动态工作流当前必须使用 --dry-run 参数运行');
     }
     const preview = await generateDynamicWorkflow({
       demandText,
@@ -120,31 +112,37 @@ export async function commandRun(
     return 0;
   }
 
-  assertCleanBase(repoPath, allowDirtyBase);
-
   // 4c (design §4.2): run goes through SessionService + an embedded job
   // runner. The job is awaited to a terminal state before the process exits
   // ("跑完即退出" preserved); the printed status is the WORKFLOW status (the
   // executor settles the job `done` when the engine pauses at a gate), and
   // the exit code follows the workflow's terminal status.
   const isGoal = Boolean(args.values.goal);
-  if (isGoal && args.values.template) {
-    throw new Error('--goal 模式下不能同时指定 --template');
+  const configDefaultAgent = readConfigDefaultAgent(repoPath);
+  const agent = args.values.agent ?? configDefaultAgent ?? 'codex';
+  const runModeIssue = getRunModePolicyIssue({
+    agent,
+    kind: isGoal ? 'goal' : 'workflow',
+    template: args.values.template,
+  });
+  if (runModeIssue) {
+    throw new Error(runModeIssue);
   }
+
+  // Provider/mode incompatibilities are rejected before any workflow, Session,
+  // or background job is created. The clean-base check remains synchronous too.
+  assertCleanBase(repoPath, allowDirtyBase);
+
   const templateName = isGoal
     ? 'goal'
     : (args.values.template ?? 'standard-delivery');
-  const configDefaultAgent = readConfigDefaultAgent(repoPath);
 
   return withCliSessionContext(repoPath, io, async (ctx) => {
     const result = await ctx.sessionService.startRun({
       demandText,
-      ...(isGoal
-        ? { mode: 'goal' as const }
-        : { templateName }),
+      ...(isGoal ? { mode: 'goal' as const } : { templateName }),
       engine: {
-        agent:
-          args.values.agent ?? configDefaultAgent ?? 'codex',
+        agent,
         allowDirtyBase,
         runtime: providerRuntimeFromCliOptions(args.values),
       },
@@ -171,9 +169,7 @@ export async function commandRun(
     }
 
     // S3: re-read the workflow instance — job terminal ≠ workflow terminal.
-    const workflow = await ctx.repositories.getWorkflowInstance(
-      result.runId,
-    );
+    const workflow = await ctx.repositories.getWorkflowInstance(result.runId);
     const status = workflow?.status ?? result.workflow.status;
     const pendingHuman = (
       await ctx.repositories.listHumanDecisions(result.runId)
@@ -209,10 +205,7 @@ export function createDynamicMockAdapter(demandText: string) {
       outputFiles: string[];
       timedOut: false;
     }> {
-      const outputPath = join(
-        input.outputDir,
-        'workflow-spec.json',
-      );
+      const outputPath = join(input.outputDir, 'workflow-spec.json');
       const highRisk = /高风险|high-risk|risk/u.test(demandText);
       const dataRisk = /数据|退款|data|migration/u.test(demandText);
       writeFileSync(
@@ -228,10 +221,7 @@ export function createDynamicMockAdapter(demandText: string) {
                   id: 'rd-dynamic-implementation',
                   role: 'rd',
                   artifactOutputs: ['code-changes'],
-                  gates: [
-                    { type: 'build' },
-                    { type: 'lint' },
-                  ],
+                  gates: [{ type: 'build' }, { type: 'lint' }],
                 },
               ],
             },
