@@ -1,19 +1,11 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { parseArgs } from 'node:util';
 
-import * as coreModule from '@tekon/core';
 import {
-  assertDshDefaultConfigContract,
-  assertDshHeadlessHelpContract,
-  assertDshVersionAllowed,
-  parseDshVersion,
+  runDshPreflight as runCoreDshPreflight,
   TESTED_DSH_VERSION,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
-
-const execFileAsync = promisify(execFile);
 
 export interface DshPreflightResult {
   testedVersion: string;
@@ -32,140 +24,35 @@ export async function runDshPreflight(options?: {
   probeHelp?: (command: string) => Promise<string>;
   probeConfig?: (command: string) => Promise<string>;
 }): Promise<DshPreflightResult> {
-  const corePreflight = (coreModule as Record<string, unknown>).runDshPreflight;
-  if (typeof corePreflight === 'function' && !options?.probeVersion) {
-    try {
-      const res = (await corePreflight(options?.command)) as {
-        testedVersion: string;
-        actualVersion: string;
-        helpContractOk: boolean;
-        configContractOk: boolean;
-        installHint?: string;
-      };
-      const testedVersion = res.testedVersion ?? TESTED_DSH_VERSION;
-      const actualVersion = res.actualVersion ?? null;
-      const helpContractOk = Boolean(res.helpContractOk);
-      const configContractOk = Boolean(res.configContractOk);
-      const installHint =
-        res.installHint ?? `npm install -g @deepseek-ai/dsh@${testedVersion}`;
-      const allowVersion =
-        options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
-      const versionOk =
-        actualVersion !== null &&
-        (actualVersion === testedVersion || allowVersion === actualVersion);
-      const compatible = versionOk && helpContractOk && configContractOk;
-      return {
-        testedVersion,
-        actualVersion,
-        helpContractOk,
-        configContractOk,
-        installHint,
-        compatible,
-      };
-    } catch (err) {
-      const testedVersion = TESTED_DSH_VERSION;
-      const installHint = `npm install -g @deepseek-ai/dsh@${testedVersion}`;
-      const actualVersion =
-        err && typeof err === 'object' && 'actualVersion' in err
-          ? String((err as { actualVersion: unknown }).actualVersion)
-          : null;
-      return {
-        testedVersion,
-        actualVersion,
-        helpContractOk: false,
-        configContractOk: false,
-        installHint,
-        compatible: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  }
-
-  // Fallback probe logic adhering to design §4-B contract
-  const dshCommand = options?.command ?? 'dsh';
-  const testedVersion = TESTED_DSH_VERSION;
-  const installHint = `npm install -g @deepseek-ai/dsh@${testedVersion}`;
   const allowVersion =
     options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
 
-  let actualVersion: string | null = null;
-  let helpContractOk = false;
-  let configContractOk = false;
-  let errorMsg: string | undefined;
-
   try {
-    const rawVersion = options?.probeVersion
-      ? await options.probeVersion(dshCommand)
-      : (await execFileAsync(dshCommand, ['--version'], { timeout: 15_000 }))
-          .stdout;
-    actualVersion = parseDshVersion(rawVersion);
-    assertDshVersionAllowed(actualVersion, { allowVersion });
-  } catch (err) {
-    errorMsg = err instanceof Error ? err.message : String(err);
-    const parsedVersion =
-      err && typeof err === 'object' && 'actualVersion' in err
-        ? String((err as { actualVersion: unknown }).actualVersion)
-        : actualVersion;
+    const result = await runCoreDshPreflight(options?.command ?? 'dsh', {
+      allowVersion,
+      probeVersion: options?.probeVersion,
+      probeHelp: options?.probeHelp,
+      probeConfig: options?.probeConfig,
+    });
     return {
-      testedVersion,
-      actualVersion: parsedVersion,
+      ...result,
+      compatible: true,
+    };
+  } catch (error) {
+    const actualVersion =
+      error && typeof error === 'object' && 'actualVersion' in error
+        ? String((error as { actualVersion: unknown }).actualVersion)
+        : null;
+    return {
+      testedVersion: TESTED_DSH_VERSION,
+      actualVersion,
       helpContractOk: false,
       configContractOk: false,
-      installHint,
+      installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
       compatible: false,
-      error: errorMsg,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
-
-  try {
-    const rawHelp = options?.probeHelp
-      ? await options.probeHelp(dshCommand)
-      : (
-          await execFileAsync(
-            dshCommand,
-            ['--profile', 'headless', '--help'],
-            { timeout: 15_000 },
-          )
-        ).stdout;
-    assertDshHeadlessHelpContract(rawHelp);
-    helpContractOk = true;
-  } catch (err) {
-    errorMsg = err instanceof Error ? err.message : String(err);
-  }
-
-  try {
-    const rawConfig = options?.probeConfig
-      ? await options.probeConfig(dshCommand)
-      : (
-          await execFileAsync(
-            dshCommand,
-            ['--profile', 'headless', '--dump-default-config'],
-            { timeout: 15_000 },
-          )
-        ).stdout;
-    assertDshDefaultConfigContract(rawConfig);
-    configContractOk = true;
-  } catch (err) {
-    if (!errorMsg) {
-      errorMsg = err instanceof Error ? err.message : String(err);
-    }
-  }
-
-  const compatible =
-    actualVersion !== null &&
-    (actualVersion === testedVersion || allowVersion === actualVersion) &&
-    helpContractOk &&
-    configContractOk;
-
-  return {
-    testedVersion,
-    actualVersion,
-    helpContractOk,
-    configContractOk,
-    installHint,
-    compatible,
-    ...(errorMsg ? { error: errorMsg } : {}),
-  };
 }
 
 export async function commandProvider(
