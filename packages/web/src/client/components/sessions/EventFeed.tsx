@@ -198,7 +198,8 @@ export function EventFeed({
                 ? '已加载最早历史'
                 : '加载更早历史'}
             </button>
-          ) : hasEarlierEvents ? (
+          ) : null}
+          {hasEarlierEvents ? (
             <button
               type="button"
               className="btn btn-secondary btn-xs"

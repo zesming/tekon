@@ -1,8 +1,28 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EventFeed } from "../../src/client/components/sessions/EventFeed.js";
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+// Mock React hooks to support interactive state transitions in node environment
+let currentDispatcher: any = null;
+
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: any) =>
+      currentDispatcher ? currentDispatcher.useState(initial) : actual.useState(initial),
+    useRef: (initial: any) =>
+      currentDispatcher ? currentDispatcher.useRef(initial) : actual.useRef(initial),
+    useCallback: (fn: any, deps: any[]) =>
+      currentDispatcher ? currentDispatcher.useCallback(fn, deps) : actual.useCallback(fn, deps),
+    useMemo: (fn: any, deps?: any[]) =>
+      currentDispatcher ? currentDispatcher.useMemo(fn, deps) : (actual.useMemo ? actual.useMemo(fn, deps as any) : fn()),
+    useEffect: (fn: any, deps?: any[]) =>
+      currentDispatcher ? currentDispatcher.useEffect(fn, deps) : (actual.useEffect ? actual.useEffect(fn, deps as any) : undefined),
+  };
+});
+
+import { EventFeed } from "../../src/client/components/sessions/EventFeed.js";
 import {
   computeEventWindow,
   DEFAULT_EVENT_WINDOW,
@@ -30,6 +50,103 @@ function ev(
     modelVisible: false,
     correlationId: null,
     ...over,
+  };
+}
+
+function findElementInTree(
+  node: any,
+  predicate: (elem: React.ReactElement<any>) => boolean,
+): React.ReactElement<any> | null {
+  if (!node || typeof node !== "object") return null;
+  if (React.isValidElement(node)) {
+    if (predicate(node)) return node;
+    const children = (node.props as any)?.children;
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        const found = findElementInTree(child, predicate);
+        if (found) return found;
+      }
+    } else if (children) {
+      const found = findElementInTree(children, predicate);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function renderInteractiveFeed(props: Parameters<typeof EventFeed>[0]) {
+  let stateIndex = 0;
+  let memoIndex = 0;
+  const states: any[] = [];
+  const setStates: Array<(val: any) => void> = [];
+  const memos: Array<{ value: any; deps: any[] | undefined }> = [];
+  let tree: any = null;
+
+  function renderTree() {
+    stateIndex = 0;
+    memoIndex = 0;
+    currentDispatcher = {
+      useState(initial: any) {
+        const idx = stateIndex++;
+        if (states.length <= idx) {
+          states[idx] = typeof initial === "function" ? initial() : initial;
+        }
+        if (!setStates[idx]) {
+          setStates[idx] = (newVal: any) => {
+            const resolved =
+              typeof newVal === "function" ? newVal(states[idx]) : newVal;
+            if (states[idx] !== resolved) {
+              states[idx] = resolved;
+              renderTree();
+            }
+          };
+        }
+        return [states[idx], setStates[idx]];
+      },
+      useMemo(fn: any, deps?: any[]) {
+        const idx = memoIndex++;
+        if (memos.length <= idx) {
+          const value = fn();
+          memos[idx] = { value, deps };
+          return value;
+        }
+        const prev = memos[idx];
+        const changed =
+          !deps ||
+          !prev.deps ||
+          deps.some((d, i) => !Object.is(d, prev.deps?.[i]));
+        if (changed) {
+          const value = fn();
+          memos[idx] = { value, deps };
+          return value;
+        }
+        return prev.value;
+      },
+    };
+    tree = EventFeed(props);
+  }
+
+  renderTree();
+
+  return {
+    get tree() {
+      return tree;
+    },
+    get html() {
+      return renderToStaticMarkup(tree);
+    },
+    clickExpand() {
+      const expandBtn = findElementInTree(
+        tree,
+        (elem) =>
+          typeof elem.props?.['aria-label'] === 'string' &&
+          elem.props['aria-label'].includes('展开更早'),
+      );
+      if (!expandBtn || typeof expandBtn.props.onClick !== 'function') {
+        throw new Error('Expand button not found or has no onClick handler');
+      }
+      expandBtn.props.onClick();
+    },
   };
 }
 
@@ -357,5 +474,94 @@ describe("EventFeed earlier history button rendering (MUST-1 + MUST-2)", () => {
       }),
     );
     expect(html).toContain("展开更早的 50 条事件");
+  });
+
+  it("renders BOTH '加载更早历史' and '展开更早的 N 条事件' buttons when externalHasEarlier=true and events.length > 250", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("加载更早历史");
+    expect(html).toContain("展开更早的 50 条事件");
+  });
+
+  it("renders all in-memory events in DOM after clicking '展开更早的 N 条事件'", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const harness = renderInteractiveFeed({
+      events,
+      hasEarlier: true,
+      reachedEarlierLimit: false,
+      isLoadingEarlier: false,
+      onLoadEarlier: () => {},
+    });
+
+    // Before click: only latest 250 events (seq 51..300) are rendered in DOM window
+    const initialHtml = harness.html;
+    expect(initialHtml).toContain("展开更早的 50 条事件");
+    expect(initialHtml).toContain("加载更早历史");
+    expect(initialHtml).toContain("msg 300");
+    expect(initialHtml).toContain("msg 51");
+    expect(initialHtml).not.toContain("msg 1</div>");
+    expect(initialHtml).not.toContain("msg 50</div>");
+
+    // Click "展开更早的 50 条事件"
+    harness.clickExpand();
+
+    // After click: all 300 events (seq 1..300) are rendered in DOM
+    const expandedHtml = harness.html;
+    expect(expandedHtml).toContain("msg 1");
+    expect(expandedHtml).toContain("msg 50");
+    expect(expandedHtml).toContain("msg 51");
+    expect(expandedHtml).toContain("msg 300");
+    expect(expandedHtml).not.toContain("展开更早的");
+    // External "加载更早历史" button remains present
+    expect(expandedHtml).toContain("加载更早历史");
+  });
+
+  it("disables '加载更早历史' when reachedEarlierLimit=true while '展开' button remains enabled and clickable", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const harness = renderInteractiveFeed({
+      events,
+      hasEarlier: true,
+      reachedEarlierLimit: true,
+      isLoadingEarlier: false,
+      onLoadEarlier: () => {},
+    });
+
+    const initialHtml = harness.html;
+    // "已加载最早历史" is present and disabled
+    expect(initialHtml).toContain("已加载最早历史");
+    expect(initialHtml).toContain("disabled");
+    // "展开更早的 50 条事件" is present
+    expect(initialHtml).toContain("展开更早的 50 条事件");
+
+    // Find the expand button and verify it is not disabled
+    const expandBtn = findElementInTree(
+      harness.tree,
+      (elem) =>
+        typeof elem.props?.['aria-label'] === 'string' &&
+        elem.props['aria-label'].includes('展开更早'),
+    );
+    expect(expandBtn).toBeDefined();
+    expect(expandBtn?.props.disabled).toBeFalsy();
+
+    // Expand button is clickable and successfully expands history in DOM
+    harness.clickExpand();
+    const expandedHtml = harness.html;
+    expect(expandedHtml).toContain("msg 1");
+    expect(expandedHtml).toContain("msg 300");
+    expect(expandedHtml).toContain("已加载最早历史");
   });
 });
