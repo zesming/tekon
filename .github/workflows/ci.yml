@@ -32,6 +32,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check installer syntax
+        run: bash -n scripts/install.sh
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
