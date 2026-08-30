@@ -2,8 +2,11 @@ import { createSseParser, type StreamConnState } from './session-stream.js';
 
 export interface WorkspaceSummaryEvent {
   workspaceId: string;
-  sessionId: string;
-  type: string;
+  /** Present on low-latency process-local frames; absent on signature catch-up. */
+  sessionId?: string;
+  /** Present on low-latency process-local frames; absent on signature catch-up. */
+  type?: string;
+  timestamp?: string;
 }
 
 const FATAL_STREAM_STATUSES = new Set([400, 401, 403, 404]);
@@ -81,14 +84,16 @@ export function openWorkspaceSummaryStream(
           if (frame.data === undefined) continue;
           try {
             const event = JSON.parse(frame.data) as WorkspaceSummaryEvent;
-            options.onEvent(event);
+            if (event.workspaceId === options.workspaceId) {
+              options.onEvent(event);
+            }
           } catch {
-            // Ignore unparseable frames
+            // Ignore unparseable frames.
           }
         }
       }
     } catch {
-      // transient failure -> fall through to reconnect unless closed
+      // Transient failure -> fall through to reconnect unless closed.
     }
     if (closed) return;
     scheduleReconnect();
