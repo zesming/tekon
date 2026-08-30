@@ -47,14 +47,16 @@ test.describe('Tekon release dashboard', () => {
       page.getByText('交付管道 Delivery Pipeline'),
     ).toBeVisible();
 
-    // ── 3. Verify authenticated delivery affordances ─────────────────────
-    await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible();
+    // ── 3. Verify credential-configured delivery affordances ─────────────
+    await expect(
+      page.getByRole('button', { name: '连接凭据：已设置' }),
+    ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeVisible();
 
     // The fixture run is paused, so readiness keeps Prepare PR disabled even
-    // though the normal connected credential is present.
+    // though the normal configured credential is present.
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeDisabled();

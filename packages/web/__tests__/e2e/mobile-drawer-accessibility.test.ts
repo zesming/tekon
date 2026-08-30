@@ -62,7 +62,9 @@ test.describe('mobile navigation accessibility', () => {
         ),
       )
       .toBe(true);
-    await expect(page.getByRole('button', { name: /已连接/ })).not.toBeFocused();
+    await expect(
+      page.getByRole('button', { name: '连接凭据：已设置' }),
+    ).not.toBeFocused();
 
     await page.locator('.nav-overlay').click({ position: { x: 380, y: 400 } });
     await expect(sidebar).toBeHidden();

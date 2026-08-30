@@ -153,7 +153,7 @@ test('Sessions list shows the started session and links to its detail', async ({
     page.getByRole('button', { name: '启动受控交付' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /已连接/ }),
+    page.getByRole('button', { name: '连接凭据：已设置' }),
   ).toBeVisible();
 
   const link = page.locator(`a[href="/sessions/${sessionId}"]`);
