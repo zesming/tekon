@@ -21,16 +21,16 @@ const execFileAsync = promisify(execFile);
 export const TESTED_DSH_VERSION = '0.1.2-alpha.1';
 
 /**
- * Plugin ids that MUST appear in `dsh --profile headless --dump-default-config`.
- * Their presence is the capability contract (design §5.2): headless runner,
- * the sandbox/approval governance seams we pin, the session store, and the
- * default model. Their disappearance means the headless composition drifted and
- * a human must re-verify the boundary before trusting it.
+ * Config row ids that MUST appear in
+ * `dsh --profile headless --dump-default-config`. Their presence is the
+ * capability contract (design §5.2): headless runner, sandbox/approval
+ * governance, session persistence, and the default model. These are row ids
+ * from the composed YAML tree — not package-name substrings.
  */
 export const REQUIRED_DSH_PLUGIN_IDS = [
   'headless-runner',
   'sandbox-policy',
-  'user-approval',
+  'approval',
   'session-persistence-jsonl',
   'agent-default-model',
 ] as const;
@@ -128,15 +128,28 @@ export function assertDshHeadlessHelpContract(helpOutput: string): void {
   }
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function containsConfigRowId(dumpOutput: string, id: string): boolean {
+  const escaped = escapeRegExp(id);
+  return new RegExp(
+    `^\\s*(?:-\\s*)?id:\\s*["']?${escaped}["']?\\s*$`,
+    'mu',
+  ).test(dumpOutput);
+}
+
 /**
- * Verify the headless default-config dump still contains every required plugin
- * id (design §5.2). The dump format is NOT a schema we bind — we only assert
- * substring presence of each id, which is the deliberately loose contract:
- * a required id disappearing means the composition drifted.
+ * Verify the headless default-config YAML still contains every required row id.
+ * `dsh --dump-default-config` is a documented YAML composition dump. Matching
+ * complete `id:` rows prevents a package name such as
+ * `@deepseek-ai/dsh-user-approval` from falsely satisfying the contract when
+ * the actual config row id is absent or renamed.
  */
 export function assertDshDefaultConfigContract(dumpOutput: string): void {
   for (const id of REQUIRED_DSH_PLUGIN_IDS) {
-    if (!dumpOutput.includes(id)) {
+    if (!containsConfigRowId(dumpOutput, id)) {
       throw new DshCapabilityError(
         `dsh headless default config is missing the required plugin id ` +
           `'${id}'. The headless composition drifted from the tested contract; ` +
