@@ -13,6 +13,7 @@ import { join, relative, resolve } from 'node:path';
 
 import {
   agentRequiresUnrestrictedNetwork,
+  canonicalJson,
   computeRunPlanDigest,
   listWorkflowCatalog,
   loadWorkflowTemplate,
@@ -20,6 +21,7 @@ import {
   projectRunPlan,
   readDraftShapeFile,
   renderDraftShapeForRun,
+  type RunPlan,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -28,6 +30,7 @@ import type {
   ProjectRunInput,
   ProjectCleanInput,
   TokenRunInput,
+  WebRunEngineInput,
 } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSafeName, assertSessionToken } from '../common.js';
@@ -105,7 +108,7 @@ export function createProjectRouter(context: ServerContext) {
 
     async health(input?: { token?: string }) {
       const token = input?.token?.trim();
-      const tokenHash = token ? hashToken(token) : "empty";
+      const tokenHash = token ? hashToken(token) : 'empty';
       const cacheKey = `${context.projectContext.sessionPath}:${tokenHash}`;
       const now = Date.now();
       cleanExpiredHealthCache(now);
@@ -115,33 +118,33 @@ export function createProjectRouter(context: ServerContext) {
         return cached.result;
       }
 
-      let credential: "not-configured" | "valid" | "invalid" = "not-configured";
+      let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
       let detail: string | undefined;
-      let dshHeadless: "available" | "unavailable" | undefined;
+      let dshHeadless: 'available' | 'unavailable' | undefined;
 
       if (!token) {
-        credential = "not-configured";
+        credential = 'not-configured';
       } else {
         let expectedToken: string | undefined;
         try {
           const parsed = JSON.parse(
-            readFileSync(context.projectContext.sessionPath, "utf8"),
+            readFileSync(context.projectContext.sessionPath, 'utf8'),
           ) as { token?: unknown };
           expectedToken =
-            typeof parsed.token === "string" ? parsed.token : undefined;
+            typeof parsed.token === 'string' ? parsed.token : undefined;
         } catch {
           expectedToken = undefined;
         }
 
         if (!expectedToken) {
-          credential = "not-configured";
-          detail = "Web session token is not configured on server";
+          credential = 'not-configured';
+          detail = 'Web session token is not configured on server';
         } else if (token === expectedToken) {
-          credential = "valid";
+          credential = 'valid';
           dshHeadless = probeProvider();
         } else {
-          credential = "invalid";
-          detail = "Session token does not match server configuration";
+          credential = 'invalid';
+          detail = 'Session token does not match server configuration';
         }
       }
 
@@ -214,9 +217,6 @@ export function createProjectRouter(context: ServerContext) {
     async pause(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      // M7 order: token → scope → write. SessionService does the CAS
-      // running→paused (MUST-FIX1: no clobber of a concurrent terminal/cancel);
-      // the router maps an illegal transition (e.g. passed→paused) to 400.
       const result = await context.sessionService.requestPause({
         runId: runInput.runId,
       });
@@ -242,9 +242,6 @@ export function createProjectRouter(context: ServerContext) {
             assertDraftShapePathInScope(context, runInput.demandShapePath),
           )
         : null;
-      // P0-03 (S7c): a shaped demand must be BOTH approved AND readyForRun
-      // (openQuestions cleared). The approval state comes from the server-read
-      // file, never a client boolean. Free-text runs (no shapePath) are exempt.
       if (shapedDraft && !shapedDraft.approved) {
         throw new ApiError(
           'BAD_REQUEST',
@@ -257,10 +254,6 @@ export function createProjectRouter(context: ServerContext) {
           'Draft shape has open questions; resolve them (readyForRun) before run.',
         );
       }
-      // 4f-2: a draft with a generated plan must be plan-approved before run.
-      // Old drafts (no hasPlan) are exempt — the existing approve→run path is
-      // unaffected. This makes the plan approval point real (non-decorative):
-      // once a plan exists, run is gated on its explicit approval.
       if (shapedDraft?.hasPlan && shapedDraft.planApproved !== true) {
         throw new ApiError(
           'BAD_REQUEST',
@@ -273,16 +266,13 @@ export function createProjectRouter(context: ServerContext) {
       if (!demandText) {
         throw new ApiError('BAD_REQUEST', 'Demand text is required.');
       }
+
       const isGoal = runInput.mode === 'goal';
-      // S12: every synchronous validation stays before enqueue — a dirty base
-      // must 400 here, not degrade into a background job failure.
-      assertCleanBase(
-        context.projectContext.projectRoot,
-        Boolean(runInput.allowDirtyBase),
-      );
-      // 4b: goal mode ignores template/workflowSpec (SessionService uses the
-      // built-in goal template). Workflow mode resolves the template + any
-      // project workflow override as before.
+      const allowDirtyBase = Boolean(runInput.allowDirtyBase);
+      const resolvedProfile = runInput.profile ?? 'human-web';
+      const resolvedAgent = runInput.agent ?? 'codex';
+      assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
+
       const templateName = isGoal
         ? undefined
         : runInput.template?.trim() || 'standard-delivery';
@@ -290,7 +280,8 @@ export function createProjectRouter(context: ServerContext) {
         assertSafeName(templateName, 'template');
       }
 
-      // P1-UX-01 / P1-PLAN-01: plan digest validation for workflow mode
+      let workflowSpec: WorkflowTemplate | null = null;
+      let canonicalPlan: RunPlan | null = null;
       if (!isGoal) {
         if (!runInput.planDigest || runInput.planDigest.trim() === '') {
           throw new ApiError(
@@ -298,20 +289,23 @@ export function createProjectRouter(context: ServerContext) {
             'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
           );
         }
-        const template = loadTemplate(context, templateName!);
-        const plan = projectRunPlan(template, {
-          agent: runInput.agent,
-          mode: runInput.mode,
-          profile: runInput.profile,
-          allowDirtyBase: runInput.allowDirtyBase,
+
+        // Load exactly once. The same immutable object is used for digest
+        // validation and prepareRun so a project YAML edit cannot win a
+        // validation→execution TOCTOU race.
+        workflowSpec = loadTemplate(context, templateName!);
+        canonicalPlan = projectRunPlan(workflowSpec, {
+          agent: resolvedAgent,
+          mode: 'workflow',
+          profile: resolvedProfile,
+          allowDirtyBase,
           timeoutMs: runInput.timeoutMs,
           noProgressTimeoutMs: runInput.noProgressTimeoutMs,
           progressHeartbeatMs: runInput.progressHeartbeatMs,
           templateId: templateName,
         });
         const computedDigest =
-          (plan as { digest?: string }).digest ??
-          computeRunPlanDigest(plan);
+          canonicalPlan.digest ?? computeRunPlanDigest(canonicalPlan);
         if (runInput.planDigest !== computedDigest) {
           throw new ApiError(
             'BAD_REQUEST',
@@ -320,14 +314,8 @@ export function createProjectRouter(context: ServerContext) {
         }
       }
 
-      const workflowSpec =
-        !isGoal && templateName
-          ? loadProjectWorkflowIfPresent(context, templateName)
-          : null;
-
-      // P1-SEC-01: Check unrestricted network precondition
       const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(
-        runInput.agent,
+        resolvedAgent,
       );
       if (
         requiresUnrestrictedNetwork &&
@@ -336,38 +324,47 @@ export function createProjectRouter(context: ServerContext) {
         throw new ApiError('BAD_REQUEST', '联网不受限需知情确认');
       }
 
-      // 4a: SessionService owns the prepareRun → session → events → enqueue
-      // orchestration. The router keeps token/scope, draft-shape validation,
-      // clean-base, project-workflow loading, ApiError, and mapping. The
-      // demand-shaped governance audit (P0-03 evidence, intentionally not a
-      // session event) rides the onPrepared hook so it stays in the audit chain.
+      const engineInput = {
+        agent: resolvedAgent,
+        allowDirtyBase,
+        ...(runInput.timeoutMs !== undefined
+          ? { timeoutMs: runInput.timeoutMs }
+          : {}),
+        ...(runInput.noProgressTimeoutMs !== undefined
+          ? { noProgressTimeoutMs: runInput.noProgressTimeoutMs }
+          : {}),
+        ...(runInput.progressHeartbeatMs !== undefined
+          ? { progressHeartbeatMs: runInput.progressHeartbeatMs }
+          : {}),
+        ...(runInput.acknowledgeUnrestrictedNetwork !== undefined
+          ? {
+              acknowledgeUnrestrictedNetwork:
+                runInput.acknowledgeUnrestrictedNetwork,
+            }
+          : {}),
+        ...(canonicalPlan
+          ? {
+              canonicalPlan,
+              planDigest: canonicalPlan.digest,
+              planSnapshot: canonicalJson(canonicalPlan),
+            }
+          : {}),
+      } as WebRunEngineInput & {
+        canonicalPlan?: RunPlan;
+        planSnapshot?: string;
+      };
+
       const result = await context.sessionService.startRun({
         demandText,
         ...(isGoal
           ? { mode: 'goal' as const }
-          : workflowSpec
-            ? { workflowSpec }
-            : { templateName }),
-        // 4d: explicit per-run profile (autonomy is never inferred). Omitted →
-        // SessionService falls back to the composition-root default (human-web).
+          : {
+              templateName,
+              workflowSpec: workflowSpec!,
+              planDigest: canonicalPlan!.digest,
+            }),
         ...(runInput.profile ? { profile: runInput.profile } : {}),
-        engine: {
-          agent: runInput.agent ?? 'codex',
-          allowDirtyBase: Boolean(runInput.allowDirtyBase),
-          ...(runInput.timeoutMs !== undefined
-            ? { timeoutMs: runInput.timeoutMs }
-            : {}),
-          ...(runInput.noProgressTimeoutMs !== undefined
-            ? { noProgressTimeoutMs: runInput.noProgressTimeoutMs }
-            : {}),
-          ...(runInput.progressHeartbeatMs !== undefined
-            ? { progressHeartbeatMs: runInput.progressHeartbeatMs }
-            : {}),
-          ...(runInput.acknowledgeUnrestrictedNetwork !== undefined
-            ? { acknowledgeUnrestrictedNetwork: runInput.acknowledgeUnrestrictedNetwork }
-            : {}),
-          ...(runInput.planDigest ? { planDigest: runInput.planDigest } : {}),
-        },
+        engine: engineInput,
         onPrepared:
           shapedDraft ||
           (requiresUnrestrictedNetwork && runInput.acknowledgeUnrestrictedNetwork)
@@ -391,7 +388,7 @@ export function createProjectRouter(context: ServerContext) {
                     runId,
                     type: 'run.network-acknowledged',
                     payload: {
-                      agent: runInput.agent ?? 'codex',
+                      agent: resolvedAgent,
                       acknowledgeUnrestrictedNetwork: true,
                     },
                   });
@@ -410,9 +407,6 @@ export function createProjectRouter(context: ServerContext) {
     async resume(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      // 4a: SessionService owns the resume orchestration (pending-decision
-      // guard, M8 terminal guard, MF2 single-active-job guard, session backfill,
-      // enqueue). The router maps each outcome to ApiError/response.
       const result = await context.sessionService.resumeRun({
         runId: runInput.runId,
       });
@@ -446,11 +440,6 @@ export function createProjectRouter(context: ServerContext) {
     async cancel(runInput: TokenRunInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      // 4a: SessionService owns the cancel orchestration. MF1: it is the single
-      // emission point for agent/cancel-requested + agent/cancelled;
-      // writeWorkflowTerminal is idempotent and runs FIRST (the CAS guard that
-      // makes a racing engine completion throw instead of writing false passed).
-      // The router only maps the result to a response.
       const result = await context.sessionService.requestCancel({
         runId: runInput.runId,
       });
