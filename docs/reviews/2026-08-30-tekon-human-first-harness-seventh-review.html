@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tekon 人类可用性与 Harness 架构第七轮全面复审</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#5e687b; --line:#d9dee8; --soft:#f5f7fa; --accent:#3157d5; --warn:#9a5b00; --danger:#a12a2a; --ok:#1d6b42; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#eef1f6; color:var(--ink); font:15px/1.72 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    main { width:min(1120px, calc(100% - 32px)); margin:32px auto; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:0 12px 42px rgba(31,42,66,.08); overflow:hidden; }
+    header { padding:42px 48px 30px; background:linear-gradient(135deg,#18223a,#314977); color:white; }
+    header h1 { margin:0 0 12px; font-size:32px; line-height:1.25; }
+    header p { margin:0; color:#dbe4ff; }
+    article { padding:34px 48px 60px; }
+    h2 { margin:42px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); font-size:23px; }
+    h3 { margin:28px 0 10px; font-size:18px; }
+    h4 { margin:22px 0 8px; }
+    p { margin:10px 0; }
+    a { color:var(--accent); }
+    code { padding:.12em .35em; border-radius:4px; background:#eef1f6; font:0.92em ui-monospace,SFMono-Regular,Consolas,monospace; }
+    pre { overflow:auto; padding:16px 18px; border:1px solid var(--line); border-radius:8px; background:#111827; color:#e7edf8; line-height:1.5; }
+    blockquote { margin:18px 0; padding:14px 18px; border-left:4px solid var(--accent); background:#f3f6ff; }
+    .meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 24px; margin:0; padding:18px 20px; background:var(--soft); border:1px solid var(--line); border-radius:10px; }
+    .meta div { min-width:0; }
+    .verdict { margin:22px 0; padding:18px 20px; border:1px solid #e0b668; border-radius:10px; background:#fff8e8; }
+    .correction { margin:22px 0; padding:18px 20px; border:1px solid #e3aaaa; border-radius:10px; background:#fff1f1; }
+    .good { padding:14px 18px; border-left:4px solid var(--ok); background:#eef9f3; }
+    table { width:100%; border-collapse:collapse; margin:16px 0; }
+    th,td { padding:10px 12px; border:1px solid var(--line); vertical-align:top; text-align:left; }
+    th { background:var(--soft); }
+    ul,ol { padding-left:24px; }
+    .priority { display:inline-block; min-width:34px; padding:1px 7px; border-radius:999px; font-weight:700; text-align:center; }
+    .p0 { color:#8e1c1c; background:#fde8e8; }
+    .p1 { color:#875400; background:#fff0cf; }
+    .p2 { color:#3157a5; background:#eaf0ff; }
+    .checklist { list-style:none; padding-left:0; }
+    .checklist li { margin:6px 0; }
+    footer { margin-top:48px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); }
+    @media (max-width:720px) { main{width:100%;margin:0;border:0;border-radius:0;} header,article{padding-left:22px;padding-right:22px;} .meta{grid-template-columns:1fr;} header h1{font-size:26px;} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Tekon 人类可用性与 Harness 架构第七轮全面复审</h1>
+    <p>2026-08-30 · PR #11 · 产品、UI/UX、Runtime、数据、实现、测试与 DeepSeek Harness 对齐</p>
+  </header>
+  <article>
+    <div class="meta">
+      <div><strong>复审起点</strong><br><code>97712042208c…</code></div>
+      <div><strong>主线基线</strong><br><code>main@300aea6b9ea5…</code></div>
+      <div><strong>产品版本</strong><br><code>0.17.0</code></div>
+      <div><strong>稳定入口</strong><br><a href="current.md">docs/reviews/current.md</a></div>
+    </div>
+
+    <div class="correction">
+      <strong>上一轮结论纠正：</strong>上一轮最终答复在最终 CI 尚未结束时宣称完整验证通过；随后终态显示 Web Playwright failure。本轮只以 <code>completed + success</code> 作为通过依据，并重新修复和验证全部失败路径。
+    </div>
+
+    <div class="verdict">
+      <strong>最终裁决：</strong>本轮发现并修复了阻断 CI 的浏览器测试合同漂移、Node.js 支持声明错误和自定义安装目录失效等真实问题。完成最终门禁后，当前增量可通过代码合并门；Tekon 仍不通过“面向普通人的稳定持续协作研发工作台”产品验收，可作为实验性受控交付执行与观察基础设施有条件通过。
+    </div>
+
+    <h2>1. 执行摘要</h2>
+    <p>本轮开始时 PR Head 与上一轮最终提交相同，没有检测到新的用户 commit，因此本轮对上一轮完整工作树和结论重新验真。GitHub Actions 终态显示，产品启动链并未整体失效；主要问题是 TopBar 从“已连接”改成更诚实的“连接凭据：已设置”后，多个 E2E 文件继续复制旧文案。最后一个失败来自宽泛的“错误”正则同时命中临时目录路径与真实 API 错误。</p>
+    <p>本轮没有关闭 strict mode、删除断言或容忍 flaky，而是把定位器收敛到真实 role/name，并保留 <code>failOnFlakyTests</code>。</p>
+    <p>安装链路还发现两个真实用户问题：Vite 7 与 Node 18 声明冲突；自定义 <code>TEKON_HOME</code> 安装后，启动器仍硬编码默认目录。两者已修复。</p>
+
+    <h2>2. 本轮修复</h2>
+    <h3>2.1 浏览器测试合同</h3>
+    <ul>
+      <li>连接状态统一断言 <code>连接凭据：已设置/未设置</code>；</li>
+      <li>失败会话操作统一使用真实 <code>aria-label</code>；</li>
+      <li>不存在运行页锁定真实错误 <code>Run not found: non-existent-run-id</code>；</li>
+      <li>不降低 Playwright strictness，不删除产品行为断言。</li>
+    </ul>
+
+    <h3>2.2 安装与运行环境</h3>
+    <ul>
+      <li>根包增加 <code>engines.node = ^20.19.0 || &gt;=22.12.0</code>；</li>
+      <li>installer 按 Vite 7 官方范围拒绝不支持的 Node；</li>
+      <li>自定义 <code>TEKON_HOME</code> 的 wrapper 写入真实 CLI 路径；</li>
+      <li>CI 增加 <code>bash -n scripts/install.sh</code>。</li>
+    </ul>
+
+    <h3>2.3 决策入口</h3>
+    <p>README 改为指向 <code>docs/reviews/current.md</code>，不再把第一轮历史报告当作当前结论；CHANGELOG 不复制本轮复审过程。</p>
+
+    <h2>3. 产品逻辑</h2>
+    <div class="good"><strong>成立的部分：</strong>Deliver 轨道已经形成真实价值：入口可发现、完整治理链边界诚实、非法模式 fail-fast、dsh 网络确认贯通、Artifact/Gate/review/delivery 与人工副作用控制均有实现和测试。</div>
+
+    <h3><span class="priority p0">P0</span> Collaborate 仍缺失</h3>
+    <p><code>followUp</code>、<code>steer</code>、<code>resume</code> 仍未实现；没有 durable user input、真实执行期 semantic stream、浏览器/进程恢复和 Collaborate → Deliver 升级。当前 Session 是运行观察与治理界面，不是持续协作产品。</p>
+
+    <h3><span class="priority p1">P1</span> Run plan 不是权威合同</h3>
+    <p>默认入口已 fail-closed，但高级 StartRunForm 在 plan RPC 失败时隐藏预览并继续允许提交。preview 与 run 分别重新加载模板，也没有 plan digest/snapshot 绑定，无法证明用户看到的计划就是实际执行计划。</p>
+
+    <h3><span class="priority p1">P1</span> Web 模板目录与 CLI 不一致</h3>
+    <p>CLI 展示 built-ins + project templates；Web 只扫描 <code>.tekon/workflows</code>。新项目高级表单无法显式选择 README 宣称的内置模板。Web 还使用 YAML 内部 id 作为 selector，而 run/plan 按文件名加载，文件名与 id 不同会产生不可执行选项。</p>
+
+    <h2>4. UI / UX</h2>
+    <table>
+      <thead><tr><th>领域</th><th>当前判断</th></tr></thead>
+      <tbody>
+        <tr><td>默认入口</td><td>产品化“受控交付”入口成立，Advanced Cockpit 被降级为专家面。</td></tr>
+        <tr><td>连接管理</td><td>“凭据已设置”文案诚实；仍无服务健康、过期和最近成功请求状态。</td></tr>
+        <tr><td>Session 列表</td><td>行动排序、ack 和 workspace 刷新有效。</td></tr>
+        <tr><td>EventFeed</td><td>叙事/技术事件分层有效；只限制 DOM，网络和内存仍无界。</td></tr>
+        <tr><td>可访问性</td><td>核心路径和移动 drawer 改善；未完成屏幕阅读器、多浏览器和全站专项。</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Runtime 与数据架构</h2>
+    <h3><span class="priority p0">P0</span> Multi-owner Runtime</h3>
+    <p>CLI 与 Web 均可持有 JobRunner，共享 SQLite、Git、worktree、Artifact、Audit、文件与子进程。Job owner/lease/CAS 不能 fence 全部副作用。长期方向仍应是 repo-scoped daemon + lock，除非明确选择 active-active 并承担所有领域 fencing。</p>
+
+    <h3><span class="priority p0">P0</span> Shutdown 只部分闭环</h3>
+    <p>active poll、late claim、abort/kill 和 pending drain 已显著改善；但 executor/provider 忽略 AbortSignal 时，最终 <code>Promise.allSettled</code> 可永久等待。服务关闭后的 durable 状态究竟是 cancelled、interrupted 还是 recoverable 也未定义。</p>
+
+    <h3><span class="priority p0">P0</span> Session Event 不是事实源</h3>
+    <p>dual-write 仍吞掉 event append 失败，log 无法保证完整重建上下文，也不适合作为 durable inbox、fork/resume 或 follow-up claim 的权威基础。</p>
+
+    <h3><span class="priority p1">P1</span> 引用完整性</h3>
+    <p><code>session_events</code>、<code>jobs</code>、<code>projection_checkpoints</code> 缺统一 Session 外键和孤儿迁移策略。需要 SQLite table rebuild、旧数据策略与升级/回滚测试，不能只对新库快速加约束。</p>
+
+    <h2>6. DeepSeek Harness 对齐</h2>
+    <p>将 <code>dsh-headless</code> 限制为 Goal one-shot 仍正确。持续协作应评估官方 SDK stdio JSON-RPC 与 ACP：它们已经提供 Session、prompt、semantic update、cancel、list/resume/close 和更完整生命周期。</p>
+    <p>Tekon Core 虽拥有 version、help contract、default-config/plugin 三类 probe，但生产 adapter 只执行 version gate；完整 capability preflight 仍主要存在于 fixture/opt-in test。应在创建 durable run 之前完成并缓存 binary/version/flags/profile/credentials 检查。</p>
+    <p>Harness 官方仍标记为 experimental developer preview，sandbox、审批和权限不能保证隔离；Tekon 的确认 UI 不能替代 OS/container/VM 最小权限。</p>
+
+    <h2>7. 代码、测试与过度设计</h2>
+    <h3>优点</h3>
+    <ul>
+      <li>Core/CLI/Web/Playwright 分层门禁完整；</li>
+      <li>CAS、owner loss、SSE catch-up、auth scope、teardown 等竞态有确定性测试；</li>
+      <li>浏览器 retry 不会掩盖 flaky；</li>
+      <li>并发注释通常解释不变式而不是复述代码。</li>
+    </ul>
+    <h3>维护风险</h3>
+    <ul>
+      <li>稳定控件文案散落复制，导致一次诚实文案调整击穿多文件；</li>
+      <li>安装器仍缺自定义目录与多 shell smoke；</li>
+      <li>用户手册 Markdown/HTML 仍写 Node 18，说明生成链存在漂移；</li>
+      <li>Profile、Automation、Goal、Provider registry、LegacyAgentDriver、dual-write 等横向抽象领先于 Collaborate 纵向闭环。</li>
+    </ul>
+
+    <h2>8. 当前优先级</h2>
+    <table>
+      <thead><tr><th>级别</th><th>问题</th></tr></thead>
+      <tbody>
+        <tr><td><span class="priority p0">P0</span></td><td>single-owner Runtime；shutdown/recovery 持久语义；authoritative Session log/durable inbox；Collaborate vertical slice。</td></tr>
+        <tr><td><span class="priority p1">P1</span></td><td>权威 run plan；Web template catalog；DSH production preflight；连接 health；长 Session 全链路有界；外键迁移；用户手册 Node 文案；全站可访问性。</td></tr>
+        <tr><td><span class="priority p2">P2</span></td><td>E2E locator 复用；installer smoke；历史报告/CHANGELOG 决策噪声。</td></tr>
+      </tbody>
+    </table>
+
+    <h2>9. 推荐顺序</h2>
+    <ol>
+      <li>single-owner daemon、repo lock、durable interrupted/recoverable 与 hard deadline；</li>
+      <li>权威 Session log + durable inbox + 外键迁移；</li>
+      <li>DSH SDK/ACP 真实 semantic streaming vertical slice；</li>
+      <li>follow-up/steer/cancel/resume 与浏览器/进程恢复；</li>
+      <li>immutable run-plan snapshot + digest，统一默认/高级入口 fail-closed；</li>
+      <li>Session summary/cursor/分页/虚拟化、health RPC、统一 template catalog；</li>
+      <li>手册生成一致性与全站可访问性专项。</li>
+    </ol>
+
+    <h2>10. 验收结论</h2>
+    <ul class="checklist">
+      <li>✅ Deliver 入口和治理边界基本成立。</li>
+      <li>✅ dsh 网络确认跨入口贯通。</li>
+      <li>✅ 失败 ack、workspace 刷新、连接凭据语义和核心可访问性改善。</li>
+      <li>❌ Collaborate、真实 streaming、follow-up/steer/resume 不存在。</li>
+      <li>❌ Runtime authority、authoritative log、权威 run plan 和长 Session 全链路有界化未完成。</li>
+    </ul>
+    <blockquote><strong>成熟度表述：</strong>Tekon v0.17.0 已形成测试较强、启动与风险边界较透明的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、权威 Session 事实链、权威 run plan 和全链路长会话有界化。</blockquote>
+    <p>本 PR 未执行 merge、release 或 deploy。</p>
+
+    <h2>参考资料</h2>
+    <ul>
+      <li><a href="https://vite.dev/blog/announcing-vite7">Vite 7 / Node.js support</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/releases">DeepSeek Harness releases</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/sdk">DeepSeek Harness SDK</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/acp/acp">DeepSeek Harness ACP</a></li>
+      <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md">DeepSeek Harness Safety</a></li>
+    </ul>
+
+    <footer>详细证据、提交列表与完整建议见同目录 Markdown 报告。</footer>
+  </article>
+</main>
+</body>
+</html>
