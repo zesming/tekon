@@ -159,17 +159,17 @@ function computeWorkspaceSignature(
   return sessions
     .map(
       (s) =>
-        `${s.id}:${s.status}:${s.updatedAt}:${s.lastActivityAt}:${s.acknowledgedAt ?? ""}`,
+        `${s.id}:${s.status}:${s.updatedAt}:${s.lastActivityAt}:${s.acknowledgedAt ?? ''}`,
     )
     .sort()
-    .join("|");
+    .join('|');
 }
 
 /**
  * Phase 5 T5 (P1-UX-01): workspace-level summary SSE stream.
- * Broadcasts lightweight change frames whenever any session changes state
- * or receives an event, allowing the client to invalidate session.list without
- * heavy polling.
+ * Broadcasts lightweight change frames whenever a session in this workspace
+ * changes state or receives an event, allowing the client to invalidate
+ * session.list without heavy polling.
  */
 export async function handleWorkspaceSummarySse(input: {
   request: IncomingMessage;
@@ -194,6 +194,7 @@ export async function handleWorkspaceSummarySse(input: {
   let catchUpTimer: ReturnType<typeof setInterval> | null = null;
   let catchUpInFlight = false;
   let lastSignature = '';
+  let workspaceSessionIds = new Set<string>();
 
   const writeFrame = (data: {
     workspaceId: string;
@@ -208,10 +209,18 @@ export async function handleWorkspaceSummarySse(input: {
     );
   };
 
-  // 1. Process-local bus subscription: when ANY session emits an event,
-  // push a lightweight summary frame.
+  // 1. Process-local bus subscription. subscribeAll is repository-wide, so
+  // filter against the latest durable workspace membership before forwarding.
+  // New sessions that appear between polls are still caught by the signature
+  // poll below; no foreign-workspace metadata is ever emitted meanwhile.
   const unsubscribe = bus.subscribeAll((event) => {
-    if (closed || response.writableEnded) return;
+    if (
+      closed ||
+      response.writableEnded ||
+      !workspaceSessionIds.has(event.sessionId)
+    ) {
+      return;
+    }
     writeFrame({
       workspaceId,
       sessionId: event.sessionId,
@@ -231,12 +240,14 @@ export async function handleWorkspaceSummarySse(input: {
   request.on('close', cleanup);
 
   // 2. Cross-process catch-up poll: checks whether any session in the workspace
-  // has newer activity than last seen.
+  // has newer activity than last seen, and refreshes the membership filter used
+  // by the process-local bus path.
   const catchUp = async (): Promise<void> => {
     if (closed || response.writableEnded || catchUpInFlight) return;
     catchUpInFlight = true;
     try {
       const sessionList = await sessions.listSessions(workspaceId);
+      workspaceSessionIds = new Set(sessionList.map((session) => session.id));
       const signature = computeWorkspaceSignature(sessionList);
       if (lastSignature && signature !== lastSignature) {
         writeFrame({ workspaceId, timestamp: new Date().toISOString() });

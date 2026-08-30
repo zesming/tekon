@@ -230,6 +230,66 @@ describe('workspace summary SSE endpoint (T5 / P1-UX-01)', () => {
     fake.close();
   });
 
+  it('does not forward process-local events from another workspace', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const workspace = await s.store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const foreignWorkspace = await s.store.getOrCreateDefaultWorkspace(
+      `${fixture.projectRoot}-foreign`,
+    );
+    const localSession = await s.store.createSession({
+      workspaceId: workspace.id,
+      title: 'local session',
+      profile: 'human-web',
+      runId: null,
+    });
+    const foreignSession = await s.store.createSession({
+      workspaceId: foreignWorkspace.id,
+      title: 'foreign session',
+      profile: 'human-web',
+      runId: null,
+    });
+
+    const fake = makeFakeReqRes(`/api/workspaces/${workspace.id}/summary/events`);
+    await handleWorkspaceSummarySse({
+      request: fake.request,
+      response: fake.response,
+      workspaceId: workspace.id,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    const foreignEvent = await s.store.appendEvent({
+      sessionId: foreignSession.id,
+      type: 'turn/start',
+      payload: {},
+    });
+    s.bus.publish(foreignEvent);
+    expect(fake.frames()).toHaveLength(0);
+
+    const localEvent = await s.store.appendEvent({
+      sessionId: localSession.id,
+      type: 'turn/start',
+      payload: {},
+    });
+    s.bus.publish(localEvent);
+    expect(fake.frames()).toHaveLength(1);
+    const data = JSON.parse(fake.frames()[0].data!) as {
+      workspaceId: string;
+      sessionId: string;
+    };
+    expect(data).toMatchObject({
+      workspaceId: workspace.id,
+      sessionId: localSession.id,
+    });
+    fake.close();
+  });
+
   it('catches up session activity when appended without process-local bus publish', async () => {
     const fixture = await createWebFixtureProject();
     const s = openStore(fixture.projectRoot);

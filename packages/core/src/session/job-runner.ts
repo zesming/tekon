@@ -138,7 +138,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pending = new Set<Promise<void>>();
   let pollTimer: NodeJS.Timeout | null = null;
   let stopped = true;
-  let pollInFlight = false;
+  let pollTask: Promise<void> | null = null;
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -366,23 +366,34 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     }
   }
 
-  async function poll(): Promise<void> {
-    if (stopped || pollInFlight) {
-      return;
+  function poll(): Promise<void> {
+    if (stopped) {
+      return Promise.resolve();
     }
-    pollInFlight = true;
-    try {
+    if (pollTask) {
+      return pollTask;
+    }
+
+    const task = (async () => {
       // Process-local AbortControllers and registries cannot be mutated by a
       // second CLI/Web process. Observe the durable job row on every owner poll
       // and relay foreign pause/cancel requests into this process first.
       await syncOwnedControls();
+      // stop() may begin while syncOwnedControls() is awaiting SQLite. Do not
+      // enter a fresh claim after the runner crossed into draining.
+      if (stopped) return;
+
       const job = await jobs.claimNext(workerId);
       if (job) {
         spawnJob(job);
       }
-    } finally {
-      pollInFlight = false;
-    }
+    })();
+    pollTask = task;
+    const clearPollTask = () => {
+      if (pollTask === task) pollTask = null;
+    };
+    void task.then(clearPollTask, clearPollTask);
+    return task;
   }
 
   async function recoverStaleJobs(): Promise<number> {
@@ -520,15 +531,23 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     },
 
     async stop() {
-      if (!pollTimer && pending.size === 0) {
+      if (!pollTimer && pending.size === 0 && !pollTask) {
         return;
       }
-      // Draining: reject new claims immediately. poll() already guards on
-      // `stopped`, so no new job enters `pending` after this point.
+      // Enter draining and prevent any new poll from beginning.
       stopped = true;
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
+      }
+
+      // A poll may already be inside syncOwnedControls() or claimNext(). Wait
+      // for that exact poll to finish before snapshotting pending. If it had
+      // already claimed and spawned a job, the task is now present in pending;
+      // after this barrier no later poll can add another one.
+      const activePoll = pollTask;
+      if (activePoll) {
+        await Promise.allSettled([activePoll]);
       }
 
       // Phase 1: give in-flight jobs a bounded window to settle on their own.
