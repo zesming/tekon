@@ -72,7 +72,7 @@ Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里�
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（>=18）、`npm`。
+脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。
 
 安装完成后，按脚本输出的提示将 `tekon` 加入 PATH，`source` 对应 rc 文件即可使用。
 
@@ -204,5 +204,5 @@ npm run lint:actions
 ## 文档
 
 - [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
-- [人类可用性与 Harness 架构全面复审](docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md)
+- [当前权威产品与架构评审](docs/reviews/current.md)
 - [变更日志](CHANGELOG.md)
