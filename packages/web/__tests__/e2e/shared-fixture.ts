@@ -61,18 +61,18 @@ export const test = base.extend<SharedFixtures>({
   },
 });
 
-// Establish the same connected state as a real `tekon ui` launch, then prove
-// that the credential is visible and the fragment is removed before each
-// business journey starts. The page fixture above also authenticates every
+// Establish the same credential-configured state as a real `tekon ui` launch,
+// then prove that the credential is visible and the fragment is removed before
+// each business journey starts. The page fixture above also authenticates every
 // later hard route launch; SPA navigation and page.reload() do not use it.
 test.beforeEach(async ({ page, fixture, server }) => {
   const fragment = new URLSearchParams({
     token: fixture.sessionToken,
   }).toString();
   await page.goto(`${server.url}/#${fragment}`);
-  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: /凭据已设置/ }),
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page).not.toHaveURL(/token=/u);
 });
 
