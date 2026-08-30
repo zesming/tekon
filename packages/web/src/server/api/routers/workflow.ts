@@ -34,9 +34,9 @@ export function createWorkflowRouter(context: ServerContext) {
       const template = loadTemplate(context, templateName);
       return projectRunPlan(template, {
         agent: input.agent,
-        mode: input.mode,
-        profile: input.profile,
-        allowDirtyBase: input.allowDirtyBase,
+        mode: isGoal ? 'goal' : 'workflow',
+        profile: input.profile ?? 'human-web',
+        allowDirtyBase: Boolean(input.allowDirtyBase),
         timeoutMs: input.timeoutMs,
         noProgressTimeoutMs: input.noProgressTimeoutMs,
         progressHeartbeatMs: input.progressHeartbeatMs,
@@ -53,7 +53,7 @@ function loadTemplate(context: ServerContext, name: string): WorkflowTemplate {
   }
   try {
     return loadWorkflowTemplate({ name });
-  } catch (error) {
+  } catch {
     throw new ApiError(
       'NOT_FOUND',
       `Workflow template not found: ${name}`,
