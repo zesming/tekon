@@ -167,14 +167,6 @@ export function EventFeed({
     [allGroups, showTechnical],
   );
 
-  if (events.length === 0) {
-    return (
-      <div className="feed-empty text-muted" role="status" aria-live="polite">
-        等待事件… Waiting for session events.
-      </div>
-    );
-  }
-
   return (
     <div className="event-feed-shell">
       {truncated ? (
@@ -184,7 +176,7 @@ export function EventFeed({
           aria-live="polite"
         >
           <span>
-            连接恢复时历史量超过在线回放预算，已切换到最近记录；完整历史仍可按页读取。
+            连接恢复时历史量超过在线回放预算，已切换到最近记录；本页仍可按页加载更早记录，但最多额外保留 2000 条。
           </span>
           {onDismissTruncated ? (
             <button
@@ -198,75 +190,88 @@ export function EventFeed({
           ) : null}
         </div>
       ) : null}
-      <div className="event-feed-toolbar">
-        <span className="text-muted">
-          {showTechnical
-            ? '正在显示完整技术时间线'
-            : hiddenTechnicalCount > 0
-              ? `已隐藏 ${hiddenTechnicalCount} 条技术事件`
-              : '叙事时间线'}
-        </span>
-        <div className="flex gap-2 items-center">
-          {externalHasEarlier && onLoadEarlier ? (
-            <button
-              type="button"
-              className="btn btn-secondary btn-xs"
-              disabled={isLoadingEarlier || reachedEarlierLimit}
-              title={reachedEarlierLimit ? '已加载最早历史' : undefined}
-              onClick={onLoadEarlier}
-            >
-              {isLoadingEarlier
-                ? '正在加载更早历史…'
-                : reachedEarlierLimit
-                  ? '已加载最早历史'
-                  : '加载更早历史'}
-            </button>
-          ) : null}
-          {hasEarlierEvents ? (
-            <button
-              type="button"
-              className="btn btn-secondary btn-xs"
-              aria-label={`展开更早的 ${hiddenEarlierCount} 条事件`}
-              onClick={() => setShowAllHistory(true)}
-            >
-              展开更早的 {hiddenEarlierCount} 条事件
-            </button>
-          ) : null}
-          {hiddenTechnicalCount > 0 || showTechnical ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              aria-pressed={showTechnical}
-              onClick={() => setShowTechnical((value) => !value)}
-            >
-              {showTechnical ? '隐藏技术事件' : '显示技术事件'}
-            </button>
-          ) : null}
+
+      {events.length === 0 ? (
+        <div className="feed-empty text-muted" role="status" aria-live="polite">
+          等待事件… Waiting for session events.
         </div>
-      </div>
-      <div
-        className="event-feed"
-        role="log"
-        aria-label="会话活动记录"
-        aria-live="polite"
-        aria-relevant="additions text"
-        aria-atomic="false"
-      >
-        {groups.map((group, index) => (
-          <section
-            className="feed-turn"
-            key={group.turnSeq ?? `pre-${index}`}
-            aria-label={group.turnSeq ? `回合 ${group.turnSeq}` : '会话开始'}
+      ) : (
+        <>
+          <div className="event-feed-toolbar">
+            <span className="text-muted">
+              {showTechnical
+                ? '正在显示完整技术时间线'
+                : hiddenTechnicalCount > 0
+                  ? `已隐藏 ${hiddenTechnicalCount} 条技术事件`
+                  : '叙事时间线'}
+            </span>
+            <div className="flex gap-2 items-center">
+              {externalHasEarlier && onLoadEarlier ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  disabled={isLoadingEarlier || reachedEarlierLimit}
+                  title={
+                    reachedEarlierLimit
+                      ? '本页最多额外保留 2000 条更早记录'
+                      : undefined
+                  }
+                  onClick={onLoadEarlier}
+                >
+                  {isLoadingEarlier
+                    ? '正在加载更早历史…'
+                    : reachedEarlierLimit
+                      ? '已达本页历史上限'
+                      : '加载更早历史'}
+                </button>
+              ) : null}
+              {hasEarlierEvents ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-xs"
+                  aria-label={`展开更早的 ${hiddenEarlierCount} 条事件`}
+                  onClick={() => setShowAllHistory(true)}
+                >
+                  展开更早的 {hiddenEarlierCount} 条事件
+                </button>
+              ) : null}
+              {hiddenTechnicalCount > 0 || showTechnical ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  aria-pressed={showTechnical}
+                  onClick={() => setShowTechnical((value) => !value)}
+                >
+                  {showTechnical ? '隐藏技术事件' : '显示技术事件'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div
+            className="event-feed"
+            role="log"
+            aria-label="会话活动记录"
+            aria-live="polite"
+            aria-relevant="additions text"
+            aria-atomic="false"
           >
-            {group.turnSeq ? (
-              <div className="feed-turn-label">任务回合</div>
-            ) : null}
-            {group.rows.map((row) => (
-              <FeedRowView row={row} key={row.seq} />
+            {groups.map((group, index) => (
+              <section
+                className="feed-turn"
+                key={group.turnSeq ?? `pre-${index}`}
+                aria-label={group.turnSeq ? `回合 ${group.turnSeq}` : '会话开始'}
+              >
+                {group.turnSeq ? (
+                  <div className="feed-turn-label">任务回合</div>
+                ) : null}
+                {group.rows.map((row) => (
+                  <FeedRowView row={row} key={row.seq} />
+                ))}
+              </section>
             ))}
-          </section>
-        ))}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
