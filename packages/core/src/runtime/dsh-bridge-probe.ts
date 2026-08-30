@@ -207,8 +207,10 @@ export async function runDshPreflight(
 
   const rawVersion = await probeVersion(dshCommand);
   const actualVersion = parseDshVersion(rawVersion);
+  const allowVersion =
+    options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
   assertDshVersionAllowed(actualVersion, {
-    allowVersion: options?.allowVersion,
+    allowVersion,
     onWarn: options?.onWarn,
   });
 
