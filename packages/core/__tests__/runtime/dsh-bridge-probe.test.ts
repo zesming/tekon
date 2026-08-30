@@ -43,8 +43,8 @@ describe('assertDshVersionAllowed', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(DshVersionGateError);
       const message = (error as Error).message;
-      expect(message).toContain('0.2.0'); // actual
-      expect(message).toContain(TESTED_DSH_VERSION); // tested
+      expect(message).toContain('0.2.0');
+      expect(message).toContain(TESTED_DSH_VERSION);
     }
   });
 
@@ -90,9 +90,9 @@ describe('assertDshHeadlessHelpContract', () => {
 
 describe('assertDshDefaultConfigContract', () => {
   const configWithPlugins = (ids: string[]): string =>
-    JSON.stringify({ plugins: ids.map((id) => ({ id })) });
+    ['plugins:', ...ids.map((id) => `  - id: ${id}`)].join('\n');
 
-  it('accepts a config tree that contains all required plugin ids', () => {
+  it('accepts a YAML config tree that contains all required row ids', () => {
     expect(() =>
       assertDshDefaultConfigContract(
         configWithPlugins([...REQUIRED_DSH_PLUGIN_IDS, 'some-extra-plugin']),
@@ -100,18 +100,27 @@ describe('assertDshDefaultConfigContract', () => {
     ).not.toThrow();
   });
 
-  it('accepts required ids anywhere in the raw text (id-substring match)', () => {
-    // The dump format is not a schema we bind; substring presence of each id
-    // is the deliberately loose contract (drift = a required id disappears).
+  it('accepts quoted complete id rows', () => {
     const raw = REQUIRED_DSH_PLUGIN_IDS.map(
-      (id) => `- id: ${id}\n  name: '@deepseek-ai/x'`,
+      (id) => `- id: "${id}"\n  name: '@deepseek-ai/x'`,
     ).join('\n');
     expect(() => assertDshDefaultConfigContract(raw)).not.toThrow();
   });
 
+  it('does not let a package-name substring stand in for a missing row id', () => {
+    const raw = [
+      ...REQUIRED_DSH_PLUGIN_IDS.filter((id) => id !== 'approval').map(
+        (id) => `- id: ${id}`,
+      ),
+      "- id: unrelated-row\n  name: '@deepseek-ai/dsh-user-approval'",
+    ].join('\n');
+
+    expect(() => assertDshDefaultConfigContract(raw)).toThrow(/approval/);
+  });
+
   it('throws naming the missing plugin id when the tree drifts', () => {
     const missing = REQUIRED_DSH_PLUGIN_IDS[0];
-    const partial = REQUIRED_DSH_PLUGIN_IDS.slice(1).join(' ');
+    const partial = configWithPlugins(REQUIRED_DSH_PLUGIN_IDS.slice(1));
     try {
       assertDshDefaultConfigContract(partial);
       throw new Error('should have thrown');
@@ -121,15 +130,14 @@ describe('assertDshDefaultConfigContract', () => {
     }
   });
 
-  it('lists the canonical required plugin ids (drift lock)', () => {
-    // If this set changes, the fixture + manual claims must change with it.
+  it('lists the canonical required config row ids (drift lock)', () => {
     expect([...REQUIRED_DSH_PLUGIN_IDS].sort()).toEqual(
       [
         'agent-default-model',
+        'approval',
         'headless-runner',
         'sandbox-policy',
         'session-persistence-jsonl',
-        'user-approval',
       ].sort(),
     );
   });
@@ -143,15 +151,14 @@ describe('runDshPreflight', () => {
     'Usage: dsh --profile headless [options] [task...]',
     'Answer one task, print the final assistant message, and exit.',
   ].join('\n');
-  const validConfig = JSON.stringify({
-    plugins: [
-      { id: 'headless-runner' },
-      { id: 'sandbox-policy' },
-      { id: 'user-approval' },
-      { id: 'session-persistence-jsonl' },
-      { id: 'agent-default-model' },
-    ],
-  });
+  const validConfig = [
+    'plugins:',
+    '  - id: headless-runner',
+    '  - id: sandbox-policy',
+    '  - id: approval',
+    '  - id: session-persistence-jsonl',
+    '  - id: agent-default-model',
+  ].join('\n');
 
   it('succeeds when version and contracts match', async () => {
     const { runDshPreflight } =
@@ -202,8 +209,7 @@ describe('runDshPreflight', () => {
       runDshPreflight('dsh', {
         probeVersion: async () => validVersion,
         probeHelp: async () => validHelp,
-        probeConfig: async () =>
-          JSON.stringify({ plugins: [{ id: 'headless-runner' }] }),
+        probeConfig: async () => '- id: headless-runner',
       }),
     ).rejects.toThrow(DshCapabilityError);
   });
