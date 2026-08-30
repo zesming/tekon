@@ -72,6 +72,42 @@ describe('openSessionStream reconnect', () => {
     expect(states).toContain('reconnecting');
   });
 
+  it('keeps replay-truncated control frames out of the event feed', async () => {
+    const seen: number[] = [];
+    const calls: Array<Record<string, string>> = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      call += 1;
+      calls.push((init?.headers as Record<string, string>) ?? {});
+      if (call === 1) {
+        return sseResponse(
+          'event: replay-truncated\n' +
+            'data: {"cursor":500,"reason":"budget exceeded"}\n\n' +
+            frame(501, 'assistant/message'),
+        );
+      }
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+
+    const handle = openSessionStream({
+      sessionId: 's1',
+      token: 'tok',
+      fetchImpl,
+      baseBackoffMs: 1,
+      maxBackoffMs: 2,
+      onEvent: (event) => seen.push(event.seq),
+      onStateChange: () => {},
+    });
+
+    await vi.waitFor(() => {
+      expect(call).toBeGreaterThanOrEqual(2);
+    }, { timeout: 2000 });
+    handle.close();
+
+    expect(seen).toEqual([501]);
+    expect(calls[1]['Last-Event-ID']).toBe('501');
+  });
+
   it('does not send Last-Event-ID on the very first connection', async () => {
     const calls: Array<Record<string, string>> = [];
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
