@@ -306,3 +306,77 @@ describe('web session read API', () => {
     );
   });
 });
+
+describe('session.events pagination (P1-UX-03)', () => {
+  it('returns paginated events with limit, hasMore, and latestSeq', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const { store, close } = openStore(fixture.projectRoot);
+    cleanupTasks.push(close);
+    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'events-pagination-test',
+      profile: 'human-web',
+      runId: 'run_events_1',
+    });
+
+    for (let i = 1; i <= 5; i++) {
+      await store.appendEvent({
+        sessionId: session.id,
+        type: 'assistant/message',
+        payload: { text: `message ${i}` },
+        modelVisible: true,
+      });
+    }
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    // Request first page with limit 2
+    const page1 = await api.session.events({
+      sessionId: session.id,
+      sinceSeq: 0,
+      limit: 2,
+    });
+
+    expect(page1.events).toHaveLength(2);
+    expect(page1.events.map((e) => e.seq)).toEqual([1, 2]);
+    expect(page1.hasMore).toBe(true);
+    expect(page1.latestSeq).toBeGreaterThanOrEqual(5);
+
+    // Request second page starting after seq 2
+    const page2 = await api.session.events({
+      sessionId: session.id,
+      sinceSeq: 2,
+      limit: 2,
+    });
+
+    expect(page2.events).toHaveLength(2);
+    expect(page2.events.map((e) => e.seq)).toEqual([3, 4]);
+    expect(page2.hasMore).toBe(true);
+
+    // Request final page
+    const page3 = await api.session.events({
+      sessionId: session.id,
+      sinceSeq: 4,
+      limit: 2,
+    });
+
+    expect(page3.events).toHaveLength(1);
+    expect(page3.events[0].seq).toBe(5);
+    expect(page3.hasMore).toBe(false);
+  });
+
+  it('throws NOT_FOUND for non-existent session', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    await expect(
+      api.session.events({ sessionId: 'sess_non_existent' }),
+    ).rejects.toThrow(/not found/i);
+  });
+});

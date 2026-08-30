@@ -19,6 +19,8 @@ import {
   missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
 import {
+  assertDshDefaultConfigContract,
+  assertDshHeadlessHelpContract,
   assertDshVersionAllowed,
   parseDshVersion,
 } from './dsh-bridge-probe.js';
@@ -94,6 +96,24 @@ async function defaultProbeVersion(command: string): Promise<string> {
   const { stdout } = await execFileAsync(command, ['--version'], {
     timeout: 15_000,
   });
+  return stdout;
+}
+
+async function defaultProbeHelp(command: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    command,
+    ['--profile', 'headless', '--help'],
+    { timeout: 15_000 },
+  );
+  return stdout;
+}
+
+async function defaultProbeConfig(command: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    command,
+    ['--profile', 'headless', '--dump-default-config'],
+    { timeout: 15_000 },
+  );
   return stdout;
 }
 
@@ -210,6 +230,16 @@ export function createDshHeadlessAdapter(
      * run, and cached — fake-binary tests never spawn a probe.
      */
     probeVersion?: (command: string) => Promise<string>;
+    /**
+     * Help-probe override for tests. Returns the raw `dsh --profile headless --help` stdout.
+     * Defaults to spawning `dsh --profile headless --help`.
+     */
+    probeHelp?: (command: string) => Promise<string>;
+    /**
+     * Config-probe override for tests. Returns the raw `dsh --profile headless --dump-default-config` stdout.
+     * Defaults to spawning `dsh --profile headless --dump-default-config`.
+     */
+    probeConfig?: (command: string) => Promise<string>;
     /** Escape hatch: accept this exact untested version (design §5.1). */
     allowVersion?: string;
     onWarn?: (message: string) => void;
@@ -223,7 +253,10 @@ export function createDshHeadlessAdapter(
   const dshCommand = config.command ?? 'dsh';
   const realDsh = isRealDshCommand(dshCommand);
   const probeVersion = options?.probeVersion ?? defaultProbeVersion;
+  const probeHelp = options?.probeHelp ?? defaultProbeHelp;
+  const probeConfig = options?.probeConfig ?? defaultProbeConfig;
   let versionGate: Promise<void> | null = null;
+  let capabilityGate: Promise<void> | null = null;
 
   // Lazily version-gate the real dsh binary once (design §5.1): the first run
   // spawns `dsh --version`, compares against the pin, and fails closed on
@@ -242,10 +275,29 @@ export function createDshHeadlessAdapter(
     return versionGate;
   };
 
+  // Lazily capability-gate the real dsh binary once (P1-DSH-01): the first run
+  // executes help contract and config contract checks after version gate.
+  // Cached so subsequent runs skip it.
+  const ensureCapabilityGate = (): Promise<void> => {
+    if (!realDsh) return Promise.resolve();
+    if (!capabilityGate) {
+      capabilityGate = (async () => {
+        await ensureVersionGate();
+        const [helpRaw, configRaw] = await Promise.all([
+          probeHelp(dshCommand),
+          probeConfig(dshCommand),
+        ]);
+        assertDshHeadlessHelpContract(helpRaw);
+        assertDshDefaultConfigContract(configRaw);
+      })();
+    }
+    return capabilityGate;
+  };
+
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      await ensureVersionGate();
+      await ensureCapabilityGate();
       const command = buildDshHeadlessCommand(config, { prompt: input.prompt });
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({

@@ -10,7 +10,10 @@ import type { AgentAdapter, AgentRunResult } from '../runtime/agent-adapter.js';
 import type { AgentEventSink } from '../runtime/agent-step-events.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { SubprocessRegistry } from '../session/subprocess-registry.js';
-import { isJobOwnershipLostAbort } from '../session/job-runner.js';
+import {
+  isJobOwnershipLostAbort,
+  isJobShutdownAbort,
+} from '../session/job-runner.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { WorkflowInstance } from '../types/domain.js';
@@ -416,6 +419,14 @@ export function createWorkflowEngine(
           if (isJobOwnershipLostAbort(options.signal)) {
             return helpers.mustGetWorkflow(runId);
           }
+          if (isJobShutdownAbort(options.signal)) {
+            await options.repositories.updateWorkflowInstanceStatusIfActive(
+              runId,
+              'interrupted',
+              node.id,
+            );
+            return helpers.mustGetWorkflow(runId);
+          }
           await settleCancelled(runId, node.id);
           return helpers.mustGetWorkflow(runId);
         }
@@ -459,6 +470,14 @@ export function createWorkflowEngine(
     // only a genuine cancel settles `cancelled`.
     if (options.signal?.aborted) {
       if (isJobOwnershipLostAbort(options.signal)) {
+        return helpers.mustGetWorkflow(runId);
+      }
+      if (isJobShutdownAbort(options.signal)) {
+        await options.repositories.updateWorkflowInstanceStatusIfActive(
+          runId,
+          'interrupted',
+          null,
+        );
         return helpers.mustGetWorkflow(runId);
       }
       await settleCancelled(runId, null);

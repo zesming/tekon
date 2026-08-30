@@ -115,7 +115,17 @@ function FeedRowView({ row }: { row: FeedRow }) {
   );
 }
 
-export function EventFeed({ events }: { events: StreamEvent[] }) {
+export function EventFeed({
+  events,
+  hasEarlier: externalHasEarlier,
+  isLoadingEarlier,
+  onLoadEarlier,
+}: {
+  events: StreamEvent[];
+  hasEarlier?: boolean;
+  isLoadingEarlier?: boolean;
+  onLoadEarlier?: () => void;
+}) {
   const [showTechnical, setShowTechnical] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
@@ -172,7 +182,16 @@ export function EventFeed({ events }: { events: StreamEvent[] }) {
             : '叙事时间线'}
         </span>
         <div className="flex gap-2 items-center">
-          {hasEarlierEvents ? (
+          {externalHasEarlier && onLoadEarlier ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-xs"
+              disabled={isLoadingEarlier}
+              onClick={onLoadEarlier}
+            >
+              {isLoadingEarlier ? '正在加载更早历史…' : '加载更早历史'}
+            </button>
+          ) : hasEarlierEvents ? (
             <button
               type="button"
               className="btn btn-secondary btn-xs"

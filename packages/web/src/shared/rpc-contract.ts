@@ -69,7 +69,14 @@ export const projectRunInputSchema = z.object({
   noProgressTimeoutMs: z.number().optional(),
   progressHeartbeatMs: z.number().optional(),
   acknowledgeUnrestrictedNetwork: z.boolean().optional(),
+  planDigest: z.string().optional(),
 });
+
+export const projectHealthInputSchema = z
+  .object({
+    token: z.string().optional(),
+  })
+  .optional();
 
 export const draftShapeInputSchema = z.object({
   demandText: z.string(),
@@ -142,7 +149,6 @@ export const deliveryCiStatusInputSchema = z.object({
   selector: z.string().optional(),
 });
 
-
 export const workflowPlanInputSchema = z.object({
   template: z.string().optional(),
   mode: z.enum(['workflow', 'goal']).optional(),
@@ -151,6 +157,12 @@ export const workflowPlanInputSchema = z.object({
 
 export const progressListInputSchema = z.object({
   runId: z.string().min(1),
+});
+
+export const sessionEventsInputSchema = z.object({
+  sessionId: z.string().min(1),
+  sinceSeq: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -465,7 +477,8 @@ export const roleItemSchema = z
 export const workflowItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  path: z.string(),
+  path: z.string().optional(),
+  builtin: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -485,6 +498,13 @@ export const projectOverviewOutputSchema = z.object({
   project: apiProjectSchema,
   latestRun: apiWorkflowSchema.nullable(),
   counts: projectOverviewCountsSchema,
+});
+
+export const projectHealthOutputSchema = z.object({
+  credential: z.enum(['not-configured', 'valid', 'invalid']),
+  checkedAt: z.string(),
+  detail: z.string().optional(),
+  provider: z.enum(['available', 'unavailable']).optional(),
 });
 
 export const projectDetailOutputSchema = z.object({
@@ -525,8 +545,9 @@ export const draftShapeApproveOutputSchema = z.object({
   shapePath: z.string(),
 });
 
-// 4f-2: generatePlan / planApprove both return the updated shape + its path,
-// mirroring the approve output shape.
+// 4f-2: plan flow. generatePlan freezes the plan view; planApprove is a
+// SEPARATE approval from demand approve. project.run gates a run on plan
+// approval only when hasPlan is set (old drafts exempt — backward compatible).
 export const draftShapeGeneratePlanOutputSchema = z.object({
   shape: draftShapeSchema,
   shapePath: z.string(),
@@ -584,7 +605,6 @@ export const roleListOutputSchema = z.object({
   roles: z.array(roleItemSchema),
 });
 
-
 export const runPlanGateSchema = z.object({
   nodeId: z.string(),
   role: z.string(),
@@ -605,6 +625,7 @@ export const runPlanSchema = z.object({
   gates: z.array(runPlanGateSchema),
   requiresUnrestrictedNetwork: z.boolean(),
   phases: z.array(runPlanPhaseSummarySchema),
+  digest: z.string().optional(),
 });
 
 export const workflowListOutputSchema = z.object({
@@ -727,6 +748,19 @@ export const sessionAcknowledgeOutputSchema = z.object({
   acknowledgedAt: z.string().nullable(),
 });
 
+export const sessionPresentedEventSchema = z.object({
+  seq: z.number(),
+  type: z.string(),
+  timestamp: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+});
+
+export const sessionEventsOutputSchema = z.object({
+  events: z.array(sessionPresentedEventSchema),
+  hasMore: z.boolean(),
+  latestSeq: z.number(),
+});
+
 // ---------------------------------------------------------------------------
 // Procedure specs — the single source of truth for every RPC endpoint
 // ---------------------------------------------------------------------------
@@ -741,6 +775,11 @@ export const procedureSpecs = {
     auth: 'none' as const,
     input: z.undefined(),
     output: projectOverviewOutputSchema,
+  },
+  'project.health': {
+    auth: 'none' as const,
+    input: projectHealthInputSchema,
+    output: projectHealthOutputSchema,
   },
   'project.detail': {
     auth: 'none' as const,
@@ -896,6 +935,11 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: sessionAcknowledgeInputSchema,
     output: sessionAcknowledgeOutputSchema,
+  },
+  'session.events': {
+    auth: 'session' as const,
+    input: sessionEventsInputSchema,
+    output: sessionEventsOutputSchema,
   },
 } as const;
 

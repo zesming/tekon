@@ -577,3 +577,42 @@ Tekon 已拥有：
 - [DeepSeek Harness SDK](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/sdk)
 - [DeepSeek Harness ACP](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/acp/acp)
 - [DeepSeek Harness Safety](https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md)
+
+---
+
+## 14. 交付侧批注（2026-08-30，基于代码逐条复核）
+
+本节由交付侧在三个并行只读复核（产品/文档、架构、UX/测试）完成后追加。复核方法：对第 11 节全部 P0/P1/P2 条目逐条回到当前代码树取证，不依据报告文字本身。
+
+### 14.1 复核结论：报告 15 项论断全部属实
+
+- **P0-ARCH-01 属实**：Web composition root 在 `packages/web/src/server/api/root.ts:167` 创建并 `start()` JobRunner；CLI 在 `packages/cli/src/lib/session-context.ts:201` 独立创建。`claimNext`/`updateJob`/`settleOwnedJob`（`packages/core/src/session/session-store.ts:665/687/725`）的条件更新只校验 `jobs.owner/status/lease`；`nodes` 更新、`gate_results`、`audit_events`、`artifacts` 写入（`packages/core/src/db/repositories.ts:566/578/625/650`）均无 generation fencing。
+- **P0-ARCH-02 属实**：`packages/core/src/session/job-runner.ts:594` 的 Phase 3 是裸 `await Promise.allSettled([...pending])`，无 hard deadline；`jobStatusSchema`（`packages/core/src/types/session-contract.ts:90`）无 `interrupted/recoverable` 状态，shutdown abort 后 job 被结算为 `cancelled`（`job-runner.ts:213`）。
+- **P0-ARCH-03 属实**：`packages/core/src/session/dual-write.ts:224` 的 bridge 用 `try/catch` 吞掉 `session_events` 追加失败，`onError` 默认为空函数。
+- **P0-PRODUCT-01 属实**：`packages/core/src/runtime/legacy-agent-driver.ts:137/142/175` 的 `followUp/steer/resume` 均抛 `NotSupportedYet`。
+- **P1-PRODUCT-02 / P1-UX-01 属实**：`StartRunForm.tsx:197` 的 `isSubmitDisabled` 不含 plan 状态，`planData` 为空时预览直接不渲染；对照 `SessionComposer.tsx:44` 默认入口已 fail-closed。`rpc-contract.ts` 的 `projectRunInputSchema`/`runPlanSchema` 无 digest 字段。
+- **P1-PRODUCT-03 属实**：Web `listWorkflows`（`packages/web/src/server/api/routers/workflow.ts:69`）只扫 `.tekon/workflows`；CLI `workflow list`（`packages/cli/src/commands/workflow.ts:114`）合并 built-in + 项目模板。Web 下拉 value 用 YAML `id`（`workflow.ts:83`），plan/run 按文件名加载（`workflow.ts:57`、`project.ts:404`），id 与文件名不一致时必然 `NOT_FOUND`。
+- **P1-DSH-01 属实**：生产 adapter 只调 `ensureVersionGate`（`packages/core/src/runtime/dsh-headless-adapter.ts:228`）；`assertDshHeadlessHelpContract`/`assertDshDefaultConfigContract`（`dsh-bridge-probe.ts:116/132`）仅被测试引用。
+- **P1-UX-02 属实**：无 health RPC；TopBar 状态仅 `Boolean(token)`（`packages/web/src/client/layouts/TopBar.tsx:81`）。
+- **P1-UX-03 属实**：`use-session-stream.ts:49` 内存累积全部事件；SSE 无 `Last-Event-ID` 时 `cursor=0`（`packages/web/src/server/sse.ts:47`）；`listEventsSince`（`session-store.ts:451`）无 `LIMIT`。
+- **P1-DATA-01 属实**：`migrations.ts:182` 起 `session_events/jobs/projection_checkpoints` 的 `session_id` 均无 `references sessions(id)`。
+- **P1-DOC-01 属实**：手册 md:167 与 html:411 仍写 `node (>=18)`，与 `package.json:8`、`install.sh:56`、`README.md:75` 的 `^20.19.0 || >=22.12.0` 冲突。
+- **P2-TEST-01 属实**：`连接凭据：已设置` 复制在 8 个 E2E 文件中，无 locator helper。
+- 第七轮"已修复"四项（Node engines、installer 门槛与自定义 `TEKON_HOME` wrapper、CI `bash -n`、README 指向 `current.md`）在代码中全部真实存在。
+
+### 14.2 交付侧判断：本轮可落地范围
+
+报告第 12 节的 A-E 顺序是架构正确顺序，但其中 A（single-owner daemon）、B（权威 Session log）、C（DSH SDK/ACP 真实 streaming）属于架构基线变更，需要独立 ADR、数据迁移与真实 provider 对接，超出单个 PR 的可验证范围，强行在本 PR 做半成品会违反报告 10.2（不要到处叠加局部 fencing）和 10.1（冻结横向抽象）。
+
+本轮按"报告问题分级 + 可独立验证 + 不改变架构基线"原则，落地以下 8 项，其余维持报告裁决并在 `current.md` 记录：
+
+1. **P1-PRODUCT-03**：Core 导出统一 template catalog（built-in + 项目模板，id 即文件名），CLI/Web 共同消费；修复 Web 下拉 id/文件名不一致。
+2. **P1-UX-01 + P1-PRODUCT-02（入口侧）**：高级 StartRunForm plan 加载失败时显示错误并禁用提交，与默认入口统一 fail-closed；plan 增加 digest 字段并在 run 时回传校验，绑定"看到的计划"与"执行的计划"。
+3. **P1-DSH-01**：生产 adapter 在 version gate 后执行 help/config capability preflight（复用已存在的 probe 函数），失败 fail-closed。
+4. **P1-UX-02**：新增 `project.health` RPC（provider 凭据配置状态 + 最近一次真实 provider 调用结果），TopBar 展示真实健康状态而非仅 token 非空。
+5. **P1-UX-03**：`listEventsSince` 增加 `limit/cursor` 分页；SSE replay 有界；客户端只保留窗口事件 + 分段加载，消除无界内存与网络。
+6. **P1-DOC-01**：手册 md/html 的 Node 版本统一为 `^20.19.0 || >=22.12.0`，并加一致性检查。
+7. **P2-TEST-01**：建立 E2E locator helper（共享常量 + role/name 定位），替换 8 个文件中的复制文案。
+8. **P0-ARCH-02（有界部分）**：Phase 3 增加 hard deadline；shutdown 时未结算 job 持久标记为新的 `interrupted` 状态（可恢复语义），不再静默 `cancelled`。
+
+明确不在本轮做：P0-ARCH-01（single-owner daemon）、P0-ARCH-03（权威 Session log 下线 dual-write）、P0-PRODUCT-01（Collaborate vertical slice）、P1-DATA-01（外键迁移，需旧库迁移矩阵）、P1-A11Y-01（全站可访问性专项）。这些维持报告"仍未关闭"裁决，是后续架构 PR 的输入。

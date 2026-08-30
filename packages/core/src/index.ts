@@ -72,4 +72,4 @@ export * from './eval/metrics.js';
 export * from './eval/report.js';
 export * from './eval/work-readiness.js';
 export * from './eval/work-usability.js';
-export type { WorkflowTemplate } from './workflow/template.js';
+export type { WorkflowTemplate, WorkflowCatalogEntry } from './workflow/template.js';

@@ -83,9 +83,12 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   // ── Fetch workflow execution plan preview (T2) ──
   const effectiveTemplate = mode === 'goal' ? undefined : (template || undefined);
-  const { data: planData } = useQuery<
-    RpcProcedureMap['workflow.plan']['output']
-  >(
+  const {
+    data: planData,
+    isLoading: planLoading,
+    error: planError,
+    refetch: refetchPlan,
+  } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
     queryKeys.workflowPlan(mode, effectiveTemplate, agent),
     () =>
       rpc.call('workflow.plan', {
@@ -169,6 +172,9 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
       input.acknowledgeUnrestrictedNetwork = true;
     }
+    if (mode !== 'goal' && planData?.digest) {
+      input.planDigest = planData.digest;
+    }
 
     const parsedTimeout = Number(timeoutMs);
     if (Number.isFinite(parsedTimeout) && parsedTimeout > 0) {
@@ -198,7 +204,9 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     startMutation.isPending ||
     !demandText.trim() ||
     draftNotReady ||
-    (requiresUnrestrictedNetwork && !acknowledgedNetwork);
+    (requiresUnrestrictedNetwork && !acknowledgedNetwork) ||
+    !planData ||
+    Boolean(planError);
 
   return (
     <div className="card mb-6">
@@ -337,8 +345,33 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               : '受控交付会执行模板中的角色、Artifact 与 Gate；dsh-headless 不支持此模式。'}
           </p>
 
-          {/* Execution Plan Preview (T2) */}
-          {planData ? (
+          {/* Execution Plan Error / Fail-Closed Alert (P1-UX-01) */}
+          {planError ? (
+            <div
+              className="flex items-center gap-2 mb-4"
+              role="alert"
+              style={{
+                background: 'var(--fail-bg, #fef2f2)',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginTop: '12px',
+              }}
+            >
+              <span style={{ color: 'var(--fail, #991b1b)', fontSize: '13px' }}>
+                无法读取执行计划，已阻止启动：{planError.message}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={refetchPlan}
+              >
+                重试
+              </button>
+            </div>
+          ) : planLoading ? (
+            <div className="text-muted text-sm my-2">正在读取执行计划…</div>
+          ) : planData ? (
             <div
               className="run-plan-preview mb-4"
               role="region"

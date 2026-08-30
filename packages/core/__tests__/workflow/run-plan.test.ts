@@ -7,6 +7,7 @@ import {
 } from "../../src/workflow/template.js";
 import {
   agentRequiresUnrestrictedNetwork,
+  computeRunPlanDigest,
   projectRunPlan,
 } from "../../src/workflow/run-plan.js";
 
@@ -164,5 +165,56 @@ phases:
         nodeIds: ["goal-execute"],
       },
     ]);
+  });
+});
+
+
+describe("computeRunPlanDigest", () => {
+  it("produces deterministic 64-char hex sha256 regardless of property order and ignores existing digest", () => {
+    const template = loadBuiltInWorkflowTemplate("bugfix");
+    const plan = projectRunPlan(template, { agent: "codex", mode: "workflow" });
+
+    expect(typeof plan.digest).toBe("string");
+    expect(plan.digest).toMatch(/^[0-9a-f]{64}$/);
+
+    const recomputed = computeRunPlanDigest(plan);
+    expect(recomputed).toBe(plan.digest);
+
+    // Property order permutation should produce identical digest
+    const reordered = {
+      phases: plan.phases,
+      gates: plan.gates,
+      requiresUnrestrictedNetwork: plan.requiresUnrestrictedNetwork,
+      roleChain: plan.roleChain,
+    };
+    expect(computeRunPlanDigest(reordered)).toBe(plan.digest);
+  });
+
+  it("changes when plan fields are modified", () => {
+    const template = loadBuiltInWorkflowTemplate("bugfix");
+    const basePlan = projectRunPlan(template, { agent: "codex", mode: "workflow" });
+    const baseDigest = basePlan.digest;
+
+    // Change requiresUnrestrictedNetwork
+    const netModified = { ...basePlan, requiresUnrestrictedNetwork: true };
+    expect(computeRunPlanDigest(netModified)).not.toBe(baseDigest);
+
+    // Change roleChain
+    const roleModified = { ...basePlan, roleChain: [...basePlan.roleChain, "pmo" as const] };
+    expect(computeRunPlanDigest(roleModified)).not.toBe(baseDigest);
+
+    // Change gates
+    const gateModified = {
+      ...basePlan,
+      gates: basePlan.gates.map((g, idx) => (idx === 0 ? { ...g, requiresHumanApproval: !g.requiresHumanApproval } : g)),
+    };
+    expect(computeRunPlanDigest(gateModified)).not.toBe(baseDigest);
+
+    // Change phases
+    const phaseModified = {
+      ...basePlan,
+      phases: basePlan.phases.map((p, idx) => (idx === 0 ? { ...p, name: p.name + " modified" } : p)),
+    };
+    expect(computeRunPlanDigest(phaseModified)).not.toBe(baseDigest);
   });
 });

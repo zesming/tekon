@@ -12,7 +12,11 @@ import { join, relative, resolve } from 'node:path';
 
 import {
   agentRequiresUnrestrictedNetwork,
+  computeRunPlanDigest,
+  listWorkflowCatalog,
+  loadWorkflowTemplate,
   loadWorkflowTemplateFile,
+  projectRunPlan,
   readDraftShapeFile,
   renderDraftShapeForRun,
   type WorkflowTemplate,
@@ -42,12 +46,87 @@ import {
   mapWorkflowFromDomain,
 } from '../mappers.js';
 
+interface HealthCacheEntry {
+  result: {
+    credential: 'not-configured' | 'valid' | 'invalid';
+    checkedAt: string;
+    detail?: string;
+    provider?: 'available' | 'unavailable';
+  };
+  cachedAt: number;
+}
+
+const HEALTH_CACHE_TTL_MS = 60_000;
+const healthCache = new Map<string, HealthCacheEntry>();
+
+function probeProvider(): 'available' | 'unavailable' {
+  try {
+    execFileSync('dsh', ['--version'], {
+      timeout: 1000,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    });
+    return 'available';
+  } catch {
+    return 'unavailable';
+  }
+}
+
 export function createProjectRouter(context: ServerContext) {
   return {
     async list() {
       return listScopedProjects(context.db, context.projectContext).map(
         mapProject,
       );
+    },
+
+    async health(input?: { token?: string }) {
+      const token = input?.token?.trim();
+      const cacheKey = `${context.projectContext.sessionPath}:${token ?? ''}`;
+      const cached = healthCache.get(cacheKey);
+      const now = Date.now();
+      if (cached && now - cached.cachedAt < HEALTH_CACHE_TTL_MS) {
+        return cached.result;
+      }
+
+      let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
+      let detail: string | undefined;
+      let provider: 'available' | 'unavailable' | undefined;
+
+      if (!token) {
+        credential = 'not-configured';
+      } else {
+        let expectedToken: string | undefined;
+        try {
+          const parsed = JSON.parse(
+            readFileSync(context.projectContext.sessionPath, 'utf8'),
+          ) as { token?: unknown };
+          expectedToken =
+            typeof parsed.token === 'string' ? parsed.token : undefined;
+        } catch {
+          expectedToken = undefined;
+        }
+
+        if (!expectedToken) {
+          credential = 'not-configured';
+          detail = 'Web session token is not configured on server';
+        } else if (token === expectedToken) {
+          credential = 'valid';
+          provider = probeProvider();
+        } else {
+          credential = 'invalid';
+          detail = 'Session token does not match server configuration';
+        }
+      }
+
+      const result = {
+        credential,
+        checkedAt: new Date().toISOString(),
+        ...(detail ? { detail } : {}),
+        ...(provider ? { provider } : {}),
+      };
+
+      healthCache.set(cacheKey, { result, cachedAt: now });
+      return result;
     },
 
     async overview() {
@@ -183,6 +262,25 @@ export function createProjectRouter(context: ServerContext) {
       if (templateName) {
         assertSafeName(templateName, 'template');
       }
+
+      // P1-UX-01 / P1-PRODUCT-02: plan digest validation for workflow mode
+      if (!isGoal && runInput.planDigest) {
+        const template = loadTemplate(context, templateName!);
+        const plan = projectRunPlan(template, {
+          agent: runInput.agent,
+          mode: runInput.mode,
+        });
+        const computedDigest =
+          (plan as { digest?: string }).digest ??
+          computeRunPlanDigest(plan);
+        if (runInput.planDigest !== computedDigest) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            'PLAN_DIGEST_MISMATCH: Execution plan digest mismatch',
+          );
+        }
+      }
+
       const workflowSpec =
         !isGoal && templateName
           ? loadProjectWorkflowIfPresent(context, templateName)
@@ -196,7 +294,7 @@ export function createProjectRouter(context: ServerContext) {
         requiresUnrestrictedNetwork &&
         runInput.acknowledgeUnrestrictedNetwork !== true
       ) {
-        throw new ApiError("BAD_REQUEST", "联网不受限需知情确认");
+        throw new ApiError('BAD_REQUEST', '联网不受限需知情确认');
       }
 
       // 4a: SessionService owns the prepareRun → session → events → enqueue
@@ -370,31 +468,22 @@ function listRoles(
 
 function listWorkflows(
   context: ServerContext,
-): Array<{ id: string; name: string; path: string }> {
-  const workflowsDir = context.projectContext.workflowsDir;
-  if (!existsSync(workflowsDir)) {
-    return [];
-  }
-
-  return readdirSync(workflowsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.ya?ml$/u.test(entry.name))
-    .map((entry) => {
-      const path = join(workflowsDir, entry.name);
-      const content = readFileSync(path, 'utf8');
-      return {
-        id:
-          extractYamlScalar(content, 'id') ??
-          entry.name.replace(/\.ya?ml$/u, ''),
-        name: extractYamlScalar(content, 'name') ?? entry.name,
-        path,
-      };
-    })
-    .sort((left, right) => left.id.localeCompare(right.id));
+): Array<{ id: string; name: string; builtin?: boolean; path?: string }> {
+  return listWorkflowCatalog({
+    projectWorkflowsDir: context.projectContext.workflowsDir,
+  });
 }
 
-function extractYamlScalar(content: string, key: string): string | undefined {
-  const match = new RegExp(`^${key}:\\s*(.+)$`, 'mu').exec(content);
-  return match?.[1]?.trim().replace(/^["']|["']$/gu, '');
+function loadTemplate(context: ServerContext, name: string): WorkflowTemplate {
+  const custom = loadProjectWorkflowIfPresent(context, name);
+  if (custom) {
+    return custom;
+  }
+  try {
+    return loadWorkflowTemplate({ name });
+  } catch {
+    throw new ApiError('NOT_FOUND', `Workflow template not found: ${name}`);
+  }
 }
 
 function loadProjectWorkflowIfPresent(

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  listWorkflowCatalog,
   loadWorkflowTemplate,
   parseWorkflowTemplate,
 } from '../../src/workflow/template.js';
@@ -416,5 +417,75 @@ phases:
     expect(() =>
       loadWorkflowTemplate({ name: '../evil', workflowsDir }),
     ).toThrow(/invalid workflow template name/u);
+  });
+
+  it('lists built-in workflow template catalog entries with id matching filename', () => {
+    const catalog = listWorkflowCatalog();
+    const ids = catalog.map((entry) => entry.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'bugfix',
+        'docs-update',
+        'goal',
+        'plan-only',
+        'standard-delivery',
+        'standard-feature',
+        'test-improvement',
+      ]),
+    );
+
+    const goalEntry = catalog.find((entry) => entry.id === 'goal');
+    expect(goalEntry).toBeDefined();
+    expect(goalEntry?.builtin).toBe(true);
+    expect(goalEntry?.name).toBe('Goal');
+
+    const bugfixEntry = catalog.find((entry) => entry.id === 'bugfix');
+    expect(bugfixEntry).toBeDefined();
+    expect(bugfixEntry?.builtin).toBe(true);
+    expect(bugfixEntry?.name).toBe('Bugfix');
+  });
+
+  it('merges project workflows, overrides same-name built-ins, and derives id strictly from filename', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tekon-project-workflows-'));
+    tempDirs.push(root);
+    const projectWorkflowsDir = join(root, '.tekon', 'workflows');
+    mkdirSync(projectWorkflowsDir, { recursive: true });
+
+    // Custom workflow with differing internal YAML id
+    writeFileSync(
+      join(projectWorkflowsDir, 'custom-flow.yaml'),
+      `id: internal-different-id\nname: Custom Project Flow\ngovernance: none\nphases:\n  - id: p1\n    nodes:\n      - id: n1\n        role: goal\n`,
+      'utf8',
+    );
+
+    // Override built-in bugfix
+    writeFileSync(
+      join(projectWorkflowsDir, 'bugfix.yaml'),
+      `id: internal-bugfix-override\nname: Overridden Bugfix\ngovernance: none\nphases:\n  - id: p1\n    nodes:\n      - id: n1\n        role: goal\n`,
+      'utf8',
+    );
+
+    const catalog = listWorkflowCatalog({ projectWorkflowsDir });
+    const customEntry = catalog.find((entry) => entry.id === 'custom-flow');
+    expect(customEntry).toBeDefined();
+    expect(customEntry).toMatchObject({
+      id: 'custom-flow',
+      name: 'Custom Project Flow',
+      builtin: false,
+      path: join(projectWorkflowsDir, 'custom-flow.yaml'),
+    });
+
+    const bugfixEntry = catalog.find((entry) => entry.id === 'bugfix');
+    expect(bugfixEntry).toBeDefined();
+    expect(bugfixEntry).toMatchObject({
+      id: 'bugfix',
+      name: 'Overridden Bugfix',
+      builtin: false,
+      path: join(projectWorkflowsDir, 'bugfix.yaml'),
+    });
+
+    const stdEntry = catalog.find((entry) => entry.id === 'standard-delivery');
+    expect(stdEntry).toBeDefined();
+    expect(stdEntry?.builtin).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from './shared-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 test.describe('Tekon main flow', () => {
   test('dashboard, run list, run detail tabs, approvals, and authenticated operations', async ({
@@ -17,9 +18,7 @@ test.describe('Tekon main flow', () => {
 
     // Shared business journeys use the production sessionStorage bootstrap,
     // so the visible UI credential and the RPC/SSE credential are the same.
-    await expect(
-      page.getByRole('button', { name: '连接凭据：已设置' }),
-    ).toBeVisible();
+    await expect(credentialStatus(page, 'valid')).toBeVisible();
 
     // Sidebar navigation items are present
     await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();

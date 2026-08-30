@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,6 +73,14 @@ export interface WorkflowTemplatePhase {
   dependsOn: string[];
   parallel: boolean;
   nodes: WorkflowTemplateNode[];
+}
+
+
+export interface WorkflowCatalogEntry {
+  id: string;
+  name: string;
+  builtin: boolean;
+  path?: string;
 }
 
 export interface WorkflowTemplate {
@@ -208,6 +216,80 @@ export function loadWorkflowTemplate(options: {
   return loadWorkflowTemplateFile(
     join(getWorkflowsDir(options.workflowsDir), `${options.name}.yaml`),
   );
+}
+
+
+export function listWorkflowCatalog(options?: {
+  projectWorkflowsDir?: string;
+}): WorkflowCatalogEntry[] {
+  const catalogMap = new Map<string, WorkflowCatalogEntry>();
+
+  const builtinDir = getWorkflowsDir();
+  if (existsSync(builtinDir)) {
+    try {
+      const entries = readdirSync(builtinDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.yaml')) {
+          const id = entry.name.slice(0, -'.yaml'.length);
+          const fullPath = join(builtinDir, entry.name);
+          let name = id;
+          try {
+            const raw = parseYaml(readFileSync(fullPath, 'utf8')) as {
+              name?: unknown;
+            } | null;
+            if (raw && typeof raw.name === 'string' && raw.name.trim().length > 0) {
+              name = raw.name.trim();
+            }
+          } catch {
+            // fallback to id
+          }
+          catalogMap.set(id, {
+            id,
+            name,
+            builtin: true,
+            path: fullPath,
+          });
+        }
+      }
+    } catch {
+      // directory read failure ignored
+    }
+  }
+
+  if (options?.projectWorkflowsDir && existsSync(options.projectWorkflowsDir)) {
+    try {
+      const entries = readdirSync(options.projectWorkflowsDir, {
+        withFileTypes: true,
+      });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.yaml')) {
+          const id = entry.name.slice(0, -'.yaml'.length);
+          const fullPath = join(options.projectWorkflowsDir, entry.name);
+          let name = id;
+          try {
+            const raw = parseYaml(readFileSync(fullPath, 'utf8')) as {
+              name?: unknown;
+            } | null;
+            if (raw && typeof raw.name === 'string' && raw.name.trim().length > 0) {
+              name = raw.name.trim();
+            }
+          } catch {
+            // fallback to id
+          }
+          catalogMap.set(id, {
+            id,
+            name,
+            builtin: false,
+            path: fullPath,
+          });
+        }
+      }
+    } catch {
+      // directory read failure ignored
+    }
+  }
+
+  return [...catalogMap.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function loadBuiltInWorkflowTemplate(

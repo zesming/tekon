@@ -400,12 +400,12 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // subscribe is live), a new event is appended AND published. The handler
     // must buffer it (flushing=true) and flush it after replay — not drop it
     // (loss) and not double-send it (the boundary event is > maxReplayedSeq).
-    const realList = s.store.listEventsSince.bind(s.store);
+    const realPage = s.store.listEventsPage.bind(s.store);
     let injected = false;
     (
-      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
-    ).listEventsSince = async (sid: string, since: number) => {
-      const events = await realList(sid, since);
+      s.store as { listEventsPage: SessionEventStore['listEventsPage'] }
+    ).listEventsPage = async (sid: string, since: number, limit: number) => {
+      const page = await realPage(sid, since, limit);
       if (!injected) {
         injected = true;
         const boundary = await s.store.appendEvent({
@@ -415,7 +415,7 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
         }); // seq 2, published while flushing=true
         s.bus.publish(boundary);
       }
-      return events;
+      return page;
     };
 
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
@@ -494,14 +494,14 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // Fire the client 'close' DURING the replay await (before the handler
     // finishes). The close handler is registered before replay, so cleanup runs
     // and unsubscribes — a later publish must not be written.
-    const realList = s.store.listEventsSince.bind(s.store);
+    const realPage = s.store.listEventsPage.bind(s.store);
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
     (
-      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
-    ).listEventsSince = async (sid: string, since: number) => {
-      const events = await realList(sid, since);
+      s.store as { listEventsPage: SessionEventStore['listEventsPage'] }
+    ).listEventsPage = async (sid: string, since: number, limit: number) => {
+      const page = await realPage(sid, since, limit);
       fake.close(); // client disconnects mid-replay
-      return events;
+      return page;
     };
 
     await handleSessionEventsSse({
@@ -637,6 +637,43 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     expect(fake.frames().filter((frame) => frame.id === '1')).toHaveLength(1);
+    fake.close();
+  });
+});
+
+describe('SSE fresh connect bounded replay (P1-UX-03)', () => {
+  it('fresh connect without sinceSeq / Last-Event-ID initializes cursor from latestSeq - REPLAY_WINDOW', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    for (let i = 1; i <= 6; i++) {
+      await s.store.appendEvent({
+        sessionId,
+        type: 'assistant/message',
+        payload: { text: `event ${i}` },
+        modelVisible: true,
+      });
+    }
+
+    // Connect with fresh request (no sinceSeq, no Last-Event-ID)
+    const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events`);
+    await handleSessionEventsSse({
+      request: fake.request,
+      response: fake.response,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    const frames = fake.frames();
+    // All 6 events are within REPLAY_WINDOW (500), so all 6 are delivered
+    expect(frames.map((f) => f.id)).toEqual(['1', '2', '3', '4', '5', '6']);
     fake.close();
   });
 });

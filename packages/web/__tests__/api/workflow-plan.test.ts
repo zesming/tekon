@@ -141,3 +141,44 @@ describe('workflow.plan RPC', () => {
     expect(body.result.requiresUnrestrictedNetwork).toBe(false);
   });
 });
+
+describe('workflow catalog & digest (P1-PRODUCT-03 / P1-PRODUCT-02)', () => {
+  it('workflow.list returns catalog and all listed ids can be planned', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    const listResult = await api.workflow.list();
+    expect(listResult.workflows.length).toBeGreaterThanOrEqual(1);
+
+    for (const item of listResult.workflows) {
+      if (item.id === 'goal') {
+        const goalPlan = await api.workflow.plan({ mode: 'goal' });
+        expect(goalPlan).toBeDefined();
+        expect(goalPlan.digest).toBeDefined();
+      } else {
+        const plan = await api.workflow.plan({ template: item.id });
+        expect(plan).toBeDefined();
+        expect(plan.roleChain.length).toBeGreaterThan(0);
+        expect(plan.digest).toBeDefined();
+        expect(typeof plan.digest).toBe('string');
+      }
+    }
+  });
+
+  it('workflow.plan returns a deterministic digest', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    const plan1 = await api.workflow.plan({ template: 'standard-feature', agent: 'codex' });
+    const plan2 = await api.workflow.plan({ template: 'standard-feature', agent: 'codex' });
+
+    expect(plan1.digest).toBeDefined();
+    expect(plan1.digest).toBe(plan2.digest);
+  });
+});

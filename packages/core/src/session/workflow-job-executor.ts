@@ -9,6 +9,7 @@ import { createGateEngine } from '../gate/engine.js';
 import {
   isJobCancellationAbort,
   isJobOwnershipLostAbort,
+  isJobShutdownAbort,
   type JobExecutionContext,
   type JobExecutor,
 } from './job-runner.js';
@@ -185,6 +186,9 @@ export function createWorkflowJobExecutor(deps: {
         if (isJobOwnershipLostAbort(ctx.signal)) {
           return { status: 'failed' as JobStatus };
         }
+        if (isJobShutdownAbort(ctx.signal)) {
+          return { status: 'interrupted' as JobStatus };
+        }
         if (isJobCancellationAbort(ctx.signal)) {
           // Abort raced the run to completion. Settle the workflow cancelled
           // (idempotent, M2) and the session cancelled — but do NOT emit
@@ -229,6 +233,10 @@ export function createWorkflowJobExecutor(deps: {
     // The current owner will emit the authoritative lifecycle events.
     if (isJobOwnershipLostAbort(ctx.signal)) {
       return { status: 'failed' };
+    }
+
+    if (isJobShutdownAbort(ctx.signal)) {
+      return { status: 'interrupted' };
     }
 
     // User cancellation remains authoritative over an engine result.

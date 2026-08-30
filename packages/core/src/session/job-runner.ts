@@ -9,6 +9,9 @@ import type { SubprocessRegistry } from './subprocess-registry.js';
 export const JOB_ABORT_REASON_OWNERSHIP_LOST =
   'tekon:job-ownership-lost' as const;
 
+/** Abort reason used only when the job runner is shutting down. */
+export const JOB_ABORT_REASON_SHUTDOWN = 'tekon:job-shutdown' as const;
+
 /** True when an AbortSignal fences a stale executor rather than user cancel. */
 export function isJobOwnershipLostAbort(
   signal: AbortSignal | undefined,
@@ -18,11 +21,22 @@ export function isJobOwnershipLostAbort(
   );
 }
 
-/** User cancellation excludes the internal ownership-loss fencing signal. */
+/** True when an AbortSignal was triggered by runner shutdown. */
+export function isJobShutdownAbort(signal: AbortSignal | undefined): boolean {
+  return Boolean(
+    signal?.aborted && signal.reason === JOB_ABORT_REASON_SHUTDOWN,
+  );
+}
+
+/** User cancellation excludes internal signals (ownership-loss fencing and runner shutdown). */
 export function isJobCancellationAbort(
   signal: AbortSignal | undefined,
 ): boolean {
-  return Boolean(signal?.aborted && !isJobOwnershipLostAbort(signal));
+  return Boolean(
+    signal?.aborted &&
+      !isJobOwnershipLostAbort(signal) &&
+      !isJobShutdownAbort(signal),
+  );
 }
 
 /**
@@ -103,12 +117,18 @@ export interface CreateJobRunnerDeps {
    * override only; production keeps the 5s default.
    */
   stopSettleTimeoutMs?: number;
+  /**
+   * Hard deadline for uncooperative executors during stop() phase 3 drain
+   * barrier. Test override only; production keeps the 10s default.
+   */
+  stopHardTimeoutMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const STOP_SETTLE_TIMEOUT_MS = 5_000;
+const DEFAULT_STOP_HARD_TIMEOUT_MS = 10_000;
 
 /** Statuses an executor may legitimately settle a job to. */
 const SETTLEABLE_STATUSES: readonly JobStatus[] = [
@@ -116,6 +136,7 @@ const SETTLEABLE_STATUSES: readonly JobStatus[] = [
   'failed',
   'cancelled',
   'paused',
+  'interrupted',
 ];
 
 export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
@@ -125,6 +146,8 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const leaseTtlMs = deps.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
   const stopSettleTimeoutMs =
     deps.stopSettleTimeoutMs ?? STOP_SETTLE_TIMEOUT_MS;
+  const stopHardTimeoutMs =
+    deps.stopHardTimeoutMs ?? DEFAULT_STOP_HARD_TIMEOUT_MS;
   const workerId =
     deps.workerId ?? `web-${process.pid}-${randomUUID().slice(0, 8)}`;
 
@@ -574,7 +597,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       // Completed-but-not-yet-dequeued jobs are never touched here.
       for (const [jobId, controller] of controllers) {
         if (!controller.signal.aborted) {
-          controller.abort();
+          controller.abort(JOB_ABORT_REASON_SHUTDOWN);
         }
         const current = await jobs.get(jobId).catch(() => null);
         const sessionId = current?.sessionId;
@@ -591,7 +614,19 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       // synchronous settle() write — and dequeues from `pending` before we
       // return. Callers only close the (synchronous, better-sqlite3) database
       // after stop() resolves, so no late write can hit a closed handle.
-      await Promise.allSettled([...pending]);
+      // Bounded by stopHardTimeoutMs to avoid hanging forever on uncooperative executors.
+      const drainTasks = Promise.allSettled([...pending]);
+      let hardTimer: NodeJS.Timeout | undefined;
+      const hardDeadline = new Promise<void>((resolve) => {
+        hardTimer = setTimeout(resolve, stopHardTimeoutMs);
+        if (typeof hardTimer.unref === 'function') {
+          hardTimer.unref();
+        }
+      });
+      await Promise.race([drainTasks, hardDeadline]);
+      if (hardTimer) {
+        clearTimeout(hardTimer);
+      }
 
       for (const jobId of [...heartbeats.keys()]) {
         clearHeartbeat(jobId);

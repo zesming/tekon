@@ -1,3 +1,9 @@
+import {
+  presentEvent,
+  type PresentedEvent,
+  type SessionEvent,
+} from '@tekon/core';
+
 import type { ServerContext } from '../context.js';
 import { ApiError } from '../errors.js';
 import type { SessionActionKind } from '../../../shared/rpc-contract.js';
@@ -195,6 +201,38 @@ export function createSessionRouter(context: ServerContext) {
           needsAction: action.needsAction,
           actionKind: action.actionKind,
         },
+      };
+    },
+
+    async events(input: {
+      sessionId: string;
+      sinceSeq?: number;
+      limit?: number;
+    }) {
+      const session = await context.sessions.getSession(input.sessionId);
+      if (!session) {
+        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+      }
+
+      const limit = input.limit ?? 500;
+      const sinceSeq = input.sinceSeq ?? 0;
+      const page = await context.sessions.listEventsPage(
+        input.sessionId,
+        sinceSeq,
+        limit,
+      );
+      const events = page.events;
+      const hasMore = page.hasMore;
+      const latestSeq = await context.sessions.latestSeq(input.sessionId);
+
+      const presentedEvents = events
+        .map((e) => presentEvent(e))
+        .filter((e): e is PresentedEvent => e !== null);
+
+      return {
+        events: presentedEvents,
+        hasMore,
+        latestSeq,
       };
     },
 

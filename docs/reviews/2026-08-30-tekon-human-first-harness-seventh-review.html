@@ -177,6 +177,41 @@
     <blockquote><strong>成熟度表述：</strong>Tekon v0.17.0 已形成测试较强、启动与风险边界较透明的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、权威 Session 事实链、权威 run plan 和全链路长会话有界化。</blockquote>
     <p>本 PR 未执行 merge、release 或 deploy。</p>
 
+
+    <h2>11. 交付侧批注（2026-08-30，基于代码逐条复核）</h2>
+    <p>本节由交付侧在三个并行只读复核（产品/文档、架构、UX/测试）完成后追加。复核方法：对报告全部 P0/P1/P2 条目逐条回到当前代码树取证，不依据报告文字本身。</p>
+
+    <h3>11.1 复核结论：报告 15 项论断全部属实</h3>
+    <ul>
+      <li><strong>P0-ARCH-01 属实</strong>：Web 在 <code>packages/web/src/server/api/root.ts:167</code>、CLI 在 <code>packages/cli/src/lib/session-context.ts:201</code> 各自创建并启动 JobRunner；CAS 只覆盖 <code>jobs</code> 行（<code>session-store.ts:665/687/725</code>），<code>nodes/gate_results/audit_events/artifacts</code> 写入（<code>repositories.ts:566/578/625/650</code>）无 generation fencing。</li>
+      <li><strong>P0-ARCH-02 属实</strong>：<code>job-runner.ts:594</code> Phase 3 是裸 <code>Promise.allSettled</code>，无 hard deadline；无 <code>interrupted/recoverable</code> 状态，shutdown abort 后 job 被结算为 <code>cancelled</code>。</li>
+      <li><strong>P0-ARCH-03 属实</strong>：<code>dual-write.ts:224</code> 的 bridge 吞掉 <code>session_events</code> 追加失败，<code>onError</code> 默认为空函数。</li>
+      <li><strong>P0-PRODUCT-01 属实</strong>：<code>legacy-agent-driver.ts:137/142/175</code> 的 <code>followUp/steer/resume</code> 均抛 <code>NotSupportedYet</code>。</li>
+      <li><strong>P1-PRODUCT-02 / P1-UX-01 属实</strong>：<code>StartRunForm.tsx:197</code> 的禁用条件不含 plan 状态，plan 失败时预览不渲染且仍可提交；对照 <code>SessionComposer.tsx:44</code> 默认入口已 fail-closed。契约中无 plan digest 字段。</li>
+      <li><strong>P1-PRODUCT-03 属实</strong>：Web <code>listWorkflows</code>（<code>workflow.ts:69</code>）只扫 <code>.tekon/workflows</code>；CLI（<code>workflow.ts:114</code>）合并 built-in + 项目模板。Web 下拉 value 用 YAML <code>id</code>，plan/run 按文件名加载，不一致时必然 <code>NOT_FOUND</code>。</li>
+      <li><strong>P1-DSH-01 属实</strong>：生产 adapter 只调 version gate（<code>dsh-headless-adapter.ts:228</code>）；help/config probe（<code>dsh-bridge-probe.ts:116/132</code>）仅被测试引用。</li>
+      <li><strong>P1-UX-02 属实</strong>：无 health RPC；TopBar 状态仅 <code>Boolean(token)</code>（<code>TopBar.tsx:81</code>）。</li>
+      <li><strong>P1-UX-03 属实</strong>：<code>use-session-stream.ts:49</code> 内存累积全部事件；SSE 无 <code>Last-Event-ID</code> 时 <code>cursor=0</code>（<code>sse.ts:47</code>）；<code>listEventsSince</code>（<code>session-store.ts:451</code>）无 <code>LIMIT</code>。</li>
+      <li><strong>P1-DATA-01 属实</strong>：<code>migrations.ts:182</code> 起三张子表的 <code>session_id</code> 均无外键。</li>
+      <li><strong>P1-DOC-01 属实</strong>：手册 md:167 与 html:411 仍写 <code>node (&gt;=18)</code>，与 <code>package.json</code>/<code>install.sh</code>/<code>README</code> 的 <code>^20.19.0 || &gt;=22.12.0</code> 冲突。</li>
+      <li><strong>P2-TEST-01 属实</strong>：<code>连接凭据：已设置</code> 复制在 8 个 E2E 文件中，无 locator helper。</li>
+      <li>第七轮"已修复"四项（Node engines、installer 门槛与自定义 <code>TEKON_HOME</code> wrapper、CI <code>bash -n</code>、README 指向 <code>current.md</code>）在代码中全部真实存在。</li>
+    </ul>
+
+    <h3>11.2 交付侧判断：本轮可落地范围</h3>
+    <p>报告推荐顺序 A-E 是架构正确顺序，但 A（single-owner daemon）、B（权威 Session log）、C（DSH SDK/ACP 真实 streaming）属于架构基线变更，需要独立 ADR、数据迁移与真实 provider 对接，超出单个 PR 的可验证范围。本轮按"报告问题分级 + 可独立验证 + 不改变架构基线"原则落地 8 项：</p>
+    <ol>
+      <li><strong>P1-PRODUCT-03</strong>：Core 导出统一 template catalog（built-in + 项目模板，id 即文件名），CLI/Web 共同消费；修复 Web 下拉 id/文件名不一致。</li>
+      <li><strong>P1-UX-01 + P1-PRODUCT-02（入口侧）</strong>：高级 StartRunForm plan 失败时显示错误并禁用提交，与默认入口统一 fail-closed；plan 增加 digest 并在 run 时回传校验。</li>
+      <li><strong>P1-DSH-01</strong>：生产 adapter 在 version gate 后执行 help/config capability preflight，失败 fail-closed。</li>
+      <li><strong>P1-UX-02</strong>：新增 <code>project.health</code> RPC，TopBar 展示真实健康状态。</li>
+      <li><strong>P1-UX-03</strong>：<code>listEventsSince</code> 增加 <code>limit/cursor</code>；SSE replay 有界；客户端窗口化 + 分段加载。</li>
+      <li><strong>P1-DOC-01</strong>：手册 Node 版本统一并加一致性检查。</li>
+      <li><strong>P2-TEST-01</strong>：建立 E2E locator helper，替换 8 个文件中的复制文案。</li>
+      <li><strong>P0-ARCH-02（有界部分）</strong>：Phase 3 增加 hard deadline；shutdown 时未结算 job 持久标记为 <code>interrupted</code>。</li>
+    </ol>
+    <p>明确不在本轮做：P0-ARCH-01、P0-ARCH-03、P0-PRODUCT-01、P1-DATA-01、P1-A11Y-01。这些维持报告"仍未关闭"裁决，作为后续架构 PR 的输入。</p>
+
     <h2>参考资料</h2>
     <ul>
       <li><a href="https://vite.dev/blog/announcing-vite7">Vite 7 / Node.js support</a></li>

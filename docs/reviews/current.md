@@ -6,8 +6,25 @@
 - **本轮复审起点**：`97712042208c9197659ed2445c96c4c74f253b27`（与上一轮最终提交相同；本轮开始时未检测到额外用户 commit）
 - **当前产品代码快照**：`5bf2fe3423682d1f693da91f656924868d2a205c`
 - **第七轮报告快照**：`4298fcc1357fdfc35222d21b836949964b89a76f`
-- **当前版本**：`0.17.0`
+- **当前版本**：`0.18.0`
 - **当前裁决**：最终 PR Head 的 Core/CI 完整成功后，当前增量可通过代码合并门；Tekon 尚未通过“面向普通人的稳定持续协作研发工作台”产品验收。
+
+## 2026-08-30 第七轮批注整改（v0.18.0）
+
+交付侧对第七轮报告全部 P0/P1/P2 论断做了逐条代码复核（报告第 14 节批注，15 项论断全部属实），并按四轮最高思考等级 reviewer 评审达成一致的执行方案（`docs/superpowers/plans/2026-08-30-seventh-review-remediation-plan.md`）落地 8 项可独立验证整改：
+
+- Web/CLI 统一 workflow template catalog（built-in + 项目模板，id 即文件名）；
+- 高级入口 plan 失败 fail-closed + plan digest 绑定；
+- DSH 生产 capability preflight（help/config 合同）；
+- `project.health` RPC 与 TopBar 真实握手状态；
+- 长会话全链路有界（`listEventsPage` 分页、SSE 尾窗、客户端窗口化、重连续传不丢）；
+- 手册 Node 版本一致性 + 一致性测试；
+- E2E locator helper；
+- shutdown hard deadline + `interrupted` 持久状态（job-runner / workflow-job-executor / automation-job-executor / engine / node-executor 全链路三分流）。
+
+验证：`pnpm -r typecheck` 通过；`pnpm test` 129 文件 1407 测试通过；Playwright 32 项通过无 flaky；桌面/移动 UI 截图抽查无错位重叠。
+
+**仍未关闭（维持第七轮裁决，属后续架构 PR 范围）**：P0-ARCH-01（single-owner Runtime）、P0-ARCH-03（权威 Session log / durable inbox）、P0-PRODUCT-01（Collaborate vertical slice：真实 streaming、follow-up/steer/resume、重启恢复）、P1-DATA-01（Session 子表外键与孤儿迁移）、P1-A11Y-01（全站可访问性与多浏览器专项）。
 
 ## 本轮纠正与关闭
 

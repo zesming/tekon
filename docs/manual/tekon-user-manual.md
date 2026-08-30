@@ -164,7 +164,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（>=18）、`npm`。
+安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。
 
 如需指定安装目录或分支：
 

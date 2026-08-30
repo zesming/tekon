@@ -97,6 +97,18 @@ export interface SessionEventStore {
     correlationId?: string | null;
   }): Promise<SessionEvent>;
   listEventsSince(sessionId: string, sinceSeq: number): Promise<SessionEvent[]>;
+  /**
+   * Bounded page read for the long-session tail window (review P1-UX-03):
+   * returns at most `limit` events with seq > sinceSeq in ascending order,
+   * plus hasMore when further rows exist. listEventsSince stays unbounded
+   * for internal contiguous catch-up; callers that need a bounded window
+   * must use this method.
+   */
+  listEventsPage(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
   latestSeq(sessionId: string): Promise<number>;
   /**
    * Lightweight tail read for session.get's lastActivityAt: returns only the
@@ -457,6 +469,22 @@ export function createSessionEventStore(
         )
         .all(sessionId, sinceSeq) as SessionEventRow[];
       return rows.map(mapSessionEvent);
+    },
+
+    async listEventsPage(sessionId, sinceSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq > ?
+           order by seq asc
+           limit ?`,
+        )
+        .all(sessionId, sinceSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
     },
 
     async latestSeq(sessionId) {

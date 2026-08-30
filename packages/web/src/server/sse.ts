@@ -7,11 +7,18 @@ import {
   type SessionEventStore,
 } from '@tekon/core';
 
+export const REPLAY_WINDOW = 500;
+export const CATCH_UP_CHUNK_LIMIT = 500;
+
 /**
  * Stream one session's durable events. The process-local bus is a low-latency
  * hint; SQLite remains the cross-process source. A short catch-up poll reads
  * from the last contiguous seq, so events appended by a separate CLI process
  * reach an already-open Web stream without a reconnect.
+ *
+ * P1-UX-03: Bounded replay window on fresh connect (no Last-Event-ID / sinceSeq).
+ * Reconnects with Last-Event-ID continue to catch up [k..end] chunk-by-chunk with
+ * no loss and no duplication.
  */
 export async function handleSessionEventsSse(input: {
   request: IncomingMessage;
@@ -45,10 +52,22 @@ export async function handleSessionEventsSse(input: {
   const sinceParam = url.searchParams.get('sinceSeq');
   const lastEventId = request.headers['last-event-id'];
   let cursor = 0;
+  let isFreshConnect = true;
+
   if (sinceParam != null && /^\d+$/.test(sinceParam)) {
     cursor = Number(sinceParam);
+    isFreshConnect = false;
   } else if (typeof lastEventId === 'string' && /^\d+$/.test(lastEventId)) {
     cursor = Number(lastEventId);
+    isFreshConnect = false;
+  }
+
+  if (isFreshConnect) {
+    const latest =
+      typeof sessions.latestSeq === 'function'
+        ? await sessions.latestSeq(sessionId)
+        : 0;
+    cursor = Math.max(0, latest - REPLAY_WINDOW);
   }
 
   response.statusCode = 200;
@@ -113,8 +132,28 @@ export async function handleSessionEventsSse(input: {
     if (closed || response.writableEnded || catchUpInFlight) return;
     catchUpInFlight = true;
     try {
-      const events = await sessions.listEventsSince(sessionId, cursor);
-      for (const event of events) enqueue(event);
+      for (;;) {
+        if (closed || response.writableEnded) break;
+        if (typeof (sessions as any).listEventsPage === 'function') {
+          const pageResult = await (sessions as any).listEventsPage(
+            sessionId,
+            cursor,
+            CATCH_UP_CHUNK_LIMIT,
+          );
+          const events: SessionEvent[] = Array.isArray(pageResult)
+            ? pageResult
+            : pageResult.events ?? [];
+          const hasMore: boolean = Array.isArray(pageResult)
+            ? events.length >= CATCH_UP_CHUNK_LIMIT
+            : pageResult.hasMore ?? false;
+          for (const event of events) enqueue(event);
+          if (!hasMore || events.length === 0) break;
+        } else {
+          const events = await sessions.listEventsSince(sessionId, cursor);
+          for (const event of events) enqueue(event);
+          break;
+        }
+      }
     } catch {
       cleanup();
     } finally {

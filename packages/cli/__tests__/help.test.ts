@@ -220,4 +220,23 @@ describe('tekon help', () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain(`Tekon CLI v${readRootVersion()}`);
   });
+
+  it('tekon workflow list lists built-in workflow template ids sorted one per line', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['workflow', 'list'], io);
+    const stdout = io.takeStdout();
+
+    expect(exitCode).toBe(0);
+    const lines = stdout.trim().split('\n');
+    expect(lines).toEqual([
+      'bugfix',
+      'docs-update',
+      'goal',
+      'plan-only',
+      'standard-delivery',
+      'standard-feature',
+      'test-improvement',
+    ]);
+  });
+
 });

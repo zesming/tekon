@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { GateType, Role } from "../types/domain.js";
 import type { WorkflowTemplate } from "./template.js";
 
@@ -17,6 +19,7 @@ export interface RunPlanPhaseSummary {
 }
 
 export interface RunPlan {
+  digest: string;
   roleChain: Role[];
   gates: RunPlanGate[];
   requiresUnrestrictedNetwork: boolean;
@@ -26,6 +29,30 @@ export interface RunPlan {
 export interface RunPlanContext {
   agent?: string;
   mode?: "workflow" | "goal";
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj)
+    .filter((key) => key !== "digest")
+    .sort();
+  const entries = keys.map(
+    (key) => `${JSON.stringify(key)}:${canonicalJson(obj[key])}`,
+  );
+  return `{${entries.join(",")}}`;
+}
+
+export function computeRunPlanDigest(
+  plan: Omit<RunPlan, "digest"> | RunPlan,
+): string {
+  const canonical = canonicalJson(plan);
+  return createHash("sha256").update(canonical).digest("hex");
 }
 
 /**
@@ -44,6 +71,7 @@ export function agentRequiresUnrestrictedNetwork(
  * - Extracts all gates with their nodeId, role, type, requiresHumanApproval, and optional timeoutMs.
  * - Summarizes phases with id, name, parallel flag, and nodeIds.
  * - Sets requiresUnrestrictedNetwork via agentRequiresUnrestrictedNetwork.
+ * - Computes and attaches a deterministic digest of the plan.
  */
 export function projectRunPlan(
   template: WorkflowTemplate,
@@ -80,10 +108,17 @@ export function projectRunPlan(
     context.agent,
   );
 
-  return {
+  const planWithoutDigest = {
     roleChain,
     gates,
     requiresUnrestrictedNetwork,
     phases,
+  };
+
+  const digest = computeRunPlanDigest(planWithoutDigest);
+
+  return {
+    digest,
+    ...planWithoutDigest,
   };
 }

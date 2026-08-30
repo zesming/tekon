@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 import { parse as parseYaml } from 'yaml';
 
-import { loadWorkflowTemplate } from '@tekon/core';
+import {
+  listWorkflowCatalog,
+  loadWorkflowTemplate,
+  loadWorkflowTemplateFile,
+} from '@tekon/core';
 
 export function getVersion(): string {
   try {
@@ -77,16 +81,18 @@ export function getBuiltInRolesDir() {
 }
 
 export function getBuiltInWorkflowsDir() {
+  const catalog = listWorkflowCatalog();
+  const firstBuiltin = catalog.find((entry) => entry.builtin && entry.path);
+  if (firstBuiltin?.path) {
+    return dirname(firstBuiltin.path);
+  }
   return join(getRepoRoot(), 'workflows');
 }
 
-export function listWorkflowNames(workflowsDir: string) {
-  if (!existsSync(workflowsDir)) {
-    return [];
-  }
-  return readdirSync(workflowsDir)
-    .filter((entry) => entry.endsWith('.yaml'))
-    .map((entry) => entry.slice(0, -'.yaml'.length));
+export function listWorkflowNames(workflowsDir?: string) {
+  return listWorkflowCatalog(
+    workflowsDir ? { projectWorkflowsDir: workflowsDir } : undefined,
+  ).map((entry) => entry.id);
 }
 
 export function loadWorkflowByName(
@@ -94,12 +100,12 @@ export function loadWorkflowByName(
   projectWorkflowsDir: string,
 ) {
   ensureSafeName(name);
-  const workflowsDir = existsSync(
-    join(projectWorkflowsDir, `${name}.yaml`),
-  )
-    ? projectWorkflowsDir
-    : getBuiltInWorkflowsDir();
-  return loadWorkflowTemplate({ name, workflowsDir });
+  const catalog = listWorkflowCatalog({ projectWorkflowsDir });
+  const entry = catalog.find((item) => item.id === name);
+  if (entry?.path) {
+    return loadWorkflowTemplateFile(entry.path);
+  }
+  return loadWorkflowTemplate({ name, workflowsDir: projectWorkflowsDir });
 }
 
 export function getWorkflowFilePath(
@@ -107,9 +113,10 @@ export function getWorkflowFilePath(
   projectWorkflowsDir: string,
 ) {
   ensureSafeName(name);
-  const projectPath = join(projectWorkflowsDir, `${name}.yaml`);
-  if (existsSync(projectPath)) {
-    return projectPath;
+  const catalog = listWorkflowCatalog({ projectWorkflowsDir });
+  const entry = catalog.find((item) => item.id === name);
+  if (entry?.path) {
+    return entry.path;
   }
   return join(getBuiltInWorkflowsDir(), `${name}.yaml`);
 }

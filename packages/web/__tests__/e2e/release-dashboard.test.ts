@@ -1,4 +1,5 @@
 import { expect, test } from './shared-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 test.describe('Tekon release dashboard', () => {
   test('delivery pipeline display, PR preparation, and desktop screenshot', async ({
@@ -48,9 +49,7 @@ test.describe('Tekon release dashboard', () => {
     ).toBeVisible();
 
     // ── 3. Verify credential-configured delivery affordances ─────────────
-    await expect(
-      page.getByRole('button', { name: '连接凭据：已设置' }),
-    ).toBeVisible();
+    await expect(credentialStatus(page, 'valid')).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeVisible();

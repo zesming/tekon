@@ -10,7 +10,8 @@ interface WorkflowDetailPanelProps {
 }
 
 /** Extract a relative path display from the full filesystem path. */
-function relativePath(fullPath: string): string {
+function relativePath(fullPath: string | undefined): string {
+  if (!fullPath) return '内置模板';
   const idx = fullPath.indexOf('workflows/');
   if (idx >= 0) return fullPath.slice(idx);
   const segments = fullPath.split('/');

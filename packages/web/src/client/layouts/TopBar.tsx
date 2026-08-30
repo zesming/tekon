@@ -8,6 +8,9 @@ import {
 import { useLocation } from 'react-router';
 
 import { useSessionToken } from '../hooks/use-session-token.js';
+import { useQuery } from '../hooks/use-query.js';
+import { rpc } from '../lib/rpc-client.js';
+import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
 type TopBarProps = {
   title?: string;
@@ -78,7 +81,31 @@ export function TopBar(props: TopBarProps) {
     };
   }, [panelOpen]);
 
-  const credentialConfigured = Boolean(token);
+  // P1-UX-02: consume project.health to show truthful credential status
+  const { data: healthData } = useQuery<
+    RpcProcedureMap['project.health']['output']
+  >(
+    token ? `project.health.${token}` : 'project.health.none',
+    () => rpc.call('project.health', { token: token ?? undefined }),
+  );
+
+  const credentialStatus: 'not-configured' | 'valid' | 'invalid' = !token
+    ? 'not-configured'
+    : healthData?.credential ?? 'valid';
+
+  const statusLabel =
+    credentialStatus === 'valid'
+      ? '凭据有效'
+      : credentialStatus === 'invalid'
+        ? '凭据无效'
+        : '未配置凭据';
+
+  const statusAccessibleName =
+    credentialStatus === 'valid'
+      ? '连接凭据：有效'
+      : credentialStatus === 'invalid'
+        ? '连接凭据：无效'
+        : '连接凭据：未配置';
 
   const openPanel = () => {
     setDraftToken(token ?? '');
@@ -133,15 +160,15 @@ export function TopBar(props: TopBarProps) {
           ref={toggleBtnRef}
           type="button"
           className={`connection-status-btn ${
-            credentialConfigured ? 'connected' : 'disconnected'
+            credentialStatus === 'valid'
+              ? 'connected'
+              : credentialStatus === 'invalid'
+                ? 'disconnected invalid'
+                : 'disconnected'
           }`}
           aria-expanded={panelOpen}
           aria-controls="topbar-connection-panel"
-          aria-label={
-            credentialConfigured
-              ? '连接凭据：已设置'
-              : '连接凭据：未设置'
-          }
+          aria-label={statusAccessibleName}
           onClick={() => {
             if (panelOpen) closePanel(false);
             else openPanel();
@@ -149,15 +176,21 @@ export function TopBar(props: TopBarProps) {
         >
           <span
             className={`status-dot ${
-              credentialConfigured
+              credentialStatus === 'valid'
                 ? 'status-dot-connected'
                 : 'status-dot-disconnected'
             }`}
             aria-hidden="true"
           />
-          <span className="connection-status-label">
-            {credentialConfigured ? '凭据已设置' : '未设置凭据'}
-          </span>
+          <span className="connection-status-label">{statusLabel}</span>
+          {healthData?.provider === 'unavailable' && credentialStatus === 'valid' ? (
+            <span
+              className="text-muted text-xs ml-1"
+              title="Provider 当前不可用"
+            >
+              (Provider不可用)
+            </span>
+          ) : null}
           <svg
             width="12"
             height="12"

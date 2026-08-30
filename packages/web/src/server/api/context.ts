@@ -13,6 +13,7 @@ import type {
   TekonRepositories,
   WorkReviewSurface,
   RunPlan,
+  PresentedEvent,
 } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
@@ -30,6 +31,7 @@ export interface WebRunEngineInput {
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
   acknowledgeUnrestrictedNetwork?: boolean;
+  planDigest?: string;
 }
 
 /**
@@ -76,6 +78,7 @@ export interface ProjectRunInput {
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
   acknowledgeUnrestrictedNetwork?: boolean;
+  planDigest?: string;
 }
 
 export interface WorkflowPlanInput {
@@ -286,6 +289,12 @@ export interface ApiCaller {
       jobId?: string;
     }>;
     clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
+    health(input?: { token?: string }): Promise<{
+      credential: 'not-configured' | 'valid' | 'invalid';
+      checkedAt: string;
+      detail?: string;
+      provider?: 'available' | 'unavailable';
+    }>;
   };
   delivery: {
     prepare(input: TokenRunInput): Promise<{
@@ -376,7 +385,7 @@ export interface ApiCaller {
   };
   workflow: {
     list(): Promise<{
-      workflows: Array<{ id: string; name: string; path: string }>;
+      workflows: Array<{ id: string; name: string; path?: string; builtin?: boolean }>;
     }>;
     plan(input: WorkflowPlanInput): Promise<RunPlan>;
   };
@@ -441,6 +450,15 @@ export interface ApiCaller {
     }>;
     acknowledge(input: { sessionId: string }): Promise<{
       acknowledgedAt: string | null;
+    }>;
+    events(input: {
+      sessionId: string;
+      sinceSeq?: number;
+      limit?: number;
+    }): Promise<{
+      events: PresentedEvent[];
+      hasMore: boolean;
+      latestSeq: number;
     }>;
   };
   /**

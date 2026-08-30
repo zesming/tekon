@@ -5,6 +5,7 @@ import {
   createWebServer,
   type RunningWebServer,
 } from '../../src/server/http.js';
+import { credentialStatus } from './helpers/locators.js';
 
 type FixtureProject = Awaited<ReturnType<typeof createWebFixtureProject>>;
 
@@ -70,9 +71,9 @@ test.beforeEach(async ({ page, fixture, server }) => {
     token: fixture.sessionToken,
   }).toString();
   await page.goto(`${server.url}/#${fragment}`);
-  await expect(
-    page.getByRole('button', { name: '连接凭据：已设置' }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page).not.toHaveURL(/token=/u);
 });
 

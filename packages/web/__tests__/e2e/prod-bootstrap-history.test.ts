@@ -1,4 +1,8 @@
 import { test, expect } from './prod-bootstrap-fixture.js';
+import {
+  BUTTON_LABELS,
+  credentialStatus,
+} from './helpers/locators.js';
 
 test('stripping a bootstrap fragment preserves current router history state', async ({
   page,
@@ -24,9 +28,9 @@ test('stripping a bootstrap fragment preserves current router history state', as
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, fixture.sessionToken);
 
-  await expect(
-    page.getByRole('button', { name: '连接凭据：已设置' }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(page.url()).not.toContain('token=');
   expect(
     await page.evaluate(
@@ -63,15 +67,13 @@ test('manual token fallback authenticates the first request for the new scope', 
   // TopBar is the documented fallback when a user opened a bare URL. The RPC
   // credential must be updated synchronously before descendant query effects
   // issue the first request for the token-derived auth scope.
-  await page
-    .getByRole('button', { name: '连接凭据：未设置' })
-    .click();
+  await credentialStatus(page, 'not-configured').click();
   await page.getByLabel('Session token').fill(fixture.sessionToken);
-  await page.getByRole('button', { name: '应用连接' }).click();
+  await page.getByRole('button', { name: BUTTON_LABELS.APPLY_CONNECTION }).click();
 
-  await expect(
-    page.getByRole('button', { name: '连接凭据：已设置' }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByText('还没有交付任务')).toBeVisible({
     timeout: 15_000,
   });
