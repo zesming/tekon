@@ -132,8 +132,7 @@ export async function handleSessionEventsSse(input: {
         cursor = tailCursor;
         if (!response.writableEnded) {
           response.write(
-            `event: replay-truncated
-` +
+            `event: replay-truncated\n` +
               `data: ${JSON.stringify({
                 cursor: tailCursor,
                 reason:
@@ -199,10 +198,16 @@ export async function handleSessionEventsSse(input: {
 
   let catchUpEventsCount = 0;
   let catchUpBytesCount = 0;
+  // The reconnect budget protects only the backlog owned by the first catch-up
+  // after a Last-Event-ID/sinceSeq connection. Once that backlog is drained,
+  // later cross-process events are normal live traffic and must not accumulate
+  // forever against the reconnect allowance.
+  let reconnectReplayBudgetActive = !isFreshConnect;
 
   const catchUp = async (): Promise<void> => {
     if (closed || response.writableEnded || catchUpInFlight) return;
     catchUpInFlight = true;
+    let replayTruncatedThisPass = false;
     try {
       for (;;) {
         if (closed || response.writableEnded) break;
@@ -227,7 +232,7 @@ export async function handleSessionEventsSse(input: {
 
         let truncated = false;
         for (const event of events) {
-          if (!isFreshConnect) {
+          if (reconnectReplayBudgetActive) {
             catchUpEventsCount += 1;
             catchUpBytesCount += Buffer.byteLength(JSON.stringify(event));
             if (
@@ -235,6 +240,7 @@ export async function handleSessionEventsSse(input: {
               catchUpBytesCount > RECONNECT_MAX_BYTES
             ) {
               truncated = true;
+              replayTruncatedThisPass = true;
               break;
             }
           }
@@ -275,6 +281,15 @@ export async function handleSessionEventsSse(input: {
 
         if (!hasMore || events.length === 0) break;
       }
+
+      if (
+        reconnectReplayBudgetActive &&
+        !replayTruncatedThisPass &&
+        !closed &&
+        !response.writableEnded
+      ) {
+        reconnectReplayBudgetActive = false;
+      }
     } catch {
       cleanup();
     } finally {
@@ -296,7 +311,9 @@ export async function handleSessionEventsSse(input: {
 
   const heartbeatMs = input.heartbeatMs ?? 15_000;
   heartbeat = setInterval(() => {
-    if (!closed && !response.writableEnded) response.write(': ping\n\n');
+    if (!closed && !response.writableEnded && !isBackpressured) {
+      response.write(': ping\n\n');
+    }
   }, heartbeatMs);
   heartbeat.unref?.();
 
