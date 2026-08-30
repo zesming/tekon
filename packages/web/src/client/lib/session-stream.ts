@@ -195,6 +195,19 @@ export interface OpenSessionStreamOptions {
   maxBackoffMs?: number;
 }
 
+function asStreamEvent(value: unknown): StreamEvent | null {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    typeof (value as { seq?: unknown }).seq !== 'number' ||
+    !Number.isFinite((value as { seq: number }).seq) ||
+    typeof (value as { type?: unknown }).type !== 'string'
+  ) {
+    return null;
+  }
+  return value as StreamEvent;
+}
+
 /**
  * Open a resilient SSE stream to GET /api/sessions/:id/events. Returns a
  * `close()` that aborts the fetch and stops reconnection. On disconnect it
@@ -259,8 +272,23 @@ export function openSessionStream(
         for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
           if (frame.data === undefined) continue;
           try {
-            const event = JSON.parse(frame.data) as StreamEvent;
-            if (typeof event.seq === 'number' && event.seq > maxSeq) {
+            const parsed = JSON.parse(frame.data) as unknown;
+            if (frame.event === 'replay-truncated') {
+              const cursor =
+                typeof parsed === 'object' &&
+                parsed !== null &&
+                typeof (parsed as { cursor?: unknown }).cursor === 'number'
+                  ? (parsed as { cursor: number }).cursor
+                  : null;
+              if (cursor !== null && Number.isFinite(cursor)) {
+                maxSeq = Math.max(maxSeq, cursor);
+              }
+              continue;
+            }
+
+            const event = asStreamEvent(parsed);
+            if (!event) continue;
+            if (event.seq > maxSeq) {
               maxSeq = event.seq;
             }
             options.onEvent(event);
