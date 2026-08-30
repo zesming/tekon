@@ -18,8 +18,13 @@ it('sanity: the escape-hatch test version is genuinely different from the pin', 
   expect(UNTESTED_VERSION).not.toBe(TESTED_DSH_VERSION);
 });
 const CONTRACT_HELP = 'print the final assistant message';
-const CONTRACT_CONFIG =
-  'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model';
+const CONTRACT_CONFIG = [
+  '- id: headless-runner',
+  '- id: sandbox-policy',
+  '- id: approval',
+  '- id: session-persistence-jsonl',
+  '- id: agent-default-model',
+].join('\n');
 
 describe('dsh preflight version escape hatch', () => {
   const tempDirs: string[] = [];
