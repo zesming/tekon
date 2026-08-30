@@ -38,15 +38,15 @@ test('first paint authenticates from the #token fragment (no manual paste)', asy
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: '连接凭据：已设置' }),
+  ).toBeVisible({ timeout: 15_000 });
   expect(unauthorized, `unexpected 401s: ${unauthorized.join(', ')}`).toEqual(
     [],
   );
 
-  // The token was captured into state (the TopBar shows connected) and the
-  // fragment was stripped from the address bar.
+  // The token was captured into state (the TopBar reports credentials set) and
+  // the fragment was stripped from the address bar.
   expect(page.url()).not.toContain('token=');
 });
 
@@ -80,9 +80,9 @@ test('the session survives a refresh via sessionStorage', async ({
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: '连接凭据：已设置' }),
+  ).toBeVisible({ timeout: 15_000 });
   expect(unauthorized, `401s after refresh: ${unauthorized.join(', ')}`).toEqual(
     [],
   );
@@ -113,9 +113,9 @@ test('the token is never sent to the server in a request URL or Referer', async 
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: '连接凭据：已设置' }),
+  ).toBeVisible({ timeout: 15_000 });
   expect(leaks, `token leaked to server: ${leaks.join(', ')}`).toEqual([]);
 });
 
@@ -130,9 +130,9 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('button', { name: /未连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: '连接凭据：未设置' }),
+  ).toBeVisible({ timeout: 15_000 });
 
   await page.evaluate(() => {
     (window as Window & { __tekonBootstrapMarker?: string })
@@ -143,9 +143,9 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
     window.location.hash = new URLSearchParams({ token }).toString();
   }, fixture.sessionToken);
 
-  await expect(page.getByRole('button', { name: /已连接/ })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: '连接凭据：已设置' }),
+  ).toBeVisible({ timeout: 15_000 });
   expect(page.url()).not.toContain('token=');
   expect(
     await page.evaluate(

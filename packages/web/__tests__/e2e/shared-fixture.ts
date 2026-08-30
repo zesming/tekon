@@ -71,7 +71,7 @@ test.beforeEach(async ({ page, fixture, server }) => {
   }).toString();
   await page.goto(`${server.url}/#${fragment}`);
   await expect(
-    page.getByRole('button', { name: /凭据已设置/ }),
+    page.getByRole('button', { name: '连接凭据：已设置' }),
   ).toBeVisible({ timeout: 15_000 });
   await expect(page).not.toHaveURL(/token=/u);
 });
