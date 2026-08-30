@@ -7,10 +7,9 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 
-import { useAuthScope } from '../hooks/use-auth-scope.js';
 import { useSessionToken } from '../hooks/use-session-token.js';
 import { useQuery } from '../hooks/use-query.js';
-import { queryKeys } from '../lib/query-keys.js';
+import { authScope, queryKeys } from '../lib/query-keys.js';
 import { rpc } from '../lib/rpc-client.js';
 import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
@@ -30,7 +29,7 @@ export function TopBar(props: TopBarProps) {
   const { title = defaultTitle, subtitle, navOpen, onToggleNav, toggleRef } =
     props;
   const { token, setToken } = useSessionToken();
-  const authScope = useAuthScope();
+  const scope = authScope(token);
   const [panelOpen, setPanelOpen] = useState(false);
   const [masked, setMasked] = useState(true);
   const [draftToken, setDraftToken] = useState(token ?? '');
@@ -91,7 +90,7 @@ export function TopBar(props: TopBarProps) {
     error: healthError,
     refetch: refetchHealth,
   } = useQuery<RpcProcedureMap['project.health']['output']>(
-    token ? queryKeys.projectHealth(authScope) : null,
+    token ? queryKeys.projectHealth(scope) : null,
     () => rpc.call('project.health', { token: token ?? undefined }),
   );
 
