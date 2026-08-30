@@ -81,6 +81,17 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   const workflows = workflowData?.workflows ?? [];
 
+  const parsedTimeout = Number(timeoutMs);
+  const validTimeout =
+    Number.isFinite(parsedTimeout) && parsedTimeout > 0
+      ? parsedTimeout
+      : undefined;
+  const parsedNoProgress = Number(noProgressTimeoutMs);
+  const validNoProgress =
+    Number.isFinite(parsedNoProgress) && parsedNoProgress > 0
+      ? parsedNoProgress
+      : undefined;
+
   // ── Fetch workflow execution plan preview (T2) ──
   const effectiveTemplate = mode === 'goal' ? undefined : (template || undefined);
   const {
@@ -89,12 +100,24 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     error: planError,
     refetch: refetchPlan,
   } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
-    queryKeys.workflowPlan(mode, effectiveTemplate, agent),
+    queryKeys.workflowPlan(
+      mode,
+      effectiveTemplate,
+      agent,
+      mode === 'workflow' ? profile : undefined,
+      allowDirtyBase,
+      validTimeout,
+      validNoProgress,
+    ),
     () =>
       rpc.call('workflow.plan', {
         mode,
         template: effectiveTemplate,
         agent,
+        profile: mode === 'workflow' ? profile : undefined,
+        allowDirtyBase: allowDirtyBase ? true : undefined,
+        timeoutMs: validTimeout,
+        noProgressTimeoutMs: validNoProgress,
       }),
   );
 
@@ -167,7 +190,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     if (mode === 'goal') input.mode = 'goal';
     if (mode === 'workflow' && template) input.template = template;
     if (agent) input.agent = agent;
-    if (mode === 'workflow' && profile !== 'human-web') input.profile = profile;
+    // B1 fix: profile must be sent unconditionally in workflow mode so the
+    // run-submission digest input domain matches the plan-preview domain
+    // (which always sends profile). Omitting the default 'human-web' here
+    // made the server-computed digest diverge and rejected every default run.
+    if (mode === 'workflow') input.profile = profile;
     if (allowDirtyBase) input.allowDirtyBase = true;
     if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
       input.acknowledgeUnrestrictedNetwork = true;

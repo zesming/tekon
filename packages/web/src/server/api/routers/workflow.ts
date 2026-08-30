@@ -35,6 +35,12 @@ export function createWorkflowRouter(context: ServerContext) {
       return projectRunPlan(template, {
         agent: input.agent,
         mode: input.mode,
+        profile: input.profile,
+        allowDirtyBase: input.allowDirtyBase,
+        timeoutMs: input.timeoutMs,
+        noProgressTimeoutMs: input.noProgressTimeoutMs,
+        progressHeartbeatMs: input.progressHeartbeatMs,
+        templateId: templateName,
       });
     },
   };

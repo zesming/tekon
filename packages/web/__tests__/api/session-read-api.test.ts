@@ -308,6 +308,56 @@ describe('web session read API', () => {
 });
 
 describe('session.events pagination (P1-UX-03)', () => {
+  it("continues scanning across raw pages when an entire chunk consists of internal events", async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const { store, close } = openStore(fixture.projectRoot);
+    cleanupTasks.push(close);
+    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await store.createSession({
+      workspaceId: workspace.id,
+      title: "invisible-scan-test",
+      profile: "human-web",
+      runId: "run_events_scan",
+    });
+
+    await store.appendEvent({
+      sessionId: session.id,
+      type: "assistant/message",
+      payload: { text: "visible-1" },
+      modelVisible: true,
+    }); // seq 1
+
+    for (let i = 2; i <= 121; i++) {
+      await store.appendEvent({
+        sessionId: session.id,
+        type: "internal/checkpoint",
+        payload: { idx: i },
+        visibility: "internal",
+      });
+    }
+
+    await store.appendEvent({
+      sessionId: session.id,
+      type: "assistant/message",
+      payload: { text: "visible-2" },
+      modelVisible: true,
+    }); // seq 122
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    const result = await api.session.events({
+      sessionId: session.id,
+      sinceSeq: 0,
+      limit: 2,
+    });
+
+    expect(result.events).toHaveLength(2);
+    expect(result.events.map((e) => e.seq)).toEqual([1, 122]);
+  });
+
   it('returns paginated events with limit, hasMore, and latestSeq', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);

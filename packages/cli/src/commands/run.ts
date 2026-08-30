@@ -4,6 +4,9 @@ import { parseArgs } from 'node:util';
 
 import {
   agentRequiresUnrestrictedNetwork,
+  canonicalJson,
+  loadWorkflowTemplate,
+  projectRunPlan,
   generateDynamicWorkflow,
   getRunModePolicyIssue,
   readDraftShapeFile,
@@ -23,7 +26,11 @@ import {
   resolveDemandShapePath,
   resolveProjectRepoPath,
 } from '../lib/path-utils.js';
-import { assertCleanBase, readConfigDefaultAgent } from '../lib/utils.js';
+import {
+  assertCleanBase,
+  loadWorkflowByName,
+  readConfigDefaultAgent,
+} from '../lib/utils.js';
 
 export async function commandRun(
   argv: string[],
@@ -157,13 +164,36 @@ export async function commandRun(
   const runtime = providerRuntimeFromCliOptions(args.values);
 
   return withCliSessionContext(repoPath, io, async (ctx) => {
+    const projectWorkflowsDir = join(repoPath, '.tekon', 'workflows');
+    const template = isGoal
+      ? loadWorkflowTemplate({ name: 'goal' })
+      : loadWorkflowByName(templateName, projectWorkflowsDir);
+
+    const runPlan = projectRunPlan(template, {
+      agent,
+      profile: 'cli',
+      allowDirtyBase,
+      timeoutMs: runtime?.timeoutMs,
+      noProgressTimeoutMs: runtime?.noProgressTimeoutMs,
+      progressHeartbeatMs: runtime?.progressHeartbeatMs,
+      templateId: template.id,
+      templateVersion: template.version,
+      mode: isGoal ? ('goal' as const) : ('workflow' as const),
+    });
+
     const result = await ctx.sessionService.startRun({
       demandText,
-      ...(isGoal ? { mode: 'goal' as const } : { templateName }),
+      ...(isGoal
+        ? { mode: 'goal' as const }
+        : { templateName, workflowSpec: template }),
+      planDigest: runPlan.digest,
       engine: {
         agent,
         allowDirtyBase,
         runtime,
+        canonicalPlan: runPlan,
+        planDigest: runPlan.digest,
+        planSnapshot: canonicalJson(runPlan),
       },
       ...(requiresUnrestrictedNetwork
         ? {

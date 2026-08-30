@@ -107,3 +107,36 @@ test('StartRunForm exposes keyboard disclosure, renders execution plan preview, 
   await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#start-run-form-body')).toBeHidden();
 });
+
+// B1 regression: the plan-preview digest input domain must match the
+// project.run submission domain. Previously the preview sent profile
+// unconditionally while submission omitted the default 'human-web', so the
+// server recomputed a different digest and rejected every default workflow
+// run with PLAN_DIGEST_MISMATCH. This test drives the real form submit path.
+test('StartRunForm default workflow run submits with a matching plan digest', async ({
+  page,
+  server,
+}) => {
+  await page.goto(`${server.url}/advanced/runs`);
+  await page.getByRole('button', { name: '✦ 新建运行' }).click();
+  await expect(page.locator('#start-run-form-body')).toBeVisible();
+
+  await page.getByLabel('需求描述', { exact: true }).fill('B1 digest 对称验证');
+
+  // Default mode=workflow, agent=codex, profile=human-web.
+  const submitButton = page.getByRole('button', { name: '▶ 发起运行' });
+  await expect(submitButton).toBeEnabled();
+
+  // The run must be accepted — no digest mismatch rejection. Assert on the
+  // RPC response itself (the success toast auto-dismisses).
+  const runResponse = page.waitForResponse(
+    (res) => res.url().includes('/api/rpc') && res.status() === 200,
+    { timeout: 15000 },
+  );
+  await submitButton.click();
+  const response = await runResponse;
+  const body = await response.json();
+  expect(body.result?.run?.id).toBeTruthy();
+  expect(body.error).toBeUndefined();
+  await expect(page.getByText('PLAN_DIGEST_MISMATCH')).toHaveCount(0);
+});

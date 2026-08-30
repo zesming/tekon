@@ -1,5 +1,18 @@
 # 变更日志
 
+## v0.19.0
+
+本轮落地第八轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-eighth-review.md`，PR #11）第 18 节维护者批注后的整改，聚焦 canonical RunPlan、DSH 预检前移、长会话有界化、连接健康诚实化、数据引用完整性与弹窗可访问性；架构级项（single-owner daemon、Session 事实源选型、Collaborate 主链路、DSH pin 升级）按复审裁决维持冻结。
+
+### 用户可见改进
+
+- **执行计划成为真实合同**：Web 发起 workflow 运行必须回传服务端计划 digest，缺失或被篡改即拒绝启动；digest 绑定完整执行参数（代理、Profile、超时、工作区、模板等），计划预览与实际执行同源；运行持久化 canonical 计划快照，可审计。
+- **DSH 环境预检前移**：使用 `dsh-headless` 时，版本/help/config 合同校验在任何运行记录产生之前执行，不兼容时立即给出可读错误与安装指引；新增 `tekon provider preflight dsh-headless` 命令，可主动自检环境兼容性。
+- **长会话全链路有界**：事件分页有最大上限；断线重连追赶有事件数与字节预算，超限降级为尾窗并通知；服务端按慢客户端背压推流；"加载更早"在整段历史都是技术事件时不再误报没有更早内容；客户端历史窗口加载后立即裁剪。
+- **连接状态更诚实**：顶栏健康状态的缓存不再保存原始令牌，容量与过期有界；Provider 可用性字段明确为 `dsh-headless` 探测结果，不再泛化表述。
+- **配置弹窗可键盘操作**：角色/工作流详情弹窗支持 Esc 关闭、Tab 焦点循环、关闭后焦点回到触发按钮，背景对辅助技术 inert。
+- **停机更安全**：服务关闭超时后，迟到的数据库写入会被快速拒绝，不再静默写入已关闭句柄。
+
 ## v0.18.0
 
 本轮落地第七轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-seventh-review.md`，PR #11）批注中可独立验证的 8 项整改，均为用户可见或行为级改进；架构基线项（single-owner runtime、权威 Session log、Collaborate vertical slice、外键迁移、全站可访问性专项）维持复审裁决，留给后续架构 PR。

@@ -68,7 +68,10 @@ export function useSessionStream(
         limit: EARLIER_PAGE_LIMIT,
       });
       if (res?.events && res.events.length > 0) {
-        retainFloor.current += res.events.length;
+        retainFloor.current = Math.min(
+          MAX_EARLIER,
+          retainFloor.current + res.events.length,
+        );
         if (retainFloor.current >= MAX_EARLIER) {
           setReachedEarlierLimit(true);
         }
@@ -76,8 +79,14 @@ export function useSessionStream(
           res.events,
           eventsRef.current,
         );
+        const maxWindow =
+          CLIENT_STREAM_WINDOW_SIZE +
+          Math.min(retainFloor.current, MAX_EARLIER);
+        if (eventsRef.current.length > maxWindow) {
+          eventsRef.current = eventsRef.current.slice(-maxWindow);
+        }
         setEvents(eventsRef.current);
-        setHasEarlier(eventsRef.current[0]?.seq > 1);
+        setHasEarlier((eventsRef.current[0]?.seq ?? 1) > 1);
       } else {
         setHasEarlier(false);
       }

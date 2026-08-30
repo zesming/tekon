@@ -58,6 +58,12 @@ export interface SessionServiceStartRunInput<TEngineInput = SessionServiceEngine
    * silently swallowed.
    */
   onPrepared?: (runId: string) => Promise<void>;
+  /**
+   * Canonical plan digest computed by the caller (CLI) for audit binding.
+   * Web validates it in the router before startRun; CLI computes and passes
+   * it directly. Persisted to workflow_instances.plan_digest via the engine.
+   */
+  planDigest?: string;
 }
 
 export interface SessionServiceStartRunResult {
@@ -149,6 +155,7 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
    * 'cli' (design §8 decision 2).
    */
   sessionProfile?: string;
+  preflight?: () => Promise<void>;
 }
 
 export function createSessionService<TEngineInput = SessionServiceEngineInput>(
@@ -172,6 +179,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     // composition root's default.
     const profile = input.profile ?? SESSION_PROFILE;
     const engine = await deps.createEngine(input.engine);
+    await deps.preflight?.();
     // 4b: goal mode ignores any provided template/workflowSpec and uses the
     // built-in single-node goal template (design §3.3 precedence).
     const prepareInput: WorkflowEngineStartInput =

@@ -3,10 +3,25 @@
 - **当前报告**：[2026-08-30 Tekon 人类可用性与 DeepSeek Harness 架构第八轮全面复审](2026-08-30-tekon-human-first-harness-eighth-review.md)
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **用户整改快照**：`692ca76b9452d6cb242e9f746c572ccad5bdd0b4`
+- **第八轮批注整改快照**：见第八轮报告第 19 节（v0.19.0）
 - **reviewer 代码快照**：`816b097b668d3da98c19b0cbaec85a2234ef976a`
-- **当前版本**：`0.18.0`
+- **当前版本**：`0.19.0`
 - **自动化状态**：`816b097b...` 的 Core #302 与 CI #211 均为 `completed/success`。
 - **当前裁决**：本轮用户整改与 reviewer 低风险增量通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收。
+
+## 第八轮批注整改（v0.19.0）
+
+第 18 节维护者批注后，本轮闭环了 6 项 P1 与 1 项 P0 增量，详见第八轮报告第 19 节：
+
+- canonical RunPlan：digest 绑定完整执行参数、Web workflow 模式强制校验、Run 持久化计划快照；
+- DSH preflight 前移到持久副作用之前，新增 `tekon provider preflight dsh-headless`；
+- 长 Session 全链路有界（分页上限、重连预算、背压、可见事件分页、客户端窗口）；
+- 连接健康缓存哈希化 + 容量/TTL 有界，provider 语义诚实化为 `dshHeadless`；
+- Session 子表外键迁移与孤儿 quarantine；
+- 配置详情弹窗 focus trap / Escape / 焦点恢复 / inert；
+- shutdown 后 db 层 closed 栅栏，迟到写入快速失败（P0-ARCH-02 增量，不宣称关闭）。
+
+架构级冻结项（single-owner daemon、Session 事实源选型、Collaborate 主链路、DSH pin 升级）维持第八轮裁决，按报告第 14 节顺序推进。
 
 ## 第八轮确认的实质改进
 

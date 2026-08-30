@@ -192,6 +192,8 @@ export const workflowInstanceSchema = z.object({
   // executor builds a fresh engine from the provider snapshot and would
   // otherwise silently drop this flag. Default false keeps legacy rows strict.
   allowDirtyBase: z.boolean().default(false),
+  planSnapshot: z.string().nullable().optional(),
+  planDigest: z.string().nullable().optional(),
   currentNodeId: z.string().nullable().optional(),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,

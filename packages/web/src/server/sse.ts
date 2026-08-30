@@ -9,6 +9,8 @@ import {
 
 export const REPLAY_WINDOW = 500;
 export const CATCH_UP_CHUNK_LIMIT = 500;
+export const RECONNECT_MAX_EVENTS = 2000;
+export const RECONNECT_MAX_BYTES = 4_000_000;
 
 /**
  * Stream one session's durable events. The process-local bus is a low-latency
@@ -82,12 +84,14 @@ export async function handleSessionEventsSse(input: {
   let catchUpTimer: ReturnType<typeof setInterval> | null = null;
   let catchUpInFlight = false;
 
-  const writeFrame = (event: SessionEvent): void => {
-    if (closed || response.writableEnded) return;
+  let isBackpressured = false;
+
+  const writeFrame = (event: SessionEvent): boolean => {
+    if (closed || response.writableEnded) return true;
     const presented = presentEvent(event);
-    if (!presented) return;
+    if (!presented) return true;
     const safeType = presented.type.replace(/[\r\n]/g, ' ');
-    response.write(
+    return response.write(
       `id: ${presented.seq}\n` +
         `event: ${safeType}\n` +
         `data: ${JSON.stringify(presented)}\n\n`,
@@ -100,18 +104,29 @@ export async function handleSessionEventsSse(input: {
   // them from the client.
   const pending = new Map<number, SessionEvent>();
   const drain = (): void => {
+    if (isBackpressured) return;
     for (;;) {
       const next = pending.get(cursor + 1);
       if (!next) break;
       pending.delete(next.seq);
       cursor = next.seq;
-      writeFrame(next);
+      const ok = writeFrame(next);
+      if (!ok) {
+        isBackpressured = true;
+        response.once('drain', () => {
+          isBackpressured = false;
+          drain();
+        });
+        break;
+      }
     }
   };
   const enqueue = (event: SessionEvent): void => {
     if (event.seq <= cursor || pending.has(event.seq)) return;
     pending.set(event.seq, event);
-    drain();
+    if (!isBackpressured) {
+      drain();
+    }
   };
 
   // Subscribe before replay. The contiguous buffer removes replay/live races
@@ -128,31 +143,81 @@ export async function handleSessionEventsSse(input: {
   };
   request.on('close', cleanup);
 
+  let catchUpEventsCount = 0;
+  let catchUpBytesCount = 0;
+
   const catchUp = async (): Promise<void> => {
     if (closed || response.writableEnded || catchUpInFlight) return;
     catchUpInFlight = true;
     try {
       for (;;) {
         if (closed || response.writableEnded) break;
+        let events: SessionEvent[] = [];
+        let hasMore = false;
         if (typeof (sessions as any).listEventsPage === 'function') {
           const pageResult = await (sessions as any).listEventsPage(
             sessionId,
             cursor,
             CATCH_UP_CHUNK_LIMIT,
           );
-          const events: SessionEvent[] = Array.isArray(pageResult)
+          events = Array.isArray(pageResult)
             ? pageResult
             : pageResult.events ?? [];
-          const hasMore: boolean = Array.isArray(pageResult)
+          hasMore = Array.isArray(pageResult)
             ? events.length >= CATCH_UP_CHUNK_LIMIT
             : pageResult.hasMore ?? false;
-          for (const event of events) enqueue(event);
-          if (!hasMore || events.length === 0) break;
         } else {
-          const events = await sessions.listEventsSince(sessionId, cursor);
-          for (const event of events) enqueue(event);
+          events = await sessions.listEventsSince(sessionId, cursor);
+          hasMore = false;
+        }
+
+        let truncated = false;
+        for (const event of events) {
+          if (!isFreshConnect) {
+            catchUpEventsCount += 1;
+            catchUpBytesCount += Buffer.byteLength(JSON.stringify(event));
+            if (
+              catchUpEventsCount > RECONNECT_MAX_EVENTS ||
+              catchUpBytesCount > RECONNECT_MAX_BYTES
+            ) {
+              truncated = true;
+              break;
+            }
+          }
+          enqueue(event);
+        }
+
+        if (truncated) {
+          const latest =
+            typeof sessions.latestSeq === 'function'
+              ? await sessions.latestSeq(sessionId)
+              : 0;
+          cursor = Math.max(0, latest - REPLAY_WINDOW);
+          pending.clear();
+          response.write(
+            `event: replay-truncated\n` +
+              `data: ${JSON.stringify({
+                cursor,
+                reason: 'Reconnection replay budget exceeded; truncated to tail window',
+              })}\n\n`,
+          );
+          if (typeof (sessions as any).listEventsPage === 'function') {
+            const tailResult = await (sessions as any).listEventsPage(
+              sessionId,
+              cursor,
+              REPLAY_WINDOW,
+            );
+            const tailEvents: SessionEvent[] = Array.isArray(tailResult)
+              ? tailResult
+              : tailResult.events ?? [];
+            for (const tailEvent of tailEvents) {
+              enqueue(tailEvent);
+            }
+          }
           break;
         }
+
+        if (!hasMore || events.length === 0) break;
       }
     } catch {
       cleanup();

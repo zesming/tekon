@@ -1,0 +1,235 @@
+import { execFileSync } from 'node:child_process';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { TESTED_DSH_VERSION } from '@tekon/core';
+
+import { runCli, type CliIO } from '../src/index.js';
+import { runDshPreflight } from '../src/commands/provider.js';
+
+describe('tekon provider preflight', () => {
+  const tempDirs: string[] = [];
+  const anchorCwd = process.cwd();
+
+  afterEach(() => {
+    try {
+      process.chdir(anchorCwd);
+    } catch {
+      // ignore
+    }
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  it('reports compatible exit 0 when dsh version and contracts match', async () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), 'tekon-fake-dsh-'));
+    tempDirs.push(fakeBinDir);
+    createFakeDsh(fakeBinDir, {
+      version: TESTED_DSH_VERSION,
+      help: 'dsh headless --help\nprint the final assistant message on stdout',
+      config:
+        '{"plugins":["headless-runner","sandbox-policy","user-approval","session-persistence-jsonl","agent-default-model"]}',
+    });
+
+    const io = createMemoryIo();
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
+    try {
+      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const stdout = io.takeStdout();
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
+      expect(stdout).toContain(`当前检测版本: ${TESTED_DSH_VERSION}`);
+      expect(stdout).toContain('Help 合同检查: 通过');
+      expect(stdout).toContain('Config 合同检查: 通过');
+      expect(stdout).toContain('兼容性结论: 兼容');
+      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('reports incompatible exit 1 when dsh version mismatches', async () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), 'tekon-fake-dsh-'));
+    tempDirs.push(fakeBinDir);
+    createFakeDsh(fakeBinDir, {
+      version: '0.2.0-alpha',
+      help: 'print the final assistant message',
+      config:
+        'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model',
+    });
+
+    const io = createMemoryIo();
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
+    try {
+      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const stdout = io.takeStdout();
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
+      expect(stdout).toContain('当前检测版本: 0.2.0-alpha');
+      expect(stdout).toContain('兼容性结论: 不兼容');
+      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('reports incompatible exit 1 when dsh binary is not found', async () => {
+    const emptyBinDir = mkdtempSync(join(tmpdir(), 'tekon-empty-bin-'));
+    tempDirs.push(emptyBinDir);
+
+    const io = createMemoryIo();
+    const originalPath = process.env.PATH;
+    process.env.PATH = emptyBinDir;
+    try {
+      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const stdout = io.takeStdout();
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
+      expect(stdout).toContain('当前检测版本: 未安装或不可执行');
+      expect(stdout).toContain('兼容性结论: 不兼容');
+      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('reports incompatible exit 1 when help or config contract fails', async () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), 'tekon-fake-dsh-'));
+    tempDirs.push(fakeBinDir);
+    createFakeDsh(fakeBinDir, {
+      version: TESTED_DSH_VERSION,
+      help: 'broken help without anchor',
+      config: 'missing required plugins',
+    });
+
+    const io = createMemoryIo();
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
+    try {
+      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const stdout = io.takeStdout();
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toContain('Help 合同检查: 未通过');
+      expect(stdout).toContain('Config 合同检查: 未通过');
+      expect(stdout).toContain('兼容性结论: 不兼容');
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('outputs json when --json is provided', async () => {
+    const fakeBinDir = mkdtempSync(join(tmpdir(), 'tekon-fake-dsh-'));
+    tempDirs.push(fakeBinDir);
+    createFakeDsh(fakeBinDir, {
+      version: TESTED_DSH_VERSION,
+      help: 'print the final assistant message',
+      config:
+        'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model',
+    });
+
+    const io = createMemoryIo();
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
+    try {
+      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless', '--json'], io);
+      const stdout = io.takeStdout();
+
+      expect(exitCode).toBe(0);
+      const parsed = JSON.parse(stdout);
+      expect(parsed).toMatchObject({
+        testedVersion: TESTED_DSH_VERSION,
+        actualVersion: TESTED_DSH_VERSION,
+        helpContractOk: true,
+        configContractOk: true,
+        compatible: true,
+      });
+      expect(parsed.installHint).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+    } finally {
+      process.env.PATH = originalPath;
+    }
+  });
+
+  it('rejects unsupported provider name', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['provider', 'preflight', 'some-unknown-provider'], io);
+    expect(exitCode).toBe(1);
+    expect(io.takeStderr()).toContain('暂不支持对 Provider \'some-unknown-provider\' 进行预检');
+  });
+
+  it('rejects provider command without subcommands', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['provider'], io);
+    expect(exitCode).toBe(1);
+    expect(io.takeStderr()).toContain('请指定子命令');
+  });
+
+  it('tekon help provider displays subcommand list', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['help', 'provider'], io);
+    expect(exitCode).toBe(0);
+    const stdout = io.takeStdout();
+    expect(stdout).toContain('tekon provider');
+    expect(stdout).toContain('preflight');
+  });
+});
+
+function createFakeDsh(
+  dir: string,
+  opts: { version: string; help: string; config: string },
+) {
+  const scriptPath = join(dir, 'dsh');
+  const content = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes('--version')) {
+  process.stdout.write(${JSON.stringify(opts.version + '\n')});
+  process.exit(0);
+}
+if (args.includes('--help')) {
+  process.stdout.write(${JSON.stringify(opts.help + '\n')});
+  process.exit(0);
+}
+if (args.includes('--dump-default-config')) {
+  process.stdout.write(${JSON.stringify(opts.config + '\n')});
+  process.exit(0);
+}
+process.exit(0);
+`;
+  writeFileSync(scriptPath, content, { mode: 0o755 });
+}
+
+function createMemoryIo(): CliIO & {
+  takeStdout(): string;
+  takeStderr(): string;
+} {
+  let stdout = '';
+  let stderr = '';
+  return {
+    stdout: { write: (chunk) => void (stdout += chunk) },
+    stderr: { write: (chunk) => void (stderr += chunk) },
+    takeStdout() {
+      const value = stdout;
+      stdout = '';
+      return value;
+    },
+    takeStderr() {
+      const value = stderr;
+      stderr = '';
+      return value;
+    },
+  };
+}

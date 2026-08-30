@@ -18,6 +18,24 @@ afterEach(() => {
   }
 });
 
+
+async function startRun(api: any, input: any) {
+  if (input.mode !== "goal" && !input.planDigest) {
+    const plan = await api.workflow.plan({
+      template: input.template,
+      mode: input.mode,
+      agent: input.agent,
+      profile: input.profile,
+      allowDirtyBase: input.allowDirtyBase,
+      timeoutMs: input.timeoutMs,
+      noProgressTimeoutMs: input.noProgressTimeoutMs,
+      progressHeartbeatMs: input.progressHeartbeatMs,
+    });
+    return (api.project as any).run({ ...input, planDigest: plan.digest });
+  }
+  return (api.project as any).run(input);
+}
+
 function runStatus(projectRoot: string, runId: string): string | undefined {
   const db = openTekonDatabase({
     filename: join(projectRoot, '.tekon', 'tekon.sqlite'),
@@ -53,7 +71,7 @@ describe('project.run background job (S7b)', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     const startedAt = Date.now();
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Background job should drive this run.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -76,7 +94,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Two active jobs per run are not allowed.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -129,7 +147,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Cancel then cancel again.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -163,7 +181,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Terminal runs cannot be resumed.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -185,7 +203,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Passed runs cannot be paused.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -208,7 +226,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Cancel should emit terminal session events.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -261,7 +279,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Do a lightweight one-off task.',
       mode: 'goal',
       agent: 'mock',
@@ -325,7 +343,7 @@ describe('project.run background job (S7b)', () => {
 
     // A real prepared run + session (kind bound, plan persisted), then flip the
     // run back to running so it is non-terminal when the bogus job claims it.
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Prepared run for the unknown-kind guard.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -379,7 +397,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Autonomous delivery should auto-prepare after pass.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -424,7 +442,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Human-web must not auto-prepare.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -452,7 +470,7 @@ describe('project.run background job (S7b)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Readiness projection should debounce gate results.',
       template: 'standard-delivery',
       agent: 'mock',

@@ -666,4 +666,80 @@ describe('job runner stop race and shutdown semantics (Item 8)', () => {
 
     db.close();
   });
+
+  it('P0-ARCH-02 / §4-G: database write fence rejects late repository writes from uncooperative executor after shutdown deadline', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
+    const repositories = createRepositories(db, writeQueue);
+    const sessions = createSessionEventStore(db, writeQueue);
+    const jobs = createJobRepository(db, writeQueue);
+    const bus = createSessionEventBus();
+    const registry = createSubprocessRegistry();
+
+    let executorStarted = false;
+    let attemptLateWrite!: () => Promise<unknown>;
+
+    // Uncooperative executor that hangs on execution, ignores abort,
+    // and provides a late write closure that directly invokes repository methods.
+    const uncooperativeExecutor: JobExecutor = {
+      execute() {
+        executorStarted = true;
+        attemptLateWrite = async () => {
+          return repositories.createWorkflowInstance({
+            id: 'run_late_write',
+            projectId: 'proj_late',
+            demandId: 'demand_late',
+            status: 'running',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        };
+        return new Promise(() => {
+          // never settles, ignores abort signal
+        });
+      },
+    };
+
+    const runner = createJobRunner({
+      jobs,
+      sessions,
+      bus,
+      registry,
+      executor: uncooperativeExecutor,
+      pollIntervalMs: 2,
+      stopSettleTimeoutMs: 10,
+      stopHardTimeoutMs: 50,
+      workerId: 'worker_late_writer',
+    });
+    runners.push(runner);
+
+    const workspace = await sessions.getOrCreateDefaultWorkspace('/tmp/stop-late');
+    const session = await sessions.createSession({
+      workspaceId: workspace.id,
+      title: 'uncooperative-late',
+      profile: 'human-web',
+      runId: 'run_uncooperative_late',
+    });
+    await runner.enqueue({
+      sessionId: session.id,
+      kind: 'workflow-run',
+    });
+
+    runner.start();
+    await waitFor(() => executorStarted);
+
+    // Stop runner (returns within hard deadline) and activate DB write fence (shutdown sequence)
+    await runner.stop();
+    db.markClosed();
+
+    // The uncooperative executor attempts a direct repository write after deadline
+    await expect(attemptLateWrite()).rejects.toThrow(/closed/i);
+
+    // Verify repository layer: no late write landed
+    const lateInstance = await repositories.getWorkflowInstance('run_late_write');
+    expect(lateInstance).toBeNull();
+
+    db.close();
+  });
 });

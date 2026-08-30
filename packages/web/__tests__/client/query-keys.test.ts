@@ -107,10 +107,10 @@ describe('queryKeys', () => {
       expect(queryKeys.workflows()).toBe('workflows');
     });
 
-    it('workflowPlan includes mode, template, and agent with defaults', () => {
-      expect(queryKeys.workflowPlan()).toBe('workflow.plan.default.default.default');
-      expect(queryKeys.workflowPlan('goal', undefined, 'dsh-headless')).toBe('workflow.plan.goal.default.dsh-headless');
-      expect(queryKeys.workflowPlan('workflow', 'feature-approval', 'codex')).toBe('workflow.plan.workflow.feature-approval.codex');
+    it('workflowPlan includes mode, template, agent, profile, allowDirtyBase, and timeouts with defaults', () => {
+      expect(queryKeys.workflowPlan()).toBe('workflow.plan.default.default.default.default.clean.default.default.default');
+      expect(queryKeys.workflowPlan('goal', undefined, 'dsh-headless')).toBe('workflow.plan.goal.default.dsh-headless.default.clean.default.default.default');
+      expect(queryKeys.workflowPlan('workflow', 'feature-approval', 'codex', 'human-web', true, 1000, 500, 200)).toBe('workflow.plan.workflow.feature-approval.codex.human-web.dirty.1000.500.200');
     });
 
     it('settings returns static key', () => {

@@ -632,3 +632,94 @@ Tekon 必须继续使用独立的：
 因此最准确的结论是：
 
 > Tekon v0.18.0 的当前增量可以继续合并审阅；项目可作为有人监督的实验性受控交付执行与观察基础设施使用，但尚不能按稳定持续协作研发工作台发布。
+
+---
+
+## 18. 维护者复核批注（2026-08-30 第二轮）
+
+本节是维护者在报告推送后，对全部认定做的独立代码级复核，作为后续整改的依据。
+
+### 18.1 复核方法
+
+- 同步 DeepSeek Harness 官方仓库至 `~/Projects/deepseek-harness`，确认官方 `master` HEAD 即报告基线 `cd5ef8148158c3a752a658978873241fdf8e2bbc`，基线之后无新提交；最新发布仍是 `dsh-v0.1.2-alpha.1`。
+- 并行委派三个 explorer subagent，对第 13 节问题清单逐项做只读代码核查，要求文件+行号证据。
+- 复核对象为分支 `review/human-first-harness-2026-08-28`，HEAD `c732d5d`。
+
+### 18.2 逐项认定结论
+
+| ID | 报告认定 | 复核结论 | 关键证据 |
+| --- | --- | --- | --- |
+| P0-ARCH-01 | 未关闭 | **认定准确** | CLI 与 Web 各自 `createJobRunner`（[session-context.ts:148](../../packages/cli/src/lib/session-context.ts:148)、[root.ts:107](../../packages/web/src/server/api/root.ts:107)）；`run_locks` 表存在但全仓无加锁逻辑；`daemon` 在 `packages/` 下零实现。 |
+| P0-ARCH-02 | 部分完成 | **认定准确** | [job-runner.ts:609](../../packages/core/src/session/job-runner.ts:609) 的 `Promise.race([drainTasks, hardDeadline])` 超时即返回，随后 `db.close()`（[root.ts:311](../../packages/web/src/server/api/root.ts:311)）；[job-runner-stop-race.test.ts:260](../../packages/core/__tests__/session/job-runner-stop-race.test.ts:260) 只断言 1000ms 内返回，未证明 deadline 后无 late write。 |
+| P0-ARCH-03 | 未关闭 | **认定准确** | [dual-write.ts:223](../../packages/core/src/session/dual-write.ts:223) 明确 best-effort、查不到 session 静默跳过、异常只 `reportError`；`inbox`/`outbox` 在 `packages/` 下零实现。 |
+| P0-PRODUCT-01 | 未关闭 | **认定准确** | `LegacyAgentDriver` 的 `followUp`/`steer`/`resume` 仍为 `NotSupportedYet`；Collaborate 主链路无实现。 |
+| P1-PLAN-01 | 部分完成 | **认定准确** | [rpc-contract.ts:76](../../packages/web/src/shared/rpc-contract.ts:76) `planDigest` 仍 optional；[project.ts:267](../../packages/web/src/server/api/routers/project.ts:267) 仅 `!isGoal && runInput.planDigest` 时校验，省略与 Goal 模式均跳过（测试 [project-run-digest.test.ts:63](../../packages/web/__tests__/api/project-run-digest.test.ts:63) 固化旧行为）；[run-plan.ts:21](../../packages/core/src/workflow/run-plan.ts:21) digest 仅覆盖 4 个投影字段；Run 无 plan snapshot 持久化。 |
+| P1-DSH-01 | 部分完成 | **认定准确** | [dsh-bridge-probe.ts:16](../../packages/core/src/runtime/dsh-bridge-probe.ts:16) `TESTED_DSH_VERSION = '0.1.1-rc.2'`；probe 在 [dsh-headless-adapter.ts:281](../../packages/core/src/runtime/dsh-headless-adapter.ts:281) `runAgent()` 内懒执行，晚于 `prepareRun`、`createSession`、`enqueueJob`、role_run 与 worktree 创建。 |
+| P1-SESSION-01 | 部分完成 | **认定准确** | [rpc-contract.ts:166](../../packages/web/src/shared/rpc-contract.ts:166) limit 无 `.max()`；[sse.ts:132](../../packages/web/src/server/sse.ts:132) reconnect `for(;;)` 追赶无总预算；[sse.ts:80](../../packages/web/src/server/sse.ts:80) 忽略 `response.write()` 返回值；[session.ts:217](../../packages/web/src/server/api/routers/session.ts:217) 先取 raw page 再过滤，整页被过滤时客户端 [use-session-stream.ts:65](../../packages/web/src/client/hooks/use-session-stream.ts:65) 误判 `hasEarlier=false`；`loadEarlier` 不裁剪窗口。 |
+| P1-HEALTH-01 | 部分完成 | **认定准确** | [project.ts:84](../../packages/web/src/server/api/routers/project.ts:84) cache key 拼原始 token；`Map` 无 TTL 清理与容量上限；`probeProvider()` 硬编码 `dsh --version`。 |
+| P1-DATA-01 | 未关闭 | **认定准确** | [migrations.ts:182](../../packages/core/src/db/migrations.ts:182) `session_events`/`jobs`/`projection_checkpoints` 的 `session_id` 均无 `references sessions(id)`；对比 workflow 子表均有 `on delete cascade`；无 table rebuild 或孤儿治理迁移。 |
+| P1-A11Y-01 | 未关闭 | **认定准确** | [RoleDetailPanel.tsx:30](../../packages/web/src/client/components/config/RoleDetailPanel.tsx:30) 与 [WorkflowDetailPanel.tsx:28](../../packages/web/src/client/components/config/WorkflowDetailPanel.tsx:28) 仅有 `role="dialog"`/`aria-modal`/遮罩点击关闭；无 focus trap、Escape、焦点恢复、背景 inert、`aria-labelledby`。 |
+| P2-TEST-01 | 本轮修复 | **认定准确** | 调度裕量修复已在 `816b097b` 落地，断言未放松。 |
+| P2-UX-01 | 部分修复 | **认定准确** | dead affordance 已删除；完整 modal focus 语义仍缺。 |
+
+### 18.3 DeepSeek Harness 基线核实
+
+- `dsh-headless` 官方 README 仍明确 "one task per invocation, with no interactive follow-up"，报告 9.1 的边界判断成立。
+- ACP app README 仍声明 persistent session、`session/resume`、`session/cancel`、quiescent `session/close`；SDK client 仍是 EOF → SIGTERM → SIGKILL 梯子且无 mid-turn cancel。报告 9.4 的方向判断成立。
+- `0.1.1-rc.2 → 0.1.2-alpha.1` 之间 headless 有 streaming 修复（reasoning 连续块、chunk 穷尽处理），但不改变 one-shot 合同；报告"未经 contract fixture 与真实 smoke 不直接升 pin"的谨慎立场成立。
+
+### 18.4 维护者判断
+
+报告的 12 项认定与代码事实全部一致，无过时项、无高估项，作为本轮整改的权威依据。据此确定本轮整改边界：
+
+1. **本轮闭环（P1）**：canonical RunPlan snapshot 与 digest 强制化；DSH preflight 前移到持久副作用之前；长 Session 全链路有界（limit 上限、reconnect 预算、backpressure、过滤分页、客户端窗口）；health cache 哈希化+容量上限+TTL 清理+provider 语义诚实化；Session 子表外键迁移与孤儿治理；dialog 可访问性专项。
+2. **本轮增量、不宣称关闭（P0-ARCH-02）**：shutdown 后增加 closed 栅栏，使 deadline 后迟到的 repository/文件写入快速失败而非静默 late write，并用故障注入测试证明；完整 quiescence 仍依赖 executor 进程隔离，保留为架构后续。
+3. **本轮不触碰（架构级）**：P0-ARCH-01 single-owner daemon、P0-ARCH-03 Session 事实源选型、P0-PRODUCT-01 Collaborate 主链路、DSH pin 升级。这些需要独立 ADR、迁移设计与真实 provider smoke，不以本 PR 顺手补丁替代，按第 14 节顺序推进。
+
+整改方案与 reviewer 循环评审记录见 `docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md`。
+
+---
+
+## 19. 第 18 节批注整改结果（v0.19.0）
+
+本节记录第 18 节维护者批注后的整改落地情况。整改方案见 `docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md`（经三轮 reviewer 循环评审，第三轮"未检出必须修复项"）；实施后经两轮 code review，第二轮结论"可放行"。
+
+### 19.1 已闭环
+
+| 报告 ID | 整改内容 | 关键证据 |
+| --- | --- | --- |
+| P1-PLAN-01 | digest 输入域扩展为完整执行参数（agent/profile/allowDirtyBase/timeout 系列/templateId/templateVersion），agent 在 `projectRunPlan` 内归一化为 `'codex'`；Web workflow 模式强制校验（缺失 `PLAN_DIGEST_REQUIRED`、不匹配 `PLAN_DIGEST_MISMATCH`），Goal 模式免校验；Run 持久化 `plan_snapshot`/`plan_digest`；CLI 自算 digest 并持久化 | `run-plan.ts`、`engine.ts`、`project.ts`、`StartRunForm.tsx`、`project-run-digest.test.ts`、`start-run-form.test.ts`（真实表单提交 e2e） |
+| P1-DSH-01 | `runDshPreflight` 导出；preflight 前移到 `createEngine` 之后、`prepareRun` 之前（Web 与 CLI 组合根均注入 hook）；新增 `tekon provider preflight dsh-headless` 命令（tested/actual/合同/安装指引，exit 0/1） | `dsh-bridge-probe.ts`、`session-service.ts`、`root.ts`、`session-context.ts`、`commands/provider.ts`、`provider-preflight.test.ts`（含真实进程 e2e） |
+| P1-SESSION-01 | RPC limit `.max(1000)`；SSE reconnect 预算（2000 事件 / 4MB）超限截断为尾窗并发 `replay-truncated`；`response.write()` drain 背压；`session.events` 按可见事件分页（最多扫描 5 个 raw page）；客户端 `loadEarlier` 后立即裁剪窗口 | `rpc-contract.ts`、`sse.ts`、`session.ts`、`use-session-stream.ts`、对应测试 |
+| P1-HEALTH-01 | cache key 改 SHA-256(token)；容量上限 128 + 惰性 TTL 清理；`provider` 重命名为 `dshHeadless`（rpc-contract/context/router/TopBar 全同步） | `project.ts`、`project-health.test.ts` |
+| P1-DATA-01 | schema v5：`session_events`/`jobs`/`projection_checkpoints` table rebuild 加 `references sessions(id) on delete cascade`；事务内 `defer_foreign_keys=ON`；孤儿行 quarantine 到 `*_orphan_quarantine`；迁移前后 `integrity_check` 校验返回值 | `migrations.ts`、`migrations.test.ts`（新库 FK、v4 老库迁移、quarantine 计数） |
+| P1-A11Y-01 / P2-UX-01 | `useDialogA11y` hook：focus 移入、Tab 循环、Escape 关闭、焦点恢复、背景 inert、`aria-labelledby`；Role/Workflow 详情接入 | `use-dialog-a11y.ts`、`RoleDetailPanel.tsx`、`WorkflowDetailPanel.tsx`、`config-detail-dialog-a11y.test.ts` |
+
+### 19.2 P0 增量（不宣称关闭）
+
+| 报告 ID | 整改内容 | 边界 |
+| --- | --- | --- |
+| P0-ARCH-02 | `TekonDatabase` 写路径 closed 栅栏（`markClosed()`/`isClosed()`），Web/CLI 关停序列在 `db.close()` 前置位；故障注入测试证明 deadline 后 executor 直接经 repository 写库被拒绝 | 只拦 repository/db 写，不拦 command-gateway/worktree 的裸文件写；进程内不合作 Promise 仍无法真正终止，完整 quiescence 依赖 executor 进程隔离（架构后续） |
+
+### 19.3 维持冻结（架构级，按第 14 节顺序推进）
+
+- P0-ARCH-01 single-owner daemon + repo lock；
+- P0-ARCH-03 Session 事实源选型（需 ADR）；
+- P0-PRODUCT-01 Collaborate 主链路、follow-up/steer/resume、真实 streaming；
+- DSH pin 升级到 `0.1.2-alpha.1`（需 contract fixture + 真实 smoke；preflight 命令已把兼容矩阵做透明）。
+
+### 19.4 验证证据
+
+- `pnpm test`：134 文件、1454 通过、3 跳过；
+- `pnpm typecheck`：core/cli/web 全绿；
+- `pnpm build`：成功；
+- Playwright e2e：35 通过（含新增 digest 对称性、dialog a11y 用例）；
+- CLI e2e：provider preflight 真实进程用例通过；
+- UI 截图核查：默认入口、高级表单、顶栏连接面板、移动端（390px）无错位/重叠/展示错误；
+- code review：两轮，第二轮"未检出必须修复项，可放行"（两条非阻塞建议：preflight agent 经共享变量传递的理论并发窗口、migrations 改动范围描述，均记录在案）。
+
+### 19.5 残留与已知边界
+
+- preflight 的 agent 判定经组合根闭包变量传递，理论并发 startRun 可交错（单用户 MVP 下概率极低；adapter 层 `ensureCapabilityGate` 仍 fail-closed，不构成安全绕过）；
+- SSE `replay-truncated` 尾窗帧本身不参与背压核算（风险低，预算仍有界）；
+- db 层栅栏不覆盖文件写（见 19.2 边界）。

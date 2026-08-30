@@ -236,6 +236,8 @@ tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heart
 
 未传 `--template` 时默认运行 `standard-delivery`；未传 `--agent` 时默认使用 Codex provider。离线回归或演示时，可显式切到 mock provider：
 
+> **计划确认是真实合同**：Web 发起 workflow 运行时，服务端会把执行计划（角色链、Gate、代理、Profile、超时、工作区策略等）计算成 digest，客户端必须回传同一 digest 才能启动；计划被篡改或预览与实际执行参数不一致时，运行会被拒绝（`PLAN_DIGEST_MISMATCH`），不会静默执行另一份计划。每次运行的 canonical 计划快照会持久化到运行记录，供审计。
+
 ```bash
 tekon run --template standard-delivery --agent mock
 ```
@@ -368,6 +370,14 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
   - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
   - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制,无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
   - 一次性、无流式、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.1-rc.2`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。
+
+**Provider 环境预检**：使用 `dsh-headless` 前，可先运行预检命令确认本机环境与 Tekon 钉死版本兼容：
+
+```bash
+tekon provider preflight dsh-headless
+```
+
+它会检查实际安装的 `dsh` 版本、headless help 合同与默认配置插件组合，输出 tested 版本、actual 版本、合同校验结果与精确的兼容安装命令；兼容时退出码 0，不兼容时退出码 1。Web 与 CLI 在使用 `dsh-headless` 发起运行时，也会在任何运行记录产生之前自动执行同样的预检，不兼容时立即给出可读错误，不会带着残缺能力进入执行。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 

@@ -10,6 +10,16 @@ async function startApprovalRun(
   baseUrl: string,
   token: string,
 ): Promise<{ runId: string; sessionId: string }> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'feature-approval', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   const response = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-session-token': token },
@@ -20,6 +30,7 @@ async function startApprovalRun(
         template: 'feature-approval',
         agent: 'mock',
         token,
+        planDigest: planJson.result.digest,
       },
     }),
   });

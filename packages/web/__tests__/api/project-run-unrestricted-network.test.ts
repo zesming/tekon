@@ -1,9 +1,46 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
 import { createApiCaller } from '../../src/server/api/root.js';
+import {
+  REQUIRED_DSH_PLUGIN_IDS,
+  TESTED_DSH_VERSION,
+} from '@tekon/core';
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
+
+/**
+ * Create a fake `dsh` binary on PATH that satisfies the preflight contract
+ * (version + headless help anchor + required plugin ids), so tests exercise
+ * the run path rather than the preflight rejection.
+ */
+function installFakeDsh(): string {
+  const binDir = join(tmpdir(), `tekon-fake-dsh-${process.pid}`);
+  mkdirSync(binDir, { recursive: true });
+  const script = join(binDir, 'dsh');
+  const helpAnchor = 'print the final assistant message';
+  const pluginIds = REQUIRED_DSH_PLUGIN_IDS.map((id) => `'${id}'`).join(',');
+  const lines = [
+    '#!/usr/bin/env node',
+    'const args = process.argv.slice(2);',
+    `if (args.includes('--version')) { process.stdout.write('${TESTED_DSH_VERSION}' + '\\n'); }`,
+    `else if (args.includes('--help')) { process.stdout.write('${helpAnchor}' + '\\n'); }`,
+    `else if (args.includes('--dump-default-config')) { process.stdout.write(JSON.stringify({ plugins: [${pluginIds}].map((id) => ({ id })) })); }`,
+    '',
+  ];
+  writeFileSync(script, lines.join('\n'));
+  chmodSync(script, 0o755);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}:${previousPath ?? ''}`;
+  cleanupTasks.push(() => {
+    process.env.PATH = previousPath;
+    rmSync(binDir, { recursive: true, force: true });
+  });
+  return binDir;
+}
 
 afterEach(async () => {
   for (const cleanup of cleanupTasks.splice(0)) {
@@ -30,6 +67,7 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
   });
 
   it('admits dsh-headless run when unrestricted network is explicitly acknowledged', async () => {
+    installFakeDsh();
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 

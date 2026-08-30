@@ -1,9 +1,29 @@
 import type { TekonDatabase } from './connection.js';
 
-const WORK_USABLE_SCHEMA_VERSION = 4;
+const WORK_USABLE_SCHEMA_VERSION = 5;
+
+function assertIntegrityOk(db: TekonDatabase): void {
+  const rows = db.pragma('integrity_check') as unknown;
+  const values = Array.isArray(rows)
+    ? rows.map((row) =>
+        typeof row === 'object' && row !== null
+          ? String((row as Record<string, unknown>).integrity_check ?? '')
+          : String(row),
+      )
+    : [String(rows)];
+  if (values.some((value) => value !== 'ok')) {
+    throw new Error(
+      `SQLite integrity_check failed: ${values.join(', ')}`,
+    );
+  }
+}
+
 
 export function migrateDatabase(db: TekonDatabase): void {
   const migrate = db.transaction(() => {
+    assertIntegrityOk(db);
+    db.pragma('defer_foreign_keys = ON');
+
     db.exec(`
       create table if not exists schema_migrations (
         version integer primary key,
@@ -30,6 +50,10 @@ export function migrateDatabase(db: TekonDatabase): void {
         project_id text not null references projects(id),
         demand_id text not null references demands(id),
         status text not null,
+        kind text not null default 'workflow',
+        allow_dirty_base integer not null default 0,
+        plan_snapshot text,
+        plan_digest text,
         current_node_id text,
         created_at text not null,
         updated_at text not null
@@ -193,7 +217,7 @@ export function migrateDatabase(db: TekonDatabase): void {
 
       create table if not exists session_events (
         id integer primary key autoincrement,
-        session_id text not null,
+        session_id text not null references sessions(id) on delete cascade,
         seq integer not null,
         type text not null,
         version integer not null,
@@ -210,7 +234,7 @@ export function migrateDatabase(db: TekonDatabase): void {
 
       create table if not exists jobs (
         id text primary key,
-        session_id text not null,
+        session_id text not null references sessions(id) on delete cascade,
         kind text not null,
         status text not null,
         owner text,
@@ -224,7 +248,7 @@ export function migrateDatabase(db: TekonDatabase): void {
       create index if not exists idx_jobs_status_created on jobs(status, created_at);
 
       create table if not exists projection_checkpoints (
-        session_id text not null,
+        session_id text not null references sessions(id) on delete cascade,
         projection_name text not null,
         last_seq integer not null,
         updated_at text not null,
@@ -234,44 +258,44 @@ export function migrateDatabase(db: TekonDatabase): void {
 
     addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
     addColumnIfMissing(db, 'nodes', 'outputs', "text not null default '[]'");
-    // node_order gives same-phase nodes a deterministic execution order.
-    // Without it listNodes falls back to created_at (identical across a
-    // phase's nodes — persistPlan stamps one timestamp) then the random
-    // id UUID, which scrambles rd→qa ordering and breaks cross-node
-    // promotion. Default 0 keeps legacy rows stable (id tiebreaker).
     addColumnIfMissing(db, 'nodes', 'node_order', 'integer not null default 0');
     addColumnIfMissing(db, 'gate_results', 'gate_key', 'text');
     addColumnIfMissing(db, 'worktree_leases', 'base_head', 'text');
-    // 4b: run kind ('workflow' | 'goal'). Default 'workflow' keeps every legacy
-    // row a workflow run; dual-write reads it so run.resumed/run.passed events
-    // carry the right kind without threading mode through the engine.
     addColumnIfMissing(
       db,
       'workflow_instances',
       'kind',
       "text not null default 'workflow'",
     );
-    // 4c: run-scoped allow-dirty-base policy. Stored as 0/1 (SQLite has no
-    // boolean); default 0 keeps every legacy row strict about a clean base.
-    // The async job executor reads it to rebuild the engine with the same
-    // lease policy the run was started with.
     addColumnIfMissing(
       db,
       'workflow_instances',
       'allow_dirty_base',
       'integer not null default 0',
     );
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'plan_snapshot',
+      'text',
+    );
+    addColumnIfMissing(
+      db,
+      'workflow_instances',
+      'plan_digest',
+      'text',
+    );
 
-    // P1-UX-02: human-attention state for the Session List. NULL = unacknowledged
-    // (a failed session keeps needsAction and stays pinned); a timestamp means a
-    // human has acknowledged/archived it, so it drops out of the attention band.
-    // Nullable text with no default keeps every legacy row NULL (unacknowledged),
-    // and addColumnIfMissing keeps the migration idempotent without a table rebuild.
+    addColumnIfMissing(db, 'sessions', 'run_id', 'text');
     addColumnIfMissing(db, 'sessions', 'acknowledged_at', 'text');
+
+    rebuildSessionChildTablesIfMissingFk(db);
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',
     ).run(WORK_USABLE_SCHEMA_VERSION, new Date().toISOString());
+
+    assertIntegrityOk(db);
   });
 
   migrate();
@@ -288,5 +312,108 @@ function addColumnIfMissing(
   }>;
   if (!columns.some((entry) => entry.name === column)) {
     db.exec(`alter table ${table} add column ${column} ${definition}`);
+  }
+}
+
+function hasForeignKeyTo(
+  db: TekonDatabase,
+  table: string,
+  targetTable: string,
+): boolean {
+  const fkList = db.prepare(`pragma foreign_key_list(${table})`).all() as Array<{
+    table: string;
+  }>;
+  return fkList.some(
+    (fk) => fk.table.toLowerCase() === targetTable.toLowerCase(),
+  );
+}
+
+function rebuildSessionChildTablesIfMissingFk(db: TekonDatabase): void {
+  // 1. session_events
+  if (!hasForeignKeyTo(db, 'session_events', 'sessions')) {
+    db.exec(`
+      create table if not exists session_events_orphan_quarantine as
+        select * from session_events where session_id not in (select id from sessions);
+
+      create table session_events_new (
+        id integer primary key autoincrement,
+        session_id text not null references sessions(id) on delete cascade,
+        seq integer not null,
+        type text not null,
+        version integer not null,
+        timestamp text not null,
+        payload text not null default '{}',
+        visibility text not null default 'ui-only',
+        model_visible integer not null default 0,
+        source_event_seqs text not null default '[]',
+        correlation_id text,
+        unique(session_id, seq)
+      );
+
+      insert into session_events_new (id, session_id, seq, type, version, timestamp, payload, visibility, model_visible, source_event_seqs, correlation_id)
+        select id, session_id, seq, type, version, timestamp, payload, visibility, model_visible, source_event_seqs, correlation_id
+        from session_events
+        where session_id in (select id from sessions);
+
+      drop table session_events;
+      alter table session_events_new rename to session_events;
+      create index if not exists idx_session_events_session_seq
+        on session_events(session_id, seq);
+    `);
+  }
+
+  // 2. jobs
+  if (!hasForeignKeyTo(db, 'jobs', 'sessions')) {
+    db.exec(`
+      create table if not exists jobs_orphan_quarantine as
+        select * from jobs where session_id not in (select id from sessions);
+
+      create table jobs_new (
+        id text primary key,
+        session_id text not null references sessions(id) on delete cascade,
+        kind text not null,
+        status text not null,
+        owner text,
+        lease text,
+        abort_state text not null default 'none',
+        checkpoint text,
+        payload text not null default '{}',
+        created_at text not null,
+        updated_at text not null
+      );
+
+      insert into jobs_new (id, session_id, kind, status, owner, lease, abort_state, checkpoint, payload, created_at, updated_at)
+        select id, session_id, kind, status, owner, lease, abort_state, checkpoint, payload, created_at, updated_at
+        from jobs
+        where session_id in (select id from sessions);
+
+      drop table jobs;
+      alter table jobs_new rename to jobs;
+      create index if not exists idx_jobs_status_created on jobs(status, created_at);
+    `);
+  }
+
+  // 3. projection_checkpoints
+  if (!hasForeignKeyTo(db, 'projection_checkpoints', 'sessions')) {
+    db.exec(`
+      create table if not exists projection_checkpoints_orphan_quarantine as
+        select * from projection_checkpoints where session_id not in (select id from sessions);
+
+      create table projection_checkpoints_new (
+        session_id text not null references sessions(id) on delete cascade,
+        projection_name text not null,
+        last_seq integer not null,
+        updated_at text not null,
+        primary key (session_id, projection_name)
+      );
+
+      insert into projection_checkpoints_new (session_id, projection_name, last_seq, updated_at)
+        select session_id, projection_name, last_seq, updated_at
+        from projection_checkpoints
+        where session_id in (select id from sessions);
+
+      drop table projection_checkpoints;
+      alter table projection_checkpoints_new rename to projection_checkpoints;
+    `);
   }
 }

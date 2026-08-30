@@ -330,4 +330,28 @@ describe("useSessionStream (MUST-1 + MUST-2)", () => {
     expect(harness.current.events[0].seq).toBe(6);
     expect(harness.current.events[999].seq).toBe(1005);
   });
+  it("trims the events array in loadEarlier when merged events exceed maxWindow", async () => {
+    const harness = renderHook((id: string | null) => useSessionStream(id), "sess_trim" as string | null);
+
+    // Feed 1000 live events: seq 2001..3000
+    for (let i = 2001; i <= 3000; i++) {
+      lastStreamOptions.onEvent(makeEvent(i));
+    }
+    expect(harness.current.events).toHaveLength(1000);
+
+    mockRpcHandler = async () => {
+      const earlier = [];
+      for (let i = 1001; i <= 2000; i++) {
+        earlier.push(makeEvent(i));
+      }
+      return { events: earlier, hasMore: true, latestSeq: 3000 };
+    };
+
+    await harness.current.loadEarlier();
+
+    expect(harness.current.events.length).toBeLessThanOrEqual(CLIENT_STREAM_WINDOW_SIZE + MAX_EARLIER);
+    expect(harness.current.events).toHaveLength(2000);
+    expect(harness.current.events[0].seq).toBe(1001);
+  });
+
 });

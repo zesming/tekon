@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 let mockLocation = { pathname: "/runs" };
 let mockToken: string | null = null;
-let mockHealthData: { credential: "valid" | "invalid" | "not-configured"; provider?: "available" | "unavailable" } | undefined = undefined;
+let mockHealthData: { credential: "valid" | "invalid" | "not-configured"; dshHeadless?: "available" | "unavailable" } | undefined = undefined;
 
 vi.mock("react-router", () => ({
   useLocation: () => mockLocation,
@@ -28,7 +28,7 @@ vi.mock("../../src/client/hooks/use-query.js", () => ({
 
 import { TopBar } from "../../src/client/layouts/TopBar.js";
 
-describe("TopBar credential status (SUG-2)", () => {
+describe("TopBar credential status (SUG-2 / P1-HEALTH-01)", () => {
   it("renders not-configured state when token is null", () => {
     mockToken = null;
     mockHealthData = undefined;
@@ -66,5 +66,13 @@ describe("TopBar credential status (SUG-2)", () => {
     expect(html).toContain("aria-label=\"连接凭据：无效\"");
     expect(html).toContain("凭据无效");
     expect(html).toContain("status-dot-disconnected");
+  });
+
+  it("renders dsh-headless不可用 badge when dshHeadless is unavailable and credential is valid", () => {
+    mockToken = "session-tok-123";
+    mockHealthData = { credential: "valid", dshHeadless: "unavailable" };
+
+    const html = renderToStaticMarkup(React.createElement(TopBar, {}));
+    expect(html).toContain("dsh-headless不可用");
   });
 });

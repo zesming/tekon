@@ -40,6 +40,11 @@ import {
   persistPlan,
   planFromRepository,
 } from './execution-plan.js';
+import {
+  canonicalJson,
+  projectRunPlan,
+  type RunPlan,
+} from './run-plan.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
 export type { ExecutableNode, ExecutionPlan } from './workflow-runtime.js';
@@ -72,6 +77,9 @@ export interface WorkflowEngineStartInput {
    * events carry the right kind.
    */
   kind?: 'workflow' | 'goal';
+  planSnapshot?: string;
+  planDigest?: string;
+  canonicalPlan?: RunPlan;
 }
 
 export interface WorkflowEngineResult {
@@ -134,6 +142,9 @@ export interface CreateWorkflowEngineOptions {
    * — C1 governance zero-regression.
    */
   agentEventSink?: AgentEventSink;
+  planSnapshot?: string;
+  planDigest?: string;
+  canonicalPlan?: RunPlan;
 }
 
 export function createWorkflowEngine(
@@ -333,6 +344,23 @@ export function createWorkflowEngine(
       repoPath: options.repoPath,
       createdAt: now,
     });
+    const canonicalPlan =
+      input.canonicalPlan ??
+      options.canonicalPlan ??
+      projectRunPlan(template, {
+        agent: options.agentProvider ?? 'codex',
+        mode: input.kind ?? 'workflow',
+        allowDirtyBase: options.allowDirtyBase,
+      });
+    const planSnapshot =
+      input.planSnapshot ??
+      options.planSnapshot ??
+      canonicalJson(canonicalPlan);
+    const planDigest =
+      input.planDigest ??
+      options.planDigest ??
+      canonicalPlan.digest;
+
     await options.repositories.createWorkflowInstance({
       id: runId,
       projectId,
@@ -344,6 +372,8 @@ export function createWorkflowEngine(
       // started with (the executor builds a fresh engine from the provider
       // snapshot and cannot otherwise recover this flag).
       allowDirtyBase: options.allowDirtyBase ?? false,
+      planSnapshot,
+      planDigest,
       createdAt: now,
       updatedAt: now,
     });

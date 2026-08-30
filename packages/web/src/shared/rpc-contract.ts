@@ -53,28 +53,41 @@ export const tokenRunInputSchema = z.object({
   token: z.string().min(1),
 });
 
-export const projectRunInputSchema = z.object({
-  demandText: z.string(),
-  token: z.string().min(1),
-  // 4b: 'goal' runs the built-in single-node goal template (ignores template);
-  // omitted/'workflow' keeps the governed delivery-workflow path.
-  mode: z.enum(['workflow', 'goal']).optional(),
-  // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
-  // (never PR creation — governance red line). Omitted → human-web. review-only
-  // is intentionally NOT accepted here: starting a run is itself a mutation, so
-  // a run cannot create a read-only session; review-only enforcement is
-  // deferred until a dedicated review-only entry point exists (design §1.2.3).
-  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
-  template: z.string().optional(),
-  agent: z.string().optional(),
-  allowDirtyBase: z.boolean().optional(),
-  demandShapePath: z.string().optional(),
-  timeoutMs: z.number().optional(),
-  noProgressTimeoutMs: z.number().optional(),
-  progressHeartbeatMs: z.number().optional(),
-  acknowledgeUnrestrictedNetwork: z.boolean().optional(),
-  planDigest: z.string().optional(),
-});
+export const projectRunInputSchema = z
+  .object({
+    demandText: z.string(),
+    token: z.string().min(1),
+    // 4b: 'goal' runs the built-in single-node goal template (ignores template);
+    // omitted/'workflow' keeps the governed delivery-workflow path.
+    mode: z.enum(['workflow', 'goal']).optional(),
+    // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
+    // (never PR creation — governance red line). Omitted → human-web. review-only
+    // is intentionally NOT accepted here: starting a run is itself a mutation, so
+    // a run cannot create a read-only session; review-only enforcement is
+    // deferred until a dedicated review-only entry point exists (design §1.2.3).
+    profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
+    template: z.string().optional(),
+    agent: z.string().optional(),
+    allowDirtyBase: z.boolean().optional(),
+    demandShapePath: z.string().optional(),
+    timeoutMs: z.number().optional(),
+    noProgressTimeoutMs: z.number().optional(),
+    progressHeartbeatMs: z.number().optional(),
+    acknowledgeUnrestrictedNetwork: z.boolean().optional(),
+    planDigest: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.mode !== 'goal' &&
+      (!data.planDigest || data.planDigest.trim() === '')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
+        path: ['planDigest'],
+      });
+    }
+  });
 
 export const projectHealthInputSchema = z
   .object({
@@ -157,6 +170,11 @@ export const workflowPlanInputSchema = z.object({
   template: z.string().optional(),
   mode: z.enum(['workflow', 'goal']).optional(),
   agent: z.string().optional(),
+  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
+  allowDirtyBase: z.boolean().optional(),
+  timeoutMs: z.number().optional(),
+  noProgressTimeoutMs: z.number().optional(),
+  progressHeartbeatMs: z.number().optional(),
 });
 
 export const progressListInputSchema = z.object({
@@ -166,7 +184,7 @@ export const progressListInputSchema = z.object({
 export const sessionEventsInputSchema = z.object({
   sessionId: z.string().min(1),
   sinceSeq: z.number().int().nonnegative().optional(),
-  limit: z.number().int().positive().optional(),
+  limit: z.number().int().positive().max(1000).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -508,7 +526,7 @@ export const projectHealthOutputSchema = z.object({
   credential: z.enum(['not-configured', 'valid', 'invalid']),
   checkedAt: z.string(),
   detail: z.string().optional(),
-  provider: z.enum(['available', 'unavailable']).optional(),
+  dshHeadless: z.enum(['available', 'unavailable']).optional(),
 });
 
 export const projectDetailOutputSchema = z.object({

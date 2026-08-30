@@ -23,6 +23,7 @@ import {
   assertDshHeadlessHelpContract,
   assertDshVersionAllowed,
   parseDshVersion,
+  runDshPreflight,
 } from './dsh-bridge-probe.js';
 
 // ---------------------------------------------------------------------------
@@ -282,13 +283,13 @@ export function createDshHeadlessAdapter(
     if (!realDsh) return Promise.resolve();
     if (!capabilityGate) {
       capabilityGate = (async () => {
-        await ensureVersionGate();
-        const [helpRaw, configRaw] = await Promise.all([
-          probeHelp(dshCommand),
-          probeConfig(dshCommand),
-        ]);
-        assertDshHeadlessHelpContract(helpRaw);
-        assertDshDefaultConfigContract(configRaw);
+        await runDshPreflight(dshCommand, {
+          probeVersion,
+          probeHelp,
+          probeConfig,
+          allowVersion: options?.allowVersion,
+          onWarn: options?.onWarn,
+        });
       })();
     }
     return capabilityGate;

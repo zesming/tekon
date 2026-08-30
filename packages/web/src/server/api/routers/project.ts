@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
@@ -51,13 +52,36 @@ interface HealthCacheEntry {
     credential: 'not-configured' | 'valid' | 'invalid';
     checkedAt: string;
     detail?: string;
-    provider?: 'available' | 'unavailable';
+    dshHeadless?: 'available' | 'unavailable';
   };
   cachedAt: number;
 }
 
 const HEALTH_CACHE_TTL_MS = 60_000;
+const HEALTH_CACHE_MAX_ENTRIES = 128;
 const healthCache = new Map<string, HealthCacheEntry>();
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function cleanExpiredHealthCache(now: number): void {
+  for (const [key, entry] of healthCache.entries()) {
+    if (now - entry.cachedAt >= HEALTH_CACHE_TTL_MS) {
+      healthCache.delete(key);
+    }
+  }
+}
+
+function setHealthCache(key: string, entry: HealthCacheEntry): void {
+  if (healthCache.size >= HEALTH_CACHE_MAX_ENTRIES && !healthCache.has(key)) {
+    const oldestKey = healthCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      healthCache.delete(oldestKey);
+    }
+  }
+  healthCache.set(key, entry);
+}
 
 function probeProvider(): 'available' | 'unavailable' {
   try {
@@ -81,40 +105,43 @@ export function createProjectRouter(context: ServerContext) {
 
     async health(input?: { token?: string }) {
       const token = input?.token?.trim();
-      const cacheKey = `${context.projectContext.sessionPath}:${token ?? ''}`;
-      const cached = healthCache.get(cacheKey);
+      const tokenHash = token ? hashToken(token) : "empty";
+      const cacheKey = `${context.projectContext.sessionPath}:${tokenHash}`;
       const now = Date.now();
+      cleanExpiredHealthCache(now);
+
+      const cached = healthCache.get(cacheKey);
       if (cached && now - cached.cachedAt < HEALTH_CACHE_TTL_MS) {
         return cached.result;
       }
 
-      let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
+      let credential: "not-configured" | "valid" | "invalid" = "not-configured";
       let detail: string | undefined;
-      let provider: 'available' | 'unavailable' | undefined;
+      let dshHeadless: "available" | "unavailable" | undefined;
 
       if (!token) {
-        credential = 'not-configured';
+        credential = "not-configured";
       } else {
         let expectedToken: string | undefined;
         try {
           const parsed = JSON.parse(
-            readFileSync(context.projectContext.sessionPath, 'utf8'),
+            readFileSync(context.projectContext.sessionPath, "utf8"),
           ) as { token?: unknown };
           expectedToken =
-            typeof parsed.token === 'string' ? parsed.token : undefined;
+            typeof parsed.token === "string" ? parsed.token : undefined;
         } catch {
           expectedToken = undefined;
         }
 
         if (!expectedToken) {
-          credential = 'not-configured';
-          detail = 'Web session token is not configured on server';
+          credential = "not-configured";
+          detail = "Web session token is not configured on server";
         } else if (token === expectedToken) {
-          credential = 'valid';
-          provider = probeProvider();
+          credential = "valid";
+          dshHeadless = probeProvider();
         } else {
-          credential = 'invalid';
-          detail = 'Session token does not match server configuration';
+          credential = "invalid";
+          detail = "Session token does not match server configuration";
         }
       }
 
@@ -122,10 +149,10 @@ export function createProjectRouter(context: ServerContext) {
         credential,
         checkedAt: new Date().toISOString(),
         ...(detail ? { detail } : {}),
-        ...(provider ? { provider } : {}),
+        ...(dshHeadless ? { dshHeadless } : {}),
       };
 
-      healthCache.set(cacheKey, { result, cachedAt: now });
+      setHealthCache(cacheKey, { result, cachedAt: now });
       return result;
     },
 
@@ -263,12 +290,24 @@ export function createProjectRouter(context: ServerContext) {
         assertSafeName(templateName, 'template');
       }
 
-      // P1-UX-01 / P1-PRODUCT-02: plan digest validation for workflow mode
-      if (!isGoal && runInput.planDigest) {
+      // P1-UX-01 / P1-PLAN-01: plan digest validation for workflow mode
+      if (!isGoal) {
+        if (!runInput.planDigest || runInput.planDigest.trim() === '') {
+          throw new ApiError(
+            'BAD_REQUEST',
+            'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
+          );
+        }
         const template = loadTemplate(context, templateName!);
         const plan = projectRunPlan(template, {
           agent: runInput.agent,
           mode: runInput.mode,
+          profile: runInput.profile,
+          allowDirtyBase: runInput.allowDirtyBase,
+          timeoutMs: runInput.timeoutMs,
+          noProgressTimeoutMs: runInput.noProgressTimeoutMs,
+          progressHeartbeatMs: runInput.progressHeartbeatMs,
+          templateId: templateName,
         });
         const computedDigest =
           (plan as { digest?: string }).digest ??
@@ -327,6 +366,7 @@ export function createProjectRouter(context: ServerContext) {
           ...(runInput.acknowledgeUnrestrictedNetwork !== undefined
             ? { acknowledgeUnrestrictedNetwork: runInput.acknowledgeUnrestrictedNetwork }
             : {}),
+          ...(runInput.planDigest ? { planDigest: runInput.planDigest } : {}),
         },
         onPrepared:
           shapedDraft ||

@@ -781,6 +781,18 @@ describe('S5 engine prepareRun / signal / pause', () => {
     expect(runAgentSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('prepareRun persists plan_snapshot and plan_digest to workflow_instances', async () => {
+    const { engine, repositories } = setupHarness();
+
+    const { runId, workflow } = await engine.prepareRun(startInput());
+    expect(workflow.planSnapshot).toBeTruthy();
+    expect(workflow.planDigest).toMatch(/^[0-9a-f]{64}$/);
+
+    const persisted = await repositories.getWorkflowInstance(runId);
+    expect(persisted?.planSnapshot).toBe(workflow.planSnapshot);
+    expect(persisted?.planDigest).toBe(workflow.planDigest);
+  });
+
   it('startRun still executes the full workflow (CLI compatibility)', async () => {
     const { engine, runAgentSpy } = setupHarness();
 

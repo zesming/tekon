@@ -12,6 +12,7 @@ import { commandReview } from './commands/review.js';
 import { commandRole } from './commands/role.js';
 import { commandRun } from './commands/run.js';
 import { commandClean, commandLog, commandStatus } from './commands/status.js';
+import { commandProvider } from './commands/provider.js';
 import { commandUi, commandUpdate } from './commands/ui.js';
 import { commandConstraints, commandWorkflow } from './commands/workflow.js';
 import { getVersion } from './lib/utils.js';
@@ -85,6 +86,9 @@ const COMMANDS: CommandMeta[] = [
   ] },
   { name: 'log', description: '查看运行审计日志', group: '审阅与评估' },
   // 工具
+  { name: 'provider', description: '管理与检查 Agent Provider', group: '工具', subcommands: [
+    { name: 'preflight', description: '检查指定 Provider 的环境兼容性与合同' },
+  ] },
   { name: 'clean', description: '清理工作树', group: '工具' },
   { name: 'ui', description: '启动 Web 管理界面', group: '工具' },
   { name: 'update', description: '更新 Tekon CLI', group: '工具' },
@@ -163,6 +167,8 @@ export async function runCli(
       case 'ui':
         await commandUi(rest, io);
         return 0;
+      case 'provider':
+        return await commandProvider(rest, io);
       case 'update':
         await commandUpdate(rest, io);
         return 0;

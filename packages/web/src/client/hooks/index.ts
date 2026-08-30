@@ -6,3 +6,4 @@ export { useAuthScope } from './use-auth-scope.js';
 export { useTicker } from './use-ticker.js';
 export { useWorkspaceSummaryStream } from './use-workspace-summary-stream.js';
 
+export { useDialogA11y } from './use-dialog-a11y.js';

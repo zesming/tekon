@@ -7,6 +7,16 @@ test('EventFeed renders narrative and provides technical event controls', async 
   server,
   fixture,
 }) => {
+  const planRes = await fetch(`${server.url}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'standard-delivery', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   // Start a run to populate events
   const response = await fetch(`${server.url}/api/rpc`, {
     method: 'POST',
@@ -21,6 +31,7 @@ test('EventFeed renders narrative and provides technical event controls', async 
         template: 'standard-delivery',
         agent: 'mock',
         token: fixture.sessionToken,
+        planDigest: planJson.result.digest,
       },
     }),
   });

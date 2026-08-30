@@ -214,20 +214,56 @@ export function createSessionRouter(context: ServerContext) {
         throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
       }
 
-      const limit = input.limit ?? 500;
-      const sinceSeq = input.sinceSeq ?? 0;
-      const page = await context.sessions.listEventsPage(
-        input.sessionId,
-        sinceSeq,
-        limit,
-      );
-      const events = page.events;
-      const hasMore = page.hasMore;
-      const latestSeq = await context.sessions.latestSeq(input.sessionId);
+      const targetLimit = Math.min(Math.max(1, input.limit ?? 500), 1000);
+      let currentSinceSeq = input.sinceSeq ?? 0;
+      const presentedEvents: PresentedEvent[] = [];
+      let hasMore = false;
+      const MAX_PAGE_SCANS = 5;
 
-      const presentedEvents = events
-        .map((e) => presentEvent(e))
-        .filter((e): e is PresentedEvent => e !== null);
+      for (let scan = 0; scan < MAX_PAGE_SCANS; scan++) {
+        const remaining = targetLimit - presentedEvents.length;
+        const rawChunkSize = Math.max(remaining, 100);
+        const page = await context.sessions.listEventsPage(
+          input.sessionId,
+          currentSinceSeq,
+          rawChunkSize,
+        );
+        const rawEvents = page.events;
+        hasMore = page.hasMore;
+
+        if (rawEvents.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        for (let i = 0; i < rawEvents.length; i++) {
+          const rawEvent = rawEvents[i];
+          currentSinceSeq = Math.max(currentSinceSeq, rawEvent.seq);
+          const presented = presentEvent(rawEvent);
+          if (presented !== null) {
+            presentedEvents.push(presented);
+            if (presentedEvents.length >= targetLimit) {
+              if (i < rawEvents.length - 1 || page.hasMore) {
+                hasMore = true;
+              } else {
+                hasMore = false;
+              }
+              break;
+            }
+          }
+        }
+
+        if (presentedEvents.length >= targetLimit) {
+          break;
+        }
+
+        if (!page.hasMore) {
+          hasMore = false;
+          break;
+        }
+      }
+
+      const latestSeq = await context.sessions.latestSeq(input.sessionId);
 
       return {
         events: presentedEvents,

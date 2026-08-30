@@ -129,6 +129,43 @@ phases:
         requiresHumanApproval: false,
       },
     ]);
+    expect(plan.agent).toBe("codex");
+    expect(plan.templateId).toBe("sample-flow");
+    expect(plan.templateVersion).toBe(1);
+  });
+
+  it("normalizes agent to 'codex' by default inside projectRunPlan", () => {
+    const template = loadBuiltInWorkflowTemplate("bugfix");
+
+    const defaultPlan = projectRunPlan(template);
+    expect(defaultPlan.agent).toBe("codex");
+    expect(defaultPlan.requiresUnrestrictedNetwork).toBe(false);
+
+    const explicitPlan = projectRunPlan(template, { agent: "claude-code" });
+    expect(explicitPlan.agent).toBe("claude-code");
+    expect(explicitPlan.requiresUnrestrictedNetwork).toBe(false);
+  });
+
+  it("projects all extended execution fields when provided in context", () => {
+    const template = loadBuiltInWorkflowTemplate("bugfix");
+
+    const plan = projectRunPlan(template, {
+      agent: "claude-code",
+      profile: "custom-profile",
+      allowDirtyBase: true,
+      timeoutMs: 120000,
+      noProgressTimeoutMs: 30000,
+      progressHeartbeatMs: 10000,
+    });
+
+    expect(plan.agent).toBe("claude-code");
+    expect(plan.profile).toBe("custom-profile");
+    expect(plan.allowDirtyBase).toBe(true);
+    expect(plan.timeoutMs).toBe(120000);
+    expect(plan.noProgressTimeoutMs).toBe(30000);
+    expect(plan.progressHeartbeatMs).toBe(10000);
+    expect(plan.templateId).toBe(template.id);
+    expect(plan.templateVersion).toBe(template.version);
   });
 
   it("sets requiresUnrestrictedNetwork to true only for dsh-headless agent", () => {
@@ -165,9 +202,10 @@ phases:
         nodeIds: ["goal-execute"],
       },
     ]);
+    expect(plan.agent).toBe("dsh-headless");
+    expect(plan.templateId).toBe("goal");
   });
 });
-
 
 describe("computeRunPlanDigest", () => {
   it("produces deterministic 64-char hex sha256 regardless of property order and ignores existing digest", () => {
@@ -186,6 +224,9 @@ describe("computeRunPlanDigest", () => {
       gates: plan.gates,
       requiresUnrestrictedNetwork: plan.requiresUnrestrictedNetwork,
       roleChain: plan.roleChain,
+      agent: plan.agent,
+      templateId: plan.templateId,
+      templateVersion: plan.templateVersion,
     };
     expect(computeRunPlanDigest(reordered)).toBe(plan.digest);
   });
@@ -216,5 +257,37 @@ describe("computeRunPlanDigest", () => {
       phases: basePlan.phases.map((p, idx) => (idx === 0 ? { ...p, name: p.name + " modified" } : p)),
     };
     expect(computeRunPlanDigest(phaseModified)).not.toBe(baseDigest);
+
+    // Change agent
+    const agentModified = { ...basePlan, agent: "claude-code" };
+    expect(computeRunPlanDigest(agentModified)).not.toBe(baseDigest);
+
+    // Change profile
+    const profileModified = { ...basePlan, profile: "profile-v2" };
+    expect(computeRunPlanDigest(profileModified)).not.toBe(baseDigest);
+
+    // Change allowDirtyBase
+    const dirtyModified = { ...basePlan, allowDirtyBase: true };
+    expect(computeRunPlanDigest(dirtyModified)).not.toBe(baseDigest);
+
+    // Change timeoutMs
+    const timeoutModified = { ...basePlan, timeoutMs: 60000 };
+    expect(computeRunPlanDigest(timeoutModified)).not.toBe(baseDigest);
+
+    // Change noProgressTimeoutMs
+    const noProgModified = { ...basePlan, noProgressTimeoutMs: 30000 };
+    expect(computeRunPlanDigest(noProgModified)).not.toBe(baseDigest);
+
+    // Change progressHeartbeatMs
+    const heartbeatModified = { ...basePlan, progressHeartbeatMs: 15000 };
+    expect(computeRunPlanDigest(heartbeatModified)).not.toBe(baseDigest);
+
+    // Change templateId
+    const templateIdModified = { ...basePlan, templateId: "custom-template" };
+    expect(computeRunPlanDigest(templateIdModified)).not.toBe(baseDigest);
+
+    // Change templateVersion
+    const versionModified = { ...basePlan, templateVersion: 2 };
+    expect(computeRunPlanDigest(versionModified)).not.toBe(baseDigest);
   });
 });

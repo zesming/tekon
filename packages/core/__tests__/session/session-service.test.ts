@@ -358,6 +358,54 @@ describe('SessionService.startRun', () => {
     const events = await env.sessions.listEventsSince(result.sessionId, 0);
     expect(events).toHaveLength(3);
   });
+
+  it("executes deps.preflight hook before prepareRun and creates no side effects if preflight fails", async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: "run_preflight_fail",
+      projectId: "proj_1",
+      demandId: "demand_1",
+      status: "running",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const callOrder: string[] = [];
+
+    const preflightError = new Error("DSH capability preflight failed");
+    const service = createSessionService({
+      sessions: env.sessions,
+      jobs: env.jobs,
+      jobRunner: env.jobRunner,
+      bus: env.bus,
+      repositories: env.repositories,
+      audit: env.audit,
+      projectRoot: PROJECT_ROOT,
+      createEngine: () => {
+        callOrder.push("createEngine");
+        return engine;
+      },
+      preflight: async () => {
+        callOrder.push("preflight");
+        throw preflightError;
+      },
+    });
+
+    await expect(
+      service.startRun({
+        demandText: "Should fail fast on preflight",
+        templateName: "standard-delivery",
+        engine: null,
+      }),
+    ).rejects.toThrow("DSH capability preflight failed");
+
+    expect(callOrder).toEqual(["createEngine", "preflight"]);
+    expect(engine.prepareRun).not.toHaveBeenCalled();
+
+    // No session created
+    const session = await env.sessions.findSessionByRunId("run_preflight_fail");
+    expect(session).toBeNull();
+  });
 });
 
 describe('SessionService.resumeRun', () => {

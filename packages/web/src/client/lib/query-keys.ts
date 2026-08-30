@@ -55,7 +55,16 @@ export const queryKeys = {
     `draftShape.detail.${shapePath}`,
   roles: () => 'roles',
   workflows: () => 'workflows',
-  workflowPlan: (mode?: string, template?: string, agent?: string) =>
-    `workflow.plan.${mode ?? 'default'}.${template ?? 'default'}.${agent ?? 'default'}`,
+  workflowPlan: (
+    mode?: string,
+    template?: string,
+    agent?: string,
+    profile?: string,
+    allowDirtyBase?: boolean,
+    timeoutMs?: number,
+    noProgressTimeoutMs?: number,
+    progressHeartbeatMs?: number,
+  ) =>
+    `workflow.plan.${mode ?? 'default'}.${template ?? 'default'}.${agent ?? 'default'}.${profile ?? 'default'}.${allowDirtyBase ? 'dirty' : 'clean'}.${timeoutMs ?? 'default'}.${noProgressTimeoutMs ?? 'default'}.${progressHeartbeatMs ?? 'default'}`,
   settings: () => 'settings',
 };

@@ -223,7 +223,7 @@ export function TopBar(props: TopBarProps) {
             aria-hidden="true"
           />
           <span className="connection-status-label">{statusLabel}</span>
-          {healthData?.provider === 'unavailable' &&
+          {healthData?.dshHeadless === 'unavailable' &&
           credentialStatus === 'valid' ? (
             <span
               className="text-muted text-xs ml-1"

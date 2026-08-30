@@ -1,3 +1,4 @@
+import { useDialogA11y } from '../../hooks/use-dialog-a11y.js';
 import type { ApiWorkflowItem } from '../../../shared/api-types.js';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,9 @@ export function WorkflowDetailPanel({
   workflow,
   onClose,
 }: WorkflowDetailPanelProps) {
+  const panelRef = useDialogA11y<HTMLDivElement>({ onClose });
+  const titleId = `workflow-detail-title-${workflow.id}`;
+
   return (
     <div
       className="detail-overlay"
@@ -30,15 +34,17 @@ export function WorkflowDetailPanel({
       }}
     >
       <div
+        ref={panelRef}
         className="detail-panel"
         role="dialog"
         aria-modal="true"
-        aria-label={`${workflow.name} 工作流详情`}
+        aria-labelledby={titleId}
       >
         {/* ── Header ── */}
         <div className="detail-panel-header">
           <div>
             <div
+              id={titleId}
               style={{
                 fontFamily: 'var(--font-d)',
                 fontSize: '20px',

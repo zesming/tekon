@@ -24,14 +24,29 @@ export interface RunPlan {
   gates: RunPlanGate[];
   requiresUnrestrictedNetwork: boolean;
   phases: RunPlanPhaseSummary[];
+  agent: string;
+  profile?: string;
+  allowDirtyBase?: boolean;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
+  templateId?: string;
+  templateVersion?: number | string;
 }
 
 export interface RunPlanContext {
   agent?: string;
   mode?: "workflow" | "goal";
+  profile?: string;
+  allowDirtyBase?: boolean;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
+  templateId?: string;
+  templateVersion?: number | string;
 }
 
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
   }
@@ -40,7 +55,7 @@ function canonicalJson(value: unknown): string {
   }
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj)
-    .filter((key) => key !== "digest")
+    .filter((key) => key !== "digest" && obj[key] !== undefined)
     .sort();
   const entries = keys.map(
     (key) => `${JSON.stringify(key)}:${canonicalJson(obj[key])}`,
@@ -71,6 +86,8 @@ export function agentRequiresUnrestrictedNetwork(
  * - Extracts all gates with their nodeId, role, type, requiresHumanApproval, and optional timeoutMs.
  * - Summarizes phases with id, name, parallel flag, and nodeIds.
  * - Sets requiresUnrestrictedNetwork via agentRequiresUnrestrictedNetwork.
+ * - Normalizes agent to 'codex' if omitted.
+ * - Includes execution configuration (profile, allowDirtyBase, timeouts, templateId, templateVersion).
  * - Computes and attaches a deterministic digest of the plan.
  */
 export function projectRunPlan(
@@ -104,15 +121,32 @@ export function projectRunPlan(
     });
   }
 
-  const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(
-    context.agent,
-  );
+  const agent = context.agent ?? "codex";
+  const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(agent);
+  const templateId = context.templateId ?? template.id;
+  const templateVersion = context.templateVersion ?? template.version;
 
-  const planWithoutDigest = {
+  const planWithoutDigest: Omit<RunPlan, "digest"> = {
     roleChain,
     gates,
     requiresUnrestrictedNetwork,
     phases,
+    agent,
+    ...(context.profile !== undefined ? { profile: context.profile } : {}),
+    ...(context.allowDirtyBase !== undefined
+      ? { allowDirtyBase: context.allowDirtyBase }
+      : {}),
+    ...(context.timeoutMs !== undefined
+      ? { timeoutMs: context.timeoutMs }
+      : {}),
+    ...(context.noProgressTimeoutMs !== undefined
+      ? { noProgressTimeoutMs: context.noProgressTimeoutMs }
+      : {}),
+    ...(context.progressHeartbeatMs !== undefined
+      ? { progressHeartbeatMs: context.progressHeartbeatMs }
+      : {}),
+    ...(templateId !== undefined ? { templateId } : {}),
+    ...(templateVersion !== undefined ? { templateVersion } : {}),
   };
 
   const digest = computeRunPlanDigest(planWithoutDigest);

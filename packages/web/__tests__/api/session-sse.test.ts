@@ -677,3 +677,122 @@ describe('SSE fresh connect bounded replay (P1-UX-03)', () => {
     fake.close();
   });
 });
+
+describe("SSE reconnect budget and backpressure (P1-SESSION-01)", () => {
+  it("emits replay-truncated and truncates to tail window when reconnect exceeds max event budget", async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    (s.store as any).listEventsPage = async (sid: string, since: number, limit: number) => {
+      const events = [];
+      const start = since + 1;
+      const count = Math.min(limit, 500);
+      for (let i = 0; i < count; i++) {
+        events.push({
+          seq: start + i,
+          sessionId: sid,
+          type: "assistant/message",
+          payload: { text: `bulk message ${start + i}` },
+          visibility: "model",
+          modelVisible: true,
+          timestamp: "2026-08-30T00:00:00.000Z",
+          correlationId: null,
+        });
+      }
+      return {
+        events,
+        hasMore: start + count <= 2500,
+        latestSeq: 2500,
+      };
+    };
+    (s.store as any).latestSeq = async () => 2500;
+
+    const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
+    await handleSessionEventsSse({
+      request: fake.request,
+      response: fake.response,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    const frames = fake.frames();
+    const truncatedFrame = frames.find((f) => f.event === "replay-truncated");
+    expect(truncatedFrame).toBeDefined();
+    expect(JSON.parse(truncatedFrame!.data!).cursor).toBe(2000);
+    fake.close();
+  });
+
+  it("pauses draining when write returns false and resumes upon drain event", async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    let writeShouldBlock = true;
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/sessions/${sessionId}/events?sinceSeq=0`;
+    req.headers = {};
+    req.method = "GET";
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        if (writeShouldBlock) {
+          writeShouldBlock = false;
+          return false;
+        }
+        return true;
+      },
+      once(event: string, cb: () => void) {
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    await s.store.appendEvent({ sessionId, type: "turn/start", payload: {} });
+    await s.store.appendEvent({ sessionId, type: "assistant/message", payload: {} });
+
+    await handleSessionEventsSse({
+      request: req,
+      response: res,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    expect(writtenFrames.length).toBe(1);
+    expect(writtenFrames[0]).toContain("turn/start");
+
+    emitter.emit("drain");
+
+    expect(writtenFrames.length).toBe(2);
+    expect(writtenFrames[1]).toContain("assistant/message");
+    req.emit("close");
+  });
+});

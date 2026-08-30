@@ -51,6 +51,16 @@ async function startAndPrepareRun(
   baseUrl: string,
   sessionToken: string,
 ): Promise<string> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'standard-delivery', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   // 1. Start a run with standard-delivery template (mock agent completes it)
   const runResponse = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
@@ -63,6 +73,7 @@ async function startAndPrepareRun(
         template: 'standard-delivery',
         agent: 'mock',
         token: sessionToken,
+        planDigest: planJson.result.digest,
       },
     }),
   });

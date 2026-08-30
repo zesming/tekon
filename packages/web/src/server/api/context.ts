@@ -85,6 +85,11 @@ export interface WorkflowPlanInput {
   template?: string;
   mode?: 'workflow' | 'goal';
   agent?: string;
+  profile?: 'human-web' | 'autonomous-delivery';
+  allowDirtyBase?: boolean;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
 }
 
 export interface DraftShapeInput {
@@ -293,7 +298,7 @@ export interface ApiCaller {
       credential: 'not-configured' | 'valid' | 'invalid';
       checkedAt: string;
       detail?: string;
-      provider?: 'available' | 'unavailable';
+      dshHeadless?: 'available' | 'unavailable';
     }>;
   };
   delivery: {

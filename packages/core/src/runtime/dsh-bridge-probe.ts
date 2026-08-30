@@ -3,14 +3,19 @@
 // external `dsh` CLI. Every function here is PURE (operates on strings the
 // caller captured from `dsh --version` / `--help` / `--dump-default-config`),
 // so the L1 fixture contract test can exercise the full parser without spawning
-// a process. The adapter factory (dsh-headless-adapter.ts) is the only place
-// that actually spawns dsh and feeds these outputs in.
+// a process. The adapter factory (dsh-headless-adapter.ts) and runDshPreflight
+// feed these outputs in.
 //
 // Boundary rationale (design §3): the dsh headless CLI contract (argv → stdout/
 // stderr/exit-code) is the only documented, machine-consumable surface of the
 // rc package. We pin the exact tested version and fail closed on drift rather
 // than bind any private library export or file layout.
 // ---------------------------------------------------------------------------
+
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
 export const TESTED_DSH_VERSION = '0.1.1-rc.2';
@@ -139,4 +144,87 @@ export function assertDshDefaultConfigContract(dumpOutput: string): void {
       );
     }
   }
+}
+
+export interface DshPreflightResult {
+  testedVersion: string;
+  actualVersion: string;
+  helpContractOk: boolean;
+  configContractOk: boolean;
+  installHint: string;
+}
+
+export interface RunDshPreflightOptions {
+  probeVersion?: (command: string) => Promise<string>;
+  probeHelp?: (command: string) => Promise<string>;
+  probeConfig?: (command: string) => Promise<string>;
+  allowVersion?: string;
+  onWarn?: (message: string) => void;
+}
+
+async function defaultProbeVersion(command: string): Promise<string> {
+  const { stdout } = await execFileAsync(command, ['--version'], {
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  return stdout;
+}
+
+async function defaultProbeHelp(command: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    command,
+    ['--profile', 'headless', '--help'],
+    {
+      encoding: 'utf8',
+      timeout: 5000,
+    },
+  );
+  return stdout;
+}
+
+async function defaultProbeConfig(command: string): Promise<string> {
+  const { stdout } = await execFileAsync(
+    command,
+    ['--profile', 'headless', '--dump-default-config'],
+    {
+      encoding: 'utf8',
+      timeout: 5000,
+    },
+  );
+  return stdout;
+}
+
+/**
+ * Run DSH preflight probe: checks version, headless help contract, and plugin composition.
+ */
+export async function runDshPreflight(
+  dshCommand = 'dsh',
+  options?: RunDshPreflightOptions,
+): Promise<DshPreflightResult> {
+  const probeVersion = options?.probeVersion ?? defaultProbeVersion;
+  const probeHelp = options?.probeHelp ?? defaultProbeHelp;
+  const probeConfig = options?.probeConfig ?? defaultProbeConfig;
+
+  const rawVersion = await probeVersion(dshCommand);
+  const actualVersion = parseDshVersion(rawVersion);
+  assertDshVersionAllowed(actualVersion, {
+    allowVersion: options?.allowVersion,
+    onWarn: options?.onWarn,
+  });
+
+  const [rawHelp, rawConfig] = await Promise.all([
+    probeHelp(dshCommand),
+    probeConfig(dshCommand),
+  ]);
+
+  assertDshHeadlessHelpContract(rawHelp);
+  assertDshDefaultConfigContract(rawConfig);
+
+  return {
+    testedVersion: TESTED_DSH_VERSION,
+    actualVersion,
+    helpContractOk: true,
+    configContractOk: true,
+    installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+  };
 }
