@@ -31,16 +31,14 @@ const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
 };
 
 // Phase 3 3b / Phase 4 P1-04 / T3 / T5: controlled-delivery list + composer.
-// Displays relative activity time, needsAction badges, acknowledge action for failed sessions,
-// and subscribes to workspace summary SSE for real-time list synchronization.
+// Displays relative activity time, needsAction badges, a handled marker for
+// failed sessions, and workspace summary SSE synchronization.
 
 export function SessionsPage() {
   const nowMs = useTicker(60_000);
   const scope = useAuthScope();
   const { addFlash } = useFlash();
 
-  // Fire unconditionally like the other read pages: the RPC client supplies the
-  // session token; auth failures surface via ErrorBanner.
   const { data, isLoading, error, refetch } = useQuery<
     RpcProcedureMap['session.list']['output']
   >(queryKeys.sessionList(scope), () => rpc.call('session.list'));
@@ -48,10 +46,8 @@ export function SessionsPage() {
   const sessions = data?.sessions ?? [];
   const workspaceId = data?.workspaceId ?? null;
 
-  // T5: Subscribe to live workspace summary SSE stream for real-time list invalidation
   useWorkspaceSummaryStream(workspaceId);
 
-  // T3: Acknowledge mutation for failed sessions
   const ackMutation = useMutation<
     RpcProcedureMap['session.acknowledge']['input'],
     RpcProcedureMap['session.acknowledge']['output']
@@ -67,11 +63,11 @@ export function SessionsPage() {
     e.stopPropagation();
     try {
       await ackMutation.mutate({ sessionId });
-      addFlash('success', '已确认并归档该失败会话');
+      addFlash('success', '已将该失败会话标记为已处理');
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : '确认失败会话失败',
+        err instanceof Error ? err.message : '标记失败会话时出错',
       );
     }
   };
@@ -132,7 +128,9 @@ export function SessionsPage() {
             return (
               <li
                 key={session.id}
-                className={`session-list-item${isFailedUnacknowledged ? " session-list-item-with-ack" : ""}`}
+                className={`session-list-item${
+                  isFailedUnacknowledged ? ' session-list-item-with-ack' : ''
+                }`}
                 title={session.runId ? `关联运行 ${session.runId}` : undefined}
               >
                 <NavLink
@@ -166,12 +164,12 @@ export function SessionsPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-xs session-acknowledge-btn"
-                    title="确认并归档"
-                    aria-label="确认并归档失败会话"
+                    title="标记为已处理"
+                    aria-label="将失败会话标记为已处理"
                     disabled={ackMutation.isPending}
                     onClick={(e) => handleAcknowledge(e, session.id)}
                   >
-                    ✓ 确认归档
+                    ✓ 标记已处理
                   </button>
                 )}
               </li>

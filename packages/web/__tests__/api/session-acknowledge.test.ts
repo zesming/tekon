@@ -89,7 +89,7 @@ async function postRpc(
 }
 
 describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
-  it('unacknowledged failed session stays in needsAction top band, sinks to terminal history after acknowledge', async () => {
+  it('keeps list and get consistent before and after handling a failed session', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
@@ -118,31 +118,97 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     cleanupTasks.push(() => api.close());
 
-    // 1. Before acknowledge: failed is unacknowledged (acknowledgedAt is null)
-    // -> needsAction is true -> pinned at top ahead of active
     const listBefore = await api.session.list();
     const failedBefore = listBefore.sessions.find((s) => s.id === failed.id);
-    expect(failedBefore).toBeDefined();
-    expect(failedBefore?.acknowledgedAt).toBeNull();
-    expect(failedBefore?.needsAction).toBe(true);
-    expect(failedBefore?.actionKind).toBe('failed');
+    expect(failedBefore).toMatchObject({
+      acknowledgedAt: null,
+      needsAction: true,
+      actionKind: 'failed',
+    });
     expect(listBefore.sessions[0].id).toBe(failed.id);
-    expect(listBefore.sessions[1].id).toBe(active.id);
 
-    // 2. Acknowledge the failed session
+    const getBefore = await api.session.get({ sessionId: failed.id });
+    expect(getBefore.session).toMatchObject({
+      acknowledgedAt: null,
+      needsAction: true,
+      actionKind: 'failed',
+    });
+
     const ackResult = await api.session.acknowledge({ sessionId: failed.id });
-    expect(ackResult.acknowledgedAt).toBeDefined();
     expect(typeof ackResult.acknowledgedAt).toBe('string');
 
-    // 3. After acknowledge: acknowledgedAt is set
-    // -> needsAction becomes false -> sinks below active session
     const listAfter = await api.session.list();
     const failedAfter = listAfter.sessions.find((s) => s.id === failed.id);
-    expect(failedAfter?.acknowledgedAt).toBe(ackResult.acknowledgedAt);
-    expect(failedAfter?.needsAction).toBe(false);
-    expect(failedAfter?.actionKind).toBeNull();
+    expect(failedAfter).toMatchObject({
+      acknowledgedAt: ackResult.acknowledgedAt,
+      needsAction: false,
+      actionKind: null,
+    });
     expect(listAfter.sessions[0].id).toBe(active.id);
-    expect(listAfter.sessions[1].id).toBe(failed.id);
+
+    const getAfter = await api.session.get({ sessionId: failed.id });
+    expect(getAfter.session).toMatchObject({
+      acknowledgedAt: ackResult.acknowledgedAt,
+      needsAction: false,
+      actionKind: null,
+    });
+  });
+
+  it('reopens action when a previously handled session enters a later failure generation', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const { store, db, close } = openStore(fixture.projectRoot);
+    cleanupTasks.push(close);
+    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'retrying session',
+      profile: 'human-web',
+      runId: 'run_retry',
+    });
+    await store.updateSessionStatus(session.id, 'failed');
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+    await api.session.acknowledge({ sessionId: session.id });
+
+    await store.updateSessionStatus(session.id, 'active');
+    await store.updateSessionStatus(session.id, 'failed');
+    db.prepare('update sessions set updated_at = ? where id = ?').run(
+      '2030-01-01T00:00:00.000Z',
+      session.id,
+    );
+
+    const list = await api.session.list();
+    const entry = list.sessions.find((item) => item.id === session.id);
+    expect(entry).toMatchObject({
+      acknowledgedAt: null,
+      needsAction: true,
+      actionKind: 'failed',
+    });
+  });
+
+  it('rejects pre-acknowledgement of a session that is not currently failed', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const { store, close } = openStore(fixture.projectRoot);
+    cleanupTasks.push(close);
+    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const active = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'active session',
+      profile: 'human-web',
+      runId: 'run_active',
+    });
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    await expect(
+      api.session.acknowledge({ sessionId: active.id }),
+    ).rejects.toThrow(/currently failed/i);
   });
 
   it('legacy NULL acknowledged_at is treated as unacknowledged and stays pinned', async () => {
@@ -160,7 +226,6 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
       runId: 'run_legacy',
     });
     await store.updateSessionStatus(legacyFailed.id, 'failed');
-    // Ensure acknowledged_at is explicitly NULL in SQLite
     db.prepare('update sessions set acknowledged_at = null where id = ?').run(
       legacyFailed.id,
     );
@@ -170,9 +235,11 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
 
     const list = await api.session.list();
     const entry = list.sessions.find((s) => s.id === legacyFailed.id);
-    expect(entry?.acknowledgedAt).toBeNull();
-    expect(entry?.needsAction).toBe(true);
-    expect(entry?.actionKind).toBe('failed');
+    expect(entry).toMatchObject({
+      acknowledgedAt: null,
+      needsAction: true,
+      actionKind: 'failed',
+    });
   });
 
   it('session.acknowledge throws NOT_FOUND for non-existent session', async () => {
@@ -194,12 +261,13 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
     const { store, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
-    const s = await store.createSession({
+    const session = await store.createSession({
       workspaceId: workspace.id,
       title: 'http ack test',
       profile: 'human-web',
       runId: null,
     });
+    await store.updateSessionStatus(session.id, 'failed');
 
     const server = await createWebServer({
       projectRoot: fixture.projectRoot,
@@ -209,17 +277,15 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
     await server.listen();
     cleanupTasks.push(() => server.close());
 
-    // Without token: 401
     const unauth = await postRpc(server, 'session.acknowledge', {
-      sessionId: s.id,
+      sessionId: session.id,
     });
     expect(unauth.status).toBe(401);
 
-    // With token: 200
     const auth = await postRpc(
       server,
       'session.acknowledge',
-      { sessionId: s.id },
+      { sessionId: session.id },
       'fixture-session-token',
     );
     expect(auth.status).toBe(200);

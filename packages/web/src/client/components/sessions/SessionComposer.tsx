@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useMutation, useSessionToken } from '../../hooks/index.js';
+import {
+  useMutation,
+  useQuery,
+  useSessionToken,
+} from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { queryKeys } from '../../lib/query-keys.js';
 import { routes } from '../../lib/route-paths.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
@@ -11,13 +16,23 @@ import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 // D5: this does NOT inject run-time messages (follow-up/steer) — that needs
 // AgentHandle.followUp/steer, deferred to phase 2b (throws NotSupportedYet).
 // The composer starts a new run; run-time control (pause/cancel/resume) lives
-// in the right rail (3c). On success it captures the returned sessionId (which
-// the old StartRunForm dropped) and navigates to the new session.
+// in the right rail. The human-first path now loads the same server-derived
+// workflow plan as the advanced form before enabling the launch action.
 
 export function SessionComposer() {
   const { token } = useSessionToken();
   const navigate = useNavigate();
   const [text, setText] = useState('');
+
+  const {
+    data: plan,
+    isLoading: planLoading,
+    error: planError,
+    refetch: refetchPlan,
+  } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
+    queryKeys.workflowPlan('workflow'),
+    () => rpc.call('workflow.plan', { mode: 'workflow' }),
+  );
 
   const startMutation = useMutation<
     RpcProcedureMap['project.run']['input'],
@@ -27,7 +42,12 @@ export function SessionComposer() {
   });
 
   const canSend =
-    Boolean(token) && text.trim().length > 0 && !startMutation.isPending;
+    Boolean(token) &&
+    text.trim().length > 0 &&
+    Boolean(plan) &&
+    !planLoading &&
+    !planError &&
+    !startMutation.isPending;
 
   const handleSend = async () => {
     if (!canSend || !token) return;
@@ -36,7 +56,6 @@ export function SessionComposer() {
         demandText: text.trim(),
         token,
       });
-      // Capture the sessionId the server returns (3a) and open the session.
       if (result?.sessionId) {
         setText('');
         navigate(routes.session(result.sessionId));
@@ -46,6 +65,9 @@ export function SessionComposer() {
     }
   };
 
+  const humanApprovalCount =
+    plan?.gates.filter((gate) => gate.requiresHumanApproval).length ?? 0;
+
   return (
     <div className="session-composer" aria-busy={startMutation.isPending}>
       <textarea
@@ -53,20 +75,68 @@ export function SessionComposer() {
         aria-label="新建受控交付任务"
         aria-describedby={
           startMutation.error
-            ? 'session-composer-hint session-composer-error'
-            : 'session-composer-hint'
+            ? 'session-composer-hint session-composer-plan session-composer-error'
+            : 'session-composer-hint session-composer-plan'
         }
         aria-invalid={Boolean(startMutation.error)}
         placeholder={
           token
             ? '描述需要受控交付的需求（将运行 PM / RD / QA / Reviewer 全链路）…'
-            : '请先在顶栏设置会话令牌'
+            : '请先在顶栏设置连接凭据'
         }
         value={text}
         disabled={!token}
         onChange={(e) => setText(e.target.value)}
         rows={3}
       />
+
+      <div
+        id="session-composer-plan"
+        className="session-composer-plan"
+        role="region"
+        aria-label="执行前计划"
+        style={{
+          border: '1px solid var(--border-l)',
+          borderRadius: 6,
+          padding: '10px 12px',
+          background: 'var(--surface-h)',
+        }}
+      >
+        {planLoading ? (
+          <span className="text-muted">正在读取执行计划…</span>
+        ) : planError ? (
+          <div className="flex items-center gap-2" role="alert">
+            <span className="text-danger">
+              无法读取执行计划，已阻止启动：{planError.message}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={refetchPlan}
+            >
+              重试
+            </button>
+          </div>
+        ) : plan ? (
+          <div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              执行前计划
+            </div>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              执行链路：{plan.roleChain.join(' → ') || '默认角色链'}；
+              {plan.gates.length} 个控制点
+              {humanApprovalCount > 0
+                ? `，其中 ${humanApprovalCount} 个需要人工确认`
+                : '，无需预设人工确认'}
+              ；
+              {plan.requiresUnrestrictedNetwork
+                ? '网络访问不受限'
+                : '网络访问受限'}。
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       <div className="session-composer-actions">
         <span
           id="session-composer-hint"

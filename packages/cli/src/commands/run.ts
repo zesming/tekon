@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
+  agentRequiresUnrestrictedNetwork,
   generateDynamicWorkflow,
   getRunModePolicyIssue,
   readDraftShapeFile,
@@ -38,6 +39,10 @@ export async function commandRun(
       dynamic: { type: 'boolean', default: false },
       'dry-run': { type: 'boolean', default: false },
       'allow-dirty-base': { type: 'boolean', default: false },
+      'acknowledge-unrestricted-network': {
+        type: 'boolean',
+        default: false,
+      },
       'save-as': { type: 'string' },
       'draft-file': { type: 'string' },
       'demand-file': { type: 'string' },
@@ -129,13 +134,27 @@ export async function commandRun(
     throw new Error(runModeIssue);
   }
 
-  // Provider/mode incompatibilities are rejected before any workflow, Session,
-  // or background job is created. The clean-base check remains synchronous too.
+  const requiresUnrestrictedNetwork =
+    agentRequiresUnrestrictedNetwork(agent);
+  if (
+    requiresUnrestrictedNetwork &&
+    args.values['acknowledge-unrestricted-network'] !== true
+  ) {
+    throw new Error(
+      `${agent} 联网不受 Tekon 限制。确认本次运行接受完整网络访问后，` +
+        '显式追加 --acknowledge-unrestricted-network。',
+    );
+  }
+
+  // Provider/mode and informed-consent checks happen before any workflow,
+  // Session, Job or clean-base side effect. Runtime overrides carry the same
+  // acknowledgement into the provider capability guard.
   assertCleanBase(repoPath, allowDirtyBase);
 
   const templateName = isGoal
     ? 'goal'
     : (args.values.template ?? 'standard-delivery');
+  const runtime = providerRuntimeFromCliOptions(args.values);
 
   return withCliSessionContext(repoPath, io, async (ctx) => {
     const result = await ctx.sessionService.startRun({
@@ -144,8 +163,24 @@ export async function commandRun(
       engine: {
         agent,
         allowDirtyBase,
-        runtime: providerRuntimeFromCliOptions(args.values),
+        runtime,
       },
+      ...(requiresUnrestrictedNetwork
+        ? {
+            onPrepared: async (runId: string) => {
+              await ctx.audit.append({
+                runId,
+                type: 'run.network-acknowledged',
+                payload: {
+                  agent,
+                  surface: 'cli',
+                  acknowledgement:
+                    '--acknowledge-unrestricted-network',
+                },
+              });
+            },
+          }
+        : {}),
     });
 
     ctx.jobRunner.start();

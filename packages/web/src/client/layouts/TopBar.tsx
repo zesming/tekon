@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from 'react';
 import { useLocation } from 'react-router';
 
 import { useSessionToken } from '../hooks/use-session-token.js';
@@ -10,8 +16,6 @@ type TopBarProps = {
   onToggleNav?: () => void;
   toggleRef?: RefObject<HTMLButtonElement | null>;
 };
-
-const TOKEN_APPLY_DELAY_MS = 350;
 
 export function TopBar(props: TopBarProps) {
   const { pathname } = useLocation();
@@ -27,26 +31,26 @@ export function TopBar(props: TopBarProps) {
 
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const toggleBtnRef = useRef<HTMLButtonElement | null>(null);
-  const isTypingRef = useRef(false);
+  const tokenInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Bootstrap/hash/manual changes outside this input stay reflected here.
+  // External bootstrap/hash changes stay reflected while the editor is closed.
+  // Typing is deliberately draft-only: credentials become active only after
+  // the explicit Apply action, so partial tokens cannot churn auth/cache/SSE.
   useEffect(() => {
-    if (!isTypingRef.current) {
+    if (!panelOpen) {
       setDraftToken(token ?? '');
     }
-  }, [token]);
+  }, [panelOpen, token]);
 
-  // Debounced token application on user keystroke pause
   useEffect(() => {
-    if (!isTypingRef.current) return;
-    const timer = window.setTimeout(() => {
-      setToken(draftToken || null);
-      isTypingRef.current = false;
-    }, TOKEN_APPLY_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [draftToken, setToken]);
+    if (!panelOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      tokenInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [panelOpen]);
 
-  // Close panel on outside click or Escape key
+  // Close panel on outside click or Escape key.
   useEffect(() => {
     if (!panelOpen) return;
 
@@ -74,23 +78,32 @@ export function TopBar(props: TopBarProps) {
     };
   }, [panelOpen]);
 
-  const isConnected = Boolean(token);
+  const credentialConfigured = Boolean(token);
 
-  const handleInputChange = (value: string) => {
-    isTypingRef.current = true;
-    setDraftToken(value);
+  const openPanel = () => {
+    setDraftToken(token ?? '');
+    setMasked(true);
+    setPanelOpen(true);
   };
 
-  const handleApply = () => {
-    isTypingRef.current = false;
-    setToken(draftToken || null);
+  const closePanel = (restoreFocus = false) => {
     setPanelOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => toggleBtnRef.current?.focus());
+    }
+  };
+
+  const handleApply = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!draftToken) return;
+    setToken(draftToken);
+    closePanel(true);
   };
 
   const handleDisconnect = () => {
-    isTypingRef.current = false;
     setDraftToken('');
     setToken(null);
+    window.requestAnimationFrame(() => tokenInputRef.current?.focus());
   };
 
   return (
@@ -115,27 +128,35 @@ export function TopBar(props: TopBarProps) {
         </div>
       </div>
 
-      {/* T4: Connection state presentation & management panel */}
       <div className="topbar-connection" ref={panelContainerRef}>
         <button
           ref={toggleBtnRef}
           type="button"
           className={`connection-status-btn ${
-            isConnected ? 'connected' : 'disconnected'
+            credentialConfigured ? 'connected' : 'disconnected'
           }`}
           aria-expanded={panelOpen}
           aria-controls="topbar-connection-panel"
-          aria-label={isConnected ? '连接状态：已连接' : '连接状态：未连接'}
-          onClick={() => setPanelOpen((prev) => !prev)}
+          aria-label={
+            credentialConfigured
+              ? '连接凭据：已设置'
+              : '连接凭据：未设置'
+          }
+          onClick={() => {
+            if (panelOpen) closePanel(false);
+            else openPanel();
+          }}
         >
           <span
             className={`status-dot ${
-              isConnected ? 'status-dot-connected' : 'status-dot-disconnected'
+              credentialConfigured
+                ? 'status-dot-connected'
+                : 'status-dot-disconnected'
             }`}
             aria-hidden="true"
           />
           <span className="connection-status-label">
-            {isConnected ? '已连接' : '未连接'}
+            {credentialConfigured ? '凭据已设置' : '未设置凭据'}
           </span>
           <svg
             width="12"
@@ -155,19 +176,20 @@ export function TopBar(props: TopBarProps) {
         </button>
 
         {panelOpen && (
-          <div
+          <form
             id="topbar-connection-panel"
             className="connection-panel"
             role="dialog"
             aria-label="连接管理"
+            onSubmit={handleApply}
           >
             <div className="connection-panel-header">
-              <span className="connection-panel-title">会话连接管理</span>
+              <span className="connection-panel-title">连接凭据管理</span>
               <button
                 type="button"
                 className="connection-panel-close"
                 aria-label="关闭连接管理面板"
-                onClick={() => setPanelOpen(false)}
+                onClick={() => closePanel(true)}
               >
                 ×
               </button>
@@ -182,12 +204,12 @@ export function TopBar(props: TopBarProps) {
               </label>
               <div className="topbar-token">
                 <input
+                  ref={tokenInputRef}
                   id="session-token-input"
                   className="input"
                   type={masked ? 'password' : 'text'}
-                  aria-label="Session token"
                   value={draftToken}
-                  onChange={(e) => handleInputChange(e.target.value)}
+                  onChange={(e) => setDraftToken(e.target.value)}
                   placeholder="输入 Session token"
                   autoComplete="off"
                   spellCheck={false}
@@ -203,6 +225,9 @@ export function TopBar(props: TopBarProps) {
                   {masked ? '👁' : '🙈'}
                 </button>
               </div>
+              <p className="text-muted" style={{ fontSize: 11, marginTop: 6 }}>
+                编辑内容只保存在当前面板；点击“应用连接”后才会切换活动凭据。
+              </p>
             </div>
             <div className="connection-panel-footer">
               {token ? (
@@ -211,18 +236,18 @@ export function TopBar(props: TopBarProps) {
                   className="btn btn-ghost btn-xs"
                   onClick={handleDisconnect}
                 >
-                  断开连接
+                  清除凭据
                 </button>
               ) : null}
               <button
-                type="button"
+                type="submit"
                 className="btn btn-primary btn-xs"
-                onClick={handleApply}
+                disabled={!draftToken}
               >
                 应用连接
               </button>
             </div>
-          </div>
+          </form>
         )}
       </div>
     </div>

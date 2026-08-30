@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { runCli, type CliIO } from '../src/index.js';
+import { providerRuntimeFromCliOptions } from '../src/lib/agent-factory.js';
 
-describe('CLI run-mode policy', () => {
+describe('CLI run-mode and provider consent policy', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
@@ -37,6 +38,46 @@ describe('CLI run-mode policy', () => {
       ),
     ).resolves.toBe(1);
     expect(io.takeStderr()).toContain('dsh-headless 仅支持 goal');
+  });
+
+  it('rejects a dsh-headless goal before side effects without explicit network acknowledgement', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          '需要显式联网确认的 headless 任务',
+          '--goal',
+          '--agent',
+          'dsh-headless',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain(
+      '--acknowledge-unrestricted-network',
+    );
+  });
+
+  it('threads the explicit CLI acknowledgement into provider runtime overrides', () => {
+    expect(
+      providerRuntimeFromCliOptions({
+        'acknowledge-unrestricted-network': true,
+      }),
+    ).toMatchObject({ acknowledgeUnrestrictedNetwork: true });
+
+    expect(
+      providerRuntimeFromCliOptions({
+        'acknowledge-unrestricted-network': false,
+      }),
+    ).not.toHaveProperty('acknowledgeUnrestrictedNetwork');
   });
 });
 

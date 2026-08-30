@@ -4,8 +4,9 @@ import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
 /**
  * Phase 4 P1-04 / Phase 5 T3 (P1-UX-02): derive whether a session needs user
- * action and what kind from its current status and acknowledgedAt timestamp.
- * A failed session only needs action when unacknowledged (acknowledgedAt is null/undefined).
+ * action and what kind from its current status and current-failure
+ * acknowledgement. A failed session only stops needing action after that same
+ * failure generation has been acknowledged.
  */
 export function deriveSessionAction(
   status: string,
@@ -44,6 +45,24 @@ export function latestActivityTimestamp(
 }
 
 /**
+ * `acknowledged_at` currently lives beside the frozen Session contract. The
+ * acknowledge write assigns acknowledged_at and updated_at from one timestamp;
+ * any later status transition changes updated_at and reopens the failure. This
+ * makes the acknowledgement generation-scoped even before the storage layer
+ * gains an explicit failure-generation column or clears stale values itself.
+ */
+export function currentFailureAcknowledgement(input: {
+  status: string;
+  acknowledgedAt?: string | null;
+  updatedAt: string;
+}): string | null {
+  if (input.status !== 'failed' || !input.acknowledgedAt) return null;
+  return input.acknowledgedAt === input.updatedAt
+    ? input.acknowledgedAt
+    : null;
+}
+
+/**
  * Human-attention order for the Session List:
  *   needs action -> actively running -> idle -> terminal history.
  * Within the same group, most recent activity stays first.
@@ -59,8 +78,16 @@ function attentionRank(
 }
 
 export function compareSessionAttention(
-  left: { status: string; lastActivityAt: string; acknowledgedAt?: string | null },
-  right: { status: string; lastActivityAt: string; acknowledgedAt?: string | null },
+  left: {
+    status: string;
+    lastActivityAt: string;
+    acknowledgedAt?: string | null;
+  },
+  right: {
+    status: string;
+    lastActivityAt: string;
+    acknowledgedAt?: string | null;
+  },
 ): number {
   const rankDifference =
     attentionRank(left.status, left.acknowledgedAt) -
@@ -91,10 +118,12 @@ export function createSessionRouter(context: ServerContext) {
       );
       const sessions = await context.sessions.listSessions(workspace.id);
       const projectedSessions = sessions.map((session) => {
-        const action = deriveSessionAction(
-          session.status,
-          session.acknowledgedAt,
-        );
+        const acknowledgedAt = currentFailureAcknowledgement({
+          status: session.status,
+          acknowledgedAt: session.acknowledgedAt,
+          updatedAt: session.updatedAt,
+        });
+        const action = deriveSessionAction(session.status, acknowledgedAt);
         return {
           id: session.id,
           workspaceId: session.workspaceId,
@@ -102,7 +131,7 @@ export function createSessionRouter(context: ServerContext) {
           profile: session.profile,
           status: session.status,
           runId: session.runId,
-          acknowledgedAt: session.acknowledgedAt,
+          acknowledgedAt,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
           // session-store projects the newest event; updatedAt remains the
@@ -130,15 +159,23 @@ export function createSessionRouter(context: ServerContext) {
         throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
       }
 
-      // Session schema has no runId (frozen contract); compose it (N3). Read
-      // the current event tail as well so list/get expose one lastActivityAt
-      // meaning instead of list=max(event) while get=updatedAt. The tail read
-      // projects only timestamp (no full-event payload deserialization).
-      const [runId, latestEventAt] = await Promise.all([
+      // Session schema has no runId/acknowledgedAt (frozen contract); compose
+      // both from the projection/store. Read the current event tail as well so
+      // list/get expose one lastActivityAt and one needsAction meaning.
+      const [runId, latestEventAt, workspaceSessions] = await Promise.all([
         context.sessions.getRunIdBySessionId(input.sessionId),
         context.sessions.getLatestEventTimestamp(input.sessionId),
+        context.sessions.listSessions(session.workspaceId),
       ]);
-      const action = deriveSessionAction(session.status);
+      const projected = workspaceSessions.find(
+        (candidate) => candidate.id === input.sessionId,
+      );
+      const acknowledgedAt = currentFailureAcknowledgement({
+        status: session.status,
+        acknowledgedAt: projected?.acknowledgedAt,
+        updatedAt: session.updatedAt,
+      });
+      const action = deriveSessionAction(session.status, acknowledgedAt);
       return {
         session: {
           id: session.id,
@@ -147,6 +184,7 @@ export function createSessionRouter(context: ServerContext) {
           profile: session.profile,
           status: session.status,
           runId,
+          acknowledgedAt,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
           lastActivityAt: latestActivityTimestamp(
@@ -161,6 +199,17 @@ export function createSessionRouter(context: ServerContext) {
     },
 
     async acknowledge(input: { sessionId: string }) {
+      const session = await context.sessions.getSession(input.sessionId);
+      if (!session) {
+        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+      }
+      if (session.status !== 'failed') {
+        throw new ApiError(
+          'BAD_REQUEST',
+          'Only a currently failed session can be marked as handled',
+        );
+      }
+
       const acknowledgedAt = await context.sessions.acknowledgeSession(
         input.sessionId,
       );
