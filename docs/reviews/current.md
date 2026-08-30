@@ -45,6 +45,9 @@
 - workspace SSE process-local 路径按 workspace membership 隔离；
 - query key 切换不再短暂展示上一 provider/mode/auth scope 的旧数据。
 
+
+> 注：以下"部分完成"与"本轮新增或重新确认的主要问题"两节为第七轮报告原始发现快照；其中 Web 模板目录、高级入口 fail-open、DSH 生产 preflight、长 Session 有界化、手册 Node 版本等条目已在 v0.18.0 按上文"第七轮批注整改"段修复，仍未关闭项以该段为准。
+
 ## 部分完成，不能按“已关闭”表述
 
 - **Shutdown**：主竞态已修，但不合作 executor/provider 的 hard deadline 和 durable interrupted/recoverable 语义未定；
