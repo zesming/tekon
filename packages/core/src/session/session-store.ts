@@ -109,6 +109,20 @@ export interface SessionEventStore {
     sinceSeq: number,
     limit: number,
   ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
+  /**
+   * Backward cursor page read for "load earlier history" (ninth-review
+   * annotation 16.3): returns at most `limit` RAW events with seq < beforeSeq
+   * in DESCENDING order, plus hasMore when older rows exist. The caller filters
+   * visible events and derives the next cursor. Descending order is what lets
+   * the server return a continuation cursor even when a whole raw page is
+   * filtered out, fixing the old fixed-scan "empty visible page + hasMore but
+   * no cursor" dead end.
+   */
+  listEventsBefore(
+    sessionId: string,
+    beforeSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
   latestSeq(sessionId: string): Promise<number>;
   /**
    * Lightweight tail read for session.get's lastActivityAt: returns only the
@@ -480,6 +494,22 @@ export function createSessionEventStore(
            limit ?`,
         )
         .all(sessionId, sinceSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
+    },
+
+    async listEventsBefore(sessionId, beforeSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq < ?
+           order by seq desc
+           limit ?`,
+        )
+        .all(sessionId, beforeSeq, limit + 1) as SessionEventRow[];
       const hasMore = rows.length > limit;
       return {
         events: rows.slice(0, limit).map(mapSessionEvent),

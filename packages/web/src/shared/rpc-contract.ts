@@ -184,6 +184,9 @@ export const progressListInputSchema = z.object({
 export const sessionEventsInputSchema = z.object({
   sessionId: z.string().min(1),
   sinceSeq: z.number().int().nonnegative().optional(),
+  // Backward cursor for "load earlier history": when present, the server reads
+  // raw rows with seq < beforeSeq (descending) and returns nextBeforeSeq.
+  beforeSeq: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().max(1000).optional(),
 });
 
@@ -784,6 +787,11 @@ export const sessionEventsOutputSchema = z.object({
   events: z.array(sessionPresentedEventSchema),
   hasMore: z.boolean(),
   latestSeq: z.number(),
+  // Backward-cursor continuation: the smallest raw seq the server examined
+  // (next request uses beforeSeq = this value). Null only for a backward
+  // request when no older raw rows remain — the client's sole "reached the
+  // start" signal. Absent for forward (sinceSeq) requests.
+  nextBeforeSeq: z.number().int().nonnegative().nullable().optional(),
 });
 
 // ---------------------------------------------------------------------------

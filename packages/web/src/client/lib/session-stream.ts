@@ -164,11 +164,7 @@ export function lastEventId(events: readonly StreamEvent[]): number {
   return max;
 }
 
-export type StreamConnState =
-  | 'connecting'
-  | 'live'
-  | 'reconnecting'
-  | 'closed';
+export type StreamConnState = 'connecting' | 'live' | 'reconnecting' | 'closed';
 
 /**
  * HTTP statuses that will never recover on retry: an origin/Sec-Fetch guard
@@ -186,6 +182,12 @@ export interface OpenSessionStreamOptions {
   /** Called with the parsed event for each incoming data frame. */
   onEvent(event: StreamEvent): void;
   onStateChange(state: StreamConnState): void;
+  /**
+   * Called when the server signals that replay was truncated (reconnect budget
+   * or slow-client backpressure cap exceeded). The stream has switched to the
+   * recent tail; the UI should show a non-blocking notice. Optional.
+   */
+  onTruncated?: (cursor: number | null) => void;
   /** Resume point for the first connection (default 0 = full replay). */
   sinceSeq?: number;
   /** Overridable for tests; defaults to global fetch. */
@@ -214,9 +216,9 @@ function asStreamEvent(value: unknown): StreamEvent | null {
  * reconnects with exponential backoff, resuming from the max seq seen via the
  * `Last-Event-ID` header (server stitches 0..k ∪ k..end with no loss/dup).
  */
-export function openSessionStream(
-  options: OpenSessionStreamOptions,
-): { close(): void } {
+export function openSessionStream(options: OpenSessionStreamOptions): {
+  close(): void;
+} {
   const fetchImpl = options.fetchImpl ?? fetch;
   const baseBackoff = options.baseBackoffMs ?? 500;
   const maxBackoff = options.maxBackoffMs ?? 10_000;
@@ -269,7 +271,9 @@ export function openSessionStream(
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+        for (const frame of parser.push(
+          decoder.decode(value, { stream: true }),
+        )) {
           if (frame.data === undefined) continue;
           try {
             const parsed = JSON.parse(frame.data) as unknown;
@@ -283,6 +287,9 @@ export function openSessionStream(
               if (cursor !== null && Number.isFinite(cursor)) {
                 maxSeq = Math.max(maxSeq, cursor);
               }
+              options.onTruncated?.(
+                cursor !== null && Number.isFinite(cursor) ? cursor : null,
+              );
               continue;
             }
 

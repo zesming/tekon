@@ -121,12 +121,16 @@ export function EventFeed({
   reachedEarlierLimit,
   isLoadingEarlier,
   onLoadEarlier,
+  truncated,
+  onDismissTruncated,
 }: {
   events: StreamEvent[];
   hasEarlier?: boolean;
   reachedEarlierLimit?: boolean;
   isLoadingEarlier?: boolean;
   onLoadEarlier?: () => void;
+  truncated?: boolean;
+  onDismissTruncated?: () => void;
 }) {
   const [showTechnical, setShowTechnical] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -157,9 +161,7 @@ export function EventFeed({
       allGroups
         .map((group) => ({
           ...group,
-          rows: showTechnical
-            ? group.rows
-            : group.rows.filter(isNarrativeRow),
+          rows: showTechnical ? group.rows : group.rows.filter(isNarrativeRow),
         }))
         .filter((group) => group.rows.length > 0),
     [allGroups, showTechnical],
@@ -175,13 +177,34 @@ export function EventFeed({
 
   return (
     <div className="event-feed-shell">
+      {truncated ? (
+        <div
+          className="feed-truncation-banner"
+          role="status"
+          aria-live="polite"
+        >
+          <span>
+            连接恢复时历史量超过在线回放预算，已切换到最近记录；完整历史仍可按页读取。
+          </span>
+          {onDismissTruncated ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-xs"
+              aria-label="关闭历史截断提示"
+              onClick={onDismissTruncated}
+            >
+              关闭
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="event-feed-toolbar">
         <span className="text-muted">
           {showTechnical
             ? '正在显示完整技术时间线'
             : hiddenTechnicalCount > 0
-            ? `已隐藏 ${hiddenTechnicalCount} 条技术事件`
-            : '叙事时间线'}
+              ? `已隐藏 ${hiddenTechnicalCount} 条技术事件`
+              : '叙事时间线'}
         </span>
         <div className="flex gap-2 items-center">
           {externalHasEarlier && onLoadEarlier ? (
@@ -195,8 +218,8 @@ export function EventFeed({
               {isLoadingEarlier
                 ? '正在加载更早历史…'
                 : reachedEarlierLimit
-                ? '已加载最早历史'
-                : '加载更早历史'}
+                  ? '已加载最早历史'
+                  : '加载更早历史'}
             </button>
           ) : null}
           {hasEarlierEvents ? (

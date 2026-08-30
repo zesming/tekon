@@ -44,7 +44,10 @@ describe('tekon provider preflight', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     try {
-      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const exitCode = await runCli(
+        ['provider', 'preflight', 'dsh-headless'],
+        io,
+      );
       const stdout = io.takeStdout();
 
       expect(exitCode).toBe(0);
@@ -53,7 +56,11 @@ describe('tekon provider preflight', () => {
       expect(stdout).toContain('Help 合同检查: 通过');
       expect(stdout).toContain('Config 合同检查: 通过');
       expect(stdout).toContain('兼容性结论: 兼容');
-      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+      expect(stdout).toMatch(
+        new RegExp(
+          `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        ),
+      );
     } finally {
       process.env.PATH = originalPath;
     }
@@ -73,14 +80,21 @@ describe('tekon provider preflight', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     try {
-      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const exitCode = await runCli(
+        ['provider', 'preflight', 'dsh-headless'],
+        io,
+      );
       const stdout = io.takeStdout();
 
       expect(exitCode).toBe(1);
       expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
       expect(stdout).toContain('当前检测版本: 0.2.0-alpha');
       expect(stdout).toContain('兼容性结论: 不兼容');
-      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+      expect(stdout).toMatch(
+        new RegExp(
+          `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        ),
+      );
     } finally {
       process.env.PATH = originalPath;
     }
@@ -94,14 +108,21 @@ describe('tekon provider preflight', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = emptyBinDir;
     try {
-      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const exitCode = await runCli(
+        ['provider', 'preflight', 'dsh-headless'],
+        io,
+      );
       const stdout = io.takeStdout();
 
       expect(exitCode).toBe(1);
       expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
       expect(stdout).toContain('当前检测版本: 未安装或不可执行');
       expect(stdout).toContain('兼容性结论: 不兼容');
-      expect(stdout).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+      expect(stdout).toMatch(
+        new RegExp(
+          `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        ),
+      );
     } finally {
       process.env.PATH = originalPath;
     }
@@ -120,7 +141,10 @@ describe('tekon provider preflight', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     try {
-      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless'], io);
+      const exitCode = await runCli(
+        ['provider', 'preflight', 'dsh-headless'],
+        io,
+      );
       const stdout = io.takeStdout();
 
       expect(exitCode).toBe(1);
@@ -146,7 +170,10 @@ describe('tekon provider preflight', () => {
     const originalPath = process.env.PATH;
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     try {
-      const exitCode = await runCli(['provider', 'preflight', 'dsh-headless', '--json'], io);
+      const exitCode = await runCli(
+        ['provider', 'preflight', 'dsh-headless', '--json'],
+        io,
+      );
       const stdout = io.takeStdout();
 
       expect(exitCode).toBe(0);
@@ -158,7 +185,11 @@ describe('tekon provider preflight', () => {
         configContractOk: true,
         compatible: true,
       });
-      expect(parsed.installHint).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+      expect(parsed.installHint).toMatch(
+        new RegExp(
+          `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+        ),
+      );
     } finally {
       process.env.PATH = originalPath;
     }
@@ -166,9 +197,14 @@ describe('tekon provider preflight', () => {
 
   it('rejects unsupported provider name', async () => {
     const io = createMemoryIo();
-    const exitCode = await runCli(['provider', 'preflight', 'some-unknown-provider'], io);
+    const exitCode = await runCli(
+      ['provider', 'preflight', 'some-unknown-provider'],
+      io,
+    );
     expect(exitCode).toBe(1);
-    expect(io.takeStderr()).toContain('暂不支持对 Provider \'some-unknown-provider\' 进行预检');
+    expect(io.takeStderr()).toContain(
+      "暂不支持对 Provider 'some-unknown-provider' 进行预检",
+    );
   });
 
   it('rejects provider command without subcommands', async () => {

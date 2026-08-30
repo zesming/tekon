@@ -535,12 +535,12 @@ Tekon 必须继续拥有自己的：
 | P0-ARCH-03 | P0 | 未关闭 | Session Event 仍为 best-effort projection，不是 durable inbox/权威历史。 |
 | P0-PRODUCT-01 | P0 | 未关闭 | follow-up、steer、真实 prompt cancel、restart resume、Collaborate → Deliver 未闭环。 |
 | P1-PLAN-01 | P1 | 部分完成 | Web 校验/持久化一致性已修；RunPlan 仍未绑定完整输入，也未成为执行/恢复唯一事实。 |
-| P1-SESSION-01 | P1 | 部分完成 | loadEarlier 非真正 before-cursor；过滤扫描无 continuation cursor；慢客户端 pending buffer 无容量上限。 |
-| P1-DSH-01 | P1 | 部分完成 | request-scoped preflight 与 escape hatch 已修；pin 落后官方发布且缺真实 smoke。 |
+| P1-SESSION-01 | P1 | 基本关闭（v0.20.0） | 已改为真正 beforeSeq 反向游标 + nextBeforeSeq continuation；慢客户端 pending buffer 有数量/字节双维度上限。长会话全链路（DB/API/SSE/客户端/DOM/模型上下文）历史预算仍未完全闭环。 |
+| P1-DSH-01 | P1 | 部分完成（v0.20.0） | pin 已升级到官方 `0.1.2-alpha.1` 并更新契约 fixture；真实 provider smoke（带 API key）仍待有 dsh 二进制的环境执行。 |
 | P1-DATA-01 | P1 | 基本关闭 | FK rebuild/quarantine 已落地；建议补严格 FK shape 与 foreign_key_check。 |
 | P1-A11Y-01 | P1 | 部分完成 | 两个配置详情 dialog 已闭环；全站 screen reader、多浏览器、对比度尚未验收。 |
 | P1-CODE-01 | P1 | 未关闭 | project router 和状态映射复杂度继续上升，边界与所有权不清。 |
-| P2-UX-01 | P2 | 未关闭 | replay truncation 未向用户显示；更早历史按钮可能没有实际向前推进。 |
+| P2-UX-01 | P2 | 已关闭（v0.20.0） | replay truncation 现在显示可关闭的非阻断提示；“加载更早历史”用反向游标，每次点击都真正向前推进。 |
 | P2-DOC-01 | P2 | 未关闭 | current.md 同时保留“已闭环”与上一轮“不能关闭”快照，版本成熟度文字仍写 v0.18.0。 |
 | FIX-PLAN-WEB | P1 | 本轮修复 | Web 校验计划、执行模板和持久化计划不一致。 |
 | FIX-DSH-RACE | P1 | 本轮修复 | Web `pendingAgent` 可在并发启动中串扰 preflight。 |
@@ -620,3 +620,88 @@ Tekon 必须继续拥有自己的：
 允许的最终成熟度表述：
 
 > Tekon v0.19.0 已形成测试较强、计划和风险边界更透明的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart 和全链路历史预算尚未闭环。
+
+---
+
+## 16. 追加批注（第二轮独立视角，2026-08-30）
+
+本节是在第九轮裁决基础上的独立复核批注。方法：同步 DeepSeek Harness 官方 master 到 `cd5ef8148158c3a752a658978873241fdf8e2bbc`（`dsh@0.1.2-alpha.1`），并对报告第 4/5/6/7/10/11 节逐项回到当前代码取证。结论区分【事实】【推断】【建议】。
+
+### 16.1 对报告裁决的总体判断
+
+【事实】报告第 11 节问题清单中，除 P2-DOC-01 外，其余条目与当前代码（HEAD `fafef36`）完全一致。P2-DOC-01 已在 `fafef36` 修复：`docs/reviews/current.md` 已无 `v0.18.0` 残留，"已闭环/不能关闭"双快照已整理为第九轮口径。
+
+【推断】报告把 P0 架构项（single-owner Runtime、authoritative Session log、executor 隔离）列为长期方向是正确的，但这些是"季度级"重构，不应阻塞本轮可交付的收敛。本轮应优先关闭"证据充分、改动可控、能直接提升用户可感知正确性"的项。
+
+【建议】本轮收敛范围锁定为以下四项，理由是它们都满足"报告已点名 + 代码证据明确 + 改动局部 + 有明确验收信号"：
+
+1. **DSH pin 升级到 `0.1.2-alpha.1`**（P1-DSH-01 的 pin 部分）；
+2. **真正的 backward cursor 历史分页**（P1-SESSION-01 的 cursor 部分 + P2-UX-01 的"按钮无前进"）；
+3. **SSE 慢客户端 pending Map 容量上限**（P1-SESSION-01 的背压部分）；
+4. **replay truncation 用户可见提示**（P2-UX-01 的截断提示部分）。
+
+明确**不**在本轮做：single-owner daemon、executor 进程隔离、authoritative Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定。这些保持报告原裁决，登记为后续顺序，避免本轮范围膨胀。
+
+### 16.2 DSH pin 升级的可行性取证
+
+【事实】我在官方 `0.1.2-alpha.1` 代码库逐项核对了 Tekon probe 依赖的三个契约锚点：
+
+- 版本输出：根 `package.json` version = `0.1.2-alpha.1`（`parseDshVersion` 取最后一行非空文本，格式兼容）；
+- help 锚点字符串 `print the final assistant message`：仍存在于 `packages/bundle/headless/src/startup.ts:34`（description 文案）；
+- 五个必需插件 id：`headless-runner`、`sandbox-policy`、`user-approval`、`session-persistence-jsonl`、`agent-default-model` 在官方代码库全部仍存在。
+
+【推断】锚点是子串/存在性匹配，不是整行快照，因此 `0.1.1-rc.2 → 0.1.2-alpha.1` 的 help/config 文案漂移不会破坏 probe；真正需要更新的是 `TESTED_DSH_VERSION` 常量与三份 fixture（`version.txt` / `headless-help.txt` / `headless-dump-default-config.txt`）。
+
+【事实-边界】本机未安装 `dsh` 二进制，也无 `DEEPSEEK_API_KEY`，因此无法在本环境跑真实 L2 live smoke 或带 key 的 Provider smoke。报告 §10.1 也明确 L2 是 opt-in。
+
+【建议】pin 升级做法：更新 `TESTED_DSH_VERSION` 为 `0.1.2-alpha.1`，重新生成 fixture（用官方仓库实测输出或在有 dsh 的机器上 `dsh --version` / `--profile headless --help` / `--profile headless --dump-default-config` 录制），L1 fixture 测试证明 parser 仍接受。**在没有真实 dsh 二进制的环境里，不应声称已完成真实 smoke**；升级后必须在报告/CHANGELOG 如实标注"fixture 契约已更新，真实 Provider smoke 待有 dsh+key 的环境执行"。这是诚实边界，不把 fixture 更新包装成兼容验证完成。
+
+### 16.3 长 Session 历史分页的具体缺陷取证
+
+【事实】当前 `loadEarlier` 不是真正的 backward cursor：
+
+- 客户端 `use-session-stream.ts:63` 用 `sinceSeq = max(0, earliestSeq - EARLIER_PAGE_LIMIT - 1)` 发起**正向**扫描，没有 `beforeSeq` 上界；
+- 服务端 `session.ts:223` 固定 `MAX_PAGE_SCANS = 5`，连续 5 个 raw page 全被 `presentEvent` 过滤时返回 `events: [] + hasMore: true`，但**不返回 continuation cursor**；
+- 客户端收到空数组直接 `setHasEarlier(false)`，历史拉取中断；
+- 更隐蔽的是 `use-session-stream.ts:70`：只要返回非空就 `retainFloor += events.length`，不校验返回事件是否真的 `< earliestSeq`（真正向前推进）。当服务端返回当前窗口之后的可见事件时，去重后窗口没前进，retainFloor 却虚增，到 500 后误显示"已加载最早历史"。
+
+【建议】改成真正的 backward cursor 合同：
+
+```text
+beforeSeq(=earliestSeq)
+→ server: raw rows WHERE seq < beforeSeq ORDER BY seq DESC LIMIT n
+→ 过滤 visible 后返回 { events, nextBeforeSeq: min(返回的 raw seq) - 1, hasMore }
+→ client 只在 nextBeforeSeq 严格变小时认为发生进展
+```
+
+这样空 visible page 也能通过 `nextBeforeSeq` 继续向前翻，不会中断；retainFloor 只在 cursor 真实前进时累加。
+
+### 16.4 SSE 背压与截断提示取证
+
+【事实】`sse.ts:108` 的 `pending = new Map()` 在 `isBackpressured` 期间只增不减，无容量上限、无丢弃策略、无断开保护。慢客户端 + 高频事件会让服务端内存无界增长。
+
+【事实】`session-stream.ts:276` 收到 `replay-truncated` 只更新 `maxSeq` 并 `continue`，UI 无任何提示。用户看到历史突然从较新尾窗开始，无法区分"没有更多" vs "重连预算超限" vs "网络中断"。
+
+【建议】
+
+- pending Map 加容量上限（如 10k 事件或字节预算），超限触发与 replay 相同的截断路径（发 `replay-truncated` + 断开重连到尾窗），而不是 OOM；
+- 客户端收到 `replay-truncated` 时在 Session 顶部显示非阻断提示："连接恢复时历史量超过在线回放预算，已切换到最近记录；完整历史仍可按页读取。"
+
+### 16.5 批注结论
+
+【事实】第九轮报告的代码级裁决经得起独立复核，证据链完整。
+
+【建议】本轮按 16.1 的四项收敛，完成后用最高思考等级 reviewer 循环复查，直到无必须修复项。P0 架构项保持报告原排序，不在本轮扩张。DSH pin 升级的"真实 smoke"缺口必须如实标注，不得在文档中表述为已完成兼容验证。
+
+### 16.6 v0.20.0 整改落地状态
+
+本节四项已在 v0.20.0 落地，对应方案 `docs/superpowers/plans/2026-08-30-ninth-review-annotation-remediation-plan.md`：
+
+1. **DSH pin 升级**：`TESTED_DSH_VERSION` 升级到 `0.1.2-alpha.1`，三份 fixture（version/help/config）按官方 `cd5ef81` 源码核对更新，L1 fixture 测试通过。**诚实边界**：本机无 `dsh` 二进制与 `DEEPSEEK_API_KEY`，真实 provider smoke 未执行，已在 CHANGELOG 与 fixture 注释如实标注。
+2. **backward cursor 历史分页**：新增 `listEventsBefore`（`seq < beforeSeq ORDER BY seq DESC`）+ `nextBeforeSeq` continuation；`loadEarlier` 改用 `beforeSeq`，"到底"信号统一为 `nextBeforeSeq === null`，删除"空数组即停"旧分支；retainFloor 只在窗口真正前进时累加。新增测试构造连续 >5 页内部事件，证明不再中断。
+3. **SSE 背压上限**：`pending` Map 增加 `MAX_PENDING_EVENTS`(10000) 与 `MAX_PENDING_BYTES`(20MB) 双维度上限，超限发 `replay-truncated` 并关闭连接让客户端重连到尾窗。
+4. **truncation 用户提示**：客户端 `onTruncated` 回调 → `useSessionStream.truncated` 状态 → EventFeed 顶部可关闭非阻断 banner，e2e 覆盖出现/不阻塞/可关闭。
+
+验证：`pnpm test` 135 文件 / 1465 通过 / 3 跳过；`pnpm -r typecheck` 全绿；Web Playwright 36 个 e2e 全绿（含新增 truncation banner）。
+
+reviewer 对方案的两项必须修复（`nextBeforeSeq` 去掉 `-1` 避免 off-by-one 丢事件、"到底"信号统一为 `nextBeforeSeq === null`）已在实现中采纳。

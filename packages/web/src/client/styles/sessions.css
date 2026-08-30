@@ -159,6 +159,20 @@
 .event-feed-shell {
   min-width: 0;
 }
+.feed-truncation-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-left: 3px solid var(--accent, #2563eb);
+  border-radius: 8px;
+  background: var(--surface-1, #fff);
+  font-size: 12px;
+  color: var(--text, #0f172a);
+}
 .event-feed-toolbar {
   display: flex;
   align-items: center;

@@ -1,5 +1,19 @@
 # 变更日志
 
+## v0.20.0
+
+本轮落地第九轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-ninth-review.md`，PR #11）第 16 节批注锁定的四项收敛：DSH 版本 pin 升级、真正的历史反向分页、慢客户端背压上限与历史截断用户提示。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **“加载更早历史”真正向前推进**：历史分页改为真正的反向游标（`beforeSeq`），连续大量技术事件不再让“加载更早”按钮点了却没有更早内容，也不会误报“已加载最早历史”；每次点击都向更早的记录推进，直到真正到达起点。
+- **历史截断有明确提示**：当网络恢复或客户端较慢导致在线回放的历史量超过预算时，会话顶部出现一条可关闭的非阻断提示，说明已切换到最近记录、完整历史仍可按页读取，不再静默截断。
+- **慢客户端不再拖垮服务端内存**：服务端在慢客户端背压期间对未发送事件设置数量与字节双维度上限，超限即截断到尾窗并让客户端重连，而不是无界缓冲。
+
+### 工程与合同
+
+- **DSH 测试基准版本升级**：`dsh` 钉死版本由 `0.1.1-rc.2` 升级到官方当前基线 `0.1.2-alpha.1`，help/config 契约 fixture 同步更新。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与 L1 解析测试；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行，未在本轮声称完成兼容验证。
+
 ## v0.19.0
 
 本轮落地第八轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-eighth-review.md`，PR #11）第 18 节维护者批注后的整改，聚焦 canonical RunPlan、DSH 预检前移、长会话有界化、连接健康诚实化、数据引用完整性与弹窗可访问性；架构级项（single-owner daemon、Session 事实源选型、Collaborate 主链路、DSH pin 升级）按复审裁决维持冻结。

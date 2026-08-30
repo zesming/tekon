@@ -63,9 +63,7 @@ export function currentFailureAcknowledgement(input: {
   updatedAt: string;
 }): string | null {
   if (input.status !== 'failed' || !input.acknowledgedAt) return null;
-  return input.acknowledgedAt === input.updatedAt
-    ? input.acknowledgedAt
-    : null;
+  return input.acknowledgedAt === input.updatedAt ? input.acknowledgedAt : null;
 }
 
 /**
@@ -73,10 +71,7 @@ export function currentFailureAcknowledgement(input: {
  *   needs action -> actively running -> idle -> terminal history.
  * Within the same group, most recent activity stays first.
  */
-function attentionRank(
-  status: string,
-  acknowledgedAt?: string | null,
-): number {
+function attentionRank(status: string, acknowledgedAt?: string | null): number {
   if (deriveSessionAction(status, acknowledgedAt).needsAction) return 0;
   if (status === 'active') return 1;
   if (status === 'idle') return 2;
@@ -106,6 +101,83 @@ export function compareSessionAttention(
     return rightMs - leftMs;
   }
   return 0;
+}
+
+/**
+ * Backward-cursor read for "load earlier history" (ninth-review annotation
+ * 16.3). Reads raw rows with seq < beforeSeq in DESCENDING order, filters to
+ * visible events, and returns them in ascending order plus a continuation
+ * cursor. The cursor is the smallest raw seq examined; the client uses it as
+ * the next beforeSeq. Because the cursor comes from raw rows (not visible
+ * ones), a page that is entirely internal events still advances the cursor, so
+ * history paging never dead-ends on a long run of filtered events.
+ *
+ * nextBeforeSeq is null only when no older raw rows remain — the client's sole
+ * "reached the start" signal. hasMore is relative to beforeSeq (older raw rows
+ * exist), not to the global event stream.
+ */
+async function readEventsBackward(
+  sessions: ServerContext['sessions'],
+  sessionId: string,
+  beforeSeq: number,
+  targetLimit: number,
+  latestSeq: number,
+): Promise<{
+  events: PresentedEvent[];
+  hasMore: boolean;
+  latestSeq: number;
+  nextBeforeSeq: number | null;
+}> {
+  const RAW_CHUNK = Math.max(targetLimit, 200);
+  // Bounded scan per call: enough to fill a visible page through sparse
+  // internal-event regions, but never an unbounded history scan. The cursor
+  // always advances, so the client can page further on the next call.
+  const MAX_SCANS = 10;
+  const collected: PresentedEvent[] = [];
+  let cursor = beforeSeq;
+  let reachedStart = false;
+
+  for (let scan = 0; scan < MAX_SCANS; scan++) {
+    const page = await sessions.listEventsBefore(sessionId, cursor, RAW_CHUNK);
+    if (page.events.length === 0) {
+      reachedStart = true;
+      break;
+    }
+    // page.events is descending; the last element has the smallest seq.
+    const smallestRawSeq = page.events[page.events.length - 1].seq;
+    for (const rawEvent of page.events) {
+      const presented = presentEvent(rawEvent);
+      if (presented !== null) {
+        collected.push(presented);
+      }
+    }
+    cursor = smallestRawSeq;
+    if (collected.length >= targetLimit) {
+      break;
+    }
+    if (!page.hasMore) {
+      reachedStart = true;
+      break;
+    }
+  }
+
+  // collected is descending; return the newest targetLimit visible events.
+  const trimmed = collected.slice(0, targetLimit);
+  trimmed.sort((a, b) => a.seq - b.seq);
+
+  // The next cursor is the smallest seq we fully accounted for. When we
+  // returned visible events it is the smallest returned seq (older visible
+  // events are re-read on the next call and de-duped by the client). When the
+  // whole scan was internal events it is the smallest raw seq examined, so the
+  // client skips past the sparse region instead of dead-ending.
+  const nextCursor = trimmed.length > 0 ? trimmed[0].seq : cursor;
+
+  return {
+    events: trimmed,
+    hasMore: !reachedStart,
+    latestSeq,
+    nextBeforeSeq: reachedStart ? null : nextCursor,
+  };
 }
 
 /**
@@ -162,7 +234,10 @@ export function createSessionRouter(context: ServerContext) {
     async get(input: { sessionId: string }) {
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
-        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+        throw new ApiError(
+          'NOT_FOUND',
+          `Session not found: ${input.sessionId}`,
+        );
       }
 
       // Session schema has no runId/acknowledgedAt (frozen contract); compose
@@ -207,14 +282,36 @@ export function createSessionRouter(context: ServerContext) {
     async events(input: {
       sessionId: string;
       sinceSeq?: number;
+      beforeSeq?: number;
       limit?: number;
     }) {
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
-        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+        throw new ApiError(
+          'NOT_FOUND',
+          `Session not found: ${input.sessionId}`,
+        );
       }
 
       const targetLimit = Math.min(Math.max(1, input.limit ?? 500), 1000);
+      const latestSeq = await context.sessions.latestSeq(input.sessionId);
+
+      // Backward cursor path ("load earlier history"): read raw rows with
+      // seq < beforeSeq in descending order and return a continuation cursor
+      // (nextBeforeSeq) even when a whole raw page is filtered out. This fixes
+      // the old fixed-scan dead end where >5 consecutive internal-event pages
+      // returned an empty visible page with hasMore=true but no cursor.
+      if (typeof input.beforeSeq === 'number') {
+        return readEventsBackward(
+          context.sessions,
+          input.sessionId,
+          input.beforeSeq,
+          targetLimit,
+          latestSeq,
+        );
+      }
+
+      // Forward path (initial tail / SSE catch-up): unchanged.
       let currentSinceSeq = input.sinceSeq ?? 0;
       const presentedEvents: PresentedEvent[] = [];
       let hasMore = false;
@@ -263,8 +360,6 @@ export function createSessionRouter(context: ServerContext) {
         }
       }
 
-      const latestSeq = await context.sessions.latestSeq(input.sessionId);
-
       return {
         events: presentedEvents,
         hasMore,
@@ -275,7 +370,10 @@ export function createSessionRouter(context: ServerContext) {
     async acknowledge(input: { sessionId: string }) {
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
-        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+        throw new ApiError(
+          'NOT_FOUND',
+          `Session not found: ${input.sessionId}`,
+        );
       }
       if (session.status !== 'failed') {
         throw new ApiError(
@@ -288,7 +386,10 @@ export function createSessionRouter(context: ServerContext) {
         input.sessionId,
       );
       if (!acknowledgedAt) {
-        throw new ApiError('NOT_FOUND', `Session not found: ${input.sessionId}`);
+        throw new ApiError(
+          'NOT_FOUND',
+          `Session not found: ${input.sessionId}`,
+        );
       }
       return { acknowledgedAt };
     },

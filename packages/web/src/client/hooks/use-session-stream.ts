@@ -37,6 +37,10 @@ export interface UseSessionStreamResult {
   reachedEarlierLimit: boolean;
   isLoadingEarlier: boolean;
   loadEarlier: () => Promise<void>;
+  /** True when the server signalled replay truncation (budget/backpressure). */
+  truncated: boolean;
+  /** Dismiss the truncation notice. */
+  dismissTruncated: () => void;
 }
 
 export function useSessionStream(
@@ -48,37 +52,52 @@ export function useSessionStream(
   const [hasEarlier, setHasEarlier] = useState(false);
   const [reachedEarlierLimit, setReachedEarlierLimit] = useState(false);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [truncated, setTruncated] = useState(false);
   const eventsRef = useRef<StreamEvent[]>([]);
   const retainFloor = useRef(0);
+  // Backward cursor carried across loadEarlier calls. The server advances it
+  // even when a whole page is internal events, so an empty visible page does
+  // not dead-end paging.
+  const earlierCursor = useRef<number | null>(null);
+
+  const dismissTruncated = useCallback(() => setTruncated(false), []);
 
   const loadEarlier = useCallback(async () => {
-    if (!sessionId || isLoadingEarlier || retainFloor.current >= MAX_EARLIER) return;
+    if (!sessionId || isLoadingEarlier || retainFloor.current >= MAX_EARLIER)
+      return;
     const earliestSeq = eventsRef.current[0]?.seq ?? 0;
-    if (earliestSeq <= 1) {
+    const beforeSeq = earlierCursor.current ?? earliestSeq;
+    if (beforeSeq <= 1) {
       setHasEarlier(false);
       return;
     }
 
     setIsLoadingEarlier(true);
     try {
-      const sinceSeq = Math.max(0, earliestSeq - EARLIER_PAGE_LIMIT - 1);
+      // Backward cursor: ask for raw rows with seq < beforeSeq. The server
+      // returns nextBeforeSeq (smallest raw seq examined) which advances even
+      // when a whole page is internal events, so paging never dead-ends.
       const res = await rpc.call('session.events', {
         sessionId,
-        sinceSeq,
+        beforeSeq,
         limit: EARLIER_PAGE_LIMIT,
       });
+      const nextCursor = res?.nextBeforeSeq;
+      earlierCursor.current = nextCursor ?? null;
       if (res?.events && res.events.length > 0) {
-        retainFloor.current = Math.min(
-          MAX_EARLIER,
-          retainFloor.current + res.events.length,
-        );
+        const before = eventsRef.current[0]?.seq ?? 0;
+        eventsRef.current = mergeEventsBySeq(res.events, eventsRef.current);
+        const after = eventsRef.current[0]?.seq ?? before;
+        // Only count progress when the window actually moved backward.
+        if (after < before) {
+          retainFloor.current = Math.min(
+            MAX_EARLIER,
+            retainFloor.current + res.events.length,
+          );
+        }
         if (retainFloor.current >= MAX_EARLIER) {
           setReachedEarlierLimit(true);
         }
-        eventsRef.current = mergeEventsBySeq(
-          res.events,
-          eventsRef.current,
-        );
         const maxWindow =
           CLIENT_STREAM_WINDOW_SIZE +
           Math.min(retainFloor.current, MAX_EARLIER);
@@ -86,9 +105,12 @@ export function useSessionStream(
           eventsRef.current = eventsRef.current.slice(-maxWindow);
         }
         setEvents(eventsRef.current);
-        setHasEarlier((eventsRef.current[0]?.seq ?? 1) > 1);
-      } else {
+      }
+      // "Reached the start" is signalled solely by nextBeforeSeq === null.
+      if (nextCursor === null) {
         setHasEarlier(false);
+      } else {
+        setHasEarlier(true);
       }
     } catch {
       // keep current state on error
@@ -104,15 +126,20 @@ export function useSessionStream(
     // Reset accumulated state when the subscription target changes.
     eventsRef.current = [];
     retainFloor.current = 0;
+    earlierCursor.current = null;
     setEvents([]);
     setConnState('connecting');
     setHasEarlier(false);
     setReachedEarlierLimit(false);
     setIsLoadingEarlier(false);
+    setTruncated(false);
 
     const stream = openSessionStream({
       sessionId,
       token,
+      onTruncated() {
+        setTruncated(true);
+      },
       onEvent(event) {
         eventsRef.current = mergeEventsBySeq(eventsRef.current, [event]);
         const maxWindow =
@@ -141,5 +168,7 @@ export function useSessionStream(
     reachedEarlierLimit,
     isLoadingEarlier,
     loadEarlier,
+    truncated,
+    dismissTruncated,
   };
 }

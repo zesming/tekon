@@ -1,9 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import {
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +48,11 @@ describe('tekon provider preflight e2e', () => {
     expect(output).toContain('Help 合同检查: 通过');
     expect(output).toContain('Config 合同检查: 通过');
     expect(output).toContain('兼容性结论: 兼容');
-    expect(output).toMatch(/npm (?:install|i) -g @deepseek-ai\/dsh@0\.1\.1-rc\.2/);
+    expect(output).toMatch(
+      new RegExp(
+        `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      ),
+    );
   });
 
   it('runs provider preflight dsh-headless --json returning parseable JSON', () => {

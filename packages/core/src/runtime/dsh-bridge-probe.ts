@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
-export const TESTED_DSH_VERSION = '0.1.1-rc.2';
+export const TESTED_DSH_VERSION = '0.1.2-alpha.1';
 
 /**
  * Plugin ids that MUST appear in `dsh --profile headless --dump-default-config`.

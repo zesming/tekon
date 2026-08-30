@@ -112,6 +112,30 @@ describe('session event store', () => {
     expect(await sessions.listEventsSince(session.id, 3)).toEqual([]);
   });
 
+  it('listEventsBefore returns raw events with seq < beforeSeq in descending order', async () => {
+    const { sessions } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    for (let i = 0; i < 5; i++) {
+      await sessions.appendEvent({ sessionId: session.id, type: 'turn/start' });
+    }
+
+    // limit 2 → the two newest rows below seq 5, descending.
+    const page = await sessions.listEventsBefore(session.id, 5, 2);
+    expect(page.events.map((event) => event.seq)).toEqual([4, 3]);
+    expect(page.hasMore).toBe(true);
+
+    // The next page continues from the smallest returned seq.
+    const next = await sessions.listEventsBefore(session.id, 3, 2);
+    expect(next.events.map((event) => event.seq)).toEqual([2, 1]);
+    expect(next.hasMore).toBe(false);
+
+    // No rows below seq 1.
+    const empty = await sessions.listEventsBefore(session.id, 1, 10);
+    expect(empty.events).toEqual([]);
+    expect(empty.hasMore).toBe(false);
+  });
+
   it('roundtrips payloads, arrays, booleans, and event metadata', async () => {
     const { sessions } = setupStore();
     const { session } = await seedSession(sessions);

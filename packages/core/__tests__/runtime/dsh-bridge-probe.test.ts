@@ -138,7 +138,7 @@ describe('assertDshDefaultConfigContract', () => {
 // ── runDshPreflight ─────────────────────────────────────────────────────
 
 describe('runDshPreflight', () => {
-  const validVersion = '0.1.1-rc.2\n';
+  const validVersion = TESTED_DSH_VERSION + '\n';
   const validHelp = [
     'Usage: dsh --profile headless [options] [task...]',
     'Answer one task, print the final assistant message, and exit.',
@@ -154,7 +154,8 @@ describe('runDshPreflight', () => {
   });
 
   it('succeeds when version and contracts match', async () => {
-    const { runDshPreflight } = await import('../../src/runtime/dsh-bridge-probe.js');
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
     const result = await runDshPreflight('dsh', {
       probeVersion: async () => validVersion,
       probeHelp: async () => validHelp,
@@ -162,16 +163,17 @@ describe('runDshPreflight', () => {
     });
 
     expect(result).toEqual({
-      testedVersion: '0.1.1-rc.2',
-      actualVersion: '0.1.1-rc.2',
+      testedVersion: TESTED_DSH_VERSION,
+      actualVersion: TESTED_DSH_VERSION,
       helpContractOk: true,
       configContractOk: true,
-      installHint: 'npm install -g @deepseek-ai/dsh@0.1.1-rc.2',
+      installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
     });
   });
 
   it('fails fast on version mismatch', async () => {
-    const { runDshPreflight } = await import('../../src/runtime/dsh-bridge-probe.js');
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
     await expect(
       runDshPreflight('dsh', {
         probeVersion: async () => '0.2.0\n',
@@ -182,7 +184,8 @@ describe('runDshPreflight', () => {
   });
 
   it('fails when help contract is missing anchor', async () => {
-    const { runDshPreflight } = await import('../../src/runtime/dsh-bridge-probe.js');
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
     await expect(
       runDshPreflight('dsh', {
         probeVersion: async () => validVersion,
@@ -193,12 +196,14 @@ describe('runDshPreflight', () => {
   });
 
   it('fails when config contract is missing required plugin', async () => {
-    const { runDshPreflight } = await import('../../src/runtime/dsh-bridge-probe.js');
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
     await expect(
       runDshPreflight('dsh', {
         probeVersion: async () => validVersion,
         probeHelp: async () => validHelp,
-        probeConfig: async () => JSON.stringify({ plugins: [{ id: 'headless-runner' }] }),
+        probeConfig: async () =>
+          JSON.stringify({ plugins: [{ id: 'headless-runner' }] }),
       }),
     ).rejects.toThrow(DshCapabilityError);
   });

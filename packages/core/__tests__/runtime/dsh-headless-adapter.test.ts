@@ -11,6 +11,7 @@ import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  TESTED_DSH_VERSION,
   buildDshHeadlessCommand,
   createDshHeadlessAdapter,
   dshHeadlessProviderConfig,
@@ -474,7 +475,7 @@ describe('dsh-headless adapter', () => {
       {
         probeVersion: async () => {
           probeCount += 1;
-          return '0.1.1-rc.2\n';
+          return TESTED_DSH_VERSION + '\n';
         },
         probeHelp: async () => 'usage: print the final assistant message\n',
         probeConfig: async () =>
@@ -497,7 +498,7 @@ describe('dsh-headless adapter', () => {
       {
         probeVersion: async () => {
           probeCount += 1;
-          return '0.1.1-rc.2\n';
+          return TESTED_DSH_VERSION + '\n';
         },
       },
     );
@@ -563,7 +564,7 @@ describe('dsh-headless adapter', () => {
       { ...ackConfig(repoPath), command: 'dsh', args: [] },
       gateway,
       {
-        probeVersion: async () => '0.1.1-rc.2\n',
+        probeVersion: async () => TESTED_DSH_VERSION + '\n',
         probeHelp: async () => 'dsh options: --help\n', // missing HEADLESS_HELP_ANCHOR
         probeConfig: async () =>
           'headless-runner\nsandbox-policy\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n',
@@ -589,7 +590,7 @@ describe('dsh-headless adapter', () => {
       { ...ackConfig(repoPath), command: 'dsh', args: [] },
       gateway,
       {
-        probeVersion: async () => '0.1.1-rc.2\n',
+        probeVersion: async () => TESTED_DSH_VERSION + '\n',
         probeHelp: async () => 'print the final assistant message\n',
         probeConfig: async () =>
           'headless-runner\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n', // missing sandbox-policy
@@ -620,7 +621,7 @@ describe('dsh-headless adapter', () => {
       {
         probeVersion: async () => {
           versionCount += 1;
-          return '0.1.1-rc.2\n';
+          return TESTED_DSH_VERSION + '\n';
         },
         probeHelp: async () => {
           helpCount += 1;
@@ -639,5 +640,4 @@ describe('dsh-headless adapter', () => {
     expect(helpCount).toBe(1);
     expect(configCount).toBe(1);
   });
-
 });

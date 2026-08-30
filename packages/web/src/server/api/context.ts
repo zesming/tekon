@@ -346,25 +346,19 @@ export interface ApiCaller {
     }>;
   };
   artifact: {
-    list(input: {
-      runId: string;
-    }): Promise<{ artifacts: ArtifactOutput[] }>;
+    list(input: { runId: string }): Promise<{ artifacts: ArtifactOutput[] }>;
   };
   gate: {
     list(input: { runId: string }): Promise<{
       gates: GateOutput[];
       pendingDecisions: HumanDecisionOutput[];
     }>;
-    approve(
-      input: DecisionInput,
-    ): Promise<{
+    approve(input: DecisionInput): Promise<{
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;
     }>;
-    reject(
-      input: DecisionInput,
-    ): Promise<{ decision: HumanDecisionOutput }>;
+    reject(input: DecisionInput): Promise<{ decision: HumanDecisionOutput }>;
   };
   audit: {
     list(input: {
@@ -390,7 +384,12 @@ export interface ApiCaller {
   };
   workflow: {
     list(): Promise<{
-      workflows: Array<{ id: string; name: string; path?: string; builtin?: boolean }>;
+      workflows: Array<{
+        id: string;
+        name: string;
+        path?: string;
+        builtin?: boolean;
+      }>;
     }>;
     plan(input: WorkflowPlanInput): Promise<RunPlan>;
   };
@@ -459,11 +458,13 @@ export interface ApiCaller {
     events(input: {
       sessionId: string;
       sinceSeq?: number;
+      beforeSeq?: number;
       limit?: number;
     }): Promise<{
       events: PresentedEvent[];
       hasMore: boolean;
       latestSeq: number;
+      nextBeforeSeq?: number | null;
     }>;
   };
   /**

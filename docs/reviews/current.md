@@ -1,10 +1,10 @@
 # Tekon 当前权威产品与架构评审
 
-- **当前报告**：[2026-08-30 Tekon 人类可用性、持续协作与 DeepSeek Harness 第九轮全面复审](2026-08-30-tekon-human-first-harness-ninth-review.md)
+- **当前报告**：[2026-08-30 Tekon 人类可用性、持续协作与 DeepSeek Harness 第九轮全面复审](2026-08-30-tekon-human-first-harness-ninth-review.md)（含第 16 节批注与 v0.20.0 整改）
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **用户 v0.19.0 整改快照**：`f7be7550680a792f9a619e6de2056612226e9d2b`
 - **reviewer 代码快照**：`4d4daeaf176f2457b4d64b084f73fe511661fd4f`
-- **当前版本**：`0.19.0`
+- **当前版本**：`0.20.0`
 - **代码自动化状态**：`4d4daeaf...` 的 Core #314 与 CI #223 均为 `completed/success`；Root、CLI unit/e2e、Web build/typecheck/unit、Playwright 全部成功
 - **当前裁决**：本轮用户整改与 reviewer 低风险修复通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
@@ -38,8 +38,8 @@
 ## 仍不能按“已关闭”表述的项目
 
 - **RunPlan**：Web 校验与持久化一致性已修，但 snapshot 尚未完整绑定 Demand version、base revision、workspace identity、网络确认、预期 Artifacts 和 resolved Provider config；execute/resume 也未把它当作唯一执行事实。
-- **长 Session**：`loadEarlier` 仍是用 `sinceSeq` 模拟向前读取，不是真正的 `beforeSeq` cursor；过滤扫描没有 continuation cursor；慢客户端期间 SSE pending Map 无容量上限；截断未向用户显示。
-- **DSH**：入口 preflight 已基本闭环，但 tested pin 仍是 `0.1.1-rc.2`，官方当前基线为 `0.1.2-alpha.1`；缺 contract fixture 更新和真实 Provider smoke。
+- **长 Session**：v0.20.0 已改为真正的 `beforeSeq` 反向游标 + `nextBeforeSeq` continuation，空可见页不再中断；慢客户端 SSE pending Map 有事件数/字节双维度上限；截断有可关闭的用户提示。全链路（DB/API/SSE/客户端/DOM/模型上下文）历史预算仍未完全闭环。
+- **DSH**：v0.20.0 已把 tested pin 升级到官方 `0.1.2-alpha.1` 并更新 contract fixture；真实 Provider smoke（带 API key）仍待有 dsh 二进制的环境执行。
 - **Shutdown**：closed fence 只能让 DB late write 失败，不能证明不合作 executor、文件/Git 副作用或外部 SDK 已 quiescent。
 - **数据**：FK migration 基本关闭；建议继续补严格 FK shape 校验与 `foreign_key_check`。
 - **可访问性**：当前两个详情 dialog 已闭环，不能外推为全站 screen reader、多浏览器和对比度验收。
@@ -59,7 +59,7 @@ repo 级 single-owner Runtime
 
 ## 允许的成熟度表述
 
-> Tekon v0.19.0 已形成测试较强、计划和风险边界更透明的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart 和全链路历史预算尚未闭环。
+> Tekon v0.20.0 已形成测试较强、计划和风险边界更透明的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart 和全链路历史预算尚未闭环。
 
 ## 评审资料维护规则
 

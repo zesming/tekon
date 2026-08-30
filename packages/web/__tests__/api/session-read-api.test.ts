@@ -12,7 +12,10 @@ import {
 
 import { createWebFixtureProject } from '../fixtures/project.js';
 import { createApiCaller } from '../../src/server/api/root.js';
-import { createWebServer, type RunningWebServer } from '../../src/server/http.js';
+import {
+  createWebServer,
+  type RunningWebServer,
+} from '../../src/server/http.js';
 
 // Phase 3 3a: session read-path RPC (session.list / session.get) + the M1
 // token-wiring anti-false-green guard.
@@ -130,7 +133,9 @@ describe('web session read API', () => {
     // Seed sessions directly in the store (fixture seeds runs, not sessions).
     const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
-    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const workspace = await store.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
     const approval = await store.createSession({
       workspaceId: workspace.id,
       title: 'approval session',
@@ -208,7 +213,9 @@ describe('web session read API', () => {
       actionKind: 'approval',
     });
 
-    const byId = new Map(result.sessions.map((session) => [session.id, session]));
+    const byId = new Map(
+      result.sessions.map((session) => [session.id, session]),
+    );
     expect(byId.get(failed.id)).toMatchObject({
       status: 'failed',
       needsAction: true,
@@ -233,7 +240,9 @@ describe('web session read API', () => {
 
     const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
-    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const workspace = await store.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
     const session = await store.createSession({
       workspaceId: workspace.id,
       title: 'detail',
@@ -299,49 +308,51 @@ describe('web session read API', () => {
       'fixture-session-token',
     );
     expect(ok.status).toBe(200);
-    expect((ok.body as { result: { sessions: unknown[] } }).result).toMatchObject(
-      {
-        sessions: expect.any(Array),
-      },
-    );
+    expect(
+      (ok.body as { result: { sessions: unknown[] } }).result,
+    ).toMatchObject({
+      sessions: expect.any(Array),
+    });
   });
 });
 
 describe('session.events pagination (P1-UX-03)', () => {
-  it("continues scanning across raw pages when an entire chunk consists of internal events", async () => {
+  it('continues scanning across raw pages when an entire chunk consists of internal events', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
     const { store, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
-    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const workspace = await store.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
     const session = await store.createSession({
       workspaceId: workspace.id,
-      title: "invisible-scan-test",
-      profile: "human-web",
-      runId: "run_events_scan",
+      title: 'invisible-scan-test',
+      profile: 'human-web',
+      runId: 'run_events_scan',
     });
 
     await store.appendEvent({
       sessionId: session.id,
-      type: "assistant/message",
-      payload: { text: "visible-1" },
+      type: 'assistant/message',
+      payload: { text: 'visible-1' },
       modelVisible: true,
     }); // seq 1
 
     for (let i = 2; i <= 121; i++) {
       await store.appendEvent({
         sessionId: session.id,
-        type: "internal/checkpoint",
+        type: 'internal/checkpoint',
         payload: { idx: i },
-        visibility: "internal",
+        visibility: 'internal',
       });
     }
 
     await store.appendEvent({
       sessionId: session.id,
-      type: "assistant/message",
-      payload: { text: "visible-2" },
+      type: 'assistant/message',
+      payload: { text: 'visible-2' },
       modelVisible: true,
     }); // seq 122
 
@@ -364,7 +375,9 @@ describe('session.events pagination (P1-UX-03)', () => {
 
     const { store, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
-    const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const workspace = await store.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
     const session = await store.createSession({
       workspaceId: workspace.id,
       title: 'events-pagination-test',
@@ -417,6 +430,92 @@ describe('session.events pagination (P1-UX-03)', () => {
     expect(page3.events).toHaveLength(1);
     expect(page3.events[0].seq).toBe(5);
     expect(page3.hasMore).toBe(false);
+  });
+
+  // Ninth-review annotation 16.3: backward cursor must keep advancing through a
+  // long run of internal events. The old forward path scanned a fixed 5 raw
+  // pages and dead-ended with an empty visible page + hasMore=true but no
+  // cursor. This dataset has >5 raw pages (limit 2, RAW_CHUNK >= 200) of
+  // internal events between the visible tail and the visible head.
+  it('backward cursor advances through >5 raw pages of internal events without dead-ending', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+
+    const { store, close } = openStore(fixture.projectRoot);
+    cleanupTasks.push(close);
+    const workspace = await store.getOrCreateDefaultWorkspace(
+      fixture.projectRoot,
+    );
+    const session = await store.createSession({
+      workspaceId: workspace.id,
+      title: 'backward-cursor-test',
+      profile: 'human-web',
+      runId: 'run_backward_cursor',
+    });
+
+    // One visible head event, then 1500 internal events, then one visible tail.
+    await store.appendEvent({
+      sessionId: session.id,
+      type: 'assistant/message',
+      payload: { text: 'visible-head' },
+      modelVisible: true,
+    }); // seq 1
+    for (let i = 2; i <= 1501; i++) {
+      await store.appendEvent({
+        sessionId: session.id,
+        type: 'internal/checkpoint',
+        payload: { idx: i },
+        visibility: 'internal',
+      });
+    }
+    await store.appendEvent({
+      sessionId: session.id,
+      type: 'assistant/message',
+      payload: { text: 'visible-tail' },
+      modelVisible: true,
+    }); // seq 1502
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+
+    // Start backward paging from the tail. The first page must surface the
+    // tail event and return a strictly smaller cursor (not null), proving it
+    // advanced past the internal-event run.
+    const page1 = await api.session.events({
+      sessionId: session.id,
+      beforeSeq: 1503,
+      limit: 2,
+    });
+    expect(page1.events.map((e) => e.seq)).toContain(1502);
+    expect(page1.nextBeforeSeq).not.toBeNull();
+    expect(page1.nextBeforeSeq as number).toBeLessThan(1502);
+
+    // Page until the cursor reports the start. The head event (seq 1) must be
+    // reachable, which is impossible with the old fixed 5-scan forward path.
+    let cursor: number | null = page1.nextBeforeSeq ?? null;
+    let sawHead = page1.events.some((e) => e.seq === 1);
+    let guard = 0;
+    while (cursor !== null && !sawHead && guard < 50) {
+      const page = await api.session.events({
+        sessionId: session.id,
+        beforeSeq: cursor,
+        limit: 2,
+      });
+      if (page.events.some((e) => e.seq === 1)) {
+        sawHead = true;
+      }
+      cursor = page.nextBeforeSeq ?? null;
+      guard += 1;
+    }
+    expect(sawHead).toBe(true);
+
+    // Once the start is reached, the final page reports nextBeforeSeq === null.
+    const finalPage = await api.session.events({
+      sessionId: session.id,
+      beforeSeq: 1,
+      limit: 2,
+    });
+    expect(finalPage.nextBeforeSeq).toBeNull();
   });
 
   it('throws NOT_FOUND for non-existent session', async () => {

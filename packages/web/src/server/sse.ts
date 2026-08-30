@@ -11,6 +11,14 @@ export const REPLAY_WINDOW = 500;
 export const CATCH_UP_CHUNK_LIMIT = 500;
 export const RECONNECT_MAX_EVENTS = 2000;
 export const RECONNECT_MAX_BYTES = 4_000_000;
+// Slow-client backpressure cap (ninth-review annotation 16.4): while the socket
+// is backpressured, live events buffer in `pending`. Bound that buffer in both
+// event count and bytes so a stalled client cannot grow server memory without
+// limit. On overflow we truncate to the tail window and close; the client
+// reconnects (it already handles replay-truncated) and re-subscribes to a fresh
+// tail. Sized above the replay window so normal bursts never trip it.
+export const MAX_PENDING_EVENTS = 10_000;
+export const MAX_PENDING_BYTES = 20_000_000;
 
 /**
  * Stream one session's durable events. The process-local bus is a low-latency
@@ -103,12 +111,52 @@ export async function handleSessionEventsSse(input: {
   // Internal events still advance the cursor even though presentEvent filters
   // them from the client.
   const pending = new Map<number, SessionEvent>();
+  let pendingBytes = 0;
+  let backpressureTruncated = false;
+
+  // Truncate to the tail window and close so the client reconnects to a fresh
+  // tail instead of buffering without bound. Mirrors the catch-up truncation
+  // frame so the client's existing replay-truncated handling applies.
+  const truncateForBackpressure = (): void => {
+    if (backpressureTruncated || closed || response.writableEnded) return;
+    backpressureTruncated = true;
+    pending.clear();
+    pendingBytes = 0;
+    void (async () => {
+      try {
+        const latest =
+          typeof sessions.latestSeq === 'function'
+            ? await sessions.latestSeq(sessionId)
+            : 0;
+        const tailCursor = Math.max(0, latest - REPLAY_WINDOW);
+        cursor = tailCursor;
+        if (!response.writableEnded) {
+          response.write(
+            `event: replay-truncated
+` +
+              `data: ${JSON.stringify({
+                cursor: tailCursor,
+                reason:
+                  'Slow-client backpressure buffer exceeded; truncated to tail window',
+              })}\n\n`,
+          );
+        }
+      } catch {
+        // fall through to close
+      } finally {
+        cleanup();
+      }
+    })();
+  };
+
   const drain = (): void => {
     if (isBackpressured) return;
     for (;;) {
       const next = pending.get(cursor + 1);
       if (!next) break;
       pending.delete(next.seq);
+      pendingBytes -= Buffer.byteLength(JSON.stringify(next));
+      if (pendingBytes < 0) pendingBytes = 0;
       cursor = next.seq;
       const ok = writeFrame(next);
       if (!ok) {
@@ -123,7 +171,13 @@ export async function handleSessionEventsSse(input: {
   };
   const enqueue = (event: SessionEvent): void => {
     if (event.seq <= cursor || pending.has(event.seq)) return;
+    if (backpressureTruncated) return;
     pending.set(event.seq, event);
+    pendingBytes += Buffer.byteLength(JSON.stringify(event));
+    if (pending.size > MAX_PENDING_EVENTS || pendingBytes > MAX_PENDING_BYTES) {
+      truncateForBackpressure();
+      return;
+    }
     if (!isBackpressured) {
       drain();
     }
@@ -162,10 +216,10 @@ export async function handleSessionEventsSse(input: {
           );
           events = Array.isArray(pageResult)
             ? pageResult
-            : pageResult.events ?? [];
+            : (pageResult.events ?? []);
           hasMore = Array.isArray(pageResult)
             ? events.length >= CATCH_UP_CHUNK_LIMIT
-            : pageResult.hasMore ?? false;
+            : (pageResult.hasMore ?? false);
         } else {
           events = await sessions.listEventsSince(sessionId, cursor);
           hasMore = false;
@@ -194,11 +248,13 @@ export async function handleSessionEventsSse(input: {
               : 0;
           cursor = Math.max(0, latest - REPLAY_WINDOW);
           pending.clear();
+          pendingBytes = 0;
           response.write(
             `event: replay-truncated\n` +
               `data: ${JSON.stringify({
                 cursor,
-                reason: 'Reconnection replay budget exceeded; truncated to tail window',
+                reason:
+                  'Reconnection replay budget exceeded; truncated to tail window',
               })}\n\n`,
           );
           if (typeof (sessions as any).listEventsPage === 'function') {
@@ -209,7 +265,7 @@ export async function handleSessionEventsSse(input: {
             );
             const tailEvents: SessionEvent[] = Array.isArray(tailResult)
               ? tailResult
-              : tailResult.events ?? [];
+              : (tailResult.events ?? []);
             for (const tailEvent of tailEvents) {
               enqueue(tailEvent);
             }
@@ -308,8 +364,7 @@ export async function handleWorkspaceSummarySse(input: {
   }): void => {
     if (closed || response.writableEnded) return;
     response.write(
-      `event: workspace/summary\n` +
-        `data: ${JSON.stringify(data)}\n\n`,
+      `event: workspace/summary\n` + `data: ${JSON.stringify(data)}\n\n`,
     );
   };
 

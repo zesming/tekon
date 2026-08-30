@@ -40,6 +40,8 @@ export function SessionDetailPage() {
     reachedEarlierLimit,
     isLoadingEarlier,
     loadEarlier,
+    truncated,
+    dismissTruncated,
   } = useSessionStream(sessionId);
   const liveState = useMemo(() => deriveSessionSidePanel(events), [events]);
 
@@ -90,6 +92,8 @@ export function SessionDetailPage() {
             reachedEarlierLimit={reachedEarlierLimit}
             isLoadingEarlier={isLoadingEarlier}
             onLoadEarlier={loadEarlier}
+            truncated={truncated}
+            onDismissTruncated={dismissTruncated}
           />
         </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
