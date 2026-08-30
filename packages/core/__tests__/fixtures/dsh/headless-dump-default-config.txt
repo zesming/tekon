@@ -1,14 +1,14 @@
-# Excerpt of `dsh --profile headless --dump-default-config`. The plugin ids and
+# Excerpt of `dsh --profile headless --dump-default-config`. The row ids and
 # config values below were cross-checked against the official dsh@0.1.2-alpha.1
-# source (commit cd5ef8148158c3a752a658978873241fdf8e2bbc): the headless bundle
-# composition (packages/bundle/headless) and the default-model selection
-# (provider deepseek-official, model deepseek-v4-flash). This is a source-level
+# source (commit cd5ef8148158c3a752a658978873241fdf8e2bbc): the base bundle,
+# headless bundle composition, and default-model selection (provider
+# deepseek-official, model deepseek-v4-flash). This is a source-level
 # cross-check, not a recording from a locally installed dsh binary; a real
 # L2 live smoke (DSH_CLI_PATH + API key) must still run in an environment that
 # has dsh installed before claiming provider compatibility. Trimmed to the
-# plugin ids the ACL contract checks for. The full dump is the composed plugin
-# tree; the contract only asserts substring presence of each required id
-# (drift = a required id disappears), so this excerpt is a faithful L1 fixture.
+# config row ids the ACL contract checks for. The full dump is the composed
+# plugin tree; the contract validates complete `id:` rows so a package-name
+# substring cannot hide a renamed or missing row.
 plugins:
   - id: headless-runner
     name: '@deepseek-ai/dsh-headless'
@@ -17,7 +17,7 @@ plugins:
     config:
       mode: workspace-write
       workspaceRoot: <cwd>
-  - id: user-approval
+  - id: approval
     name: '@deepseek-ai/dsh-user-approval'
     config:
       policy: ask
