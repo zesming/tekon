@@ -422,15 +422,15 @@ describe('command gateway', () => {
         child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
         setTimeout(() => {
           writeFileSync(join(outputDir, 'artifact-1.json'), '{"step":1}');
-        }, 30);
+        }, 50);
         setTimeout(() => {
           writeFileSync(join(outputDir, 'artifact-2.json'), '{"step":2}');
-        }, 70);
+        }, 300);
         setTimeout(() => {
           child.stdout.end();
           child.stderr.end();
           child.emit('close', 0, null);
-        }, 120);
+        }, 600);
         return child;
       },
     });
@@ -439,7 +439,7 @@ describe('command gateway', () => {
       cwd,
       outputDir,
       timeoutMs: 1_000,
-      noProgressTimeoutMs: 80,
+      noProgressTimeoutMs: 400,
       progressIntervalMs: 10,
       policy: {
         allow: [{ tool: 'node', args: [] }],
@@ -502,7 +502,7 @@ describe('command gateway', () => {
               ],
             }),
           );
-        }, 30);
+        }, 50);
         setTimeout(() => {
           writeFileSync(
             join(outputDir, 'implementation-plan.json'),
@@ -511,12 +511,12 @@ describe('command gateway', () => {
               body: 'Plan body.',
             }),
           );
-        }, 70);
+        }, 300);
         setTimeout(() => {
           child.stdout.end();
           child.stderr.end();
           child.emit('close', 0, null);
-        }, 120);
+        }, 600);
         return child;
       },
     });
@@ -526,7 +526,7 @@ describe('command gateway', () => {
       cwd,
       outputDir,
       timeoutMs: 1_000,
-      noProgressTimeoutMs: 80,
+      noProgressTimeoutMs: 400,
       progressIntervalMs: 10,
       policy: {
         allow: [{ tool: 'node', args: [] }],

@@ -7,8 +7,10 @@ import {
 } from 'react';
 import { useLocation } from 'react-router';
 
+import { useAuthScope } from '../hooks/use-auth-scope.js';
 import { useSessionToken } from '../hooks/use-session-token.js';
 import { useQuery } from '../hooks/use-query.js';
+import { queryKeys } from '../lib/query-keys.js';
 import { rpc } from '../lib/rpc-client.js';
 import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
@@ -28,6 +30,7 @@ export function TopBar(props: TopBarProps) {
   const { title = defaultTitle, subtitle, navOpen, onToggleNav, toggleRef } =
     props;
   const { token, setToken } = useSessionToken();
+  const authScope = useAuthScope();
   const [panelOpen, setPanelOpen] = useState(false);
   const [masked, setMasked] = useState(true);
   const [draftToken, setDraftToken] = useState(token ?? '');
@@ -81,39 +84,58 @@ export function TopBar(props: TopBarProps) {
     };
   }, [panelOpen]);
 
-  // P1-UX-02: consume project.health to show truthful credential status
-  const { data: healthData } = useQuery<
-    RpcProcedureMap['project.health']['output']
-  >(
-    token ? `project.health.${token}` : 'project.health.none',
+  // P1-UX-02: consume project.health to show truthful credential status. The
+  // cache key uses the auth scope instead of embedding the raw credential.
+  const {
+    data: healthData,
+    error: healthError,
+    refetch: refetchHealth,
+  } = useQuery<RpcProcedureMap['project.health']['output']>(
+    token ? queryKeys.projectHealth(authScope) : null,
     () => rpc.call('project.health', { token: token ?? undefined }),
   );
+
+  // Health is operational state, not a one-time bootstrap fact. Refresh it so
+  // an expired/rotated server credential or provider installation is reflected
+  // without requiring a page reload.
+  useEffect(() => {
+    if (!token) return;
+    const timer = window.setInterval(refetchHealth, 60_000);
+    return () => window.clearInterval(timer);
+  }, [refetchHealth, token]);
 
   const credentialStatus:
     | 'not-configured'
     | 'checking'
     | 'valid'
-    | 'invalid' = !token
+    | 'invalid'
+    | 'unavailable' = !token
     ? 'not-configured'
-    : healthData?.credential ?? 'checking';
+    : healthError
+      ? 'unavailable'
+      : healthData?.credential ?? 'checking';
 
   const statusLabel =
     credentialStatus === 'valid'
       ? '凭据有效'
       : credentialStatus === 'invalid'
         ? '凭据无效'
-        : credentialStatus === 'checking'
-          ? '校验中'
-          : '未配置凭据';
+        : credentialStatus === 'unavailable'
+          ? '校验失败'
+          : credentialStatus === 'checking'
+            ? '校验中'
+            : '未配置凭据';
 
   const statusAccessibleName =
     credentialStatus === 'valid'
       ? '连接凭据：有效'
       : credentialStatus === 'invalid'
         ? '连接凭据：无效'
-        : credentialStatus === 'checking'
-          ? '连接凭据：校验中'
-          : '连接凭据：未配置';
+        : credentialStatus === 'unavailable'
+          ? '连接凭据：校验失败'
+          : credentialStatus === 'checking'
+            ? '连接凭据：校验中'
+            : '连接凭据：未配置';
 
   const openPanel = () => {
     setDraftToken(token ?? '');
@@ -174,11 +196,18 @@ export function TopBar(props: TopBarProps) {
                 ? 'disconnected invalid'
                 : credentialStatus === 'checking'
                   ? 'disconnected checking'
-                  : 'disconnected'
+                  : credentialStatus === 'unavailable'
+                    ? 'disconnected unavailable'
+                    : 'disconnected'
           }`}
           aria-expanded={panelOpen}
           aria-controls="topbar-connection-panel"
           aria-label={statusAccessibleName}
+          title={
+            credentialStatus === 'unavailable'
+              ? (healthError?.message ?? '无法完成连接校验')
+              : undefined
+          }
           onClick={() => {
             if (panelOpen) closePanel(false);
             else openPanel();
@@ -195,12 +224,13 @@ export function TopBar(props: TopBarProps) {
             aria-hidden="true"
           />
           <span className="connection-status-label">{statusLabel}</span>
-          {healthData?.provider === 'unavailable' && credentialStatus === 'valid' ? (
+          {healthData?.provider === 'unavailable' &&
+          credentialStatus === 'valid' ? (
             <span
               className="text-muted text-xs ml-1"
-              title="Provider 当前不可用"
+              title="dsh-headless 当前不可用"
             >
-              (Provider不可用)
+              (dsh-headless不可用)
             </span>
           ) : null}
           <svg

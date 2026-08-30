@@ -31,7 +31,12 @@ export function RoleDetailPanel({ role, onClose }: RoleDetailPanelProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="detail-panel">
+      <div
+        className="detail-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${role.name} 角色详情`}
+      >
         {/* ── Header ── */}
         <div className="detail-panel-header">
           <div>
@@ -51,6 +56,7 @@ export function RoleDetailPanel({ role, onClose }: RoleDetailPanelProps) {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
+            aria-label="关闭角色详情"
             onClick={onClose}
           >
             ✕

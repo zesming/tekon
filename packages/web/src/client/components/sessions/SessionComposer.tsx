@@ -41,20 +41,22 @@ export function SessionComposer() {
     invalidateKeys: ['session.list', 'project.detail', 'project.overview'],
   });
 
+  const planDigest = plan?.digest;
   const canSend =
     Boolean(token) &&
     text.trim().length > 0 &&
-    Boolean(plan) &&
+    Boolean(planDigest) &&
     !planLoading &&
     !planError &&
     !startMutation.isPending;
 
   const handleSend = async () => {
-    if (!canSend || !token) return;
+    if (!canSend || !token || !planDigest) return;
     try {
       const result = await startMutation.mutate({
         demandText: text.trim(),
         token,
+        planDigest,
       });
       if (result?.sessionId) {
         setText('');
@@ -116,6 +118,10 @@ export function SessionComposer() {
             >
               重试
             </button>
+          </div>
+        ) : plan && !planDigest ? (
+          <div className="text-danger" role="alert">
+            执行计划缺少校验摘要，已阻止启动。请重新读取计划后再试。
           </div>
         ) : plan ? (
           <div>

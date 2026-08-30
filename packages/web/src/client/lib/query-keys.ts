@@ -26,24 +26,33 @@ export function authScope(token: string | null): string {
  */
 export const queryKeys = {
   // ── Auth-scoped keys ────────────────────────────────────────────────────
+  projectHealth: (scope: string) => `project.health.${scope}`,
   projectOverview: (scope: string) => `project.overview.${scope}`,
-  projectDetail: (projectId: string, scope: string) => `project.detail.${projectId}.${scope}`,
+  projectDetail: (projectId: string, scope: string) =>
+    `project.detail.${projectId}.${scope}`,
   runList: (scope: string) => `run.list.${scope}`,
-  runDetail: (runId: string, scope: string) => `run.detail.${runId}.${scope}`,
+  runDetail: (runId: string, scope: string) =>
+    `run.detail.${runId}.${scope}`,
   sessionList: (scope: string) => `session.list.${scope}`,
-  sessionDetail: (sessionId: string, scope: string) => `session.detail.${sessionId}.${scope}`,
-  gateResults: (runId: string, scope: string) => `gate.results.${runId}.${scope}`,
-  reviewDetail: (runId: string, scope: string) => `review.${runId}.${scope}`,
-  deliveryCiStatus: (runId: string, scope: string) => `delivery.ciStatus.${runId}.${scope}`,
+  sessionDetail: (sessionId: string, scope: string) =>
+    `session.detail.${sessionId}.${scope}`,
+  gateResults: (runId: string, scope: string) =>
+    `gate.results.${runId}.${scope}`,
+  reviewDetail: (runId: string, scope: string) =>
+    `review.${runId}.${scope}`,
+  deliveryCiStatus: (runId: string, scope: string) =>
+    `delivery.ciStatus.${runId}.${scope}`,
 
   // ── Session-independent keys ────────────────────────────────────────────
-  artifacts: (runId: string, nodeId?: string) => `artifacts.${runId}.${nodeId ?? 'all'}`,
+  artifacts: (runId: string, nodeId?: string) =>
+    `artifacts.${runId}.${nodeId ?? 'all'}`,
   auditLog: (runId: string) => `audit.${runId}`,
   readiness: (runId: string) => `readiness.${runId}`,
   deliveryStatus: (runId: string) => `delivery.${runId}`,
   humanDecisions: (runId: string) => `human.decisions.${runId}`,
   progress: (runId: string) => `progress.${runId}`,
-  draftShapeDetail: (shapePath: string) => `draftShape.detail.${shapePath}`,
+  draftShapeDetail: (shapePath: string) =>
+    `draftShape.detail.${shapePath}`,
   roles: () => 'roles',
   workflows: () => 'workflows',
   workflowPlan: (mode?: string, template?: string, agent?: string) =>
