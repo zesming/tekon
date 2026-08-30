@@ -23,6 +23,7 @@ import {
   runDshPreflight,
   TESTED_DSH_VERSION,
   type AuditLogger,
+  type RunPlan,
   type SubprocessRegistry,
   type TekonRepositories,
   type WorkflowEngine,
@@ -58,23 +59,38 @@ import {
 export type { ApiCaller } from './context.js';
 export { dispatchApiCall } from './dispatch.js';
 
+type WebRunEngineWithPlan = WebRunEngineInput & {
+  canonicalPlan?: RunPlan;
+  planSnapshot?: string;
+};
+
 /**
  * 4a: the web run-engine factory injected into SessionService. It encapsulates
- * the web provider/adapter construction (moved verbatim from the project
- * router's run handler): command gateway → web agent runtime → workflow
- * engine with gate/worktree managers. The service only calls the factory;
- * web-specific validation errors (ApiError from createWebAgentRuntime /
- * providerRuntimeFromRunInput) propagate through it unchanged.
+ * provider validation and construction before the engine is allowed to persist
+ * a Run. DSH preflight is request-scoped here: no process-global mutable slot
+ * can be overwritten by a concurrent start request.
  */
 function createWebRunEngineFactory(deps: {
   projectContext: WebProjectContext;
   repositories: TekonRepositories;
   audit: AuditLogger;
   registry: SubprocessRegistry;
-  onAgentResolved?: (agent: string) => void;
-}): (input: WebRunEngineInput) => WorkflowEngine {
-  return (input) => {
-    deps.onAgentResolved?.(input.agent);
+}): (input: WebRunEngineInput) => Promise<WorkflowEngine> {
+  return async (input) => {
+    if (input.agent === 'dsh-headless') {
+      try {
+        await runDshPreflight();
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : String(error);
+        throw new ApiError(
+          'BAD_REQUEST',
+          `dsh-headless 预检未通过: ${detail} (tested: ${TESTED_DSH_VERSION})`,
+        );
+      }
+    }
+
+    const plannedInput = input as WebRunEngineWithPlan;
     const gateway = createCommandGateway({
       repositories: deps.repositories,
     });
@@ -93,6 +109,9 @@ function createWebRunEngineFactory(deps: {
       agentProvider: agentRuntime.provider,
       agentConfigSummary: agentRuntime.configSummary,
       allowDirtyBase: input.allowDirtyBase,
+      canonicalPlan: plannedInput.canonicalPlan,
+      planDigest: plannedInput.planDigest,
+      planSnapshot: plannedInput.planSnapshot,
       registry: deps.registry,
       gateEngine: createGateEngine({
         repositories: deps.repositories,
@@ -256,12 +275,8 @@ export async function createApiCaller(
   });
 
   // 4a: SessionService owns the run/resume/cancel/pause orchestration; the
-  // project router degrades to auth + input assembly + mapping.
-  // P1-DSH-01: DSH capability preflight must run before any persistent side
-  // effect (Run/Session/Job/role-run/worktree). The engine factory records the
-  // resolved agent; the hook runs inside SessionService.startRun between
-  // createEngine and prepareRun. Mirrors the CLI composition root.
-  let pendingAgent: string | undefined;
+  // project router degrades to auth + input assembly + mapping. Provider
+  // preflight now belongs to the request-scoped engine factory above.
   const sessionService = createSessionService<WebRunEngineInput>({
     sessions,
     jobs,
@@ -275,26 +290,7 @@ export async function createApiCaller(
       repositories: dualRepositories,
       audit: dualAudit,
       registry,
-      onAgentResolved: (agent) => {
-        pendingAgent = agent;
-      },
     }),
-    preflight: async () => {
-      if (pendingAgent !== 'dsh-headless') return;
-      try {
-        await runDshPreflight();
-      } catch (error) {
-        // Any probe failure (version gate, contract drift, missing dsh
-        // binary) blocks before persistent side effects, with a readable
-        // message instead of a raw ENOENT.
-        const detail =
-          error instanceof Error ? error.message : String(error);
-        throw new ApiError(
-          'BAD_REQUEST',
-          `dsh-headless 预检未通过: ${detail} (tested: ${TESTED_DSH_VERSION})`,
-        );
-      }
-    },
   });
 
   const context: ServerContext = {
