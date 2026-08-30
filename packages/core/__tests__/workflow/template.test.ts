@@ -465,6 +465,20 @@ phases:
       'utf8',
     );
 
+    // Custom workflow using .yml extension
+    writeFileSync(
+      join(projectWorkflowsDir, 'yml-flow.yml'),
+      `id: internal-yml-id\nname: YML Project Flow\ngovernance: none\nphases:\n  - id: p1\n    nodes:\n      - id: n1\n        role: goal\n`,
+      'utf8',
+    );
+
+    // Override built-in docs-update using .yml extension
+    writeFileSync(
+      join(projectWorkflowsDir, 'docs-update.yml'),
+      `id: internal-docs-override\nname: Overridden Docs Update\ngovernance: none\nphases:\n  - id: p1\n    nodes:\n      - id: n1\n        role: goal\n`,
+      'utf8',
+    );
+
     const catalog = listWorkflowCatalog({ projectWorkflowsDir });
     const customEntry = catalog.find((entry) => entry.id === 'custom-flow');
     expect(customEntry).toBeDefined();
@@ -473,6 +487,24 @@ phases:
       name: 'Custom Project Flow',
       builtin: false,
       path: join(projectWorkflowsDir, 'custom-flow.yaml'),
+    });
+
+    const ymlEntry = catalog.find((entry) => entry.id === 'yml-flow');
+    expect(ymlEntry).toBeDefined();
+    expect(ymlEntry).toMatchObject({
+      id: 'yml-flow',
+      name: 'YML Project Flow',
+      builtin: false,
+      path: join(projectWorkflowsDir, 'yml-flow.yml'),
+    });
+
+    const docsEntry = catalog.find((entry) => entry.id === 'docs-update');
+    expect(docsEntry).toBeDefined();
+    expect(docsEntry).toMatchObject({
+      id: 'docs-update',
+      name: 'Overridden Docs Update',
+      builtin: false,
+      path: join(projectWorkflowsDir, 'docs-update.yml'),
     });
 
     const bugfixEntry = catalog.find((entry) => entry.id === 'bugfix');

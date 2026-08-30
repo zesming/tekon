@@ -12,6 +12,7 @@ import {
 import { useSessionToken } from './use-session-token.js';
 
 export const CLIENT_STREAM_WINDOW_SIZE = 1000;
+export const MAX_EARLIER = 2000;
 const EARLIER_PAGE_LIMIT = 500;
 
 // Events that change a session's list-visible state (status badge / existence).
@@ -33,6 +34,7 @@ export interface UseSessionStreamResult {
   connState: StreamConnState;
   latestSeq: number;
   hasEarlier: boolean;
+  reachedEarlierLimit: boolean;
   isLoadingEarlier: boolean;
   loadEarlier: () => Promise<void>;
 }
@@ -44,11 +46,13 @@ export function useSessionStream(
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [connState, setConnState] = useState<StreamConnState>('connecting');
   const [hasEarlier, setHasEarlier] = useState(false);
+  const [reachedEarlierLimit, setReachedEarlierLimit] = useState(false);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
   const eventsRef = useRef<StreamEvent[]>([]);
+  const retainFloor = useRef(0);
 
   const loadEarlier = useCallback(async () => {
-    if (!sessionId || isLoadingEarlier) return;
+    if (!sessionId || isLoadingEarlier || retainFloor.current >= MAX_EARLIER) return;
     const earliestSeq = eventsRef.current[0]?.seq ?? 0;
     if (earliestSeq <= 1) {
       setHasEarlier(false);
@@ -64,8 +68,12 @@ export function useSessionStream(
         limit: EARLIER_PAGE_LIMIT,
       });
       if (res?.events && res.events.length > 0) {
+        retainFloor.current += res.events.length;
+        if (retainFloor.current >= MAX_EARLIER) {
+          setReachedEarlierLimit(true);
+        }
         eventsRef.current = mergeEventsBySeq(
-          res.events as StreamEvent[],
+          res.events,
           eventsRef.current,
         );
         setEvents(eventsRef.current);
@@ -86,9 +94,11 @@ export function useSessionStream(
     }
     // Reset accumulated state when the subscription target changes.
     eventsRef.current = [];
+    retainFloor.current = 0;
     setEvents([]);
     setConnState('connecting');
     setHasEarlier(false);
+    setReachedEarlierLimit(false);
     setIsLoadingEarlier(false);
 
     const stream = openSessionStream({
@@ -96,10 +106,11 @@ export function useSessionStream(
       token,
       onEvent(event) {
         eventsRef.current = mergeEventsBySeq(eventsRef.current, [event]);
-        if (eventsRef.current.length > CLIENT_STREAM_WINDOW_SIZE) {
-          eventsRef.current = eventsRef.current.slice(
-            -CLIENT_STREAM_WINDOW_SIZE,
-          );
+        const maxWindow =
+          CLIENT_STREAM_WINDOW_SIZE +
+          Math.min(retainFloor.current, MAX_EARLIER);
+        if (eventsRef.current.length > maxWindow) {
+          eventsRef.current = eventsRef.current.slice(-maxWindow);
         }
         setEvents(eventsRef.current);
         setHasEarlier((eventsRef.current[0]?.seq ?? 1) > 1);
@@ -118,6 +129,7 @@ export function useSessionStream(
     connState,
     latestSeq: lastEventId(events),
     hasEarlier,
+    reachedEarlierLimit,
     isLoadingEarlier,
     loadEarlier,
   };

@@ -1,3 +1,6 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EventFeed } from "../../src/client/components/sessions/EventFeed.js";
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -289,5 +292,70 @@ describe("computeEventWindow (T6 event feed DOM windowing)", () => {
     expect(expanded.hasEarlierEvents).toBe(false);
     expect(expanded.hiddenEarlierCount).toBe(0);
     expect(expanded.visibleEvents).toHaveLength(10);
+  });
+});
+
+describe("EventFeed earlier history button rendering (MUST-1 + MUST-2)", () => {
+  it("renders enabled '加载更早历史' button when externalHasEarlier is true and not at limit", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("加载更早历史");
+    expect(html).not.toContain("disabled");
+  });
+
+  it("renders disabled '已加载最早历史' button when reachedEarlierLimit is true", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: true,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("已加载最早历史");
+    expect(html).toContain("disabled");
+  });
+
+  it("renders disabled '正在加载更早历史…' button when isLoadingEarlier is true", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: true,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("正在加载更早历史…");
+    expect(html).toContain("disabled");
+  });
+
+  it("preserves in-memory DOM unfold button when external pagination is not active", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+      }),
+    );
+    expect(html).toContain("展开更早的 50 条事件");
   });
 });

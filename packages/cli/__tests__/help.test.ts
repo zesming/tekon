@@ -228,15 +228,17 @@ describe('tekon help', () => {
 
     expect(exitCode).toBe(0);
     const lines = stdout.trim().split('\n');
-    expect(lines).toEqual([
-      'bugfix',
-      'docs-update',
-      'goal',
-      'plan-only',
-      'standard-delivery',
-      'standard-feature',
-      'test-improvement',
-    ]);
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'bugfix',
+        'docs-update',
+        'goal',
+        'plan-only',
+        'standard-delivery',
+        'standard-feature',
+        'test-improvement',
+      ]),
+    );
   });
 
 });

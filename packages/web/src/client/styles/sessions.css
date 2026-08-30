@@ -364,6 +364,10 @@
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
+.status-dot-checking {
+  background: var(--pend, #f59e0b);
+}
+
 .status-dot-disconnected {
   background: var(--text-t, #94a3b8);
 }

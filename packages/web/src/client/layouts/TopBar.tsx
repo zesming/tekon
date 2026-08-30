@@ -89,23 +89,31 @@ export function TopBar(props: TopBarProps) {
     () => rpc.call('project.health', { token: token ?? undefined }),
   );
 
-  const credentialStatus: 'not-configured' | 'valid' | 'invalid' = !token
+  const credentialStatus:
+    | 'not-configured'
+    | 'checking'
+    | 'valid'
+    | 'invalid' = !token
     ? 'not-configured'
-    : healthData?.credential ?? 'valid';
+    : healthData?.credential ?? 'checking';
 
   const statusLabel =
     credentialStatus === 'valid'
       ? '凭据有效'
       : credentialStatus === 'invalid'
         ? '凭据无效'
-        : '未配置凭据';
+        : credentialStatus === 'checking'
+          ? '校验中'
+          : '未配置凭据';
 
   const statusAccessibleName =
     credentialStatus === 'valid'
       ? '连接凭据：有效'
       : credentialStatus === 'invalid'
         ? '连接凭据：无效'
-        : '连接凭据：未配置';
+        : credentialStatus === 'checking'
+          ? '连接凭据：校验中'
+          : '连接凭据：未配置';
 
   const openPanel = () => {
     setDraftToken(token ?? '');
@@ -164,7 +172,9 @@ export function TopBar(props: TopBarProps) {
               ? 'connected'
               : credentialStatus === 'invalid'
                 ? 'disconnected invalid'
-                : 'disconnected'
+                : credentialStatus === 'checking'
+                  ? 'disconnected checking'
+                  : 'disconnected'
           }`}
           aria-expanded={panelOpen}
           aria-controls="topbar-connection-panel"
@@ -178,7 +188,9 @@ export function TopBar(props: TopBarProps) {
             className={`status-dot ${
               credentialStatus === 'valid'
                 ? 'status-dot-connected'
-                : 'status-dot-disconnected'
+                : credentialStatus === 'checking'
+                  ? 'status-dot-checking'
+                  : 'status-dot-disconnected'
             }`}
             aria-hidden="true"
           />

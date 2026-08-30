@@ -118,11 +118,13 @@ function FeedRowView({ row }: { row: FeedRow }) {
 export function EventFeed({
   events,
   hasEarlier: externalHasEarlier,
+  reachedEarlierLimit,
   isLoadingEarlier,
   onLoadEarlier,
 }: {
   events: StreamEvent[];
   hasEarlier?: boolean;
+  reachedEarlierLimit?: boolean;
   isLoadingEarlier?: boolean;
   onLoadEarlier?: () => void;
 }) {
@@ -186,10 +188,15 @@ export function EventFeed({
             <button
               type="button"
               className="btn btn-secondary btn-xs"
-              disabled={isLoadingEarlier}
+              disabled={isLoadingEarlier || reachedEarlierLimit}
+              title={reachedEarlierLimit ? '已加载最早历史' : undefined}
               onClick={onLoadEarlier}
             >
-              {isLoadingEarlier ? '正在加载更早历史…' : '加载更早历史'}
+              {isLoadingEarlier
+                ? '正在加载更早历史…'
+                : reachedEarlierLimit
+                ? '已加载最早历史'
+                : '加载更早历史'}
             </button>
           ) : hasEarlierEvents ? (
             <button

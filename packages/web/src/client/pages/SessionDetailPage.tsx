@@ -33,7 +33,14 @@ export function SessionDetailPage() {
     rpc.call('session.get', { sessionId: sessionId! }),
   );
 
-  const { events, connState } = useSessionStream(sessionId);
+  const {
+    events,
+    connState,
+    hasEarlier,
+    reachedEarlierLimit,
+    isLoadingEarlier,
+    loadEarlier,
+  } = useSessionStream(sessionId);
   const liveState = useMemo(() => deriveSessionSidePanel(events), [events]);
 
   const session = data?.session;
@@ -76,7 +83,14 @@ export function SessionDetailPage() {
 
       <div className="session-columns">
         <section className="session-feed-col" aria-label="会话活动">
-          <EventFeed key={sessionId ?? 'none'} events={events} />
+          <EventFeed
+            key={sessionId ?? 'none'}
+            events={events}
+            hasEarlier={hasEarlier}
+            reachedEarlierLimit={reachedEarlierLimit}
+            isLoadingEarlier={isLoadingEarlier}
+            onLoadEarlier={loadEarlier}
+          />
         </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
           <SessionSidePanel state={liveState} />

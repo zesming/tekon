@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { draftShapeSchema, sessionStatusSchema } from '@tekon/core';
+import {
+  draftShapeSchema,
+  sessionStatusSchema,
+  eventVisibilitySchema,
+} from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -753,6 +757,9 @@ export const sessionPresentedEventSchema = z.object({
   type: z.string(),
   timestamp: z.string(),
   payload: z.record(z.string(), z.unknown()),
+  visibility: eventVisibilitySchema,
+  modelVisible: z.boolean(),
+  correlationId: z.string().nullable(),
 });
 
 export const sessionEventsOutputSchema = z.object({
