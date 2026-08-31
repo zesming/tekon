@@ -1,5 +1,18 @@
 # 变更日志
 
+## v0.20.1
+
+本轮落地第十轮复审（`docs/reviews/2026-08-31-tekon-human-first-harness-tenth-review.md`，PR #11）第 16 节批注锁定的三项收敛：workspace summary SSE 背压上限、DSH Node 前置条件说明、统一 fake-dsh fixture 并移除 bare-line 测试 seam。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定、模型 compaction、完整历史导出、全站 a11y 专项）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **workspace 概览推送不再被慢客户端拖垮**：workspace summary SSE 在慢客户端背压期间对未发送帧设置数量与字节双维度上限（100 帧 / 256KB），超限即关闭连接，客户端重连后通过追赶轮询拿到最新快照。
+- **DSH 的 Node 版本要求被显式告知**：`tekon provider preflight dsh-headless` 的安装指引（文本与 `--json`）现在明确写出 DSH 要求 Node `^22.19.0 || >=24.0.0`，与 Tekon 主合同的 Node `^20.19.0 || >=22.12.0` 不同；用户手册 §5.7 同步补充该边界。Node 20 用户不会再被送进一个装不上或跑不起来的安装。
+
+### 工程与合同
+
+- **测试 fixture 诚实度**：CLI 层 fake-dsh 生成逻辑统一为单一 helper（`VALID_DSH_CONFIG` 由 `REQUIRED_DSH_PLUGIN_IDS` 生成），单测与 e2e 不再各持一份手写副本；adapter 测试的 probe config 从裸行 id 改为标准 YAML `id:` 行；生产 parser 移除 `bareProbeId` 兼容分支，合同校验只接受完整 `id:` YAML 行，消除 seam 掩盖回归的可能。
+
 ## v0.20.0
 
 本轮落地第九轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-ninth-review.md`，PR #11）第 16 节批注锁定的四项收敛：DSH 版本 pin 升级、真正的历史反向分页、慢客户端背压上限与历史截断用户提示。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定）按复审裁决维持冻结，登记为后续顺序。

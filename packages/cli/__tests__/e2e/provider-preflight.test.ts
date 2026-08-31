@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,13 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TESTED_DSH_VERSION } from '@tekon/core';
 
-const VALID_CONFIG = [
-  '- id: headless-runner',
-  '- id: sandbox-policy',
-  '- id: approval',
-  '- id: session-persistence-jsonl',
-  '- id: agent-default-model',
-].join('\n');
+import {
+  createFakeDsh,
+  VALID_DSH_CONFIG,
+} from '../helpers/fake-dsh.js';
 
 describe('tekon provider preflight e2e', () => {
   const tempDirs: string[] = [];
@@ -35,7 +32,7 @@ describe('tekon provider preflight e2e', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'dsh headless --help\nprint the final assistant message on stdout',
-      config: VALID_CONFIG,
+      config: VALID_DSH_CONFIG,
     });
 
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
@@ -60,6 +57,7 @@ describe('tekon provider preflight e2e', () => {
         `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
       ),
     );
+    expect(output).toContain('Node ^22.19.0 || >=24.0.0');
   });
 
   it('runs provider preflight dsh-headless --json returning parseable JSON', () => {
@@ -68,7 +66,7 @@ describe('tekon provider preflight e2e', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'print the final assistant message',
-      config: VALID_CONFIG,
+      config: VALID_DSH_CONFIG,
     });
 
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
@@ -103,26 +101,4 @@ describe('tekon provider preflight e2e', () => {
   });
 });
 
-function createFakeDsh(
-  dir: string,
-  opts: { version: string; help: string; config: string },
-) {
-  const scriptPath = join(dir, 'dsh');
-  const content = `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args.includes('--version')) {
-  process.stdout.write(${JSON.stringify(opts.version + '\n')});
-  process.exit(0);
-}
-if (args.includes('--help')) {
-  process.stdout.write(${JSON.stringify(opts.help + '\n')});
-  process.exit(0);
-}
-if (args.includes('--dump-default-config')) {
-  process.stdout.write(${JSON.stringify(opts.config + '\n')});
-  process.exit(0);
-}
-process.exit(0);
-`;
-  writeFileSync(scriptPath, content, { mode: 0o755 });
-}
+

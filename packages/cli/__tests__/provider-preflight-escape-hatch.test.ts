@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { TESTED_DSH_VERSION } from '@tekon/core';
 
 import { runCli, type CliIO } from '../src/index.js';
+import {
+  createFakeDsh as writeFakeDsh,
+  VALID_DSH_CONFIG,
+} from './helpers/fake-dsh.js';
 
 // A version that is genuinely different from the pin, so the escape-hatch
 // branch (not the version-match fast path) is what under test.
@@ -18,13 +22,7 @@ it('sanity: the escape-hatch test version is genuinely different from the pin', 
   expect(UNTESTED_VERSION).not.toBe(TESTED_DSH_VERSION);
 });
 const CONTRACT_HELP = 'print the final assistant message';
-const CONTRACT_CONFIG = [
-  '- id: headless-runner',
-  '- id: sandbox-policy',
-  '- id: approval',
-  '- id: session-persistence-jsonl',
-  '- id: agent-default-model',
-].join('\n');
+const CONTRACT_CONFIG = VALID_DSH_CONFIG;
 
 describe('dsh preflight version escape hatch', () => {
   const tempDirs: string[] = [];
@@ -97,18 +95,11 @@ describe('dsh preflight version escape hatch', () => {
 function createFakeDsh(tempDirs: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'tekon-dsh-escape-'));
   tempDirs.push(dir);
-  const path = join(dir, 'dsh');
-  writeFileSync(
-    path,
-    `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args.includes('--version')) process.stdout.write(${JSON.stringify(`${UNTESTED_VERSION}\n`)});
-else if (args.includes('--help')) process.stdout.write(${JSON.stringify(`${CONTRACT_HELP}\n`)});
-else if (args.includes('--dump-default-config')) process.stdout.write(${JSON.stringify(`${CONTRACT_CONFIG}\n`)});
-`,
-    'utf8',
-  );
-  chmodSync(path, 0o755);
+  writeFakeDsh(dir, {
+    version: UNTESTED_VERSION,
+    help: CONTRACT_HELP,
+    config: CONTRACT_CONFIG,
+  });
   return dir;
 }
 

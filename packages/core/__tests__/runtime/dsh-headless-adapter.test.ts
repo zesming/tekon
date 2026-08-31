@@ -450,7 +450,7 @@ describe('dsh-headless adapter', () => {
         probeVersion: async () => '0.9.9-wrong\n',
         probeHelp: async () => 'usage: print the final assistant message\n',
         probeConfig: async () =>
-          'headless-runner\nsandbox-policy\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n',
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
         allowVersion: '0.9.9-wrong',
         onWarn: (w) => warnings.push(w),
       },
@@ -479,7 +479,7 @@ describe('dsh-headless adapter', () => {
         },
         probeHelp: async () => 'usage: print the final assistant message\n',
         probeConfig: async () =>
-          'headless-runner\nsandbox-policy\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n',
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));
@@ -567,7 +567,7 @@ describe('dsh-headless adapter', () => {
         probeVersion: async () => TESTED_DSH_VERSION + '\n',
         probeHelp: async () => 'dsh options: --help\n', // missing HEADLESS_HELP_ANCHOR
         probeConfig: async () =>
-          'headless-runner\nsandbox-policy\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n',
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
       },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
@@ -593,7 +593,7 @@ describe('dsh-headless adapter', () => {
         probeVersion: async () => TESTED_DSH_VERSION + '\n',
         probeHelp: async () => 'print the final assistant message\n',
         probeConfig: async () =>
-          'headless-runner\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n', // missing sandbox-policy
+          '- id: headless-runner\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n', // missing sandbox-policy only
       },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
@@ -629,7 +629,7 @@ describe('dsh-headless adapter', () => {
         },
         probeConfig: async () => {
           configCount += 1;
-          return 'headless-runner\nsandbox-policy\nuser-approval\nsession-persistence-jsonl\nagent-default-model\n';
+          return '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n';
         },
       },
     );

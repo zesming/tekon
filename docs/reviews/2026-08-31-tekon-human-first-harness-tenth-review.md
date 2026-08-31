@@ -464,3 +464,63 @@ fake dsh 目前分散在 Core、CLI unit、CLI e2e 和 Web API 测试中，曾�
 - [Base composition](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/bundle/base/cordis.patch.yml)
 - [Default-config dump contract note](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/.agents/notes/archived/feature/2026-07-30-dsh-dump-config.md)
 - [dsh v0.1.2-alpha.2 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.2)
+
+---
+
+## 16. 追加批注（独立视角，2026-08-31）
+
+本节是在第十轮裁决基础上的独立复核批注。方法：同步 DeepSeek Harness 官方 master 到 `0a53fb55bea101816fa226bb964ae2bed71c343b`（`dsh@0.1.2-alpha.2`），并对报告第 4/5/12 节逐项回到当前代码取证。结论区分【事实】【推断】【建议】。
+
+### 16.1 对报告裁决的总体判断
+
+【事实】报告第 12 节问题清单中，本轮 reviewer 直接修复的三类 P2 问题（P2-SSE-01、P2-UX-01、P2-DSH-01）均已在当前代码（HEAD `f9f3733`）中真实落地，证据如下：
+
+- **P2-SSE-01**：`sse.ts:205` 的 `reconnectReplayBudgetActive = !isFreshConnect` 使预算仅在首次重连 backlog 生效；`sse.ts:285-292` 在首轮 catch-up 未截断时关闭预算，后续正常跨进程事件不再累计。
+- **P2-UX-01**：`EventFeed.tsx:158-177` 的 truncation banner 位于空状态判断之外，空事件时仍可见；文案明确"本页最多额外保留 2000 条"；按钮文案为"已达本页历史上限"。
+- **P2-DSH-01**：`dsh-bridge-probe.ts:28-34` 的 `REQUIRED_DSH_PLUGIN_IDS` 已改为官方真实 row id `approval`；`dsh-bridge-probe.ts:133-138` 用完整 YAML `id:` 行正则匹配，不再由包名子串假通过。
+
+【推断】报告把 P0 架构项（single-owner daemon、Session 事实源、Collaborate vertical slice、ACP 集成）列为长期方向是正确的。本轮应优先关闭"证据充分、改动可控、能直接提升用户可感知正确性或测试诚实度"的项。
+
+【建议】本轮收敛范围锁定为以下三项，理由是它们都满足"报告已点名 + 代码证据明确 + 改动局部 + 有明确验收信号"：
+
+1. **workspace summary SSE 背压上限**（P1-SESSION-01 的 workspace SSE 部分）；
+2. **DSH Node 前置条件说明**（P1-DSH-01 的文档/指引部分）；
+3. **统一 fake-dsh fixture 并移除 bare-line seam**（P2-TEST-01）。
+
+明确**不**在本轮做：single-owner daemon、executor 进程隔离、authoritative Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定、模型 compaction、完整历史导出、全站 a11y 专项。这些保持报告原裁决，登记为后续顺序。
+
+### 16.2 workspace summary SSE 背压缺陷取证
+
+【事实】`handleWorkspaceSummarySse`（`sse.ts:399-425`）的 `writeFrame` 直接 `response.write`，未检查返回值、无 pending 缓冲、无 slow-client 淘汰机制。这与 `handleSessionEventsSse` 已有的双维度背压上限形成明显不对称。
+
+【推断】workspace summary SSE 推送频率较低（workspace 级事件），但慢客户端仍可能导致服务端内存无界增长。修复方式应复用 `handleSessionEventsSse` 的背压模式，而非重新发明。
+
+【建议】为 `handleWorkspaceSummarySse` 补充：write 返回值监听、pending Map 容量上限（可复用 `MAX_PENDING_EVENTS/BYTES` 或设较小值）、超限截断+关闭。由于 workspace summary 是低频聚合事件，截断后客户端重连获取最新快照即可，不需要 `replay-truncated` 帧的复杂语义。
+
+### 16.3 DSH Node 前置条件缺口取证
+
+【事实】Tekon 根合同允许 Node `^20.19.0 || >=22.12.0`，而 DSH alpha.1/alpha.2 要求 `^22.19.0 || >=24.0.0`。`runDshPreflight` 的 `installHint`（`dsh-bridge-probe.ts:256`、`provider.ts:51`）仅为 `npm install -g @deepseek-ai/dsh@0.1.2-alpha.1`，未提及 Node 前置差异。`tekon-user-manual.md:372` 也未说明。
+
+【推断】用户在 Node 20 环境运行 `tekon provider preflight dsh-headless` 时，即使 dsh 已安装，也可能因 Node 版本不兼容而失败，但错误信息不会指出根因是 Node 版本。
+
+【建议】在 `installHint` 和手册 §5.7 中补充："DSH 要求 Node `^22.19.0 || >=24.0.0`，与 Tekon 主合同的 Node `^20.19.0 || >=22.12.0` 不同；Node 20 环境下 dsh-headless 可能无法安装或运行。"
+
+### 16.4 fake-dsh fixture 分散与 bare-line seam 取证
+
+【事实】fake dsh 脚本/配置分散在：
+- `packages/core/__tests__/runtime/dsh-headless-adapter.test.ts:453`
+- `packages/cli/__tests__/e2e/provider-preflight.test.ts:10-16`
+- `packages/cli/__tests__/provider-preflight.test.ts:232`
+- `packages/web/__tests__/api/project-run-unrestricted-network.test.ts:25-35`
+
+生产 parser `dsh-bridge-probe.ts:145-149` 仍保留 `bareProbeId` 兼容分支，使旧测试的裸行 id 仍能通过。
+
+【推断】多套 fixture 形状容易漂移（本轮 `user-approval` vs `approval` 就是例证）；bare-line seam 让生产校验逻辑复杂化，且可能掩盖真实 YAML 行匹配的回归。
+
+【建议】本轮先统一 CLI 层的 fake-dsh 生成逻辑（`provider-preflight.test.ts` 和 `e2e/provider-preflight.test.ts` 共用一个 helper），并把 `dsh-headless-adapter.test.ts` 的裸行配置改为标准 YAML。统一后移除 `bareProbeId` seam。Core fixture（`packages/core/__tests__/fixtures/dsh/`）已是标准 YAML，无需改动。
+
+### 16.5 批注结论
+
+【事实】第十轮报告的代码级裁决经得起独立复核，三类 P2 修复证据链完整。
+
+【建议】本轮按 16.1 的三项收敛，完成后用最高思考等级 reviewer 循环复查，直到无必须修复项。P0 架构项保持报告原排序，不在本轮扩张。DSH tested pin 保持 `0.1.2-alpha.1`（不盲目升级到 alpha.2），但文档必须称为"tested pin"而非"官方当前版本"。

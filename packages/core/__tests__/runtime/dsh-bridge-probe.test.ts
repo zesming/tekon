@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   TESTED_DSH_VERSION,
+  dshInstallHint,
   DshVersionGateError,
   DshCapabilityError,
   parseDshVersion,
@@ -174,7 +175,7 @@ describe('runDshPreflight', () => {
       actualVersion: TESTED_DSH_VERSION,
       helpContractOk: true,
       configContractOk: true,
-      installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+      installHint: dshInstallHint(),
     });
   });
 

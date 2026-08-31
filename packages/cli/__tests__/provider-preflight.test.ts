@@ -1,11 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -14,14 +7,10 @@ import { TESTED_DSH_VERSION } from '@tekon/core';
 
 import { runCli, type CliIO } from '../src/index.js';
 import { runDshPreflight } from '../src/commands/provider.js';
-
-const VALID_CONFIG = [
-  '- id: headless-runner',
-  '- id: sandbox-policy',
-  '- id: approval',
-  '- id: session-persistence-jsonl',
-  '- id: agent-default-model',
-].join('\n');
+import {
+  createFakeDsh,
+  VALID_DSH_CONFIG,
+} from './helpers/fake-dsh.js';
 
 describe('tekon provider preflight', () => {
   const tempDirs: string[] = [];
@@ -44,7 +33,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'dsh headless --help\nprint the final assistant message on stdout',
-      config: VALID_CONFIG,
+      config: VALID_DSH_CONFIG,
     });
 
     const io = createMemoryIo();
@@ -68,6 +57,7 @@ describe('tekon provider preflight', () => {
           `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
         ),
       );
+      expect(stdout).toContain('Node ^22.19.0 || >=24.0.0');
     } finally {
       process.env.PATH = originalPath;
     }
@@ -79,7 +69,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: '0.2.0-alpha',
       help: 'print the final assistant message',
-      config: VALID_CONFIG,
+      config: VALID_DSH_CONFIG,
     });
 
     const io = createMemoryIo();
@@ -101,6 +91,7 @@ describe('tekon provider preflight', () => {
           `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
         ),
       );
+      expect(stdout).toContain('Node ^22.19.0 || >=24.0.0');
     } finally {
       process.env.PATH = originalPath;
     }
@@ -129,6 +120,7 @@ describe('tekon provider preflight', () => {
           `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
         ),
       );
+      expect(stdout).toContain('Node ^22.19.0 || >=24.0.0');
     } finally {
       process.env.PATH = originalPath;
     }
@@ -168,7 +160,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'print the final assistant message',
-      config: VALID_CONFIG,
+      config: VALID_DSH_CONFIG,
     });
 
     const io = createMemoryIo();
@@ -195,6 +187,7 @@ describe('tekon provider preflight', () => {
           `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
         ),
       );
+      expect(parsed.installHint).toContain('Node ^22.19.0 || >=24.0.0');
     } finally {
       process.env.PATH = originalPath;
     }
@@ -228,30 +221,6 @@ describe('tekon provider preflight', () => {
     expect(stdout).toContain('preflight');
   });
 });
-
-function createFakeDsh(
-  dir: string,
-  opts: { version: string; help: string; config: string },
-) {
-  const scriptPath = join(dir, 'dsh');
-  const content = `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args.includes('--version')) {
-  process.stdout.write(${JSON.stringify(opts.version + '\n')});
-  process.exit(0);
-}
-if (args.includes('--help')) {
-  process.stdout.write(${JSON.stringify(opts.help + '\n')});
-  process.exit(0);
-}
-if (args.includes('--dump-default-config')) {
-  process.stdout.write(${JSON.stringify(opts.config + '\n')});
-  process.exit(0);
-}
-process.exit(0);
-`;
-  writeFileSync(scriptPath, content, { mode: 0o755 });
-}
 
 function createMemoryIo(): CliIO & {
   takeStdout(): string;

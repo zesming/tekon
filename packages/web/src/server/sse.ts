@@ -19,6 +19,11 @@ export const RECONNECT_MAX_BYTES = 4_000_000;
 // tail. Sized above the replay window so normal bursts never trip it.
 export const MAX_PENDING_EVENTS = 10_000;
 export const MAX_PENDING_BYTES = 20_000_000;
+// Workspace summary frames are small and low-frequency; use tighter caps than
+// the session stream. On overflow the connection closes and the client
+// reconnects, where the catch-up poll restores the latest snapshot.
+export const MAX_PENDING_WORKSPACE_EVENTS = 100;
+export const MAX_PENDING_WORKSPACE_BYTES = 256 * 1024;
 
 /**
  * Stream one session's durable events. The process-local bus is a low-latency
@@ -191,6 +196,9 @@ export async function handleSessionEventsSse(input: {
     closed = true;
     if (heartbeat) clearInterval(heartbeat);
     if (catchUpTimer) clearInterval(catchUpTimer);
+    pending.clear();
+    pendingBytes = 0;
+    response.removeAllListeners?.('drain');
     unsubscribe();
     if (!response.writableEnded) response.end();
   };
@@ -356,8 +364,15 @@ export async function handleWorkspaceSummarySse(input: {
   bus: SessionEventBus;
   heartbeatMs?: number;
   catchUpMs?: number;
+  // Test-only overrides for the backpressure caps. Defaults to the exported
+  // MAX_PENDING_WORKSPACE_* constants; production callers never set these.
+  maxPendingEvents?: number;
+  maxPendingBytes?: number;
 }): Promise<void> {
   const { request, response, workspaceId, sessions, bus } = input;
+  const maxPendingEvents =
+    input.maxPendingEvents ?? MAX_PENDING_WORKSPACE_EVENTS;
+  const maxPendingBytes = input.maxPendingBytes ?? MAX_PENDING_WORKSPACE_BYTES;
 
   response.statusCode = 200;
   response.setHeader('content-type', 'text/event-stream; charset=utf-8');
@@ -372,17 +387,70 @@ export async function handleWorkspaceSummarySse(input: {
   let catchUpInFlight = false;
   let lastSignature = '';
   let workspaceSessionIds = new Set<string>();
+  let isBackpressured = false;
+  const pending: string[] = [];
+  let pendingBytes = 0;
+
+  const serializeFrame = (data: {
+    workspaceId: string;
+    sessionId?: string;
+    type?: string;
+    timestamp?: string;
+  }): string =>
+    `event: workspace/summary\n` + `data: ${JSON.stringify(data)}\n\n`;
 
   const writeFrame = (data: {
     workspaceId: string;
     sessionId?: string;
     type?: string;
     timestamp?: string;
+  }): boolean => {
+    if (closed || response.writableEnded) return true;
+    return response.write(serializeFrame(data));
+  };
+
+  const drainPending = (): void => {
+    while (!closed && !response.writableEnded && pending.length > 0) {
+      const frame = pending.shift() as string;
+      pendingBytes -= Buffer.byteLength(frame);
+      if (pendingBytes < 0) pendingBytes = 0;
+      if (!response.write(frame)) {
+        isBackpressured = true;
+        response.once('drain', () => {
+          isBackpressured = false;
+          drainPending();
+        });
+        return;
+      }
+    }
+  };
+
+  // Buffer frames while the socket is backpressured, with the same dual
+  // dimension cap as the session stream. Overflow closes the connection; the
+  // client reconnects and the catch-up poll supplies the latest snapshot.
+  const enqueue = (data: {
+    workspaceId: string;
+    sessionId?: string;
+    type?: string;
+    timestamp?: string;
   }): void => {
     if (closed || response.writableEnded) return;
-    response.write(
-      `event: workspace/summary\n` + `data: ${JSON.stringify(data)}\n\n`,
-    );
+    if (isBackpressured) {
+      const frame = serializeFrame(data);
+      pending.push(frame);
+      pendingBytes += Buffer.byteLength(frame);
+      if (pending.length > maxPendingEvents || pendingBytes > maxPendingBytes) {
+        cleanup();
+      }
+      return;
+    }
+    if (!writeFrame(data)) {
+      isBackpressured = true;
+      response.once('drain', () => {
+        isBackpressured = false;
+        drainPending();
+      });
+    }
   };
 
   // 1. Process-local bus subscription. subscribeAll is repository-wide, so
@@ -397,7 +465,7 @@ export async function handleWorkspaceSummarySse(input: {
     ) {
       return;
     }
-    writeFrame({
+    enqueue({
       workspaceId,
       sessionId: event.sessionId,
       type: event.type,
@@ -410,6 +478,9 @@ export async function handleWorkspaceSummarySse(input: {
     closed = true;
     if (heartbeat) clearInterval(heartbeat);
     if (catchUpTimer) clearInterval(catchUpTimer);
+    pending.length = 0;
+    pendingBytes = 0;
+    response.removeAllListeners?.('drain');
     unsubscribe();
     if (!response.writableEnded) response.end();
   };
@@ -426,7 +497,7 @@ export async function handleWorkspaceSummarySse(input: {
       workspaceSessionIds = new Set(sessionList.map((session) => session.id));
       const signature = computeWorkspaceSignature(sessionList);
       if (lastSignature && signature !== lastSignature) {
-        writeFrame({ workspaceId, timestamp: new Date().toISOString() });
+        enqueue({ workspaceId, timestamp: new Date().toISOString() });
       }
       lastSignature = signature;
     } catch {
@@ -450,7 +521,9 @@ export async function handleWorkspaceSummarySse(input: {
 
   const heartbeatMs = input.heartbeatMs ?? 15_000;
   heartbeat = setInterval(() => {
-    if (!closed && !response.writableEnded) response.write(': ping\n\n');
+    if (!closed && !response.writableEnded && !isBackpressured) {
+      response.write(': ping\n\n');
+    }
   }, heartbeatMs);
   heartbeat.unref?.();
 

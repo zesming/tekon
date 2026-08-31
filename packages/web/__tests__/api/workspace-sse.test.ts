@@ -18,7 +18,10 @@ import {
   createWebServer,
   type RunningWebServer,
 } from '../../src/server/http.js';
-import { handleWorkspaceSummarySse } from '../../src/server/sse.js';
+import {
+  handleWorkspaceSummarySse,
+  MAX_PENDING_WORKSPACE_EVENTS,
+} from '../../src/server/sse.js';
 
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 
@@ -375,5 +378,254 @@ describe('workspace summary SSE endpoint (T5 / P1-UX-01)', () => {
     s.bus.publish(event);
 
     expect(fake.frames().length).toBe(0);
+  });
+
+  // Tenth-review annotation 16.2: a stalled client must not grow server memory
+  // without limit. While the socket is backpressured, summary frames buffer in
+  // a bounded pending queue; on overflow the server closes the connection so
+  // the client reconnects and the catch-up poll restores the latest snapshot.
+  it('closes the connection when the backpressure pending buffer exceeds the event cap', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const workspace = await s.store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await s.store.createSession({
+      workspaceId: workspace.id,
+      title: 'ws-sse-backpressure-test',
+      profile: 'human-web',
+      runId: null,
+    });
+
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+    let drainListeners = 0;
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/workspaces/${workspace.id}/summary/events`;
+    req.headers = {};
+    req.method = 'GET';
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        return false; // permanently backpressured
+      },
+      once(event: string, cb: () => void) {
+        if (event === 'drain') drainListeners += 1;
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    const done = handleWorkspaceSummarySse({
+      request: req,
+      response: res,
+      workspaceId: workspace.id,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+      catchUpMs: 60_000,
+    });
+    await done;
+
+    // Publish more live events than the cap while the socket stays backpressured.
+    for (let i = 0; i < MAX_PENDING_WORKSPACE_EVENTS + 10; i++) {
+      const event = await s.store.appendEvent({
+        sessionId: session.id,
+        type: 'turn/start',
+        payload: { idx: i },
+      });
+      s.bus.publish(event);
+    }
+
+    expect(ended).toBe(true); // connection closed so the client reconnects
+
+    req.emit('close');
+    await done;
+  });
+
+  it('closes the connection when the backpressure pending buffer exceeds the byte cap', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const workspace = await s.store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await s.store.createSession({
+      workspaceId: workspace.id,
+      title: 'ws-sse-backpressure-bytes-test',
+      profile: 'human-web',
+      runId: null,
+    });
+
+    const writtenFrames: string[] = [];
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/workspaces/${workspace.id}/summary/events`;
+    req.headers = {};
+    req.method = 'GET';
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        return false; // permanently backpressured
+      },
+      once(event: string, cb: () => void) {
+        req.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        req.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    // Inject a byte cap smaller than two frames so the byte dimension trips
+    // well before the event-count cap (each frame is ~180 bytes).
+    const done = handleWorkspaceSummarySse({
+      request: req,
+      response: res,
+      workspaceId: workspace.id,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+      catchUpMs: 60_000,
+      maxPendingEvents: 10_000,
+      maxPendingBytes: 256,
+    });
+    await done;
+
+    for (let i = 0; i < 10; i++) {
+      const event = await s.store.appendEvent({
+        sessionId: session.id,
+        type: 'turn/start',
+        payload: { idx: i },
+      });
+      s.bus.publish(event);
+    }
+
+    expect(ended).toBe(true);
+    // At most one frame can buffer under a 256-byte cap (~180 bytes per frame),
+    // proving the byte dimension — not the event count — closed the stream.
+    expect(writtenFrames.length).toBeLessThanOrEqual(2);
+
+    req.emit('close');
+    await done;
+  });
+
+  it('flushes buffered frames on drain and leaves no drain listener after close', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const workspace = await s.store.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await s.store.createSession({
+      workspaceId: workspace.id,
+      title: 'ws-sse-drain-test',
+      profile: 'human-web',
+      runId: null,
+    });
+
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+    let backpressured = true;
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/workspaces/${workspace.id}/summary/events`;
+    req.headers = {};
+    req.method = 'GET';
+
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return false;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        return !backpressured;
+      },
+      once(event: string, cb: () => void) {
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      removeAllListeners(event?: string) {
+        emitter.removeAllListeners(event);
+      },
+      end() {},
+    } as unknown as ServerResponse;
+
+    const done = handleWorkspaceSummarySse({
+      request: req,
+      response: res,
+      workspaceId: workspace.id,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+      catchUpMs: 60_000,
+    });
+    await done;
+
+    const first = await s.store.appendEvent({
+      sessionId: session.id,
+      type: 'turn/start',
+      payload: {},
+    });
+    s.bus.publish(first);
+    expect(writtenFrames.length).toBe(1); // first frame written, socket backed up
+
+    const second = await s.store.appendEvent({
+      sessionId: session.id,
+      type: 'turn/end',
+      payload: {},
+    });
+    s.bus.publish(second);
+    expect(writtenFrames.length).toBe(1); // buffered, not written
+
+    backpressured = false;
+    emitter.emit('drain');
+    expect(writtenFrames.length).toBe(2); // buffered frame flushed
+    expect(writtenFrames[1]).toContain('turn/end');
+
+    // While backpressured again, a drain listener stays mounted; closing the
+    // request must remove it so no listener leaks past the stream lifetime.
+    backpressured = true;
+    const third = await s.store.appendEvent({
+      sessionId: session.id,
+      type: 'turn/start',
+      payload: {},
+    });
+    s.bus.publish(third);
+    expect(emitter.listenerCount('drain')).toBe(1);
+
+    req.emit('close');
+    await done;
+    expect(emitter.listenerCount('drain')).toBe(0); // cleanup removed it
   });
 });

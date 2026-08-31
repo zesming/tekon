@@ -21,6 +21,19 @@ const execFileAsync = promisify(execFile);
 export const TESTED_DSH_VERSION = '0.1.2-alpha.1';
 
 /**
+ * Install hint for a compatible dsh build. DSH requires Node
+ * `^22.19.0 || >=24.0.0`, which is stricter than Tekon's own
+ * `^20.19.0 || >=22.12.0` contract; the hint states that difference so a
+ * Node 20 user is not sent into an install that cannot run.
+ */
+export function dshInstallHint(version: string = TESTED_DSH_VERSION): string {
+  return (
+    `npm install -g @deepseek-ai/dsh@${version}` +
+    `（DSH 要求 Node ^22.19.0 || >=24.0.0，与 Tekon 的 Node ^20.19.0 || >=22.12.0 不同）`
+  );
+}
+
+/**
  * Config row ids that MUST appear in
  * `dsh --profile headless --dump-default-config`. Their presence is the
  * capability contract (design §5.2): headless runner, sandbox/approval
@@ -138,19 +151,7 @@ function containsConfigRowId(dumpOutput: string, id: string): boolean {
     `^\\s*(?:-\\s*)?id:\\s*["']?${escaped}["']?\\s*$`,
     'mu',
   );
-  if (yamlRow.test(dumpOutput)) {
-    return true;
-  }
-
-  // Probe injection predates the real YAML fixture and some adapter unit tests
-  // supply one bare row id per line. Keep that pure-test seam compatible while
-  // remaining strict for real dumps: an actual YAML row renamed to
-  // `id: user-approval`, or a package `name:` containing that substring, still
-  // cannot satisfy the required `id: approval` contract.
-  const bareProbeId = id === 'approval' ? 'user-approval' : id;
-  return new RegExp(`^\\s*${escapeRegExp(bareProbeId)}\\s*$`, 'mu').test(
-    dumpOutput,
-  );
+  return yamlRow.test(dumpOutput);
 }
 
 /**
@@ -253,6 +254,6 @@ export async function runDshPreflight(
     actualVersion,
     helpContractOk: true,
     configContractOk: true,
-    installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+    installHint: dshInstallHint(),
   };
 }

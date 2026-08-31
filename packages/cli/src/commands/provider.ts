@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 
 import {
+  dshInstallHint,
   runDshPreflight as runCoreDshPreflight,
   TESTED_DSH_VERSION,
 } from '@tekon/core';
@@ -48,7 +49,7 @@ export async function runDshPreflight(options?: {
       actualVersion,
       helpContractOk: false,
       configContractOk: false,
-      installHint: `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+      installHint: dshInstallHint(),
       compatible: false,
       error: error instanceof Error ? error.message : String(error),
     };
