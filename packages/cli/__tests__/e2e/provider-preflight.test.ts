@@ -7,6 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { TESTED_DSH_VERSION } from '@tekon/core';
 
+const VALID_CONFIG = [
+  '- id: headless-runner',
+  '- id: sandbox-policy',
+  '- id: approval',
+  '- id: session-persistence-jsonl',
+  '- id: agent-default-model',
+].join('\n');
+
 describe('tekon provider preflight e2e', () => {
   const tempDirs: string[] = [];
   const cliPackageRoot = join(
@@ -27,8 +35,7 @@ describe('tekon provider preflight e2e', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'dsh headless --help\nprint the final assistant message on stdout',
-      config:
-        '{"plugins":["headless-runner","sandbox-policy","user-approval","session-persistence-jsonl","agent-default-model"]}',
+      config: VALID_CONFIG,
     });
 
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
@@ -61,8 +68,7 @@ describe('tekon provider preflight e2e', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'print the final assistant message',
-      config:
-        'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model',
+      config: VALID_CONFIG,
     });
 
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
