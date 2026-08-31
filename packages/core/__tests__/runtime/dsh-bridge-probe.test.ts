@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DSH_NODE_REQUIREMENT,
   TESTED_DSH_VERSION,
   dshInstallHint,
   DshVersionGateError,
@@ -144,6 +145,18 @@ describe('assertDshDefaultConfigContract', () => {
   });
 });
 
+// ── install metadata ────────────────────────────────────────────────────
+
+describe('dsh install metadata', () => {
+  it('keeps the install hint copy/paste-safe and exposes Node separately', () => {
+    expect(dshInstallHint()).toBe(
+      `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+    );
+    expect(dshInstallHint()).not.toContain('Node');
+    expect(DSH_NODE_REQUIREMENT).toBe('^22.19.0 || >=24.0.0');
+  });
+});
+
 // ── runDshPreflight ─────────────────────────────────────────────────────
 
 describe('runDshPreflight', () => {
@@ -173,6 +186,7 @@ describe('runDshPreflight', () => {
     expect(result).toEqual({
       testedVersion: TESTED_DSH_VERSION,
       actualVersion: TESTED_DSH_VERSION,
+      nodeRequirement: DSH_NODE_REQUIREMENT,
       helpContractOk: true,
       configContractOk: true,
       installHint: dshInstallHint(),
@@ -191,16 +205,22 @@ describe('runDshPreflight', () => {
     ).rejects.toThrow(DshVersionGateError);
   });
 
-  it('fails when help contract is missing anchor', async () => {
+  it('preserves the detected version when the help contract fails', async () => {
     const { runDshPreflight } =
       await import('../../src/runtime/dsh-bridge-probe.js');
-    await expect(
-      runDshPreflight('dsh', {
+    try {
+      await runDshPreflight('dsh', {
         probeVersion: async () => validVersion,
         probeHelp: async () => 'Usage: dsh [options]',
         probeConfig: async () => validConfig,
-      }),
-    ).rejects.toThrow(DshCapabilityError);
+      });
+      throw new Error('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DshCapabilityError);
+      expect((error as DshCapabilityError).actualVersion).toBe(
+        TESTED_DSH_VERSION,
+      );
+    }
   });
 
   it('fails when config contract is missing required plugin', async () => {
