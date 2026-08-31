@@ -22,13 +22,17 @@ function installFakeDsh(): string {
   mkdirSync(binDir, { recursive: true });
   const script = join(binDir, 'dsh');
   const helpAnchor = 'print the final assistant message';
-  const pluginIds = REQUIRED_DSH_PLUGIN_IDS.map((id) => `'${id}'`).join(',');
+  const configYaml = REQUIRED_DSH_PLUGIN_IDS.map(
+    (id) => `- id: ${id}`,
+  ).join('\n');
   const lines = [
     '#!/usr/bin/env node',
     'const args = process.argv.slice(2);',
     `if (args.includes('--version')) { process.stdout.write('${TESTED_DSH_VERSION}' + '\\n'); }`,
     `else if (args.includes('--help')) { process.stdout.write('${helpAnchor}' + '\\n'); }`,
-    `else if (args.includes('--dump-default-config')) { process.stdout.write(JSON.stringify({ plugins: [${pluginIds}].map((id) => ({ id })) })); }`,
+    `else if (args.includes('--dump-default-config')) { process.stdout.write(${JSON.stringify(
+      `${configYaml}\n`,
+    )}); }`,
     '',
   ];
   writeFileSync(script, lines.join('\n'));
@@ -116,7 +120,7 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
     expect(result.jobId).toBeDefined();
     expect(result.run.status).toBe('running');
   });
-  it("does not record run.network-acknowledged audit for codex even if acknowledgedNetwork flag is passed", async () => {
+  it('does not record run.network-acknowledged audit for codex even if acknowledgedNetwork flag is passed', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
@@ -124,16 +128,16 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
     cleanupTasks.push(() => api.close());
 
     const result = await api.project.run({
-      demandText: "test codex with ack flag",
+      demandText: 'test codex with ack flag',
       token: fixture.sessionToken,
-      agent: "codex",
-      mode: "goal",
+      agent: 'codex',
+      mode: 'goal',
       acknowledgeUnrestrictedNetwork: true,
     });
 
     const auditRes = await api.audit.list({ runId: result.run.id });
     const netAckEvent = auditRes.events.find(
-      (e) => e.type === "run.network-acknowledged",
+      (e) => e.type === 'run.network-acknowledged',
     );
     expect(netAckEvent).toBeUndefined();
   });
