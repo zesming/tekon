@@ -43,6 +43,6 @@ describe('EventFeed history boundary messaging', () => {
 
     expect(html).toContain('已达本页历史上限');
     expect(html).toContain('本页最多额外保留 2000 条更早记录');
-    expect(html).not.toContain('已加载最早历史');
+    expect(html).toContain('达到上限不等于已加载最早历史');
   });
 });
