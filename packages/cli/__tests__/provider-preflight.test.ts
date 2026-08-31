@@ -15,6 +15,14 @@ import { TESTED_DSH_VERSION } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
 import { runDshPreflight } from '../src/commands/provider.js';
 
+const VALID_CONFIG = [
+  '- id: headless-runner',
+  '- id: sandbox-policy',
+  '- id: approval',
+  '- id: session-persistence-jsonl',
+  '- id: agent-default-model',
+].join('\n');
+
 describe('tekon provider preflight', () => {
   const tempDirs: string[] = [];
   const anchorCwd = process.cwd();
@@ -36,8 +44,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'dsh headless --help\nprint the final assistant message on stdout',
-      config:
-        '{"plugins":["headless-runner","sandbox-policy","user-approval","session-persistence-jsonl","agent-default-model"]}',
+      config: VALID_CONFIG,
     });
 
     const io = createMemoryIo();
@@ -72,8 +79,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: '0.2.0-alpha',
       help: 'print the final assistant message',
-      config:
-        'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model',
+      config: VALID_CONFIG,
     });
 
     const io = createMemoryIo();
@@ -162,8 +168,7 @@ describe('tekon provider preflight', () => {
     createFakeDsh(fakeBinDir, {
       version: TESTED_DSH_VERSION,
       help: 'print the final assistant message',
-      config:
-        'headless-runner sandbox-policy user-approval session-persistence-jsonl agent-default-model',
+      config: VALID_CONFIG,
     });
 
     const io = createMemoryIo();
