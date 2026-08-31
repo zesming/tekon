@@ -576,3 +576,47 @@ CLI CI 中持续出现 npm 对 `verify-deps-before-run`、`recursive`、`_jsr-re
 - [Base composition](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/bundle/base/cordis.patch.yml)
 - [dsh v0.1.2-alpha.2 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.2)
 - [alpha.1 → alpha.2 compare](https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.1.2-alpha.1...dsh-v0.1.2-alpha.2)
+
+---
+
+## 16. 主 Agent 交叉评估批注（2026-08-31，基于 HEAD `19deedf`）
+
+> 本节为应要求追加的独立评审视角，不改动上文第 1–15 节的原始裁决。方法：同步 deepseek-harness 至 `origin/master`（最新 tag `dsh-v0.1.2-alpha.2`，与 Tekon tested pin 一致），委派 4 个 subagent 分别从「修复落地核对」「架构进展对比」「代码健康度/安全」「测试与文档一致性」四个角度独立评估，再由主 Agent 对相互矛盾的结论逐条回源核对。
+
+### 16.1 四路评估一致确认的结论
+
+四个评估方对第 5 节列出的 5 项 reviewer 直接修复给出一致判定：**全部真实落地、测试断言有效、无假通过、无新引入问题**。主 Agent 逐条回源复核无误：
+
+- **P1-SSE-02**：`catchUp` 入口与分页循环内部均检查 `isBackpressured`/`backpressureTruncated`，当前页 `enqueue` 触发 `write()===false` 后立即退出循环，cursor 由 `drain()` 推进后才由下一次定时 catch-up 续拉。回归测试构造 1200 事件 / 500 分页 / 首帧背压，断言背压期 `pageCalls===1` 且无 `replay-truncated`，drain 后完整追平。
+- **P2-SSE-02**：Session 流与 Workspace 流的 heartbeat 均检查 `write(': ping\n\n')` 返回值，`false` 时进入与业务帧相同的背压状态并注册一次性 drain。
+- **P2-DSH-02**：`dshInstallHint()` 返回纯命令，`DSH_NODE_REQUIREMENT` 为独立结构化字段，`--json` 与文本输出解耦。
+- **P2-DSH-03**：`DshCapabilityError` 携带 `actualVersion`，help/config 漂移时 CLI 区分「未安装 / 版本不匹配 / 版本匹配但合同漂移」三态。
+- **P2-DOC-01**：`current.md` 重新绑定 v0.20.2、reviewer 快照、Core/CI 状态与 DSH pin，第 1–10 轮报告确立为只读归档。
+
+全量自动化在 HEAD `19deedf` 复跑：138 个测试文件 1476 通过 / 3 skip / 0 失败；Web 21 套件 211 通过；`pnpm audit --prod` 0 漏洞；无硬编码密钥、无 shell 拼接注入面、Web 默认绑 `127.0.0.1` 且具备 CSRF/CSP。
+
+### 16.2 对一路评估「缺失」结论的纠正（附证据）
+
+其中一路评估（Euclid）基于第十轮快照 `f9f3733` 给出若干「缺失」判定，与当前 HEAD `19deedf` 不符。主 Agent 逐条回源，确认以下三项不成立，不应纳入后续整改依据：
+
+1. **「workspace SSE 无背压控制」——不成立**。`handleWorkspaceSummarySse`（`packages/web/src/server/sse.ts:426-519`）具备完整的 `isBackpressured` 状态、`writeFrame` 返回值检查、`drainPending` 续写、`MAX_PENDING_WORKSPACE_EVENTS=100` / `MAX_PENDING_WORKSPACE_BYTES=256KB` 双上限与超限断开。
+2. **「手册未说明 DSH Node 要求」——不成立**。`docs/manual/tekon-user-manual.md:373` 与 `docs/manual/tekon-user-manual.html:484` 均明确写出 DSH 要求 `^22.19.0 || >=24.0.0`，并标注与 Tekon 主合同 `^20.19.0 || >=22.12.0` 的差异。
+3. **「`bareProbeId` seam 仍在、`installHint` 仍是 alpha.1」——不成立**。生产 parser 已删除 bare-line 兼容分支，改用完整 YAML `id:` 行正则；`installHint` 与 tested pin 均为 `0.1.2-alpha.2`。
+
+该路评估中仍有价值的部分是 P2-TEST-02 的根因分析与「可局部收敛 / 季度级重构」的范围划分，已并入下文。
+
+### 16.3 主 Agent 独立判定的本轮可收敛项
+
+以下三项证据充分、改动可控、有明确验收信号，建议在本 PR 内收敛（不触碰冻结的架构主线）：
+
+- **P2-TEST-02（测试 lane 语义）**：`packages/cli/__tests__/e2e/` 下三个文件命名为 `*.test.ts` 而非 `*.e2e.test.ts`，匹配不上 `--exclude "**/*.e2e.test.ts"`，导致这些真实子进程 e2e 用例同时进入 unit lane 与 e2e lane 各跑一遍。应统一命名为 `*.e2e.test.ts`，恢复「快速 unit gate / 慢速 e2e gate」的分层语义。报告第 10.4 节与第 451 行已自认此项。
+- **CI npm env warning 噪音**：CI 中 `npm exec --yes -- pnpm@10.12.1 ...` 透传 `npm_config_*` 触发未知 env config 弃用警告，不阻断但降低真实错误信噪比。可在 CI step 中收敛（如显式 `env:` 清理或改用 corepack/直接 pnpm）。
+- **devDependencies 漏洞治理**：全量 `pnpm audit` 检出 12 项（9 High），全部来自 devDependencies（`brace-expansion` 经 `@vitest/coverage-v8`、`postcss`/`nanoid` 经 `vite`、`esbuild` 经 `tsx`/`vite`）。不暴露于生产运行时，但建议在根 `package.json` 用 `pnpm.overrides` 锁定修复版本。
+
+### 16.4 维持冻结、不在本 PR 伪装关闭的架构项
+
+P0-ARCH-01（single-owner Runtime）、P0-ARCH-02（quiescent shutdown）、P0-DATA-01（权威 Session 事实源）、P0-PRODUCT-01（持续协作闭环）、P1-PLAN-01（canonical RunPlan）、P1-SESSION-01 的模型 compaction/历史导出、P1-A11Y-01（全站无障碍）——这些与报告第 11、13 节的冻结判断一致，应分独立 PR 推进，不在本已庞大的 PR #11 中通过新增 wrapper/fixture/措辞制造关闭假象。
+
+### 16.5 结论
+
+第十一轮修复质量扎实、可合并，无阻塞项。本轮建议仅收敛第 16.3 节三项低风险过程/卫生项；架构主线按报告第 13 节顺序另立 PR。

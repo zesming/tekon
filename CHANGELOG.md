@@ -1,5 +1,15 @@
 # 变更日志
 
+## v0.20.3
+
+本轮落地第十一轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-eleventh-review.md`，PR #11）第 16.3 节批注锁定的三项过程/卫生收敛：CLI e2e 文件命名与 lane 语义对齐、CI npm env warning 清理、devDependencies 漏洞 override。架构级项（single-owner Runtime、权威 Session、ACP vertical slice、RunPlan authority、模型 compaction、全站 a11y）按复审裁决维持冻结，登记为后续顺序。
+
+### 工程与合同
+
+- **CLI e2e lane 对齐**：`packages/cli/__tests__/e2e/` 下三个文件由 `*.test.ts` 重命名为 `*.e2e.test.ts`，`test:e2e` 选择器从 `__tests__/e2e` 改为 `.e2e.test`，与 `packages/core` 约定一致。此前这三个真实子进程 e2e 用例因文件名不匹配 `--exclude "**/*.e2e.test.ts"`，同时进入 unit lane 与 e2e lane 各跑一遍；现在 unit lane 只跑 9 个 unit 文件，e2e lane 跑 3 个 e2e 文件，恢复「快速 unit gate / 慢速 e2e gate」分层。
+- **CI npm env warning 清理**：`.github/workflows/ci.yml` 中 17 处 `npm exec --yes -- pnpm@10.12.1` 替换为 `corepack pnpm`，由根 `package.json` 的 `packageManager: "pnpm@10.12.1"` 解析版本，消除 npm 对 `npm_config_*` 未知 env config 的弃用警告。注意：`scripts/install.sh`、`scripts/update.sh`、root `smoke:claude-provider` 与 `.github/workflows/core.yml` 仍用 `npm exec`，会继续发同类告警，留待独立 PR（改 installer 需按 AGENTS.md 跑干净环境 smoketest）。
+- **devDependencies 漏洞 override**：根 `package.json` 新增 `pnpm.overrides`，锁定 `brace-expansion`（按 `^2.0.0`/`^5.0.0` 声明范围分桶到 `2.1.4`/`5.0.9`）、`postcss`（`8.5.26`）、`nanoid`（`3.3.18`）。`pnpm audit` 的 High/Moderate 由 10 项降为 0，仅剩 2 项 esbuild Low（vite 要求 `^0.27.0`，修补版 `0.28.1` 越界，强升会击穿 vite 构建，故保留）。全部命中项均为 dev-only，`pnpm audit --prod` 始终为 0。override 只锁当前依赖树存在的 2.x/5.x brace-expansion；若将来引入 3.x/4.x 主版本，需重新评估并加桶（advisory `>=3.0.0 <5.0.7` 当前无暴露面）。
+
 ## v0.20.2
 
 本轮落地第十轮复审第 17 节批注锁定的四项收敛：DSH tested pin 升级到 alpha.2、CI e2e 脚本修复、react-router 安全升级、HTML 标签修复。架构级项（8 项 P0/P1）按复审裁决维持冻结，登记为后续顺序。

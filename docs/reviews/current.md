@@ -4,7 +4,7 @@
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **用户 v0.20.1 / v0.20.2 整改快照**：`2752a0b5e99d5a860dd21a46debae3bb1d901164`
 - **reviewer 代码快照**：`4bf88401e7c4ed1e881ff7ebd94b53028dbbf0eb`
-- **当前版本**：`0.20.2`
+- **当前版本**：`0.20.3`
 - **代码自动化状态**：`4bf8840...` 的 Core #342 与 CI #251 均为 `completed/success`；Root、CLI unit/e2e、Web build/typecheck/unit、Chromium Playwright 全部成功
 - **Tekon DSH tested pin**：`0.1.2-alpha.2`
 - **DeepSeek Harness 当前官方版本**：`0.1.2-alpha.2`
@@ -20,6 +20,13 @@
 - react-router 更新后 Web build/unit/Chromium e2e 成功；
 - 本轮 reviewer 修复了 Session SSE 分页追赶与 socket 背压组合下的重复读取/自旋，以及两条 SSE heartbeat 忽略 `write(false)` 的问题；
 - DSH preflight 的 JSON 现在把 `nodeRequirement` 与可执行 `installHint` 分开，help/config 失败也会保留已探测到的 actual version。
+
+## v0.20.3 批注整改（第十一轮第 16.3 节）
+
+- CLI e2e 文件重命名为 `*.e2e.test.ts`，`test:e2e` 选择器对齐 core 包，消除 unit/e2e 双跑；
+- CI 17 处 `npm exec --yes -- pnpm@10.12.1` 替换为 `corepack pnpm`，消除 npm env config 弃用警告；
+- 根 `package.json` 新增 `pnpm.overrides` 锁定 brace-expansion/postcss/nanoid，`pnpm audit` High/Moderate 降为 0（仅剩 2 项 esbuild Low，vite semver 不兼容故保留）；
+- 详见 `docs/superpowers/plans/2026-08-31-eleventh-review-remediation-plan.md`。
 
 ## 本轮 reviewer 直接修复
 
@@ -59,7 +66,7 @@
 - **长 Session**：在线 replay/pending 已有基础上限，完整历史导出、模型 context compaction、统一 retention policy、真实规模和故障矩阵仍未闭环；
 - **DSH**：pin/合同已追平 alpha.2，但带真实 dsh 二进制与 API key 的 Provider smoke 仍缺；
 - **可访问性**：两个配置 dialog 已闭环，不能外推为全站 screen reader、Firefox/WebKit 和对比度验收；
-- **测试与过程**：CLI e2e 文件命名和 unit lane 选择不一致，npm env warning 未清理；当前 PR 体量仍过大。
+- **测试与过程**：CLI e2e 文件命名与 lane 语义已对齐（`*.e2e.test.ts` + `.e2e.test` 选择器），CI npm env warning 已通过 corepack 替换清理；devDependencies 漏洞已 override 到 High/Moderate 为 0。当前 PR 体量仍过大，建议 squash merge 后架构主链路拆独立 PR。
 
 ## 仍未关闭的主链路
 
@@ -76,7 +83,7 @@ repo 级 single-owner Runtime
 
 ## 允许的成熟度表述
 
-> Tekon v0.20.2 已形成测试覆盖较强、计划与风险边界较透明、长会话在线观察具有基础资源上限的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart、完整历史导出和模型上下文预算尚未闭环。
+> Tekon v0.20.3 已形成测试覆盖较强、计划与风险边界较透明、长会话在线观察具有基础资源上限的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart、完整历史导出和模型上下文预算尚未闭环。
 
 ## 评审资料维护规则
 
