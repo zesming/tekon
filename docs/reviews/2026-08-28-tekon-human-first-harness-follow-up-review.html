@@ -666,7 +666,7 @@
       <p class="callout callout-warn">建议仍是 <strong>single-owner daemon 优先</strong>：一个 repo 一个 Runtime；CLI/Web/IDE 都是客户端。只有明确需要高可用多 owner 时，才承担完整 generation fencing 成本。</p>
 
       <h3>P0-ARCH-02：Shutdown 仍非 quiescent</h3>
-      <p><code>job-runner.stop()` 最多等待固定时间后清理进程内 Map。清引用不等于 provider、subprocess、Git/文件写入和异步 listener 已全部停止。</p>
+      <p><code>job-runner.stop()</code> 最多等待固定时间后清理进程内 Map。清引用不等于 provider、subprocess、Git/文件写入和异步 listener 已全部停止。</p>
       <p><strong>通过条件</strong>：停止领取、持久取消/暂停、abort、kill、join、flush、最终状态写入、证明无 late write，然后才关闭 DB/进程。</p>
 
       <h3>P0-ARCH-03：Session Event 仍是观察投影，不是 Harness 式事实源</h3>

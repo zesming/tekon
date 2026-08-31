@@ -4,9 +4,9 @@
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **用户 v0.20.0 整改快照**：`1f3a1695c5dc61122a6faaba20ce2d12dce0aa11`
 - **reviewer 代码快照**：`11eecfb6347c5fe690a8561c5e49a344a30de317`
-- **当前版本**：`0.20.0`
+- **当前版本**：`0.20.2`
 - **代码自动化状态**：`11eecfb...` 的 Core #331 与 CI #240 均为 `completed/success`；Root、CLI unit/e2e、Web build/typecheck/unit、Playwright 全部成功
-- **Tekon DSH tested pin**：`0.1.2-alpha.1`
+- **Tekon DSH tested pin**：`0.1.2-alpha.2`
 - **DeepSeek Harness 当前官方版本**：`0.1.2-alpha.2`
 - **当前裁决**：v0.20.0 整改与 reviewer 低风险修复通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
@@ -16,7 +16,7 @@
 - Session SSE pending buffer 具备事件数和字节双上限；
 - truncation 已有用户可见提示，并明确页面最多额外保留 2000 条；
 - reconnect replay budget 只覆盖首次重连 backlog，不再错误累计正常后续事件；
-- DSH tested pin 升到 `0.1.2-alpha.1`，preflight 校验官方组合 YAML 的完整 row id；
+- DSH tested pin 升到 `0.1.2-alpha.2`，preflight 校验官方组合 YAML 的完整 row id；
 - DSH fixture 不再把 package name 中的 `user-approval` 当作真实配置 row id；
 - Core、CLI、Web unit 和 Playwright 在同一代码快照上完整成功。
 
@@ -32,7 +32,7 @@
    required row 使用官方实际的 `approval`；正式 dump 必须匹配完整 YAML `id:` 行，包名子串不能假通过。
 
 4. **外部版本事实**  
-   明确区分 Tekon tested pin `0.1.2-alpha.1` 与 upstream latest `0.1.2-alpha.2`；未在缺少真实 smoke 的情况下盲目升 pin。
+   Tekon tested pin 已升级到 `0.1.2-alpha.2`（与 upstream latest 一致）；headless 合同零差异，真实 smoke 仍待有 dsh 二进制的环境执行。
 
 对应 reviewer 代码提交区间：`f106430a...` 至 `11eecfb...`。
 

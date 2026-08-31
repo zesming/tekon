@@ -1,5 +1,19 @@
 # 变更日志
 
+## v0.20.2
+
+本轮落地第十轮复审第 17 节批注锁定的四项收敛：DSH tested pin 升级到 alpha.2、CI e2e 脚本修复、react-router 安全升级、HTML 标签修复。架构级项（8 项 P0/P1）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.1` 升级到官方当前基线 `0.1.2-alpha.2`。alpha.2 与 alpha.1 的 headless 合同零差异（help/config/Node engines 均未变），升级合同风险极低。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+
+### 工程与合同
+
+- **CI e2e 脚本修复**：`packages/core` 的 `test:e2e` 从硬编码 7 个文件改为 `.e2e.test` 子串匹配，补全了被遗漏的 `engine-rework.e2e.test.ts`，且不会误纳 `session-job-e2e.test.ts` 命名反例。
+- **react-router 安全升级**：`^7.17.0` 升级到 `^7.18.2`，修复 2 个 high（CSRF 绕过、未认证 DoS）+ 3 个 moderate 漏洞。本仓库为 Vite SPA 模式，实际暴露面有限，升级主要为消除 audit 告警与依赖卫生。
+- **HTML 标签修复**：`follow-up-review.html` 的未闭合 `<code>` 标签修复，消除了该文件的 HTML parse error。`format:check` 全仓仍有既有 250 文件格式待办，不在本轮范围。
+
 ## v0.20.1
 
 本轮落地第十轮复审（`docs/reviews/2026-08-31-tekon-human-first-harness-tenth-review.md`，PR #11）第 16 节批注锁定的三项收敛：workspace summary SSE 背压上限、DSH Node 前置条件说明、统一 fake-dsh fixture 并移除 bare-line 测试 seam。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定、模型 compaction、完整历史导出、全站 a11y 专项）按复审裁决维持冻结，登记为后续顺序。

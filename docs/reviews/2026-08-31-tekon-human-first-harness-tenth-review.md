@@ -524,3 +524,55 @@ fake dsh 目前分散在 Core、CLI unit、CLI e2e 和 Web API 测试中，曾�
 【事实】第十轮报告的代码级裁决经得起独立复核，三类 P2 修复证据链完整。
 
 【建议】本轮按 16.1 的三项收敛，完成后用最高思考等级 reviewer 循环复查，直到无必须修复项。P0 架构项保持报告原排序，不在本轮扩张。DSH tested pin 保持 `0.1.2-alpha.1`（不盲目升级到 alpha.2），但文档必须称为"tested pin"而非"官方当前版本"。
+
+## 17. 追加批注（独立视角，2026-08-31 第二轮）
+
+本节是在第十轮裁决与第 16 节批注基础上的第二轮独立复核。方法：同步 DSH 官方 master 到 `0a53fb55`（`dsh@0.1.2-alpha.2`），委派三个 explorer subagent 分别评估 DSH 版本影响、报告遗留项状态与整体代码健康度，并对关键发现逐项回到代码取证。结论区分【事实】【推断】【建议】。
+
+### 17.1 DSH alpha.1 → alpha.2 影响评估
+
+【事实】DSH 在 `cd5ef81..0a53fb55` 范围内共 160 个 commit，关键变化集中在 7 个领域：Cordis 4.0.2 依赖升级、运行时解耦与工具包抽象、Session Projection 架构统一、API Gateway 协议收敛、Web 界面增强、Node 24.9 修复、全包版本 bump。**headless CLI 外部交互协议未变**：
+
+- `--help` 锚点 "print the final assistant message" 完整保留（`packages/bundle/headless/src/startup.ts:34`，该文件在 alpha.1→alpha.2 期间零修改）；
+- 5 个必需插件 row id（`headless-runner`、`sandbox-policy`、`approval`、`session-persistence-jsonl`、`agent-default-model`）全部保留，headless + base 两个合同相关 bundle 的 `cordis.patch.yml` diff 为空；
+- Node engines 要求不变（`^22.19.0 || >=24.0.0`）；
+- stdout/stderr 协议不变（reasoning→stderr，最终消息→stdout，退出码 0/1）。
+
+【推断】alpha.2 对 Tekon dsh-headless adapter **无 breaking change**。当前唯一阻断是 Tekon 主动设置的精确版本 pin（fail-closed 设计）。升级 tested pin 到 alpha.2 的合同风险极低，但仍需更新 fixture 注释中的 commit hash 交叉校验引用。
+
+【建议】本轮将 tested pin 升级到 `0.1.2-alpha.2`，同步更新 `version.txt` 与 fixture 头部注释。**不声称已完成真实 provider smoke**（本机无 dsh 二进制与 API key），保持诚实标注。
+
+### 17.2 报告遗留项状态复核
+
+【事实】对第 16 节锁定的三项收敛逐项复核：
+
+- **workspace summary SSE 背压**：已闭环（`sse.ts:25` 双维度上限，超限关闭+重连追赶）；
+- **DSH Node 前置条件**：已闭环（`dshInstallHint()` + 手册 §5.7 第四条边界，含 HTML 版）；
+- **fake-dsh fixture 统一与 bare-line seam 移除**：已闭环（CLI 三个测试文件共用 `helpers/fake-dsh.ts`，`VALID_DSH_CONFIG` 由 `REQUIRED_DSH_PLUGIN_IDS` 生成；生产 parser 只认完整 YAML `id:` 行）。
+
+【事实】第十轮报告的 8 项"仍未关闭"P0/P1 架构项**全部保持冻结**，无代码雏形：single-owner Runtime、executor 隔离、authoritative Session log、真实 streaming、follow-up/steer/cancel、Collaborate→Deliver、canonical RunPlan 唯一输入、全链路预算。这是正确的——这些是季度级重构，不应在 review 修复轮中扩张。
+
+【事实】6 项"部分关闭"中，测试结构（P2-TEST-01）已完全关闭；长 Session（P1-SESSION-01）与 DSH（P1-DSH-01）有局部新进展；RunPlan、Shutdown、A11Y 保持冻结。
+
+### 17.3 代码健康度评估
+
+【事实】整体健康度良好：`pnpm test` 137 文件 / 1472 通过 / 3 跳过；typecheck 与 lint 零错误；安全脱敏机制完备。但发现 3 项必须修复：
+
+1. **CI 遗漏 `engine-rework.e2e.test.ts`**：`packages/core/package.json:19` 的 `test:e2e` 硬编码 7 个文件，遗漏了第 8 个 e2e 测试。根 `pnpm test` 能跑到，但 CI 的 `core` workflow 只跑 `test:unit` + `test:e2e`，该文件在 CI 中从未执行。
+2. **`react-router` 安全漏洞**：`^7.17.0` 命中 2 个 high（CSRF 绕过、未认证 DoS）+ 3 个 moderate 漏洞，需升级到 `^7.18.2`。
+3. **HTML 标签语法错误**：`docs/reviews/2026-08-28-tekon-human-first-harness-follow-up-review.html:669` 的 `<code>job-runner.stop()`` 缺少 `</code>` 闭合，导致该文件无法被 prettier 解析（parse error）。`format:check` 全仓本就有 250 文件格式待办，该 parse error 是其中之一；修复后该文件可被正常解析，但全仓格式待办不在本轮范围。
+
+【建议】本轮收敛范围锁定为以下四项，全部满足"证据明确 + 改动局部 + 有明确验收信号"：
+
+1. DSH tested pin 升级 `0.1.2-alpha.1 → 0.1.2-alpha.2`（合同风险极低，fixture 注释同步）；
+2. CI e2e 脚本修复（`.e2e.test` 子串匹配，补全遗漏文件）；
+3. `react-router` 安全升级；
+4. HTML 标签修复。
+
+明确**不**在本轮做：8 项 P0/P1 架构重构、GateEngine 冗余清理、CI 多 Node 矩阵、子包版本号同步、手册命令补全。这些保持报告原裁决，登记为后续顺序。
+
+### 17.4 批注结论
+
+【事实】第十轮报告的代码级裁决经得起第二轮独立复核。第 16 节三项收敛已真实落地。DSH alpha.2 无 breaking change，升级 pin 安全。代码健康度有 3 项必须修复的低风险问题。
+
+【建议】本轮按 17.3 的四项收敛，完成后用最高思考等级 reviewer 循环复查。DSH tested pin 升级后，文档应称为"tested pin `0.1.2-alpha.2`（源码级交叉校验，非本机实测）"，保持诚实。
