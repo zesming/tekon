@@ -213,7 +213,7 @@ export function EventFeed({
                   disabled={isLoadingEarlier || reachedEarlierLimit}
                   title={
                     reachedEarlierLimit
-                      ? '本页最多额外保留 2000 条更早记录'
+                      ? '本页最多额外保留 2000 条更早记录；达到上限不等于已加载最早历史'
                       : undefined
                   }
                   onClick={onLoadEarlier}
