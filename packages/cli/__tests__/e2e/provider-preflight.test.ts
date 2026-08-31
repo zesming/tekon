@@ -5,7 +5,10 @@ import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { TESTED_DSH_VERSION } from '@tekon/core';
+import {
+  DSH_NODE_REQUIREMENT,
+  TESTED_DSH_VERSION,
+} from '@tekon/core';
 
 import {
   createFakeDsh,
@@ -49,15 +52,13 @@ describe('tekon provider preflight e2e', () => {
 
     expect(output).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
     expect(output).toContain(`当前检测版本: ${TESTED_DSH_VERSION}`);
+    expect(output).toContain(`DSH Node 要求: ${DSH_NODE_REQUIREMENT}`);
     expect(output).toContain('Help 合同检查: 通过');
     expect(output).toContain('Config 合同检查: 通过');
     expect(output).toContain('兼容性结论: 兼容');
-    expect(output).toMatch(
-      new RegExp(
-        `npm (?:install|i) -g @deepseek-ai/dsh@${TESTED_DSH_VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
-      ),
+    expect(output).toContain(
+      `安装指引: npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
     );
-    expect(output).toContain('Node ^22.19.0 || >=24.0.0');
   });
 
   it('runs provider preflight dsh-headless --json returning parseable JSON', () => {
@@ -84,6 +85,10 @@ describe('tekon provider preflight e2e', () => {
     const parsed = JSON.parse(output);
     expect(parsed.testedVersion).toBe(TESTED_DSH_VERSION);
     expect(parsed.actualVersion).toBe(TESTED_DSH_VERSION);
+    expect(parsed.nodeRequirement).toBe(DSH_NODE_REQUIREMENT);
+    expect(parsed.installHint).toBe(
+      `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
+    );
     expect(parsed.helpContractOk).toBe(true);
     expect(parsed.configContractOk).toBe(true);
     expect(parsed.compatible).toBe(true);
@@ -100,5 +105,3 @@ describe('tekon provider preflight e2e', () => {
     expect(output).toContain('preflight');
   });
 });
-
-
