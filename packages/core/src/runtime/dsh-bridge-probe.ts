@@ -20,17 +20,17 @@ const execFileAsync = promisify(execFile);
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
 export const TESTED_DSH_VERSION = '0.1.2-alpha.2';
 
+/** DSH's own runtime prerequisite, which is stricter than Tekon's Node contract. */
+export const DSH_NODE_REQUIREMENT = '^22.19.0 || >=24.0.0';
+
 /**
- * Install hint for a compatible dsh build. DSH requires Node
- * `^22.19.0 || >=24.0.0`, which is stricter than Tekon's own
- * `^20.19.0 || >=22.12.0` contract; the hint states that difference so a
- * Node 20 user is not sent into an install that cannot run.
+ * Copy/paste-safe install command for a compatible dsh build. Runtime
+ * prerequisites are returned as a separate structured field instead of being
+ * appended to the command, so JSON and automation consumers can execute this
+ * value without parsing localized prose.
  */
 export function dshInstallHint(version: string = TESTED_DSH_VERSION): string {
-  return (
-    `npm install -g @deepseek-ai/dsh@${version}` +
-    `（DSH 要求 Node ^22.19.0 || >=24.0.0，与 Tekon 的 Node ^20.19.0 || >=22.12.0 不同）`
-  );
+  return `npm install -g @deepseek-ai/dsh@${version}`;
 }
 
 /**
@@ -75,12 +75,15 @@ export class DshVersionGateError extends Error {
 }
 
 /**
- * Raised when a capability contract check fails — the dsh CLI is present and
- * the version matched, but its documented behavior surface (help anchor,
- * plugin composition) drifted from what the ACL was built against.
+ * Raised when a capability contract check fails. `actualVersion` is populated
+ * when version probing succeeded but the later help/config surface failed, so
+ * callers do not misreport an installed dsh as "not installed".
  */
 export class DshCapabilityError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly actualVersion: string | null = null,
+  ) {
     super(message);
     this.name = 'DshCapabilityError';
   }
@@ -176,6 +179,7 @@ export function assertDshDefaultConfigContract(dumpOutput: string): void {
 export interface DshPreflightResult {
   testedVersion: string;
   actualVersion: string;
+  nodeRequirement: string;
   helpContractOk: boolean;
   configContractOk: boolean;
   installHint: string;
@@ -241,17 +245,25 @@ export async function runDshPreflight(
     onWarn: options?.onWarn,
   });
 
-  const [rawHelp, rawConfig] = await Promise.all([
-    probeHelp(dshCommand),
-    probeConfig(dshCommand),
-  ]);
+  try {
+    const [rawHelp, rawConfig] = await Promise.all([
+      probeHelp(dshCommand),
+      probeConfig(dshCommand),
+    ]);
 
-  assertDshHeadlessHelpContract(rawHelp);
-  assertDshDefaultConfigContract(rawConfig);
+    assertDshHeadlessHelpContract(rawHelp);
+    assertDshDefaultConfigContract(rawConfig);
+  } catch (error) {
+    throw new DshCapabilityError(
+      error instanceof Error ? error.message : String(error),
+      actualVersion,
+    );
+  }
 
   return {
     testedVersion: TESTED_DSH_VERSION,
     actualVersion,
+    nodeRequirement: DSH_NODE_REQUIREMENT,
     helpContractOk: true,
     configContractOk: true,
     installHint: dshInstallHint(),
