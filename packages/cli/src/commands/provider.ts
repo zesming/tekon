@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 
 import {
+  DSH_NODE_REQUIREMENT,
   dshInstallHint,
   runDshPreflight as runCoreDshPreflight,
   TESTED_DSH_VERSION,
@@ -11,6 +12,7 @@ import type { CliIO } from '../lib/context.js';
 export interface DshPreflightResult {
   testedVersion: string;
   actualVersion: string | null;
+  nodeRequirement: string;
   helpContractOk: boolean;
   configContractOk: boolean;
   installHint: string;
@@ -42,11 +44,14 @@ export async function runDshPreflight(options?: {
   } catch (error) {
     const actualVersion =
       error && typeof error === 'object' && 'actualVersion' in error
-        ? String((error as { actualVersion: unknown }).actualVersion)
+        ? ((error as { actualVersion: unknown }).actualVersion == null
+            ? null
+            : String((error as { actualVersion: unknown }).actualVersion))
         : null;
     return {
       testedVersion: TESTED_DSH_VERSION,
       actualVersion,
+      nodeRequirement: DSH_NODE_REQUIREMENT,
       helpContractOk: false,
       configContractOk: false,
       installHint: dshInstallHint(),
@@ -105,6 +110,7 @@ export async function commandProvider(
       '🔍 DSH Headless Provider 预检',
       `  测试基准版本: ${result.testedVersion}`,
       `  当前检测版本: ${result.actualVersion ?? '未安装或不可执行'}`,
+      `  DSH Node 要求: ${result.nodeRequirement}`,
       `  Help 合同检查: ${result.helpContractOk ? '通过' : '未通过'}`,
       `  Config 合同检查: ${result.configContractOk ? '通过' : '未通过'}`,
       `  安装指引: ${result.installHint}`,
