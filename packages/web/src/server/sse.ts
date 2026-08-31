@@ -213,12 +213,28 @@ export async function handleSessionEventsSse(input: {
   let reconnectReplayBudgetActive = !isFreshConnect;
 
   const catchUp = async (): Promise<void> => {
-    if (closed || response.writableEnded || catchUpInFlight) return;
+    if (
+      closed ||
+      response.writableEnded ||
+      catchUpInFlight ||
+      isBackpressured ||
+      backpressureTruncated
+    ) {
+      return;
+    }
     catchUpInFlight = true;
     let replayTruncatedThisPass = false;
+    let reachedReplayTailThisPass = false;
     try {
       for (;;) {
-        if (closed || response.writableEnded) break;
+        if (
+          closed ||
+          response.writableEnded ||
+          isBackpressured ||
+          backpressureTruncated
+        ) {
+          break;
+        }
         let events: SessionEvent[] = [];
         let hasMore = false;
         if (typeof (sessions as any).listEventsPage === 'function') {
@@ -256,6 +272,7 @@ export async function handleSessionEventsSse(input: {
         }
 
         if (truncated) {
+          reconnectReplayBudgetActive = false;
           const latest =
             typeof sessions.latestSeq === 'function'
               ? await sessions.latestSeq(sessionId)
@@ -287,11 +304,24 @@ export async function handleSessionEventsSse(input: {
           break;
         }
 
-        if (!hasMore || events.length === 0) break;
+        // `response.write() === false` means the current page is accepted into
+        // the socket buffer, but cursor advancement now depends on `drain()`.
+        // Do not immediately re-read from the old cursor: that would count the
+        // same rows repeatedly against reconnect budgets and can spin forever
+        // on a fresh connection whose page still reports hasMore=true.
+        if (isBackpressured || backpressureTruncated) {
+          break;
+        }
+
+        if (!hasMore || events.length === 0) {
+          reachedReplayTailThisPass = true;
+          break;
+        }
       }
 
       if (
         reconnectReplayBudgetActive &&
+        reachedReplayTailThisPass &&
         !replayTruncatedThisPass &&
         !closed &&
         !response.writableEnded
@@ -320,7 +350,13 @@ export async function handleSessionEventsSse(input: {
   const heartbeatMs = input.heartbeatMs ?? 15_000;
   heartbeat = setInterval(() => {
     if (!closed && !response.writableEnded && !isBackpressured) {
-      response.write(': ping\n\n');
+      if (!response.write(': ping\n\n')) {
+        isBackpressured = true;
+        response.once('drain', () => {
+          isBackpressured = false;
+          drain();
+        });
+      }
     }
   }, heartbeatMs);
   heartbeat.unref?.();
@@ -522,7 +558,13 @@ export async function handleWorkspaceSummarySse(input: {
   const heartbeatMs = input.heartbeatMs ?? 15_000;
   heartbeat = setInterval(() => {
     if (!closed && !response.writableEnded && !isBackpressured) {
-      response.write(': ping\n\n');
+      if (!response.write(': ping\n\n')) {
+        isBackpressured = true;
+        response.once('drain', () => {
+          isBackpressured = false;
+          drainPending();
+        });
+      }
     }
   }, heartbeatMs);
   heartbeat.unref?.();
