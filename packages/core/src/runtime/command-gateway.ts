@@ -416,6 +416,7 @@ async function runProcess(input: {
     let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
     let timeoutReason: 'total' | 'no-progress' | undefined;
+    let noProgressCandidateActivityAt: number | null = null;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
     if (input.signal) {
       input.signal.addEventListener('abort', () => {
@@ -467,13 +468,28 @@ async function runProcess(input: {
       ? setInterval(
           () => {
             recordOutputDirProgress();
-            if (
-              input.noProgressTimeoutMs &&
-              Date.now() - progress.lastActivityAt() >=
-                input.noProgressTimeoutMs
-            ) {
-              triggerTimeout('no-progress');
+            if (!input.noProgressTimeoutMs) {
+              return;
             }
+
+            const observedActivityAt = progress.lastActivityAt();
+            if (
+              Date.now() - observedActivityAt < input.noProgressTimeoutMs
+            ) {
+              noProgressCandidateActivityAt = null;
+              return;
+            }
+
+            // Timers and filesystem writes can become runnable in the same
+            // event-loop turn. Require the same inactivity watermark on two
+            // consecutive samples so boundary activity receives one final
+            // observation instead of being falsely labelled as no progress.
+            if (noProgressCandidateActivityAt !== observedActivityAt) {
+              noProgressCandidateActivityAt = observedActivityAt;
+              return;
+            }
+
+            triggerTimeout('no-progress');
           },
           Math.min(input.progressIntervalMs, input.noProgressTimeoutMs),
         )
