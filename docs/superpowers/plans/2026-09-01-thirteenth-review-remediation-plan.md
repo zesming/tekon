@@ -1,62 +1,100 @@
 # 第十三轮复审整改执行方案（2026-09-01）
 
-> 依据：第十二轮复审报告第 17.2 节（四路评估一致锁定的四项收敛）与第 18 节（第二轮四路交叉评估批注）。
-> 范围：本 PR（`review/human-first-harness-2026-08-28` → `main`，PR #11）内可安全落地的调整；架构冻结项（第 17.4/18.4 节）不在本方案范围。
+> 依据：第十二轮复审报告第 17/18 节与第十三轮重新评审。
+> 范围：PR #11 当前分支中可独立验证、低耦合的修复；single-owner Runtime、权威 Session log、ACP Collaborate、RunPlan authority 等架构主线继续拆分到后续 PR。
 
-## 1. 已完成项（第 17.2 节四项，提交 `bd16c72`）
+## 1. 用户侧 v0.20.4 整改
 
-| 项                  | 落地内容                                                                                | 证据                                               |
-| ------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| DSH pin 升级        | `TESTED_DSH_VERSION` → `0.1.2-alpha.3`，fixture、手册、current.md 同步                  | `packages/core/src/runtime/dsh-bridge-probe.ts:21` |
-| 版本身份统一        | 根 + 三个内部 package 统一 `0.20.4`，smoke 断言 lockstep                                | 四个 `package.json`、`smoke.test.ts:27`            |
-| fixture npm warning | 6 个 CLI 测试文件 `writeFileSync` 替代 `npm init`/`npm pkg set`                         | `packages/cli/__tests__/` 6 文件                   |
-| CI 供应链 gate      | 独立 `audit` job 执行 `pnpm audit --prod`，`cli`/`web` 改为 `needs: [typecheck, audit]` | `.github/workflows/ci.yml`                         |
+| 项 | 落地内容 | 裁决 |
+| --- | --- | --- |
+| DSH pin | `TESTED_DSH_VERSION` 升至官方 `0.1.2-alpha.3`，fixture、手册与版本提示同步 | Tekon 使用的 headless 兼容锚点通过；不能外推为整个上游仓库无变化 |
+| 发布身份 | 根与 `@tekon/core`、`@tekon/cli`、`@tekon/web` 统一为 `0.20.4`，smoke 断言 lockstep | 数字版本身份关闭；发布 provenance/tag 自动化仍是独立治理项 |
+| CLI fixture | 6 个 fixture 直接写 `package.json`，不再 spawn `npm init/pkg set` | CLI unit/e2e 的 unknown-config warning 已关闭 |
+| 供应链 gate | CI 独立执行 `pnpm audit --prod` | 生产依赖 advisory gate 已建立；dev 依赖、SBOM/provenance 不在覆盖范围 |
+| smoke 健壮性 | 扫描 `packages/` 时过滤不存在 `package.json` 的条目 | 关闭 |
+| dirty-base 测试 | JSON 解析后改字段，不依赖文本格式 replace | 关闭 |
 
-验收：`pnpm test` 138 文件 1477 passed；CLI e2e 3 文件 7 通过且 0 npm warn；`pnpm audit --prod` 0 漏洞。
+## 2. 第十三轮新增问题与修复
 
-## 2. 本轮新增调整（第 18 节批注后的收尾）
+### 2.1 Session 详情右栏对 best-effort Event 的过度依赖
 
-### 2.1 smoke 断言包目录过滤（第 18.2 节第 6 项）
+**问题**：`SessionDetailPage` 虽已从 `session.get` 获得 `runId/status/actionKind`，但右栏只消费 Event projection。Event 尚未到达或迁移期双写缺失时：
 
-- **问题**：`smoke.test.ts` 用 `readdirSync(packages)` 直接拼接 `package.json`，`.DS_Store`、无 `package.json` 的残留目录或断链 symlink 会触发 `MODULE_NOT_FOUND` 而非语义化断言。
-- **实现**：用 `existsSync(join(packageDir, name, 'package.json'))` 过滤，只扫描含 `package.json` 的包目录。
-- **验收**：`vitest run smoke.test.ts` 4 通过。
+- 关联 run 可能没有控制入口；
+- `awaiting-approval` 可能没有触发 `gate.list`，从而隐藏审批卡；
+- `SessionSidePanel` 把未知状态默认成 `running`，可能短暂展示不合法的暂停/取消；
+- 二次取消确认状态可能在组件切换 run 时残留。
 
-### 2.2 CI audit gate 拆独立 job（第 18.2 节第 1 项，用户已决策）
+**修复**：
 
-- **问题**：`pnpm audit --prod` 位于 `typecheck` job 内，`cli`/`web`/`web-e2e` 全部 `needs: typecheck`。registry 抖动或新 advisory 会让 build/typecheck 诊断完全不产出，且下游全部跳过。
-- **决策**：拆为独立 `audit` job，`cli`/`web` 改为 `needs: [typecheck, audit]`。audit 与 typecheck 并行，互不阻塞诊断；audit 失败仍阻断合并（gate 语义保留）。
-- **验收**：CI YAML 语法正确；`pnpm audit --prod` 本地退出码 0。
+- 新增 `mergeSessionSnapshotIntoSidePanel`，将 `session.get` 作为 run binding、生命周期和 attention 状态的安全回退；
+- live Event 一旦存在仍优先，避免快照覆盖新状态；
+- 未知状态保持 `unknown`，RunControls fail-closed；
+- `gate.list` 成为“当前有哪些 pending decision”的权威来源，Event/Session 只决定何时读取；
+- 审批后同时失效 `session.detail`、`session.list` 与 gate/project 查询；
+- `RunControls` 以 `runId` 为 key，切换 run 时重置二次取消确认；
+- 新增 10 个纯函数测试覆盖 7 种 Session→Run 状态映射、审批回退、live 优先和未知状态关闭。
 
-### 2.3 文档同步
+这是一项迁移期 UI 安全修复，不改变“Session Event 仍非权威事实源”的架构裁决。
 
-- 第十二轮报告追加第 18 节批注（第二轮四路交叉评估）。
-- `CHANGELOG.md` 补记 smoke 目录过滤与 audit 步骤顺序调整。
-- `docs/reviews/current.md` 同步第 18 节结论。
+### 2.2 DSH L2 live probe 的假通过
 
-## 3. 明确不做的项（维持冻结或交用户决策）
+**问题**：原 opt-in L2 测试遇到安装版本与 tested pin 不一致时，只验证生产 gate 会抛错，测试自身仍通过。这适合单元测试生产拒绝逻辑，却不符合“发布前 live probe”的含义。
 
-| 项                                                                                             | 理由                                                                                                                                  |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01、P1-A11Y-01、P1-PROCESS-01 | 架构冻结项，第 18.1 节四路评估逐项核对代码证据后确认冻结裁决成立，按报告第 14 节顺序分独立 PR 推进                                    |
-| P1-GOV-01 main 分支保护                                                                        | 需仓库 Owner 在 GitHub Settings 操作，非代码可解决                                                                                    |
-| audit 加 `--audit-level high`                                                                  | 降低 gate 严格度，当前 0 漏洞无必要，后续有需要时再评估                                                                               |
-| 全仓 prettier 格式化（253 文件）                                                               | 独立提交，不混入本 PR                                                                                                                 |
-| 引入 ESLint/Biome                                                                              | 独立评估，不在本 PR                                                                                                                   |
-| `createFixtureRepo` 抽共享 helper                                                              | 6 文件重复但行为有细微差异（approval-terminal 仅 test script、run-mode-policy 保留 npm 默认 test），抽共享 helper 需仔细对齐，另立 PR |
-| dev 依赖树 2 处 low-severity（esbuild Windows）                                                | `--prod` 不覆盖，不影响生产运行时，记录                                                                                               |
+**修复**：L2 现在要求 `dsh --version` 精确等于 `TESTED_DSH_VERSION`；版本漂移直接让 live probe 失败。同时把证据层级写清：
 
-## 4. 验收标准
+- L1：源码交叉核对 fixture；
+- L2：真实二进制 `--version/--help/--dump-default-config`，不需要 API key；
+- L3：带凭据的一次真实 provider invocation，仍未完成。
 
-1. `pnpm test` 全量通过（138+ 文件，0 失败）。
-2. `pnpm --filter @tekon/cli test:e2e` 通过且 0 npm warn。
-3. `pnpm audit --prod` 退出码 0。
-4. `.github/workflows/ci.yml` YAML 语法正确，audit 为独立 job，`cli`/`web` 的 `needs` 包含 `audit`。
-5. 第十二轮报告第 18 节、CHANGELOG、current.md 内容一致，无占位符。
-6. reviewer 循环评审本方案与实施代码，直到未检出必须修复项。
-7. 全功能 e2e（CLI + Web Playwright）通过。
-8. UI 人工目视检查：主路径页面无错位/重叠/展示错误，交互符合预期（现有 e2e 无视觉断言，此项为人工检查项，由主 agent 在全功能 e2e 阶段执行并记录结果）。
+### 2.3 Audit gate 与功能诊断解耦
 
-## 5. 版本号评估
+**问题**：audit 虽已拆为独立 job，但 `cli`/`web` 同时 `needs: audit`。registry 故障或新 advisory 会让所有功能测试被跳过，无法同时看到应用回归证据。
 
-本轮改动为测试健壮性（smoke 目录过滤）、CI 步骤顺序（不改变 gate 语义）、文档（报告第 18 节、CHANGELOG、current.md、方案文档），均属 PATCH 范畴。v0.20.4 尚未推送发布（无 git tag），本轮改动吸收进 v0.20.4，不单独 bump。
+**修复**：
+
+- audit 保持独立顶级 job，失败仍使整个 workflow 失败；
+- `cli`/`web` 只依赖 root build/typecheck，因此 audit 失败不会压掉功能测试；
+- audit 安装使用 `--ignore-scripts`，避免在只读供应链检查中执行依赖 lifecycle script；
+- 增加 5 分钟超时；
+- CI job 名从不准确的 `Root typecheck + lint` 改为 `Root build + typecheck`。当前仓库没有真实 JS/TS static linter，不再用名称制造已覆盖假象。
+
+## 3. 自动化验收
+
+Reviewer 代码快照：`6917c06369d5cb0da5b681fc61d2bb25d600572d`。
+
+- Core #362：`completed/success`；
+- CI #271：`completed/success`；
+- Root build + typecheck：成功；
+- Production dependency audit：成功；
+- CLI build/unit/e2e：成功；
+- Web build/typecheck/unit：成功；
+- Web unit：36 文件、358 测试通过，其中新 snapshot fallback 测试 10 项通过；
+- Chromium Playwright：成功。
+
+L2 DSH 测试在未配置 `DSH_CLI_PATH` 的普通 CI 中按设计跳过，因此上述绿色 CI 不能代替真实二进制或 API provider smoke。
+
+## 4. 明确不在本 PR 继续扩张的项
+
+| 项 | 原因 |
+| --- | --- |
+| repo single-owner daemon/lock | 跨 CLI/Web composition root、进程生命周期、Git/DB/Provider 资源所有权，需要独立架构 PR |
+| executor process/worker 隔离与 restart recovery | 必须设计 kill/join、checkpoint、generation fencing 和故障注入 |
+| authoritative Session log / durable inbox | 需要事实源与迁移决策，不应继续在 best-effort dual-write 上叠补丁 |
+| ACP Collaborate vertical slice | 需要真实 provider 子进程、persistent session、prompt/cancel/close/resume 的完整纵向验证 |
+| RunPlan execute/resume authority | 需统一绑定 Demand、mode、base/workspace、Provider、权限、网络、Artifacts 与 executable plan |
+| complete-history export / model compaction | 需服务端流式导出、flush/snapshot、retention 和 token budget 共同设计 |
+| 全站 a11y 与多浏览器 | 当前仅 Chromium 自动化和局部 dialog 证据，需专项验收 |
+| branch protection/ruleset | 需要仓库 Owner 在 GitHub Settings 配置 |
+| ESLint/Biome、全仓 format | 属独立代码卫生 PR，避免在超大 PR 中继续扩大面 |
+
+## 5. 文档裁决
+
+- 第十三轮另建新报告，不再向第十二轮继续追加 revision；
+- `docs/reviews/current.md` 改指向第十三轮；
+- 第十二轮及之前报告转为只读历史；
+- `CHANGELOG.md` v0.20.4 中“整个 headless 合同零差异”与 `needs: [typecheck, audit]` 描述代表整改时点，不作为最终权威状态；当前事实以第十三轮报告、workflow 和代码为准。
+
+## 6. 合并边界
+
+代码快照已通过现有自动化，但 `main` 尚未配置 branch protection/required checks。合并前仍需人工确认 PR Head 与成功 CI 绑定；建议 squash merge。未执行 merge、release、deploy 或仓库 ruleset 修改。
