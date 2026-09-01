@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -172,21 +172,22 @@ function createFixtureRepo(tempDirs: string[]): string {
   execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
-  execFileSync('npm', ['init', '-y'], { cwd: repoPath });
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.build=node -e "process.exit(0)"'],
-    { cwd: repoPath },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.lint=node -e "process.exit(0)"'],
-    { cwd: repoPath },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'],
-    { cwd: repoPath },
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      scripts: {
+        build: 'node -e "process.exit(0)"',
+        lint: 'node -e "process.exit(0)"',
+        test: 'node -e "process.exit(0)"',
+      },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });

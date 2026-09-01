@@ -5,11 +5,11 @@
 - **上一轮权威代码快照**：`19deedfe03d78553102faad355d8aef26d32dd6e`
 - **用户 v0.20.3 整改快照**：`1a4700ec8d9e735bdb3fcf25fe0dc1652e2ee007`
 - **reviewer 代码修复快照**：`5ff5b430fb839177125fba695198b6ab24c3f87c`
-- **当前版本**：`0.20.3`
+- **当前版本**：`0.20.4`
 - **代码自动化状态**：`5ff5b430...` 的 Core #348 与 CI #257 均为 `completed/success`；Root build/typecheck、CLI unit/e2e、Web build/typecheck/unit 与 Chromium Playwright 全部成功
-- **Tekon DSH tested pin**：`0.1.2-alpha.2`
-- **DeepSeek Harness 当前官方版本**：`0.1.2-alpha.2`
-- **当前裁决**：v0.20.3 整改与 reviewer 局部修复通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **Tekon DSH tested pin**：`0.1.2-alpha.3`
+- **DeepSeek Harness 当前官方版本**：`0.1.2-alpha.3`
+- **当前裁决**：v0.20.4 整改（DSH pin 升级、版本身份统一、fixture warning 清理、CI audit gate）已提交，CI 待重绑后确认通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 第十二轮确认的实质改进
 
@@ -19,6 +19,14 @@
 - `actions/checkout` 与 `actions/setup-node` 已升级到当前 Node 24 runtime 的 v6 系列；
 - 上一轮已闭环的 Session/Workspace SSE backpressure、历史 cursor、DSH pin/help/config/Node 合同继续通过回归；
 - 当前 reviewer 代码修复快照的 Core、CLI、Web 与 Chromium Playwright 自动化全部成功。
+
+## v0.20.4 批注整改（第十二轮第 17.2 节）
+
+- DSH tested pin 升级到 `0.1.2-alpha.3`（与 alpha.2 合同零差异）；
+- 内部 package 版本统一为 `0.20.4`（lockstep），补 smoke 断言防漂移；
+- 6 个 CLI fixture 不再 spawn `npm` 子进程，消除 unknown-config warning；
+- CI `typecheck` job 新增 `pnpm audit --prod` 供应链 gate；
+- 详见 `docs/superpowers/plans/2026-09-01-twelfth-review-remediation-plan.md`。
 
 ## 本轮 reviewer 直接修复
 
@@ -51,11 +59,11 @@
 - **Collaborate**：真实 streaming、follow-up、steer、prompt cancel、restart resume 和 Collaborate → Deliver 仍缺；
 - **RunPlan**：校验与持久化一致，但尚未成为 execute/resume 唯一权威输入，也未完整绑定 Demand/mode/base/workspace/resolved Provider/expected Artifacts；
 - **长 Session**：在线 replay/pending 已有基础上限，完整历史导出、模型 context compaction、统一 retention policy、真实规模和故障矩阵仍未闭环；
-- **DSH**：pin/fixture 合同已追平 alpha.2，但带真实 dsh 二进制与 API key 的 Provider smoke 仍缺；
-- **发布身份**：根产品版本 `0.20.3` 与内部 `@tekon/*` package 版本 `0.7.0` 并存，缺单一版本权威；
+- **DSH**：pin/fixture 合同已追平 alpha.3，但带真实 dsh 二进制与 API key 的 Provider smoke 仍缺；
+- **发布身份**：内部 package 版本已与根产品版本 lockstep 统一为 `0.20.4`，smoke 测试有断言防漂移；
 - **仓库治理**：`main` 未保护，required status checks enforcement 关闭；红色 CI 不能从仓库规则层阻止合并；
-- **测试卫生**：fixture 内子 `npm` 仍继承 pnpm 私有 `npm_config_*` 并打印 unknown-env warning；不应通过降低全局日志级别掩盖；
-- **供应链治理**：当前 override 只证明该 lockfile 的局部 pin；尚无强制 advisory、SBOM、provenance 或 dependency-review gate；
+- **测试卫生**：CLI 测试 fixture 不再 spawn `npm` 子进程，该 lane 的 unknown-env warning 已清零（install/update 脚本与 smoke:claude-provider 等路径仍会产生同类告警）；
+- **供应链治理**：CI 已强制 `pnpm audit --prod`（生产依赖 advisory gate）；dev 依赖树与 SBOM/provenance 仍无 gate；
 - **可访问性**：局部 dialog 与 Chromium lane 不能外推为全站 screen reader、Firefox/WebKit、缩放和对比度验收；
 - **PR 可审阅性**：当前 PR 体量过大，建议 squash merge，并把后续架构主链路拆为独立 PR。
 
@@ -74,7 +82,7 @@ repo 级 single-owner Runtime
 
 ## 允许的成熟度表述
 
-> Tekon v0.20.3 已形成测试覆盖较强、执行计划和风险边界较透明、长会话在线观察具有基础资源上限的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart、完整历史导出、模型上下文预算和统一发布身份尚未闭环。
+> Tekon v0.20.4 已形成测试覆盖较强、执行计划和风险边界较透明、长会话在线观察具有基础资源上限的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下试用，但持续协作、单一 Runtime 权威、权威 Session 事实链、可证明的 shutdown/restart、完整历史导出、模型上下文预算和统一发布身份尚未闭环。
 
 ## 评审资料维护规则
 

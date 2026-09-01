@@ -1,6 +1,6 @@
 # Excerpt of `dsh --profile headless --dump-default-config`. The row ids and
-# config values below were cross-checked against the official dsh@0.1.2-alpha.2
-# source (commit 0a53fb55bea101816fa226bb964ae2bed71c343b): the base bundle,
+# config values below were cross-checked against the official dsh@0.1.2-alpha.3
+# source (commit dd6322d604e00eec1ba5e0c8541159906a21094a): the base bundle,
 # headless bundle composition, and default-model selection (provider
 # deepseek-official, model deepseek-v4-flash). This is a source-level
 # cross-check, not a recording from a locally installed dsh binary; a real

@@ -18,7 +18,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
-export const TESTED_DSH_VERSION = '0.1.2-alpha.2';
+export const TESTED_DSH_VERSION = '0.1.2-alpha.3';
 
 /** DSH's own runtime prerequisite, which is stricter than Tekon's Node contract. */
 export const DSH_NODE_REQUIREMENT = '^22.19.0 || >=24.0.0';

@@ -566,3 +566,37 @@ PR #11 已超过适合逐行审阅、可靠二分和低风险回滚的规模。�
 - [Session log export](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/packages/session-query/session-log-export/README.md)
 - [Root Node engines](https://github.com/deepseek-ai/deepseek-harness/blob/0a53fb55bea101816fa226bb964ae2bed71c343b/package.json)
 - [dsh v0.1.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.2)
+
+---
+
+## 17. 主 Agent 交叉评估批注（2026-09-01，基于 HEAD `cf2ccf1`）
+
+> 本节为应要求追加的独立评审视角，不改动上文第 1–16 节的原始裁决。方法：同步 deepseek-harness 至 `origin/master`（最新 tag `dsh-v0.1.2-alpha.3`），委派 4 个 subagent 分别从「reviewer 修复落地核对」「新增问题项可行性评估」「DSH alpha.3 升级风险」「代码健康度」四个角度独立评估，再由主 Agent 综合判断。
+
+### 17.1 四路评估一致确认的结论
+
+1. **第 5 节 3 项 reviewer 修复全部落地**：`ci.yml` 4 个 job 均在 `pnpm` 前 `corepack enable pnpm`；`core.yml` 移除全部 5 处 `npm exec`；checkout/setup-node 全部 v6。CI #257 全绿。
+2. **CLI e2e lane 分层正确**：unit 9 文件 61 测试，e2e 3 文件 7 测试，无双跑。
+3. **代码健康度 A 级**：`pnpm test` 138 文件 1476 通过 / 3 skip / 0 失败；`pnpm audit --prod` 0 漏洞；`git diff 19deedf..HEAD packages/*/src/` 为空，无生产代码越界改动。
+4. **DSH alpha.3 兼容锚点零差异**：Node engines、help anchor、5 个 required plugin ids、reasoning streaming、exit code 语义与 alpha.2 完全一致。alpha.3 移除 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 契约方向一致。
+
+### 17.2 本轮可收敛项（四路评估一致认定）
+
+| 项 | 方案 | 风险 | 依据 |
+| --- | --- | --- | --- |
+| **DSH pin 升级 alpha.2→alpha.3** | 更新 `TESTED_DSH_VERSION` + fixture + 手册 | 低 | Zeno 逐项核对所有 L1/L2 锚点零差异；headless 执行器代码 0 修改 |
+| **P1-RELEASE-01 版本身份统一** | lockstep：三个内部 package `0.7.0`→`0.20.4` | 零 | workspace 依赖用 `workspace:*` 不绑定版本；lockfile 不记录内部包版本；smoke 测试断言恒等 |
+| **P2-CI-03 fixture npm warning** | 方案 B：`writeFileSync` 替代 `npm init`/`npm pkg set`（6 文件 15 处） | 零 | 消除子进程派生 + env 继承；core/web 测试已用此模式 |
+| **P2-DEPS-01 供应链 gate** | CI `typecheck` job 加 `pnpm audit --prod` | 零 | 当前退出码 0，不阻断；未来新增不安全生产依赖时自动拦截 |
+
+### 17.3 需用户操作（非代码可解决）
+
+- **P1-GOV-01 main 分支保护**：`gh api` 确认 `main` 未保护、rulesets 为空。需仓库 Owner 在 GitHub `Settings → Rules → Rulesets` 配置：要求 PR + 要求 status checks（Core、CI 的 6 个 context）。
+
+### 17.4 维持冻结的架构项
+
+P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01（compaction/export）、P1-A11Y-01、P1-PROCESS-01——与报告第 12、14 节冻结判断一致，分独立 PR 推进。
+
+### 17.5 结论
+
+第十二轮修复质量扎实，CI 阻断已解决。本轮建议收敛第 17.2 节四项低风险项；P1-GOV-01 需用户在 GitHub 设置中操作；架构主线按报告第 14 节顺序另立 PR。

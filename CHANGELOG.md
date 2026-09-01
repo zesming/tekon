@@ -1,5 +1,16 @@
 # 变更日志
 
+## v0.20.4
+
+本轮落地第十二轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-twelfth-review.md`，PR #11）第 17.2 节批注锁定的四项低风险收敛：DSH tested pin 升级、版本身份统一、fixture npm warning 清理、CI 供应链 gate。架构级项按复审裁决维持冻结，登记为后续顺序。
+
+### 工程与合同
+
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到官方当前基线 `0.1.2-alpha.3`。alpha.3 与 alpha.2 的 headless 合同零差异（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级合同风险极低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+- **版本身份统一（P1-RELEASE-01）**：`@tekon/core`、`@tekon/cli`、`@tekon/web` 三个内部 package 的版本由 `0.7.0` 统一为 `0.20.4`，与根产品版本 lockstep。此前 `TEKON_CORE_VERSION`（读内部 package）与 CLI `getVersion()`（读根 package）输出不一致，按推断会干扰 bug report 与日志中的版本识别（当前无生产代码消费该常量，属预防性统一）。补了 smoke 测试断言所有内部 package 与根版本一致，防止再次漂移。
+- **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
+- **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 的 `typecheck` job 新增 `pnpm audit --prod` 步骤。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；gate 加在 `typecheck` job（其余 job `needs: typecheck`），audit 失败会连锁阻断整条 CI。
+
 ## v0.20.3
 
 本轮落地第十一轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-eleventh-review.md`，PR #11）第 16.3 节批注锁定的三项过程/卫生收敛：CLI e2e 文件命名与 lane 语义对齐、CI npm env warning 清理、devDependencies 漏洞 override。架构级项（single-owner Runtime、权威 Session、ACP vertical slice、RunPlan authority、模型 compaction、全站 a11y）按复审裁决维持冻结，登记为后续顺序。

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -113,7 +113,20 @@ function createFixtureRepo(tempDirs: string[]): string {
   execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
-  execFileSync('npm', ['init', '-y'], { cwd: repoPath });
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      // npm init -y 隐式生成 scripts.test；保留以避免 detectRepoProfile 静默漂移
+      scripts: { test: 'echo "Error: no test specified" && exit 1' },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
+  );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
   return repoPath;
