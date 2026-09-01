@@ -6,10 +6,10 @@
 - **用户 v0.20.3 整改快照**：`1a4700ec8d9e735bdb3fcf25fe0dc1652e2ee007`
 - **reviewer 代码修复快照**：`5ff5b430fb839177125fba695198b6ab24c3f87c`
 - **当前版本**：`0.20.4`
-- **代码自动化状态**：`5ff5b430...` 的 Core #348 与 CI #257 均为 `completed/success`；Root build/typecheck、CLI unit/e2e、Web build/typecheck/unit 与 Chromium Playwright 全部成功
+- **代码自动化状态**：`1c285e0...` 的 Core #33473574591 与 CI #33473574622 均为 `completed/success`；Root typecheck/lint、CLI build/unit/e2e、Web build/typecheck/unit 与 Web Playwright e2e 全部成功
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前官方版本**：`0.1.2-alpha.3`
-- **当前裁决**：v0.20.4 整改（DSH pin 升级、版本身份统一、fixture warning 清理、CI audit gate）已提交，CI 待重绑后确认通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **当前裁决**：v0.20.4 整改（DSH pin 升级、版本身份统一、fixture warning 清理、CI audit gate、smoke 断言健壮性、audit 步骤顺序）已提交并通过代码合并门（CI 全绿）；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 第十二轮确认的实质改进
 
