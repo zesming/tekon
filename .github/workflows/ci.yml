@@ -3,7 +3,7 @@ name: CI
 # Full-stack CI covering core + CLI + Web + Playwright (report P1-06 / §13.13).
 # core.yml remains the focused core gate; this workflow adds the layers that
 # most affect human usability and were previously unprotected on the main
-# branch: root typecheck/lint, CLI build/unit/e2e, Web build/typecheck/unit,
+# branch: root build/typecheck, CLI build/unit/e2e, Web build/typecheck/unit,
 # and the browser (Playwright) journeys.
 
 on:
@@ -27,7 +27,7 @@ env:
 
 jobs:
   typecheck:
-    name: Root typecheck + lint
+    name: Root build + typecheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
