@@ -45,7 +45,12 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
   // Session snapshot decides when to fetch; gate.list remains the authority for
   // which decisions are currently pending, so a missing best-effort projection
   // cannot hide an approval and a stale event cannot keep a decided card alive.
-  const invalidateKeys = ['gate.results.', 'session.list.', 'project.overview'];
+  const invalidateKeys = [
+    'gate.results.',
+    'session.detail.',
+    'session.list.',
+    'project.overview',
+  ];
   const { data: gateData, refetch } = useQuery<
     RpcProcedureMap['gate.list']['output']
   >(
