@@ -90,6 +90,43 @@ export class DshCapabilityError extends Error {
 }
 
 /**
+ * Raised when the host Node.js runtime does not satisfy DSH's requirement.
+ * Distinct from {@link DshCapabilityError} because no dsh binary has been
+ * probed yet — the host itself is incompatible. `hostNodeVersion` lets callers
+ * render a precise "host Node incompatible" message instead of misreporting
+ * "dsh not installed".
+ */
+export class DshHostNodeError extends Error {
+  constructor(readonly hostNodeVersion: string) {
+    super(
+      `host Node.js '${hostNodeVersion}' does not satisfy DSH requirement ` +
+        `'${DSH_NODE_REQUIREMENT}' (odd Node release lines such as 23.x are ` +
+        `not supported). Upgrade Node.js or set ` +
+        `TEKON_DSH_ALLOW_HOST_NODE='${hostNodeVersion}' to bypass this check ` +
+        `at your own risk.`,
+    );
+    this.name = 'DshHostNodeError';
+  }
+}
+
+/**
+ * Pure host Node.js version compatibility check. Returns true when the host
+ * satisfies DSH's runtime requirement. Pre-release suffixes are tolerated
+ * (only the numeric major.minor segment is compared); unparseable input
+ * returns false (fail-closed).
+ */
+export function isHostNodeVersionCompatible(version: string): boolean {
+  const match = /^(\d+)\.(\d+)/.exec(version.trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  if (Number.isNaN(major) || Number.isNaN(minor)) return false;
+  if (major >= 24) return true;
+  if (major === 22 && minor >= 19) return true;
+  return false;
+}
+
+/**
  * Parse `dsh --version` stdout into a bare version string. Tolerates a leading
  * boot banner by taking the last non-empty trimmed line.
  */
@@ -183,6 +220,9 @@ export interface DshPreflightResult {
   helpContractOk: boolean;
   configContractOk: boolean;
   installHint: string;
+  hostNodeVersion: string;
+  hostNodeCompatible: boolean;
+  hostNodeBypassed: boolean;
 }
 
 export interface RunDshPreflightOptions {
@@ -191,6 +231,8 @@ export interface RunDshPreflightOptions {
   probeConfig?: (command: string) => Promise<string>;
   allowVersion?: string;
   onWarn?: (message: string) => void;
+  /** Test injection: override the host Node.js version (defaults to process.versions.node). */
+  hostNodeVersion?: string;
 }
 
 async function defaultProbeVersion(command: string): Promise<string> {
@@ -236,6 +278,22 @@ export async function runDshPreflight(
   const probeHelp = options?.probeHelp ?? defaultProbeHelp;
   const probeConfig = options?.probeConfig ?? defaultProbeConfig;
 
+  const hostNodeVersion = options?.hostNodeVersion ?? process.versions.node;
+  let hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
+  let hostNodeBypassed = false;
+  if (!hostNodeCompatible) {
+    const allowHostNode = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    if (allowHostNode === hostNodeVersion) {
+      hostNodeCompatible = true;
+      hostNodeBypassed = true;
+      options?.onWarn?.(
+        `[dsh bridge] host Node check bypassed via TEKON_DSH_ALLOW_HOST_NODE='${hostNodeVersion}'`,
+      );
+    } else {
+      throw new DshHostNodeError(hostNodeVersion);
+    }
+  }
+
   const rawVersion = await probeVersion(dshCommand);
   const actualVersion = parseDshVersion(rawVersion);
   const allowVersion =
@@ -267,5 +325,8 @@ export async function runDshPreflight(
     helpContractOk: true,
     configContractOk: true,
     installHint: dshInstallHint(),
+    hostNodeVersion,
+    hostNodeCompatible,
+    hostNodeBypassed,
   };
 }

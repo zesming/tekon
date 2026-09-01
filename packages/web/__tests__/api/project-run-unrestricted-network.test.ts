@@ -13,6 +13,18 @@ import {
 const cleanupTasks: Array<() => Promise<void> | void> = [];
 
 /**
+ * The host running these tests may not satisfy DSH's Node requirement
+ * (e.g. Node 22.16 < 22.19). Set the exact-match escape hatch so the
+ * preflight does not reject the run before it reaches the network gate.
+ */
+function allowHostNodeForDsh(): void {
+  process.env.TEKON_DSH_ALLOW_HOST_NODE = process.versions.node;
+  cleanupTasks.push(() => {
+    delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
+  });
+}
+
+/**
  * Create a fake `dsh` binary on PATH that satisfies the preflight contract
  * (version + headless help anchor + required plugin ids), so tests exercise
  * the run path rather than the preflight rejection.
@@ -71,6 +83,7 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
   });
 
   it('admits dsh-headless run when unrestricted network is explicitly acknowledged', async () => {
+    allowHostNodeForDsh();
     installFakeDsh();
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);

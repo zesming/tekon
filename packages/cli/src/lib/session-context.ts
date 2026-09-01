@@ -19,6 +19,7 @@ import {
   createSubprocessRegistry,
   createWorkflowEngine,
   DshCapabilityError,
+  DshHostNodeError,
   createWorkflowJobExecutor,
   createWorktreeManager,
   createWriteQueue,
@@ -242,8 +243,15 @@ export async function withCliSessionContext<T>(
       },
       preflight: async () => {
         if (activeAgent === 'dsh-headless') {
-          const preflight = await runDshPreflight();
+          const preflight = await runDshPreflight({
+            onWarn: (msg) => {
+              io.stderr.write(`${msg}\n`);
+            },
+          });
           if (!preflight.compatible) {
+            if (preflight.failureKind === 'host-node') {
+              throw new DshHostNodeError(preflight.hostNodeVersion);
+            }
             throw new DshCapabilityError(
               preflight.error ??
                 `dsh-headless 环境预检未通过 (tested: ${preflight.testedVersion}, actual: ${preflight.actualVersion ?? '未安装'})。` +

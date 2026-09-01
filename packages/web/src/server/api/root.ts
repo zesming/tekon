@@ -21,6 +21,8 @@ import {
   createJobRunner,
   openTekonDatabase,
   runDshPreflight,
+  DshHostNodeError,
+  isHostNodeVersionCompatible,
   TESTED_DSH_VERSION,
   type AuditLogger,
   type RunPlan,
@@ -75,14 +77,24 @@ function createWebRunEngineFactory(deps: {
   repositories: TekonRepositories;
   audit: AuditLogger;
   registry: SubprocessRegistry;
+  preflight?: typeof runDshPreflight;
 }): (input: WebRunEngineInput) => Promise<WorkflowEngine> {
   return async (input) => {
     if (input.agent === 'dsh-headless') {
+      const preflight = deps.preflight ?? runDshPreflight;
       try {
-        await runDshPreflight();
+        await preflight(undefined, {
+          onWarn: (m) => console.warn('[dsh bridge]', m),
+        });
       } catch (error) {
         const detail =
           error instanceof Error ? error.message : String(error);
+        if (error instanceof DshHostNodeError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `dsh-headless 宿主 Node 不兼容: ${detail} (tested: ${TESTED_DSH_VERSION})`,
+          );
+        }
         throw new ApiError(
           'BAD_REQUEST',
           `dsh-headless 预检未通过: ${detail} (tested: ${TESTED_DSH_VERSION})`,

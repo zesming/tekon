@@ -244,6 +244,8 @@ export function createDshHeadlessAdapter(
     /** Escape hatch: accept this exact untested version (design §5.1). */
     allowVersion?: string;
     onWarn?: (message: string) => void;
+    /** Test injection: override the host Node.js version (defaults to process.versions.node). */
+    hostNodeVersion?: string;
   },
 ): AgentAdapter {
   // Runs the capability guard, including the phase-5b network-ack carve-out:
@@ -289,6 +291,7 @@ export function createDshHeadlessAdapter(
           probeConfig,
           allowVersion: options?.allowVersion,
           onWarn: options?.onWarn,
+          hostNodeVersion: options?.hostNodeVersion,
         });
       })();
     }

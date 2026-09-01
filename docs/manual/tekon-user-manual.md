@@ -370,7 +370,7 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
   - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
   - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制,无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
   - 一次性、无流式、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.2-alpha.3`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。
-  - ⚠️ **Node 版本要求与 Tekon 主合同不同**：DSH 要求 Node `^22.19.0 || >=24.0.0`，而 Tekon 主合同允许 Node `^20.19.0 || >=22.12.0`。Node 20 环境下 `dsh-headless` 可能无法安装或运行；preflight 的安装指引会显式提示该差异，但不会把 Node 不兼容误报为 dsh 缺失。
+  - ⚠️ **Node 版本要求与 Tekon 主合同不同**：DSH 要求 Node `^22.19.0 || >=24.0.0`，而 Tekon 主合同允许 Node `^20.19.0 || >=22.12.0`。preflight 会在探测 dsh 二进制之前硬拦截不兼容的宿主 Node（Node 20.x、22.12 及以上但低于 22.19、奇数版本线如 23.x），并给出升级指引。若确认 dsh 实际运行在更高版本 Node 上（如全局安装在 Node 24 下），可设置 `TEKON_DSH_ALLOW_HOST_NODE=<当前版本号>` 精确放行，preflight 会输出旁路警告。
 
 **Provider 环境预检**：使用 `dsh-headless` 前，可先运行预检命令确认本机环境与 Tekon 钉死版本兼容：
 

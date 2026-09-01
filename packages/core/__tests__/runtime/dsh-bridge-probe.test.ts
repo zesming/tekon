@@ -6,6 +6,8 @@ import {
   dshInstallHint,
   DshVersionGateError,
   DshCapabilityError,
+  DshHostNodeError,
+  isHostNodeVersionCompatible,
   parseDshVersion,
   assertDshVersionAllowed,
   assertDshHeadlessHelpContract,
@@ -157,6 +159,35 @@ describe('dsh install metadata', () => {
   });
 });
 
+// ── isHostNodeVersionCompatible ─────────────────────────────────────────
+
+describe('isHostNodeVersionCompatible', () => {
+  it.each([
+    ['20.19.0', false],
+    ['22.14.0', false],
+    ['22.18.0', false],
+    ['18.20.0', false],
+    ['23.0.0', false],
+    ['22.18.0-rc', false],
+    ['', false],
+    ['abc', false],
+    ['22', false],
+  ])('rejects incompatible host %s', (version, expected) => {
+    expect(isHostNodeVersionCompatible(version)).toBe(expected);
+  });
+
+  it.each([
+    ['22.19.0', true],
+    ['22.20.1', true],
+    ['24.0.0', true],
+    ['25.1.0', true],
+    ['24.0.0-rc.1', true],
+    ['22.19.0-rc', true],
+  ])('accepts compatible host %s', (version, expected) => {
+    expect(isHostNodeVersionCompatible(version)).toBe(expected);
+  });
+});
+
 // ── runDshPreflight ─────────────────────────────────────────────────────
 
 describe('runDshPreflight', () => {
@@ -181,6 +212,7 @@ describe('runDshPreflight', () => {
       probeVersion: async () => validVersion,
       probeHelp: async () => validHelp,
       probeConfig: async () => validConfig,
+      hostNodeVersion: '22.19.0',
     });
 
     expect(result).toEqual({
@@ -190,6 +222,9 @@ describe('runDshPreflight', () => {
       helpContractOk: true,
       configContractOk: true,
       installHint: dshInstallHint(),
+      hostNodeVersion: '22.19.0',
+      hostNodeCompatible: true,
+      hostNodeBypassed: false,
     });
   });
 
@@ -201,6 +236,7 @@ describe('runDshPreflight', () => {
         probeVersion: async () => '0.2.0\n',
         probeHelp: async () => validHelp,
         probeConfig: async () => validConfig,
+        hostNodeVersion: '22.19.0',
       }),
     ).rejects.toThrow(DshVersionGateError);
   });
@@ -213,6 +249,7 @@ describe('runDshPreflight', () => {
         probeVersion: async () => validVersion,
         probeHelp: async () => 'Usage: dsh [options]',
         probeConfig: async () => validConfig,
+        hostNodeVersion: '22.19.0',
       });
       throw new Error('should have thrown');
     } catch (error) {
@@ -231,7 +268,100 @@ describe('runDshPreflight', () => {
         probeVersion: async () => validVersion,
         probeHelp: async () => validHelp,
         probeConfig: async () => '- id: headless-runner',
+        hostNodeVersion: '22.19.0',
       }),
     ).rejects.toThrow(DshCapabilityError);
+  });
+
+  it('fails fast on incompatible host Node before any probe runs', async () => {
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
+    const probeSpy = async () => {
+      throw new Error('probe should not be called');
+    };
+    await expect(
+      runDshPreflight('dsh', {
+        probeVersion: probeSpy,
+        probeHelp: probeSpy,
+        probeConfig: probeSpy,
+        hostNodeVersion: '20.19.0',
+      }),
+    ).rejects.toThrow(DshHostNodeError);
+  });
+
+  it('bypasses host Node check with exact-match escape hatch and warns', async () => {
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
+    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    process.env.TEKON_DSH_ALLOW_HOST_NODE = '20.19.0';
+    const warnings: string[] = [];
+    try {
+      const result = await runDshPreflight('dsh', {
+        probeVersion: async () => validVersion,
+        probeHelp: async () => validHelp,
+        probeConfig: async () => validConfig,
+        hostNodeVersion: '20.19.0',
+        onWarn: (m) => warnings.push(m),
+      });
+      expect(result.hostNodeCompatible).toBe(true);
+      expect(result.hostNodeBypassed).toBe(true);
+      expect(warnings.length).toBeGreaterThan(0);
+      expect(warnings[0]).toContain('TEKON_DSH_ALLOW_HOST_NODE');
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
+      } else {
+        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
+      }
+    }
+  });
+
+  it('does not bypass with a non-matching escape hatch value', async () => {
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
+    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    process.env.TEKON_DSH_ALLOW_HOST_NODE = '1';
+    try {
+      await expect(
+        runDshPreflight('dsh', {
+          probeVersion: async () => validVersion,
+          probeHelp: async () => validHelp,
+          probeConfig: async () => validConfig,
+          hostNodeVersion: '20.19.0',
+        }),
+      ).rejects.toThrow(DshHostNodeError);
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
+      } else {
+        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
+      }
+    }
+  });
+
+  it('bypasses unparseable host version with exact-match escape hatch', async () => {
+    const { runDshPreflight } =
+      await import('../../src/runtime/dsh-bridge-probe.js');
+    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    process.env.TEKON_DSH_ALLOW_HOST_NODE = 'abc';
+    const warnings: string[] = [];
+    try {
+      const result = await runDshPreflight('dsh', {
+        probeVersion: async () => validVersion,
+        probeHelp: async () => validHelp,
+        probeConfig: async () => validConfig,
+        hostNodeVersion: 'abc',
+        onWarn: (m) => warnings.push(m),
+      });
+      expect(result.hostNodeCompatible).toBe(true);
+      expect(result.hostNodeBypassed).toBe(true);
+      expect(warnings.length).toBeGreaterThan(0);
+    } finally {
+      if (originalEnv === undefined) {
+        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
+      } else {
+        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
+      }
+    }
   });
 });

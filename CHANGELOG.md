@@ -11,6 +11,10 @@
 - **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
 - **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 新增独立 `audit` job 执行 `pnpm audit --prod`。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；audit 与功能测试解耦（`cli`/`web` 只 `needs: typecheck`），audit 失败不压掉功能诊断，但 audit 本身仍是独立 gate。
 
+### DSH Host Node 版本硬拦截（第十四轮批注）
+
+- **preflight 硬拦截不兼容宿主 Node**：`runDshPreflight` 在探测 dsh 二进制之前新增宿主 Node 版本检查（`isHostNodeVersionCompatible`），不兼容时（Node 20.x、22.12–22.18、23.x 奇数线）抛 `DshHostNodeError`，不再让用户先撞上 dsh 子进程的底层退出错误。提供 `TEKON_DSH_ALLOW_HOST_NODE=<实际版本>` 精确值逃生口（对齐 `TEKON_DSH_ALLOW_VERSION` 先例），放行时输出 `onWarn` 警告。`DshPreflightResult` 增加 `hostNodeVersion`/`hostNodeCompatible`/`hostNodeBypassed` 结构化字段；CLI `provider preflight` 输出与 `--json` 同步展示宿主 Node 状态，`failureKind` 判别字段区分"宿主 Node 不兼容"与"dsh 未安装"。Web `probeProvider` health 判定同步纳入宿主 Node 检查。
+
 ### 测试与 CI 收尾（第十三轮批注）
 
 - **smoke 版本断言健壮性**：`packages/core/__tests__/smoke.test.ts` 的 lockstep 断言改为扫描 `packages/` 目录（不再硬编码包名），并用 `existsSync(<pkg>/package.json)` 过滤，避免 `.DS_Store`、残留目录或断链 symlink 触发 `MODULE_NOT_FOUND`。

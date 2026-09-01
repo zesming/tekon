@@ -497,3 +497,65 @@ single-owner Runtime
 - [ACP](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/packages/acp/acp/README.md)
 - [Session log export](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/packages/session-query/session-log-export/README.md)
 - [Safety](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/SAFETY.md)
+
+## 14. 主 Agent 四路循环评估批注（2026-09-01，基于 HEAD `99e0065`）
+
+本节是主 Agent 收到本报告后，按既定循环（同步上游 → 四路独立评估 → 达成一致 → 批注 → 整改）产出的交叉评估记录。评估基线：`99e0065`（含 reviewer 修复 `1e16835` 与测试 `ced8877`），DSH 上游 `dd6322d60`（alpha.3，pull 后无新提交）。
+
+### 14.1 四路评估结论（一致）
+
+| 评估路 | 结论 | 关键证据 |
+| --- | --- | --- |
+| reviewer 修复落地核查 | **成立，无过度** | 两阶段 watermark 确认在 `command-gateway.ts:467-495`；总超时 `setTimeout(..., timeoutMs)` 未动（`:498`）；progress JSON 透传用户原始 `noProgressTimeoutMs`；diff 仅 +20/-4 行且全在 no-progress 分支内 |
+| 事项清单与冻结项 | **过程项已关闭，一项欠账可本轮关闭** | 一轮一报告已恢复（`current.md` 指向本报告）；`current.md` 已绑定 `1e16835` + Core #368 / CI #277；DSH Host Node preflight 仍未实现（`dsh-bridge-probe.ts:266` 只输出 `nodeRequirement` 字符串，spawn 前无 `process.versions.node` 比较） |
+| DSH 官方对齐复核 | **全部成立，零漂移** | 取证克隆 `~/Projects/deepseek-harness`（2026-09-01）：`git tag --points-at HEAD` = `dsh-v0.1.2-alpha.3`，`dd6322d..master` 为空；Headless one-shot、ACP persistent session、session-log-export、Safety 四项官方声明与本报告 §10 语义一致；Tekon 侧 `TESTED_DSH_VERSION`、`HEADLESS_HELP_ANCHOR`、5 个 plugin row ids 与官方 alpha.3 完全一致，`DSH_NODE_REQUIREMENT` 常量与官方 engines 声明一致（注意：Tekon 根 engines 更宽，二者差异即 §3 认定的断层） |
+| 测试与 CI 健康 | **成立** | `1e16835` 的 Core #368 / CI #277 与 `99e0065` 的 Core #371 / CI #280 均为 attempt 1 首次成功；本地 core 92 文件 / 1062 passed / 3 skipped（skipped 均为无 `DSH_CLI_PATH` 的 L2 探针）；边界测试真实 timer + 真实文件 I/O，无 fake timer，修复前必失败 |
+
+四路对本报告的裁决无异议：本轮代码增量通过合并门；架构冻结项（§9.3）与 P0/P1 主线维持本报告判定，不在本 PR 扩张。§11 是优先级排序而非禁止清单，本轮关闭其中 P1 第 4 项不构成对 §9.3 冻结精神的违反（冻结对象是 Profile、Automation 类型、Driver wrapper、展示事件、Workflow DSL 等横向机制）。
+
+### 14.2 对本报告批评项的认领
+
+1. **第十三轮报告追加 §17 违反一轮一报告**：成立。上一轮主 Agent 以"减少新文件"为由继续叠 revision，造成快照身份与裁决混排。本轮起恢复一轮一报告；第一至十三轮报告视为只读归档，不再追加。
+2. **`current.md` 曾绑定旧快照**：成立。reviewer 已在 `99e0065` 修正，主 Agent 复核无误。
+3. **Core #366 首次红灯不能用 rerun 绿色覆盖**：成立。主 Agent 上一轮把本地全量绿色当作充分证据，忽略了远端 focused Core 的首次失败语义。本轮修复（两阶段确认）针对的是生产判定逻辑本身，而非测试时序，且有真实 timer 边界测试锁死回归。
+
+### 14.3 本轮决策：关闭 DSH Host Node preflight 断层
+
+报告 §3 将"DSH Host Node 断层"裁决为**成立，未关闭**，§11 列为 P1 第 4 项。该问题已连续两轮登记未关闭，且：
+
+- 改动面小：`dsh-bridge-probe.ts` 一个纯函数 + spawn 前一次断言 + 单元测试，不触碰 §9.3 冻结清单中的任何横向机制；
+- 用户影响（推断，本轮未做 Node 20 + 真实 dsh 实测）：Node 20.x / 22.12–22.18 是 Tekon 合法运行环境（根 `package.json` engines），这些用户选 DSH 时，按手册 §5.7 的表述"可能无法安装或运行"，且目前只会得到底层子进程错误，而非明确的版本指引；
+- 与本 PR 已有的 fail-closed preflight 风格一致（`DshVersionGateError` / `DshCapabilityError` 模式可直接复用）。
+
+因此主 Agent 判断：本轮在本 PR 内以最小改动关闭它，而不是再滚一轮。实现与测试方案见 `docs/superpowers/plans/2026-09-01-fourteenth-review-remediation-plan.md` §8（该节是本轮整改的执行记录，不代表新开第十五轮评审；本报告仍是当前权威报告）。
+
+reviewer 对方案初稿提出 8 项 must-fix（宿主 Node 与 dsh 运行时 Node 可能不同、需逃生口；`actualVersion=null` 会被 CLI 误诊为"未安装"；本机 Node v22.16.0 会让既有测试转红；§6/§8 矛盾需勘误；手册/CHANGELOG 需同步；版本 bump 需决策；§14.1 措辞；快照重绑定承诺），已全部纳入修订后的方案 §8。
+
+不纳入本轮的事项（维持报告判定）：
+
+- P0 架构主线（single-owner Runtime、authoritative Session、ACP vertical slice、Collaborate → Deliver）：按 §11 顺序拆独立 PR；
+- `main` 分支保护：人工 GitHub 配置，用户已决策暂缓；
+- lint/format/audit-dev/release 流水线：P2，独立 PR；
+- L2/L3 DSH 真实二进制与凭据测试：环境依赖，保持 L1 fixture 为合并门。
+
+### 14.4 验证与快照承诺
+
+本节是 §12 最终裁决之后的执行批注，不改变 §12 裁决。本轮整改（DSH Host Node preflight）完成后：
+
+1. 重新执行 core 全量测试、CLI e2e、Web Playwright、UI 截图核对；
+2. reviewer 循环审查至无 must-fix；
+3. 同步更新本报告头部快照字段（`:8`/`:12`）、§3 裁决表 DSH Host Node 行、§11 P1 第 4 项、`current.md` 快照绑定，以及手册 §5.7 与 CHANGELOG；
+4. 提交到本 PR 并清理临时产物。
+
+### 14.5 落地结果（2026-09-01）
+
+DSH Host Node preflight 已按 §8 方案落地并通过全量验证：
+
+- **core**：`isHostNodeVersionCompatible` 纯函数 + `DshHostNodeError` + `runDshPreflight` 入口硬拦截 + `TEKON_DSH_ALLOW_HOST_NODE` 精确值逃生口（onWarn 警告）；`DshPreflightResult` 增加 `hostNodeVersion`/`hostNodeCompatible`/`hostNodeBypassed`；
+- **adapter**：`createDshHeadlessAdapter` options 透传 `hostNodeVersion`；
+- **CLI**：`provider preflight` 输出与 `--json` 展示宿主 Node 状态，`failureKind` 区分"宿主 Node 不兼容"与"dsh 未安装"，`--host-node-version` 诊断 flag，`session-context.ts` 运行路径透传 onWarn 并直接抛 `DshHostNodeError`；
+- **Web**：`createWebRunEngineFactory` 支持 preflight 注入，`probeProvider` health 判定纳入宿主 Node 检查；
+- **文档**：手册 §5.7、CHANGELOG v0.20.4、README 同步更新；
+- **测试**：全仓 140 文件 / 1514 passed / 3 skipped（本机 Node v22.16.0），`pnpm -r typecheck` 通过。
+
+§3 裁决表"DSH Host Node 断层登记：成立，未关闭"与 §11 P1 第 4 项是基于 `99e0065` 快照的历史裁决；本节记录该断层已在本轮关闭。`current.md` 已同步更新。

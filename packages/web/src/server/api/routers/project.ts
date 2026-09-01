@@ -12,6 +12,7 @@ import {
 import { join, relative, resolve } from 'node:path';
 
 import {
+  isHostNodeVersionCompatible,
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
   computeRunPlanDigest,
@@ -87,6 +88,9 @@ function setHealthCache(key: string, entry: HealthCacheEntry): void {
 }
 
 function probeProvider(): 'available' | 'unavailable' {
+  if (!isHostNodeVersionCompatible(process.versions.node)) {
+    return 'unavailable';
+  }
   try {
     execFileSync('dsh', ['--version'], {
       timeout: 1000,

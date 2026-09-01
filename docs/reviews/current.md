@@ -49,6 +49,7 @@
 - DSH tested pin 的 L1 合同与 L2 版本假通过；
 - audit 与 build/test 诊断互相阻塞；
 - no-progress 第一次边界采样误杀合法输出目录活动；
+- DSH Host Node 版本断层（preflight 硬拦截 + 精确值逃生口 + 结构化结果字段）；
 - reviewer 代码快照的 Core、Root、Audit、CLI、Web unit 与 Chromium Playwright 回归门。
 
 ## 仍不能按“已关闭”表述的项目
@@ -59,7 +60,7 @@
 - **Collaborate**：真实 execution-time streaming、follow-up、steer、prompt cancel、restart resume 和 Collaborate→Deliver 仍缺；
 - **RunPlan**：尚未成为 execute/resume 唯一事实，未完整绑定 Demand、mode、base/workspace、resolved Provider、权限、网络与 expected Artifacts；
 - **长 Session**：在线 replay/pending 已有边界；complete-history export、模型 compaction、统一 retention、真实规模和故障矩阵仍缺；
-- **DSH Host Node**：preflight 会展示 DSH Node 要求，但尚未在 spawn 前直接比较宿主 Node 版本；
+- **DSH Host Node**：~~preflight 会展示 DSH Node 要求，但尚未在 spawn 前直接比较宿主 Node 版本~~ **已关闭（2026-09-01，§14.5）**：preflight 在 spawn 前硬拦截不兼容宿主 Node，提供精确值逃生口；
 - **DSH 实机验证**：alpha.3 L1 合同成立；普通 CI 中 L2 metadata probe 仍跳过，带 API key 的 L3 Provider smoke 仍缺；
 - **CommandGateway 维护性**：同一文件仍同时承担 policy、env、spawn、进程组、redaction、filesystem sampler、timeout 与 stream settle；后续应先抽纯 timeout state machine；
 - **发布治理**：数字版本已 lockstep；tag、migration、provenance、构建物和 installer/update channel 仍需单一发布流程；

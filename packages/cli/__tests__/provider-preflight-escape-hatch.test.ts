@@ -53,6 +53,8 @@ describe('dsh preflight version escape hatch', () => {
         'dsh-headless',
         '--allow-version',
         UNTESTED_VERSION,
+        '--host-node-version',
+        '22.19.0',
       ],
       io,
     );
@@ -68,7 +70,7 @@ describe('dsh preflight version escape hatch', () => {
     const io = createMemoryIo();
 
     const exitCode = await runCli(
-      ['provider', 'preflight', 'dsh-headless'],
+      ['provider', 'preflight', 'dsh-headless', '--host-node-version', '22.19.0'],
       io,
     );
 
@@ -83,7 +85,7 @@ describe('dsh preflight version escape hatch', () => {
     const io = createMemoryIo();
 
     const exitCode = await runCli(
-      ['provider', 'preflight', 'dsh-headless'],
+      ['provider', 'preflight', 'dsh-headless', '--host-node-version', '22.19.0'],
       io,
     );
 

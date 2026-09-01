@@ -423,7 +423,10 @@ describe('dsh-headless adapter', () => {
     const adapter = createDshHeadlessAdapter(
       { ...ackConfig(repoPath), command: 'dsh', args: [] },
       gateway,
-      { probeVersion: async () => '0.9.9-wrong\n' },
+      {
+        probeVersion: async () => '0.9.9-wrong\n',
+        hostNodeVersion: '22.19.0',
+      },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
       /version mismatch/i,
@@ -453,6 +456,7 @@ describe('dsh-headless adapter', () => {
           '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
         allowVersion: '0.9.9-wrong',
         onWarn: (w) => warnings.push(w),
+        hostNodeVersion: '22.19.0',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));
@@ -480,6 +484,7 @@ describe('dsh-headless adapter', () => {
         probeHelp: async () => 'usage: print the final assistant message\n',
         probeConfig: async () =>
           '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
+        hostNodeVersion: '22.19.0',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));
@@ -568,6 +573,7 @@ describe('dsh-headless adapter', () => {
         probeHelp: async () => 'dsh options: --help\n', // missing HEADLESS_HELP_ANCHOR
         probeConfig: async () =>
           '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
+        hostNodeVersion: '22.19.0',
       },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
@@ -594,6 +600,7 @@ describe('dsh-headless adapter', () => {
         probeHelp: async () => 'print the final assistant message\n',
         probeConfig: async () =>
           '- id: headless-runner\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n', // missing sandbox-policy only
+        hostNodeVersion: '22.19.0',
       },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
@@ -631,6 +638,7 @@ describe('dsh-headless adapter', () => {
           configCount += 1;
           return '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n';
         },
+        hostNodeVersion: '22.19.0',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));

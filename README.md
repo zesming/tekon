@@ -141,7 +141,7 @@ tekon ui                                      # 启动 Web Dashboard
 | 批准需求卡         | `tekon draft approve`                        |
 | 推荐 workflow      | `tekon workflow select "<需求>"`             |
 | 检查命令画像       | `tekon workflow preflight`                   |
-| 预检 dsh 环境      | `tekon provider preflight dsh-headless`     |
+| 预检 dsh 环境      | `tekon provider preflight dsh-headless`（含宿主 Node 版本硬拦截） |
 | 发起运行           | `tekon run`                                  |
 | 查看状态           | `tekon status`                               |
 | 查看审阅面         | `tekon review`                               |
