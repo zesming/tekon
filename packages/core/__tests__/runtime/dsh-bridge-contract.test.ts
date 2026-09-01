@@ -27,10 +27,10 @@ const fixture = (name: string): string =>
 // These assert the ACL parser against the outputs cross-checked against the
 // official @deepseek-ai/dsh@0.1.2-alpha.3 source (commit dd6322d6). The help
 // and config fixtures are source-level cross-checks, not recordings from a
-// locally installed dsh binary; a real L2 live smoke (DSH_CLI_PATH + API key)
-// must still run before claiming provider compatibility. If the pinned version
-// bumps, regenerate the fixtures and this test proves the parser still accepts
-// them.
+// locally installed dsh binary. A real L2 binary probe (DSH_CLI_PATH) must run
+// before release; a separate L3 provider smoke with credentials is still needed
+// before claiming end-to-end model compatibility. If the pinned version bumps,
+// regenerate the fixtures and this test proves the parser still accepts them.
 
 describe('dsh L1 fixture contract (design §5.3)', () => {
   it('parses the measured --version fixture to the pinned version', () => {
