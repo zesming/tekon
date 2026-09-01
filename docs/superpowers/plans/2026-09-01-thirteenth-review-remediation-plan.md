@@ -5,12 +5,12 @@
 
 ## 1. 已完成项（第 17.2 节四项，提交 `bd16c72`）
 
-| 项                  | 落地内容                                                               | 证据                                               |
-| ------------------- | ---------------------------------------------------------------------- | -------------------------------------------------- |
-| DSH pin 升级        | `TESTED_DSH_VERSION` → `0.1.2-alpha.3`，fixture、手册、current.md 同步 | `packages/core/src/runtime/dsh-bridge-probe.ts:21` |
-| 版本身份统一        | 根 + 三个内部 package 统一 `0.20.4`，smoke 断言 lockstep               | 四个 `package.json`、`smoke.test.ts:27`            |
-| fixture npm warning | 6 个 CLI 测试文件 `writeFileSync` 替代 `npm init`/`npm pkg set`        | `packages/cli/__tests__/` 6 文件                   |
-| CI 供应链 gate      | `typecheck` job 加 `pnpm audit --prod`                                 | `.github/workflows/ci.yml:50`                      |
+| 项                  | 落地内容                                                                                | 证据                                               |
+| ------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| DSH pin 升级        | `TESTED_DSH_VERSION` → `0.1.2-alpha.3`，fixture、手册、current.md 同步                  | `packages/core/src/runtime/dsh-bridge-probe.ts:21` |
+| 版本身份统一        | 根 + 三个内部 package 统一 `0.20.4`，smoke 断言 lockstep                                | 四个 `package.json`、`smoke.test.ts:27`            |
+| fixture npm warning | 6 个 CLI 测试文件 `writeFileSync` 替代 `npm init`/`npm pkg set`                         | `packages/cli/__tests__/` 6 文件                   |
+| CI 供应链 gate      | 独立 `audit` job 执行 `pnpm audit --prod`，`cli`/`web` 改为 `needs: [typecheck, audit]` | `.github/workflows/ci.yml`                         |
 
 验收：`pnpm test` 138 文件 1477 passed；CLI e2e 3 文件 7 通过且 0 npm warn；`pnpm audit --prod` 0 漏洞。
 
@@ -22,12 +22,10 @@
 - **实现**：用 `existsSync(join(packageDir, name, 'package.json'))` 过滤，只扫描含 `package.json` 的包目录。
 - **验收**：`vitest run smoke.test.ts` 4 通过。
 
-### 2.2 CI audit gate 步骤顺序（第 18.2 节第 1 项的保守处置）
+### 2.2 CI audit gate 拆独立 job（第 18.2 节第 1 项，用户已决策）
 
-- **问题**：`pnpm audit --prod` 位于 `typecheck` job 的 install 之后、build/typecheck 之前。registry 抖动或新 advisory 会让 build/typecheck 诊断完全不产出，且下游 `cli`/`web`/`web-e2e` 全部跳过。
-- **决策**：保留 audit 在 `typecheck` job 内（尊重第 17.2 节四路一致方案，保持 gate 语义），但将步骤顺序移到 `Build all packages` 与 `Typecheck all packages` 之后。这样 audit 失败时 build/typecheck 诊断已产出，故障定位不依赖 audit 可用性。
-- **未解决的半问题**：audit 失败时下游 `cli`/`web`/`web-e2e` 依然全部跳过（`needs: typecheck` 语义），功能回归诊断仍不可得。本方案不解决这一半，交用户决策。
-- **替代方案对比**：拆独立 audit job 并把下游改为 `needs: [typecheck, audit]` 可保留阻断语义（纯 YAML 改动，不依赖 branch protection），且 audit 与 build/typecheck 并行、互不阻塞诊断。本轮不采纳的理由：拆独立 job 改变了第 17.2 节四路一致确认的 gate 位置，属于供应链 gate 严格度的设计取舍，应由用户决策；本轮只做不改变 gate 语义的最小步骤重排。
+- **问题**：`pnpm audit --prod` 位于 `typecheck` job 内，`cli`/`web`/`web-e2e` 全部 `needs: typecheck`。registry 抖动或新 advisory 会让 build/typecheck 诊断完全不产出，且下游全部跳过。
+- **决策**：拆为独立 `audit` job，`cli`/`web` 改为 `needs: [typecheck, audit]`。audit 与 typecheck 并行，互不阻塞诊断；audit 失败仍阻断合并（gate 语义保留）。
 - **验收**：CI YAML 语法正确；`pnpm audit --prod` 本地退出码 0。
 
 ### 2.3 文档同步
@@ -42,7 +40,7 @@
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01、P1-A11Y-01、P1-PROCESS-01 | 架构冻结项，第 18.1 节四路评估逐项核对代码证据后确认冻结裁决成立，按报告第 14 节顺序分独立 PR 推进                                    |
 | P1-GOV-01 main 分支保护                                                                        | 需仓库 Owner 在 GitHub Settings 操作，非代码可解决                                                                                    |
-| audit 拆独立 job                                                                               | 改变第 17.2 节四路一致确认的 gate 位置，属供应链 gate 严格度的设计取舍，交用户决策                                                    |
+| audit 加 `--audit-level high`                                                                  | 降低 gate 严格度，当前 0 漏洞无必要，后续有需要时再评估                                                                               |
 | 全仓 prettier 格式化（253 文件）                                                               | 独立提交，不混入本 PR                                                                                                                 |
 | 引入 ESLint/Biome                                                                              | 独立评估，不在本 PR                                                                                                                   |
 | `createFixtureRepo` 抽共享 helper                                                              | 6 文件重复但行为有细微差异（approval-terminal 仅 test script、run-mode-policy 保留 npm 默认 test），抽共享 helper 需仔细对齐，另立 PR |
@@ -53,7 +51,7 @@
 1. `pnpm test` 全量通过（138+ 文件，0 失败）。
 2. `pnpm --filter @tekon/cli test:e2e` 通过且 0 npm warn。
 3. `pnpm audit --prod` 退出码 0。
-4. `.github/workflows/ci.yml` YAML 语法正确，audit 步骤位于 build/typecheck 之后。
+4. `.github/workflows/ci.yml` YAML 语法正确，audit 为独立 job，`cli`/`web` 的 `needs` 包含 `audit`。
 5. 第十二轮报告第 18 节、CHANGELOG、current.md 内容一致，无占位符。
 6. reviewer 循环评审本方案与实施代码，直到未检出必须修复项。
 7. 全功能 e2e（CLI + Web Playwright）通过。

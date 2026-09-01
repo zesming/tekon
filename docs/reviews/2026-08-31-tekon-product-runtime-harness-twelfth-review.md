@@ -618,7 +618,7 @@ P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01（compac
 
 | # | 级别 | 问题 | 证据 | 本轮处置 |
 | --- | --- | --- | --- | --- |
-| 1 | 建议 | CI audit gate 位于 `typecheck` job 且被 `cli`/`web`/`web-e2e` 三个 job `needs`，registry 抖动或新 advisory 会连锁跳过全部功能测试 | `.github/workflows/ci.yml:50` | 本轮将 audit 步骤从 install 之后移到 build/typecheck 之后，保留 gate 语义的同时确保 audit 失败时 build/typecheck 诊断已产出；下游连锁跳过问题仍存在，拆独立 job（`needs: [typecheck, audit]`）或加 `--audit-level` 交用户决策 |
+| 1 | 建议 | CI audit gate 位于 `typecheck` job 且被 `cli`/`web`/`web-e2e` 三个 job `needs`，registry 抖动或新 advisory 会连锁跳过全部功能测试 | `.github/workflows/ci.yml:50` | 已拆为独立 `audit` job，`cli`/`web` 改为 `needs: [typecheck, audit]`；audit 与 typecheck 并行，gate 语义保留（audit 失败仍阻断合并），build/typecheck 诊断不再被 audit 阻塞 |
 | 2 | 建议 | `format:check` 未接入 CI，全仓 253 个文件不合规，新代码不应扩大欠账 | 根 `package.json` `format:check` 脚本 | 本轮新增的代码文件（smoke.test.ts、ci.yml、方案文档）已过 prettier；报告与 CHANGELOG 本身属历史欠账未加剧；全仓格式化另立独立提交 |
 | 3 | 建议 | `lint` 脚本实为 `tsc --noEmit`，与 `typecheck` 等价，无真正 linter | 各子包 `package.json` | 记录，后续评估 ESLint/Biome |
 | 4 | 观察 | 6 个 CLI 测试文件各自实现 `createFixtureRepo`，存在重复 | `packages/cli/__tests__/` 6 文件 | 记录，后续可抽共享 helper |
@@ -629,7 +629,7 @@ P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01（compac
 ### 18.3 需用户操作（非代码可解决）
 
 - **P1-GOV-01 main 分支保护**：仍未配置。需仓库 Owner 在 GitHub `Settings → Rules → Rulesets` 要求 PR + status checks（Core、CI 的 context）。
-- **第 18.2 节第 1 项 audit gate 位置**：是否拆为独立 job 或加 `--audit-level high`，涉及供应链 gate 的严格度取舍，由用户决策。
+- **第 18.2 节第 1 项 audit gate 位置**：已按用户决策拆为独立 `audit` job（`needs: [typecheck, audit]`），gate 语义保留且诊断互不阻塞。
 
 ### 18.4 维持冻结的架构项
 

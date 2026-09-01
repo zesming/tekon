@@ -25,7 +25,7 @@
 - DSH tested pin 升级到 `0.1.2-alpha.3`（与 alpha.2 合同零差异）；
 - 内部 package 版本统一为 `0.20.4`（lockstep），补 smoke 断言防漂移；
 - 6 个 CLI fixture 不再 spawn `npm` 子进程，消除 unknown-config warning；
-- CI `typecheck` job 新增 `pnpm audit --prod` 供应链 gate；
+- CI 新增独立 `audit` job（`pnpm audit --prod`），`cli`/`web` 改为 `needs: [typecheck, audit]`，audit 与 typecheck 并行且保留 gate 语义；
 - 详见 `docs/superpowers/plans/2026-09-01-twelfth-review-remediation-plan.md`。
 
 ## 第十三轮批注（第十二轮第 18 节）
