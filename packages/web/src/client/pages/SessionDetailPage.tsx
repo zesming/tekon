@@ -4,7 +4,10 @@ import { useParams } from 'react-router';
 import { useQuery, useAuthScope, useSessionStream } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { queryKeys } from '../lib/query-keys.js';
-import { deriveSessionSidePanel } from '../lib/session-side-panel.js';
+import {
+  deriveSessionSidePanel,
+  mergeSessionSnapshotIntoSidePanel,
+} from '../lib/session-side-panel.js';
 import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
 import { StatusBadge } from '../components/ui/StatusBadge.js';
@@ -44,13 +47,21 @@ export function SessionDetailPage() {
     dismissTruncated,
   } = useSessionStream(sessionId);
   const liveState = useMemo(() => deriveSessionSidePanel(events), [events]);
-
   const session = data?.session;
+  const sidePanelState = useMemo(
+    () =>
+      mergeSessionSnapshotIntoSidePanel(liveState, {
+        runId: session?.runId,
+        status: session?.status,
+        actionKind: session?.actionKind,
+      }),
+    [liveState, session?.actionKind, session?.runId, session?.status],
+  );
+
   // session.get is a point-in-time snapshot while the event stream keeps
-  // advancing. Prefer the live workflow projection once it is known so the
-  // header cannot remain "active" after the controls and result card already
-  // show a passed/failed/cancelled outcome.
-  const displayedStatus = liveState.runStatus ?? session?.status ?? null;
+  // advancing. The merged state uses the snapshot until the live projection is
+  // known, then prefers the newer event-derived workflow status.
+  const displayedStatus = sidePanelState.runStatus ?? session?.status ?? null;
 
   return (
     <div className="session-detail">
@@ -97,7 +108,7 @@ export function SessionDetailPage() {
           />
         </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
-          <SessionSidePanel state={liveState} />
+          <SessionSidePanel state={sidePanelState} />
         </aside>
       </div>
     </div>
