@@ -600,3 +600,41 @@ P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01（compac
 ### 17.5 结论
 
 第十二轮修复质量扎实，CI 阻断已解决。本轮建议收敛第 17.2 节四项低风险项；P1-GOV-01 需用户在 GitHub 设置中操作；架构主线按报告第 14 节顺序另立 PR。
+
+---
+
+## 18. 主 Agent 第二轮交叉评估批注（2026-09-01，基于 HEAD `bd16c72`）
+
+> 本节为应要求追加的第二轮独立评审视角，不改动上文第 1–17 节的原始裁决。方法：同步 deepseek-harness 至 `origin/master`（HEAD `dd6322d6`，即 `dsh-v0.1.2-alpha.3` release merge），委派 4 个 subagent 分别从「第 17.2 节收敛落地核对」「DSH alpha.3 合同与升级风险」「架构冻结项现状」「测试与 CI 健康度」四个角度独立评估，再由主 Agent 综合判断。
+
+### 18.1 四路评估一致确认的结论
+
+1. **第 17.2 节四项收敛全部落地，无越界改动**：DSH pin、版本 lockstep、fixture 改造、CI audit gate 均有提交内证据（`dsh-bridge-probe.ts:21`、四个 `package.json`、6 个 CLI 测试文件、`ci.yml:50`）；`git diff cf2ccf1..bd16c72 -- packages/*/src/` 仅含 `dsh-bridge-probe.ts` 一行常量变更，核心运行时（session/workflow/web 路由）零改动。
+2. **DSH alpha.3 升级风险低**：alpha.2→alpha.3 的 headless help anchor、5 个 required plugin ids、Node engines、reasoning streaming、exit code 语义零差异（官方 `packages/bundle/headless/` 在该区间仅改 package.json 版本号）；alpha.3 移除 SQLite 持久化后端与 Tekon 绑定的 `session-persistence-jsonl` 方向同向。Tekon 侧 fixture 与官方实际输出逐字一致，契约测试含缺行/伪装/版本不匹配负例，非假通过。已装 alpha.2 的用户升级后由 `DshVersionGateError` fail-closed 拦截，有 `TEKON_DSH_ALLOW_VERSION` 逃生通道。
+3. **架构冻结裁决全部成立**：P0-ARCH-01（CLI `session-context.ts:184` 与 Web `root.ts:144` 仍各自持有 JobRunner/DB/EventBus）、P0-ARCH-02（`job-runner.ts:618` hardDeadline 超时后直接 resolve，无真实 join；registry 只转发 `handle.kill`，经 gateway 注册的子进程虽以 `detached: true` + `process.kill(-pid)` 杀进程组，但 `draft-agent.ts`、`commands/ui.ts`、`review/surface.ts` 里的 `execFileSync` 从不进 registry，未经 gateway 的子进程不受管辖）、P0-DATA-01（`dual-write.ts:16` 仍 best-effort）、P0-PRODUCT-01（`agent-adapter.ts:23` 仅批处理接口，无 streaming/follow-up/steer/prompt-cancel/resume）、P1-PLAN-01（`run-plan.ts:37` 声明了 mode 但 digest 计算忽略 mode，执行仍读 SQLite 而非 RunPlan）、P1-SESSION-01（无导出/compaction/retention）、P1-A11Y-01（仅 2 个局部 e2e，无 axe/多浏览器/缩放矩阵）——逐项有代码证据，`bd16c72` 未触碰任何冻结项。
+4. **测试与 CI 健康度良好**：`pnpm test` 138 文件 1477 passed / 3 skipped；CLI e2e 3 文件 7 通过且 0 npm warn；`pnpm audit --prod` 0 漏洞；两个 workflow 工具链一致；dirty-base 测试经 parse/改字段/stringify 重构后与 fixture 文本格式解耦，断言有真实区分度；smoke 版本 lockstep 断言扫描 `packages/` 目录，变异验证有效。
+
+### 18.2 本轮新发现（四路评估汇总，均为建议/观察级，无阻断项）
+
+| # | 级别 | 问题 | 证据 | 本轮处置 |
+| --- | --- | --- | --- | --- |
+| 1 | 建议 | CI audit gate 位于 `typecheck` job 且被 `cli`/`web`/`web-e2e` 三个 job `needs`，registry 抖动或新 advisory 会连锁跳过全部功能测试 | `.github/workflows/ci.yml:50` | 本轮将 audit 步骤从 install 之后移到 build/typecheck 之后，保留 gate 语义的同时确保 audit 失败时 build/typecheck 诊断已产出；下游连锁跳过问题仍存在，拆独立 job（`needs: [typecheck, audit]`）或加 `--audit-level` 交用户决策 |
+| 2 | 建议 | `format:check` 未接入 CI，全仓 253 个文件不合规，新代码不应扩大欠账 | 根 `package.json` `format:check` 脚本 | 本轮新增的代码文件（smoke.test.ts、ci.yml、方案文档）已过 prettier；报告与 CHANGELOG 本身属历史欠账未加剧；全仓格式化另立独立提交 |
+| 3 | 建议 | `lint` 脚本实为 `tsc --noEmit`，与 `typecheck` 等价，无真正 linter | 各子包 `package.json` | 记录，后续评估 ESLint/Biome |
+| 4 | 观察 | 6 个 CLI 测试文件各自实现 `createFixtureRepo`，存在重复 | `packages/cli/__tests__/` 6 文件 | 记录，后续可抽共享 helper |
+| 5 | 观察 | `tekon-user-manual.html` §5.7 为泛化表述"版本钉死"，与 md 的具体版本号无冲突但存在细节漂移 | `docs/manual/tekon-user-manual.html:484` | 无需同步（HTML 从未含具体版本号） |
+| 6 | 观察 | smoke 断言 `readdirSync(packages)` 未过滤非目录文件，`.DS_Store` 等会触发 `MODULE_NOT_FOUND` 而非语义化断言 | `packages/core/__tests__/smoke.test.ts:33` | 本轮修复（加目录过滤） |
+| 7 | 观察 | dev 依赖树 2 处 low-severity（esbuild Windows dev server，来自 tsx/vite），`--prod` 不覆盖 | `pnpm audit`（非 prod） | 记录，不影响生产运行时 |
+
+### 18.3 需用户操作（非代码可解决）
+
+- **P1-GOV-01 main 分支保护**：仍未配置。需仓库 Owner 在 GitHub `Settings → Rules → Rulesets` 要求 PR + status checks（Core、CI 的 context）。
+- **第 18.2 节第 1 项 audit gate 位置**：是否拆为独立 job 或加 `--audit-level high`，涉及供应链 gate 的严格度取舍，由用户决策。
+
+### 18.4 维持冻结的架构项
+
+与第 17.4 节一致，P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01、P1-A11Y-01、P1-PROCESS-01 维持冻结，按报告第 14 节顺序分独立 PR 推进。本轮四路评估逐项核对代码证据后确认冻结裁决仍然成立，不具备在本 PR 内安全关闭其中任何一项的条件。
+
+### 18.5 结论
+
+第 17.2 节四项收敛质量扎实，DSH alpha.3 升级合同风险低，架构冻结裁决经代码级复核全部成立。本轮无阻断项；第 18.2 节第 6 项（smoke 目录过滤）与第 1 项（audit 步骤顺序调整）随本轮一并修复，其余建议/观察项记录后交用户决策或另立 PR。P1-GOV-01 仍需用户在 GitHub 设置中操作。

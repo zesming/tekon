@@ -28,6 +28,12 @@
 - CI `typecheck` job 新增 `pnpm audit --prod` 供应链 gate；
 - 详见 `docs/superpowers/plans/2026-09-01-twelfth-review-remediation-plan.md`。
 
+## 第十三轮批注（第十二轮第 18 节）
+
+- 第二轮四路交叉评估确认：第 17.2 节四项全部落地、DSH alpha.3 升级风险低、架构冻结裁决全部成立（逐项有代码证据）、测试全绿（138 文件 1477 passed）；
+- 新发现 7 项建议/观察级问题（无阻断项），其中 smoke 目录过滤已修复，audit gate 步骤顺序已调整（移到 build/typecheck 之后保留诊断），其余记录交用户决策或另立 PR；
+- 详见第十二轮报告第 18 节与 `docs/superpowers/plans/2026-09-01-thirteenth-review-remediation-plan.md`。
+
 ## 本轮 reviewer 直接修复
 
 1. **Corepack shim 缺失导致的 CLI e2e 阻断**  

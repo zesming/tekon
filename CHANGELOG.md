@@ -11,6 +11,12 @@
 - **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
 - **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 的 `typecheck` job 新增 `pnpm audit --prod` 步骤。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；gate 加在 `typecheck` job（其余 job `needs: typecheck`），audit 失败会连锁阻断整条 CI。
 
+### 测试与 CI 收尾（第十三轮批注）
+
+- **smoke 版本断言健壮性**：`packages/core/__tests__/smoke.test.ts` 的 lockstep 断言改为扫描 `packages/` 目录（不再硬编码包名），并用 `existsSync(<pkg>/package.json)` 过滤，避免 `.DS_Store`、残留目录或断链 symlink 触发 `MODULE_NOT_FOUND`。
+- **CI audit 步骤顺序**：`pnpm audit --prod` 从 install 之后移到 build/typecheck 之后，audit 失败时仍保留 build/typecheck 诊断输出；gate 语义不变（仍在 `typecheck` job 内，下游 job 仍 `needs: typecheck`）。
+- **dirty-base 测试回归修复**：`run-cli.test.ts` 的 `--allow-dirty-base` 测试改为 `JSON.parse` → 改字段 → `JSON.stringify`，与 fixture 的 `JSON.stringify` 输出格式解耦，不再依赖文本 replace 匹配。
+
 ## v0.20.3
 
 本轮落地第十一轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-eleventh-review.md`，PR #11）第 16.3 节批注锁定的三项过程/卫生收敛：CLI e2e 文件命名与 lane 语义对齐、CI npm env warning 清理、devDependencies 漏洞 override。架构级项（single-owner Runtime、权威 Session、ACP vertical slice、RunPlan authority、模型 compaction、全站 a11y）按复审裁决维持冻结，登记为后续顺序。

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -30,12 +30,21 @@ describe('@tekon/core', () => {
     const rootPkg = require('../../../package.json') as { version: string };
     expect(pkg.version).toBe(rootPkg.version);
     const packageDir = join(import.meta.dirname, '..', '..');
+    let scanned = 0;
     for (const name of readdirSync(packageDir)) {
+      // 只扫描含 package.json 的包目录，避免 .DS_Store、残留目录或断链
+      // symlink 触发 MODULE_NOT_FOUND 而非语义化断言。
+      if (!existsSync(join(packageDir, name, 'package.json'))) {
+        continue;
+      }
+      scanned += 1;
       const sibling = require(join(packageDir, name, 'package.json')) as {
         version: string;
       };
       expect(sibling.version).toBe(rootPkg.version);
     }
+    // 下界断言：确保过滤没有静默跳过所有包（防假通过）。
+    expect(scanned).toBeGreaterThan(0);
   });
 
   it('exports phase 2 role system APIs', () => {
