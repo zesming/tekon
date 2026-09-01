@@ -6,15 +6,15 @@
 
 ### 工程与合同
 
-- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到官方当前基线 `0.1.2-alpha.3`。alpha.3 与 alpha.2 的 headless 合同零差异（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级合同风险极低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到官方当前基线 `0.1.2-alpha.3`。Tekon 依赖的 alpha.3 headless 兼容锚点相对 alpha.2 未变（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级风险低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
 - **版本身份统一（P1-RELEASE-01）**：`@tekon/core`、`@tekon/cli`、`@tekon/web` 三个内部 package 的版本由 `0.7.0` 统一为 `0.20.4`，与根产品版本 lockstep。此前 `TEKON_CORE_VERSION`（读内部 package）与 CLI `getVersion()`（读根 package）输出不一致，按推断会干扰 bug report 与日志中的版本识别（当前无生产代码消费该常量，属预防性统一）。补了 smoke 测试断言所有内部 package 与根版本一致，防止再次漂移。
 - **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
-- **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 新增独立 `audit` job 执行 `pnpm audit --prod`，`cli`/`web` 改为 `needs: [typecheck, audit]`。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；audit 与 typecheck 并行，audit 失败仍阻断合并（gate 语义保留），但 build/typecheck 诊断不再被 audit 阻塞。
+- **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 新增独立 `audit` job 执行 `pnpm audit --prod`。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；audit 与功能测试解耦（`cli`/`web` 只 `needs: typecheck`），audit 失败不压掉功能诊断，但 audit 本身仍是独立 gate。
 
 ### 测试与 CI 收尾（第十三轮批注）
 
 - **smoke 版本断言健壮性**：`packages/core/__tests__/smoke.test.ts` 的 lockstep 断言改为扫描 `packages/` 目录（不再硬编码包名），并用 `existsSync(<pkg>/package.json)` 过滤，避免 `.DS_Store`、残留目录或断链 symlink 触发 `MODULE_NOT_FOUND`。
-- **CI audit 拆独立 job**：`pnpm audit --prod` 从 `typecheck` job 拆为独立 `audit` job，`cli`/`web` 改为 `needs: [typecheck, audit]`。audit 与 typecheck 并行，audit 失败仍阻断合并（gate 语义保留），但 build/typecheck 诊断不再被 audit 阻塞。
+- **CI audit 拆独立 job**：`pnpm audit --prod` 从 `typecheck` job 拆为独立 `audit` job（`--ignore-scripts` + `timeout-minutes: 5`），`cli`/`web` 只 `needs: typecheck`。audit 与功能测试解耦，audit 失败不压掉功能诊断。
 - **dirty-base 测试回归修复**：`run-cli.test.ts` 的 `--allow-dirty-base` 测试改为 `JSON.parse` → 改字段 → `JSON.stringify`，与 fixture 的 `JSON.stringify` 输出格式解耦，不再依赖文本 replace 匹配。
 
 ## v0.20.3

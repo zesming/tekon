@@ -520,7 +520,7 @@ CLI / Web 两套 composition root
 | P2-CI-02 | P2 | 本轮修复 | `Root typecheck + lint` 名称与实际执行不符。 |
 | P2-RELEASE-01 | P2 | 已关闭数字漂移 | 根与内部 package 已 lockstep；完整发布治理仍是后续项。 |
 | P2-DOC-01 | P2 | 本报告关闭权威入口 | 第十二轮继续追加 revision、current 绑定旧快照；现转为第十三轮。 |
-| P2-DOC-02 | P2 | 待清理 | v0.20.4 CHANGELOG 仍保留“整个 headless 合同零差异”和 `needs: [typecheck, audit]` 的整改时点表述；不作为当前权威事实。 |
+| P2-DOC-02 | P2 | 本轮清理（见 §17.2） | v0.20.4 CHANGELOG 已按第 10.1 节清理时点表述（"零差异"→"兼容锚点未变"，`needs: [typecheck, audit]`→`needs: typecheck`）。 |
 | P2-CODE-01 | P2 | 未关闭 | JS/TS `lint` 只是 typecheck，缺真实 static lint gate。 |
 | P2-CODE-02 | P2 | 未关闭 | Session/Workflow status 双词汇需长期统一投影，避免 UI 重复映射。 |
 
@@ -591,3 +591,36 @@ CLI / Web 两套 composition root
 - [Safety](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/SAFETY.md)
 - [Session log export](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/packages/session-query/session-log-export/README.md)
 - [Session package / JSONL persistence](https://github.com/deepseek-ai/deepseek-harness/blob/dd6322d604e00eec1ba5e0c8541159906a21094a/packages/session/README.md)
+
+---
+
+## 17. 主 Agent 交叉评估批注（2026-09-01，基于 HEAD `ccf7272`）
+
+> 本节为应要求追加的独立评审视角，不改动上文第 1–16 节的原始裁决。方法：同步 deepseek-harness 至 `origin/master`（HEAD `dd6322d6`，即 `dsh-v0.1.2-alpha.3`），委派 4 个 subagent 分别从「reviewer 直接修复落地核对」「问题清单与架构冻结项现状」「DSH alpha.3 合同与 L2/L3 风险」「测试与 CI 健康度」四个角度独立评估，再由主 Agent 综合判断。
+
+### 17.1 四路评估一致确认的结论
+
+1. **第 4 节 4 项 reviewer 直接修复全部落地，无越界改动**：Session 右栏权威快照 fallback（`session-side-panel.ts:30-88`、`SessionDetailPage.tsx:51-59`、`SessionSidePanel.tsx:48-61`）、DSH L2 live probe 精确匹配（`dsh-bridge-contract.test.ts:73`）、audit lane 解耦（`ci.yml:60-85`，`--ignore-scripts` + `timeout-minutes: 5` + `cli/web` 只 `needs: typecheck`）、CI 名称更正（`ci.yml:30`）。`git diff --stat d5389a6..HEAD` 共 9 个文件，全部在第 4 节描述范围内。
+2. **DSH 第 10.1 节表述准确**：alpha.2→alpha.3 的 headless README、`src/index.ts`、`package.json`（仅版本号）、根 Node engines、JSONL persistence 五项逐项核对无误。P2-DSH-01 修复有效（L2 probe 从"版本不匹配也判通过"改为"必须严格等于 pin"），负例覆盖完整。
+3. **架构冻结裁决全部成立**：P0-ARCH-01（CLI `session-context.ts:150` 与 Web `root.ts:134` 仍各自持有 JobRunner/DB/EventBus）、P0-ARCH-02（`job-runner.ts:618` hardDeadline 超时直接 resolve，无真实 join）、P0-DATA-01（`dual-write.ts:245` 仍 best-effort，写失败仅告警不重试）、P0-PRODUCT-01（`legacy-agent-driver.ts:138` 的 followUp/steer/resume 仍 `throw NotSupportedYet`）、P1-PLAN-01（`run-plan.ts:21` 未包含 mode/Demand/Artifacts）、P1-SESSION-01（无导出/compaction/retention）、P1-A11Y-01、P1-PROCESS-01（101 提交 179 文件）——逐项有代码证据，本轮 12 个提交未触碰任何冻结项。
+4. **测试与 CI 健康度良好**：`pnpm test` 139 文件 1487 passed / 3 skipped（L2 probe 无 `DSH_CLI_PATH` 时按预期跳过）；CLI e2e 3 文件 7 通过且 0 npm warn；Web Playwright 36 通过；`pnpm audit --prod` 0 漏洞；CI #274 与 Core #365 对 `ccf7272` 全绿。新增 10 个 snapshot fallback 测试无假通过风险（纯函数断言、覆盖 7 种状态映射 + live 优先 + fail-closed）。
+
+### 17.2 本轮新发现（四路评估汇总）
+
+| # | 级别 | 问题 | 证据 | 本轮处置 |
+| --- | --- | --- | --- | --- |
+| 1 | 建议 | P2-DOC-02：CHANGELOG 仍保留"整个 headless 合同零差异"绝对化表述与 `needs: [typecheck, audit]` 时点表述，与第 10.1 节结论及当前 ci.yml 不符 | `CHANGELOG.md:9,12,17` | 本轮清理 |
+| 2 | 建议 | DSH Host Node 版本下限断层：Tekon 允许 Node `^20.19.0 \|\| >=22.12.0`，DSH 要求 `^22.19.0 \|\| >=24.0.0`；preflight 已 fail-closed 且输出含 `DSH Node 要求`，但全仓无 `process.version` 与 `DSH_NODE_REQUIREMENT` 的比对，缺运行时 Node 版本比对与硬拦截 | `packages/core/src/runtime/dsh-bridge-probe.ts`、`packages/cli/src/commands/provider.ts:113` | 记录，后续评估是否在 preflight 加 Node 版本比对与硬拦截 |
+| 3 | 观察 | L2 probe 在 CI 默认跳过（无 `DSH_CLI_PATH`），CI 全绿不等于真实二进制兼容性验证 | `dsh-bridge-contract.test.ts` L2 suite | 记录，L3 smoke 仍需在装有 dsh 的环境执行 |
+
+### 17.3 需用户操作（非代码可解决）
+
+- **P1-GOV-01 main 分支保护**：仍未配置。需仓库 Owner 在 GitHub `Settings → Rules → Rulesets` 要求 PR + status checks。
+
+### 17.4 维持冻结的架构项
+
+与第 17.4 节（第十二轮）一致，P0-ARCH-01/02、P0-DATA-01、P0-PRODUCT-01、P1-PLAN-01、P1-SESSION-01、P1-A11Y-01、P1-PROCESS-01 维持冻结，按报告第 14 节顺序分独立 PR 推进。本轮四路评估逐项核对代码证据后确认冻结裁决仍然成立。
+
+### 17.5 结论
+
+第十三轮 reviewer 直接修复质量扎实，4 项 P2 修复全部落地且无越界改动，CI 对 `ccf7272` 全绿。本轮清理 P2-DOC-02（CHANGELOG 时点表述），其余新发现项记录后交用户决策或另立 PR。P1-GOV-01 仍需用户在 GitHub 设置中操作。

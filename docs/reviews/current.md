@@ -6,7 +6,7 @@
 - **用户 v0.20.4 整改快照**：`1c285e03b017a4935603859f0e1fb1726d3f230e`
 - **reviewer 代码快照**：`6917c06369d5cb0da5b681fc61d2bb25d600572d`
 - **当前版本**：`0.20.4`
-- **代码自动化状态**：reviewer 代码快照的 Core #362 与 CI #271 均为 `completed/success`；Root build/typecheck、production dependency audit、CLI build/unit/e2e、Web build/typecheck/unit 与 Chromium Playwright 全部成功
+- **代码自动化状态**：`ccf7272` 的 Core #365 与 CI #274 均为 `completed/success`；Root build/typecheck、production dependency audit、CLI build/unit/e2e、Web build/typecheck/unit 与 Chromium Playwright 全部成功
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 官方取证基线**：master / `dsh-v0.1.2-alpha.3` `dd6322d604e00eec1ba5e0c8541159906a21094a`
 - **当前裁决**：v0.20.4 整改与 reviewer 局部修复通过当前代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
@@ -91,7 +91,8 @@ repo 级 single-owner Runtime
 ## 文档说明
 
 - 本文件与第十三轮报告是当前权威状态；
-- `CHANGELOG.md` v0.20.4 中“整个 headless 合同零差异”和 `needs: [typecheck, audit]` 代表整改时点，不能覆盖当前代码与第十三轮裁决；
+- `CHANGELOG.md` v0.20.4 已按第十三轮第 10.1 节清理时点表述（"零差异"→"兼容锚点未变"，`needs: [typecheck, audit]`→`needs: typecheck`）；
+- 第十三轮报告第 17 节（主 Agent 第二轮四路交叉评估批注）记录了 P2-DOC-02 清理、DSH Node 版本诊断缺口与架构冻结项复核；
 - 第一至第十二轮报告只读归档；
 - 产品或架构基线变化时新建报告，不在旧报告尾部继续叠加 revision；
 - CHANGELOG 只记录版本变化，不作为架构验收权威；
