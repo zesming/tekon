@@ -13,7 +13,12 @@ import {
   parseDshVersion,
 } from '../../src/index.js';
 
-const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'dsh');
+const fixturesDir = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'fixtures',
+  'dsh',
+);
 const fixture = (name: string): string =>
   readFileSync(join(fixturesDir, name), 'utf8');
 
@@ -65,14 +70,8 @@ describeLive('dsh L2 live probe (opt-in via DSH_CLI_PATH)', () => {
       timeout: 30_000,
     });
 
-  it('the installed dsh version matches the pin (or gate fails closed)', () => {
-    const parsed = parseDshVersion(run(['--version']));
-    // Does not hard-fail on mismatch: it proves the gate behaves correctly.
-    if (parsed === TESTED_DSH_VERSION) {
-      expect(() => assertDshVersionAllowed(parsed, {})).not.toThrow();
-    } else {
-      expect(() => assertDshVersionAllowed(parsed, {})).toThrow();
-    }
+  it('the installed dsh version exactly matches the tested pin', () => {
+    expect(parseDshVersion(run(['--version']))).toBe(TESTED_DSH_VERSION);
   });
 
   it('the installed headless --help still advertises the stdout contract', () => {
