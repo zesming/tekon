@@ -606,3 +606,27 @@ Adapter 的第二套 metadata probe/timeout/dead version gate 就是典型局部
 
 - [Providing Accessible Names and Descriptions](https://www.w3.org/WAI/ARIA/apg/practices/names-and-descriptions/)
 - [ARIA1: Using aria-describedby](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA1.html)
+
+## 17. 批注（2026-09-02 主代理四路评估）
+
+### 17.1 四路评估结论（一致）
+
+| 评估路 | 结论 | 关键证据 |
+| --- | --- | --- |
+| reviewer 修复落地核查 | **2 项修复全部成立** | P2-CODE-03：`dsh-headless-adapter.ts` 已删除 `ensureVersionGate` 死代码与 15 秒默认 probe 漂移，`ensureCapabilityGate` 复用共享 `runDshPreflight` 且每实例缓存一次，TOCTOU 二次校验保留；P2-A11Y-02：`TopBar.tsx` 按钮保留短 `aria-label`，dsh 不可用时设 `aria-describedby="topbar-dsh-status-description"`，同级 `.sr-only` 文本提供诊断，视觉提示 `aria-hidden=true`，Playwright `toHaveAccessibleDescription` 断言存在且通过（CI 36 passed） |
+| 新增 P2 项真实性 | **3 项全部真实存在** | P2-DSH-CMD：`isRealDshCommand` 用 `basename(command) === 'dsh'` 推断（`dsh-headless-adapter.ts:73`），命名不同的生产 wrapper 会跳过 execution-time preflight；P2-UX-HEALTH：Web health 与凭据握手耦合，UI 只展示 available/unavailable；P2-PROCESS-02：#27 依赖/milestone/owner 未平台化 |
+| DSH alpha.4 对齐复核 | **报告 §11 结论准确，锚点零漂移** | upstream HEAD = `dsh-v0.1.2-alpha.4`；`tool-web.config.fetch` alpha.3 `false` → alpha.4 `true`（默认启用 web_fetch，不经 approval）；Tekon 依赖的 4 个合同锚点（Headless one-shot、help anchor `print the final assistant message`、5 个 plugin row ids、Node engines `^22.19.0 \|\| >=24.0.0`）在 alpha.3→alpha.4 间均无变化；alpha.4 有 ACP 包（`packages/acp/`），报告"Collaborate 应优先做 ACP vertical slice"有 upstream 依据 |
+| 测试与 CI 健康 | **全绿，报告 §10 判断准确** | 本地 `pnpm test`：140 文件 / 1518 passed / 3 skipped（L2 DSH probe 无 `DSH_CLI_PATH`）；PR #11 CI 7 项全绿；`main` 确认未保护（`gh api` 返回 404 Branch not protected）；无真实 JS/TS static lint gate（三个子包 `lint` 脚本均为 `tsc --noEmit` 别名，全仓无 eslint/biome/oxlint 依赖） |
+
+四路对本报告的裁决无异议：reviewer 的 2 项 P2 修复方向正确、落地完整；3 个新增 P2 项真实存在但不适合在 PR #11 内修复；alpha.3 tested pin 维持 fail-closed 合理。
+
+### 17.2 本轮决策
+
+1. **P2-DSH-CMD 留独立 issue**：`isRealDshCommand` 的 basename 推断被 adapter 测试大量依赖（fake command 路径），修复需重构测试注入结构（如显式 `skipPreflight` 选项或环境变量标记），不适合在已超百提交的 PR #11 内进行。
+2. **P2-UX-HEALTH 留独立 issue**：Web health 与凭据握手解耦涉及前后端契约变更，需独立设计。
+3. **P2-PROCESS-02 留独立 issue**：#27 平台化（subissue/milestone/owner）是 GitHub 治理操作，不阻塞代码合并。
+4. **PR #11 合并建议**：同意报告 §14 建议，本轮批注追加后即可 squash merge；合并后按 §14 顺序从 #16（single-owner daemon）开始推进独立 PR。
+
+### 17.3 验证承诺
+
+本轮批注为纯文档追加，不改变代码行为。批注追加后将重新执行 `pnpm test` 确认无回归，并推送到 PR #11。
