@@ -25,6 +25,12 @@ function hostStatus(): '兼容' | '已旁路' {
     : '已旁路';
 }
 
+function expectedAdmissionConclusion(): string {
+  return isHostNodeVersionCompatible(process.versions.node)
+    ? '兼容'
+    : '已旁路（无合同保证）';
+}
+
 describe('tekon provider preflight', () => {
   const tempDirs: string[] = [];
   const anchorCwd = process.cwd();
@@ -54,7 +60,7 @@ describe('tekon provider preflight', () => {
     }
   });
 
-  it('reports compatible exit 0 when dsh version and contracts match', async () => {
+  it('reports a successful admission when dsh version and contracts match', async () => {
     admitCurrentHostForFixture();
     const fakeBinDir = mkdtempSync(join(tmpdir(), 'tekon-fake-dsh-'));
     tempDirs.push(fakeBinDir);
@@ -74,14 +80,18 @@ describe('tekon provider preflight', () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
-    expect(stdout).toContain(`当前检测版本: ${TESTED_DSH_VERSION}`);
+    expect(stdout).toContain(
+      `当前检测版本: ${TESTED_DSH_VERSION} (已验证)`,
+    );
     expect(stdout).toContain(
       `宿主 Node: ${process.versions.node} (${hostStatus()})`,
     );
     expect(stdout).toContain(`DSH Node 要求: ${DSH_NODE_REQUIREMENT}`);
     expect(stdout).toContain('Help 合同检查: 通过');
     expect(stdout).toContain('Config 合同检查: 通过');
-    expect(stdout).toContain('兼容性结论: 兼容');
+    expect(stdout).toContain(
+      `兼容性结论: ${expectedAdmissionConclusion()}`,
+    );
   });
 
   it('reports the detected version when the version pin mismatches', async () => {
@@ -103,7 +113,7 @@ describe('tekon provider preflight', () => {
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(1);
-    expect(stdout).toContain('当前检测版本: 0.2.0-alpha');
+    expect(stdout).toContain('当前检测版本: 0.2.0-alpha (不兼容)');
     expect(stdout).toContain('兼容性结论: 不兼容');
   });
 
@@ -121,7 +131,7 @@ describe('tekon provider preflight', () => {
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(1);
-    expect(stdout).toContain('当前检测版本: 未安装或不可执行');
+    expect(stdout).toContain('当前检测版本: 未安装或不可执行 (不兼容)');
     expect(stdout).toContain('兼容性结论: 不兼容');
   });
 
@@ -144,7 +154,9 @@ describe('tekon provider preflight', () => {
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(1);
-    expect(stdout).toContain(`当前检测版本: ${TESTED_DSH_VERSION}`);
+    expect(stdout).toContain(
+      `当前检测版本: ${TESTED_DSH_VERSION} (已验证)`,
+    );
     expect(stdout).not.toContain('当前检测版本: 未安装或不可执行');
     expect(stdout).toContain('Help 合同检查: 未通过');
     expect(stdout).toContain('Config 合同检查: 未通过');
@@ -173,6 +185,8 @@ describe('tekon provider preflight', () => {
     expect(parsed).toMatchObject({
       testedVersion: TESTED_DSH_VERSION,
       actualVersion: TESTED_DSH_VERSION,
+      versionCompatible: true,
+      versionBypassed: false,
       nodeRequirement: DSH_NODE_REQUIREMENT,
       helpContractOk: true,
       configContractOk: true,
@@ -189,6 +203,8 @@ describe('tekon provider preflight', () => {
 
     expect(result).toMatchObject({
       actualVersion: null,
+      versionCompatible: false,
+      versionBypassed: false,
       hostNodeVersion: '20.19.0',
       hostNodeCompatible: false,
       hostNodeBypassed: false,
@@ -209,6 +225,8 @@ describe('tekon provider preflight', () => {
     });
 
     expect(result).toMatchObject({
+      versionCompatible: true,
+      versionBypassed: false,
       hostNodeVersion: '20.19.0',
       hostNodeCompatible: false,
       hostNodeBypassed: true,
