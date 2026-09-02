@@ -136,6 +136,10 @@ export function TopBar(props: TopBarProps) {
             ? '连接凭据：校验中'
             : '连接凭据：未配置';
 
+  const dshHeadlessUnavailable =
+    credentialStatus === 'valid' &&
+    healthData?.dshHeadless === 'unavailable';
+
   const openPanel = () => {
     setDraftToken(token ?? '');
     setMasked(true);
@@ -202,6 +206,11 @@ export function TopBar(props: TopBarProps) {
           aria-expanded={panelOpen}
           aria-controls="topbar-connection-panel"
           aria-label={statusAccessibleName}
+          aria-describedby={
+            dshHeadlessUnavailable
+              ? 'topbar-dsh-status-description'
+              : undefined
+          }
           title={
             credentialStatus === 'unavailable'
               ? (healthError?.message ?? '无法完成连接校验')
@@ -223,11 +232,11 @@ export function TopBar(props: TopBarProps) {
             aria-hidden="true"
           />
           <span className="connection-status-label">{statusLabel}</span>
-          {healthData?.dshHeadless === 'unavailable' &&
-          credentialStatus === 'valid' ? (
+          {dshHeadlessUnavailable ? (
             <span
               className="text-muted text-xs ml-1"
               title="dsh-headless 当前不可用；运行 tekon provider preflight dsh-headless 查看详情"
+              aria-hidden="true"
             >
               (dsh-headless不可用)
             </span>
@@ -248,6 +257,12 @@ export function TopBar(props: TopBarProps) {
             <path d="M3 4.5l3 3 3-3" />
           </svg>
         </button>
+        {dshHeadlessUnavailable ? (
+          <span id="topbar-dsh-status-description" className="sr-only">
+            dsh-headless 当前不可用；运行 tekon provider preflight dsh-headless
+            查看详情
+          </span>
+        ) : null}
 
         {panelOpen && (
           <form
