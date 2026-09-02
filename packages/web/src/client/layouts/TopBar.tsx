@@ -38,9 +38,6 @@ export function TopBar(props: TopBarProps) {
   const toggleBtnRef = useRef<HTMLButtonElement | null>(null);
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
 
-  // External bootstrap/hash changes stay reflected while the editor is closed.
-  // Typing is deliberately draft-only: credentials become active only after
-  // the explicit Apply action, so partial tokens cannot churn auth/cache/SSE.
   useEffect(() => {
     if (!panelOpen) {
       setDraftToken(token ?? '');
@@ -55,7 +52,6 @@ export function TopBar(props: TopBarProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [panelOpen]);
 
-  // Close panel on outside click or Escape key.
   useEffect(() => {
     if (!panelOpen) return;
 
@@ -83,8 +79,6 @@ export function TopBar(props: TopBarProps) {
     };
   }, [panelOpen]);
 
-  // P1-UX-02: consume project.health to show truthful credential status. The
-  // cache key uses the auth scope instead of embedding the raw credential.
   const {
     data: healthData,
     error: healthError,
@@ -94,9 +88,6 @@ export function TopBar(props: TopBarProps) {
     () => rpc.call('project.health', { token: token ?? undefined }),
   );
 
-  // Health is operational state, not a one-time bootstrap fact. Refresh it so
-  // an expired/rotated server credential or provider installation is reflected
-  // without requiring a page reload.
   useEffect(() => {
     if (!token) return;
     const timer = window.setInterval(refetchHealth, 60_000);
@@ -227,9 +218,7 @@ export function TopBar(props: TopBarProps) {
           credentialStatus === 'valid' ? (
             <span
               className="text-muted text-xs ml-1"
-              title={
-                healthData.dshHeadlessDetail ?? 'dsh-headless 当前不可用'
-              }
+              title="dsh-headless 当前不可用；运行 tekon provider preflight dsh-headless 查看详情"
             >
               (dsh-headless不可用)
             </span>
