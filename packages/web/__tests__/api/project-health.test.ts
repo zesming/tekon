@@ -99,6 +99,7 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     const result = await api.project.health({ token: fixture.sessionToken });
     expect(result.credential).toBe('valid');
     expect(result.dshHeadless).toBe('available');
+    expect(result.dshHeadlessDetail).toBeUndefined();
 
     await api.close();
   });
@@ -113,6 +114,8 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     const result = await api.project.health({ token: fixture.sessionToken });
     expect(result.credential).toBe('valid');
     expect(result.dshHeadless).toBe('unavailable');
+    expect(result.dshHeadlessDetail).toContain('version mismatch');
+    expect(result.dshHeadlessDetail).toContain('0.1.2-alpha.4');
 
     await api.close();
   });
@@ -127,6 +130,7 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     const result = await api.project.health({ token: fixture.sessionToken });
     expect(result.credential).toBe('valid');
     expect(result.dshHeadless).toBe('unavailable');
+    expect(result.dshHeadlessDetail).toMatch(/stdout contract|missing the required plugin/i);
 
     await api.close();
   });
@@ -142,6 +146,7 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
       'Session token does not match server configuration',
     );
     expect(result.dshHeadless).toBeUndefined();
+    expect(result.dshHeadlessDetail).toBeUndefined();
 
     await api.close();
   });
