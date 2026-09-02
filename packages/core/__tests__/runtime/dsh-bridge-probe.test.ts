@@ -195,7 +195,7 @@ describe('runDshPreflight', () => {
     probeConfig: async () => validConfig,
   };
 
-  it('succeeds when the stable host, version, and contracts match', async () => {
+  it('succeeds when the stable host, pinned version, and contracts match', async () => {
     await expect(
       runDshPreflight('dsh', {
         ...validProbes,
@@ -208,6 +208,8 @@ describe('runDshPreflight', () => {
       helpContractOk: true,
       configContractOk: true,
       installHint: dshInstallHint(),
+      versionCompatible: true,
+      versionBypassed: false,
       hostNodeVersion: '22.19.0',
       hostNodeCompatible: true,
       hostNodeBypassed: false,
@@ -222,6 +224,21 @@ describe('runDshPreflight', () => {
         hostNodeVersion: '22.19.0',
       }),
     ).rejects.toThrow(DshVersionGateError);
+  });
+
+  it('marks an explicitly admitted untested version as bypassed, not compatible', async () => {
+    const warnings: string[] = [];
+    const result = await runDshPreflight('dsh', {
+      ...validProbes,
+      probeVersion: async () => '0.1.2-alpha.4\n',
+      allowVersion: '0.1.2-alpha.4',
+      hostNodeVersion: '22.19.0',
+      onWarn: (warning) => warnings.push(warning),
+    });
+
+    expect(result.versionCompatible).toBe(false);
+    expect(result.versionBypassed).toBe(true);
+    expect(warnings.join('\n')).toContain('without contract guarantees');
   });
 
   it('preserves the detected version when a later contract fails', async () => {
