@@ -12,7 +12,6 @@ import {
 import { join, relative, resolve } from 'node:path';
 
 import {
-  isHostNodeVersionCompatible,
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
   computeRunPlanDigest,
@@ -22,6 +21,7 @@ import {
   projectRunPlan,
   readDraftShapeFile,
   renderDraftShapeForRun,
+  runDshPreflight,
   type RunPlan,
   type WorkflowTemplate,
 } from '@tekon/core';
@@ -87,15 +87,14 @@ function setHealthCache(key: string, entry: HealthCacheEntry): void {
   healthCache.set(key, entry);
 }
 
-function probeProvider(): 'available' | 'unavailable' {
-  if (!isHostNodeVersionCompatible(process.versions.node)) {
-    return 'unavailable';
-  }
+async function probeProvider(): Promise<'available' | 'unavailable'> {
   try {
-    execFileSync('dsh', ['--version'], {
-      timeout: 1000,
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
+    // Health must use the same admission contract as a real run. A binary that
+    // merely answers `--version` is not usable when its exact version, help
+    // surface, composed governance rows, or host Node contract is incompatible.
+    // The core preflight also honors the explicit exact-value escape hatches,
+    // so the status cannot disagree with the subsequent run admission.
+    await runDshPreflight('dsh');
     return 'available';
   } catch {
     return 'unavailable';
@@ -145,7 +144,7 @@ export function createProjectRouter(context: ServerContext) {
           detail = 'Web session token is not configured on server';
         } else if (token === expectedToken) {
           credential = 'valid';
-          dshHeadless = probeProvider();
+          dshHeadless = await probeProvider();
         } else {
           credential = 'invalid';
           detail = 'Session token does not match server configuration';
