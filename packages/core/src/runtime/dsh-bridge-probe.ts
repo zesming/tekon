@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_DSH_PROBE_TIMEOUT_MS = 5_000;
 
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
 export const TESTED_DSH_VERSION = '0.1.2-alpha.3';
@@ -256,36 +257,47 @@ export interface RunDshPreflightOptions {
   hostNodeVersion?: string;
   /** Exact-match host escape hatch; defaults to TEKON_DSH_ALLOW_HOST_NODE. */
   allowHostNode?: string;
+  /** Timeout for each built-in metadata probe. Custom probes own their budget. */
+  probeTimeoutMs?: number;
   onWarn?: (message: string) => void;
 }
 
-async function defaultProbeVersion(command: string): Promise<string> {
+async function defaultProbeVersion(
+  command: string,
+  timeoutMs: number,
+): Promise<string> {
   const { stdout } = await execFileAsync(command, ['--version'], {
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: timeoutMs,
   });
   return stdout;
 }
 
-async function defaultProbeHelp(command: string): Promise<string> {
+async function defaultProbeHelp(
+  command: string,
+  timeoutMs: number,
+): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
     ['--profile', 'headless', '--help'],
     {
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: timeoutMs,
     },
   );
   return stdout;
 }
 
-async function defaultProbeConfig(command: string): Promise<string> {
+async function defaultProbeConfig(
+  command: string,
+  timeoutMs: number,
+): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
     ['--profile', 'headless', '--dump-default-config'],
     {
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: timeoutMs,
     },
   );
   return stdout;
@@ -299,9 +311,17 @@ export async function runDshPreflight(
   dshCommand = 'dsh',
   options?: RunDshPreflightOptions,
 ): Promise<DshPreflightResult> {
-  const probeVersion = options?.probeVersion ?? defaultProbeVersion;
-  const probeHelp = options?.probeHelp ?? defaultProbeHelp;
-  const probeConfig = options?.probeConfig ?? defaultProbeConfig;
+  const probeTimeoutMs =
+    options?.probeTimeoutMs ?? DEFAULT_DSH_PROBE_TIMEOUT_MS;
+  const probeVersion =
+    options?.probeVersion ??
+    ((command: string) => defaultProbeVersion(command, probeTimeoutMs));
+  const probeHelp =
+    options?.probeHelp ??
+    ((command: string) => defaultProbeHelp(command, probeTimeoutMs));
+  const probeConfig =
+    options?.probeConfig ??
+    ((command: string) => defaultProbeConfig(command, probeTimeoutMs));
 
   const hostNodeVersion = options?.hostNodeVersion ?? process.versions.node;
   const hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
