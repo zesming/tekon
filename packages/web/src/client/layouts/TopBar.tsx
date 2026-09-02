@@ -227,7 +227,9 @@ export function TopBar(props: TopBarProps) {
           credentialStatus === 'valid' ? (
             <span
               className="text-muted text-xs ml-1"
-              title="dsh-headless 当前不可用"
+              title={
+                healthData.dshHeadlessDetail ?? 'dsh-headless 当前不可用'
+              }
             >
               (dsh-headless不可用)
             </span>
