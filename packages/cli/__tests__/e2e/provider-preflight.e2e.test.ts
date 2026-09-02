@@ -67,19 +67,23 @@ describe('tekon provider preflight e2e', () => {
       { encoding: 'utf8', env: fixtureEnv(fakeBinDir) },
     );
 
-    const status = isHostNodeVersionCompatible(process.versions.node)
+    const hostCompatible = isHostNodeVersionCompatible(process.versions.node);
+    const status = hostCompatible ? '兼容' : '已旁路';
+    const conclusion = hostCompatible
       ? '兼容'
-      : '已旁路';
+      : '已旁路（无合同保证）';
     expect(output).toContain(`测试基准版本: ${TESTED_DSH_VERSION}`);
-    expect(output).toContain(`当前检测版本: ${TESTED_DSH_VERSION}`);
+    expect(output).toContain(
+      `当前检测版本: ${TESTED_DSH_VERSION} (已验证)`,
+    );
     expect(output).toContain(`宿主 Node: ${process.versions.node} (${status})`);
     expect(output).toContain(`DSH Node 要求: ${DSH_NODE_REQUIREMENT}`);
     expect(output).toContain('Help 合同检查: 通过');
     expect(output).toContain('Config 合同检查: 通过');
-    expect(output).toContain('兼容性结论: 兼容');
+    expect(output).toContain(`兼容性结论: ${conclusion}`);
   });
 
-  it('returns parseable JSON describing the actual host runtime', () => {
+  it('returns parseable JSON describing tested compatibility and admission', () => {
     const fakeBinDir = createMatchingFake();
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
     const output = execFileSync(
@@ -93,6 +97,8 @@ describe('tekon provider preflight e2e', () => {
     expect(parsed).toMatchObject({
       testedVersion: TESTED_DSH_VERSION,
       actualVersion: TESTED_DSH_VERSION,
+      versionCompatible: true,
+      versionBypassed: false,
       nodeRequirement: DSH_NODE_REQUIREMENT,
       hostNodeVersion: process.versions.node,
       hostNodeCompatible: compatible,
