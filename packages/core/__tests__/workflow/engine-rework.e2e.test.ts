@@ -302,7 +302,7 @@ function createChangesRequestedGateEngine(
 function createGitRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-rework-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });

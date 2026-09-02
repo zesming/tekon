@@ -6,7 +6,7 @@
 
 ### 工程与合同
 
-- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到官方当前基线 `0.1.2-alpha.3`。Tekon 依赖的 alpha.3 headless 兼容锚点相对 alpha.2 未变（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级风险低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到 `0.1.2-alpha.3（tested pin）`。Tekon 依赖的 alpha.3 headless 兼容锚点相对 alpha.2 未变（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级风险低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
 - **版本身份统一（P1-RELEASE-01）**：`@tekon/core`、`@tekon/cli`、`@tekon/web` 三个内部 package 的版本由 `0.7.0` 统一为 `0.20.4`，与根产品版本 lockstep。此前 `TEKON_CORE_VERSION`（读内部 package）与 CLI `getVersion()`（读根 package）输出不一致，按推断会干扰 bug report 与日志中的版本识别（当前无生产代码消费该常量，属预防性统一）。补了 smoke 测试断言所有内部 package 与根版本一致，防止再次漂移。
 - **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
 - **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 新增独立 `audit` job 执行 `pnpm audit --prod`。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；audit 与功能测试解耦（`cli`/`web` 只 `needs: typecheck`），audit 失败不压掉功能诊断，但 audit 本身仍是独立 gate。
@@ -14,6 +14,14 @@
 ### DSH Host Node 版本硬拦截（第十四轮批注）
 
 - **preflight 硬拦截不兼容宿主 Node**：`runDshPreflight` 在探测 dsh 二进制之前新增宿主 Node 版本检查（`isHostNodeVersionCompatible`），不兼容时（Node 20.x、22.12–22.18、23.x 奇数线）抛 `DshHostNodeError`，不再让用户先撞上 dsh 子进程的底层退出错误。提供 `TEKON_DSH_ALLOW_HOST_NODE=<实际版本>` 精确值逃生口（对齐 `TEKON_DSH_ALLOW_VERSION` 先例），放行时输出 `onWarn` 警告。`DshPreflightResult` 增加 `hostNodeVersion`/`hostNodeCompatible`/`hostNodeBypassed` 结构化字段；CLI `provider preflight` 输出与 `--json` 同步展示宿主 Node 状态，`failureKind` 判别字段区分"宿主 Node 不兼容"与"dsh 未安装"。Web `probeProvider` health 判定同步纳入宿主 Node 检查。
+
+### DSH preflight 语义修正与 Web health 同源（第十五轮批注）
+
+- **Host Node 判定改为稳定 semver**：`isHostNodeVersionCompatible` 只接受完整 `v?major.minor.patch`，prerelease/partial/malformed 一律 fail-closed，数值必须是 safe integer；不再只截取 major/minor 导致 prerelease 被误判为兼容。
+- **compatible 与 bypass 分离**：`DshPreflightResult` 增加 `versionCompatible/versionBypassed`，与 `hostNodeCompatible/hostNodeBypassed` 并列；逃生口命中时 compatible 保持 false，bypassed 为 true。CLI 文本在任意 bypass 存在时显示"已旁路（无合同保证）"而非"兼容"。
+- **移除公开 `--host-node-version`**：该参数是测试注入 seam，可伪造当前机器兼容结果；公共 CLI 不再接受，程序化 API 仍保留。
+- **Web health 与真实 admission 同源**：`probeProvider()` 改为调用完整 `runDshPreflight()`（含 tested pin、help anchor、plugin config），有 1 秒 metadata probe 预算；顶栏不可用提示指向 `tekon provider preflight dsh-headless` 诊断动作。
+- **网络隔离文案修正**：SessionComposer 网络隔离说明从"网络访问受限"改为"计划未请求不受限网络；实际隔离取决于 Provider 与宿主环境"，避免过度承诺。
 
 ### 测试与 CI 收尾（第十三轮批注）
 
@@ -37,7 +45,7 @@
 
 ### 用户可见改进
 
-- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.1` 升级到官方当前基线 `0.1.2-alpha.2`。alpha.2 与 alpha.1 的 headless 合同零差异（help/config/Node engines 均未变），升级合同风险极低。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.1` 升级到 `0.1.2-alpha.2（tested pin）`。alpha.2 与 alpha.1 的 headless 合同零差异（help/config/Node engines 均未变），升级合同风险极低。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
 
 ### 工程与合同
 
@@ -70,7 +78,7 @@
 
 ### 工程与合同
 
-- **DSH 测试基准版本升级**：`dsh` 钉死版本由 `0.1.1-rc.2` 升级到官方当前基线 `0.1.2-alpha.1`，help/config 契约 fixture 同步更新。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与 L1 解析测试；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行，未在本轮声称完成兼容验证。
+- **DSH 测试基准版本升级**：`dsh` 钉死版本由 `0.1.1-rc.2` 升级到 `0.1.2-alpha.1（tested pin）`，help/config 契约 fixture 同步更新。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与 L1 解析测试；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行，未在本轮声称完成兼容验证。
 
 ## v0.19.0
 

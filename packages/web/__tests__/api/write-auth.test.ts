@@ -806,7 +806,7 @@ describe('web write authorization', () => {
       rmSync(remotePath, { recursive: true, force: true }),
     );
     cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
       cwd: fixture.projectRoot,
     });

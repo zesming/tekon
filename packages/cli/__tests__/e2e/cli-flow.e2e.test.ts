@@ -408,7 +408,7 @@ function runCli(cliPath: string, args: string[], cwd: string): string {
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-e2e-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });

@@ -763,3 +763,37 @@ PR #11 已超过适合逐行审阅和低风险回滚的规模。最终建议 squ
 ### Semver
 
 - [npm/node-semver README](https://github.com/npm/node-semver#prerelease-tags)
+
+## 16. 主 Agent 四路循环评估批注（2026-09-02，基于 HEAD `1283024`）
+
+本节是主 Agent 收到本报告后，按既定循环（同步上游 → 四路独立评估 → 达成一致 → 批注 → 整改）产出的交叉评估记录。评估基线：`1283024`（含 reviewer 修复 `ebd040e` 及后续提交），DSH 上游 `4e84901e6`（alpha.4，pull 后确认）。
+
+### 16.1 四路评估结论（一致）
+
+| 评估路 | 结论 | 关键证据 |
+| --- | --- | --- |
+| reviewer 修复落地核查 | **6 项 P2 修复全部成立，但发现 1 项阻断** | semver 严格解析（`parseStableNodeVersion` + safe integer）、compatible/bypass 四字段分离、`--host-node-version` 已移除且有拒绝断言、Web health 调用完整 `runDshPreflight` 且有 1s 预算、顶栏诊断入口指向 `tekon provider preflight`。**阻断项**：`75ac0c5` 提交的 `dsh-bridge-host-node.test.ts` 引用不存在的导出（`isDshNodeVersionSupported`、`DshNodeVersionGateError`、`nodeVersion` 参数），12 个测试全部失败，Core #397 首次执行 `failure` |
+| DSH 官方对齐复核 | **alpha.4 发布事实成立，合同锚点零漂移** | 上游 `git tag --points-at HEAD` = `dsh-v0.1.2-alpha.4`；Tekon 依赖的 4 个锚点（Headless one-shot、help anchor、5 个 plugin row ids、Node engines）在 alpha.3→alpha.4 间均无变化；alpha.4 默认启用 `web_fetch`（`tool-web.config.fetch: true`），不经 approval 审批，对 Tekon `acknowledgeUnrestrictedNetwork` 知情确认语义有加重影响 |
+| 测试与 CI 健康 | **Core #397 失败，CI #306 成功但不含 Core unit** | `13c27eb` Core #372/CI #281 首次成功；`ebd040e` Core #392/CI #301 首次成功；`1283024` Core #397 **failure**（`dsh-bridge-host-node.test.ts` 12 项失败），CI #306 success（不含 Core unit）。本地 core 93 文件/1087 passed/12 failed/3 skipped，CLI 64 passed，Web 359 passed |
+| 事项清单与冻结项 | **本轮可关闭 5 项，架构冻结项维持** | P2-DOC-02（CHANGELOG "官方当前基线"）、P2-CI-01（13 处 git init hint）、current.md 快照绑定、手册 HTML 同步、TopBar 注释恢复；P1-DSH-01（alpha.4 升 pin）、P1-DSH-02（逃生口审计）留独立 PR |
+
+四路对本报告的裁决无异议：reviewer 的 6 项 P2 修复方向正确、落地完整；alpha.3 tested pin 维持 fail-closed 是合理的；架构冻结项（§13）不在本轮扩张。
+
+### 16.2 本轮决策与整改
+
+1. **删除失效测试文件**（阻断项）：`dsh-bridge-host-node.test.ts` 与 `dsh-bridge-probe.test.ts` 中的测试完全重复，且引用了不存在的导出。直接删除，不保留冗余。
+2. **P2-DOC-02**：CHANGELOG 3 处"官方当前基线"改为"（tested pin）"，历史版本记录不承担动态 upstream latest 事实。
+3. **P2-CI-01**：13 处 `git init` 加 `-b main`，消除 default-branch hint 噪声。
+4. **文档同步**：CHANGELOG 补登记第 15 轮 reviewer 修复；手册 HTML 补全 tested pin 版本号；TopBar 恢复误删的 5 段注释。
+5. **current.md 快照绑定**：整改完成后更新为最新 HEAD。
+
+不纳入本轮的事项（维持报告判定）：
+
+- **P1-DSH-01（alpha.4 升 pin）**：需完成 L1 fixture 更新 → L2 metadata probe → L3 credentialed smoke → `web_fetch` 网络复核，当前环境无 `dsh` 二进制与 API key，留独立 PR；
+- **P1-DSH-02（逃生口审计）**：涉及 Provider snapshot schema 扩展与 Audit 事件写入，跨模块状态变更，留独立 PR；
+- **P0 架构主线**：按 §13 顺序拆独立 PR；
+- **`main` 分支保护**：人工 GitHub 配置，用户已决策暂缓。
+
+### 16.3 验证承诺
+
+本轮整改完成后，将重新执行：core 全量测试（含删除失效文件后的回归）、CLI e2e、Web Playwright、UI 截图核对，并由 reviewer 循环审查至放行；最终提交到本 PR 并清理临时产物。

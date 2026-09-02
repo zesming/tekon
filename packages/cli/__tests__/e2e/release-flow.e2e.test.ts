@@ -178,7 +178,7 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     const remotePath = mkdtempSync(join(tmpdir(), 'tekon-release-remote-'));
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-release-gh-'));
     tempDirs.push(remotePath, binDir);
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
       cwd: repoPath,
     });

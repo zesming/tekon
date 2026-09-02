@@ -147,7 +147,7 @@ const test = sharedTest.extend<CreatePrFixtures>({
 
   remotePath: async ({}, use) => {
     const remotePath = mkdtempSync(join(tmpdir(), 'tekon-e2e-remote-'));
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     await use(remotePath);
     rmSync(remotePath, { recursive: true, force: true });
   },

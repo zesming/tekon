@@ -4,7 +4,7 @@
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **上一轮权威 Head**：`99e00655470f43273bbc0d25228924e838e51652`
 - **用户本轮整改快照**：`13c27ebfdd473b7f2e866d6a1faf54c29c087801`
-- **reviewer 代码修复快照**：`ebd040e44f66e26c69af449584eb29a699d52726`
+- **reviewer 代码修复快照**：`128302499c3ef0389250e77ca9e36676e2f792a9`
 - **当前版本**：`0.20.4`
 - **代码自动化状态**：reviewer 代码快照的 Core #392 与 CI #301 均为首次执行 `completed/success`；Core unit 84 文件 / 1061 passed / 3 skipped，Core e2e 8 文件 / 26 passed，CLI unit 9 文件 / 64 passed，CLI e2e 3 文件 / 8 passed；Root build/typecheck、production dependency audit、Web build/typecheck/unit 与 Chromium Playwright 全部成功
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`

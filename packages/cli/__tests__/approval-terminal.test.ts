@@ -197,7 +197,7 @@ function createMemoryIo(): CliIO & {
 function createFixtureRepo(tempDirs: string[]): string {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-approval-terminal-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
