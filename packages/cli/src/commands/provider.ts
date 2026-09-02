@@ -21,9 +21,16 @@ export type DshPreflightResult = Omit<CoreDshPreflightResult, 'actualVersion'> &
   failureKind?: 'host-node' | 'version' | 'contract' | 'not-installed';
 };
 
+/**
+ * Programmatic preflight seam. `hostNodeVersion` and `allowHostNode` exist for
+ * deterministic tests and embedded callers; the public CLI always evaluates
+ * the actual process runtime and never exposes a flag that can fabricate a
+ * compatible result for the current machine.
+ */
 export async function runDshPreflight(options?: {
   command?: string;
   allowVersion?: string;
+  allowHostNode?: string;
   probeVersion?: (command: string) => Promise<string>;
   probeHelp?: (command: string) => Promise<string>;
   probeConfig?: (command: string) => Promise<string>;
@@ -32,10 +39,13 @@ export async function runDshPreflight(options?: {
 }): Promise<DshPreflightResult> {
   const allowVersion =
     options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
+  const allowHostNode =
+    options?.allowHostNode ?? process.env.TEKON_DSH_ALLOW_HOST_NODE;
 
   try {
     const result = await runCoreDshPreflight(options?.command ?? 'dsh', {
       allowVersion,
+      allowHostNode,
       probeVersion: options?.probeVersion,
       probeHelp: options?.probeHelp,
       probeConfig: options?.probeConfig,
@@ -71,14 +81,11 @@ export async function runDshPreflight(options?: {
           : null;
     }
 
-    const isCompatible = isHostNodeVersionCompatible(hostNodeVersion);
-    const allowHostNode = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    const hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
     const hostNodeBypassed =
-      !isCompatible && allowHostNode === hostNodeVersion;
-    const hostNodeCompatible =
-      error instanceof DshHostNodeError
-        ? false
-        : isCompatible || hostNodeBypassed;
+      !(error instanceof DshHostNodeError) &&
+      !hostNodeCompatible &&
+      allowHostNode === hostNodeVersion;
 
     return {
       testedVersion: TESTED_DSH_VERSION,
@@ -89,7 +96,7 @@ export async function runDshPreflight(options?: {
       installHint: dshInstallHint(),
       hostNodeVersion,
       hostNodeCompatible,
-      hostNodeBypassed: error instanceof DshHostNodeError ? false : hostNodeBypassed,
+      hostNodeBypassed,
       compatible: false,
       failureKind,
       error: error instanceof Error ? error.message : String(error),
@@ -127,25 +134,16 @@ export async function commandProvider(
       options: {
         command: { type: 'string' },
         'allow-version': { type: 'string' },
-        'host-node-version': { type: 'string' },
         json: { type: 'boolean', default: false },
       },
       allowPositionals: true,
     });
 
-    const hostNodeVersion = args.values['host-node-version'];
-    if (hostNodeVersion && hostNodeVersion !== process.versions.node) {
-      io.stderr.write(
-        `[dsh bridge] 警告: 检测到 --host-node-version='${hostNodeVersion}' 诊断注入 (真实宿主 Node: ${process.versions.node})，该选项仅供测试与诊断使用，生产环境请升级 Node.js。\n`,
-      );
-    }
-
     const result = await runDshPreflight({
       command: args.values.command,
       allowVersion: args.values['allow-version'],
-      hostNodeVersion,
-      onWarn: (msg) => {
-        io.stderr.write(`${msg}\n`);
+      onWarn: (message) => {
+        io.stderr.write(`${message}\n`);
       },
     });
 
@@ -159,12 +157,17 @@ export async function commandProvider(
       (result.failureKind === 'host-node'
         ? '宿主 Node 不兼容'
         : '未安装或不可执行');
+    const hostNodeStatus = result.hostNodeBypassed
+      ? '已旁路'
+      : result.hostNodeCompatible
+        ? '兼容'
+        : '不兼容';
 
     const lines: string[] = [
       '🔍 DSH Headless Provider 预检',
       `  测试基准版本: ${result.testedVersion}`,
       `  当前检测版本: ${actualVersionDisplay}`,
-      `  宿主 Node: ${result.hostNodeVersion} (${result.hostNodeCompatible ? (result.hostNodeBypassed ? '已旁路' : '兼容') : '不兼容'})`,
+      `  宿主 Node: ${result.hostNodeVersion} (${hostNodeStatus})`,
       `  DSH Node 要求: ${result.nodeRequirement}`,
       `  Help 合同检查: ${result.helpContractOk ? '通过' : '未通过'}`,
       `  Config 合同检查: ${result.configContractOk ? '通过' : '未通过'}`,
