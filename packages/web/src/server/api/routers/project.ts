@@ -20,7 +20,6 @@ import {
   loadWorkflowTemplateFile,
   projectRunPlan,
   readDraftShapeFile,
-  redactSecrets,
   renderDraftShapeForRun,
   runDshPreflight,
   type RunPlan,
@@ -58,14 +57,8 @@ interface HealthCacheEntry {
     checkedAt: string;
     detail?: string;
     dshHeadless?: 'available' | 'unavailable';
-    dshHeadlessDetail?: string;
   };
   cachedAt: number;
-}
-
-interface DshProviderHealth {
-  status: 'available' | 'unavailable';
-  detail?: string;
 }
 
 const HEALTH_CACHE_TTL_MS = 60_000;
@@ -95,7 +88,7 @@ function setHealthCache(key: string, entry: HealthCacheEntry): void {
   healthCache.set(key, entry);
 }
 
-async function probeProvider(): Promise<DshProviderHealth> {
+async function probeProvider(): Promise<'available' | 'unavailable'> {
   try {
     // Health uses the same admission contract as a real run. A binary that
     // merely answers `--version` is not usable when its exact version, help
@@ -105,12 +98,9 @@ async function probeProvider(): Promise<DshProviderHealth> {
     await runDshPreflight('dsh', {
       probeTimeoutMs: DSH_HEALTH_PROBE_TIMEOUT_MS,
     });
-    return { status: 'available' };
-  } catch (error) {
-    const detail = redactSecrets(
-      error instanceof Error ? error.message : String(error),
-    ).content;
-    return { status: 'unavailable', detail };
+    return 'available';
+  } catch {
+    return 'unavailable';
   }
 }
 
@@ -137,7 +127,6 @@ export function createProjectRouter(context: ServerContext) {
       let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
       let detail: string | undefined;
       let dshHeadless: 'available' | 'unavailable' | undefined;
-      let dshHeadlessDetail: string | undefined;
 
       if (!token) {
         credential = 'not-configured';
@@ -158,9 +147,7 @@ export function createProjectRouter(context: ServerContext) {
           detail = 'Web session token is not configured on server';
         } else if (token === expectedToken) {
           credential = 'valid';
-          const providerHealth = await probeProvider();
-          dshHeadless = providerHealth.status;
-          dshHeadlessDetail = providerHealth.detail;
+          dshHeadless = await probeProvider();
         } else {
           credential = 'invalid';
           detail = 'Session token does not match server configuration';
@@ -172,7 +159,6 @@ export function createProjectRouter(context: ServerContext) {
         checkedAt: new Date().toISOString(),
         ...(detail ? { detail } : {}),
         ...(dshHeadless ? { dshHeadless } : {}),
-        ...(dshHeadlessDetail ? { dshHeadlessDetail } : {}),
       };
 
       setHealthCache(cacheKey, { result, cachedAt: now });
