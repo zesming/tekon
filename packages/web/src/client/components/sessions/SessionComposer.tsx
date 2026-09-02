@@ -136,8 +136,9 @@ export function SessionComposer() {
                 : '，无需预设人工确认'}
               ；
               {plan.requiresUnrestrictedNetwork
-                ? '网络访问不受限'
-                : '网络访问受限'}。
+                ? '该 Provider 需要不受限网络访问，启动前仍需明确确认'
+                : '计划未请求不受限网络；实际隔离取决于 Provider 与宿主环境'}
+              。
             </div>
           </div>
         ) : null}
