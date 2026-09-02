@@ -1,15 +1,12 @@
 // ---------------------------------------------------------------------------
 // dsh bridge probe (phase 5b). Version pin + capability contract checks for the
-// external `dsh` CLI. Every function here is PURE (operates on strings the
-// caller captured from `dsh --version` / `--help` / `--dump-default-config`),
-// so the L1 fixture contract test can exercise the full parser without spawning
-// a process. The adapter factory (dsh-headless-adapter.ts) and runDshPreflight
-// feed these outputs in.
+// external `dsh` CLI. Every parser/assertion here is deterministic; the probe
+// runner is the only function that spawns a process.
 //
 // Boundary rationale (design §3): the dsh headless CLI contract (argv → stdout/
 // stderr/exit-code) is the only documented, machine-consumable surface of the
-// rc package. We pin the exact tested version and fail closed on drift rather
-// than bind any private library export or file layout.
+// prerelease package. We pin the exact tested version and fail closed on drift
+// rather than bind any private library export or file layout.
 // ---------------------------------------------------------------------------
 
 import { execFile } from 'node:child_process';
@@ -51,6 +48,32 @@ export const REQUIRED_DSH_PLUGIN_IDS = [
 /** Documented stdout-contract anchor in `dsh --profile headless --help`. */
 const HEADLESS_HELP_ANCHOR = 'print the final assistant message';
 
+interface StableNodeVersion {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
+/**
+ * Parse the stable, complete Node version shape used by `process.versions.node`.
+ * npm/node-semver excludes prereleases from ordinary range matching unless a
+ * range explicitly opts into them, so `22.19.0-rc.1` must not satisfy
+ * `^22.19.0`. Build metadata is harmless and remains accepted.
+ */
+function parseStableNodeVersion(version: string): StableNodeVersion | null {
+  const match =
+    /^v?(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u.exec(
+      version.trim(),
+    );
+  if (!match) return null;
+
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return null;
+  return { major, minor, patch };
+}
+
 /**
  * Raised when the PATH `dsh` version does not match {@link TESTED_DSH_VERSION}
  * and no matching `allowVersion` escape hatch was provided. Never a silent
@@ -90,40 +113,36 @@ export class DshCapabilityError extends Error {
 }
 
 /**
- * Raised when the host Node.js runtime does not satisfy DSH's requirement.
+ * Raised when the Tekon host Node runtime does not satisfy DSH's requirement.
  * Distinct from {@link DshCapabilityError} because no dsh binary has been
  * probed yet — the host itself is incompatible. `hostNodeVersion` lets callers
- * render a precise "host Node incompatible" message instead of misreporting
- * "dsh not installed".
+ * render a precise diagnosis instead of misreporting "dsh not installed".
  */
 export class DshHostNodeError extends Error {
   constructor(readonly hostNodeVersion: string) {
+    const stable = parseStableNodeVersion(hostNodeVersion) !== null;
     super(
       `host Node.js '${hostNodeVersion}' does not satisfy DSH requirement ` +
-        `'${DSH_NODE_REQUIREMENT}' (odd Node release lines such as 23.x are ` +
-        `not supported). Upgrade Node.js or set ` +
-        `TEKON_DSH_ALLOW_HOST_NODE='${hostNodeVersion}' to bypass this check ` +
-        `at your own risk.`,
+        `'${DSH_NODE_REQUIREMENT}'. ` +
+        (stable
+          ? `Upgrade Node.js or set TEKON_DSH_ALLOW_HOST_NODE='${hostNodeVersion}' ` +
+            `to acknowledge an unsupported stable host at your own risk.`
+          : `Use a complete stable Node.js version; prerelease or malformed ` +
+            `versions cannot be admitted by the escape hatch.`),
     );
     this.name = 'DshHostNodeError';
   }
 }
 
 /**
- * Pure host Node.js version compatibility check. Returns true when the host
- * satisfies DSH's runtime requirement. Pre-release suffixes are tolerated
- * (only the numeric major.minor segment is compared); unparseable input
- * returns false (fail-closed).
+ * Pure host Node.js compatibility check matching the declared DSH engines
+ * range. Prerelease, partial, or malformed versions return false (fail closed).
  */
 export function isHostNodeVersionCompatible(version: string): boolean {
-  const match = /^(\d+)\.(\d+)/.exec(version.trim());
-  if (!match) return false;
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  if (Number.isNaN(major) || Number.isNaN(minor)) return false;
-  if (major >= 24) return true;
-  if (major === 22 && minor >= 19) return true;
-  return false;
+  const parsed = parseStableNodeVersion(version);
+  if (!parsed) return false;
+  if (parsed.major >= 24) return true;
+  return parsed.major === 22 && parsed.minor >= 19;
 }
 
 /**
@@ -220,8 +239,11 @@ export interface DshPreflightResult {
   helpContractOk: boolean;
   configContractOk: boolean;
   installHint: string;
-  hostNodeVersion: string;
+  /** Actual range compatibility, not admission after an escape hatch. */
   hostNodeCompatible: boolean;
+  /** Exact Node version assessed by this preflight. */
+  hostNodeVersion: string;
+  /** True only when an incompatible but parseable stable host was admitted. */
   hostNodeBypassed: boolean;
 }
 
@@ -230,9 +252,11 @@ export interface RunDshPreflightOptions {
   probeHelp?: (command: string) => Promise<string>;
   probeConfig?: (command: string) => Promise<string>;
   allowVersion?: string;
-  onWarn?: (message: string) => void;
-  /** Test injection: override the host Node.js version (defaults to process.versions.node). */
+  /** Programmatic/test seam; the CLI does not expose a host-version override. */
   hostNodeVersion?: string;
+  /** Exact-match host escape hatch; defaults to TEKON_DSH_ALLOW_HOST_NODE. */
+  allowHostNode?: string;
+  onWarn?: (message: string) => void;
 }
 
 async function defaultProbeVersion(command: string): Promise<string> {
@@ -268,7 +292,8 @@ async function defaultProbeConfig(command: string): Promise<string> {
 }
 
 /**
- * Run DSH preflight probe: checks version, headless help contract, and plugin composition.
+ * Run DSH preflight: check host Node, pinned dsh version, help contract, and
+ * composed plugin rows. No dsh process starts before the host check passes.
  */
 export async function runDshPreflight(
   dshCommand = 'dsh',
@@ -279,12 +304,13 @@ export async function runDshPreflight(
   const probeConfig = options?.probeConfig ?? defaultProbeConfig;
 
   const hostNodeVersion = options?.hostNodeVersion ?? process.versions.node;
-  let hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
+  const hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
   let hostNodeBypassed = false;
   if (!hostNodeCompatible) {
-    const allowHostNode = process.env.TEKON_DSH_ALLOW_HOST_NODE;
-    if (allowHostNode === hostNodeVersion) {
-      hostNodeCompatible = true;
+    const stableHost = parseStableNodeVersion(hostNodeVersion) !== null;
+    const allowHostNode =
+      options?.allowHostNode ?? process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    if (stableHost && allowHostNode === hostNodeVersion) {
       hostNodeBypassed = true;
       options?.onWarn?.(
         `[dsh bridge] host Node check bypassed via TEKON_DSH_ALLOW_HOST_NODE='${hostNodeVersion}'`,
