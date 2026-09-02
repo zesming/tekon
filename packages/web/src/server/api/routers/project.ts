@@ -20,6 +20,7 @@ import {
   loadWorkflowTemplateFile,
   projectRunPlan,
   readDraftShapeFile,
+  redactSecrets,
   renderDraftShapeForRun,
   runDshPreflight,
   type RunPlan,
@@ -57,12 +58,19 @@ interface HealthCacheEntry {
     checkedAt: string;
     detail?: string;
     dshHeadless?: 'available' | 'unavailable';
+    dshHeadlessDetail?: string;
   };
   cachedAt: number;
 }
 
+interface DshProviderHealth {
+  status: 'available' | 'unavailable';
+  detail?: string;
+}
+
 const HEALTH_CACHE_TTL_MS = 60_000;
 const HEALTH_CACHE_MAX_ENTRIES = 128;
+const DSH_HEALTH_PROBE_TIMEOUT_MS = 1_000;
 const healthCache = new Map<string, HealthCacheEntry>();
 
 function hashToken(token: string): string {
@@ -87,17 +95,22 @@ function setHealthCache(key: string, entry: HealthCacheEntry): void {
   healthCache.set(key, entry);
 }
 
-async function probeProvider(): Promise<'available' | 'unavailable'> {
+async function probeProvider(): Promise<DshProviderHealth> {
   try {
-    // Health must use the same admission contract as a real run. A binary that
+    // Health uses the same admission contract as a real run. A binary that
     // merely answers `--version` is not usable when its exact version, help
     // surface, composed governance rows, or host Node contract is incompatible.
-    // The core preflight also honors the explicit exact-value escape hatches,
-    // so the status cannot disagree with the subsequent run admission.
-    await runDshPreflight('dsh');
-    return 'available';
-  } catch {
-    return 'unavailable';
+    // A short per-probe budget keeps this status check responsive; actual run
+    // admission retains the wider core default.
+    await runDshPreflight('dsh', {
+      probeTimeoutMs: DSH_HEALTH_PROBE_TIMEOUT_MS,
+    });
+    return { status: 'available' };
+  } catch (error) {
+    const detail = redactSecrets(
+      error instanceof Error ? error.message : String(error),
+    ).content;
+    return { status: 'unavailable', detail };
   }
 }
 
@@ -124,6 +137,7 @@ export function createProjectRouter(context: ServerContext) {
       let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
       let detail: string | undefined;
       let dshHeadless: 'available' | 'unavailable' | undefined;
+      let dshHeadlessDetail: string | undefined;
 
       if (!token) {
         credential = 'not-configured';
@@ -144,7 +158,9 @@ export function createProjectRouter(context: ServerContext) {
           detail = 'Web session token is not configured on server';
         } else if (token === expectedToken) {
           credential = 'valid';
-          dshHeadless = await probeProvider();
+          const providerHealth = await probeProvider();
+          dshHeadless = providerHealth.status;
+          dshHeadlessDetail = providerHealth.detail;
         } else {
           credential = 'invalid';
           detail = 'Session token does not match server configuration';
@@ -156,6 +172,7 @@ export function createProjectRouter(context: ServerContext) {
         checkedAt: new Date().toISOString(),
         ...(detail ? { detail } : {}),
         ...(dshHeadless ? { dshHeadless } : {}),
+        ...(dshHeadlessDetail ? { dshHeadlessDetail } : {}),
       };
 
       setHealthCache(cacheKey, { result, cachedAt: now });
