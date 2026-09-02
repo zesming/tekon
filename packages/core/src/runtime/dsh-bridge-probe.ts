@@ -75,12 +75,6 @@ function parseStableNodeVersion(version: string): StableNodeVersion | null {
   return { major, minor, patch };
 }
 
-/**
- * Raised when the PATH `dsh` version does not match {@link TESTED_DSH_VERSION}
- * and no matching `allowVersion` escape hatch was provided. Never a silent
- * downgrade — the message names both the actual and the tested version plus the
- * escape hatch (design §5.1).
- */
 export class DshVersionGateError extends Error {
   constructor(
     readonly actualVersion: string,
@@ -98,11 +92,6 @@ export class DshVersionGateError extends Error {
   }
 }
 
-/**
- * Raised when a capability contract check fails. `actualVersion` is populated
- * when version probing succeeded but the later help/config surface failed, so
- * callers do not misreport an installed dsh as "not installed".
- */
 export class DshCapabilityError extends Error {
   constructor(
     message: string,
@@ -113,12 +102,6 @@ export class DshCapabilityError extends Error {
   }
 }
 
-/**
- * Raised when the Tekon host Node runtime does not satisfy DSH's requirement.
- * Distinct from {@link DshCapabilityError} because no dsh binary has been
- * probed yet — the host itself is incompatible. `hostNodeVersion` lets callers
- * render a precise diagnosis instead of misreporting "dsh not installed".
- */
 export class DshHostNodeError extends Error {
   constructor(readonly hostNodeVersion: string) {
     const stable = parseStableNodeVersion(hostNodeVersion) !== null;
@@ -135,10 +118,6 @@ export class DshHostNodeError extends Error {
   }
 }
 
-/**
- * Pure host Node.js compatibility check matching the declared DSH engines
- * range. Prerelease, partial, or malformed versions return false (fail closed).
- */
 export function isHostNodeVersionCompatible(version: string): boolean {
   const parsed = parseStableNodeVersion(version);
   if (!parsed) return false;
@@ -146,10 +125,6 @@ export function isHostNodeVersionCompatible(version: string): boolean {
   return parsed.major === 22 && parsed.minor >= 19;
 }
 
-/**
- * Parse `dsh --version` stdout into a bare version string. Tolerates a leading
- * boot banner by taking the last non-empty trimmed line.
- */
 export function parseDshVersion(stdout: string): string {
   const lines = stdout
     .split('\n')
@@ -164,11 +139,6 @@ export function parseDshVersion(stdout: string): string {
   return last;
 }
 
-/**
- * Enforce the version pin. Throws {@link DshVersionGateError} unless the actual
- * version equals {@link TESTED_DSH_VERSION} or an explicit, exactly-matching
- * `allowVersion` escape hatch is provided (which logs a warning via onWarn).
- */
 export function assertDshVersionAllowed(
   actualVersion: string,
   options: { allowVersion?: string; onWarn?: (message: string) => void },
@@ -187,10 +157,6 @@ export function assertDshVersionAllowed(
   throw new DshVersionGateError(actualVersion, TESTED_DSH_VERSION);
 }
 
-/**
- * Verify `dsh --profile headless --help` still advertises the stdout contract
- * this bridge relies on (a single final assistant message on stdout).
- */
 export function assertDshHeadlessHelpContract(helpOutput: string): void {
   if (!helpOutput.toLowerCase().includes(HEADLESS_HELP_ANCHOR)) {
     throw new DshCapabilityError(
@@ -214,13 +180,6 @@ function containsConfigRowId(dumpOutput: string, id: string): boolean {
   return yamlRow.test(dumpOutput);
 }
 
-/**
- * Verify the headless default-config YAML still contains every required row id.
- * `dsh --dump-default-config` is a documented YAML composition dump. Matching
- * complete `id:` rows prevents a package name such as
- * `@deepseek-ai/dsh-user-approval` from falsely satisfying the contract when
- * the actual config row id is absent or renamed.
- */
 export function assertDshDefaultConfigContract(dumpOutput: string): void {
   for (const id of REQUIRED_DSH_PLUGIN_IDS) {
     if (!containsConfigRowId(dumpOutput, id)) {
@@ -240,6 +199,10 @@ export interface DshPreflightResult {
   helpContractOk: boolean;
   configContractOk: boolean;
   installHint: string;
+  /** True only when the installed dsh exactly matches the tested pin. */
+  versionCompatible: boolean;
+  /** True when an untested version was admitted through an exact escape hatch. */
+  versionBypassed: boolean;
   /** Actual range compatibility, not admission after an escape hatch. */
   hostNodeCompatible: boolean;
   /** Exact Node version assessed by this preflight. */
@@ -303,10 +266,6 @@ async function defaultProbeConfig(
   return stdout;
 }
 
-/**
- * Run DSH preflight: check host Node, pinned dsh version, help contract, and
- * composed plugin rows. No dsh process starts before the host check passes.
- */
 export async function runDshPreflight(
   dshCommand = 'dsh',
   options?: RunDshPreflightOptions,
@@ -342,12 +301,14 @@ export async function runDshPreflight(
 
   const rawVersion = await probeVersion(dshCommand);
   const actualVersion = parseDshVersion(rawVersion);
+  const versionCompatible = actualVersion === TESTED_DSH_VERSION;
   const allowVersion =
     options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
   assertDshVersionAllowed(actualVersion, {
     allowVersion,
     onWarn: options?.onWarn,
   });
+  const versionBypassed = !versionCompatible;
 
   try {
     const [rawHelp, rawConfig] = await Promise.all([
@@ -371,6 +332,8 @@ export async function runDshPreflight(
     helpContractOk: true,
     configContractOk: true,
     installHint: dshInstallHint(),
+    versionCompatible,
+    versionBypassed,
     hostNodeVersion,
     hostNodeCompatible,
     hostNodeBypassed,
