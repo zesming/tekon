@@ -1,7 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import type { AgentAdapterConfig } from '../types/config.js';
 import {
@@ -18,13 +16,7 @@ import {
   ingestAgentManifestArtifacts,
   missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
-import {
-  assertDshDefaultConfigContract,
-  assertDshHeadlessHelpContract,
-  assertDshVersionAllowed,
-  parseDshVersion,
-  runDshPreflight,
-} from './dsh-bridge-probe.js';
+import { runDshPreflight } from './dsh-bridge-probe.js';
 
 // ---------------------------------------------------------------------------
 // dsh-headless adapter (phase 5b). Bridges the external `dsh` CLI through its
@@ -84,38 +76,6 @@ export interface BuiltDshHeadlessCommand extends CommandInvocation {
 
 function isRealDshCommand(command: string): boolean {
   return basename(command) === 'dsh';
-}
-
-const execFileAsync = promisify(execFile);
-
-/**
- * Default version probe: spawn `dsh --version` and return its stdout. Side-
- * effect free and needs no API key. Uses execFile (argv, no shell) so the
- * command string is never interpreted by a shell.
- */
-async function defaultProbeVersion(command: string): Promise<string> {
-  const { stdout } = await execFileAsync(command, ['--version'], {
-    timeout: 15_000,
-  });
-  return stdout;
-}
-
-async function defaultProbeHelp(command: string): Promise<string> {
-  const { stdout } = await execFileAsync(
-    command,
-    ['--profile', 'headless', '--help'],
-    { timeout: 15_000 },
-  );
-  return stdout;
-}
-
-async function defaultProbeConfig(command: string): Promise<string> {
-  const { stdout } = await execFileAsync(
-    command,
-    ['--profile', 'headless', '--dump-default-config'],
-    { timeout: 15_000 },
-  );
-  return stdout;
 }
 
 /**
@@ -194,7 +154,7 @@ function buildDshEnv(input: {
   }
   // Pinned governance (never inherited from ambient env):
   env.DSH_PERMISSION_MODE = 'workspace-write';
-  // DSH_HOME lives under the MAIN repo's data dir, OUTSIDE the worktree: dsh's
+  // DSH_HOME lives under the MAIN repo data dir, OUTSIDE the worktree: dsh's
   // session store / profiles are host-process state the sandboxed agent tools
   // (rooted at cwd = worktree) must not reach or poison across runs (design
   // §4.2, review S2). Built from lease.repoPath (the main repo), NOT
@@ -226,26 +186,21 @@ export function createDshHeadlessAdapter(
   options?: {
     /**
      * Version-probe override for tests. Returns the raw `dsh --version` stdout.
-     * Defaults to spawning the configured `dsh` command with `--version`. Only
-     * invoked for a real `dsh` command (basename === 'dsh'), lazily on first
-     * run, and cached — fake-binary tests never spawn a probe.
+     * The shared runDshPreflight implementation owns the real process probe and
+     * its timeout so Web, CLI, and direct adapter execution cannot drift.
      */
     probeVersion?: (command: string) => Promise<string>;
-    /**
-     * Help-probe override for tests. Returns the raw `dsh --profile headless --help` stdout.
-     * Defaults to spawning `dsh --profile headless --help`.
-     */
+    /** Help-probe override for tests. */
     probeHelp?: (command: string) => Promise<string>;
-    /**
-     * Config-probe override for tests. Returns the raw `dsh --profile headless --dump-default-config` stdout.
-     * Defaults to spawning `dsh --profile headless --dump-default-config`.
-     */
+    /** Default-config probe override for tests. */
     probeConfig?: (command: string) => Promise<string>;
     /** Escape hatch: accept this exact untested version (design §5.1). */
     allowVersion?: string;
     onWarn?: (message: string) => void;
-    /** Test injection: override the host Node.js version (defaults to process.versions.node). */
+    /** Test injection: override the host Node.js version. */
     hostNodeVersion?: string;
+    /** Optional timeout for each built-in metadata probe. */
+    probeTimeoutMs?: number;
   },
 ): AgentAdapter {
   // Runs the capability guard, including the phase-5b network-ack carve-out:
@@ -255,43 +210,24 @@ export function createDshHeadlessAdapter(
 
   const dshCommand = config.command ?? 'dsh';
   const realDsh = isRealDshCommand(dshCommand);
-  const probeVersion = options?.probeVersion ?? defaultProbeVersion;
-  const probeHelp = options?.probeHelp ?? defaultProbeHelp;
-  const probeConfig = options?.probeConfig ?? defaultProbeConfig;
-  let versionGate: Promise<void> | null = null;
   let capabilityGate: Promise<void> | null = null;
 
-  // Lazily version-gate the real dsh binary once (design §5.1): the first run
-  // spawns `dsh --version`, compares against the pin, and fails closed on
-  // drift. Cached so subsequent runs skip it. Never gates a fake binary.
-  const ensureVersionGate = (): Promise<void> => {
-    if (!realDsh) return Promise.resolve();
-    if (!versionGate) {
-      versionGate = (async () => {
-        const raw = await probeVersion(dshCommand);
-        assertDshVersionAllowed(parseDshVersion(raw), {
-          allowVersion: options?.allowVersion,
-          onWarn: options?.onWarn,
-        });
-      })();
-    }
-    return versionGate;
-  };
-
-  // Lazily capability-gate the real dsh binary once (P1-DSH-01): the first run
-  // executes help contract and config contract checks after version gate.
-  // Cached so subsequent runs skip it.
+  // Lazily run the complete shared preflight once. This is intentionally kept
+  // in addition to the pre-persistence Web/CLI check: it catches a binary or
+  // environment change between planning and actual job execution. The shared
+  // probe owns version, Host Node, help/config checks, and timeout semantics.
   const ensureCapabilityGate = (): Promise<void> => {
     if (!realDsh) return Promise.resolve();
     if (!capabilityGate) {
       capabilityGate = (async () => {
         await runDshPreflight(dshCommand, {
-          probeVersion,
-          probeHelp,
-          probeConfig,
+          probeVersion: options?.probeVersion,
+          probeHelp: options?.probeHelp,
+          probeConfig: options?.probeConfig,
           allowVersion: options?.allowVersion,
           onWarn: options?.onWarn,
           hostNodeVersion: options?.hostNodeVersion,
+          probeTimeoutMs: options?.probeTimeoutMs,
         });
       })();
     }
