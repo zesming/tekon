@@ -16,17 +16,12 @@ import type { CliIO } from '../lib/context.js';
 
 export type DshPreflightResult = Omit<CoreDshPreflightResult, 'actualVersion'> & {
   actualVersion: string | null;
+  /** Admission result. Bypassed hosts/versions can be admitted without being compatible. */
   compatible: boolean;
   error?: string;
   failureKind?: 'host-node' | 'version' | 'contract' | 'not-installed';
 };
 
-/**
- * Programmatic preflight seam. `hostNodeVersion` and `allowHostNode` exist for
- * deterministic tests and embedded callers; the public CLI always evaluates
- * the actual process runtime and never exposes a flag that can fabricate a
- * compatible result for the current machine.
- */
 export async function runDshPreflight(options?: {
   command?: string;
   allowVersion?: string;
@@ -86,6 +81,12 @@ export async function runDshPreflight(options?: {
       !(error instanceof DshHostNodeError) &&
       !hostNodeCompatible &&
       allowHostNode === hostNodeVersion;
+    const versionCompatible = actualVersion === TESTED_DSH_VERSION;
+    const versionBypassed =
+      actualVersion !== null &&
+      !versionCompatible &&
+      allowVersion === actualVersion &&
+      !(error instanceof DshVersionGateError);
 
     return {
       testedVersion: TESTED_DSH_VERSION,
@@ -94,6 +95,8 @@ export async function runDshPreflight(options?: {
       helpContractOk: false,
       configContractOk: false,
       installHint: dshInstallHint(),
+      versionCompatible,
+      versionBypassed,
       hostNodeVersion,
       hostNodeCompatible,
       hostNodeBypassed,
@@ -157,22 +160,33 @@ export async function commandProvider(
       (result.failureKind === 'host-node'
         ? '宿主 Node 不兼容'
         : '未安装或不可执行');
+    const versionStatus = result.versionBypassed
+      ? '已旁路'
+      : result.versionCompatible
+        ? '已验证'
+        : '不兼容';
     const hostNodeStatus = result.hostNodeBypassed
       ? '已旁路'
       : result.hostNodeCompatible
         ? '兼容'
         : '不兼容';
+    const anyBypass = result.versionBypassed || result.hostNodeBypassed;
+    const compatibilityConclusion = !result.compatible
+      ? '不兼容'
+      : anyBypass
+        ? '已旁路（无合同保证）'
+        : '兼容';
 
     const lines: string[] = [
       '🔍 DSH Headless Provider 预检',
       `  测试基准版本: ${result.testedVersion}`,
-      `  当前检测版本: ${actualVersionDisplay}`,
+      `  当前检测版本: ${actualVersionDisplay} (${versionStatus})`,
       `  宿主 Node: ${result.hostNodeVersion} (${hostNodeStatus})`,
       `  DSH Node 要求: ${result.nodeRequirement}`,
       `  Help 合同检查: ${result.helpContractOk ? '通过' : '未通过'}`,
       `  Config 合同检查: ${result.configContractOk ? '通过' : '未通过'}`,
       `  安装指引: ${result.installHint}`,
-      `  兼容性结论: ${result.compatible ? '兼容' : '不兼容'}`,
+      `  兼容性结论: ${compatibilityConclusion}`,
     ];
 
     if (!result.compatible && result.error) {
