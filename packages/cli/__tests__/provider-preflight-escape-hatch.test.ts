@@ -4,7 +4,10 @@ import { delimiter, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { TESTED_DSH_VERSION } from '@tekon/core';
+import {
+  TESTED_DSH_VERSION,
+  isHostNodeVersionCompatible,
+} from '@tekon/core';
 
 import { runCli, type CliIO } from '../src/index.js';
 import {
@@ -12,22 +15,20 @@ import {
   VALID_DSH_CONFIG,
 } from './helpers/fake-dsh.js';
 
-// A version that is genuinely different from the pin, so the escape-hatch
-// branch (not the version-match fast path) is what under test.
 const UNTESTED_VERSION = '9.9.9-untested';
-
-it('sanity: the escape-hatch test version is genuinely different from the pin', () => {
-  // If this fails, the escape-hatch tests would pass via the version-match
-  // fast path instead of exercising the allowVersion override.
-  expect(UNTESTED_VERSION).not.toBe(TESTED_DSH_VERSION);
-});
 const CONTRACT_HELP = 'print the final assistant message';
-const CONTRACT_CONFIG = VALID_DSH_CONFIG;
 
 describe('dsh preflight version escape hatch', () => {
   const tempDirs: string[] = [];
   const originalPath = process.env.PATH;
   const originalAllowVersion = process.env.TEKON_DSH_ALLOW_VERSION;
+  const originalAllowHostNode = process.env.TEKON_DSH_ALLOW_HOST_NODE;
+
+  function admitCurrentHostForFixture(): void {
+    if (!isHostNodeVersionCompatible(process.versions.node)) {
+      process.env.TEKON_DSH_ALLOW_HOST_NODE = process.versions.node;
+    }
+  }
 
   afterEach(() => {
     process.env.PATH = originalPath;
@@ -36,12 +37,22 @@ describe('dsh preflight version escape hatch', () => {
     } else {
       process.env.TEKON_DSH_ALLOW_VERSION = originalAllowVersion;
     }
+    if (originalAllowHostNode === undefined) {
+      delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
+    } else {
+      process.env.TEKON_DSH_ALLOW_HOST_NODE = originalAllowHostNode;
+    }
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
+  it('uses a genuinely untested version', () => {
+    expect(UNTESTED_VERSION).not.toBe(TESTED_DSH_VERSION);
+  });
+
   it('honors --allow-version for the exact detected version', async () => {
+    admitCurrentHostForFixture();
     const fakeBinDir = createFakeDsh(tempDirs);
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     const io = createMemoryIo();
@@ -53,8 +64,6 @@ describe('dsh preflight version escape hatch', () => {
         'dsh-headless',
         '--allow-version',
         UNTESTED_VERSION,
-        '--host-node-version',
-        '22.19.0',
       ],
       io,
     );
@@ -63,14 +72,15 @@ describe('dsh preflight version escape hatch', () => {
     expect(io.takeStdout()).toContain('兼容性结论: 兼容');
   });
 
-  it('rejects the untested version without an escape hatch (proves the hatch is what allows it)', async () => {
+  it('rejects the untested version without an escape hatch', async () => {
+    admitCurrentHostForFixture();
     const fakeBinDir = createFakeDsh(tempDirs);
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     delete process.env.TEKON_DSH_ALLOW_VERSION;
     const io = createMemoryIo();
 
     const exitCode = await runCli(
-      ['provider', 'preflight', 'dsh-headless', '--host-node-version', '22.19.0'],
+      ['provider', 'preflight', 'dsh-headless'],
       io,
     );
 
@@ -78,14 +88,15 @@ describe('dsh preflight version escape hatch', () => {
     expect(io.takeStdout()).toContain('兼容性结论: 不兼容');
   });
 
-  it('honors TEKON_DSH_ALLOW_VERSION in the normal core preflight path', async () => {
+  it('honors TEKON_DSH_ALLOW_VERSION in the normal preflight path', async () => {
+    admitCurrentHostForFixture();
     const fakeBinDir = createFakeDsh(tempDirs);
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
     process.env.TEKON_DSH_ALLOW_VERSION = UNTESTED_VERSION;
     const io = createMemoryIo();
 
     const exitCode = await runCli(
-      ['provider', 'preflight', 'dsh-headless', '--host-node-version', '22.19.0'],
+      ['provider', 'preflight', 'dsh-headless'],
       io,
     );
 
@@ -100,7 +111,7 @@ function createFakeDsh(tempDirs: string[]): string {
   writeFakeDsh(dir, {
     version: UNTESTED_VERSION,
     help: CONTRACT_HELP,
-    config: CONTRACT_CONFIG,
+    config: VALID_DSH_CONFIG,
   });
   return dir;
 }
