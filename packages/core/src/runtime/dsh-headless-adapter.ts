@@ -116,8 +116,10 @@ function assertSafeDshArgs(args: readonly string[]): void {
  * in depth, design §4.3). The governance framing and arg whitelist apply to
  * EVERY command, including an overridden binary path (enterprise dsh
  * distribution): a wrapper must still receive `--profile headless` + the task,
- * so renaming the binary can never drop the headless contract or the whitelist
- * (mirrors codex, whose controlled flags survive a command override).
+ * so renaming the binary can never drop the headless contract or the arg
+ * whitelist. Note: the execution-time capability gate (runDshPreflight) is
+ * keyed on basename(command) === 'dsh' and IS skipped for non-standard names;
+ * see #28 for the unified provider command identity contract.
  */
 export function buildDshHeadlessCommand(
   config: AgentAdapterConfig,

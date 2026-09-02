@@ -757,3 +757,31 @@ PR #11 最终建议使用 squash merge。合并前必须再次确认 Head 与 Co
 - [Base composition](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/packages/bundle/base/cordis.patch.yml)
 - [ACP](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/packages/acp/acp/README.md)
 - [Safety](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/SAFETY.md)
+
+## 16. 批注（2026-09-02 主代理两路评估）
+
+### 16.1 两路评估结论（一致）
+
+| 评估路 | 结论 | 关键证据 |
+| --- | --- | --- |
+| 3 个 P1 深入核查 | **全部真实存在** | P1-PROVIDER-CMD：`codex-adapter.ts:212` basename 推断，非 `codex` 命名时跳过 `assertSafeCodexArgs`/受控 global args/profile 白名单/artifact 校验，且 fallback 分支把 `--sandbox`/`--ask-for-approval` 放在 `exec` 后不生效，治理姿态为零；DSH 侧 `assertSafeDshArgs` 无条件调用（arg 白名单不跳过），但 `ensureCapabilityGate` 中 `if (!realDsh) return` 跳过全套 preflight。P1-RUN-START：`engine.ts:318-403` prepareRun 七个写操作无事务/saga，`session-service.ts:202-247` 两段之间无原子性，失败留孤儿 run；现有测试用 fakeEngine 从不失败，盲区属实。P1-UX-PROVIDER：`project.ts:147` probeProvider 只在 token 有效时调用，DSH 有三层 preflight 而 Codex/Claude 为零层 |
+| Issue 操作与 CI 健康 | **全部合理，CI 全绿** | #28/#29 已升级 P1 并扩范围，#31 新建内容完整（8 条逐失败点注入验收），#30 not_planned 关闭理由充分，#27 已同步为四组 checklist；本地 `pnpm test` 140 文件/1518 passed/3 skipped，PR #11 CI 7 项全绿，MERGEABLE/CLEAN |
+
+两路对本报告的裁决无异议：3 个 P1 发现方向正确、证据充分；issue 操作（升级/新建/关闭）合理；alpha.3 tested pin 维持 fail-closed 正确；PR #11 应按 §14 建议 squash merge。
+
+### 16.2 补充发现
+
+Wegener 评估中发现报告未提及的两处细节：
+
+1. **DSH 注释与代码矛盾**：`dsh-headless-adapter.ts:112-121` 注释声称 "renaming the binary can never drop the headless contract or the whitelist"，但 `ensureCapabilityGate` 中 `if (!realDsh) return` 实际跳过了 capability gate。whitelist 部分成立（`assertSafeDshArgs` 无条件调用），capability gate 部分与代码矛盾。本轮修复注释，避免误导。
+2. **Codex fallback 分支治理姿态为零**：非 `codex` 命名时，`--sandbox workspace-write --ask-for-approval on-request` 被放在 `exec` 子命令之后，对真实 codex CLI 不生效。已在 #28 中覆盖。
+
+### 16.3 本轮决策
+
+1. **修复 DSH 注释矛盾**：将 `dsh-headless-adapter.ts:112-121` 的注释改为准确描述——arg 白名单无条件执行，但 capability gate（preflight）依赖 basename 推断，命名不同的 wrapper 会跳过。
+2. **3 个 P1 留独立 PR**：P1-PROVIDER-CMD（#28）、P1-UX-PROVIDER（#29）、P1-RUN-START（#31）均为跨模块架构变更，不适合在已冻结的 PR #11 内进行。
+3. **PR #11 合并建议**：同意报告 §14 建议，本轮批注+注释修复后即可 squash merge；合并后按 §13 第一组顺序（#16 → #15 → #29/#28 → #31）推进独立 PR。
+
+### 16.4 验证承诺
+
+本轮改动为注释修正+文档批注，不改变代码行为。改动后将重新执行 `pnpm test` 确认无回归，并推送到 PR #11。
