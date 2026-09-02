@@ -22,6 +22,9 @@ test('TopBar connection panel applies credentials explicitly and supports keyboa
 
   const statusBtn = credentialStatus(page);
   await expect(statusBtn).toHaveAccessibleName(CREDENTIAL_TEXT.VALID);
+  await expect(statusBtn).toHaveAccessibleDescription(
+    'dsh-headless 当前不可用；运行 tekon provider preflight dsh-headless 查看详情',
+  );
   await expect(statusBtn).toHaveAttribute('aria-expanded', 'false');
 
   await statusBtn.click();
