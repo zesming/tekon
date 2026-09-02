@@ -51,7 +51,7 @@ describe('dsh preflight version escape hatch', () => {
     expect(UNTESTED_VERSION).not.toBe(TESTED_DSH_VERSION);
   });
 
-  it('honors --allow-version for the exact detected version', async () => {
+  it('honors --allow-version but labels the admitted version as bypassed', async () => {
     admitCurrentHostForFixture();
     const fakeBinDir = createFakeDsh(tempDirs);
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
@@ -69,7 +69,10 @@ describe('dsh preflight version escape hatch', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(io.takeStdout()).toContain('兼容性结论: 兼容');
+    const stdout = io.takeStdout();
+    expect(stdout).toContain(`当前检测版本: ${UNTESTED_VERSION} (已旁路)`);
+    expect(stdout).toContain('兼容性结论: 已旁路（无合同保证）');
+    expect(io.takeStderr()).toContain('without contract guarantees');
   });
 
   it('rejects the untested version without an escape hatch', async () => {
@@ -88,7 +91,7 @@ describe('dsh preflight version escape hatch', () => {
     expect(io.takeStdout()).toContain('兼容性结论: 不兼容');
   });
 
-  it('honors TEKON_DSH_ALLOW_VERSION in the normal preflight path', async () => {
+  it('honors TEKON_DSH_ALLOW_VERSION without calling it compatible', async () => {
     admitCurrentHostForFixture();
     const fakeBinDir = createFakeDsh(tempDirs);
     process.env.PATH = `${fakeBinDir}${delimiter}${originalPath ?? ''}`;
@@ -101,7 +104,9 @@ describe('dsh preflight version escape hatch', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(io.takeStdout()).toContain('兼容性结论: 兼容');
+    expect(io.takeStdout()).toContain(
+      '兼容性结论: 已旁路（无合同保证）',
+    );
   });
 });
 
