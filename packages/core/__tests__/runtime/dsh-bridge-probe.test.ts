@@ -13,9 +13,8 @@ import {
   assertDshHeadlessHelpContract,
   assertDshDefaultConfigContract,
   REQUIRED_DSH_PLUGIN_IDS,
+  runDshPreflight,
 } from '../../src/index.js';
-
-// ── parseDshVersion ─────────────────────────────────────────────────────
 
 describe('parseDshVersion', () => {
   it('extracts a clean single-line version', () => {
@@ -23,7 +22,7 @@ describe('parseDshVersion', () => {
     expect(parseDshVersion('  0.1.1-rc.2  ')).toBe('0.1.1-rc.2');
   });
 
-  it('takes the last non-empty line (tolerates a boot banner before it)', () => {
+  it('takes the last non-empty line and tolerates a boot banner', () => {
     expect(parseDshVersion('some banner\n0.1.1-rc.2\n')).toBe('0.1.1-rc.2');
   });
 
@@ -33,70 +32,62 @@ describe('parseDshVersion', () => {
   });
 });
 
-// ── assertDshVersionAllowed ─────────────────────────────────────────────
-
 describe('assertDshVersionAllowed', () => {
   it('accepts the pinned version', () => {
     expect(() => assertDshVersionAllowed(TESTED_DSH_VERSION, {})).not.toThrow();
   });
 
-  it('rejects a mismatched version with a DshVersionGateError naming both versions', () => {
+  it('rejects a mismatched version and names both versions', () => {
+    expect(() => assertDshVersionAllowed('0.2.0', {})).toThrow(
+      DshVersionGateError,
+    );
     try {
       assertDshVersionAllowed('0.2.0', {});
-      throw new Error('should have thrown');
     } catch (error) {
-      expect(error).toBeInstanceOf(DshVersionGateError);
-      const message = (error as Error).message;
-      expect(message).toContain('0.2.0');
-      expect(message).toContain(TESTED_DSH_VERSION);
+      expect((error as Error).message).toContain('0.2.0');
+      expect((error as Error).message).toContain(TESTED_DSH_VERSION);
     }
   });
 
-  it('allows an explicitly acknowledged version via allowVersion escape hatch', () => {
+  it('allows an explicitly acknowledged exact version and warns', () => {
     const warnings: string[] = [];
     expect(() =>
       assertDshVersionAllowed('0.2.0', {
         allowVersion: '0.2.0',
-        onWarn: (w) => warnings.push(w),
+        onWarn: (warning) => warnings.push(warning),
       }),
     ).not.toThrow();
-    expect(warnings.join('\n')).toMatch(/0\.2\.0/);
+    expect(warnings.join('\n')).toContain('0.2.0');
   });
 
-  it('does not let a non-matching allowVersion bypass the gate', () => {
+  it('does not let a non-matching escape hatch bypass the gate', () => {
     expect(() =>
       assertDshVersionAllowed('0.3.0', { allowVersion: '0.2.0' }),
     ).toThrow(DshVersionGateError);
   });
 });
 
-// ── help contract ───────────────────────────────────────────────────────
-
 describe('assertDshHeadlessHelpContract', () => {
-  it('accepts help output containing the documented stdout anchor', () => {
-    const help = [
-      'Usage: dsh --profile headless [options] [task...]',
-      'Answer one task, print the final assistant message, and exit.',
-      '  task        the task text; multiple words are joined by spaces',
-      '  -h, --help  show this help',
-    ].join('\n');
-    expect(() => assertDshHeadlessHelpContract(help)).not.toThrow();
+  it('accepts the documented stdout anchor', () => {
+    expect(() =>
+      assertDshHeadlessHelpContract(
+        'Answer one task, print the final assistant message, and exit.',
+      ),
+    ).not.toThrow();
   });
 
-  it('throws a DshCapabilityError when the anchor sentence is missing', () => {
+  it('throws when the anchor is absent', () => {
     expect(() =>
       assertDshHeadlessHelpContract('Usage: dsh --profile headless [task...]'),
     ).toThrow(DshCapabilityError);
   });
 });
 
-// ── default-config plugin contract ──────────────────────────────────────
-
 describe('assertDshDefaultConfigContract', () => {
-  const configWithPlugins = (ids: string[]): string =>
+  const configWithPlugins = (ids: readonly string[]): string =>
     ['plugins:', ...ids.map((id) => `  - id: ${id}`)].join('\n');
 
-  it('accepts a YAML config tree that contains all required row ids', () => {
+  it('accepts a YAML tree containing all required row ids', () => {
     expect(() =>
       assertDshDefaultConfigContract(
         configWithPlugins([...REQUIRED_DSH_PLUGIN_IDS, 'some-extra-plugin']),
@@ -111,30 +102,26 @@ describe('assertDshDefaultConfigContract', () => {
     expect(() => assertDshDefaultConfigContract(raw)).not.toThrow();
   });
 
-  it('does not let a package-name substring stand in for a missing row id', () => {
+  it('does not let a package-name substring replace a missing row id', () => {
     const raw = [
       ...REQUIRED_DSH_PLUGIN_IDS.filter((id) => id !== 'approval').map(
         (id) => `- id: ${id}`,
       ),
       "- id: unrelated-row\n  name: '@deepseek-ai/dsh-user-approval'",
     ].join('\n');
-
     expect(() => assertDshDefaultConfigContract(raw)).toThrow(/approval/);
   });
 
-  it('throws naming the missing plugin id when the tree drifts', () => {
+  it('names the missing row when the composition drifts', () => {
     const missing = REQUIRED_DSH_PLUGIN_IDS[0];
-    const partial = configWithPlugins(REQUIRED_DSH_PLUGIN_IDS.slice(1));
-    try {
-      assertDshDefaultConfigContract(partial);
-      throw new Error('should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(DshCapabilityError);
-      expect((error as Error).message).toContain(missing);
-    }
+    expect(() =>
+      assertDshDefaultConfigContract(
+        configWithPlugins(REQUIRED_DSH_PLUGIN_IDS.slice(1)),
+      ),
+    ).toThrow(missing);
   });
 
-  it('lists the canonical required config row ids (drift lock)', () => {
+  it('locks the canonical required row ids', () => {
     expect([...REQUIRED_DSH_PLUGIN_IDS].sort()).toEqual(
       [
         'agent-default-model',
@@ -147,10 +134,8 @@ describe('assertDshDefaultConfigContract', () => {
   });
 });
 
-// ── install metadata ────────────────────────────────────────────────────
-
 describe('dsh install metadata', () => {
-  it('keeps the install hint copy/paste-safe and exposes Node separately', () => {
+  it('keeps the install command executable and exposes Node separately', () => {
     expect(dshInstallHint()).toBe(
       `npm install -g @deepseek-ai/dsh@${TESTED_DSH_VERSION}`,
     );
@@ -159,39 +144,38 @@ describe('dsh install metadata', () => {
   });
 });
 
-// ── isHostNodeVersionCompatible ─────────────────────────────────────────
-
 describe('isHostNodeVersionCompatible', () => {
   it.each([
-    ['20.19.0', false],
-    ['22.14.0', false],
-    ['22.18.0', false],
-    ['18.20.0', false],
-    ['23.0.0', false],
-    ['22.18.0-rc', false],
-    ['', false],
-    ['abc', false],
-    ['22', false],
-  ])('rejects incompatible host %s', (version, expected) => {
-    expect(isHostNodeVersionCompatible(version)).toBe(expected);
+    '20.19.0',
+    '22.14.0',
+    '22.18.0',
+    '18.20.0',
+    '23.0.0',
+    '22.19.0-rc',
+    '24.0.0-rc.1',
+    '22.19',
+    '24.0garbage',
+    '',
+    'abc',
+    '22',
+  ])('rejects incompatible, prerelease, partial, or malformed host %s', (version) => {
+    expect(isHostNodeVersionCompatible(version)).toBe(false);
   });
 
   it.each([
-    ['22.19.0', true],
-    ['22.20.1', true],
-    ['24.0.0', true],
-    ['25.1.0', true],
-    ['24.0.0-rc.1', true],
-    ['22.19.0-rc', true],
-  ])('accepts compatible host %s', (version, expected) => {
-    expect(isHostNodeVersionCompatible(version)).toBe(expected);
+    '22.19.0',
+    '22.20.1',
+    '24.0.0',
+    '25.1.0',
+    'v24.0.0',
+    '24.0.0+vendor.1',
+  ])('accepts stable compatible host %s', (version) => {
+    expect(isHostNodeVersionCompatible(version)).toBe(true);
   });
 });
 
-// ── runDshPreflight ─────────────────────────────────────────────────────
-
 describe('runDshPreflight', () => {
-  const validVersion = TESTED_DSH_VERSION + '\n';
+  const validVersion = `${TESTED_DSH_VERSION}\n`;
   const validHelp = [
     'Usage: dsh --profile headless [options] [task...]',
     'Answer one task, print the final assistant message, and exit.',
@@ -205,17 +189,19 @@ describe('runDshPreflight', () => {
     '  - id: agent-default-model',
   ].join('\n');
 
-  it('succeeds when version and contracts match', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
-    const result = await runDshPreflight('dsh', {
-      probeVersion: async () => validVersion,
-      probeHelp: async () => validHelp,
-      probeConfig: async () => validConfig,
-      hostNodeVersion: '22.19.0',
-    });
+  const validProbes = {
+    probeVersion: async () => validVersion,
+    probeHelp: async () => validHelp,
+    probeConfig: async () => validConfig,
+  };
 
-    expect(result).toEqual({
+  it('succeeds when the stable host, version, and contracts match', async () => {
+    await expect(
+      runDshPreflight('dsh', {
+        ...validProbes,
+        hostNodeVersion: '22.19.0',
+      }),
+    ).resolves.toEqual({
       testedVersion: TESTED_DSH_VERSION,
       actualVersion: TESTED_DSH_VERSION,
       nodeRequirement: DSH_NODE_REQUIREMENT,
@@ -229,26 +215,20 @@ describe('runDshPreflight', () => {
   });
 
   it('fails fast on version mismatch', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
     await expect(
       runDshPreflight('dsh', {
+        ...validProbes,
         probeVersion: async () => '0.2.0\n',
-        probeHelp: async () => validHelp,
-        probeConfig: async () => validConfig,
         hostNodeVersion: '22.19.0',
       }),
     ).rejects.toThrow(DshVersionGateError);
   });
 
-  it('preserves the detected version when the help contract fails', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
+  it('preserves the detected version when a later contract fails', async () => {
     try {
       await runDshPreflight('dsh', {
-        probeVersion: async () => validVersion,
+        ...validProbes,
         probeHelp: async () => 'Usage: dsh [options]',
-        probeConfig: async () => validConfig,
         hostNodeVersion: '22.19.0',
       });
       throw new Error('should have thrown');
@@ -260,108 +240,67 @@ describe('runDshPreflight', () => {
     }
   });
 
-  it('fails when config contract is missing required plugin', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
+  it('fails when config contract is missing a required plugin', async () => {
     await expect(
       runDshPreflight('dsh', {
-        probeVersion: async () => validVersion,
-        probeHelp: async () => validHelp,
+        ...validProbes,
         probeConfig: async () => '- id: headless-runner',
         hostNodeVersion: '22.19.0',
       }),
     ).rejects.toThrow(DshCapabilityError);
   });
 
-  it('fails fast on incompatible host Node before any probe runs', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
-    const probeSpy = async () => {
-      throw new Error('probe should not be called');
+  it('rejects an incompatible host before any dsh probe runs', async () => {
+    let probeCalls = 0;
+    const forbiddenProbe = async () => {
+      probeCalls += 1;
+      return '';
     };
     await expect(
       runDshPreflight('dsh', {
-        probeVersion: probeSpy,
-        probeHelp: probeSpy,
-        probeConfig: probeSpy,
+        probeVersion: forbiddenProbe,
+        probeHelp: forbiddenProbe,
+        probeConfig: forbiddenProbe,
         hostNodeVersion: '20.19.0',
+      }),
+    ).rejects.toThrow(DshHostNodeError);
+    expect(probeCalls).toBe(0);
+  });
+
+  it('admits an exact acknowledged stable host without relabeling it compatible', async () => {
+    const warnings: string[] = [];
+    const result = await runDshPreflight('dsh', {
+      ...validProbes,
+      hostNodeVersion: '20.19.0',
+      allowHostNode: '20.19.0',
+      onWarn: (warning) => warnings.push(warning),
+    });
+
+    expect(result.hostNodeCompatible).toBe(false);
+    expect(result.hostNodeBypassed).toBe(true);
+    expect(warnings.join('\n')).toContain('TEKON_DSH_ALLOW_HOST_NODE');
+  });
+
+  it('does not bypass with a non-matching host acknowledgement', async () => {
+    await expect(
+      runDshPreflight('dsh', {
+        ...validProbes,
+        hostNodeVersion: '20.19.0',
+        allowHostNode: '22.18.0',
       }),
     ).rejects.toThrow(DshHostNodeError);
   });
 
-  it('bypasses host Node check with exact-match escape hatch and warns', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
-    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
-    process.env.TEKON_DSH_ALLOW_HOST_NODE = '20.19.0';
-    const warnings: string[] = [];
-    try {
-      const result = await runDshPreflight('dsh', {
-        probeVersion: async () => validVersion,
-        probeHelp: async () => validHelp,
-        probeConfig: async () => validConfig,
-        hostNodeVersion: '20.19.0',
-        onWarn: (m) => warnings.push(m),
-      });
-      expect(result.hostNodeCompatible).toBe(true);
-      expect(result.hostNodeBypassed).toBe(true);
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings[0]).toContain('TEKON_DSH_ALLOW_HOST_NODE');
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
-      } else {
-        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
-      }
-    }
-  });
-
-  it('does not bypass with a non-matching escape hatch value', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
-    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
-    process.env.TEKON_DSH_ALLOW_HOST_NODE = '1';
-    try {
+  it.each(['abc', '22.19.0-rc.1', '24.0garbage'])(
+    'does not admit an unparseable or prerelease host even with exact acknowledgement: %s',
+    async (hostNodeVersion) => {
       await expect(
         runDshPreflight('dsh', {
-          probeVersion: async () => validVersion,
-          probeHelp: async () => validHelp,
-          probeConfig: async () => validConfig,
-          hostNodeVersion: '20.19.0',
+          ...validProbes,
+          hostNodeVersion,
+          allowHostNode: hostNodeVersion,
         }),
       ).rejects.toThrow(DshHostNodeError);
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
-      } else {
-        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
-      }
-    }
-  });
-
-  it('bypasses unparseable host version with exact-match escape hatch', async () => {
-    const { runDshPreflight } =
-      await import('../../src/runtime/dsh-bridge-probe.js');
-    const originalEnv = process.env.TEKON_DSH_ALLOW_HOST_NODE;
-    process.env.TEKON_DSH_ALLOW_HOST_NODE = 'abc';
-    const warnings: string[] = [];
-    try {
-      const result = await runDshPreflight('dsh', {
-        probeVersion: async () => validVersion,
-        probeHelp: async () => validHelp,
-        probeConfig: async () => validConfig,
-        hostNodeVersion: 'abc',
-        onWarn: (m) => warnings.push(m),
-      });
-      expect(result.hostNodeCompatible).toBe(true);
-      expect(result.hostNodeBypassed).toBe(true);
-      expect(warnings.length).toBeGreaterThan(0);
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.TEKON_DSH_ALLOW_HOST_NODE;
-      } else {
-        process.env.TEKON_DSH_ALLOW_HOST_NODE = originalEnv;
-      }
-    }
-  });
+    },
+  );
 });
