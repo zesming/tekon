@@ -152,3 +152,26 @@ reviewer 代码快照：`ebd040e44f66e26c69af449584eb29a699d52726`。
 本轮改变 DSH preflight 的边界语义和 Web health 真实性，但仍属于尚未发布的 v0.20.4 收敛，不单独 bump。
 
 PR #11 已超过百个提交和约 180 个文件，建议最终 squash merge。合并前必须确认最终 PR Head 的 Core 与 CI 都为 `completed/success`。本方案不执行 merge、release、deploy 或 ruleset 修改。
+
+## 7. 冻结项独立 job 拆分（2026-09-02 用户决策）
+
+用户决策：剩余冻结项拆为独立 GitHub issue（job）跟踪，按 §13 顺序推进；`main` 分支保护暂缓。Tracking issue：#27。
+
+| 报告 ID | Issue | §13 顺序 | 备注 |
+| --- | --- | --- | --- |
+| P0-ARCH-01 | #16 | 2 | single-owner daemon + repo lock |
+| P0-ARCH-02 | #15 | 3 | executor 隔离 + restart contract，依赖 #16 |
+| P0-DATA-01 | #13 | 4 | authoritative Session / outbox + inbox，依赖 #15 |
+| P0-PRODUCT-01a | #14 | 5 | DeepSeek ACP vertical slice，与 #17 协同 |
+| P0-PRODUCT-01b | #19 | 6 | Collaborate → Deliver，依赖 #14 |
+| P1-PLAN-01 | #20 | 7 | canonical RunPlan authority |
+| P1-SESSION-01 | #18 | 8 | 历史导出 + 上下文预算，依赖 #13 |
+| P1-DSH-01 | #17 | 9 | alpha.4 验证，阻塞（需 dsh 环境/key） |
+| P1-DSH-02 | #22 | 9 | 逃生口审计 |
+| P1-A11Y-01 | #21 | 10 | 全站 a11y 验收 |
+| P1-GOV-01 | #24 | 1 | 暂缓（用户决策，人工 GitHub 配置） |
+| P1-PROCESS-01 | #23 | 贯穿 | PR 体量治理 |
+| P2-CODE-01 | #26 | — | lint gate + format debt |
+| P2-CODE-02 | #25 | — | command-gateway 拆分 |
+
+每个 job 独立 PR，测试先行，reviewer 循环评审至放行；架构方向变更回到 #27 讨论。
