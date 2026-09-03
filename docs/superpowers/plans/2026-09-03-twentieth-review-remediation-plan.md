@@ -45,6 +45,7 @@
 4. **SessionComposer 交互完备与测试命名合规**：补齐缺摘要分支重试按钮，补全真实 Chromium 失败后重试与摘要重新拉取断言，规范 e2e 文件命名，Web 端到端测试由 42 项增至至少 44 项。
 5. **事实与追踪对齐**：解耦 rc.1 tag 与 master 分支并固定 commit 引用，确立基于隔离 npm 安装与 production build 的 Wrapped L2 复测断言标准，更新 #17、#27、#32，梳理 #13–#33 职责并补全遗漏的 #23。
 6. **四包 lockstep 升级**：全仓四包版本统一提升至 `0.20.6`，同步更新变更日志（使用 `## v0.20.6` 标题）与相关文档。
+7. **响应式证据常驻化**：将四档默认正常态以及 320px/390px 动态高风险态的几何检查固化为 4 个 Chromium 用例，使 Web 端到端测试总数达到 48 项；据 RED 修复 Advanced 高级设置三列挤压与 dsh 选项裁切，临时截图只用于本轮目视检查，验后删除。
 
 ---
 
@@ -119,12 +120,14 @@
   - 将 `packages/web/__tests__/e2e/session-composer-admission.test.ts` 重命名为 `packages/web/__tests__/e2e/session-composer-admission.e2e.test.ts`；
   - _原因界定_：重命名理由仅为严格遵守 `AGENTS.md` 约定的 `*.e2e.test.ts` 文件命名规范，不声称当前 Web unit lane 存在双跑（因 Web unit 配置已将 `__tests__/e2e/**` 排除）；
   - _范围界定_：验收标准仅要求本轮新增与重命名的文件合规，不强制重构既有遗留 Web e2e 测试文件。补充上述 2 个新场景后，Web 端到端测试由 42 项增至至少 44 项。
+- **四视口常驻回归**：`responsive-run-surfaces.e2e.test.ts` 在 320px、390px、700px、1440px 下打开 SessionComposer 与 StartRunForm，检查 document/body 横溢、可见控件越界、控件重叠与关键文本横向裁切；4 个矩阵用例加入后 Web 端到端总数为 48 项。
 
 ### 2.4 UI 边界控制（克制设计原则）
 
 - **不增加不可达的默认网络确认控件**：默认 Session 启动模式为 `mode: 'workflow'`，在当前系统配置下并不请求非受限网络访问（unrestricted network）。增加网络确认对话框或复选框属于当前阶段不可达的冗余代码，坚决不做。
 - **不进行过早的跨组件 Hook 抽取**：虽然 `SessionComposer` 与 `StartRunForm` 在启动准入与单飞逻辑上有相似性，但在单一 Runtime 权威（#16）与规范 RunPlan 准入（#31）尚未成型前，抽取大而全的表单 Hook 会过早锁定接口，带来二次重构成本。
 - **UI 重复逻辑保留为 Backlog 跟踪项**：两套启动界面的准入状态机重复作为 P2 待办继续在 Issue 中跟踪，当前通过分层测试保障各自的 fail-closed。
+- **320px 动态态收口**：Advanced 高级设置内部移除强制三列 inline 网格，恢复 `.form-row` 的自适应列；闭合 dsh 选项缩短为 `dsh-headless（仅 Goal）`，完整 experimental、仅 Goal 与联网不受限边界继续由相邻帮助和警告承担。
 
 ### 2.5 DeepSeek Harness 事实基线与官方资料引用
 
@@ -260,7 +263,14 @@
   - 用例 2（缺少 planDigest 时点击重试重新拉取计划）：模拟计划缺少摘要时呈现重试按钮，点击后必须断言 `workflow.plan` 的 RPC 请求计数增加，返回正常 digest，且提交按钮恢复为可用状态。
 - 重命名与扩充后，Web 端到端测试由 42 项增至至少 44 项。
 
-### 3.5 版本、变更日志与文档同步
+### 3.5 StartRunForm 与四视口常驻回归
+
+- `StartRunForm.tsx` 的高级设置移除 inline 三列覆盖，dsh 选项标签缩短为 `dsh-headless（仅 Goal）`；同步更新现有精确标签断言；
+- `responsive-run-surfaces.e2e.test.ts` 固化 320px、390px、700px、1440px 四档默认正常态，并在 320px/390px 覆盖缺摘要重试和 Advanced dsh 联网警告/高级设置展开态；
+- 对 document/body 横溢、关键可见控件边界、控件/文字交叉重叠、文本节点相互重叠、裁切祖先和表单当前文本宽度做结构化断言，并锁定关键控件与最低采样数；
+- 定向矩阵 4/4 通过后，Web Chromium 全量由 44 项增至 48 项。
+
+### 3.6 版本、变更日志与文档同步
 
 - **四包 Lockstep 升级**：根目录与 `core`、`cli`、`web` 四个 `package.json` 版本统一递增至 `0.20.6`；
 - **CHANGELOG.md**：新增 `## v0.20.6` 条目（规范标题格式），详细说明 DSH preflight 隔离临时 probe workspace、Windows 兼容性防御变量、SessionComposer 缺摘要原地重试与端到端测试命名规范化；
@@ -300,7 +310,7 @@
    → Core 隔离测试集全部断言转绿 (GREEN)
 2. 实现 SessionComposer.tsx 重试按钮:
    - 补充 plan && !planDigest 状态下的重试按钮与 refetchPlan 绑定
-   → Web Chromium e2e 测试全部转绿 (GREEN，共至少 44 项通过)
+   → Web Chromium e2e 测试全部转绿 (GREEN，共 48 项通过，含四视口矩阵 4/4)
 ```
 
 ---
@@ -360,12 +370,12 @@
 | **定向单元测试（RED→GREEN）** | `pnpm --filter @tekon/core test dsh-bridge-probe-isolation` | 验证工作区 cwd 隔离、ambient 凭据切断、受控 callerDir、相对路径绝对化、Windows 防御变量、分阶段 ENOENT、双故障/safe warning sink 与 3 类 probe 组合 |
 | **Core 端到端测试**           | `pnpm --filter @tekon/core test:e2e`                        | 确保 8 个 Core e2e 测试文件、26 项测试全量通过（Core26 基线）                                                                                       |
 | **CLI 端到端测试**            | `pnpm --filter @tekon/cli test:e2e`                         | 确保 3 个 CLI e2e 测试文件、8 项测试全量通过（CLI8 基线）                                                                                           |
-| **Web Chromium 端到端**       | `pnpm --filter @tekon/web test:e2e`                         | 确保至少 44 项 Playwright 浏览器用例全绿（含失败重试、摘要重试与规范命名文件）                                                                      |
+| **Web Chromium 端到端**       | `pnpm --filter @tekon/web test:e2e`                         | 确保 48 项 Playwright 浏览器用例全绿（含失败重试、摘要重试与四视口常驻矩阵）                                                                        |
 | **全仓单元与集成回归**        | `pnpm test`                                                 | 全量 144+ 测试文件、1541+ 项用例通过，无意外回归                                                                                                    |
 | **静态类型与规范检查**        | `pnpm lint && pnpm typecheck`                               | 全仓无 TypeScript 类型错误；说明：当前 lint 脚本主要由 `tsc -p tsconfig.json --noEmit` 执行，不声称 ESLint                                          |
 | **生产构建验证**              | `pnpm build`                                                | 全包构建产物正常生成，无打包报错                                                                                                                    |
 | **安全依赖审计**              | `pnpm audit --prod`                                         | 生产依赖无中高危已知安全漏洞                                                                                                                        |
-| **响应式多视口视觉验收**      | Playwright Viewport Matrix (320px / 390px / 700px / 1440px) | 验证 SessionComposer 与 StartRunForm 无文字截断、按钮无换行错位、无横向滚动条；说明：当前自动化覆盖 390/700/1440px，320px 为专用/人工视口检测       |
+| **响应式多视口视觉验收**      | Playwright Viewport Matrix (320px / 390px / 700px / 1440px) | 四档验证两个入口默认正常态；320px/390px 加测缺摘要重试与 dsh 警告/高级设置展开态；检查无横溢、关键控件越界/重叠和文本横向裁切                    |
 | **多角色 Review**             | 代码/测试审查、技术架构审查、文档编辑审查                   | 独立最高思考等级审查，达成 `hasMustFix=false`                                                                                                       |
 | **远端 CI 状态绑定**          | GitHub Actions Workflow (`core.yml` & `ci.yml`)             | 提交推送到远端后，按实际 Actions Run 绑定终态 `completed/success`                                                                                   |
 
@@ -426,9 +436,9 @@
 3. **ENOENT 错误契约完整**：版本探测阶段不存在命令时抛出 `code === 'ENOENT'`，`path` 为原 bare command；配置阶段缺失时正确包装 `DshCapabilityError`；两阶段清理逻辑均被执行。
 4. **双故障与 Warning 吸收**：主异常或主结果不被 cleanup 异常覆盖；`onWarn` 回调自身崩溃被 safe warning sink 吸收。
 5. **SessionComposer 交互闭环**：缺少 planDigest 时界面渲染“重试”按钮，点击重新请求计划；首次提交失败后用户可直接再次点击重试。
-6. **测试套件规范与 e2e 命名合规**：本轮新增与重命名的 e2e 测试文件均以 `*.e2e.test.ts` 命名，Web 端到端测试总数达到至少 44 项。
+6. **测试套件规范与 e2e 命名合规**：本轮新增与重命名的 e2e 测试文件均以 `*.e2e.test.ts` 命名，Web 端到端测试总数达到 48 项。
 7. **全量门禁全绿**：`pnpm test`、`pnpm lint`（`tsc -p tsconfig.json --noEmit`）、`pnpm typecheck`、`pnpm build`、`pnpm audit --prod` 以及 Core/CLI/Web 各自的 `test:e2e` 全部无错误通过。
-8. **响应式布局无横溢**：320px、390px、700px 与 1440px 视口下无任何元素横向溢出或文本重叠。
+8. **响应式布局无横溢**：320px、390px、700px 与 1440px 的被测默认正常态，以及 320px/390px 的缺摘要重试和 dsh 警告/高级设置展开态，无页面横溢、关键控件越界/重叠或文本横向裁切。
 9. **无占位内容**：方案、代码与报告中无任何 `TBD`、`TODO`、`FIXME` 或 placeholder。
 10. **版本一致性**：四包版本号严格统一为 `0.20.6`。
 11. **HTML 与 Markdown 双向同步**：HTML 文件样式精简、自包含且与 Markdown 内容严格一致。
@@ -474,7 +484,7 @@
   └── current.md 消除冲突规则并链接双入口
 
 阶段 5: 全量验证、多角色 Review 与 CI 终态绑定
-  └── 代码与文档就绪后执行最终 pnpm test、分包 test:e2e、Playwright 全量回归 (>= 44 tests)
+  └── 代码与文档就绪后执行最终 pnpm test、分包 test:e2e、Playwright 全量回归 (48 tests)
   └── 执行 pnpm lint / typecheck / build / audit 全门禁
   └── 代码审查、技术方案审查与文档编辑审查达成 hasMustFix=false
   └── 推送后按实际产生的 commit / Actions ID 绑定最新 GitHub Actions Core / CI 终态

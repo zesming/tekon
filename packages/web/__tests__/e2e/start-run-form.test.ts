@@ -70,7 +70,9 @@ test('StartRunForm exposes keyboard disclosure, renders execution plan preview, 
   await expect(modeSelect).toHaveValue('goal');
   await expect(templateSelect).toBeDisabled();
   await expect(profileSelect).toBeDisabled();
-  await expect(helpText).toContainText('dsh-headless 仅可在此模式使用');
+  await expect(helpText).toContainText(
+    'dsh-headless 当前为实验性，仅可在此模式使用',
+  );
 
   // T2: Unrestricted network warning appears and submit button is blocked until acknowledged
   const networkAlert = page.getByRole('alert');

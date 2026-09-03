@@ -26,12 +26,12 @@ type RunMode = 'workflow' | 'goal';
 
 const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
 
-/** Human-facing labels; experimental and synthetic providers carry caveats inline. */
+/** Human-facing labels; synthetic caveats stay inline, while dsh maturity is in adjacent help. */
 const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
   codex: 'codex',
   'claude-code': 'claude-code',
   mock: 'mock（仅测试/演示）',
-  'dsh-headless': 'dsh-headless（experimental · 仅 Goal）',
+  'dsh-headless': 'dsh-headless（仅 Goal）',
 };
 
 /**
@@ -426,7 +426,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           </div>
           <p id="run-mode-help" className="text-sm text-muted">
             {mode === 'goal'
-              ? 'Goal 是单节点一次性任务，不进入 Gate、Artifact 或交付链路。dsh-headless 仅可在此模式使用，且网络访问不受 Tekon 限制。'
+              ? 'Goal 是单节点一次性任务，不进入 Gate、Artifact 或交付链路。dsh-headless 当前为实验性，仅可在此模式使用，且网络访问不受 Tekon 限制。'
               : '受控交付会执行模板中的角色、Artifact 与 Gate；dsh-headless 不支持此模式。'}
           </p>
           {agent === 'mock' ? (
@@ -693,10 +693,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             >
               ⚙ 高级设置（超时与工作区）
             </summary>
-            <div
-              className="form-row mt-2"
-              style={{ gridTemplateColumns: '1fr 1fr 1fr', marginTop: '10px' }}
-            >
+            <div className="form-row mt-2" style={{ marginTop: '10px' }}>
               <div className="form-group">
                 <label className="form-label" htmlFor="start-run-timeout">
                   超时 (ms)

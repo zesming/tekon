@@ -338,11 +338,14 @@ test.describe('Advanced Run Admission & Single Submit', () => {
     const selectedDshOptionText = await agentSelect.evaluate(
       (el: HTMLSelectElement) => el.options[el.selectedIndex]?.text.trim(),
     );
-    expect(selectedDshOptionText).toBe(
-      'dsh-headless（experimental · 仅 Goal）',
-    );
+    expect(selectedDshOptionText).toBe('dsh-headless（仅 Goal）');
     await expect(modeSelect).toHaveValue('goal');
-    await expect(page.locator('#run-mode-help')).toContainText(
+    const modeHelp = page.locator('#run-mode-help');
+    await expect(modeHelp).toBeVisible();
+    await expect(modeHelp).toContainText(
+      'dsh-headless 当前为实验性',
+    );
+    await expect(modeHelp).toContainText(
       '网络访问不受 Tekon 限制',
     );
     await expect(page.getByRole('alert')).toContainText('联网不受限');

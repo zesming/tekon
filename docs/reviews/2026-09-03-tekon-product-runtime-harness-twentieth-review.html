@@ -258,7 +258,7 @@
 <li>issue 已登记不等于问题已关闭；</li>
 <li>小而可逆的安全/UX 缺陷可以直接修复，公共协议、迁移和恢复语义必须拆独立 PR。</li>
 </ol>
-<p>Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没有真实 <code>dsh@0.1.2-rc.1</code>、API key、Firefox/WebKit 或屏幕阅读器环境。补充整改阶段已在 Node 22.19.0 上完成官方 npm rc.1 的无凭据 Wrapped L2，并扩充 Chromium 到 44 项；仍不声称完成真实模型 L3、Firefox/WebKit、像素级视觉审计或真实辅助技术走查。</p>
+<p>Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没有真实 <code>dsh@0.1.2-rc.1</code>、API key、Firefox/WebKit 或屏幕阅读器环境。补充整改阶段已在 Node 22.19.0 上完成官方 npm rc.1 的无凭据 Wrapped L2，将 Chromium 扩充到 48 项，并为两个运行入口补充 320px、390px、700px、1440px 常驻几何回归；仍不声称完成真实模型 L3、Firefox/WebKit、长期像素快照基线、真实设备或真实辅助技术走查。</p>
 <h2>3. 自动化与代码门</h2>
 <h3>3.1 用户 v0.20.5 整改 Head</h3>
 <p><code>dddc0a53be717b276eed80bdb58fe4bcb7095fa2</code>：</p>
@@ -315,9 +315,9 @@
 <td><code>shapePath</code> 存在时，草案、需求批准、plan 存在与 planApproved 均进入准入。权威 RunPlan/admission transaction 仍未闭环。</td>
 </tr>
 <tr>
-<td>390/700px 高级表单</td>
+<td>320/390/700px 高级表单</td>
 <td>基本关闭</td>
-<td>选项、高级设置和操作按钮改为单列/全宽，有 Chromium viewport 覆盖；无真实设备、视觉快照和屏幕阅读器证据。</td>
+<td>主选项在窄屏单列，高级设置改为自适应网格，dsh 闭合标签再次缩短；常驻 Chromium 矩阵覆盖 320/390/700/1440px，本轮临时截图已目视检查；无真实设备、长期视觉快照和屏幕阅读器证据。</td>
 </tr>
 <tr>
 <td>Probe telemetry hard opt-out</td>
@@ -471,8 +471,7 @@ DSH_TELEMETRY_DISABLED=1
 </li>
 <li><p><strong>辅助技术证据局部</strong><br>当前只有 Chromium 和少数 ARIA 断言，不能外推为 NVDA、JAWS、VoiceOver、Firefox、WebKit、200%/400% 缩放、forced-colors、reduced-motion 已通过。</p>
 </li>
-<li><p><strong>没有新的视觉走查证据</strong><br>本轮无法访问独立部署并截图，因此 390/700px 结论是布局代码和 Chromium 行为合同，不是像素级/真实设备验收。</p>
-</li>
+<li><p><strong>视觉证据仍有边界</strong>：本轮视觉证据限于临时截图目视检查，验后删除；常驻证据是可重复的几何断言，不等同于长期像素快照基线、真实设备或辅助技术验收，详见 15.3。</p></li>
 </ol>
 <h2>8. Runtime 与整体架构评审</h2>
 <h3>8.1 P0：repo 级 single-owner Runtime 仍缺失</h3>
@@ -824,10 +823,12 @@ CLI / Web 两套 composition root
 <li>带路径分隔符的相对命令在切换 cwd 前按受控 invocation cwd 解析为绝对路径；裸命令继续由 <code>PATH</code> 解析。default probe 使用隔离参数，custom probe 保持接收原始命令；三项全 custom 时不创建 workspace。</li>
 <li>成功、合同失败和命令缺失均进入 <code>finally</code> 清理。Version 阶段命令缺失保留原生 <code>ENOENT</code>；已得到版本后的 Config/Help 失败继续包装为带 <code>actualVersion</code> 的 <code>DshCapabilityError</code>。清理失败只进入安全 warning sink，不覆盖主结果或主异常。</li>
 <li>默认 Session Composer 的 <code>plan &amp;&amp; !planDigest</code> 分支增加原地“重试”；现有 <code>project.run</code> latch 在首次失败后释放的行为增加真实 Chromium 证明。e2e 文件按仓库规范改名为 <code>session-composer-admission.e2e.test.ts</code>。</li>
+<li>新增常驻 <code>responsive-run-surfaces.e2e.test.ts</code>，四档均检查 SessionComposer 与 StartRunForm 默认正常态；320px/390px 另检查 Session 缺摘要重试态及 Advanced dsh 联网警告/高级设置展开态。审计基于实际文本节点渲染矩形、裁切祖先、表单值宽度及控件/文字交叉重叠，并锁定关键控件与最低采样数，避免空页面假通过。</li>
+<li>新测试的 RED 暴露出 320px 下高级设置的 inline 三列布局和 dsh 闭合选项过长；高级设置恢复使用 <code>.form-row</code> 自适应网格，选项缩短为 <code>dsh-headless（仅 Goal）</code>，实验性、仅 Goal 与联网不受限知情确认仍保留在相邻帮助与警告中。</li>
 </ul>
 <h3>15.3 TDD 与本地自动化证据</h3>
 <p>Core 先增加测试并得到预期 RED：14 个 focused 用例中 11 个失败，失败集中在相对命令 <code>ENOENT</code>、宿主 DSH home/caller cwd 仍被继承、以及 cleanup seam 尚不存在。实现后同一套 14/14 GREEN；相关 DSH probe/adapter 回归为 89/89。</p>
-<p>Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试”按钮而 RED，组件最小改动后 focused 3/3 GREEN。完整本地结果：</p>
+<p>Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试”按钮而 RED，组件最小改动后 focused 3/3 GREEN。最终又将四视口检查固化为 4 个常驻 Chromium 用例；增强采样和动态态后先在 320px 检出两项真实裁切，最小 UI 修复后定向 4/4、相关 Advanced admission 9/9、Web 全量 48/48。完整本地结果：</p>
 <table>
 <thead>
 <tr>
@@ -853,13 +854,14 @@ CLI / Web 两套 composition root
 </tr>
 <tr>
 <td>Web Chromium</td>
-<td>44 passed</td>
+<td>48 passed</td>
 </tr>
 <tr>
 <td><code>pnpm build</code> / Core typecheck</td>
 <td>success</td>
 </tr>
 </tbody></table>
+<p>定向命令：<code>pnpm --filter @tekon/web build &amp;&amp; pnpm --filter @tekon/web exec playwright test __tests__/e2e/responsive-run-surfaces.e2e.test.ts</code>。四档均打开默认 SessionComposer 和 Advanced StartRunForm；320px/390px 额外构造缺摘要重试以及 dsh 联网警告/高级设置展开态。断言 document/body 不横溢、关键可见表单控件不越界或相互覆盖、实际文本片段不被视口或裁切祖先截断、输入与选项当前文本宽度可容纳；320/390/700/1440px 共 4/4 通过。本轮还人工查看了两个入口的 8 张临时截图和报告 HTML 的 4 张视口截图，结论一致；截图验后删除，未把一次性产物冒充长期视觉回归基线。</p>
 <p>远端代码快照 <code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code> 的 Core #420 / CI #329 均在 attempt 1 <code>completed/success</code>，7 checks 全部通过。</p>
 <p>3 个 skipped 仍是需要显式 <code>DSH_CLI_PATH</code> 的常驻 L2 合同用例；本节的官方 rc.1 Wrapped L2 另行在隔离临时安装中执行并记录如下。</p>
 <h3>15.4 官方 rc.1 Wrapped L2</h3>
@@ -898,6 +900,7 @@ ambient homes changed = false
 <li><a href="../../packages/core/src/runtime/dsh-headless-adapter.ts">DSH Headless Adapter</a></li>
 <li><a href="../../packages/web/src/client/components/sessions/SessionComposer.tsx">默认 Session Composer</a></li>
 <li><a href="../../packages/web/src/client/components/runs/StartRunForm.tsx">Advanced StartRunForm</a></li>
+<li><a href="../../packages/web/__tests__/e2e/responsive-run-surfaces.e2e.test.ts">运行入口四视口 e2e</a></li>
 <li><a href="../../packages/web/src/client/components/runs/start-run-submit-state.ts">Advanced submit state</a></li>
 <li><a href="../../packages/web/src/server/api/routers/project.ts">Project Router</a></li>
 <li><a href="../../packages/core/src/session/session-service.ts">SessionService</a></li>

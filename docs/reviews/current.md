@@ -12,7 +12,7 @@
 - **用户整改自动化**：Core #416、CI #325 为 `completed/success`
 - **Reviewer 行为修复自动化**：Core #417、CI #326 为 `completed/success`
 - **当前权威远端基线自动化**：Core #419、CI #328 为 `completed/success`
-- **v0.20.6 本地自动化**：144 files / 1551 passed / 3 skipped；Core e2e 26、CLI e2e 8、Web Chromium 44；官方 rc.1 Wrapped L2 通过
+- **v0.20.6 本地自动化**：144 files / 1551 passed / 3 skipped；Core e2e 26、CLI e2e 8、Web Chromium 48（含四视口矩阵 4/4）；官方 rc.1 Wrapped L2 通过
 - **v0.20.6 远端自动化**：Core #420（run `33747232853`）、CI #329（run `33747232722`）均为 attempt 1 `completed/success`，7 checks 全部通过
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
@@ -46,6 +46,8 @@ v0.20.5 的以下整改真实成立：
 
 5. **默认 Session 缺摘要重试**
    `workflow.plan` 返回但缺少 digest 时继续阻止启动，并提供原地重试；第二次计划请求恢复 digest 后提交按钮重新可用。
+
+6. **运行入口四视口常驻回归**：`responsive-run-surfaces.e2e.test.ts` 在 320px、390px、700px、1440px 下检查两个入口的默认正常态，并在 320px/390px 追加 Session 缺摘要重试态及 Advanced dsh 联网警告/高级设置展开态；断言页面横溢、关键控件越界/重叠和文本横向裁切，4/4 通过。该测试先检出高级设置三列挤压和 dsh 选项裁切，修复后转绿。另对两个入口的 8 张临时截图及报告 HTML 四档截图完成目视检查，验后删除，不作为长期像素快照基线。
 
 ## 已关闭或基本关闭
 

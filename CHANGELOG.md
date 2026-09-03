@@ -8,6 +8,7 @@
 
 - **默认 Session 缺摘要可原地恢复**：执行计划返回但缺少 `digest` 时，界面继续 fail-closed 阻止提交，同时提供“重试”按钮重新请求计划；摘要恢复后提交按钮重新可用。
 - **默认 Session 失败后可重试证据**：新增真实 Chromium 场景，验证首次 `project.run` 返回错误后同步 latch 被释放，第二次提交只再发起一次请求并成功进入 Session 详情页。
+- **窄屏 Advanced Run 动态态可读**：高级设置展开后改用自适应网格，超时输入与脏工作区选项不再挤入三列；dsh 闭合选项缩短为 `dsh-headless（仅 Goal）`，实验性、仅 Goal 与网络风险仍由相邻说明展示。
 
 ### 工程与合同
 
@@ -16,6 +17,7 @@
 - **环境与清理闭环**：宿主 `DSH_HOME`/`DSH_AGENTS_HOME` 不再透传，补充 `SystemDrive`、`windir`、`WINDIR` 防御性兼容值；成功、合同失败与命令缺失均在 `finally` 清理。清理失败只经安全 warning sink 报告，不覆盖主结果或主异常；版本阶段的原生 `ENOENT` 和后续阶段的 `DshCapabilityError` 语义保持不变。
 - **官方 rc.1 Wrapped L2**：在 Node 22.19.0 上通过 Tekon 生产构建和 delegating recorder 调用 npm `@deepseek-ai/dsh@0.1.2-rc.1`（integrity `sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA==`）。Version/Config/Help 分别为 51ms/69ms/556ms，5 项插件行与 Help 锚点通过，版本事实保持 incompatible + explicitly bypassed，敏感哨兵未进入实际命令，临时 root 完成后已删除。L3 真实模型调用仍未开展。
 - **测试规范**：Web e2e 文件改为 `session-composer-admission.e2e.test.ts`；Core 增加真实 caller cwd、ambient DSH home、混合 probe、相对命令、分阶段 `ENOENT`、Windows 变量和清理双故障覆盖。
+- **响应式运行入口回归**：新增常驻 `responsive-run-surfaces.e2e.test.ts`，四档 Chromium 视口均检查 SessionComposer 与 StartRunForm 默认正常态的页面横溢、控件越界/重叠和文本横向裁切；320px/390px 另覆盖缺摘要重试、dsh 联网警告和高级设置展开态。矩阵 4/4 通过，Web Chromium 全量 48 项。
 
 ## v0.20.5
 

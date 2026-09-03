@@ -64,7 +64,7 @@ v0.20.5 对上一轮发现做了实质整改，重点包括：
 6. issue 已登记不等于问题已关闭；
 7. 小而可逆的安全/UX 缺陷可以直接修复，公共协议、迁移和恢复语义必须拆独立 PR。
 
-Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没有真实 `dsh@0.1.2-rc.1`、API key、Firefox/WebKit 或屏幕阅读器环境。补充整改阶段已在 Node 22.19.0 上完成官方 npm rc.1 的无凭据 Wrapped L2，并扩充 Chromium 到 44 项；仍不声称完成真实模型 L3、Firefox/WebKit、像素级视觉审计或真实辅助技术走查。
+Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没有真实 `dsh@0.1.2-rc.1`、API key、Firefox/WebKit 或屏幕阅读器环境。补充整改阶段已在 Node 22.19.0 上完成官方 npm rc.1 的无凭据 Wrapped L2，将 Chromium 扩充到 48 项，并为两个运行入口补充 320px、390px、700px、1440px 常驻几何回归；仍不声称完成真实模型 L3、Firefox/WebKit、长期像素快照基线、真实设备或真实辅助技术走查。
 
 ## 3. 自动化与代码门
 
@@ -110,7 +110,7 @@ Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没�
 | Advanced Run 纯 submit-state | 基本关闭                 | token、plan loading/error、draft approval、digest、network acknowledgement 和 mutation pending 由纯函数统一判定，测试覆盖优先级。服务端仍无 request idempotency。 |
 | Advanced Run 同步单飞        | 关闭当前组件缺陷         | `useRef` 在 mutation state 更新前锁住第二次激活；真实 Chromium 证明同 turn 只发一个 `project.run`。                                                               |
 | Draft plan approval 门       | 基本关闭                 | `shapePath` 存在时，草案、需求批准、plan 存在与 planApproved 均进入准入。权威 RunPlan/admission transaction 仍未闭环。                                            |
-| 390/700px 高级表单           | 基本关闭                 | 选项、高级设置和操作按钮改为单列/全宽，有 Chromium viewport 覆盖；无真实设备、视觉快照和屏幕阅读器证据。                                                          |
+| 320/390/700px 高级表单       | 基本关闭                 | 主选项在窄屏单列，高级设置改为自适应网格，dsh 闭合标签再次缩短；常驻 Chromium 矩阵覆盖 320/390/700/1440px，本轮临时截图已目视检查；无真实设备、长期视觉快照和屏幕阅读器证据。 |
 | Probe telemetry hard opt-out | 本轮补全后关闭直接缺陷   | 正式 Run 与 metadata probe 均固定 `DSH_TELEMETRY_DISABLED=1`；官方 `--help` 本身不运行任务，因此这是统一隐私默认与纵深防御，不应写成“help 必然启动 telemetry”。   |
 | `project.clean` 独立化       | 问题边界通过，行为未关闭 | #33 正确拒绝用局部 job 检查冒充 lifecycle-safe；当前 API 仍可裸删目录，需独立 PR fail-closed。                                                                    |
 | 产品代码收口文档             | 部分完成                 | 正确记录 v0.20.5；但上游版本在同日已进入 rc.1，任何“当前发布基线 alpha.5”已过时。                                                                                 |
@@ -305,8 +305,7 @@ RunAdmissionState
 6. **辅助技术证据局部**  
    当前只有 Chromium 和少数 ARIA 断言，不能外推为 NVDA、JAWS、VoiceOver、Firefox、WebKit、200%/400% 缩放、forced-colors、reduced-motion 已通过。
 
-7. **没有新的视觉走查证据**  
-   本轮无法访问独立部署并截图，因此 390/700px 结论是布局代码和 Chromium 行为合同，不是像素级/真实设备验收。
+7. **视觉证据仍有边界**：本轮视觉证据限于临时截图目视检查，验后删除；常驻证据是可重复的几何断言，不等同于长期像素快照基线、真实设备或辅助技术验收，详见 15.3。
 
 ## 8. Runtime 与整体架构评审
 
@@ -635,12 +634,14 @@ PR #11 已远超适合继续增长的规模。最终建议 squash merge，后续
 - 带路径分隔符的相对命令在切换 cwd 前按受控 invocation cwd 解析为绝对路径；裸命令继续由 `PATH` 解析。default probe 使用隔离参数，custom probe 保持接收原始命令；三项全 custom 时不创建 workspace。
 - 成功、合同失败和命令缺失均进入 `finally` 清理。Version 阶段命令缺失保留原生 `ENOENT`；已得到版本后的 Config/Help 失败继续包装为带 `actualVersion` 的 `DshCapabilityError`。清理失败只进入安全 warning sink，不覆盖主结果或主异常。
 - 默认 Session Composer 的 `plan && !planDigest` 分支增加原地“重试”；现有 `project.run` latch 在首次失败后释放的行为增加真实 Chromium 证明。e2e 文件按仓库规范改名为 `session-composer-admission.e2e.test.ts`。
+- 新增常驻 `responsive-run-surfaces.e2e.test.ts`，四档均检查 SessionComposer 与 StartRunForm 默认正常态；320px/390px 另检查 Session 缺摘要重试态及 Advanced dsh 联网警告/高级设置展开态。审计基于实际文本节点渲染矩形、裁切祖先、表单值宽度及控件/文字交叉重叠，并锁定关键控件与最低采样数，避免空页面假通过。
+- 新测试的 RED 暴露出 320px 下高级设置的 inline 三列布局和 dsh 闭合选项过长；高级设置恢复使用 `.form-row` 自适应网格，选项缩短为 `dsh-headless（仅 Goal）`，实验性、仅 Goal 与联网不受限知情确认仍保留在相邻帮助与警告中。
 
 ### 15.3 TDD 与本地自动化证据
 
 Core 先增加测试并得到预期 RED：14 个 focused 用例中 11 个失败，失败集中在相对命令 `ENOENT`、宿主 DSH home/caller cwd 仍被继承、以及 cleanup seam 尚不存在。实现后同一套 14/14 GREEN；相关 DSH probe/adapter 回归为 89/89。
 
-Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试”按钮而 RED，组件最小改动后 focused 3/3 GREEN。完整本地结果：
+Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试”按钮而 RED，组件最小改动后 focused 3/3 GREEN。最终又将四视口检查固化为 4 个常驻 Chromium 用例；增强采样和动态态后先在 320px 检出两项真实裁切，最小 UI 修复后定向 4/4、相关 Advanced admission 9/9、Web 全量 48/48。完整本地结果：
 
 | 验证                          | 结果                              |
 | ----------------------------- | --------------------------------- |
@@ -648,8 +649,10 @@ Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试
 | Core e2e                      | 8 files；26 passed                |
 | CLI e2e                       | 3 files；8 passed                 |
 | Web unit/API                  | 37 files；377 passed              |
-| Web Chromium                  | 44 passed                         |
+| Web Chromium                  | 48 passed                         |
 | `pnpm build` / Core typecheck | success                           |
+
+定向命令：`pnpm --filter @tekon/web build && pnpm --filter @tekon/web exec playwright test __tests__/e2e/responsive-run-surfaces.e2e.test.ts`。四档均打开默认 SessionComposer 和 Advanced StartRunForm；320px/390px 额外构造缺摘要重试以及 dsh 联网警告/高级设置展开态。断言 document/body 不横溢、关键可见表单控件不越界或相互覆盖、实际文本片段不被视口或裁切祖先截断、输入与选项当前文本宽度可容纳；320/390/700/1440px 共 4/4 通过。本轮还人工查看了两个入口的 8 张临时截图和报告 HTML 的 4 张视口截图，结论一致；截图验后删除，未把一次性产物冒充长期视觉回归基线。
 
 远端代码快照 `611feb09eae5ff212cc0177273fb2cb11633c9b7` 的 Core #420 / CI #329 均在 attempt 1 `completed/success`，7 checks 全部通过。
 
@@ -701,6 +704,7 @@ ambient homes changed = false
 - [DSH Headless Adapter](../../packages/core/src/runtime/dsh-headless-adapter.ts)
 - [默认 Session Composer](../../packages/web/src/client/components/sessions/SessionComposer.tsx)
 - [Advanced StartRunForm](../../packages/web/src/client/components/runs/StartRunForm.tsx)
+- [运行入口四视口 e2e](../../packages/web/__tests__/e2e/responsive-run-surfaces.e2e.test.ts)
 - [Advanced submit state](../../packages/web/src/client/components/runs/start-run-submit-state.ts)
 - [Project Router](../../packages/web/src/server/api/routers/project.ts)
 - [SessionService](../../packages/core/src/session/session-service.ts)
