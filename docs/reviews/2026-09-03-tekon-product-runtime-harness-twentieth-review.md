@@ -6,6 +6,7 @@
 - **用户 v0.20.5 整改 Head**：`dddc0a53be717b276eed80bdb58fe4bcb7095fa2`
 - **Reviewer 行为修复 Head**：`b2bfa45a099047b8eec778b217c598a0727106cb`
 - **主 Agent 补充整改基线 Head**：`6fd86ee1c500f55ff4d8a993812ae00823c3c46b`
+- **v0.20.6 代码与文档快照 Head**：`611feb09eae5ff212cc0177273fb2cb11633c9b7`
 - **产品版本**：评审对象 `0.20.5`；补充整改 `0.20.6`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
@@ -13,7 +14,8 @@
 - **用户整改自动化**：Core #416、CI #325 均为 `completed/success`
 - **Reviewer 行为修复自动化**：Core #417、CI #326 均为 `completed/success`
 - **补充整改基线自动化**：Core #419、CI #328 均为 `completed/success`
-- **裁决**：v0.20.6 本地门已通过，远端代码合并门需待提交并取得新 Head 的 Core/CI `completed/success` 后裁决；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **v0.20.6 远端自动化**：Core #420（run `33747232853`）、CI #329（run `33747232722`）均为 attempt 1 `completed/success`，7 checks 全部通过
+- **裁决**：v0.20.6 本地门与远端代码合并门均通过；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 1. 执行摘要
 
@@ -89,6 +91,17 @@ Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没�
 - Root、Audit、CLI、Web unit 与原有 Playwright 全部成功。
 
 因此，**v0.20.5 整改与本轮 reviewer 局部修复通过当前代码合并门**。
+
+### 3.3 v0.20.6 补充整改 Head
+
+`611feb09eae5ff212cc0177273fb2cb11633c9b7`：
+
+- Core #420（run `33747232853`）：attempt 1 `completed/success`；
+- CI #329（run `33747232722`）：attempt 1 `completed/success`；
+- Lint GitHub Actions workflows、Core build and tests、Root build + typecheck、Audit production dependencies、CLI build + unit + e2e、Web build + typecheck + unit、Web Playwright e2e 共 7 项 checks 全部通过；
+- PR #11 在该 Head 上为 `MERGEABLE/CLEAN`。
+
+因此，**v0.20.6 补充整改通过远端代码合并门**。该结论只覆盖当前增量，不改变 Tekon 整体产品验收仍未通过的裁决。
 
 ## 4. 对 v0.20.5 整改的逐项裁决
 
@@ -637,6 +650,8 @@ Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试
 | Web unit/API                  | 37 files；377 passed              |
 | Web Chromium                  | 44 passed                         |
 | `pnpm build` / Core typecheck | success                           |
+
+远端代码快照 `611feb09eae5ff212cc0177273fb2cb11633c9b7` 的 Core #420 / CI #329 均在 attempt 1 `completed/success`，7 checks 全部通过。
 
 3 个 skipped 仍是需要显式 `DSH_CLI_PATH` 的常驻 L2 合同用例；本节的官方 rc.1 Wrapped L2 另行在隔离临时安装中执行并记录如下。
 

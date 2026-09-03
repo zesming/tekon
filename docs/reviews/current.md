@@ -7,14 +7,16 @@
 - **Reviewer 行为修复 Head**：`b2bfa45a099047b8eec778b217c598a0727106cb`
 - **第二十轮报告发布**：`ae423dbc3700f84ef42d8503dbf04b37c956e96a`
 - **当前权威远端基线 Head**：`6fd86ee1c500f55ff4d8a993812ae00823c3c46b`
-- **当前版本**：`0.20.6`（补充整改工作树）
+- **v0.20.6 代码与文档快照 Head**：`611feb09eae5ff212cc0177273fb2cb11633c9b7`
+- **当前版本**：`0.20.6`
 - **用户整改自动化**：Core #416、CI #325 为 `completed/success`
 - **Reviewer 行为修复自动化**：Core #417、CI #326 为 `completed/success`
 - **当前权威远端基线自动化**：Core #419、CI #328 为 `completed/success`
 - **v0.20.6 本地自动化**：144 files / 1551 passed / 3 skipped；Core e2e 26、CLI e2e 8、Web Chromium 44；官方 rc.1 Wrapped L2 通过
+- **v0.20.6 远端自动化**：Core #420（run `33747232853`）、CI #329（run `33747232722`）均为 attempt 1 `completed/success`，7 checks 全部通过
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
-- **当前裁决**：v0.20.6 本地门已通过，远端代码合并门需待提交并取得新 Head 的 Core/CI `completed/success` 后裁决；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **当前裁决**：v0.20.6 本地门与远端代码合并门均通过；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 第二十轮与 v0.20.6 补充整改裁决
 

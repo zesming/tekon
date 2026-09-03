@@ -205,6 +205,7 @@
 <li><strong>用户 v0.20.5 整改 Head</strong>：<code>dddc0a53be717b276eed80bdb58fe4bcb7095fa2</code></li>
 <li><strong>Reviewer 行为修复 Head</strong>：<code>b2bfa45a099047b8eec778b217c598a0727106cb</code></li>
 <li><strong>主 Agent 补充整改基线 Head</strong>：<code>6fd86ee1c500f55ff4d8a993812ae00823c3c46b</code></li>
+<li><strong>v0.20.6 代码与文档快照 Head</strong>：<code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code></li>
 <li><strong>产品版本</strong>：评审对象 <code>0.20.5</code>；补充整改 <code>0.20.6</code></li>
 <li><strong>Tekon DSH tested pin</strong>：<code>0.1.2-alpha.3</code></li>
 <li><strong>DeepSeek Harness 当前上游发布</strong>：<code>0.1.2-rc.1</code></li>
@@ -212,7 +213,8 @@
 <li><strong>用户整改自动化</strong>：Core #416、CI #325 均为 <code>completed/success</code></li>
 <li><strong>Reviewer 行为修复自动化</strong>：Core #417、CI #326 均为 <code>completed/success</code></li>
 <li><strong>补充整改基线自动化</strong>：Core #419、CI #328 均为 <code>completed/success</code></li>
-<li><strong>裁决</strong>：v0.20.6 本地门已通过，远端代码合并门需待提交并取得新 Head 的 Core/CI <code>completed/success</code> 后裁决；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</li>
+<li><strong>v0.20.6 远端自动化</strong>：Core #420（run <code>33747232853</code>）、CI #329（run <code>33747232722</code>）均为 attempt 1 <code>completed/success</code>，7 checks 全部通过</li>
+<li><strong>裁决</strong>：v0.20.6 本地门与远端代码合并门均通过；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</li>
 </ul>
 <h2>1. 执行摘要</h2>
 <p>v0.20.5 对上一轮发现做了实质整改，重点包括：</p>
@@ -279,6 +281,15 @@
 <li>Root、Audit、CLI、Web unit 与原有 Playwright 全部成功。</li>
 </ul>
 <p>因此，<strong>v0.20.5 整改与本轮 reviewer 局部修复通过当前代码合并门</strong>。</p>
+<h3>3.3 v0.20.6 补充整改 Head</h3>
+<p><code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code>：</p>
+<ul>
+<li>Core #420（run <code>33747232853</code>）：attempt 1 <code>completed/success</code>；</li>
+<li>CI #329（run <code>33747232722</code>）：attempt 1 <code>completed/success</code>；</li>
+<li>Lint GitHub Actions workflows、Core build and tests、Root build + typecheck、Audit production dependencies、CLI build + unit + e2e、Web build + typecheck + unit、Web Playwright e2e 共 7 项 checks 全部通过；</li>
+<li>PR #11 在该 Head 上为 <code>MERGEABLE/CLEAN</code>。</li>
+</ul>
+<p>因此，<strong>v0.20.6 补充整改通过远端代码合并门</strong>。该结论只覆盖当前增量，不改变 Tekon 整体产品验收仍未通过的裁决。</p>
 <h2>4. 对 v0.20.5 整改的逐项裁决</h2>
 <table>
 <thead>
@@ -849,6 +860,7 @@ CLI / Web 两套 composition root
 <td>success</td>
 </tr>
 </tbody></table>
+<p>远端代码快照 <code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code> 的 Core #420 / CI #329 均在 attempt 1 <code>completed/success</code>，7 checks 全部通过。</p>
 <p>3 个 skipped 仍是需要显式 <code>DSH_CLI_PATH</code> 的常驻 L2 合同用例；本节的官方 rc.1 Wrapped L2 另行在隔离临时安装中执行并记录如下。</p>
 <h3>15.4 官方 rc.1 Wrapped L2</h3>
 <p>执行环境为 Node <code>v22.19.0</code> / Linux x64；npm 包 <code>@deepseek-ai/dsh@0.1.2-rc.1</code> 的 <code>dist.integrity</code> 为：</p>
