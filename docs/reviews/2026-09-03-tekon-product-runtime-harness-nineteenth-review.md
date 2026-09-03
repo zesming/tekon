@@ -5,15 +5,15 @@
 - **上一轮权威 Head**：`62f7c6ba2a0c12e6ad6a0ce2be6dca026cf96840`
 - **用户本轮整改 Head**：`b3167c52ee80f492c1d11ea9f5cd25a3193cc1c2`
 - **Reviewer 行为修复快照**：`7acfbae438dbef46befe4d7bab46b844720b80ef`
-- **第十九轮报告权威发布**：`618de86a5e187f1398b8f66676ebc16af43ef1a6`
-- **主 Agent 收口快照**：`0ad721d4058e8155f646313d00779134f4da0aec`
+- **第十九轮报告初版发布**：`618de86a5e187f1398b8f66676ebc16af43ef1a6`
+- **产品代码收口快照**：`0ad721d4058e8155f646313d00779134f4da0aec`
 - **收口版本**：`0.20.5`
 - **产品版本**：`0.20.5`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 上游发布基线**：`0.1.2-alpha.5`
 - **用户整改自动化**：Core #411、CI #320 均为 `completed/success`
 - **Reviewer 修复自动化**：Core #412、CI #321 均为 `completed/success`
-- **主 Agent 收口自动化**：Core run [33723748836](https://github.com/zesming/tekon/actions/runs/33723748836)、CI run [33723748858](https://github.com/zesming/tekon/actions/runs/33723748858) 均为 `completed/success`（7 checks 全 pass）
+- **产品代码收口自动化**：Core run [33723748836](https://github.com/zesming/tekon/actions/runs/33723748836)、CI run [33723748858](https://github.com/zesming/tekon/actions/runs/33723748858) 均为 `completed/success`（7 checks 全 pass）
 - **最终裁决**：当前增量通过代码合并门；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 1. 执行摘要

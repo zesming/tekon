@@ -5,12 +5,12 @@
 - **上一轮权威 Head**：`62f7c6ba2a0c12e6ad6a0ce2be6dca026cf96840`
 - **用户本轮整改 Head**：`b3167c52ee80f492c1d11ea9f5cd25a3193cc1c2`
 - **Reviewer 行为修复快照**：`7acfbae438dbef46befe4d7bab46b844720b80ef`
-- **第十九轮报告权威发布**：`618de86a5e187f1398b8f66676ebc16af43ef1a6`
-- **主 Agent 收口快照**：`0ad721d4058e8155f646313d00779134f4da0aec`
+- **第十九轮报告初版发布**：`618de86a5e187f1398b8f66676ebc16af43ef1a6`
+- **产品代码收口快照**：`0ad721d4058e8155f646313d00779134f4da0aec`
 - **当前版本**：`0.20.5`
 - **用户整改自动化**：Core #411、CI #320 为 `completed/success`
 - **Reviewer 修复自动化**：Core #412、CI #321 为 `completed/success`
-- **主 Agent 收口自动化**：Core run [33723748836](https://github.com/zesming/tekon/actions/runs/33723748836)、CI run [33723748858](https://github.com/zesming/tekon/actions/runs/33723748858) 均为 `completed/success`（7 checks 全 pass）
+- **产品代码收口自动化**：Core run [33723748836](https://github.com/zesming/tekon/actions/runs/33723748836)、CI run [33723748858](https://github.com/zesming/tekon/actions/runs/33723748858) 均为 `completed/success`（7 checks 全 pass）
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前发布基线**：`0.1.2-alpha.5`
 - **当前裁决**：本轮增量通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
@@ -22,7 +22,7 @@
 - “合同锚点零漂移”只能限定为 alpha.4→alpha.5 对当前 Headless metadata 锚点未观察到直接变化；alpha.3→alpha.5 仍包含默认 `web_fetch` 变化，且 L2/L3 未完成；
 - 用户整改 Head 没有行为代码变化，Core/CI 全绿；
 - Reviewer 行为修复快照 `7acfbae` 对 Advanced Run 的网络表述、提交门、mock 身份及 DSH Run telemetry 实施直接修复并通过 Core #412 / CI #321；
-- 主 Agent 收口快照 `0ad721d` 进一步消除残留风险：将 telemetry opt-out 扩大至 metadata probe；将 Advanced Run 准入提取为单一源纯函数 `startRunSubmitState()` 并引入同步 `useRef` latch 关闭同一 tick 双发漏洞，补齐未批准草案计划门禁；优化 390px/700px 视口单列布局与短标签；将 `project.clean` 误删入口防护拆为 issue #33 且不宣称 lifecycle-safe；本地测试为 143 文件/1539 passed/3 skipped，Actions run 33723748836/33723748858 全绿。
+- 产品代码收口快照 `0ad721d` 进一步消除残留风险：将 telemetry opt-out 扩大至 metadata probe；将 Advanced Run 准入提取为单一源纯函数 `startRunSubmitState()` 并引入同步 `useRef` latch 关闭同一 tick 双发漏洞，补齐未批准草案计划门禁；优化 390px/700px 视口单列布局与短标签；将 `project.clean` 误删入口防护拆为 issue #33 且不宣称 lifecycle-safe；本地测试为 143 文件/1539 passed/3 skipped，Actions run 33723748836/33723748858 全绿。
 
 ## 本轮直接关闭或改善
 
@@ -103,7 +103,7 @@ Tekon 的 invocation cwd 是 worktree。因此 child env 中没有 `DEEPSEEK_API
 - mock Provider 在高级 Web 表单中无提示伪装成真实执行；
 - Advanced Run 单一准入源、同一 tick `useRef` latch 并发防重入与草案未审批计划门禁；
 - 390px/700px 移动视口单列布局与选项短标签；
-- 主 Agent 收口快照 `0ad721d` 的 Core run 33723748836 与 CI run 33723748858 门禁（7 checks 全 pass）。
+- 产品代码收口快照 `0ad721d` 的 Core run 33723748836 与 CI run 33723748858 门禁（7 checks 全 pass）。
 
 ## 本地全量验证与客观限制
 
@@ -215,5 +215,5 @@ single-owner Runtime
 - tested pin、release tag、master、actual installed version、compatibility、bypass、acknowledgement 与 credential source 必须分开；
 - issue 登记不等于问题关闭；验证必须绑定具体 commit 和 `completed/success` 的 Core/CI；
 - 后续主线只在独立小 PR 中实现，不继续向 PR #11 塞入跨模块架构代码；
-- 合并前再次确认 PR Head（当前快照 `0ad721d`）与自动化终态一致；最终建议 squash merge；
+- 合并前再次确认 PR 最新 Head 与自动化终态一致；`0ad721d` 仅表示产品代码收口快照，不表示后续纯文档提交的最终 Head；最终建议 squash merge；
 - 本轮未执行 merge、release、deploy 或 ruleset 修改。
