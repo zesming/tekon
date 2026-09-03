@@ -206,6 +206,7 @@
 <li><strong>Reviewer 行为修复 Head</strong>：<code>b2bfa45a099047b8eec778b217c598a0727106cb</code></li>
 <li><strong>主 Agent 补充整改基线 Head</strong>：<code>6fd86ee1c500f55ff4d8a993812ae00823c3c46b</code></li>
 <li><strong>v0.20.6 代码与文档快照 Head</strong>：<code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code></li>
+<li><strong>v0.20.6 响应式验收快照 Head</strong>：<code>777e353e9b0ff7ffbe02b046a08aadeefe2cac97</code></li>
 <li><strong>产品版本</strong>：评审对象 <code>0.20.5</code>；补充整改 <code>0.20.6</code></li>
 <li><strong>Tekon DSH tested pin</strong>：<code>0.1.2-alpha.3</code></li>
 <li><strong>DeepSeek Harness 当前上游发布</strong>：<code>0.1.2-rc.1</code></li>
@@ -214,6 +215,7 @@
 <li><strong>Reviewer 行为修复自动化</strong>：Core #417、CI #326 均为 <code>completed/success</code></li>
 <li><strong>补充整改基线自动化</strong>：Core #419、CI #328 均为 <code>completed/success</code></li>
 <li><strong>v0.20.6 远端自动化</strong>：Core #420（run <code>33747232853</code>）、CI #329（run <code>33747232722</code>）均为 attempt 1 <code>completed/success</code>，7 checks 全部通过</li>
+<li><strong>v0.20.6 响应式验收远端自动化</strong>：Core #422（run <code>33753603954</code>）、CI #331（run <code>33753603924</code>）均为 attempt 1 <code>completed/success</code>，7 checks 全部通过</li>
 <li><strong>裁决</strong>：v0.20.6 本地门与远端代码合并门均通过；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</li>
 </ul>
 <h2>1. 执行摘要</h2>
@@ -290,6 +292,15 @@
 <li>PR #11 在该 Head 上为 <code>MERGEABLE/CLEAN</code>。</li>
 </ul>
 <p>因此，<strong>v0.20.6 补充整改通过远端代码合并门</strong>。该结论只覆盖当前增量，不改变 Tekon 整体产品验收仍未通过的裁决。</p>
+<h3>3.4 v0.20.6 响应式验收收口 Head</h3>
+<p><code>777e353e9b0ff7ffbe02b046a08aadeefe2cac97</code>：</p>
+<ul>
+<li>Core #422（run <code>33753603954</code>）：attempt 1 <code>completed/success</code>；</li>
+<li>CI #331（run <code>33753603924</code>）：attempt 1 <code>completed/success</code>；</li>
+<li>7 项 checks 全部通过，包含新增四视口矩阵的 Web Playwright e2e；</li>
+<li>PR #11 在该 Head 上为 <code>MERGEABLE/CLEAN</code>。</li>
+</ul>
+<p>因此，<strong>响应式常驻证据、窄屏修复和对应文档通过远端代码合并门</strong>。</p>
 <h2>4. 对 v0.20.5 整改的逐项裁决</h2>
 <table>
 <thead>
@@ -863,6 +874,7 @@ CLI / Web 两套 composition root
 </tbody></table>
 <p>定向命令：<code>pnpm --filter @tekon/web build &amp;&amp; pnpm --filter @tekon/web exec playwright test __tests__/e2e/responsive-run-surfaces.e2e.test.ts</code>。四档均打开默认 SessionComposer 和 Advanced StartRunForm；320px/390px 额外构造缺摘要重试以及 dsh 联网警告/高级设置展开态。断言 document/body 不横溢、关键可见表单控件不越界或相互覆盖、实际文本片段不被视口或裁切祖先截断、输入与选项当前文本宽度可容纳；320/390/700/1440px 共 4/4 通过。本轮还人工查看了两个入口的 8 张临时截图和报告 HTML 的 4 张视口截图，结论一致；截图验后删除，未把一次性产物冒充长期视觉回归基线。</p>
 <p>远端代码快照 <code>611feb09eae5ff212cc0177273fb2cb11633c9b7</code> 的 Core #420 / CI #329 均在 attempt 1 <code>completed/success</code>，7 checks 全部通过。</p>
+<p>远端响应式验收快照 <code>777e353e9b0ff7ffbe02b046a08aadeefe2cac97</code> 的 Core #422 / CI #331 同样在 attempt 1 <code>completed/success</code>，新增四视口矩阵已进入 Web Playwright 远端门。</p>
 <p>3 个 skipped 仍是需要显式 <code>DSH_CLI_PATH</code> 的常驻 L2 合同用例；本节的官方 rc.1 Wrapped L2 另行在隔离临时安装中执行并记录如下。</p>
 <h3>15.4 官方 rc.1 Wrapped L2</h3>
 <p>执行环境为 Node <code>v22.19.0</code> / Linux x64；npm 包 <code>@deepseek-ai/dsh@0.1.2-rc.1</code> 的 <code>dist.integrity</code> 为：</p>

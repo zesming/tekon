@@ -7,6 +7,7 @@
 - **Reviewer 行为修复 Head**：`b2bfa45a099047b8eec778b217c598a0727106cb`
 - **主 Agent 补充整改基线 Head**：`6fd86ee1c500f55ff4d8a993812ae00823c3c46b`
 - **v0.20.6 代码与文档快照 Head**：`611feb09eae5ff212cc0177273fb2cb11633c9b7`
+- **v0.20.6 响应式验收快照 Head**：`777e353e9b0ff7ffbe02b046a08aadeefe2cac97`
 - **产品版本**：评审对象 `0.20.5`；补充整改 `0.20.6`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
@@ -15,6 +16,7 @@
 - **Reviewer 行为修复自动化**：Core #417、CI #326 均为 `completed/success`
 - **补充整改基线自动化**：Core #419、CI #328 均为 `completed/success`
 - **v0.20.6 远端自动化**：Core #420（run `33747232853`）、CI #329（run `33747232722`）均为 attempt 1 `completed/success`，7 checks 全部通过
+- **v0.20.6 响应式验收远端自动化**：Core #422（run `33753603954`）、CI #331（run `33753603924`）均为 attempt 1 `completed/success`，7 checks 全部通过
 - **裁决**：v0.20.6 本地门与远端代码合并门均通过；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 1. 执行摘要
@@ -102,6 +104,17 @@ Reviewer 原始取证阶段没有可访问的独立 Tekon 部署实例，也没�
 - PR #11 在该 Head 上为 `MERGEABLE/CLEAN`。
 
 因此，**v0.20.6 补充整改通过远端代码合并门**。该结论只覆盖当前增量，不改变 Tekon 整体产品验收仍未通过的裁决。
+
+### 3.4 v0.20.6 响应式验收收口 Head
+
+`777e353e9b0ff7ffbe02b046a08aadeefe2cac97`：
+
+- Core #422（run `33753603954`）：attempt 1 `completed/success`；
+- CI #331（run `33753603924`）：attempt 1 `completed/success`；
+- 7 项 checks 全部通过，包含新增四视口矩阵的 Web Playwright e2e；
+- PR #11 在该 Head 上为 `MERGEABLE/CLEAN`。
+
+因此，**响应式常驻证据、窄屏修复和对应文档通过远端代码合并门**。
 
 ## 4. 对 v0.20.5 整改的逐项裁决
 
@@ -655,6 +668,8 @@ Web 先增加两个 Chromium 场景；缺摘要重试用例因找不到“重试
 定向命令：`pnpm --filter @tekon/web build && pnpm --filter @tekon/web exec playwright test __tests__/e2e/responsive-run-surfaces.e2e.test.ts`。四档均打开默认 SessionComposer 和 Advanced StartRunForm；320px/390px 额外构造缺摘要重试以及 dsh 联网警告/高级设置展开态。断言 document/body 不横溢、关键可见表单控件不越界或相互覆盖、实际文本片段不被视口或裁切祖先截断、输入与选项当前文本宽度可容纳；320/390/700/1440px 共 4/4 通过。本轮还人工查看了两个入口的 8 张临时截图和报告 HTML 的 4 张视口截图，结论一致；截图验后删除，未把一次性产物冒充长期视觉回归基线。
 
 远端代码快照 `611feb09eae5ff212cc0177273fb2cb11633c9b7` 的 Core #420 / CI #329 均在 attempt 1 `completed/success`，7 checks 全部通过。
+
+远端响应式验收快照 `777e353e9b0ff7ffbe02b046a08aadeefe2cac97` 的 Core #422 / CI #331 同样在 attempt 1 `completed/success`，新增四视口矩阵已进入 Web Playwright 远端门。
 
 3 个 skipped 仍是需要显式 `DSH_CLI_PATH` 的常驻 L2 合同用例；本节的官方 rc.1 Wrapped L2 另行在隔离临时安装中执行并记录如下。
 
