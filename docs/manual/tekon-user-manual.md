@@ -366,11 +366,12 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
 - `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
 - `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
 - `codex`：本机 Codex CLI adapter，使用 `codex --profile internal ... exec` 非交互执行，需本机 Codex CLI 已安装并认证 internal profile。
-- `dsh-headless`（**experimental，默认关闭**）：本机 DeepSeek Harness（`dsh`）adapter，经 `dsh --profile headless "<task>"` 一次性子进程边界执行。**使用前必读的三条硬边界：**
+- `dsh-headless`（**experimental，默认关闭**）：本机 DeepSeek Harness（`dsh`）adapter，经 `dsh --profile headless "<task>"` 一次性子进程边界执行。**使用前必读的硬边界：**
   - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
-  - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制,无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
-  - 一次性、无流式、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.2-alpha.3`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。
+  - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制，无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
+  - 一次性、未向 Session/UI 投影执行期流、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.2-alpha.3`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。官方参考参见 [DeepSeek Harness alpha.3 CLI Reference](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.3/apps/cli/reference/README.md)（资料内容：DSH headless 会把 reasoning delta 流式写 stderr、最终文本写 stdout，并定义参数规范与内置会话遥测机制；对 Tekon 判断：当前 adapter 仅收集日志、未向 Session/UI 投影该 stream，且缺乏多工作区产物外写机制，仅可作为 experimental goal-only provider，且 preflight 与 Run 必须硬关断内置 session telemetry）。
   - ⚠️ **Node 版本要求与 Tekon 主合同不同**：DSH 要求 Node `^22.19.0 || >=24.0.0`，而 Tekon 主合同允许 Node `^20.19.0 || >=22.12.0`。preflight 会在探测 dsh 二进制之前硬拦截不兼容的宿主 Node（Node 20.x、22.12 及以上但低于 22.19、奇数版本线如 23.x），并给出升级指引。若确认 dsh 实际运行在更高版本 Node 上（如全局安装在 Node 24 下），可设置 `TEKON_DSH_ALLOW_HOST_NODE=<当前版本号>` 精确放行，preflight 会输出旁路警告。
+  - ⚠️ **DSH 内置 session telemetry 硬关断与独立凭证风险**：Tekon 启动的 metadata preflight 只删除宿主环境中的 `DSH_TELEMETRY_MODE` 与 `DSH_TELEMETRY_OTLP_URL` 并固定设置 `DSH_TELEMETRY_DISABLED=1`，仍继承其他宿主环境变量（例如 `PATH`、`DSH_HOME` 等）；正式 Run 才是 `envMode: exact` 白名单（allowlist）。该策略只影响 Tekon 启动的子进程，不修改用户宿主环境。在 alpha.3 中，`--version` 与 `--dump-default-config` 为 boot-free，但 `--profile headless --help` 会进入 profile/plugin boot；无证据表明此前发生外传，但不能用不 boot 排除风险，故 preflight 同样严格关断。需要注意：worktree 中的 `.env` 凭证回退读取仍是独立安全风险，不因遥测配置关闭而解决，不等于凭证隔离。
 
 **Provider 环境预检**：使用 `dsh-headless` 前，可先运行预检命令确认本机环境与 Tekon 钉死版本兼容：
 
@@ -591,7 +592,7 @@ tekon run "做一个一次性小任务" --goal --agent mock
 - `--agent mock`：使用 mock provider。
 - `--agent claude-code`：使用 Claude Code adapter。
 - `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
-- `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的三条硬边界）。
+- `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的硬边界）。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
 - `--repo <path>`：只在跨仓库运行时使用。

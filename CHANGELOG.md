@@ -1,5 +1,21 @@
 # 变更日志
 
+## v0.20.5
+
+本轮落地第十九轮复审（`docs/reviews/2026-09-03-tekon-product-runtime-harness-nineteenth-review.md`，PR #11）锁定的整改事项：收口 Advanced Run 准入与并发防重入、DSH metadata preflight 内置 session telemetry 硬关断，并补齐执行方案/文档。架构级项（single-owner Runtime、权威 Session、ACP、RunPlan schema、完整生命周期治理与 `project.clean`）按复审裁决维持冻结，由独立 issue/PR 承载。
+
+### 用户可见改进
+
+- **Advanced Run 使用单一阻断源**：提交按钮与 handler 共享 `startRunSubmitState`，一致阻断 token 缺失、计划未就绪、空需求、草案未批准、计划摘要缺失和网络未确认等状态；生成过计划的需求草案现在必须完成独立计划审批后才能提交。
+- **同一页面重复提交防护**：同步 `useRef` latch 关闭 React pending 状态生效前的重入窗口，并在请求失败后释放以允许重试。该保护只覆盖当前组件实例，不替代服务端幂等或跨端 Run admission。
+- **Advanced Run 窄屏可读性**：在 768px 及以下把模式、模板、Provider 与 Profile 选择器改为单列，缩短闭合选择器中的 dsh/mock/autonomous 标签；联网不受限、合成结果和“不自动创建 PR”等完整边界继续由紧邻帮助与告警说明。
+- **提示保持诚实**：Advanced Run 延续“计划未请求不受限网络”的准确表述，mock Provider 明确为合成测试/演示，不能作为真实交付证据。
+
+### 工程与合同
+
+- **DSH 内置 session telemetry 硬关断**：正式 Run 在 `7acfbae` 新增 `DSH_TELEMETRY_DISABLED=1`（`envMode: exact` 白名单）；metadata preflight 本轮同样实施 hard opt-out，三个 metadata probe（`--version`、`--dump-default-config`、`--profile headless --help`）保留 `PATH`、`DSH_HOME` 等必要环境，删除宿主环境（ambient）中的 `DSH_TELEMETRY_MODE` 与 `DSH_TELEMETRY_OTLP_URL`，并固定设置 `DSH_TELEMETRY_DISABLED=1`。DSH 对任意非空 `DSH_TELEMETRY_DISABLED` 均视为关闭，`1` 是 Tekon 的规范化表达。事实澄清：在 alpha.3 中，`--version` 与 `--dump-default-config` 为 boot-free，但 `--profile headless --help` 会进入 profile/plugin boot；无证据表明此前发生外传，但不能用不 boot 排除风险。此外，preflight 仍继承其他宿主环境变量，不等于凭证隔离（例如 worktree `.env` 读取仍是独立安全风险）。
+- **回归证据补齐**：新增 probe 环境真子进程测试、Advanced Run 阻断状态单测和合规命名的 Playwright e2e，覆盖同一页面单次提交、失败后重试及 `hasPlan => planApproved`。第十九轮执行方案同步提供 Markdown/HTML 审阅版。
+
 ## v0.20.4
 
 本轮落地第十二轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-twelfth-review.md`，PR #11）第 17.2 节批注锁定的四项低风险收敛：DSH tested pin 升级、版本身份统一、fixture npm warning 清理、CI 供应链 gate。架构级项按复审裁决维持冻结，登记为后续顺序。

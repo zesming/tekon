@@ -142,7 +142,10 @@ test('StartRunForm default workflow run submits with a matching plan digest', as
   // The run must be accepted — no digest mismatch rejection. Assert on the
   // RPC response itself (the success toast auto-dismisses).
   const runResponse = page.waitForResponse(
-    (res) => res.url().includes('/api/rpc') && res.status() === 200,
+    (res) =>
+      res.url().includes('/api/rpc') &&
+      res.status() === 200 &&
+      res.request().postDataJSON()?.path === 'project.run',
     { timeout: 15000 },
   );
   await submitButton.click();

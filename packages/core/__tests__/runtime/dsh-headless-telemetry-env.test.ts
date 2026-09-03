@@ -38,7 +38,9 @@ describe('dsh-headless telemetry environment', () => {
     const priorEndpoint = process.env.DSH_TELEMETRY_OTLP_URL;
     try {
       process.env.DSH_TELEMETRY_MODE = 'FULL';
-      delete process.env.DSH_TELEMETRY_DISABLED;
+      // Upstream DSH treats any non-empty value of DSH_TELEMETRY_DISABLED as disabled.
+      // Setting ambient '0' does not enable telemetry; fixing child env to '1' is Tekon's canonical normalization.
+      process.env.DSH_TELEMETRY_DISABLED = '0';
       process.env.DSH_TELEMETRY_OTLP_URL = 'https://collector.invalid/v1/logs';
 
       const adapter = createDshHeadlessAdapter(
@@ -82,9 +84,11 @@ describe('dsh-headless telemetry environment', () => {
     } finally {
       if (priorMode === undefined) delete process.env.DSH_TELEMETRY_MODE;
       else process.env.DSH_TELEMETRY_MODE = priorMode;
-      if (priorDisabled === undefined) delete process.env.DSH_TELEMETRY_DISABLED;
+      if (priorDisabled === undefined)
+        delete process.env.DSH_TELEMETRY_DISABLED;
       else process.env.DSH_TELEMETRY_DISABLED = priorDisabled;
-      if (priorEndpoint === undefined) delete process.env.DSH_TELEMETRY_OTLP_URL;
+      if (priorEndpoint === undefined)
+        delete process.env.DSH_TELEMETRY_OTLP_URL;
       else process.env.DSH_TELEMETRY_OTLP_URL = priorEndpoint;
     }
 

@@ -215,6 +215,8 @@ export interface RunDshPreflightOptions {
   probeVersion?: (command: string) => Promise<string>;
   probeHelp?: (command: string) => Promise<string>;
   probeConfig?: (command: string) => Promise<string>;
+  /** Programmatic/test seam for probe execution environment snapshot; not exposed via CLI or RPC. */
+  probeEnvSource?: NodeJS.ProcessEnv;
   allowVersion?: string;
   /** Programmatic/test seam; the CLI does not expose a host-version override. */
   hostNodeVersion?: string;
@@ -225,13 +227,34 @@ export interface RunDshPreflightOptions {
   onWarn?: (message: string) => void;
 }
 
+/**
+ * Constructs an isolated environment snapshot for built-in metadata probes.
+ *
+ * Boundary rationale: unlike execution agent runs that use an exact allowlist
+ * (`envMode: exact`), metadata probes run external binaries directly and must
+ * preserve ambient runtime prerequisites (e.g. PATH, DSH_HOME). We therefore
+ * inherit ambient environment while hard-opting out of telemetry: deleting
+ * DSH_TELEMETRY_MODE and DSH_TELEMETRY_OTLP_URL, and forcing DSH_TELEMETRY_DISABLED='1'.
+ */
+function buildProbeTelemetryEnv(
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...source };
+  delete env.DSH_TELEMETRY_MODE;
+  delete env.DSH_TELEMETRY_OTLP_URL;
+  env.DSH_TELEMETRY_DISABLED = '1';
+  return env;
+}
+
 async function defaultProbeVersion(
   command: string,
   timeoutMs: number,
+  env: NodeJS.ProcessEnv,
 ): Promise<string> {
   const { stdout } = await execFileAsync(command, ['--version'], {
     encoding: 'utf8',
     timeout: timeoutMs,
+    env,
   });
   return stdout;
 }
@@ -239,6 +262,7 @@ async function defaultProbeVersion(
 async function defaultProbeHelp(
   command: string,
   timeoutMs: number,
+  env: NodeJS.ProcessEnv,
 ): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
@@ -246,6 +270,7 @@ async function defaultProbeHelp(
     {
       encoding: 'utf8',
       timeout: timeoutMs,
+      env,
     },
   );
   return stdout;
@@ -254,6 +279,7 @@ async function defaultProbeHelp(
 async function defaultProbeConfig(
   command: string,
   timeoutMs: number,
+  env: NodeJS.ProcessEnv,
 ): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
@@ -261,6 +287,7 @@ async function defaultProbeConfig(
     {
       encoding: 'utf8',
       timeout: timeoutMs,
+      env,
     },
   );
   return stdout;
@@ -270,17 +297,20 @@ export async function runDshPreflight(
   dshCommand = 'dsh',
   options?: RunDshPreflightOptions,
 ): Promise<DshPreflightResult> {
+  const probeEnv = buildProbeTelemetryEnv(options?.probeEnvSource);
   const probeTimeoutMs =
     options?.probeTimeoutMs ?? DEFAULT_DSH_PROBE_TIMEOUT_MS;
   const probeVersion =
     options?.probeVersion ??
-    ((command: string) => defaultProbeVersion(command, probeTimeoutMs));
+    ((command: string) =>
+      defaultProbeVersion(command, probeTimeoutMs, probeEnv));
   const probeHelp =
     options?.probeHelp ??
-    ((command: string) => defaultProbeHelp(command, probeTimeoutMs));
+    ((command: string) => defaultProbeHelp(command, probeTimeoutMs, probeEnv));
   const probeConfig =
     options?.probeConfig ??
-    ((command: string) => defaultProbeConfig(command, probeTimeoutMs));
+    ((command: string) =>
+      defaultProbeConfig(command, probeTimeoutMs, probeEnv));
 
   const hostNodeVersion = options?.hostNodeVersion ?? process.versions.node;
   const hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);

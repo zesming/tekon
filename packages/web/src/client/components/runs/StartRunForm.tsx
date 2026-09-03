@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '../../hooks/index.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
@@ -7,6 +7,7 @@ import { rpc } from '../../lib/rpc-client.js';
 import { queryKeys } from '../../lib/query-keys.js';
 import { formatTimeout, formatPhaseParallel } from '../../lib/plan-format.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
+import { startRunSubmitState } from './start-run-submit-state.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,8 +30,8 @@ const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
 const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
   codex: 'codex',
   'claude-code': 'claude-code',
-  mock: 'mock（仅测试/演示 · 生成合成产物，不执行真实任务）',
-  'dsh-headless': 'dsh-headless（experimental · 联网不受限 · 仅 Goal）',
+  mock: 'mock（仅测试/演示）',
+  'dsh-headless': 'dsh-headless（experimental · 仅 Goal）',
 };
 
 /**
@@ -39,14 +40,17 @@ const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
+  const startInFlightRef = useRef(false);
   const { addFlash } = useFlash();
   const [searchParams] = useSearchParams();
   const shapePath = searchParams.get('shapePath') ?? '';
 
   // ── Fetch demand detail when shapePath is provided ──
-  const { data: demandDetail } = useQuery<
-    RpcProcedureMap['draftShape.detail']['output']
-  >(
+  const {
+    data: demandDetail,
+    isLoading: draftLoading,
+    error: draftError,
+  } = useQuery<RpcProcedureMap['draftShape.detail']['output']>(
     shapePath && token ? queryKeys.draftShapeDetail(shapePath) : null,
     () => rpc.call('draftShape.detail', { shapePath, token: token! }),
   );
@@ -134,12 +138,18 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     }
   }, [requiresUnrestrictedNetwork]);
 
-  // P0-03 (S7c): when a shaped draft is loaded, the server rejects unless it is
-  // approved AND readyForRun. Mirror that in the UI so submit is disabled with
-  // an explanation instead of surfacing a server 400.
+  // P0-03 (S7c) & 4f-2: when a shaped draft is loaded, block if loading, error,
+  // missing shape, unapproved demand, open questions (not readyForRun), or
+  // generated plan not approved (hasPlan && !planApproved).
   const draft = demandDetail?.shape;
   const draftNotReady = Boolean(
-    shapePath && draft && !(draft.approved && draft.readyForRun),
+    shapePath &&
+    (draftLoading ||
+      draftError ||
+      !draft ||
+      !draft.approved ||
+      !draft.readyForRun ||
+      Boolean(draft.hasPlan && draft.planApproved !== true)),
   );
 
   // ── Start run mutation ──
@@ -169,31 +179,63 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     }
   };
 
+  const submitState = startRunSubmitState({
+    hasToken: Boolean(token),
+    submitting: startMutation.isPending,
+    planLoading,
+    planError: Boolean(planError),
+    hasPlanData: Boolean(planData),
+    hasDemandText: Boolean(demandText.trim()),
+    draftNotReady,
+    missingPlanDigest,
+    networkUnacknowledged: requiresUnrestrictedNetwork && !acknowledgedNetwork,
+  });
+  const isSubmitDisabled = submitState.disabled;
+
   const handleStart = async () => {
-    if (!token) {
-      addFlash('warning', '请先设置会话令牌');
-      return;
-    }
-    if (!demandText.trim()) {
-      addFlash('warning', '请输入需求描述');
-      return;
-    }
-    if (planLoading || !planData || planError) {
-      addFlash('warning', '执行计划尚未准备完成，已阻止启动');
-      return;
-    }
-    if (mode === 'workflow' && !planData.digest) {
-      addFlash('warning', '执行计划缺少校验摘要，已阻止启动');
-      return;
-    }
-    if (requiresUnrestrictedNetwork && !acknowledgedNetwork) {
-      addFlash('warning', '联网不受限需知情确认');
+    if (startInFlightRef.current) return;
+
+    if (submitState.reason) {
+      if (submitState.reason === 'submitting') {
+        return;
+      }
+      if (submitState.reason === 'no-token') {
+        addFlash('warning', '请先设置会话令牌');
+        return;
+      }
+      if (
+        submitState.reason === 'plan-loading' ||
+        submitState.reason === 'plan-error' ||
+        submitState.reason === 'no-plan'
+      ) {
+        addFlash('warning', '执行计划尚未准备完成，已阻止启动');
+        return;
+      }
+      if (submitState.reason === 'no-demand') {
+        addFlash('warning', '请输入需求描述');
+        return;
+      }
+      if (submitState.reason === 'draft-not-ready') {
+        addFlash(
+          'warning',
+          '草案尚未加载完成、需求未批准、仍有待澄清问题，或生成的计划未批准',
+        );
+        return;
+      }
+      if (submitState.reason === 'missing-plan-digest') {
+        addFlash('warning', '执行计划缺少校验摘要，已阻止启动');
+        return;
+      }
+      if (submitState.reason === 'network-unacknowledged') {
+        addFlash('warning', '联网不受限需知情确认');
+        return;
+      }
       return;
     }
 
     const input: RpcProcedureMap['project.run']['input'] = {
       demandText: demandText.trim(),
-      token,
+      token: token!,
     };
 
     if (shapePath) input.demandShapePath = shapePath;
@@ -209,7 +251,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
       input.acknowledgeUnrestrictedNetwork = true;
     }
-    if (mode !== 'goal' && planData.digest) {
+    if (mode !== 'goal' && planData?.digest) {
       input.planDigest = planData.digest;
     }
 
@@ -223,6 +265,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       input.noProgressTimeoutMs = parsedNoProgress;
     }
 
+    startInFlightRef.current = true;
     try {
       const result = await startMutation.mutate(input);
       addFlash('success', `运行已启动: ${result.run.id.slice(0, 12)}`);
@@ -230,23 +273,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       setAcknowledgedNetwork(false);
       setIsOpen(false);
     } catch (err) {
-      addFlash(
-        'error',
-        err instanceof Error ? err.message : '启动运行失败',
-      );
+      addFlash('error', err instanceof Error ? err.message : '启动运行失败');
+    } finally {
+      startInFlightRef.current = false;
     }
   };
-
-  const isSubmitDisabled =
-    !token ||
-    startMutation.isPending ||
-    planLoading ||
-    !demandText.trim() ||
-    draftNotReady ||
-    (requiresUnrestrictedNetwork && !acknowledgedNetwork) ||
-    !planData ||
-    missingPlanDigest ||
-    Boolean(planError);
 
   return (
     <div className="card mb-6">
@@ -302,7 +333,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           </div>
 
           {/* Mode + Template + Agent + Profile */}
-          <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="form-row start-run-options">
             <div className="form-group">
               <label className="form-label" htmlFor="start-run-mode">
                 运行模式
@@ -366,6 +397,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                 className="select"
                 value={profile}
                 disabled={mode === 'goal'}
+                aria-describedby={
+                  mode === 'workflow' && profile === 'autonomous-delivery'
+                    ? 'start-run-profile-help'
+                    : undefined
+                }
                 onChange={(e) =>
                   setProfile(
                     e.target.value as 'human-web' | 'autonomous-delivery',
@@ -374,9 +410,18 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               >
                 <option value="human-web">human-web（默认）</option>
                 <option value="autonomous-delivery">
-                  autonomous-delivery（通过后自动准备交付，不自动创建 PR）
+                  autonomous-delivery（自动准备）
                 </option>
               </select>
+              {mode === 'workflow' && profile === 'autonomous-delivery' ? (
+                <p
+                  id="start-run-profile-help"
+                  className="text-sm text-muted"
+                  style={{ marginTop: 6 }}
+                >
+                  运行通过后自动准备交付证据，不会自动创建 PR。
+                </p>
+              ) : null}
             </div>
           </div>
           <p id="run-mode-help" className="text-sm text-muted">
@@ -735,7 +780,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               className="text-sm"
               style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
             >
-              该需求草案尚未批准或仍有待澄清问题，需先在草案页批准并清空开放问题后再发起运行。
+              草案尚未加载完成、需求未批准、仍有待澄清问题，或生成的计划未批准。请先在草案页处理并批准后再发起运行。
             </p>
           )}
 
