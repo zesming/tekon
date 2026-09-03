@@ -1,0 +1,1612 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第十九轮全面复审</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6fa;
+      --surface: #ffffff;
+      --surface-subtle: #f8fafc;
+      --line: #e2e8f0;
+      --line-subtle: #edf2f7;
+      --ink: #0f172a;
+      --ink-secondary: #334155;
+      --muted: #64748b;
+      --accent: #1d6fd8;
+      --accent-hover: #1555a6;
+      --accent-light: #eff6ff;
+      --accent-border: #bfdbfe;
+      --ok: #067647;
+      --ok-bg: #edfcf2;
+      --ok-border: #a6f4c5;
+      --warn: #9a5b00;
+      --warn-bg: #fff8e8;
+      --warn-border: #fcd89b;
+      --danger: #b42318;
+      --danger-bg: #fff1f0;
+      --danger-border: #fecdca;
+      --code-bg: #0f172a;
+      --code-fg: #f8fafc;
+      --inline-code-bg: #eef2f6;
+      --inline-code-fg: #0f172a;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      font-size: 15px;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.75;
+      letter-spacing: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page-wrapper {
+      width: min(1140px, calc(100% - 32px));
+      margin: 24px auto 60px;
+    }
+
+    /* Header */
+    .doc-header {
+      background: #1e293b;
+      color: #f8fafc;
+      border-radius: 8px;
+      padding: 32px 36px;
+      margin-bottom: 20px;
+      border: 1px solid #334155;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 10px;
+      letter-spacing: 0;
+    }
+
+    .doc-header h1 {
+      font-size: 25px;
+      font-weight: 700;
+      line-height: 1.35;
+      margin-bottom: 16px;
+      color: #ffffff;
+      letter-spacing: 0;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px 20px;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid #334155;
+      font-size: 13px;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .meta-label {
+      color: #94a3b8;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+
+    .meta-value {
+      color: #f1f5f9;
+      overflow-wrap: anywhere;
+    }
+
+    .meta-value code {
+      color: #38bdf8;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+      word-break: break-all;
+    }
+
+    .meta-value a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .meta-value a:hover {
+      text-decoration: underline;
+    }
+
+    /* Verdict Banner */
+    .verdict-banner {
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      border-left: 5px solid var(--danger);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .verdict-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .verdict-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--danger);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .verdict-body {
+      font-size: 14.5px;
+      color: #7f1d1d;
+      font-weight: 600;
+      line-height: 1.6;
+    }
+
+    /* Table of Contents */
+    .toc-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+
+    .toc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+
+    .toc-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .toc-subtitle {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .toc-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px 24px;
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+
+    .toc-item {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .toc-item a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .toc-item a:hover {
+      text-decoration: underline;
+    }
+
+    .toc-sub-list {
+      list-style: none;
+      padding-left: 12px;
+      margin: 4px 0 0;
+      border-left: 2px solid var(--line);
+    }
+
+    .toc-sub-item {
+      font-size: 12.5px;
+      line-height: 1.5;
+      margin: 2px 0;
+    }
+
+    .toc-sub-item a {
+      color: var(--ink-secondary);
+      font-weight: normal;
+      text-decoration: none;
+    }
+
+    .toc-sub-item a:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    /* Review sections */
+    .review-section {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0;
+      letter-spacing: 0;
+    }
+
+    .sub-heading-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 26px;
+      margin-bottom: 12px;
+      border-bottom: 1px dashed var(--line);
+      padding-bottom: 6px;
+    }
+
+    h3 {
+      font-size: 16px;
+      font-weight: 650;
+      color: var(--ink-secondary);
+      margin: 0;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 10px 0;
+      font-size: 14.5px;
+      color: var(--ink-secondary);
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.9em;
+      background: var(--inline-code-bg);
+      color: var(--inline-code-fg);
+      padding: 2px 5px;
+      border-radius: 4px;
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.55;
+      padding: 14px 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      max-width: 100%;
+      margin: 14px 0;
+      white-space: pre;
+      border: 1px solid #1e293b;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border-radius: 0;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    blockquote {
+      border-left: 4px solid var(--accent);
+      background: #f0f4f9;
+      padding: 12px 18px;
+      border-radius: 0 6px 6px 0;
+      margin: 14px 0;
+      color: var(--ink-secondary);
+    }
+
+    blockquote p {
+      margin: 4px 0;
+    }
+
+    ul, ol {
+      margin: 10px 0 14px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+      font-size: 14.5px;
+      color: var(--ink-secondary);
+      line-height: 1.7;
+    }
+
+    li > p {
+      margin: 6px 0 2px;
+    }
+
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+      max-width: 100%;
+      margin: 16px 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      min-width: 560px;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--surface-subtle);
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    tr:nth-child(even) td {
+      background: #fafbfd;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .badge-ok {
+      background: var(--ok-bg);
+      color: var(--ok);
+      border: 1px solid var(--ok-border);
+    }
+
+    .badge-warn {
+      background: var(--warn-bg);
+      color: var(--warn);
+      border: 1px solid var(--warn-border);
+    }
+
+    .badge-danger {
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid var(--danger-border);
+    }
+
+    .badge-info {
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+
+    .back-to-top, .back-to-top-sub {
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: normal;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+
+    .back-to-top:hover, .back-to-top-sub:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    @media (max-width: 768px) {
+      .page-wrapper {
+        width: calc(100% - 20px);
+        margin: 14px auto 40px;
+      }
+      .doc-header {
+        padding: 22px 18px;
+      }
+      .doc-header h1 {
+        font-size: 21px;
+      }
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+      .review-section {
+        padding: 20px 16px;
+      }
+      .toc-card {
+        padding: 18px 16px;
+      }
+      .toc-list {
+        grid-template-columns: 1fr;
+      }
+      h2 {
+        font-size: 18px;
+      }
+      h3 {
+        font-size: 15px;
+      }
+      th, td {
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .page-wrapper {
+        width: calc(100% - 12px);
+        margin: 10px auto 30px;
+      }
+      .doc-header {
+        padding: 16px 12px;
+      }
+      .doc-header h1 {
+        font-size: 18px;
+      }
+      .review-section {
+        padding: 16px 12px;
+      }
+      pre {
+        padding: 10px 12px;
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrapper">
+  <header class="doc-header">
+    <span class="eyebrow">Tekon 权威复审报告 · 第十九轮 · 2026-09-03</span>
+    <h1>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第十九轮全面复审</h1>
+    <div class="meta-grid">
+      <div class="meta-item">
+        <span class="meta-label">日期</span>
+        <span class="meta-value">2026-09-03</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">对应 PR</span>
+        <span class="meta-value"><a href="https://github.com/zesming/tekon/pull/11">#11</a></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">上一轮权威 Head</span>
+        <span class="meta-value"><code>62f7c6ba2a0c12e6ad6a0ce2be6dca026cf96840</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">用户本轮整改 Head</span>
+        <span class="meta-value"><code>b3167c52ee80f492c1d11ea9f5cd25a3193cc1c2</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Reviewer 行为修复快照</span>
+        <span class="meta-value"><code>7acfbae438dbef46befe4d7bab46b844720b80ef</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">第十九轮报告权威发布</span>
+        <span class="meta-value"><code>618de86a5e187f1398b8f66676ebc16af43ef1a6</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">主 Agent 收口快照</span>
+        <span class="meta-value"><code>0ad721d4058e8155f646313d00779134f4da0aec</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">收口版本</span>
+        <span class="meta-value"><code>0.20.5</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">产品版本</span>
+        <span class="meta-value"><code>0.20.5</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Tekon DSH tested pin</span>
+        <span class="meta-value"><code>0.1.2-alpha.3</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">DeepSeek Harness 上游发布基线</span>
+        <span class="meta-value"><code>0.1.2-alpha.5</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">用户整改自动化</span>
+        <span class="meta-value">Core #411、CI #320 均为 <code>completed/success</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Reviewer 修复自动化</span>
+        <span class="meta-value">Core #412、CI #321 均为 <code>completed/success</code></span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">主 Agent 收口自动化</span>
+        <span class="meta-value">Core run <a href="https://github.com/zesming/tekon/actions/runs/33723748836">33723748836</a>、CI run <a href="https://github.com/zesming/tekon/actions/runs/33723748858">33723748858</a> 均为 <code>completed/success</code>（7 checks 全 pass）</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="verdict-banner">
+    <div class="verdict-header">
+      <span class="verdict-tag">最终裁决</span>
+    </div>
+    <div class="verdict-body">当前增量通过代码合并门；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</div>
+  </div>
+
+  <nav id="toc" class="toc-card" aria-label="报告目录导航">
+    <div class="toc-header">
+      <span class="toc-title">目录导航 (Table of Contents)</span>
+      <span class="toc-subtitle">18 章节全量覆盖 · §18.1–§18.10 完备</span>
+    </div>
+    <ol class="toc-list">
+      <li class="toc-item">
+        <a href="#sec-1">1. 执行摘要</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-2">2. 评审范围与方法</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-3">3. 自动化与代码门</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-3-1">3.1 用户整改 Head</a></li>
+          <li class="toc-sub-item"><a href="#sec-3-2">3.2 Reviewer 修复 Head</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-4">4. 对用户最新批注的裁决</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-5">5. 本轮直接修复</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-5-1">5.1 Advanced Run 网络文案恢复真实性</a></li>
+          <li class="toc-sub-item"><a href="#sec-5-2">5.2 Advanced Run 提交状态 fail-closed</a></li>
+          <li class="toc-sub-item"><a href="#sec-5-3">5.3 mock Provider 不再伪装成真实执行</a></li>
+          <li class="toc-sub-item"><a href="#sec-5-4">5.4 DSH telemetry hard opt-out</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-6">6. 新发现：DSH 环境与能力证据仍不完整</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-6-1">6.1 exact env 不等于唯一凭据来源</a></li>
+          <li class="toc-sub-item"><a href="#sec-6-2">6.2 DSH tool allow/deny 尚未形成 enforcement</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-7">7. 新发现：<code>project.clean</code> 不是生命周期安全的清理</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-8">8. 产品逻辑评审</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-8-1">8.1 Deliver 轨道具有实际价值</a></li>
+          <li class="toc-sub-item"><a href="#sec-8-2">8.2 Collaborate 轨道仍不存在</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-9">9. UI 与 UX 评审</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-9-1">9.1 本轮关闭或改善</a></li>
+          <li class="toc-sub-item"><a href="#sec-9-2">9.2 仍未关闭</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-10">10. Runtime 与数据架构评审</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-10-1">10.1 P0：仍缺 repo 级 single-owner Runtime</a></li>
+          <li class="toc-sub-item"><a href="#sec-10-2">10.2 P0：Shutdown 仍不能证明 quiescent</a></li>
+          <li class="toc-sub-item"><a href="#sec-10-3">10.3 P0：Session Event 仍是 best-effort projection</a></li>
+          <li class="toc-sub-item"><a href="#sec-10-4">10.4 P1：Run admission 仍非原子</a></li>
+          <li class="toc-sub-item"><a href="#sec-10-5">10.5 P1：RunPlan 仍不是唯一执行事实</a></li>
+          <li class="toc-sub-item"><a href="#sec-10-6">10.6 P1：Provider admission/command identity 仍分裂</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-11">11. DeepSeek Harness alpha.5 对齐结论</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-11-1">11.1 版本事实</a></li>
+          <li class="toc-sub-item"><a href="#sec-11-2">11.2 alpha.4 → alpha.5 的主要变化</a></li>
+          <li class="toc-sub-item"><a href="#sec-11-3">11.3 Headless 仍应保持 Goal-only</a></li>
+          <li class="toc-sub-item"><a href="#sec-11-4">11.4 ACP 仍是 Collaborate 的优先 vertical slice</a></li>
+          <li class="toc-sub-item"><a href="#sec-11-5">11.5 Safety 边界</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-12">12. 代码实现与测试可信度</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-12-1">做得较好的部分</a></li>
+          <li class="toc-sub-item"><a href="#sec-12-2">仍需改进</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-13">13. 过度实现与过度设计判断</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-14">14. 优先级与实施顺序</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-14-1">P0 主链路</a></li>
+          <li class="toc-sub-item"><a href="#sec-14-2">P1 Provider 与执行事实</a></li>
+          <li class="toc-sub-item"><a href="#sec-14-3">P1 产品闭环</a></li>
+          <li class="toc-sub-item"><a href="#sec-14-4">P2 工程治理</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-15">15. 合并建议</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-16">16. 最终裁决</a>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-17">17. 关键依据</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-17-1">Tekon</a></li>
+          <li class="toc-sub-item"><a href="#sec-17-2">DeepSeek Harness alpha.5</a></li>
+        </ul>
+      </li>
+      <li class="toc-item">
+        <a href="#sec-18">18. 主 Agent 视角批注与收口裁决</a>
+        <ul class="toc-sub-list">
+          <li class="toc-sub-item"><a href="#sec-18-1">18.1 对 §5 四项直接修复的裁决与收口</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-2">18.2 DeepSeek Harness 上游事实与证据边界核定</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-3">18.3 <code>project.clean</code> 风险拆分（#33）与生命周期范围控制</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-4">18.4 跨模块架构冻结项的处置边界</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-5">18.5 实施整改细节（commit <code>0ad721d</code>, v0.20.5）</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-6">18.6 测试先行（TDD）RED 证据与 GREEN 验证</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-7">18.7 本地全量验证数据与边界限制说明</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-8">18.8 独立 Reviewer 协作循环与结论</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-9">18.9 Subagent TOML 运行时事实核对与澄清</a></li>
+          <li class="toc-sub-item"><a href="#sec-18-10">18.10 最终收口裁决与合并建议</a></li>
+        </ul>
+      </li>
+    </ol>
+  </nav>
+
+  <section id="sec-1" class="review-section">
+    <div class="section-header">
+      <h2>1. 执行摘要</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>用户本轮增量没有产品行为代码变化，只向第十八轮报告追加了评估批注，并把 DeepSeek Harness 上游基线更新到 alpha.5。该增量本身没有引入回归，当前 Head 的 Core、Root、production dependency audit、CLI、Web unit 和 Chromium Playwright 均成功。</p>
+<p>批注对以下事实的判断基本准确：</p>
+<ul>
+  <li><code>SessionServiceStartRunInput.planDigest</code> 是公开但未接线的参数；</li>
+  <li>CLI Provider preflight 通过外层 <code>activeAgent</code> 可变槽传递本次 Provider；</li>
+  <li>每 Run 一个 Project 与每物理仓库一个 Workspace 构成重复身份模型；</li>
+  <li>DSH 默认配置硬编码网络 acknowledgement，而 Web/CLI 已知入口另有前置确认。</li>
+</ul>
+<p>需要收窄的一点是：alpha.5 release tag 与当前 master 并不是同一个 commit。alpha.5 的 tag commit 是 <code>db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5</code>；<code>49a606bc5b5934603f22a26957a07dc799ab0291</code> 是随后同步到 master 的 merge commit。后续 L1/L2 fixture 应绑定 release tag，而不是把 master SHA 当作 tag identity。</p>
+<p>重新从完整产品路径反向审查后，本轮确认并处理了四类问题：</p>
+<ol>
+  <li><strong>Advanced Run UI 仍把计划声明写成宿主隔离保证</strong>：<code>网络受控隔离</code> 与实际合同不符，也与默认 Session Composer 已修正的文案矛盾；</li>
+  <li><strong>Advanced Run 提交门不完整</strong>：无 token、计划仍在加载、workflow plan 缺 digest 时，按钮没有一致 fail-closed；</li>
+  <li><strong>mock Provider 在生产表单中像真实执行器</strong>：它会生成合成结果和通过产物，却只显示为 <code>mock</code>；</li>
+  <li><strong>DSH 子进程没有明确关闭上游 telemetry</strong>：exact env 会过滤大部分 ambient 配置，但此前既没有 hard opt-out，也没有测试固定该隐私边界。</li>
+</ol>
+<p>上述四项的首轮修复方向已在 <code>7acfbae...</code> 中落地，并由 Core #412 / CI #321 首次执行全部通过；其中 Advanced Run 提交门经主 Agent 复核后仍有缺口，最终由 <code>0ad721d...</code> 补全，详见 §18.1。</p>
+<p>同时新增或扩大了两个不能用局部补丁闭环的问题：</p>
+<ul>
+  <li><strong>#32 DSH environment/evidence</strong>：exact child env 不会阻止 DSH 从工作树 <code>.env</code> 解析凭据；<code>permissionProfile.tools</code> 也没有映射成 DSH 内部工具控制；</li>
+  <li><strong>#18 Session lifecycle</strong>：<code>project.clean</code> 可直接删除 Run 目录，但不检查 active Job、不写 Audit、不处理数据库中的 Artifact/path 引用。</li>
+</ul>
+<p>因此，本轮结论不是“无问题通过”。当前 PR 的代码增量可以 squash merge；整体产品仍应定位为实验性受控交付执行与观察基础设施。</p>
+  </section>
+
+  <section id="sec-2" class="review-section">
+    <div class="section-header">
+      <h2>2. 评审范围与方法</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>本轮覆盖：</p>
+<ul>
+  <li>PR #11 最新 Head、上一权威 Head 之后的 diff 和 Actions；</li>
+  <li>README、用户手册、CHANGELOG、<code>docs/reviews/current.md</code> 与第十八轮报告最新批注；</li>
+  <li>Web 默认 Session Composer、高级 StartRunForm、TopBar、Session list/detail/right rail、历史和审批；</li>
+  <li>Core WorkflowEngine、SessionService、RunPlan、Provider Registry、AgentAdapter、Codex/Claude/DSH、JobRunner、dual-write、CommandGateway；</li>
+  <li>CLI run/resume、Session composition root、Provider preflight；</li>
+  <li>Run admission、Provider acknowledgement、Project/Workspace identity、清理与历史生命周期；</li>
+  <li>#13–#32 的问题边界和重复/过度拆分风险；</li>
+  <li>DeepSeek Harness alpha.5 release、alpha.4→alpha.5 diff、Headless、base composition、credential store、telemetry 和 Safety。</li>
+</ul>
+<p>判断原则：</p>
+<ol>
+  <li>绿色结论必须绑定具体 commit 的首次 <code>completed/success</code>，不能借用上一 Head；</li>
+  <li>capability declaration、实际 enforcement、compatibility、bypass、acknowledgement、credential source、snapshot 与 Audit 是不同事实；</li>
+  <li>计划未请求能力不等于 Host 已实施隔离；</li>
+  <li>synthetic Provider 结果不能在 UI 中伪装成真实交付证据；</li>
+  <li>删除文件目录不等于完成数据生命周期清理；</li>
+  <li>公共参数、注释和 UI 承诺必须参与真实数据流；</li>
+  <li>小而可逆的误导/隐私默认值可以直接修复；公共协议、迁移、恢复和事务语义必须拆独立 PR；</li>
+  <li>issue 数量、评审轮数和项目管理元数据不是产品成熟度。</li>
+</ol>
+<p>本轮没有可访问的独立 Tekon 部署，也没有真实 alpha.5 二进制、API key、Firefox/WebKit 或屏幕阅读器环境。UI 结论来自源码、ARIA 结构和现有 Chromium Playwright；DSH L2/L3 仍未完成。</p>
+  </section>
+
+  <section id="sec-3" class="review-section">
+    <div class="section-header">
+      <h2>3. 自动化与代码门</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-3-1">
+  <h3>3.1 用户整改 Head</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p><code>b3167c52ee80f492c1d11ea9f5cd25a3193cc1c2</code>：</p>
+<ul>
+  <li>Core #411：success；</li>
+  <li>CI #320：success；</li>
+  <li>Root build/typecheck：success；</li>
+  <li>production dependency audit：success；</li>
+  <li>CLI build/unit/e2e：success；</li>
+  <li>Web build/typecheck/unit：success；</li>
+  <li>Chromium Playwright：success。</li>
+</ul>
+<p>用户批注中写到的本地 <code>pnpm test</code> 数量，本轮没有在同一机器上独立复现；合并判断使用可验证的 Actions 结果。</p>
+<div class="sub-heading-wrap" id="sec-3-2">
+  <h3>3.2 Reviewer 修复 Head</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p><code>7acfbae438dbef46befe4d7bab46b844720b80ef</code>：</p>
+<ul>
+  <li>Core #412：success；</li>
+  <li>CI #321：success；</li>
+  <li>新增 DSH telemetry exact-env 测试通过；</li>
+  <li>修改后的 Advanced Run Chromium 用例通过；</li>
+  <li>Root、Audit、CLI、Web unit/e2e 均成功。</li>
+</ul>
+<p>因此，<strong>本轮增量通过当前代码合并门</strong>。</p>
+  </section>
+
+  <section id="sec-4" class="review-section">
+    <div class="section-header">
+      <h2>4. 对用户最新批注的裁决</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+  <th>项目</th>
+  <th>裁决</th>
+  <th>理由与边界</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>planDigest</code> 死参数</td>
+  <td><span class="badge badge-ok">通过</span></td>
+  <td>顶层字段确实未被 <code>SessionService.startRun()</code> 读取；主入口依靠未展开的 engine input 中第二份同类数据生效。</td>
+</tr>
+<tr>
+  <td>CLI <code>activeAgent</code> mutable slot</td>
+  <td><span class="badge badge-ok">通过</span></td>
+  <td>单 CLI 命令通常串行，当前事故概率有限，但公共编排接口无法证明本次 preflight 对应本次 Provider。</td>
+</tr>
+<tr>
+  <td>Project/Workspace 双重身份</td>
+  <td><span class="badge badge-ok">通过</span></td>
+  <td>Workflow 每 Run 新建 Project，Session 按物理 repo 复用 Workspace，领域身份重复。</td>
+</tr>
+<tr>
+  <td>DSH 默认 network ack</td>
+  <td><span class="badge badge-warn">“风险面收窄”判断通过</span></td>
+  <td>Web/CLI 已知入口有前置确认；Core 与未来调用方、snapshot/resume 路径以及 <code>onPrepared</code> 非原子窗口的风险仍真实存在。</td>
+</tr>
+<tr>
+  <td>alpha.5 已发布</td>
+  <td><span class="badge badge-ok">通过</span></td>
+  <td>2026-09-02 已发布。</td>
+</tr>
+<tr>
+  <td>alpha.5 <code>HEAD=49a606...</code></td>
+  <td><span class="badge badge-danger">需修正</span></td>
+  <td><code>49a606...</code> 是 master release-sync merge；tag commit 为 <code>db6bdc...</code>。</td>
+</tr>
+<tr>
+  <td>“合同锚点零漂移”</td>
+  <td><span class="badge badge-warn">部分通过</span></td>
+  <td>alpha.4→alpha.5 的当前 Headless metadata 锚点未观察到漂移；alpha.3→alpha.5 仍包含默认 <code>web_fetch</code> 变化，且 L2/L3 未验证。</td>
+</tr>
+</tbody>
+</table>
+</div>
+  </section>
+
+  <section id="sec-5" class="review-section">
+    <div class="section-header">
+      <h2>5. 本轮直接修复</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-5-1">
+  <h3>5.1 Advanced Run 网络文案恢复真实性</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>原高级表单在 <code>requiresUnrestrictedNetwork=false</code> 时显示绿色：</p>
+<pre><code>网络受控隔离</code></pre>
+<p>但该字段只表示 canonical plan 没有声明需要不受限网络，不能证明：</p>
+<ul>
+  <li>Provider sandbox 已执行网络隔离；</li>
+  <li>通用解释器、自定义二进制不能联网；</li>
+  <li>Host/container firewall 已生效；</li>
+  <li>当前工作负载没有其它 egress 路径。</li>
+</ul>
+<p>这也与默认 Session Composer 的正确文案发生漂移。</p>
+<p>现在改为：</p>
+<pre><code>计划未请求不受限网络</code></pre>
+<p>并补充：</p>
+<blockquote><p>此处只表示计划未声明不受限网络；实际网络隔离仍取决于 Provider 与宿主环境。</p></blockquote>
+<p>Playwright 同时增加反向断言，确保 <code>网络受控隔离</code> 不再出现。</p>
+<div class="sub-heading-wrap" id="sec-5-2">
+  <h3>5.2 Advanced Run 提交状态 fail-closed</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>原 <code>isSubmitDisabled</code> 没有完整包含：</p>
+<ul>
+  <li><code>!token</code>；</li>
+  <li><code>planLoading</code>；</li>
+  <li>workflow plan 已返回但缺少 digest。</li>
+</ul>
+<p>这会让高级入口与默认 Composer 出现不同的启动语义：用户可以点击后才收到 token 警告，或在计划切换窗口中发送旧/不完整数据，最终依赖服务端 400 兜底。</p>
+<p>现在：</p>
+<pre><code>无 token
+或计划加载中
+或计划失败
+或 workflow digest 缺失
+或需要网络确认但未确认
+→ 按钮禁用 + 可行动提示</code></pre>
+<p><code>handleStart()</code> 仍保留防御式检查，避免程序化触发绕开 UI disabled 状态。以上是 <code>7acfbae...</code> 的首轮修复；主 Agent 后续在 <code>0ad721d...</code> 中补齐统一状态选择器、同步防重入 latch 和未批准草案门禁，详见 §18.1。</p>
+<div class="sub-heading-wrap" id="sec-5-3">
+  <h3>5.3 mock Provider 不再伪装成真实执行</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p><code>mock-agent-adapter.ts</code> 会生成确定性的合成产物，其中多项 Gate 状态为通过；它适合测试和离线演示，但不执行真实 Agent。</p>
+<p>高级表单原来只显示：</p>
+<pre><code>mock</code></pre>
+<p>普通用户可能把合成 Run、Artifact 或 Gate 结果误认为真实工作完成。</p>
+<p>现在 option 和选中后的提示明确说明：</p>
+<pre><code>仅测试/演示
+生成合成结果与产物
+不执行真实代理任务
+不能作为交付完成证据</code></pre>
+<p>长期更好的产品形态是把它移动到显式 Simulation/Developer mode，而不是永久与生产 Provider 并列；本轮先关闭无提示误用。</p>
+<div class="sub-heading-wrap" id="sec-5-4">
+  <h3>5.4 DSH telemetry hard opt-out</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>DeepSeek Harness alpha.3 与 alpha.5 的 base composition 都挂载 session telemetry，默认是 feedback-gated；<code>DSH_TELEMETRY_MODE=FULL</code> 还可启用完整事件流。Tekon Headless 没有可见的 <code>/feedback</code> 交互，也没有 telemetry consent 产品模型。</p>
+<p>原 exact env 不会转发大多数 <code>DSH_*</code> 变量，但也没有明确设置官方 hard opt-out。现在 child env 固定：</p>
+<pre><code>DSH_TELEMETRY_DISABLED=1</code></pre>
+<p>并明确不继承 ambient：</p>
+<pre><code>DSH_TELEMETRY_MODE
+DSH_TELEMETRY_OTLP_URL</code></pre>
+<p>新增测试在外层故意设置 <code>FULL</code> 和自定义 endpoint，验证传给 DSH 的 exact env 仍只有 hard opt-out。</p>
+<p>这项修复只关闭正式 Run 的 telemetry 默认值；它不解决 DSH 自身的凭据 fallback、网络能力或内部工具控制。metadata probe 阶段的残留缺口及后续补全见 §18.1。</p>
+  </section>
+
+  <section id="sec-6" class="review-section">
+    <div class="section-header">
+      <h2>6. 新发现：DSH 环境与能力证据仍不完整</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-6-1">
+  <h3>6.1 exact env 不等于唯一凭据来源</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>官方 DSH 凭据优先级为：</p>
+<pre><code>launch environment
+→ $DSH_HOME/.credentials.yaml
+→ invocation cwd/.env
+→ $DSH_HOME/.env</code></pre>
+<p>Tekon 将 <code>cwd</code> 设为 worktree，将 <code>DSH_HOME</code> 设为每 run/node 的新目录。新的 Home 可以减少跨 Run profile/session 污染，但工作树根目录 <code>.env</code> 仍然是 DSH 的合法 fallback。</p>
+<p>因此：</p>
+<pre><code>child env 中没有 DEEPSEEK_API_KEY</code></pre>
+<p>不能推出：</p>
+<pre><code>DSH 没有得到 API key</code></pre>
+<p>更不能推出凭据来自本次用户显式输入。当前 snapshot、Audit、health 与 UI 无法区分 process env、worktree <code>.env</code>、local credential store 或缺失凭据。</p>
+<p>官方也明确说明 DSH 的本地 credential store 与 Agent 工具进程使用同一 OS 用户；owner-only 文件权限是谨慎隐藏，不是 Agent 与密钥之间的安全边界。</p>
+<div class="sub-heading-wrap" id="sec-6-2">
+  <h3>6.2 DSH tool allow/deny 尚未形成 enforcement</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>Tekon DSH 默认 permission profile 写入：</p>
+<pre><code>allow: git, npm, pnpm
+deny: rm, sudo, git push --force</code></pre>
+<p>但外层 CommandGateway 只看到并约束 <code>dsh --profile headless &lt;task&gt;</code> 这一启动命令。它不能直接审查 DSH 内部的 bash/filesystem/tool 调用；当前代码也没有把这组 allow/deny 转换成 DSH bundle/plugin 配置。</p>
+<p><code>assertAgentProviderCapabilities()</code> 因而主要验证“配置声明看起来有边界”，而不是证明每项边界由 Provider 或 OS 执行。其返回的 <code>ProviderCapabilityMapping</code> 目前也没有被调用方持久化为可验证证据。</p>
+<p>结论：</p>
+<ul>
+  <li>DSH 的 filesystem sandbox/approval 可以按官方机制描述；</li>
+  <li>network 应继续描述为 enabled/unrestricted；</li>
+  <li>未映射的 tool allow/deny 不能进入“已执行控制”成熟度表述。</li>
+</ul>
+<p>已创建 <a href="https://github.com/zesming/tekon/issues/32">#32</a>，要求统一 credential provenance、telemetry policy 和 <code>declared / provider-enforced / os-enforced</code> capability evidence。</p>
+  </section>
+
+  <section id="sec-7" class="review-section">
+    <div class="section-header">
+      <h2>7. 新发现：<code>project.clean</code> 不是生命周期安全的清理</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>Web <code>project.clean</code> 当前完成 token、确认字符串、runId 格式与 scope 校验后，直接执行：</p>
+<pre><code>rm -rf .tekon/runs/&lt;runId&gt;</code></pre>
+<p>它没有：</p>
+<ul>
+  <li>拒绝 non-terminal Run 或 active Job；</li>
+  <li>与 JobRunner/SubprocessRegistry 协调；</li>
+  <li>写入 Audit 或 durable tombstone；</li>
+  <li>删除/修正数据库中的 Artifact、Gate、Delivery、Session 路径引用；</li>
+  <li>在清理前提供完整导出；</li>
+  <li>对文件删除与数据库变更做事务/saga 或失败恢复。</li>
+</ul>
+<p>可能后果：</p>
+<ol>
+  <li>Provider 仍在写目录时，API 把目录删除；</li>
+  <li>数据库仍显示 Artifact/证据存在，但点击路径已经消失；</li>
+  <li>Audit UI 看起来完整，实际底层文件已经被破坏；</li>
+  <li>重复 clean、部分删除或进程重启后的状态没有统一语义。</li>
+</ol>
+<p>固定确认字面量只能减少误点，不能保证生命周期一致性。</p>
+<p>入口防误删已拆为独立 <a href="https://github.com/zesming/tekon/issues/33">#33</a>，完整导出、retention、compaction 与 lifecycle-safe purge 继续由 <a href="https://github.com/zesming/tekon/issues/18">#18</a> 统一处理；范围说明见 §18.3。</p>
+  </section>
+
+  <section id="sec-8" class="review-section">
+    <div class="section-header">
+      <h2>8. 产品逻辑评审</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-8-1">
+  <h3>8.1 Deliver 轨道具有实际价值</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>当前真正成立的产品链路仍是：</p>
+<pre><code>需求输入
+→ 服务端 RunPlan 与 digest
+→ standard-delivery 角色链
+→ 隔离 worktree
+→ Gate / Artifact / Audit / Review
+→ 人工审批
+→ Delivery / PR 准备</code></pre>
+<p>成立的关键点：</p>
+<ul>
+  <li>默认入口明确为“启动受控交付”，不再伪装成普通聊天；</li>
+  <li>plan/digest/token/必要确认缺失时主路径 fail-closed；</li>
+  <li>dirty base、网络例外和远端副作用有明确提示；</li>
+  <li>Goal 与 Workflow/Deliver 边界清楚；</li>
+  <li>Session 列表、观察、审批和控制具有可用路径；</li>
+  <li>历史 cursor、replay/pending budget、heartbeat backpressure 与截断提示基本成立；</li>
+  <li>Session right rail 可以用快照兜底 best-effort Event；</li>
+  <li>未知状态不会被虚构为 running。</li>
+</ul>
+<p>因此 Tekon 已经不是只能由 Agent 自举的内部框架，而是一套工程用户可以监督使用的受控执行与证据工作台。</p>
+<div class="sub-heading-wrap" id="sec-8-2">
+  <h3>8.2 Collaborate 轨道仍不存在</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>用户仍不能在同一 Session 中完成：</p>
+<pre><code>持续输入
+→ Provider execution-time semantic updates
+→ follow-up / steer
+→ prompt-owned cancel
+→ Runtime 重启后恢复
+→ 原地升级为 Deliver</code></pre>
+<p>Legacy driver 仍等待 one-shot adapter 完整结束后再投影缓存事件；<code>followUp</code>、<code>steer</code>、<code>resume</code> 尚未实现。</p>
+<p>所以当前 Session 的真实角色仍是：</p>
+<ul>
+  <li>Run 观察面；</li>
+  <li>审批面；</li>
+  <li>治理证据面；</li>
+  <li>结果与历史投影面。</li>
+</ul>
+<p>它不是稳定的多轮研发协作空间。</p>
+  </section>
+
+  <section id="sec-9" class="review-section">
+    <div class="section-header">
+      <h2>9. UI 与 UX 评审</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-9-1">
+  <h3>9.1 本轮关闭或改善</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>默认 Composer 与 Advanced Run 的网络文案恢复一致；</li>
+  <li>Advanced Run 的 token/plan/digest loading gate 更完整；</li>
+  <li>mock 不再无提示进入真实执行器列表；</li>
+  <li>DSH experimental、Goal-only 和不受限网络仍明确；</li>
+  <li>现有 TopBar accessible description、Dialog 焦点管理、Session snapshot fallback 继续成立。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-9-2">
+  <h3>9.2 仍未关闭</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ol>
+  <li><strong>两个启动入口仍容易再次漂移</strong>  <p>默认 Session Composer 和 Advanced StartRunForm 分别实现计划加载、网络语义、digest gate 与错误呈现。本轮的“网络受控隔离”回归正是重复 UI 状态机导致回归的证据。后续应共享 <code>RunPlanDisclosure</code> 和 <code>RunAdmissionState</code>，而不是继续复制条件。</p></li>
+  <li><strong>Credential health 仍等待可选 DSH probe</strong>  <p>普通连接状态仍与可选 Provider metadata 探测耦合；具体错误也只归并为 available/unavailable。</p></li>
+  <li><strong>完整历史没有直接出口</strong>  <p>截断后只能分页，不能一键导出完整 Session、子 Session、Artifact 与审批证据。</p></li>
+  <li><strong>Admission 失败的重试语义不清晰</strong>  <p>非原子启动可能留下部分 Run；用户无法判断“失败是否无痕”以及能否安全重试。</p></li>
+  <li><strong>工程概念仍较多</strong>  <p>Session、Run、Gate、Artifact、Profile、Provider、Token 仍进入普通路径；mock 更适合独立 Simulation mode。</p></li>
+  <li><strong>辅助技术验收仍不足</strong>  <p>只有 Chromium 和局部 ARIA 证据，没有 Firefox、WebKit、NVDA/JAWS/VoiceOver、200%/400% 缩放、forced-colors、reduced-motion 和真实弱网矩阵。</p></li>
+  <li><strong>视觉回归不足</strong>  <p>极长需求、多个 Gate、长 Artifact、多错误叠加、窄屏和历史截断组合主要依赖人工发现。</p></li>
+</ol>
+  </section>
+
+  <section id="sec-10" class="review-section">
+    <div class="section-header">
+      <h2>10. Runtime 与数据架构评审</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-10-1">
+  <h3>10.1 P0：仍缺 repo 级 single-owner Runtime</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>CLI 与 Web 仍可分别持有：</p>
+<ul>
+  <li>SQLite、WriteQueue、repositories；</li>
+  <li>Session store、EventBus；</li>
+  <li>JobRunner、SubprocessRegistry；</li>
+  <li>Workflow/Automation executor；</li>
+  <li>Git/worktree、Provider；</li>
+  <li>shutdown 生命周期。</li>
+</ul>
+<p>Job owner、lease、CAS 与进程内 generation token 只能保护部分 Job/Workflow 行，不能完整 fence 普通文件、Git promotion、Artifact、Gate、Audit、Delivery 和外部 SDK 副作用。</p>
+<p>长期方向仍应是：</p>
+<pre><code>repo-scoped daemon/service
+→ physical repo lock
+→ CLI/Web 客户端化
+→ 单一 admission/execution/shutdown authority</code></pre>
+<div class="sub-heading-wrap" id="sec-10-2">
+  <h3>10.2 P0：Shutdown 仍不能证明 quiescent</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>当前 stop 已有停止 poll、等待 active poll、settle window、AbortController、registered subprocess kill、hard deadline 与 DB closed fence。</p>
+<p>但 hard deadline 返回时，不合作 executor 仍可能继续 JavaScript、普通文件、Git 或外部 SDK 副作用。完整闭环需要 process/worker isolation、真实 kill/join、generation fencing、checkpoint/flush 和 crash/restart/late-write 故障注入。</p>
+<div class="sub-heading-wrap" id="sec-10-3">
+  <h3>10.3 P0：Session Event 仍是 best-effort projection</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>当前依然是：</p>
+<pre><code>领域表 / Audit 先成功
+→ best-effort append session_event
+→ 找不到 Session 或追加失败时允许跳过</code></pre>
+<p>它适合 UI projection，但不能独立承担 durable inbox、权威模型历史、prompt claim/processed、crash replay、fork/resume 或 restart recovery。</p>
+<div class="sub-heading-wrap" id="sec-10-4">
+  <h3>10.4 P1：Run admission 仍非原子</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>启动横跨：</p>
+<pre><code>Demand
+→ Project
+→ Run
+→ Provider snapshot
+→ ExecutionPlan
+→ Audit
+→ Workspace
+→ Session
+→ opening Events
+→ Job</code></pre>
+<p>没有统一事务、transactional outbox 或显式 admission saga。#31 仍是发布前的重要数据一致性问题。</p>
+<div class="sub-heading-wrap" id="sec-10-5">
+  <h3>10.5 P1：RunPlan 仍不是唯一执行事实</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>仍未完整绑定：</p>
+<ul>
+  <li>Demand identity/version/body hash；</li>
+  <li>mode；</li>
+  <li>base revision；</li>
+  <li>workspace physical identity；</li>
+  <li>resolved Provider executable/config/capability evidence；</li>
+  <li>permission/network acknowledgement；</li>
+  <li>expected Artifacts；</li>
+  <li>executable node plan。</li>
+</ul>
+<p>顶层 <code>SessionService.planDigest</code> 静默失效；Project/Workspace identity 也未统一。#20 应与 #22/#29/#31 共同定义不可变 RunAdmission snapshot。</p>
+<div class="sub-heading-wrap" id="sec-10-6">
+  <h3>10.6 P1：Provider admission/command identity 仍分裂</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>DSH/Codex 仍可受 executable basename 影响 preflight 或 argv framing；</li>
+  <li>CLI preflight 仍依赖 <code>activeAgent</code> mutable slot；</li>
+  <li>Credential health、Provider health、run admission 和 execution recheck 尚未统一；</li>
+  <li>Codex/Claude 缺少与 DSH 同级的持久化前 capability probe。</li>
+</ul>
+  </section>
+
+  <section id="sec-11" class="review-section">
+    <div class="section-header">
+      <h2>11. DeepSeek Harness alpha.5 对齐结论</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-11-1">
+  <h3>11.1 版本事实</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>截至 2026-09-03：</p>
+<pre><code>Tekon tested pin = 0.1.2-alpha.3
+upstream release = 0.1.2-alpha.5
+alpha.5 tag = db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5
+current master sync = 49a606bc5b5934603f22a26957a07dc799ab0291</code></pre>
+<p>继续精确 pin alpha.3 是合理的 fail-closed 选择；不能因为上游有新 prerelease 就自动升级。</p>
+<div class="sub-heading-wrap" id="sec-11-2">
+  <h3>11.2 alpha.4 → alpha.5 的主要变化</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>本次 release 主要修复从旧版本升级时：</p>
+<ul>
+  <li>session projection cache 版本兼容；</li>
+  <li>legacy storage document salvage；</li>
+  <li>app 启动或 Session title 丢失问题。</li>
+</ul>
+<p>当前 Headless one-shot、help anchor、五个 metadata row id 与 Node engines 没有观察到直接漂移。</p>
+<p>但这只说明 L1 静态锚点；不代表：</p>
+<ul>
+  <li>alpha.3→alpha.5 完全无变化；</li>
+  <li>真实安装 metadata 已通过；</li>
+  <li>API 调用、timeout、cancel、redaction 已通过；</li>
+  <li>默认 <code>web_fetch</code>、credential fallback 或 telemetry 边界已完成验证。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-11-3">
+  <h3>11.3 Headless 仍应保持 Goal-only</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>官方 Headless 仍是：</p>
+<pre><code>一次 invocation
+→ 一个 positional task
+→ fresh Agent
+→ 等待 quiescence / flush Session
+→ stdout 最终文本
+→ 退出</code></pre>
+<p>没有 interactive follow-up，因此 Tekon 继续把它限制在 Goal/one-shot 场景是正确的。</p>
+<div class="sub-heading-wrap" id="sec-11-4">
+  <h3>11.4 ACP 仍是 Collaborate 的优先 vertical slice</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>持续协作应验证：</p>
+<pre><code>owned ACP subprocess
+→ session/new
+→ prompt
+→ execution-time semantic updates
+→ prompt cancel
+→ quiescent close
+→ process restart + session/resume</code></pre>
+<p>不要把 persistent session 强行映射回 one-shot AgentAdapter。</p>
+<div class="sub-heading-wrap" id="sec-11-5">
+  <h3>11.5 Safety 边界</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>Harness 仍是快速迭代的 developer preview。其 sandbox、approval 和 permission controls 可以降低风险，但不能作为 Tekon 对不可信 workload 的唯一安全边界。</p>
+  </section>
+
+  <section id="sec-12" class="review-section">
+    <div class="section-header">
+      <h2>12. 代码实现与测试可信度</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-12-1">
+  <h3>做得较好的部分</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>Core/CLI/Web 分层和大量不变量测试已经形成较强回归网；</li>
+  <li>package-manager、版本 lockstep、production audit、CLI e2e 与 Chromium gate 已稳定；</li>
+  <li>SSE replay/backpressure、Session snapshot fallback、Job owner/CAS、CommandGateway no-progress 边界均有针对性测试；</li>
+  <li>本轮 UI 文案通过反向 Playwright 断言固定，不只修改字符串；</li>
+  <li>DSH telemetry 修复在 ambient FULL/endpoint 条件下验证 exact env，而不是只断言默认情况。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-12-2">
+  <h3>仍需改进</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>Actions 主要跑 Node 24，声明的 Node 20.19/22.12 支持范围没有持续矩阵；</li>
+  <li>没有真实 semantic lint，多个 <code>lint</code> 仍主要等价于 typecheck；</li>
+  <li>DSH L2/L3、Codex/Claude provider smoke 仍不足；</li>
+  <li>当前测试大量依赖同进程 fake，不能证明 multi-process DB、crash/restart 和真实 subprocess quiescence；</li>
+  <li>浏览器矩阵只有 Chromium；</li>
+  <li><code>useQuery</code> 创建 AbortController，但 fetcher 不接收 signal，当前“取消”主要是结果 generation guard，而非真实网络中止；属于低优先级复杂度债务。</li>
+</ul>
+  </section>
+
+  <section id="sec-13" class="review-section">
+    <div class="section-header">
+      <h2>13. 过度实现与过度设计判断</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>当前结构性风险仍是：</p>
+<blockquote><p>横向框架、治理层、测试替身和评审资料的增长速度，持续快于纵向持续协作闭环。</p></blockquote>
+<p>项目已有：</p>
+<pre><code>AgentAdapter / AgentDriver / LegacyAgentDriver
+Provider Registry / capability declarations
+Workflow / Role / Gate / Artifact / Audit
+JobRunner / Session projection / SSE
+Profile / Automation / Goal / Readiness / Delivery
+CLI / Web 两套 composition root
+默认 Composer + Advanced Run 两套 admission UI
+大量计划、ADR、报告和 issue</code></pre>
+<p>而最小 Collaborate 链路仍未成立。</p>
+<p>本轮出现的文案漂移说明 UI 也存在横向重复：两个启动入口分别实现同一计划/准入状态机。后续不应再为第三个入口复制一遍，而应提取共享 admission view-model。</p>
+<p><code>assertAgentProviderCapabilities()</code> 返回一份结构化 mapping，但实际调用方只利用“抛不抛错”；对于 DSH，tool allow/deny 还是未映射声明。这里不需要继续扩展更大的通用 capability DSL，优先把三种真实 Provider 的实际 evidence 落实为可验证证据。</p>
+<p>在以下主链路完成前，应冻结新的 Profile、Automation job、Driver wrapper、展示 Event 和 Workflow DSL：</p>
+<pre><code>single-owner Runtime
+→ executor isolation/restart
+→ request-scoped Provider admission
+→ credential/capability evidence
+→ atomic Run admission
+→ canonical RunPlan authority
+→ authoritative Session
+→ persistent Provider stream
+→ follow-up / cancel / resume
+→ Collaborate → Deliver
+→ export / compaction / lifecycle retention</code></pre>
+  </section>
+
+  <section id="sec-14" class="review-section">
+    <div class="section-header">
+      <h2>14. 优先级与实施顺序</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-14-1">
+  <h3>P0 主链路</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ol>
+  <li>#16 single-owner Runtime + physical repo lock；</li>
+  <li>#15 executor isolation、kill/join 与 restart contract；</li>
+  <li>#31 atomic Run admission / saga；</li>
+  <li>#13 authoritative Session/outbox + durable inbox。</li>
+</ol>
+<div class="sub-heading-wrap" id="sec-14-2">
+  <h3>P1 Provider 与执行事实</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ol>
+  <li>#29 request-scoped Provider capability/admission；</li>
+  <li>#28 command identity/framing；</li>
+  <li>#32 DSH credential/telemetry/capability evidence；</li>
+  <li>#22 exception acknowledgement/snapshot/Audit；</li>
+  <li>#20 RunPlan admission/execute/resume authority；</li>
+  <li>#17 alpha.5 L2/L3。</li>
+</ol>
+<div class="sub-heading-wrap" id="sec-14-3">
+  <h3>P1 产品闭环</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ol>
+  <li>#14 ACP vertical slice；</li>
+  <li>#19 Collaborate → Deliver；</li>
+  <li>#18 export/compaction/retention/lifecycle-safe purge；</li>
+  <li>#21 a11y/browser/weak-network matrix。</li>
+</ol>
+<div class="sub-heading-wrap" id="sec-14-4">
+  <h3>P2 工程治理</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>#25 CommandGateway timeout state machine 拆分；</li>
+  <li>#26 semantic lint 与 format debt；</li>
+  <li>#24 required checks、SBOM、provenance、签名与 release channel。</li>
+</ul>
+  </section>
+
+  <section id="sec-15" class="review-section">
+    <div class="section-header">
+      <h2>15. 合并建议</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>当前 PR 已明显超过适合逐行审阅、可靠二分和低风险回滚的规模。最终建议：</p>
+<ul>
+  <li>使用 <strong>squash merge</strong>；</li>
+  <li>合并前确认 PR Head 未变化，Core/CI 仍为 success；</li>
+  <li>不在 PR #11 继续实现 daemon、Session truth、ACP、RunPlan schema 或 admission transaction；</li>
+  <li>后续 #13–#32 全部使用独立小 PR；</li>
+  <li><code>main</code> 未配置 required checks，仍需人工执行最终合并门。</li>
+</ul>
+<p>本轮未执行 merge、release、deploy 或 ruleset 修改。</p>
+  </section>
+
+  <section id="sec-16" class="review-section">
+    <div class="section-header">
+      <h2>16. 最终裁决</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p><strong>当前 PR 的本轮增量通过代码合并门。</strong></p>
+<p><strong>Tekon 整体产品验收仍不通过。</strong></p>
+<p>允许的成熟度表述：</p>
+<blockquote><p>Tekon v0.20.5 已形成测试覆盖较强、执行计划与风险边界较透明、Session 在线观察具有基础资源上限、可选 DSH Headless Provider 具有 tested pin、Host Node fail-closed 预检和 telemetry hard opt-out 的实验性受控交付执行与观察基础设施；Deliver 轨道可在有人监督下使用，但持续协作、单一 Runtime 权威、权威 Session 事实链、原子 Run admission、Provider credential/capability evidence、可证明的 shutdown/restart、完整历史导出和模型上下文预算仍未闭环。</p></blockquote>
+  </section>
+
+  <section id="sec-17" class="review-section">
+    <div class="section-header">
+      <h2>17. 关键依据</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<div class="sub-heading-wrap" id="sec-17-1">
+  <h3>Tekon</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><a href="../../packages/web/src/client/components/runs/StartRunForm.tsx"><code>packages/web/src/client/components/runs/StartRunForm.tsx</code></a></li>
+  <li><a href="../../packages/web/src/client/components/runs/start-run-submit-state.ts"><code>packages/web/src/client/components/runs/start-run-submit-state.ts</code></a></li>
+  <li><a href="../../packages/web/__tests__/client/start-run-submit-state.test.ts"><code>packages/web/__tests__/client/start-run-submit-state.test.ts</code></a></li>
+  <li><a href="../../packages/web/__tests__/e2e/start-run-admission.e2e.test.ts"><code>packages/web/__tests__/e2e/start-run-admission.e2e.test.ts</code></a></li>
+  <li><a href="../../packages/web/__tests__/e2e/start-run-form.test.ts"><code>packages/web/__tests__/e2e/start-run-form.test.ts</code></a></li>
+  <li><a href="../../packages/core/src/runtime/dsh-headless-adapter.ts"><code>packages/core/src/runtime/dsh-headless-adapter.ts</code></a></li>
+  <li><a href="../../packages/core/src/runtime/dsh-bridge-probe.ts"><code>packages/core/src/runtime/dsh-bridge-probe.ts</code></a></li>
+  <li><a href="../../packages/core/__tests__/runtime/dsh-bridge-probe-telemetry-env.test.ts"><code>packages/core/__tests__/runtime/dsh-bridge-probe-telemetry-env.test.ts</code></a></li>
+  <li><a href="../../packages/core/__tests__/runtime/dsh-headless-telemetry-env.test.ts"><code>packages/core/__tests__/runtime/dsh-headless-telemetry-env.test.ts</code></a></li>
+  <li><a href="../../packages/core/src/runtime/agent-adapter.ts"><code>packages/core/src/runtime/agent-adapter.ts</code></a></li>
+  <li><a href="../../packages/core/src/runtime/mock-agent-adapter.ts"><code>packages/core/src/runtime/mock-agent-adapter.ts</code></a></li>
+  <li><a href="../../packages/core/src/session/session-service.ts"><code>packages/core/src/session/session-service.ts</code></a></li>
+  <li><a href="../../packages/web/src/server/api/routers/project.ts"><code>packages/web/src/server/api/routers/project.ts</code></a></li>
+  <li><a href="../../packages/core/src/workflow/run-plan.ts"><code>packages/core/src/workflow/run-plan.ts</code></a></li>
+  <li><a href="../superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md"><code>docs/superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md</code></a></li>
+</ul>
+<div class="sub-heading-wrap" id="sec-17-2">
+  <h3>DeepSeek Harness alpha.5</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.5">alpha.5 release</a></li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.1.2-alpha.4...dsh-v0.1.2-alpha.5">alpha.4 → alpha.5 compare</a></li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/apps/cli/reference/README.md">CLI behavior reference</a></li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/bundle/base/cordis.patch.yml">Base composition</a></li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/bundle/headless/cordis.patch.yml">Headless composition</a></li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/credentials/credentials-local/src/index.ts">Local credential provider index (<code>packages/credentials/credentials-local/src/index.ts</code>)</a> 与 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/credentials/credentials-local/README.md">文档说明</a>（官方源码确立凭据解析分层：<code>process.env</code> &gt; <code>$DSH_HOME/.credentials.yaml</code> &gt; <code>&lt;invocation cwd&gt;/.env</code> &gt; <code>$DSH_HOME/.env</code>）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/boot/app-boot/src/index.ts">App boot (<code>packages/boot/app-boot/src/index.ts</code>)</a>（共享 boot 基础设施与 Loader 驱动）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/boot/app-boot/src/profile.ts">Profile boot (<code>packages/boot/app-boot/src/profile.ts</code>)</a> 与 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/apps/cli/src/profile-boot.ts">CLI profile runner (<code>apps/cli/src/profile-boot.ts</code>)</a>（<code>--profile headless --help</code> 触发 profile 与 plugin 完整引导）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/core/tools/src/index.ts">Core tools (<code>packages/core/tools/src/index.ts</code>)</a>（Cordis 内置工具服务定义与 schema，与 Tekon shell 声明的概念错位证据）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md">Web fetch capability seam note (<code>.agents/notes/implemented/architecture/2026-06-24-web-capability-seam.md</code>)</a> 与 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/web/tool-web/README.md">Tool web (<code>packages/web/tool-web/README.md</code>)</a>（<code>web_fetch</code> 无需逐次审批公网抓取机制）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/acp/acp/README.md">ACP server (<code>packages/acp/acp/README.md</code>)</a> 与 <a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/packages/acp/acp/src/index.ts">ACP entry (<code>packages/acp/acp/src/index.ts</code>)</a>（持久 Session、流式更新与标准交互控制协议）</li>
+  <li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.5/SAFETY.md">Safety</a></li>
+</ul>
+  </section>
+
+  <section id="sec-18" class="review-section">
+    <div class="section-header">
+      <h2>18. 主 Agent 视角批注与收口裁决</h2>
+      <a href="#toc" class="back-to-top" title="返回目录">↑ 目录</a>
+    </div>
+<p>本节记录主 Agent 在 <code>0ad721d</code> 收口后的最终复核；§1–§17 保留此前各快照的评审时点，若结论存在演进，以本节为准。</p>
+<div class="sub-heading-wrap" id="sec-18-1">
+  <h3>18.1 对 §5 四项直接修复的裁决与收口</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>网络文案（§5.1）</strong>：Advanced Run 历史表述“网络受控隔离”与实际合同不符。按本轮验证，DSH 当前沙箱不能作为公网出站阻断证据，network 应继续标为 enabled/unrestricted，现有 sandbox 证据集中在文件写入约束。<code>7acfbae</code> 将文案修正为“计划未请求不受限网络”，明确实际隔离能力取决于底层 Provider 与宿主环境，并在 Playwright 中补充反向断言。主 Agent 裁决：<strong>整改成立，予以通过</strong>。</li>
+  <li><strong>mock Provider 产品身份（§5.3）</strong>：针对高级表单中 mock 与真实 Provider 缺乏醒目隔离的问题，<code>7acfbae</code> 增加了明确的中文警示 Note，标注 mock 仅用于测试/演示、生成合成结果与通过产物、不执行真实任务、不能作为交付依据。主 Agent 裁决：<strong>整改成立，予以通过</strong>。</li>
+  <li><strong>DSH telemetry 边界（§5.4）</strong>：<code>7acfbae</code> 在正式 Run 子进程（<code>envMode: exact</code> 白名单）中固定 <code>DSH_TELEMETRY_DISABLED=1</code>，确保不继承宿主 ambient telemetry 配置。复核发现，前置 metadata probe 原先仍直接继承宿主环境，因此无法证明 probe 阶段已关闭 DSH 内置 telemetry，并存在宿主默认值污染风险；没有证据表明该阶段已经发生遥测外传。<code>0ad721d</code> 随后在 <code>dsh-bridge-probe.ts</code> 统一删除 <code>DSH_TELEMETRY_MODE</code> 与 <code>DSH_TELEMETRY_OTLP_URL</code>、固定注入 <code>DSH_TELEMETRY_DISABLED=1</code>，并以真实子进程环境捕获测试固定边界。主 Agent 裁决：<strong>正式 Run 与 metadata probe 在本轮范围内均已完成内置 telemetry hard opt-out，予以通过</strong>。</li>
+  <li><strong>Advanced Run 提交门与防重入（§5.2）</strong>：<code>7acfbae</code> 提出的 fail-closed 准入拦截方向正确，但原补丁存在三处关键缺陷：
+<ol>
+  <li>缺少针对准入优先级和阻断条件的可证伪单元测试，也缺少防重入 e2e；</li>
+  <li>仅依赖 React 异步状态 <code>isPending</code> 进行禁用，在同一事件循环 tick 内双击或并发触发时，存在重入窗口（即同一页面同时派发两个 <code>project.run</code> RPC 请求）；</li>
+  <li>表单状态机遗漏了对需求草案“已生成计划但尚未审批”（<code>hasPlan &amp;&amp; !planApproved</code>）状态的拦截，导致未批准计划草案可绕过审批直接提交。<p>主 Agent 在 <code>0ad721d</code> 中将准入逻辑抽取为纯函数 <code>startRunSubmitState()</code> 并补全 9 级优先级的独立单测，在 <code>StartRunForm</code> 中引入同步 <code>useRef</code> latch，关闭本轮确认的同一 tick 重入窗口（失败时重置以支持重试），并严格阻断未批准的草案计划。主 Agent 裁决：<strong>准入状态机、防重入 latch 与草案审批门禁已在本轮范围内闭环，予以通过</strong>。</p></li>
+</ol>
+</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-2">
+  <h3>18.2 DeepSeek Harness 上游事实与证据边界核定</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>alpha.5 tag 与 master 区分</strong>：官方 release tag <code>dsh-v0.1.2-alpha.5</code> 的 tag commit 为 <code>db6bdc3576c2d4e7c965e8e3ed0c2a731eed87f5</code>，而 <code>49a606bc5b5934603f22a26957a07dc799ab0291</code> 是主干接收该版本的 release-sync merge commit。二者身份不可混淆，后续 L1/L2/L3 验证 fixture 必须严格绑定 release tag commit。</li>
+  <li><strong>凭据解析分层（credential fallback）</strong>：核对官方 <code>packages/credentials/credentials-local/src/index.ts</code> 源码，其凭据解析链条为：<code>process.env</code> &gt; <code>$DSH_HOME/.credentials.yaml</code> &gt; <code>&lt;invocation cwd&gt;/.env</code> &gt; <code>$DSH_HOME/.env</code>。Tekon 启动子进程时将 invocation cwd 设为工作区 worktree，因此即使 child env 未显式传递 <code>DEEPSEEK_API_KEY</code>，DSH 仍会隐式回退到工作树 <code>.env</code> 读取凭据。这证明单纯清理环境变量不等于凭据隔离，该独立凭据风险成立。</li>
+  <li><strong>概念错位（Cordis tool id vs Tekon shell 声明）</strong>：DSH 内部采用 Cordis 插件微内核架构（<code>packages/core/tools</code>），其工具注册基于具体的 Cordis tool id；而 Tekon 当前在 <code>permissionProfile.tools.allow/deny</code> 中声明的规则，仅由外层 CommandGateway 对启动命令做 shell 级模式匹配，并未转换为 DSH 内部的工具级控制。外层声明不可伪装成 Provider 已生效的内部控制能力。</li>
+  <li><strong>preflight 环境变量继承事实</strong>：metadata probe 本轮虽然硬清除了遥测 key，但依然继承了宿主环境的 <code>PATH</code>、<code>DSH_HOME</code> 及其他环境配置；这只解决了遥测上报，绝不等于环境或凭据的完全沙箱隔离。</li>
+  <li><strong>启动开销与 Profile boot 事实</strong>：经源码确认，<code>dsh --version</code> 与 <code>dsh --dump-default-config</code> 为 boot-free 极速路径；但 <code>dsh --profile headless --help</code> 会执行完整的 profile discovery、bundle patch 合成以及 plugin loader 挂载（profile/plugin boot）。尽管没有证据表明此前 help 探测触发过外部请求，但由于其进入了完整的 plugin boot 链路，在 probe 阶段实行 telemetry hard opt-out 是必要的纵深防御。</li>
+  <li><strong>DSH reasoning 流（stderr）</strong>：DSH headless 在执行中会将 reasoning delta 实时写入 stderr，并将最终输出写入 stdout；但 Tekon 当前的 <code>dsh-headless-adapter.ts</code> 仅将输出收集为普通子进程日志，未向 Session 和前端 UI 投影实时推理流，导致用户在运行过程中无法感知代理的逐步思考过程。该持续交互能力继续由 #14 / #19 跟踪。</li>
+  <li><strong>问题跟踪状态</strong>：#32（DSH 环境凭据与能力证据）与 #17（DSH alpha.5 真实 L2/L3 验收）涉及深层跨进程与模型交互，<strong>必须继续保持 open</strong>，不得在缺少真实验证的情况下草率关闭。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-3">
+  <h3>18.3 <code>project.clean</code> 风险拆分（#33）与生命周期范围控制</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>§7 风险裁决成立</strong>：当前 <code>project.clean</code> 接口直接调用物理删除移除 <code>.tekon/runs/&lt;runId&gt;</code> 目录，缺乏对 active Job 的互斥检查，不写入 Audit 审计记录，不修复数据库中存在的 Artifact 与 path 关联引用，亦无失败补偿机制。若在并发或未完成阶段触发，可能导致活跃任务崩溃与数据撕裂。</li>
+  <li><strong>治理路径与 #33 拆分</strong>：主 Agent 裁决不可在当前超大 PR 中重写整套生命周期。为第一时间消除误删隐患，已将“活动期误删入口防护”拆分为独立 issue <a href="https://github.com/zesming/tekon/issues/33">#33</a>。首选方案是安全暂停所有物理删除动作并记录拒绝 Audit。</li>
+  <li><strong>明确非 lifecycle-safe 声明</strong>：必须清醒认识到，#33 仅属于入口阻断兜底，<strong>绝不能宣称为 lifecycle-safe 的清理方案</strong>。完整的 export 导出、模型 compaction、统一 retention、tombstone 标记与物理清理事务仍必须完整保留在 issue <a href="https://github.com/zesming/tekon/issues/18">#18</a> 中进行系统化设计与推进。</li>
+  <li><strong>PR #11 范围控制</strong>：PR #11 生产代码中保持 <code>project.clean</code> 原样不动，不引入未经全面状态机验证的临时修改。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-4">
+  <h3>18.4 跨模块架构冻结项的处置边界</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li>维持既定架构冻结裁决，不在 PR #11 内回填以下长期跨模块能力：
+<ul>
+  <li>single-owner Runtime 与物理仓库互斥锁（#16）；</li>
+  <li>执行器强隔离、kill/join 语义与重启保证（#15）；</li>
+  <li>原子 Run admission 与 saga 补偿事务（#31）；</li>
+  <li>权威 Session 事实源、durable outbox/inbox（#13）；</li>
+  <li>ACP 标准双向交互垂直切片（#14）；</li>
+  <li>Collaborate 与 Deliver 双轨交互闭环（#19）；</li>
+  <li>request-scoped Provider 准入与命令身份规范（#28, #29）。</li>
+</ul>
+</li>
+  <li>上述架构项继续在 GitHub issues 跟踪，待 PR #11 合并后拆分为独立小 PR 循序渐进落地。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-5">
+  <h3>18.5 实施整改细节（commit <code>0ad721d</code>, v0.20.5）</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>Probe 环境变量快照（probe env）</strong>：在 <code>packages/core/src/runtime/dsh-bridge-probe.ts</code> 中，<code>runDshPreflight()</code> 统一生成 inherited-minus-telemetry 快照，删除 <code>DSH_TELEMETRY_MODE</code> 与 <code>DSH_TELEMETRY_OTLP_URL</code>，固定 <code>DSH_TELEMETRY_DISABLED=1</code>；为单元测试暴露只读 seam <code>probeEnvSource</code>。</li>
+  <li><strong>提交状态选择器与同步 Latch（submit selector+ref latch）</strong>：新增纯函数 <code>startRunSubmitState()</code>（<code>packages/web/src/client/components/runs/start-run-submit-state.ts</code>），将 token、submitting、plan 状态、需求文本、草案审批、digest 与网络确认清晰解耦；<code>StartRunForm.tsx</code> 使用该函数确定禁用状态，并结合 <code>useRef</code> latch 实现同步防重入锁，在 mutation settlement 后安全释放。</li>
+  <li><strong>草案审批门禁（draft gate）</strong>：在提交准入校验中强化 <code>draft-not-ready</code> 状态：当需求草案已生成执行计划（<code>hasPlan=true</code>）但未经人类审批（<code>planApproved=false</code>）时，提交按钮强制保持 disabled 并展示需先审批计划的醒目提示。</li>
+  <li><strong>移动与窄屏响应式（390/700/&lt;=768单列与短标签）</strong>：针对 390px 与 700px 视口，在 <code>reset.css</code> 中增加 <code>&lt;=768px</code> 媒体查询，将表单模式、模板、Provider 与 Profile 四个选择器强制切换为单列垂直排布；缩短选择器闭合状态下的标签文本（短标签：如 <code>dsh-headless（experimental · 仅 Goal）</code>、<code>mock（仅测试/演示）</code>、<code>autonomous-delivery（自动准备）</code>），消除挤压换行，将完备的风险说明保留在相邻辅助文案中。</li>
+  <li><strong>文档、方案与版本同步（manual/plan HTML、v0.20.5）</strong>：同步更新用户使用手册（<code>docs/manual/tekon-user-manual.md</code>、<code>docs/manual/tekon-user-manual.html</code>）、<code>CHANGELOG.md</code>；生成整改方案 <code>docs/superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.{md,html}</code>；根项目及 core/cli/web 四个 <code>package.json</code> lockstep 升级至 <code>v0.20.5</code>。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-6">
+  <h3>18.6 测试先行（TDD）RED 证据与 GREEN 验证</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>本轮所有改动均遵循“测试先行”工程原则，先建立确定失败的 RED 测试，再编写实现使其变绿。以下 RED 输出来自主 Agent 本轮运行记录；由于测试与实现最终落在同一提交，提交历史不能独立复现先后顺序，GREEN 结果可以从当前快照复现：</p>
+<ol>
+  <li><strong>DSH 探针 Telemetry 继承测试</strong>：
+<ul>
+  <li>RED 运行记录：在 <code>packages/core/__tests__/runtime/dsh-bridge-probe-telemetry-env.test.ts</code> 中构建 fake dsh 捕获子进程环境变量；宿主传入 <code>DSH_TELEMETRY_DISABLED=0</code> 时，probe 收到 <code>0</code>，测试断言失败；</li>
+  <li>GREEN 验证：在 <code>dsh-bridge-probe.ts</code> 引入过滤快照后，fake dsh 记录的变量固定为 <code>1</code>，且 telemetry mode/url 被剔除，测试通过。</li>
+</ul>
+</li>
+  <li><strong>Advanced Run 准入纯函数单测</strong>：
+<ul>
+  <li>RED 运行记录：新增 <code>packages/web/__tests__/client/start-run-submit-state.test.ts</code> 时，目标模块尚未创建，测试因模块缺失报错；</li>
+  <li>GREEN 验证：实现纯函数后，18 组表驱动测试覆盖 9 个阻断优先级层级及成功路径，全部通过。</li>
+</ul>
+</li>
+  <li><strong>并发单次提交防重入（Single-submit Latch）E2E</strong>：
+<ul>
+  <li>RED 运行记录：在 <code>packages/web/__tests__/e2e/start-run-admission.e2e.test.ts</code> 中模拟同一 tick 内连续触发两次提交；无 <code>useRef</code> latch 时，服务端捕获到 2 个并发 <code>project.run</code> RPC 请求，测试断言失败；</li>
+  <li>GREEN 验证：在表单 handler 中置入同步 latch 后，同一 tick 内的第二次触发被丢弃，服务端只收到 1 个请求，测试通过。</li>
+</ul>
+</li>
+  <li><strong>未批准计划草案准入拦截 E2E</strong>：
+<ul>
+  <li>RED 运行记录：使用 <code>hasPlan=true, planApproved=false</code> 的草案加载表单；补齐校验前，计划生成后提交按钮仍为 enabled，允许用户直接运行；</li>
+  <li>GREEN 验证：补齐 <code>draft-not-ready</code> 状态校验后，提交按钮在计划生成完毕后保持 disabled，并展示“计划未批准”告警文案，测试通过。</li>
+</ul>
+</li>
+  <li><strong>移动视口单列与标签文本 E2E</strong>：
+<ul>
+  <li>RED 运行记录：390px 视口下，首行两列选择器的 x 坐标差为 164px；700px 视口下差值为 319px；<code>autonomous-delivery</code> 长标签还导致闭合选择器换行和文本截断；</li>
+  <li>GREEN 验证：引入单列媒体查询并缩短标签后，390px 与 700px 视口下所有选择器 x 坐标差不超过 2px，且页面满足 <code>document.documentElement.scrollWidth &lt;= window.innerWidth + 1</code>，测试通过。</li>
+</ul>
+</li>
+</ol>
+<div class="sub-heading-wrap" id="sec-18-7">
+  <h3>18.7 本地全量验证数据与边界限制说明</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>自动化测试套件执行结果</strong>：
+<ul>
+  <li>主 Agent 本地运行 <code>pnpm test</code>：<strong>143 files / 1539 passed / 3 skipped / 0 failed</strong>，耗时约 25 秒；</li>
+  <li>Core e2e：<code>pnpm --filter @tekon/core test:e2e</code> 共 8 个文件，<strong>26 passed</strong>；</li>
+  <li>CLI e2e：<code>pnpm --filter @tekon/cli test:e2e</code> 共 3 个文件，<strong>8 passed</strong>；</li>
+  <li>Web e2e：<code>pnpm --filter @tekon/web test:e2e</code> 共 20 个 Playwright 测试文件，<strong>41 passed，0 retries</strong>，总耗时 34.9 秒。</li>
+</ul>
+</li>
+  <li><strong>工程门禁检查（lint/typecheck/build/audit）</strong>：
+<ul>
+  <li><code>pnpm run lint</code>：通过；当前 lint 脚本仍主要等价于 TypeScript <code>--noEmit</code> 检查，不代表已接入独立 ESLint 静态规则；</li>
+  <li><code>pnpm run typecheck</code>：全部通过；</li>
+  <li><code>pnpm run build</code>：三包构建均成功输出产物；</li>
+  <li><code>pnpm audit --prod</code>：无任何已知生产依赖安全漏洞（0 vulnerabilities）。</li>
+</ul>
+</li>
+  <li><strong>视觉与多视口验证</strong>：
+<ul>
+  <li>Web 界面在 390px、700px、1440px 视口下完成组件排布与溢出核验；</li>
+  <li>整改方案 HTML 与用户手册 HTML 在 320px、375px、1440px 视口下完成截图和页面级横向滚动检查；统一判定标准为 <code>document.documentElement.scrollWidth &lt;= window.innerWidth + 1</code>。</li>
+</ul>
+</li>
+  <li><strong>客观边界与测试缺口说明</strong>：
+<ul>
+  <li>3 个 skipped tests 属于未设置 <code>DSH_CLI_PATH</code> 时跳过的真实 DSH L2 metadata probe；它们只检查 <code>--version</code>、<code>--profile headless --help</code> 与 <code>--profile headless --dump-default-config</code>，不运行模型，也不需要 API key；</li>
+  <li>浏览器端到端矩阵当前仅覆盖 Chromium，未运行 Firefox 与 WebKit 兼容矩阵；</li>
+  <li>DSH 测试包含基于 fake binary 的 L1 合同断言与进程环境变量捕获，未执行真实 DSH L2 metadata probe，也未执行带凭据的 L3 模型调用。</li>
+</ul>
+</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-8">
+  <h3>18.8 独立 Reviewer 协作循环与结论</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>在实施整改全周期中，严格执行子代理独立审阅机制：</p>
+<ul>
+  <li><strong>设计与架构审查</strong>：首轮指出了 #33 边界、React state 防重入缺陷、plan error 优先级缺失、用户手册与 e2e 命名不规范等 5 项必须修复项；经吸收并在整改方案中细化后，第二轮复审结论为 <code>hasMustFix=false</code>；</li>
+  <li><strong>代码与测试审查</strong>：对 <code>dsh-bridge-probe.ts</code> 快照过滤机制、<code>start-run-submit-state.ts</code> 纯函数及 Playwright 单发 latch 进行了全面审阅，确认无死分支、无假测试、无副作用泄漏，最终判定 <code>hasMustFix=false</code>；</li>
+  <li><strong>文档与编辑审查</strong>：技术 reviewer 勘误了 <code>--help</code> 探测会进入 profile/plugin boot 的底层事实，促成了 telemetry 表述收窄为“内置 session telemetry 硬关断”；文案与编辑 reviewer 复核后判定 <code>hasMustFix=false</code>；</li>
+  <li><strong>视觉与可访问性审查</strong>：针对 390px/700px 移动视口排布进行了真机尺寸核对，确认单列排布与 aria 标注合规无误，判定 <code>hasMustFix=false</code>。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-9">
+  <h3>18.9 Subagent TOML 运行时事实核对与澄清</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<ul>
+  <li><strong>本轮调用事实</strong>：本轮主 Agent 在委派 subagent 时，直接指定 <code>agent_type</code> 为 <code>explorer</code>、<code>designer</code>、<code>worker</code>、<code>reviewer</code>、<code>doc_reviewer</code>。当前 runtime 的 <code>spawn_agent</code> 工具元数据所列角色描述、模型与思考等级，和 <code>~/.codex/agents/*.toml</code> 逐项一致；各次调用返回的 agent role 也与请求一致。这些证据可以证明角色映射生效，但不能直接内省并证明每条 <code>developer_instructions</code> 的加载细节；</li>
+  <li><strong>历史回溯与事实澄清</strong>：历史 session 日志显示，第十六轮曾有 4 个 <code>explorer</code> 角色在角色分配成功后统一报错 <code>400 User location is not supported for the API use</code>；后续第十七轮、第十八轮调用才显式回退为 <code>default</code>。因此，现有证据指向“角色 TOML 中当时指定的底座模型遭遇地域限制后，主 Agent 主动旁路”，而不是 runtime 静默忽略 TOML。当前 <code>explorer</code> / <code>worker</code> 已更新到新的模型配置并可正常运行；</li>
+  <li><strong>边界声明</strong>：以上记录为本轮在当前运行环境和工具调用层观察到的真实工程事实，旨在澄清内部协作链路，不作为 OpenAI 官方规范或产品声明。</li>
+</ul>
+<div class="sub-heading-wrap" id="sec-18-10">
+  <h3>18.10 最终收口裁决与合并建议</h3>
+  <a href="#toc" class="back-to-top-sub" title="返回目录">↑ 目录</a>
+</div>
+<p>综合上述事实与验证结果，主 Agent 做出最终收口裁决：</p>
+<ol>
+  <li><strong>当前 PR #11 的本轮整改增量通过代码合并门</strong>：DSH 内置 session telemetry 关断已覆盖至 metadata probe，Advanced Run 准入实现了单一源纯函数校验与同步并发防重入，移动窄屏布局收敛，全套自动化测试与工程门禁零错误通过；</li>
+  <li><strong>Tekon 整体产品仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</strong>：当前 Deliver 轨道在有人监督下基本可用，但持续协作、单权威 Runtime、权威 Session 事实链、原子准入与 DSH 凭据隔离等核心链路仍未成立；</li>
+  <li><strong>合并策略保持不变</strong>：当前 PR 累积提交量已接近 150 个，涉及文件近 200 个，严禁继续追加新的架构实现代码；维持 <strong>squash merge</strong> 进入主干的建议，后续各项架构演进严格基于独立小 PR 推进。</li>
+</ol>
+  </section>
+
+  <footer>
+    <p>Tekon 仓库评审记录 · 2026-09-03 · 收口快照 <code>0ad721d</code> · 版本 v0.20.5 · PR <a href="https://github.com/zesming/tekon/pull/11">#11</a></p>
+  </footer>
+</div>
+</body>
+</html>
