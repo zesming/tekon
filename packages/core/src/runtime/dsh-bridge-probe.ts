@@ -15,6 +15,41 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const DEFAULT_DSH_PROBE_TIMEOUT_MS = 5_000;
 
+/**
+ * Metadata probes must not receive the caller's full credential-bearing
+ * environment. Keep only process discovery, home/temp/locale values and the
+ * explicit DSH state roots needed to start the installed CLI on supported
+ * platforms. In particular, do not forward API keys, cloud credentials,
+ * proxy URLs, SSH agents, NODE_OPTIONS or arbitrary npm_config values.
+ */
+const DSH_PROBE_SAFE_ENV_KEYS = [
+  'PATH',
+  'Path',
+  'HOME',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'SHELL',
+  'TERM',
+  'COLORTERM',
+  'NO_COLOR',
+  'SystemRoot',
+  'SYSTEMROOT',
+  'ComSpec',
+  'COMSPEC',
+  'PATHEXT',
+  'DSH_HOME',
+  'DSH_AGENTS_HOME',
+] as const;
+
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
 export const TESTED_DSH_VERSION = '0.1.2-alpha.3';
 
@@ -228,20 +263,23 @@ export interface RunDshPreflightOptions {
 }
 
 /**
- * Constructs an isolated environment snapshot for built-in metadata probes.
+ * Constructs a minimal, isolated environment for built-in metadata probes.
  *
- * Boundary rationale: unlike execution agent runs that use an exact allowlist
- * (`envMode: exact`), metadata probes run external binaries directly and must
- * preserve ambient runtime prerequisites (e.g. PATH, DSH_HOME). We therefore
- * inherit ambient environment while hard-opting out of telemetry: deleting
- * DSH_TELEMETRY_MODE and DSH_TELEMETRY_OTLP_URL, and forcing DSH_TELEMETRY_DISABLED='1'.
+ * Metadata commands need PATH plus a small set of home/temp/locale values and
+ * optional DSH state roots. They do not need model credentials, cloud tokens,
+ * proxy credentials, SSH agents or arbitrary Node/npm injection settings.
+ * Telemetry is hard-disabled independently of the caller's environment.
  */
 function buildProbeTelemetryEnv(
   source: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...source };
-  delete env.DSH_TELEMETRY_MODE;
-  delete env.DSH_TELEMETRY_OTLP_URL;
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of DSH_PROBE_SAFE_ENV_KEYS) {
+    const value = source[key];
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
   env.DSH_TELEMETRY_DISABLED = '1';
   return env;
 }
@@ -341,13 +379,14 @@ export async function runDshPreflight(
   const versionBypassed = !versionCompatible;
 
   try {
-    const [rawHelp, rawConfig] = await Promise.all([
-      probeHelp(dshCommand),
-      probeConfig(dshCommand),
-    ]);
-
-    assertDshHeadlessHelpContract(rawHelp);
+    // Both commands may auto-initialize the shipped headless profile in the
+    // same DSH_HOME. Run them sequentially so a clean home cannot race two
+    // writers during first-use profile creation.
+    const rawConfig = await probeConfig(dshCommand);
     assertDshDefaultConfigContract(rawConfig);
+
+    const rawHelp = await probeHelp(dshCommand);
+    assertDshHeadlessHelpContract(rawHelp);
   } catch (error) {
     throw new DshCapabilityError(
       error instanceof Error ? error.message : String(error),

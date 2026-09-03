@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import {
@@ -23,6 +23,7 @@ export function SessionComposer() {
   const { token } = useSessionToken();
   const navigate = useNavigate();
   const [text, setText] = useState('');
+  const startInFlightRef = useRef(false);
 
   const {
     data: plan,
@@ -51,7 +52,11 @@ export function SessionComposer() {
     !startMutation.isPending;
 
   const handleSend = async () => {
-    if (!canSend || !token || !planDigest) return;
+    if (startInFlightRef.current || !canSend || !token || !planDigest) return;
+
+    // React mutation state is asynchronous. Latch synchronously so a second
+    // activation in the same event-loop turn cannot create a duplicate Run.
+    startInFlightRef.current = true;
     try {
       const result = await startMutation.mutate({
         demandText: text.trim(),
@@ -64,6 +69,8 @@ export function SessionComposer() {
       }
     } catch {
       // Error surfaced via startMutation.error below; nothing else to do.
+    } finally {
+      startInFlightRef.current = false;
     }
   };
 
