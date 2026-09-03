@@ -25,11 +25,11 @@ type RunMode = 'workflow' | 'goal';
 
 const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
 
-/** Human-facing labels; dsh-headless carries its experimental caveat inline. */
+/** Human-facing labels; experimental and synthetic providers carry caveats inline. */
 const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
   codex: 'codex',
   'claude-code': 'claude-code',
-  mock: 'mock',
+  mock: 'mock（仅测试/演示 · 生成合成产物，不执行真实任务）',
   'dsh-headless': 'dsh-headless（experimental · 联网不受限 · 仅 Goal）',
 };
 
@@ -125,6 +125,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const requiresUnrestrictedNetwork = Boolean(
     planData?.requiresUnrestrictedNetwork || agent === 'dsh-headless',
   );
+  const missingPlanDigest =
+    mode === 'workflow' && Boolean(planData) && !planData?.digest;
 
   useEffect(() => {
     if (!requiresUnrestrictedNetwork) {
@@ -176,6 +178,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       addFlash('warning', '请输入需求描述');
       return;
     }
+    if (planLoading || !planData || planError) {
+      addFlash('warning', '执行计划尚未准备完成，已阻止启动');
+      return;
+    }
+    if (mode === 'workflow' && !planData.digest) {
+      addFlash('warning', '执行计划缺少校验摘要，已阻止启动');
+      return;
+    }
     if (requiresUnrestrictedNetwork && !acknowledgedNetwork) {
       addFlash('warning', '联网不受限需知情确认');
       return;
@@ -199,7 +209,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
       input.acknowledgeUnrestrictedNetwork = true;
     }
-    if (mode !== 'goal' && planData?.digest) {
+    if (mode !== 'goal' && planData.digest) {
       input.planDigest = planData.digest;
     }
 
@@ -228,11 +238,14 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   };
 
   const isSubmitDisabled =
+    !token ||
     startMutation.isPending ||
+    planLoading ||
     !demandText.trim() ||
     draftNotReady ||
     (requiresUnrestrictedNetwork && !acknowledgedNetwork) ||
     !planData ||
+    missingPlanDigest ||
     Boolean(planError);
 
   return (
@@ -371,6 +384,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               ? 'Goal 是单节点一次性任务，不进入 Gate、Artifact 或交付链路。dsh-headless 仅可在此模式使用，且网络访问不受 Tekon 限制。'
               : '受控交付会执行模板中的角色、Artifact 与 Gate；dsh-headless 不支持此模式。'}
           </p>
+          {agent === 'mock' ? (
+            <p
+              className="text-sm"
+              role="note"
+              style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
+            >
+              mock 仅用于测试或演示：它会生成合成结果与产物，不会执行真实代理任务，也不能作为交付完成证据。
+            </p>
+          ) : null}
 
           {/* Execution Plan Error / Fail-Closed Alert (P1-UX-01) */}
           {planError ? (
@@ -398,6 +420,29 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
             </div>
           ) : planLoading ? (
             <div className="text-muted text-sm my-2">正在读取执行计划…</div>
+          ) : missingPlanDigest ? (
+            <div
+              className="flex items-center gap-2 mb-4"
+              role="alert"
+              style={{
+                background: 'var(--fail-bg, #fef2f2)',
+                border: '1px solid #fecaca',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginTop: '12px',
+              }}
+            >
+              <span style={{ color: 'var(--fail, #991b1b)', fontSize: '13px' }}>
+                执行计划缺少校验摘要，已阻止启动。请重新读取计划后再试。
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={refetchPlan}
+              >
+                重试
+              </button>
+            </div>
           ) : planData ? (
             <div
               className="run-plan-preview mb-4"
@@ -429,11 +474,20 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                     联网不受限
                   </span>
                 ) : (
-                  <span className="badge badge-passed badge-sm">
-                    网络受控隔离
+                  <span className="badge badge-paused badge-sm">
+                    计划未请求不受限网络
                   </span>
                 )}
               </div>
+
+              {!planData.requiresUnrestrictedNetwork ? (
+                <p
+                  className="text-muted"
+                  style={{ fontSize: '11px', marginBottom: '10px' }}
+                >
+                  此处只表示计划未声明不受限网络；实际网络隔离仍取决于 Provider 与宿主环境。
+                </p>
+              ) : null}
 
               {/* Role Chain */}
               <div style={{ marginBottom: '10px' }}>
@@ -666,6 +720,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
             </button>
           </div>
+
+          {!token && (
+            <p
+              className="text-sm"
+              style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
+            >
+              请先在顶栏配置会话令牌，再发起运行。
+            </p>
+          )}
 
           {draftNotReady && (
             <p

@@ -41,16 +41,28 @@ test('StartRunForm exposes keyboard disclosure, renders execution plan preview, 
   await expect(templateSelect).toBeEnabled();
   await expect(profileSelect).toBeEnabled();
 
-  // T2: Plan preview region is rendered with roleChain and gates
+  // T2: Plan preview distinguishes a plan declaration from host enforcement.
   const planPreview = page.getByRole('region', { name: '执行计划预览' });
   await expect(planPreview).toBeVisible();
   await expect(planPreview).toContainText('角色链路');
-  await expect(planPreview).toContainText('网络受控隔离');
+  await expect(planPreview).toContainText('计划未请求不受限网络');
+  await expect(planPreview).toContainText(
+    '实际网络隔离仍取决于 Provider 与宿主环境',
+  );
+  await expect(planPreview).not.toContainText('网络受控隔离');
 
   // Fill in demand text
   const demandInput = page.getByLabel('需求描述', { exact: true });
   await demandInput.fill('测试需求描述');
   await expect(submitButton).toBeEnabled();
+
+  // The production form may expose mock for offline demos, but it must make the
+  // synthetic/no-real-execution boundary explicit before a user can mistake it
+  // for delivery evidence.
+  await agentSelect.selectOption('mock');
+  await expect(page.getByRole('note')).toContainText(
+    '生成合成结果与产物，不会执行真实代理任务',
+  );
 
   // (a) Selecting dsh-headless auto-switches to Goal and disables
   // template + profile; help text explains the constraint.

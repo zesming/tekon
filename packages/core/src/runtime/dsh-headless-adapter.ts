@@ -137,8 +137,13 @@ export function buildDshHeadlessCommand(
 
 /**
  * Build the pinned, non-inherited environment for the dsh child. Governance
- * env is set explicitly; DEEPSEEK_API_KEY is forwarded ONLY when present in the
- * source env and never persisted anywhere by Tekon.
+ * values are set explicitly and DSH session telemetry is hard-disabled for
+ * Tekon's non-interactive subprocess. DEEPSEEK_API_KEY is forwarded only when
+ * present in the source environment and is never persisted by Tekon.
+ *
+ * DSH may still resolve credential fallbacks from the invocation worktree's
+ * `.env`; that provenance is outside this environment map and must not be
+ * mistaken for an explicitly forwarded process credential.
  */
 function buildDshEnv(input: {
   mainRepoPath: string;
@@ -156,6 +161,10 @@ function buildDshEnv(input: {
   }
   // Pinned governance (never inherited from ambient env):
   env.DSH_PERMISSION_MODE = 'workspace-write';
+  // The headless bridge exposes no user-facing /feedback flow and Tekon has no
+  // telemetry-consent model. Force the upstream hard opt-out rather than
+  // inheriting DSH's feedback-gated default or an ambient deployment setting.
+  env.DSH_TELEMETRY_DISABLED = '1';
   // DSH_HOME lives under the MAIN repo data dir, OUTSIDE the worktree: dsh's
   // session store / profiles are host-process state the sandboxed agent tools
   // (rooted at cwd = worktree) must not reach or poison across runs (design
@@ -175,7 +184,8 @@ function buildDshEnv(input: {
   env.TEKON_ARTIFACT_MANIFEST = input.manifestPath;
   env.TEKON_RUN_ID = input.runId;
   env.TEKON_NODE_ID = input.nodeId;
-  // Credential passthrough only when the operator provided it.
+  // Explicit environment credential passthrough only when the operator supplied
+  // it. This does not disable DSH's own worktree `.env` fallback.
   if (source.DEEPSEEK_API_KEY) {
     env.DEEPSEEK_API_KEY = source.DEEPSEEK_API_KEY;
   }
