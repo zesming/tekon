@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -24,6 +24,8 @@ interface ProbeExecutionRecord {
   DSH_TELEMETRY_OTLP_URL?: string;
   PATH?: string;
   DSH_HOME?: string;
+  DSH_AGENTS_HOME?: string;
+  cwd: string;
 }
 
 /**
@@ -33,7 +35,8 @@ interface ProbeExecutionRecord {
  * - `--profile headless --dump-default-config` -> YAML tree containing the 5 required plugin IDs
  *
  * Appends observed environment variables (DSH_TELEMETRY_DISABLED, DSH_TELEMETRY_MODE,
- * DSH_TELEMETRY_OTLP_URL, PATH, DSH_HOME) to a temporary JSONL log file on each invocation.
+ * DSH_TELEMETRY_OTLP_URL, PATH, DSH_HOME, DSH_AGENTS_HOME and cwd) to a
+ * temporary JSONL log file on each invocation.
  */
 function createFakeDsh(tempDir: string): {
   fakeDshPath: string;
@@ -53,6 +56,8 @@ const entry = {
   DSH_TELEMETRY_OTLP_URL: process.env.DSH_TELEMETRY_OTLP_URL,
   PATH: process.env.PATH,
   DSH_HOME: process.env.DSH_HOME,
+  DSH_AGENTS_HOME: process.env.DSH_AGENTS_HOME,
+  cwd: process.cwd(),
 };
 
 appendFileSync(logFilePath, JSON.stringify(entry) + '\\n', 'utf8');
@@ -113,7 +118,7 @@ describe('dsh bridge probe telemetry environment', () => {
     }
   });
 
-  it('default probes strip ambient telemetry variables and hard-disable telemetry while preserving PATH and DSH_HOME', async () => {
+  it('default probes strip ambient telemetry variables, replace DSH homes, and hard-disable telemetry', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'tekon-dsh-probe-ambient-'));
     tempDirs.push(tempDir);
     const { fakeDshPath, logFilePath } = createFakeDsh(tempDir);
@@ -158,7 +163,9 @@ describe('dsh bridge probe telemetry environment', () => {
         expect(entry.DSH_TELEMETRY_MODE).toBeUndefined();
         expect(entry.DSH_TELEMETRY_OTLP_URL).toBeUndefined();
         expect(entry.PATH).toBe(process.env.PATH);
-        expect(entry.DSH_HOME).toBe(expectedDshHome);
+        expect(entry.DSH_HOME).not.toBe(expectedDshHome);
+        expect(dirname(entry.DSH_HOME!)).toBe(entry.cwd);
+        expect(entry.DSH_AGENTS_HOME).toBe(join(entry.cwd, 'agents-home'));
       }
     } finally {
       if (priorDisabled === undefined)
@@ -216,7 +223,9 @@ describe('dsh bridge probe telemetry environment', () => {
       expect(entry.DSH_TELEMETRY_MODE).toBeUndefined();
       expect(entry.DSH_TELEMETRY_OTLP_URL).toBeUndefined();
       expect(entry.PATH).toBe(customPath);
-      expect(entry.DSH_HOME).toBe(customDshHome);
+      expect(entry.DSH_HOME).not.toBe(customDshHome);
+      expect(dirname(entry.DSH_HOME!)).toBe(entry.cwd);
+      expect(entry.DSH_AGENTS_HOME).toBe(join(entry.cwd, 'agents-home'));
     }
   });
 });

@@ -10,6 +10,9 @@
 // ---------------------------------------------------------------------------
 
 import { execFile } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -17,10 +20,11 @@ const DEFAULT_DSH_PROBE_TIMEOUT_MS = 5_000;
 
 /**
  * Metadata probes must not receive the caller's full credential-bearing
- * environment. Keep only process discovery, home/temp/locale values and the
- * explicit DSH state roots needed to start the installed CLI on supported
- * platforms. In particular, do not forward API keys, cloud credentials,
- * proxy URLs, SSH agents, NODE_OPTIONS or arbitrary npm_config values.
+ * environment. Keep only process discovery and home/temp/locale values needed
+ * to start the installed CLI on supported platforms. DSH state roots are
+ * replaced with paths inside a per-preflight workspace. In particular, do not
+ * forward API keys, cloud credentials, proxy URLs, SSH agents, NODE_OPTIONS or
+ * arbitrary npm_config values.
  */
 const DSH_PROBE_SAFE_ENV_KEYS = [
   'PATH',
@@ -41,13 +45,14 @@ const DSH_PROBE_SAFE_ENV_KEYS = [
   'TERM',
   'COLORTERM',
   'NO_COLOR',
+  'SystemDrive',
+  'windir',
+  'WINDIR',
   'SystemRoot',
   'SYSTEMROOT',
   'ComSpec',
   'COMSPEC',
   'PATHEXT',
-  'DSH_HOME',
-  'DSH_AGENTS_HOME',
 ] as const;
 
 /** The exact dsh version this bridge was built and tested against (design §5.1). */
@@ -252,6 +257,10 @@ export interface RunDshPreflightOptions {
   probeConfig?: (command: string) => Promise<string>;
   /** Programmatic/test seam for probe execution environment snapshot; not exposed via CLI or RPC. */
   probeEnvSource?: NodeJS.ProcessEnv;
+  /** Programmatic/test seam for resolving relative probe commands; not exposed via CLI or RPC. */
+  probeInvocationCwd?: string;
+  /** Programmatic/test seam for deterministic cleanup failure coverage. */
+  probeCleanup?: (dir: string) => void | Promise<void>;
   allowVersion?: string;
   /** Programmatic/test seam; the CLI does not expose a host-version override. */
   hostNodeVersion?: string;
@@ -266,11 +275,12 @@ export interface RunDshPreflightOptions {
  * Constructs a minimal, isolated environment for built-in metadata probes.
  *
  * Metadata commands need PATH plus a small set of home/temp/locale values and
- * optional DSH state roots. They do not need model credentials, cloud tokens,
+ * isolated DSH state roots. They do not need model credentials, cloud tokens,
  * proxy credentials, SSH agents or arbitrary Node/npm injection settings.
  * Telemetry is hard-disabled independently of the caller's environment.
  */
 function buildProbeTelemetryEnv(
+  workspace: string,
   source: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -281,34 +291,42 @@ function buildProbeTelemetryEnv(
     }
   }
   env.DSH_TELEMETRY_DISABLED = '1';
+  env.DSH_HOME = join(workspace, 'dsh-home');
+  env.DSH_AGENTS_HOME = join(workspace, 'agents-home');
   return env;
+}
+
+interface DefaultProbeOptions {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
 }
 
 async function defaultProbeVersion(
   command: string,
-  timeoutMs: number,
-  env: NodeJS.ProcessEnv,
+  options: DefaultProbeOptions,
 ): Promise<string> {
   const { stdout } = await execFileAsync(command, ['--version'], {
     encoding: 'utf8',
-    timeout: timeoutMs,
-    env,
+    timeout: options.timeoutMs,
+    cwd: options.cwd,
+    env: options.env,
   });
   return stdout;
 }
 
 async function defaultProbeHelp(
   command: string,
-  timeoutMs: number,
-  env: NodeJS.ProcessEnv,
+  options: DefaultProbeOptions,
 ): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
     ['--profile', 'headless', '--help'],
     {
       encoding: 'utf8',
-      timeout: timeoutMs,
-      env,
+      timeout: options.timeoutMs,
+      cwd: options.cwd,
+      env: options.env,
     },
   );
   return stdout;
@@ -316,40 +334,46 @@ async function defaultProbeHelp(
 
 async function defaultProbeConfig(
   command: string,
-  timeoutMs: number,
-  env: NodeJS.ProcessEnv,
+  options: DefaultProbeOptions,
 ): Promise<string> {
   const { stdout } = await execFileAsync(
     command,
     ['--profile', 'headless', '--dump-default-config'],
     {
       encoding: 'utf8',
-      timeout: timeoutMs,
-      env,
+      timeout: options.timeoutMs,
+      cwd: options.cwd,
+      env: options.env,
     },
   );
   return stdout;
+}
+
+async function safeWarnCleanup(
+  root: string,
+  options?: RunDshPreflightOptions,
+): Promise<void> {
+  try {
+    if (options?.probeCleanup) {
+      await options.probeCleanup(root);
+    } else {
+      rmSync(root, { recursive: true, force: true });
+    }
+  } catch (cleanupError) {
+    try {
+      options?.onWarn?.(
+        `[dsh bridge] failed to clean up probe workspace: ${String(cleanupError)}`,
+      );
+    } catch {
+      // A consumer warning callback must not replace the probe result/error.
+    }
+  }
 }
 
 export async function runDshPreflight(
   dshCommand = 'dsh',
   options?: RunDshPreflightOptions,
 ): Promise<DshPreflightResult> {
-  const probeEnv = buildProbeTelemetryEnv(options?.probeEnvSource);
-  const probeTimeoutMs =
-    options?.probeTimeoutMs ?? DEFAULT_DSH_PROBE_TIMEOUT_MS;
-  const probeVersion =
-    options?.probeVersion ??
-    ((command: string) =>
-      defaultProbeVersion(command, probeTimeoutMs, probeEnv));
-  const probeHelp =
-    options?.probeHelp ??
-    ((command: string) => defaultProbeHelp(command, probeTimeoutMs, probeEnv));
-  const probeConfig =
-    options?.probeConfig ??
-    ((command: string) =>
-      defaultProbeConfig(command, probeTimeoutMs, probeEnv));
-
   const hostNodeVersion = options?.hostNodeVersion ?? process.versions.node;
   const hostNodeCompatible = isHostNodeVersionCompatible(hostNodeVersion);
   let hostNodeBypassed = false;
@@ -367,44 +391,75 @@ export async function runDshPreflight(
     }
   }
 
-  const rawVersion = await probeVersion(dshCommand);
-  const actualVersion = parseDshVersion(rawVersion);
-  const versionCompatible = actualVersion === TESTED_DSH_VERSION;
-  const allowVersion =
-    options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
-  assertDshVersionAllowed(actualVersion, {
-    allowVersion,
-    onWarn: options?.onWarn,
-  });
-  const versionBypassed = !versionCompatible;
-
+  const needsWorkspace =
+    !options?.probeVersion || !options.probeConfig || !options.probeHelp;
+  const root = needsWorkspace
+    ? mkdtempSync(join(tmpdir(), 'tekon-dsh-probe-'))
+    : null;
   try {
-    // Both commands may auto-initialize the shipped headless profile in the
-    // same DSH_HOME. Run them sequentially so a clean home cannot race two
-    // writers during first-use profile creation.
-    const rawConfig = await probeConfig(dshCommand);
-    assertDshDefaultConfigContract(rawConfig);
+    const probeTimeoutMs =
+      options?.probeTimeoutMs ?? DEFAULT_DSH_PROBE_TIMEOUT_MS;
+    const resolvedDshCommand =
+      root && (dshCommand.includes('/') || dshCommand.includes('\\'))
+        ? resolve(options?.probeInvocationCwd ?? process.cwd(), dshCommand)
+        : dshCommand;
+    const defaultOptions = root
+      ? {
+          cwd: root,
+          env: buildProbeTelemetryEnv(root, options?.probeEnvSource),
+          timeoutMs: probeTimeoutMs,
+        }
+      : null;
 
-    const rawHelp = await probeHelp(dshCommand);
-    assertDshHeadlessHelpContract(rawHelp);
-  } catch (error) {
-    throw new DshCapabilityError(
-      error instanceof Error ? error.message : String(error),
+    const rawVersion = options?.probeVersion
+      ? await options.probeVersion(dshCommand)
+      : await defaultProbeVersion(resolvedDshCommand, defaultOptions!);
+    const actualVersion = parseDshVersion(rawVersion);
+    const versionCompatible = actualVersion === TESTED_DSH_VERSION;
+    const allowVersion =
+      options?.allowVersion ?? process.env.TEKON_DSH_ALLOW_VERSION;
+    assertDshVersionAllowed(actualVersion, {
+      allowVersion,
+      onWarn: options?.onWarn,
+    });
+    const versionBypassed = !versionCompatible;
+
+    try {
+      // Both commands may auto-initialize the shipped headless profile in the
+      // same DSH_HOME. Run them sequentially so a clean home cannot race two
+      // writers during first-use profile creation.
+      const rawConfig = options?.probeConfig
+        ? await options.probeConfig(dshCommand)
+        : await defaultProbeConfig(resolvedDshCommand, defaultOptions!);
+      assertDshDefaultConfigContract(rawConfig);
+
+      const rawHelp = options?.probeHelp
+        ? await options.probeHelp(dshCommand)
+        : await defaultProbeHelp(resolvedDshCommand, defaultOptions!);
+      assertDshHeadlessHelpContract(rawHelp);
+    } catch (error) {
+      throw new DshCapabilityError(
+        error instanceof Error ? error.message : String(error),
+        actualVersion,
+      );
+    }
+
+    return {
+      testedVersion: TESTED_DSH_VERSION,
       actualVersion,
-    );
+      nodeRequirement: DSH_NODE_REQUIREMENT,
+      helpContractOk: true,
+      configContractOk: true,
+      installHint: dshInstallHint(),
+      versionCompatible,
+      versionBypassed,
+      hostNodeVersion,
+      hostNodeCompatible,
+      hostNodeBypassed,
+    };
+  } finally {
+    if (root) {
+      await safeWarnCleanup(root, options);
+    }
   }
-
-  return {
-    testedVersion: TESTED_DSH_VERSION,
-    actualVersion,
-    nodeRequirement: DSH_NODE_REQUIREMENT,
-    helpContractOk: true,
-    configContractOk: true,
-    installHint: dshInstallHint(),
-    versionCompatible,
-    versionBypassed,
-    hostNodeVersion,
-    hostNodeCompatible,
-    hostNodeBypassed,
-  };
 }

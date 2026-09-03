@@ -1,11 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import {
-  useMutation,
-  useQuery,
-  useSessionToken,
-} from '../../hooks/index.js';
+import { useMutation, useQuery, useSessionToken } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { queryKeys } from '../../lib/query-keys.js';
 import { routes } from '../../lib/route-paths.js';
@@ -127,14 +123,21 @@ export function SessionComposer() {
             </button>
           </div>
         ) : plan && !planDigest ? (
-          <div className="text-danger" role="alert">
-            执行计划缺少校验摘要，已阻止启动。请重新读取计划后再试。
+          <div className="flex items-center gap-2" role="alert">
+            <span className="text-danger">
+              执行计划缺少校验摘要，已阻止启动。请重新读取计划后再试。
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={refetchPlan}
+            >
+              重试
+            </button>
           </div>
         ) : plan ? (
           <div>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>
-              执行前计划
-            </div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>执行前计划</div>
             <div className="text-muted" style={{ fontSize: 12 }}>
               执行链路：{plan.roleChain.join(' → ') || '默认角色链'}；
               {plan.gates.length} 个控制点
@@ -156,7 +159,8 @@ export function SessionComposer() {
           id="session-composer-hint"
           className="text-muted session-composer-hint"
         >
-          当前入口会启动 standard-delivery 受控交付全链路；轻量协作、会话内追问与转向尚未开放
+          当前入口会启动 standard-delivery
+          受控交付全链路；轻量协作、会话内追问与转向尚未开放
         </span>
         <button
           type="button"

@@ -371,7 +371,7 @@ Provider 是执行节点的 agent 后端。当前用户可见选项：
   - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制，无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
   - 一次性、未向 Session/UI 投影执行期流、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.2-alpha.3`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。官方参考参见 [DeepSeek Harness alpha.3 CLI Reference](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.3/apps/cli/reference/README.md)（资料内容：DSH headless 会把 reasoning delta 流式写 stderr、最终文本写 stdout，并定义参数规范与内置会话遥测机制；对 Tekon 判断：当前 adapter 仅收集日志、未向 Session/UI 投影该 stream，且缺乏多工作区产物外写机制，仅可作为 experimental goal-only provider，且 preflight 与 Run 必须硬关断内置 session telemetry）。
   - ⚠️ **Node 版本要求与 Tekon 主合同不同**：DSH 要求 Node `^22.19.0 || >=24.0.0`，而 Tekon 主合同允许 Node `^20.19.0 || >=22.12.0`。preflight 会在探测 dsh 二进制之前硬拦截不兼容的宿主 Node（Node 20.x、22.12 及以上但低于 22.19、奇数版本线如 23.x），并给出升级指引。若确认 dsh 实际运行在更高版本 Node 上（如全局安装在 Node 24 下），可设置 `TEKON_DSH_ALLOW_HOST_NODE=<当前版本号>` 精确放行，preflight 会输出旁路警告。
-  - ⚠️ **DSH 内置 session telemetry 硬关断与独立凭证风险**：Tekon 启动的 metadata preflight 只删除宿主环境中的 `DSH_TELEMETRY_MODE` 与 `DSH_TELEMETRY_OTLP_URL` 并固定设置 `DSH_TELEMETRY_DISABLED=1`，仍继承其他宿主环境变量（例如 `PATH`、`DSH_HOME` 等）；正式 Run 才是 `envMode: exact` 白名单（allowlist）。该策略只影响 Tekon 启动的子进程，不修改用户宿主环境。在 alpha.3 中，`--version` 与 `--dump-default-config` 为 boot-free，但 `--profile headless --help` 会进入 profile/plugin boot；无证据表明此前发生外传，但不能用不 boot 排除风险，故 preflight 同样严格关断。需要注意：worktree 中的 `.env` 凭证回退读取仍是独立安全风险，不因遥测配置关闭而解决，不等于凭证隔离。
+  - ⚠️ **Metadata 预检采用最小环境和隔离临时 workspace**：Tekon 为内置 Version/Config/Help probe 创建一次临时 root，统一设置 `cwd=root`、`DSH_HOME=root/dsh-home`、`DSH_AGENTS_HOME=root/agents-home`，只透传命令启动、home/temp/locale 等白名单值，并固定 `DSH_TELEMETRY_DISABLED=1`。这会切断 DeepSeek Harness rc.1 已确认的 invocation cwd `.env`、DSH home `.env` 与 `.credentials.yaml` 自动 fallback；完成后临时 root 会清理。它**不是 OS sandbox**，不能阻止同 UID 恶意二进制主动读取宿主文件，也不修改用户宿主环境。正式 Run 仍使用独立的 `envMode: exact` 白名单，但 worktree `.env`、代理配置、凭据来源与内部工具执行证据仍是独立风险，不因 metadata 隔离而关闭。2026-09-03 的无凭据 Wrapped L2 已验证官方 [`0.1.2-rc.1`](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-rc.1) 的 Version/Config/Help 合同；因 L3 真实模型调用尚未完成，Tekon tested pin 继续保持 `0.1.2-alpha.3`。
 
 **Provider 环境预检**：使用 `dsh-headless` 前，可先运行预检命令确认本机环境与 Tekon 钉死版本兼容：
 
@@ -1015,7 +1015,7 @@ tekon -h            # 等同于 tekon help
 **查看版本**：
 
 ```bash
-tekon --version     # 输出 v0.5.0
+tekon --version     # 输出 v0.20.6
 tekon -v            # 同上
 ```
 
@@ -1237,7 +1237,7 @@ Session UI 适合：
 
 | 参数                  | 用途                                                                        |
 | --------------------- | --------------------------------------------------------------------------- |
-| `--help`, `-h`        | 查看命令帮助；`tekon --help` 显示命令概览，`tekon help <cmd>` 查看子命令。 |
+| `--help`, `-h`        | 查看命令帮助；`tekon --help` 显示命令概览，`tekon help <cmd>` 查看子命令。  |
 | `--version`, `-v`     | 输出版本号。                                                                |
 | `--repo <path>`       | 跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。                    |
 | `--run-id <runId>`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。                   |

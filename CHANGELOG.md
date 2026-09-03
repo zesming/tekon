@@ -1,5 +1,22 @@
 # 变更日志
 
+## v0.20.6
+
+本轮收口第二十轮复审确认的 DSH metadata probe fallback 风险与默认 Session 启动恢复缺口。Tekon 的 DSH tested pin 仍为 `0.1.2-alpha.3`；官方 `0.1.2-rc.1` 只完成无凭据 Wrapped L2，不据此升级生产 pin。
+
+### 用户可见改进
+
+- **默认 Session 缺摘要可原地恢复**：执行计划返回但缺少 `digest` 时，界面继续 fail-closed 阻止提交，同时提供“重试”按钮重新请求计划；摘要恢复后提交按钮重新可用。
+- **默认 Session 失败后可重试证据**：新增真实 Chromium 场景，验证首次 `project.run` 返回错误后同步 latch 被释放，第二次提交只再发起一次请求并成功进入 Session 详情页。
+
+### 工程与合同
+
+- **DSH metadata probe 使用隔离临时 workspace**：只要版本、Config 或 Help 中任一 probe 使用内置实现，就创建一次临时 root，并统一设置 `cwd=root`、`DSH_HOME=root/dsh-home`、`DSH_AGENTS_HOME=root/agents-home`。这会切断 DSH rc.1 已确认的 invocation cwd `.env`、DSH home `.env` 与 `.credentials.yaml` 自动 fallback；它不是 OS sandbox，不能阻止同 UID 恶意二进制主动读取宿主文件。
+- **混合 probe 与命令路径合同**：default probe 使用隔离 cwd、最小环境和切换 cwd 前解析的相对命令；custom probe 保持接收调用方原始命令；三项全为 custom 时不创建 workspace。Config 校验完成后才执行 Help，继续避免同一临时 DSH home 的 first-use 并发写。
+- **环境与清理闭环**：宿主 `DSH_HOME`/`DSH_AGENTS_HOME` 不再透传，补充 `SystemDrive`、`windir`、`WINDIR` 防御性兼容值；成功、合同失败与命令缺失均在 `finally` 清理。清理失败只经安全 warning sink 报告，不覆盖主结果或主异常；版本阶段的原生 `ENOENT` 和后续阶段的 `DshCapabilityError` 语义保持不变。
+- **官方 rc.1 Wrapped L2**：在 Node 22.19.0 上通过 Tekon 生产构建和 delegating recorder 调用 npm `@deepseek-ai/dsh@0.1.2-rc.1`（integrity `sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA==`）。Version/Config/Help 分别为 51ms/69ms/556ms，5 项插件行与 Help 锚点通过，版本事实保持 incompatible + explicitly bypassed，敏感哨兵未进入实际命令，临时 root 完成后已删除。L3 真实模型调用仍未开展。
+- **测试规范**：Web e2e 文件改为 `session-composer-admission.e2e.test.ts`；Core 增加真实 caller cwd、ambient DSH home、混合 probe、相对命令、分阶段 `ENOENT`、Windows 变量和清理双故障覆盖。
+
 ## v0.20.5
 
 本轮落地第十九轮复审（`docs/reviews/2026-09-03-tekon-product-runtime-harness-nineteenth-review.md`，PR #11）锁定的整改事项：收口 Advanced Run 准入与并发防重入、DSH metadata preflight 内置 session telemetry 硬关断，并补齐执行方案/文档。架构级项（single-owner Runtime、权威 Session、ACP、RunPlan schema、完整生命周期治理与 `project.clean`）按复审裁决维持冻结，由独立 issue/PR 承载。
