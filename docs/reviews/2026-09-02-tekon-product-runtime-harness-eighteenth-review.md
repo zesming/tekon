@@ -671,3 +671,28 @@ PR #11 已远超适合继续增长的规模。最终建议 squash merge；后续
 - [Headless](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/packages/bundle/headless/README.md)
 - [ACP](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/packages/acp/acp/README.md)
 - [Safety](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.4/SAFETY.md)
+
+## 16. 批注（2026-09-03 主代理评估）
+
+### 16.1 评估结论
+
+| 评估路 | 结论 | 关键证据 |
+| --- | --- | --- |
+| 4 个新发现深入核查 | **3 项真实，1 项部分真实** | P1-PLAN-01：`session-service.ts:66` 声明 `planDigest?` 但 `startRun()` 未转发，CLI/Web 双源传参（顶层被忽略、engine 侧生效），契约误导真实。P1-UX-PROVIDER：`session-context.ts:223` `let activeAgent` mutable slot 真实，但 CLI 单 run 模型当前无并发竞争，影响有限。P2-DOMAIN：`engine.ts:329` 每次 run 新建 `project_${randomUUID()}`，Session 层复用 workspace，双重身份真实。P1-PROVIDER-EXCEPTION：硬编码 `acknowledgeUnrestrictedNetwork: true`（`dsh-headless-adapter.ts:377`）和 guard 只查 ack===true（`agent-adapter.ts:127`）真实，孤儿风险（`session-service.ts:204` prepareRun 后 onPrepared 失败无补偿）真实；但"无前置检查"不真实——CLI `run.ts:146` 和 Web `project.ts:326` 都有显式知情同意门 |
+| DSH alpha.5 对齐复核 | **合同锚点零漂移，报告 §11 版本事实已过时** | upstream 已发布 `dsh-v0.1.2-alpha.5`（HEAD `49a606bc5`）；Tekon tested pin 仍 alpha.3。alpha.4→alpha.5 间 4 个合同锚点（Headless one-shot、help anchor、5 个 plugin row ids、Node engines `^22.19.0 \|\| >=24.0.0`）均无变化；`tool-web.config.fetch` 仍为 `true`。报告 §11 仍写 "alpha.4"，建议后续报告更新为 alpha.5 |
+| Issue 操作与 CI 健康 | **合理，CI 全绿** | #22 扩大为 P1-PROVIDER-EXCEPTION、#20 扩大（planDigest + Project/Workspace）、#29 扩大（CLI activeAgent）；#27 保持 tracking；本地 `pnpm test` 140 文件/1518 passed/3 skipped，PR #11 CI 7 项全绿，MERGEABLE/CLEAN |
+
+### 16.2 补充发现
+
+1. **P1-PROVIDER-EXCEPTION 风险面收窄**：报告称"直接使用 Core 高层工厂、不提供本次 acknowledgement，也可以构造 dsh-headless Adapter"，但 CLI/Web 两个主入口都有显式知情同意门（CLI `--acknowledge-unrestricted-network`、Web 前端勾选）。真实风险面是绕过 CLI/Web 直接调用 `dshHeadlessProviderConfig()` 的未来入口或脚本，以及 prepareRun/onPrepared 孤儿风险。
+2. **alpha.5 已发布**：upstream 于 2026-09-02 发布 alpha.5（session-projection-cache 跨版本兼容 + storage salvage），报告 §11 仍引用 alpha.4。alpha.5 合同锚点零漂移，Tekon 升 pin 评估应基于 alpha.5 而非 alpha.4。
+
+### 16.3 本轮决策
+
+1. **4 个新发现留独立 PR**：P1-PROVIDER-EXCEPTION（#22）、P1-PLAN-01（#20）、P1-UX-PROVIDER（#29）、P2-DOMAIN（并入 #20）均为跨模块架构变更，不适合在已冻结的 PR #11 内进行。
+2. **PR #11 合并建议**：同意报告 §14 建议，本轮批注后即可 squash merge；合并后按 §13 顺序从 #16 推进独立 PR。
+3. **alpha.5 升 pin 评估**：#17 应更新为基于 alpha.5 而非 alpha.4 进行 L1/L2/L3 验证。
+
+### 16.4 验证承诺
+
+本轮批注为纯文档追加，不改变代码行为。批注追加后将重新执行 `pnpm test` 确认无回归，并推送到 PR #11。
