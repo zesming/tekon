@@ -189,6 +189,9 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
             mode: RUN_MODE,
             templateName: GOAL_TEMPLATE_NAME,
             kind: 'goal',
+            ...(input.planDigest !== undefined && input.planDigest !== ''
+              ? { planDigest: input.planDigest }
+              : {}),
           }
         : {
             demandText: input.demandText,
@@ -197,6 +200,9 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
             ...(input.workflowSpec
               ? { workflowSpec: input.workflowSpec }
               : { templateName: input.templateName }),
+            ...(input.planDigest !== undefined && input.planDigest !== ''
+              ? { planDigest: input.planDigest }
+              : {}),
           };
     // prepareRun persists the run (ms-level) without running the agent.
     const prepared = await engine.prepareRun(prepareInput);

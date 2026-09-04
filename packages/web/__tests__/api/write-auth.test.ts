@@ -851,7 +851,7 @@ describe('web write authorization', () => {
 });
 
 describe('project.clean', () => {
-  it('removes the run directory from disk and reports removedRunDir true', async () => {
+  it('rejects with CONFLICT (CLEAN_SUSPENDED) and preserves the run directory on disk', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -859,13 +859,17 @@ describe('project.clean', () => {
     const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
     expect(existsSync(runDir)).toBe(true);
 
-    const result = await dispatchApiCall(api, 'project.clean', {
-      runId: 'run_1',
-      token: fixture.sessionToken,
-      confirm: 'delete-run-dir',
+    await expect(
+      dispatchApiCall(api, 'project.clean', {
+        runId: 'run_1',
+        token: fixture.sessionToken,
+        confirm: 'delete-run-dir',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringMatching(/CLEAN_SUSPENDED.*lifecycle-safe purge/),
     });
-    expect(result).toMatchObject({ removedRunDir: true });
-    expect(existsSync(runDir)).toBe(false);
+    expect(existsSync(runDir)).toBe(true);
 
     await api.close();
   });

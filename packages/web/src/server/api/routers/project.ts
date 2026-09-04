@@ -7,7 +7,6 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
 } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -45,6 +44,7 @@ import {
   mustGetRun,
   pendingDecisionCount,
 } from '../queries.js';
+import { createProviderHealthService } from '../provider-health.js';
 import {
   mapProject,
   mapWorkflow,
@@ -104,7 +104,14 @@ async function probeProvider(): Promise<'available' | 'unavailable'> {
   }
 }
 
-export function createProjectRouter(context: ServerContext) {
+export function createProjectRouter(
+  context: ServerContext,
+  options?: { probeProvider?: () => Promise<'available' | 'unavailable'> },
+) {
+  const providerHealthService = createProviderHealthService({
+    probe: options?.probeProvider ?? probeProvider,
+  });
+
   return {
     async list() {
       return listScopedProjects(context.db, context.projectContext).map(
@@ -113,7 +120,10 @@ export function createProjectRouter(context: ServerContext) {
     },
 
     async health(input?: { token?: string }) {
-      const token = input?.token?.trim();
+      // Credential health must use the same byte-for-byte token semantics as
+      // authenticated RPCs. Trimming here would report a token as valid while
+      // every mutation and provider-health request correctly rejects it.
+      const token = input?.token;
       const tokenHash = token ? hashToken(token) : 'empty';
       const cacheKey = `${context.projectContext.sessionPath}:${tokenHash}`;
       const now = Date.now();
@@ -126,7 +136,6 @@ export function createProjectRouter(context: ServerContext) {
 
       let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
       let detail: string | undefined;
-      let dshHeadless: 'available' | 'unavailable' | undefined;
 
       if (!token) {
         credential = 'not-configured';
@@ -147,7 +156,6 @@ export function createProjectRouter(context: ServerContext) {
           detail = 'Web session token is not configured on server';
         } else if (token === expectedToken) {
           credential = 'valid';
-          dshHeadless = await probeProvider();
         } else {
           credential = 'invalid';
           detail = 'Session token does not match server configuration';
@@ -158,11 +166,20 @@ export function createProjectRouter(context: ServerContext) {
         credential,
         checkedAt: new Date().toISOString(),
         ...(detail ? { detail } : {}),
-        ...(dshHeadless ? { dshHeadless } : {}),
       };
 
       setHealthCache(cacheKey, { result, cachedAt: now });
       return result;
+    },
+
+    async providerHealth(input: { token: string; provider: 'dsh-headless' }) {
+      assertSessionToken(context.projectContext, input.token);
+      const tokenHash = hashToken(input.token);
+      return await providerHealthService.check({
+        scope: context.projectContext.sessionPath,
+        tokenHash,
+        provider: input.provider,
+      });
     },
 
     async overview() {
@@ -470,16 +487,50 @@ export function createProjectRouter(context: ServerContext) {
         throw new ApiError('BAD_REQUEST', 'Invalid runId format');
       }
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      const runDir = join(
-        context.projectContext.dataDir,
-        'runs',
+
+      const run = mustGetRun(context.db, runInput.runId);
+      // Clean evidence covers every active job kind, including delayed
+      // readiness/delivery automation. JobRepository.findActiveByRunId is
+      // intentionally limited to workflow controls and would omit those.
+      const activeJob = context.db
+        .prepare(
+          `select j.id from jobs j
+           join sessions s on s.id = j.session_id
+           where s.run_id = ?
+             and j.status in ('queued', 'running', 'paused', 'cancelling')
+           order by j.created_at desc, j.id desc
+           limit 1`,
+        )
+        .get(runInput.runId) as { id: string } | undefined;
+      const leases = await context.repositories.listWorktreeLeases(
         runInput.runId,
       );
-      const removedRunDir = existsSync(runDir);
-      if (removedRunDir) {
-        rmSync(runDir, { recursive: true, force: true });
+      const unreleasedLeaseIds = leases
+        .filter((lease) => !lease.releasedAt)
+        .map((lease) => lease.id);
+
+      try {
+        await context.audit.append({
+          runId: runInput.runId,
+          type: 'project.clean.suspended',
+          payload: {
+            reason: 'CLEAN_SUSPENDED',
+            runStatus: run.status,
+            ...(activeJob?.id ? { activeJobId: activeJob.id } : {}),
+            unreleasedLeaseIds,
+          },
+        });
+      } catch {
+        throw new ApiError(
+          'INTERNAL_ERROR',
+          'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
+        );
       }
-      return { removedRunDir };
+
+      throw new ApiError(
+        'CONFLICT',
+        'CLEAN_SUSPENDED: project.clean is suspended pending lifecycle-safe purge',
+      );
     },
   };
 }

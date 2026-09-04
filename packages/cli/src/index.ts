@@ -89,7 +89,7 @@ const COMMANDS: CommandMeta[] = [
   { name: 'provider', description: '管理与检查 Agent Provider', group: '工具', subcommands: [
     { name: 'preflight', description: '检查指定 Provider 的环境兼容性与合同' },
   ] },
-  { name: 'clean', description: '清理工作树', group: '工具' },
+  { name: 'clean', description: '清理暂不可用（等待生命周期安全清理）', group: '工具' },
   { name: 'ui', description: '启动 Web 管理界面', group: '工具' },
   { name: 'update', description: '更新 Tekon CLI', group: '工具' },
 ];

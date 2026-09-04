@@ -273,6 +273,114 @@ describe('SessionService.startRun', () => {
     expect(job?.kind).toBe('goal-run');
   });
 
+  it('forwards planDigest to prepareRun for workflow runs when provided', async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: 'run_digest',
+      projectId: 'proj_1',
+      demandId: 'demand_1',
+      status: 'running',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const service = makeService(env, engine);
+
+    await service.startRun({
+      demandText: 'Run with digest.',
+      templateName: 'standard-delivery',
+      planDigest:
+        'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      engine: null,
+    });
+
+    expect(engine.prepareRun).toHaveBeenCalledWith({
+      demandText: 'Run with digest.',
+      mode: 'template',
+      kind: 'workflow',
+      templateName: 'standard-delivery',
+      planDigest:
+        'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+    });
+  });
+
+  it('forwards planDigest to prepareRun for goal runs when provided', async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: 'run_goal_digest',
+      projectId: 'proj_1',
+      demandId: 'demand_1',
+      status: 'running',
+      kind: 'goal',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const service = makeService(env, engine);
+
+    await service.startRun({
+      demandText: 'Goal with digest.',
+      mode: 'goal',
+      planDigest:
+        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      engine: null,
+    });
+
+    expect(engine.prepareRun).toHaveBeenCalledWith({
+      demandText: 'Goal with digest.',
+      mode: 'template',
+      templateName: 'goal',
+      kind: 'goal',
+      planDigest:
+        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+  });
+
+  it('does not add planDigest property to prepareRun when not provided', async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: 'run_no_digest',
+      projectId: 'proj_1',
+      demandId: 'demand_1',
+      status: 'running',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const service = makeService(env, engine);
+
+    await service.startRun({
+      demandText: 'Run without digest.',
+      engine: null,
+    });
+
+    const callArgs = vi.mocked(engine.prepareRun).mock.calls[0][0];
+    expect('planDigest' in callArgs).toBe(false);
+  });
+
+  it('does not add planDigest property to prepareRun when it is empty', async () => {
+    const env = setup();
+    const workflow: WorkflowInstance = {
+      id: 'run_empty_digest',
+      projectId: 'proj_1',
+      demandId: 'demand_1',
+      status: 'running',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const engine = fakeEngine(workflow);
+    const service = makeService(env, engine);
+
+    await service.startRun({
+      demandText: 'Run with an empty digest.',
+      planDigest: '',
+      engine: null,
+    });
+
+    const callArgs = vi.mocked(engine.prepareRun).mock.calls[0][0];
+    expect('planDigest' in callArgs).toBe(false);
+  });
+
   it('calls onPrepared after prepareRun but before createSession', async () => {
     const env = setup();
     const workflow: WorkflowInstance = {

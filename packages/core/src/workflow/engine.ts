@@ -42,6 +42,7 @@ import {
 } from './execution-plan.js';
 import {
   canonicalJson,
+  computeRunPlanDigest,
   projectRunPlan,
   type RunPlan,
 } from './run-plan.js';
@@ -323,6 +324,44 @@ export function createWorkflowEngine(
       loadWorkflowTemplate({
         name: input.templateName ?? 'standard-delivery',
       });
+    const canonicalPlan =
+      input.canonicalPlan ??
+      options.canonicalPlan ??
+      projectRunPlan(template, {
+        agent: options.agentProvider ?? 'codex',
+        mode: input.kind ?? 'workflow',
+        allowDirtyBase: options.allowDirtyBase,
+      });
+    const planSnapshot =
+      input.planSnapshot ??
+      options.planSnapshot ??
+      canonicalJson(canonicalPlan);
+    const canonicalDigest = computeRunPlanDigest(canonicalPlan);
+
+    if (canonicalPlan.digest !== canonicalDigest) {
+      throw new Error(
+        `PLAN_DIGEST_MISMATCH: canonical plan digest '${canonicalPlan.digest}' does not match its content digest '${canonicalDigest}'`,
+      );
+    }
+
+    if (
+      input.planDigest !== undefined &&
+      input.planDigest !== canonicalDigest
+    ) {
+      throw new Error(
+        `PLAN_DIGEST_MISMATCH: input planDigest '${input.planDigest}' does not match canonical plan digest '${canonicalDigest}'`,
+      );
+    }
+    if (
+      options.planDigest !== undefined &&
+      options.planDigest !== canonicalDigest
+    ) {
+      throw new Error(
+        `PLAN_DIGEST_MISMATCH: options planDigest '${options.planDigest}' does not match canonical plan digest '${canonicalDigest}'`,
+      );
+    }
+    const planDigest = canonicalDigest;
+
     const runId = `run_${randomUUID()}`;
     const projectId = `project_${randomUUID()}`;
     const demandId = `demand_${randomUUID()}`;
@@ -344,22 +383,6 @@ export function createWorkflowEngine(
       repoPath: options.repoPath,
       createdAt: now,
     });
-    const canonicalPlan =
-      input.canonicalPlan ??
-      options.canonicalPlan ??
-      projectRunPlan(template, {
-        agent: options.agentProvider ?? 'codex',
-        mode: input.kind ?? 'workflow',
-        allowDirtyBase: options.allowDirtyBase,
-      });
-    const planSnapshot =
-      input.planSnapshot ??
-      options.planSnapshot ??
-      canonicalJson(canonicalPlan);
-    const planDigest =
-      input.planDigest ??
-      options.planDigest ??
-      canonicalPlan.digest;
 
     await options.repositories.createWorkflowInstance({
       id: runId,

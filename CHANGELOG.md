@@ -1,5 +1,21 @@
 # 变更日志
 
+## v0.21.0
+
+本轮依据第二十二轮复审收口可确定性验证的安全与合同缺口。DeepSeek Harness tested pin 继续保持 `0.1.2-alpha.3`；官方 `0.1.3-alpha.1` 仅作为 ACP/SessionHandle 后续技术输入，不据“最新”直接升 pin。
+
+### 用户可见改进
+
+- **物理清理入口 fail-closed**：Web `project.clean` 与 CLI `tekon clean` 暂停全部物理删除。Web 在认证、确认字面量、runId 格式和仓库 scope 校验后记录 `project.clean.suspended` Audit，再返回 `CLEAN_SUSPENDED`；CLI 固定 exit 1、只写 stderr。run/worktree 目录均保持不变，完整 export/retention/purge 继续由 #18/#33 承担。
+- **连接状态不再等待可选 DSH**：`project.health` 只验证 Web Session token；TopBar 在凭据有效后通过独立、受认证且有界缓存/single-flight 的 `project.providerHealth` 异步获取 dsh-headless 可用性。Provider 失败不会把有效凭据误显示为无效，原始进程错误、路径和代理信息不会返回浏览器。
+- **计划摘要拒绝静默漂移**：`SessionService` 顶层 `planDigest` 进入 `WorkflowEngine.prepareRun`；input/options/canonical plan 的 digest 在任何目录、数据库或 Audit 副作用前做一致性校验，不一致返回 `PLAN_DIGEST_MISMATCH`。
+
+### 工程与合同
+
+- **Production Audit 分类重试**：CI 改由可测试脚本解析 pnpm 10.12.1 JSON；只有有效零漏洞结果成功。已确认 Advisory、零退出但空/坏 JSON和未知错误立即失败，只有无有效结果的 timeout/DNS/reset/HTTP 5xx 可重试一次。
+- **Node floor 精确验证**：兼容矩阵从 minor 浮动值改为精确 `20.19.0`、`22.12.0`、`22.19.0`，Node 24 保持 `24.x` 最新补丁，并在 setup 后断言实际解析版本。根 `engines` 范围本轮不变；Node 23/25/26/future major 不因开放上界被表述为已验证。
+- **正式文档恢复双格式**：第二十二轮报告与本轮执行方案均提供同步 Markdown/HTML，人审版本不再以减少镜像为由违反仓库交付规则。
+
 ## v0.20.6
 
 本轮收口第二十轮复审确认的 DSH metadata probe fallback 风险与默认 Session 启动恢复缺口。Tekon 的 DSH tested pin 仍为 `0.1.2-alpha.3`；官方 `0.1.2-rc.1` 只完成无凭据 Wrapped L2，不据此升级生产 pin。

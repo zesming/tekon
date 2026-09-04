@@ -629,7 +629,6 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       ],
       ['constraints', 'show', '--repo', repoPath],
       ['log', '--run-id', gatedRunId!, '--repo', repoPath],
-      ['clean', '--repo', repoPath],
     ]) {
       await expect(runCli(argv, io)).resolves.toBe(0);
       expect(io.takeStdout().length).toBeGreaterThan(0);

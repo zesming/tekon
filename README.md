@@ -63,6 +63,7 @@ Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里�
 - **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
 - **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
 - **Workspace 为单项目占位**：暂不支持多 workspace 切换/增删。
+- **物理清理暂不可用**：`tekon clean` 与 Web `project.clean` 当前统一返回 `CLEAN_SUSPENDED`，不会删除 worktree 或 run 目录。待完整导出、retention、active job/lease 协调和可审计 purge 闭环前，不提供物理删除。
 
 ## 快速开始
 
@@ -72,7 +73,7 @@ Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里�
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。
+脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。CI 精确验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 Node `24.x` 最新补丁；这四腿是已测集合，不代表开放上界中的未来 major 自动获得生产支持。
 
 安装完成后，按脚本输出的提示将 `tekon` 加入 PATH，`source` 对应 rc 文件即可使用。
 
@@ -154,6 +155,7 @@ tekon ui                                      # 启动 Web Dashboard
 | 等待 CI            | `tekon delivery ci-watch`                    |
 | 评估 readiness     | `tekon eval readiness`                       |
 | 评估样本集         | `tekon eval work-usability --samples <yaml>` |
+| 清理运行产物       | `tekon clean`（当前暂停，返回 `CLEAN_SUSPENDED`，不会删除） |
 | 更新 Tekon         | `tekon update`                               |
 | 启动 Web Dashboard | `tekon ui`                                   |
 

@@ -23,11 +23,15 @@ describe('authScope', () => {
     expect(authScope('token-a')).not.toBe(authScope('token-b'));
   });
 
-  it('returns a string representation of a number for non-empty tokens', () => {
+  it('does not reuse a scope for the known Aa/BB 32-bit hash collision', () => {
+    expect(authScope('Aa')).not.toBe(authScope('BB'));
+  });
+
+  it('returns an opaque identifier that does not embed the token', () => {
     const scope = authScope('some-real-token');
     expect(scope).not.toBe('anon');
-    // Should be a numeric string (the hash result)
-    expect(Number.isFinite(Number(scope))).toBe(true);
+    expect(scope).toMatch(/^auth-[0-9a-z]+$/u);
+    expect(scope).not.toContain('some-real-token');
   });
 });
 

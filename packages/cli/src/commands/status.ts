@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import type { CliIO } from '../lib/context.js';
-import { ensureInitialized, withCommandCtx } from '../lib/context.js';
+import { withCommandCtx } from '../lib/context.js';
 import { resolveProjectRepoPath } from '../lib/path-utils.js';
 
 export async function commandStatus(
@@ -68,13 +68,10 @@ export async function commandClean(
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  await ensureInitialized(repoPath, io);
-  const worktreesDir = join(repoPath, '.tekon', 'worktrees');
-  let cleaned = 0;
-  if (existsSync(worktreesDir)) {
-    cleaned = readdirSync(worktreesDir).length;
-    rmSync(worktreesDir, { force: true, recursive: true });
+  if (!existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
+    throw new Error(`项目未初始化: ${repoPath}。请运行 "tekon init" 初始化项目。`);
   }
-  mkdirSync(worktreesDir, { recursive: true });
-  io.stdout.write(`清理工作树: ${cleaned} 个\n`);
+  throw new Error(
+    'CLEAN_SUSPENDED: tekon clean is suspended pending lifecycle-safe purge (see #33, #18)',
+  );
 }

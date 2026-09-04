@@ -300,6 +300,14 @@ export interface ApiCaller {
       detail?: string;
       dshHeadless?: 'available' | 'unavailable';
     }>;
+    providerHealth(input: {
+      token: string;
+      provider: 'dsh-headless';
+    }): Promise<{
+      provider: 'dsh-headless';
+      status: 'available' | 'unavailable';
+      checkedAt: string;
+    }>;
   };
   delivery: {
     prepare(input: TokenRunInput): Promise<{

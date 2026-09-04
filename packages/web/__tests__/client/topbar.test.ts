@@ -1,78 +1,105 @@
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
 
-let mockLocation = { pathname: "/runs" };
+let mockLocation = { pathname: '/runs' };
 let mockToken: string | null = null;
-let mockHealthData: { credential: "valid" | "invalid" | "not-configured"; dshHeadless?: "available" | "unavailable" } | undefined = undefined;
+let mockHealthData:
+  | { credential: 'valid' | 'invalid' | 'not-configured' }
+  | undefined = undefined;
+let mockProviderHealthData:
+  | { provider: 'dsh-headless'; status: 'available' | 'unavailable' }
+  | undefined = undefined;
 
-vi.mock("react-router", () => ({
+vi.mock('react-router', () => ({
   useLocation: () => mockLocation,
 }));
 
-vi.mock("../../src/client/hooks/use-session-token.js", () => ({
+vi.mock('../../src/client/hooks/use-session-token.js', () => ({
   useSessionToken: () => ({
     token: mockToken,
     setToken: vi.fn(),
   }),
 }));
 
-vi.mock("../../src/client/hooks/use-query.js", () => ({
-  useQuery: () => ({
-    data: mockHealthData,
+vi.mock('../../src/client/hooks/use-query.js', () => ({
+  useQuery: (key: string | null) => ({
+    data: key?.includes('project.providerHealth')
+      ? mockProviderHealthData
+      : mockHealthData,
     loading: false,
     error: null,
     refetch: vi.fn(),
   }),
 }));
 
-import { TopBar } from "../../src/client/layouts/TopBar.js";
+import { TopBar } from '../../src/client/layouts/TopBar.js';
 
-describe("TopBar credential status (SUG-2 / P1-HEALTH-01)", () => {
-  it("renders not-configured state when token is null", () => {
+describe('TopBar credential status (SUG-2 / P1-HEALTH-01)', () => {
+  it('renders not-configured state when token is null', () => {
     mockToken = null;
     mockHealthData = undefined;
+    mockProviderHealthData = undefined;
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
-    expect(html).toContain("aria-label=\"连接凭据：未配置\"");
-    expect(html).toContain("未配置凭据");
+    expect(html).toContain('aria-label="连接凭据：未配置"');
+    expect(html).toContain('未配置凭据');
   });
 
-  it("renders checking state when token is present but health has not resolved yet", () => {
-    mockToken = "session-tok-123";
+  it('renders checking state when token is present but health has not resolved yet', () => {
+    mockToken = 'session-tok-123';
     mockHealthData = undefined;
+    mockProviderHealthData = undefined;
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
-    expect(html).toContain("aria-label=\"连接凭据：校验中\"");
-    expect(html).toContain("校验中");
-    expect(html).toContain("status-dot-checking");
+    expect(html).toContain('aria-label="连接凭据：校验中"');
+    expect(html).toContain('校验中');
+    expect(html).toContain('status-dot-checking');
   });
 
-  it("renders valid state when healthData.credential is valid", () => {
-    mockToken = "session-tok-123";
-    mockHealthData = { credential: "valid" };
+  it('renders valid state when healthData.credential is valid', () => {
+    mockToken = 'session-tok-123';
+    mockHealthData = { credential: 'valid' };
+    mockProviderHealthData = undefined;
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
-    expect(html).toContain("aria-label=\"连接凭据：有效\"");
-    expect(html).toContain("凭据有效");
-    expect(html).toContain("status-dot-connected");
+    expect(html).toContain('aria-label="连接凭据：有效"');
+    expect(html).toContain('凭据有效');
+    expect(html).toContain('status-dot-connected');
   });
 
-  it("renders invalid state when healthData.credential is invalid", () => {
-    mockToken = "session-tok-123";
-    mockHealthData = { credential: "invalid" };
+  it('renders invalid state when healthData.credential is invalid', () => {
+    mockToken = 'session-tok-123';
+    mockHealthData = { credential: 'invalid' };
+    mockProviderHealthData = undefined;
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
-    expect(html).toContain("aria-label=\"连接凭据：无效\"");
-    expect(html).toContain("凭据无效");
-    expect(html).toContain("status-dot-disconnected");
+    expect(html).toContain('aria-label="连接凭据：无效"');
+    expect(html).toContain('凭据无效');
+    expect(html).toContain('status-dot-disconnected');
   });
 
-  it("renders dsh-headless不可用 badge when dshHeadless is unavailable and credential is valid", () => {
-    mockToken = "session-tok-123";
-    mockHealthData = { credential: "valid", dshHeadless: "unavailable" };
+  it('renders dsh-headless不可用 badge from separate provider health when credentials are valid', () => {
+    mockToken = 'session-tok-123';
+    mockHealthData = { credential: 'valid' };
+    mockProviderHealthData = {
+      provider: 'dsh-headless',
+      status: 'unavailable',
+    };
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
-    expect(html).toContain("dsh-headless不可用");
+    expect(html).toContain('dsh-headless不可用');
+  });
+
+  it('does not expose stale provider health when credentials are invalid', () => {
+    mockToken = 'rotated-session-token';
+    mockHealthData = { credential: 'invalid' };
+    mockProviderHealthData = {
+      provider: 'dsh-headless',
+      status: 'unavailable',
+    };
+
+    const html = renderToStaticMarkup(React.createElement(TopBar, {}));
+    expect(html).not.toContain('dsh-headless不可用');
   });
 });

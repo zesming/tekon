@@ -79,19 +79,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Audit production dependencies
-        run: |
-          set -euo pipefail
-          for attempt in 1 2; do
-            if pnpm audit --prod; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 2 ]; then
-              echo "::error::Production dependency audit failed after two attempts"
-              exit 1
-            fi
-            echo "::warning::Production dependency audit failed; retrying once after 15 seconds"
-            sleep 15
-          done
+        run: node scripts/ci/audit-production.mjs
 
   # Validate every declared Node floor independently from the primary Node 24
   # lane. Keep all legs running so one compatibility failure does not hide the
@@ -103,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['20.19.x', '22.12.x', '22.19.x', '24.x']
+        node-version: ['20.19.0', '22.12.0', '22.19.0', '24.x']
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -112,6 +100,22 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
+
+      - name: Assert resolved Node version
+        run: |
+          node -e '
+            const expected = "${{ matrix.node-version }}";
+            const actual = process.versions.node;
+            console.log(`Resolved Node version: ${actual} (expected: ${expected})`);
+            if (expected.endsWith(".x")) {
+              const prefix = expected.slice(0, -2);
+              if (!actual.startsWith(prefix + ".")) {
+                throw new Error(`Node version mismatch: expected prefix ${prefix}, got ${actual}`);
+              }
+            } else if (actual !== expected) {
+              throw new Error(`Node version mismatch: expected ${expected}, got ${actual}`);
+            }
+          '
 
       # Node 22.12 bundles Corepack 0.29, whose pnpm signing keys predate the
       # pinned pnpm 10 release. Pin a Corepack version that supports every leg.

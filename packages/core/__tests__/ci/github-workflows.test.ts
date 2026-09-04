@@ -76,17 +76,14 @@ describe('GitHub Actions Node compatibility contract', () => {
     expect(job['runs-on']).toBe('ubuntu-latest');
     expect(job['timeout-minutes']).toBe(20);
     expect(job.strategy?.['fail-fast']).toBe(false);
-    expect(versions).toEqual(['20.19.x', '22.12.x', '22.19.x', '24.x']);
+    expect(versions).toEqual(['20.19.0', '22.12.0', '22.19.0', '24.x']);
     expect(job.strategy?.matrix?.exclude).toBeUndefined();
 
     const declaredFloors = Array.from(
-      rootPackage.engines.node.matchAll(/(?:\^|>=)(\d+\.\d+)\.\d+/gu),
+      rootPackage.engines.node.matchAll(/(?:\^|>=)(\d+\.\d+\.\d+)/gu),
       (match) => match[1],
     );
-    const matrixMinors = (versions as string[]).map((version) =>
-      version.split('.').slice(0, 2).join('.'),
-    );
-    expect(matrixMinors).toEqual(expect.arrayContaining(declaredFloors));
+    expect(versions).toEqual(expect.arrayContaining(declaredFloors));
 
     const primaryNode = String(ci.env?.NODE_VERSION);
     expect(versions).toContain(`${primaryNode}.x`);
@@ -107,10 +104,21 @@ describe('GitHub Actions Node compatibility contract', () => {
     expect(setupNode?.with?.['node-version']).toBe(
       '${{ matrix.node-version }}',
     );
+    const resolvedStep = steps.find(
+      (step) =>
+        step.run?.includes('process.versions.node') &&
+        step.run?.includes('matrix.node-version'),
+    );
+    expect(resolvedStep).toBeDefined();
+    expect(resolvedStep?.run).toContain('expected.endsWith(".x")');
+    expect(resolvedStep?.run).toContain('actual.startsWith(prefix + ".")');
+    expect(resolvedStep?.run).toContain('actual !== expected');
+    expect(resolvedStep?.run).toContain('throw new Error');
 
     const orderedStepIndexes = [
       steps.findIndex((step) => step.uses === 'actions/checkout@v6'),
       steps.findIndex((step) => step.uses === 'actions/setup-node@v6'),
+      steps.indexOf(resolvedStep!),
       steps.findIndex(
         (step) => step.run === 'npm install --global corepack@0.34.1',
       ),
@@ -165,5 +173,23 @@ describe('GitHub Actions Node compatibility contract', () => {
       expect([undefined, false]).toContain(step['continue-on-error']);
       expect(step.if).toBeUndefined();
     }
+  });
+});
+
+describe('GitHub Actions production audit contract', () => {
+  const ci = loadWorkflow('ci.yml');
+
+  it('runs production audit using the classified retry runner with no continue-on-error', () => {
+    const job = requireJob(ci, 'audit');
+    expect([undefined, false]).toContain(job['continue-on-error']);
+    const steps = requireSteps(job);
+    for (const step of steps) {
+      expect([undefined, false]).toContain(step['continue-on-error']);
+    }
+
+    const auditStep = steps.find((step) =>
+      step.run?.includes('node scripts/ci/audit-production.mjs'),
+    );
+    expect(auditStep).toBeDefined();
   });
 });

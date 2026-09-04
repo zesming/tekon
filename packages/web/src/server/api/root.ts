@@ -138,7 +138,9 @@ function createWebRunEngineFactory(deps: {
 }
 
 export async function createApiCaller(
-  input: ResolveProjectRootInput,
+  input: ResolveProjectRootInput & {
+    providerProbe?: () => Promise<'available' | 'unavailable'>;
+  },
 ): Promise<ApiCaller> {
   const projectContext = createProjectContext(input);
   assertProjectDatabaseExists(projectContext);
@@ -321,7 +323,9 @@ export async function createApiCaller(
   const demandRouter = createDemandRouter(context);
   return {
     draftShape: demandRouter,
-    project: createProjectRouter(context),
+    project: createProjectRouter(context, {
+      probeProvider: input.providerProbe,
+    }),
     delivery: createDeliveryRouter(context),
     artifact: createArtifactRouter(context),
     gate: createGateRouter(context),

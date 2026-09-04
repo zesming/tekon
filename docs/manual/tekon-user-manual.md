@@ -164,7 +164,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。
+安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。CI 精确验证 `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x` 最新补丁；该集合不等于对 Node 23/25/26 或未来 major 的生产支持承诺。
 
 如需指定安装目录或分支：
 
@@ -380,6 +380,8 @@ tekon provider preflight dsh-headless
 ```
 
 它会检查实际安装的 `dsh` 版本、headless help 合同与默认配置插件组合，输出 tested 版本、actual 版本、合同校验结果与精确的兼容安装命令；兼容时退出码 0，不兼容时退出码 1。Web 与 CLI 在使用 `dsh-headless` 发起运行时，也会在任何运行记录产生之前自动执行同样的预检，不兼容时立即给出可读错误，不会带着残缺能力进入执行。
+
+Web 顶栏的连接徽标只等待 Session token 校验，不再同步执行可选 DSH 探测。凭据有效后，页面才通过独立的 Provider health 请求异步显示 `dsh-headless` 是否可用；Provider 失败不会把有效凭据降级为“凭据无效”。当前 Web 只显示可用/不可用，可行动的细节仍通过上述 `tekon provider preflight dsh-headless` 查看。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 
@@ -920,9 +922,9 @@ tekon ui
 - Web 是本地 dashboard，不是远程服务。
 - Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
 
-**Web 使用要点（v0.17.0）**：
+**Web 使用要点（v0.21.0）**：
 
-- **连接状态**：顶栏不再是裸露的令牌输入框，而是显示“已连接 / 未连接”状态徽标；点开连接管理面板可查看、重填并应用会话令牌，或断开连接。通过 `tekon ui` 输出的 `#token=` URL 打开时会自动进入“已连接”。
+- **连接状态**：顶栏不再是裸露的令牌输入框，而是显示“凭据有效 / 无效 / 未配置”状态徽标；点开连接管理面板可查看、重填并应用会话令牌，或断开连接。凭据校验不等待可选 Provider；有效后再异步显示 dsh-headless 可用性。通过 `tekon ui` 输出的 `#token=` URL 打开时会自动校验。
 - **执行计划预览**：在“新建运行”表单里发起前，可预览本次运行的角色链路、阶段、需人工审批的 Gate、超时和预期节点；毫秒级超时、profile 等工程参数收在“高级”折叠区。
 - **联网不受限确认**：选择 `dsh-headless` 等会带来不受限网络出口的 agent 时，预览会显式告警并要求勾选“我已知悉本次运行联网不受限”；未勾选无法提交，确认会写入运行审计。
 - **失败任务处理**：受控交付列表中失败的会话可点“确认/归档”，确认后下沉到历史区、不再占据待处理置顶位；未处理的失败仍会置顶提醒。
@@ -986,7 +988,17 @@ tekon draft show
 - `--agent claude-code`：显式指定 Agent（`draft new` 默认使用配置中的默认 Agent）。
 - `--no-write`（`draft shape`）：只预览，不写入文件。
 
-### 6.23 `help`
+### 6.23 `clean`（当前暂停）
+
+用途：历史版本中用于递归清理 worktree；当前在生命周期安全清理完成前 fail-closed。
+
+```bash
+tekon clean
+```
+
+命令固定以 exit code 1 退出，并在 stderr 输出 `CLEAN_SUSPENDED`；不会扫描、删除或重建 `.tekon/worktrees/`。Web 的 `project.clean` 同样不会删除 `.tekon/runs/<runId>`。这是数据保护措施，不表示已经完成导出、retention 或可审计 purge。
+
+### 6.24 `help`
 
 用途：查看命令帮助。
 
@@ -1015,7 +1027,7 @@ tekon -h            # 等同于 tekon help
 **查看版本**：
 
 ```bash
-tekon --version     # 输出 v0.20.6
+tekon --version     # 输出 v0.21.0
 tekon -v            # 同上
 ```
 

@@ -95,6 +95,11 @@ export const projectHealthInputSchema = z
   })
   .optional();
 
+export const projectProviderHealthInputSchema = z.object({
+  token: z.string().min(1),
+  provider: z.literal('dsh-headless'),
+});
+
 export const draftShapeInputSchema = z.object({
   demandText: z.string(),
   token: z.string().min(1),
@@ -532,6 +537,12 @@ export const projectHealthOutputSchema = z.object({
   dshHeadless: z.enum(['available', 'unavailable']).optional(),
 });
 
+export const projectProviderHealthOutputSchema = z.object({
+  provider: z.literal('dsh-headless'),
+  status: z.enum(['available', 'unavailable']),
+  checkedAt: z.string(),
+});
+
 export const projectDetailOutputSchema = z.object({
   project: apiProjectSchema,
   runs: z.array(apiWorkflowSchema),
@@ -813,6 +824,11 @@ export const procedureSpecs = {
     auth: 'none' as const,
     input: projectHealthInputSchema,
     output: projectHealthOutputSchema,
+  },
+  'project.providerHealth': {
+    auth: 'token' as const,
+    input: projectProviderHealthInputSchema,
+    output: projectProviderHealthOutputSchema,
   },
   'project.detail': {
     auth: 'none' as const,

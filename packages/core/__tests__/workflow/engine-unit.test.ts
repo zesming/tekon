@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,6 +28,7 @@ import {
   type WorkflowEngine,
   type WorkflowTemplate,
 } from '../../src/index.js';
+import { projectRunPlan } from '../../src/workflow/run-plan.js';
 
 // ---------------------------------------------------------------------------
 // assertSuccessfulAgentRun
@@ -758,7 +759,7 @@ describe('S5 engine prepareRun / signal / pause', () => {
       adapter: { runAgent: (input) => runAgentSpy(input) },
       ...overrides,
     });
-    return { engine, repositories, audit, runAgentSpy, mock, db };
+    return { engine, repositories, audit, runAgentSpy, mock, db, repoPath };
   }
 
   function startInput() {
@@ -767,6 +768,25 @@ describe('S5 engine prepareRun / signal / pause', () => {
       mode: 'template' as const,
       workflowSpec: minimalTemplate,
     };
+  }
+
+  function expectNoAdmissionSideEffects(
+    db: ReturnType<typeof openTekonDatabase>,
+    repoPath: string,
+  ): void {
+    const runsDir = join(repoPath, '.tekon', 'runs');
+    expect(existsSync(runsDir) ? readdirSync(runsDir) : []).toHaveLength(0);
+    for (const table of [
+      'demands',
+      'projects',
+      'workflow_instances',
+      'audit_events',
+    ]) {
+      const row = db
+        .prepare(`select count(*) as count from ${table}`)
+        .get() as { count: number };
+      expect(row.count, table).toBe(0);
+    }
   }
 
   it('prepareRun persists the run without invoking the adapter; executePreparedRun runs it', async () => {
@@ -791,6 +811,83 @@ describe('S5 engine prepareRun / signal / pause', () => {
     const persisted = await repositories.getWorkflowInstance(runId);
     expect(persisted?.planSnapshot).toBe(workflow.planSnapshot);
     expect(persisted?.planDigest).toBe(workflow.planDigest);
+  });
+
+  it('prepareRun rejects mismatched input.planDigest with PLAN_DIGEST_MISMATCH before side effects', async () => {
+    const { engine, repoPath, db } = setupHarness();
+    const wrongDigest =
+      '0000000000000000000000000000000000000000000000000000000000000000';
+    await expect(
+      engine.prepareRun({
+        ...startInput(),
+        planDigest: wrongDigest,
+      }),
+    ).rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
+
+    expectNoAdmissionSideEffects(db, repoPath);
+  });
+
+  it('prepareRun rejects mismatched options.planDigest with PLAN_DIGEST_MISMATCH before side effects', async () => {
+    const wrongDigest =
+      '1111111111111111111111111111111111111111111111111111111111111111';
+    const { engine, repoPath, db } = setupHarness({ planDigest: wrongDigest });
+    await expect(engine.prepareRun(startInput())).rejects.toThrow(
+      /PLAN_DIGEST_MISMATCH/,
+    );
+
+    expectNoAdmissionSideEffects(db, repoPath);
+  });
+
+  it('prepareRun accepts matching input.planDigest and persists it to SQLite', async () => {
+    const { engine, repositories } = setupHarness();
+    const canonical = projectRunPlan(minimalTemplate, {
+      agent: 'codex',
+      mode: 'workflow',
+    });
+
+    const { runId, workflow } = await engine.prepareRun({
+      ...startInput(),
+      planDigest: canonical.digest,
+    });
+    expect(workflow.planDigest).toBe(canonical.digest);
+
+    const persisted = await repositories.getWorkflowInstance(runId);
+    expect(persisted?.planDigest).toBe(canonical.digest);
+  });
+
+  it('prepareRun rejects conflicting input/options planDigest even when input matches canonical', async () => {
+    const canonical = projectRunPlan(minimalTemplate, {
+      agent: 'codex',
+      mode: 'workflow',
+    });
+    const wrongDigest =
+      '2222222222222222222222222222222222222222222222222222222222222222';
+    const { engine, repoPath, db } = setupHarness({ planDigest: wrongDigest });
+
+    await expect(
+      engine.prepareRun({
+        ...startInput(),
+        planDigest: canonical.digest,
+      }),
+    ).rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
+    expectNoAdmissionSideEffects(db, repoPath);
+  });
+
+  it('prepareRun rejects a canonical plan whose stored digest does not match its content before side effects', async () => {
+    const canonical = projectRunPlan(minimalTemplate, {
+      agent: 'codex',
+      mode: 'workflow',
+    });
+    const tamperedCanonical = { ...canonical, agent: 'dsh-headless' };
+    const { engine, repoPath, db } = setupHarness({
+      canonicalPlan: tamperedCanonical,
+      planDigest: canonical.digest,
+    });
+
+    await expect(engine.prepareRun(startInput())).rejects.toThrow(
+      /PLAN_DIGEST_MISMATCH/,
+    );
+    expectNoAdmissionSideEffects(db, repoPath);
   });
 
   it('startRun still executes the full workflow (CLI compatibility)', async () => {

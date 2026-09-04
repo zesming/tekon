@@ -94,9 +94,9 @@ export function TopBar(props: TopBarProps) {
     () => rpc.call('project.health', { token: token ?? undefined }),
   );
 
-  // Health is operational state, not a one-time bootstrap fact. Refresh it so
-  // an expired/rotated server credential or provider installation is reflected
-  // without requiring a page reload.
+  // Credential health is operational state, not a one-time bootstrap fact.
+  // Keep this request independent from optional provider probes so the
+  // connection badge never waits for an external CLI.
   useEffect(() => {
     if (!token) return;
     const timer = window.setInterval(refetchHealth, 60_000);
@@ -113,6 +113,25 @@ export function TopBar(props: TopBarProps) {
     : healthError
       ? 'unavailable'
       : healthData?.credential ?? 'checking';
+
+  const { data: providerHealthData, refetch: refetchProviderHealth } = useQuery<
+    RpcProcedureMap['project.providerHealth']['output']
+  >(
+    token && credentialStatus === 'valid'
+      ? queryKeys.projectProviderHealth('dsh-headless', scope)
+      : null,
+    () =>
+      rpc.call('project.providerHealth', {
+        token: token!,
+        provider: 'dsh-headless',
+      }),
+  );
+
+  useEffect(() => {
+    if (!token || credentialStatus !== 'valid') return;
+    const timer = window.setInterval(refetchProviderHealth, 60_000);
+    return () => window.clearInterval(timer);
+  }, [credentialStatus, refetchProviderHealth, token]);
 
   const statusLabel =
     credentialStatus === 'valid'
@@ -138,7 +157,7 @@ export function TopBar(props: TopBarProps) {
 
   const dshHeadlessUnavailable =
     credentialStatus === 'valid' &&
-    healthData?.dshHeadless === 'unavailable';
+    providerHealthData?.status === 'unavailable';
 
   const openPanel = () => {
     setDraftToken(token ?? '');

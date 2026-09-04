@@ -2,18 +2,33 @@
 // Centralized query key factory with auth-scoped keys
 // ---------------------------------------------------------------------------
 
+const MAX_AUTH_SCOPE_TOKENS = 128;
+const tokenScopes = new Map<string, string>();
+let nextAuthScopeId = 1;
+
 /**
- * Compute a short hash of an auth token for cache-key differentiation.
- * Returns `'anon'` for null / empty tokens so unauthenticated queries
- * share a single namespace.
+ * Assign a process-local opaque cache scope to an auth token. A bounded token
+ * map avoids putting credentials in query keys while guaranteeing that two
+ * distinct retained tokens cannot collide. Evicted tokens receive a fresh,
+ * never-reused scope if seen again, which causes a safe cache miss.
  */
 export function authScope(token: string | null): string {
   if (!token) return 'anon';
-  let hash = 0;
-  for (let i = 0; i < token.length; i++) {
-    hash = ((hash << 5) - hash + token.charCodeAt(i)) | 0;
+
+  const existing = tokenScopes.get(token);
+  if (existing) {
+    tokenScopes.delete(token);
+    tokenScopes.set(token, existing);
+    return existing;
   }
-  return String(hash);
+
+  if (tokenScopes.size >= MAX_AUTH_SCOPE_TOKENS) {
+    const oldestToken = tokenScopes.keys().next().value;
+    if (oldestToken !== undefined) tokenScopes.delete(oldestToken);
+  }
+  const scope = `auth-${(nextAuthScopeId++).toString(36)}`;
+  tokenScopes.set(token, scope);
+  return scope;
 }
 
 /**
@@ -27,6 +42,8 @@ export function authScope(token: string | null): string {
 export const queryKeys = {
   // ── Auth-scoped keys ────────────────────────────────────────────────────
   projectHealth: (scope: string) => `project.health.${scope}`,
+  projectProviderHealth: (provider: string, scope: string) =>
+    `project.providerHealth.${provider}.${scope}`,
   projectOverview: (scope: string) => `project.overview.${scope}`,
   projectDetail: (projectId: string, scope: string) =>
     `project.detail.${projectId}.${scope}`,

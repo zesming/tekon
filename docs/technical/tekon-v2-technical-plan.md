@@ -1168,7 +1168,7 @@ tekon constraints show        # 查看约束规则
 tekon log [--project <id>]    # 查看审计日志
 
 # ── 清理 ──
-tekon clean                   # 清理 worktree
+tekon clean                   # 当前返回 CLEAN_SUSPENDED；生命周期安全清理完成前不删除 worktree
 ```
 
 ### 9.2 status 输出示例
@@ -1330,7 +1330,7 @@ Phase 1 期间让 Tekon 管理 Tekon 自身的开发：
 | -------------------------------- | ---- | ---- | ------------------------------------------------------ |
 | Agent 产出质量波动               | 高   | 高   | Schema Gate 强制结构校验 + 重试 + onExhausted escalate |
 | Agent 陷入修复死循环             | 中   | 中   | maxRetries 限制 + onExhausted block + 审计日志可追溯   |
-| Worktree 泄漏磁盘空间            | 中   | 低   | tekon clean 命令 + 定期清理策略                        |
+| Worktree 泄漏磁盘空间            | 中   | 低   | 当前 `tekon clean` 已暂停物理删除；由 #18/#33 设计导出、retention 与生命周期安全 purge |
 | 动态 Workflow 生成不合理         | 中   | 中   | 三层约束系统 + --dry-run 预览 + --save-as 可修正       |
 | Claude Code/Codex 版本更新不兼容 | 低   | 中   | Agent command 可自定义，用户可替换任何 CLI             |
 

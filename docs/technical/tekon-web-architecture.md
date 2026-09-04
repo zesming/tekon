@@ -294,9 +294,11 @@ export type RpcProcedureMap = {
 | `project.list` | 已有，只读 | none | Web read API | 项目列表，本地单仓库主要用于兼容 |
 | `project.overview` | 已有，只读 | none | Web read API | Dashboard 主数据 |
 | `project.detail` | 已有，只读 | none | Web read API | Runs 列表 |
+| `project.health` | 已有，只读 | none | Web credential read | 只校验 Session token，不等待可选 Provider |
+| `project.providerHealth` | v0.21.0 新增 | token | DSH preflight | 凭据有效后独立探测 dsh-headless；只返回 available/unavailable |
 | `project.run` | 已有，token | token + confirm | `tekon run` | 发起受控 run，保留 dirty-base 显式确认 |
 | `project.pause/resume/cancel` | 已有，token | token + confirm | `pause/resume/cancel` | pause/resume/cancel 都必须有明确按钮确认 |
-| `project.clean` | 已有，token | token + high-risk confirm | `clean` | 删除 run 目录，高危确认必须单独测试 |
+| `project.clean` | 已有，token，当前挂起 | token + high-risk confirm | `clean` | 记录拒绝 Audit 后返回 `CLEAN_SUSPENDED`，不执行物理删除；等待 lifecycle-safe purge |
 | `demand.shape` | 已有，token | token | `demand shape` | 写 `.tekon/demands/`，需要 token |
 | `demand.approve` | 已有，token | token + confirm | `demand approve` | 批准需求卡 |
 | `demand.detail` | 新增 MVP | none | `demand show` | 只读已校验 scope 的需求卡 |

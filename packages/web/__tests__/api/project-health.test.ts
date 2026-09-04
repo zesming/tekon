@@ -1,20 +1,12 @@
-import {
-  chmodSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  TESTED_DSH_VERSION,
-  isHostNodeVersionCompatible,
-} from '@tekon/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TESTED_DSH_VERSION, isHostNodeVersionCompatible } from '@tekon/core';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
-import { createApiCaller } from '../../src/server/api/root.js';
+import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
 
 const cleanupTasks: Array<() => void> = [];
 const tempDirs: string[] = [];
@@ -35,11 +27,13 @@ function admitCurrentHostForFixture(): void {
   }
 }
 
-function installFakeDsh(input: {
-  version?: string;
-  help?: string;
-  config?: string;
-} = {}): void {
+function installFakeDsh(
+  input: {
+    version?: string;
+    help?: string;
+    config?: string;
+  } = {},
+): void {
   const dir = mkdtempSync(join(tmpdir(), 'tekon-web-health-dsh-'));
   tempDirs.push(dir);
   const scriptPath = join(dir, 'dsh');
@@ -89,16 +83,39 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     await api.close();
   });
 
-  it('returns available only for the full matching DSH contract', async () => {
+  it('validates credentials without waiting for or invoking a provider probe', async () => {
+    const providerProbe = vi.fn(async () => 'available' as const);
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      providerProbe,
+    });
+
+    const result = await api.project.health({ token: fixture.sessionToken });
+    expect(result.credential).toBe('valid');
+    expect(result.dshHeadless).toBeUndefined();
+    expect(providerProbe).not.toHaveBeenCalled();
+
+    await api.close();
+  });
+
+  it('returns available only from the separate authenticated provider health endpoint', async () => {
     admitCurrentHostForFixture();
     installFakeDsh();
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const result = await api.project.health({ token: fixture.sessionToken });
-    expect(result.credential).toBe('valid');
-    expect(result.dshHeadless).toBe('available');
+    const result = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { provider: string; status: string; checkedAt: string };
+    expect(result).toMatchObject({
+      provider: 'dsh-headless',
+      status: 'available',
+    });
+    expect(new Date(result.checkedAt).getTime()).not.toBeNaN();
 
     await api.close();
   });
@@ -110,23 +127,43 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const result = await api.project.health({ token: fixture.sessionToken });
-    expect(result.credential).toBe('valid');
-    expect(result.dshHeadless).toBe('unavailable');
+    const result = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: string };
+    expect(result.status).toBe('unavailable');
 
     await api.close();
   });
 
-  it('does not call a matching binary available when help/config contracts drift', async () => {
+  it('rejects a matching binary when the help contract drifts', async () => {
     admitCurrentHostForFixture();
-    installFakeDsh({ help: 'usage only', config: '- id: headless-runner' });
+    installFakeDsh({ help: 'usage only' });
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const result = await api.project.health({ token: fixture.sessionToken });
-    expect(result.credential).toBe('valid');
-    expect(result.dshHeadless).toBe('unavailable');
+    const result = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: string };
+    expect(result.status).toBe('unavailable');
+
+    await api.close();
+  });
+
+  it('rejects a matching binary when the config contract drifts', async () => {
+    admitCurrentHostForFixture();
+    installFakeDsh({ config: '- id: headless-runner' });
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    const result = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: string };
+    expect(result.status).toBe('unavailable');
 
     await api.close();
   });
@@ -146,35 +183,165 @@ describe('project.health RPC (P1-UX-02 / P1-HEALTH-01)', () => {
     await api.close();
   });
 
-  it('caches health check results within the 60s window using hashed token', async () => {
-    admitCurrentHostForFixture();
-    installFakeDsh();
+  it('uses exact token semantics and rejects an otherwise valid token with whitespace', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const first = await api.project.health({ token: fixture.sessionToken });
-    const second = await api.project.health({ token: fixture.sessionToken });
-
-    expect(first.credential).toBe('valid');
-    expect(second.credential).toBe('valid');
-    expect(first.checkedAt).toBe(second.checkedAt);
-    expect(first.dshHeadless).toBe('available');
+    const result = await api.project.health({
+      token: `${fixture.sessionToken} `,
+    });
+    expect(result.credential).toBe('invalid');
+    await expect(
+      dispatchApiCall(api, 'project.providerHealth', {
+        token: `${fixture.sessionToken} `,
+        provider: 'dsh-headless',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
     await api.close();
   });
 
-  it('caps cache size at 128 entries and evicts oldest', async () => {
+  it('deduplicates concurrent provider probes and caches unavailable results for the same authenticated scope', async () => {
+    let releaseProbe!: () => void;
+    const providerProbe = vi.fn(
+      () =>
+        new Promise<'unavailable'>((resolve) => {
+          releaseProbe = () => resolve('unavailable');
+        }),
+    );
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
-    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      providerProbe,
+    });
 
-    for (let index = 0; index < 135; index += 1) {
-      await api.project.health({ token: `token-load-test-${index}` });
-    }
+    const requests = Array.from({ length: 8 }, () =>
+      dispatchApiCall(api, 'project.providerHealth', {
+        token: fixture.sessionToken,
+        provider: 'dsh-headless',
+      }),
+    );
+    await vi.waitFor(() => expect(providerProbe).toHaveBeenCalledTimes(1));
+    releaseProbe();
+    const results = (await Promise.all(requests)) as Array<{
+      status: string;
+      checkedAt: string;
+    }>;
 
-    const result = await api.project.health({ token: fixture.sessionToken });
-    expect(result.credential).toBe('valid');
+    expect(results.every((result) => result.status === 'unavailable')).toBe(
+      true,
+    );
+    expect(new Set(results.map((result) => result.checkedAt))).toHaveLength(1);
+    const cached = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: string };
+    expect(cached.status).toBe('unavailable');
+    expect(providerProbe).toHaveBeenCalledTimes(1);
+
+    await api.close();
+  });
+
+  it('authenticates before consulting provider cache or starting a probe', async () => {
+    const providerProbe = vi.fn(async () => 'available' as const);
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      providerProbe,
+    });
+
+    await expect(
+      dispatchApiCall(api, 'project.providerHealth', {
+        token: 'wrong-token-value',
+        provider: 'dsh-headless',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(providerProbe).not.toHaveBeenCalled();
+
+    await expect(
+      dispatchApiCall(api, 'project.providerHealth', {
+        provider: 'dsh-headless',
+      } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(providerProbe).not.toHaveBeenCalled();
+
+    await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    });
+    expect(providerProbe).toHaveBeenCalledTimes(1);
+
+    await api.close();
+  });
+
+  it('revalidates the token before cache access after server-side rotation', async () => {
+    const providerProbe = vi.fn(async () => 'available' as const);
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      providerProbe,
+    });
+
+    await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    });
+    expect(providerProbe).toHaveBeenCalledTimes(1);
+
+    const rotatedToken = 'rotated-fixture-session-token';
+    writeFileSync(
+      join(fixture.projectRoot, '.tekon', 'web-session.json'),
+      JSON.stringify({ token: rotatedToken }),
+      'utf8',
+    );
+    await expect(
+      dispatchApiCall(api, 'project.providerHealth', {
+        token: fixture.sessionToken,
+        provider: 'dsh-headless',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(providerProbe).toHaveBeenCalledTimes(1);
+
+    await dispatchApiCall(api, 'project.providerHealth', {
+      token: rotatedToken,
+      provider: 'dsh-headless',
+    });
+    expect(providerProbe).toHaveBeenCalledTimes(2);
+
+    await api.close();
+  });
+
+  it('maps provider probe errors to unavailable without exposing raw details', async () => {
+    const providerProbe = vi.fn(async () => {
+      throw new Error(
+        'secret-token at http://user:password@proxy.internal/private/path',
+      );
+    });
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({
+      projectRoot: fixture.projectRoot,
+      providerProbe,
+    });
+
+    const result = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: 'available' | 'unavailable' };
+    expect(result.status).toBe('unavailable');
+    expect(JSON.stringify(result)).not.toMatch(
+      /secret-token|password|proxy\.internal|private\/path/u,
+    );
+    const cached = (await dispatchApiCall(api, 'project.providerHealth', {
+      token: fixture.sessionToken,
+      provider: 'dsh-headless',
+    })) as { status: 'available' | 'unavailable' };
+    expect(cached.status).toBe('unavailable');
+    expect(providerProbe).toHaveBeenCalledTimes(1);
 
     await api.close();
   });

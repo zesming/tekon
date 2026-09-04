@@ -78,6 +78,7 @@ describe('tekon help', () => {
     expect(stdout).toContain('run');
     expect(stdout).toContain('status');
     expect(stdout).toContain('clean');
+    expect(stdout).toContain('清理暂不可用（等待生命周期安全清理）');
     expect(stdout).toContain('ui');
     expect(stdout).toContain('update');
 

@@ -10,8 +10,11 @@ import { createProjectRouter as createBaseProjectRouter } from './project.js';
  * mixing product policy into the large legacy project router. The base router
  * remains the owner of draft, clean-base, and orchestration validation.
  */
-export function createProjectRouter(context: ServerContext) {
-  const base = createBaseProjectRouter(context);
+export function createProjectRouter(
+  context: ServerContext,
+  options?: { probeProvider?: () => Promise<'available' | 'unavailable'> },
+) {
+  const base = createBaseProjectRouter(context, options);
   return {
     ...base,
     async run(input: ProjectRunInput) {
