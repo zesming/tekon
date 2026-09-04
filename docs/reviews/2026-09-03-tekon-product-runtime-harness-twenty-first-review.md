@@ -5,12 +5,14 @@
 - **上一轮权威 Head**：`6fd86ee1c500f55ff4d8a993812ae00823c3c46b`
 - **用户 v0.20.6 整改 Head**：`374387da794c96b3775d2814b98a3e38067a6b94`
 - **Reviewer 代码修复 Head**：`8991fa5496492691799dc885633768cc2fd54b2e`
+- **主 Agent 收口实施证据 Head**：`0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917`
 - **产品版本**：`0.20.6`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
 - **rc.1 release tag commit**：`a66e4702047846cdaa10c66c9d3df3951f5ea70d`
 - **Reviewer 代码自动化**：Core #424、CI #333 均为 `completed/success`；Root build/typecheck、production dependency audit、CLI build/unit/e2e、Web build/typecheck/unit、Chromium Playwright 全部成功
-- **最终裁决**：v0.20.6 整改与本轮局部测试修复通过代码合并门；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **收口实施自动化**：Core #427（run `33836232524`）、CI #336（run `33836232602`）均为 attempt 1 `completed/success`；原 7 项 checks 与 Node 20.19.x/22.12.x/22.19.x/24.x 四腿全部成功
+- **最终裁决**：v0.20.6 整改、本轮局部测试修复、Node compatibility job、结构化合同测试与文档治理纠偏均通过实施 Head 的代码合并门；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 1. 执行摘要
 
@@ -50,6 +52,16 @@ Reviewer 代码 Head `8991fa5496492691799dc885633768cc2fd54b2e`：
 - Chromium Playwright：success。
 
 因此，**v0.20.6 用户整改与本轮局部修复通过当前代码合并门**。
+
+主 Agent 收口实施证据 Head `0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917`：
+
+- Core #427 / run `33836232524`：attempt 1 `completed/success`；
+- CI #336 / run `33836232602`：attempt 1 `completed/success`；
+- 原 7 项 checks 全绿；
+- Node compatibility 20.19.x / 22.12.x / 22.19.x / 24.x 四腿全绿；
+- 最慢的 Node 20.19.x 腿耗时 2m45s，未触及 20 分钟上限。
+
+因此，**独立 Node compatibility job、结构化合同测试与文档治理纠偏已通过实施 Head 的代码合并门**。branch protection/ruleset 仍未修改，这些 checks 尚未成为仓库强制合并规则。
 
 ### 2.2 产品成熟度
 
@@ -573,6 +585,7 @@ RunPlanDisclosure data model
 - 常驻 opt-in L2 现在复用生产 wrapper；
 - production dependency audit 当前成功；
 - 本轮工作树在 Linux/Node 22.16 上通过 145 files、1554 tests、1 个有解释的 L2 skip，Core/CLI/Web e2e 分别为 26/8/48 passed。
+- `0d8fa4c...` 的 Core #427 / CI #336 在 attempt 1 完成，四条 Node compatibility legs 与原 7 项 checks 共 11 项全部成功。
 
 它不能证明：
 
@@ -608,8 +621,8 @@ PR #11 已远超适合继续增长的规模。最终建议 squash merge；合并
 
 1. **HTML 不是可选镜像**：`AGENTS.md` 明确要求需要人类审阅的正式文档提供 HTML，并要求源稿变更时同步更新。原报告主张 Markdown-only 与现行规约直接冲突。正确做法是 Markdown 作为内容源、HTML 作为同步审阅呈现，而不是删除 HTML。
 2. **L2 跳过基线已经变化**：`8991fa5...` 将 Version/Config/Help 三个 live cases 合并为一个生产 wrapper case。合同内容没有缩水，但无 `DSH_CLI_PATH` 时由 `3 skipped` 变为 `1 skipped`；后续证据必须按实际结果记录。
-3. **`current.md` 不是当前快照**：它尚未绑定当前 Head `34a542f...` 的 Core #426（run `33759049251`）与 CI #335（run `33759049201`），并丢失 v0.20.6 的本地测试、四视口和较早关键 run 证据，不能继续直接作为权威入口。
-4. **Node 兼容范围缺持续证据**：根 `engines.node` 为 `^20.19.0 || >=22.12.0`，此前工作流只跑 Node 24。设计阶段已在 Linux x64 的干净环境实测 Node 20.19.0 与 22.12.0，二者均通过 install、全包 build/typecheck、Core unit、CLI unit 和二进制版本 smoke；本轮已将该验证固化为独立 CI job，远端实施 Head 证据待提交后绑定。
+3. **`current.md` 原快照已漂移**：批注时它尚未绑定 Head `34a542f...` 的 Core #426（run `33759049251`）与 CI #335（run `33759049201`），并丢失 v0.20.6 的本地测试、四视口和较早关键 run 证据；本轮已恢复这些证据，并进一步绑定实施 Head `0d8fa4c...`。
+4. **Node 兼容范围原缺持续证据**：根 `engines.node` 为 `^20.19.0 || >=22.12.0`，此前工作流只跑 Node 24。设计阶段已在 Linux x64 的干净环境实测 Node 20.19.0 与 22.12.0，二者均通过 install、全包 build/typecheck、Core unit、CLI unit 和二进制版本 smoke；本轮已将该验证固化为独立 CI job，并由实施 Head `0d8fa4c...` 的 CI #336 完成远端绑定。
 
 ### 14.3 新发现但不在本轮实现的边界
 
@@ -653,9 +666,9 @@ Node workflow 合同经过三轮明确 RED→GREEN：
 - Core e2e：26 passed；CLI e2e：8 passed；Web Chromium e2e：48 passed；
 - 独立 reviewer 在 Node 22.12.0 上运行当前工作树完整单腿：固定 Corepack 0.34.1、pnpm 10.12.1、frozen install、全包 build/typecheck、Core 1079 passed/1 skipped、CLI 64 passed 与 CLI smoke 全部通过，`pnpm ignored-builds` 为 `None`；
 - 320/390/700/1440px 两个 Run 入口四视口 4/4 通过；报告与方案 HTML 同视口无页面横向溢出；
-- 仓库 actionlint 脚本因 Docker daemon 直连拉取镜像超时而退出 125；随后通过仅作用于下载命令的公司代理取得官方 `v1.7.12` release，校验官方 SHA-256 后执行同版本 actionlint，结果通过，临时目录已删除。远端 Core job 仍需在实施 Head 上再次绑定证据。
+- 仓库 actionlint 脚本因 Docker daemon 直连拉取镜像超时而退出 125；随后通过仅作用于下载命令的公司代理取得官方 `v1.7.12` release，校验官方 SHA-256 后执行同版本 actionlint，结果通过，临时目录已删除；实施 Head 的远端 Core #427 也已通过同版本 actionlint。
 
-以上只是不带远端 Head 的本地实施证据。提交后必须等待四个 Node matrix legs 与原 7 个 checks 在同一实施 Head 上全部成功，再写入仓库内权威快照。
+以上本地证据已由实施 Head `0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917` 的 Core #427（run `33836232524`）与 CI #336（run `33836232602`）绑定：attempt 1、11 项 checks 全部 `completed/success`。下一次提交只发布这组证据；该文档证据 Head 自身的 checks 只更新到 PR/Issue 外部状态，不再回填仓库。
 
 ## 15. 参考资料
 

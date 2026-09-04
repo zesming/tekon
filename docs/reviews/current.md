@@ -8,12 +8,13 @@
 - **Reviewer 代码修复 Head**：`8991fa5496492691799dc885633768cc2fd54b2e`
 - **第二十一轮报告发布**：`031203866ee6a213943ebde498437433046382a5`
 - **第二十一轮权威基线 Head**：`34a542f963b495673b4f7adc48c2c5a574fc7052`
-- **本轮收口实现**：独立 Node compatibility job 与结构化 YAML 合同测试已在本分支实现；精确实施证据 Head 与远端 runs 在首次推送通过后回填
+- **本轮收口实施证据 Head**：`0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917`
 - **当前版本**：`0.20.6`
 - **当前已绑定自动化**：Core #426（run `33759049251`）、CI #335（run `33759049201`）在 `34a542f...` 上均为 attempt 1 `completed/success`，原 7 项 checks 全绿
+- **收口实施自动化**：Core #427（run `33836232524`）、CI #336（run `33836232602`）在 `0d8fa4c...` 上均为 attempt 1 `completed/success`，原 7 项 checks 与四条 Node compatibility legs 共 11 项全绿
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
-- **当前裁决**：v0.20.6 整改与本轮局部修复通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+- **当前裁决**：v0.20.6 整改、本轮局部修复与 Node compatibility 收口均通过实施 Head 的代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
 ## 当前证据索引
 
@@ -24,6 +25,7 @@
 - v0.20.6 代码与文档快照：`611feb09eae5ff212cc0177273fb2cb11633c9b7`，Core #420（run `33747232853`）、CI #329（run `33747232722`）成功；
 - v0.20.6 响应式验收快照：`777e353e9b0ff7ffbe02b046a08aadeefe2cac97`，Core #422（run `33753603954`）、CI #331（run `33753603924`）成功；
 - 第二十一轮权威基线：`34a542f963b495673b4f7adc48c2c5a574fc7052`，Core #426（run `33759049251`）、CI #335（run `33759049201`）成功；
+- 收口实施证据：`0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917`，Core #427（run `33836232524`）、CI #336（run `33836232602`）attempt 1 成功，11 项 checks 全绿；
 - L2 live cases 从 Version/Config/Help 三个独立 case 合并为一个生产 wrapper case，检查内容未缩水，因此无 DSH 环境的统计由 `3 skipped` 变为 `1 skipped`。
 
 ## 第二十一轮确认的实质改进
