@@ -56,11 +56,13 @@ jobs:
   # Keep advisory lookup independent from functional validation. A registry
   # outage or a newly published advisory must still fail the workflow, but it
   # should not suppress build/test diagnostics that help distinguish an
-  # application regression from a supply-chain gate failure.
+  # application regression from a supply-chain gate failure. Retry once because
+  # the npm audit endpoint can time out independently of package installation;
+  # a vulnerability or a second endpoint failure remains a hard failure.
   audit:
     name: Audit production dependencies
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -77,7 +79,19 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Audit production dependencies
-        run: pnpm audit --prod
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if pnpm audit --prod; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Production dependency audit failed after two attempts"
+              exit 1
+            fi
+            echo "::warning::Production dependency audit failed; retrying once after 15 seconds"
+            sleep 15
+          done
 
   # Validate every declared Node floor independently from the primary Node 24
   # lane. Keep all legs running so one compatibility failure does not hide the
