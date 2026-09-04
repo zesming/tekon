@@ -222,6 +222,13 @@
 
 > 依 `docs/technical/tekon-replatform-current-scope.md` §6 采纳的发布策略：**纯复审报告、批注、措辞订正与验收状态调整不单独抬高产品版本**（`tekon update` 比较根 `package.json` version，误 bump 会让用户全量重装重建却零行为变化）。此类内容记录于此，不再为每轮复审创建新的产品 PATCH。
 
+### 第二十一轮复审收口（PR #11）
+
+- **Node 兼容矩阵**：在现有 `CI` workflow 中新增独立 `node-compat` job，以 `fail-fast: false` 并行验证 Node 20.19.x、22.12.x、22.19.x、24.x 的 frozen install、全包 build/typecheck、Core unit、CLI unit 与构建后 CLI smoke。矩阵固定安装 `corepack@0.34.1`，避免 Node 22.12 自带 Corepack 0.29.4 无法验证 pnpm 10.12.1 签名；不修改 branch protection/ruleset。
+- **测试合同**：新增结构化 YAML 合同测试，锁定矩阵覆盖根 `engines.node` 下界、独立运行、20 分钟上限、命令顺序，以及不得通过 `exclude`、`if` 或 `continue-on-error` 跳过失败版本；开发过程已通过缺 job、缺固定 Corepack、exclude 腿和 job 条件跳过等变异确认 RED，最终实现 GREEN。
+- **评审资料纠偏**：第二十一轮报告恢复与 Markdown 内容源同步的 HTML 人审版，`current.md` 恢复 v0.20.6 本地测试、四视口、历史 Head/run 证据，并明确最终证据不以仓库提交自引用。
+- **版本裁决**：没有用户命令、运行时合同、产品 Gate 或数据格式变化，产品版本保持 `0.20.6`；required checks、供应链发布证据与其它架构项继续留在独立 Issue/PR。
+
 ### 第十四轮权威复审收敛（`docs/reviews/2026-08-28-tekon-harness-replatform-fourteenth-authoritative-review.md`，作者推送，`18106e1..f9de822` 共 29 提交）
 
 - **本轮 CI 自修改工作流首次落地实质产品代码**（5 个 web 文件）并自动应用了 `apply_fixes`（版本回退 + 文档状态改写 + 生成报告）。动态评估 workflow（新代码正确性 / 版本与分析器 soundness / P0 架构核验三视角 + 首席）+ 独立 opus reviewer 一致：`hasMustFix=false`（新产品代码无回归）、本轮有 3 个自动化引入的 PR-local 文档缺陷需修、`needsUserAdrDecision=true`。

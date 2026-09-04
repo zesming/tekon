@@ -79,6 +79,56 @@ jobs:
       - name: Audit production dependencies
         run: pnpm audit --prod
 
+  # Validate every declared Node floor independently from the primary Node 24
+  # lane. Keep all legs running so one compatibility failure does not hide the
+  # result at another boundary.
+  node-compat:
+    name: Node compatibility (${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.19.x', '22.12.x', '22.19.x', '24.x']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # Node 22.12 bundles Corepack 0.29, whose pnpm signing keys predate the
+      # pinned pnpm 10 release. Pin a Corepack version that supports every leg.
+      - name: Install compatible Corepack
+        run: npm install --global corepack@0.34.1
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Typecheck all packages
+        run: pnpm -r typecheck
+
+      - name: Core unit tests
+        run: pnpm --filter @tekon/core test:unit
+
+      - name: CLI unit tests
+        run: pnpm --filter @tekon/cli test:unit
+
+      - name: CLI binary smoke
+        run: |
+          set -euo pipefail
+          expected="v$(node -p "require('./package.json').version")"
+          test "$(node packages/cli/dist/index.js --version)" = "$expected"
+          node packages/cli/dist/index.js --help >/dev/null
+
   cli:
     name: CLI build + unit + e2e
     runs-on: ubuntu-latest

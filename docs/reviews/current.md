@@ -1,16 +1,30 @@
 # Tekon 当前权威产品与架构评审
 
-- **当前报告**：[2026-09-03 Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第二十一轮全面复审](2026-09-03-tekon-product-runtime-harness-twenty-first-review.md)
+- **当前详细报告**：[Markdown 源稿](2026-09-03-tekon-product-runtime-harness-twenty-first-review.md) / [HTML 审阅版](2026-09-03-tekon-product-runtime-harness-twenty-first-review.html)
+- **当前收口方案**：[Markdown 源稿](../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md) / [HTML 审阅版](../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.html)
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **上一轮权威 Head**：`6fd86ee1c500f55ff4d8a993812ae00823c3c46b`
 - **用户 v0.20.6 整改 Head**：`374387da794c96b3775d2814b98a3e38067a6b94`
 - **Reviewer 代码修复 Head**：`8991fa5496492691799dc885633768cc2fd54b2e`
 - **第二十一轮报告发布**：`031203866ee6a213943ebde498437433046382a5`
+- **第二十一轮权威基线 Head**：`34a542f963b495673b4f7adc48c2c5a574fc7052`
+- **本轮收口实现**：独立 Node compatibility job 与结构化 YAML 合同测试已在本分支实现；精确实施证据 Head 与远端 runs 在首次推送通过后回填
 - **当前版本**：`0.20.6`
-- **Reviewer 代码自动化**：Core #424、CI #333 均为 `completed/success`；Root build/typecheck、production dependency audit、CLI build/unit/e2e、Web build/typecheck/unit 与 Chromium Playwright 全部成功
+- **当前已绑定自动化**：Core #426（run `33759049251`）、CI #335（run `33759049201`）在 `34a542f...` 上均为 attempt 1 `completed/success`，原 7 项 checks 全绿
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前上游发布**：`0.1.2-rc.1`
 - **当前裁决**：v0.20.6 整改与本轮局部修复通过代码合并门；Tekon 仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
+
+## 当前证据索引
+
+- v0.20.6 本地基线：`pnpm test` 为 144 files、1551 passed、1 skipped；唯一 skip 是未设置 `DSH_CLI_PATH` 时的真实 DSH L2 wrapper；
+- 本轮当前工作树：`pnpm test` 为 145 files、1554 passed、1 skipped；新增 1 个文件和 3 个通过用例均来自 Node workflow 结构合同；
+- 本轮当前工作树的 build、typecheck、lint、production audit 与 actionlint 1.7.12 均通过；Core/CLI/Web e2e 分别为 26/8/48 passed；
+- Chromium Playwright：48 passed；320/390/700/1440px 两个 Run 入口四视口 4/4 通过；
+- v0.20.6 代码与文档快照：`611feb09eae5ff212cc0177273fb2cb11633c9b7`，Core #420（run `33747232853`）、CI #329（run `33747232722`）成功；
+- v0.20.6 响应式验收快照：`777e353e9b0ff7ffbe02b046a08aadeefe2cac97`，Core #422（run `33753603954`）、CI #331（run `33753603924`）成功；
+- 第二十一轮权威基线：`34a542f963b495673b4f7adc48c2c5a574fc7052`，Core #426（run `33759049251`）、CI #335（run `33759049201`）成功；
+- L2 live cases 从 Version/Config/Help 三个独立 case 合并为一个生产 wrapper case，检查内容未缩水，因此无 DSH 环境的统计由 `3 skipped` 变为 `1 skipped`。
 
 ## 第二十一轮确认的实质改进
 
@@ -22,7 +36,8 @@
 - Advanced Run 在 320/390/700/1440px 有常驻 overflow/layout smoke；
 - 官方 rc.1 Linux Wrapped L2 已验证 metadata wrapper；
 - 仓库常驻 opt-in L2 已改为调用生产 `runDshPreflight()`，不再直接在调用者 cwd/环境中执行真实 dsh；
-- Reviewer 代码 Head `8991fa5...` 的 Core #424 / CI #333 全绿。
+- Reviewer 代码 Head `8991fa5...` 的 Core #424 / CI #333 全绿；
+- 本轮新增独立 `node-compat` job，覆盖 Node 20.19.x、22.12.x、22.19.x、24.x 的 install/build/typecheck/Core unit/CLI unit/CLI smoke；矩阵先固定 `corepack@0.34.1`，避免 Node 22.12 自带旧 Corepack 无法验证 pnpm 10.12.1 签名。分支保护保持不变。
 
 ## 本轮直接修复
 
@@ -48,7 +63,7 @@ DSH_EXPECTED_VERSION=<tested pin or candidate>
    Node 官方明确 `.bat` / `.cmd` 不能直接由 `execFile()` 启动；npm-installed `dsh.cmd` 的 metadata、正式 Run、quoting、timeout/cancel 与 process-tree 合同尚未验证。basename 身份判断还会让 `dsh.cmd` 或 wrapper 跳过 execution-time preflight。
 
 2. **Node 支持矩阵与发布证据（#24）**  
-   根 `engines` 声明 Node 20.19、22.12+ 与 24+，主 CI 只运行 Node 24；缺少最低版本矩阵、required checks、SBOM、provenance、签名与明确 release channel。
+   根 `engines` 声明 Node 20.19、22.12+ 与 24+。本轮已按用户决定在 PR #11 增加独立最低版本矩阵；required checks、SBOM、provenance、签名与明确 release channel 仍未完成。
 
 3. **Responsive test 过度增长**  
    自定义 geometry scanner 是有价值的 overflow smoke，但已经承担文本测量、clipping ancestor 与 overlap 判断；不应继续扩展成自建视觉测试平台。
@@ -56,8 +71,8 @@ DSH_EXPECTED_VERSION=<tested pin or candidate>
 4. **Warning callback 语义未定义**  
    Host/version 精确旁路时 `onWarn` 抛错会改变准入结果，而 cleanup warning 已被保护。后续需明确它是纯观测 sink 还是可否决策略 hook。
 
-5. **两套 Run UI 和报告镜像重复**  
-   默认/高级入口仍复制 plan、submission、single-flight 与风险披露；第二十轮又维护 Markdown/HTML 两份权威报告。第二十一轮恢复 Markdown-only。
+5. **两套 Run UI 和报告同步成本**
+   默认/高级入口仍复制 plan、submission、single-flight 与风险披露；正式报告按规约保留 Markdown 内容源与同步 HTML 审阅版，必须避免形成两套裁决。
 
 ## 已关闭或基本关闭
 
@@ -91,7 +106,7 @@ DSH_EXPECTED_VERSION=<tested pin or candidate>
 - **历史与生命周期（#18/#33）**：完整导出、模型 compaction、retention、lifecycle-safe purge 与短期 clean fail-closed 尚未落地；
 - **DSH rc.1（#17）**：Linux L1/L2 成立；Windows L2、带凭据 L3 和升 pin 裁决尚未完成；
 - **a11y / 多浏览器（#21）**：缺全站 screen reader、Firefox/WebKit、缩放、forced-colors 与真实弱网验收；
-- **工程治理（#24/#25/#26）**：Node matrix、required checks、供应链发布证据、CommandGateway 拆分、semantic lint 与 format debt 仍缺；
+- **工程治理（#24/#25/#26）**：Node matrix 已在本轮实现；required checks、供应链发布证据、CommandGateway 拆分、semantic lint 与 format debt 仍缺；
 - **两套 Run UI**：当前均已 fail-closed/单飞，但业务状态与披露仍重复；
 - **PR 可审阅性**：PR 规模已经不适合继续增长，最终应 squash merge。
 
@@ -117,12 +132,12 @@ DSH_EXPECTED_VERSION=<tested pin or candidate>
 
 ## 评审资料维护规则
 
-- 本文件是唯一稳定入口；
-- 第二十一轮 Markdown 报告是当前详细裁决；
+- 本文件是导航索引和唯一稳定入口，不是独立正式评审报告；
+- 第二十一轮 Markdown 是当前详细裁决的内容源，同名 HTML 是同步的人审呈现；
 - 第一至第二十轮只读归档，不再追加新裁决；
-- 不再生成当前报告的重复 HTML 镜像；历史 HTML 保留为归档，不继续同步；
+- 正式报告修改时必须同步 HTML；不得在两份文件中形成不同裁决；
 - 普通问题在独立 Issue/PR 中关闭，只有产品或架构基线显著变化时新增完整报告；
-- CHANGELOG 只记录用户可见行为，不复制 reviewer 过程；
-- 代码 snapshot 与 `completed/success` 的 Core/CI snapshot 必须成对更新；
-- PR Head 若继续变化，必须重新绑定 CI 终态后才能复用“代码门通过”；
+- CHANGELOG 的 Unreleased 段只记录本轮工程与评审收敛，不为纯复审抬高产品版本；
+- 仓库内记录实施证据 Head 与对应 runs；最终文档证据 Head 与 runs 只写 PR/Issue 外部状态，避免提交自引用；
+- PR Head 若继续变化，必须重新绑定同一 Head 的 CI 终态后才能复用“代码门通过”；
 - PR #11 最终建议 squash merge；后续 #13–#33 不再回填该超大分支。

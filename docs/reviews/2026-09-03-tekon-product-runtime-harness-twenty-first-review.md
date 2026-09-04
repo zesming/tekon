@@ -110,7 +110,7 @@ Reviewer 代码 Head `8991fa5496492691799dc885633768cc2fd54b2e`：
 | 四视口响应式矩阵 | 有效 smoke | 能持续发现横溢、控件越界和部分裁切；不等于视觉层级、native select、屏幕阅读器或真实设备验收。 |
 | 官方 rc.1 Wrapped L2 | Linux metadata 层通过 | 证明隔离 wrapper 的 Version/Config/Help 接线；显式 version bypass 仍不是 tested compatibility，且没有 L3。 |
 | 常驻 opt-in L2 | 本轮修复 | 原测试绕过 wrapper；现统一调用生产 `runDshPreflight()`，并区分 expected version、compatibility 与 bypass。 |
-| HTML 报告镜像 | 不建议继续 | 第二十轮重新生成 HTML 增加双份权威内容；第二十一轮恢复 Markdown-only。 |
+| HTML 审阅版 | 必须同步 | `AGENTS.md` 要求正式人审文档提供 HTML。Markdown 作为内容源，HTML 作为同步审阅呈现；两者不得形成两套裁决。 |
 
 ## 5. 本轮直接修复
 
@@ -490,29 +490,29 @@ RunPlanDisclosure data model
 
 同一模块继续承担 policy、env、spawn、process group、redaction、progress evidence、filesystem activity、timeout、kill 和 stream settlement。后续应先抽取纯 timeout state machine、activity sampler 和 termination adapter，而不是增加更多 timer 特判。
 
-### 10.5 评审与文档过程出现过度实现
+### 10.5 评审与文档过程需要收敛
 
-截至本轮，PR 已包含二十余轮报告、多个 HTML 镜像、整改方案和大量批注。HTML 与 Markdown 两份当前权威内容会增加：
+截至本轮，PR 已包含二十余轮报告、多个 HTML 审阅版、整改方案和大量批注。重复维护内容会增加：
 
 - 快照和 CI 状态漂移；
 - 链接与结论不一致；
 - Reviewer 过程压过产品文档；
 - PR diff 与人工审阅成本。
 
-第二十一轮恢复为 Markdown-only。后续普通问题只在独立 Issue/PR 中关闭；只有产品或架构基线发生明显变化时才新增完整报告。
+第二十一轮仍按仓库规约提供 HTML 审阅版，但 Markdown 是内容源，HTML 只做同步呈现，不建立第二套裁决。后续普通问题只在独立 Issue/PR 中关闭；只有产品或架构基线明显变化时才新增完整报告。
 
-### 10.6 Node compatibility 证据不足
+### 10.6 Node compatibility 矩阵已进入本轮收口
 
-根 `engines` 声明 Node 20.19、22.12+ 与 24+，主 CI 只运行 Node 24；Core 类型环境使用较新 Node 类型。当前没有发现明确使用旧运行时缺失 API的代码，但也没有持续证据支持全部声明版本。
+根 `engines` 声明 Node 20.19、22.12+ 与 24+，此前主 CI 只运行 Node 24；Core 类型环境使用较新 Node 类型。当前没有发现明确使用旧运行时缺失 API 的代码，但较新的 Node 类型仍不能替代旧运行时执行证据。
 
-应新增轻量 matrix：
+本轮新增独立轻量 matrix：
 
 ```text
 20.19.x / 22.12.x / 22.19.x / 24.x
-→ install / build / typecheck / Core unit / CLI smoke
+→ pinned Corepack / install / build / typecheck / Core unit / CLI unit / CLI smoke
 ```
 
-若不愿维护，则收窄 `engines`，而不是保留未验证承诺。
+设计阶段已在 Linux x64 干净 checkout 验证 Node 20.19.0 与 22.12.0。实现期 reviewer 进一步发现 Node 22.12 自带 Corepack 0.29.4 无法验证 pnpm 10.12.1 的签名，因此 job 在启用 shim 前固定安装兼容四腿的 `corepack@0.34.1`。Windows、macOS 和浏览器矩阵仍未覆盖。
 
 ## 11. 问题清单
 
@@ -530,13 +530,13 @@ RunPlanDisclosure data model
 | P1-DSH-ENV / #32 | P1 | 部分完成 | metadata probe 已隔离；正式 Run `.env` 凭据、代理和 tool enforcement 仍缺。 |
 | P1-DSH / #17 | P1 | 部分完成 | Linux L1/L2 成立；Windows L2、L3 与升 pin 裁决未完成。 |
 | P1-LIFECYCLE / #18/#33 | P1 | 未关闭 | 完整导出、compaction、retention、safe purge 与即时 clean guard 未落地。 |
-| P1-GOV-RELEASE / #24 | P1 | 扩大 | main required checks、Node matrix、SBOM/provenance/签名/release evidence 不完整。 |
+| P1-GOV-RELEASE / #24 | P1 | 部分收敛 | Node matrix 本轮实现；main required checks、SBOM/provenance/签名/release evidence 仍不完整。 |
 | P1-A11Y / #21 | P1 | 未关闭 | Chromium/layout smoke 不能替代全站辅助技术与多浏览器验收。 |
 | P1-PROCESS | P1 | 未关闭 | PR 规模过大，人工审阅、二分和回滚质量下降。 |
 | P2-L2-TEST | P2 | 本轮修复 | 常驻 opt-in L2 绕过生产隔离 wrapper。 |
 | P2-WARN-SINK | P2 | 待定义 | `onWarn` 抛错是否允许否决旁路，公共语义不明确。 |
 | P2-RESPONSIVE-TEST | P2 | 待收敛 | 自定义 geometry scanner 职责和重复覆盖持续增长。 |
-| P2-DOC-PROCESS | P2 | 本轮收敛 | Markdown/HTML 双份当前权威报告增加漂移面。 |
+| P2-DOC-PROCESS | P2 | 本轮纠偏 | 正式报告必须同步 HTML；以 Markdown 为内容源并校验关键事实，避免两份裁决漂移。 |
 
 ## 12. 建议实施顺序
 
@@ -562,7 +562,7 @@ RunPlanDisclosure data model
    server-streamed export、manifest、subsession/artifact、summary/compaction、retention 与 lifecycle-safe purge。
 
 8. **#21/#24/#25/#26：质量和发布**  
-   a11y/多浏览器、Node matrix、required checks、供应链证据、CommandGateway 拆分和 semantic lint。
+   本轮先按已确认方案新增独立 Node compatibility job；a11y/多浏览器、required checks、供应链证据、CommandGateway 拆分和 semantic lint 继续留在独立 Issue/PR。
 
 ## 13. 合并与证据边界
 
@@ -571,7 +571,8 @@ RunPlanDisclosure data model
 - `8991fa5...` 在现有 Linux/Node 24/Chromium 自动化合同下构建、类型和测试成功；
 - v0.20.6 的 metadata workspace、最小环境、cleanup、默认入口重试/单飞和响应式 smoke 没有被本轮修复击穿；
 - 常驻 opt-in L2 现在复用生产 wrapper；
-- production dependency audit 当前成功。
+- production dependency audit 当前成功；
+- 本轮工作树在 Linux/Node 22.16 上通过 145 files、1554 tests、1 个有解释的 L2 skip，Core/CLI/Web e2e 分别为 26/8/48 passed。
 
 它不能证明：
 
@@ -583,14 +584,80 @@ RunPlanDisclosure data model
 - DSH rc.1 已通过真实模型 L3；
 - 工作树 `.env` 不会提供额外凭据；
 - DSH 内部工具实际遵循 Tekon allow/deny；
-- Node 20.19 与 22.12 的完整支持仍成立；
+- Node 20.19 与 22.12 在 Windows、macOS、浏览器与所有 native/toolchain 组合上的完整支持；
 - 完整历史、安全 purge、Firefox/WebKit 和屏幕阅读器已经验收。
 
 PR #11 已远超适合继续增长的规模。最终建议 squash merge；合并后以 #33 为第一个小 PR，其余主线严格拆分，不再创建第二十二轮“大一统整改”继续回填该分支。
 
 本轮未执行 merge、release、deploy 或仓库 ruleset 修改。
 
-## 14. 参考资料
+## 14. 主 Agent 第二视角批注与执行裁决
+
+### 14.1 总体判断
+
+架构与实现、DSH 上游、CI/测试、文档与外部状态四路独立只读核查，加上本地复核，没有推翻第二十一轮的核心判断：DSH metadata 隔离与常驻 opt-in L2 修复真实成立；Deliver 轨道可在有人监督下使用；Windows launcher、Provider admission、Runtime/Session 权威、原子 Run admission、RunPlan 全链绑定与 L3 仍未闭环。
+
+本轮不把这些架构问题继续回填到 PR #11。只处理已经有明确合同、改动面小且可独立验证的收口项：
+
+1. 增加独立 Node compatibility job，持续验证根 `engines.node` 声明的最低边界与 DSH 的 Node 分界；
+2. 恢复正式报告 HTML 审阅版并纠正文档治理表述；
+3. 修复 `current.md` 的 Head、CI、本地测试与历史证据漂移；
+4. 同步 #24、#33 和 PR 描述，不修改 branch protection/ruleset。
+
+### 14.2 需要纠正的事实与规约
+
+1. **HTML 不是可选镜像**：`AGENTS.md` 明确要求需要人类审阅的正式文档提供 HTML，并要求源稿变更时同步更新。原报告主张 Markdown-only 与现行规约直接冲突。正确做法是 Markdown 作为内容源、HTML 作为同步审阅呈现，而不是删除 HTML。
+2. **L2 跳过基线已经变化**：`8991fa5...` 将 Version/Config/Help 三个 live cases 合并为一个生产 wrapper case。合同内容没有缩水，但无 `DSH_CLI_PATH` 时由 `3 skipped` 变为 `1 skipped`；后续证据必须按实际结果记录。
+3. **`current.md` 不是当前快照**：它尚未绑定当前 Head `34a542f...` 的 Core #426（run `33759049251`）与 CI #335（run `33759049201`），并丢失 v0.20.6 的本地测试、四视口和较早关键 run 证据，不能继续直接作为权威入口。
+4. **Node 兼容范围缺持续证据**：根 `engines.node` 为 `^20.19.0 || >=22.12.0`，此前工作流只跑 Node 24。设计阶段已在 Linux x64 的干净环境实测 Node 20.19.0 与 22.12.0，二者均通过 install、全包 build/typecheck、Core unit、CLI unit 和二进制版本 smoke；本轮已将该验证固化为独立 CI job，远端实施 Head 证据待提交后绑定。
+
+### 14.3 新发现但不在本轮实现的边界
+
+- `tekon clean` 也直接递归删除 worktree 目录，#33 后续设计不能只看 Web `project.clean`；
+- `mobile-layout.test.ts` 与 `start-run-form.test.ts` 仍不符合仓库 `*.e2e.test.ts` 命名约定，应在测试分层治理中处理；
+- Windows `dsh.cmd` 同时存在 preflight 身份误判与原生 launcher 失败，继续由 #28 统一设计，不能用无约束 `shell: true` 快修；
+- `onWarn` 是纯观测 sink 还是可否决策略 hook 尚未定义，本轮不改变公共 API 语义。
+
+### 14.4 Node compatibility job 裁决
+
+采用 `.github/workflows/ci.yml` 内独立 `node-compat` job：
+
+```text
+20.19.x / 22.12.x / 22.19.x / 24.x
+→ npm install --global corepack@0.34.1
+→ frozen install
+→ all-package build + typecheck
+→ Core unit + CLI unit
+→ built CLI --version/--help smoke
+```
+
+该 job 不设置 `needs`，矩阵 `fail-fast: false`，单腿上限 20 分钟，暂不增加缓存。Node 20 的 `better-sqlite3` 可能从源码构建，因此 Core unit 必须保留，用真实 SQLite 加载证明 ABI 可用。Node 22.12 的 bundled Corepack 太旧，固定 `0.34.1` 是签名兼容前置条件。Node 24 虽与主 lane 重叠，但保留它可让矩阵自身完整、便于独立比较。
+
+这一变更只增加持续验证，不改变用户命令、运行时合同或 `.tekon` 数据格式。按既有版本政策，纯复审与 CI 证据收敛不单独抬高产品版本，仍保持 `0.20.6`。本轮不配置 required checks，因此新矩阵仍是 GitHub Actions 检查，不得表述为仓库强制合并规则。
+
+具体测试先行顺序与验收矩阵见 [第二十一轮收口执行方案](../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md)。
+
+### 14.5 实现期本地证据
+
+Node workflow 合同经过三轮明确 RED→GREEN：
+
+1. 首次新增结构化 YAML 测试时，因 `node-compat` 不存在而 3/3 failed；新增 job 后 3/3 passed；
+2. reviewer 指出 Corepack 版本、`continue-on-error` 表达式和步骤顺序/smoke 断言缺口后，增强合同先因缺少固定 Corepack 步骤而 1 failed / 2 passed；补 `corepack@0.34.1` 后 3/3 passed。
+3. 提交前 reviewer 指出 `matrix.exclude` 与 job/step `if` 仍可静默跳过矩阵腿；增强合同后分别注入 Node 20.19 exclude 与 `if: ${{ false }}`，两次均得到 1 failed / 2 passed，撤销变异后 3/3 passed。
+
+当前本地结果：
+
+- `pnpm test`：145 files、1554 passed、1 skipped；
+- build、typecheck、lint：通过；
+- production audit：直连 npm registry 超时，使用仅作用于该命令的公司代理重试后为 `No known vulnerabilities found`；
+- Core e2e：26 passed；CLI e2e：8 passed；Web Chromium e2e：48 passed；
+- 独立 reviewer 在 Node 22.12.0 上运行当前工作树完整单腿：固定 Corepack 0.34.1、pnpm 10.12.1、frozen install、全包 build/typecheck、Core 1079 passed/1 skipped、CLI 64 passed 与 CLI smoke 全部通过，`pnpm ignored-builds` 为 `None`；
+- 320/390/700/1440px 两个 Run 入口四视口 4/4 通过；报告与方案 HTML 同视口无页面横向溢出；
+- 仓库 actionlint 脚本因 Docker daemon 直连拉取镜像超时而退出 125；随后通过仅作用于下载命令的公司代理取得官方 `v1.7.12` release，校验官方 SHA-256 后执行同版本 actionlint，结果通过，临时目录已删除。远端 Core job 仍需在实施 Head 上再次绑定证据。
+
+以上只是不带远端 Head 的本地实施证据。提交后必须等待四个 Node matrix legs 与原 7 个 checks 在同一实施 Head 上全部成功，再写入仓库内权威快照。
+
+## 15. 参考资料
 
 ### Tekon
 
