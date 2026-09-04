@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 
 interface WorkflowStep {
+  name?: string;
+  env?: Record<string, unknown>;
   if?: unknown;
   uses?: string;
   run?: string;
@@ -105,11 +107,16 @@ describe('GitHub Actions Node compatibility contract', () => {
       '${{ matrix.node-version }}',
     );
     const resolvedStep = steps.find(
-      (step) =>
-        step.run?.includes('process.versions.node') &&
-        step.run?.includes('matrix.node-version'),
+      (step) => step.name === 'Assert resolved Node version',
     );
     expect(resolvedStep).toBeDefined();
+    expect(resolvedStep?.env?.EXPECTED_NODE_VERSION).toBe(
+      '${{ matrix.node-version }}',
+    );
+    expect(resolvedStep?.run).toContain(
+      'process.env.EXPECTED_NODE_VERSION',
+    );
+    expect(resolvedStep?.run).not.toMatch(/\$\{/u);
     expect(resolvedStep?.run).toContain('expected.endsWith(".x")');
     expect(resolvedStep?.run).toContain('actual.startsWith(prefix + ".")');
     expect(resolvedStep?.run).toContain('actual !== expected');

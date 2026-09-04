@@ -102,18 +102,21 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Assert resolved Node version
+        env:
+          EXPECTED_NODE_VERSION: ${{ matrix.node-version }}
         run: |
           node -e '
-            const expected = "${{ matrix.node-version }}";
+            const expected = process.env.EXPECTED_NODE_VERSION;
+            if (!expected) throw new Error("Missing EXPECTED_NODE_VERSION");
             const actual = process.versions.node;
-            console.log(`Resolved Node version: ${actual} (expected: ${expected})`);
+            console.log("Resolved Node version: " + actual + " (expected: " + expected + ")");
             if (expected.endsWith(".x")) {
               const prefix = expected.slice(0, -2);
               if (!actual.startsWith(prefix + ".")) {
-                throw new Error(`Node version mismatch: expected prefix ${prefix}, got ${actual}`);
+                throw new Error("Node version mismatch: expected prefix " + prefix + ", got " + actual);
               }
             } else if (actual !== expected) {
-              throw new Error(`Node version mismatch: expected ${expected}, got ${actual}`);
+              throw new Error("Node version mismatch: expected " + expected + ", got " + actual);
             }
           '
 
