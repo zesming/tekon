@@ -417,15 +417,9 @@ async function runProcess(input: {
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
     let timeoutReason: 'total' | 'no-progress' | undefined;
     let noProgressCandidateActivityAt: number | null = null;
+    let abortHandler: (() => void) | null = null;
+    let abortHandled = false;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
-    if (input.signal) {
-      input.signal.addEventListener('abort', () => {
-        // settle 后不再杀进程，避免 PID 回收误伤无关进程。
-        if (!settled) {
-          killChildProcess(child, 'SIGKILL');
-        }
-      });
-    }
     const recordOutputDirProgress = () => {
       const activity = outputDirMonitor.sample();
       if (activity) {
@@ -503,6 +497,10 @@ async function runProcess(input: {
         return;
       }
       settled = true;
+      if (input.signal && abortHandler) {
+        input.signal.removeEventListener('abort', abortHandler);
+        abortHandler = null;
+      }
       if (registryHandle && input.registry && input.registryKey) {
         input.registry.unregister(input.registryKey, registryHandle);
       }
@@ -578,6 +576,23 @@ async function runProcess(input: {
     child.stdin.prependListener('error', (error: Error) => {
       stdinError = error;
     });
+    if (input.signal) {
+      abortHandler = () => {
+        if (settled || abortHandled) {
+          return;
+        }
+        abortHandled = true;
+        killChildProcess(child, 'SIGKILL');
+      };
+      input.signal.addEventListener('abort', abortHandler, { once: true });
+      // AbortSignal does not replay an abort that happened between the initial
+      // pre-spawn check and listener registration. Re-check after all child
+      // lifecycle listeners are installed so that narrow window still kills
+      // and settles the spawned process.
+      if (input.signal.aborted) {
+        abortHandler();
+      }
+    }
     if (input.stdin === undefined) {
       child.stdin.end();
     } else {
