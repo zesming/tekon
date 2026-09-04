@@ -5,7 +5,7 @@
 - **上一轮权威 Head**：`34a542f963b495673b4f7adc48c2c5a574fc7052`
 - **用户本轮整改 Head**：`5fa791e7384cce931c254847879c665d3fff6f97`
 - **Reviewer 代码修复 Head**：`2073a0f4a6ee9956f69398dee33d3c70d0c9e607`
-- **本轮收口代码快照**：`a6daaf40a3544be7f6d21c1a390a3f05894a86a6`
+- **本轮收口代码快照**：`a843fc100037adce6fd1a86f6d9097ce95dd32fd`
 - **产品版本**：`0.21.0`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前最新发布**：`0.1.3-alpha.1`
@@ -14,7 +14,7 @@
 - **本轮收口本地验证**：151 个测试文件、1614 passed/1 skipped；CLI e2e 8/8；Chromium 51/51；全包 typecheck/build 与真实 production audit 通过
 - **最终裁决**：第 22 轮六项收口切片通过本地代码门和独立复审；新 PR Head 的远端 Actions 终态以 PR 外部状态为准。Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收
 
-> 阅读说明：§1–§12 主要保留 `2073a0f...` 时点的原始复审判断，§13–§15 已回填局部状态；§17 是实施前批注，§18 是 `a6daaf40...` 收口后的当前裁决。旧时点与 §18 冲突时，以 §18 为准。
+> 阅读说明：§1–§12 主要保留 `2073a0f...` 时点的原始复审判断，§13–§15 已回填局部状态；§17 是实施前批注，§18 是 `a843fc1...` 收口后的当前裁决。旧时点与 §18 冲突时，以 §18 为准。
 
 ## 1. 执行摘要
 
@@ -737,7 +737,7 @@ PR 中已积累多轮 Markdown、HTML、Remediation Plan、Closure Plan 和权�
 
 ## 15. 合并、发布与证据边界
 
-代码快照 `a6daaf40...` 的本地代码门只能证明：
+代码快照 `a843fc1...` 的本地代码门只能证明：
 
 - 当前环境下 151 个测试文件、CLI 8 项真实进程 e2e、Chromium 51 项 Playwright、全包 typecheck/build 与 production audit 通过；
 - workflow 已声明并校验精确 `20.19.0`、`22.12.0`、`22.19.0` 和滚动 `24.x`；新 Head 的真实四档 Actions 终态仍须由 PR 外部 checks 证明；
@@ -851,7 +851,7 @@ PR #11 已远超适合继续增长的规模。最终建议 Squash Merge，后续
 
 ### 18.1 代码快照与六项结果
 
-本节评审的代码快照是 `a6daaf40a3544be7f6d21c1a390a3f05894a86a6`，版本为 `0.21.0`。包含本报告的文档提交与最终 GitHub Actions 由 PR #11 的外部 Head/checks 证明，不在仓内制造自引用。
+本节评审的代码快照是 `a843fc100037adce6fd1a86f6d9097ce95dd32fd`，版本为 `0.21.0`。包含本报告的文档提交与最终 GitHub Actions 由 PR #11 的外部 Head/checks 证明，不在仓内制造自引用。
 
 | 收口项 | 当前结果 | 仍保持开放的边界 |
 | --- | --- | --- |
@@ -870,6 +870,7 @@ PR #11 已远超适合继续增长的规模。最终建议 Squash Merge，后续
 - `pnpm --filter @tekon/cli test:e2e`：3 个文件、8/8，通过真实构建后二进制；`clean` 失败后 worktree 内容保留，`status`/`log` 仍可用。
 - `pnpm --filter @tekon/web test:e2e`：Chromium 51/51，最终完整运行无 retry/flake。新增 TopBar 用例覆盖 credential 先返回、provider 延迟/500、token scope 轮换。
 - `node scripts/ci/audit-production.mjs`：真实 registry 调用首次返回 `No known vulnerabilities found`。
+- PR 中间 Head `9fe3659...` 的 Core run `33889063233` 被 Actionlint `SC2016` 拦截：Node 断言的单引号 shell 脚本含 `${...}`。代码快照 `a843fc1...` 已改为 step env 传值和无插值字符串拼接；合同测试先红后 4/4，通过代码/测试复审。最终远端结果仍以后续 Head checks 为准。
 - 320/390/700/1440 截图：四档均有 `scrollWidth === clientWidth`；人工目视未见错位、重叠、横向溢出、裁切或状态展示错误。临时截图不归档，验收结论保留在本报告。
 - `git diff --check`：通过；变更文件存在且非空，正式文档未保留占位标记。
 

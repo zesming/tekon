@@ -3,7 +3,7 @@
 - **当前详细报告**：[2026-09-04 第二十二轮全面复审](2026-09-04-tekon-product-runtime-harness-twenty-second-review.md)（[HTML 人审版](2026-09-04-tekon-product-runtime-harness-twenty-second-review.html)）
 - **本轮收口方案**：[第二十二轮复审批注与收口执行方案](../superpowers/plans/2026-09-04-twenty-second-review-remediation-plan.md)（[HTML 人审版](../superpowers/plans/2026-09-04-twenty-second-review-remediation-plan.html)）
 - **对应 PR**：[#11](https://github.com/zesming/tekon/pull/11)
-- **本轮被评审代码快照**：`a6daaf40a3544be7f6d21c1a390a3f05894a86a6`
+- **本轮被评审代码快照**：`a843fc100037adce6fd1a86f6d9097ce95dd32fd`
 - **当前版本**：`0.21.0`
 - **Tekon DSH tested pin**：`0.1.2-alpha.3`
 - **DeepSeek Harness 当前复核版本**：`0.1.3-alpha.1`，tag commit `d347e703908d0406b7a7ef80e3a0e594d86b2215`
@@ -20,7 +20,7 @@
 
 ## 本地验收证据
 
-被评审代码快照 `a6daaf40` 在当前环境完成：
+被评审代码快照 `a843fc1` 在当前环境完成：
 
 - `pnpm test`：151 files，1614 passed，1 skipped；唯一 skip 是未设置 `DSH_CLI_PATH` 的 opt-in DSH L2 live probe；
 - `pnpm -r typecheck`：通过；

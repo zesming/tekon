@@ -7,7 +7,7 @@
 - **关联 PR**：[#11](https://github.com/zesming/tekon/pull/11)
 - **权威输入**：[第二十二轮全面复审](../../reviews/2026-09-04-tekon-product-runtime-harness-twenty-second-review.md)
 
-> 文档状态：§1–§7 为 `e69b938` 时点编制的实施方案；§8 为 `a6daaf40` 收口完成后的执行记录回填。两处时点冲突时，以 §8 的实际结果为准。
+> 文档状态：§1–§7 为 `e69b938` 时点编制的实施方案；§8 为 `a843fc1` 收口完成后的执行记录回填。两处时点冲突时，以 §8 的实际结果为准。
 
 ## 1. 目标、约束与验收口径
 
@@ -271,7 +271,7 @@ API 测试用可观测 fake DSH 证明 credential health 从不 spawn probe；pr
 
 ## 8. 执行记录
 
-- **被评审代码快照**：`a6daaf40a3544be7f6d21c1a390a3f05894a86a6`
+- **被评审代码快照**：`a843fc100037adce6fd1a86f6d9097ce95dd32fd`
 - **实现版本**：`0.21.0`，根包与 Core/CLI/Web lockstep。
 - **六项结果**：Audit 分类重试、精确 Node matrix 合同、Web/CLI clean guard、公开 `planDigest` 透传与副作用前校验、Credential/Provider Health 分层、正式文档同步均已实现。
 - **本地全量验证**：`pnpm test` 151 files、1614 passed/1 skipped；全包 typecheck/build 通过；CLI e2e 8/8；Chromium 51/51；真实 production audit 返回零漏洞。Workspace manifest 版本变化未改变 `pnpm-lock.yaml` 内容，因此锁文件无需同步。

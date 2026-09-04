@@ -22,7 +22,7 @@
 <li><strong>关联 PR</strong>：<a href="https://github.com/zesming/tekon/pull/11" data-hovercard-type="pull_request" data-hovercard-url="/zesming/tekon/pull/11/hovercard">#11</a></li>
 <li><strong>权威输入</strong>：<a href="../../reviews/2026-09-04-tekon-product-runtime-harness-twenty-second-review.md">第二十二轮全面复审</a></li>
 </ul>
-<blockquote><p>文档状态：§1–§7 为 <code class="notranslate">e69b938</code> 时点编制的实施方案；§8 为 <code class="notranslate">a6daaf40</code> 收口完成后的执行记录回填。两处时点冲突时，以 §8 的实际结果为准。</p></blockquote>
+<blockquote><p>文档状态：§1–§7 为 <code class="notranslate">e69b938</code> 时点编制的实施方案；§8 为 <code class="notranslate">a843fc1</code> 收口完成后的执行记录回填。两处时点冲突时，以 §8 的实际结果为准。</p></blockquote>
 <h2>1. 目标、约束与验收口径</h2>
 <h3>1.1 目标</h3>
 <p>本轮只关闭第 22 轮报告与独立复核中已能用当前仓库确定性证明的合并缺口：</p>
@@ -255,7 +255,7 @@ output: provider + status('available'|'unavailable') + checkedAt
 </ul>
 <h2>8. 执行记录</h2>
 <ul>
-<li><strong>被评审代码快照</strong>：<code class="notranslate">a6daaf40a3544be7f6d21c1a390a3f05894a86a6</code></li>
+<li><strong>被评审代码快照</strong>：<code class="notranslate">a843fc100037adce6fd1a86f6d9097ce95dd32fd</code></li>
 <li><strong>实现版本</strong>：<code class="notranslate">0.21.0</code>，根包与 Core/CLI/Web lockstep。</li>
 <li><strong>六项结果</strong>：Audit 分类重试、精确 Node matrix 合同、Web/CLI clean guard、公开 <code class="notranslate">planDigest</code> 透传与副作用前校验、Credential/Provider Health 分层、正式文档同步均已实现。</li>
 <li><strong>本地全量验证</strong>：<code class="notranslate">pnpm test</code> 151 files、1614 passed/1 skipped；全包 typecheck/build 通过；CLI e2e 8/8；Chromium 51/51；真实 production audit 返回零漏洞。Workspace manifest 版本变化未改变 <code class="notranslate">pnpm-lock.yaml</code> 内容，因此锁文件无需同步。</li>
