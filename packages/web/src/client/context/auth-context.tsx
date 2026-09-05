@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react';
 import type { ReactElement } from 'react';
 
 import { authScope } from '../lib/query-keys.js';
@@ -65,6 +72,13 @@ export function AuthProvider({
   // the first request for the new auth scope can still leave with the old/null
   // credential and cache a 401 under the new scope.
   const setToken = useCallback((newToken: string | null) => {
+    const newScope = authScope(newToken);
+    if (prevScopeRef.current !== newScope) {
+      // Revoke the old scope before descendants can start their new queries.
+      // This does not cancel network I/O and never touches the next scope.
+      queryCache.clearByScope(prevScopeRef.current);
+      prevScopeRef.current = newScope;
+    }
     setRpcSessionToken(newToken);
     persistToken(newToken);
     setTokenState(newToken);
@@ -90,11 +104,8 @@ export function AuthProvider({
     return () => window.removeEventListener('hashchange', captureTokenFragment);
   }, [setToken]);
 
-  // Detect actual token changes and evict old-session cache entries.
+  // Scope revocation belongs exclusively to the synchronous setter above.
   useEffect(() => {
-    const newScope = authScope(token);
-    const oldScope = prevScopeRef.current;
-
     // Keep the RPC client's token in sync so authenticated (auth:'session')
     // procedures and the SSE client actually send x-session-token, and persist
     // it so a refresh keeps the session (F7-P0-01). main.tsx seeds the initial
@@ -102,14 +113,6 @@ export function AuthProvider({
     // These calls remain idempotent here as a defensive invariant.
     setRpcSessionToken(token);
     persistToken(token);
-
-    if (oldScope !== newScope) {
-      // Hard-clear all entries that belonged to the previous scope.
-      queryCache.clearByScope(oldScope);
-      // Abort any in-flight requests so they cannot write stale data.
-      queryCache.clearAllInFlight();
-      prevScopeRef.current = newScope;
-    }
   }, [token]);
 
   return (

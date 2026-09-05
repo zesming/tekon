@@ -26,8 +26,13 @@ export function TopBar(props: TopBarProps) {
   const defaultTitle = pathname.startsWith('/advanced')
     ? 'Tekon Cockpit'
     : 'Tekon Workspace';
-  const { title = defaultTitle, subtitle, navOpen, onToggleNav, toggleRef } =
-    props;
+  const {
+    title = defaultTitle,
+    subtitle,
+    navOpen,
+    onToggleNav,
+    toggleRef,
+  } = props;
   const { token, setToken } = useSessionToken();
   const scope = authScope(token);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -37,6 +42,7 @@ export function TopBar(props: TopBarProps) {
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
   const toggleBtnRef = useRef<HTMLButtonElement | null>(null);
   const tokenInputRef = useRef<HTMLInputElement | null>(null);
+  const providerRefreshScopeRef = useRef<string | null>(null);
 
   // External bootstrap/hash changes stay reflected while the editor is closed.
   // Typing is deliberately draft-only: credentials become active only after
@@ -112,26 +118,71 @@ export function TopBar(props: TopBarProps) {
     ? 'not-configured'
     : healthError
       ? 'unavailable'
-      : healthData?.credential ?? 'checking';
+      : (healthData?.credential ?? 'checking');
 
-  const { data: providerHealthData, refetch: refetchProviderHealth } = useQuery<
-    RpcProcedureMap['project.providerHealth']['output']
-  >(
+  const {
+    data: providerHealthData,
+    error: providerHealthError,
+    isLoading: providerHealthLoading,
+    refetch: refetchProviderHealth,
+  } = useQuery<RpcProcedureMap['project.providerHealth']['output']>(
     token && credentialStatus === 'valid'
       ? queryKeys.projectProviderHealth('dsh-headless', scope)
       : null,
-    () =>
-      rpc.call('project.providerHealth', {
+    () => {
+      const refresh = providerRefreshScopeRef.current === scope;
+      if (refresh) providerRefreshScopeRef.current = null;
+      return rpc.call('project.providerHealth', {
         token: token!,
         provider: 'dsh-headless',
-      }),
+        ...(refresh ? { refresh: true } : {}),
+      });
+    },
   );
 
   useEffect(() => {
-    if (!token || credentialStatus !== 'valid') return;
-    const timer = window.setInterval(refetchProviderHealth, 60_000);
-    return () => window.clearInterval(timer);
-  }, [credentialStatus, refetchProviderHealth, token]);
+    if (!token || credentialStatus !== 'valid' || providerHealthLoading) return;
+    const expiresAt = Date.parse(providerHealthData?.expiresAt ?? '');
+    // A failed refresh may retain an expired successful result for its check
+    // time. Back off on that error instead of repeatedly scheduling at 0 ms.
+    const delay =
+      providerHealthError || !Number.isFinite(expiresAt)
+        ? 60_000
+        : Math.max(0, expiresAt - Date.now());
+    const timer = window.setTimeout(refetchProviderHealth, delay);
+    return () => window.clearTimeout(timer);
+  }, [
+    credentialStatus,
+    providerHealthData,
+    providerHealthError,
+    providerHealthLoading,
+    refetchProviderHealth,
+    token,
+  ]);
+
+  const providerStatus =
+    credentialStatus !== 'valid'
+      ? 'pending-credential'
+      : providerHealthLoading
+        ? 'checking'
+        : providerHealthError
+          ? 'error'
+          : (providerHealthData?.status ?? 'checking');
+  const providerStatusLabel =
+    providerStatus === 'checking'
+      ? '检查中'
+      : providerStatus === 'error'
+        ? '检查失败'
+        : providerStatus === 'available'
+          ? '可用'
+          : providerStatus === 'unavailable'
+            ? '不可用'
+            : '凭据有效后检查';
+
+  const retryProviderHealth = () => {
+    providerRefreshScopeRef.current = scope;
+    refetchProviderHealth();
+  };
 
   const statusLabel =
     credentialStatus === 'valid'
@@ -155,9 +206,7 @@ export function TopBar(props: TopBarProps) {
             ? '连接凭据：校验中'
             : '连接凭据：未配置';
 
-  const dshHeadlessUnavailable =
-    credentialStatus === 'valid' &&
-    providerHealthData?.status === 'unavailable';
+  const dshHeadlessUnavailable = providerStatus === 'unavailable';
 
   const openPanel = () => {
     setDraftToken(token ?? '');
@@ -226,9 +275,7 @@ export function TopBar(props: TopBarProps) {
           aria-controls="topbar-connection-panel"
           aria-label={statusAccessibleName}
           aria-describedby={
-            dshHeadlessUnavailable
-              ? 'topbar-dsh-status-description'
-              : undefined
+            dshHeadlessUnavailable ? 'topbar-dsh-status-description' : undefined
           }
           title={
             credentialStatus === 'unavailable'
@@ -303,6 +350,54 @@ export function TopBar(props: TopBarProps) {
               </button>
             </div>
             <div className="connection-panel-body">
+              <section
+                aria-label="连接检查结果"
+                style={{ marginBottom: 14, fontSize: 12 }}
+              >
+                <p>连接凭据：{statusLabel}</p>
+                <p>
+                  Provider（dsh-headless）：
+                  <span role="status" data-testid="provider-health-state">
+                    {providerStatusLabel}
+                  </span>
+                </p>
+                <p className="text-muted">
+                  上次检查：
+                  {providerHealthData?.checkedAt &&
+                  credentialStatus === 'valid' ? (
+                    <time dateTime={providerHealthData.checkedAt}>
+                      {new Date(providerHealthData.checkedAt).toLocaleString(
+                        'zh-CN',
+                      )}
+                    </time>
+                  ) : (
+                    '尚无记录'
+                  )}
+                </p>
+                {providerStatus === 'error' ||
+                providerStatus === 'unavailable' ? (
+                  <p
+                    className="text-muted"
+                    style={{ overflowWrap: 'anywhere' }}
+                  >
+                    {providerStatus === 'error'
+                      ? 'Provider 检查失败，请重试。'
+                      : 'Provider 当前不可用。'}
+                    运行 <code>tekon provider preflight dsh-headless</code>{' '}
+                    查看详情。
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  disabled={
+                    credentialStatus !== 'valid' || providerHealthLoading
+                  }
+                  onClick={retryProviderHealth}
+                >
+                  重新检查 Provider
+                </button>
+              </section>
               <label
                 className="form-label"
                 htmlFor="session-token-input"

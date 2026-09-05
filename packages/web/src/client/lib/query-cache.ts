@@ -16,15 +16,33 @@ interface CacheEntry<T = unknown> {
 
 export class QueryCache {
   private cache = new Map<string, CacheEntry>();
-  private inFlight = new Map<string, Promise<unknown>>();
+  private inFlight = new Map<
+    string,
+    { promise: Promise<unknown>; epoch: number }
+  >();
+  private nextEpoch = 0;
 
   /**
    * Get cached data for a key, or undefined if not present.
    */
-  get<T>(key: string): { data: T | undefined; error: Error | null; stale: boolean } | undefined {
+  get<T>(
+    key: string,
+  ):
+    | {
+        data: T | undefined;
+        error: Error | null;
+        stale: boolean;
+        isFetching: boolean;
+      }
+    | undefined {
     const entry = this.cache.get(key);
     if (!entry) return undefined;
-    return { data: entry.data as T | undefined, error: entry.error, stale: entry.stale };
+    return {
+      data: entry.data as T | undefined,
+      error: entry.error,
+      stale: entry.stale,
+      isFetching: this.inFlight.has(key),
+    };
   }
 
   /**
@@ -35,7 +53,12 @@ export class QueryCache {
    * @param error Error (if any)
    * @param scope Optional auth scope tag for scope-based eviction
    */
-  set<T>(key: string, data: T | undefined, error: Error | null = null, scope?: string): void {
+  set<T>(
+    key: string,
+    data: T | undefined,
+    error: Error | null = null,
+    scope?: string,
+  ): void {
     let entry = this.cache.get(key);
     if (!entry) {
       entry = {
@@ -128,8 +151,8 @@ export class QueryCache {
   }
 
   /**
-   * Forget all in-flight registrations. This does not abort the underlying
-   * requests or fence their cache writes; callers own those lifecycle guards.
+   * Revoke all request owners. Underlying requests still settle, but cannot
+   * publish data/errors or clear a successor's registration.
    */
   clearAllInFlight(): void {
     this.inFlight.clear();
@@ -139,24 +162,72 @@ export class QueryCache {
    * Get or create an in-flight promise for deduplication.
    */
   getInFlight<T>(key: string): Promise<T> | undefined {
-    return this.inFlight.get(key) as Promise<T> | undefined;
+    return this.inFlight.get(key)?.promise as Promise<T> | undefined;
+  }
+
+  /**
+   * The cache owns request publication. Every consumer, including the one
+   * starting the fetch, observes the cache instead of publishing the Promise's
+   * result independently. Unsubscribing does not cancel this shared request.
+   */
+  fetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    const pending = this.getInFlight<T>(key);
+    if (pending) return pending;
+
+    const epoch = ++this.nextEpoch;
+    const owns = () => this.inFlight.get(key)?.epoch === epoch;
+    const promise = Promise.resolve()
+      .then(fetcher)
+      .then(
+        (data) => {
+          if (owns()) this.set(key, data);
+          return data;
+        },
+        (error: unknown) => {
+          const failure =
+            error instanceof Error ? error : new Error(String(error));
+          if (owns()) this.set(key, this.get<T>(key)?.data, failure);
+          throw failure;
+        },
+      );
+    if (!this.cache.has(key)) {
+      this.cache.set(key, {
+        data: undefined,
+        error: null,
+        timestamp: Date.now(),
+        stale: false,
+        subscribers: new Set(),
+      });
+    }
+    this.register(key, promise, epoch);
+    this.notify(key);
+    return promise;
   }
 
   /**
    * Set an in-flight promise for deduplication.
    */
   setInFlight<T>(key: string, promise: Promise<T>): Promise<T> {
-    this.inFlight.set(key, promise);
+    this.register(key, promise, ++this.nextEpoch);
+    return promise;
+  }
+
+  private register(
+    key: string,
+    promise: Promise<unknown>,
+    epoch: number,
+  ): void {
+    this.inFlight.set(key, { promise, epoch });
     promise
       .catch(() => undefined) // suppress unhandled rejection on the cleanup chain
       .finally(() => {
         // A cleared/replaced request may settle after its successor started.
         // Only the registered owner may remove this key's in-flight entry.
-        if (this.inFlight.get(key) === promise) {
+        if (this.inFlight.get(key)?.epoch === epoch) {
           this.inFlight.delete(key);
+          this.notify(key);
         }
       });
-    return promise;
   }
 
   private notify(key: string): void {

@@ -8,215 +8,76 @@ export interface UseQueryResult<T> {
   refetch: () => void;
 }
 
-/**
- * React hook for fetching and caching data.
- *
- * @param key - Cache key (null to disable fetching)
- * @param fetcher - Async function to fetch data
- * @returns Query result with data, error, loading state, and refetch function
- */
+function readSnapshot<T>(key: string | null) {
+  const cached = key ? queryCache.get<T>(key) : undefined;
+  return {
+    data: cached?.data,
+    error: cached?.error ?? null,
+    isLoading:
+      !!key &&
+      (!cached ||
+        cached.isFetching ||
+        cached.stale ||
+        (cached.data === undefined && cached.error === null)),
+  };
+}
+
+/** Subscribers only project owner-checked cache publications, never raw results. */
 export function useQuery<T>(
   key: string | null,
   fetcher: () => Promise<T>,
 ): UseQueryResult<T> {
-  const initialCache = key ? queryCache.get<T>(key) : undefined;
-  const [data, setData] = useState<T | undefined>(initialCache?.data);
-  const [error, setError] = useState<Error | null>(
-    initialCache?.error ?? null,
-  );
-  const [isLoading, setIsLoading] = useState(() => {
-    if (!key) return false;
-    return (
-      !initialCache ||
-      (initialCache.data === undefined && initialCache.error === null) ||
-      initialCache.stale
-    );
-  });
-
-  const mountedRef = useRef(true);
+  const [snapshot, setSnapshot] = useState(() => readSnapshot<T>(key));
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
-  // The state variables above belong to this key. A key-changing render occurs
-  // before the effect can reset them, so the returned projection masks the old
-  // key synchronously instead of briefly showing or acting on stale data.
-  const stateKeyRef = useRef<string | null>(key);
+  const stateKeyRef = useRef(key);
 
-  // Stale-request protection: monotonically increasing generation counter.
-  const generationRef = useRef(0);
-  // Abort controller for the current in-flight request.
-  const abortRef = useRef<AbortController | null>(null);
-
-  const doFetch = useCallback(async () => {
+  const doFetch = useCallback(() => {
     if (!key) return;
-
-    // Bump generation so any in-flight request becomes stale.
-    const myGeneration = ++generationRef.current;
-
-    // Abort the previous in-flight request (best-effort cancellation).
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    // Join an existing request for this cache key. Generation guards still
-    // prevent a result from writing into a later key.
-    const inFlight = queryCache.getInFlight<T>(key);
-    if (inFlight) {
-      try {
-        const result = await inFlight;
-        if (
-          mountedRef.current &&
-          stateKeyRef.current === key &&
-          generationRef.current === myGeneration
-        ) {
-          setData(result);
-          setError(null);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        if (
-          mountedRef.current &&
-          stateKeyRef.current === key &&
-          generationRef.current === myGeneration
-        ) {
-          setError(err instanceof Error ? err : new Error(String(err)));
-          setIsLoading(false);
-        }
-      }
-      return;
-    }
-
-    setIsLoading(true);
-
-    const promise = (async () => {
-      try {
-        const result = await fetcherRef.current();
-        queryCache.set(key, result, null);
-        if (
-          mountedRef.current &&
-          stateKeyRef.current === key &&
-          generationRef.current === myGeneration
-        ) {
-          setData(result);
-          setError(null);
-          setIsLoading(false);
-        }
-        return result;
-      } catch (err) {
-        const fetchError =
-          err instanceof Error ? err : new Error(String(err));
-        queryCache.set(key, undefined, fetchError);
-        if (
-          mountedRef.current &&
-          stateKeyRef.current === key &&
-          generationRef.current === myGeneration
-        ) {
-          setData(undefined);
-          setError(fetchError);
-          setIsLoading(false);
-        }
-        throw fetchError;
-      }
-    })();
-
-    queryCache.setInFlight(key, promise);
-
-    try {
-      await promise;
-    } catch {
-      // Error already handled above.
-    }
+    // Capture this render's fetcher before the async boundary. Cache owns the
+    // request lifetime, so an initiating component may safely unmount.
+    void queryCache.fetch(key, fetcherRef.current).catch(() => {
+      // The cache publishes only errors belonging to the current request owner.
+    });
   }, [key]);
 
   useEffect(() => {
-    mountedRef.current = true;
     stateKeyRef.current = key;
+    setSnapshot(readSnapshot<T>(key));
+    if (!key) return;
 
-    if (!key) {
-      // Bump generation to invalidate any in-flight request from the previous key.
-      ++generationRef.current;
-      if (abortRef.current) {
-        abortRef.current.abort();
-        abortRef.current = null;
-      }
-      setData(undefined);
-      setError(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const cached = queryCache.get<T>(key);
-    // Reset state to the new key before fetching. Without this, a plan or
-    // credential-scoped query can briefly display the previous key's data.
-    setData(cached?.data);
-    setError(cached?.error ?? null);
-    setIsLoading(
-      !cached ||
-        (cached.data === undefined && cached.error === null) ||
-        cached.stale,
-    );
-
-    // Subscribe to cache updates.
+    let active = true;
     const unsubscribe = queryCache.subscribe(key, () => {
-      const next = queryCache.get<T>(key);
-      if (next && mountedRef.current && stateKeyRef.current === key) {
-        setData(next.data);
-        setError(next.error);
-        setIsLoading(false);
-        if (next.stale) {
-          void doFetch();
-        }
-      }
+      if (!active) return;
+      setSnapshot(readSnapshot<T>(key));
+      const cached = queryCache.get<T>(key);
+      if (cached?.stale && !cached.isFetching) doFetch();
     });
-
-    // Fetch if not cached or stale.
+    const cached = queryCache.get<T>(key);
     if (
       !cached ||
-      (cached.data === undefined && cached.error === null) ||
-      cached.stale
+      cached.stale ||
+      (cached.data === undefined && cached.error === null)
     ) {
-      void doFetch();
+      doFetch();
     }
-
     return () => {
-      mountedRef.current = false;
-      // Bump generation to invalidate any in-flight request so it cannot
-      // write stale data if it resolves after the next key mounts.
-      ++generationRef.current;
+      active = false;
       unsubscribe();
-      if (abortRef.current) {
-        abortRef.current.abort();
-        abortRef.current = null;
-      }
+      // This only ends the subscription; no shared network request is aborted.
     };
   }, [key, doFetch]);
 
   const refetch = useCallback(() => {
-    if (key) {
-      queryCache.invalidate(key);
-      void doFetch();
-    }
+    if (!key) return;
+    queryCache.invalidate(key);
+    doFetch();
   }, [key, doFetch]);
 
-  // During the key-changing render, the effect has not reset React state yet.
-  // Project directly from the new key's cache (or an empty loading state) so
-  // consumers never see the previous query's payload under the new key.
-  if (stateKeyRef.current !== key) {
-    if (!key) {
-      return { data: undefined, error: null, isLoading: false, refetch };
-    }
-    const cached = queryCache.get<T>(key);
-    return {
-      data: cached?.data,
-      error: cached?.error ?? null,
-      isLoading:
-        !cached ||
-        (cached.data === undefined && cached.error === null) ||
-        cached.stale,
-      refetch,
-    };
-  }
-
-  return { data, error, isLoading, refetch };
+  // A key-changing render precedes effect cleanup. Hide the previous key's
+  // payload synchronously, including during an A → B → A credential switch.
+  return {
+    ...(stateKeyRef.current === key ? snapshot : readSnapshot<T>(key)),
+    refetch,
+  };
 }

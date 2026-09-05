@@ -11,6 +11,7 @@ import {
 } from '@tekon/core';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
+import { createScopedFixtureRun } from '../fixtures/session-run.js';
 import { createApiCaller } from '../../src/server/api/root.js';
 import { createWebServer, type RunningWebServer } from '../../src/server/http.js';
 
@@ -101,7 +102,7 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
       workspaceId: workspace.id,
       title: 'failed session',
       profile: 'human-web',
-      runId: 'run_failed',
+      runId: createScopedFixtureRun(db, 'run_failed'),
     });
     await store.updateSessionStatus(failed.id, 'failed');
 
@@ -109,7 +110,7 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
       workspaceId: workspace.id,
       title: 'active session',
       profile: 'human-web',
-      runId: 'run_active',
+      runId: createScopedFixtureRun(db, 'run_active'),
     });
 
     setSessionTime(db, failed.id, '2026-08-28T09:00:00.000Z');
@@ -165,7 +166,7 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
       workspaceId: workspace.id,
       title: 'retrying session',
       profile: 'human-web',
-      runId: 'run_retry',
+      runId: createScopedFixtureRun(db, 'run_retry'),
     });
     await store.updateSessionStatus(session.id, 'failed');
 
@@ -193,14 +194,14 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(fixture.projectRoot);
     const active = await store.createSession({
       workspaceId: workspace.id,
       title: 'active session',
       profile: 'human-web',
-      runId: 'run_active',
+      runId: createScopedFixtureRun(db, 'run_active'),
     });
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -223,7 +224,7 @@ describe('session.acknowledge & attention sorting (T3 / P1-UX-02)', () => {
       workspaceId: workspace.id,
       title: 'legacy failed session',
       profile: 'human-web',
-      runId: 'run_legacy',
+      runId: createScopedFixtureRun(db, 'run_legacy'),
     });
     await store.updateSessionStatus(legacyFailed.id, 'failed');
     db.prepare('update sessions set acknowledged_at = null where id = ?').run(

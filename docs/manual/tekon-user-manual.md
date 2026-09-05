@@ -1,5 +1,7 @@
 # 天工（Tekon）用户使用手册
 
+本文对应 v0.22.0。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
+
 名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取”天工”。
 
 ## 1. 天工是什么
@@ -226,7 +228,7 @@ tekon eval demand-shape
 tekon run
 ```
 
-输出里会有 `runId`。后续常规命令默认读取最近一次 run；只有查看历史 run 或避免歧义时才需要手动传 `--run-id`。
+普通 workflow/Goal 启动前，CLI 向 stderr 打印 `Request ID: …`；保存它，超时或结果丢失后可加 `--request-id <原标识>` 按相同需求和参数重试。受理后输出 `runId`，同一请求的重试返回原运行身份。后续常规命令默认读取最近一次 run；查看历史 run 或避免歧义时传 `--run-id`。目录未就绪的运行会显示“创建失败需恢复（尚未执行）”，处理方式见 §6.6。
 
 明确长程任务可以在 run 级别显式放大外层预算，例如 2 小时总超时、20 分钟无输出进展超时、30 秒 heartbeat：
 
@@ -236,7 +238,7 @@ tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heart
 
 未传 `--template` 时默认运行 `standard-delivery`；未传 `--agent` 时默认使用 Codex provider。离线回归或演示时，可显式切到 mock provider：
 
-> **计划确认是真实合同**：Web 发起 workflow 运行时，服务端会把执行计划（角色链、Gate、代理、Profile、超时、工作区策略等）计算成 digest，客户端必须回传同一 digest 才能启动；计划被篡改或预览与实际执行参数不一致时，运行会被拒绝（`PLAN_DIGEST_MISMATCH`），不会静默执行另一份计划。每次运行的 canonical 计划快照会持久化到运行记录，供审计。
+> **计划预览与实际执行绑定**：Web 的 workflow/Goal 预览摘要绑定完整模板、执行模式，以及 Provider、Profile、超时和工作区策略等确认参数；Goal 使用内置 goal 模板。模板或参数变化导致摘要不匹配时，显示 `PLAN_DIGEST_MISMATCH`：刷新预览、重新审阅，再点击提交，不自动接受新计划。公开预览只展示摘要，不展示模板内的命令参数或环境配置。已经受理的运行保留原计划快照；当前模板变化不会替换该运行的计划。历史运行保留兼容路径，不能把旧快照等同于 v2 的完整绑定保证。
 
 ```bash
 tekon run --template standard-delivery --agent mock
@@ -381,7 +383,7 @@ tekon provider preflight dsh-headless
 
 它会检查实际安装的 `dsh` 版本、headless help 合同与默认配置插件组合，输出 tested 版本、actual 版本、合同校验结果与精确的兼容安装命令；兼容时退出码 0，不兼容时退出码 1。Web 与 CLI 在使用 `dsh-headless` 发起运行时，也会在任何运行记录产生之前自动执行同样的预检，不兼容时立即给出可读错误，不会带着残缺能力进入执行。
 
-Web 顶栏的连接徽标只等待 Session token 校验，不再同步执行可选 DSH 探测。凭据有效后，页面才通过独立的 Provider health 请求异步显示 `dsh-headless` 是否可用；Provider 失败不会把有效凭据降级为“凭据无效”。当前 Web 只显示可用/不可用，可行动的细节仍通过上述 `tekon provider preflight dsh-headless` 查看。
+Web 顶栏将凭据和 Provider 分开显示。凭据校验不等待可选 DSH 探测；凭据有效后，独立检查 `dsh-headless`，显示“检查中 / 可用 / 不可用 / 检查失败”，并提供上次检查时间和重试按钮。页面按服务端返回的过期时间刷新结果；检查失败时保留的旧时间不代表本次检查成功。凭据有效只说明连接授权有效，不保证 Provider 可执行；需要诊断时运行上述 `tekon provider preflight dsh-headless`。
 
 真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
 
@@ -596,6 +598,7 @@ tekon run "做一个一次性小任务" --goal --agent mock
 - `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
 - `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的硬边界）。
 - `--dynamic --dry-run`：只生成动态 workflow 预览。
+- `--request-id <id>`：复用一次提交意图的标识；8–128 个 ASCII 字母、数字、下划线或连字符，省略时自动生成。
 - `--allow-dirty-base`：允许基于当前未提交业务改动运行。
 - `--repo <path>`：只在跨仓库运行时使用。
 
@@ -604,6 +607,25 @@ tekon run "做一个一次性小任务" --goal --agent mock
 - 输出 `runId` 后，用 `status` 和 `review` 继续检查。
 - `status=passed` 不代表可以自动合入。
 - 有 pending human gate 时，需要先处理审批。
+
+**重试同一次提交**：普通 workflow/Goal 在启动前向 stderr 打印 Request ID。超时、断连或未收到结果时，保留原需求、文件引用和所有执行参数，追加原标识重试：
+
+```bash
+tekon run "给列表增加筛选" --agent mock --request-id delivery-20260905-01
+```
+
+相同 requestId 与相同意图返回原 Run/Session/Job；已受理后，不会因为当前需求卡、模板或 Provider 环境变化而另建运行。`REQUEST_ID_CONFLICT` 表示该标识已绑定其他意图：先核对是否误改参数；如果确定要另建任务，换一个新标识。不要为一次尚待确认的原请求盲目换号。
+
+| 看到的状态 | 如何判断与处理 |
+| --- | --- |
+| 本次未创建 | 本次校验失败或事务回滚。修正输入；同内容重试继续用原标识。它不证明同标识的其他在途调用永远不会受理。 |
+| 已受理 | 已有持久运行身份。观察原 Run/Session；重试不创建第二份。 |
+| 创建失败需恢复 | 身份已保存，但运行目录尚未就绪，Job 不执行。修复目录的类型、权限或链接问题后，按原请求重试。 |
+| 受理状态待确认 | 网络或数据库问题使结果无法确定。保留原标识，查询或原样重试；不要据此新建另一运行。 |
+
+CLI 目录失败会打印 Run/Session ID 并以非零状态退出。用 `tekon status --run-id <runId>` 检查 `admission` 和 `filesState`；Web 可在修复目录后重启 UI 服务触发恢复，查询按钮本身不会修复目录。恢复保留原始 Job，不复活已取消或终态运行。
+
+**dry-run 的当前限制**：`--dry-run` 仅支持 `--dynamic`；普通 workflow 和 `--goal` 搭配 `--dry-run` 会在项目初始化前返回 `DRY_RUN_UNSUPPORTED`。动态预览不受理 Run，不支持 `--request-id`；它仍可能初始化本地目录，`--save-as` 会保存预览，不应当作“完全不写本地文件”的命令。
 
 ### 6.7 `status`
 
@@ -615,11 +637,12 @@ tekon status
 
 常见字段：
 
-- `workflowStatus`：整体状态。
-- `currentNodeId`：当前节点。
+- `status`：整体状态。
+- `currentNode`：当前节点。
 - `artifacts`：产物数量。
 - `gates`：gate 数量。
 - `pendingHumanDecisions`：待人工决策数量。
+- `admission` / `filesState` / `requestId`：新运行的受理、目录就绪状态和原请求标识。`admission=recovery-required` 表示已保存身份但尚不能执行；不要仅看 `status` 或已有 Run ID 判断执行进度。
 
 ### 6.8 `approval summary`
 
@@ -922,10 +945,11 @@ tekon ui
 - Web 是本地 dashboard，不是远程服务。
 - Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
 
-**Web 使用要点（v0.21.0）**：
+**Web 使用要点（v0.22.0）**：
 
-- **连接状态**：顶栏不再是裸露的令牌输入框，而是显示“凭据有效 / 无效 / 未配置”状态徽标；点开连接管理面板可查看、重填并应用会话令牌，或断开连接。凭据校验不等待可选 Provider；有效后再异步显示 dsh-headless 可用性。通过 `tekon ui` 输出的 `#token=` URL 打开时会自动校验。
-- **执行计划预览**：在“新建运行”表单里发起前，可预览本次运行的角色链路、阶段、需人工审批的 Gate、超时和预期节点；毫秒级超时、profile 等工程参数收在“高级”折叠区。
+- **连接状态**：顶栏分开显示凭据与 Provider；连接面板可重填、应用或断开会话令牌，Provider 可单独重试并查看检查时间。凭据校验不等待 Provider，通过 `#token=` URL 打开时自动校验。
+- **执行计划预览**：默认入口和高级表单都绑定完整模板及执行模式；预览过期时刷新、重新审阅，再提交。毫秒级超时、profile 等参数收在“高级”折叠区。
+- **提交结果可找回**：两个发起入口共享待确认请求账本；网络错误后先查询原 Request ID，或保持原内容重试。目录未就绪时显示需恢复状态。详见 §7。
 - **联网不受限确认**：选择 `dsh-headless` 等会带来不受限网络出口的 agent 时，预览会显式告警并要求勾选“我已知悉本次运行联网不受限”；未勾选无法提交，确认会写入运行审计。
 - **失败任务处理**：受控交付列表中失败的会话可点“确认/归档”，确认后下沉到历史区、不再占据待处理置顶位；未处理的失败仍会置顶提醒。
 - **实时刷新与长会话**：列表在会话状态变化时自动上屏（保留短轮询兜底）；会话事件流默认只渲染最近若干条，更早内容点“加载更早历史”按需加载，且每次加载都会真正向更早的记录推进（不会出现按钮点了却没有更早内容的情况）。
@@ -1027,7 +1051,7 @@ tekon -h            # 等同于 tekon help
 **查看版本**：
 
 ```bash
-tekon --version     # 输出 v0.21.0
+tekon --version     # 输出 v0.22.0
 tekon -v            # 同上
 ```
 
@@ -1060,7 +1084,7 @@ tekon ui --repo /path/to/project
 Session UI 适合：
 
 - 在左侧会话列表选择或用输入框发起一个新会话（运行）。
-- 在会话详情中间栏**实时**查看事件流：用户消息、步骤开始/结束、工具调用与结果、Agent 消息（当前为产物元数据合成的**摘要**，非模型原文）、错误。断线会自动重连并续播，不丢事件。
+- 在会话详情中间栏**实时**查看事件流：用户消息、步骤开始/结束、工具调用与结果、Agent 消息（当前为产物元数据合成的**摘要**，非模型原文）、错误。断线会自动重连并续播已持久化的事件，仍受下方事件日志边界约束。
 - 在右侧就地处理 human approval（inline 审批卡片，展示风险、命令、就绪度与证据），并暂停/取消/恢复运行。
 
 旧 Dashboard（`/advanced`）适合：
@@ -1081,7 +1105,13 @@ Session UI 适合：
 /path/to/project/.tekon/web-session.json
 ```
 
-可在页面顶栏"Session token"输入框粘贴该 token 作为兜底；只读浏览（会话列表、事件流）在配置令牌后加载。
+可在页面顶栏的连接管理面板粘贴该 token 作为兜底；会话列表和事件流在配置令牌后加载。面板将凭据与 Provider 状态分列，显示检查时间并提供 Provider 重试；“凭据有效”不代表 Provider 可用。
+
+**提交后没有确定结果时**：默认输入框和高级表单都会保留 Request ID。“受理状态待确认”时点“查询受理结果”，或保持原内容重新提交；“尚未查到”只表示查询时还没有记录，原请求仍可能在处理中，必须保留原身份。查到已受理后进入原 Session 观察；“创建失败需恢复”时先修复目录，再用原内容重试或重启 UI 服务，查询本身不负责恢复。明确选择“明确新建另一个任务”才使用新身份，旧待确认请求仍可查询。
+
+账本按物理仓库及凭据作用域隔离，保存在当前标签页的 sessionStorage 中；同仓库、同凭据刷新后仍能找回待确认请求。账本只存作用域指纹、意图指纹、requestId 和受理状态，不存需求正文或 token；登录令牌另由认证功能保存到 sessionStorage。刷新后可以直接查旧请求，但若要重新提交内容，需要自己恢复原输入。会话存储不可用或账本损坏时，会在发出 Run 请求前阻止提交；不要清除尚待确认的记录来绕过提示。
+
+使用 symlink 路径启动同一个物理仓库时，新旧 Run/Session 仍可查看；历史 alias Workspace 的列表和事件订阅也保持可见，原 ID 不变。它不提供跨仓库 Workspace 切换；指向其他物理仓库的记录不在当前访问范围。
 
 注意：
 
@@ -1089,15 +1119,15 @@ Session UI 适合：
 - token 不应提交。
 - Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
 - **发起运行时可选 Profile**：新建运行表单的 `Profile` 下拉默认 `human-web`（人工驱动，不自动推进人工点）。选 `autonomous-delivery` 后，运行**通过（passed）时会自动准备交付**（打包证据、生成 PR 准备包、进入待审批状态）；**但绝不自动创建 PR**——创建远端 PR 始终需要人工在交付面板显式批准。此边界是硬约束，不因 Profile 放宽。自动准备只在长驻的 Web/服务模式下触发；CLI `tekon run` 跑完即退出，交付仍走显式 `tekon delivery prepare`。
-- **发起运行、批准 human gate、恢复运行都是"立即返回、后台推进"**：点击后请求很快返回，工作流在后台执行。
+- **发起运行、批准 human gate、恢复运行采用“返回结果、后台推进”**：发起运行先完成校验和受理；只有目录 ready 的 Job 才能在后台执行，已受理不等于已经开始执行。
   - **Session UI（默认）会通过事件流实时反映进展**：发起后无需手动刷新，中间栏会随后台执行追加事件、右侧审批卡片在门禁触发时自动出现、决策后运行自动继续。
   - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
-  - 需要中止时点"取消"：正在后台执行的运行会被打断并落到 `cancelled`，不会残留。
+  - 需要中止时点“取消”，然后确认运行状态是否已变为 `cancelled`。
   - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
 
 > 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
 >
-> **事件日志定位（迁移期）**：`session_events` 目前是 best-effort 的**投影**，用于会话叙事与 SSE 回放；**`workflow_instances` / `jobs` 等旧表仍是运行状态的事实源**。迁移期个别事件可能因写入失败而缺失，因此不应把 event log 当作可 100% 完整重建的权威日志。canonical event log（事务化 outbox + 投影不变量）为后续阶段规划。
+> **事件日志定位（迁移期）**：新 Session 的 `session/created`、`workflow/started`、`user/message` 三个开场事件，与 Run、必需治理 Audit 和初始 Job 一起原子受理；重试不会重复这三个事件。后续 `session_events` 仍可能因 best-effort 投影缺失，运行状态仍需结合 `workflow_instances` / `jobs` 等持久记录判断。它不是可完整重建所有运行的权威事件日志，全域事务化 outbox 仍为后续范围。
 
 ## 8. 如何判断结果是否可信
 
@@ -1267,8 +1297,9 @@ Session UI 适合：
 | ------------------------------- | ----------------------------------------------------------------------- |
 | `--template <name>`             | 使用内置模板。                                                          |
 | `--demand-file <path>`          | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。      |
-| `--dynamic`                     | 使用动态 workflow 路径。                                                |
-| `--dry-run`                     | 只预览，不执行。                                                        |
+| `--dynamic`                     | 动态 workflow 预览，必须搭配 `--dry-run`，不开放实际执行。                |
+| `--dry-run`                     | 仅支持 `--dynamic`；普通 workflow/Goal 会在初始化前拒绝。                 |
+| `--request-id <id>`             | 普通 workflow/Goal 的原意图重试标识；8–128 个字母、数字、下划线或连字符。 |
 | `--save-as <name>`              | 保存动态 workflow 预览。                                                |
 | `--timeout-ms <ms>`             | 覆盖真实 provider 外层总超时，明确长程任务可配置为 2 小时以上。         |
 | `--no-progress-timeout-ms <ms>` | 覆盖无 stdout/stderr 或受控输出目录文件进展超时，用来判断任务是否卡死。 |

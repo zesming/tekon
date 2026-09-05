@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { useQuery, useAuthScope, useSessionStream } from '../hooks/index.js';
@@ -14,6 +14,11 @@ import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { EventFeed } from '../components/sessions/EventFeed.js';
 import { SessionSidePanel } from '../components/sessions/SessionSidePanel.js';
+import {
+  AdmissionReadinessBanner,
+  admissionNeedsRecovery,
+  admissionReadinessLabel,
+} from '../components/runs/AdmissionNotice.js';
 
 // Phase 3 3b: Session Detail. The event feed is the continuous narrative;
 // the side rail contains run controls, approvals, artifacts, and result cards.
@@ -48,6 +53,15 @@ export function SessionDetailPage() {
   } = useSessionStream(sessionId);
   const liveState = useMemo(() => deriveSessionSidePanel(events), [events]);
   const session = data?.session;
+  const admissionPending = admissionNeedsRecovery(session);
+  // Opening SSE events can exist before files are ready. Only a successful
+  // authoritative snapshot may enable controls, including after refresh errors.
+  const snapshotUnavailable = !session || Boolean(error);
+  useEffect(() => {
+    if (!admissionPending) return;
+    const timer = window.setInterval(refetch, 5_000);
+    return () => window.clearInterval(timer);
+  }, [admissionPending, refetch]);
   const sidePanelState = useMemo(
     () =>
       mergeSessionSnapshotIntoSidePanel(liveState, {
@@ -69,15 +83,21 @@ export function SessionDetailPage() {
         <div>
           <h1 className="page-title">{session?.title ?? sessionId}</h1>
           <p className="page-subtitle">
-            {session ? (
+            {session && !error ? (
               <>
-                {displayedStatus ? (
+                {admissionPending && session ? (
+                  <span className="badge badge-pending badge-sm">
+                    {admissionReadinessLabel(session)}
+                  </span>
+                ) : displayedStatus ? (
                   <StatusBadge status={displayedStatus} size="sm" />
                 ) : null}
                 {session.runId ? ' · 已关联交付运行' : ''}
               </>
+            ) : error ? (
+              '受理状态待确认'
             ) : (
-              '加载中…'
+              '正在确认受理状态…'
             )}
             <span
               className={`session-conn session-conn-${connState}`}
@@ -93,6 +113,7 @@ export function SessionDetailPage() {
       </header>
 
       {error ? <ErrorBanner error={error} onRetry={refetch} /> : null}
+      {session ? <AdmissionReadinessBanner value={session} /> : null}
 
       <div className="session-columns">
         <section className="session-feed-col" aria-label="会话活动">
@@ -108,7 +129,17 @@ export function SessionDetailPage() {
           />
         </section>
         <aside className="session-side-col" aria-label="运行控制与结果">
-          <SessionSidePanel state={sidePanelState} />
+          {snapshotUnavailable ? (
+            <p className="text-muted">
+              尚未取得有效受理快照，暂不提供运行控制。
+            </p>
+          ) : admissionPending ? (
+            <p className="text-muted">
+              目录就绪前不会执行任务。当前仅可观察受理记录。
+            </p>
+          ) : (
+            <SessionSidePanel state={sidePanelState} />
+          )}
         </aside>
       </div>
     </div>

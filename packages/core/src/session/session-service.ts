@@ -1,9 +1,18 @@
+import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import {
+  type AdmissionStore,
+  type RunAdmissionEnvelope,
+  hashAdmissionEnvelope,
+  isValidRequestId,
+} from '../db/admission-store.js';
 import type { SessionEventBus } from './event-bus.js';
 import type { DurableJobRunner } from './job-runner.js';
 import type { JobRepository, SessionEventStore } from './session-store.js';
 import { isWorkflowTerminalError } from '../workflow/errors.js';
+import { RunAdmissionError } from '../workflow/admission-error.js';
 import { writeWorkflowTerminal } from '../workflow/state-machine.js';
 import type {
   WorkflowEngine,
@@ -31,6 +40,9 @@ export type SessionServiceEngineInput = unknown;
 
 export interface SessionServiceStartRunInput<TEngineInput = SessionServiceEngineInput> {
   demandText: string;
+  requestId?: string;
+  /** Trusted composition-root envelope: original references, before file resolution. */
+  requestEnvelope?: RunAdmissionEnvelope;
   /**
    * 4b: run kind. 'workflow' (default) runs a governed delivery workflow;
    * 'goal' runs the built-in single-node goal template. Orthogonal to the
@@ -51,13 +63,13 @@ export interface SessionServiceStartRunInput<TEngineInput = SessionServiceEngine
    */
   profile?: string;
   /**
-   * Hook invoked after prepareRun (runId exists) and before createSession.
-   * The web router uses it to append the `run.demand-shaped` governance
-   * audit (P0-03 approval evidence), which is intentionally NOT mapped to a
-   * session event. Rejections propagate — the audit chain must not be
-   * silently swallowed.
+   * Governance evidence inserted in the same admission transaction.
+   * Async onPrepared callbacks are not a valid atomic admission boundary.
    */
-  onPrepared?: (runId: string) => Promise<void>;
+  admissionAudits?: Array<{
+    type: string;
+    payload: Record<string, unknown>;
+  }>;
   /**
    * Canonical plan digest computed by the caller (CLI) for audit binding.
    * Web validates it in the router before startRun; CLI computes and passes
@@ -72,12 +84,17 @@ export interface SessionServiceStartRunResult {
   jobId: string;
   /** The prepared workflow instance (web maps it via mapWorkflowFromDomain). */
   workflow: WorkflowInstance;
+  requestId: string;
+  replayed: boolean;
+  admissionState: 'pending' | 'ready' | 'recovery_required';
+  detail?: string;
 }
 
 export type SessionServiceResumeResult =
   | { outcome: 'pending-decisions'; runId: string }
   | { outcome: 'terminal'; runId: string; status: WorkflowStatus }
   | { outcome: 'active-job'; runId: string }
+  | { outcome: 'recovery-required'; runId: string; lastError?: string | null }
   | {
       outcome: 'enqueued';
       runId: string;
@@ -111,6 +128,10 @@ export interface SessionServiceCancelResult {
 }
 
 export interface SessionService<TEngineInput = SessionServiceEngineInput> {
+  lookupRun(input: {
+    requestId: string;
+    requestEnvelope: RunAdmissionEnvelope;
+  }): Promise<SessionServiceStartRunResult | null>;
   startRun(
     input: SessionServiceStartRunInput<TEngineInput>,
   ): Promise<SessionServiceStartRunResult>;
@@ -134,13 +155,13 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
   bus: SessionEventBus;
   repositories: TekonRepositories;
   /**
-   * Reserved for service-emitted audit (4b/4c). In 4a the web demand-shaped
-   * audit flows through the onPrepared hook, so the service itself does not
-   * call it yet.
+   * Lifecycle audit. Admission governance events use admissionAudits inside
+   * the database transaction, never an asynchronous onPrepared callback.
    */
   audit: AuditLogger;
   /** Workspace root for getOrCreateDefaultWorkspace. */
   projectRoot: string;
+  admissionStore?: AdmissionStore;
   /**
    * Engine factory injected by the composition root. Encapsulates the
    * provider/adapter/runtime construction (web: createWebAgentRuntime +
@@ -171,95 +192,144 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
   const RUN_MODE = 'template' as const;
   const GOAL_TEMPLATE_NAME = 'goal';
 
-  async function startRun(
-    input: SessionServiceStartRunInput<TEngineInput>,
-  ): Promise<SessionServiceStartRunResult> {
-    const runKind = input.mode === 'goal' ? 'goal' : 'workflow';
-    // 4d: per-run profile override (explicit autonomy only); falls back to the
-    // composition root's default.
-    const profile = input.profile ?? SESSION_PROFILE;
-    const engine = await deps.createEngine(input.engine);
-    await deps.preflight?.();
-    // 4b: goal mode ignores any provided template/workflowSpec and uses the
-    // built-in single-node goal template (design §3.3 precedence).
-    const prepareInput: WorkflowEngineStartInput =
-      runKind === 'goal'
-        ? {
-            demandText: input.demandText,
-            mode: RUN_MODE,
-            templateName: GOAL_TEMPLATE_NAME,
-            kind: 'goal',
-            ...(input.planDigest !== undefined && input.planDigest !== ''
-              ? { planDigest: input.planDigest }
-              : {}),
-          }
-        : {
-            demandText: input.demandText,
-            mode: RUN_MODE,
-            kind: 'workflow',
-            ...(input.workflowSpec
-              ? { workflowSpec: input.workflowSpec }
-              : { templateName: input.templateName }),
-            ...(input.planDigest !== undefined && input.planDigest !== ''
-              ? { planDigest: input.planDigest }
-              : {}),
-          };
-    // prepareRun persists the run (ms-level) without running the agent.
-    const prepared = await engine.prepareRun(prepareInput);
-    const runId = prepared.runId;
+  const admissionStore = deps.admissionStore ?? repositories.admissionStore;
 
-    if (input.onPrepared) {
-      await input.onPrepared(runId);
+  async function lookupRun(input: {
+    requestId: string;
+    requestEnvelope: RunAdmissionEnvelope;
+  }): Promise<SessionServiceStartRunResult | null> {
+    if (!isValidRequestId(input.requestId)) throw new Error('REQUEST_ID_INVALID');
+    if (input.requestEnvelope.scope !== realpathSync(projectRoot)) throw new Error('REQUEST_SCOPE_MISMATCH');
+    const existing = await admissionStore.getAdmission(input.requestId);
+    if (!existing) return null;
+    if (existing.envelopeHash !== hashAdmissionEnvelope(input.requestEnvelope)) {
+      throw new Error('REQUEST_ID_CONFLICT');
     }
+    const workflow = await repositories.getWorkflowInstance(existing.runId);
+    const project = workflow ? await repositories.getProject(workflow.projectId) : null;
+    if (!workflow || project?.repoPath !== realpathSync(projectRoot)) throw new Error('REQUEST_SCOPE_MISMATCH');
+    if (!existing.sessionId || !existing.jobId) throw new Error('ADMISSION_SESSION_MISSING');
+    let admission;
+    try {
+      admission = existing.filesState === 'ready' ? existing
+        : await admissionStore.recoverAdmissionFiles(existing.requestId);
+    } catch (error) {
+      throw new RunAdmissionError(input.requestId, error, existing);
+    }
+    return {
+      requestId: admission.requestId,
+      runId: admission.runId,
+      sessionId: existing.sessionId,
+      jobId: existing.jobId,
+      workflow,
+      replayed: true,
+      admissionState: admission.filesState,
+      ...(admission.lastError ? { detail: admission.lastError } : {}),
+    };
+  }
 
-    // Create the session, then explicitly append the opening events
-    // (dual-write can't backfill them — no session existed at run.started).
-    const workspace = await sessions.getOrCreateDefaultWorkspace(projectRoot);
-    const session = await sessions.createSession({
-      workspaceId: workspace.id,
-      title: input.demandText.slice(0, 80),
-      profile,
-      runId,
-    });
-    const created = await sessions.appendEvent({
-      sessionId: session.id,
-      type: 'session/created',
-      payload: { runId, profile },
-    });
-    bus.publish(created);
-    const started = await sessions.appendEvent({
-      sessionId: session.id,
-      type: 'workflow/started',
-      payload: {
-        runId,
-        templateId:
-          runKind === 'goal'
-            ? GOAL_TEMPLATE_NAME
-            : input.workflowSpec?.id ?? input.templateName,
+  async function startRun(
+    rawInput: SessionServiceStartRunInput<TEngineInput>,
+  ): Promise<SessionServiceStartRunResult> {
+    const requestId = rawInput.requestId ?? randomUUID();
+    if (!isValidRequestId(requestId)) throw new Error('REQUEST_ID_INVALID');
+    try {
+      return await startRunWithIdentity({ ...rawInput, requestId });
+    } catch (error) {
+      if (error instanceof RunAdmissionError) throw error;
+      throw new RunAdmissionError(requestId, error);
+    }
+  }
+
+  async function startRunWithIdentity(
+    rawInput: SessionServiceStartRunInput<TEngineInput> & { requestId: string },
+  ): Promise<SessionServiceStartRunResult> {
+    if ((rawInput as { onPrepared?: unknown }).onPrepared !== undefined) {
+      throw new Error('ADMISSION_HOOK_UNSUPPORTED: use admissionAudits');
+    }
+    // Freeze the submitted intent before factory/preflight or any queue wait.
+    const input = structuredClone(rawInput);
+    const requestId = input.requestId;
+    const runKind = input.mode === 'goal' ? 'goal' : 'workflow';
+    const profile = input.profile ?? SESSION_PROFILE;
+    const { requestId: _requestId, requestEnvelope: _envelope, ...explicitIntent } = input;
+    const requestEnvelope = input.requestEnvelope ?? {
+      version: 1,
+      scope: realpathSync(projectRoot),
+      demandTextOrRef: input.demandText,
+      mode: runKind,
+      surface: 'session',
+      intent: { ...explicitIntent, mode: runKind, profile },
+    };
+    const lookupInput = { requestId, requestEnvelope };
+    try {
+      const existing = await lookupRun(lookupInput);
+      if (existing) return existing;
+      const engine = await deps.createEngine(input.engine);
+      // The legacy CLI preflight consumes the provider selected by its factory.
+      await deps.preflight?.();
+      const prepareInput: WorkflowEngineStartInput = {
+        requestId,
+        demandText: input.demandText,
         mode: RUN_MODE,
         kind: runKind,
-      },
-    });
-    bus.publish(started);
-    const userMessage = await sessions.appendEvent({
-      sessionId: session.id,
-      type: 'user/message',
-      payload: { text: input.demandText },
-      modelVisible: true,
-    });
-    bus.publish(userMessage);
-
-    const job = await jobRunner.enqueue({
-      sessionId: session.id,
-      kind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
-    });
-
-    return {
-      runId,
-      sessionId: session.id,
-      jobId: job.id,
-      workflow: prepared.workflow,
-    };
+        profile,
+        ...(runKind === 'goal' ? { templateName: GOAL_TEMPLATE_NAME }
+          : input.workflowSpec ? { workflowSpec: input.workflowSpec,
+              ...(input.templateName ? { templateName: input.templateName } : {}) }
+            : { templateName: input.templateName }),
+        ...(input.planDigest !== undefined
+          ? { planDigest: input.planDigest } : {}),
+      };
+      const prepared = engine.buildPreparedRun(prepareInput);
+      if (!prepared.providerSnapshot) throw new Error('ADMISSION_PROVIDER_REQUIRED');
+      const outcome = await admissionStore.admitRun({
+        ...prepared,
+        requestId,
+        envelopeVersion: requestEnvelope.version,
+        envelopeHash: hashAdmissionEnvelope(requestEnvelope),
+        admissionAudits: input.admissionAudits ?? [],
+        sessionData: {
+          workspaceRoot: realpathSync(projectRoot),
+          profile,
+          sessionId: `sess_${randomUUID()}`,
+          jobId: `job_${randomUUID()}`,
+          jobKind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
+        },
+      });
+      if (!outcome.sessionId || !outcome.jobId) throw new Error('ADMISSION_SESSION_MISSING');
+      // Persistent events are authoritative for this opening prefix. A failed
+      // notification cannot turn a committed admission into a fresh request.
+      for (const event of outcome.openingEvents) {
+        try { bus.publish(event); } catch { /* recover via persisted events */ }
+      }
+      return {
+        requestId: outcome.requestId,
+        runId: outcome.runId,
+        sessionId: outcome.sessionId,
+        jobId: outcome.jobId,
+        workflow: outcome.workflow,
+        replayed: outcome.outcome === 'already_admitted',
+        admissionState: outcome.filesState,
+        ...(outcome.admission.lastError ? { detail: outcome.admission.lastError } : {}),
+      };
+    } catch (error) {
+      // Another process may have won after our initial read while our own
+      // environment validation/transaction failed. Never return a loser ID.
+      try {
+        const winner = await lookupRun(lookupInput);
+        if (winner) return winner;
+      } catch (lookupError) {
+        if (lookupError instanceof Error && lookupError.message === 'REQUEST_ID_CONFLICT') {
+          throw new RunAdmissionError(requestId, lookupError);
+        }
+        if (lookupError instanceof RunAdmissionError && lookupError.runId) throw lookupError;
+        // Unreadable database: the caller retains requestId and must query or
+        // retry it, rather than interpret this as proof that no Run exists.
+      }
+      if (error instanceof RunAdmissionError) throw error;
+      throw new RunAdmissionError(requestId, error);
+    }
   }
 
   async function resumeRun(input: {
@@ -295,6 +365,33 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         return { outcome: 'pending-decisions', runId: input.runId };
       }
     }
+
+    const resolvedAdmissionStore = admissionStore;
+
+    if (resolvedAdmissionStore) {
+      const admission = await resolvedAdmissionStore.getAdmissionByRunId(input.runId);
+      if (admission && admission.filesState !== 'ready') {
+        const state = await resolvedAdmissionStore.recoverAdmissionFiles(admission.requestId);
+        if (state.filesState !== 'ready') {
+          return {
+            outcome: 'recovery-required',
+            runId: input.runId,
+            lastError: admission.lastError,
+          };
+        }
+      }
+      if (admission?.jobId && admission.sessionId) {
+        const initialJob = await jobs.get(admission.jobId);
+        if (initialJob?.status === 'queued') {
+          // This is the original durable admission, not an abandoned resume.
+          // Return its queued identity so CLI can start its runner and wait;
+          // never cancel/re-enqueue it just because the server was offline.
+          return { outcome: 'enqueued', runId: input.runId,
+            sessionId: admission.sessionId, jobId: admission.jobId };
+        }
+      }
+    }
+
     // No two active jobs per run. Reclaim queued + stale-paused jobs first.
     await jobs.cancelStaleActiveJobs(input.runId);
     // Resolve (or create) the run's session before the atomic enqueue. For a
@@ -425,5 +522,5 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     };
   }
 
-  return { startRun, resumeRun, requestPause, requestCancel };
+  return { lookupRun, startRun, resumeRun, requestPause, requestCancel };
 }

@@ -1,6 +1,6 @@
 import type { TekonDatabase } from './connection.js';
 
-const WORK_USABLE_SCHEMA_VERSION = 5;
+const WORK_USABLE_SCHEMA_VERSION = 7;
 
 function assertIntegrityOk(db: TekonDatabase): void {
   const rows = db.pragma('integrity_check') as unknown;
@@ -246,6 +246,22 @@ export function migrateDatabase(db: TekonDatabase): void {
         updated_at text not null
       );
       create index if not exists idx_jobs_status_created on jobs(status, created_at);
+
+      create table if not exists run_admissions (
+        request_id text primary key,
+        envelope_version integer not null,
+        envelope_hash text not null,
+        run_id text not null unique references workflow_instances(id) on delete restrict,
+        session_id text references sessions(id) on delete restrict,
+        job_id text references jobs(id) on delete restrict,
+        data_dir text not null,
+        files_state text not null check(files_state in ('pending', 'ready', 'recovery_required')),
+        last_error text,
+        created_at text not null,
+        updated_at text not null,
+        check((session_id is null) = (job_id is null))
+      );
+      create index if not exists idx_run_admissions_run_id on run_admissions(run_id);
 
       create table if not exists projection_checkpoints (
         session_id text not null references sessions(id) on delete cascade,

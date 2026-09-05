@@ -5,6 +5,7 @@ import {
   openTekonDatabase,
 } from '@tekon/core';
 import { test, expect } from './shared-fixture.js';
+import { createScopedFixtureRun } from '../fixtures/session-run.js';
 
 // T3 / T7: E2E test for acknowledging a failed session from the SessionsPage UI.
 
@@ -27,7 +28,7 @@ test('acknowledging a failed session clears its action badge and sinks it down',
     workspaceId: workspace.id,
     title: '失败待确认会话',
     profile: 'human-web',
-    runId: 'run_failed_1',
+    runId: createScopedFixtureRun(db, 'run_failed_1'),
   });
   await store.updateSessionStatus(failedSession.id, 'failed');
 
@@ -35,7 +36,7 @@ test('acknowledging a failed session clears its action badge and sinks it down',
     workspaceId: workspace.id,
     title: '正常运行会话',
     profile: 'human-web',
-    runId: 'run_active_1',
+    runId: createScopedFixtureRun(db, 'run_active_1'),
   });
   await store.updateSessionStatus(activeSession.id, 'active');
 

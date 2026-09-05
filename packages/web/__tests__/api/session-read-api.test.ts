@@ -11,6 +11,7 @@ import {
 } from '@tekon/core';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
+import { createScopedFixtureRun } from '../fixtures/session-run.js';
 import { createApiCaller } from '../../src/server/api/root.js';
 import {
   createWebServer,
@@ -148,7 +149,7 @@ describe('web session read API', () => {
       workspaceId: workspace.id,
       title: 'failed session',
       profile: 'human-web',
-      runId: 'run_2',
+      runId: createScopedFixtureRun(db, 'run_2'),
     });
     await store.updateSessionStatus(failed.id, 'failed');
 
@@ -156,14 +157,14 @@ describe('web session read API', () => {
       workspaceId: workspace.id,
       title: 'active session',
       profile: 'human-web',
-      runId: 'run_3',
+      runId: createScopedFixtureRun(db, 'run_3'),
     });
 
     const input = await store.createSession({
       workspaceId: workspace.id,
       title: 'input session',
       profile: 'human-web',
-      runId: 'run_4',
+      runId: createScopedFixtureRun(db, 'run_4'),
     });
     await store.updateSessionStatus(input.id, 'awaiting-input');
 
@@ -321,7 +322,7 @@ describe('session.events pagination (P1-UX-03)', () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(
       fixture.projectRoot,
@@ -330,7 +331,7 @@ describe('session.events pagination (P1-UX-03)', () => {
       workspaceId: workspace.id,
       title: 'invisible-scan-test',
       profile: 'human-web',
-      runId: 'run_events_scan',
+      runId: createScopedFixtureRun(db, 'run_events_scan'),
     });
 
     await store.appendEvent({
@@ -373,7 +374,7 @@ describe('session.events pagination (P1-UX-03)', () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(
       fixture.projectRoot,
@@ -382,7 +383,7 @@ describe('session.events pagination (P1-UX-03)', () => {
       workspaceId: workspace.id,
       title: 'events-pagination-test',
       profile: 'human-web',
-      runId: 'run_events_1',
+      runId: createScopedFixtureRun(db, 'run_events_1'),
     });
 
     for (let i = 1; i <= 5; i++) {
@@ -441,7 +442,7 @@ describe('session.events pagination (P1-UX-03)', () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    const { store, close } = openStore(fixture.projectRoot);
+    const { store, db, close } = openStore(fixture.projectRoot);
     cleanupTasks.push(close);
     const workspace = await store.getOrCreateDefaultWorkspace(
       fixture.projectRoot,
@@ -450,7 +451,7 @@ describe('session.events pagination (P1-UX-03)', () => {
       workspaceId: workspace.id,
       title: 'backward-cursor-test',
       profile: 'human-web',
-      runId: 'run_backward_cursor',
+      runId: createScopedFixtureRun(db, 'run_backward_cursor'),
     });
 
     // One visible head event, then 1500 internal events, then one visible tail.

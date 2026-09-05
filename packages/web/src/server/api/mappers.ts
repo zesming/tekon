@@ -36,7 +36,9 @@ export function mapWorkflow(
   run: WorkflowRow,
   enrich?: { db: TekonDatabase },
 ): WorkflowOutput {
+  const readiness = enrich ? admissionProjection(enrich.db, run.id) : {};
   return {
+    ...readiness,
     id: run.id,
     projectId: run.project_id,
     demandId: run.demand_id,
@@ -46,6 +48,17 @@ export function mapWorkflow(
     currentNodeId: run.current_node_id,
     createdAt: run.created_at,
     updatedAt: run.updated_at,
+  };
+}
+
+export function admissionProjection(db: TekonDatabase, runId: string | null): Pick<WorkflowOutput, 'admissionState' | 'filesState'> {
+  if (!runId) return {};
+  const admission = db.prepare('select files_state from run_admissions where run_id = ?').get(runId) as
+    { files_state: 'pending' | 'ready' | 'recovery_required' } | undefined;
+  const admissionState = admission ? (admission.files_state === 'ready' ? 'accepted' : 'recovery-required') : undefined;
+  return {
+    ...(admissionState ? { admissionState } : {}),
+    ...(admission ? { filesState: admission.files_state } : {}),
   };
 }
 

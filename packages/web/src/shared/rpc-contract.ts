@@ -57,6 +57,7 @@ export const projectRunInputSchema = z
   .object({
     demandText: z.string(),
     token: z.string().min(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, 'REQUEST_ID_INVALID').optional(),
     // 4b: 'goal' runs the built-in single-node goal template (ignores template);
     // omitted/'workflow' keeps the governed delivery-workflow path.
     mode: z.enum(['workflow', 'goal']).optional(),
@@ -89,6 +90,17 @@ export const projectRunInputSchema = z
     }
   });
 
+export const projectAdmissionInputSchema = z.object({
+  token: z.string().min(1),
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, 'REQUEST_ID_INVALID'),
+});
+
+export const projectAdmissionIntentInputSchema = z.object({
+  token: z.string().min(1),
+  // 身份查询不运行准入；真正 project.run 仍重新检查必需摘要和认证。
+  run: z.object(projectRunInputSchema.shape).omit({ token: true, requestId: true }).optional(),
+});
+
 export const projectHealthInputSchema = z
   .object({
     token: z.string().optional(),
@@ -98,6 +110,7 @@ export const projectHealthInputSchema = z
 export const projectProviderHealthInputSchema = z.object({
   token: z.string().min(1),
   provider: z.literal('dsh-headless'),
+  refresh: z.boolean().optional(),
 });
 
 export const draftShapeInputSchema = z.object({
@@ -220,6 +233,8 @@ export const apiWorkflowSchema = z
     provider: z.string().nullable(),
     status: z.string(),
     currentNodeId: z.string().nullable(),
+    admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+    filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -473,6 +488,8 @@ export const reviewEvidenceGroupSchema = z.object({
 // surface with many nested arrays. Field drift here is low-risk (read-only UI
 // data) and strict validation would be too brittle as sub-schemas evolve.
 export const workReviewSurfaceSchema = z.object({
+  admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+  filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   runId: z.string(),
   workflowStatus: z.string(),
   // Real provider recorded for the run (report §6.4/P1.4: Run Detail derived
@@ -541,6 +558,7 @@ export const projectProviderHealthOutputSchema = z.object({
   provider: z.literal('dsh-headless'),
   status: z.enum(['available', 'unavailable']),
   checkedAt: z.string(),
+  expiresAt: z.string(),
 });
 
 export const projectDetailOutputSchema = z.object({
@@ -554,6 +572,32 @@ export const runWrapperOutputSchema = z.object({
   // cancel resolve the active job. Optional so legacy shapes still validate.
   sessionId: z.string().optional(),
   jobId: z.string().optional(),
+});
+
+export const projectRunOutputSchema = runWrapperOutputSchema.extend({
+  requestId: z.string(),
+  replayed: z.boolean(),
+  admissionState: z.enum(['accepted', 'recovery-required']),
+  detail: z.string().optional(),
+});
+
+export const projectAdmissionOutputSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('not-found'), requestId: z.string() }),
+  z.object({
+    state: z.enum(['accepted', 'recovery-required']),
+    requestId: z.string(),
+    runId: z.string(),
+    sessionId: z.string().optional(),
+    jobId: z.string().optional(),
+    filesState: z.enum(['pending', 'ready', 'recovery_required']),
+    detail: z.string().optional(),
+  }),
+]);
+
+export const projectAdmissionIntentOutputSchema = z.object({
+  scope: z.string(),
+  fingerprint: z.string().optional(),
+  requestId: z.string().optional(),
 });
 
 export const projectCleanOutputSchema = z.object({
@@ -657,11 +701,13 @@ export const runPlanPhaseSummarySchema = z.object({
 });
 
 export const runPlanSchema = z.object({
+  digestVersion: z.literal(2),
+  mode: z.enum(['workflow', 'goal']),
   roleChain: z.array(z.string()),
   gates: z.array(runPlanGateSchema),
   requiresUnrestrictedNetwork: z.boolean(),
   phases: z.array(runPlanPhaseSummarySchema),
-  digest: z.string().optional(),
+  digest: z.string(),
 });
 
 export const workflowListOutputSchema = z.object({
@@ -746,6 +792,8 @@ export type SessionActionKind = z.infer<typeof sessionActionKindSchema>;
 // needsAction / actionKind projection fields.
 // Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
 export const apiSessionSchema = z.object({
+  admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+  filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   id: z.string(),
   workspaceId: z.string(),
   title: z.string().nullable(),
@@ -843,7 +891,17 @@ export const procedureSpecs = {
   'project.run': {
     auth: 'token' as const,
     input: projectRunInputSchema,
-    output: runWrapperOutputSchema,
+    output: projectRunOutputSchema,
+  },
+  'project.admission': {
+    auth: 'token' as const,
+    input: projectAdmissionInputSchema,
+    output: projectAdmissionOutputSchema,
+  },
+  'project.admissionIntent': {
+    auth: 'token' as const,
+    input: projectAdmissionIntentInputSchema,
+    output: projectAdmissionIntentOutputSchema,
   },
   'project.resume': {
     auth: 'token' as const,

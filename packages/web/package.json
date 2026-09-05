@@ -1,6 +1,6 @@
 {
   "name": "@tekon/web",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,9 +13,12 @@
   },
   "dependencies": {
     "@tekon/core": "workspace:*",
+    "@vitejs/plugin-react": "^5.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router": "^7.18.2",
+    "tsx": "^4.22.4",
+    "vite": "^7.3.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -23,10 +26,7 @@
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "tsx": "^4.22.4",
     "typescript": "^5.9.3",
-    "vite": "^7.3.5",
     "vitest": "^3.2.6"
   }
 }

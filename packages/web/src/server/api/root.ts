@@ -20,6 +20,7 @@ import {
   createWriteQueue,
   createJobRunner,
   openTekonDatabase,
+  migrateDatabase,
   runDshPreflight,
   DshHostNodeError,
   isHostNodeVersionCompatible,
@@ -44,6 +45,7 @@ import {
 } from './agents.js';
 import type { ServerContext, ApiCaller, WebRunEngineInput } from './context.js';
 import { ApiError } from './errors.js';
+import { createWebProjectScope, webProjectScope } from './queries.js';
 import {
   createArtifactRouter,
   createAuditRouter,
@@ -120,6 +122,10 @@ function createWebRunEngineFactory(deps: {
       adapter: agentRuntime.adapter,
       agentProvider: agentRuntime.provider,
       agentConfigSummary: agentRuntime.configSummary,
+      profile: input.profile,
+      timeoutMs: input.timeoutMs,
+      noProgressTimeoutMs: input.noProgressTimeoutMs,
+      progressHeartbeatMs: input.progressHeartbeatMs,
       allowDirtyBase: input.allowDirtyBase,
       canonicalPlan: plannedInput.canonicalPlan,
       planDigest: plannedInput.planDigest,
@@ -146,6 +152,7 @@ export async function createApiCaller(
   assertProjectDatabaseExists(projectContext);
 
   const db = openTekonDatabase({ filename: projectContext.dbPath });
+  migrateDatabase(db);
 
   // S6/S7a: one shared write queue serializes legacy tables, session_events,
   // jobs, and the audit hash chain. MF4: audit appends run directly on the
@@ -212,6 +219,7 @@ export async function createApiCaller(
       automation: automationExecutor,
     }),
   });
+  await repositories.admissionStore.scanAndRecoverAdmissions();
   jobRunner.start();
 
   // Automation listeners launch asynchronous work outside JobRunner. Track
@@ -322,6 +330,7 @@ export async function createApiCaller(
 
   const demandRouter = createDemandRouter(context);
   return {
+    [webProjectScope]: createWebProjectScope(db, projectContext, sessions),
     draftShape: demandRouter,
     project: createProjectRouter(context, {
       probeProvider: input.providerProbe,

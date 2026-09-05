@@ -1,6 +1,8 @@
 # Tekon 第二十三轮复审：以远端实现和可复现证据重做
 
-日期：2026-09-05。对应 [PR #11](https://github.com/zesming/tekon/pull/11)。产品版本：**0.21.0**。
+日期：2026-09-05。对应 [PR #11](https://github.com/zesming/tekon/pull/11)。原报告基线：**0.21.0**；接续整改：**0.22.0**（§11）。
+
+> 时点说明：§1–§9 保留报告作者在 `0e36f4d` 的评审结论；§10 为同步至 `6d27652` 后追加的独立复核批注，§11 记录 v0.22.0 的实施与最新验收。阅读当前状态请先看 §11，勿把历史未修复判断与接续结果混读。
 
 | 快照 | 本轮实际核验结果 |
 | --- | --- |
@@ -11,7 +13,7 @@
 | 文档提交 | 本报告绑定上面的代码快照；包含报告自身的最终 Head 与 Checks 由 PR 展示，不制造自引用 |
 | DSH tested pin | `0.1.2-alpha.3`，本轮没有升级 |
 
-**结论：不能给出“整仓无问题通过”。本轮确认并修复三个具体缺陷，修复提交的自动化门禁全部成功；RunPlan 的执行字段绑定、原子且幂等的启动仍有重要缺口。** Deliver 可以按明确限制进行工程试用，但不能由测试全绿推导为稳定持续协作产品验收通过。
+**原报告结论（§1–9 时点）：不能给出“整仓无问题通过”。当时已修复三个具体缺陷，但 RunPlan 执行字段绑定、原子且幂等的启动仍有重要缺口。** 这两个缺口的 v0.22.0 修复与验收见 §11。Deliver 可以按明确限制进行工程试用，不能由测试全绿推导为稳定持续协作产品验收通过。
 
 此前对话中“第二十三轮已推送”、不存在的下载文件、错误的 v0.20.6 定位及所谓 `onWarn` 已修复，均不作为证据。本报告替代那次未交付结论；本轮实际修改不包含 `onWarn`。
 
@@ -34,7 +36,7 @@
 
 ## 2. 本轮用户整改：应当关闭的旧结论
 
-1. **物理清理已停用。** Web `project.clean` 完成认证、确认参数和 scope 校验后记录 `project.clean.suspended`，再返回 409；审计失败返回固定 500。CLI `tekon clean` 不再删除 worktree。短期误删入口已关闭，完整 export/retention/purge 留在 #18。不能继续写“仍在裸删除”。依据：[项目路由][S2]、[CLI clean][S16]。
+1. **物理清理已停用。** Web `project.clean` 完成认证、确认参数和 scope 校验后记录 `project.clean.suspended`，再返回 409；审计失败返回固定 500。CLI `tekon clean` 不再删除 worktree。短期误删入口已关闭，完整 export/retention/purge 留在 #18。不能继续写“仍在裸删除”。依据：[项目路由][S2]、[CLI status（clean 停用）][S16]。
 2. **顶层 planDigest 已接线。** SessionService 将非空值传入 prepareRun，Engine 在目录、数据库和 Audit 写入前检查 input/options/canonical digest 一致性。旧的“死参数”结论关闭；独立 snapshot 与执行计划的完整绑定仍未关闭。依据：[SessionService][S7]、[Engine][S6]。
 3. **凭据检查不再等待 DSH。** `project.health` 与受认证的 `project.providerHealth` 分开，后者有 60 秒 TTL、128 个已完成结果的缓存上限和同 key single-flight。TopBar 异步获取 Provider 状态；这是实际 UX 改善，不应回退为“仍耦合”。依据：[项目路由][S2]、[Provider health][S17]、[TopBar][S11]。
 4. **Node floor 已精确化。** `20.19.0 / 22.12.0 / 22.19.0 / 24.x` 与解析版本断言一致。通过这些 runner 只证明这个集合，不证明开放 engines 上界中的全部版本。依据：[CI][S14]。
@@ -169,6 +171,110 @@ ACP 的取消是协议交互，不是收到 UI 点击就可判定完成；应验
 建议后续只推进三个可验收工作包：**先补 RunPlan 可执行字段与 snapshot 校验；再做原子/幂等启动和明确重试结果；最后选一个 Provider 完成最小持久协作纵向链路。** Runtime 隔离、导出与支持平台按这些链路的真实需求补齐，不把所有架构愿望都前置为一个巨型重构。
 
 最终状态：三处缺陷已修复且代码 CI 全绿；R23-04/R23-05 保留 P1；整体评审仍有问题，不作无条件通过。未执行 merge、release、deploy 或仓库规则变更。
+
+## 10. 接续复核批注与整改裁决（2026-09-05）
+
+### 10.1 同步事实与独立复核
+
+本次实际 fast-forward 到 `6d276527f48874b46c06eb5b2e68a1757f077e01`；DSH 已 fetch，HEAD 与 origin/master 均为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`，没有新增上游提交。独立 subagents 分别追踪计划/恢复、启动事务、前端/供应链；不是将作者自检改称独立评审。
+
+| 事项 | 独立证据 | 判断与动作 |
+| --- | --- | --- |
+| R23-01 | 源码拒绝分支位于路径/初始化前；当前本地 CLI dist 仍是同步前构建，直接跑新 e2e 得到 2/2 失败 | 源码修复合理；旧 dist 失败不是 src 缺陷，必须重建后重新验证；不能记录为已通过 |
+| R23-02/03 | 定向 Web 四文件共 22/22 通过：credential rotation、query-cache-flight/scope、provider health | 接受这三项局部修复；它们不等于完整请求生命周期已闭环 |
+| R23-04 | 源码探针得到 commandRef build→test：摘要相同、ExecutionPlan 不同；workflow→goal 摘要相同；嵌套 env.digest 被 canonicalJson 丢弃 | 根因是规范化投影缺字段，不是 hash 碰撞；v2 必须绑定完整模板且仅排除顶层 digest |
+| 请求迟到写入 | 真实 React/useQuery/QueryCache 的隔离 Chromium 复现：A1 pending→卸载并清 scope→A2 fresh→A1 resolve/reject，页面及缓存分别变 stale/stale-error | R23-03 残余缺陷成立；共享请求必须拥有缓存发布权，组件 generation 单独不足 |
+| Provider 可见性 | TopBar 未使用 provider query 的 error/isLoading；详情只有 token 管理 | 有效凭据不降级是正确边界，但 Provider 检查失败必须独立可见并可重试 |
+| 运行依赖审计 | CLI ui 启动 tsx；Web index 固定启用 Vite；vite config 加载 React plugin，而三者均在 devDependencies | 生产审计集合漏掉实际启动链；调整依赖归类，不声称发现具体漏洞 |
+| dry-run 文档 | 主用户手册参数表仍把单独 --dry-run 描述为“只预览，不执行” | 这是尚未同步的用户合同，补充仅 dynamic 支持及普通/Goal 拒绝语义 |
+
+这组结果不是全功能验收；未以旧构建运行的失败充当当前实现证据，也未把隔离 React 复现写成真实 Tekon 页面验收。
+
+### 10.2 对 R23-04 的补充理由
+
+源码位置：[RunPlan][S5]、[Engine][S6]、[ExecutionPlan][S19] 仍适用；追加复核发现两个必须同时处理的边界：
+
+- prepareRun 在多次 await 写入之后才 templateToPlan，直接 Core 调用者可在等待期间改写传入 workflowSpec。必须在首个异步边界之前深拷贝并固定执行事实，而不只是“Web YAML 只读一次”。
+- executePreparedRun/resumeRun 读取独立节点，不检查 snapshot/digest。恢复应核验初始节点与有审计来源的合法派生返工节点；不能把合法 rework 当损坏，也不能按名字前缀放行任意节点。
+- Web Goal 预览可读取项目同名 override，实际 SessionService 固定内置 goal，且提交曾忽略 Goal digest。统一内置来源，并校验所有收到的 digest；旧 API 无 digest 的兼容调用不冒充用户已确认预览。
+- 历史 v1 摘要使用冻结算法，只能验证旧投影；无快照旧 Run 保留已有恢复能力。未知/缺损 v2 拒绝而非降级。不批量重算历史或套用当前模板。
+
+建议已纳入 [执行方案 HTML](../superpowers/plans/2026-09-05-twenty-third-review-remediation-plan.html) 的 §3；完整 demand/base/Provider/权限证据绑定仍留在 #20，不因模板切片完成而关闭整个 issue。
+
+### 10.3 对 R23-05 的方案取舍
+
+事实：当前启动文件副作用仅为创建空 Run 目录；SQLite 使用 better-sqlite3，同步事务不能包裹现有 async repository 链；共享 write queue 内再次 await 同一队列会自死锁。依据：[SessionService][S7]、[Engine][S6]、[WriteQueue](https://github.com/zesming/tekon/blob/6d276527f48874b46c06eb5b2e68a1757f077e01/packages/core/src/db/write-queue.ts)。
+
+据此选择：纯 PreparedRun → 单个同步 admission 事务 → 目录幂等就绪 → Job 可认领。Demand/Run/Provider/Plan/治理 Audit/Session/opening events/Job/requestId 同事务；Bus 提交后发布；目录失败保留稳定身份并阻止执行。用持久 requestId 和规范化原始请求信封解决响应丢失重试，锁内复查保证跨进程唯一性。
+
+重放必须在重新读取模板/需求文件、clean-base 和 Provider preflight 之前查找。否则首次已受理后环境变化会把安全重试误判成新请求失败。未就绪 Job 也不能被现有 stale cleanup/resume 当孤儿替换；恢复不能复活已取消 Run。SQLite 事务不覆盖 Git/外部命令，不能据此宣称整个 runtime 恰好一次执行。
+
+### 10.4 本轮范围与后续边界
+
+本轮按四个工作包实施：RunPlan 执行绑定、原子/幂等受理与恢复、前端请求/状态闭环、实际运行依赖审计。两个发起入口共享请求身份和错误处理，保留简单/高级不同视觉层级；不以代码重复本身要求巨型表单重构。
+
+DSH 最新 tag 的 SessionHandle、单写者锁及 v2 Session 格式是后续输入，不代表当前 one-shot Adapter 已获得持久协作；tested pin 继续 `0.1.2-alpha.3`。ACP、单一执行 owner、quiescent shutdown、全域 outbox、导出保留/删除和 Provider 统一准入继续按原报告 issue 跟踪。它们尚未完成，不把“本轮问题切片放行”写成“长期产品全部验收通过”。
+
+以上记录方案进入评审时的判断；接续实施与验收见 §11。原 §1–9 的未完成判断保留为历史快照，不代表 v0.22.0 的最新状态。
+
+## 11. 接续实施与验收（v0.22.0）
+
+### 11.1 实际变更与逐项裁决
+
+基线仍为 `6d27652`，根/Core/CLI/Web 版本同步至 `0.22.0`。新增请求身份、恢复状态和重试行为属于 MINOR；DSH tested pin 不变。方案已经两轮最高等级独立技术 review 与文档 review，随后按测试先行实施。
+
+| 报告事项 | 本轮结果与证据 | 保留边界 |
+| --- | --- | --- |
+| R23-01 | 普通/Goal `--dry-run` 真进程拒绝且零初始化；手册改为仅 `--dynamic --dry-run` 预览 | dynamic 预览不承诺零初始化；不能附受理 requestId |
+| R23-02 | 凭据每次读取当前配置；Provider 独立请求、错误、检查时间与重试；真实 Auth A→B→A 成功/失败乱序旅程通过 | 不声称取消了旧网络请求 |
+| R23-03 | QueryCache 按请求代数限制发布；旧 success/error/finally 无权覆盖新请求；两个消费者的 unsubscribe 定向测试 | 单消费者卸载证据是订阅取消测试，不冒充完整 React 卸载旅程 |
+| R23-04 | RunPlan v2 绑定完整模板与 mode；混源输入、独立 snapshot、持久节点和合法 rework/repair 均校验；实际模板 alias 的 HTTP 与 Core 恢复回归通过 | v1 仅验证冻结旧投影；无快照历史兼容。#20 的完整需求/base/Provider/权限绑定未关闭 |
+| R23-05 | 同 SQLite 事务持久化受理身份、计划、治理 Audit、Session、三个 opening events 与初始 Job；目录后置恢复；同信封查重与跨进程唯一受理 | 不等于外部命令/Git 恰好执行一次；DB 不可读时只能报告状态待确认 |
+| 迟到响应与状态 | 简单/高级入口共享持久 requestId 账本；丢响应、刷新、not-found、延迟意图准备与凭据切换、过期计划均有真实浏览器回归；accepted 事实保持单调 | sessionStorage 不保存正文/token，不支持跨浏览器恢复原意图正文 |
+| 调度与身份 | pending/recovery Job 不可 claim、不被 stale 清理；execute/resume 无副作用拒绝；恢复保留初始 Job，取消不复活；Core/Session/CLI/Web 故障保留已验证赢家 ID | 开始事件不等于目录已就绪或 Agent 已执行 |
+| 仓库作用域 | canonical 物理根与历史 alias 一致读取；Session/RPC/SSE 越仓库拒绝，同物理 Workspace 聚合保留旧身份；真实 HTTP/SSE 六项通过 | 不把别的物理仓库加入当前 scope |
+| 供应链 | `tsx`、`vite`、React plugin 按真实 `tekon ui` 启动链归为生产依赖；manifest/lock 分类测试与生产 audit 通过 | 保留已有依赖升级，不将其宣称为本轮新发现的漏洞修复 |
+
+关键测试源码：[`admission-store.test.ts`](../../packages/core/__tests__/db/admission-store.test.ts)、[`run-plan-integrity.test.ts`](../../packages/core/__tests__/workflow/run-plan-integrity.test.ts)、[`execution-plan-integrity.test.ts`](../../packages/core/__tests__/workflow/execution-plan-integrity.test.ts)、[`admission-readiness.test.ts`](../../packages/core/__tests__/session/admission-readiness.test.ts)、[`run-request-id.e2e.test.ts`](../../packages/cli/__tests__/e2e/run-request-id.e2e.test.ts)、[`http-run-admission.test.ts`](../../packages/web/__tests__/api/http-run-admission.test.ts)、[`http-physical-scope.test.ts`](../../packages/web/__tests__/api/http-physical-scope.test.ts)、[`run-admission-recovery.e2e.test.ts`](../../packages/web/__tests__/e2e/run-admission-recovery.e2e.test.ts)。
+
+### 11.2 独立审阅中发现并修复的问题
+
+代码与测试均由未实施对应改动的最高等级 subagent 复核，必须修复项先补反向测试、修复、再复查：
+
+- Store：根路径预先 symlink 重定向、数组 descriptor/prototype 绕过；真实多进程 Audit/幂等与故障注入继续通过。
+- 计划：真实旧 v1 快照没有内嵌 digest；模板文件名与内部 ID 不同时 alias 不应丢失。新增红测后修复，最终定向 144 项通过。
+- 前端：真实 opening SSE 先于权威快照不能开放控制；POST accepted 后迟到 lookup 不得降级事实或重写待确认账本。
+- 整合：默认生成 requestId 的异常不能丢身份；初查后失败要查询并发赢家；显式空 digest 必须拒绝；Web 物理作用域需覆盖历史 alias 与 SSE。
+- CLI：相对文件真实 cwd 优先读取与信封必须一致；绝对引用中的 symlink/`..` 不得被词法折叠成另一文件的同一请求。测试证明原文件删除可原键重放，而改变实际引用会冲突。
+- 错误分类：提交前的可信 Provider `ApiError` 保留 400 分类；提交后错误优先保留持久 ID，并过滤底层数据库错误文本。
+
+### 11.3 验收事实与边界
+
+本地环境为 Linux、Node `22.16.0`、pnpm `10.12.1`。最后一次 `pnpm test --run` 全仓 **169 文件、1878 项通过、0 失败、1 项条件跳过**；跳过的是未提供真实 DSH 可执行文件的 live contract，不计入通过数。最后一次 `CI=1 pnpm --filter @tekon/web exec playwright test` 全套 **78/78 通过，无重试通过项**。全包构建、全包 typecheck、生产依赖 audit（零已知漏洞）、冻结 lockfile 离线校验均通过。CLI 真进程、真实 HTTP/SSE、Core/Session、调度与故障恢复定向证据均纳入相应全量测试，不把这些数字另行相加成更多覆盖。
+
+全量验收曾检出两类旧夹具问题：Session read/ack 和浏览器 ack 用例引用不存在的 Run，新增 scope 校验正确拒绝。现补齐同仓库真实 Run 关系，保留原业务断言，未放宽权限。UI 验收还实际发现并修复 320px 连接面板越界、320/390px Run 状态被挤成竖排；修复前分别有浏览器越界与文字 7 行/3 行的反向证据，修复后四宽度与全套重新通过。测试的面积取整、Flex 合法 stretch 误判也按真实几何原因修正，未删除针对根因的断言。
+
+本轮没有进行新的真实 DSH L2/L3、Windows/macOS、跨机器负载或生产故障演练；故障证据来自可重复的本地 SQLite/文件系统/子进程退出注入。目录逐组件检查不防御拥有目录写权限者在调用间主动换链的 OS TOCTOU；无密钥 Audit 链不防御全库写权限者重写全部历史。
+
+ACP、常驻单一执行 owner、quiescent shutdown、全域 outbox/event sourcing、完整 export/retention/purge、统一 Provider capability/准入及持续协作仍未实现。这是原报告明确的后续主线，不以本轮切片完成宣称全产品生产就绪。没有执行合入、发布、部署或仓库规则修改。
+
+### 11.4 UI 原始截图与交付范围
+
+最终 Chromium 静态生产页面在 320/390/700/1440px 的 28 张完整 PNG 已归档。主代理检查了各状态的版面、关键文案和控件，并对修复后的 320/390px Run Header 原图再次目视；关键控件无横向越界、意外交叠或不可达。几何断言覆盖完整页面表面，表格自身保留设计内的横向滚动。截图中的故障状态由受控 RPC 响应构造，Session opening 来自真实 SQLite/SSE；它们是 UI 呈现证据，不代替数据库故障测试或真实模型交付评估。
+
+| 状态 | 320 | 390 | 700 | 1440 |
+| --- | --- | --- | --- | --- |
+| Provider 检查失败 | [320px](assets/r23-v0.22.0/320-topbar-provider-error.png) | [390px](assets/r23-v0.22.0/390-topbar-provider-error.png) | [700px](assets/r23-v0.22.0/700-topbar-provider-error.png) | [1440px](assets/r23-v0.22.0/1440-topbar-provider-error.png) |
+| 简单入口·受理待确认 | [320px](assets/r23-v0.22.0/320-simple-unknown.png) | [390px](assets/r23-v0.22.0/390-simple-unknown.png) | [700px](assets/r23-v0.22.0/700-simple-unknown.png) | [1440px](assets/r23-v0.22.0/1440-simple-unknown.png) |
+| 高级入口·需恢复 | [320px](assets/r23-v0.22.0/320-advanced-recovery.png) | [390px](assets/r23-v0.22.0/390-advanced-recovery.png) | [700px](assets/r23-v0.22.0/700-advanced-recovery.png) | [1440px](assets/r23-v0.22.0/1440-advanced-recovery.png) |
+| Session·目录未就绪 | [320px](assets/r23-v0.22.0/320-session-unready.png) | [390px](assets/r23-v0.22.0/390-session-unready.png) | [700px](assets/r23-v0.22.0/700-session-unready.png) | [1440px](assets/r23-v0.22.0/1440-session-unready.png) |
+| Session·快照错误 | [320px](assets/r23-v0.22.0/320-session-error.png) | [390px](assets/r23-v0.22.0/390-session-error.png) | [700px](assets/r23-v0.22.0/700-session-error.png) | [1440px](assets/r23-v0.22.0/1440-session-error.png) |
+| Run·目录未就绪 | [320px](assets/r23-v0.22.0/320-run-unready.png) | [390px](assets/r23-v0.22.0/390-run-unready.png) | [700px](assets/r23-v0.22.0/700-run-unready.png) | [1440px](assets/r23-v0.22.0/1440-run-unready.png) |
+| Run·快照错误 | [320px](assets/r23-v0.22.0/320-run-error.png) | [390px](assets/r23-v0.22.0/390-run-error.png) | [700px](assets/r23-v0.22.0/700-run-error.png) | [1440px](assets/r23-v0.22.0/1440-run-error.png) |
+
+主用户手册原版式保留，14 组本轮中英内容与切换显隐检查通过、无页面脚本错误；历史章节仍以中文为主。README、CHANGELOG、手册、当前评审入口及本方案/报告 HTML 已同步。AGENTS 和安装/更新脚本未修改：本轮没有规则或安装流程变化，因此不触发安装脚本专项 smoketest。
+
+代码/测试与文档独立复查未检出必须修复项。本轮只交付已验收的整改切片，保留 §11.3 的未测与未实现范围；不关闭整个 #20 或宣称全域执行恰好一次。本轮提交沿用原 PR #11 分支，最终 Head 与远端 Checks 以该 PR 的实际状态为准，不能用原报告旧 CI 冒充本轮结果。只清理本轮浏览器临时输出和目视拼图，原始 PNG 留在本报告资源目录，不删除历史运行数据。
 
 ## 依据索引
 

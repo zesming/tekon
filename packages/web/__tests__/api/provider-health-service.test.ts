@@ -3,6 +3,48 @@ import { describe, expect, it, vi } from 'vitest';
 import { createProviderHealthService } from '../../src/server/api/provider-health.js';
 
 describe('provider health cache and single-flight', () => {
+  it('returns server expiry and all callers join an explicit refresh already in progress', async () => {
+    let now = 1_000;
+    let release!: (status: 'unavailable') => void;
+    const probe = vi
+      .fn<() => Promise<'available' | 'unavailable'>>()
+      .mockResolvedValueOnce('available')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+    const service = createProviderHealthService({
+      probe,
+      now: () => now,
+      ttlMs: 60_000,
+    });
+    const input = {
+      scope: 'repo-a',
+      tokenHash: 'hash-a',
+      provider: 'dsh-headless' as const,
+    };
+    const first = await service.check(input);
+    expect(first.checkedAt).toBe(new Date(1_000).toISOString());
+    expect(first.expiresAt).toBe(new Date(61_000).toISOString());
+    now = 5_000;
+    const refresh = service.check({ ...input, refresh: true });
+    const repeat = service.check({ ...input, refresh: true });
+    const ordinary = service.check(input);
+    release('unavailable');
+    const results = await Promise.all([refresh, repeat, ordinary]);
+    expect(results.every((result) => result.status === 'unavailable')).toBe(
+      true,
+    );
+    expect(
+      results.every(
+        (result) => result.expiresAt === new Date(65_000).toISOString(),
+      ),
+    ).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
   it('deduplicates concurrent probes and caches unavailable results', async () => {
     let release!: () => void;
     const probe = vi.fn(

@@ -691,7 +691,8 @@ export function createJobRepository(
                  (status = 'queued' and created_at < @cutoff)
                  or (status = 'paused' and lease is not null and lease < @cutoff)
                )
-               and (@exceptJobId is null or id != @exceptJobId)`,
+               and (@exceptJobId is null or id != @exceptJobId)
+               and session_id not in (select s.id from sessions s join run_admissions a on a.run_id = s.run_id where a.files_state != 'ready')`,
           )
           .run({ now: now(), runId, cutoff, exceptJobId: exceptJobId ?? null });
         return result.changes;
@@ -708,9 +709,12 @@ export function createJobRepository(
         // 错回上一个 job)。
         const target = db
           .prepare(
-            `select id from jobs
-             where status = 'queued'
-             order by created_at asc, id asc
+            `select j.id from jobs j
+             left join sessions s on s.id = j.session_id
+             left join run_admissions a on a.run_id = s.run_id
+             where j.status = 'queued'
+               and (a.files_state is null or a.files_state = 'ready')
+             order by j.created_at asc, j.id asc
              limit 1`,
           )
           .get() as { id: string } | undefined;

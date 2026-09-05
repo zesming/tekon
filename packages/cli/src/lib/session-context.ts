@@ -114,6 +114,10 @@ function createCliRunEngineFactory(deps: {
       adapter: agentRuntime.adapter,
       agentProvider: agentRuntime.provider,
       agentConfigSummary: agentRuntime.configSummary,
+      profile: 'cli',
+      timeoutMs: input.runtime?.timeoutMs,
+      noProgressTimeoutMs: input.runtime?.noProgressTimeoutMs,
+      progressHeartbeatMs: input.runtime?.progressHeartbeatMs,
       allowDirtyBase: input.allowDirtyBase,
       canonicalPlan: input.canonicalPlan,
       planDigest: input.planDigest,
@@ -145,6 +149,7 @@ export async function withCliSessionContext<T>(
     // and the audit hash chain (mirrors web root.ts).
     const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
     const repositories = createRepositories(db, writeQueue);
+    await repositories.admissionStore.scanAndRecoverAdmissions();
     const audit = createAuditLogger({ repositories, db, writeQueue });
     const sessions = createSessionEventStore(db, writeQueue);
     const jobs = createJobRepository(db, writeQueue);

@@ -10,6 +10,8 @@ let mockHealthData:
 let mockProviderHealthData:
   | { provider: 'dsh-headless'; status: 'available' | 'unavailable' }
   | undefined = undefined;
+let mockProviderLoading = false;
+let mockProviderError: Error | null = null;
 
 vi.mock('react-router', () => ({
   useLocation: () => mockLocation,
@@ -27,8 +29,10 @@ vi.mock('../../src/client/hooks/use-query.js', () => ({
     data: key?.includes('project.providerHealth')
       ? mockProviderHealthData
       : mockHealthData,
-    loading: false,
-    error: null,
+    isLoading: key?.includes('project.providerHealth')
+      ? mockProviderLoading
+      : false,
+    error: key?.includes('project.providerHealth') ? mockProviderError : null,
     refetch: vi.fn(),
   }),
 }));
@@ -101,5 +105,25 @@ describe('TopBar credential status (SUG-2 / P1-HEALTH-01)', () => {
 
     const html = renderToStaticMarkup(React.createElement(TopBar, {}));
     expect(html).not.toContain('dsh-headless不可用');
+  });
+
+  it('does not show a previous unavailable result while rechecking or after a check failure', () => {
+    mockToken = 'session-valid-token';
+    mockHealthData = { credential: 'valid' };
+    mockProviderHealthData = {
+      provider: 'dsh-headless',
+      status: 'unavailable',
+    };
+    mockProviderLoading = true;
+    const checking = renderToStaticMarkup(React.createElement(TopBar, {}));
+    expect(checking).toContain('aria-label="连接凭据：有效"');
+    expect(checking).not.toContain('dsh-headless不可用');
+    mockProviderLoading = false;
+    mockProviderError = new Error('secret provider path');
+    const failed = renderToStaticMarkup(React.createElement(TopBar, {}));
+    expect(failed).toContain('aria-label="连接凭据：有效"');
+    expect(failed).not.toContain('dsh-headless不可用');
+    expect(failed).not.toContain('secret provider path');
+    mockProviderError = null;
   });
 });

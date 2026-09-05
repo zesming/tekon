@@ -20,6 +20,7 @@ export async function commandStatus(
       }
       const gates = await repositories.listGateResults(runId);
       const artifacts = await repositories.listArtifacts(runId);
+      const admission = await repositories.admissionStore.getAdmissionByRunId(runId);
       const pendingHuman = (
         await repositories.listHumanDecisions(runId)
       ).filter((decision) => decision.status === 'pending');
@@ -32,6 +33,11 @@ export async function commandStatus(
           `gates=${gates.length}`,
           `artifacts=${artifacts.length}`,
           `pendingHumanDecisions=${pendingHuman.length}`,
+          ...(admission ? [
+            `admission=${admission.filesState === 'ready' ? 'accepted' : 'recovery-required'}`,
+            `filesState=${admission.filesState}`,
+            `requestId=${admission.requestId}`,
+          ] : []),
         ].join(' ') + '\n',
       );
     },

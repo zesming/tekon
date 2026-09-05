@@ -346,6 +346,14 @@
   align-items: center;
 }
 
+@media (max-width: 768px) {
+  .topbar-connection {
+    /* Keep the right-anchored panel inside the viewport when this item wraps
+       onto another row or its status label becomes shorter. */
+    margin-left: auto;
+  }
+}
+
 .connection-status-btn {
   display: inline-flex;
   align-items: center;

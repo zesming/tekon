@@ -8,6 +8,8 @@ import {
 import {
   agentRequiresUnrestrictedNetwork,
   computeRunPlanDigest,
+  computeRunPlanDigestV1,
+  projectRunPlanPreview,
   projectRunPlan,
 } from "../../src/workflow/run-plan.js";
 
@@ -220,8 +222,11 @@ describe("computeRunPlanDigest", () => {
 
     // Property order permutation should produce identical digest
     const reordered = {
+      template: plan.template,
       phases: plan.phases,
+      mode: plan.mode,
       gates: plan.gates,
+      digestVersion: plan.digestVersion,
       requiresUnrestrictedNetwork: plan.requiresUnrestrictedNetwork,
       roleChain: plan.roleChain,
       agent: plan.agent,
@@ -289,5 +294,64 @@ describe("computeRunPlanDigest", () => {
     // Change templateVersion
     const versionModified = { ...basePlan, templateVersion: 2 };
     expect(computeRunPlanDigest(versionModified)).not.toBe(baseDigest);
+  });
+  it("changes digest when gate.commandRef is changed (e.g. build to test)", () => {
+    const template1 = loadBuiltInWorkflowTemplate("bugfix");
+    const template2 = JSON.parse(JSON.stringify(template1));
+    const gate1 = template1.phases.flatMap(p => p.nodes).flatMap(n => n.gates).find(g => g.type === "build");
+    const gate2 = template2.phases.flatMap(p => p.nodes).flatMap(n => n.gates).find(g => g.type === "build");
+    expect(gate1).toBeDefined();
+    expect(gate2).toBeDefined();
+    gate1!.commandRef = "build";
+    gate2!.commandRef = "test";
+    const plan1 = projectRunPlan(template1, { agent: "codex" });
+    const plan2 = projectRunPlan(template2, { agent: "codex" });
+    expect(plan1.digest).not.toBe(plan2.digest);
+  });
+
+  it("preserves nested properties named digest in v2 (e.g. command.env.digest)", () => {
+    const template1 = loadBuiltInWorkflowTemplate("bugfix");
+    const template2 = JSON.parse(JSON.stringify(template1));
+    template1.phases[0].nodes[0].gates.push({
+      ...template1.phases[0].nodes[0].gates[0],
+      type: "build",
+      command: { tool: "node", args: ["build.js"], env: { digest: "digest_value_1" } },
+    });
+    template2.phases[0].nodes[0].gates.push({
+      ...template2.phases[0].nodes[0].gates[0],
+      type: "build",
+      command: { tool: "node", args: ["build.js"], env: { digest: "digest_value_2" } },
+    });
+    const plan1 = projectRunPlan(template1, { agent: "codex" });
+    const plan2 = projectRunPlan(template2, { agent: "codex" });
+    expect(plan1.digest).not.toBe(plan2.digest);
+  });
+
+  it("freezes v1 legacy recursive exclude behavior and produces fixed vector", () => {
+    const legacyPayload = {
+      digest: "top_level_digest",
+      fieldA: "hello",
+      nested: {
+        digest: "nested_digest_should_be_stripped_in_v1",
+        fieldB: 42,
+      },
+    };
+    const v1Digest = computeRunPlanDigestV1(legacyPayload);
+    expect(v1Digest).toBe("6ef1e5a8b72ec49167e6a3244df20f609f961b0fc8af5706e3a9675525f7c39a");
+  });
+});
+
+describe("projectRunPlanPreview", () => {
+  it("returns only whitelisted preview fields and excludes template, command args and env", () => {
+    const template = loadBuiltInWorkflowTemplate("bugfix");
+    const plan = projectRunPlan(template, { agent: "codex", mode: "workflow" });
+    const preview = projectRunPlanPreview(plan);
+    expect(preview.digest).toBe(plan.digest);
+    expect(preview.digestVersion).toBe(2);
+    expect(preview.mode).toBe("workflow");
+    expect(preview.roleChain).toEqual(plan.roleChain);
+    expect(preview.gates).toEqual(plan.gates);
+    expect(preview.phases).toEqual(plan.phases);
+    expect((preview as any).template).toBeUndefined();
   });
 });

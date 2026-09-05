@@ -20,6 +20,7 @@ import {
   openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
+import { validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
 
 describe('workflow engine changes-requested rework e2e', () => {
   const tempDirs: string[] = [];
@@ -44,6 +45,7 @@ describe('workflow engine changes-requested rework e2e', () => {
       const audit = createAuditLogger({ repositories });
       const gateway = createCommandGateway({ repositories });
       const mock = createMockAgentAdapter();
+      let pauseRequested = false;
 
       const observedGateCalls: Array<{
         nodeId: string;
@@ -73,9 +75,11 @@ describe('workflow engine changes-requested rework e2e', () => {
           observedGateCalls,
         ),
         worktreeManager: createWorktreeManager({ repositories, gateway }),
+        isPauseRequested: () => pauseRequested,
+        onNodeCheckpoint: async nodeId => { if (nodeId.endsWith('_reviewer-node')) pauseRequested = true; },
       });
 
-      const result = await engine.startRun({
+      let result = await engine.startRun({
         demandText: 'changes-requested rework 测试',
         mode: 'template',
         workflowSpec: {
@@ -168,6 +172,13 @@ describe('workflow engine changes-requested rework e2e', () => {
         },
       });
 
+      expect(result.workflow.status).toBe('paused');
+      const verified = await validateAndBuildExecutionPlan(result.runId, repositories, audit);
+      expect(verified.phases[0].nodes.map(node => node.id)).toEqual([
+        `${result.runId}_rd-node`, `${result.runId}_rd-node_rework_1`,
+      ]);
+      pauseRequested = false;
+      result = await engine.resumeRun(result.runId);
       // ── Overall: workflow passed ──
       expect(result.workflow.status).toBe('passed');
 

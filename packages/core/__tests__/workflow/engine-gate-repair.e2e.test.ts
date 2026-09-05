@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createAuditLogger,
@@ -14,6 +14,8 @@ import {
   openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
+import { validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
+import { createGateEngine } from '../../src/gate/engine.js';
 
 describe('workflow engine gate repair e2e', () => {
   const tempDirs: string[] = [];
@@ -31,6 +33,7 @@ describe('workflow engine gate repair e2e', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
+    let pauseRequested = false;
 
     // Phase 2 S3 (review S1): capture agent-loop events so we can prove the
     // gate-repair agent execution also emits step events (not just node/rework).
@@ -52,9 +55,11 @@ describe('workflow engine gate repair e2e', () => {
       adapter: createMockAgentAdapter(),
       gateEngine: createFailOnceGateEngine(repositories),
       agentEventSink,
+      isPauseRequested: () => pauseRequested,
+      onNodeCheckpoint: async nodeId => { if (nodeId.endsWith('_rd-code')) pauseRequested = true; },
     });
 
-    const result = await engine.startRun({
+    let result = await engine.startRun({
       demandText: '触发 gate repair',
       mode: 'template',
       workflowSpec: {
@@ -147,6 +152,15 @@ describe('workflow engine gate repair e2e', () => {
       },
     });
 
+    expect(result.workflow.status).toBe('paused');
+    const verified = await validateAndBuildExecutionPlan(result.runId, repositories, audit);
+    expect(verified.phases.flatMap(phase => phase.nodes).some(node => node.id.startsWith('repair_'))).toBe(false);
+    const events = await repositories.listAuditEvents(result.runId);
+    expect(events.filter(event => event.type === 'gate.repair.intent')).toHaveLength(1);
+    expect(events.filter(event => event.type === 'gate.repair.created')).toHaveLength(1);
+    expect(events.findIndex(event => event.type === 'gate.repair.intent')).toBeLessThan(events.findIndex(event => event.type === 'gate.repair.created'));
+    pauseRequested = false;
+    result = await engine.resumeRun(result.runId);
     const nodes = await repositories.listNodes(result.runId);
     expect(nodes.map((node) => node.id)).toEqual(
       expect.arrayContaining([expect.stringMatching(/^repair_gate_/u)]),
@@ -255,6 +269,44 @@ describe('workflow engine gate repair e2e', () => {
 
     db.close();
   });
+
+  it.each(['intent', 'node', 'created'] as const)('repair %s 边界失败仍保留可验证记录，intent 先于 source 状态和节点创建', async boundary => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-repair-intent-')); tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' }); migrateDatabase(db);
+    const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
+    const append = audit.append.bind(audit); const createNode = repositories.createNode.bind(repositories);
+    const sourceStatusAtIntent: string[] = [];
+    vi.spyOn(audit, 'append').mockImplementation(async event => {
+      if (event.type === 'gate.repair.intent') {
+        const source = await repositories.getNode(String(event.payload.sourceNodeId));
+        sourceStatusAtIntent.push(source!.status);
+        if (boundary === 'intent') throw new Error('injected intent failure');
+      }
+      if (event.type === 'gate.repair.created' && boundary === 'created') throw new Error('injected created failure');
+      return append(event);
+    });
+    vi.spyOn(repositories, 'createNode').mockImplementation(async node => {
+      if (node.id.startsWith('repair_')) {
+        const events = await repositories.listAuditEvents(node.runId);
+        expect(events.filter(event => event.type === 'gate.repair.intent')).toHaveLength(1);
+        if (boundary === 'node') throw new Error('injected node failure');
+      }
+      return createNode(node);
+    });
+    try {
+      const engine = engineWithBuildGate(repoPath, repositories, audit, createFailOnceGateEngine(repositories), new AbortController().signal);
+      const run = await engine.startRun({ demandText: 'repair 中断验证', mode: 'template', workflowSpec: buildGateWorkflowSpec() });
+      expect(run.workflow.status).toBe('interrupted');
+      expect(sourceStatusAtIntent).toEqual(['awaiting-gate']);
+      const events = await repositories.listAuditEvents(run.runId);
+      expect(events.filter(event => event.type === 'gate.repair.intent')).toHaveLength(boundary === 'intent' ? 0 : 1);
+      expect(events.filter(event => event.type === 'gate.repair.created')).toHaveLength(0);
+      const nodes = await repositories.listNodes(run.runId);
+      expect(nodes.filter(node => node.id.startsWith('repair_'))).toHaveLength(boundary === 'created' ? 1 : 0);
+      const verified = await validateAndBuildExecutionPlan(run.runId, repositories, audit);
+      expect(verified.phases.flatMap(phase => phase.nodes).map(node => node.id)).toEqual([`${run.runId}_rd-code`]);
+    } finally { db.close(); }
+  });
 });
 
 function buildGateWorkflowSpec() {
@@ -327,6 +379,7 @@ function createFailOnceGateEngine(
   repositories: ReturnType<typeof createRepositories>,
 ): GateEngine {
   let failed = false;
+  const realGateEngine = createGateEngine({ repositories });
 
   return {
     async runGate(input) {
@@ -337,6 +390,7 @@ function createFailOnceGateEngine(
         runId: input.runId,
         nodeId: input.nodeId,
         gateType: input.gate.type,
+        gateKey: input.gate.gateKey,
         status: shouldFail ? 'failed' : 'passed',
         durationMs: 0,
         retries: shouldFail ? 0 : 1,
@@ -344,16 +398,7 @@ function createFailOnceGateEngine(
       });
     },
     async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+      return realGateEngine.createAutoFixRepairNode(input);
     },
   };
 }

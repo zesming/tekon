@@ -6,6 +6,7 @@ import {
   type SessionEventBus,
   type SessionEventStore,
 } from '@tekon/core';
+import type { WebProjectScope } from './api/queries.js';
 
 export const REPLAY_WINDOW = 500;
 export const CATCH_UP_CHUNK_LIMIT = 500;
@@ -41,10 +42,13 @@ export async function handleSessionEventsSse(input: {
   sessionId: string;
   sessions: SessionEventStore;
   bus: SessionEventBus;
+  /** The HTTP composition root always supplies its repository scope. */
+  scope?: WebProjectScope;
   heartbeatMs?: number;
   catchUpMs?: number;
 }): Promise<void> {
   const { request, response, sessionId, sessions, bus } = input;
+  input.scope?.assertSession(sessionId);
 
   // Validate before committing event-stream headers so the route can still
   // return a normal JSON 404/500.
@@ -174,6 +178,7 @@ export async function handleSessionEventsSse(input: {
     }
   };
   const enqueue = (event: SessionEvent): void => {
+    try { input.scope?.assertSession(sessionId); } catch { cleanup(); return; }
     if (event.seq <= cursor || pending.has(event.seq)) return;
     if (backpressureTruncated) return;
     pending.set(event.seq, event);
@@ -226,6 +231,7 @@ export async function handleSessionEventsSse(input: {
     let replayTruncatedThisPass = false;
     let reachedReplayTailThisPass = false;
     try {
+      input.scope?.assertSession(sessionId);
       for (;;) {
         if (
           closed ||
@@ -398,6 +404,8 @@ export async function handleWorkspaceSummarySse(input: {
   workspaceId: string;
   sessions: SessionEventStore;
   bus: SessionEventBus;
+  /** Aggregate historical aliases only when supplied by the scoped HTTP root. */
+  scope?: WebProjectScope;
   heartbeatMs?: number;
   catchUpMs?: number;
   // Test-only overrides for the backpressure caps. Defaults to the exported
@@ -406,6 +414,7 @@ export async function handleWorkspaceSummarySse(input: {
   maxPendingBytes?: number;
 }): Promise<void> {
   const { request, response, workspaceId, sessions, bus } = input;
+  input.scope?.assertWorkspace(workspaceId);
   const maxPendingEvents =
     input.maxPendingEvents ?? MAX_PENDING_WORKSPACE_EVENTS;
   const maxPendingBytes = input.maxPendingBytes ?? MAX_PENDING_WORKSPACE_BYTES;
@@ -501,6 +510,10 @@ export async function handleWorkspaceSummarySse(input: {
     ) {
       return;
     }
+    try {
+      input.scope?.assertWorkspace(workspaceId);
+      input.scope?.assertSession(event.sessionId);
+    } catch { cleanup(); return; }
     enqueue({
       workspaceId,
       sessionId: event.sessionId,
@@ -529,7 +542,10 @@ export async function handleWorkspaceSummarySse(input: {
     if (closed || response.writableEnded || catchUpInFlight) return;
     catchUpInFlight = true;
     try {
-      const sessionList = await sessions.listSessions(workspaceId);
+      input.scope?.assertWorkspace(workspaceId);
+      const sessionList = input.scope
+        ? await input.scope.listSessions()
+        : await sessions.listSessions(workspaceId);
       workspaceSessionIds = new Set(sessionList.map((session) => session.id));
       const signature = computeWorkspaceSignature(sessionList);
       if (lastSignature && signature !== lastSignature) {

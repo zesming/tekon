@@ -1,3 +1,5 @@
+import { deriveReworkNode, DYNAMIC_NODE_ORDER_OFFSET } from './execution-plan.js';
+
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -34,14 +36,6 @@ import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
-
-/**
- * Intra-phase order for dynamically created rework nodes. Original plan nodes
- * use small array-index orders (0..N via persistPlan); this large offset keeps
- * rework nodes sorted after them on a planFromRepository resume, matching the
- * legacy "appended at the end of the phase" behavior.
- */
-const DYNAMIC_NODE_ORDER_OFFSET = 1_000_000;
 
 export interface ReworkHandlerDeps {
   repoPath: string;
@@ -321,15 +315,24 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
 
     // --- Step 2: Create rework node reusing target's inputs/outputs/gates ---
     const now = new Date().toISOString();
-    await repositories.createNode({
-      id: reworkNodeId,
-      runId,
+    const derived = deriveReworkNode({
+      id: targetNode.id,
       role: targetNode.role,
-      status: 'pending',
+      phaseId: targetNode.phaseId,
       inputs: targetInputs,
       outputs: targetOutputs,
       gates: targetGates,
-      dependencies: [reviewNode.id],
+      dependsOn: targetNode.dependencies,
+    }, reviewNode.id, attempt);
+    await repositories.createNode({
+      id: derived.id,
+      runId,
+      role: derived.role,
+      status: 'pending',
+      inputs: derived.inputs,
+      outputs: derived.outputs,
+      gates: derived.gates,
+      dependencies: derived.dependsOn,
       // Dynamic rework nodes are created after the original plan nodes and
       // must sort after them within the phase on a planFromRepository resume.
       // Original nodes use small array-index orders (0..N); a large offset
@@ -338,7 +341,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       order: DYNAMIC_NODE_ORDER_OFFSET,
       createdAt: now,
       updatedAt: now,
-      phaseId: targetNode.phaseId,
+      phaseId: derived.phaseId,
     });
 
     // --- Step 3: Run rework agent ---

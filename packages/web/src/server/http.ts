@@ -19,6 +19,7 @@ import {
   type ApiCaller,
 } from './api/root.js';
 import { ApiError } from './api/errors.js';
+import { webProjectScope } from './api/queries.js';
 import { procedureSpecs, type ProcedureName } from '../shared/rpc-contract.js';
 import { resolveProjectRoot } from './project-context.js';
 import { handleSessionEventsSse, handleWorkspaceSummarySse } from './sse.js';
@@ -341,12 +342,17 @@ async function handleSseRoute(input: {
       sessionId: input.sessionId,
       sessions: input.api.sessions,
       bus: input.api.bus,
+      scope: input.api[webProjectScope],
     });
-  } catch {
+  } catch (error) {
     // Headers may already be sent (stream opened); just end the response. If
     // the failure happened before the stream opened (e.g. getSession threw on a
     // db error), surface a 500 rather than a misleading empty 200.
     if (!input.response.headersSent) {
+      if (error instanceof ApiError && error.code === 'NOT_FOUND') {
+        writeJson(input.response, 404, { error: { code: error.code, message: error.message } });
+        return;
+      }
       input.response.statusCode = 500;
     }
     if (!input.response.writableEnded) {
@@ -416,9 +422,14 @@ async function handleWorkspaceSummarySseRoute(input: {
       workspaceId: input.workspaceId,
       sessions: input.api.sessions,
       bus: input.api.bus,
+      scope: input.api[webProjectScope],
     });
-  } catch {
+  } catch (error) {
     if (!input.response.headersSent) {
+      if (error instanceof ApiError && error.code === 'NOT_FOUND') {
+        writeJson(input.response, 404, { error: { code: error.code, message: error.message } });
+        return;
+      }
       input.response.statusCode = 500;
     }
     if (!input.response.writableEnded) {

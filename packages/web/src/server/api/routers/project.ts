@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { hashWebRunEnvelope, webRunEnvelope } from '../admission-envelope.js';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
@@ -13,7 +14,7 @@ import { join, relative, resolve } from 'node:path';
 import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
-  computeRunPlanDigest,
+  isValidRequestId,
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
@@ -21,16 +22,17 @@ import {
   readDraftShapeFile,
   renderDraftShapeForRun,
   runDshPreflight,
-  type RunPlan,
+  RunAdmissionError,
   type WorkflowTemplate,
+  type SessionServiceStartRunResult,
 } from '@tekon/core';
 
 import type {
   ServerContext,
   ProjectRunInput,
+  ProjectRunIntent,
   ProjectCleanInput,
   TokenRunInput,
-  WebRunEngineInput,
 } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSafeName, assertSessionToken } from '../common.js';
@@ -48,7 +50,6 @@ import { createProviderHealthService } from '../provider-health.js';
 import {
   mapProject,
   mapWorkflow,
-  mapWorkflowFromDomain,
 } from '../mappers.js';
 
 const DSH_HEALTH_PROBE_TIMEOUT_MS = 1_000;
@@ -134,13 +135,62 @@ export function createProjectRouter(
       return result;
     },
 
-    async providerHealth(input: { token: string; provider: 'dsh-headless' }) {
+    async admission(input: { token: string; requestId: string }) {
+      assertSessionToken(context.projectContext, input.token);
+      if (!isValidRequestId(input.requestId)) {
+        throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
+      }
+      const admission = await context.repositories.admissionStore.getAdmission(input.requestId);
+      if (!admission) {
+        return { state: 'not-found' as const, requestId: input.requestId };
+      }
+      assertRunInScope(context.db, context.projectContext, admission.runId);
+      const state = admission.filesState !== 'ready'
+        ? ('recovery-required' as const)
+        : ('accepted' as const);
+      return {
+        state,
+        requestId: admission.requestId,
+        runId: admission.runId,
+        sessionId: admission.sessionId ?? undefined,
+        jobId: admission.jobId ?? undefined,
+        filesState: admission.filesState,
+        detail: admission.lastError ?? undefined,
+      };
+    },
+
+    async admissionIntent(input: {
+      token: string;
+      run?: ProjectRunIntent;
+    }) {
+      assertSessionToken(context.projectContext, input.token);
+      const tokenHash = hashToken(input.token);
+      const scope = createHash('sha256')
+        .update(JSON.stringify([realpathSync(context.projectContext.projectRoot), tokenHash]))
+        .digest('hex');
+
+      if (!input.run) {
+        return { scope };
+      }
+
+      const fingerprint = hashWebRunEnvelope(context.projectContext.projectRoot, input.run);
+      const suggestedRequestId = `req_${randomUUID()}`;
+
+      return {
+        scope,
+        fingerprint,
+        requestId: suggestedRequestId,
+      };
+    },
+
+    async providerHealth(input: { token: string; provider: 'dsh-headless'; refresh?: boolean }) {
       assertSessionToken(context.projectContext, input.token);
       const tokenHash = hashToken(input.token);
       return await providerHealthService.check({
         scope: context.projectContext.sessionPath,
         tokenHash,
         provider: input.provider,
+        refresh: input.refresh,
       });
     },
 
@@ -220,68 +270,83 @@ export function createProjectRouter(
       };
     },
 
-    async run(runInput: ProjectRunInput) {
-      assertSessionToken(context.projectContext, runInput.token);
-      const shapedDraft = runInput.demandShapePath
-        ? readDraftShapeFile(
-            assertDraftShapePathInScope(context, runInput.demandShapePath),
-          )
-        : null;
-      if (shapedDraft && !shapedDraft.approved) {
-        throw new ApiError(
-          'BAD_REQUEST',
-          'Draft shape must be approved before run.',
-        );
-      }
-      if (shapedDraft && !shapedDraft.readyForRun) {
-        throw new ApiError(
-          'BAD_REQUEST',
-          'Draft shape has open questions; resolve them (readyForRun) before run.',
-        );
-      }
-      if (shapedDraft?.hasPlan && shapedDraft.planApproved !== true) {
-        throw new ApiError(
-          'BAD_REQUEST',
-          'Draft has a generated plan that must be approved before run (tekon draft plan-approve).',
-        );
-      }
-      const demandText = shapedDraft
-        ? renderDraftShapeForRun(shapedDraft)
-        : runInput.demandText.trim();
-      if (!demandText) {
-        throw new ApiError('BAD_REQUEST', 'Demand text is required.');
-      }
+    async run(rawInput: ProjectRunInput) {
+      assertSessionToken(context.projectContext, rawInput.token);
+      const runInput = structuredClone(rawInput);
+      const requestId = runInput.requestId ?? randomUUID();
+      if (!isValidRequestId(requestId)) throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
+      const requestEnvelope = webRunEnvelope(context.projectContext.projectRoot, runInput);
+      const lookupInput = { requestId, requestEnvelope };
 
-      const isGoal = runInput.mode === 'goal';
-      const allowDirtyBase = Boolean(runInput.allowDirtyBase);
-      const resolvedProfile = runInput.profile ?? 'human-web';
-      const resolvedAgent = runInput.agent ?? 'codex';
-      assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
-
-      const templateName = isGoal
-        ? undefined
-        : runInput.template?.trim() || 'standard-delivery';
-      if (templateName) {
-        assertSafeName(templateName, 'template');
+      function resultFor(result: SessionServiceStartRunResult) {
+        return {
+          run: mapWorkflow(mustGetRun(context.db, result.runId), { db: context.db }),
+          sessionId: result.sessionId,
+          jobId: result.jobId,
+          requestId: result.requestId,
+          replayed: result.replayed,
+          admissionState: result.admissionState === 'ready'
+            ? 'accepted' as const : 'recovery-required' as const,
+          ...(result.detail ? { detail: result.detail } : {}),
+        };
       }
-
-      let workflowSpec: WorkflowTemplate | null = null;
-      let canonicalPlan: RunPlan | null = null;
-      if (!isGoal) {
-        if (!runInput.planDigest || runInput.planDigest.trim() === '') {
-          throw new ApiError(
-            'BAD_REQUEST',
-            'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
-          );
+      function mappedError(error: unknown): ApiError {
+        // Session keeps recovery identity around factory errors. Before any
+        // known admission, preserve the router factory's deliberate API verdict.
+        if (error instanceof RunAdmissionError && !error.runId && error.cause instanceof ApiError) {
+          return new ApiError(error.cause.code, `${error.cause.message} (requestId=${requestId})`);
         }
+        if (error instanceof ApiError) return new ApiError(error.code, `${error.message} (requestId=${requestId})`);
+        if (error instanceof Error && error.message.startsWith('REQUEST_ID_CONFLICT')) {
+          return new ApiError('CONFLICT', `REQUEST_ID_CONFLICT: requestId=${requestId}`);
+        }
+        if (error instanceof Error && error.message.startsWith('PLAN_')) {
+          return new ApiError('BAD_REQUEST', `PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试 (requestId=${requestId})`);
+        }
+        if (error instanceof RunAdmissionError && error.runId) {
+          const identity = [
+            `requestId=${requestId}`, `runId=${error.runId}`,
+            ...(error.sessionId ? [`sessionId=${error.sessionId}`] : []),
+            ...(error.jobId ? [`jobId=${error.jobId}`] : []),
+            `admissionState=${error.admissionState}`,
+          ].join(' ');
+          return new ApiError('INTERNAL_ERROR', `RUN_ADMISSION_FAILED: 已保留受理身份，请查询或重试原请求 (${identity})`);
+        }
+        return new ApiError('INTERNAL_ERROR', `RUN_ADMISSION_FAILED: 受理状态待确认，请查询或重试原 requestId=${requestId}`);
+      }
 
-        // Load exactly once. The same immutable object is used for digest
-        // validation and prepareRun so a project YAML edit cannot win a
-        // validation→execution TOCTOU race.
-        workflowSpec = loadTemplate(context, templateName!);
-        canonicalPlan = projectRunPlan(workflowSpec, {
+      try {
+        const existing = await context.sessionService.lookupRun(lookupInput);
+        if (existing) return resultFor(existing);
+
+        const shapedDraft = runInput.demandShapePath
+          ? readDraftShapeFile(assertDraftShapePathInScope(context, runInput.demandShapePath))
+          : null;
+        if (shapedDraft && !shapedDraft.approved) {
+          throw new ApiError('BAD_REQUEST', 'Draft shape must be approved before run.');
+        }
+        if (shapedDraft && !shapedDraft.readyForRun) {
+          throw new ApiError('BAD_REQUEST', 'Draft shape has open questions; resolve them (readyForRun) before run.');
+        }
+        if (shapedDraft?.hasPlan && shapedDraft.planApproved !== true) {
+          throw new ApiError('BAD_REQUEST', 'Draft has a generated plan that must be approved before run (tekon draft plan-approve).');
+        }
+        const demandText = shapedDraft ? renderDraftShapeForRun(shapedDraft) : runInput.demandText.trim();
+        if (!demandText) throw new ApiError('BAD_REQUEST', 'Demand text is required.');
+        const isGoal = runInput.mode === 'goal';
+        const allowDirtyBase = Boolean(runInput.allowDirtyBase);
+        const resolvedProfile = runInput.profile ?? 'human-web';
+        const resolvedAgent = runInput.agent ?? 'codex';
+        assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
+        const templateName = isGoal ? 'goal' : runInput.template?.trim() || 'standard-delivery';
+        assertSafeName(templateName, 'template');
+        if (!isGoal && !runInput.planDigest?.trim()) {
+          throw new ApiError('BAD_REQUEST', 'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs');
+        }
+        const workflowSpec = isGoal ? loadWorkflowTemplate({ name: 'goal' }) : loadTemplate(context, templateName);
+        const canonicalPlan = projectRunPlan(workflowSpec, {
           agent: resolvedAgent,
-          mode: 'workflow',
+          mode: isGoal ? 'goal' : 'workflow',
           profile: resolvedProfile,
           allowDirtyBase,
           timeoutMs: runInput.timeoutMs,
@@ -289,104 +354,58 @@ export function createProjectRouter(
           progressHeartbeatMs: runInput.progressHeartbeatMs,
           templateId: templateName,
         });
-        const computedDigest =
-          canonicalPlan.digest ?? computeRunPlanDigest(canonicalPlan);
-        if (runInput.planDigest !== computedDigest) {
-          throw new ApiError(
-            'BAD_REQUEST',
-            'PLAN_DIGEST_MISMATCH: Execution plan digest mismatch',
-          );
+        if (runInput.planDigest !== undefined && runInput.planDigest !== canonicalPlan.digest) {
+          throw new ApiError('BAD_REQUEST', 'PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试');
         }
+        const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(resolvedAgent);
+        if (requiresUnrestrictedNetwork && runInput.acknowledgeUnrestrictedNetwork !== true) {
+          throw new ApiError('BAD_REQUEST', '联网不受限需知情确认');
+        }
+        const admissionAudits: Array<{ type: string; payload: Record<string, unknown> }> = [];
+        if (shapedDraft) admissionAudits.push({ type: 'run.demand-shaped', payload: {
+          shapePath: runInput.demandShapePath, approved: shapedDraft.approved, readyForRun: shapedDraft.readyForRun,
+        } });
+        if (requiresUnrestrictedNetwork) admissionAudits.push({ type: 'run.network-acknowledged', payload: {
+          agent: resolvedAgent, acknowledgeUnrestrictedNetwork: true,
+        } });
+        const result = await context.sessionService.startRun({
+          requestId,
+          requestEnvelope,
+          demandText,
+          mode: isGoal ? 'goal' : 'workflow',
+          templateName,
+          workflowSpec,
+          profile: resolvedProfile,
+          planDigest: canonicalPlan.digest,
+          admissionAudits,
+          engine: {
+            agent: resolvedAgent,
+            profile: resolvedProfile,
+            allowDirtyBase,
+            timeoutMs: runInput.timeoutMs,
+            noProgressTimeoutMs: runInput.noProgressTimeoutMs,
+            progressHeartbeatMs: runInput.progressHeartbeatMs,
+            acknowledgeUnrestrictedNetwork: runInput.acknowledgeUnrestrictedNetwork,
+            canonicalPlan,
+            planDigest: canonicalPlan.digest,
+            planSnapshot: canonicalJson(canonicalPlan),
+          },
+        });
+        return resultFor(result);
+      } catch (error) {
+        // A concurrent process may have admitted the original request after our
+        // first lookup but before environment validation failed.
+        try {
+          const winner = await context.sessionService.lookupRun(lookupInput);
+          if (winner) return resultFor(winner);
+        } catch (lookupError) {
+          if (lookupError instanceof Error && lookupError.message.startsWith('REQUEST_ID_CONFLICT')) {
+            throw mappedError(lookupError);
+          }
+          if (lookupError instanceof RunAdmissionError && lookupError.runId) throw mappedError(lookupError);
+        }
+        throw mappedError(error);
       }
-
-      const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(
-        resolvedAgent,
-      );
-      if (
-        requiresUnrestrictedNetwork &&
-        runInput.acknowledgeUnrestrictedNetwork !== true
-      ) {
-        throw new ApiError('BAD_REQUEST', '联网不受限需知情确认');
-      }
-
-      const engineInput = {
-        agent: resolvedAgent,
-        allowDirtyBase,
-        ...(runInput.timeoutMs !== undefined
-          ? { timeoutMs: runInput.timeoutMs }
-          : {}),
-        ...(runInput.noProgressTimeoutMs !== undefined
-          ? { noProgressTimeoutMs: runInput.noProgressTimeoutMs }
-          : {}),
-        ...(runInput.progressHeartbeatMs !== undefined
-          ? { progressHeartbeatMs: runInput.progressHeartbeatMs }
-          : {}),
-        ...(runInput.acknowledgeUnrestrictedNetwork !== undefined
-          ? {
-              acknowledgeUnrestrictedNetwork:
-                runInput.acknowledgeUnrestrictedNetwork,
-            }
-          : {}),
-        ...(canonicalPlan
-          ? {
-              canonicalPlan,
-              planDigest: canonicalPlan.digest,
-              planSnapshot: canonicalJson(canonicalPlan),
-            }
-          : {}),
-      } as WebRunEngineInput & {
-        canonicalPlan?: RunPlan;
-        planSnapshot?: string;
-      };
-
-      const result = await context.sessionService.startRun({
-        demandText,
-        ...(isGoal
-          ? { mode: 'goal' as const }
-          : {
-              templateName,
-              workflowSpec: workflowSpec!,
-              planDigest: canonicalPlan!.digest,
-            }),
-        ...(runInput.profile ? { profile: runInput.profile } : {}),
-        engine: engineInput,
-        onPrepared:
-          shapedDraft ||
-          (requiresUnrestrictedNetwork && runInput.acknowledgeUnrestrictedNetwork)
-            ? async (runId) => {
-                if (shapedDraft) {
-                  await context.audit.append({
-                    runId,
-                    type: 'run.demand-shaped',
-                    payload: {
-                      shapePath: runInput.demandShapePath,
-                      approved: shapedDraft.approved,
-                      readyForRun: shapedDraft.readyForRun,
-                    },
-                  });
-                }
-                if (
-                  requiresUnrestrictedNetwork &&
-                  runInput.acknowledgeUnrestrictedNetwork
-                ) {
-                  await context.audit.append({
-                    runId,
-                    type: 'run.network-acknowledged',
-                    payload: {
-                      agent: resolvedAgent,
-                      acknowledgeUnrestrictedNetwork: true,
-                    },
-                  });
-                }
-              }
-            : undefined,
-      });
-
-      return {
-        run: mapWorkflowFromDomain(result.workflow),
-        sessionId: result.sessionId,
-        jobId: result.jobId,
-      };
     },
 
     async resume(runInput: TokenRunInput) {
@@ -412,6 +431,9 @@ export function createProjectRouter(
           'CONFLICT',
           'Run already has an active job; cancel it or wait for it to finish.',
         );
+      }
+      if (result.outcome === 'recovery-required') {
+        throw new ApiError('CONFLICT', `ADMISSION_RECOVERY_REQUIRED: runId=${runInput.runId}`);
       }
       return {
         run: mapWorkflow(mustGetRun(context.db, runInput.runId), {

@@ -23,6 +23,10 @@ import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { LoadingState } from '../components/ui/LoadingState.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 import { SessionComposer } from '../components/sessions/SessionComposer.js';
+import {
+  admissionNeedsRecovery,
+  admissionReadinessLabel,
+} from '../components/runs/AdmissionNotice.js';
 
 const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
   approval: '待审批',
@@ -122,7 +126,8 @@ export function SessionsPage() {
               nowMs,
             );
             const isFailedUnacknowledged =
-              (session.status === 'failed' || session.actionKind === 'failed') &&
+              (session.status === 'failed' ||
+                session.actionKind === 'failed') &&
               !session.acknowledgedAt;
 
             return (
@@ -147,9 +152,17 @@ export function SessionsPage() {
                       {ACTION_KIND_LABELS[session.actionKind]}
                     </span>
                   ) : null}
-                  <StatusBadge status={session.status} size="sm" />
+                  {admissionNeedsRecovery(session) ? (
+                    <span className="badge badge-pending badge-sm">
+                      {admissionReadinessLabel(session)}
+                    </span>
+                  ) : (
+                    <StatusBadge status={session.status} size="sm" />
+                  )}
                   {session.runId ? (
-                    <span className="session-list-run text-muted">交付运行</span>
+                    <span className="session-list-run text-muted">
+                      交付运行
+                    </span>
                   ) : null}
                   <time
                     className="session-list-time"

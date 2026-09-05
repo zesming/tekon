@@ -6,6 +6,8 @@ import {
 
 import type { ServerContext } from '../context.js';
 import { ApiError } from '../errors.js';
+import { admissionProjection } from '../mappers.js';
+import { createWebProjectScope, listScopedWorkspaces } from '../queries.js';
 import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
 /**
@@ -185,16 +187,16 @@ async function readEventsBackward(
  * the Session List UI (left rail / SessionsPage) and Session Detail metadata.
  *
  * session.list takes no client input: the client has no workspaceId, so the
- * server resolves the default workspace from projectRoot and returns its id
- * for the workspace picker (M2).
+ * server aggregates physically equivalent historical workspaces without
+ * rewriting their IDs, and returns one existing ID for summary subscriptions.
  */
 export function createSessionRouter(context: ServerContext) {
+  const scope = createWebProjectScope(context.db, context.projectContext, context.sessions);
   return {
     async list() {
-      const workspace = await context.sessions.getOrCreateDefaultWorkspace(
-        context.projectContext.projectRoot,
-      );
-      const sessions = await context.sessions.listSessions(workspace.id);
+      const workspace = listScopedWorkspaces(context.db, context.projectContext)[0]
+        ?? await context.sessions.getOrCreateDefaultWorkspace(context.projectContext.projectRoot);
+      const sessions = await scope.listSessions();
       const projectedSessions = sessions.map((session) => {
         const acknowledgedAt = currentFailureAcknowledgement({
           status: session.status,
@@ -203,6 +205,7 @@ export function createSessionRouter(context: ServerContext) {
         });
         const action = deriveSessionAction(session.status, acknowledgedAt);
         return {
+          ...admissionProjection(context.db, session.runId),
           id: session.id,
           workspaceId: session.workspaceId,
           title: session.title,
@@ -232,6 +235,7 @@ export function createSessionRouter(context: ServerContext) {
     },
 
     async get(input: { sessionId: string }) {
+      scope.assertSession(input.sessionId);
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
         throw new ApiError(
@@ -259,6 +263,7 @@ export function createSessionRouter(context: ServerContext) {
       const action = deriveSessionAction(session.status, acknowledgedAt);
       return {
         session: {
+          ...admissionProjection(context.db, runId),
           id: session.id,
           workspaceId: session.workspaceId,
           title: session.title,
@@ -285,6 +290,7 @@ export function createSessionRouter(context: ServerContext) {
       beforeSeq?: number;
       limit?: number;
     }) {
+      scope.assertSession(input.sessionId);
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
         throw new ApiError(
@@ -368,6 +374,7 @@ export function createSessionRouter(context: ServerContext) {
     },
 
     async acknowledge(input: { sessionId: string }) {
+      scope.assertSession(input.sessionId);
       const session = await context.sessions.getSession(input.sessionId);
       if (!session) {
         throw new ApiError(

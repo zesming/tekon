@@ -65,7 +65,7 @@ describe('database migrations', () => {
 
     migrateDatabase(db);
 
-    // Exactly the 15 legacy tables plus the 5 new event-spine tables.
+    // Legacy tables, the event spine, and the persistent admission ledger.
     // (sqlite_sequence is an internal bookkeeping table created by the
     // session_events autoincrement primary key, not a Tekon table.)
     const tables = db
@@ -88,6 +88,7 @@ describe('database migrations', () => {
       'projection_checkpoints',
       'projects',
       'role_runs',
+      'run_admissions',
       'run_locks',
       'run_provider_configs',
       'schema_migrations',
@@ -143,7 +144,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(5);
+    expect(versions[0].version).toBe(7);
 
     db.close();
   });
@@ -175,7 +176,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(5);
+    expect(versions[0].version).toBe(7);
 
     db.close();
   });
@@ -313,7 +314,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(5);
+    expect(versions[0].version).toBe(7);
 
     db.close();
   });

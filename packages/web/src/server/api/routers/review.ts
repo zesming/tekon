@@ -2,6 +2,7 @@ import type { ServerContext } from '../context.js';
 import { createWorkReviewSurface, type WorkReviewSurface } from '@tekon/core';
 import { assertRunInScope, runProviderName } from '../queries.js';
 import { redactObject, redactTextPreview } from '../redaction.js';
+import { admissionProjection } from '../mappers.js';
 
 export function createReviewRouter(context: ServerContext) {
   return {
@@ -19,6 +20,7 @@ export function createReviewRouter(context: ServerContext) {
       // sensitive, so it is attached after redaction.
       return {
         ...redactReviewSurface(surface),
+        ...admissionProjection(context.db, reviewInput.runId),
         provider: runProviderName(context.db, reviewInput.runId),
       };
     },
@@ -63,5 +65,4 @@ function redactReviewSurface(surface: WorkReviewSurface): WorkReviewSurface {
   // (e.g. nextCommands, suggestedCommand, gate triage, evidence text)
   return redactObject(result) as WorkReviewSurface;
 }
-
 

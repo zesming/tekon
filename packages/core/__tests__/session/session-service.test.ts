@@ -1,7 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   createAuditLogger,
+  createMockAgentAdapter,
+  createWorkflowEngine,
+  loadWorkflowTemplate,
   createJobRepository,
   createJobRunner,
   createRepositories,
@@ -20,16 +26,16 @@ import {
   type WorkflowTemplate,
 } from '../../src/index.js';
 
-// 4a (design §2.1): SessionService is the extracted orchestration of the web
-// project router's run/resume/cancel/pause flows. These tests pin the
-// orchestration contract: session creation + runId binding, the three opening
-// events, job enqueue kinds, the onPrepared hook position (after prepareRun,
-// before createSession), and the cancel CAS guard (writeWorkflowTerminal first,
-// terminal conflicts emit nothing).
+// Start uses a real Engine and SQLite admission; lifecycle tests isolate only
+// execution so they can verify pause/resume/cancel without invoking a Provider.
+// Broader fault/concurrency tests live in admission-engine and admission-store.
 
-const PROJECT_ROOT = '/tmp/tekon-session-service-test';
+const cleanup: Array<() => void> = [];
+afterEach(() => { for (const release of cleanup.splice(0).reverse()) release(); });
 
 interface TestEnv {
+  projectRoot: string;
+  engine: WorkflowEngine;
   repositories: TekonRepositories;
   sessions: ReturnType<typeof createSessionEventStore>;
   jobs: ReturnType<typeof createJobRepository>;
@@ -39,7 +45,10 @@ interface TestEnv {
 }
 
 function setup(): TestEnv {
+  const projectRoot = mkdtempSync(join(tmpdir(), 'tekon-session-service-'));
+  cleanup.push(() => rmSync(projectRoot, { recursive: true, force: true }));
   const db = openTekonDatabase({ filename: ':memory:' });
+  cleanup.push(() => { db.close(); });
   migrateDatabase(db);
   const writeQueue = createWriteQueue();
   const repositories = createRepositories(db, writeQueue);
@@ -52,7 +61,9 @@ function setup(): TestEnv {
     execute: async () => ({ status: 'done' }),
   };
   const jobRunner = createJobRunner({ jobs, sessions, bus, registry, executor });
-  return { repositories, sessions, jobs, bus, jobRunner, audit };
+  const engine = createWorkflowEngine({ repoPath: projectRoot, dataDir: '.tekon', repositories, audit,
+    adapter: createMockAgentAdapter(), agentProvider: 'mock' });
+  return { projectRoot, engine, repositories, sessions, jobs, bus, jobRunner, audit };
 }
 
 async function seedRun(
@@ -64,7 +75,7 @@ async function seedRun(
   await env.repositories.createProject({
     id: 'proj_1',
     name: 'Test',
-    repoPath: '/tmp/repo',
+    repoPath: env.projectRoot,
     createdAt: new Date().toISOString(),
   }).catch(() => {});
   await env.repositories
@@ -90,7 +101,8 @@ async function seedRun(
 
 function fakeEngine(workflow: WorkflowInstance): WorkflowEngine {
   return {
-    prepareRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
+    buildPreparedRun: vi.fn(() => { throw new Error('Unexpected fresh preparation in lifecycle test'); }),
+    prepareRun: vi.fn(async () => { throw new Error('Unexpected fresh admission in lifecycle test'); }),
     executePreparedRun: vi.fn(async () => workflow),
     startRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
     resumeRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
@@ -108,7 +120,7 @@ function makeService(
     bus: env.bus,
     repositories: env.repositories,
     audit: env.audit,
-    projectRoot: PROJECT_ROOT,
+    projectRoot: env.projectRoot,
     createEngine: () => engine,
   });
 }
@@ -117,7 +129,7 @@ async function seedSession(
   env: TestEnv,
   runId: string,
 ): Promise<string> {
-  const workspace = await env.sessions.getOrCreateDefaultWorkspace(PROJECT_ROOT);
+  const workspace = await env.sessions.getOrCreateDefaultWorkspace(env.projectRoot);
   const session = await env.sessions.createSession({
     workspaceId: workspace.id,
     title: null,
@@ -128,391 +140,94 @@ async function seedSession(
 }
 
 describe('SessionService.startRun', () => {
-  it('creates a run-bound session, appends the three opening events, and enqueues a workflow-run job', async () => {
+  it('atomically binds a real run/session/job and publishes the persisted opening prefix', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_start',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-    const publishSpy = vi.spyOn(env.bus, 'publish');
-
-    const result = await service.startRun({
-      demandText: 'Do the thing.',
-      templateName: 'standard-delivery',
-      engine: null,
-    });
-
-    expect(result.runId).toBe('run_start');
-    expect(result.workflow).toBe(workflow);
-    expect(result.sessionId).toBeTruthy();
-    expect(result.jobId).toBeTruthy();
-
-    // Session is bound to the run.
-    const session = await env.sessions.getSession(result.sessionId);
-    expect(session).not.toBeNull();
-    const bound = await env.sessions.findSessionByRunId('run_start');
-    expect(bound?.id).toBe(result.sessionId);
-
-    // The three opening events, in order, with exact payloads.
+    const prepare = vi.spyOn(env.engine, 'buildPreparedRun');
+    const publish = vi.spyOn(env.bus, 'publish');
+    const service = makeService(env, env.engine);
+    const result = await service.startRun({ demandText: 'Do the thing.', templateName: 'standard-delivery', engine: null });
+    expect(result.workflow.id).toBe(result.runId);
+    expect((await env.sessions.findSessionByRunId(result.runId))?.id).toBe(result.sessionId);
     const events = await env.sessions.listEventsSince(result.sessionId, 0);
-    expect(events.map((e) => e.type)).toEqual([
-      'session/created',
-      'workflow/started',
-      'user/message',
-    ]);
-    expect(events[0].payload).toEqual({
-      runId: 'run_start',
-      profile: 'human-web',
-    });
-    expect(events[1].payload).toEqual({
-      runId: 'run_start',
-      templateId: 'standard-delivery',
-      mode: 'template',
-      kind: 'workflow',
-    });
+    expect(events.map((event) => event.type)).toEqual(['session/created', 'workflow/started', 'user/message']);
+    expect(events[0].payload).toEqual({ runId: result.runId, profile: 'human-web' });
+    expect(events[1].payload).toEqual({ runId: result.runId, templateId: 'standard-delivery', mode: 'template', kind: 'workflow' });
     expect(events[2].payload).toEqual({ text: 'Do the thing.' });
     expect(events[2].modelVisible).toBe(true);
-
-    // Every appended event is also published to the bus.
-    expect(publishSpy).toHaveBeenCalledTimes(3);
-    expect(publishSpy).toHaveBeenNthCalledWith(1, events[0]);
-    expect(publishSpy).toHaveBeenNthCalledWith(2, events[1]);
-    expect(publishSpy).toHaveBeenNthCalledWith(3, events[2]);
-
-    // The job is enqueued with the right kind + session binding.
-    const job = await env.jobs.get(result.jobId);
-    expect(job).toMatchObject({
-      kind: 'workflow-run',
-      sessionId: result.sessionId,
-      status: 'queued',
-    });
-
-    // prepareRun received the templateName (no workflowSpec) + kind:'workflow'.
-    expect(engine.prepareRun).toHaveBeenCalledWith({
-      demandText: 'Do the thing.',
-      mode: 'template',
-      kind: 'workflow',
-      templateName: 'standard-delivery',
-    });
+    expect(publish.mock.calls.map(([event]) => event)).toEqual(events);
+    expect(await env.jobs.get(result.jobId)).toMatchObject({ kind: 'workflow-run', sessionId: result.sessionId, status: 'queued' });
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({
+      demandText: 'Do the thing.', mode: 'template', kind: 'workflow', profile: 'human-web',
+      templateName: 'standard-delivery', requestId: result.requestId,
+    }));
   });
 
-  it('passes workflowSpec to prepareRun and uses its id as the event templateId', async () => {
+  it('uses the actual workflowSpec rather than independently persisting a named template', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_spec',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-    const workflowSpec = { id: 'project-feature' } as WorkflowTemplate;
-
-    const result = await service.startRun({
-      demandText: 'Spec run.',
-      workflowSpec,
-      engine: null,
-    });
-
-    expect(engine.prepareRun).toHaveBeenCalledWith({
-      demandText: 'Spec run.',
-      mode: 'template',
-      kind: 'workflow',
-      workflowSpec,
-    });
+    const workflowSpec = { ...loadWorkflowTemplate({ name: 'goal' }), id: 'project-feature' };
+    const result = await makeService(env, env.engine).startRun({ demandText: 'Spec run.', workflowSpec, engine: null });
+    expect(JSON.parse(result.workflow.planSnapshot!).template.id).toBe('project-feature');
     const events = await env.sessions.listEventsSince(result.sessionId, 0);
-    expect(events[1].payload).toMatchObject({
-      templateId: 'project-feature',
-      runId: 'run_spec',
-    });
+    expect(events[1].payload).toMatchObject({ templateId: 'project-feature', runId: result.runId });
   });
 
-  // 4b: goal mode ignores template/workflowSpec, uses the built-in goal
-  // template, enqueues a goal-run job, and tags events kind:'goal'.
-  it('runs goal mode via the goal template, ignoring any template/workflowSpec', async () => {
+  it('goal mode fixes the built-in source and job kind even when a project spec is supplied', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_goal',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      kind: 'goal',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    const result = await service.startRun({
-      demandText: 'Lightweight goal.',
-      mode: 'goal',
-      // Both provided but must be ignored in goal mode.
-      templateName: 'standard-delivery',
-      workflowSpec: { id: 'ignored' } as WorkflowTemplate,
-      engine: null,
+    const prepare = vi.spyOn(env.engine, 'buildPreparedRun');
+    const result = await makeService(env, env.engine).startRun({
+      demandText: 'Lightweight goal.', mode: 'goal', templateName: 'bugfix',
+      workflowSpec: loadWorkflowTemplate({ name: 'bugfix' }), engine: null,
     });
-
-    expect(engine.prepareRun).toHaveBeenCalledWith({
-      demandText: 'Lightweight goal.',
-      mode: 'template',
-      templateName: 'goal',
-      kind: 'goal',
-    });
-    const events = await env.sessions.listEventsSince(result.sessionId, 0);
-    expect(events[1].type).toBe('workflow/started');
-    expect(events[1].payload).toMatchObject({ kind: 'goal', templateId: 'goal' });
-    const job = await env.jobs.get(result.jobId);
-    expect(job?.kind).toBe('goal-run');
+    expect(prepare.mock.calls[0][0]).toMatchObject({ templateName: 'goal', kind: 'goal' });
+    expect(prepare.mock.calls[0][0]).not.toHaveProperty('workflowSpec');
+    expect(JSON.parse(result.workflow.planSnapshot!).template.id).toBe('goal');
+    expect((await env.jobs.get(result.jobId))?.kind).toBe('goal-run');
+    expect((await env.sessions.listEventsSince(result.sessionId, 0))[1].payload).toMatchObject({ templateId: 'goal', kind: 'goal' });
   });
 
-  it('forwards planDigest to prepareRun for workflow runs when provided', async () => {
+  for (const mode of ['workflow', 'goal'] as const) {
+    it(`binds the top-level ${mode} digest and rejects a stale one before persistence`, async () => {
+      const env = setup();
+      const templateName = mode === 'goal' ? 'goal' : 'standard-delivery';
+      const digest = env.engine.buildPreparedRun({ demandText: 'Confirmed', mode: 'template', kind: mode, templateName, profile: 'human-web' }).planDigest;
+      const service = makeService(env, env.engine);
+      await expect(service.startRun({ demandText: 'Rejected', mode, templateName, engine: null, planDigest: 'wrong' }))
+        .rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
+      expect(env.repositories.getDatabase().prepare('select count(*) as count from workflow_instances').get()).toEqual({ count: 0 });
+      const result = await service.startRun({ demandText: 'Confirmed', mode, templateName, engine: null, planDigest: digest });
+      expect(result.workflow.planDigest).toBe(digest);
+    });
+  }
+
+  it('rejects an explicitly empty digest instead of silently dropping confirmation', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_digest',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    await service.startRun({
-      demandText: 'Run with digest.',
-      templateName: 'standard-delivery',
-      planDigest:
-        'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-      engine: null,
-    });
-
-    expect(engine.prepareRun).toHaveBeenCalledWith({
-      demandText: 'Run with digest.',
-      mode: 'template',
-      kind: 'workflow',
-      templateName: 'standard-delivery',
-      planDigest:
-        'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-    });
+    await expect(makeService(env, env.engine).startRun({ demandText: 'No confirmation', mode: 'goal', engine: null, planDigest: '' }))
+      .rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
+    expect(env.repositories.getDatabase().prepare('select count(*) as count from workflow_instances').get()).toEqual({ count: 0 });
   });
 
-  it('forwards planDigest to prepareRun for goal runs when provided', async () => {
+  it('rejects legacy async admission hooks without invoking them or creating a run', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_goal_digest',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      kind: 'goal',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    await service.startRun({
-      demandText: 'Goal with digest.',
-      mode: 'goal',
-      planDigest:
-        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      engine: null,
-    });
-
-    expect(engine.prepareRun).toHaveBeenCalledWith({
-      demandText: 'Goal with digest.',
-      mode: 'template',
-      templateName: 'goal',
-      kind: 'goal',
-      planDigest:
-        '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-    });
+    const onPrepared = vi.fn(async () => {});
+    const input = { demandText: 'Legacy JS caller', engine: null, onPrepared };
+    await expect(makeService(env, env.engine).startRun(input)).rejects.toThrow(/ADMISSION_HOOK_UNSUPPORTED/);
+    expect(onPrepared).not.toHaveBeenCalled();
+    expect(env.repositories.getDatabase().prepare('select count(*) as count from workflow_instances').get()).toEqual({ count: 0 });
   });
 
-  it('does not add planDigest property to prepareRun when not provided', async () => {
+  it('preflight rejection prevents pure preparation and all admission side effects', async () => {
     const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_no_digest',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    await service.startRun({
-      demandText: 'Run without digest.',
-      engine: null,
-    });
-
-    const callArgs = vi.mocked(engine.prepareRun).mock.calls[0][0];
-    expect('planDigest' in callArgs).toBe(false);
-  });
-
-  it('does not add planDigest property to prepareRun when it is empty', async () => {
-    const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_empty_digest',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    await service.startRun({
-      demandText: 'Run with an empty digest.',
-      planDigest: '',
-      engine: null,
-    });
-
-    const callArgs = vi.mocked(engine.prepareRun).mock.calls[0][0];
-    expect('planDigest' in callArgs).toBe(false);
-  });
-
-  it('calls onPrepared after prepareRun but before createSession', async () => {
-    const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_hook',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const service = makeService(env, engine);
-
-    const onPrepared = vi.fn(async (runId: string) => {
-      expect(runId).toBe('run_hook');
-      // The session must not exist yet — the hook lands between prepareRun
-      // and createSession (design §2.1 M3: demand-shaped audit needs runId
-      // but must precede session creation).
-      const session = await env.sessions.findSessionByRunId(runId);
-      expect(session).toBeNull();
-    });
-
-    await service.startRun({
-      demandText: 'Hooked run.',
-      templateName: 'standard-delivery',
-      engine: null,
-      onPrepared,
-    });
-
-    expect(onPrepared).toHaveBeenCalledTimes(1);
-    expect(onPrepared).toHaveBeenCalledWith('run_hook');
-    // After the hook, the session exists.
-    const session = await env.sessions.findSessionByRunId('run_hook');
-    expect(session).not.toBeNull();
-  });
-
-  it('propagates onPrepared rejections (the audit hook must not be swallowed)', async () => {
-    const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_hook_fail',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const service = makeService(env, fakeEngine(workflow));
-
-    await expect(
-      service.startRun({
-        demandText: 'Hooked run.',
-        templateName: 'standard-delivery',
-        engine: null,
-        onPrepared: async () => {
-          throw new Error('audit chain broken');
-        },
-      }),
-    ).rejects.toThrow('audit chain broken');
-
-    // No session/job leaked past the failed hook.
-    expect(await env.sessions.findSessionByRunId('run_hook_fail')).toBeNull();
-  });
-
-  it('works without onPrepared', async () => {
-    const env = setup();
-    const workflow: WorkflowInstance = {
-      id: 'run_nohook',
-      projectId: 'proj_1',
-      demandId: 'demand_1',
-      status: 'running',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const service = makeService(env, fakeEngine(workflow));
-
-    const result = await service.startRun({
-      demandText: 'Plain run.',
-      templateName: 'standard-delivery',
-      engine: null,
-    });
-
-    expect(result.sessionId).toBeTruthy();
-    const events = await env.sessions.listEventsSince(result.sessionId, 0);
-    expect(events).toHaveLength(3);
-  });
-
-  it("executes deps.preflight hook before prepareRun and creates no side effects if preflight fails", async () => {
-    const env = setup();
-    const workflow: WorkflowInstance = {
-      id: "run_preflight_fail",
-      projectId: "proj_1",
-      demandId: "demand_1",
-      status: "running",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const engine = fakeEngine(workflow);
-    const callOrder: string[] = [];
-
-    const preflightError = new Error("DSH capability preflight failed");
+    const prepare = vi.spyOn(env.engine, 'buildPreparedRun');
     const service = createSessionService({
-      sessions: env.sessions,
-      jobs: env.jobs,
-      jobRunner: env.jobRunner,
-      bus: env.bus,
-      repositories: env.repositories,
-      audit: env.audit,
-      projectRoot: PROJECT_ROOT,
-      createEngine: () => {
-        callOrder.push("createEngine");
-        return engine;
-      },
-      preflight: async () => {
-        callOrder.push("preflight");
-        throw preflightError;
-      },
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => env.engine, preflight: async () => { throw new Error('preflight rejected'); },
     });
-
-    await expect(
-      service.startRun({
-        demandText: "Should fail fast on preflight",
-        templateName: "standard-delivery",
-        engine: null,
-      }),
-    ).rejects.toThrow("DSH capability preflight failed");
-
-    expect(callOrder).toEqual(["createEngine", "preflight"]);
-    expect(engine.prepareRun).not.toHaveBeenCalled();
-
-    // No session created
-    const session = await env.sessions.findSessionByRunId("run_preflight_fail");
-    expect(session).toBeNull();
+    await expect(service.startRun({ demandText: 'Blocked', engine: null })).rejects.toThrow('preflight rejected');
+    expect(prepare).not.toHaveBeenCalled();
+    for (const table of ['workflow_instances', 'sessions', 'session_events', 'jobs', 'run_admissions']) {
+      expect(env.repositories.getDatabase().prepare(`select count(*) as count from ${table}`).get()).toEqual({ count: 0 });
+    }
   });
 });
 
@@ -607,7 +322,7 @@ describe('SessionService.resumeRun', () => {
     expect(result.outcome).toBe('enqueued');
     if (result.outcome !== 'enqueued') throw new Error('unreachable');
     expect(result.sessionId).toBe(existingSessionId);
-    const workspace = await env.sessions.getOrCreateDefaultWorkspace(PROJECT_ROOT);
+    const workspace = await env.sessions.getOrCreateDefaultWorkspace(env.projectRoot);
     const sessions = await env.sessions.listSessions(workspace.id);
     expect(sessions).toHaveLength(1);
   });

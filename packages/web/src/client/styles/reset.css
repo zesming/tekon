@@ -1313,6 +1313,11 @@ tbody tr:last-child td {
   gap: 16px;
 }
 
+.run-header > div:first-child {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .run-header-id {
   font-family: var(--font-m);
   font-size: 12px;
@@ -1331,6 +1336,7 @@ tbody tr:last-child td {
 
 .run-header-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
   color: var(--text-s);
@@ -1340,6 +1346,16 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.run-header-meta > span {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.run-header-meta > .badge {
+  white-space: nowrap;
 }
 
 .run-header-actions {

@@ -4,7 +4,7 @@
 
 天工的核心思路是"受控研发工作台"：让 Agent 承担可自动化的执行和整理工作，让人保留需求批准、风险确认、PR 创建、合入和上线等关键控制权。
 
-> 📖 **用户手册** — [在线查看 / View Online](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（中文 / English，页面内可切换语言）
+> 📖 **用户手册** — [在线查看 / View Online](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（中文为主，本轮新增内容提供 English，页面内可切换语言）
 
 ## 项目定位
 
@@ -47,6 +47,7 @@
 | Provider 接入 | 支持 mock、Claude Code、Codex，以及 experimental 的 dsh-headless（DeepSeek Harness，默认关闭、网络不受限、仅 goal 可用），通过 artifact manifest 交付结构化产物 |
 | Gate 与证据   | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness                                  |
 | 审阅面        | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包                                                                                         |
+| 可靠发起      | Request ID 绑定提交意图；同内容重试返回原运行身份，目录未就绪时保留身份并等待恢复                                                                               |
 | 交付管理      | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控                                                                                       |
 | 效果评估      | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性                                                                           |
 | Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面                                                                  |
@@ -58,11 +59,11 @@ Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里�
 - **默认发起 = 受控交付全链路**：Web「启动受控交付」与 `tekon run`（默认 `standard-delivery`）会进入 PM/RD/QA/Reviewer 完整交付流程，而非轻量对话。轻量协作会话（Collaborate）为后续方向。
 - **Session feed 非完整模型 streaming**：中间栏的 Agent 消息当前为「产物元数据合成的摘要」（DSH headless 会展示官方最终 assistant 文本），**不是逐块的模型原文增量**（`assistant/chunk`）。真流式为后续里程碑。
 - **follow-up / steer 未开放**：进入 Session 后暂不能继续追问或中途转向，Composer 仅用于发起新 run。
-- **Event log 是迁移期 best-effort projection**：`session_events` 为 best-effort 双写投影，**`workflow_instances` / `jobs` 等旧表仍是事实源**；迁移期个别事件可能缺失，不保证从 event log 完整重建。
+- **Event log 仍非完整事实源**：新 Session 的三个开场事件（创建会话、开始 workflow、用户需求）与 Run/初始 Job 一起原子受理；后续事件仍可能因 best-effort 投影缺失，不能仅从 event log 完整重建运行。
 - **automation（自动准备交付 / readiness）仅长驻进程内触发**：由 CLI 完成的 run 不会触发另一 Web 进程的 automation；CLI 交付仍走显式 `tekon delivery prepare`。
 - **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
 - **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
-- **Workspace 为单项目占位**：暂不支持多 workspace 切换/增删。
+- **Workspace 仍限当前项目**：同一物理仓库的 symlink 路径及历史 alias Workspace 可共同查看，保留原 Session ID；暂不支持多 workspace 切换/增删。
 - **物理清理暂不可用**：`tekon clean` 与 Web `project.clean` 当前统一返回 `CLEAN_SUSPENDED`，不会删除 worktree 或 run 目录。待完整导出、retention、active job/lease 协调和可审计 purge 闭环前，不提供物理删除。
 
 ## 快速开始
@@ -107,6 +108,12 @@ tekon run "你的需求"
 
 > 当前 `run` 默认进入 `standard-delivery` 完整治理链路，并不是轻量对话。真实 streaming、同一 Session 内继续追问和中途转向仍属于后续里程碑。
 
+普通 workflow/Goal 启动前会向 stderr 打印 `Request ID: …`。保存这个标识；超时、断连或返回结果丢失后，用相同需求和参数加 `--request-id <原标识>` 重试，继续观察原 Run。若显示 `REQUEST_ID_CONFLICT`，说明该标识已用于另一提交意图；确认要另建任务后使用新标识。
+
+目录准备失败时会保留 Run/Session 身份并显示“创建失败需恢复（尚未执行）”。修复目录后按原请求重试，用 `tekon status --run-id <runId>` 查看 `admission` 与 `filesState`；不要仅凭已有 Run ID 判断任务已经执行。Web 两个发起入口也会保留待确认请求，支持查询受理结果；暂未查到记录不代表原请求失败。
+
+Web 预览绑定完整模板及 workflow/Goal 模式；出现 `PLAN_DIGEST_MISMATCH` 时，先刷新预览并审阅，再重新提交。顶栏分开显示凭据与 Provider 的检查状态、检查时间和重试入口。CLI 的 `--dry-run` 当前仅支持 `--dynamic`；普通 workflow/Goal 的 dry-run 会在初始化前拒绝，动态预览不受理 Run。
+
 ### 受控交付 CLI（高级）
 
 ```bash
@@ -144,6 +151,7 @@ tekon ui                                      # 启动 Web Dashboard
 | 检查命令画像       | `tekon workflow preflight`                   |
 | 预检 dsh 环境      | `tekon provider preflight dsh-headless`（宿主 Node 硬拦截 + 隔离 metadata workspace） |
 | 发起运行           | `tekon run`                                  |
+| 重试原提交         | `tekon run "<原需求>" --request-id <原标识>`（其他参数也保持一致） |
 | 查看状态           | `tekon status`                               |
 | 查看审阅面         | `tekon review`                               |
 | 审批摘要           | `tekon approval summary`                     |

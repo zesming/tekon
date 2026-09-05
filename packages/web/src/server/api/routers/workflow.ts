@@ -6,6 +6,7 @@ import {
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
   projectRunPlan,
+  toRunPlanPreview,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -31,8 +32,10 @@ export function createWorkflowRouter(context: ServerContext) {
 
       assertSafeName(templateName, 'template');
 
-      const template = loadTemplate(context, templateName);
-      return projectRunPlan(template, {
+      const template = isGoal
+        ? loadWorkflowTemplate({ name: 'goal' })
+        : loadTemplate(context, templateName);
+      return toRunPlanPreview(projectRunPlan(template, {
         agent: input.agent,
         mode: isGoal ? 'goal' : 'workflow',
         profile: input.profile ?? 'human-web',
@@ -41,7 +44,7 @@ export function createWorkflowRouter(context: ServerContext) {
         noProgressTimeoutMs: input.noProgressTimeoutMs,
         progressHeartbeatMs: input.progressHeartbeatMs,
         templateId: templateName,
-      });
+      }));
     },
   };
 }

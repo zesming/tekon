@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { openTekonDatabase } from '@tekon/core';
+import { computeRunPlanDigest, openTekonDatabase } from '@tekon/core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
@@ -57,8 +57,12 @@ describe('project.run plan digest validation (P1-UX-01 / P1-PRODUCT-02 / A-web)'
         | undefined;
       expect(row?.plan_digest).toBe(plan.digest);
       expect(row?.plan_snapshot).toBeTruthy();
-      const { digest: _digest, ...planWithoutDigest } = plan;
-      expect(JSON.parse(row!.plan_snapshot!)).toEqual(planWithoutDigest);
+      const snapshot = JSON.parse(row!.plan_snapshot!);
+      expect(snapshot.digestVersion).toBe(2);
+      expect(snapshot.mode).toBe('workflow');
+      expect(snapshot.template.id).toBe('project-feature');
+      expect(computeRunPlanDigest(snapshot)).toBe(plan.digest);
+      expect(plan).not.toHaveProperty('template');
     } finally {
       db.close();
     }
@@ -101,23 +105,20 @@ describe('project.run plan digest validation (P1-UX-01 / P1-PRODUCT-02 / A-web)'
     ).rejects.toThrow(/PLAN_DIGEST_REQUIRED/);
   });
 
-  it('does not validate planDigest in goal mode', async () => {
+  it('rejects a supplied incorrect goal digest but preserves the old no-preview API', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     cleanupTasks.push(() => api.close());
 
-    const result = await api.project.run({
+    await expect(api.project.run({
       demandText: 'Goal mode run',
       mode: 'goal',
       agent: 'mock',
       token: fixture.sessionToken,
       allowDirtyBase: true,
       planDigest: 'any-arbitrary-digest',
-    });
-
-    expect(result.run).toBeDefined();
-    expect(result.sessionId).toBeDefined();
+    })).rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
 
     const resultWithoutDigest = await api.project.run({
       demandText: 'Goal mode run without digest',

@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { useMutation, useQuery, useSessionToken } from '../../hooks/index.js';
+import { useQuery, useSessionToken } from '../../hooks/index.js';
+import { useRunAdmission } from '../../hooks/use-run-admission.js';
+import { AdmissionNotice } from '../runs/AdmissionNotice.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { queryKeys } from '../../lib/query-keys.js';
 import { routes } from '../../lib/route-paths.js';
@@ -19,7 +21,6 @@ export function SessionComposer() {
   const { token } = useSessionToken();
   const navigate = useNavigate();
   const [text, setText] = useState('');
-  const startInFlightRef = useRef(false);
 
   const {
     data: plan,
@@ -31,11 +32,15 @@ export function SessionComposer() {
     () => rpc.call('workflow.plan', { mode: 'workflow' }),
   );
 
-  const startMutation = useMutation<
-    RpcProcedureMap['project.run']['input'],
-    RpcProcedureMap['project.run']['output']
-  >((input) => rpc.call('project.run', input), {
-    invalidateKeys: ['session.list', 'project.detail', 'project.overview'],
+  const admission = useRunAdmission({
+    token,
+    payload: { demandText: text.trim(), planDigest: plan?.digest },
+    onAccepted: (result) => {
+      if (result.sessionId) {
+        setText('');
+        navigate(routes.session(result.sessionId));
+      }
+    },
   });
 
   const planDigest = plan?.digest;
@@ -45,45 +50,29 @@ export function SessionComposer() {
     Boolean(planDigest) &&
     !planLoading &&
     !planError &&
-    !startMutation.isPending;
+    !admission.isPending &&
+    !admission.planExpired &&
+    admission.scopeReady;
 
   const handleSend = async () => {
-    if (startInFlightRef.current || !canSend || !token || !planDigest) return;
-
-    // React mutation state is asynchronous. Latch synchronously so a second
-    // activation in the same event-loop turn cannot create a duplicate Run.
-    startInFlightRef.current = true;
-    try {
-      const result = await startMutation.mutate({
-        demandText: text.trim(),
-        token,
-        planDigest,
-      });
-      if (result?.sessionId) {
-        setText('');
-        navigate(routes.session(result.sessionId));
-      }
-    } catch {
-      // Error surfaced via startMutation.error below; nothing else to do.
-    } finally {
-      startInFlightRef.current = false;
-    }
+    if (!canSend) return;
+    await admission.submit();
   };
 
   const humanApprovalCount =
     plan?.gates.filter((gate) => gate.requiresHumanApproval).length ?? 0;
 
   return (
-    <div className="session-composer" aria-busy={startMutation.isPending}>
+    <div className="session-composer" aria-busy={admission.isPending}>
       <textarea
         className="input session-composer-input"
         aria-label="新建受控交付任务"
         aria-describedby={
-          startMutation.error
+          admission.error
             ? 'session-composer-hint session-composer-plan session-composer-error'
             : 'session-composer-hint session-composer-plan'
         }
-        aria-invalid={Boolean(startMutation.error)}
+        aria-invalid={Boolean(admission.error)}
         placeholder={
           token
             ? '描述需要受控交付的需求（将运行 PM / RD / QA / Reviewer 全链路）…'
@@ -168,17 +157,15 @@ export function SessionComposer() {
           disabled={!canSend}
           onClick={handleSend}
         >
-          {startMutation.isPending ? '正在创建交付…' : '启动受控交付'}
+          {admission.isPending ? '正在创建交付…' : '启动受控交付'}
         </button>
       </div>
-      {startMutation.error ? (
-        <p
-          id="session-composer-error"
-          className="session-composer-error text-danger"
-          role="alert"
-        >
-          {startMutation.error.message}
-        </p>
+      {token ? (
+        <AdmissionNotice
+          admission={admission}
+          refetchPlan={refetchPlan}
+          errorId="session-composer-error"
+        />
       ) : null}
     </div>
   );

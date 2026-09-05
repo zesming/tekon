@@ -4,12 +4,14 @@ export interface ProviderHealthResult {
   provider: 'dsh-headless';
   status: ProviderHealthStatus;
   checkedAt: string;
+  expiresAt: string;
 }
 
 export interface ProviderHealthInput {
   scope: string;
   tokenHash: string;
   provider: 'dsh-headless';
+  refresh?: boolean;
 }
 
 interface CacheEntry {
@@ -57,14 +59,13 @@ export function createProviderHealthService(options: {
     const at = now();
     cleanExpired(at);
     const key = keyFor(input);
-    const cached = cache.get(key);
-    if (cached && at - cached.cachedAt < ttlMs) {
-      return cached.result;
-    }
-
     const pending = inFlight.get(key);
     if (pending) {
       return pending;
+    }
+    const cached = cache.get(key);
+    if (!input.refresh && cached && at - cached.cachedAt < ttlMs) {
+      return cached.result;
     }
 
     const probe = (async () => {
@@ -81,6 +82,7 @@ export function createProviderHealthService(options: {
         provider: input.provider,
         status,
         checkedAt: new Date(checkedAtMs).toISOString(),
+        expiresAt: new Date(checkedAtMs + ttlMs).toISOString(),
       };
       setCache(key, { result, cachedAt: checkedAtMs });
       return result;

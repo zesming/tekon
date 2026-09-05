@@ -1,6 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import { useMutation, useQuery } from '../../hooks/index.js';
+import { useQuery } from '../../hooks/index.js';
+import {
+  useRunAdmission,
+  type RunPayload,
+} from '../../hooks/use-run-admission.js';
+import { AdmissionNotice } from './AdmissionNotice.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
@@ -40,7 +45,6 @@ const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
  */
 export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { token } = useSessionToken();
-  const startInFlightRef = useRef(false);
   const { addFlash } = useFlash();
   const [searchParams] = useSearchParams();
   const shapePath = searchParams.get('shapePath') ?? '';
@@ -97,7 +101,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       : undefined;
 
   // ── Fetch workflow execution plan preview (T2) ──
-  const effectiveTemplate = mode === 'goal' ? undefined : (template || undefined);
+  const effectiveTemplate = mode === 'goal' ? undefined : template || undefined;
   const {
     data: planData,
     isLoading: planLoading,
@@ -129,8 +133,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const requiresUnrestrictedNetwork = Boolean(
     planData?.requiresUnrestrictedNetwork || agent === 'dsh-headless',
   );
-  const missingPlanDigest =
-    mode === 'workflow' && Boolean(planData) && !planData?.digest;
+  const missingPlanDigest = Boolean(planData) && !planData?.digest;
 
   useEffect(() => {
     if (!requiresUnrestrictedNetwork) {
@@ -152,12 +155,29 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       Boolean(draft.hasPlan && draft.planApproved !== true)),
   );
 
-  // ── Start run mutation ──
-  const startMutation = useMutation<
-    RpcProcedureMap['project.run']['input'],
-    RpcProcedureMap['project.run']['output']
-  >((input) => rpc.call('project.run', input), {
-    invalidateKeys: ['project.detail', 'project.overview', 'session.list'],
+  const payload: RunPayload = {
+    demandText: demandText.trim(),
+    ...(shapePath ? { demandShapePath: shapePath } : {}),
+    ...(mode === 'goal' ? { mode: 'goal' } : { profile }),
+    ...(mode === 'workflow' && template ? { template } : {}),
+    ...(agent ? { agent } : {}),
+    ...(allowDirtyBase ? { allowDirtyBase: true } : {}),
+    ...(requiresUnrestrictedNetwork && acknowledgedNetwork
+      ? { acknowledgeUnrestrictedNetwork: true }
+      : {}),
+    ...(planData?.digest ? { planDigest: planData.digest } : {}),
+    ...(validTimeout ? { timeoutMs: validTimeout } : {}),
+    ...(validNoProgress ? { noProgressTimeoutMs: validNoProgress } : {}),
+  };
+  const admission = useRunAdmission({
+    token,
+    payload,
+    onAccepted: (result) => {
+      addFlash('success', `运行已受理: ${result.run.id.slice(0, 12)}`);
+      setDemandText('');
+      setAcknowledgedNetwork(false);
+      setIsOpen(false);
+    },
   });
 
   const handleModeChange = (nextMode: RunMode) => {
@@ -181,7 +201,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   const submitState = startRunSubmitState({
     hasToken: Boolean(token),
-    submitting: startMutation.isPending,
+    submitting: admission.isPending,
     planLoading,
     planError: Boolean(planError),
     hasPlanData: Boolean(planData),
@@ -190,10 +210,12 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     missingPlanDigest,
     networkUnacknowledged: requiresUnrestrictedNetwork && !acknowledgedNetwork,
   });
-  const isSubmitDisabled = submitState.disabled;
+  const isSubmitDisabled =
+    submitState.disabled || admission.planExpired || !admission.scopeReady;
 
   const handleStart = async () => {
-    if (startInFlightRef.current) return;
+    if (admission.isPending || admission.planExpired || !admission.scopeReady)
+      return;
 
     if (submitState.reason) {
       if (submitState.reason === 'submitting') {
@@ -233,50 +255,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       return;
     }
 
-    const input: RpcProcedureMap['project.run']['input'] = {
-      demandText: demandText.trim(),
-      token: token!,
-    };
-
-    if (shapePath) input.demandShapePath = shapePath;
-    if (mode === 'goal') input.mode = 'goal';
-    if (mode === 'workflow' && template) input.template = template;
-    if (agent) input.agent = agent;
-    // B1 fix: profile must be sent unconditionally in workflow mode so the
-    // run-submission digest input domain matches the plan-preview domain
-    // (which always sends profile). Omitting the default 'human-web' here
-    // made the server-computed digest diverge and rejected every default run.
-    if (mode === 'workflow') input.profile = profile;
-    if (allowDirtyBase) input.allowDirtyBase = true;
-    if (requiresUnrestrictedNetwork && acknowledgedNetwork) {
-      input.acknowledgeUnrestrictedNetwork = true;
-    }
-    if (mode !== 'goal' && planData?.digest) {
-      input.planDigest = planData.digest;
-    }
-
-    const parsedTimeout = Number(timeoutMs);
-    if (Number.isFinite(parsedTimeout) && parsedTimeout > 0) {
-      input.timeoutMs = parsedTimeout;
-    }
-
-    const parsedNoProgress = Number(noProgressTimeoutMs);
-    if (Number.isFinite(parsedNoProgress) && parsedNoProgress > 0) {
-      input.noProgressTimeoutMs = parsedNoProgress;
-    }
-
-    startInFlightRef.current = true;
-    try {
-      const result = await startMutation.mutate(input);
-      addFlash('success', `运行已启动: ${result.run.id.slice(0, 12)}`);
-      setDemandText('');
-      setAcknowledgedNetwork(false);
-      setIsOpen(false);
-    } catch (err) {
-      addFlash('error', err instanceof Error ? err.message : '启动运行失败');
-    } finally {
-      startInFlightRef.current = false;
-    }
+    await admission.submit();
   };
 
   return (
@@ -435,7 +414,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               role="note"
               style={{ color: 'var(--warn, #b45309)', marginTop: 8 }}
             >
-              mock 仅用于测试或演示：它会生成合成结果与产物，不会执行真实代理任务，也不能作为交付完成证据。
+              mock
+              仅用于测试或演示：它会生成合成结果与产物，不会执行真实代理任务，也不能作为交付完成证据。
             </p>
           ) : null}
 
@@ -530,7 +510,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                   className="text-muted"
                   style={{ fontSize: '11px', marginBottom: '10px' }}
                 >
-                  此处只表示计划未声明不受限网络；实际网络隔离仍取决于 Provider 与宿主环境。
+                  此处只表示计划未声明不受限网络；实际网络隔离仍取决于 Provider
+                  与宿主环境。
                 </p>
               ) : null}
 
@@ -538,15 +519,24 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               <div style={{ marginBottom: '10px' }}>
                 <span
                   className="text-sm text-muted"
-                  style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                  style={{
+                    display: 'block',
+                    marginBottom: '4px',
+                    fontWeight: 600,
+                  }}
                 >
                   角色链路：
                 </span>
-                <div className="flex gap-2 items-center" style={{ flexWrap: 'wrap' }}>
+                <div
+                  className="flex gap-2 items-center"
+                  style={{ flexWrap: 'wrap' }}
+                >
                   {planData.roleChain.map((role, idx) => (
                     <span key={role} className="flex items-center gap-2">
                       {idx > 0 && (
-                        <span style={{ color: 'var(--text-t)', fontSize: '11px' }}>
+                        <span
+                          style={{ color: 'var(--text-t)', fontSize: '11px' }}
+                        >
                           →
                         </span>
                       )}
@@ -561,7 +551,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                 <div style={{ marginBottom: '10px' }}>
                   <span
                     className="text-sm text-muted"
-                    style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                    style={{
+                      display: 'block',
+                      marginBottom: '4px',
+                      fontWeight: 600,
+                    }}
                   >
                     执行阶段：
                   </span>
@@ -578,8 +572,12 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                         }}
                       >
                         <div style={{ fontWeight: 600 }}>{phase.name}</div>
-                        <div className="text-muted" style={{ fontSize: '11px' }}>
-                          {formatPhaseParallel(phase.parallel)} · 节点: {phase.nodeIds.join(', ')}
+                        <div
+                          className="text-muted"
+                          style={{ fontSize: '11px' }}
+                        >
+                          {formatPhaseParallel(phase.parallel)} · 节点:{' '}
+                          {phase.nodeIds.join(', ')}
                         </div>
                       </div>
                     ))}
@@ -592,7 +590,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                 <div>
                   <span
                     className="text-sm text-muted"
-                    style={{ display: 'block', marginBottom: '4px', fontWeight: 600 }}
+                    style={{
+                      display: 'block',
+                      marginBottom: '4px',
+                      fontWeight: 600,
+                    }}
                   >
                     Gate 审批与控制点：
                   </span>
@@ -617,7 +619,10 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                             <span className="badge-tag risk">人工审批</span>
                           )}
                         </div>
-                        <div className="text-muted" style={{ fontSize: '11px' }}>
+                        <div
+                          className="text-muted"
+                          style={{ fontSize: '11px' }}
+                        >
                           节点: {g.nodeId} · 超时: {formatTimeout(g.timeoutMs)}
                         </div>
                       </div>
@@ -648,7 +653,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                   fontWeight: 600,
                 }}
               >
-                ⚠ 风险提示：当前执行代理（{agent}）联网不受限，运行环境将具备完整网络访问权限。
+                ⚠ 风险提示：当前执行代理（{agent}
+                ）联网不受限，运行环境将具备完整网络访问权限。
               </div>
               <label
                 style={{
@@ -759,7 +765,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
               disabled={isSubmitDisabled}
               onClick={handleStart}
             >
-              {startMutation.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
+              {admission.isPending ? '⏳ 启动中…' : '▶ 发起运行'}
             </button>
           </div>
 
@@ -782,24 +788,15 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
           )}
 
           {requiresUnrestrictedNetwork && !acknowledgedNetwork && (
-            <p
-              className="text-sm"
-              style={{ color: '#991b1b', marginTop: 8 }}
-            >
+            <p className="text-sm" style={{ color: '#991b1b', marginTop: 8 }}>
               需勾选知情确认框后方可发起不受限网络运行。
-            </p>
-          )}
-
-          {startMutation.error && (
-            <p
-              className="text-sm"
-              style={{ color: 'var(--fail)', marginTop: 8 }}
-            >
-              {startMutation.error.message}
             </p>
           )}
         </div>
       )}
+      {token ? (
+        <AdmissionNotice admission={admission} refetchPlan={refetchPlan} />
+      ) : null}
     </div>
   );
 }

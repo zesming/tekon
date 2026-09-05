@@ -31,6 +31,7 @@ import {
   workflowInstanceSchema,
 } from '../types/domain.js';
 import { type WorktreeLease, worktreeLeaseSchema } from '../types/config.js';
+import { createAdmissionStore, type AdmissionStore } from './admission-store.js';
 import type { TekonDatabase } from './connection.js';
 import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
@@ -292,6 +293,10 @@ export interface TekonRepositories {
     nodeId: string,
   ): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
+  getDatabase(): TekonDatabase;
+  getWriteQueue(): WriteQueue;
+  admissionStore: AdmissionStore;
+  mustGetWorkflow(runId: string): Promise<WorkflowInstance>;
 }
 
 export function createRepositories(
@@ -944,6 +949,22 @@ export function createRepositories(
         )
         .get(runId, nodeId) as RoleRunRow | undefined;
       return row ? mapRoleRun(row) : null;
+    },
+
+    getDatabase() {
+      return db;
+    },
+
+    getWriteQueue() {
+      return writeQueue;
+    },
+
+    admissionStore: createAdmissionStore({ db, writeQueue }),
+
+    async mustGetWorkflow(runId) {
+      const row = await this.getWorkflowInstance(runId);
+      if (!row) throw new Error(`workflow not found: ${runId}`);
+      return row;
     },
 
     async findRecoverableRun(runId) {
