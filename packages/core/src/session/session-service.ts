@@ -485,12 +485,20 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       }
       throw error;
     }
+    // A cancelled workflow row is the durable intent, not proof that the job
+    // received it. Retry delivery even after a previous call wrote that row
+    // and then failed. Session observation must not block the cancel chain.
+    const active = await jobs.findActiveByRunId(input.runId);
+    if (active) {
+      await jobRunner.requestCancel(active.id, 'web cancel');
+    }
     const session = await sessions.findSessionByRunId(input.runId);
     if (!written) {
       return {
         runId: input.runId,
         terminalConflict: false,
         ...(session ? { sessionId: session.id } : {}),
+        ...(active ? { jobId: active.id } : {}),
       };
     }
     if (session) {
@@ -500,10 +508,6 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         payload: { runId: input.runId },
       });
       bus.publish(requested);
-    }
-    const active = await jobs.findActiveByRunId(input.runId);
-    if (active) {
-      await jobRunner.requestCancel(active.id, 'web cancel');
     }
     if (session) {
       await sessions.updateSessionStatus(session.id, 'cancelled');
