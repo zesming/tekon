@@ -1,36 +1,40 @@
 # Tekon 当前权威产品与架构评审
 
-[第二十五轮 HTML 人审版](2026-09-05-tekon-product-runtime-harness-twenty-fifth-review.html) · [完整 Markdown](2026-09-05-tekon-product-runtime-harness-twenty-fifth-review.md) · [整改方案](../superpowers/plans/2026-09-05-twenty-fifth-review-remediation-plan.html) · [PR #11](https://github.com/zesming/tekon/pull/11)
+[第二十六轮 HTML 人审版](2026-09-05-tekon-product-runtime-harness-twenty-sixth-review.html) · [Markdown 完整报告](2026-09-05-tekon-product-runtime-harness-twenty-sixth-review.md) · [PR #11](https://github.com/zesming/tekon/pull/11) · [本索引 HTML](current.html)
 
-日期：2026-09-05。接续整改版本：**0.23.1**。基线为 `4bb7c260da2f8557f23beab42e01baca65f3ef2a`；保留作者 `c4f6939` 的 R25 修复与原 9 项测试。R24 实际交付为 `8a7bb3f`。
+**日期：2026-09-05；版本：0.23.1。**
+
+- 用户基线：`1e277464dbf9eeb9f97620421405d7a5913bc067`；Core #444 / CI #353 成功。
+- 实际修复：`ed7e0bb0768c622357357d24eb20b726708cd66d`，原 PR 分支非强制快进。
+- 代码检查：[Core #445](https://github.com/zesming/tekon/actions/runs/33967697106) / [CI #354](https://github.com/zesming/tekon/actions/runs/33967697121) 均 completed/success；新增 Core 7 项、Web 5 项回归实际执行。
+- Core 单测 1343 passed / 1 项既有条件跳过、e2e 43 passed；Web 单测 572 passed。文档自身的最终 Head 与 Checks 由 PR 描述单独记录，不复用代码 Head 的绿色。
 
 ## 当前裁决
 
-认可 R24 的有效命令绑定及作者 R25 的回执后本地失败修复；接续调查补出共享合并、恢复重试、作用域读取失败和真实异步导航的 P2 缺口，已按评审方案实施并通过本地完整验收。Controller 三轮独立代码/测试复查放行，组件及浏览器测试另行审阅；16 张最终截图经主代理与独立代理逐张复查放行。最终完成度复查与 Git 交付按报告 §10.4 收口。
+**R25 回执整改有效。本轮取消投递 P1 和终态提示 P2 已局部修复并通过集成回归；未再确认必须阻断本次增量的新问题。** 该结论不等于所有 Provider、操作系统、负载与完整持续协作已经验收。
 
-## 本轮变化
+## 本轮具体修复
 
-- 当前页同时保护 accepted 与 recovery-required 的 Run/Session 身份；旧账本、not-found、迟到失败不能推翻确认，目录修复后仍可原 ID 重试。
-- 新作用域读取失败不会留下旧作用域入口；查询或忽略 A 的迟到错误不再误清、改写 B 的错误归属。
-- 默认入口等待真实 Router 导航；失败保留输入与原会话入口，旧异步回调不清空后来编辑的输入。成功离开时由页面卸载重置表单。
-- 请求账本仍只保存 scope、requestId、fingerprint、state 四字段；完整回执只保存在 Controller 内存中，刷新后不保留。刷新后记录仍在则查询，已清理则从受控交付列表打开已有会话。
+**R26-01：**Run 已写为 cancelled 后，Session 查询或事件写入失败原先会阻止 Job 收到取消；重试又因 written=false 早返回。现在先按既有 JobRunner 协议向活动 Job 投递取消，再处理 Session 观察；已经 cancelled 仍可显式重试投递。passed/failed 的终态赢家不被推翻，正常重复调用不重复发送生命周期事件。
 
-## 验证记录
+**R26-02：**取消接口返回 HTTP 成功但实际 Run 已 passed/failed 时，页面原先仍提示 cancelled。现在依据返回的真实终态反馈；cancelled 只表示已记录取消，不宣称全部后台进程退出。
 
-全包 build/typecheck 通过；全仓 Vitest 为 180 files、2034 passed、1 项既有 DSH live opt-in skipped；Controller 定向 72/72；CLI 真进程 e2e 22/22；完整 Chromium 两片串行 84 + 64 = 148/148，零重试、零跳过；其中 R25 生产页面 39 项、真实 React 生命周期 10 项。生产依赖审计通过。
+本地源码定向复现分别为 4 失败/2 通过 → 6/6，以及 4 失败 → 4/4。Core 新测试使用真实 SQLite/JobRunner；Web 新测试调用实际组件处理函数、控制 Hook/RPC 端口。不将端口测试冒充真实浏览器或跨进程 Provider 验证。
 
-完整浏览器与重采截图的结果见报告 §10。初轮运行中断及夹具失败已如实记录，修正后取得上述完整结果。16 张新图与[对应状态记录](assets/r25-v0.23.1/evidence.json)已归档，初轮加载中过渡图已替换；归档专跑再次 16/16，零重试。
+## 不再重复报告的旧问题
 
-## 保留的边界与下一阶段
+R25 回执合并、目录恢复重试、scope/错误归属和异步导航已改进。RunPlan v3 有效命令绑定、同库原子/幂等受理、目录就绪屏障、共享提交控制器、Credential/Provider 分层及停用裸 clean 继续成立。
 
-服务端受理、幂等、RunPlan v3、历史恢复、Job owner 与审批链未在本补丁重做。命令绑定不冻结 package scripts、PATH 二进制、依赖或宿主；SQLite 原子受理不保证所有外部副作用恰好执行一次。
+## 后续范围
 
-DSH 已 fetch 至 HEAD/origin/master `d347e703908d0406b7a7ef80e3a0e594d86b2215`，发布标签 `dsh-v0.1.3-alpha.1`；Tekon tested pin 保持 `0.1.2-alpha.3`。依据与判断见报告 §9.4 的固定源稿链接。
+先用一个真实 Provider 验证执行、取消、确认退出、关闭与重启恢复，再独立推进只读完整历史导出。此次先保证取消控制投递；观察错误仍可能返回、缺失事件不自动补齐，崩溃后的自动重试及完整进程树终止不在本补丁保证内。
 
-本次生产页面回归使用真实 HTTP/SQLite 与显式 mock Provider，React 专项使用受控回执；不宣称真实 Provider 生命周期、ACP、完整只读导出、Windows、真实设备或辅助技术验收已完成。下一阶段优先取得真实 Provider 的执行、取消、退出与重启恢复证据，并独立推进完整只读历史导出。
+已排除“后台 Gate 未注入 signal”的主路径误判：workflow-job-executor 在组合根统一向 gateway 注入 signal 与 registry。单一执行所有权是需求，daemon、ACP 或事件溯源是方案，不能按名称缺失一概判 P0。
 
-## 交付与资料维护
+DSH 官方发布观察为 `0.1.3-alpha.1`；Tekon pin 保持 `0.1.2-alpha.3`。Headless 仍为一次性任务，ACP 不等于 raw deltas、旧更新重放或完整 transcript replay/fork。
 
-报告 §1–8 保留作者历史时点，§9 是接续调查，§10 是实施验收。README、CHANGELOG、用户手册及正式 HTML 已同步本轮边界；安装流程及协作规则未变，不修改安装/更新脚本和 AGENTS。
+## 证据与维护
 
-本索引记录本地验收时点；最终提交、Head 与 Core/CI 链接以 PR #11 对应记录为准，不能引用作者原 Head 检查代替。未获合入、发布、部署、强推或修改仓库规则的授权。
+容器 DNS 不可用，未执行本地全仓 pnpm test；完整集成来自绑定 SHA 的远端检查。无独立 subagent、新应用截图/读屏、Windows、真实 DSH L2/L3 或负载演练。报告 HTML 只检查自身 320/1440 排版。
+
+第二十六轮 Markdown 为内容源，HTML 同步呈现，旧报告保留历史。修复纳入未合并的 v0.23.1；不另发布、不改安装与协作规则。未合并、发布、部署、强推或修改仓库规则。
