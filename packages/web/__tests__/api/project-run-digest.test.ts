@@ -58,7 +58,7 @@ describe('project.run plan digest validation (P1-UX-01 / P1-PRODUCT-02 / A-web)'
       expect(row?.plan_digest).toBe(plan.digest);
       expect(row?.plan_snapshot).toBeTruthy();
       const snapshot = JSON.parse(row!.plan_snapshot!);
-      expect(snapshot.digestVersion).toBe(2);
+      expect(snapshot.digestVersion).toBe(3);
       expect(snapshot.mode).toBe('workflow');
       expect(snapshot.template.id).toBe('project-feature');
       expect(computeRunPlanDigest(snapshot)).toBe(plan.digest);

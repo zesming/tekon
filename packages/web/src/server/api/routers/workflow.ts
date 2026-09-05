@@ -5,7 +5,7 @@ import {
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
-  projectRunPlan,
+  captureRunPlan,
   toRunPlanPreview,
   type WorkflowTemplate,
 } from '@tekon/core';
@@ -35,7 +35,8 @@ export function createWorkflowRouter(context: ServerContext) {
       const template = isGoal
         ? loadWorkflowTemplate({ name: 'goal' })
         : loadTemplate(context, templateName);
-      return toRunPlanPreview(projectRunPlan(template, {
+      try {
+        return toRunPlanPreview(captureRunPlan(context.projectContext.projectRoot, template, {
         agent: input.agent,
         mode: isGoal ? 'goal' : 'workflow',
         profile: input.profile ?? 'human-web',
@@ -44,7 +45,13 @@ export function createWorkflowRouter(context: ServerContext) {
         noProgressTimeoutMs: input.noProgressTimeoutMs,
         progressHeartbeatMs: input.progressHeartbeatMs,
         templateId: templateName,
-      }));
+        }), context.planPreviewSigner);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('PLAN_CONFIG_INVALID:')) {
+          throw new ApiError('BAD_REQUEST', 'PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览');
+        }
+        throw error;
+      }
     },
   };
 }

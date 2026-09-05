@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,7 +7,7 @@ import {
   createAuditLogger, createJobRepository, createJobRunner, createMockAgentAdapter,
   createRepositories, createSessionEventBus, createSessionEventStore,
   createSessionService, createSubprocessRegistry, createWorkflowEngine, createWriteQueue,
-  migrateDatabase, openTekonDatabase,
+  captureRunPlan, migrateDatabase, openTekonDatabase, parseWorkflowTemplate,
 } from '../../src/index.js';
 
 const cleanup: Array<() => void> = [];
@@ -39,6 +39,25 @@ function setup() {
 }
 
 describe('SessionService 使用真实 Engine 原子受理', () => {
+  it('Provider/preflight的await期间profile变化，拒绝旧确认且无新受理', async () => {
+    const env = setup();
+    mkdirSync(join(env.projectRoot, '.tekon'));
+    const path = join(env.projectRoot, '.tekon/repo-profile.yaml');
+    writeFileSync(path, JSON.stringify({ commands: { build: { tool: 'npm', args: ['run', 'confirmed'] } } }));
+    const template = parseWorkflowTemplate({ id: 'await-facts', governance: 'none', phases: [{ id: 'dev', nodes: [{ id: 'rd', role: 'rd', gates: [{ type: 'build', commandRef: 'build' }] }] }] });
+    const confirmed = captureRunPlan(env.projectRoot, template, { agent: 'mock', profile: 'human-web' });
+    env.preflight.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      writeFileSync(path, JSON.stringify({ commands: { build: { notApplicable: true, reason: 'changed after provider await' } } }));
+    });
+    await expect(env.service.startRun({ requestId: 'service-command-await-01', demandText: 'preflight drift', workflowSpec: template, engine: {}, planDigest: confirmed.digest })).rejects.toThrow(/PLAN_DIGEST_MISMATCH/);
+    expect(env.preflight).toHaveBeenCalledOnce();
+    for (const table of ['run_admissions', 'workflow_instances', 'sessions', 'jobs', 'gate_results']) {
+      expect(env.db.prepare(`select count(*) as count from ${table}`).get()).toEqual({ count: 0 });
+    }
+    expect(existsSync(join(env.projectRoot, '.tekon/runs'))).toBe(false);
+  });
+
   it('持久化factory解析出的配置，治理Audit与opening prefix各一次；重放不再预检', async () => {
     const { service, db, factory, preflight, order, audit } = setup();
     const input = { requestId: 'service-factory-01', demandText: 'factory truth', mode: 'goal' as const,

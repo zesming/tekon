@@ -18,7 +18,7 @@ import {
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
-  projectRunPlan,
+  captureRunPlan,
   readDraftShapeFile,
   renderDraftShapeForRun,
   runDshPreflight,
@@ -300,7 +300,11 @@ export function createProjectRouter(
         if (error instanceof Error && error.message.startsWith('REQUEST_ID_CONFLICT')) {
           return new ApiError('CONFLICT', `REQUEST_ID_CONFLICT: requestId=${requestId}`);
         }
-        if (error instanceof Error && error.message.startsWith('PLAN_')) {
+        const planError = error instanceof RunAdmissionError && !error.runId ? error.cause : error;
+        if (planError instanceof Error && planError.message.startsWith('PLAN_CONFIG_INVALID:')) {
+          return new ApiError('BAD_REQUEST', `PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览 (requestId=${requestId})`);
+        }
+        if (planError instanceof Error && planError.message.startsWith('PLAN_')) {
           return new ApiError('BAD_REQUEST', `PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试 (requestId=${requestId})`);
         }
         if (error instanceof RunAdmissionError && error.runId) {
@@ -344,7 +348,7 @@ export function createProjectRouter(
           throw new ApiError('BAD_REQUEST', 'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs');
         }
         const workflowSpec = isGoal ? loadWorkflowTemplate({ name: 'goal' }) : loadTemplate(context, templateName);
-        const canonicalPlan = projectRunPlan(workflowSpec, {
+        const canonicalPlan = captureRunPlan(context.projectContext.projectRoot, workflowSpec, {
           agent: resolvedAgent,
           mode: isGoal ? 'goal' : 'workflow',
           profile: resolvedProfile,

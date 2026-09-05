@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { queryCache } from '../lib/query-cache.js';
+import { authScope, queryKeys } from '../lib/query-keys.js';
 import { rpc } from '../lib/rpc-client.js';
 import {
   lastEventId,
@@ -47,6 +48,11 @@ export function useSessionStream(
   sessionId: string | null,
 ): UseSessionStreamResult {
   const { token } = useSessionToken();
+  const contextKey = JSON.stringify([sessionId, token]);
+  const contextRef = useRef(contextKey);
+  contextRef.current = contextKey;
+  const stateContext = useRef(contextKey);
+  const subscriptionRef = useRef<object | null>(null);
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [connState, setConnState] = useState<StreamConnState>('connecting');
   const [hasEarlier, setHasEarlier] = useState(false);
@@ -63,8 +69,11 @@ export function useSessionStream(
   const dismissTruncated = useCallback(() => setTruncated(false), []);
 
   const loadEarlier = useCallback(async () => {
+    const owner = subscriptionRef.current;
     if (!sessionId || isLoadingEarlier || retainFloor.current >= MAX_EARLIER)
       return;
+    if (!owner || contextRef.current !== contextKey) return;
+    const current = () => subscriptionRef.current === owner && contextRef.current === contextKey;
     const earliestSeq = eventsRef.current[0]?.seq ?? 0;
     const beforeSeq = earlierCursor.current ?? earliestSeq;
     if (beforeSeq <= 1) {
@@ -82,6 +91,7 @@ export function useSessionStream(
         beforeSeq,
         limit: EARLIER_PAGE_LIMIT,
       });
+      if (!current()) return;
       const nextCursor = res?.nextBeforeSeq;
       earlierCursor.current = nextCursor ?? null;
       if (res?.events && res.events.length > 0) {
@@ -115,14 +125,19 @@ export function useSessionStream(
     } catch {
       // keep current state on error
     } finally {
-      setIsLoadingEarlier(false);
+      if (current()) setIsLoadingEarlier(false);
     }
-  }, [sessionId, isLoadingEarlier]);
+  }, [sessionId, isLoadingEarlier, contextKey]);
 
   useEffect(() => {
     if (!sessionId) {
       return;
     }
+    const owner = {};
+    subscriptionRef.current = owner;
+    stateContext.current = contextKey;
+    const current = () => subscriptionRef.current === owner && contextRef.current === contextKey;
+    const scope = authScope(token);
     // Reset accumulated state when the subscription target changes.
     eventsRef.current = [];
     retainFloor.current = 0;
@@ -138,9 +153,11 @@ export function useSessionStream(
       sessionId,
       token,
       onTruncated() {
+        if (!current()) return;
         setTruncated(true);
       },
       onEvent(event) {
+        if (!current()) return;
         eventsRef.current = mergeEventsBySeq(eventsRef.current, [event]);
         const maxWindow =
           CLIENT_STREAM_WINDOW_SIZE +
@@ -151,24 +168,38 @@ export function useSessionStream(
         setEvents(eventsRef.current);
         setHasEarlier((eventsRef.current[0]?.seq ?? 1) > 1);
         if (SESSION_LIST_REFRESH_EVENTS.has(event.type)) {
-          queryCache.invalidate('session.list.');
+          queryCache.invalidate(queryKeys.sessionList(scope));
+        }
+        if (event.type === 'approval/requested' || event.type === 'approval/decided') {
+          const runId = event.payload?.runId;
+          // The event is an invalidation hint; the authenticated RPC remains the
+          // authority for decision data and permissions.
+          queryCache.invalidate(typeof runId === 'string' && runId.length > 0
+            ? queryKeys.gateResults(runId, scope)
+            : 'gate.results.');
         }
       },
-      onStateChange: setConnState,
+      onStateChange(state) {
+        if (current()) setConnState(state);
+      },
     });
 
-    return () => stream.close();
-  }, [sessionId, token]);
+    return () => {
+      if (subscriptionRef.current === owner) subscriptionRef.current = null;
+      stream.close();
+    };
+  }, [sessionId, token, contextKey]);
 
+  const sameContext = stateContext.current === contextKey;
   return {
-    events,
-    connState,
-    latestSeq: lastEventId(events),
-    hasEarlier,
-    reachedEarlierLimit,
-    isLoadingEarlier,
+    events: sameContext ? events : [],
+    connState: sameContext ? connState : 'connecting',
+    latestSeq: sameContext ? lastEventId(events) : 0,
+    hasEarlier: sameContext && hasEarlier,
+    reachedEarlierLimit: sameContext && reachedEarlierLimit,
+    isLoadingEarlier: sameContext && isLoadingEarlier,
     loadEarlier,
-    truncated,
+    truncated: sameContext && truncated,
     dismissTruncated,
   };
 }

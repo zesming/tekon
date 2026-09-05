@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  projectRunPlan,
+  captureRunPlan,
   loadWorkflowTemplate,
   openTekonDatabase,
 } from '@tekon/core';
@@ -43,7 +43,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
       io.takeStdout();
 
       const template = loadWorkflowTemplate({ name: 'standard-delivery' });
-      const expectedPlan = projectRunPlan(template, {
+      const expectedPlan = captureRunPlan(repoPath, template, {
         agent: 'mock',
         profile: 'cli',
         allowDirtyBase: false,
@@ -108,7 +108,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
       io.takeStdout();
 
       const template = loadWorkflowTemplate({ name: 'goal' });
-      const expectedPlan = projectRunPlan(template, {
+      const expectedPlan = captureRunPlan(repoPath, template, {
         agent: 'mock',
         profile: 'cli',
         allowDirtyBase: false,

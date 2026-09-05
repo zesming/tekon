@@ -63,6 +63,10 @@ export function openWorkspaceSummaryStream(
         headers,
         signal: controller.signal,
       });
+      if (closed) {
+        await response.body?.cancel().catch(() => undefined);
+        return;
+      }
       if (!response.ok || !response.body) {
         if (FATAL_STREAM_STATUSES.has(response.status)) {
           markClosed();
@@ -77,10 +81,15 @@ export function openWorkspaceSummaryStream(
       const decoder = new TextDecoder();
       for (;;) {
         const { done, value } = await reader.read();
+        if (closed) {
+          await reader.cancel().catch(() => undefined);
+          return;
+        }
         if (done) break;
         for (const frame of parser.push(
           decoder.decode(value, { stream: true }),
         )) {
+          if (closed) return;
           if (frame.data === undefined) continue;
           try {
             const event = JSON.parse(frame.data) as WorkspaceSummaryEvent;

@@ -323,6 +323,37 @@ describe('persistent admission identity and request lifetime', () => {
     expect(ctx.run.mock.calls[1][0].requestId).toBe(id);
   });
 
+  for (const surface of ['post', 'lookup'] as const) {
+    for (const filesState of ['pending', 'recovery_required', 'ready'] as const) {
+      it(`${surface} retains ${filesState} in the view without widening the ledger`, async () => {
+        const ctx = setup();
+        const state = filesState === 'ready' ? 'accepted' : 'recovery-required';
+        if (surface === 'post') {
+          ctx.run.mockImplementationOnce(async (input) => {
+            const result = accepted(input.requestId!, state);
+            return { ...result, run: { ...result.run, filesState } };
+          });
+          await ctx.controller.loadScope();
+          await ctx.controller.submit();
+        } else {
+          ctx.ledger.upsert({ scope: 'repo-one-A', fingerprint: 'lookup-fingerprint', requestId: 'request-files-state', state: 'unknown' });
+          await ctx.controller.loadScope();
+          ctx.lookup.mockResolvedValueOnce({ state, filesState, requestId: 'request-files-state', runId: 'run-one', sessionId: 'session-one' });
+          await ctx.controller.lookup('request-files-state');
+        }
+        expect(ctx.controller.snapshot.records[0]).toMatchObject({ state, filesState });
+        const persisted = ctx.ledger.list('repo-one-A');
+        if (filesState === 'ready') expect(persisted).toEqual([]);
+        else {
+          expect(Object.keys(persisted[0]).sort()).toEqual(['fingerprint', 'requestId', 'scope', 'state']);
+          const reloaded = setup(ctx.s);
+          await reloaded.controller.loadScope();
+          expect(reloaded.controller.snapshot.records[0]).not.toHaveProperty('filesState');
+        }
+      });
+    }
+  }
+
   for (const lateState of ['not-found', 'recovery-required'] as const) {
     it(`keeps POST accepted monotonic when an older lookup returns ${lateState}`, async () => {
       const ctx = setup();

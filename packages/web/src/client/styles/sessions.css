@@ -4,6 +4,37 @@
  * ------------------------------------------------------------------------- */
 
 /* Session list */
+.plan-command-bindings {
+  min-width: 0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-l);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.plan-command-bindings p { margin: 6px 0; }
+.plan-command-bindings-header, .plan-binding-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.plan-command-bindings-header { justify-content: space-between; }
+.plan-command-bindings summary { cursor: pointer; padding: 8px 0; }
+.plan-command-bindings button { white-space: normal; max-width: 100%; }
+.plan-binding-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.plan-binding-list > li { min-width: 0; padding: 10px; background: var(--surface); border: 1px solid var(--border-l); border-radius: 6px; }
+.plan-binding-comparison ul { margin: 6px 0; padding-left: 20px; }
+.execution-binding-notice { margin: 12px 0; padding: 12px; background: var(--surface-h); border-left: 3px solid var(--border); overflow-wrap: anywhere; }
+.execution-binding-notice[data-binding-state="invalid"] { border-left-color: var(--fail); }
+
 .session-list {
   list-style: none;
   margin: 16px 0 0;

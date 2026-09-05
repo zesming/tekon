@@ -421,7 +421,7 @@ for (const width of WIDTHS) {
       const submit = page.getByRole('button', { name: '▶ 发起运行' });
       await submit.click();
       const notice = page.getByTestId('admission-notice');
-      await expect(notice).toContainText('创建失败需恢复');
+      await expect(notice).toContainText('已受理，等待目录恢复');
       await expect(notice).toContainText('任务尚未执行');
       for (const control of [
         demand,

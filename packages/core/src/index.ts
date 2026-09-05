@@ -61,6 +61,7 @@ export * from './workflow/scheduler.js';
 export * from './workflow/engine.js';
 export * from './workflow/dynamic.js';
 export * from './workflow/run-plan.js';
+export * from './workflow/repo-command-binding.js';
 export * from './workflow/execution-plan.js';
 export * from './constraint/validator.js';
 export * from './constraint/runtime-policy.js';

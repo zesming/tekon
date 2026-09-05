@@ -90,7 +90,7 @@ describe('真实 HTTP 的计划保密与幂等受理', () => {
     const authenticated = await rpc('workflow.plan', input, fixture.sessionToken);
     for (const response of [anonymous, authenticated]) {
       expect(response.status).toBe(200);
-      expect(response.body.result.digestVersion).toBe(2);
+      expect(response.body.result.digestVersion).toBe(3);
       expect(response.body.result.digest).toMatch(/^[a-f0-9]{64}$/);
       expect(response.body.result).not.toHaveProperty('template');
       expect(JSON.stringify(response.body)).not.toContain(sentinel);

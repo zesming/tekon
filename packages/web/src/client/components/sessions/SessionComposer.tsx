@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router';
 import { useQuery, useSessionToken } from '../../hooks/index.js';
 import { useRunAdmission } from '../../hooks/use-run-admission.js';
 import { AdmissionNotice } from '../runs/AdmissionNotice.js';
+import { PlanCommandBindings } from '../runs/PlanCommandBindings.js';
+import { usePlanCommandComparison } from '../../hooks/use-plan-command-comparison.js';
 import { rpc } from '../../lib/rpc-client.js';
-import { queryKeys } from '../../lib/query-keys.js';
+import { authScope, queryKeys } from '../../lib/query-keys.js';
 import { routes } from '../../lib/route-paths.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
@@ -30,6 +32,11 @@ export function SessionComposer() {
   } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
     queryKeys.workflowPlan('workflow'),
     () => rpc.call('workflow.plan', { mode: 'workflow' }),
+  );
+  const planComparison = usePlanCommandComparison(
+    JSON.stringify([authScope(token), queryKeys.workflowPlan('workflow')]),
+    plan,
+    !planLoading && !planError,
   );
 
   const admission = useRunAdmission({
@@ -139,6 +146,7 @@ export function SessionComposer() {
                 : '计划未请求不受限网络；实际隔离取决于 Provider 与宿主环境'}
               。
             </div>
+            <PlanCommandBindings plan={plan} comparison={planComparison} onRefresh={refetchPlan} />
           </div>
         ) : null}
       </div>

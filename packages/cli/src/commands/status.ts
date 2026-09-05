@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { classifyExecutionBinding } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
 import { withCommandCtx } from '../lib/context.js';
@@ -13,7 +14,7 @@ export async function commandStatus(
   await withCommandCtx(
     argv,
     io,
-    async ({ repos: repositories, repoPath, runId }) => {
+    async ({ db, repos: repositories, repoPath, runId }) => {
       const workflow = await repositories.getWorkflowInstance(runId);
       if (!workflow) {
         throw new Error(`未找到运行: ${runId}`);
@@ -21,6 +22,19 @@ export async function commandStatus(
       const gates = await repositories.listGateResults(runId);
       const artifacts = await repositories.listArtifacts(runId);
       const admission = await repositories.admissionStore.getAdmissionByRunId(runId);
+      const persisted = db.prepare('select plan_snapshot, plan_digest, kind from workflow_instances where id=?').get(runId) as
+        { plan_snapshot: string | null; plan_digest: string | null; kind: 'workflow' | 'goal' };
+      const executionBinding = classifyExecutionBinding({
+        planSnapshot: persisted.plan_snapshot, planDigest: persisted.plan_digest,
+        kind: persisted.kind, hasAdmission: Boolean(admission),
+      });
+      if (executionBinding === 'legacy-unbound') {
+        io.stderr.write('历史计划未记录仓库命令绑定；使用 commandRef 时按当前配置解析。\n');
+      } else if (executionBinding === 'invalid') {
+        io.stderr.write('执行计划校验失败；请检查持久记录，不能视为已冻结计划。\n');
+      } else if (executionBinding === 'unknown') {
+        io.stderr.write('执行绑定状态待确认；当前版本不能识别该计划。\n');
+      }
       const pendingHuman = (
         await repositories.listHumanDecisions(runId)
       ).filter((decision) => decision.status === 'pending');
@@ -33,6 +47,7 @@ export async function commandStatus(
           `gates=${gates.length}`,
           `artifacts=${artifacts.length}`,
           `pendingHumanDecisions=${pendingHuman.length}`,
+          `executionBinding=${executionBinding}`,
           ...(admission ? [
             `admission=${admission.filesState === 'ready' ? 'accepted' : 'recovery-required'}`,
             `filesState=${admission.filesState}`,

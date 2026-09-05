@@ -1,5 +1,6 @@
 import {
   evaluateHumanApprovalSummary,
+  classifyExecutionBinding,
   type TekonDatabase,
   type WorkflowInstance,
 } from '@tekon/core';
@@ -51,12 +52,19 @@ export function mapWorkflow(
   };
 }
 
-export function admissionProjection(db: TekonDatabase, runId: string | null): Pick<WorkflowOutput, 'admissionState' | 'filesState'> {
+export function admissionProjection(db: TekonDatabase, runId: string | null): Pick<WorkflowOutput, 'admissionState' | 'filesState' | 'executionBinding'> {
   if (!runId) return {};
   const admission = db.prepare('select files_state from run_admissions where run_id = ?').get(runId) as
     { files_state: 'pending' | 'ready' | 'recovery_required' } | undefined;
   const admissionState = admission ? (admission.files_state === 'ready' ? 'accepted' : 'recovery-required') : undefined;
+  // 直接读取持久字段，不经可丢失非法值的领域解析；分类不替代执行完整性校验。
+  const plan = db.prepare('select plan_snapshot, plan_digest, kind from workflow_instances where id = ?').get(runId) as
+    { plan_snapshot: string | null; plan_digest: string | null; kind: 'workflow' | 'goal' } | undefined;
   return {
+    executionBinding: plan ? classifyExecutionBinding({
+      planSnapshot: plan.plan_snapshot, planDigest: plan.plan_digest,
+      kind: plan.kind, hasAdmission: Boolean(admission),
+    }) : 'unknown',
     ...(admissionState ? { admissionState } : {}),
     ...(admission ? { filesState: admission.files_state } : {}),
   };

@@ -391,7 +391,7 @@ for (const width of VIEWPORTS) {
       if (width <= 390) {
         await agentSelect.selectOption('dsh-headless');
         await expect(page.getByRole('alert')).toContainText('联网不受限');
-        await page.locator('#start-run-form-body details > summary').click();
+        await page.getByText('⚙ 高级设置（超时与工作区）', { exact: true }).click();
         await expect(
           page.getByLabel('超时 (ms)', { exact: true }),
         ).toBeVisible();

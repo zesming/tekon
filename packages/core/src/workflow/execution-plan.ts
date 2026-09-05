@@ -20,10 +20,13 @@ import {
 import {
   canonicalJson,
   computeLegacyV1RunPlanDigest,
-  projectRunPlan,
+  projectRunPlanV3,
   validateRunPlanV2,
+  validateRunPlanV3,
   type RunPlan,
+  type RunPlanV3,
 } from './run-plan.js';
+import { materializeBoundGate, normalizeRepoCommands, type BoundRepoCommand } from './repo-command-binding.js';
 
 /**
  * Convert a workflow template into an executable plan by scoping all IDs
@@ -49,6 +52,19 @@ export function templateToPlan(
       ),
     })),
   };
+}
+
+/** 原模板先确定Gate身份；v3随后物化命令并清除运行时引用。 */
+export function runPlanToExecutionPlan(plan: RunPlan, runId: string): ExecutionPlan {
+  const execution = templateToPlan(plan.template, runId);
+  if (plan.digestVersion === 3) {
+    for (const phase of execution.phases) {
+      for (const node of phase.nodes) {
+        node.gates = node.gates.map(gate => materializeBoundGate(gate, plan.repoCommands));
+      }
+    }
+  }
+  return execution;
 }
 
 function templateNodeToExecutable(
@@ -174,7 +190,7 @@ export function deriveRepairNode(
 
 export interface PreparedRun {
   template: WorkflowTemplate;
-  canonicalPlan: RunPlan;
+  canonicalPlan: RunPlanV3;
   planSnapshot: string;
   planDigest: string;
   kind: 'workflow' | 'goal';
@@ -188,6 +204,7 @@ export function buildPreparedRun(
     canonicalPlan?: RunPlan;
     planDigest?: string;
     planSnapshot?: string;
+    repoCommands?: BoundRepoCommand[];
   },
   options: {
     agentProvider?: string;
@@ -199,11 +216,13 @@ export function buildPreparedRun(
     canonicalPlan?: RunPlan;
     planDigest?: string;
     planSnapshot?: string;
+    repoCommands?: BoundRepoCommand[];
   } = {},
 ): PreparedRun {
   const kind = input.kind ?? 'workflow';
   const template = normalizeExecutableTemplate(input.workflowSpec);
-  const canonicalPlan = projectRunPlan(template, {
+  const repoCommands = normalizeRepoCommands(template, options.repoCommands ?? input.repoCommands ?? []);
+  const canonicalPlan = projectRunPlanV3(template, {
     mode: kind,
     agent: options.agentProvider ?? 'codex',
     allowDirtyBase: options.allowDirtyBase,
@@ -212,12 +231,15 @@ export function buildPreparedRun(
     noProgressTimeoutMs: options.noProgressTimeoutMs,
     progressHeartbeatMs: options.progressHeartbeatMs,
     templateId: input.templateName ?? template.id,
-  });
+  }, repoCommands);
   // 校验每份确认来源；只有运行实际上下文能够生成最终持久化事实。
   const expected = canonicalJson(canonicalPlan);
   for (const [name, source] of [['input', input], ['options', options]] as const) {
+    if (source.repoCommands !== undefined && canonicalJson(normalizeRepoCommands(template, source.repoCommands)) !== canonicalJson(repoCommands)) {
+      throw new Error(`PLAN_DIGEST_MISMATCH: ${name}.repoCommands`);
+    }
     if (source.canonicalPlan !== undefined) {
-      const verified = validateRunPlanV2(source.canonicalPlan);
+      const verified = validateRunPlanV3(source.canonicalPlan);
       if (canonicalJson(verified) !== expected) {
         throw new Error(`PLAN_DIGEST_MISMATCH: ${name}.canonicalPlan`);
       }
@@ -227,7 +249,7 @@ export function buildPreparedRun(
       try { parsed = JSON.parse(source.planSnapshot); } catch {
         throw new Error(`PLAN_DIGEST_MISMATCH: ${name}.planSnapshot`);
       }
-      if (canonicalJson(validateRunPlanV2(parsed)) !== expected) {
+      if (canonicalJson(validateRunPlanV3(parsed)) !== expected) {
         throw new Error(`PLAN_DIGEST_MISMATCH: ${name}.planSnapshot`);
       }
     }
@@ -333,10 +355,12 @@ async function validateExecutionPlan(
     }
     return planFromRepository(runId, repositories);
   }
-  const canonical = validateRunPlanV2(raw, 'PLAN_VERIFICATION_FAILED');
+  const canonical = raw.digestVersion === 2
+    ? validateRunPlanV2(raw, 'PLAN_VERIFICATION_FAILED')
+    : validateRunPlanV3(raw, 'PLAN_VERIFICATION_FAILED');
   same(workflow.planDigest, canonical.digest, 'plan.digest');
   same(workflow.kind ?? 'workflow', canonical.mode, 'plan.mode');
-  const plan = templateToPlan(canonical.template, runId);
+  const plan = runPlanToExecutionPlan(canonical, runId);
 
   let rows: Awaited<ReturnType<typeof readExecutionRows>>;
   try { rows = await readExecutionRows(runId, repositories); } catch (error) {

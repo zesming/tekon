@@ -57,6 +57,8 @@ import {
   MAX_EARLIER,
 } from '../../src/client/hooks/use-session-stream.js';
 import type { StreamEvent } from '../../src/client/lib/session-stream.js';
+import { queryCache } from '../../src/client/lib/query-cache.js';
+import { authScope, queryKeys } from '../../src/client/lib/query-keys.js';
 
 function makeEvent(seq: number, type = 'step/log'): StreamEvent {
   return {
@@ -199,10 +201,62 @@ function renderHook<TProps, TResult>(
 
 describe('useSessionStream (MUST-1 + MUST-2)', () => {
   beforeEach(() => {
+    mockToken = 'tok-123';
     mockRpcCalls = [];
     mockRpcHandler = null;
     mockStreamHandle = { close: vi.fn() };
     lastStreamOptions = null;
+  });
+
+  for (const type of ['approval/requested', 'approval/decided']) {
+    it(`${type} invalidates the current run Gate query, preserving other runs and scopes`, () => {
+      const scope = authScope(mockToken);
+      const key = queryKeys.gateResults('run-current', scope);
+      const otherRun = queryKeys.gateResults('run-other', scope);
+      const otherScope = queryKeys.gateResults('run-current', authScope('other-token'));
+      for (const entry of [key, otherRun, otherScope]) queryCache.set(entry, 'before');
+      const harness = renderHook((id: string) => useSessionStream(id), 'session-current');
+      lastStreamOptions.onEvent({ ...makeEvent(1, type), payload: { runId: 'run-current', decisionId: 'decision-current' } });
+      expect(queryCache.get(key)?.stale).toBe(true);
+      expect(queryCache.get(otherRun)?.stale).toBe(false);
+      expect(queryCache.get(otherScope)?.stale).toBe(false);
+      harness.unmount();
+    });
+  }
+
+  it('ignores the old subscription after credentials change and after unmount', () => {
+    const harness = renderHook((id: string) => useSessionStream(id), 'session-current');
+    const previousOptions = lastStreamOptions;
+    mockToken = 'replacement-token';
+    harness.rerender('session-current');
+    const currentKey = queryKeys.gateResults('run-current', authScope(mockToken));
+    queryCache.set(currentKey, 'current');
+    previousOptions.onEvent({ ...makeEvent(1, 'approval/requested'), payload: { runId: 'run-current' } });
+    previousOptions.onStateChange('live');
+    expect(harness.current.events).toEqual([]);
+    expect(harness.current.connState).toBe('connecting');
+    expect(queryCache.get(currentKey)?.stale).toBe(false);
+    const currentOptions = lastStreamOptions;
+    harness.unmount();
+    currentOptions.onEvent({ ...makeEvent(2, 'approval/requested'), payload: { runId: 'run-current' } });
+    expect(queryCache.get(currentKey)?.stale).toBe(false);
+  });
+
+  it('does not merge a delayed earlier-page response into a replacement session', async () => {
+    let release!: (value: unknown) => void;
+    mockRpcHandler = () => new Promise((resolve) => { release = resolve; });
+    const harness = renderHook<string, ReturnType<typeof useSessionStream>>(
+      (id) => useSessionStream(id), 'session-before',
+    );
+    lastStreamOptions.onEvent(makeEvent(100));
+    const loading = harness.current.loadEarlier();
+    harness.rerender('session-after');
+    release({ events: [makeEvent(99)], nextBeforeSeq: 99 });
+    await loading;
+    expect(harness.current.events).toEqual([]);
+    expect(harness.current.hasEarlier).toBe(false);
+    expect(harness.current.isLoadingEarlier).toBe(false);
+    harness.unmount();
   });
 
   it('exports CLIENT_STREAM_WINDOW_SIZE as 1000 and MAX_EARLIER as 2000', () => {

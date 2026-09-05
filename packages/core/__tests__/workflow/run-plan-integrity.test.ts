@@ -1,15 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { buildPreparedRun } from '../../src/workflow/execution-plan.js';
-import { canonicalJson, computeRunPlanDigest, projectRunPlan, projectRunPlanPreview, validateRunPlanV2 } from '../../src/workflow/run-plan.js';
+import { buildPreparedRun as prepareWithCapturedFacts } from '../../src/workflow/execution-plan.js';
+import { canonicalJson, computeRunPlanDigest, projectRunPlanV3, projectRunPlanPreview, validateRunPlanV3, type RunPlanContext } from '../../src/workflow/run-plan.js';
 import { loadBuiltInWorkflowTemplate, type WorkflowTemplate } from '../../src/workflow/template.js';
+import type { BoundRepoCommand } from '../../src/workflow/repo-command-binding.js';
 
-describe('RunPlan v2 的完整确认绑定', () => {
+// 本文件测试完整模板/上下文合同；统一使用明确的空仓库捕获fixture，
+// 避免缺少repoCommands让拒绝类断言在到达目标字段之前假通过。
+function emptyRepoFacts(template: WorkflowTemplate): BoundRepoCommand[] {
+  const refs = [...new Set(template.phases.flatMap(phase => phase.nodes.flatMap(node => node.gates.flatMap(gate => gate.commandRef && !gate.command ? [gate.commandRef] : []))))].sort();
+  return refs.map(commandRef => ({ commandRef, status: 'missing', source: { kind: 'empty-default', resolverVersion: 1 } }));
+}
+function projectRunPlan(template: WorkflowTemplate, context: RunPlanContext = {}) {
+  return projectRunPlanV3(template, context, emptyRepoFacts(template));
+}
+function buildPreparedRun(input: Parameters<typeof prepareWithCapturedFacts>[0], options: Parameters<typeof prepareWithCapturedFacts>[1] = {}) {
+  return prepareWithCapturedFacts(input, { repoCommands: emptyRepoFacts(input.workflowSpec), ...options });
+}
+
+describe('RunPlan v3 的完整确认绑定', () => {
   it('保留经过校验的模板显示别名与版本上下文，仍逐项比较完整投影', () => {
     const template = loadBuiltInWorkflowTemplate('bugfix');
     const canonicalPlan = projectRunPlan(template, { templateId: 'alias', templateVersion: '2026.9' });
-    expect(validateRunPlanV2(canonicalPlan)).toEqual(canonicalPlan);
+    expect(validateRunPlanV3(canonicalPlan)).toEqual(canonicalPlan);
     const forged = { ...canonicalPlan, phases: [] }; forged.digest = computeRunPlanDigest(forged);
-    expect(() => validateRunPlanV2(forged)).toThrow(/PLAN_DIGEST_MISMATCH: projection/);
+    expect(() => validateRunPlanV3(forged)).toThrow(/PLAN_DIGEST_MISMATCH: projection/);
   });
   it('纯准备绑定请求模板别名与实际模板内容，换别名不能沿用旧确认', () => {
     const template = loadBuiltInWorkflowTemplate('bugfix');
@@ -97,7 +111,7 @@ describe('RunPlan v2 的完整确认绑定', () => {
     expect(() => buildPreparedRun({ workflowSpec: template, canonicalPlan: plan }, { agentProvider: 'dsh-headless', timeoutMs: 200 })).toThrow(/PLAN_DIGEST_MISMATCH/);
   });
 
-  it.each([undefined, 1, 3])('新确认拒绝旧/未知 digestVersion=%s', (version) => {
+  it.each([undefined, 1, 2, 4])('新确认拒绝旧/未知 digestVersion=%s', (version) => {
     const template = loadBuiltInWorkflowTemplate('bugfix');
     const plan = { ...projectRunPlan(template), digestVersion: version };
     plan.digest = computeRunPlanDigest(plan);

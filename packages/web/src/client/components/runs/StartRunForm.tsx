@@ -6,11 +6,13 @@ import {
   type RunPayload,
 } from '../../hooks/use-run-admission.js';
 import { AdmissionNotice } from './AdmissionNotice.js';
+import { PlanCommandBindings } from './PlanCommandBindings.js';
+import { usePlanCommandComparison } from '../../hooks/use-plan-command-comparison.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
-import { queryKeys } from '../../lib/query-keys.js';
-import { formatTimeout, formatPhaseParallel } from '../../lib/plan-format.js';
+import { authScope, queryKeys } from '../../lib/query-keys.js';
+import { formatPhaseParallel } from '../../lib/plan-format.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 import { startRunSubmitState } from './start-run-submit-state.js';
 
@@ -102,21 +104,17 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
 
   // ── Fetch workflow execution plan preview (T2) ──
   const effectiveTemplate = mode === 'goal' ? undefined : template || undefined;
+  const planKey = queryKeys.workflowPlan(
+    mode, effectiveTemplate, agent, mode === 'workflow' ? profile : undefined,
+    allowDirtyBase, validTimeout, validNoProgress,
+  );
   const {
     data: planData,
     isLoading: planLoading,
     error: planError,
     refetch: refetchPlan,
   } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
-    queryKeys.workflowPlan(
-      mode,
-      effectiveTemplate,
-      agent,
-      mode === 'workflow' ? profile : undefined,
-      allowDirtyBase,
-      validTimeout,
-      validNoProgress,
-    ),
+    planKey,
     () =>
       rpc.call('workflow.plan', {
         mode,
@@ -127,6 +125,9 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
         timeoutMs: validTimeout,
         noProgressTimeoutMs: validNoProgress,
       }),
+  );
+  const planComparison = usePlanCommandComparison(
+    JSON.stringify([authScope(token), planKey]), planData, !planLoading && !planError,
   );
 
   // Reset or align network acknowledgement when agent/plan changes
@@ -585,51 +586,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                 </div>
               )}
 
-              {/* Gates */}
-              {planData.gates && planData.gates.length > 0 && (
-                <div>
-                  <span
-                    className="text-sm text-muted"
-                    style={{
-                      display: 'block',
-                      marginBottom: '4px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Gate 审批与控制点：
-                  </span>
-                  <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
-                    {planData.gates.map((g) => (
-                      <div
-                        key={`${g.nodeId}-${g.type}`}
-                        style={{
-                          background: 'var(--surface)',
-                          border: g.requiresHumanApproval
-                            ? '1px solid var(--blk)'
-                            : '1px solid var(--border-l)',
-                          borderRadius: '6px',
-                          padding: '6px 10px',
-                          fontSize: '12px',
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span style={{ fontWeight: 600 }}>{g.type}</span>
-                          <span className="text-muted">({g.role})</span>
-                          {g.requiresHumanApproval && (
-                            <span className="badge-tag risk">人工审批</span>
-                          )}
-                        </div>
-                        <div
-                          className="text-muted"
-                          style={{ fontSize: '11px' }}
-                        >
-                          节点: {g.nodeId} · 超时: {formatTimeout(g.timeoutMs)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <PlanCommandBindings plan={planData} comparison={planComparison} onRefresh={refetchPlan} />
             </div>
           ) : null}
 

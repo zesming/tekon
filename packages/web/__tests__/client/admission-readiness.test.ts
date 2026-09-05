@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+let mockError: Error | null = null;
 let mockSurface: {
   workflowStatus: string;
   provider: string;
@@ -18,7 +19,7 @@ vi.mock('../../src/client/hooks/index.js', () => ({
   useQuery: () => ({
     data: mockSurface,
     isLoading: false,
-    error: null,
+    error: mockError,
     refetch: vi.fn(),
   }),
   useAuthScope: () => 'auth-test',
@@ -63,7 +64,7 @@ describe('admission readiness presentation', () => {
       };
       const html = renderToStaticMarkup(React.createElement(RunDetailPage));
       expect(html).toContain(
-        filesState === 'pending' ? '等待目录就绪' : '创建失败需恢复',
+        filesState === 'pending' ? '已受理，等待目录就绪' : '已受理，等待目录恢复',
       );
       expect(html).toContain('任务尚未执行');
       expect(html).not.toContain('active-run-controls');
@@ -90,7 +91,7 @@ describe('admission readiness presentation', () => {
         }),
       );
       expect(html).toContain(
-        filesState === 'pending' ? '等待目录就绪' : '创建失败需恢复',
+        filesState === 'pending' ? '已受理，等待目录就绪' : '已受理，等待目录恢复',
       );
       expect(html).not.toContain('active-run-controls');
       expect(html).not.toContain('badge-running');
@@ -113,5 +114,17 @@ describe('admission readiness presentation', () => {
     expect(html).toContain('请求已受理');
     expect(html).toContain('任务尚未执行');
     expect(html).toContain('原请求重试');
+  });
+  it('keeps a known Run admission visible when the current refresh fails', () => {
+    mockSurface = { ...mockSurface, admissionState: 'accepted', filesState: 'ready' };
+    mockError = new Error('当前读取失败');
+    try {
+      const html = renderToStaticMarkup(React.createElement(RunDetailPage));
+      expect(html).toContain('已受理');
+      expect(html).toContain('当前状态刷新失败');
+      expect(html).not.toContain('active-run-controls');
+    } finally {
+      mockError = null;
+    }
   });
 });

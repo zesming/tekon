@@ -19,6 +19,8 @@ export interface AdmissionView extends Omit<AdmissionRecord, 'state'> {
   lookupState?: 'not-found';
   runId?: string;
   sessionId?: string;
+  /** 来自当前服务端响应，仅保留在内存；持久账本仍只保存请求身份。 */
+  filesState?: RunResult['run']['filesState'];
 }
 interface Snapshot {
   isPending: boolean;
@@ -230,6 +232,7 @@ export class RunAdmissionController {
           state: 'recovery-required',
           runId: result.run.id,
           sessionId: result.sessionId,
+          filesState: result.run.filesState,
         });
       } else {
         // Keep observation identities in memory before removing the pending
@@ -239,6 +242,7 @@ export class RunAdmissionController {
           state: 'accepted',
           runId: result.run.id,
           sessionId: result.sessionId,
+          filesState: result.run.filesState,
         });
         this.options.ledger.remove(scope, requestId);
         if (current()) this.options.onAccepted(result);
@@ -306,6 +310,7 @@ export class RunAdmissionController {
           lookupState: undefined,
           runId: result.runId,
           sessionId: result.sessionId,
+          filesState: result.filesState,
         });
         if (result.state === 'accepted')
           this.options.ledger.remove(scope, requestId);

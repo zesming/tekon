@@ -7,7 +7,7 @@ import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
   loadWorkflowTemplate,
-  projectRunPlan,
+  captureRunPlan,
   generateDynamicWorkflow,
   getRunModePolicyIssue,
   readDraftShapeFile,
@@ -211,7 +211,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
               templateName,
               join(repoPath, '.tekon', 'workflows'),
             );
-        const runPlan = projectRunPlan(template, {
+        const runPlan = captureRunPlan(repoPath, template, {
           agent,
           profile: 'cli',
           allowDirtyBase,
@@ -277,7 +277,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
 
     if (result.admissionState !== 'ready') {
       io.stdout.write(
-        `Run ID: ${result.runId}\nSession ID: ${result.sessionId}\n状态: 创建失败需恢复（尚未执行）\n`,
+        `Run ID: ${result.runId}\nSession ID: ${result.sessionId}\n状态: ${result.admissionState === 'pending' ? '已受理，等待目录就绪' : '已受理，等待目录恢复；任务尚未执行'}\n`,
       );
       io.stderr.write(
         `ADMISSION_RECOVERY_REQUIRED: requestId=${requestId}，修复目录准备问题后以相同请求重试。\n`,

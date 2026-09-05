@@ -383,7 +383,7 @@ test('recovery-required sessions show their unready state in list and detail', a
   });
   await page.goto(`${server.url}/?unready=1`);
   const row = page.getByRole('link', { name: /需要恢复的交付/ });
-  await expect(row).toContainText('创建失败需恢复');
+  await expect(row).toContainText('已受理，等待目录恢复');
   await expect(row).not.toContainText('active');
   await row.click();
   await expect(page.getByTestId('admission-readiness')).toContainText(

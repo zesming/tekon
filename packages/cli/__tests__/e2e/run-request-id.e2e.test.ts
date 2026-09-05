@@ -400,7 +400,7 @@ syncBuiltinESMExports();
         .prepare('select plan_snapshot, plan_digest from workflow_instances')
         .get() as { plan_snapshot: string; plan_digest: string };
       const snapshot = JSON.parse(row.plan_snapshot);
-      expect(snapshot.digestVersion).toBe(2);
+      expect(snapshot.digestVersion).toBe(3);
       expect(snapshot.mode).toBe('goal');
       expect(snapshot.template.id).toBe('goal');
       expect(row.plan_digest).toMatch(/^[a-f0-9]{64}$/);

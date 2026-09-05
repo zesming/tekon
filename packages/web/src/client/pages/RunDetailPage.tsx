@@ -11,10 +11,12 @@ import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { LoadingState } from '../components/ui/LoadingState.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { RunControls } from '../components/runs/RunControls.js';
+import { ExecutionBindingNotice } from '../components/runs/ExecutionBindingNotice.js';
 import {
   AdmissionReadinessBanner,
   admissionNeedsRecovery,
   admissionReadinessLabel,
+  knownAdmissionLabel,
 } from '../components/runs/AdmissionNotice.js';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +102,7 @@ export function RunDetailPage() {
           error={reviewQuery.error ?? new Error('Run not found')}
           onRetry={reviewQuery.refetch}
         />
+        {knownAdmissionLabel(reviewQuery.data) ? <p role="status">{knownAdmissionLabel(reviewQuery.data)} · 当前状态刷新失败，暂不提供运行控制。</p> : null}
       </>
     );
   }
@@ -188,6 +191,7 @@ export function RunDetailPage() {
         </div>
       </div>
       <AdmissionReadinessBanner value={surface} />
+      <ExecutionBindingNotice value={surface.executionBinding} />
 
       {!admissionPending ? (
         <>

@@ -39,11 +39,12 @@ import { createReworkHandler } from './rework.js';
 import { createGateRunner } from './gate-runner.js';
 import { createNodeExecutor } from './node-executor.js';
 import {
-  templateToPlan,
+  runPlanToExecutionPlan,
   buildPreparedRun as buildRunPlan,
   validateAndBuildExecutionPlan,
 } from './execution-plan.js';
 import type { RunPlan } from './run-plan.js';
+import { captureRepoCommands } from './repo-command-binding.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
 export type { ExecutableNode, ExecutionPlan } from './workflow-runtime.js';
@@ -387,9 +388,10 @@ export function createWorkflowEngine(
     const workflowSpec = input.workflowSpec ?? loadWorkflowTemplate({
       name: input.templateName ?? (input.kind === 'goal' ? 'goal' : 'standard-delivery'),
     });
-    const prepared = buildRunPlan({ ...input, workflowSpec }, { ...settings, profile: input.profile ?? settings.profile });
+    const repoCommands = captureRepoCommands(settings.repoPath, workflowSpec);
+    const prepared = buildRunPlan({ ...input, workflowSpec }, { ...settings, profile: input.profile ?? settings.profile, repoCommands });
     const runId = `run_${randomUUID()}`;
-    const execution = templateToPlan(prepared.template, runId);
+    const execution = runPlanToExecutionPlan(prepared.canonicalPlan, runId);
     return {
       ...identity,
       envelopeVersion: 1,

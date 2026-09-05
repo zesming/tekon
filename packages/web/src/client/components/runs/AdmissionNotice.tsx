@@ -68,7 +68,7 @@ export function AdmissionNotice({
               {record.state === 'accepted'
                 ? '已受理'
                 : record.state === 'recovery-required'
-                  ? '创建失败需恢复'
+                  ? admissionReadinessLabel(record)
                   : '受理状态待确认'}
             </strong>{' '}
             · 请求 <code>{record.requestId}</code>
@@ -82,10 +82,7 @@ export function AdmissionNotice({
             <p>当前尚未查到记录，原请求仍可能在处理中。</p>
           ) : null}
           {record.state === 'recovery-required' ? (
-            <p>
-              运行目录尚未就绪，任务尚未执行。修复目录后用原内容重试，或重启 UI
-              服务恢复；查询本身不会修复目录。
-            </p>
+            <p>{admissionReadinessGuidance(record)}</p>
           ) : null}
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             {record.state !== 'accepted' ? (
@@ -152,7 +149,23 @@ export function admissionNeedsRecovery(
   );
 }
 export function admissionReadinessLabel(value: AdmissionReadiness): string {
-  return value.filesState === 'pending' ? '等待目录就绪' : '创建失败需恢复';
+  if (value.filesState === 'pending') return '已受理，等待目录就绪';
+  if (value.filesState === 'recovery_required') return '已受理，等待目录恢复';
+  return '已受理，目录状态待确认';
+}
+function admissionReadinessGuidance(value: AdmissionReadiness): string {
+  if (value.filesState === 'pending') {
+    return '请求已受理，运行目录尚未就绪，任务尚未执行。请稍后查询受理结果或刷新目录状态，无需另建任务。';
+  }
+  if (value.filesState === 'recovery_required') {
+    return '请求已受理，运行目录准备失败，任务尚未执行。修复目录后按原请求重试，或重启 UI 服务恢复；查询本身不会修复目录。';
+  }
+  return '请求已受理；当前目录细分状态尚未确认，请先查询受理结果或刷新状态，再按结果处理。';
+}
+/** 查询失败不撤销已经从权威快照读到的受理事实。 */
+export function knownAdmissionLabel(value: AdmissionReadiness | undefined): string | null {
+  if (admissionNeedsRecovery(value)) return admissionReadinessLabel(value!);
+  return value?.admissionState === 'accepted' || value?.filesState === 'ready' ? '已受理' : null;
 }
 export function AdmissionReadinessBanner({
   value,
@@ -172,8 +185,7 @@ export function AdmissionReadinessBanner({
       }}
     >
       {admissionReadinessLabel(value)}
-      ：请求已受理，运行目录尚未就绪，任务尚未执行。修复目录后按原请求重试，或重启
-      UI 服务恢复。
+      ：{admissionReadinessGuidance(value)}
     </p>
   );
 }

@@ -253,6 +253,10 @@ export function openSessionStream(options: OpenSessionStreamOptions): {
         headers,
         signal: controller.signal,
       });
+      if (closed) {
+        await response.body?.cancel().catch(() => undefined);
+        return;
+      }
       if (!response.ok || !response.body) {
         // A fatal client error (bad token, unknown session) will never recover
         // on retry — stop rather than hammer the server. Anything else (5xx,
@@ -270,10 +274,15 @@ export function openSessionStream(options: OpenSessionStreamOptions): {
       const decoder = new TextDecoder();
       for (;;) {
         const { done, value } = await reader.read();
+        if (closed) {
+          await reader.cancel().catch(() => undefined);
+          return;
+        }
         if (done) break;
         for (const frame of parser.push(
           decoder.decode(value, { stream: true }),
         )) {
+          if (closed) return;
           if (frame.data === undefined) continue;
           try {
             const parsed = JSON.parse(frame.data) as unknown;

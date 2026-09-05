@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { queryCache } from '../lib/query-cache.js';
+import { authScope, queryKeys } from '../lib/query-keys.js';
 import {
   openWorkspaceSummaryStream,
   type WorkspaceSummaryEvent,
@@ -21,24 +22,41 @@ export function useWorkspaceSummaryStream(
 ): UseWorkspaceSummaryStreamResult {
   const { token } = useSessionToken();
   const [connState, setConnState] = useState<StreamConnState>('connecting');
+  const contextKey = JSON.stringify([workspaceId, token]);
+  const contextRef = useRef(contextKey);
+  contextRef.current = contextKey;
+  const stateContext = useRef(contextKey);
 
   useEffect(() => {
     if (!workspaceId) {
       return;
     }
+    let active = true;
+    const current = () => active && contextRef.current === contextKey;
+    stateContext.current = contextKey;
     setConnState('connecting');
+    const listKey = queryKeys.sessionList(authScope(token));
 
     const stream = openWorkspaceSummaryStream({
       workspaceId,
       token,
       onEvent(_event: WorkspaceSummaryEvent) {
-        queryCache.invalidate('session.list.');
+        if (current()) queryCache.invalidate(listKey);
       },
-      onStateChange: setConnState,
+      onStateChange(state) {
+        if (!current()) return;
+        setConnState(state);
+        // A fresh connection establishes a new server signature baseline. Read
+        // once even without a subsequent event, including after a disconnect.
+        if (state === 'live') queryCache.invalidate(listKey);
+      },
     });
 
-    return () => stream.close();
-  }, [workspaceId, token]);
+    return () => {
+      active = false;
+      stream.close();
+    };
+  }, [workspaceId, token, contextKey]);
 
-  return { connState };
+  return { connState: stateContext.current === contextKey ? connState : 'connecting' };
 }

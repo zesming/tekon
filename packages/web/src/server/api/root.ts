@@ -44,6 +44,7 @@ import {
   providerRuntimeFromRunInput,
 } from './agents.js';
 import type { ServerContext, ApiCaller, WebRunEngineInput } from './context.js';
+import { createPlanPreviewSigner } from './plan-preview.js';
 import { ApiError } from './errors.js';
 import { createWebProjectScope, webProjectScope } from './queries.js';
 import {
@@ -316,6 +317,7 @@ export async function createApiCaller(
   });
 
   const context: ServerContext = {
+    planPreviewSigner: createPlanPreviewSigner(),
     db,
     repositories: dualRepositories,
     audit: dualAudit,

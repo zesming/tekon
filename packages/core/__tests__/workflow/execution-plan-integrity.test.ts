@@ -3,14 +3,14 @@ import { openTekonDatabase } from '../../src/db/connection.js';
 import { migrateDatabase } from '../../src/db/migrations.js';
 import { createRepositories } from '../../src/db/repositories.js';
 import { createAuditLogger } from '../../src/audit/logger.js';
-import { persistPlan, templateToPlan, validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
-import { canonicalJson, canonicalJsonV1, computeRunPlanDigest, computeRunPlanDigestV1, projectRunPlan } from '../../src/workflow/run-plan.js';
+import { persistPlan, templateToPlan, runPlanToExecutionPlan, validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
+import { canonicalJson, canonicalJsonV1, computeRunPlanDigest, computeRunPlanDigestV1, projectRunPlan, projectRunPlanV3 } from '../../src/workflow/run-plan.js';
 import { parseWorkflowTemplate } from '../../src/workflow/template.js';
 import type { ExecutableNode } from '../../src/workflow/workflow-runtime.js';
 
 const openDbs: ReturnType<typeof openTekonDatabase>[] = [];
 afterEach(() => { for (const db of openDbs.splice(0)) db.close(); });
-async function fixture(autoFixReview = false) {
+async function fixture(autoFixReview = false, version: 2 | 3 = 2) {
   const db = openTekonDatabase({ filename: ':memory:' }); openDbs.push(db); migrateDatabase(db);
   const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
   const now = new Date().toISOString(); const runId = 'integrity-run';
@@ -18,11 +18,18 @@ async function fixture(autoFixReview = false) {
     { id: 'dev', nodes: [{ id: 'source', role: 'rd', gates: [{ type: 'build', autoFix: true, maxRetries: 2, command: { tool: 'node', args: [], env: { digest: 'secret' }, match: 'exact' } }] }] },
     { id: 'review', dependsOn: ['dev'], nodes: [{ id: 'reviewer', role: 'reviewer', gates: [{ type: 'independent-review', maxRetries: 3, ...(autoFixReview ? { autoFix: true } : {}) }], dependsOn: ['source'] }] },
   ] });
-  const canonical = projectRunPlan(template);
+  if (version === 3) {
+    delete template.phases[0].nodes[0].gates[0].command;
+    template.phases[0].nodes[0].gates[0].commandRef = 'build';
+  }
+  const canonical = version === 2 ? projectRunPlan(template) : projectRunPlanV3(template, {}, [{
+    commandRef: 'build', status: 'resolved', command: { tool: 'npm', args: ['run', 'confirmed'] },
+    source: { kind: 'repo-profile', resolverVersion: 1, profileVersion: 1, path: '.tekon/repo-profile.yaml' },
+  }]);
   await repositories.createProject({ id: 'p', name: 'p', repoPath: '/tmp/integrity', createdAt: now });
   await repositories.createDemand({ id: 'd', title: 'd', body: 'd', createdAt: now });
   await repositories.createWorkflowInstance({ id: runId, projectId: 'p', demandId: 'd', status: 'paused', planSnapshot: canonicalJson(canonical), planDigest: canonical.digest, createdAt: now, updatedAt: now });
-  const plan = templateToPlan(template, runId); await persistPlan(runId, plan, repositories);
+  const plan = version === 2 ? templateToPlan(template, runId) : runPlanToExecutionPlan(canonical, runId); await persistPlan(runId, plan, repositories);
   await audit.append({ runId, type: 'run.started', payload: {} });
   const source = plan.phases[0].nodes[0]; const review = plan.phases[1].nodes[0];
   const verify = () => validateAndBuildExecutionPlan(runId, repositories, audit);
@@ -104,6 +111,26 @@ describe('v2 原始持久化计划完整性', () => {
   it('拒绝自行重算的 mode/派生展示摘要，与 Workflow.kind 比较', async () => {
     const f = await fixture(); const changed = { ...f.canonical, mode: 'goal' as const, roleChain: [] }; changed.digest = computeRunPlanDigest(changed);
     f.db.prepare('update workflow_instances set plan_snapshot = ?, plan_digest = ?').run(JSON.stringify(changed), changed.digest);
+    await expect(f.verify()).rejects.toThrow(/PLAN_VERIFICATION_FAILED/);
+  });
+});
+
+describe('v3继承物化检查的派生来源', () => {
+  it('rework及嵌套rework继承同一无ref命令，repair不新增检查', async () => {
+    const f = await fixture(false, 3);
+    const one = await f.rework(); const two = await f.rework(one, 2);
+    const repair = await f.repair();
+    const verified = await f.verify();
+    const nodes = verified.phases[0].nodes;
+    expect(nodes.map(node => node.id)).toEqual([f.source.id, one.id, two.id]);
+    for (const node of nodes) {
+      expect(node.gates).toEqual(f.source.gates);
+      expect(node.gates[0]).not.toHaveProperty('commandRef');
+      expect(node.gates[0].command).toEqual({ tool: 'npm', args: ['run', 'confirmed'] });
+    }
+    expect(repair.gates).toEqual([]);
+    const forged = structuredClone(two.gates); forged[0].commandRef = 'build';
+    f.db.prepare('update nodes set gates = ? where id = ?').run(JSON.stringify(forged), two.id);
     await expect(f.verify()).rejects.toThrow(/PLAN_VERIFICATION_FAILED/);
   });
 });
@@ -210,7 +237,7 @@ describe('历史计划严格兼容边界', () => {
     f.db.prepare('update workflow_instances set plan_snapshot = ?, plan_digest = ?').run(snapshot, source === 'database' ? 'wrong' : legacyDigest);
     await expect(f.verify()).rejects.toThrow(/PLAN_VERIFICATION_FAILED: legacy.digest/);
   });
-  it.each([1, 3, null])('未知显式版本 %s 不能作为 v1', async version => {
+  it.each([1, 99, null])('未知显式版本 %s 不能作为 v1', async version => {
     const f = await fixture(); const old = { digestVersion: version, digest: '' }; old.digest = computeRunPlanDigestV1(old);
     f.db.prepare('update workflow_instances set plan_snapshot = ?, plan_digest = ?').run(JSON.stringify(old), old.digest);
     await expect(f.verify()).rejects.toThrow(/PLAN_VERIFICATION_FAILED/);

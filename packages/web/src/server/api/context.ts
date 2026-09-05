@@ -14,6 +14,8 @@ import type {
   WorkReviewSurface,
   RunPlan,
   RunPlanPreview,
+  RunPlanPreviewSigner,
+  ExecutionBinding,
   PresentedEvent,
 } from '@tekon/core';
 
@@ -45,12 +47,14 @@ export interface WebRunEngineInput {
  * provider snapshot was recorded for the run.
  */
 export type WorkReviewSurfaceOutput = WorkReviewSurface & {
+  executionBinding?: ExecutionBinding;
   admissionState?: 'accepted' | 'recovery-required';
   filesState?: 'pending' | 'ready' | 'recovery_required';
   provider: string | null;
 };
 
 export interface ServerContext {
+  planPreviewSigner: RunPlanPreviewSigner;
   db: TekonDatabase;
   /** Dual-write wrapped repositories (S7a): engine/routers get dual-write for free. */
   repositories: TekonRepositories;
@@ -173,6 +177,7 @@ export interface ProjectOutput {
 }
 
 export interface WorkflowOutput {
+  executionBinding?: ExecutionBinding;
   id: string;
   projectId: string;
   demandId: string;

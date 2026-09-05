@@ -223,6 +223,7 @@ export const apiProjectSchema = z
 
 export const apiWorkflowSchema = z
   .object({
+    executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
     id: z.string(),
     projectId: z.string(),
     demandId: z.string(),
@@ -488,6 +489,7 @@ export const reviewEvidenceGroupSchema = z.object({
 // surface with many nested arrays. Field drift here is low-risk (read-only UI
 // data) and strict validation would be too brittle as sub-schemas evolve.
 export const workReviewSurfaceSchema = z.object({
+  executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
   admissionState: z.enum(['accepted', 'recovery-required']).optional(),
   filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   runId: z.string(),
@@ -686,6 +688,14 @@ export const roleListOutputSchema = z.object({
 });
 
 export const runPlanGateSchema = z.object({
+  gateIndex: z.number().int().nonnegative().optional(),
+  commandBinding: z.object({
+    status: z.enum(['inline', 'resolved', 'not-applicable', 'missing']),
+    source: z.enum(['template', 'repo-profile', 'package-json-detection', 'empty-default']),
+    commandRef: z.enum(['build', 'typecheck', 'lint', 'test', 'e2e', 'security']).optional(),
+    behavior: z.enum(['execute-command', 'skip', 'missing-command', 'builtin-security', 'builtin-security-and-command', 'not-command-gate']),
+    fingerprint: z.string().optional(),
+  }).optional(),
   nodeId: z.string(),
   role: z.string(),
   type: z.string(),
@@ -701,7 +711,8 @@ export const runPlanPhaseSummarySchema = z.object({
 });
 
 export const runPlanSchema = z.object({
-  digestVersion: z.literal(2),
+  digestVersion: z.union([z.literal(2), z.literal(3)]),
+  comparisonScope: z.string().optional(),
   mode: z.enum(['workflow', 'goal']),
   roleChain: z.array(z.string()),
   gates: z.array(runPlanGateSchema),
@@ -792,6 +803,7 @@ export type SessionActionKind = z.infer<typeof sessionActionKindSchema>;
 // needsAction / actionKind projection fields.
 // Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
 export const apiSessionSchema = z.object({
+  executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
   admissionState: z.enum(['accepted', 'recovery-required']).optional(),
   filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   id: z.string(),

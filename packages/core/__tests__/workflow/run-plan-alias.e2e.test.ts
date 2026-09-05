@@ -9,7 +9,7 @@ import { createAuditLogger } from '../../src/audit/logger.js';
 import { createMockAgentAdapter } from '../../src/runtime/mock-agent-adapter.js';
 import { createWorkflowEngine } from '../../src/workflow/engine.js';
 import { loadWorkflowTemplateFile } from '../../src/workflow/template.js';
-import { canonicalJson, projectRunPlan, projectRunPlanPreview } from '../../src/workflow/run-plan.js';
+import { canonicalJson, captureRunPlan, projectRunPlanPreview } from '../../src/workflow/run-plan.js';
 
 it('alias.yaml 内 id 不同的模板可预览、准备、持久化并在磁盘模板变化后恢复原计划', async () => {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-plan-alias-'));
@@ -19,7 +19,7 @@ it('alias.yaml 内 id 不同的模板可预览、准备、持久化并在磁盘�
   const path = join(repoPath, 'alias.yaml');
   writeFileSync(path, 'id: inner\nname: Alias Template\nphases:\n  - id: review\n    nodes:\n      - id: review-node\n        role: reviewer\n', 'utf8');
   const template = loadWorkflowTemplateFile(path);
-  const canonicalPlan = projectRunPlan(template, { templateId: 'alias' });
+  const canonicalPlan = captureRunPlan(repoPath, template, { templateId: 'alias' });
   const preview = projectRunPlanPreview(canonicalPlan);
   let paused = true;
   const engine = createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories, audit, adapter: { runAgent }, isPauseRequested: () => paused });

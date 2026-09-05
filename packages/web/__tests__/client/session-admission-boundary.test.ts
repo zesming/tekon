@@ -99,4 +99,16 @@ describe('authoritative admission snapshot gates session controls', () => {
       renderToStaticMarkup(React.createElement(SessionDetailPage)),
     ).toContain('execution-controls:running');
   });
+
+  it('a failed refresh retains known acceptance while withholding current execution controls', () => {
+    snapshot = {
+      data: { session: { ...session, admissionState: 'accepted', filesState: 'ready' } },
+      error: new Error('refresh unavailable'),
+    };
+    const html = renderToStaticMarkup(React.createElement(SessionDetailPage));
+    expect(html).toContain('已受理');
+    expect(html).toContain('当前状态刷新失败');
+    expect(html).not.toContain('受理状态待确认');
+    expect(html).not.toContain('execution-controls:');
+  });
 });

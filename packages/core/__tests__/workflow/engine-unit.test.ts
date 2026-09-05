@@ -28,7 +28,7 @@ import {
   type WorkflowEngine,
   type WorkflowTemplate,
 } from '../../src/index.js';
-import { projectRunPlan } from '../../src/workflow/run-plan.js';
+import { projectRunPlanV3 } from '../../src/workflow/run-plan.js';
 
 // ---------------------------------------------------------------------------
 // assertSuccessfulAgentRun
@@ -840,10 +840,10 @@ describe('S5 engine prepareRun / signal / pause', () => {
 
   it('prepareRun accepts matching input.planDigest and persists it to SQLite', async () => {
     const { engine, repositories } = setupHarness();
-    const canonical = projectRunPlan(minimalTemplate, {
+    const canonical = projectRunPlanV3(minimalTemplate, {
       agent: 'codex',
       mode: 'workflow',
-    });
+    }, []);
 
     const { runId, workflow } = await engine.prepareRun({
       ...startInput(),
@@ -856,10 +856,10 @@ describe('S5 engine prepareRun / signal / pause', () => {
   });
 
   it('prepareRun rejects conflicting input/options planDigest even when input matches canonical', async () => {
-    const canonical = projectRunPlan(minimalTemplate, {
+    const canonical = projectRunPlanV3(minimalTemplate, {
       agent: 'codex',
       mode: 'workflow',
-    });
+    }, []);
     const wrongDigest =
       '2222222222222222222222222222222222222222222222222222222222222222';
     const { engine, repoPath, db } = setupHarness({ planDigest: wrongDigest });
@@ -874,10 +874,10 @@ describe('S5 engine prepareRun / signal / pause', () => {
   });
 
   it('prepareRun rejects a canonical plan whose stored digest does not match its content before side effects', async () => {
-    const canonical = projectRunPlan(minimalTemplate, {
+    const canonical = projectRunPlanV3(minimalTemplate, {
       agent: 'codex',
       mode: 'workflow',
-    });
+    }, []);
     const tamperedCanonical = { ...canonical, agent: 'dsh-headless' };
     const { engine, repoPath, db } = setupHarness({
       canonicalPlan: tamperedCanonical,

@@ -168,12 +168,13 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
     }
   });
 
-  const refreshed = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/rpc') && response.status() === 200,
-  );
-  await page.getByRole('button', { name: /刷新/ }).click();
-  await refreshed;
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/rpc') && response.status() === 200 &&
+      response.request().postDataJSON()?.path === 'session.list',
+    ),
+    page.getByRole('button', { name: '↻ 刷新', exact: true }).click(),
+  ]);
   expect(
     unauthorized,
     `401s after same-document bootstrap: ${unauthorized.join(', ')}`,

@@ -14,10 +14,12 @@ import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { EventFeed } from '../components/sessions/EventFeed.js';
 import { SessionSidePanel } from '../components/sessions/SessionSidePanel.js';
+import { ExecutionBindingNotice } from '../components/runs/ExecutionBindingNotice.js';
 import {
   AdmissionReadinessBanner,
   admissionNeedsRecovery,
   admissionReadinessLabel,
+  knownAdmissionLabel,
 } from '../components/runs/AdmissionNotice.js';
 
 // Phase 3 3b: Session Detail. The event feed is the continuous narrative;
@@ -95,7 +97,9 @@ export function SessionDetailPage() {
                 {session.runId ? ' · 已关联交付运行' : ''}
               </>
             ) : error ? (
-              '受理状态待确认'
+              knownAdmissionLabel(session)
+                ? `${knownAdmissionLabel(session)} · 当前状态刷新失败`
+                : '受理状态待确认'
             ) : (
               '正在确认受理状态…'
             )}
@@ -114,6 +118,7 @@ export function SessionDetailPage() {
 
       {error ? <ErrorBanner error={error} onRetry={refetch} /> : null}
       {session ? <AdmissionReadinessBanner value={session} /> : null}
+      {session?.runId ? <ExecutionBindingNotice value={session.executionBinding} /> : null}
 
       <div className="session-columns">
         <section className="session-feed-col" aria-label="会话活动">

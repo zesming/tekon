@@ -1,39 +1,29 @@
 # Tekon 当前权威产品与架构评审
 
-当前报告：[第二十四轮完整报告（Markdown）](2026-09-05-tekon-product-runtime-harness-twenty-fourth-review.md) · [HTML 人审版](2026-09-05-tekon-product-runtime-harness-twenty-fourth-review.html)。对应 [PR #11](https://github.com/zesming/tekon/pull/11)。
+当前报告：[第二十四轮 HTML 人审版](2026-09-05-tekon-product-runtime-harness-twenty-fourth-review.html) · [Markdown 源稿](2026-09-05-tekon-product-runtime-harness-twenty-fourth-review.md)。对应 [PR #11](https://github.com/zesming/tekon/pull/11)。[本入口 HTML 版](current.html)。
 
-- 日期：2026-09-05；产品版本：**0.22.0**。
-- 用户远端基线：`f86e0c86fd3eba8b9823bb6efc64914993900bea`。
-- 实际代码修复：`c08caa1606de49e2ced70ef257c30db2ff01bf75`。
-- 修复提交验证：Core #438、CI #347 completed/success；CI 9 个 Job 成功，Web 49 files/468 tests，新增缓存回归 5/5。
-- 报告绑定上述代码快照；包含报告自身的最终 Head/checks 以 PR 外部状态为准，不复用旧 Head 结果。
+- 日期：2026-09-05；基线版本：`0.22.0`；整改版本：`0.23.0`。
+- 整改基线：`0a6edc95363965daad081ab23ddf254ce2feaa65`。
+- 实施方案：[第二十四轮整改方案（HTML）](../superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html) · [Markdown 源稿](../superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.md)。
+- 当前状态：**本轮整改、本地验收和最终完成度复核通过；最终 Head 交付以本次 PR 检查为准。** 1989 项测试通过（1 项既有可选跳过），Chromium 全套 99/99；build/typecheck 与生产依赖漏洞审计通过。最终 Head 仍须核对本次 PR 检查，不能沿用历史结果。
 
 ## 当前裁决
 
-**仍有问题，不给整仓无条件通过。** 本轮已修复查询期间失效通知被旧响应吞掉的问题。用户完成的 RunPlan v2、同库原子/幂等受理、目录恢复屏障和共享提交控制器均予以认可，不再重复列为缺失。
+第二十四轮原评审结论为“仍有问题，不给整仓无条件通过”。原时点保留在 §1–9；v0.23.0 实施、独立代码/测试复查、真实命令探针及四宽度截图见报告 §11。真实 Provider、完整导出和全域副作用排他仍是后续边界，不给整仓或生产可靠性无条件通过。
 
-最重要的剩余 P1：模板已绑定 commandRef 名称，但 Gate 执行时仍读取当前 repo profile 解析实际命令或 not-applicable。有效命令与跳过事实应纳入受理/执行快照，或变化时重新确认。该问题是源码路径确认，不是本轮观察到的生产事故。
+本次整改围绕两个可验证结果：运行沿用受理时记录的有效检查命令与适用性；页面在读取期间变化、重连或跨入口审批后反映最新状态。同时补齐逐项检查预览、刷新差异、历史绑定提示和“已受理，等待目录恢复”等用户说明。
 
-## 已关闭的具体切片
+## 本轮核验范围
 
-- 完整规范化模板、mode 和嵌套 digest 字段进入 RunPlan v2；独立 snapshot 和持久执行节点有校验。
-- Run、Session、Job、审计、opening events、requestId 在同一 SQLite immediate transaction 中受理；重放保留原赢家，冲突不静默创建。
-- 目录后置准备、pending/ready/recovery_required、未就绪不执行及恢复身份保留。
-- 默认/高级入口共用 RunAdmissionController、ledger 和 AdmissionNotice；已受理事实单调，未知状态可查询。
-- Credential/Provider health 已拆分；裸物理 clean 已停用；迟到 scope 结果已受代数限制。
-- 本轮新增：运行中的查询收到失效通知后不再发布过时结果/错误，结算后合并发起新读取。
+- RunPlan v3 捕获实际使用的仓库命令、来源、不适用与缺失决定；核验确认到受理、执行、恢复和返工的一致性。
+- 历史 v1/v2/无快照恢复保留兼容边界，不自动升级；无效或未知记录不能显示为已冻结。
+- 两个 Web 发起入口提供脱敏检查详情与刷新差异，变化后仍需显式提交；目录 pending 与 recovery_required 均明确已受理。
+- 真实页面、SQLite 与 SSE 验证迟到响应、首次连接/重连追平和跨入口审批；完整测试、构建、浏览器与依赖审计结果回填原报告。
 
-## 后续优先项
+## 交付边界
 
-1. #20 的有效 repo-profile 命令、not-applicable 及其他运行环境证据绑定；不要重复修复已完成的模板摘要。
-2. 在受理事务之外，验证一个 Provider 的执行、取消、关闭和重启恢复。单一 owner 是需求，daemon/事件溯源是可选择方案，不因架构名称缺失一概判 P0。
-3. 完整只读历史导出，以及“已受理，等待目录恢复”等状态用语收敛。
-4. Windows/真实 Provider、负载和辅助技术专项；当前自动化不外推为这些环境已验证。
+命令绑定不冻结 package scripts 正文、测试代码、PATH 二进制、依赖、Git/base、Provider 或宿主环境。事件日志仍可能缺失后续事件，不是完整事实源；数据库终态或取消受理也不等于全部子进程已经退出。
 
-## 证据与交付边界
+真实 Provider 的取消、关闭、重启和多轮协作，完整只读历史导出，以及 Windows、负载和辅助技术专项仍须另行验证。DSH tested pin 保持 `0.1.2-alpha.3`；上游资料和判断依据见本轮报告与方案，不将上游能力视为 Tekon 已实现。
 
-本地真实 QueryCache 定向回归：修改前 4 失败/1 通过，修改后 5/5；原文件和修复源/测试 Git blob SHA 已与远端核对。容器不能联网安装全仓依赖，未运行本地完整 pnpm test；集成证据来自对应 SHA 的远端 Actions。无独立 subagent，已保守二次自检；没有新的 Tekon 应用视觉或读屏验证。
-
-DSH tested pin 仍为 `0.1.2-alpha.3`；本轮官方复核发布 `0.1.3-alpha.1`。ACP 提供持久会话和标准语义更新，但不等于 raw provider deltas、历史重放或完整 UI；不据上游新版本自动升 pin。
-
-本文件是稳定入口，第二十四轮 Markdown 是内容源并同步 HTML；旧报告保留历史。未合并、发布、部署、强推或修改仓库规则。
+本文件是稳定入口，第二十四轮报告 Markdown 为内容源并同步 HTML；旧报告保留历史。最终提交、PR Head 和 CI 证据以原报告后续验收记录为准；本入口不代表已合并、发布或部署。

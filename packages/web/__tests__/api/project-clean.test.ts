@@ -26,6 +26,7 @@ import {
   openTekonDatabase,
 } from '@tekon/core';
 import { createProjectRouter } from '../../src/server/api/routers/project.js';
+import { createPlanPreviewSigner } from '../../src/server/api/plan-preview.js';
 
 const cleanupTasks: Array<() => void> = [];
 const SNAPSHOT_TABLES = [
@@ -158,6 +159,7 @@ describe('project.clean suspended guard and audit', () => {
     const beforeWorktreeFiles = snapshotFiles(worktreesDir);
     const beforeDatabase = snapshotDatabase(dbPath);
     const router = createProjectRouter({
+      planPreviewSigner: createPlanPreviewSigner(),
       db: seedDb,
       repositories: seedRepositories,
       projectContext: createProjectContext({
@@ -344,6 +346,7 @@ describe('project.clean suspended guard and audit', () => {
     };
 
     const router = createProjectRouter({
+      planPreviewSigner: createPlanPreviewSigner(),
       db,
       repositories,
       projectContext,

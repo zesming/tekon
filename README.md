@@ -48,6 +48,7 @@
 | Gate 与证据   | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness                                  |
 | 审阅面        | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包                                                                                         |
 | 可靠发起      | Request ID 绑定提交意图；同内容重试返回原运行身份，目录未就绪时保留身份并等待恢复                                                                               |
+| 检查绑定      | 发起前查看逐项检查的来源、执行或跳过方式及刷新差异；新运行保留受理时的命令与适用性，供执行和恢复使用                                                           |
 | 交付管理      | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控                                                                                       |
 | 效果评估      | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性                                                                           |
 | Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面                                                                  |
@@ -60,6 +61,7 @@ Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里�
 - **Session feed 非完整模型 streaming**：中间栏的 Agent 消息当前为「产物元数据合成的摘要」（DSH headless 会展示官方最终 assistant 文本），**不是逐块的模型原文增量**（`assistant/chunk`）。真流式为后续里程碑。
 - **follow-up / steer 未开放**：进入 Session 后暂不能继续追问或中途转向，Composer 仅用于发起新 run。
 - **Event log 仍非完整事实源**：新 Session 的三个开场事件（创建会话、开始 workflow、用户需求）与 Run/初始 Job 一起原子受理；后续事件仍可能因 best-effort 投影缺失，不能仅从 event log 完整重建运行。
+- **检查绑定有范围**：新运行冻结实际使用的仓库命令描述符、来源及不适用/缺失决定，不冻结 package scripts 正文、PATH 二进制、依赖或宿主环境。历史 v1/v2/无快照运行不会自动升级；其中使用 `commandRef` 的检查仍按当前配置解析。
 - **automation（自动准备交付 / readiness）仅长驻进程内触发**：由 CLI 完成的 run 不会触发另一 Web 进程的 automation；CLI 交付仍走显式 `tekon delivery prepare`。
 - **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
 - **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
@@ -110,9 +112,11 @@ tekon run "你的需求"
 
 普通 workflow/Goal 启动前会向 stderr 打印 `Request ID: …`。保存这个标识；超时、断连或返回结果丢失后，用相同需求和参数加 `--request-id <原标识>` 重试，继续观察原 Run。若显示 `REQUEST_ID_CONFLICT`，说明该标识已用于另一提交意图；确认要另建任务后使用新标识。
 
-目录准备失败时会保留 Run/Session 身份并显示“创建失败需恢复（尚未执行）”。修复目录后按原请求重试，用 `tekon status --run-id <runId>` 查看 `admission` 与 `filesState`；不要仅凭已有 Run ID 判断任务已经执行。Web 两个发起入口也会保留待确认请求，支持查询受理结果；暂未查到记录不代表原请求失败。
+目录尚未就绪或准备失败时，会保留 Run/Session 身份并显示“已受理，等待目录就绪”或“已受理，等待目录恢复”；任务尚未执行。修复目录后按原请求重试，用 `tekon status --run-id <runId>` 查看 `admission`、`filesState` 与 `executionBinding`。Web 两个发起入口也会保留待确认请求，支持查询受理结果；暂未查到记录不代表原请求失败。
 
-Web 预览绑定完整模板及 workflow/Goal 模式；出现 `PLAN_DIGEST_MISMATCH` 时，先刷新预览并审阅，再重新提交。顶栏分开显示凭据与 Provider 的检查状态、检查时间和重试入口。CLI 的 `--dry-run` 当前仅支持 `--dynamic`；普通 workflow/Goal 的 dry-run 会在初始化前拒绝，动态预览不受理 Run。
+Web 预览绑定完整模板、workflow/Goal 模式与实际使用的仓库检查配置。在“检查配置与适用性”中展开逐项详情；刷新后核对变化，再显式提交。出现 `PLAN_DIGEST_MISMATCH` 时也按此流程重新确认。服务重启或切换仓库、凭据等上下文后，旧预览不能继续作为逐项比较依据。CLI 在启动请求时捕获检查配置，普通 workflow 没有交互预览；`--dry-run` 仅支持 `--dynamic`。
+
+Session 列表在事件流首次连接和断线重连后会自动读取最新状态，审批卡片也会随其他入口的审批变化更新。顶栏分开显示凭据与 Provider 的检查状态、检查时间和重试入口。
 
 ### 受控交付 CLI（高级）
 
@@ -215,5 +219,5 @@ npm run lint:actions
 ## 文档
 
 - [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
-- [当前权威产品与架构评审](docs/reviews/current.md)
+- [当前权威产品与架构评审（HTML）](docs/reviews/current.html)
 - [变更日志](CHANGELOG.md)

@@ -2,6 +2,8 @@
 
 日期：2026-09-05 · 产品版本：**0.22.0** · 对应 [PR #11](https://github.com/zesming/tekon/pull/11)。
 
+> 时点说明：§1–9 保留报告作者的 v0.22.0 结论；§10 为接续代理同步至 `0a6edc9` 后追加的独立复核和整改裁决；§11 记录 v0.23.0 的实施、验收与剩余边界。历史段落中的未完成项不代表接续整改后的当前状态。
+
 | 核验对象 | 本轮证据 |
 | --- | --- |
 | 用户远端基线 | `f86e0c86fd3eba8b9823bb6efc64914993900bea` |
@@ -186,3 +188,117 @@ AdmissionNotice 的恢复标题是“创建失败需恢复”，同一处说明�
 本补丁属于尚未合并 v0.22.0 的缺陷修正，不单独发布或升版本。公开 CLI/RPC/安装流程未变，README、用户手册和 AGENTS 无新增操作需要同步；行为说明、复现和限制在本报告及 PR 中归档。不新增与用户使用无关的 CHANGELOG 评审过程。未执行 merge、release、deploy、强推或 ruleset 修改。
 
 **后续顺序：先补有效仓库命令及不适用事实绑定，再验证一个 Provider 的执行/取消/恢复链路；完整导出作为独立用户能力推进。当前缓存缺陷已修复，但在有效配置绑定问题处理前，不给“整仓无问题、确认即完整冻结执行环境”的无条件通过。**
+
+## 10. 接续独立复核与整改裁决（2026-09-05）
+
+### 10.1 同步、复现与证据层级
+
+Tekon 已从 `f86e0c8` 快进至 `0a6edc95363965daad081ab23ddf254ce2feaa65`，完整保留作者的缓存修复及报告勘误，工作区同步前干净。DSH 已实际 fetch origin 和 tags，HEAD 与 origin/master 仍为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`，没有新增提交；tested pin 不变。
+
+本次使用独立代理分别调查有效命令设计、真实查询/SSE链路和 DSH/执行生命周期。专用角色在当前 runtime 出现配置/请求错误，改用可正常执行的最高思考等级独立代理；以下结论不是将主代理自检改称独立评审。
+
+| 事项 | 证据 | 接续判断 |
+| --- | --- | --- |
+| R24-01 | 当前真实 QueryCache 两文件 20 项通过；独立核对 useQuery 订阅、请求发布权与 SSE key 前缀 | 原补丁的精确切片成立；尚需真实页面＋SSE时序补证，不能扩大成所有观察链路闭环 |
+| R24-02 | 主代理以真实 Engine、SQLite、Mock Agent 和本地 npm scripts 复现；控制组 passed，受理后改变参数则 exit-code failed，改 N/A 则 skipped；三组摘要相同 | 不只是 commandRef 名字变化的问题，有效命令/适用性事实确实可在受理后漂移；必须冻结 |
+| security 边界 | `GateRunner` 对 security N/A 不生成跳过，`GateEngine` 仍执行内置扫描 | 新绑定不能把安全扫描误变成 skipped，必须保留此特殊规则 |
+| Workspace 重连 | 服务端新连接首轮只设置 signature；客户端 live 不触发列表重查 | 独立发现的 P2：断线期间变更可能一直不显示；本轮补真实重连红测并整改 |
+| 审批卡片 | Session SSE 审批事件只失效 session.list；Gate query 的 runId/hasPendingApproval 可保持不变 | 独立发现的 P2：其他入口审批后卡片可能陈旧；本轮补跨入口浏览器证据 |
+| R24-03 | 共享 Notice、CLI 和手册同时出现“创建失败”与“已受理” | 接受用语收敛建议，机器状态与 unknown 边界不改 |
+
+有效命令复现使用固定、安全的 npm scripts：原命令 `npm run check-original` 正常退出；变更命令 `npm run check-changed` 以 7 退出。没有调用真实模型、网络包安装或生产命令。三组 Run 的摘要均为 `a605b3689cf31d55ed6a607b8b68a3220fa2daa66733f551ea1e2c55ecdbd4f3`：
+
+| Run ID | 条件 | Build Gate / Workflow |
+| --- | --- | --- |
+| `run_178222f2-73fb-4ca7-8c82-910a52c1ddfa` | 不改 profile 的正对照 | passed / passed |
+| `run_8c3e10a8-1288-4832-9e2a-069fc107638f` | 受理后改 args | failed（exit-code）/ blocked |
+| `run_89b6e399-c138-46b3-acc8-c876c796be92` | 受理后改为 notApplicable | skipped（not-applicable）/ passed |
+
+探针临时目录已清理；本表保留关键 Run/Gate 结论，不将其称作真实 Provider 可交付性 eval。后续实施前，Workspace 重连与跨入口审批已由真实 HTTP/SSE、SQLite 和 Chromium 复现为失败；修后对应旅程通过。新增观察测试还覆盖迟到成功、迟到 500、多帧失效合并和重新挂载，不以仅调用 cache 函数替代页面证据。
+
+### 10.2 执行绑定：采用冻结事实，不在执行中切换配置
+
+采用 [第 24 轮整改方案](../superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html)：RunPlan v3 记录实际消费的 ref 解析结果与来源，结果区分 resolved、not-applicable、missing；内联命令优先，无消费引用时不读 profile。先以原模板生成稳定 Gate key，再将绑定物化进持久执行 Gate 并移除动态 ref 入口。执行/恢复以同一快照校验期望节点，repair/rework 继承原物化事实。
+
+拒绝“仅在 Engine 构造时缓存 profile”的方案：它既不绑定用户确认时刻，也会使 v3 恢复与 requestId 重放依赖当前坏配置。文件读取放新受理同步分支，纯准备 helper 只接收已捕获事实；所有输入/选项摘要继续比较。旧 v2/v1/无快照不重写历史，在观察入口明确历史绑定边界。
+
+预览仍采用白名单；只增加检查状态、来源、实际行为说明和不透明比较标识，用于提示哪些检查变化，不公开 tool/args/env 或不适用原始理由。方案首轮独立 review 指出模板 skipReason 优先级不能遗漏、公开逐 Gate 无密钥摘要会增加低熵字段猜测入口；已补齐物化后行为优先级和服务端临时 HMAC 比较作用域，并通过第二轮最高等级技术复查及编辑性审阅后实施。持久计划摘要不包含这些临时显示标识。新预览和历史绑定提示是新增用户可见能力，本轮与缺陷修复合并按 MINOR 目标 `0.23.0` 管理，而不是仅按最初纯绑定补丁的 PATCH 建议计。
+
+绑定 `npm/pnpm` 调用不等于冻结 package script 正文、测试代码、依赖、PATH、Git/base 或 Provider。关闭 R24-02 不代表整个 #20 的执行环境已不可变。
+
+### 10.3 执行所有权与 DSH：保留已有机制，明确尚未证明的保证
+
+补充 §6.1：Tekon 已有条件原子 claim、事务化 enqueue、owner/status 条件写、heartbeat 失主处理、注册子进程 kill、工作树晋升 expected-old OID、有限关停 drain 和数据库关闭屏障。不能暗示这些机制不存在。依据：[Job 存储](https://github.com/zesming/tekon/blob/0a6edc95363965daad081ab23ddf254ce2feaa65/packages/core/src/session/session-store.ts#L587)、[JobRunner](https://github.com/zesming/tekon/blob/0a6edc95363965daad081ab23ddf254ce2feaa65/packages/core/src/session/job-runner.ts#L267)、[Worktree 晋升](https://github.com/zesming/tekon/blob/0a6edc95363965daad081ab23ddf254ce2feaa65/packages/core/src/runtime/worktree-manager.ts#L183)。
+
+同时，[requestCancel](https://github.com/zesming/tekon/blob/0a6edc95363965daad081ab23ddf254ce2feaa65/packages/core/src/session/session-service.ts#L463) 先写领域取消，再请求执行取消；有界 stop 也不保证不合作执行者已退出。因此取消受理、数据库终态与实际进程静止应分开，不能把剩余尾部风险统一推给未来 Collaborate 后宣称关闭。本轮绑定实现必须继续通过已有取消、失主、关停和恢复回归，不新增绕过 owner 的写入。
+
+DSH 的 Headless/ACP/Safety 关键结论经固定 SHA 源码复核成立。SessionHandle 的单写锁保护其会话日志，不保护 Tekon 的 Git/worktree 或其他副作用；ACP 提供 committed semantic updates，不提供 raw deltas 或旧 updates 重放。依据：[ACP 合同](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/acp/acp/README.md#L88)、[会话锁](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/session/session-persistence-jsonl/src/lease.ts#L1)、[Safety](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/SAFETY.md#L5)。
+
+上游 persistence README 存在“logical v1”残留文字，而 [Session 类型源码](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/core/session/src/types.ts#L86) 的版本常量为 2。采用当前源码事实，不据旧文字改写报告为 v1；这也不是 Tekon 已实现 ACP 的证据。
+
+### 10.4 进入实施前的交付门
+
+本轮同时处理有效检查绑定、配置可解释预览与历史提示、查询/SSE观察缺口、恢复用语。方案必须经最高等级独立循环评审后才实施；代码和测试之后还需独立 review、全仓与全套浏览器验证、四宽度新截图目视、报告逐项完成度复查。当前尚未宣称这些交付门通过。
+
+ACP 接入、完整只读导出、全域副作用排他和真实多轮 Provider/平台专项仍是原报告明确后续方向；本轮保留其未完成事实，不通过删掉风险或收窄产品承诺来关闭有效命令缺陷。最终只推送同一 PR，不合入、发布、部署或强推。
+
+## 11. v0.23.0 实施与验收记录
+
+### 11.1 落地内容与证据对应
+
+| 事项 | 实际调整 | 验证依据 |
+| --- | --- | --- |
+| R24-01 查询失效 | 保留原在途失效修复；SSE 初连/重连进入 live 后重查列表，审批事件同时失效对应 Gate 查询 | 真实页面、SQLite、HTTP/SSE 的 7 条旅程覆盖断线期间变更、外部 decided/requested、旧成功/500、多次失效与重挂；修前关键旅程失败，修后全部通过 |
+| R24-02 有效检查 | 新受理捕获 RunPlan v3；持久 Gate 移除 commandRef 并物化 command/skip 决定；确认窗口漂移拒绝，执行/恢复不读新 profile | Core 严格输入矩阵、真实 npm 执行、provider/preflight 等待窗口零受理、SQL 篡改、repair/rework/嵌套返工；另有 HTTP 与 CLI 真进程验证 |
+| 检查预览 | 两入口共享检查详情、实际行为、来源和逐项变化；服务实例私有 HMAC key/scope 仅用于显示，刷新后显式再提交 | HTTP 6 项涵盖脱敏、同实例稳定、实例轮换不改 digest、profile→自动检测可比较、missing/N/A/security/human 与坏配置错误；浏览器两入口刷新加载、认证切换、scope 轮换与四宽度展示 |
+| 历史兼容 | 冻结 v2 纯投影别名，保留 v1/无快照恢复；Workflow/Review/Session/CLI 统一观察 frozen/legacy-unbound/invalid/unknown | 历史执行与完整性回归；真实 HTTP/CLI 分类测试；缺损 admission 不降级历史，原 requestId 在配置损坏后仍返回原身份 |
+| R24-03 受理用语 | 两表单/详情/列表/CLI 区分 pending、recovery_required；已知 accepted 身份在刷新失败后保留 | 首轮前端审阅发现两表单丢失 filesState，先取得 10 条单测与两入口浏览器红测后修复；内存保留细分状态、账本重载使用中性提示，4 条浏览器旅程通过，最高等级独立复查关闭 |
+| 旧响应隔离 | 关闭流及切换认证/Session 后拒绝旧回调；`loadEarlier` 在返回时验证同一 owner | 新确定性单测覆盖旧成功、错误和跨 Session 历史页，已有认证/取消/失主/关停回归保留 |
+
+`skipReason` 的组合兼容在规范化执行模板和 Core 矩阵中验证；文件模板入口没有新增此配置字段。指纹依据有效事实：被 ref N/A 覆盖的旧模板理由变化仍改变总摘要，但不伪造逐 Gate 行为变化。
+
+### 11.2 修后真实命令探针
+
+主代理使用 v0.23.0 本地构建、真实 Engine/SQLite/Mock Agent 和本地 npm scripts 执行以下探针。初始命令为 `npm run confirmed`（退出 0），备选 `npm run changed`（退出 7）；受理后再改 profile。三组 v3 摘要均为 `c7fd4bdc4449a439bbe5318f33f55e829bb85ba0f345da701b0ac7e3690ce617`，持久 Gate 均无 commandRef：
+
+| Run ID | 受理后变更 | 实际命令 / Gate / Workflow |
+| --- | --- | --- |
+| `run_015079bd-6ff7-434e-9524-471cf99ebe55` | args 指向失败脚本 | `npm run confirmed` / passed / passed |
+| `run_66945ef1-33aa-48e0-baa7-31979ee27a07` | build 改为 notApplicable | `npm run confirmed` / passed（不是 skipped）/ passed |
+| `run_46577e73-264e-4d18-a43f-b0ac4ec4af79` | 暂停后损坏 profile，由新 Engine 恢复 | `npm run confirmed` / passed / passed |
+
+这与 §10.1 的修前漂移形成对照。三个临时仓库和内存数据库均已清理。探针只验证命令绑定机制，没有真实模型调用；本轮没有新增真实 Provider 可交付性 eval 分数，不能将 3/3 passed 转述为任务交付成功率。
+
+### 11.3 独立审阅、测试与交付门
+
+最高等级独立代理完成两轮技术方案复查及编辑性审阅后才实施；Core、服务端与 CLI 的业务代码和测试均经独立审阅，未检出必须修复项。Core 审阅后将“未知版本”测试样例改为 99，并修正 v3 无效 context 分支的 TypeScript 收窄，增量已复查通过。用户文档、MD/HTML 与版本变更的独立审阅也已放行。
+
+最终完成度、文档与视觉复核均未检出必须修复项；R24-01/02/03 及新增观察缺口在本轮验收边界内关闭，允许提交同一 PR；不等于生产可靠性无条件通过。视觉复核提出恢复图截到淡入动画中段的非阻断建议，已在采图时固定动画终态并重拍，14 项定向回归及截图增量复查再次通过。
+
+前端首轮审阅检出表单目录细分状态遗漏，已按测试先行修复并经第二轮独立复查放行。首次完整 Chromium 回归为 92/95，3 项失败均来自新增控件使旧泛定位器匹配两元素；已改为精确高级设置/列表刷新定位，并把认证测试响应等待限定为实际 session.list，相关 8 项定向通过，未降低几何或认证断言。包含新增表单状态覆盖的最终完整回归为 99/99（零重试）。
+
+| 验证层 | 实际结果与证据边界 |
+| --- | --- |
+| 全仓 Vitest | 最终 `pnpm test --run`：178 文件、1989 passed、1 skipped（1990）；包含 CLI 真进程、Core 执行和 Web API/client。既有 opt-in DSH live contract 未启用，不计作通过 |
+| 构建 / 类型 | v0.23.0 最终全包 `pnpm build`、`pnpm typecheck` 均通过 |
+| Chromium 全套 | `CI=1 pnpm --filter @tekon/web exec playwright test --retries=0`：99/99；含本轮 21 条新旅程及既有全功能、真实认证、审批、交付、冷启动、恢复和四宽度几何检查 |
+| 生产依赖漏洞审计 | `pnpm audit --prod`：No known vulnerabilities found；不等于整个工具链或 DSH 安全认证 |
+| UI 目视 / 归档 | 320/390/700/1440px 的 16 张新 PNG 已归档；实际页面未检出新控件越界、重叠、文案横裁或错误状态；字体补齐后 14 项检查预览/恢复/响应式回归另行通过 |
+| 提交 / 远端检查 | 本地门已通过；提交后必须核对包含本文的最终 PR Head 的 Core/CI。精确提交 SHA 与远端结果以 PR 外部检查记录为准，不沿用 §9 历史 CI |
+
+截图中的空态、缺命令、跳过、安全例外和历史恢复组合通过受控 RPC 投影进入真实页面，用于验证布局和交互，不冒充真实模型交付。实际绑定/目录故障/重放分别由 Core、HTTP/CLI 和既有恢复 e2e 验证。首次采图中固定栏因页面滚动出现在长图中部，已在截图前回顶；宿主缺少 emoji 字体导致既有装饰图标缺字，已在单次浏览器进程中临时加载 `fonts-noto-color-emoji 2.042-0+deb12u1` 后重拍，不修改系统字体、产品代码或 CI 环境。归档仅包含新图，R23 历史截图未改。
+
+| 宽度 | 默认入口检查 | 高级入口检查 | Session 恢复/历史 | Run 恢复/历史 |
+| --- | --- | --- | --- | --- |
+| 320px | [PNG](assets/r24-v0.23.0/r24-320-simple-bindings.png) | [PNG](assets/r24-v0.23.0/r24-320-advanced-bindings.png) | [PNG](assets/r24-v0.23.0/r24-320-session-recovery-binding.png) | [PNG](assets/r24-v0.23.0/r24-320-run-recovery-binding.png) |
+| 390px | [PNG](assets/r24-v0.23.0/r24-390-simple-bindings.png) | [PNG](assets/r24-v0.23.0/r24-390-advanced-bindings.png) | [PNG](assets/r24-v0.23.0/r24-390-session-recovery-binding.png) | [PNG](assets/r24-v0.23.0/r24-390-run-recovery-binding.png) |
+| 700px | [PNG](assets/r24-v0.23.0/r24-700-simple-bindings.png) | [PNG](assets/r24-v0.23.0/r24-700-advanced-bindings.png) | [PNG](assets/r24-v0.23.0/r24-700-session-recovery-binding.png) | [PNG](assets/r24-v0.23.0/r24-700-run-recovery-binding.png) |
+| 1440px | [PNG](assets/r24-v0.23.0/r24-1440-simple-bindings.png) | [PNG](assets/r24-v0.23.0/r24-1440-advanced-bindings.png) | [PNG](assets/r24-v0.23.0/r24-1440-session-recovery-binding.png) | [PNG](assets/r24-v0.23.0/r24-1440-run-recovery-binding.png) |
+
+README、CHANGELOG、用户手册 MD/HTML、current 与方案/报告同步到本轮合同，四包版本为 0.23.0。既有产品/架构历史文档不重写；新实现和验收细节归本方案与报告。AGENTS、安装/更新脚本未改，因为仓库规则、安装和发布流程不变；本轮无需安装脚本变更专属 smoketest。
+
+### 11.4 保留的限制
+
+本轮关闭目标是有效检查调用和观察一致性，不是冻结 package script 正文、测试代码、PATH/依赖、Git/base、Provider 或宿主环境。持久摘要与 SQL/Audit 校验不防御拥有全库写权限者同时改写版本、摘要、节点和全部历史。安全 Gate 继续执行内置扫描，N/A 不能绕过它。
+
+DSH 上游同步仍为 §10.1 的固定 SHA，tested pin 保持 `0.1.2-alpha.3`。真实 DSH L2/L3、多轮 ACP 接入、完整只读历史导出、全域副作用排他、Windows/macOS、生产规模故障和真实辅助技术专项仍未新增验收；既有取消、失主和关停测试通过也不能证明所有进程已静止。后续按原报告顺序推进，不以本轮功能通过代替这些里程碑。
