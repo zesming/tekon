@@ -128,9 +128,8 @@ export class QueryCache {
   }
 
   /**
-   * Clear all in-flight promises regardless of key. Use this when the
-   * auth token changes to abort stale requests that might write cached
-   * data from the old session.
+   * Forget all in-flight registrations. This does not abort the underlying
+   * requests or fence their cache writes; callers own those lifecycle guards.
    */
   clearAllInFlight(): void {
     this.inFlight.clear();
@@ -151,7 +150,11 @@ export class QueryCache {
     promise
       .catch(() => undefined) // suppress unhandled rejection on the cleanup chain
       .finally(() => {
-        this.inFlight.delete(key);
+        // A cleared/replaced request may settle after its successor started.
+        // Only the registered owner may remove this key's in-flight entry.
+        if (this.inFlight.get(key) === promise) {
+          this.inFlight.delete(key);
+        }
       });
     return promise;
   }

@@ -59,6 +59,14 @@ export async function commandRun(
     },
     allowPositionals: true,
   });
+  // Never silently turn a preview request into a real run. The only current
+  // preview implementation is the dynamic branch below; reject all other
+  // dry-run requests before initialization, provider setup or persistence.
+  if (args.values['dry-run'] && !args.values.dynamic) {
+    throw new Error(
+      'DRY_RUN_UNSUPPORTED: --dry-run 当前仅支持 --dynamic；本次未初始化项目或启动运行。',
+    );
+  }
   const repoPath = resolveProjectRepoPath(args.values.repo);
   await ensureInitialized(repoPath, io);
   const positionalDemandText = args.positionals.join(' ').trim();

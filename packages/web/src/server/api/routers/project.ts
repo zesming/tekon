@@ -51,41 +51,10 @@ import {
   mapWorkflowFromDomain,
 } from '../mappers.js';
 
-interface HealthCacheEntry {
-  result: {
-    credential: 'not-configured' | 'valid' | 'invalid';
-    checkedAt: string;
-    detail?: string;
-    dshHeadless?: 'available' | 'unavailable';
-  };
-  cachedAt: number;
-}
-
-const HEALTH_CACHE_TTL_MS = 60_000;
-const HEALTH_CACHE_MAX_ENTRIES = 128;
 const DSH_HEALTH_PROBE_TIMEOUT_MS = 1_000;
-const healthCache = new Map<string, HealthCacheEntry>();
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
-}
-
-function cleanExpiredHealthCache(now: number): void {
-  for (const [key, entry] of healthCache.entries()) {
-    if (now - entry.cachedAt >= HEALTH_CACHE_TTL_MS) {
-      healthCache.delete(key);
-    }
-  }
-}
-
-function setHealthCache(key: string, entry: HealthCacheEntry): void {
-  if (healthCache.size >= HEALTH_CACHE_MAX_ENTRIES && !healthCache.has(key)) {
-    const oldestKey = healthCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      healthCache.delete(oldestKey);
-    }
-  }
-  healthCache.set(key, entry);
 }
 
 async function probeProvider(): Promise<'available' | 'unavailable'> {
@@ -124,15 +93,9 @@ export function createProjectRouter(
       // authenticated RPCs. Trimming here would report a token as valid while
       // every mutation and provider-health request correctly rejects it.
       const token = input?.token;
-      const tokenHash = token ? hashToken(token) : 'empty';
-      const cacheKey = `${context.projectContext.sessionPath}:${tokenHash}`;
-      const now = Date.now();
-      cleanExpiredHealthCache(now);
-
-      const cached = healthCache.get(cacheKey);
-      if (cached && now - cached.cachedAt < HEALTH_CACHE_TTL_MS) {
-        return cached.result;
-      }
+      // The credential file may rotate or disappear between requests. Unlike
+      // the expensive provider probe, this local check must not reuse a cached
+      // verdict for an old token/configuration pair.
 
       let credential: 'not-configured' | 'valid' | 'invalid' = 'not-configured';
       let detail: string | undefined;
@@ -168,7 +131,6 @@ export function createProjectRouter(
         ...(detail ? { detail } : {}),
       };
 
-      setHealthCache(cacheKey, { result, cachedAt: now });
       return result;
     },
 
