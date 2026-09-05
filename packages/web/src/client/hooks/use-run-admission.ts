@@ -43,6 +43,9 @@ interface Options {
   ) => Promise<LookupResult>;
   onAccepted: (result: RunResult) => void;
 }
+const LOCAL_RECEIPT_ERROR =
+  '请求已受理，但浏览器请求记录更新或页面跳转未完成。请通过下方入口观察原运行，不要重复新建。';
+
 const emptySnapshot = (): Snapshot => ({
   isPending: false,
   scopeReady: false,
@@ -173,6 +176,8 @@ export class RunAdmissionController {
       this.epoch === epoch &&
       this.token === token;
     let dispatched = false;
+    let submittedRecord: AdmissionRecord | undefined;
+    let receiptObserved = false;
     this.patch({ isPending: true, error: null, outcome: null });
     try {
       if (!this.snapshot.scopeReady) await this.loadScope();
@@ -199,6 +204,7 @@ export class RunAdmissionController {
         requestId,
         state: 'unknown',
       };
+      submittedRecord = record;
       if (!current()) return;
       const resolved = this.acceptedRecords.get(`${scope}\0${requestId}`);
       if (resolved) {
@@ -225,30 +231,42 @@ export class RunAdmissionController {
         this.updateRecord(alreadyAccepted);
         return;
       }
+      // A matching server receipt is stronger evidence than subsequent browser
+      // storage or navigation failures. Publish its identity before local I/O.
+      receiptObserved = true;
+      this.updateRecord({
+        ...record,
+        state: result.admissionState,
+        runId: result.run.id,
+        sessionId: result.sessionId,
+        filesState: result.run.filesState,
+      });
+      this.patch({ outcome: null });
       if (result.admissionState === 'recovery-required') {
         this.options.ledger.upsert({ ...record, state: 'recovery-required' });
-        this.updateRecord({
-          ...record,
-          state: 'recovery-required',
-          runId: result.run.id,
-          sessionId: result.sessionId,
-          filesState: result.run.filesState,
-        });
       } else {
-        // Keep observation identities in memory before removing the pending
-        // disk record, so lookup/success never loses the route to the Run.
-        this.updateRecord({
-          ...record,
-          state: 'accepted',
-          runId: result.run.id,
-          sessionId: result.sessionId,
-          filesState: result.run.filesState,
-        });
         this.options.ledger.remove(scope, requestId);
         if (current()) this.options.onAccepted(result);
       }
     } catch (error) {
       if (!current()) return;
+      const submitted = submittedRecord;
+      const known = submitted && this.snapshot.records.find(record =>
+        record.scope === submitted.scope &&
+        record.requestId === submitted.requestId &&
+        record.fingerprint === submitted.fingerprint &&
+        record.state !== 'unknown' && record.runId,
+      );
+      if (known) {
+        // A concurrent lookup can confirm the POST before its response fails.
+        // Neither that transport error nor local receipt handling can undo it.
+        this.patch({
+          error: receiptObserved ? new Error(LOCAL_RECEIPT_ERROR) : null,
+          planExpired: false,
+          outcome: null,
+        });
+        return;
+      }
       const failure = asError(error);
       const planExpired =
         (failure instanceof ApiClientError &&
@@ -291,6 +309,7 @@ export class RunAdmissionController {
       this.authEpoch === authEpoch;
     const alreadyAccepted = () =>
       this.acceptedRecords.has(`${scope}\0${requestId}`);
+    let receiptObserved = false;
     this.patch({ checkingId: requestId, error: null });
     try {
       const result = await this.options.lookup({ token, requestId });
@@ -304,6 +323,7 @@ export class RunAdmissionController {
           lookupState: 'not-found',
         });
       } else {
+        receiptObserved = true;
         this.updateRecord({
           ...record,
           state: result.state,
@@ -312,6 +332,7 @@ export class RunAdmissionController {
           sessionId: result.sessionId,
           filesState: result.filesState,
         });
+        this.patch({ outcome: null, planExpired: false });
         if (result.state === 'accepted')
           this.options.ledger.remove(scope, requestId);
         else
@@ -323,8 +344,12 @@ export class RunAdmissionController {
           });
       }
     } catch (error) {
-      if (current() && !alreadyAccepted())
+      if (!current()) return;
+      if (receiptObserved) {
+        this.patch({ error: new Error(LOCAL_RECEIPT_ERROR), outcome: null });
+      } else if (!alreadyAccepted()) {
         this.patch({ error: asError(error) });
+      }
     } finally {
       if (current()) this.patch({ checkingId: null });
     }
