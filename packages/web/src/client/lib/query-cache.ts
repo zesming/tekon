@@ -18,7 +18,7 @@ export class QueryCache {
   private cache = new Map<string, CacheEntry>();
   private inFlight = new Map<
     string,
-    { promise: Promise<unknown>; epoch: number }
+    { promise: Promise<unknown>; epoch: number; invalidated: boolean }
   >();
   private nextEpoch = 0;
 
@@ -110,6 +110,11 @@ export class QueryCache {
     for (const key of this.cache.keys()) {
       if (key.startsWith(prefix)) {
         const entry = this.cache.get(key)!;
+        // Keep the current request registered to coalesce repeated invalidations,
+        // but revoke its right to mark pre-mutation data fresh. On settlement,
+        // subscribers observe stale=true with no owner and start one new read.
+        const pending = this.inFlight.get(key);
+        if (pending) pending.invalidated = true;
         entry.stale = true;
         entry.timestamp = Date.now();
         this.notify(key);
@@ -175,7 +180,10 @@ export class QueryCache {
     if (pending) return pending;
 
     const epoch = ++this.nextEpoch;
-    const owns = () => this.inFlight.get(key)?.epoch === epoch;
+    const owns = () => {
+      const current = this.inFlight.get(key);
+      return current?.epoch === epoch && !current.invalidated;
+    };
     const promise = Promise.resolve()
       .then(fetcher)
       .then(
@@ -217,7 +225,7 @@ export class QueryCache {
     promise: Promise<unknown>,
     epoch: number,
   ): void {
-    this.inFlight.set(key, { promise, epoch });
+    this.inFlight.set(key, { promise, epoch, invalidated: false });
     promise
       .catch(() => undefined) // suppress unhandled rejection on the cleanup chain
       .finally(() => {
