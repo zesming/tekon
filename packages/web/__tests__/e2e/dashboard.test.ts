@@ -1,4 +1,5 @@
 import { expect, test } from './shared-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 test.describe('Tekon main flow', () => {
   test('dashboard, run list, run detail tabs, approvals, and authenticated operations', async ({
@@ -17,9 +18,7 @@ test.describe('Tekon main flow', () => {
 
     // Shared business journeys use the production sessionStorage bootstrap,
     // so the visible UI credential and the RPC/SSE credential are the same.
-    await expect(page.getByLabel('Session token')).toHaveValue(
-      fixture.sessionToken,
-    );
+    await expect(credentialStatus(page, 'valid')).toBeVisible();
 
     // Sidebar navigation items are present
     await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();
@@ -102,7 +101,7 @@ test.describe('Tekon main flow', () => {
     // Pending decision is displayed
     await expect(page.getByText('decision_1', { exact: true })).toBeVisible();
 
-    // ── 7. Connected state exposes approval controls ──────────────────────
+    // ── 7. Configured credential exposes approval controls ────────────────
     await expect(
       page.getByText('需要提供 token 才能执行审批操作'),
     ).not.toBeVisible();

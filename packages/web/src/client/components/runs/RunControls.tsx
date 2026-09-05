@@ -146,8 +146,18 @@ export function RunControls({
     if (timerRef.current) clearTimeout(timerRef.current);
 
     try {
-      await cancelMutation.mutate({ runId, token });
-      addFlash('success', `Run ${runId.slice(0, 8)} cancelled`);
+      const result = await cancelMutation.mutate({ runId, token });
+      // A successful request can return an already passed/failed run. The
+      // server's terminal winner, not the clicked action, determines feedback.
+      const label = `运行 ${runId.slice(0, 8)}`;
+      if (result.run.status === 'cancelled') {
+        addFlash('success', `${label} 已记录取消；这不代表所有后台进程已退出。`);
+      } else if (result.run.status === 'passed' || result.run.status === 'failed') {
+        const state = result.run.status === 'passed' ? '已完成' : '已失败';
+        addFlash('info', `${label}${state}，未改为取消。`);
+      } else {
+        addFlash('info', `${label}的取消请求已返回，请核对最新运行状态。`);
+      }
     } catch (err) {
       addFlash(
         'error',

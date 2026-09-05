@@ -175,7 +175,7 @@ function createTempGitRepo(
 ) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-worktree-e2e-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });

@@ -27,9 +27,64 @@ export interface SidePanelState {
   cards: SidePanelCard[];
 }
 
+export interface SessionSidePanelSnapshot {
+  runId?: string | null;
+  status?: string | null;
+  actionKind?: string | null;
+}
+
 function str(payload: Record<string, unknown>, key: string): string | undefined {
   const value = payload[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/**
+ * Session rows and workflow runs use different status vocabularies. Translate
+ * only the states with an unambiguous RunControls meaning; an unknown value
+ * remains null so the UI fails closed instead of fabricating live controls.
+ */
+function runStatusFromSessionStatus(
+  status: string | null | undefined,
+): string | null {
+  switch (status) {
+    case 'active':
+      return 'running';
+    case 'idle':
+      return 'paused';
+    case 'awaiting-input':
+      return 'blocked';
+    case 'awaiting-approval':
+      return 'awaiting-approval';
+    case 'done':
+      return 'passed';
+    case 'cancelled':
+    case 'failed':
+      return status;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The event spine is explicitly best-effort during the migration. Session.get
+ * is therefore the safe point-in-time fallback for the run binding, lifecycle
+ * status, and attention state before SSE catches up or when a projection event
+ * is absent. Live events always win once present.
+ */
+export function mergeSessionSnapshotIntoSidePanel(
+  state: SidePanelState,
+  snapshot: SessionSidePanelSnapshot,
+): SidePanelState {
+  return {
+    ...state,
+    runId: state.runId ?? snapshot.runId ?? null,
+    runStatus:
+      state.runStatus ?? runStatusFromSessionStatus(snapshot.status) ?? null,
+    hasPendingApproval:
+      state.hasPendingApproval ||
+      snapshot.actionKind === 'approval' ||
+      snapshot.status === 'awaiting-approval',
+  };
 }
 
 export function deriveSessionSidePanel(

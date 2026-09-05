@@ -1511,7 +1511,7 @@ Agent Runtime 是 Tekon 中最薄的一层。职责：角色配置 → 子进程
     <p>tekon log [--project &lt;id&gt;] # 查看审计日志</p>
 
     <h1>── 清理 ──</h1>
-    <p>tekon clean # 清理 worktree</p>
+    <p>tekon clean # 当前返回 CLEAN_SUSPENDED；生命周期安全清理完成前不删除 worktree</p>
     <pre><code>
 <h3>9.2 status 输出示例</h3>
 
@@ -1776,7 +1776,7 @@ Agent Runtime 是 Tekon 中最薄的一层。职责：角色配置 → 子进程
           <td>Worktree 泄漏磁盘空间</td>
           <td>中</td>
           <td>低</td>
-          <td>tekon clean 命令 + 定期清理策略</td>
+          <td>当前 tekon clean 已暂停物理删除；由 #18/#33 设计导出、retention 与生命周期安全 purge</td>
         </tr>
         <tr>
           <td>动态 Workflow 生成不合理</td>

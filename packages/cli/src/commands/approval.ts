@@ -304,6 +304,9 @@ export async function commandResume(
         '运行已有活跃任务，请先使用 tekon cancel 取消或等待其完成。',
       );
     }
+    if (result.outcome === 'recovery-required') {
+      throw new Error(`ADMISSION_RECOVERY_REQUIRED: runId=${runId}，修复目录准备问题后重试原请求。`);
+    }
 
     jobRunner.start();
     const onSigint = () => {

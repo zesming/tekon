@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -208,12 +215,50 @@ describe('tekon cli e2e', () => {
       runCli(cliPath, ['constraints', 'show', '--repo', repoPath], repoPath),
     ).toContain('code-changes-need-build-test');
 
-    const cleanOutput = runCli(
+    const worktreesDir = join(repoPath, '.tekon', 'worktrees');
+    mkdirSync(join(worktreesDir, 'sample-worktree'), { recursive: true });
+    writeFileSync(
+      join(worktreesDir, 'sample-worktree', 'preserved.txt'),
+      'preserved',
+    );
+
+    let cleanError: any;
+    try {
+      runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
+    } catch (err) {
+      cleanError = err;
+    }
+    expect(cleanError).toBeDefined();
+    expect(cleanError.status).toBe(1);
+    expect(cleanError.stderr.toString()).toContain('CLEAN_SUSPENDED');
+    expect(cleanError.stderr.toString()).toMatch(/#33.*#18|#18.*#33/);
+    expect(cleanError.stdout.toString()).toBe('');
+
+    // Worktree content is preserved
+    expect(
+      existsSync(join(worktreesDir, 'sample-worktree', 'preserved.txt')),
+    ).toBe(true);
+    expect(
+      readFileSync(
+        join(worktreesDir, 'sample-worktree', 'preserved.txt'),
+        'utf8',
+      ),
+    ).toBe('preserved');
+
+    // Status and log commands remain functional
+    const statusOutputAfterClean = runCli(
       cliPath,
-      ['clean', '--repo', repoPath],
+      ['status', '--repo', repoPath],
       repoPath,
     );
-    expect(cleanOutput).toContain('清理工作树');
+    expect(statusOutputAfterClean).toContain('status=passed');
+    const logOutputAfterClean = runCli(
+      cliPath,
+      ['log', '--run-id', runId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(logOutputAfterClean).toContain('run.started');
+
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
     ).toContain('repoPath');
@@ -402,34 +447,29 @@ function runCli(cliPath: string, args: string[], cwd: string): string {
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-e2e-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
   execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
-  execFileSync('npm', ['init', '-y'], { cwd: repoPath });
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.build=node -e "process.exit(0)"'],
-    {
-      cwd: repoPath,
-    },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.lint=node -e "process.exit(0)"'],
-    {
-      cwd: repoPath,
-    },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'],
-    {
-      cwd: repoPath,
-    },
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      scripts: {
+        build: 'node -e "process.exit(0)"',
+        lint: 'node -e "process.exit(0)"',
+        test: 'node -e "process.exit(0)"',
+      },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });

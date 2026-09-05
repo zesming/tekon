@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第二十一轮全面复审</title>
+  <style>
+    :root {
+      --ink: #172126;
+      --muted: #59676d;
+      --line: #cbd5d9;
+      --paper: #ffffff;
+      --canvas: #eef2f3;
+      --green: #116149;
+      --green-soft: #e5f3ed;
+      --amber: #8a4b08;
+      --amber-soft: #fff2d7;
+      --red: #a33131;
+      --code: #f3f6f7;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.72;
+      letter-spacing: 0;
+    }
+    .masthead {
+      border-top: 6px solid var(--green);
+      border-bottom: 1px solid var(--line);
+      background: var(--paper);
+    }
+    .masthead-inner {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 24px;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .masthead h1 {
+      margin: 0;
+      max-width: 900px;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .tag {
+      border: 1px solid #9bb9ad;
+      border-radius: 4px;
+      padding: 4px 9px;
+      color: #164b3c;
+      background: var(--green-soft);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .tag.warn {
+      border-color: #d4ad71;
+      color: var(--amber);
+      background: var(--amber-soft);
+    }
+    .quick-nav {
+      width: min(1120px, calc(100% - 40px));
+      margin: 18px auto 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .quick-nav a { margin-right: 16px; }
+    main {
+      width: min(1120px, calc(100% - 40px));
+      margin: 18px auto 48px;
+      padding: 34px clamp(22px, 5vw, 72px) 64px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      box-shadow: 0 10px 28px rgba(23, 33, 38, 0.06);
+    }
+    main > h1:first-child { display: none; }
+    h1, h2, h3, h4 { letter-spacing: 0; }
+    h2 {
+      margin: 52px 0 18px;
+      padding-top: 16px;
+      border-top: 2px solid var(--ink);
+      font-size: 26px;
+      line-height: 1.25;
+    }
+    h3 {
+      margin: 34px 0 12px;
+      color: #153f34;
+      font-size: 20px;
+      line-height: 1.35;
+    }
+    h4 { margin: 26px 0 10px; font-size: 17px; }
+    p, ul, ol, pre, table, blockquote { margin-top: 0; margin-bottom: 18px; }
+    ul, ol { padding-left: 24px; }
+    li + li { margin-top: 5px; }
+    a { color: #086696; text-underline-offset: 3px; }
+    a:hover { color: #074968; }
+    code {
+      border-radius: 3px;
+      padding: 2px 5px;
+      background: var(--code);
+      color: #7a2945;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      overflow-x: auto;
+      border-left: 4px solid var(--green);
+      padding: 16px 18px;
+      background: #182226;
+      color: #f3f7f6;
+    }
+    pre code { padding: 0; background: transparent; color: inherit; }
+    blockquote {
+      margin-left: 0;
+      border-left: 4px solid #d69a3b;
+      padding: 12px 18px;
+      background: var(--amber-soft);
+      color: #57380f;
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    table {
+      display: block;
+      width: 100%;
+      overflow-x: auto;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      min-width: 120px;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #e8eeef; font-weight: 750; }
+    tr:nth-child(even) td { background: #f8fafb; }
+    strong { font-weight: 750; }
+    hr { margin: 42px 0; border: 0; border-top: 1px solid var(--line); }
+    footer {
+      width: min(1120px, calc(100% - 40px));
+      margin: 0 auto 36px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    @media (max-width: 700px) {
+      .masthead-inner, .quick-nav, main, footer { width: min(100% - 24px, 1120px); }
+      .masthead-inner { padding: 22px 0 18px; }
+      .masthead h1 { font-size: 30px; }
+      main { padding: 22px 16px 44px; }
+      h2 { margin-top: 40px; font-size: 23px; }
+      h3 { font-size: 19px; }
+      th, td { min-width: 150px; padding: 9px 10px; }
+    }
+    @media print {
+      body { background: #fff; font-size: 11pt; }
+      .masthead { border-top-width: 3px; }
+      .quick-nav { display: none; }
+      main { width: 100%; margin: 0; padding: 12mm; border: 0; box-shadow: none; }
+      h2, h3 { break-after: avoid; }
+      pre, table, blockquote { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p class="eyebrow">Formal Review · 2026-09-03 / Annotation 2026-09-04</p>
+      <h1>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第二十一轮全面复审</h1>
+      <div class="summary" aria-label="报告状态">
+        <span class="tag">v0.20.6</span>
+        <span class="tag">Node Matrix · 4/4 Passed</span>
+        <span class="tag warn">Product Acceptance Open</span>
+        <span class="tag warn">No Merge / Release</span>
+      </div>
+    </div>
+  </header>
+  <nav class="quick-nav" aria-label="报告入口">
+    <a href="current.md">当前权威入口</a>
+    <a href="2026-09-03-tekon-product-runtime-harness-twenty-first-review.md">Markdown 源稿</a>
+    <a href="../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.html">收口方案</a>
+    <a href="https://github.com/zesming/tekon/pull/11">PR #11</a>
+  </nav>
+  <main><h1>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第二十一轮全面复审</h1>
+<ul>
+<li><strong>日期</strong>：2026-09-03</li>
+<li><strong>对应 PR</strong>：<a href="https://github.com/zesming/tekon/pull/11">#11</a></li>
+<li><strong>上一轮权威 Head</strong>：<code>6fd86ee1c500f55ff4d8a993812ae00823c3c46b</code></li>
+<li><strong>用户 v0.20.6 整改 Head</strong>：<code>374387da794c96b3775d2814b98a3e38067a6b94</code></li>
+<li><strong>Reviewer 代码修复 Head</strong>：<code>8991fa5496492691799dc885633768cc2fd54b2e</code></li>
+<li><strong>主 Agent 收口实施证据 Head</strong>：<code>0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917</code></li>
+<li><strong>产品版本</strong>：<code>0.20.6</code></li>
+<li><strong>Tekon DSH tested pin</strong>：<code>0.1.2-alpha.3</code></li>
+<li><strong>DeepSeek Harness 当前上游发布</strong>：<code>0.1.2-rc.1</code></li>
+<li><strong>rc.1 release tag commit</strong>：<code>a66e4702047846cdaa10c66c9d3df3951f5ea70d</code></li>
+<li><strong>Reviewer 代码自动化</strong>：Core #424、CI #333 均为 <code>completed/success</code>；Root build/typecheck、production dependency audit、CLI build/unit/e2e、Web build/typecheck/unit、Chromium Playwright 全部成功</li>
+<li><strong>收口实施自动化</strong>：Core #427（run <code>33836232524</code>）、CI #336（run <code>33836232602</code>）均为 attempt 1 <code>completed/success</code>；原 7 项 checks 与 Node 20.19.x/22.12.x/22.19.x/24.x 四腿全部成功</li>
+<li><strong>最终裁决</strong>：v0.20.6 整改、本轮局部测试修复、Node compatibility job、结构化合同测试与文档治理纠偏均通过实施 Head 的代码合并门；Tekon 整体仍未通过“面向普通人的稳定持续协作研发工作台”产品验收</li>
+</ul>
+<h2>1. 执行摘要</h2>
+<p>v0.20.6 对上一轮 DSH metadata 与默认入口问题进行了真实整改：</p>
+<ol>
+<li>metadata probe 使用临时 cwd、临时 <code>DSH_HOME</code> / <code>DSH_AGENTS_HOME</code>、最小环境与 finally cleanup；</li>
+<li>Config 与 Help 顺序执行，避免 clean home 首次初始化的并发写；</li>
+<li>相对 executable 在切换临时 cwd 前解析；</li>
+<li>默认 Session Composer 增加同步 single-flight、缺 digest 重试和失败后重试证据；</li>
+<li>Advanced Run 在 320/390/700/1440px 下增加常驻响应式检查，并修复窄屏三列布局和过长 option；</li>
+<li>产品与内部 package 版本统一为 <code>0.20.6</code>；</li>
+<li>Linux 下的官方 rc.1 Wrapped L2 已证明当前 metadata wrapper 可以在显式版本旁路时完成 Version/Config/Help 检查并清理临时状态。</li>
+</ol>
+<p>这些方向整体正确，且用户整改 Head 的 Core/CI 已成功。重新从完整仓库和外部合同反向检查后，本轮仍发现以下问题：</p>
+<ul>
+<li><strong>仓库常驻 opt-in L2 测试绕过生产隔离层</strong>：测试直接用 <code>execFileSync</code> 在调用者 cwd/环境中启动真实 dsh，未使用临时 state root、最小环境、telemetry hard opt-out、顺序 probe 与 finally cleanup。本轮已改为调用生产 <code>runDshPreflight()</code>；</li>
+<li><strong>Windows npm shim 尚未形成可用合同</strong>：Node 官方明确说明 <code>.cmd</code> 不能直接由 <code>execFile()</code> 启动；而 npm 安装的 DSH 在 Windows 通常通过 <code>dsh.cmd</code> 暴露，现有 basename 身份判断也会跳过 execution-time preflight；</li>
+<li><strong>声明的 Node 支持范围大于持续验证范围</strong>：根 <code>engines</code> 支持 Node 20.19、22.12+ 与 24+，主 CI 只运行 Node 24，Core 类型环境则采用更新的 Node 类型；</li>
+<li><strong>响应式测试开始承担微型布局引擎职责</strong>：它是有价值的 overflow smoke，但 400 余行自定义矩形、文本测量和 overlap 逻辑不能替代视觉回归、真实设备或辅助技术验收；</li>
+<li><strong>两个 Run 入口和评审文档继续重复</strong>：默认 Composer 与 Advanced Form 仍分别维护计划、准入、单飞和风险披露；旧报告又重新生成 HTML 镜像，持续增加漂移面；</li>
+<li><strong>warning sink 仍能参与准入结果</strong>：Host/version 旁路调用 <code>onWarn</code> 时，如果外部日志回调抛错，当前函数会失败；当前生产 sink 通常是 <code>console.warn</code>，风险较低，但公共 API 仍应明确 warning 不改变准入语义。</li>
+</ul>
+<p>本轮只直接修复了可独立证明、不会扩大 Provider 公共架构的常驻 L2 测试问题；Windows launcher、Provider identity、服务端幂等、RunPlan schema 与 Runtime/Session 主线继续放在独立小 PR 中处理。</p>
+<h2>2. 最终判断</h2>
+<h3>2.1 当前代码增量</h3>
+<p>Reviewer 代码 Head <code>8991fa5496492691799dc885633768cc2fd54b2e</code>：</p>
+<ul>
+<li>Core #424：<code>completed/success</code>；</li>
+<li>CI #333：<code>completed/success</code>；</li>
+<li>Root build/typecheck：success；</li>
+<li>production dependency audit：success；</li>
+<li>CLI build/unit/e2e：success；</li>
+<li>Web build/typecheck/unit：success；</li>
+<li>Chromium Playwright：success。</li>
+</ul>
+<p>因此，<strong>v0.20.6 用户整改与本轮局部修复通过当前代码合并门</strong>。</p>
+<p>主 Agent 收口实施证据 Head <code>0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917</code>：</p>
+<ul>
+<li>Core #427 / run <code>33836232524</code>：attempt 1 <code>completed/success</code>；</li>
+<li>CI #336 / run <code>33836232602</code>：attempt 1 <code>completed/success</code>；</li>
+<li>原 7 项 checks 全绿；</li>
+<li>Node compatibility 20.19.x / 22.12.x / 22.19.x / 24.x 四腿全绿；</li>
+<li>最慢的 Node 20.19.x 腿耗时 2m45s，未触及 20 分钟上限。</li>
+</ul>
+<p>因此，<strong>独立 Node compatibility job、结构化合同测试与文档治理纠偏已通过实施 Head 的代码合并门</strong>。branch protection/ruleset 仍未修改，这些 checks 尚未成为仓库强制合并规则。</p>
+<h3>2.2 产品成熟度</h3>
+<p>当前允许的成熟度表述是：</p>
+<blockquote>
+<p>Tekon v0.20.6 已形成测试覆盖较强、执行计划和风险边界较透明、Session 在线观察具有基础资源上限，并为 DSH Headless 提供 tested pin、Host Node fail-closed、隔离 metadata workspace、最小 probe 环境与 telemetry hard opt-out 的实验性受控交付执行与观察基础设施。Deliver 轨道可以在有人监督下使用，但持续协作、单一 Runtime 权威、权威 Session 事实链、原子且幂等的 Run admission、跨平台 Provider launcher、可证明的 shutdown/restart、完整历史导出和模型上下文预算仍未闭环。</p>
+</blockquote>
+<p>仍不应描述为：</p>
+<ul>
+<li>面向普通用户的稳定持续协作研发工作台；</li>
+<li>Web/CLI 多进程并发安全的 repo Runtime；</li>
+<li>拥有 crash-safe durable inbox、完整 replay 和 restart resume 的 Session 平台；</li>
+<li>DSH 在 Linux、Windows、真实模型和所有网络/凭据场景均已兼容；</li>
+<li>具备宿主级网络隔离或已验证 DSH 内部 tool allow/deny 的系统；</li>
+<li>已完成任意规模长会话、安全物理清理和全站可访问性验收的产品。</li>
+</ul>
+<h2>3. 评审范围与证据边界</h2>
+<p>本轮覆盖：</p>
+<ul>
+<li><code>6fd86ee...</code> 到用户 <code>374387d...</code> 的全部增量；</li>
+<li>README、CHANGELOG、用户手册、第二十轮报告、<code>current.md</code> 和整改方案；</li>
+<li>默认 Session Composer、Advanced StartRunForm、响应式测试、TopBar、Session list/detail/right rail、历史与审批；</li>
+<li>Workflow plan/digest、draft approval、Provider/mode policy 与 <code>project.run</code>；</li>
+<li>DSH metadata probe、正式 Run 环境、Adapter、L1/L2 测试与版本旁路；</li>
+<li>SessionService、WorkflowEngine、Run admission、RunPlan、dual-write、JobRunner、CommandGateway；</li>
+<li><code>project.clean</code>、Artifact/path 引用和 Run/Session 生命周期；</li>
+<li>CI、Node engines、Node 类型版本、branch protection 与发布证据；</li>
+<li>#13–#33 的范围、依赖与重复设计风险；</li>
+<li>DeepSeek Harness rc.1 release tag、Headless、Node engines、ACP、Safety、默认 WebFetch 与 credentials 边界；</li>
+<li>Node 官方 Windows <code>.bat</code> / <code>.cmd</code> 子进程合同。</li>
+</ul>
+<p>判断原则：</p>
+<ol>
+<li>只有具体 Head 的 <code>completed/success</code> 才能作为代码门证据；</li>
+<li>页面 disabled/single-flight 不能替代服务端 idempotency 和原子 admission；</li>
+<li>capability declaration、Provider enforcement、Host enforcement、compatibility、bypass、acknowledgement、credential source、snapshot 和 Audit 是不同事实；</li>
+<li>计划未请求能力不等于宿主已经隔离；</li>
+<li>L2 测试必须走与生产相同的 metadata wrapper，不能直接启动外部 binary 后称为合同验证；</li>
+<li>Linux Wrapped L2 不能外推为 Windows npm shim 已可用；</li>
+<li>自定义 geometry assertions 是布局 smoke，不是视觉或辅助技术验收；</li>
+<li>issue、报告和测试数量不是产品成熟度；</li>
+<li>小而可逆的问题可以直接修，公共协议、迁移、恢复和事务必须拆独立 PR。</li>
+</ol>
+<p>本轮没有可访问的独立部署实例、Windows runner、Firefox/WebKit、屏幕阅读器或真实 DSH L3 凭据环境。因此 UI 判断基于源码、响应式 CSS 和 Chromium；Windows 与 L3 均明确保留为未验证。</p>
+<h2>4. 对 v0.20.6 整改的逐项裁决</h2>
+<table>
+<thead>
+<tr>
+<th>整改项</th>
+<th>裁决</th>
+<th>理由与边界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>临时 probe cwd / DSH homes</td>
+<td>基本关闭</td>
+<td>Default probe 使用同一临时 root 并 finally cleanup，切断调用仓库 <code>.env</code> 和 ambient DSH state fallback；不是 OS sandbox。</td>
+</tr>
+<tr>
+<td>最小 metadata 环境</td>
+<td>基本关闭</td>
+<td>API key、云凭据、代理凭据、SSH agent、<code>NODE_OPTIONS</code> 和 npm 注入不进入 default probe；显式企业代理/特殊运行环境仍缺结构化配置。</td>
+</tr>
+<tr>
+<td>Config / Help 顺序化</td>
+<td>关闭直接竞态</td>
+<td>避免 clean DSH_HOME 首次初始化时两个进程同时写；代价是 token health 最坏等待变长。</td>
+</tr>
+<tr>
+<td>相对 executable 解析</td>
+<td>Linux/macOS 路径基本关闭</td>
+<td>带路径分隔符的相对命令在切换 cwd 前解析；Windows <code>.cmd</code> launcher 仍未验证。</td>
+</tr>
+<tr>
+<td>Cleanup 结果保护</td>
+<td>基本关闭</td>
+<td>Cleanup 失败不会覆盖主结果/异常；可能遗留无凭据的临时目录，需要可观测性和清理策略。</td>
+</tr>
+<tr>
+<td>默认 Composer single-flight</td>
+<td>关闭组件内双发</td>
+<td>同 turn 重复激活只发送一次；不解决跨客户端、刷新、代理重放或中途持久化失败。</td>
+</tr>
+<tr>
+<td>缺 digest / mutation failure 重试</td>
+<td>基本关闭</td>
+<td>默认入口提供原地重试且失败后 latch 释放；服务端半成品与安全重试仍由 #31 负责。</td>
+</tr>
+<tr>
+<td>四视口响应式矩阵</td>
+<td>有效 smoke</td>
+<td>能持续发现横溢、控件越界和部分裁切；不等于视觉层级、native select、屏幕阅读器或真实设备验收。</td>
+</tr>
+<tr>
+<td>官方 rc.1 Wrapped L2</td>
+<td>Linux metadata 层通过</td>
+<td>证明隔离 wrapper 的 Version/Config/Help 接线；显式 version bypass 仍不是 tested compatibility，且没有 L3。</td>
+</tr>
+<tr>
+<td>常驻 opt-in L2</td>
+<td>本轮修复</td>
+<td>原测试绕过 wrapper；现统一调用生产 <code>runDshPreflight()</code>，并区分 expected version、compatibility 与 bypass。</td>
+</tr>
+<tr>
+<td>HTML 审阅版</td>
+<td>必须同步</td>
+<td><code>AGENTS.md</code> 要求正式人审文档提供 HTML。Markdown 作为内容源，HTML 作为同步审阅呈现；两者不得形成两套裁决。</td>
+</tr>
+</tbody></table>
+<h2>5. 本轮直接修复</h2>
+<h3>5.1 常驻 L2 不再绕过生产隔离层</h3>
+<p>原测试：</p>
+<pre><code class="language-text">DSH_CLI_PATH
+→ execFileSync(--version)
+→ execFileSync(--profile headless --help)
+→ execFileSync(--profile headless --dump-default-config)
+</code></pre>
+<p>该路径会：</p>
+<ul>
+<li>使用 Vitest 的 cwd；</li>
+<li>继承测试进程的环境；</li>
+<li>绕过临时 <code>DSH_HOME</code> / <code>DSH_AGENTS_HOME</code>；</li>
+<li>绕过 telemetry hard opt-out；</li>
+<li>绕过 Config/Help 顺序合同；</li>
+<li>不经过 finally cleanup；</li>
+<li>只验证 parser，不验证生产 wrapper。</li>
+</ul>
+<p>修复后：</p>
+<pre><code class="language-text">DSH_CLI_PATH=&lt;real binary&gt;
+DSH_EXPECTED_VERSION=&lt;tested pin or candidate&gt;
+→ runDshPreflight()
+→ isolated cwd/state roots/minimal env
+→ exact version assertion
+→ Config/Help contract
+→ cleanup
+</code></pre>
+<p>当 <code>DSH_EXPECTED_VERSION</code> 与 tested pin 不同时，测试只使用与候选版本精确匹配的 <code>allowVersion</code>，并明确断言：</p>
+<pre><code class="language-text">versionCompatible = false
+versionBypassed = true
+</code></pre>
+<p>因此不会将“显式旁路后 metadata 合同通过”误写为“当前版本已被 Tekon 正式测试兼容”。</p>
+<p>该修改位于 <code>8991fa5...</code>，Core #424 / CI #333 全绿。</p>
+<h3>5.2 未直接修改的 warning sink</h3>
+<p><code>runDshPreflight()</code> 在 Host Node 或 DSH version 被精确旁路时会调用 <code>onWarn</code>。Cleanup 路径已经保护 warning callback 不覆盖主结果；两个 admission warning 路径还没有同样保护。</p>
+<p>当前生产调用通常使用 <code>console.warn</code>，没有观察到实际失败，因此本轮没有为该低概率公共 API 行为重写核心文件。后续应明确二选一：</p>
+<ul>
+<li><code>onWarn</code> 是纯观测 sink，异常必须被吞掉；</li>
+<li>或 <code>onWarn</code> 是调用者策略 hook，允许否决旁路，并在类型/文档中改名说明。</li>
+</ul>
+<p>当前状态不应同时暗示两种语义。</p>
+<h2>6. 产品逻辑评审</h2>
+<h3>6.1 Deliver 轨道已经具备真实价值</h3>
+<p>当前成立的用户链路是：</p>
+<pre><code class="language-text">需求输入或需求草案
+→ 需求/计划批准
+→ 服务端 RunPlan 与 digest
+→ standard-delivery 角色链
+→ 隔离 worktree
+→ Gate / Artifact / Audit / Review
+→ 人工审批
+→ Delivery / PR 准备
+</code></pre>
+<p>正向判断：</p>
+<ul>
+<li>默认入口明确使用“启动受控交付”，没有伪装成聊天；</li>
+<li>token、计划、digest、草案批准和必要网络确认缺失时 fail-closed；</li>
+<li>Workflow、Goal、mock 和 dsh-headless 的边界较清楚；</li>
+<li>mock 已明确为测试/演示合成执行，不能作为交付证据；</li>
+<li>dirty base、远端副作用和 DSH 网络风险有显式披露；</li>
+<li>Session 列表、详情、审批、控制和在线历史具备基础工作路径；</li>
+<li>Gate、Artifact、Audit、Readiness、Delivery 与 worktree 已形成可监督的工程闭环；</li>
+<li>README 对非真实 chunk streaming、无 follow-up、best-effort Event projection 和单 Workspace 边界保持诚实。</li>
+</ul>
+<p>因此，Tekon 已经不是只能依靠 Agent 自举的内部框架，而是一套面向工程用户的受控执行与证据工作台。</p>
+<h3>6.2 Collaborate 轨道仍未成立</h3>
+<p>普通用户仍不能在同一 Session 中完成：</p>
+<pre><code class="language-text">持续输入
+→ Provider execution-time semantic updates
+→ follow-up / steer
+→ prompt-owned cancel
+→ Runtime 重启后恢复
+→ 在同一上下文中升级为 Deliver
+</code></pre>
+<p>当前 Legacy AgentDriver 仍以 one-shot Adapter 为基础：执行完成后才遍历缓存事件，<code>followUp</code>、<code>steer</code>、<code>resume</code> 尚未形成真实 Provider 合同。</p>
+<p>所以 Session 当前的真实定位仍是：</p>
+<ul>
+<li>Run 观察面；</li>
+<li>审批面；</li>
+<li>治理证据面；</li>
+<li>结果与历史投影面。</li>
+</ul>
+<p>它还不是稳定的多轮研发协作空间。</p>
+<h2>7. UI 实现与 UX 交互评审</h2>
+<h3>7.1 已经改善</h3>
+<ul>
+<li>默认与高级入口均有同步 single-flight；</li>
+<li>计划加载、错误、digest 缺失和草案 plan 未批准能够阻止提交；</li>
+<li>默认入口失败后可重试；</li>
+<li>mock 与 dsh 的真实边界可见；</li>
+<li>320/390/700px 下高级设置和选择器不再被三列 inline 布局挤压；</li>
+<li>Session 右栏能从 snapshot 兜底 best-effort Event；</li>
+<li>未知状态保持 fail-closed；</li>
+<li>历史已有 backward cursor、replay/pending budget、heartbeat backpressure 和截断提示。</li>
+</ul>
+<h3>7.2 仍需处理</h3>
+<ol>
+<li><p><strong>两套 Run UI 仍复制同一状态机</strong><br><code>SessionComposer</code> 与 <code>StartRunForm</code> 分别维护 plan query、digest、submission、single-flight、风险披露和错误状态。此前已经发生网络文案、single-flight 与重试能力漂移。应抽取克制的小边界：</p>
+<pre><code class="language-text">RunAdmissionState
++ useRunSubmission
++ RunPlanDisclosure
+</code></pre>
+<p>不应借机建立大型通用表单框架。</p>
+</li>
+<li><p><strong>Credential health 被可选 Provider 拖慢</strong><br><code>project.health</code> 在 token 有效后依次执行 DSH Version/Config/Help。用户只想确认连接凭据，也可能等待接近三个 probe timeout。Credential health、Provider health 和 Run admission 应拆开。</p>
+</li>
+<li><p><strong>Provider 诊断仍过于二值</strong><br>服务端可区分 Host Node、版本、Config、Help、timeout、未安装和环境/状态根失败，顶栏仍主要得到 available/unavailable。</p>
+</li>
+<li><p><strong>完整历史没有直接行动入口</strong><br>截断后只能分页，没有一键导出完整 Session、子 Session、Artifact、Gate、Audit 与附件清单。</p>
+</li>
+<li><p><strong>Admission 失败后无法判断能否安全重试</strong><br>组件重试 UX 已改善，但服务端可能已留下部分 Run/Plan/Audit/Session/Job，用户无法确认是否会重复创建。</p>
+</li>
+<li><p><strong>技术术语仍偏多</strong><br>Session、Run、Gate、Artifact、Profile、Provider、Token 继续进入默认路径。对工程用户尚可，对普通用户仍有较高理解成本。</p>
+</li>
+<li><p><strong>响应式 smoke 不等于视觉验收</strong><br>当前 geometry scanner 能发现部分裁切和 overlap，但无法评价视觉层级、阅读节奏、native select 展开、字体回退、对比度、焦点可见性和真实触控。</p>
+</li>
+<li><p><strong>辅助技术和浏览器矩阵仍不完整</strong><br>Chromium 成功不能外推为 Firefox、WebKit、NVDA、JAWS、VoiceOver、200%/400% 缩放、forced-colors、reduced-motion 和真实弱网已通过。</p>
+</li>
+</ol>
+<h2>8. Runtime 与整体框架架构</h2>
+<h3>8.1 P0：repo 级 single-owner Runtime 仍缺失</h3>
+<p>CLI 与 Web 仍可分别拥有：</p>
+<pre><code class="language-text">SQLite / WriteQueue / repositories
+Session store / EventBus
+JobRunner / SubprocessRegistry
+Workflow / Automation executor
+Git / worktree / Provider
+shutdown 生命周期
+</code></pre>
+<p>Job lease/CAS 和进程内 token 不能完整 fence 普通文件、Git promotion、Artifact、Gate、Audit、Delivery 与外部 SDK 副作用。</p>
+<p>长期方向仍应是：</p>
+<pre><code class="language-text">repo-scoped daemon/service
+→ physical repo lock
+→ CLI/Web 客户端化
+→ 单一 admission/execution/shutdown authority
+</code></pre>
+<h3>8.2 P0：Shutdown 仍不能证明 quiescent</h3>
+<p>现有 stop 已包含停止 poll、active poll 等待、settle window、AbortController、已登记子进程 kill、hard deadline 与 DB fence。</p>
+<p>但 deadline 返回后，不合作 executor 仍可能继续：</p>
+<ul>
+<li>运行 JavaScript；</li>
+<li>写普通文件；</li>
+<li>执行 Git；</li>
+<li>留在外部 SDK；</li>
+<li>持有未登记子进程。</li>
+</ul>
+<p>需要 process/worker isolation、真实 kill/join、generation fencing、checkpoint/flush 和 crash/restart/late-write 故障注入。</p>
+<h3>8.3 P0：Session Event 仍是 best-effort projection</h3>
+<p>当前事实顺序仍是：</p>
+<pre><code class="language-text">领域表 / Audit 先成功
+→ best-effort append session_event
+→ 找不到 Session 或 append 失败时允许跳过
+</code></pre>
+<p>它适合 UI projection，但不能承担 durable inbox、权威模型历史、prompt claim/processed、crash replay、fork/resume 与 restart recovery。</p>
+<h3>8.4 P1：Run admission 非原子且没有服务端幂等键</h3>
+<p>启动横跨：</p>
+<pre><code class="language-text">Demand
+→ Project
+→ Run
+→ Provider snapshot
+→ ExecutionPlan
+→ Audit
+→ Workspace
+→ Session
+→ opening Events
+→ Job
+</code></pre>
+<p>没有统一事务、transactional outbox 或明确 admission saga。页面 latch 只能阻止当前组件同 turn 双发，不能处理两个客户端、网络重试或中途持久化失败。</p>
+<h3>8.5 P1：RunPlan 尚未成为 execute/resume 唯一事实</h3>
+<p>仍未完整绑定：</p>
+<ul>
+<li>Demand identity/version/body hash；</li>
+<li>mode；</li>
+<li>base revision；</li>
+<li>workspace physical identity；</li>
+<li>resolved Provider executable/config/launcher；</li>
+<li>credential/capability evidence；</li>
+<li>permission/network acknowledgement；</li>
+<li>expected Artifacts；</li>
+<li>executable node plan。</li>
+</ul>
+<p>此外：</p>
+<ul>
+<li>顶层 <code>SessionServiceStartRunInput.planDigest</code> 仍未接线；</li>
+<li>Project 与 Workspace 仍构成重复身份；</li>
+<li>execute/resume 继续从多个 snapshot 和表行重新拼装事实。</li>
+</ul>
+<h3>8.6 P1：<code>project.clean</code> 仍是裸物理删除</h3>
+<p>当前仍可能直接删除 <code>.tekon/runs/&lt;runId&gt;</code>，没有与 active Job、SubprocessRegistry、worktree lease、Automation、Audit/tombstone 和数据库路径引用协调。</p>
+<p>短期最优先的小 PR 仍是 #33：暂停物理删除并 fail-closed。完整导出、retention 和 lifecycle-safe purge 由 #18 承担。</p>
+<h2>9. DeepSeek Harness <code>0.1.2-rc.1</code> 对齐</h2>
+<h3>9.1 当前事实</h3>
+<pre><code class="language-text">Tekon tested pin = 0.1.2-alpha.3
+DeepSeek Harness latest release = 0.1.2-rc.1
+rc.1 tag = a66e4702047846cdaa10c66c9d3df3951f5ea70d
+</code></pre>
+<p>rc.1 的 Node engines 仍为：</p>
+<pre><code class="language-text">^22.19.0 || &gt;=24.0.0
+</code></pre>
+<p>alpha.5→rc.1 release-tag 差异主要是 package 版本号；但 alpha.3→rc.1 跨越默认 <code>web_fetch</code>、ACP、凭据、telemetry、长会话和存储行为，不能自动升 pin。</p>
+<h3>9.2 Headless 继续保持 Goal-only</h3>
+<p>官方 rc.1 Headless 仍明确：</p>
+<pre><code class="language-text">一个 task / invocation
+→ reasoning delta 写 stderr
+→ 等待 quiescence 并 flush
+→ 最终 assistant 文本写 stdout
+→ 退出
+</code></pre>
+<p>并明确没有 interactive follow-up。因此继续限制为 Goal/one-shot 是正确的，不应把 stdout 最终结果包装成持续协作。</p>
+<h3>9.3 Windows npm shim 尚未验证</h3>
+<p>当前 metadata probe 使用 <code>child_process.execFile()</code>。Node 官方文档明确：Windows <code>.bat</code> / <code>.cmd</code> 不能直接由 <code>execFile()</code> 启动，需要显式 <code>cmd.exe</code> 或受控 shell framing。</p>
+<p>这对 npm 安装后的 <code>dsh.cmd</code> 构成实际兼容缺口：</p>
+<ul>
+<li>metadata probe 可能无法启动；</li>
+<li>basename 不是 <code>dsh</code>，execution-time preflight 会被跳过；</li>
+<li>正式 Run 的 quoting、task 单 argv、timeout/cancel 和 process-tree semantics 未经 Windows 证据固定。</li>
+</ul>
+<p>不能用无约束 <code>shell: true</code> 快速处理；应在 #28 中建立显式 <code>launcherKind</code> 和 Windows 注入/空格/元字符测试。</p>
+<h3>9.4 L2/L3 边界</h3>
+<p>Linux Wrapped L2 与本轮修正后的 opt-in L2 证明 metadata wrapper 的结构。仍未证明：</p>
+<ul>
+<li>带真实 API key 的 success/auth failure；</li>
+<li>timeout/cancel 与真实子进程树；</li>
+<li>reasoning stderr/final stdout 在模型调用中的完整性；</li>
+<li>默认 <code>web_fetch</code> 的实际网络行为；</li>
+<li>工作树 <code>.env</code> 凭据来源；</li>
+<li>snapshot/Audit secret redaction；</li>
+<li>DSH 内部工具服从 Tekon allow/deny 声明；</li>
+<li>Windows npm shim。</li>
+</ul>
+<h3>9.5 ACP 仍是 Collaborate 的优先切片</h3>
+<p>持续协作应优先验证独立 ACP vertical slice：</p>
+<pre><code class="language-text">owned ACP subprocess
+→ session/new
+→ prompt
+→ execution-time semantic updates
+→ prompt cancel
+→ quiescent close
+→ process restart + session/resume
+</code></pre>
+<p>不要继续扩张 one-shot <code>AgentAdapter</code> 来模拟 persistent session。</p>
+<h3>9.6 Safety</h3>
+<p>DeepSeek Harness 官方仍明确项目未经安全审计；Sandbox、Approval 和 Permission Controls 只能降低风险，不能保证隔离，也不能成为 Tekon 面向不可信 workload 的唯一安全边界。</p>
+<h2>10. 代码实现、测试质量与过度设计</h2>
+<h3>10.1 正向判断</h3>
+<ul>
+<li>DSH probe 的 workspace、env、command resolution、顺序与 cleanup 测试具有真实子进程证据；</li>
+<li>默认与高级入口都有同步 single-flight；</li>
+<li>RunPlan digest、Session cursor、SSE backpressure、Job ownership 和 secret redaction 的自动化覆盖较强；</li>
+<li>CI 将 production audit 与功能诊断解耦；</li>
+<li>用户整改和 reviewer 修复均绑定具体成功 Head。</li>
+</ul>
+<h3>10.2 响应式测试成为维护热点</h3>
+<p><code>responsive-run-surfaces.e2e.test.ts</code> 自定义了：</p>
+<ul>
+<li>DOM 文本矩形采样；</li>
+<li>clipping ancestor 判断；</li>
+<li>控件边界与 overlap 扫描；</li>
+<li>canvas 文本宽度测量；</li>
+<li>多视口与多个动态状态。</li>
+</ul>
+<p>这能补足没有视觉平台时的基础 smoke，但也已接近微型布局引擎。风险包括：</p>
+<ul>
+<li>浏览器布局规则被测试代码部分重写；</li>
+<li>native select 弹层不可见；</li>
+<li>字体与 canvas measurement 可能和实际控件不同；</li>
+<li>false positive/false negative 难以解释；</li>
+<li>与 <code>mobile-layout</code>、Advanced admission 等用例继续重叠。</li>
+</ul>
+<p>建议保留少量高价值不变量：页面不横溢、关键控件在视口内、核心状态可操作；视觉层级、截图 diff、真实设备和 a11y 交给专门工具。不要继续把更多 CSS 规则编码进该测试。</p>
+<h3>10.3 两套 Run UI 是已经发生过漂移的重复实现</h3>
+<p>共享的应是业务状态与提交编排，不是整个 UI：</p>
+<pre><code class="language-text">RunAdmissionState
+useRunSubmission
+RunPlanDisclosure data model
+</code></pre>
+<p>默认入口仍应保持简洁，高级入口保留高级字段；不要将两者合并为一个巨型配置表单。</p>
+<h3>10.4 CommandGateway 仍职责过密</h3>
+<p>同一模块继续承担 policy、env、spawn、process group、redaction、progress evidence、filesystem activity、timeout、kill 和 stream settlement。后续应先抽取纯 timeout state machine、activity sampler 和 termination adapter，而不是增加更多 timer 特判。</p>
+<h3>10.5 评审与文档过程需要收敛</h3>
+<p>截至本轮，PR 已包含二十余轮报告、多个 HTML 审阅版、整改方案和大量批注。重复维护内容会增加：</p>
+<ul>
+<li>快照和 CI 状态漂移；</li>
+<li>链接与结论不一致；</li>
+<li>Reviewer 过程压过产品文档；</li>
+<li>PR diff 与人工审阅成本。</li>
+</ul>
+<p>第二十一轮仍按仓库规约提供 HTML 审阅版，但 Markdown 是内容源，HTML 只做同步呈现，不建立第二套裁决。后续普通问题只在独立 Issue/PR 中关闭；只有产品或架构基线明显变化时才新增完整报告。</p>
+<h3>10.6 Node compatibility 矩阵已进入本轮收口</h3>
+<p>根 <code>engines</code> 声明 Node 20.19、22.12+ 与 24+，此前主 CI 只运行 Node 24；Core 类型环境使用较新 Node 类型。当前没有发现明确使用旧运行时缺失 API 的代码，但较新的 Node 类型仍不能替代旧运行时执行证据。</p>
+<p>本轮新增独立轻量 matrix：</p>
+<pre><code class="language-text">20.19.x / 22.12.x / 22.19.x / 24.x
+→ pinned Corepack / install / build / typecheck / Core unit / CLI unit / CLI smoke
+</code></pre>
+<p>设计阶段已在 Linux x64 干净 checkout 验证 Node 20.19.0 与 22.12.0。实现期 reviewer 进一步发现 Node 22.12 自带 Corepack 0.29.4 无法验证 pnpm 10.12.1 的签名，因此 job 在启用 shim 前固定安装兼容四腿的 <code>corepack@0.34.1</code>。Windows、macOS 和浏览器矩阵仍未覆盖。</p>
+<h2>11. 问题清单</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>严重度</th>
+<th>状态</th>
+<th>问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P0-ARCH-01 / #16</td>
+<td>P0</td>
+<td>未关闭</td>
+<td>CLI/Web 缺 repo 级 single-owner Runtime authority。</td>
+</tr>
+<tr>
+<td>P0-ARCH-02 / #15</td>
+<td>P0</td>
+<td>部分完成</td>
+<td>abort/kill/deadline/DB fence 不保证 executor、Git、文件与 SDK 已 quiescent。</td>
+</tr>
+<tr>
+<td>P0-DATA-01 / #13</td>
+<td>P0</td>
+<td>未关闭</td>
+<td>Session Event 是 best-effort projection，不是 durable inbox/权威模型历史。</td>
+</tr>
+<tr>
+<td>P0-PRODUCT-01 / #14/#19</td>
+<td>P0</td>
+<td>未关闭</td>
+<td>真实 stream、follow-up/steer/prompt cancel/restart resume 与 Collaborate→Deliver 未闭环。</td>
+</tr>
+<tr>
+<td>P1-ADMISSION-01 / #31</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>Run admission 非原子、无服务端 idempotency 和失败补偿。</td>
+</tr>
+<tr>
+<td>P1-PLAN-01 / #20</td>
+<td>P1</td>
+<td>部分完成</td>
+<td>canonical RunPlan 尚未成为 admission/execute/resume 唯一事实。</td>
+</tr>
+<tr>
+<td>P1-PROVIDER-ACK / #22</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>网络/Host/版本确认未与 Snapshot/Audit/resume 原子绑定。</td>
+</tr>
+<tr>
+<td>P1-PROVIDER-CMD / #28</td>
+<td>P1</td>
+<td>扩大</td>
+<td>basename 决定 Provider 身份；Windows <code>.cmd</code> launcher 未验证。</td>
+</tr>
+<tr>
+<td>P1-PROVIDER-HEALTH / #29</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>Credential/Provider health 未拆分，CLI preflight 仍依赖 mutable slot。</td>
+</tr>
+<tr>
+<td>P1-DSH-ENV / #32</td>
+<td>P1</td>
+<td>部分完成</td>
+<td>metadata probe 已隔离；正式 Run <code>.env</code> 凭据、代理和 tool enforcement 仍缺。</td>
+</tr>
+<tr>
+<td>P1-DSH / #17</td>
+<td>P1</td>
+<td>部分完成</td>
+<td>Linux L1/L2 成立；Windows L2、L3 与升 pin 裁决未完成。</td>
+</tr>
+<tr>
+<td>P1-LIFECYCLE / #18/#33</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>完整导出、compaction、retention、safe purge 与即时 clean guard 未落地。</td>
+</tr>
+<tr>
+<td>P1-GOV-RELEASE / #24</td>
+<td>P1</td>
+<td>部分收敛</td>
+<td>Node matrix 本轮实现；main required checks、SBOM/provenance/签名/release evidence 仍不完整。</td>
+</tr>
+<tr>
+<td>P1-A11Y / #21</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>Chromium/layout smoke 不能替代全站辅助技术与多浏览器验收。</td>
+</tr>
+<tr>
+<td>P1-PROCESS</td>
+<td>P1</td>
+<td>未关闭</td>
+<td>PR 规模过大，人工审阅、二分和回滚质量下降。</td>
+</tr>
+<tr>
+<td>P2-L2-TEST</td>
+<td>P2</td>
+<td>本轮修复</td>
+<td>常驻 opt-in L2 绕过生产隔离 wrapper。</td>
+</tr>
+<tr>
+<td>P2-WARN-SINK</td>
+<td>P2</td>
+<td>待定义</td>
+<td><code>onWarn</code> 抛错是否允许否决旁路，公共语义不明确。</td>
+</tr>
+<tr>
+<td>P2-RESPONSIVE-TEST</td>
+<td>P2</td>
+<td>待收敛</td>
+<td>自定义 geometry scanner 职责和重复覆盖持续增长。</td>
+</tr>
+<tr>
+<td>P2-DOC-PROCESS</td>
+<td>P2</td>
+<td>本轮纠偏</td>
+<td>正式报告必须同步 HTML；以 Markdown 为内容源并校验关键事实，避免两份裁决漂移。</td>
+</tr>
+</tbody></table>
+<h2>12. 建议实施顺序</h2>
+<ol>
+<li><p><strong>#33：立即暂停裸 <code>project.clean</code></strong><br>全量 fail-closed，先关闭活动期误删和证据路径破坏入口。</p>
+</li>
+<li><p><strong>#29 + #28：Provider admission 与 launcher</strong><br>拆分 Credential health、结构化 Provider health、request-scoped admission；建立显式 executable/launcher identity 和 Windows <code>.cmd</code> 合同。</p>
+</li>
+<li><p><strong>#32 + #17：DSH execution evidence</strong><br>凭据来源、代理、正式 Run state root、Windows L2、L3 与 rc.1 升 pin 裁决。</p>
+</li>
+<li><p><strong>#31 + #22 + #20：原子 admission 和执行事实</strong><br>idempotency key、事务/outbox 或 saga、exception acknowledgement、canonical RunPlan authority。</p>
+</li>
+<li><p><strong>#16 + #15：single-owner Runtime 与恢复</strong><br>repo lock、daemon、process isolation、kill/join、checkpoint 与 restart fault injection。</p>
+</li>
+<li><p><strong>#13 + #14 + #19：Session truth 与 Collaborate</strong><br>authoritative log/durable inbox、ACP persistent session、follow-up/cancel/resume 和 Collaborate→Deliver。</p>
+</li>
+<li><p><strong>#18：完整历史与模型预算</strong><br>server-streamed export、manifest、subsession/artifact、summary/compaction、retention 与 lifecycle-safe purge。</p>
+</li>
+<li><p><strong>#21/#24/#25/#26：质量和发布</strong><br>本轮先按已确认方案新增独立 Node compatibility job；a11y/多浏览器、required checks、供应链证据、CommandGateway 拆分和 semantic lint 继续留在独立 Issue/PR。</p>
+</li>
+</ol>
+<h2>13. 合并与证据边界</h2>
+<p>当前代码门通过只能证明：</p>
+<ul>
+<li><code>8991fa5...</code> 在现有 Linux/Node 24/Chromium 自动化合同下构建、类型和测试成功；</li>
+<li>v0.20.6 的 metadata workspace、最小环境、cleanup、默认入口重试/单飞和响应式 smoke 没有被本轮修复击穿；</li>
+<li>常驻 opt-in L2 现在复用生产 wrapper；</li>
+<li>production dependency audit 当前成功；</li>
+<li>本轮工作树在 Linux/Node 22.16 上通过 145 files、1554 tests、1 个有解释的 L2 skip，Core/CLI/Web e2e 分别为 26/8/48 passed。</li>
+<li><code>0d8fa4c...</code> 的 Core #427 / CI #336 在 attempt 1 完成，四条 Node compatibility legs 与原 7 项 checks 共 11 项全部成功。</li>
+</ul>
+<p>它不能证明：</p>
+<ul>
+<li>Windows npm-installed DSH/Codex launcher 可用；</li>
+<li>两个客户端或网络重试不会创建重复或半成品 Run；</li>
+<li>Web/CLI multi-owner 不会产生 Git/文件副作用冲突；</li>
+<li>shutdown 后所有 executor/SDK/Git 活动都已停止；</li>
+<li>Session Event 可恢复完整模型历史；</li>
+<li>DSH rc.1 已通过真实模型 L3；</li>
+<li>工作树 <code>.env</code> 不会提供额外凭据；</li>
+<li>DSH 内部工具实际遵循 Tekon allow/deny；</li>
+<li>Node 20.19 与 22.12 在 Windows、macOS、浏览器与所有 native/toolchain 组合上的完整支持；</li>
+<li>完整历史、安全 purge、Firefox/WebKit 和屏幕阅读器已经验收。</li>
+</ul>
+<p>PR #11 已远超适合继续增长的规模。最终建议 squash merge；合并后以 #33 为第一个小 PR，其余主线严格拆分，不再创建第二十二轮“大一统整改”继续回填该分支。</p>
+<p>本轮未执行 merge、release、deploy 或仓库 ruleset 修改。</p>
+<h2>14. 主 Agent 第二视角批注与执行裁决</h2>
+<h3>14.1 总体判断</h3>
+<p>架构与实现、DSH 上游、CI/测试、文档与外部状态四路独立只读核查，加上本地复核，没有推翻第二十一轮的核心判断：DSH metadata 隔离与常驻 opt-in L2 修复真实成立；Deliver 轨道可在有人监督下使用；Windows launcher、Provider admission、Runtime/Session 权威、原子 Run admission、RunPlan 全链绑定与 L3 仍未闭环。</p>
+<p>本轮不把这些架构问题继续回填到 PR #11。只处理已经有明确合同、改动面小且可独立验证的收口项：</p>
+<ol>
+<li>增加独立 Node compatibility job，持续验证根 <code>engines.node</code> 声明的最低边界与 DSH 的 Node 分界；</li>
+<li>恢复正式报告 HTML 审阅版并纠正文档治理表述；</li>
+<li>修复 <code>current.md</code> 的 Head、CI、本地测试与历史证据漂移；</li>
+<li>同步 #24、#33 和 PR 描述，不修改 branch protection/ruleset。</li>
+</ol>
+<h3>14.2 需要纠正的事实与规约</h3>
+<ol>
+<li><strong>HTML 不是可选镜像</strong>：<code>AGENTS.md</code> 明确要求需要人类审阅的正式文档提供 HTML，并要求源稿变更时同步更新。原报告主张 Markdown-only 与现行规约直接冲突。正确做法是 Markdown 作为内容源、HTML 作为同步审阅呈现，而不是删除 HTML。</li>
+<li><strong>L2 跳过基线已经变化</strong>：<code>8991fa5...</code> 将 Version/Config/Help 三个 live cases 合并为一个生产 wrapper case。合同内容没有缩水，但无 <code>DSH_CLI_PATH</code> 时由 <code>3 skipped</code> 变为 <code>1 skipped</code>；后续证据必须按实际结果记录。</li>
+<li><strong><code>current.md</code> 原快照已漂移</strong>：批注时它尚未绑定 Head <code>34a542f...</code> 的 Core #426（run <code>33759049251</code>）与 CI #335（run <code>33759049201</code>），并丢失 v0.20.6 的本地测试、四视口和较早关键 run 证据；本轮已恢复这些证据，并进一步绑定实施 Head <code>0d8fa4c...</code>。</li>
+<li><strong>Node 兼容范围原缺持续证据</strong>：根 <code>engines.node</code> 为 <code>^20.19.0 || &gt;=22.12.0</code>，此前工作流只跑 Node 24。设计阶段已在 Linux x64 的干净环境实测 Node 20.19.0 与 22.12.0，二者均通过 install、全包 build/typecheck、Core unit、CLI unit 和二进制版本 smoke；本轮已将该验证固化为独立 CI job，并由实施 Head <code>0d8fa4c...</code> 的 CI #336 完成远端绑定。</li>
+</ol>
+<h3>14.3 新发现但不在本轮实现的边界</h3>
+<ul>
+<li><code>tekon clean</code> 也直接递归删除 worktree 目录，#33 后续设计不能只看 Web <code>project.clean</code>；</li>
+<li><code>mobile-layout.test.ts</code> 与 <code>start-run-form.test.ts</code> 仍不符合仓库 <code>*.e2e.test.ts</code> 命名约定，应在测试分层治理中处理；</li>
+<li>Windows <code>dsh.cmd</code> 同时存在 preflight 身份误判与原生 launcher 失败，继续由 #28 统一设计，不能用无约束 <code>shell: true</code> 快修；</li>
+<li><code>onWarn</code> 是纯观测 sink 还是可否决策略 hook 尚未定义，本轮不改变公共 API 语义。</li>
+</ul>
+<h3>14.4 Node compatibility job 裁决</h3>
+<p>采用 <code>.github/workflows/ci.yml</code> 内独立 <code>node-compat</code> job：</p>
+<pre><code class="language-text">20.19.x / 22.12.x / 22.19.x / 24.x
+→ npm install --global corepack@0.34.1
+→ frozen install
+→ all-package build + typecheck
+→ Core unit + CLI unit
+→ built CLI --version/--help smoke
+</code></pre>
+<p>该 job 不设置 <code>needs</code>，矩阵 <code>fail-fast: false</code>，单腿上限 20 分钟，暂不增加缓存。Node 20 的 <code>better-sqlite3</code> 可能从源码构建，因此 Core unit 必须保留，用真实 SQLite 加载证明 ABI 可用。Node 22.12 的 bundled Corepack 太旧，固定 <code>0.34.1</code> 是签名兼容前置条件。Node 24 虽与主 lane 重叠，但保留它可让矩阵自身完整、便于独立比较。</p>
+<p>这一变更只增加持续验证，不改变用户命令、运行时合同或 <code>.tekon</code> 数据格式。按既有版本政策，纯复审与 CI 证据收敛不单独抬高产品版本，仍保持 <code>0.20.6</code>。本轮不配置 required checks，因此新矩阵仍是 GitHub Actions 检查，不得表述为仓库强制合并规则。</p>
+<p>具体测试先行顺序与验收矩阵见 <a href="../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md">第二十一轮收口执行方案</a>。</p>
+<h3>14.5 实现期本地证据</h3>
+<p>Node workflow 合同经过三轮明确 RED→GREEN：</p>
+<ol>
+<li>首次新增结构化 YAML 测试时，因 <code>node-compat</code> 不存在而 3/3 failed；新增 job 后 3/3 passed；</li>
+<li>reviewer 指出 Corepack 版本、<code>continue-on-error</code> 表达式和步骤顺序/smoke 断言缺口后，增强合同先因缺少固定 Corepack 步骤而 1 failed / 2 passed；补 <code>corepack@0.34.1</code> 后 3/3 passed。</li>
+<li>提交前 reviewer 指出 <code>matrix.exclude</code> 与 job/step <code>if</code> 仍可静默跳过矩阵腿；增强合同后分别注入 Node 20.19 exclude 与 <code>if: ${{ false }}</code>，两次均得到 1 failed / 2 passed，撤销变异后 3/3 passed。</li>
+</ol>
+<p>当前本地结果：</p>
+<ul>
+<li><code>pnpm test</code>：145 files、1554 passed、1 skipped；</li>
+<li>build、typecheck、lint：通过；</li>
+<li>production audit：直连 npm registry 超时，使用仅作用于该命令的公司代理重试后为 <code>No known vulnerabilities found</code>；</li>
+<li>Core e2e：26 passed；CLI e2e：8 passed；Web Chromium e2e：48 passed；</li>
+<li>独立 reviewer 在 Node 22.12.0 上运行当前工作树完整单腿：固定 Corepack 0.34.1、pnpm 10.12.1、frozen install、全包 build/typecheck、Core 1079 passed/1 skipped、CLI 64 passed 与 CLI smoke 全部通过，<code>pnpm ignored-builds</code> 为 <code>None</code>；</li>
+<li>320/390/700/1440px 两个 Run 入口四视口 4/4 通过；报告与方案 HTML 同视口无页面横向溢出；</li>
+<li>仓库 actionlint 脚本因 Docker daemon 直连拉取镜像超时而退出 125；随后通过仅作用于下载命令的公司代理取得官方 <code>v1.7.12</code> release，校验官方 SHA-256 后执行同版本 actionlint，结果通过，临时目录已删除；实施 Head 的远端 Core #427 也已通过同版本 actionlint。</li>
+</ul>
+<p>以上本地证据已由实施 Head <code>0d8fa4c3eae12ab8ed022dc78d60b8f094cf7917</code> 的 Core #427（run <code>33836232524</code>）与 CI #336（run <code>33836232602</code>）绑定：attempt 1、11 项 checks 全部 <code>completed/success</code>。下一次提交只发布这组证据；该文档证据 Head 自身的 checks 只更新到 PR/Issue 外部状态，不再回填仓库。</p>
+<h2>15. 参考资料</h2>
+<h3>Tekon</h3>
+<ul>
+<li><a href="current.md">当前权威入口</a></li>
+<li><a href="2026-09-03-tekon-product-runtime-harness-twentieth-review.md">第二十轮报告</a></li>
+<li><a href="../../README.md">README</a></li>
+<li><a href="../../packages/core/src/runtime/dsh-bridge-probe.ts">DSH metadata preflight</a></li>
+<li><a href="../../packages/core/__tests__/runtime/dsh-bridge-contract.test.ts">DSH opt-in L2 contract</a></li>
+<li><a href="../../packages/core/src/runtime/dsh-headless-adapter.ts">DSH Headless Adapter</a></li>
+<li><a href="../../packages/web/src/client/components/sessions/SessionComposer.tsx">默认 Session Composer</a></li>
+<li><a href="../../packages/web/src/client/components/runs/StartRunForm.tsx">Advanced StartRunForm</a></li>
+<li><a href="../../packages/web/__tests__/e2e/responsive-run-surfaces.e2e.test.ts">响应式 Run surfaces</a></li>
+<li><a href="../../packages/core/src/session/session-service.ts">SessionService</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/27">主线 Tracking #27</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/17">DSH rc.1 #17</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/28">Provider command/Windows #28</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/29">Provider health #29</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/32">DSH environment #32</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/33">Clean guard #33</a></li>
+<li><a href="https://github.com/zesming/tekon/issues/24">Release governance #24</a></li>
+</ul>
+<h3>DeepSeek Harness / Node 官方</h3>
+<ul>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-rc.1">DeepSeek Harness rc.1 release</a></li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/packages/bundle/headless/README.md">rc.1 Headless</a></li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/package.json">rc.1 Node engines</a></li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/packages/acp/acp/README.md">rc.1 ACP</a></li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/SAFETY.md">rc.1 Safety</a></li>
+<li><a href="https://nodejs.org/api/child_process.html#spawning-bat-and-cmd-files-on-windows">Node child process: spawning <code>.bat</code> and <code>.cmd</code> on Windows</a></li>
+</ul>
+</main>
+  <footer>Tekon 正式评审归档。Markdown 为内容源，HTML 为同步审阅呈现；事实、推断与建议以正文边界为准。</footer>
+</body>
+</html>

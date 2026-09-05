@@ -9,6 +9,9 @@ import type { SubprocessRegistry } from './subprocess-registry.js';
 export const JOB_ABORT_REASON_OWNERSHIP_LOST =
   'tekon:job-ownership-lost' as const;
 
+/** Abort reason used only when the job runner is shutting down. */
+export const JOB_ABORT_REASON_SHUTDOWN = 'tekon:job-shutdown' as const;
+
 /** True when an AbortSignal fences a stale executor rather than user cancel. */
 export function isJobOwnershipLostAbort(
   signal: AbortSignal | undefined,
@@ -18,11 +21,22 @@ export function isJobOwnershipLostAbort(
   );
 }
 
-/** User cancellation excludes the internal ownership-loss fencing signal. */
+/** True when an AbortSignal was triggered by runner shutdown. */
+export function isJobShutdownAbort(signal: AbortSignal | undefined): boolean {
+  return Boolean(
+    signal?.aborted && signal.reason === JOB_ABORT_REASON_SHUTDOWN,
+  );
+}
+
+/** User cancellation excludes internal signals (ownership-loss fencing and runner shutdown). */
 export function isJobCancellationAbort(
   signal: AbortSignal | undefined,
 ): boolean {
-  return Boolean(signal?.aborted && !isJobOwnershipLostAbort(signal));
+  return Boolean(
+    signal?.aborted &&
+      !isJobOwnershipLostAbort(signal) &&
+      !isJobShutdownAbort(signal),
+  );
 }
 
 /**
@@ -97,12 +111,24 @@ export interface CreateJobRunnerDeps {
   heartbeatMs?: number;
   leaseTtlMs?: number;
   workerId?: string;
+  /**
+   * Bounded wait for in-flight jobs to settle on their own during stop(),
+   * before the runner escalates to explicit abort + subprocess kill. Test
+   * override only; production keeps the 5s default.
+   */
+  stopSettleTimeoutMs?: number;
+  /**
+   * Hard deadline for uncooperative executors during stop() phase 3 drain
+   * barrier. Test override only; production keeps the 10s default.
+   */
+  stopHardTimeoutMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const STOP_SETTLE_TIMEOUT_MS = 5_000;
+const DEFAULT_STOP_HARD_TIMEOUT_MS = 10_000;
 
 /** Statuses an executor may legitimately settle a job to. */
 const SETTLEABLE_STATUSES: readonly JobStatus[] = [
@@ -110,6 +136,7 @@ const SETTLEABLE_STATUSES: readonly JobStatus[] = [
   'failed',
   'cancelled',
   'paused',
+  'interrupted',
 ];
 
 export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
@@ -117,6 +144,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const heartbeatMs = deps.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const leaseTtlMs = deps.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+  const stopSettleTimeoutMs =
+    deps.stopSettleTimeoutMs ?? STOP_SETTLE_TIMEOUT_MS;
+  const stopHardTimeoutMs =
+    deps.stopHardTimeoutMs ?? DEFAULT_STOP_HARD_TIMEOUT_MS;
   const workerId =
     deps.workerId ?? `web-${process.pid}-${randomUUID().slice(0, 8)}`;
 
@@ -130,7 +161,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pending = new Set<Promise<void>>();
   let pollTimer: NodeJS.Timeout | null = null;
   let stopped = true;
-  let pollInFlight = false;
+  let pollTask: Promise<void> | null = null;
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -358,23 +389,34 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     }
   }
 
-  async function poll(): Promise<void> {
-    if (stopped || pollInFlight) {
-      return;
+  function poll(): Promise<void> {
+    if (stopped) {
+      return Promise.resolve();
     }
-    pollInFlight = true;
-    try {
+    if (pollTask) {
+      return pollTask;
+    }
+
+    const task = (async () => {
       // Process-local AbortControllers and registries cannot be mutated by a
       // second CLI/Web process. Observe the durable job row on every owner poll
       // and relay foreign pause/cancel requests into this process first.
       await syncOwnedControls();
+      // stop() may begin while syncOwnedControls() is awaiting SQLite. Do not
+      // enter a fresh claim after the runner crossed into draining.
+      if (stopped) return;
+
       const job = await jobs.claimNext(workerId);
       if (job) {
         spawnJob(job);
       }
-    } finally {
-      pollInFlight = false;
-    }
+    })();
+    pollTask = task;
+    const clearPollTask = () => {
+      if (pollTask === task) pollTask = null;
+    };
+    void task.then(clearPollTask, clearPollTask);
+    return task;
   }
 
   async function recoverStaleJobs(): Promise<number> {
@@ -512,29 +554,80 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     },
 
     async stop() {
-      if (!pollTimer && pending.size === 0) {
+      if (!pollTimer && pending.size === 0 && !pollTask) {
         return;
       }
+      // Enter draining and prevent any new poll from beginning.
       stopped = true;
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
-      // Wait for in-flight jobs to settle, capped at 5s. Jobs that do not
-      // settle in time have their heartbeats cleared below (lease goes stale)
-      // and are recovered by the next start()'s recoverStale().
-      const allSettled = Promise.allSettled([...pending]);
-      let timer: NodeJS.Timeout | undefined;
-      const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STOP_SETTLE_TIMEOUT_MS);
-        if (typeof timer.unref === 'function') {
-          timer.unref();
+
+      // A poll may already be inside syncOwnedControls() or claimNext(). Wait
+      // for that exact poll to finish before snapshotting pending. If it had
+      // already claimed and spawned a job, the task is now present in pending;
+      // after this barrier no later poll can add another one.
+      const activePoll = pollTask;
+      if (activePoll) {
+        await Promise.allSettled([activePoll]);
+      }
+
+      // Phase 1: give in-flight jobs a bounded window to settle on their own.
+      // A job that completes normally deletes itself from `controllers` (in
+      // settle()) before its task drains from `pending`, so `controllers`
+      // membership — not elapsed time — is the authoritative "still in-flight"
+      // marker used by phase 2.
+      const settleWithinWindow = Promise.allSettled([...pending]);
+      let settleTimer: NodeJS.Timeout | undefined;
+      const settleWindow = new Promise<void>((resolve) => {
+        settleTimer = setTimeout(resolve, stopSettleTimeoutMs);
+        if (typeof settleTimer.unref === 'function') {
+          settleTimer.unref();
         }
       });
-      await Promise.race([allSettled, timeout]);
-      if (timer) {
-        clearTimeout(timer);
+      await Promise.race([settleWithinWindow, settleWindow]);
+      if (settleTimer) {
+        clearTimeout(settleTimer);
       }
+
+      // Phase 2: escalate. Any controller still present is a genuinely
+      // in-flight job (completed jobs already removed theirs). Abort it and
+      // kill its subprocesses so its executor stops issuing further writes.
+      // Completed-but-not-yet-dequeued jobs are never touched here.
+      for (const [jobId, controller] of controllers) {
+        if (!controller.signal.aborted) {
+          controller.abort(JOB_ABORT_REASON_SHUTDOWN);
+        }
+        const current = await jobs.get(jobId).catch(() => null);
+        const sessionId = current?.sessionId;
+        if (sessionId) {
+          const runId = await sessions
+            .getRunIdBySessionId(sessionId)
+            .catch(() => null);
+          if (runId) registry.killAll(runId, 'SIGKILL');
+        }
+      }
+
+      // Phase 3: deterministic drain barrier. Re-await every pending task so
+      // each aborted executor runs its catch/finally — including its final
+      // synchronous settle() write — and dequeues from `pending` before we
+      // return. Callers only close the (synchronous, better-sqlite3) database
+      // after stop() resolves, so no late write can hit a closed handle.
+      // Bounded by stopHardTimeoutMs to avoid hanging forever on uncooperative executors.
+      const drainTasks = Promise.allSettled([...pending]);
+      let hardTimer: NodeJS.Timeout | undefined;
+      const hardDeadline = new Promise<void>((resolve) => {
+        hardTimer = setTimeout(resolve, stopHardTimeoutMs);
+        if (typeof hardTimer.unref === 'function') {
+          hardTimer.unref();
+        }
+      });
+      await Promise.race([drainTasks, hardDeadline]);
+      if (hardTimer) {
+        clearTimeout(hardTimer);
+      }
+
       for (const jobId of [...heartbeats.keys()]) {
         clearHeartbeat(jobId);
       }

@@ -31,6 +31,7 @@ import {
   workflowInstanceSchema,
 } from '../types/domain.js';
 import { type WorktreeLease, worktreeLeaseSchema } from '../types/config.js';
+import { createAdmissionStore, type AdmissionStore } from './admission-store.js';
 import type { TekonDatabase } from './connection.js';
 import { createWriteQueue, type WriteQueue } from './write-queue.js';
 
@@ -71,6 +72,8 @@ type WorkflowInstanceRow = {
   status: WorkflowInstance['status'];
   kind: WorkflowInstance['kind'];
   allow_dirty_base: number | null;
+  plan_snapshot?: string | null;
+  plan_digest?: string | null;
   current_node_id: string | null;
   created_at: string;
   updated_at: string;
@@ -290,11 +293,17 @@ export interface TekonRepositories {
     nodeId: string,
   ): Promise<RoleRun | null>;
   findRecoverableRun(runId?: string): Promise<RecoverableRun | null>;
+  getDatabase(): TekonDatabase;
+  getWriteQueue(): WriteQueue;
+  admissionStore: AdmissionStore;
+  mustGetWorkflow(runId: string): Promise<WorkflowInstance>;
 }
 
 export function createRepositories(
   db: TekonDatabase,
-  writeQueue: WriteQueue = createWriteQueue(),
+  writeQueue: WriteQueue = createWriteQueue({
+    isClosed: () => db.isClosed?.() ?? false,
+  }),
 ): TekonRepositories {
   const now = () => new Date().toISOString();
 
@@ -370,11 +379,13 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into workflow_instances (
-             id, project_id, demand_id, status, kind, allow_dirty_base, current_node_id, created_at, updated_at
-           ) values (@id, @projectId, @demandId, @status, @kind, @allowDirtyBase, @currentNodeId, @createdAt, @updatedAt)`,
+             id, project_id, demand_id, status, kind, allow_dirty_base, plan_snapshot, plan_digest, current_node_id, created_at, updated_at
+           ) values (@id, @projectId, @demandId, @status, @kind, @allowDirtyBase, @planSnapshot, @planDigest, @currentNodeId, @createdAt, @updatedAt)`,
         ).run({
           ...instance,
           allowDirtyBase: instance.allowDirtyBase ? 1 : 0,
+          planSnapshot: instance.planSnapshot ?? null,
+          planDigest: instance.planDigest ?? null,
           currentNodeId: instance.currentNodeId ?? null,
         });
         return instance;
@@ -940,6 +951,22 @@ export function createRepositories(
       return row ? mapRoleRun(row) : null;
     },
 
+    getDatabase() {
+      return db;
+    },
+
+    getWriteQueue() {
+      return writeQueue;
+    },
+
+    admissionStore: createAdmissionStore({ db, writeQueue }),
+
+    async mustGetWorkflow(runId) {
+      const row = await this.getWorkflowInstance(runId);
+      if (!row) throw new Error(`workflow not found: ${runId}`);
+      return row;
+    },
+
     async findRecoverableRun(runId) {
       return writeQueue.enqueue(() => {
         const recovery = db
@@ -1011,6 +1038,8 @@ function mapWorkflowInstance(row: WorkflowInstanceRow): WorkflowInstance {
     status: row.status,
     kind: row.kind ?? 'workflow',
     allowDirtyBase: row.allow_dirty_base === 1,
+    planSnapshot: row.plan_snapshot ?? null,
+    planDigest: row.plan_digest ?? null,
     currentNodeId: row.current_node_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

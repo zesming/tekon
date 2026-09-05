@@ -18,6 +18,8 @@ import {
   createSessionService,
   createSubprocessRegistry,
   createWorkflowEngine,
+  DshCapabilityError,
+  DshHostNodeError,
   createWorkflowJobExecutor,
   createWorktreeManager,
   createWriteQueue,
@@ -32,6 +34,7 @@ import {
   type SubprocessRegistry,
   type TekonDatabase,
   type TekonRepositories,
+  type RunPlan,
   type WorkflowEngine,
 } from '@tekon/core';
 
@@ -43,6 +46,7 @@ import type { CliIO } from './context.js';
 import { ensureInitialized, openProjectDb } from './context.js';
 import { selectLatestRunId } from './db-helpers.js';
 import { resolveProjectRepoPath } from './path-utils.js';
+import { runDshPreflight } from '../commands/provider.js';
 import { getBuiltInRolesDir } from './utils.js';
 
 /**
@@ -61,6 +65,9 @@ export interface CliRunEngineInput {
   agent: string;
   allowDirtyBase: boolean;
   runtime?: ProviderRuntimeOverrides;
+  canonicalPlan?: RunPlan;
+  planDigest?: string;
+  planSnapshot?: string;
 }
 
 export interface CliSessionContext {
@@ -107,7 +114,14 @@ function createCliRunEngineFactory(deps: {
       adapter: agentRuntime.adapter,
       agentProvider: agentRuntime.provider,
       agentConfigSummary: agentRuntime.configSummary,
+      profile: 'cli',
+      timeoutMs: input.runtime?.timeoutMs,
+      noProgressTimeoutMs: input.runtime?.noProgressTimeoutMs,
+      progressHeartbeatMs: input.runtime?.progressHeartbeatMs,
       allowDirtyBase: input.allowDirtyBase,
+      canonicalPlan: input.canonicalPlan,
+      planDigest: input.planDigest,
+      planSnapshot: input.planSnapshot,
       registry: deps.registry,
       gateEngine: createGateEngine({
         repositories: deps.repositories,
@@ -133,8 +147,9 @@ export async function withCliSessionContext<T>(
 
     // One shared write queue serializes legacy tables, session_events, jobs,
     // and the audit hash chain (mirrors web root.ts).
-    const writeQueue = createWriteQueue();
+    const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
     const repositories = createRepositories(db, writeQueue);
+    await repositories.admissionStore.scanAndRecoverAdmissions();
     const audit = createAuditLogger({ repositories, db, writeQueue });
     const sessions = createSessionEventStore(db, writeQueue);
     const jobs = createJobRepository(db, writeQueue);
@@ -210,6 +225,13 @@ export async function withCliSessionContext<T>(
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
     });
 
+    let activeAgent: string | undefined;
+    const engineFactory = createCliRunEngineFactory({
+      projectRoot: repoPath,
+      repositories: dualRepositories,
+      audit: dualAudit,
+      registry,
+    });
     const sessionService = createSessionService<CliRunEngineInput>({
       sessions,
       jobs,
@@ -220,12 +242,29 @@ export async function withCliSessionContext<T>(
       projectRoot: repoPath,
       // Design §8 decision 2: CLI-created sessions are labeled 'cli'.
       sessionProfile: 'cli',
-      createEngine: createCliRunEngineFactory({
-        projectRoot: repoPath,
-        repositories: dualRepositories,
-        audit: dualAudit,
-        registry,
-      }),
+      createEngine: (input: CliRunEngineInput) => {
+        activeAgent = input?.agent;
+        return engineFactory(input);
+      },
+      preflight: async () => {
+        if (activeAgent === 'dsh-headless') {
+          const preflight = await runDshPreflight({
+            onWarn: (msg) => {
+              io.stderr.write(`${msg}\n`);
+            },
+          });
+          if (!preflight.compatible) {
+            if (preflight.failureKind === 'host-node') {
+              throw new DshHostNodeError(preflight.hostNodeVersion);
+            }
+            throw new DshCapabilityError(
+              preflight.error ??
+                `dsh-headless 环境预检未通过 (tested: ${preflight.testedVersion}, actual: ${preflight.actualVersion ?? '未安装'})。` +
+                `请根据安装指引安装兼容版本: ${preflight.installHint}`,
+            );
+          }
+        }
+      },
     });
 
     try {
@@ -246,6 +285,9 @@ export async function withCliSessionContext<T>(
       await jobRunner.stop();
     }
   } finally {
+    // P0-ARCH-02 增量：与 Web 关停序列一致，关闭前置位 closed 栅栏，
+    // 拒绝 deadline 后迟到的 repository/db 写入。
+    db.markClosed();
     db.close();
   }
 }

@@ -1,5 +1,9 @@
 import { useNavigate } from 'react-router';
 import { RunControls } from './RunControls.js';
+import {
+  admissionNeedsRecovery,
+  admissionReadinessLabel,
+} from './AdmissionNotice.js';
 import { routes } from '../../lib/route-paths.js';
 import type { z } from 'zod';
 import type { apiWorkflowSchema } from '../../../shared/rpc-contract.js';
@@ -130,14 +134,17 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                 >
                   <td className="cell-id">{shortId(run.id)}</td>
                   <td>
-                    <span className={statusBadge(run.status)}>
-                      {run.status}
+                    <span
+                      className={statusBadge(
+                        admissionNeedsRecovery(run) ? 'pending' : run.status,
+                      )}
+                    >
+                      {admissionNeedsRecovery(run)
+                        ? admissionReadinessLabel(run)
+                        : run.status}
                     </span>
                   </td>
-                  <td
-                    className="cell-primary"
-                    style={{ maxWidth: 200 }}
-                  >
+                  <td className="cell-primary" style={{ maxWidth: 200 }}>
                     <span
                       className="truncate"
                       style={{ display: 'block' }}
@@ -149,7 +156,9 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                   <td>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-muted">
-                        {run.currentNodeId ?? '—'}
+                        {admissionNeedsRecovery(run)
+                          ? '任务尚未执行'
+                          : (run.currentNodeId ?? '—')}
                       </span>
                     </div>
                   </td>
@@ -160,12 +169,22 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                     {formatRelativeTime(run.createdAt)}
                   </td>
                   <td>
-                    <RunControls
-                      runId={run.id}
-                      status={run.status}
-                      compact
-                      onView={(id) => navigate(routes.run(id))}
-                    />
+                    {admissionNeedsRecovery(run) ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        onClick={() => navigate(routes.run(run.id))}
+                      >
+                        观察
+                      </button>
+                    ) : (
+                      <RunControls
+                        runId={run.id}
+                        status={run.status}
+                        compact
+                        onView={(id) => navigate(routes.run(id))}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

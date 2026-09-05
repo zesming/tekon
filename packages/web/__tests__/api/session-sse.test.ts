@@ -18,7 +18,11 @@ import {
   createWebServer,
   type RunningWebServer,
 } from '../../src/server/http.js';
-import { handleSessionEventsSse } from '../../src/server/sse.js';
+import {
+  handleSessionEventsSse,
+  MAX_PENDING_BYTES,
+  MAX_PENDING_EVENTS,
+} from '../../src/server/sse.js';
 
 // S8: SSE endpoint GET /api/sessions/:sessionId/events (design §3.1).
 // HTTP-level tests cover auth (401/404), historical replay via sinceSeq, frame
@@ -400,12 +404,12 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // subscribe is live), a new event is appended AND published. The handler
     // must buffer it (flushing=true) and flush it after replay — not drop it
     // (loss) and not double-send it (the boundary event is > maxReplayedSeq).
-    const realList = s.store.listEventsSince.bind(s.store);
+    const realPage = s.store.listEventsPage.bind(s.store);
     let injected = false;
     (
-      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
-    ).listEventsSince = async (sid: string, since: number) => {
-      const events = await realList(sid, since);
+      s.store as { listEventsPage: SessionEventStore['listEventsPage'] }
+    ).listEventsPage = async (sid: string, since: number, limit: number) => {
+      const page = await realPage(sid, since, limit);
       if (!injected) {
         injected = true;
         const boundary = await s.store.appendEvent({
@@ -415,7 +419,7 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
         }); // seq 2, published while flushing=true
         s.bus.publish(boundary);
       }
-      return events;
+      return page;
     };
 
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
@@ -494,14 +498,14 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     // Fire the client 'close' DURING the replay await (before the handler
     // finishes). The close handler is registered before replay, so cleanup runs
     // and unsubscribes — a later publish must not be written.
-    const realList = s.store.listEventsSince.bind(s.store);
+    const realPage = s.store.listEventsPage.bind(s.store);
     const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
     (
-      s.store as { listEventsSince: SessionEventStore['listEventsSince'] }
-    ).listEventsSince = async (sid: string, since: number) => {
-      const events = await realList(sid, since);
+      s.store as { listEventsPage: SessionEventStore['listEventsPage'] }
+    ).listEventsPage = async (sid: string, since: number, limit: number) => {
+      const page = await realPage(sid, since, limit);
       fake.close(); // client disconnects mid-replay
-      return events;
+      return page;
     };
 
     await handleSessionEventsSse({
@@ -638,5 +642,340 @@ describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
     }
     expect(fake.frames().filter((frame) => frame.id === '1')).toHaveLength(1);
     fake.close();
+  });
+});
+
+describe('SSE fresh connect bounded replay (P1-UX-03)', () => {
+  it('fresh connect without sinceSeq / Last-Event-ID initializes cursor from latestSeq - REPLAY_WINDOW', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    for (let i = 1; i <= 6; i++) {
+      await s.store.appendEvent({
+        sessionId,
+        type: 'assistant/message',
+        payload: { text: `event ${i}` },
+        modelVisible: true,
+      });
+    }
+
+    // Connect with fresh request (no sinceSeq, no Last-Event-ID)
+    const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events`);
+    await handleSessionEventsSse({
+      request: fake.request,
+      response: fake.response,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    const frames = fake.frames();
+    // All 6 events are within REPLAY_WINDOW (500), so all 6 are delivered
+    expect(frames.map((f) => f.id)).toEqual(['1', '2', '3', '4', '5', '6']);
+    fake.close();
+  });
+});
+
+describe('SSE reconnect budget and backpressure (P1-SESSION-01)', () => {
+  it('emits replay-truncated and truncates to tail window when reconnect exceeds max event budget', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    (s.store as any).listEventsPage = async (
+      sid: string,
+      since: number,
+      limit: number,
+    ) => {
+      const events = [];
+      const start = since + 1;
+      const count = Math.min(limit, 500);
+      for (let i = 0; i < count; i++) {
+        events.push({
+          seq: start + i,
+          sessionId: sid,
+          type: 'assistant/message',
+          payload: { text: `bulk message ${start + i}` },
+          visibility: 'model',
+          modelVisible: true,
+          timestamp: '2026-08-30T00:00:00.000Z',
+          correlationId: null,
+        });
+      }
+      return {
+        events,
+        hasMore: start + count <= 2500,
+        latestSeq: 2500,
+      };
+    };
+    (s.store as any).latestSeq = async () => 2500;
+
+    const fake = makeFakeReqRes(`/api/sessions/${sessionId}/events?sinceSeq=0`);
+    await handleSessionEventsSse({
+      request: fake.request,
+      response: fake.response,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    const frames = fake.frames();
+    const truncatedFrame = frames.find((f) => f.event === 'replay-truncated');
+    expect(truncatedFrame).toBeDefined();
+    expect(JSON.parse(truncatedFrame!.data!).cursor).toBe(2000);
+    fake.close();
+  });
+
+  it('pauses draining when write returns false and resumes upon drain event', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    let writeShouldBlock = true;
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/sessions/${sessionId}/events?sinceSeq=0`;
+    req.headers = {};
+    req.method = 'GET';
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        if (writeShouldBlock) {
+          writeShouldBlock = false;
+          return false;
+        }
+        return true;
+      },
+      once(event: string, cb: () => void) {
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    await s.store.appendEvent({ sessionId, type: 'turn/start', payload: {} });
+    await s.store.appendEvent({
+      sessionId,
+      type: 'assistant/message',
+      payload: {},
+    });
+
+    await handleSessionEventsSse({
+      request: req,
+      response: res,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    expect(writtenFrames.length).toBe(1);
+    expect(writtenFrames[0]).toContain('turn/start');
+
+    emitter.emit('drain');
+
+    expect(writtenFrames.length).toBe(2);
+    expect(writtenFrames[1]).toContain('assistant/message');
+    req.emit('close');
+  });
+
+  // Ninth-review annotation 16.4: while the socket is backpressured, live events
+  // buffer in the pending Map. Bound that buffer so a stalled client cannot grow
+  // server memory without limit. On overflow the server emits replay-truncated
+  // and closes so the client reconnects to a fresh tail.
+  it('truncates and closes when the backpressure pending buffer exceeds the cap', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/sessions/${sessionId}/events?sinceSeq=0`;
+    req.headers = {};
+    req.method = 'GET';
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        return false; // permanently backpressured
+      },
+      once(event: string, cb: () => void) {
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    const done = handleSessionEventsSse({
+      request: req,
+      response: res,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    // Wait for the stream to subscribe (it awaits getSession + replay first).
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Push more live events than the cap while the socket stays backpressured.
+    // Events must be presentable (visible) so writeFrame attempts to write and
+    // the pending Map actually buffers.
+    for (let i = 0; i < MAX_PENDING_EVENTS + 10; i++) {
+      s.bus.publish({
+        sessionId,
+        seq: i + 1,
+        type: 'assistant/message',
+        version: 1,
+        timestamp: new Date().toISOString(),
+        payload: { idx: i },
+        visibility: 'ui-only',
+        modelVisible: false,
+        sourceEventSeqs: [],
+        correlationId: null,
+      });
+    }
+
+    // Allow the async truncation path to run.
+    await new Promise((r) => setTimeout(r, 80));
+
+    const truncatedFrame = writtenFrames.find((f) =>
+      f.includes('event: replay-truncated'),
+    );
+    expect(truncatedFrame).toBeDefined();
+    expect(ended).toBe(true); // connection closed so the client reconnects
+
+    req.emit('close');
+    await done;
+  });
+
+  // Ninth-review annotation 16.4: the byte dimension of the cap must also trip,
+  // so a few very large payloads cannot bypass the event-count limit.
+  it('truncates when the backpressure pending buffer exceeds the byte cap', async () => {
+    const fixture = await createWebFixtureProject();
+    const s = openStore(fixture.projectRoot);
+    cleanupTasks.push(() => {
+      s.close();
+      fixture.cleanup();
+    });
+    const sessionId = await seedSession(s.store, fixture.projectRoot);
+
+    const writtenFrames: string[] = [];
+    const emitter = new EventEmitter();
+
+    const req = new EventEmitter() as IncomingMessage;
+    req.url = `/api/sessions/${sessionId}/events?sinceSeq=0`;
+    req.headers = {};
+    req.method = 'GET';
+
+    let ended = false;
+    const res = {
+      statusCode: 200,
+      get writableEnded() {
+        return ended;
+      },
+      setHeader() {},
+      flushHeaders() {},
+      write(chunk: string) {
+        writtenFrames.push(chunk);
+        return false; // permanently backpressured
+      },
+      once(event: string, cb: () => void) {
+        emitter.once(event, cb);
+      },
+      on(event: string, cb: () => void) {
+        emitter.on(event, cb);
+      },
+      end() {
+        ended = true;
+      },
+    } as unknown as ServerResponse;
+
+    const done = handleSessionEventsSse({
+      request: req,
+      response: res,
+      sessionId,
+      sessions: s.store,
+      bus: s.bus,
+      heartbeatMs: 60_000,
+    });
+
+    await new Promise((r) => setTimeout(r, 30));
+
+    // A few events whose combined buffered payload exceeds the byte cap. The
+    // first event drains (its bytes are subtracted), so the remaining two must
+    // together exceed the cap.
+    const bigPayload = 'x'.repeat(MAX_PENDING_BYTES / 2 + 1);
+    for (let i = 0; i < 3; i++) {
+      s.bus.publish({
+        sessionId,
+        seq: i + 1,
+        type: 'assistant/message',
+        version: 1,
+        timestamp: new Date().toISOString(),
+        payload: { text: bigPayload },
+        visibility: 'ui-only',
+        modelVisible: false,
+        sourceEventSeqs: [],
+        correlationId: null,
+      });
+    }
+
+    await new Promise((r) => setTimeout(r, 80));
+
+    const truncatedFrame = writtenFrames.find((f) =>
+      f.includes('event: replay-truncated'),
+    );
+    expect(truncatedFrame).toBeDefined();
+    expect(ended).toBe(true);
+
+    req.emit('close');
+    await done;
   });
 });

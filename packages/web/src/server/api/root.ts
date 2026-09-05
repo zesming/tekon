@@ -20,7 +20,13 @@ import {
   createWriteQueue,
   createJobRunner,
   openTekonDatabase,
+  migrateDatabase,
+  runDshPreflight,
+  DshHostNodeError,
+  isHostNodeVersionCompatible,
+  TESTED_DSH_VERSION,
   type AuditLogger,
+  type RunPlan,
   type SubprocessRegistry,
   type TekonRepositories,
   type WorkflowEngine,
@@ -38,6 +44,9 @@ import {
   providerRuntimeFromRunInput,
 } from './agents.js';
 import type { ServerContext, ApiCaller, WebRunEngineInput } from './context.js';
+import { createPlanPreviewSigner } from './plan-preview.js';
+import { ApiError } from './errors.js';
+import { createWebProjectScope, webProjectScope } from './queries.js';
 import {
   createArtifactRouter,
   createAuditRouter,
@@ -55,21 +64,48 @@ import {
 export type { ApiCaller } from './context.js';
 export { dispatchApiCall } from './dispatch.js';
 
+type WebRunEngineWithPlan = WebRunEngineInput & {
+  canonicalPlan?: RunPlan;
+  planSnapshot?: string;
+};
+
 /**
  * 4a: the web run-engine factory injected into SessionService. It encapsulates
- * the web provider/adapter construction (moved verbatim from the project
- * router's run handler): command gateway → web agent runtime → workflow
- * engine with gate/worktree managers. The service only calls the factory;
- * web-specific validation errors (ApiError from createWebAgentRuntime /
- * providerRuntimeFromRunInput) propagate through it unchanged.
+ * provider validation and construction before the engine is allowed to persist
+ * a Run. DSH preflight is request-scoped here: no process-global mutable slot
+ * can be overwritten by a concurrent start request.
  */
 function createWebRunEngineFactory(deps: {
   projectContext: WebProjectContext;
   repositories: TekonRepositories;
   audit: AuditLogger;
   registry: SubprocessRegistry;
-}): (input: WebRunEngineInput) => WorkflowEngine {
-  return (input) => {
+  preflight?: typeof runDshPreflight;
+}): (input: WebRunEngineInput) => Promise<WorkflowEngine> {
+  return async (input) => {
+    if (input.agent === 'dsh-headless') {
+      const preflight = deps.preflight ?? runDshPreflight;
+      try {
+        await preflight(undefined, {
+          onWarn: (m) => console.warn('[dsh bridge]', m),
+        });
+      } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : String(error);
+        if (error instanceof DshHostNodeError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `dsh-headless 宿主 Node 不兼容: ${detail} (tested: ${TESTED_DSH_VERSION})`,
+          );
+        }
+        throw new ApiError(
+          'BAD_REQUEST',
+          `dsh-headless 预检未通过: ${detail} (tested: ${TESTED_DSH_VERSION})`,
+        );
+      }
+    }
+
+    const plannedInput = input as WebRunEngineWithPlan;
     const gateway = createCommandGateway({
       repositories: deps.repositories,
     });
@@ -87,7 +123,14 @@ function createWebRunEngineFactory(deps: {
       adapter: agentRuntime.adapter,
       agentProvider: agentRuntime.provider,
       agentConfigSummary: agentRuntime.configSummary,
+      profile: input.profile,
+      timeoutMs: input.timeoutMs,
+      noProgressTimeoutMs: input.noProgressTimeoutMs,
+      progressHeartbeatMs: input.progressHeartbeatMs,
       allowDirtyBase: input.allowDirtyBase,
+      canonicalPlan: plannedInput.canonicalPlan,
+      planDigest: plannedInput.planDigest,
+      planSnapshot: plannedInput.planSnapshot,
       registry: deps.registry,
       gateEngine: createGateEngine({
         repositories: deps.repositories,
@@ -102,17 +145,20 @@ function createWebRunEngineFactory(deps: {
 }
 
 export async function createApiCaller(
-  input: ResolveProjectRootInput,
+  input: ResolveProjectRootInput & {
+    providerProbe?: () => Promise<'available' | 'unavailable'>;
+  },
 ): Promise<ApiCaller> {
   const projectContext = createProjectContext(input);
   assertProjectDatabaseExists(projectContext);
 
   const db = openTekonDatabase({ filename: projectContext.dbPath });
+  migrateDatabase(db);
 
   // S6/S7a: one shared write queue serializes legacy tables, session_events,
   // jobs, and the audit hash chain. MF4: audit appends run directly on the
   // queue (no re-enqueue into repositories → no self-wait deadlock).
-  const writeQueue = createWriteQueue();
+  const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
   const repositories = createRepositories(db, writeQueue);
   const audit = createAuditLogger({ repositories, db, writeQueue });
   const sessions = createSessionEventStore(db, writeQueue);
@@ -174,6 +220,7 @@ export async function createApiCaller(
       automation: automationExecutor,
     }),
   });
+  await repositories.admissionStore.scanAndRecoverAdmissions();
   jobRunner.start();
 
   // Automation listeners launch asynchronous work outside JobRunner. Track
@@ -251,7 +298,8 @@ export async function createApiCaller(
   });
 
   // 4a: SessionService owns the run/resume/cancel/pause orchestration; the
-  // project router degrades to auth + input assembly + mapping.
+  // project router degrades to auth + input assembly + mapping. Provider
+  // preflight now belongs to the request-scoped engine factory above.
   const sessionService = createSessionService<WebRunEngineInput>({
     sessions,
     jobs,
@@ -269,6 +317,7 @@ export async function createApiCaller(
   });
 
   const context: ServerContext = {
+    planPreviewSigner: createPlanPreviewSigner(),
     db,
     repositories: dualRepositories,
     audit: dualAudit,
@@ -283,8 +332,11 @@ export async function createApiCaller(
 
   const demandRouter = createDemandRouter(context);
   return {
+    [webProjectScope]: createWebProjectScope(db, projectContext, sessions),
     draftShape: demandRouter,
-    project: createProjectRouter(context),
+    project: createProjectRouter(context, {
+      probeProvider: input.providerProbe,
+    }),
     delivery: createDeliveryRouter(context),
     artifact: createArtifactRouter(context),
     gate: createGateRouter(context),
@@ -309,6 +361,10 @@ export async function createApiCaller(
       readinessDebounce.clear();
       await Promise.allSettled([...automationTasks]);
       await jobRunner.stop();
+      // P0-ARCH-02 增量：hard deadline 后未结算的 executor 仍可能持有
+      // repositories 引用。在关闭 SQLite 前置位 closed 栅栏，让迟到的
+      // repository/db 写入快速失败，而不是静默 late write 到已关闭句柄。
+      db.markClosed();
       db.close();
     },
   };

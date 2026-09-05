@@ -3,7 +3,7 @@ name: CI
 # Full-stack CI covering core + CLI + Web + Playwright (report P1-06 / §13.13).
 # core.yml remains the focused core gate; this workflow adds the layers that
 # most affect human usability and were previously unprotected on the main
-# branch: root typecheck/lint, CLI build/unit/e2e, Web build/typecheck/unit,
+# branch: root build/typecheck, CLI build/unit/e2e, Web build/typecheck/unit,
 # and the browser (Playwright) journeys.
 
 on:
@@ -21,30 +21,134 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PNPM_VERSION: '10.12.1'
   NODE_VERSION: '24'
+  # pnpm 版本由根 package.json 的 packageManager 字段钉死。
+  # 每个 job 都先启用 Corepack shim，因为 package script 可能递归调用裸 pnpm。
 
 jobs:
   typecheck:
-    name: Root typecheck + lint
+    name: Root build + typecheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Check installer syntax
+        run: bash -n scripts/install.sh
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
 
       - name: Install dependencies
-        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build all packages
-        run: npm exec --yes -- pnpm@10.12.1 -r build
+        run: pnpm -r build
 
       - name: Typecheck all packages
-        run: npm exec --yes -- pnpm@10.12.1 -r typecheck
+        run: pnpm -r typecheck
+
+  # Keep advisory lookup independent from functional validation. A registry
+  # outage or a newly published advisory must still fail the workflow, but it
+  # should not suppress build/test diagnostics that help distinguish an
+  # application regression from a supply-chain gate failure. Retry once because
+  # the npm audit endpoint can time out independently of package installation;
+  # a vulnerability or a second endpoint failure remains a hard failure.
+  audit:
+    name: Audit production dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+
+      - name: Install lockfile dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Audit production dependencies
+        run: node scripts/ci/audit-production.mjs
+
+  # Validate every declared Node floor independently from the primary Node 24
+  # lane. Keep all legs running so one compatibility failure does not hide the
+  # result at another boundary.
+  node-compat:
+    name: Node compatibility (${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20.19.0', '22.12.0', '22.19.0', '24.x']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Assert resolved Node version
+        env:
+          EXPECTED_NODE_VERSION: ${{ matrix.node-version }}
+        run: |
+          node -e '
+            const expected = process.env.EXPECTED_NODE_VERSION;
+            if (!expected) throw new Error("Missing EXPECTED_NODE_VERSION");
+            const actual = process.versions.node;
+            console.log("Resolved Node version: " + actual + " (expected: " + expected + ")");
+            if (expected.endsWith(".x")) {
+              const prefix = expected.slice(0, -2);
+              if (!actual.startsWith(prefix + ".")) {
+                throw new Error("Node version mismatch: expected prefix " + prefix + ", got " + actual);
+              }
+            } else if (actual !== expected) {
+              throw new Error("Node version mismatch: expected " + expected + ", got " + actual);
+            }
+          '
+
+      # Node 22.12 bundles Corepack 0.29, whose pnpm signing keys predate the
+      # pinned pnpm 10 release. Pin a Corepack version that supports every leg.
+      - name: Install compatible Corepack
+        run: npm install --global corepack@0.34.1
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Typecheck all packages
+        run: pnpm -r typecheck
+
+      - name: Core unit tests
+        run: pnpm --filter @tekon/core test:unit
+
+      - name: CLI unit tests
+        run: pnpm --filter @tekon/cli test:unit
+
+      - name: CLI binary smoke
+        run: |
+          set -euo pipefail
+          expected="v$(node -p "require('./package.json').version")"
+          test "$(node packages/cli/dist/index.js --version)" = "$expected"
+          node packages/cli/dist/index.js --help >/dev/null
 
   cli:
     name: CLI build + unit + e2e
@@ -52,26 +156,29 @@ jobs:
     needs: typecheck
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
 
       - name: Install dependencies
-        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build core + CLI
         run: |
-          npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
-          npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli build
+          pnpm --filter @tekon/core build
+          pnpm --filter @tekon/cli build
 
       - name: CLI unit tests
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:unit
+        run: pnpm --filter @tekon/cli test:unit
 
       - name: CLI e2e tests
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/cli test:e2e
+        run: pnpm --filter @tekon/cli test:e2e
 
   web:
     name: Web build + typecheck + unit
@@ -79,27 +186,30 @@ jobs:
     needs: typecheck
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
 
       - name: Install dependencies
-        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build core (web depends on it)
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+        run: pnpm --filter @tekon/core build
 
       - name: Web typecheck
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web typecheck
+        run: pnpm --filter @tekon/web typecheck
 
       - name: Web build
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web build
+        run: pnpm --filter @tekon/web build
 
       - name: Web unit tests
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test
+        run: pnpm --filter @tekon/web test
 
   web-e2e:
     name: Web Playwright e2e
@@ -107,21 +217,24 @@ jobs:
     needs: web
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '24'
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
 
       - name: Install dependencies
-        run: npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build core (web depends on it)
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/core build
+        run: pnpm --filter @tekon/core build
 
       - name: Install Playwright browser (chromium)
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web exec playwright install --with-deps chromium
+        run: pnpm --filter @tekon/web exec playwright install --with-deps chromium
 
       - name: Web Playwright e2e
-        run: npm exec --yes -- pnpm@10.12.1 --filter @tekon/web test:e2e
+        run: pnpm --filter @tekon/web test:e2e

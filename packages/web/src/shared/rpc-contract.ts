@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { draftShapeSchema, sessionStatusSchema } from '@tekon/core';
+import {
+  draftShapeSchema,
+  sessionStatusSchema,
+  eventVisibilitySchema,
+} from '@tekon/core';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -49,25 +53,64 @@ export const tokenRunInputSchema = z.object({
   token: z.string().min(1),
 });
 
-export const projectRunInputSchema = z.object({
-  demandText: z.string(),
+export const projectRunInputSchema = z
+  .object({
+    demandText: z.string(),
+    token: z.string().min(1),
+    requestId: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, 'REQUEST_ID_INVALID').optional(),
+    // 4b: 'goal' runs the built-in single-node goal template (ignores template);
+    // omitted/'workflow' keeps the governed delivery-workflow path.
+    mode: z.enum(['workflow', 'goal']).optional(),
+    // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
+    // (never PR creation — governance red line). Omitted → human-web. review-only
+    // is intentionally NOT accepted here: starting a run is itself a mutation, so
+    // a run cannot create a read-only session; review-only enforcement is
+    // deferred until a dedicated review-only entry point exists (design §1.2.3).
+    profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
+    template: z.string().optional(),
+    agent: z.string().optional(),
+    allowDirtyBase: z.boolean().optional(),
+    demandShapePath: z.string().optional(),
+    timeoutMs: z.number().optional(),
+    noProgressTimeoutMs: z.number().optional(),
+    progressHeartbeatMs: z.number().optional(),
+    acknowledgeUnrestrictedNetwork: z.boolean().optional(),
+    planDigest: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.mode !== 'goal' &&
+      (!data.planDigest || data.planDigest.trim() === '')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
+        path: ['planDigest'],
+      });
+    }
+  });
+
+export const projectAdmissionInputSchema = z.object({
   token: z.string().min(1),
-  // 4b: 'goal' runs the built-in single-node goal template (ignores template);
-  // omitted/'workflow' keeps the governed delivery-workflow path.
-  mode: z.enum(['workflow', 'goal']).optional(),
-  // 4d: session profile. autonomous-delivery unlocks auto-prepare delivery
-  // (never PR creation — governance red line). Omitted → human-web. review-only
-  // is intentionally NOT accepted here: starting a run is itself a mutation, so
-  // a run cannot create a read-only session; review-only enforcement is
-  // deferred until a dedicated review-only entry point exists (design §1.2.3).
-  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
-  template: z.string().optional(),
-  agent: z.string().optional(),
-  allowDirtyBase: z.boolean().optional(),
-  demandShapePath: z.string().optional(),
-  timeoutMs: z.number().optional(),
-  noProgressTimeoutMs: z.number().optional(),
-  progressHeartbeatMs: z.number().optional(),
+  requestId: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/, 'REQUEST_ID_INVALID'),
+});
+
+export const projectAdmissionIntentInputSchema = z.object({
+  token: z.string().min(1),
+  // 身份查询不运行准入；真正 project.run 仍重新检查必需摘要和认证。
+  run: z.object(projectRunInputSchema.shape).omit({ token: true, requestId: true }).optional(),
+});
+
+export const projectHealthInputSchema = z
+  .object({
+    token: z.string().optional(),
+  })
+  .optional();
+
+export const projectProviderHealthInputSchema = z.object({
+  token: z.string().min(1),
+  provider: z.literal('dsh-headless'),
+  refresh: z.boolean().optional(),
 });
 
 export const draftShapeInputSchema = z.object({
@@ -141,8 +184,28 @@ export const deliveryCiStatusInputSchema = z.object({
   selector: z.string().optional(),
 });
 
+export const workflowPlanInputSchema = z.object({
+  template: z.string().optional(),
+  mode: z.enum(['workflow', 'goal']).optional(),
+  agent: z.string().optional(),
+  profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
+  allowDirtyBase: z.boolean().optional(),
+  timeoutMs: z.number().optional(),
+  noProgressTimeoutMs: z.number().optional(),
+  progressHeartbeatMs: z.number().optional(),
+});
+
 export const progressListInputSchema = z.object({
   runId: z.string().min(1),
+});
+
+export const sessionEventsInputSchema = z.object({
+  sessionId: z.string().min(1),
+  sinceSeq: z.number().int().nonnegative().optional(),
+  // Backward cursor for "load earlier history": when present, the server reads
+  // raw rows with seq < beforeSeq (descending) and returns nextBeforeSeq.
+  beforeSeq: z.number().int().nonnegative().optional(),
+  limit: z.number().int().positive().max(1000).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -160,6 +223,7 @@ export const apiProjectSchema = z
 
 export const apiWorkflowSchema = z
   .object({
+    executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
     id: z.string(),
     projectId: z.string(),
     demandId: z.string(),
@@ -170,6 +234,8 @@ export const apiWorkflowSchema = z
     provider: z.string().nullable(),
     status: z.string(),
     currentNodeId: z.string().nullable(),
+    admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+    filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })
@@ -423,6 +489,9 @@ export const reviewEvidenceGroupSchema = z.object({
 // surface with many nested arrays. Field drift here is low-risk (read-only UI
 // data) and strict validation would be too brittle as sub-schemas evolve.
 export const workReviewSurfaceSchema = z.object({
+  executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
+  admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+  filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   runId: z.string(),
   workflowStatus: z.string(),
   // Real provider recorded for the run (report §6.4/P1.4: Run Detail derived
@@ -457,7 +526,8 @@ export const roleItemSchema = z
 export const workflowItemSchema = z.object({
   id: z.string(),
   name: z.string(),
-  path: z.string(),
+  path: z.string().optional(),
+  builtin: z.boolean().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -479,6 +549,20 @@ export const projectOverviewOutputSchema = z.object({
   counts: projectOverviewCountsSchema,
 });
 
+export const projectHealthOutputSchema = z.object({
+  credential: z.enum(['not-configured', 'valid', 'invalid']),
+  checkedAt: z.string(),
+  detail: z.string().optional(),
+  dshHeadless: z.enum(['available', 'unavailable']).optional(),
+});
+
+export const projectProviderHealthOutputSchema = z.object({
+  provider: z.literal('dsh-headless'),
+  status: z.enum(['available', 'unavailable']),
+  checkedAt: z.string(),
+  expiresAt: z.string(),
+});
+
 export const projectDetailOutputSchema = z.object({
   project: apiProjectSchema,
   runs: z.array(apiWorkflowSchema),
@@ -490,6 +574,32 @@ export const runWrapperOutputSchema = z.object({
   // cancel resolve the active job. Optional so legacy shapes still validate.
   sessionId: z.string().optional(),
   jobId: z.string().optional(),
+});
+
+export const projectRunOutputSchema = runWrapperOutputSchema.extend({
+  requestId: z.string(),
+  replayed: z.boolean(),
+  admissionState: z.enum(['accepted', 'recovery-required']),
+  detail: z.string().optional(),
+});
+
+export const projectAdmissionOutputSchema = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('not-found'), requestId: z.string() }),
+  z.object({
+    state: z.enum(['accepted', 'recovery-required']),
+    requestId: z.string(),
+    runId: z.string(),
+    sessionId: z.string().optional(),
+    jobId: z.string().optional(),
+    filesState: z.enum(['pending', 'ready', 'recovery_required']),
+    detail: z.string().optional(),
+  }),
+]);
+
+export const projectAdmissionIntentOutputSchema = z.object({
+  scope: z.string(),
+  fingerprint: z.string().optional(),
+  requestId: z.string().optional(),
 });
 
 export const projectCleanOutputSchema = z.object({
@@ -517,8 +627,9 @@ export const draftShapeApproveOutputSchema = z.object({
   shapePath: z.string(),
 });
 
-// 4f-2: generatePlan / planApprove both return the updated shape + its path,
-// mirroring the approve output shape.
+// 4f-2: plan flow. generatePlan freezes the plan view; planApprove is a
+// SEPARATE approval from demand approve. project.run gates a run on plan
+// approval only when hasPlan is set (old drafts exempt — backward compatible).
 export const draftShapeGeneratePlanOutputSchema = z.object({
   shape: draftShapeSchema,
   shapePath: z.string(),
@@ -574,6 +685,40 @@ export const auditListOutputSchema = z.object({
 
 export const roleListOutputSchema = z.object({
   roles: z.array(roleItemSchema),
+});
+
+export const runPlanGateSchema = z.object({
+  gateIndex: z.number().int().nonnegative().optional(),
+  commandBinding: z.object({
+    status: z.enum(['inline', 'resolved', 'not-applicable', 'missing']),
+    source: z.enum(['template', 'repo-profile', 'package-json-detection', 'empty-default']),
+    commandRef: z.enum(['build', 'typecheck', 'lint', 'test', 'e2e', 'security']).optional(),
+    behavior: z.enum(['execute-command', 'skip', 'missing-command', 'builtin-security', 'builtin-security-and-command', 'not-command-gate']),
+    fingerprint: z.string().optional(),
+  }).optional(),
+  nodeId: z.string(),
+  role: z.string(),
+  type: z.string(),
+  requiresHumanApproval: z.boolean(),
+  timeoutMs: z.number().optional(),
+});
+
+export const runPlanPhaseSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  parallel: z.boolean(),
+  nodeIds: z.array(z.string()),
+});
+
+export const runPlanSchema = z.object({
+  digestVersion: z.union([z.literal(2), z.literal(3)]),
+  comparisonScope: z.string().optional(),
+  mode: z.enum(['workflow', 'goal']),
+  roleChain: z.array(z.string()),
+  gates: z.array(runPlanGateSchema),
+  requiresUnrestrictedNetwork: z.boolean(),
+  phases: z.array(runPlanPhaseSummarySchema),
+  digest: z.string(),
 });
 
 export const workflowListOutputSchema = z.object({
@@ -645,10 +790,22 @@ export const progressListOutputSchema = z.object({
   progressFiles: z.array(progressFileSchema),
 });
 
-// Phase 3 3a: session read-path. A session entry mirrors the core Session
-// metadata plus the run_id column (the frozen Session schema has no runId).
+export const sessionActionKindSchema = z.enum([
+  'approval',
+  'input',
+  'failed',
+]);
+
+export type SessionActionKind = z.infer<typeof sessionActionKindSchema>;
+
+// Phase 3 3a / Phase 4 P1-04: session read-path. A session entry mirrors the
+// core Session metadata plus the run_id column, lastActivityAt, and derived
+// needsAction / actionKind projection fields.
 // Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
 export const apiSessionSchema = z.object({
+  executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
+  admissionState: z.enum(['accepted', 'recovery-required']).optional(),
+  filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
   id: z.string(),
   workspaceId: z.string(),
   title: z.string().nullable(),
@@ -657,6 +814,10 @@ export const apiSessionSchema = z.object({
   runId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  lastActivityAt: z.string(),
+  needsAction: z.boolean(),
+  actionKind: sessionActionKindSchema.nullable(),
+  acknowledgedAt: z.string().nullable().optional(),
 });
 
 // session.list takes no client input: the server resolves the current
@@ -675,6 +836,35 @@ export const sessionGetOutputSchema = z.object({
   session: apiSessionSchema,
 });
 
+export const sessionAcknowledgeInputSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export const sessionAcknowledgeOutputSchema = z.object({
+  acknowledgedAt: z.string().nullable(),
+});
+
+export const sessionPresentedEventSchema = z.object({
+  seq: z.number(),
+  type: z.string(),
+  timestamp: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  visibility: eventVisibilitySchema,
+  modelVisible: z.boolean(),
+  correlationId: z.string().nullable(),
+});
+
+export const sessionEventsOutputSchema = z.object({
+  events: z.array(sessionPresentedEventSchema),
+  hasMore: z.boolean(),
+  latestSeq: z.number(),
+  // Backward-cursor continuation: the smallest raw seq the server examined
+  // (next request uses beforeSeq = this value). Null only for a backward
+  // request when no older raw rows remain — the client's sole "reached the
+  // start" signal. Absent for forward (sinceSeq) requests.
+  nextBeforeSeq: z.number().int().nonnegative().nullable().optional(),
+});
+
 // ---------------------------------------------------------------------------
 // Procedure specs — the single source of truth for every RPC endpoint
 // ---------------------------------------------------------------------------
@@ -690,6 +880,16 @@ export const procedureSpecs = {
     input: z.undefined(),
     output: projectOverviewOutputSchema,
   },
+  'project.health': {
+    auth: 'none' as const,
+    input: projectHealthInputSchema,
+    output: projectHealthOutputSchema,
+  },
+  'project.providerHealth': {
+    auth: 'token' as const,
+    input: projectProviderHealthInputSchema,
+    output: projectProviderHealthOutputSchema,
+  },
   'project.detail': {
     auth: 'none' as const,
     input: projectDetailInputSchema,
@@ -703,7 +903,17 @@ export const procedureSpecs = {
   'project.run': {
     auth: 'token' as const,
     input: projectRunInputSchema,
-    output: runWrapperOutputSchema,
+    output: projectRunOutputSchema,
+  },
+  'project.admission': {
+    auth: 'token' as const,
+    input: projectAdmissionInputSchema,
+    output: projectAdmissionOutputSchema,
+  },
+  'project.admissionIntent': {
+    auth: 'token' as const,
+    input: projectAdmissionIntentInputSchema,
+    output: projectAdmissionIntentOutputSchema,
   },
   'project.resume': {
     auth: 'token' as const,
@@ -816,6 +1026,11 @@ export const procedureSpecs = {
     input: z.undefined(),
     output: workflowListOutputSchema,
   },
+  'workflow.plan': {
+    auth: 'none' as const,
+    input: workflowPlanInputSchema,
+    output: runPlanSchema,
+  },
 
   'progress.list': {
     auth: 'session' as const,
@@ -834,6 +1049,16 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: sessionGetInputSchema,
     output: sessionGetOutputSchema,
+  },
+  'session.acknowledge': {
+    auth: 'session' as const,
+    input: sessionAcknowledgeInputSchema,
+    output: sessionAcknowledgeOutputSchema,
+  },
+  'session.events': {
+    auth: 'session' as const,
+    input: sessionEventsInputSchema,
+    output: sessionEventsOutputSchema,
   },
 } as const;
 

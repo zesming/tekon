@@ -629,7 +629,6 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       ],
       ['constraints', 'show', '--repo', repoPath],
       ['log', '--run-id', gatedRunId!, '--repo', repoPath],
-      ['clean', '--repo', repoPath],
     ]) {
       await expect(runCli(argv, io)).resolves.toBe(0);
       expect(io.takeStdout().length).toBeGreaterThan(0);
@@ -1001,14 +1000,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
 
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
     io.takeStdout();
-    writeFileSync(
-      join(repoPath, 'package.json'),
-      readFileSync(join(repoPath, 'package.json'), 'utf8').replace(
-        '"name":',
-        '"description": "dirty fixture",\n  "name":',
-      ),
-      'utf8',
-    );
+    const pkgPath = join(repoPath, 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
+      description: string;
+    };
+    pkg.description = 'dirty fixture';
+    writeFileSync(pkgPath, JSON.stringify(pkg), 'utf8');
 
     await expect(
       runCli(
@@ -1630,28 +1627,29 @@ process.stdin.on('end', () => {
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-unit-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
   execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
-  execFileSync('npm', ['init', '-y'], { cwd: repoPath });
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.build=node -e "process.exit(0)"'],
-    { cwd: repoPath },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.lint=node -e "process.exit(0)"'],
-    { cwd: repoPath },
-  );
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'],
-    { cwd: repoPath },
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      scripts: {
+        build: 'node -e "process.exit(0)"',
+        lint: 'node -e "process.exit(0)"',
+        test: 'node -e "process.exit(0)"',
+      },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });

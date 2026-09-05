@@ -1,17 +1,23 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet, useParams } from 'react-router';
 
 import { useQuery, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { routes } from '../lib/route-paths.js';
 import { queryKeys } from '../lib/query-keys.js';
-import type {
-  ApiWorkReviewSurface,
-} from '../../shared/api-types.js';
+import type { ApiWorkReviewSurface } from '../../shared/api-types.js';
 
 import { StatusBadge } from '../components/ui/StatusBadge.js';
 import { LoadingState } from '../components/ui/LoadingState.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { RunControls } from '../components/runs/RunControls.js';
+import { ExecutionBindingNotice } from '../components/runs/ExecutionBindingNotice.js';
+import {
+  AdmissionReadinessBanner,
+  admissionNeedsRecovery,
+  admissionReadinessLabel,
+  knownAdmissionLabel,
+} from '../components/runs/AdmissionNotice.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +68,12 @@ export function RunDetailPage() {
     runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
+  const admissionPending = admissionNeedsRecovery(reviewQuery.data);
+  useEffect(() => {
+    if (!admissionPending) return;
+    const timer = window.setInterval(reviewQuery.refetch, 5_000);
+    return () => window.clearInterval(timer);
+  }, [admissionPending, reviewQuery.refetch]);
 
   // ── Loading state ──
   if (reviewQuery.isLoading) {
@@ -90,6 +102,7 @@ export function RunDetailPage() {
           error={reviewQuery.error ?? new Error('Run not found')}
           onRetry={reviewQuery.refetch}
         />
+        {knownAdmissionLabel(reviewQuery.data) ? <p role="status">{knownAdmissionLabel(reviewQuery.data)} · 当前状态刷新失败，暂不提供运行控制。</p> : null}
       </>
     );
   }
@@ -107,9 +120,15 @@ export function RunDetailPage() {
   const totalGates = surface.gates.length;
   const passedGates = surface.gates.filter((g) => g.status === 'passed').length;
   const failedGates = surface.gates.filter((g) => g.status === 'failed').length;
-  const skippedGates = surface.gates.filter((g) => g.status === 'skipped').length;
-  const blockedGates = surface.gates.filter((g) => g.status === 'blocked').length;
-  const pendingGates = surface.gates.filter((g) => g.status === 'pending').length;
+  const skippedGates = surface.gates.filter(
+    (g) => g.status === 'skipped',
+  ).length;
+  const blockedGates = surface.gates.filter(
+    (g) => g.status === 'blocked',
+  ).length;
+  const pendingGates = surface.gates.filter(
+    (g) => g.status === 'pending',
+  ).length;
 
   // Find the earliest gate timestamp as a proxy for run start
   const earliestGate = surface.gates.reduce<string | null>((earliest, g) => {
@@ -124,9 +143,15 @@ export function RunDetailPage() {
   }, null);
 
   const isFinished =
-    status === 'passed' || status === 'failed' || status === 'cancelled' || status === 'interrupted';
+    status === 'passed' ||
+    status === 'failed' ||
+    status === 'cancelled' ||
+    status === 'interrupted';
   const duration = earliestGate
-    ? formatDuration(earliestGate, isFinished ? latestGate ?? undefined : undefined)
+    ? formatDuration(
+        earliestGate,
+        isFinished ? (latestGate ?? undefined) : undefined,
+      )
     : '—';
 
   const dateDisplay = earliestGate ? formatDateTime(earliestGate) : '—';
@@ -146,61 +171,75 @@ export function RunDetailPage() {
           <div className="run-header-id">{runId}</div>
           <div className="run-header-demand">{demandTitle}</div>
           <div className="run-header-meta">
-            <StatusBadge status={status} />
+            {admissionPending ? (
+              <span className="badge badge-pending">
+                {admissionReadinessLabel(surface)}
+              </span>
+            ) : (
+              <StatusBadge status={status} />
+            )}
             <span>📋 {surface.demand.id || '—'}</span>
             <span>🤖 {deriveAgent(surface)}</span>
-            <span>⏱ {duration}</span>
+            <span>⏱ {admissionPending ? '尚未执行' : duration}</span>
             <span>📅 {dateDisplay}</span>
           </div>
         </div>
         <div className="run-header-actions">
-          <RunControls runId={runId!} status={status} />
+          {!admissionPending ? (
+            <RunControls runId={runId!} status={status} />
+          ) : null}
         </div>
       </div>
+      <AdmissionReadinessBanner value={surface} />
+      <ExecutionBindingNotice value={surface.executionBinding} />
 
-      {/* ── Tab Navigation ── */}
-      <div className="tabs">
-        <NavLink
-          to="."
-          end
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Overview
-        </NavLink>
-        <NavLink
-          to="artifacts"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Artifacts
-        </NavLink>
-        <NavLink
-          to="gates"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Gates
-        </NavLink>
-        <NavLink
-          to="audit"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Audit
-        </NavLink>
-        <NavLink
-          to="delivery"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Delivery
-        </NavLink>
-        <NavLink
-          to="progress"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Progress
-        </NavLink>
-      </div>
+      {!admissionPending ? (
+        <>
+          {/* ── Tab Navigation ── */}
+          <div className="tabs">
+            <NavLink
+              to="."
+              end
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Overview
+            </NavLink>
+            <NavLink
+              to="artifacts"
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Artifacts
+            </NavLink>
+            <NavLink
+              to="gates"
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Gates
+            </NavLink>
+            <NavLink
+              to="audit"
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Audit
+            </NavLink>
+            <NavLink
+              to="delivery"
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Delivery
+            </NavLink>
+            <NavLink
+              to="progress"
+              className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
+            >
+              Progress
+            </NavLink>
+          </div>
 
-      {/* ── Tab Content ── */}
-      <Outlet />
+          {/* ── Tab Content ── */}
+          <Outlet />
+        </>
+      ) : null}
     </>
   );
 }

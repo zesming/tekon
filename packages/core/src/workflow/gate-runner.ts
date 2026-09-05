@@ -310,6 +310,21 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
           });
           return false;
         }
+        const repairNodeId = `repair_${result.id}`;
+        await audit.append({
+          runId,
+          type: 'gate.repair.intent',
+          payload: {
+            sourceNodeId: node.id,
+            repairNodeId,
+            gateResultId: result.id,
+            gateType: gate.type,
+            gateKey: gate.gateKey,
+            fixerRole: node.role,
+            attempt: retryAttempt,
+            maxAttempts: gate.maxRetries,
+          },
+        });
         await repositories.transitionNode(node.id, 'needs-revision');
         await leaseService.finalizeExecutionLease(runId, node.id);
         const repairNode = await gateEngine.createAutoFixRepairNode({
@@ -453,9 +468,12 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             type: 'gate.rework.attempt',
             payload: {
               nodeId: node.id,
+              reviewNodeId: node.id,
               targetNodeId,
+              reworkNodeId: `${targetNodeId}_rework_${reworkAttempt}`,
               attempt: reworkAttempt,
               maxAttempts: maxReworkAttempts,
+              gateResultId: result.id,
             },
           });
 

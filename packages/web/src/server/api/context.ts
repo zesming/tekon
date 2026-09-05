@@ -12,9 +12,15 @@ import type {
   TekonDatabase,
   TekonRepositories,
   WorkReviewSurface,
+  RunPlan,
+  RunPlanPreview,
+  RunPlanPreviewSigner,
+  ExecutionBinding,
+  PresentedEvent,
 } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
+import { webProjectScope, type WebProjectScope } from './queries.js';
 
 /**
  * Per-request knobs for the web run-engine factory (4a). The factory is
@@ -24,10 +30,15 @@ import type { WebProjectContext } from '../project-context.js';
  */
 export interface WebRunEngineInput {
   agent: string;
+  profile?: string;
   allowDirtyBase: boolean;
   timeoutMs?: number;
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
+  acknowledgeUnrestrictedNetwork?: boolean;
+  planDigest?: string;
+  canonicalPlan?: RunPlan;
+  planSnapshot?: string;
 }
 
 /**
@@ -36,10 +47,14 @@ export interface WebRunEngineInput {
  * provider snapshot was recorded for the run.
  */
 export type WorkReviewSurfaceOutput = WorkReviewSurface & {
+  executionBinding?: ExecutionBinding;
+  admissionState?: 'accepted' | 'recovery-required';
+  filesState?: 'pending' | 'ready' | 'recovery_required';
   provider: string | null;
 };
 
 export interface ServerContext {
+  planPreviewSigner: RunPlanPreviewSigner;
   db: TekonDatabase;
   /** Dual-write wrapped repositories (S7a): engine/routers get dual-write for free. */
   repositories: TekonRepositories;
@@ -64,12 +79,40 @@ export interface TokenRunInput {
 export interface ProjectRunInput {
   demandText: string;
   token: string;
+  requestId?: string;
   mode?: 'workflow' | 'goal';
   profile?: 'human-web' | 'autonomous-delivery';
   template?: string;
   agent?: string;
   allowDirtyBase?: boolean;
   demandShapePath?: string;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
+  acknowledgeUnrestrictedNetwork?: boolean;
+  planDigest?: string;
+}
+
+export type ProjectRunIntent = Omit<ProjectRunInput, 'token' | 'requestId'>;
+
+export type ProjectAdmissionOutput =
+  | { state: 'not-found'; requestId: string }
+  | {
+      state: 'accepted' | 'recovery-required';
+      requestId: string;
+      runId: string;
+      sessionId?: string;
+      jobId?: string;
+      filesState: 'pending' | 'ready' | 'recovery_required';
+      detail?: string;
+    };
+
+export interface WorkflowPlanInput {
+  template?: string;
+  mode?: 'workflow' | 'goal';
+  agent?: string;
+  profile?: 'human-web' | 'autonomous-delivery';
+  allowDirtyBase?: boolean;
   timeoutMs?: number;
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
@@ -134,6 +177,7 @@ export interface ProjectOutput {
 }
 
 export interface WorkflowOutput {
+  executionBinding?: ExecutionBinding;
   id: string;
   projectId: string;
   demandId: string;
@@ -143,6 +187,8 @@ export interface WorkflowOutput {
   currentNodeId: string | null;
   createdAt: string;
   updatedAt: string;
+  admissionState?: 'accepted' | 'recovery-required';
+  filesState?: 'pending' | 'ready' | 'recovery_required';
 }
 
 export interface ArtifactOutput {
@@ -214,6 +260,7 @@ export interface HumanDecisionOutput {
 }
 
 export interface ApiCaller {
+  [webProjectScope]: WebProjectScope;
   draftShape: {
     detail(input: DraftShapeDetailInput): Promise<{
       shape: DraftShape;
@@ -265,6 +312,16 @@ export interface ApiCaller {
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
+      requestId: string;
+      replayed: boolean;
+      admissionState: 'accepted' | 'recovery-required';
+      detail?: string;
+    }>;
+    admission(input: { token: string; requestId: string }): Promise<ProjectAdmissionOutput>;
+    admissionIntent(input: { token: string; run?: ProjectRunIntent }): Promise<{
+      scope: string;
+      fingerprint?: string;
+      requestId?: string;
     }>;
     resume(input: TokenRunInput): Promise<{
       run: WorkflowOutput;
@@ -277,6 +334,22 @@ export interface ApiCaller {
       jobId?: string;
     }>;
     clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
+    health(input?: { token?: string }): Promise<{
+      credential: 'not-configured' | 'valid' | 'invalid';
+      checkedAt: string;
+      detail?: string;
+      dshHeadless?: 'available' | 'unavailable';
+    }>;
+    providerHealth(input: {
+      token: string;
+      provider: 'dsh-headless';
+      refresh?: boolean;
+    }): Promise<{
+      provider: 'dsh-headless';
+      status: 'available' | 'unavailable';
+      checkedAt: string;
+      expiresAt: string;
+    }>;
   };
   delivery: {
     prepare(input: TokenRunInput): Promise<{
@@ -323,25 +396,19 @@ export interface ApiCaller {
     }>;
   };
   artifact: {
-    list(input: {
-      runId: string;
-    }): Promise<{ artifacts: ArtifactOutput[] }>;
+    list(input: { runId: string }): Promise<{ artifacts: ArtifactOutput[] }>;
   };
   gate: {
     list(input: { runId: string }): Promise<{
       gates: GateOutput[];
       pendingDecisions: HumanDecisionOutput[];
     }>;
-    approve(
-      input: DecisionInput,
-    ): Promise<{
+    approve(input: DecisionInput): Promise<{
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;
     }>;
-    reject(
-      input: DecisionInput,
-    ): Promise<{ decision: HumanDecisionOutput }>;
+    reject(input: DecisionInput): Promise<{ decision: HumanDecisionOutput }>;
   };
   audit: {
     list(input: {
@@ -367,8 +434,14 @@ export interface ApiCaller {
   };
   workflow: {
     list(): Promise<{
-      workflows: Array<{ id: string; name: string; path: string }>;
+      workflows: Array<{
+        id: string;
+        name: string;
+        path?: string;
+        builtin?: boolean;
+      }>;
     }>;
+    plan(input: WorkflowPlanInput): Promise<RunPlanPreview>;
   };
   progress: {
     list(input: { runId: string }): Promise<{
@@ -399,6 +472,8 @@ export interface ApiCaller {
     list(): Promise<{
       workspaceId: string;
       sessions: Array<{
+        admissionState?: 'accepted' | 'recovery-required';
+        filesState?: 'pending' | 'ready' | 'recovery_required';
         id: string;
         workspaceId: string;
         title: string | null;
@@ -407,10 +482,16 @@ export interface ApiCaller {
         runId: string | null;
         createdAt: string;
         updatedAt: string;
+        lastActivityAt: string;
+        needsAction: boolean;
+        actionKind: string | null;
+        acknowledgedAt?: string | null;
       }>;
     }>;
     get(input: { sessionId: string }): Promise<{
       session: {
+        admissionState?: 'accepted' | 'recovery-required';
+        filesState?: 'pending' | 'ready' | 'recovery_required';
         id: string;
         workspaceId: string;
         title: string | null;
@@ -419,7 +500,25 @@ export interface ApiCaller {
         runId: string | null;
         createdAt: string;
         updatedAt: string;
+        lastActivityAt: string;
+        needsAction: boolean;
+        actionKind: string | null;
+        acknowledgedAt?: string | null;
       };
+    }>;
+    acknowledge(input: { sessionId: string }): Promise<{
+      acknowledgedAt: string | null;
+    }>;
+    events(input: {
+      sessionId: string;
+      sinceSeq?: number;
+      beforeSeq?: number;
+      limit?: number;
+    }): Promise<{
+      events: PresentedEvent[];
+      hasMore: boolean;
+      latestSeq: number;
+      nextBeforeSeq?: number | null;
     }>;
   };
   /**

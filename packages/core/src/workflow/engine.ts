@@ -1,29 +1,35 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { realpathSync } from 'node:fs';
 
 import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import {
+  hashAdmissionEnvelope,
+  isValidRequestId,
+  type PreparedAdmissionData,
+  type RunAdmissionRow,
+} from '../db/admission-store.js';
 import { createGateEngine, type GateEngine } from '../gate/engine.js';
 import type { AgentAdapter, AgentRunResult } from '../runtime/agent-adapter.js';
 import type { AgentEventSink } from '../runtime/agent-step-events.js';
 import { createCommandGateway } from '../runtime/command-gateway.js';
 import type { SubprocessRegistry } from '../session/subprocess-registry.js';
-import { isJobOwnershipLostAbort } from '../session/job-runner.js';
+import {
+  isJobOwnershipLostAbort,
+  isJobShutdownAbort,
+} from '../session/job-runner.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import type { WorkflowInstance } from '../types/domain.js';
 import { WorkflowTerminalError } from './errors.js';
+import { RunAdmissionError } from './admission-error.js';
 import {
   assertWorkflowTransition,
   isTerminalWorkflowStatus,
   writeWorkflowTerminal,
 } from './state-machine.js';
-import {
-  loadWorkflowTemplate,
-  type WorkflowTemplate,
-} from './template.js';
+import { loadWorkflowTemplate, type WorkflowTemplate } from './template.js';
 
 // Sub-modules
 import { createLeaseService } from './lease-service.js';
@@ -33,10 +39,12 @@ import { createReworkHandler } from './rework.js';
 import { createGateRunner } from './gate-runner.js';
 import { createNodeExecutor } from './node-executor.js';
 import {
-  templateToPlan,
-  persistPlan,
-  planFromRepository,
+  runPlanToExecutionPlan,
+  buildPreparedRun as buildRunPlan,
+  validateAndBuildExecutionPlan,
 } from './execution-plan.js';
+import type { RunPlan } from './run-plan.js';
+import { captureRepoCommands } from './repo-command-binding.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
 export type { ExecutableNode, ExecutionPlan } from './workflow-runtime.js';
@@ -59,6 +67,8 @@ export { assertSuccessfulAgentRun } from './helpers.js';
 
 export interface WorkflowEngineStartInput {
   demandText: string;
+  requestId?: string;
+  profile?: string;
   mode: 'template' | 'dynamic';
   templateName?: string;
   workflowSpec?: WorkflowTemplate;
@@ -69,6 +79,9 @@ export interface WorkflowEngineStartInput {
    * events carry the right kind.
    */
   kind?: 'workflow' | 'goal';
+  planSnapshot?: string;
+  planDigest?: string;
+  canonicalPlan?: RunPlan;
 }
 
 export interface WorkflowEngineResult {
@@ -77,12 +90,20 @@ export interface WorkflowEngineResult {
 }
 
 export interface WorkflowEngine {
+  /** Pure validated descriptor; only the admission transaction persists it. */
+  buildPreparedRun(input: WorkflowEngineStartInput): PreparedAdmissionData;
   prepareRun(
     input: WorkflowEngineStartInput,
-  ): Promise<{ runId: string; workflow: WorkflowInstance }>;
+  ): Promise<WorkflowEnginePreparedResult>;
   executePreparedRun(runId: string): Promise<WorkflowInstance>;
-  startRun(input: WorkflowEngineStartInput): Promise<WorkflowEngineResult>;
+  startRun(input: WorkflowEngineStartInput): Promise<WorkflowEnginePreparedResult>;
   resumeRun(runId: string): Promise<WorkflowEngineResult>;
+}
+
+export interface WorkflowEnginePreparedResult extends WorkflowEngineResult {
+  requestId: string;
+  replayed: boolean;
+  filesState: RunAdmissionRow['filesState'];
 }
 
 export interface CreateWorkflowEngineOptions {
@@ -97,6 +118,10 @@ export interface CreateWorkflowEngineOptions {
   allowDirtyBase?: boolean;
   agentProvider?: AgentRunResult['provider'];
   agentConfigSummary?: Record<string, unknown>;
+  profile?: string;
+  timeoutMs?: number;
+  noProgressTimeoutMs?: number;
+  progressHeartbeatMs?: number;
   builtInRolesDir?: string;
   userHome?: string;
   /**
@@ -131,6 +156,9 @@ export interface CreateWorkflowEngineOptions {
    * — C1 governance zero-regression.
    */
   agentEventSink?: AgentEventSink;
+  planSnapshot?: string;
+  planDigest?: string;
+  canonicalPlan?: RunPlan;
 }
 
 export function createWorkflowEngine(
@@ -240,13 +268,22 @@ export function createWorkflowEngine(
   });
 
   return {
+    buildPreparedRun: buildAdmissionData,
     prepareRun,
     executePreparedRun,
 
     async startRun(input) {
-      const { runId } = await prepareRun(input);
-      const workflow = await executePreparedRun(runId);
-      return { runId, workflow };
+      const prepared = await prepareRun(input);
+      // 只有新事务赢家可自动执行；重放只观察原运行，不能成为隐式resume。
+      if (prepared.replayed || prepared.filesState !== 'ready') return prepared;
+      try {
+        const workflow = await executePreparedRun(prepared.runId);
+        return { ...prepared, workflow };
+      } catch (error) {
+        throw new RunAdmissionError(prepared.requestId, error, {
+          runId: prepared.runId, sessionId: null, jobId: null, filesState: prepared.filesState,
+        });
+      }
     },
 
     async resumeRun(runId) {
@@ -261,6 +298,9 @@ export function createWorkflowEngine(
         // returning an error object cast to WorkflowEngineResult.
         throw new WorkflowTerminalError(runId, existing.status);
       }
+
+      await assertAdmissionReady(runId);
+      const plan = await validateAndBuildExecutionPlan(runId, options.repositories, options.audit);
 
       // MUST-FIX1: CAS second line of defense — the pre-check above is a
       // bare read; a concurrent cancel/terminal write can land between the
@@ -290,86 +330,169 @@ export function createWorkflowEngine(
         payload: { kind: existing.kind },
       });
 
-      const plan = await planFromRepository(runId, options.repositories);
       const workflow = await executePlan(runId, plan);
       return { runId, workflow };
     },
   };
 
-  /**
-   * prepareRun (S5): persist the run (demand/project/instance/plan) and emit
-   * the `run.started` audit event without invoking the adapter. Returns the
-   * freshly created instance (status `running`).
-   */
-  async function prepareRun(
-    input: WorkflowEngineStartInput,
-  ): Promise<{ runId: string; workflow: WorkflowInstance }> {
-    const template =
-      input.workflowSpec ??
-      loadWorkflowTemplate({
-        name: input.templateName ?? 'standard-delivery',
-      });
-    const runId = `run_${randomUUID()}`;
-    const projectId = `project_${randomUUID()}`;
-    const demandId = `demand_${randomUUID()}`;
-    const now = new Date().toISOString();
-
-    mkdirSync(join(options.repoPath, options.dataDir, 'runs', runId), {
-      recursive: true,
-    });
-    await options.repositories.createDemand({
-      id: demandId,
-      title: input.demandText.slice(0, 80),
-      body: input.demandText,
-      source: input.mode,
-      createdAt: now,
-    });
-    await options.repositories.createProject({
-      id: projectId,
-      name: 'tekon',
+  // Capture serializable execution settings before crossing an async boundary.
+  // Runtime handles (adapter, repositories, bus, signals) are intentionally not
+  // submission data; explicit executable/config/base/plan options are.
+  function executionSettings() {
+    return structuredClone({
       repoPath: options.repoPath,
-      createdAt: now,
+      dataDir: options.dataDir,
+      baseRef: options.baseRef,
+      allowDirtyBase: options.allowDirtyBase,
+      agentProvider: options.agentProvider,
+      agentConfigSummary: options.agentConfigSummary,
+      builtInRolesDir: options.builtInRolesDir,
+      userHome: options.userHome,
+      profile: options.profile,
+      timeoutMs: options.timeoutMs,
+      noProgressTimeoutMs: options.noProgressTimeoutMs,
+      progressHeartbeatMs: options.progressHeartbeatMs,
+      canonicalPlan: options.canonicalPlan,
+      planDigest: options.planDigest,
+      planSnapshot: options.planSnapshot,
     });
-    await options.repositories.createWorkflowInstance({
-      id: runId,
-      projectId,
-      demandId,
-      status: 'running',
-      kind: input.kind ?? 'workflow',
-      // 4c: persist the lease policy on the run so the async job executor
-      // rebuilds its engine with the same allow-dirty-base the run was
-      // started with (the executor builds a fresh engine from the provider
-      // snapshot and cannot otherwise recover this flag).
-      allowDirtyBase: options.allowDirtyBase ?? false,
-      createdAt: now,
-      updatedAt: now,
-    });
-    if (options.agentProvider) {
-      await options.repositories.recordRunProviderConfig({
-        runId,
-        provider: options.agentProvider,
-        configSummary: options.agentConfigSummary ?? {},
-        createdAt: now,
-      });
-    }
+  }
 
-    const plan = templateToPlan(template, runId);
-    await persistPlan(runId, plan, options.repositories);
-    await options.audit.append({
+  function requestIdentity(
+    input: WorkflowEngineStartInput,
+    settings: ReturnType<typeof executionSettings>,
+  ) {
+    const requestId = input.requestId ?? randomUUID();
+    if (!isValidRequestId(requestId)) throw new Error('REQUEST_ID_INVALID');
+    const { requestId: _requestId, ...intent } = input;
+    return {
+      requestId,
+      envelopeHash: hashAdmissionEnvelope({
+        version: 1,
+        scope: realpathSync(settings.repoPath),
+        demandTextOrRef: input.demandText,
+        mode: input.kind ?? 'workflow',
+        surface: 'core',
+        intent,
+        execution: settings,
+      }),
+    };
+  }
+
+  function buildAdmissionData(
+    rawInput: WorkflowEngineStartInput,
+    settings = executionSettings(),
+  ): PreparedAdmissionData {
+    const input = structuredClone(rawInput);
+    const identity = requestIdentity(input, settings);
+    const workflowSpec = input.workflowSpec ?? loadWorkflowTemplate({
+      name: input.templateName ?? (input.kind === 'goal' ? 'goal' : 'standard-delivery'),
+    });
+    const repoCommands = captureRepoCommands(settings.repoPath, workflowSpec);
+    const prepared = buildRunPlan({ ...input, workflowSpec }, { ...settings, profile: input.profile ?? settings.profile, repoCommands });
+    const runId = `run_${randomUUID()}`;
+    const execution = runPlanToExecutionPlan(prepared.canonicalPlan, runId);
+    return {
+      ...identity,
+      envelopeVersion: 1,
       runId,
-      type: 'run.started',
-      payload: {
-        templateId: template.id,
-        mode: input.mode,
-        kind: input.kind ?? 'workflow',
-      },
-    });
+      projectId: `project_${randomUUID()}`,
+      projectName: 'tekon',
+      repoPath: realpathSync(settings.repoPath),
+      dataDir: settings.dataDir,
+      demandId: `demand_${randomUUID()}`,
+      demandTitle: input.demandText.slice(0, 80),
+      demandBody: input.demandText,
+      demandSource: input.mode,
+      workflowKind: prepared.kind,
+      allowDirtyBase: settings.allowDirtyBase ?? false,
+      planSnapshot: prepared.planSnapshot,
+      planDigest: prepared.planDigest,
+      ...(settings.agentProvider ? { providerSnapshot: {
+        provider: settings.agentProvider,
+        configSummary: settings.agentConfigSummary ?? {},
+      } } : {}),
+      phases: execution.phases.map((phase, phaseIndex) => ({
+        id: phase.id,
+        name: phase.name,
+        order: phaseIndex,
+        nodes: phase.nodes.map((node, nodeIndex) => ({
+          id: node.id,
+          role: node.role,
+          order: nodeIndex,
+          inputs: node.inputs,
+          outputs: node.outputs,
+          gates: node.gates,
+          dependencies: node.dependsOn,
+        })),
+      })),
+      templateId: prepared.template.id,
+    };
+  }
 
-    return { runId, workflow: await helpers.mustGetWorkflow(runId) };
+  async function prepareRun(
+    rawInput: WorkflowEngineStartInput,
+  ): Promise<WorkflowEnginePreparedResult> {
+    const requestId = rawInput.requestId ?? randomUUID();
+    if (!isValidRequestId(requestId)) throw new Error('REQUEST_ID_INVALID');
+    const store = options.repositories.admissionStore;
+    let envelopeHash: string | undefined;
+    let knownAdmission: RunAdmissionRow | undefined;
+    async function lookup(): Promise<WorkflowEnginePreparedResult | null> {
+      const existing = await store.getAdmission(requestId);
+      if (!existing) return null;
+      if (existing.envelopeHash !== envelopeHash) throw new Error('REQUEST_ID_CONFLICT');
+      knownAdmission = existing;
+      const admission = existing.filesState === 'ready'
+        ? existing : await store.recoverAdmissionFiles(existing.requestId);
+      knownAdmission = admission;
+      return {
+        requestId: admission.requestId,
+        runId: admission.runId,
+        workflow: await helpers.mustGetWorkflow(admission.runId),
+        replayed: true,
+        filesState: admission.filesState,
+      };
+    }
+    try {
+      const input = structuredClone({ ...rawInput, requestId });
+      const settings = executionSettings();
+      envelopeHash = requestIdentity(input, settings).envelopeHash;
+      const existing = await lookup();
+      if (existing) return existing;
+      const outcome = await store.admitRun(buildAdmissionData(input, settings));
+      return {
+        requestId: outcome.requestId,
+        runId: outcome.runId,
+        workflow: outcome.workflow,
+        replayed: outcome.outcome === 'already_admitted',
+        filesState: outcome.filesState,
+      };
+    } catch (error) {
+      if (envelopeHash !== undefined) {
+        try {
+          const winner = await lookup();
+          if (winner) return winner;
+        } catch (lookupError) {
+          if (lookupError instanceof Error && lookupError.message === 'REQUEST_ID_CONFLICT') {
+            throw new RunAdmissionError(requestId, lookupError);
+          }
+        }
+      }
+      throw new RunAdmissionError(requestId, error, knownAdmission);
+    }
+  }
+
+  async function assertAdmissionReady(runId: string): Promise<void> {
+    const admission = await options.repositories.admissionStore?.getAdmissionByRunId(runId);
+    if (admission && admission.filesState !== 'ready') {
+      throw new Error(`ADMISSION_RECOVERY_REQUIRED: requestId=${admission.requestId} runId=${runId}`);
+    }
   }
 
   async function executePreparedRun(runId: string): Promise<WorkflowInstance> {
-    const plan = await planFromRepository(runId, options.repositories);
+    await assertAdmissionReady(runId);
+    const plan = await validateAndBuildExecutionPlan(runId, options.repositories, options.audit);
     return executePlan(runId, plan);
   }
 
@@ -416,6 +539,14 @@ export function createWorkflowEngine(
           if (isJobOwnershipLostAbort(options.signal)) {
             return helpers.mustGetWorkflow(runId);
           }
+          if (isJobShutdownAbort(options.signal)) {
+            await options.repositories.updateWorkflowInstanceStatusIfActive(
+              runId,
+              'interrupted',
+              node.id,
+            );
+            return helpers.mustGetWorkflow(runId);
+          }
           await settleCancelled(runId, node.id);
           return helpers.mustGetWorkflow(runId);
         }
@@ -459,6 +590,14 @@ export function createWorkflowEngine(
     // only a genuine cancel settles `cancelled`.
     if (options.signal?.aborted) {
       if (isJobOwnershipLostAbort(options.signal)) {
+        return helpers.mustGetWorkflow(runId);
+      }
+      if (isJobShutdownAbort(options.signal)) {
+        await options.repositories.updateWorkflowInstanceStatusIfActive(
+          runId,
+          'interrupted',
+          null,
+        );
         return helpers.mustGetWorkflow(runId);
       }
       await settleCancelled(runId, null);

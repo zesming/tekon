@@ -40,12 +40,21 @@ export interface JobUpdateCondition {
 }
 
 /**
- * A session as surfaced to the Session List read-path (phase 3 3a). The frozen
- * `Session` schema has no runId (session-contract.ts), so the list entry
- * extends it with the run_id column value — carried through, not persisted
- * separately. Used by the web `session.list` RPC.
+ * A session as surfaced to the Session List read-path (phase 3 3a / phase 4 P1-04).
+ * The frozen `Session` schema has no runId (session-contract.ts), so the list
+ * entry extends it with the run_id column value and aggregated lastActivityAt
+ * timestamp — carried through, not persisted separately on the session table.
+ * Used by the web `session.list` RPC.
  */
-export type SessionListEntry = Session & { runId: string | null };
+export type SessionListEntry = Session & {
+  runId: string | null;
+  lastActivityAt: string;
+  /**
+   * P1-UX-02: human-attention state. NULL until a human acknowledges/archives
+   * the session; a failed session stays pinned (needsAction) while this is null.
+   */
+  acknowledgedAt: string | null;
+};
 
 export interface SessionEventStore {
   getOrCreateDefaultWorkspace(root: string): Promise<Workspace>;
@@ -58,9 +67,10 @@ export interface SessionEventStore {
   getSession(sessionId: string): Promise<Session | null>;
   findSessionByRunId(runId: string): Promise<Session | null>;
   /**
-   * List a workspace's sessions newest-first (created_at desc) for the Session
-   * List UI. Pure SELECT, zero migration; returns [] for an unknown workspace.
-   * Carries run_id from the column (SessionListEntry).
+   * List a workspace's sessions ordered by last activity desc (most recent
+   * event timestamp, falling back to created_at) for the Session List UI. Pure
+   * SELECT, zero migration; returns [] for an unknown workspace. Carries run_id
+   * and lastActivityAt from the query (SessionListEntry).
    */
   listSessions(workspaceId: string): Promise<SessionListEntry[]>;
   /**
@@ -70,6 +80,13 @@ export interface SessionEventStore {
    */
   getRunIdBySessionId(sessionId: string): Promise<string | null>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
+  /**
+   * P1-UX-02: mark a session as acknowledged/archived by a human. Sets
+   * acknowledged_at to now() (idempotent overwrite). Unknown session ids are a
+   * no-op. The Session List uses this to drop a handled failure out of the
+   * needs-action band. Returns the timestamp written, or null when no row matched.
+   */
+  acknowledgeSession(sessionId: string): Promise<string | null>;
   appendEvent(input: {
     sessionId: string;
     type: string;
@@ -80,7 +97,42 @@ export interface SessionEventStore {
     correlationId?: string | null;
   }): Promise<SessionEvent>;
   listEventsSince(sessionId: string, sinceSeq: number): Promise<SessionEvent[]>;
+  /**
+   * Bounded page read for the long-session tail window (review P1-UX-03):
+   * returns at most `limit` events with seq > sinceSeq in ascending order,
+   * plus hasMore when further rows exist. listEventsSince stays unbounded
+   * for internal contiguous catch-up; callers that need a bounded window
+   * must use this method.
+   */
+  listEventsPage(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
+  /**
+   * Backward cursor page read for "load earlier history" (ninth-review
+   * annotation 16.3): returns at most `limit` RAW events with seq < beforeSeq
+   * in DESCENDING order, plus hasMore when older rows exist. The caller filters
+   * visible events and derives the next cursor. Descending order is what lets
+   * the server return a continuation cursor even when a whole raw page is
+   * filtered out, fixing the old fixed-scan "empty visible page + hasMore but
+   * no cursor" dead end.
+   */
+  listEventsBefore(
+    sessionId: string,
+    beforeSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
   latestSeq(sessionId: string): Promise<number>;
+  /**
+   * Lightweight tail read for session.get's lastActivityAt: returns only the
+   * tail event's timestamp (max seq, sharing listSessions' seq-desc tail
+   * semantics) without deserializing the full event payload. Null when no
+   * matching event rows exist for the given sessionId. (session_events has no
+   * FK on session_id — see P1-DATA-01 — so "no events" is the real contract,
+   * not "session does not exist".)
+   */
+  getLatestEventTimestamp(sessionId: string): Promise<string | null>;
   upsertProjectionCheckpoint(
     sessionId: string,
     name: string,
@@ -171,6 +223,11 @@ type SessionRow = {
   run_id: string | null;
   created_at: string;
   updated_at: string;
+  acknowledged_at: string | null;
+};
+
+type SessionListRow = SessionRow & {
+  last_activity_at: string;
 };
 
 type SessionEventRow = {
@@ -311,16 +368,33 @@ export function createSessionEventStore(
     },
 
     async listSessions(workspaceId) {
+      // P1-PERF-01: 使用相关子查询按 seq desc limit 1 取尾事件的 timestamp，
+      // 避免全量 left join session_events + group by 的 O(全事件) 聚合代价。
+      // 正确性依据：appendEvent 在同一 BEGIN IMMEDIATE 事务内 seq=max(seq)+1 与
+      // timestamp=now() 同序分配，故 max(seq) 的事件恒为最新 timestamp；
+      // 毫秒 tie 时 seq-desc 比 max(timestamp) 更精确。语义与旧查询一致（无事件回退 created_at）。
+      // 依赖墙钟单调：若发生 NTP step-back，高 seq 事件可能拿到更早的墙钟标签，此时
+      // seq-desc 取的是因果/追加序上最近发生的事件，比 max(timestamp) 更贴近"最近活动"。
       const rows = db
         .prepare(
-          // created_at desc, then rowid desc as a stable tiebreak so sessions
-          // created within the same millisecond keep a deterministic
-          // insertion-newest-first order (rowid is monotonic on this rowid
-          // table; `id text primary key` does not remove it).
-          'select * from sessions where workspace_id = ? order by created_at desc, rowid desc',
+          `select s.*,
+             coalesce(
+               (select e.timestamp from session_events e
+                where e.session_id = s.id
+                order by e.seq desc limit 1),
+               s.created_at
+             ) as last_activity_at
+           from sessions s
+           where s.workspace_id = ?
+           order by last_activity_at desc, s.rowid desc`,
         )
-        .all(workspaceId) as SessionRow[];
-      return rows.map((row) => ({ ...mapSession(row), runId: row.run_id }));
+        .all(workspaceId) as SessionListRow[];
+      return rows.map((row) => ({
+        ...mapSession(row),
+        runId: row.run_id,
+        lastActivityAt: row.last_activity_at,
+        acknowledgedAt: row.acknowledged_at ?? null,
+      }));
     },
 
     async getRunIdBySessionId(sessionId) {
@@ -335,6 +409,18 @@ export function createSessionEventStore(
         db.prepare(
           'update sessions set status = ?, updated_at = ? where id = ?',
         ).run(status, now(), sessionId);
+      });
+    },
+
+    async acknowledgeSession(sessionId) {
+      return writeQueue.enqueue(() => {
+        const acknowledgedAt = now();
+        const info = db
+          .prepare(
+            'update sessions set acknowledged_at = ?, updated_at = ? where id = ?',
+          )
+          .run(acknowledgedAt, acknowledgedAt, sessionId);
+        return info.changes > 0 ? acknowledgedAt : null;
       });
     },
 
@@ -399,6 +485,38 @@ export function createSessionEventStore(
       return rows.map(mapSessionEvent);
     },
 
+    async listEventsPage(sessionId, sinceSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq > ?
+           order by seq asc
+           limit ?`,
+        )
+        .all(sessionId, sinceSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
+    },
+
+    async listEventsBefore(sessionId, beforeSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq < ?
+           order by seq desc
+           limit ?`,
+        )
+        .all(sessionId, beforeSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
+    },
+
     async latestSeq(sessionId) {
       const row = db
         .prepare(
@@ -406,6 +524,21 @@ export function createSessionEventStore(
         )
         .get(sessionId) as { max_seq: number };
       return row.max_seq;
+    },
+
+    async getLatestEventTimestamp(sessionId) {
+      // Tail read via the (session_id, seq) index: reverse-scan to the last
+      // row and project only timestamp, avoiding payload deserialization.
+      // Same seq-desc tail semantics as listSessions' correlated subquery.
+      const row = db
+        .prepare(
+          `select timestamp from session_events
+           where session_id = ?
+           order by seq desc
+           limit 1`,
+        )
+        .get(sessionId) as { timestamp: string } | undefined;
+      return row?.timestamp ?? null;
     },
 
     async upsertProjectionCheckpoint(sessionId, name, lastSeq) {
@@ -558,7 +691,8 @@ export function createJobRepository(
                  (status = 'queued' and created_at < @cutoff)
                  or (status = 'paused' and lease is not null and lease < @cutoff)
                )
-               and (@exceptJobId is null or id != @exceptJobId)`,
+               and (@exceptJobId is null or id != @exceptJobId)
+               and session_id not in (select s.id from sessions s join run_admissions a on a.run_id = s.run_id where a.files_state != 'ready')`,
           )
           .run({ now: now(), runId, cutoff, exceptJobId: exceptJobId ?? null });
         return result.changes;
@@ -575,9 +709,12 @@ export function createJobRepository(
         // 错回上一个 job)。
         const target = db
           .prepare(
-            `select id from jobs
-             where status = 'queued'
-             order by created_at asc, id asc
+            `select j.id from jobs j
+             left join sessions s on s.id = j.session_id
+             left join run_admissions a on a.run_id = s.run_id
+             where j.status = 'queued'
+               and (a.files_state is null or a.files_state = 'ready')
+             order by j.created_at asc, j.id asc
              limit 1`,
           )
           .get() as { id: string } | undefined;

@@ -1,6 +1,6 @@
 {
   "name": "@tekon/cli",
-  "version": "0.7.0",
+  "version": "0.23.1",
   "private": true,
   "type": "module",
   "bin": {
@@ -19,7 +19,7 @@
     "build": "tsc -p tsconfig.json && chmod +x dist/index.js",
     "test": "vitest --exclude \"**/*.e2e.test.ts\"",
     "test:unit": "vitest --run --exclude \"**/*.e2e.test.ts\"",
-    "test:e2e": "pnpm --filter @tekon/core build && pnpm --filter @tekon/cli build && vitest --run __tests__/e2e",
+    "test:e2e": "pnpm --filter @tekon/core build && pnpm --filter @tekon/cli build && vitest --run .e2e.test",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

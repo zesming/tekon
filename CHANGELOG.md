@@ -1,8 +1,283 @@
 # 变更日志
 
+## v0.23.1
+
+- **当前页保留已确认回执**：已受理或等待目录恢复的请求，不再因账本重读、另一任务提交、迟到查询或原请求重试失败而丢失 Run/Session 观察入口；目录修复后仍可按原 ID 重试恢复。
+- **本地失败不等于受理失败**：浏览器记录更新失败时保留服务端确认，查询其他请求不会抹掉当前未知请求的错误；切换仓库作用域后，旧请求不会因新账本读取失败而留在页面。
+- **导航失败可恢复**：默认入口等待异步导航结果，失败时保留输入和原会话入口，显示脱敏提示；导航期间后来编辑的内容不会被旧回调清空。
+
+## v0.23.0
+
+- **发起前检查配置**：Web 默认入口和高级表单展示逐项检查的来源、执行或跳过方式以及缺少命令的情况。点击“刷新检查配置”可查看哪些检查变化；刷新后仍需审阅并再次提交。服务重启或切换上下文后不沿用旧比较结果，配置读取失败时提示先修正文件。
+- **执行沿用受理时的检查**：新运行保存实际使用的仓库命令、来源、不适用与缺失决定，后续执行、恢复、修复重试和返工沿用这份记录。普通 CLI 在启动请求时捕获配置；修改当前仓库配置不会替换已受理运行的检查。该绑定不冻结脚本正文、PATH 二进制、依赖或宿主环境。
+- **历史绑定状态可见**：Run/Session 详情和 CLI `status` 显示检查绑定状态。历史 v1/v2/无快照运行保留兼容路径，不自动升级；其中使用 `commandRef` 的检查仍按当前配置解析。无效或暂不可识别的记录不会显示为已冻结。
+- **目录恢复明确已受理**：目录 `pending` 显示“已受理，等待目录就绪”，`recovery_required` 显示“已受理，等待目录恢复”；任务尚未执行。查询失败保留已经确认的受理身份；结果仍未知时继续查询或重试原请求。
+- **列表与审批自动追平**：Session 列表在事件流首次连接、重连后读取最新状态；另一入口的审批决定或新增审批会更新详情卡片。读取期间收到新变化时，旧响应不会盖住新状态。事件日志仍可能缺失后续事件，不能用于完整重建所有运行。
+
+## v0.22.0
+
+本轮完善执行计划绑定、请求身份与启动恢复。以下为功能变更说明；验收和 CI 结果以本轮正式报告为准。
+
+### 用户可见改进
+
+- **原请求可重试**：普通 workflow/Goal 启动前打印 Request ID，CLI 增加 `--request-id`。同一提交意图重试返回原 Run/Session/Job；不同意图复用标识返回 `REQUEST_ID_CONFLICT`，需要另建任务时使用新标识。
+- **受理与执行状态分开**：目录未就绪时保留运行身份，显示“创建失败需恢复（尚未执行）”；`status` 增加受理状态、文件状态及 requestId。原请求重试，或启动相应 CLI 命令/Web 服务时恢复目录；未就绪 Job 不被认领，恢复不复活取消或终态运行。
+- **Web 待确认请求可找回**：默认入口和高级表单共享查询、同意图重试和计划过期处理。当前标签页的 sessionStorage 账本仅存作用域指纹、意图指纹、requestId 和受理状态，不存需求正文或 token；查询暂未找到记录仍保留原请求身份。
+- **完整计划绑定**：RunPlan v2 绑定完整模板、执行模式与确认参数，运行恢复校验持久计划和合法派生节点。预览过期时提示刷新并重新确认；公开预览只展示摘要，不返回内联命令配置。
+- **连接状态独立呈现**：凭据与 Provider 分别显示，Provider 可显示检查中、可用、不可用或检查失败，并提供检查时间和重试；按服务端过期时间刷新，凭据有效不等于 Provider 可用。
+- **仓库别名兼容**：Web 使用仓库物理路径确定作用域，同仓库历史 alias Project/Workspace 和 Session 保持可见；列表及事件订阅兼容这些历史身份，不合并或重写 ID。
+- **预览边界明确**：CLI `--dry-run` 仅支持 `--dynamic`；普通 workflow/Goal 的 dry-run 在初始化前拒绝，动态路径仍不开放实际执行。
+
+### 工程与合同
+
+- **原子受理与审计**：Run 领域记录、必需治理 Audit、三个 Session 开场事件、初始 Job 和请求账本在同一 SQLite 事务内提交；目录准备后置并可恢复。常规 Audit 追加也在事务中分配单调时间和链头，避免跨进程追加分叉。后续 Session 事件仍属 best-effort 投影，不扩张为全域 outbox。
+- **运行时依赖审计集合修正**：Web 正常启动使用的 `tsx`、`vite`、`@vitejs/plugin-react` 归入 dependencies，让生产依赖审计覆盖实际启动链；保留无有效审计结果即失败的策略。此调整不代表发现了新的具体漏洞。
+- **保留长期边界**：DSH tested pin 仍为 `0.1.2-alpha.3`；持续协作、OS 级隔离、完整导出/retention/purge、全域事件事实源及全部执行环境绑定仍属于后续范围。
+
+## v0.21.0
+
+本轮依据第二十二轮复审收口可确定性验证的安全与合同缺口。DeepSeek Harness tested pin 继续保持 `0.1.2-alpha.3`；官方 `0.1.3-alpha.1` 仅作为 ACP/SessionHandle 后续技术输入，不据“最新”直接升 pin。
+
+### 用户可见改进
+
+- **物理清理入口 fail-closed**：Web `project.clean` 与 CLI `tekon clean` 暂停全部物理删除。Web 在认证、确认字面量、runId 格式和仓库 scope 校验后记录 `project.clean.suspended` Audit，再返回 `CLEAN_SUSPENDED`；CLI 固定 exit 1、只写 stderr。run/worktree 目录均保持不变，完整 export/retention/purge 继续由 #18/#33 承担。
+- **连接状态不再等待可选 DSH**：`project.health` 只验证 Web Session token；TopBar 在凭据有效后通过独立、受认证且有界缓存/single-flight 的 `project.providerHealth` 异步获取 dsh-headless 可用性。Provider 失败不会把有效凭据误显示为无效，原始进程错误、路径和代理信息不会返回浏览器。
+- **计划摘要拒绝静默漂移**：`SessionService` 顶层 `planDigest` 进入 `WorkflowEngine.prepareRun`；input/options/canonical plan 的 digest 在任何目录、数据库或 Audit 副作用前做一致性校验，不一致返回 `PLAN_DIGEST_MISMATCH`。
+
+### 工程与合同
+
+- **Production Audit 分类重试**：CI 改由可测试脚本解析 pnpm 10.12.1 JSON；只有有效零漏洞结果成功。已确认 Advisory、零退出但空/坏 JSON和未知错误立即失败，只有无有效结果的 timeout/DNS/reset/HTTP 5xx 可重试一次。
+- **Node floor 精确验证**：兼容矩阵从 minor 浮动值改为精确 `20.19.0`、`22.12.0`、`22.19.0`，Node 24 保持 `24.x` 最新补丁，并在 setup 后断言实际解析版本。根 `engines` 范围本轮不变；Node 23/25/26/future major 不因开放上界被表述为已验证。
+- **正式文档恢复双格式**：第二十二轮报告与本轮执行方案均提供同步 Markdown/HTML，人审版本不再以减少镜像为由违反仓库交付规则。
+
+## v0.20.6
+
+本轮收口第二十轮复审确认的 DSH metadata probe fallback 风险与默认 Session 启动恢复缺口。Tekon 的 DSH tested pin 仍为 `0.1.2-alpha.3`；官方 `0.1.2-rc.1` 只完成无凭据 Wrapped L2，不据此升级生产 pin。
+
+### 用户可见改进
+
+- **默认 Session 缺摘要可原地恢复**：执行计划返回但缺少 `digest` 时，界面继续 fail-closed 阻止提交，同时提供“重试”按钮重新请求计划；摘要恢复后提交按钮重新可用。
+- **默认 Session 失败后可重试证据**：新增真实 Chromium 场景，验证首次 `project.run` 返回错误后同步 latch 被释放，第二次提交只再发起一次请求并成功进入 Session 详情页。
+- **窄屏 Advanced Run 动态态可读**：高级设置展开后改用自适应网格，超时输入与脏工作区选项不再挤入三列；dsh 闭合选项缩短为 `dsh-headless（仅 Goal）`，实验性、仅 Goal 与网络风险仍由相邻说明展示。
+
+### 工程与合同
+
+- **DSH metadata probe 使用隔离临时 workspace**：只要版本、Config 或 Help 中任一 probe 使用内置实现，就创建一次临时 root，并统一设置 `cwd=root`、`DSH_HOME=root/dsh-home`、`DSH_AGENTS_HOME=root/agents-home`。这会切断 DSH rc.1 已确认的 invocation cwd `.env`、DSH home `.env` 与 `.credentials.yaml` 自动 fallback；它不是 OS sandbox，不能阻止同 UID 恶意二进制主动读取宿主文件。
+- **混合 probe 与命令路径合同**：default probe 使用隔离 cwd、最小环境和切换 cwd 前解析的相对命令；custom probe 保持接收调用方原始命令；三项全为 custom 时不创建 workspace。Config 校验完成后才执行 Help，继续避免同一临时 DSH home 的 first-use 并发写。
+- **环境与清理闭环**：宿主 `DSH_HOME`/`DSH_AGENTS_HOME` 不再透传，补充 `SystemDrive`、`windir`、`WINDIR` 防御性兼容值；成功、合同失败与命令缺失均在 `finally` 清理。清理失败只经安全 warning sink 报告，不覆盖主结果或主异常；版本阶段的原生 `ENOENT` 和后续阶段的 `DshCapabilityError` 语义保持不变。
+- **官方 rc.1 Wrapped L2**：在 Node 22.19.0 上通过 Tekon 生产构建和 delegating recorder 调用 npm `@deepseek-ai/dsh@0.1.2-rc.1`（integrity `sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA==`）。Version/Config/Help 分别为 51ms/69ms/556ms，5 项插件行与 Help 锚点通过，版本事实保持 incompatible + explicitly bypassed，敏感哨兵未进入实际命令，临时 root 完成后已删除。L3 真实模型调用仍未开展。
+- **测试规范**：Web e2e 文件改为 `session-composer-admission.e2e.test.ts`；Core 增加真实 caller cwd、ambient DSH home、混合 probe、相对命令、分阶段 `ENOENT`、Windows 变量和清理双故障覆盖。
+- **响应式运行入口回归**：新增常驻 `responsive-run-surfaces.e2e.test.ts`，四档 Chromium 视口均检查 SessionComposer 与 StartRunForm 默认正常态的页面横溢、控件越界/重叠和文本横向裁切；320px/390px 另覆盖缺摘要重试、dsh 联网警告和高级设置展开态。矩阵 4/4 通过，Web Chromium 全量 48 项。
+
+## v0.20.5
+
+本轮落地第十九轮复审（`docs/reviews/2026-09-03-tekon-product-runtime-harness-nineteenth-review.md`，PR #11）锁定的整改事项：收口 Advanced Run 准入与并发防重入、DSH metadata preflight 内置 session telemetry 硬关断，并补齐执行方案/文档。架构级项（single-owner Runtime、权威 Session、ACP、RunPlan schema、完整生命周期治理与 `project.clean`）按复审裁决维持冻结，由独立 issue/PR 承载。
+
+### 用户可见改进
+
+- **Advanced Run 使用单一阻断源**：提交按钮与 handler 共享 `startRunSubmitState`，一致阻断 token 缺失、计划未就绪、空需求、草案未批准、计划摘要缺失和网络未确认等状态；生成过计划的需求草案现在必须完成独立计划审批后才能提交。
+- **同一页面重复提交防护**：同步 `useRef` latch 关闭 React pending 状态生效前的重入窗口，并在请求失败后释放以允许重试。该保护只覆盖当前组件实例，不替代服务端幂等或跨端 Run admission。
+- **Advanced Run 窄屏可读性**：在 768px 及以下把模式、模板、Provider 与 Profile 选择器改为单列，缩短闭合选择器中的 dsh/mock/autonomous 标签；联网不受限、合成结果和“不自动创建 PR”等完整边界继续由紧邻帮助与告警说明。
+- **提示保持诚实**：Advanced Run 延续“计划未请求不受限网络”的准确表述，mock Provider 明确为合成测试/演示，不能作为真实交付证据。
+
+### 工程与合同
+
+- **DSH 内置 session telemetry 硬关断**：正式 Run 在 `7acfbae` 新增 `DSH_TELEMETRY_DISABLED=1`（`envMode: exact` 白名单）；metadata preflight 本轮同样实施 hard opt-out，三个 metadata probe（`--version`、`--dump-default-config`、`--profile headless --help`）保留 `PATH`、`DSH_HOME` 等必要环境，删除宿主环境（ambient）中的 `DSH_TELEMETRY_MODE` 与 `DSH_TELEMETRY_OTLP_URL`，并固定设置 `DSH_TELEMETRY_DISABLED=1`。DSH 对任意非空 `DSH_TELEMETRY_DISABLED` 均视为关闭，`1` 是 Tekon 的规范化表达。事实澄清：在 alpha.3 中，`--version` 与 `--dump-default-config` 为 boot-free，但 `--profile headless --help` 会进入 profile/plugin boot；无证据表明此前发生外传，但不能用不 boot 排除风险。此外，preflight 仍继承其他宿主环境变量，不等于凭证隔离（例如 worktree `.env` 读取仍是独立安全风险）。
+- **回归证据补齐**：新增 probe 环境真子进程测试、Advanced Run 阻断状态单测和合规命名的 Playwright e2e，覆盖同一页面单次提交、失败后重试及 `hasPlan => planApproved`。第十九轮执行方案同步提供 Markdown/HTML 审阅版。
+
+## v0.20.4
+
+本轮落地第十二轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-twelfth-review.md`，PR #11）第 17.2 节批注锁定的四项低风险收敛：DSH tested pin 升级、版本身份统一、fixture npm warning 清理、CI 供应链 gate。架构级项按复审裁决维持冻结，登记为后续顺序。
+
+### 工程与合同
+
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.2` 升级到 `0.1.2-alpha.3（tested pin）`。Tekon 依赖的 alpha.3 headless 兼容锚点相对 alpha.2 未变（help anchor、required config row ids、Node engines、reasoning streaming、exit code 语义均未变），升级风险低。alpha.3 移除了 SQLite 持久化后端（确立 JSONL 为唯一 provider），与 Tekon 绑定的 `session-persistence-jsonl` 方向一致。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+- **版本身份统一（P1-RELEASE-01）**：`@tekon/core`、`@tekon/cli`、`@tekon/web` 三个内部 package 的版本由 `0.7.0` 统一为 `0.20.4`，与根产品版本 lockstep。此前 `TEKON_CORE_VERSION`（读内部 package）与 CLI `getVersion()`（读根 package）输出不一致，按推断会干扰 bug report 与日志中的版本识别（当前无生产代码消费该常量，属预防性统一）。补了 smoke 测试断言所有内部 package 与根版本一致，防止再次漂移。
+- **fixture npm warning 清理（P2-CI-03）**：6 个 CLI 测试文件的 `createFixtureRepo` 不再 spawn `npm init`/`npm pkg set` 子进程，改用 `writeFileSync` 直接写 `package.json`。消除了 fixture 子进程继承 pnpm 注入的 `npm_config_*` 导致的 npm unknown-config 弃用警告，同时省去每次测试 4 次子进程派生开销。`run-mode-policy.test.ts` 保留了 `scripts.test`（`npm init -y` 隐式生成），避免 `detectRepoProfile` 静默漂移。
+- **CI 供应链 gate（P2-DEPS-01）**：`.github/workflows/ci.yml` 新增独立 `audit` job 执行 `pnpm audit --prod`。当前生产依赖树 0 漏洞，不阻断；未来新增不安全生产依赖时 CI 自动拦截。边界：`--prod` 只覆盖 50 个生产依赖包，不覆盖构建链（vite/tsx/esbuild 等 232 个 dev 包）；audit 与功能测试解耦（`cli`/`web` 只 `needs: typecheck`），audit 失败不压掉功能诊断，但 audit 本身仍是独立 gate。
+
+### DSH Host Node 版本硬拦截（第十四轮批注）
+
+- **preflight 硬拦截不兼容宿主 Node**：`runDshPreflight` 在探测 dsh 二进制之前新增宿主 Node 版本检查（`isHostNodeVersionCompatible`），不兼容时（Node 20.x、22.12–22.18、23.x 奇数线）抛 `DshHostNodeError`，不再让用户先撞上 dsh 子进程的底层退出错误。提供 `TEKON_DSH_ALLOW_HOST_NODE=<实际版本>` 精确值逃生口（对齐 `TEKON_DSH_ALLOW_VERSION` 先例），放行时输出 `onWarn` 警告。`DshPreflightResult` 增加 `hostNodeVersion`/`hostNodeCompatible`/`hostNodeBypassed` 结构化字段；CLI `provider preflight` 输出与 `--json` 同步展示宿主 Node 状态，`failureKind` 判别字段区分"宿主 Node 不兼容"与"dsh 未安装"。Web `probeProvider` health 判定同步纳入宿主 Node 检查。
+
+### DSH preflight 语义修正与 Web health 同源（第十五轮批注）
+
+- **Host Node 判定改为稳定 semver**：`isHostNodeVersionCompatible` 只接受完整 `v?major.minor.patch`，prerelease/partial/malformed 一律 fail-closed，数值必须是 safe integer；不再只截取 major/minor 导致 prerelease 被误判为兼容。
+- **compatible 与 bypass 分离**：`DshPreflightResult` 增加 `versionCompatible/versionBypassed`，与 `hostNodeCompatible/hostNodeBypassed` 并列；逃生口命中时 compatible 保持 false，bypassed 为 true。CLI 文本在任意 bypass 存在时显示"已旁路（无合同保证）"而非"兼容"。
+- **移除公开 `--host-node-version`**：该参数是测试注入 seam，可伪造当前机器兼容结果；公共 CLI 不再接受，程序化 API 仍保留。
+- **Web health 与真实 admission 同源**：`probeProvider()` 改为调用完整 `runDshPreflight()`（含 tested pin、help anchor、plugin config），有 1 秒 metadata probe 预算；顶栏不可用提示指向 `tekon provider preflight dsh-headless` 诊断动作。
+- **网络隔离文案修正**：SessionComposer 网络隔离说明从"网络访问受限"改为"计划未请求不受限网络；实际隔离取决于 Provider 与宿主环境"，避免过度承诺。
+
+### 测试与 CI 收尾（第十三轮批注）
+
+- **smoke 版本断言健壮性**：`packages/core/__tests__/smoke.test.ts` 的 lockstep 断言改为扫描 `packages/` 目录（不再硬编码包名），并用 `existsSync(<pkg>/package.json)` 过滤，避免 `.DS_Store`、残留目录或断链 symlink 触发 `MODULE_NOT_FOUND`。
+- **CI audit 拆独立 job**：`pnpm audit --prod` 从 `typecheck` job 拆为独立 `audit` job（`--ignore-scripts` + `timeout-minutes: 5`），`cli`/`web` 只 `needs: typecheck`。audit 与功能测试解耦，audit 失败不压掉功能诊断。
+- **dirty-base 测试回归修复**：`run-cli.test.ts` 的 `--allow-dirty-base` 测试改为 `JSON.parse` → 改字段 → `JSON.stringify`，与 fixture 的 `JSON.stringify` 输出格式解耦，不再依赖文本 replace 匹配。
+
+## v0.20.3
+
+本轮落地第十一轮复审（`docs/reviews/2026-08-31-tekon-product-runtime-harness-eleventh-review.md`，PR #11）第 16.3 节批注锁定的三项过程/卫生收敛：CLI e2e 文件命名与 lane 语义对齐、CI npm env warning 清理、devDependencies 漏洞 override。架构级项（single-owner Runtime、权威 Session、ACP vertical slice、RunPlan authority、模型 compaction、全站 a11y）按复审裁决维持冻结，登记为后续顺序。
+
+### 工程与合同
+
+- **CLI e2e lane 对齐**：`packages/cli/__tests__/e2e/` 下三个文件由 `*.test.ts` 重命名为 `*.e2e.test.ts`，`test:e2e` 选择器从 `__tests__/e2e` 改为 `.e2e.test`，与 `packages/core` 约定一致。此前这三个真实子进程 e2e 用例因文件名不匹配 `--exclude "**/*.e2e.test.ts"`，同时进入 unit lane 与 e2e lane 各跑一遍；现在 unit lane 只跑 9 个 unit 文件，e2e lane 跑 3 个 e2e 文件，恢复「快速 unit gate / 慢速 e2e gate」分层。
+- **CI npm env warning 清理**：`.github/workflows/ci.yml` 中 17 处 `npm exec --yes -- pnpm@10.12.1` 替换为 `corepack pnpm`，由根 `package.json` 的 `packageManager: "pnpm@10.12.1"` 解析版本，消除 npm 对 `npm_config_*` 未知 env config 的弃用警告。注意：`scripts/install.sh`、`scripts/update.sh`、root `smoke:claude-provider` 与 `.github/workflows/core.yml` 仍用 `npm exec`，会继续发同类告警，留待独立 PR（改 installer 需按 AGENTS.md 跑干净环境 smoketest）。
+- **devDependencies 漏洞 override**：根 `package.json` 新增 `pnpm.overrides`，锁定 `brace-expansion`（按 `^2.0.0`/`^5.0.0` 声明范围分桶到 `2.1.4`/`5.0.9`）、`postcss`（`8.5.26`）、`nanoid`（`3.3.18`）。`pnpm audit` 的 High/Moderate 由 10 项降为 0，仅剩 2 项 esbuild Low（vite 要求 `^0.27.0`，修补版 `0.28.1` 越界，强升会击穿 vite 构建，故保留）。全部命中项均为 dev-only，`pnpm audit --prod` 始终为 0。override 只锁当前依赖树存在的 2.x/5.x brace-expansion；若将来引入 3.x/4.x 主版本，需重新评估并加桶（advisory `>=3.0.0 <5.0.7` 当前无暴露面）。
+
+## v0.20.2
+
+本轮落地第十轮复审第 17 节批注锁定的四项收敛：DSH tested pin 升级到 alpha.2、CI e2e 脚本修复、react-router 安全升级、HTML 标签修复。架构级项（8 项 P0/P1）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **DSH tested pin 升级**：`dsh` 钉死版本由 `0.1.2-alpha.1` 升级到 `0.1.2-alpha.2（tested pin）`。alpha.2 与 alpha.1 的 headless 合同零差异（help/config/Node engines 均未变），升级合同风险极低。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与版本号；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行。
+
+### 工程与合同
+
+- **CI e2e 脚本修复**：`packages/core` 的 `test:e2e` 从硬编码 7 个文件改为 `.e2e.test` 子串匹配，补全了被遗漏的 `engine-rework.e2e.test.ts`，且不会误纳 `session-job-e2e.test.ts` 命名反例。
+- **react-router 安全升级**：`^7.17.0` 升级到 `^7.18.2`，修复 2 个 high（CSRF 绕过、未认证 DoS）+ 3 个 moderate 漏洞。本仓库为 Vite SPA 模式，实际暴露面有限，升级主要为消除 audit 告警与依赖卫生。
+- **HTML 标签修复**：`follow-up-review.html` 的未闭合 `<code>` 标签修复，消除了该文件的 HTML parse error。`format:check` 全仓仍有既有 250 文件格式待办，不在本轮范围。
+
+## v0.20.1
+
+本轮落地第十轮复审（`docs/reviews/2026-08-31-tekon-human-first-harness-tenth-review.md`，PR #11）第 16 节批注锁定的三项收敛：workspace summary SSE 背压上限、DSH Node 前置条件说明、统一 fake-dsh fixture 并移除 bare-line 测试 seam。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定、模型 compaction、完整历史导出、全站 a11y 专项）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **workspace 概览推送不再被慢客户端拖垮**：workspace summary SSE 在慢客户端背压期间对未发送帧设置数量与字节双维度上限（100 帧 / 256KB），超限即关闭连接，客户端重连后通过追赶轮询拿到最新快照。
+- **DSH 的 Node 版本要求被显式告知**：`tekon provider preflight dsh-headless` 的安装指引（文本与 `--json`）现在明确写出 DSH 要求 Node `^22.19.0 || >=24.0.0`，与 Tekon 主合同的 Node `^20.19.0 || >=22.12.0` 不同；用户手册 §5.7 同步补充该边界。Node 20 用户不会再被送进一个装不上或跑不起来的安装。
+
+### 工程与合同
+
+- **测试 fixture 诚实度**：CLI 层 fake-dsh 生成逻辑统一为单一 helper（`VALID_DSH_CONFIG` 由 `REQUIRED_DSH_PLUGIN_IDS` 生成），单测与 e2e 不再各持一份手写副本；adapter 测试的 probe config 从裸行 id 改为标准 YAML `id:` 行；生产 parser 移除 `bareProbeId` 兼容分支，合同校验只接受完整 `id:` YAML 行，消除 seam 掩盖回归的可能。
+
+## v0.20.0
+
+本轮落地第九轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-ninth-review.md`，PR #11）第 16 节批注锁定的四项收敛：DSH 版本 pin 升级、真正的历史反向分页、慢客户端背压上限与历史截断用户提示。架构级项（single-owner daemon、executor 隔离、权威 Session log、ACP vertical slice、Collaborate→Deliver、RunPlan 全字段绑定）按复审裁决维持冻结，登记为后续顺序。
+
+### 用户可见改进
+
+- **“加载更早历史”真正向前推进**：历史分页改为真正的反向游标（`beforeSeq`），连续大量技术事件不再让“加载更早”按钮点了却没有更早内容，也不会误报“已加载最早历史”；每次点击都向更早的记录推进，直到真正到达起点。
+- **历史截断有明确提示**：当网络恢复或客户端较慢导致在线回放的历史量超过预算时，会话顶部出现一条可关闭的非阻断提示，说明已切换到最近记录、完整历史仍可按页读取，不再静默截断。
+- **慢客户端不再拖垮服务端内存**：服务端在慢客户端背压期间对未发送事件设置数量与字节双维度上限，超限即截断到尾窗并让客户端重连，而不是无界缓冲。
+
+### 工程与合同
+
+- **DSH 测试基准版本升级**：`dsh` 钉死版本由 `0.1.1-rc.2` 升级到 `0.1.2-alpha.1（tested pin）`，help/config 契约 fixture 同步更新。注意：本机无 `dsh` 二进制与 API key，本轮只更新了契约 fixture 与 L1 解析测试；带真实 provider 的 smoke 仍需在装有 `dsh` 的环境执行，未在本轮声称完成兼容验证。
+
+## v0.19.0
+
+本轮落地第八轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-eighth-review.md`，PR #11）第 18 节维护者批注后的整改，聚焦 canonical RunPlan、DSH 预检前移、长会话有界化、连接健康诚实化、数据引用完整性与弹窗可访问性；架构级项（single-owner daemon、Session 事实源选型、Collaborate 主链路、DSH pin 升级）按复审裁决维持冻结。
+
+### 用户可见改进
+
+- **执行计划成为真实合同**：Web 发起 workflow 运行必须回传服务端计划 digest，缺失或被篡改即拒绝启动；digest 绑定完整执行参数（代理、Profile、超时、工作区、模板等），计划预览与实际执行同源；运行持久化 canonical 计划快照，可审计。
+- **DSH 环境预检前移**：使用 `dsh-headless` 时，版本/help/config 合同校验在任何运行记录产生之前执行，不兼容时立即给出可读错误与安装指引；新增 `tekon provider preflight dsh-headless` 命令，可主动自检环境兼容性。
+- **长会话全链路有界**：事件分页有最大上限；断线重连追赶有事件数与字节预算，超限降级为尾窗并通知；服务端按慢客户端背压推流；"加载更早"在整段历史都是技术事件时不再误报没有更早内容；客户端历史窗口加载后立即裁剪。
+- **连接状态更诚实**：顶栏健康状态的缓存不再保存原始令牌，容量与过期有界；Provider 可用性字段明确为 `dsh-headless` 探测结果，不再泛化表述。
+- **配置弹窗可键盘操作**：角色/工作流详情弹窗支持 Esc 关闭、Tab 焦点循环、关闭后焦点回到触发按钮，背景对辅助技术 inert。
+- **停机更安全**：服务关闭超时后，迟到的数据库写入会被快速拒绝，不再静默写入已关闭句柄。
+
+## v0.18.0
+
+本轮落地第七轮复审（`docs/reviews/2026-08-30-tekon-human-first-harness-seventh-review.md`，PR #11）批注中可独立验证的 8 项整改，均为用户可见或行为级改进；架构基线项（single-owner runtime、权威 Session log、Collaborate vertical slice、外键迁移、全站可访问性专项）维持复审裁决，留给后续架构 PR。
+
+### 用户可见改进
+
+- **内置模板可选**：高级“新建运行”表单与 CLI `workflow list` 现在展示同一组模板（6 个内置 + 项目模板）；下拉选项标识与后端加载标识统一为文件名，项目模板 `id` 与文件名不一致时不再出现“看得到、选不了”。
+- **高级入口计划失败即阻断**：高级表单在执行计划加载失败时显示明确错误并禁用提交，与默认入口统一为 fail-closed；计划附带 digest，启动时回传校验，预览与实际执行之间模板被改动或参数被篡改时拒绝启动。
+- **连接状态反映真实握手**：顶栏连接状态不再只凭本地令牌非空显示“已设置”，改为服务端握手校验结果（未配置 / 有效 / 无效），Provider 可用性仅作附加提示，不覆盖凭据结论。
+- **长会话不再无界增长**：事件流初次连接只回放最近窗口，更早历史按需分段加载；服务端分页与客户端内存窗口共同约束网络与内存占用；断线重连仍从上次位置连续补齐，不丢事件。
+- **DSH 能力预检**：使用 dsh provider 启动前，除版本外还校验 headless help 合同与默认配置插件组合，任一不满足即 fail-closed，不再带着残缺能力进入执行。
+- **停机语义明确**：服务关闭有 hard deadline，不会被不合作的执行器永久挂住；被中断的运行持久标记为 `interrupted`（可恢复语义），不再静默归入 `cancelled`；用户主动取消仍为 `cancelled`，所有权丢失仍站下不写。
+- **用户手册 Node 版本一致**：手册与 package/installer/README 统一为 `^20.19.0` 或 `>=22.12.0`，不再宣称 Node 18 可用；新增一致性检查防止再次漂移。
+- **E2E 控件文案单点维护**：跨页面复用的稳定控件文案集中到 locator helper，文案变更不再击穿整套浏览器测试。
+
+## v0.17.0
+
+本轮聚焦“面向人类可用”的主路径闭环与安全停机，均为用户可见的行为改进（评审过程与递延决策记录见 `docs/reviews/` 与 `docs/technical/adr-0001-runtime-authority-and-collaborate.md`，不再写入变更日志）。
+
+### 用户可见改进
+
+- **执行计划预览**：在“新建运行”表单中，发起前可预览本次运行的角色链路、阶段、需人工审批的 Gate、超时（人类可读）与预期节点，工程参数收进高级折叠区。
+- **联网不受限知情确认**：当所选 agent（当前为 `dsh-headless`）会带来不受限网络出口时，预览显式告警并要求勾选知情确认；未确认时无法提交，确认事实写入运行审计，不再由隐藏布尔值绕过。
+- **失败任务处理语义**：受控交付列表中的失败会话可“确认/归档”，确认后下沉到历史区、不再占据待处理置顶位；未确认（含历史遗留数据）仍保持置顶提醒。
+- **连接状态呈现**：顶栏 Token 输入框重构为“已连接/未连接”连接状态徽标与连接管理面板（查看/重填并应用令牌、断开连接），主路径术语统一为产品化中文。
+- **任务列表实时刷新**：受控交付列表订阅工作区级事件流，任一会话状态变化可自动上屏，保留短轮询兜底。
+- **长会话渲染边界**：会话事件流默认渲染最近若干条并可“展开更早”，超长单条内容限高按需展开，长会话不再无界撑爆页面。
+- **安全停机序列**：运行器停止改为确定性终止序列（draining → 有界等待正常完成 → 对在途任务 abort + 强制结束 → 确定性 drain 后再关闭数据库），消除停机后仍可能发生的延迟写入。
+
+
+## v0.16.0
+
+第十五轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-architecture-review.md`，PR #11）。本轮以“面向人类可用”为基准对产品主路径、CLI/Web 入口与运行时架构进行系统性审查，完成人类入口体验优化（FIX-01/02/03）与会话列表行动投影（FIX-04/P1-04），并确立多项架构 ADR 与分阶段推进策略。产品版本统一提升至 `0.16.0`。
+
+### 人类入口与体验改进（FIX-01 ~ FIX-04）
+
+- **FIX-01 无参数成为人类入口**：`tekon` 无参数执行不再视为错误（退出码 1→0），与 `tekon help` 对齐，首屏清晰提供 Web 界面、直接运行和命令帮助三条推荐路径。
+- **FIX-02 帮助页推荐开始方式前置**：帮助页重构为“推荐开始方式”优先（`tekon ui` / `tekon run "你的需求"` / `tekon help <cmd>`），避免新用户被二十余个底层框架命令淹没。
+- **FIX-03 统一 CLI 与 updater 产品版本**：CLI 改为直接读取根 `package.json` 的 `0.16.0`，消除此前 CLI 显示内部包版本 `0.7.0` 与 updater 读取根版本 `0.15.x` 的双重身份漂移。
+- **FIX-04 / P1-04 Session 列表按最近活动排序并补齐行动投影**：
+  - `packages/core/src/session/session-store.ts`：`listSessions` 改用 `LEFT JOIN session_events`，通过 `coalesce(max(e.timestamp), s.created_at)` 派生 `lastActivityAt`，按 `last_activity_at desc, s.rowid desc` 稳定排序；产生新事件的旧会话自动置顶。
+  - `packages/web/src/shared/rpc-contract.ts`：`apiSessionSchema` 扩充 `lastActivityAt`、`needsAction`（布尔）与 `actionKind`（`approval` | `input` | `failed` | `null`）。
+  - `packages/web/src/server/api/routers/session.ts`：在 `session.list` 与 `session.get` 集中派生待处理行动状态（`awaiting-approval`→`approval`、`awaiting-input`→`input`、`failed`→`failed`），不触碰 core 冻结的 `sessionSchema`。
+  - `packages/web/src/client/pages/SessionsPage.tsx`：展示中文相对活动时间（如“12分钟前”/“2小时前”），并在需人类介入时显示“待审批 / 待输入 / 需处理”高亮徽标。
+
+### 架构复审与视角批注（§13 second-perspective annotation）
+
+- **P0-01 措辞订正**：原报告称“产品合同不成立”偏强。对外承诺的“受控交付（standard-delivery）”合同完整成立并有测试真锁；缺失的是尚未宣称的轻量持续协作（Collaborate）能力。界面已在 `SessionComposer.tsx:11-15, 74` 诚实披露；verdict 为 real，归入 §9 阶段 B/C 推进。
+- **P0-02 ~ P0-04 架构 ADR 递延（阶段 A/C）**：Web/CLI 事实 multi-owner（P0-02）、非 quiescent shutdown（P0-03）与 dual-write projection-only 事实源角色（P0-04）全部确认属实；单 owner daemon vs multi-owner generation fencing 留待用户拍板后独立 PR 执行。
+- **P1-01 / P1-03 / P1-05 / P1-06 / P1-07 演进递延（阶段 B/C/D）**：DSH bridge SDK/ACP 重新对齐（P1-01）、默认交付前 run plan 预览（P1-03）、Token 输入框重构为连接管理（P1-05）、长会话分页/虚拟化（P1-06）以及中英文案词汇表统一（P1-07）均已诚实归入后续阶段。
+- **P1-08 流程治理采纳**：明确区分 Merge gate 与 Product acceptance gate，避免以 CI 全绿掩盖产品级未决项。
+
+### 第二轮复审收敛与轻量补强（Follow-up Review & Polish）
+
+第二轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-follow-up-review.md`，提交 `6da5ee1`）。复审确认新增改动总体方向正确，可进入代码审阅；本轮完成复审批注追加、首轮虚构引用修正与两项低风险轻量改进，版本保持 `0.16.0`（不 bump）：
+
+- **CODE-01 / CODE-02 / CODE-03 核验通过**：
+  - `CODE-01`：服务端实现 `attentionRank` 排序（`needsAction`→`active`→`idle`→`terminal`），同组按 `lastActivityAt` 降序；
+  - `CODE-02`：统一 `session.list` 与 `session.get` 的 `lastActivityAt` 契约（取 `createdAt`/`updatedAt`/最新事件最大值），消除双重语义；
+  - `CODE-03`：API 测试移除 20ms sleep，改用固定 ISO 时间戳确定性断言。
+- **CITATION 首轮虚构引用修正**：确认首轮报告 §13.2 P1-02 引用的 `goal-job-executor.ts` 不存在，已修正为 `workflows/goal.yaml:1-16` + `workflow-job-executor.ts:165-166`（case 'goal-run'）+ `engine.ts:71`。
+- **P1-PERF-01 Session 列表去全聚合优化**：`packages/core/src/session/session-store.ts` 中 `listSessions` 改为相关子查询 `(select e.timestamp from session_events e where e.session_id = s.id order by e.seq desc limit 1)` 取尾，依据同一事务中 `seq` 与 `timestamp` 同序分配保证最新事件匹配，消除历史事件全量重聚合开销。
+- **P1-UX-02 相对时间共享 ticker**：`packages/web/src/client/hooks/use-ticker.ts` 引入页面级 `useTicker(60_000)` 共享定时器驱动 SessionsPage 相对时间自动推进；诚实说明因 web vitest 为 node 环境（无 jsdom）故遵循既有惯例不加 renderHook 单测，`formatRelativeTime` 纯函数保持不变。
+- **P0-ARCH-01~03 / P1-UX-01/03/04/05 架构 ADR 递延**：确认 multi-owner、shutdown quiescence、Session Event 事实源角色及 UI/UX 演进归入 follow-up 报告 §11 阶段 A-D。
+
+### 第三轮复审收敛（Third Review）
+
+第三轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-28-tekon-human-first-harness-third-review.md`，提交 `ae09034` + `f657252`）。作者在 `ae09034` 自行收敛了相对时间实现（`useTicker` 返回共享时间戳、抽出 `relative-time.ts` 纯函数显式注入时钟、补确定性边界测试、`<time datetime>` 语义化），经核验无回归。本轮实施方处置：
+
+- **P1-CODE-01 `session.get` 尾事件轻量读取**：`packages/core/src/session/session-store.ts` 新增 `getLatestEventTimestamp()`（`select timestamp ... order by seq desc limit 1`，复用 `(session_id, seq)` 索引，与 `listSessions` 尾事件子查询同语义）；`packages/web/src/server/api/routers/session.ts` get handler 从 `latestSeq` + `listEventsSince(latestSeq-1)` 两步收敛为单步，消除一次 DB 往返与完整事件 payload（含 `JSON.parse`）反序列化；`lastActivityAt` 组合语义不变。报告 §8.2 原以“影响多处测试/fixture”递延，经核验全仓无手写 `SessionEventStore` double（均走真实 SQLite），故本轮闭环。
+- **P1-UX-02（failed 永久置顶）ADR 递延**：移除 `failed` 的 needsAction 会丢失失败警示徽标（功能倒退）；真实闭环需 frozen `sessionSchema` 取舍 + migration + mutation + UI，归入第三轮报告 §12 阶段 D。
+- **P0-ARCH-01~03 / P0-PRODUCT-01 / P1-UX-01/03/04/05 / P1-CODE-02 / P1-ARCH-04 / P1-PRODUCT-02**：自第二轮以来无新代码事实，递延结论与第 4~14 轮一致。
+- **P2-PROCESS-01 采纳**：第三轮报告作为 PR #11 当前权威裁决入口，后续只维护一份 current decision record 与简短 revision log。
+
+### 第四轮复审收敛（Fourth Review）
+
+第四轮**人类可用性与 Harness 架构全面复审**（`docs/reviews/2026-08-29-tekon-human-first-harness-fourth-review.md`，提交 `3b26d88` + `bec0bed`）。作者在 `3b26d88` 统一了 Goal 与 dsh-headless 入口契约（Core `run-mode-policy.ts` 纯函数策略、CLI 副作用前 fail-fast、Web API 包装层鉴权后校验、StartRunForm 显式 Workflow/Goal 切换 + 三层测试），经核验无回归。本轮实施方处置：
+
+- **P2-TEST-01 Goal/dsh UI 浏览器断言**：新增 `packages/web/__tests__/e2e/start-run-form.test.ts`（~60 行），覆盖 dsh-headless→goal 自动切换、workflow 回退 codex、goal 禁用 template/profile 三组纯前端状态联动，不启动真实 run。
+- **P1-DATA-01 注释勘误**：`getLatestEventTimestamp` 接口注释从"Session 不存在返回 null"修正为"无匹配事件行返回 null"（DB 无 FK，孤儿事件可存在）；整体 FK 迁移 + 孤儿策略归入第四轮报告 §11-D。
+- **P1-SEC-01（dsh 网络不受限未显式确认）ADR 递延**：纯 Web checkbox 无服务端执行是剧场；真实修复需完整契约（RPC+Core+CLI+snapshot），归入阶段 B/C。
+- **P0-ARCH-01~03 / P0-PRODUCT-01 / P1-UX-01~05 / P1-CODE-02 / P1-ARCH-04 / P2-TEST-02**：自第三轮以来无新代码事实，递延结论与第 4~14 轮一致。
+
+### 验证
+
+- 本地 `corepack pnpm test` 全量通过：1328 passed / 3 skipped（118 个测试文件），覆盖 Core、Web、CLI（含 `session-store`、`session-read-api`、`run-mode-policy` 与 `cli` 测试）；
+- Web Playwright e2e 全量通过：29 passed（含移动端 390px 无横向溢出、内联审批闭环、P1-04 "待审批"行动徽标断言、P2-TEST-01 Goal/dsh 状态联动断言）；
+- P1-04 UI 已做真实浏览器截图核验（桌面 1440px + 移动 390px），行动徽标/状态徽标/时间同行排布无错位、无重叠、无溢出；
+- 三包 build/typecheck 干净。
+
 ## Unreleased（复审记录，不 bump 产品版本）
 
 > 依 `docs/technical/tekon-replatform-current-scope.md` §6 采纳的发布策略：**纯复审报告、批注、措辞订正与验收状态调整不单独抬高产品版本**（`tekon update` 比较根 `package.json` version，误 bump 会让用户全量重装重建却零行为变化）。此类内容记录于此，不再为每轮复审创建新的产品 PATCH。
+
+### 第二十一轮复审收口（PR #11）
+
+- **Node 兼容矩阵**：在现有 `CI` workflow 中新增独立 `node-compat` job，以 `fail-fast: false` 并行验证 Node 20.19.x、22.12.x、22.19.x、24.x 的 frozen install、全包 build/typecheck、Core unit、CLI unit 与构建后 CLI smoke。矩阵固定安装 `corepack@0.34.1`，避免 Node 22.12 自带 Corepack 0.29.4 无法验证 pnpm 10.12.1 签名；不修改 branch protection/ruleset。
+- **测试合同**：新增结构化 YAML 合同测试，锁定矩阵覆盖根 `engines.node` 下界、独立运行、20 分钟上限、命令顺序，以及不得通过 `exclude`、`if` 或 `continue-on-error` 跳过失败版本；开发过程已通过缺 job、缺固定 Corepack、exclude 腿和 job 条件跳过等变异确认 RED，最终实现 GREEN。
+- **评审资料纠偏**：第二十一轮报告恢复与 Markdown 内容源同步的 HTML 人审版，`current.md` 恢复 v0.20.6 本地测试、四视口、历史 Head/run 证据，并明确最终证据不以仓库提交自引用。
+- **版本裁决**：没有用户命令、运行时合同、产品 Gate 或数据格式变化，产品版本保持 `0.20.6`；required checks、供应链发布证据与其它架构项继续留在独立 Issue/PR。
 
 ### 第十四轮权威复审收敛（`docs/reviews/2026-08-28-tekon-harness-replatform-fourteenth-authoritative-review.md`，作者推送，`18106e1..f9de822` 共 29 提交）
 

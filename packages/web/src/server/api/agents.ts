@@ -38,6 +38,7 @@ export function providerRuntimeFromRunInput(input: {
   timeoutMs?: number;
   noProgressTimeoutMs?: number;
   progressHeartbeatMs?: number;
+  acknowledgeUnrestrictedNetwork?: boolean;
 }): ProviderRuntimeOverrides {
   return {
     timeoutMs: positiveIntOrUndefined(input.timeoutMs, 'timeoutMs'),
@@ -49,6 +50,9 @@ export function providerRuntimeFromRunInput(input: {
       input.progressHeartbeatMs,
       'progressHeartbeatMs',
     ),
+    ...(input.acknowledgeUnrestrictedNetwork !== undefined
+      ? { acknowledgeUnrestrictedNetwork: input.acknowledgeUnrestrictedNetwork }
+      : {}),
   };
 }
 

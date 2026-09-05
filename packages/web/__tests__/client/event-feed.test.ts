@@ -1,6 +1,31 @@
-import { describe, expect, it } from 'vitest';
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it, vi } from 'vitest';
 
+// Mock React hooks to support interactive state transitions in node environment
+let currentDispatcher: any = null;
+
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: (initial: any) =>
+      currentDispatcher ? currentDispatcher.useState(initial) : actual.useState(initial),
+    useRef: (initial: any) =>
+      currentDispatcher ? currentDispatcher.useRef(initial) : actual.useRef(initial),
+    useCallback: (fn: any, deps: any[]) =>
+      currentDispatcher ? currentDispatcher.useCallback(fn, deps) : actual.useCallback(fn, deps),
+    useMemo: (fn: any, deps?: any[]) =>
+      currentDispatcher ? currentDispatcher.useMemo(fn, deps) : (actual.useMemo ? actual.useMemo(fn, deps as any) : fn()),
+    useEffect: (fn: any, deps?: any[]) =>
+      currentDispatcher ? currentDispatcher.useEffect(fn, deps) : (actual.useEffect ? actual.useEffect(fn, deps as any) : undefined),
+  };
+});
+
+import { EventFeed } from "../../src/client/components/sessions/EventFeed.js";
 import {
+  computeEventWindow,
+  DEFAULT_EVENT_WINDOW,
   describeEvent,
   groupEventsByTurn,
   type FeedRow,
@@ -25,6 +50,103 @@ function ev(
     modelVisible: false,
     correlationId: null,
     ...over,
+  };
+}
+
+function findElementInTree(
+  node: any,
+  predicate: (elem: React.ReactElement<any>) => boolean,
+): React.ReactElement<any> | null {
+  if (!node || typeof node !== "object") return null;
+  if (React.isValidElement(node)) {
+    if (predicate(node)) return node;
+    const children = (node.props as any)?.children;
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        const found = findElementInTree(child, predicate);
+        if (found) return found;
+      }
+    } else if (children) {
+      const found = findElementInTree(children, predicate);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function renderInteractiveFeed(props: Parameters<typeof EventFeed>[0]) {
+  let stateIndex = 0;
+  let memoIndex = 0;
+  const states: any[] = [];
+  const setStates: Array<(val: any) => void> = [];
+  const memos: Array<{ value: any; deps: any[] | undefined }> = [];
+  let tree: any = null;
+
+  function renderTree() {
+    stateIndex = 0;
+    memoIndex = 0;
+    currentDispatcher = {
+      useState(initial: any) {
+        const idx = stateIndex++;
+        if (states.length <= idx) {
+          states[idx] = typeof initial === "function" ? initial() : initial;
+        }
+        if (!setStates[idx]) {
+          setStates[idx] = (newVal: any) => {
+            const resolved =
+              typeof newVal === "function" ? newVal(states[idx]) : newVal;
+            if (states[idx] !== resolved) {
+              states[idx] = resolved;
+              renderTree();
+            }
+          };
+        }
+        return [states[idx], setStates[idx]];
+      },
+      useMemo(fn: any, deps?: any[]) {
+        const idx = memoIndex++;
+        if (memos.length <= idx) {
+          const value = fn();
+          memos[idx] = { value, deps };
+          return value;
+        }
+        const prev = memos[idx];
+        const changed =
+          !deps ||
+          !prev.deps ||
+          deps.some((d, i) => !Object.is(d, prev.deps?.[i]));
+        if (changed) {
+          const value = fn();
+          memos[idx] = { value, deps };
+          return value;
+        }
+        return prev.value;
+      },
+    };
+    tree = EventFeed(props);
+  }
+
+  renderTree();
+
+  return {
+    get tree() {
+      return tree;
+    },
+    get html() {
+      return renderToStaticMarkup(tree);
+    },
+    clickExpand() {
+      const expandBtn = findElementInTree(
+        tree,
+        (elem) =>
+          typeof elem.props?.['aria-label'] === 'string' &&
+          elem.props['aria-label'].includes('展开更早'),
+      );
+      if (!expandBtn || typeof expandBtn.props.onClick !== 'function') {
+        throw new Error('Expand button not found or has no onClick handler');
+      }
+      expandBtn.props.onClick();
+    },
   };
 }
 
@@ -208,5 +330,238 @@ describe('groupEventsByTurn', () => {
     ];
     const groups = groupEventsByTurn(events);
     expect(groups[0].rows.map((r) => r.seq)).toEqual([10, 11, 12]);
+  });
+});
+
+describe("computeEventWindow (T6 event feed DOM windowing)", () => {
+  it("returns all events and zero hidden count when total <= window size", () => {
+    const events = Array.from({ length: 100 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(100);
+    expect(result.visibleEvents[0].seq).toBe(1);
+    expect(result.visibleEvents[99].seq).toBe(100);
+  });
+
+  it("handles empty events list", () => {
+    const result = computeEventWindow([], false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toEqual([]);
+  });
+
+  it("handles exact boundary at window size (250 items)", () => {
+    const events = Array.from({ length: 250 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(250);
+  });
+
+  it("windows to latest 250 and counts hidden earlier events when total > 250 (unexpanded)", () => {
+    const events = Array.from({ length: 300 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false, 250);
+
+    expect(result.hasEarlierEvents).toBe(true);
+    expect(result.hiddenEarlierCount).toBe(50);
+    expect(result.visibleEvents).toHaveLength(250);
+    expect(result.visibleEvents[0].seq).toBe(51);
+    expect(result.visibleEvents[249].seq).toBe(300);
+  });
+
+  it("returns all events and clears hidden count when expanded is true", () => {
+    const events = Array.from({ length: 300 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, true, 250);
+
+    expect(result.hasEarlierEvents).toBe(false);
+    expect(result.hiddenEarlierCount).toBe(0);
+    expect(result.visibleEvents).toHaveLength(300);
+    expect(result.visibleEvents[0].seq).toBe(1);
+    expect(result.visibleEvents[299].seq).toBe(300);
+  });
+
+  it("uses DEFAULT_EVENT_WINDOW (250) by default", () => {
+    expect(DEFAULT_EVENT_WINDOW).toBe(250);
+    const events = Array.from({ length: 251 }, (_, i) => ({ seq: i + 1 }));
+    const result = computeEventWindow(events, false);
+
+    expect(result.hasEarlierEvents).toBe(true);
+    expect(result.hiddenEarlierCount).toBe(1);
+    expect(result.visibleEvents).toHaveLength(250);
+    expect(result.visibleEvents[0].seq).toBe(2);
+  });
+
+  it("respects custom window size", () => {
+    const events = Array.from({ length: 10 }, (_, i) => ({ seq: i + 1 }));
+    const unexpanded = computeEventWindow(events, false, 3);
+
+    expect(unexpanded.hasEarlierEvents).toBe(true);
+    expect(unexpanded.hiddenEarlierCount).toBe(7);
+    expect(unexpanded.visibleEvents).toHaveLength(3);
+    expect(unexpanded.visibleEvents[0].seq).toBe(8);
+    expect(unexpanded.visibleEvents[2].seq).toBe(10);
+
+    const expanded = computeEventWindow(events, true, 3);
+    expect(expanded.hasEarlierEvents).toBe(false);
+    expect(expanded.hiddenEarlierCount).toBe(0);
+    expect(expanded.visibleEvents).toHaveLength(10);
+  });
+});
+
+describe("EventFeed earlier history button rendering (MUST-1 + MUST-2)", () => {
+  it("renders enabled '加载更早历史' button when externalHasEarlier is true and not at limit", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("加载更早历史");
+    expect(html).not.toContain("disabled");
+  });
+
+  it("renders disabled '已加载最早历史' button when reachedEarlierLimit is true", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: true,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("已加载最早历史");
+    expect(html).toContain("disabled");
+  });
+
+  it("renders disabled '正在加载更早历史…' button when isLoadingEarlier is true", () => {
+    const events: StreamEvent[] = [
+      ev("user/message", { text: "hello" }, { seq: 1 }),
+    ];
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: true,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("正在加载更早历史…");
+    expect(html).toContain("disabled");
+  });
+
+  it("preserves in-memory DOM unfold button when external pagination is not active", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+      }),
+    );
+    expect(html).toContain("展开更早的 50 条事件");
+  });
+
+  it("renders BOTH '加载更早历史' and '展开更早的 N 条事件' buttons when externalHasEarlier=true and events.length > 250", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const html = renderToStaticMarkup(
+      React.createElement(EventFeed, {
+        events,
+        hasEarlier: true,
+        reachedEarlierLimit: false,
+        isLoadingEarlier: false,
+        onLoadEarlier: () => {},
+      }),
+    );
+    expect(html).toContain("加载更早历史");
+    expect(html).toContain("展开更早的 50 条事件");
+  });
+
+  it("renders all in-memory events in DOM after clicking '展开更早的 N 条事件'", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const harness = renderInteractiveFeed({
+      events,
+      hasEarlier: true,
+      reachedEarlierLimit: false,
+      isLoadingEarlier: false,
+      onLoadEarlier: () => {},
+    });
+
+    // Before click: only latest 250 events (seq 51..300) are rendered in DOM window
+    const initialHtml = harness.html;
+    expect(initialHtml).toContain("展开更早的 50 条事件");
+    expect(initialHtml).toContain("加载更早历史");
+    expect(initialHtml).toContain("msg 300");
+    expect(initialHtml).toContain("msg 51");
+    expect(initialHtml).not.toContain("msg 1</div>");
+    expect(initialHtml).not.toContain("msg 50</div>");
+
+    // Click "展开更早的 50 条事件"
+    harness.clickExpand();
+
+    // After click: all 300 events (seq 1..300) are rendered in DOM
+    const expandedHtml = harness.html;
+    expect(expandedHtml).toContain("msg 1");
+    expect(expandedHtml).toContain("msg 50");
+    expect(expandedHtml).toContain("msg 51");
+    expect(expandedHtml).toContain("msg 300");
+    expect(expandedHtml).not.toContain("展开更早的");
+    // External "加载更早历史" button remains present
+    expect(expandedHtml).toContain("加载更早历史");
+  });
+
+  it("disables '加载更早历史' when reachedEarlierLimit=true while '展开' button remains enabled and clickable", () => {
+    const events: StreamEvent[] = Array.from({ length: 300 }, (_, i) =>
+      ev("user/message", { text: `msg ${i + 1}` }, { seq: i + 1 }),
+    );
+    const harness = renderInteractiveFeed({
+      events,
+      hasEarlier: true,
+      reachedEarlierLimit: true,
+      isLoadingEarlier: false,
+      onLoadEarlier: () => {},
+    });
+
+    const initialHtml = harness.html;
+    // "已加载最早历史" is present and disabled
+    expect(initialHtml).toContain("已加载最早历史");
+    expect(initialHtml).toContain("disabled");
+    // "展开更早的 50 条事件" is present
+    expect(initialHtml).toContain("展开更早的 50 条事件");
+
+    // Find the expand button and verify it is not disabled
+    const expandBtn = findElementInTree(
+      harness.tree,
+      (elem) =>
+        typeof elem.props?.['aria-label'] === 'string' &&
+        elem.props['aria-label'].includes('展开更早'),
+    );
+    expect(expandBtn).toBeDefined();
+    expect(expandBtn?.props.disabled).toBeFalsy();
+
+    // Expand button is clickable and successfully expands history in DOM
+    harness.clickExpand();
+    const expandedHtml = harness.html;
+    expect(expandedHtml).toContain("msg 1");
+    expect(expandedHtml).toContain("msg 300");
+    expect(expandedHtml).toContain("已加载最早历史");
   });
 });

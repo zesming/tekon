@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tekon v0.23.0 · 第二十五轮复审</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f1f4f7;color:#202c3b;font-family:system-ui,-apple-system,"Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.85}.bar{background:#132538;color:#dce9f5;padding:18px max(20px,calc((100vw - 1080px)/2));font-size:12px;letter-spacing:.12em}.wrap{max-width:1080px;margin:32px auto;padding:40px 52px;background:white;border:1px solid #dbe3e9;border-radius:12px}h1{font-size:34px;line-height:1.35;letter-spacing:-.03em;margin:0 0 20px;color:#132538}h2{font-size:23px;line-height:1.5;margin:48px 0 16px;padding-top:18px;border-top:2px solid #dbe3e9;scroll-margin-top:20px}h3{font-size:18px;margin:30px 0 12px}p{margin:12px 0 18px}a{color:#155e8c;text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible,summary:focus-visible,.table-wrap:focus-visible{outline:3px solid #dd9a28;outline-offset:4px}strong{color:#172f47}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em;background:#edf3f8;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{padding:18px;background:#142b40;color:#eff6ff;overflow:auto;border-radius:8px}pre code{background:none;color:inherit;padding:0}.table-wrap{overflow-x:auto;margin:20px 0 24px;border:1px solid #dbe3e9;border-radius:8px}table{border-collapse:collapse;width:100%;min-width:610px;font-size:14px;line-height:1.7}th,td{padding:12px 16px;text-align:left;vertical-align:top;border-bottom:1px solid #e2e9ef}th{background:#eaf1f7;color:#1f3b53;font-weight:650}tr:last-child td{border-bottom:0}tr:nth-child(even) td{background:#fafcfd}ul,ol{padding-left:24px}li{margin:8px 0}.toc{margin:24px 0;padding:16px 20px;background:#f4f8fb;border-left:4px solid #317fa5;border-radius:6px}.toc summary{font-weight:650;cursor:pointer}.toc ol{columns:2;font-size:14px;line-height:1.6}.toc li{break-inside:avoid}.end{margin-top:36px;padding-top:18px;border-top:1px solid #dbe3e9;font-size:13px;color:#596b7b}blockquote{margin:20px 0;padding:4px 20px;border-left:4px solid #317fa5;background:#f4f8fb} @media(max-width:700px){body{font-size:15px}.wrap{margin:12px;padding:24px 20px;border-radius:8px}h1{font-size:26px}h2{font-size:21px;margin-top:34px}.toc ol{columns:1}table{min-width:550px}} @media(max-width:360px){.wrap{margin:8px;padding:20px 14px}h1{font-size:23px}.bar{padding:14px 20px}code{font-size:.84em}} @media print{body{background:white;color:#111}.bar,.toc{display:none}.wrap{border:0;max-width:none;margin:0;padding:0}h2,h3{break-after:avoid}.table-wrap{overflow:visible}table{min-width:0;font-size:10pt}a{color:inherit}pre{white-space:pre-wrap}.end{font-size:9pt}}</style></head><body><div class="bar">TEKON / REVIEW 25 / 2026-09-05</div><main class="wrap"><h1 id="section-1">Tekon 第二十五轮复审：有效命令绑定与受理回执</h1><details class="toc"><summary>阅读目录</summary><ol><li><a href="#section-2">1. 结论与范围</a></li><li><a href="#section-3">2. 对 v0.23.0 整改的逐项复核</a></li><li><a href="#section-8">3. R25-01 / P2：服务端确认不得被本地后处理降级</a></li><li><a href="#section-12">4. 产品逻辑与 UI/UX</a></li><li><a href="#section-16">5. 整体框架、数据与代码实现</a></li><li><a href="#section-21">6. DeepSeek Harness 与官方资料对照</a></li><li><a href="#section-22">7. 是否存在过度实现或过度设计</a></li><li><a href="#section-23">8. 验证记录与交付决策</a></li><li><a href="#section-28">9. 接续独立复核与整改裁决（2026-09-05）</a></li><li><a href="#section-33">10. v0.23.1 接续实施与验收</a></li></ol></details>
+<p><strong>日期：2026-09-05 · 产品版本：0.23.0 · <a href="https://github.com/zesming/tekon/pull/11" data-hovercard-type="pull_request" data-hovercard-url="/zesming/tekon/pull/11/hovercard">PR #11</a></strong></p>
+<blockquote>
+<p>时点说明：§1–8 保留报告作者在 <code class="notranslate">c4f6939</code> 修复后的判断；§9 起记录接续代理同步至 <code class="notranslate">4bb7c26</code> 后的独立复核与补充整改。原文中的“未发现增量问题”不是后续完整验证的结论。当前 v0.23.1 实施与验收状态见 §10。</p>
+</blockquote>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>核验对象</th>
+<th>快照与证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>用户远端基线</td>
+<td><code class="notranslate">8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0</code></td>
+</tr>
+<tr>
+<td>上轮实际交付</td>
+<td><code class="notranslate">0a6edc95363965daad081ab23ddf254ce2feaa65</code></td>
+</tr>
+<tr>
+<td>本轮行为修复</td>
+<td><code class="notranslate">c4f6939c6228585443d0498e92cd1a6d36c75007</code>，原 PR 分支非强制快进</td>
+</tr>
+<tr>
+<td>基线检查</td>
+<td><a href="https://github.com/zesming/tekon/actions/runs/33958129845">Core #441</a>、<a href="https://github.com/zesming/tekon/actions/runs/33958129847">CI #350</a> 均成功</td>
+</tr>
+<tr>
+<td>修复提交检查</td>
+<td>见本报告末尾“验证记录”；最终文档 Head 由 PR 的对应 Checks 单独证明</td>
+</tr>
+<tr>
+<td>DSH</td>
+<td>Tekon tested pin 保持 <code class="notranslate">0.1.2-alpha.3</code>；本轮官方发布观察基线为 <code class="notranslate">0.1.3-alpha.1</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-2">1. 结论与范围</h2>
+<p><strong>上一轮有效仓库命令绑定问题已关闭；本轮发现并修复一类 P2：已获得服务端受理回执后，本地账本、页面跳转或迟到 POST 错误仍可能把界面重新归类为“受理未知”。</strong> 修复前同一组定向测试为 6 失败、3 通过，修复后 9/9。没有证据将其描述成服务端事务回滚、鉴权绕过或新的重复执行漏洞。</p>
+<p>就本轮审阅的受控交付整改和回归路径，修复后未再发现必须阻断该增量的新问题。<strong>这不是所有场景的正确性证明，也不是未经真实 Provider、跨平台及负载验证就宣布生产就绪。</strong> 持续协作、导出和运行时演进应继续按各自范围验收，不作为每次补丁无限扩张的前置条件。</p>
+<p>本次从远端 Head 和变更清单重新出发，沿产品入口、预览、计划捕获、受理、物化 Gate、执行/恢复、前端请求账本、查询与事件流检查关键调用链。覆盖全仓结构与高风险边界，不声称逐行证明全部文件。主要依据是指定 SHA 的代码、测试、README/current、GitHub Actions 和官方资料；下文区分代码事实、执行复现与建议。</p>
+<p>环境限制：容器 DNS 不可用，不能 clone/安装全仓依赖；本地定向执行使用经 Git blob SHA 核对的真实 Controller/Ledger 源码及同一份测试断言，未调用的 React/RPC/cache 导入用隔离替身满足模块加载。没有本地完整 <code class="notranslate">pnpm test</code>、新的 Tekon 页面截图/读屏、Windows、真实 DSH L2/L3 或生产故障演练。本运行时没有独立 subagent，已做第二遍保守自检。HTML 报告排版验证不等于应用视觉验收。</p>
+<h2 id="section-3">2. 对 v0.23.0 整改的逐项复核</h2>
+<h3 id="section-4">2.1 R24-02：有效命令与适用性绑定——关闭此具体切片</h3>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/core/src/workflow/repo-command-binding.ts">repo-command-binding.ts</a> 只捕获真正进入仓库解析分支的 commandRef，且在同一次读取中得到来源与决定。每项保存 resolved 命令的 tool/args、not-applicable 原因或 missing 事实；没有引用时不读取配置文件。</p>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/core/src/workflow/run-plan.ts">RunPlan v3</a> 将这些记录纳入摘要，严格校验额外字段、重复/缺失引用和来源组合。<a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/core/src/workflow/execution-plan.ts">ExecutionPlan</a> 先生成稳定 Gate 身份，再物化命令并删除 commandRef：新 v3 执行不再从当前 profile 重新解析。恢复和合法 rework/repair 沿用已确认的执行事实。</p>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/core/__tests__/workflow/repo-command-binding.e2e.test.ts">真实 Gate 回归测试</a> 包含确认后修改命令、改成不适用、损坏/删除 profile、排队窗口变化、持久 Gate 篡改、repair 和 rework。测试既有实际 npm 子进程，也有为特定审阅结果注入的 Gate/Agent 替身；不能把后者称为真实模型验证，但也不是只检查一个 mock 是否被调用。</p>
+<p>**边界：**绑定的是命令描述符和解析决定，不是 package scripts 正文、测试文件、PATH 二进制、依赖、Git/base 或宿主环境。README 已明确说明这一点。本轮不把已披露的范围重新包装为“命令绑定仍未完成”，也不要求为修此切片哈希整个仓库。</p>
+<h3 id="section-5">2.2 历史兼容与展示——保留、验证，不静默升级</h3>
+<p>旧 v1、v2 和无快照记录保留原恢复语义；v3 自洽快照、历史未绑定、未知版本和无效记录分别展示。分类函数明确不是替代执行前节点/审计校验的授权机制。新运行不能通过伪装成旧版本获得自动放行，这个分层合理。</p>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/components/runs/PlanCommandBindings.tsx">逐项预览</a> 给出执行、跳过、缺失、内置安全扫描和非命令 Gate 的不同语义，不把“解析成功”一概等同于执行命令。<a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/server/api/plan-preview.ts">比较签名</a> 使用每个 Web 根实例独立的 HMAC 密钥，只服务脱敏变化提示，不持久化成运行授权。服务重启导致比较不可用，而不是伪造“未变化”，是正确降级。</p>
+<h3 id="section-6">2.3 R24-01 与观察链路——继续成立</h3>
+<p>缓存失效的旧响应不能重新发布为新鲜状态；事件订阅关闭后限制迟到回调，页面切换同时限制历史页结果；Workspace 首次连接和重连主动触发读取，审批事件使相关 Gate 查询失效。当前实现见 <a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/hooks/use-session-stream.ts">use-session-stream</a>、<a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/hooks/use-workspace-summary-stream.ts">use-workspace-summary-stream</a> 和 <a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/lib/session-stream.ts">session-stream</a>。</p>
+<p>这些约束与 React 官方关于异步响应乱序及 effect cleanup 的建议一致，但“回调不再影响页面”与“底层进程或网络已结束”仍是两项验收。<a href="https://react.dev/reference/react/useEffect#fetching-data-with-effects" rel="nofollow">React 官方说明</a></p>
+<h3 id="section-7">2.4 受理事务、身份与目录恢复——不再重复报缺失</h3>
+<p>既有同库受理、requestId 重放、冲突检查、目录后置准备、未就绪禁止执行及原赢家身份保留均继续成立。<a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/core/src/workflow/engine.ts">Engine</a> 在重放时先查原记录；新受理才捕获配置。目录与外部命令不被塞入长 SQLite 写事务，这个分界应该保留。</p>
+<p>SQLite 的 immediate transaction 可以协调同库竞争写入，但不自动包含文件、Provider 或 Git 副作用；“受理一次”不等于“任意外部操作恰好执行一次”。这是保证范围，不是否定已经实现的原子受理。<a href="https://www.sqlite.org/lang_transaction.html" rel="nofollow">SQLite 官方事务说明</a></p>
+<h2 id="section-8">3. R25-01 / P2：服务端确认不得被本地后处理降级</h2>
+<h3 id="section-9">3.1 原实现与影响</h3>
+<p>基线 <a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/hooks/use-run-admission.ts">use-run-admission.ts</a> 将发起 RPC、本地账本更新与跳转放在同一 catch 边界。原有 acceptedRecords 已处理部分成功响应竞态，但没有覆盖本地失败和迟到错误：</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>可执行顺序</th>
+<th>原结果</th>
+<th>为什么不准确</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST 返回 accepted → 删除本地记录失败</td>
+<td>同时出现已受理记录和“受理状态待确认”错误</td>
+<td>本地失败不能推翻已确认的服务端身份</td>
+</tr>
+<tr>
+<td>POST 返回 recovery-required → 更新账本失败</td>
+<td>更新内存身份之前抛错，Run/Session 观察入口丢失</td>
+<td>目录未就绪仍是已经受理，不是未知创建结果</td>
+</tr>
+<tr>
+<td>POST 返回 accepted → 跳转回调抛错</td>
+<td>被解释为未知受理</td>
+<td>跳转与数据库受理不是同一事务</td>
+</tr>
+<tr>
+<td>查询已确认 accepted → 原 POST 随后报网络错误</td>
+<td>accepted 记录保留，但全局 outcome 再次变成 unknown</td>
+<td>成功查询是比另一响应失败更强的事实</td>
+</tr>
+<tr>
+<td>原 POST 未知 → 查询返回身份 → 本地账本写入失败</td>
+<td>错误沿用未知前缀，或直接丢弃本地失败提示</td>
+<td>需要同时保留已受理事实与本地操作失败的说明</td>
+</tr>
+</tbody>
+</table></div>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/packages/web/src/client/lib/admission-ledger.ts">AdmissionLedger</a> 的通用异常还包含“已阻止创建运行”。它适合发送前失败，却不适合已收到服务端回执后的失败。风险主要是误导用户、丢失当前页观察入口以及诱导不必要的新建；未复现服务端幂等失效。</p>
+<h3 id="section-10">3.2 本轮修复</h3>
+<ol>
+<li>校验 requestId 后，先把回执身份和 filesState 写入内存，再进行浏览器账本 I/O。accepted 与 recovery-required 使用相同顺序。</li>
+<li>同 scope、requestId、fingerprint 已有服务端确认时，迟到 POST 错误不能将 outcome 降为 unknown 或 not-created。</li>
+<li>本地记录更新或跳转失败改成固定、无原始异常细节的提示：“请求已受理，但浏览器请求记录更新或页面跳转未完成。请通过下方入口观察原运行，不要重复新建。”原观察入口保留，不额外发起 Run。</li>
+<li>查询回执后的本地失败采取同样规则；目录就绪与否仍保持各自含义，不把 recovery-required 写成任务执行成功。</li>
+<li>发送前无法保存原请求仍阻止 POST；没有回执的网络错误仍是未知；其他 requestId 的响应仍不能被信任。</li>
+</ol>
+<p><a href="https://github.com/zesming/tekon/blob/c4f6939c6228585443d0498e92cd1a6d36c75007/packages/web/src/client/hooks/use-run-admission.ts">修复源码</a> · <a href="https://github.com/zesming/tekon/blob/c4f6939c6228585443d0498e92cd1a6d36c75007/packages/web/__tests__/client/run-admission-receipt.test.ts">新增九项测试</a></p>
+<h3 id="section-11">3.3 验证与保留的限制</h3>
+<p>同一份测试先于业务修改编写。它使用真实 Controller/Ledger、可控异步响应和可失败的 Storage 实现，分别覆盖两种 POST 回执、本地跳转、并发查询后 POST 失败、两种查询回执，以及发送前存储失败、纯网络失败、响应身份不符三条反例。</p>
+<p><strong>修改前 6 失败/3 通过，修改后 9 通过。</strong> 本地测试不是浏览器存储权限实测，也不是新服务端事务测试；远端 Vitest、类型检查和全套 Chromium 作为集成回归单独核对。没有扩大本地持久化内容，仍不将需求正文或凭据写入账本。</p>
+<p>仍有限制：存储彻底不可读时，旧请求恢复需要现有服务端查询路径；本补丁不修复损坏的 sessionStorage、不自动清空账本、不保证浏览器崩溃前每一条 UI 提示已经持久化。</p>
+<h2 id="section-12">4. 产品逻辑与 UI/UX</h2>
+<h3 id="section-13">4.1 当前定位应按真实价值验收</h3>
+<p><a href="https://github.com/zesming/tekon/blob/8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0/README.md">README</a> 将产品定义为本地 Agent workflow 和受控研发工作台：需求、计划、隔离执行、检查、审阅证据、人工批准、PR 准备。这与当前实现相符。它不是“仅供 Agent 自举”；工程用户已能发起、确认、查询、重试和监督交付。</p>
+<p>默认发起完整受控交付与轻量多轮协作是两种不同产品场景。README 明确不提供会话内追问/转向及完整模型增量流。后者应通过独立场景验证，而不是每轮都作为否定已完成补丁的固定理由。</p>
+<h3 id="section-14">4.2 主路径逐步判断（源码与自动化合同，不冒充新视觉走查）</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>步骤</th>
+<th>当前有效设计</th>
+<th>后续验收重点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>发起与预览</td>
+<td>默认入口简单，高级参数另置；缺计划/凭据不启动</td>
+<td>首次安装者能否理解 Provider 就绪与工作流选择</td>
+</tr>
+<tr>
+<td>核对检查</td>
+<td>显示来源、执行/跳过/缺失、安全扫描；刷新后显示逐项差异</td>
+<td>技术名词密度与长检查清单的信息层级，需真实用户/截图评估</td>
+</tr>
+<tr>
+<td>提交</td>
+<td>共享 Controller、本地原请求身份和服务端幂等</td>
+<td>本轮已补回执后本地失败；不要再生成重复提交状态机</td>
+</tr>
+<tr>
+<td>未知或目录恢复</td>
+<td>查询/观察原请求；另建必须明确选择</td>
+<td>回执、目录准备、任务状态分别显示，不把受理等同执行</td>
+</tr>
+<tr>
+<td>持续观察</td>
+<td>重连刷新、跨入口审批、迟到结果限制</td>
+<td>高频更新、弱网与真实长会话响应时延，不能仅以测试数量代替基准</td>
+</tr>
+<tr>
+<td>导出与结束</td>
+<td>暂停裸物理 clean，避免丢证据</td>
+<td>先完成完整只读证据导出，再定义清理/保留策略</td>
+</tr>
+</tbody>
+</table></div>
+<p>上一轮恢复文案已经改为“已受理，等待目录就绪/恢复”，本轮不重复列为待办。新 P2 是回执后异常分类，不是这些文案未整改。</p>
+<h3 id="section-15">4.3 未验证能力</h3>
+<p>本轮没有新的应用截图、真实设备和读屏资料，不能判定字号、对比度、焦点恢复、多浏览器或缩放全部通过。仓库新归档截图属于用户整改证据，不被重新标记为 reviewer 独立截图。HTML 报告使用清晰目录、窄屏换行和可横向阅读的表格，仅证明这份交付物的可读性。</p>
+<h2 id="section-16">5. 整体框架、数据与代码实现</h2>
+<h3 id="section-17">5.1 真实架构：Tekon 主导，DSH 是可选外部 Provider</h3>
+<p>Workflow、RunPlan、Gate、Audit、Session 和 Job 仍由 Tekon 自有框架编排；DSH Headless 是外部子进程桥接。不能把上游 SessionHandle、存储锁或恢复能力直接算成 Tekon 已获得的全局保证。</p>
+<h3 id="section-18">5.2 已经合理的复杂度</h3>
+<p>v1/v2/v3 兼容是已有持久数据带来的责任；命令物化、派生节点验证、同库受理与文件后置恢复有具体失败模式依据。应保留这些边界，而不是为缩短文件直接合并掉。共享提交 Controller 也确实消除了两处发起入口已发生过的漂移。</p>
+<h3 id="section-19">5.3 后续应证明的执行边界</h3>
+<p>SQLite admission 不覆盖后续命令；节点执行、取消和重启恢复仍需选定真实 Provider 做故障注入。唯一执行所有权是一项需求，repo lock、单进程服务或 daemon 是方案，不能仅凭没有某个架构名称判为 P0。事件的开场前缀原子化与后续 best-effort 展示投影也需分开：后者可以服务观察，但不能未经验收就承担完整模型历史和消息消费事实。</p>
+<p>现有 README 还披露自动化只在长驻进程内触发、历史交付审批记录未绑定内容指纹等限制。它们应按具体使用场景排期；本次未发现这些限制被新版命令绑定意外放大，也没有对其重新做完整攻击或生产复现。</p>
+<h3 id="section-20">5.4 维护性</h3>
+<p>本轮修复只调整共享控制器的回执/本地失败分界，没有新增全局注册表、浏览器事务框架或服务端状态表。建议继续让三类事实分别拥有清晰来源：服务端回执决定是否已受理，filesState 决定目录准备情况，浏览器错误决定当前页面后续操作是否完成。不要用单个 catch 或单个“失败”状态折叠它们。</p>
+<p>全量列表重复解析快照、高频 SSE 失效与连续网络请求的成本值得测量，但本轮没有性能基准，因此不据源码行数直接报性能事故，也不立即引入新的缓存或调度平台。</p>
+<h2 id="section-21">6. DeepSeek Harness 与官方资料对照</h2>
+<p>本轮从 GitHub Releases 接口重新读取的最新发布仍为 <a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.3-alpha.1">0.1.3-alpha.1</a>，发布时间 2026-09-04 11:34:32 UTC；Tekon 不因上游发布变化自动升级 pin。</p>
+<p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/packages/bundle/headless/README.md">官方 Headless</a> 的边界是一次任务、最终回答后退出，没有交互式 follow-up；它适合当前一次性 Goal。完整接入是实际版本、能力、凭据、取消与退出测试，不只是 help/config 关键词匹配。</p>
+<p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/packages/acp/acp/README.md">官方 ACP</a> 提供持久 Session、标准语义更新、prompt cancel、close 与 restart resume，但不提供原始 Provider deltas、旧更新重放、完整 transcript replay 或 fork。它是持续协作候选协议，不是接上即可获得完整 UI 历史产品。</p>
+<p><a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/SAFETY.md">Safety</a> 仍声明实验性且未经安全审计，sandbox/approval 不是唯一隔离保证。Tekon 应继续明确宿主权限、凭据与代理来源，而不是恢复整份环境继承以换取安装方便。此次不升级 DSH、不宣称新的真实二进制或带 API key 模型调用验证。</p>
+<p>**建议：**先选择一个真实 Provider，跑通一次执行、用户取消、确认退出、进程重启及后续恢复；再依据是否需要多轮选用 ACP。不要把上游每个新版本或每项功能都变成 Tekon 当前 PR 的必做重构。</p>
+<h2 id="section-22">7. 是否存在过度实现或过度设计</h2>
+<p>本轮没有发现应当删除的 v3 命令绑定主机制。93 行左右的绑定模块、局部 HMAC 比较签名、严格白名单预览都对应明确需求；不能仅因多了一个类型或文件就评价为过度设计。</p>
+<p>更值得避免的是：为尚未量化的性能问题建设平台；为每个可观察状态增加一套全局事实源；把 HTML、人审报告或有意义的负向测试按形式判定为冗余；不断修改已经关闭的历史结论而不区分版本。</p>
+<p>当前 PR 体量较大，后续最好按可独立验收的命令绑定、Provider 生命周期、导出等切片推进。是否 squash 由仓库合并策略决定；<strong>squash 不会自动消除行为耦合、迁移或回滚风险。</strong> 本次遵照要求仍提交同一 PR，不创建额外路线图平台、无新增泛化框架或无关 Issue 修改。</p>
+<h2 id="section-23">8. 验证记录与交付决策</h2>
+<h3 id="section-24">8.1 本地</h3>
+<ul>
+<li>真实源码 Git blob：Controller <code class="notranslate">391a1f35dbf110421e3c2503b1ad8db1ce170635</code>；Ledger <code class="notranslate">32f247ed45bfed1eb3f28e8af15f143aadeece72</code>。复制到本地后逐字节核对。</li>
+<li>同份新增测试：修改前 6 失败/3 通过；修复后 9 通过。三条保留反例证明没有将“没有确认”误判为“已受理”。</li>
+<li>两份变更 TypeScript 转译语法检查通过；它不等于完整类型检查。</li>
+<li>完整本地 pnpm 测试因依赖不可安装未执行。最终集成结果必须使用对应远端提交，而不是复用基线的绿色。</li>
+</ul>
+<h3 id="section-25">8.2 远端</h3>
+<p>代码修复提交的 <a href="https://github.com/zesming/tekon/actions/runs/33959238116">Core #442</a> 与 <a href="https://github.com/zesming/tekon/actions/runs/33959238073">CI #351</a> 均为 <strong>completed/success</strong>。CI 的 9 个 Job 全部成功：Root build/typecheck、生产依赖审计、Node 20.19.0 / 22.12.0 / 22.19.0 / 24.x、CLI、Web、Chromium。</p>
+<p><a href="https://github.com/zesming/tekon/actions/runs/33959238073/job/101288120741">Web Job 日志</a> 确认新增 <code class="notranslate">run-admission-receipt.test.ts</code> 的 9 项进入真实 Vitest，Web 总计 <strong>55 个文件、531 项通过</strong>。PR 事件实际检出代码 Head 与当前 main 的合成 merge commit <code class="notranslate">61726d57735660e6d245c6a58979a61b359cc28c</code>，日志明确对应本次 <code class="notranslate">c4f6939…</code>，不是旧分支测试。</p>
+<p>报告与索引属于后续文档提交；它们自己的 Head 检查由 PR 描述单独列出，不制造“报告内包含自身 SHA”的循环提交。</p>
+<h3 id="section-26">8.3 版本与文档</h3>
+<p>这是一项尚未合并的 v0.23.0 缺陷修正，不另行发布版本，不改 Schema、CLI、安装器、Provider pin 或现有操作流程。README/手册已经说明原请求查询和观察原运行，本次无须重复改写；新增本地失败语义在此报告归档。AGENTS 不需要变化。HTML 与 Markdown 内容同步，current 两种格式均更新。</p>
+<h3 id="section-27">8.4 后续验收顺序</h3>
+<p>本轮已修 R25-01，不新增未修复的增量 P1。下一阶段按实际价值选择：真实 Provider 的执行/取消/退出/恢复证据；完整只读历史导出；再做持久协作及必要的执行所有权演进。每项有独立测试和失败边界，不将所有长期能力绑定成一个“全部重做才能通过”的门槛。</p>
+<p>本轮未执行 merge、release、deploy、强推、物理数据清理或仓库规则修改。</p>
+<h2 id="section-28">9. 接续独立复核与整改裁决（2026-09-05）</h2>
+<h3 id="section-29">9.1 同步与独立验证</h3>
+<p>主代理从干净工作区的 <code class="notranslate">8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0</code> 快进到 <code class="notranslate">4bb7c260da2f8557f23beab42e01baca65f3ef2a</code>，保留作者 <code class="notranslate">c4f6939</code> 的修复与 9 项测试。R24 实施交付是 <code class="notranslate">8a7bb3f</code>，<code class="notranslate">0a6edc9</code> 是该轮整改前基线；这里澄清首表“上轮实际交付”的版本指向，不重写历史正文。</p>
+<p>DSH 已实际 <code class="notranslate">git fetch origin --tags</code>，HEAD 与 origin/master 仍为 <code class="notranslate">d347e703908d0406b7a7ef80e3a0e594d86b2215</code>，标签 <code class="notranslate">dsh-v0.1.3-alpha.1</code>，工作区干净。tested pin 不变。最高思考等级独立代理分别调查回执/账本、产品/UI 接线和整体执行框架/DSH，以下不是把主代理自检换个名称。</p>
+<p>本地完整依赖环境中，作者 9 项回执测试全部通过；初步定向 3 文件 43 项通过；全包 build/typecheck 通过；同步基线全量为 179 文件、1998 passed、1 项既有 opt-in DSH live contract skipped。这个基线说明已覆盖合同未回归，不能证明尚未覆盖的组合时序正确。</p>
+<h3 id="section-30">9.2 原修复成立，但已确认身份仍会被后续读取覆盖</h3>
+<p>独立 review 与主代理发现同一根因：私有 acceptedRecords 只保护目录 ready 的 accepted，且 <code class="notranslate">mergeRecords</code>、<code class="notranslate">loadScope</code> 仍会直接使用四字段账本替换完整回执。主代理用真实 Controller/Ledger、内存 Storage 和确定性异步门执行探针，没有修改业务：</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>探针时序</th>
+<th>变更前已观察到的事实</th>
+<th>当前实际结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET 开始 → POST 回 recovery-required → 旧 GET 返回 not-found</td>
+<td>recovery-required、Run/Session、recovery_required</td>
+<td>被改为 unknown，Run/Session 和目录细分消失</td>
+</tr>
+<tr>
+<td>POST 回 recovery-required → 原内容重试 → 网络失败</td>
+<td>已确认的同一 Run/Session</td>
+<td>重试写入 unknown，最终 outcome=unknown，观察入口所需身份消失</td>
+</tr>
+<tr>
+<td>POST 回 recovery-required → 同 scope loadScope</td>
+<td>已确认 Run/Session/filesState</td>
+<td>仅余账本中的 recovery-required，无 Run/Session/filesState</td>
+</tr>
+</tbody>
+</table></div>
+<p>三个探针均使用固定 <code class="notranslate">r25-probe-request</code>、<code class="notranslate">run-confirmed</code>、<code class="notranslate">session-confirmed</code>；这些是内存时序标识，不是真实服务端 Run 或模型产物。源码层另确认 accepted 的同类路径：删除旧账本失败后，提交另一任务会用磁盘 unknown 覆盖已知 accepted；再次查询又可能因 Map 已知而直接返回，无法补回观察入口。</p>
+<p>因此接受 R25-01 的原修复，但补充判定仍有 P2：已确认身份的保护需要覆盖所有合并路径，而不只 catch 中的一次性本地后处理失败。没有证据把这些页面问题升级成服务端事务回滚或幂等失效。</p>
+<p>方案独立审阅还指出作用域切换的错误路径：loadScope 目前先读取新 scope 账本，再撤销旧 scope；若新账本不可读，旧仓库记录和查询归属仍可能留在页面。修订先切断旧作用域再读取新账本，并补派发前 scope/intent 网络失败零 POST、恢复重试首次 list 失败，以及查询 A 不清除未知 B 错误的定向断言。该补充仍属于同一共享合并边界，尚不冒称已通过实现验证。</p>
+<h3 id="section-31">9.3 真实导航还有 Promise 边界</h3>
+<p>源码事实：项目使用 <code class="notranslate">createBrowserRouter</code>；当前 lockfile 和安装包的 React Router 7.18.3 的 Data Router navigate 返回 Promise。默认入口在调用 navigate 前清空输入，且 Controller、hook wrapper、组件均未完整等待返回值。原 9 项测试覆盖同步 throw，没有验证真实异步拒绝。</p>
+<p>据 <a href="https://reactrouter.com/api/hooks/useNavigate" rel="nofollow">React Router useNavigate 合同</a> 及本地安装源码，建议让后处理支持 <code class="notranslate">void | Promise&lt;void&gt;</code> 并等待，导航失败保留需求、已确认身份与固定本地失败提示；浏览器以一次目标 Session 导航的 DataCloneError 注入验证。此处尚是源码确认路径，必须先取得真实页面红测，不能把普通导航一概说成失败。</p>
+<p>方案首轮两名独立 reviewer 均指出，简单改成“await 导航后清空”仍可能由旧 continuation 清掉等待期间的新输入。修订采用更小方案：默认入口不主动清空，正常成功路由切换时由组件卸载重置；回调调用前校验 owner，旧拒绝不发布到新上下文，不承诺撤回已经开始的 Router 导航。补 deferred 导航后编辑/换凭据/新建/卸载的 React 回归及成功返回首页的真实路由断言，再行复查。</p>
+<h3 id="section-32">9.4 采用最小共享合并，不重做执行内核</h3>
+<p>具体实施合同见 <a href="../superpowers/plans/2026-09-05-twenty-fifth-review-remediation-plan.html">第 25 轮整改方案</a>：复用 Controller 内 Map 保存两类已确认回执；scope/requestId/fingerprint 同一身份才能合并；未知、not-found 和裸账本不能覆盖确认。只有 accepted 短路重发，recovery 仍能原 ID 重试并升级；目录非终态信息仍可更新。捕获异步后处理错误，不新增 RPC、持久字段、全局状态机或清空账本。拟版本 0.23.1，按既有承诺修复的 PATCH 计。</p>
+<p>整体执行与 DSH 独立复核未发现此次增量破坏 v3 物化、旧版恢复、Job owner/取消防护或上游限制。补充 §2.2 的准确边界：新受理强制 v3；已有 admission 的无快照/v1 降级路径会被拒绝，合法 v2 兼容仍保留；这不等于防御全库写权限者同时重写快照、摘要、节点及历史。无需为此新增签名平台。</p>
+<p>DSH Headless reasoning 向 stderr 输出且首 token 前无心跳，是将来升级 pin 时应验收的输出量/留存与时延边界，不是本次恢复整份环境继承或重做 Provider 的理由。依据：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/bundle/headless/README.md">固定 Headless 源稿</a>、<a href="https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/acp/acp/README.md">ACP</a>、<a href="https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/SAFETY.md">Safety</a>。</p>
+<p>以上记录实施前的调查和裁决；方案已完成最高等级循环评审，实施与验收接续记录在 §10。真实 Provider 生命周期、完整只读导出和 ACP 继续按原报告后续顺序推进，不以这些长期目标阻塞可独立验收的本轮修复，也不把它们说成已完成。</p>
+<h2 id="section-33">10. v0.23.1 接续实施与验收</h2>
+<h3 id="section-34">10.1 已落实的修复与独立审阅</h3>
+<p>共享 Controller 使用私有 confirmedRecords 保存 accepted 与 recovery-required 的完整回执；按 scope、requestId、fingerprint 和已有 Run/Session 身份合并。旧账本、未知查询与迟到失败不再覆盖已确认身份；恢复仍可原 ID 重试并升级 ready。scope 先隔离再读新账本，避免读取失败留下旧仓库入口。</p>
+<p>Controller 等待 onAccepted，hook 返回真实回调结果，SessionComposer 等待实际 Router 导航且不主动清空输入。成功离开首页自然卸载表单；导航失败保留原需求和观察入口，旧 continuation 不清空后来编辑的内容。服务端协议、Core、CLI、四字段账本及 DSH tested pin 未改。</p>
+<p>两名最高思考等级独立 reviewer 先审方案，修正导航清理归属和作用域失败隔离后放行。Controller 代码与测试三轮复查中，两次发现多请求错误归属 P2：派发前失败未绑定原请求；忽略 A 的迟到错误时又改写了 B 的错误归属。两者均先补红测再修复，最终仅在实际发布错误时绑定 owner，第三轮明确未检出必须修复项。组件、生产浏览器与 React 测试由另一名未实施对应代码的 reviewer 审阅。</p>
+<h3 id="section-35">10.2 红测、通过记录与证据边界</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>验证</th>
+<th>已取得结果</th>
+<th>证明范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Controller 新测试先行</td>
+<td>初轮 15 失败 / 14 通过；后续 scope 与三条错误归属测试各取得有效红测</td>
+<td>确认缺口来自具体合并/归属时序，不以测试数量代替行为证据</td>
+</tr>
+<tr>
+<td>Controller 最终定向</td>
+<td>新 36 + 作者 9 + 原控制器 27 = 72/72</td>
+<td>合并、恢复、派发前后故障、身份隔离与异步回调</td>
+</tr>
+<tr>
+<td>旧构建真实浏览器</td>
+<td>显式 mock 夹具修正后，accepted 清理失败再新建、真实 Data Router 拒绝两项均在功能断言失败</td>
+<td>不计入此前 preview 字段缺失或同文档导航导致的夹具失败</td>
+</tr>
+<tr>
+<td>真实 React 导航</td>
+<td>专项 10/10；与 R24 联合执行 17/17，其中 React 10 项全部通过</td>
+<td>等待 resolve/reject × 未编辑、A→B→A、明确新建、token 切换、卸载；组件最初两项红测确认输入被过早清空</td>
+</tr>
+<tr>
+<td>生产页面 R25 定向</td>
+<td>39/39，禁用自动重试</td>
+<td>两入口 22 项 I/O、1 项真实导航、16 项四宽度交互</td>
+</tr>
+<tr>
+<td>完整 Chromium</td>
+<td>两片串行 84/84 + 64/64 = 148/148，零重试、零跳过</td>
+<td>全部已登记浏览器旅程，包含本轮 49 项；不是把定向测试累加成完整覆盖</td>
+</tr>
+<tr>
+<td>全仓 Vitest</td>
+<td>180 files、2034 passed、1 skipped</td>
+<td>Core/CLI/Web；skip 为既有 opt-in DSH live contract，不算通过</td>
+</tr>
+<tr>
+<td>CLI 独立真进程 e2e</td>
+<td>6 files、22/22</td>
+<td>全部已登记 CLI e2e，与全仓测试重叠，不重复累加为新覆盖</td>
+</tr>
+<tr>
+<td>构建与静态类型</td>
+<td>全包 pnpm build、pnpm typecheck 通过</td>
+<td>四包版本 0.23.1，CLI 构建与 Web 生产构建</td>
+</tr>
+<tr>
+<td>生产依赖审计</td>
+<td>无已知生产依赖漏洞</td>
+<td>当前锁文件与审计时点，不保证未来无新公告</td>
+</tr>
+</tbody>
+</table></div>
+<p>39 项生产页面测试使用真实 HTTP、SQLite 与文件系统；默认入口在测试传输层将 plan、intent、run 三处统一改为 mock，高级入口实际选择 mock。断言核对持久 Provider、计划摘要、Run/Session/受理表总增量各一及初始执行 Job 唯一性；readiness-evaluate 派生 Job 不算重复受理。10 项 React 测试使用 Vite 加载真实组件与同一个 Router 实例，回执为受控 DTO，不计作真实服务端受理证据。</p>
+<p>运行期间用进程级 PATH 防护阻止调用本机 codex、claude、dsh；已有显式 fake Provider 仍按测试自己的 PATH 使用。本轮不提供真实模型执行、取消、退出或重启恢复证据，也不启用现有 DSH live opt-in。</p>
+<p>完整 Chromium 首轮在 124/148 附近以 SIGTERM（143）退出，没有全套终态结果；其中 React 第一项因尚在 about:blank 就读 sessionStorage 而失败。修正为测试自身显式打开真实 origin 并确认凭据，不依赖共享模块顶层钩子的跨文件注册。组合复验还暴露 R24 初始化依赖同路径导航的问题：新增 Session 后的 goto 只补 token，没有重新加载文档、列表或 SSE 观察器。仅在 setup 补 reload，保留场景内 SPA 重挂载的缓存竞争断言；17 项组合复验全绿，两处夹具修正均经独立 review 放行。最终完整 Chromium 分两片串行取得上述全绿结果，不将首轮中断记成通过，也不臆断 SIGTERM 原因。</p>
+<h3 id="section-36">10.3 四宽度与文档验收</h3>
+<p>新截图独立归档在 <code class="notranslate">assets/r25-v0.23.1/</code>，不覆盖 R23/R24。主代理与独立代理实际打开初轮全部 16 张后，拒收其中仍有列表加载动画的过渡图。采图条件现已补齐：真实 Job、相关事件序号、Run/Session/目录状态连续稳定至少 750ms，覆盖服务端 500ms 评估延迟窗口；随后点击真实刷新按钮，核对 HTTP 与 DOM 的目标身份及状态，无加载动画后采图。恢复请求以目录未就绪、初始 Job queued 且零角色执行为稳定态，不要求它执行到终态。此条件通过完整浏览器第二片；最终归档专跑再次 16/16，零重试。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的证据表"><table role="table">
+<thead>
+<tr>
+<th>宽度</th>
+<th>默认入口：已受理 / 等待恢复</th>
+<th>高级入口：已受理 / 等待恢复</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>320px</td>
+<td><a href="assets/r25-v0.23.1/r25-320-simple-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-320-simple-recovery-required-local-warning.png">等待恢复</a></td>
+<td><a href="assets/r25-v0.23.1/r25-320-advanced-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-320-advanced-recovery-required-local-warning.png">等待恢复</a></td>
+</tr>
+<tr>
+<td>390px</td>
+<td><a href="assets/r25-v0.23.1/r25-390-simple-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-390-simple-recovery-required-local-warning.png">等待恢复</a></td>
+<td><a href="assets/r25-v0.23.1/r25-390-advanced-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-390-advanced-recovery-required-local-warning.png">等待恢复</a></td>
+</tr>
+<tr>
+<td>700px</td>
+<td><a href="assets/r25-v0.23.1/r25-700-simple-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-700-simple-recovery-required-local-warning.png">等待恢复</a></td>
+<td><a href="assets/r25-v0.23.1/r25-700-advanced-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-700-advanced-recovery-required-local-warning.png">等待恢复</a></td>
+</tr>
+<tr>
+<td>1440px</td>
+<td><a href="assets/r25-v0.23.1/r25-1440-simple-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-1440-simple-recovery-required-local-warning.png">等待恢复</a></td>
+<td><a href="assets/r25-v0.23.1/r25-1440-advanced-accepted-local-warning.png">已受理</a> / <a href="assets/r25-v0.23.1/r25-1440-advanced-recovery-required-local-warning.png">等待恢复</a></td>
+</tr>
+</tbody>
+</table></div>
+<p><a href="assets/r25-v0.23.1/evidence.json">可复核状态摘要</a> 保存每张图的 SHA-256、Request/Run/Session ID、Job/目录状态、稳定窗口及采图前后几何结果。16 种场景均保留另一条 128 字符 unknown 请求，原观察与查询入口可经 Tab 到达并实际打开原会话；回执文字及控件无横裁、越界或重叠。默认入口最终列表显示已完成的 mock 会话或等待恢复；高级列表保留对应行。高级列表的 Running 汇总沿用持久 run.status，不能据此推断目录未就绪的任务已经执行，应以行内恢复徽标及“任务尚未执行”说明为准。</p>
+<p>主代理及未参与 UI/浏览器测试实现的独立代理均重新实际打开最终 16/16 张，前轮加载动画必须项关闭，复查未检出新的必须修复视觉问题。这些是临时 fixture 的 mock 受理/恢复证据：accepted 的合成流程完成不是真实任务交付，recovery 的角色执行数必须为零。本轮没有新增真实 Provider 风险 Gate 结果或交付 eval 分数。静态截图不证明真实设备、辅助技术或表格横向滚动的全部交互；键盘证据来自对应 e2e，不能仅从截图推出。宿主缺少 emoji 字体，采图使用临时进程级 Noto Color Emoji 配置，不改系统字体或业务样式。</p>
+<p>README、CHANGELOG、用户手册 MD/HTML 已同步当前页回执保护、导航失败及刷新后的操作分流。文档独立审阅曾指出“刷新后按 Request ID 查询”遗漏账本已清理的情况，现已修正：仍有记录则查询，记录已移除则从受控交付列表打开已有会话；复查未检出必须项。未改安装/更新脚本与 AGENTS，因为安装流程、命令合同及仓库协作规则均未变化。</p>
+<h3 id="section-37">10.4 交付条件</h3>
+<p>最高思考等级独立完成度复查未检出必须修复项，本轮本地整改放行。Git 推送与远端检查仍是交付步骤，不用本地通过替代最终 Head 的 Core/CI。包含全部源码、测试、文档与图片的最终提交及检查链接记录在 PR #11，避免文档写入自身 SHA 后再次产生新 Head 的循环。不得合入、发布、部署或强推。</p>
+<footer class="end">本页由同名 Markdown 源稿生成；代码快照与验证边界按正文各时点区分。报告排版不作为 Tekon 应用视觉验收证据。</footer></main></body></html>

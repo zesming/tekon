@@ -355,6 +355,20 @@ export type RpcProcedureMap = {
 <td>Runs 列表</td>
 </tr>
 <tr>
+<td><code>project.health</code></td>
+<td>已有，只读</td>
+<td>none</td>
+<td>Web credential read</td>
+<td>只校验 Session token，不等待可选 Provider</td>
+</tr>
+<tr>
+<td><code>project.providerHealth</code></td>
+<td>v0.21.0 新增</td>
+<td>token</td>
+<td>DSH preflight</td>
+<td>凭据有效后独立探测 dsh-headless；只返回 available/unavailable</td>
+</tr>
+<tr>
 <td><code>project.run</code></td>
 <td>已有，token</td>
 <td>token + confirm</td>
@@ -370,10 +384,10 @@ export type RpcProcedureMap = {
 </tr>
 <tr>
 <td><code>project.clean</code></td>
-<td>已有，token</td>
+<td>已有，token，当前挂起</td>
 <td>token + high-risk confirm</td>
 <td><code>clean</code></td>
-<td>删除 run 目录，高危确认必须单独测试</td>
+<td>记录拒绝 Audit 后返回 <code>CLEAN_SUSPENDED</code>，不执行物理删除；等待 lifecycle-safe purge</td>
 </tr>
 <tr>
 <td><code>demand.shape</code></td>

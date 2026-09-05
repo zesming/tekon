@@ -93,6 +93,7 @@ export const jobStatusSchema = z.enum([
   'paused',
   'cancelling',
   'cancelled',
+  'interrupted',
   'failed',
   'done',
 ]);

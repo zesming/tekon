@@ -1,3 +1,4 @@
+import { useDialogA11y } from '../../hooks/use-dialog-a11y.js';
 import type { ApiRoleItem } from '../../../shared/api-types.js';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,8 @@ const roleDescriptions: Record<string, string> = {
 };
 
 export function RoleDetailPanel({ role, onClose }: RoleDetailPanelProps) {
+  const panelRef = useDialogA11y<HTMLDivElement>({ onClose });
+  const titleId = `role-detail-title-${role.id}`;
   const description = roleDescriptions[role.id];
 
   return (
@@ -31,11 +34,18 @@ export function RoleDetailPanel({ role, onClose }: RoleDetailPanelProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="detail-panel">
+      <div
+        ref={panelRef}
+        className="detail-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         {/* ── Header ── */}
         <div className="detail-panel-header">
           <div>
             <div
+              id={titleId}
               style={{
                 fontFamily: 'var(--font-d)',
                 fontSize: '20px',
@@ -51,6 +61,7 @@ export function RoleDetailPanel({ role, onClose }: RoleDetailPanelProps) {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
+            aria-label="关闭角色详情"
             onClick={onClose}
           >
             ✕

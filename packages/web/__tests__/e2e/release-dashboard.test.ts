@@ -1,4 +1,5 @@
 import { expect, test } from './shared-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 test.describe('Tekon release dashboard', () => {
   test('delivery pipeline display, PR preparation, and desktop screenshot', async ({
@@ -47,16 +48,14 @@ test.describe('Tekon release dashboard', () => {
       page.getByText('交付管道 Delivery Pipeline'),
     ).toBeVisible();
 
-    // ── 3. Verify authenticated delivery affordances ─────────────────────
-    await expect(page.getByLabel('Session token')).toHaveValue(
-      fixture.sessionToken,
-    );
+    // ── 3. Verify credential-configured delivery affordances ─────────────
+    await expect(credentialStatus(page, 'valid')).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeVisible();
 
     // The fixture run is paused, so readiness keeps Prepare PR disabled even
-    // though the normal connected credential is present.
+    // though the normal configured credential is present.
     await expect(
       page.getByRole('button', { name: 'Prepare PR' }),
     ).toBeDisabled();

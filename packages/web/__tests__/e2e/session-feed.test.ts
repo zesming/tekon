@@ -1,4 +1,8 @@
 import { test, expect } from './shared-fixture.js';
+import {
+  BUTTON_LABELS,
+  credentialStatus,
+} from './helpers/locators.js';
 
 // Phase 3 3b: browser-level SSE consumption (moved from 3a per review S5 —
 // 3a had no page to host the stream). Starts a real mock-agent run through the
@@ -11,6 +15,16 @@ async function startRun(
   baseUrl: string,
   token: string,
 ): Promise<{ runId: string; sessionId: string }> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'standard-delivery', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   const response = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-session-token': token },
@@ -21,6 +35,7 @@ async function startRun(
         template: 'standard-delivery',
         agent: 'mock',
         token,
+        planDigest: planJson.result.digest,
       },
     }),
   });
@@ -96,7 +111,7 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
     page.locator('[data-event-type="worktree/leased"]'),
   ).toHaveCount(0);
   const technicalToggle = page.getByRole('button', {
-    name: '显示技术事件',
+    name: BUTTON_LABELS.SHOW_TECHNICAL_EVENTS,
   });
   await expect(technicalToggle).toBeVisible();
   await expect(technicalToggle).toHaveAttribute('aria-pressed', 'false');
@@ -105,7 +120,7 @@ test('Session Detail streams the event feed and reaches a live connection', asyn
     page.locator('[data-event-type="worktree/leased"]').first(),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: '隐藏技术事件' }),
+    page.getByRole('button', { name: BUTTON_LABELS.HIDE_TECHNICAL_EVENTS }),
   ).toHaveAttribute('aria-pressed', 'true');
 
   // The connection indicator resolves to live (replay complete, streaming).
@@ -150,11 +165,9 @@ test('Sessions list shows the started session and links to its detail', async ({
   await expect(workspace).toContainText('当前项目');
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible();
   await expect(
-    page.getByRole('button', { name: '启动受控交付' }),
+    page.getByRole('button', { name: BUTTON_LABELS.START_CONTROLLED_DELIVERY }),
   ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: '显示会话令牌' }),
-  ).toBeVisible();
+  await expect(credentialStatus(page, 'valid')).toBeVisible();
 
   const link = page.locator(`a[href="/sessions/${sessionId}"]`);
   await expect(link).toBeVisible({ timeout: 15_000 });

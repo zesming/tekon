@@ -112,6 +112,30 @@ describe('session event store', () => {
     expect(await sessions.listEventsSince(session.id, 3)).toEqual([]);
   });
 
+  it('listEventsBefore returns raw events with seq < beforeSeq in descending order', async () => {
+    const { sessions } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    for (let i = 0; i < 5; i++) {
+      await sessions.appendEvent({ sessionId: session.id, type: 'turn/start' });
+    }
+
+    // limit 2 → the two newest rows below seq 5, descending.
+    const page = await sessions.listEventsBefore(session.id, 5, 2);
+    expect(page.events.map((event) => event.seq)).toEqual([4, 3]);
+    expect(page.hasMore).toBe(true);
+
+    // The next page continues from the smallest returned seq.
+    const next = await sessions.listEventsBefore(session.id, 3, 2);
+    expect(next.events.map((event) => event.seq)).toEqual([2, 1]);
+    expect(next.hasMore).toBe(false);
+
+    // No rows below seq 1.
+    const empty = await sessions.listEventsBefore(session.id, 1, 10);
+    expect(empty.events).toEqual([]);
+    expect(empty.hasMore).toBe(false);
+  });
+
   it('roundtrips payloads, arrays, booleans, and event metadata', async () => {
     const { sessions } = setupStore();
     const { session } = await seedSession(sessions);
@@ -868,10 +892,11 @@ describe('session run id lookup', () => {
     expect(await sessions.getRunIdBySessionId(session.id)).toBeNull();
   });
 
-  // Phase 3 3a: read-path for the Session List UI. listSessions is a pure
-  // SELECT scoped to a workspace, newest-first, carrying run_id from the column
-  // (the frozen Session schema has no runId, so the list entry extends it).
-  it("listSessions returns a workspace's sessions newest-first with runId", async () => {
+  // Phase 3 3a / Phase 4 P1-04: read-path for the Session List UI.
+  // listSessions is a pure SELECT scoped to a workspace, ordered by last
+  // activity (coalesce(max(events.timestamp), created_at) desc), carrying
+  // run_id and lastActivityAt from the query (SessionListEntry).
+  it("listSessions returns a workspace's sessions ordered by last activity with runId and lastActivityAt", async () => {
     const { sessions } = setupStore();
     const workspace = await sessions.getOrCreateDefaultWorkspace('/repo/list');
     const first = await sessions.createSession({
@@ -887,18 +912,57 @@ describe('session run id lookup', () => {
       runId: null,
     });
 
-    const listed = await sessions.listSessions(workspace.id);
-    expect(listed.map((s) => s.id)).toEqual([second.id, first.id]);
+    // Without events, both fall back to created_at (second was created after first).
+    const initialList = await sessions.listSessions(workspace.id);
+    expect(initialList.map((s) => s.id)).toEqual([second.id, first.id]);
+    expect(initialList.find((s) => s.id === first.id)?.lastActivityAt).toBe(
+      first.createdAt,
+    );
+    expect(initialList.find((s) => s.id === second.id)?.lastActivityAt).toBe(
+      second.createdAt,
+    );
+
+    // Ensure event timestamp is strictly newer than second.createdAt.
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Appending an event to `first` makes its lastActivityAt newer than `second`.
+    const event = await sessions.appendEvent({
+      sessionId: first.id,
+      type: 'agent/message',
+      payload: { text: 'activity on first session' },
+    });
+
+    const updatedList = await sessions.listSessions(workspace.id);
+    // `first` now sorts ahead of `second` because its last event is newest.
+    expect(updatedList.map((s) => s.id)).toEqual([first.id, second.id]);
+    expect(updatedList[0].lastActivityAt).toBe(event.timestamp);
+    expect(updatedList[1].lastActivityAt).toBe(second.createdAt);
+
+    // Appending a second event to `first` advances lastActivityAt to the latest event (seq-desc)
+    await new Promise((r) => setTimeout(r, 20));
+    const event2 = await sessions.appendEvent({
+      sessionId: first.id,
+      type: 'agent/message',
+      payload: { text: 'second activity on first session' },
+    });
+    expect(event2.seq).toBeGreaterThan(event.seq);
+
+    const updatedList2 = await sessions.listSessions(workspace.id);
+    expect(updatedList2[0].lastActivityAt).toBe(event2.timestamp);
+
     // runId is carried through from the run_id column (NIT-1), including null.
-    const byId = new Map(listed.map((s) => [s.id, s.runId]));
+    const byId = new Map(updatedList.map((s) => [s.id, s.runId]));
     expect(byId.get(first.id)).toBe('run_first');
     expect(byId.get(second.id)).toBeNull();
+
     // The frozen Session fields are present too.
-    expect(listed[0]).toMatchObject({
+    expect(updatedList[0]).toMatchObject({
       workspaceId: workspace.id,
-      title: 'second',
+      title: 'first',
       profile: 'human-web',
       status: 'active',
+      runId: 'run_first',
+      lastActivityAt: event.timestamp,
     });
   });
 
@@ -918,5 +982,65 @@ describe('session run id lookup', () => {
     ]);
     expect(await sessions.listSessions(wsB.id)).toEqual([]);
     expect(await sessions.listSessions('ws_does_not_exist')).toEqual([]);
+  });
+
+  // getLatestEventTimestamp is the lightweight tail read used by session.get:
+  // it returns only the tail event's timestamp (no payload deserialization),
+  // sharing listSessions' seq-desc tail semantics.
+  it('getLatestEventTimestamp returns null without events and the max-seq event timestamp otherwise', async () => {
+    const { sessions } = setupStore();
+    const { session } = await seedSession(sessions);
+
+    // No events yet: null (caller falls back to created_at/updated_at).
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBeNull();
+    expect(
+      await sessions.getLatestEventTimestamp('session_does_not_exist'),
+    ).toBeNull();
+
+    const first = await sessions.appendEvent({
+      sessionId: session.id,
+      type: 'agent/message',
+      payload: { text: 'first' },
+    });
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBe(
+      first.timestamp,
+    );
+
+    await new Promise((r) => setTimeout(r, 20));
+    const second = await sessions.appendEvent({
+      sessionId: session.id,
+      type: 'tool/result',
+      payload: { text: 'second' },
+    });
+    expect(second.seq).toBeGreaterThan(first.seq);
+    // Tail is the last appended event (seq-desc), same invariant as listSessions.
+    expect(await sessions.getLatestEventTimestamp(session.id)).toBe(
+      second.timestamp,
+    );
+  });
+
+  it('getLatestEventTimestamp is scoped per session', async () => {
+    const { sessions } = setupStore();
+    const { session: a } = await seedSession(sessions, '/repo/a', 'run_a');
+    const { session: b } = await seedSession(sessions, '/repo/b', 'run_b');
+
+    const eventA = await sessions.appendEvent({
+      sessionId: a.id,
+      type: 'agent/message',
+      payload: { text: 'a activity' },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const eventB = await sessions.appendEvent({
+      sessionId: b.id,
+      type: 'agent/message',
+      payload: { text: 'b activity' },
+    });
+
+    expect(await sessions.getLatestEventTimestamp(a.id)).toBe(
+      eventA.timestamp,
+    );
+    expect(await sessions.getLatestEventTimestamp(b.id)).toBe(
+      eventB.timestamp,
+    );
   });
 });

@@ -53,13 +53,19 @@ describe('openSessionStream reconnect', () => {
     });
 
     // Wait for the first connection + a reconnect to happen.
-    await vi.waitFor(() => {
-      expect(call).toBeGreaterThanOrEqual(2);
-    }, { timeout: 2000 });
+    await vi.waitFor(
+      () => {
+        expect(call).toBeGreaterThanOrEqual(2);
+      },
+      { timeout: 2000 },
+    );
     // Give the second connection's frames time to flush.
-    await vi.waitFor(() => {
-      expect(seen).toContain(3);
-    }, { timeout: 2000 });
+    await vi.waitFor(
+      () => {
+        expect(seen).toContain(3);
+      },
+      { timeout: 2000 },
+    );
 
     handle.close();
 
@@ -70,6 +76,80 @@ describe('openSessionStream reconnect', () => {
     // connState went live then reconnecting.
     expect(states).toContain('live');
     expect(states).toContain('reconnecting');
+  });
+
+  it('keeps replay-truncated control frames out of the event feed', async () => {
+    const seen: number[] = [];
+    const calls: Array<Record<string, string>> = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      call += 1;
+      calls.push((init?.headers as Record<string, string>) ?? {});
+      if (call === 1) {
+        return sseResponse(
+          'event: replay-truncated\n' +
+            'data: {"cursor":500,"reason":"budget exceeded"}\n\n' +
+            frame(501, 'assistant/message'),
+        );
+      }
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+
+    const handle = openSessionStream({
+      sessionId: 's1',
+      token: 'tok',
+      fetchImpl,
+      baseBackoffMs: 1,
+      maxBackoffMs: 2,
+      onEvent: (event) => seen.push(event.seq),
+      onStateChange: () => {},
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(call).toBeGreaterThanOrEqual(2);
+      },
+      { timeout: 2000 },
+    );
+    handle.close();
+
+    expect(seen).toEqual([501]);
+    expect(calls[1]['Last-Event-ID']).toBe('501');
+  });
+
+  it('invokes onTruncated with the cursor when a replay-truncated frame arrives', async () => {
+    const truncated: Array<number | null> = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return sseResponse(
+          'event: replay-truncated\n' +
+            'data: {"cursor":500,"reason":"budget exceeded"}\n\n' +
+            frame(501, 'assistant/message'),
+        );
+      }
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+
+    const handle = openSessionStream({
+      sessionId: 's1',
+      token: 'tok',
+      fetchImpl,
+      baseBackoffMs: 1,
+      maxBackoffMs: 2,
+      onEvent: () => {},
+      onStateChange: () => {},
+      onTruncated: (cursor) => truncated.push(cursor),
+    });
+
+    await vi.waitFor(
+      () => {
+        expect(truncated).toEqual([500]);
+      },
+      { timeout: 2000 },
+    );
+    handle.close();
   });
 
   it('does not send Last-Event-ID on the very first connection', async () => {
@@ -87,9 +167,12 @@ describe('openSessionStream reconnect', () => {
       onStateChange: () => {},
     });
 
-    await vi.waitFor(() => {
-      expect(calls.length).toBe(1);
-    }, { timeout: 2000 });
+    await vi.waitFor(
+      () => {
+        expect(calls.length).toBe(1);
+      },
+      { timeout: 2000 },
+    );
     handle.close();
 
     expect(calls[0]['Last-Event-ID']).toBeUndefined();
@@ -120,9 +203,12 @@ describe('openSessionStream reconnect', () => {
         onStateChange: (s) => states.push(s),
       });
 
-      await vi.waitFor(() => {
-        expect(states).toContain('closed');
-      }, { timeout: 2000 });
+      await vi.waitFor(
+        () => {
+          expect(states).toContain('closed');
+        },
+        { timeout: 2000 },
+      );
       // Give any (erroneous) scheduled reconnect a chance to fire.
       await new Promise((r) => setTimeout(r, 20));
 
@@ -139,7 +225,8 @@ describe('openSessionStream reconnect', () => {
     let call = 0;
     const fetchImpl = vi.fn(async () => {
       call += 1;
-      if (call === 1) return { ok: false, status: 503, body: null } as unknown as Response;
+      if (call === 1)
+        return { ok: false, status: 503, body: null } as unknown as Response;
       return new Promise<Response>(() => {}); // hang on the retry so we can settle
     }) as unknown as typeof fetch;
 
@@ -153,9 +240,12 @@ describe('openSessionStream reconnect', () => {
       onStateChange: (s) => states.push(s),
     });
 
-    await vi.waitFor(() => {
-      expect(call).toBeGreaterThanOrEqual(2);
-    }, { timeout: 2000 });
+    await vi.waitFor(
+      () => {
+        expect(call).toBeGreaterThanOrEqual(2);
+      },
+      { timeout: 2000 },
+    );
     // Snapshot before close() (which legitimately emits 'closed').
     const before = [...states];
     handle.close();

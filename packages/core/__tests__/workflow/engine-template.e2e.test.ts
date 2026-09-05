@@ -332,7 +332,7 @@ describe('workflow engine template e2e', () => {
           ],
         },
       }),
-    ).rejects.toThrow(/duplicate gateKey "validate" in node "rd-node"/u);
+    ).rejects.toThrow(/INVALID_WORKFLOW_TEMPLATE: template.phases.0.nodes.0.gates/u);
     db.close();
   });
 });

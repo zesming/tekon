@@ -1,7 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 
 import type { AgentAdapterConfig } from '../types/config.js';
 import {
@@ -18,10 +16,7 @@ import {
   ingestAgentManifestArtifacts,
   missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
-import {
-  assertDshVersionAllowed,
-  parseDshVersion,
-} from './dsh-bridge-probe.js';
+import { runDshPreflight } from './dsh-bridge-probe.js';
 
 // ---------------------------------------------------------------------------
 // dsh-headless adapter (phase 5b). Bridges the external `dsh` CLI through its
@@ -83,20 +78,6 @@ function isRealDshCommand(command: string): boolean {
   return basename(command) === 'dsh';
 }
 
-const execFileAsync = promisify(execFile);
-
-/**
- * Default version probe: spawn `dsh --version` and return its stdout. Side-
- * effect free and needs no API key. Uses execFile (argv, no shell) so the
- * command string is never interpreted by a shell.
- */
-async function defaultProbeVersion(command: string): Promise<string> {
-  const { stdout } = await execFileAsync(command, ['--version'], {
-    timeout: 15_000,
-  });
-  return stdout;
-}
-
 /**
  * Reject any launcher-level control flag in user-supplied args (design §4.3,
  * review M3). `--profile`/`--patch`/`--dump-*` and the `web`/`plugin`
@@ -135,8 +116,10 @@ function assertSafeDshArgs(args: readonly string[]): void {
  * in depth, design §4.3). The governance framing and arg whitelist apply to
  * EVERY command, including an overridden binary path (enterprise dsh
  * distribution): a wrapper must still receive `--profile headless` + the task,
- * so renaming the binary can never drop the headless contract or the whitelist
- * (mirrors codex, whose controlled flags survive a command override).
+ * so renaming the binary can never drop the headless contract or the arg
+ * whitelist. Note: the execution-time capability gate (runDshPreflight) is
+ * keyed on basename(command) === 'dsh' and IS skipped for non-standard names;
+ * see #28 for the unified provider command identity contract.
  */
 export function buildDshHeadlessCommand(
   config: AgentAdapterConfig,
@@ -154,8 +137,13 @@ export function buildDshHeadlessCommand(
 
 /**
  * Build the pinned, non-inherited environment for the dsh child. Governance
- * env is set explicitly; DEEPSEEK_API_KEY is forwarded ONLY when present in the
- * source env and never persisted anywhere by Tekon.
+ * values are set explicitly and DSH session telemetry is hard-disabled for
+ * Tekon's non-interactive subprocess. DEEPSEEK_API_KEY is forwarded only when
+ * present in the source environment and is never persisted by Tekon.
+ *
+ * DSH may still resolve credential fallbacks from the invocation worktree's
+ * `.env`; that provenance is outside this environment map and must not be
+ * mistaken for an explicitly forwarded process credential.
  */
 function buildDshEnv(input: {
   mainRepoPath: string;
@@ -173,7 +161,11 @@ function buildDshEnv(input: {
   }
   // Pinned governance (never inherited from ambient env):
   env.DSH_PERMISSION_MODE = 'workspace-write';
-  // DSH_HOME lives under the MAIN repo's data dir, OUTSIDE the worktree: dsh's
+  // The headless bridge exposes no user-facing /feedback flow and Tekon has no
+  // telemetry-consent model. Force the upstream hard opt-out rather than
+  // inheriting DSH's feedback-gated default or an ambient deployment setting.
+  env.DSH_TELEMETRY_DISABLED = '1';
+  // DSH_HOME lives under the MAIN repo data dir, OUTSIDE the worktree: dsh's
   // session store / profiles are host-process state the sandboxed agent tools
   // (rooted at cwd = worktree) must not reach or poison across runs (design
   // §4.2, review S2). Built from lease.repoPath (the main repo), NOT
@@ -192,7 +184,8 @@ function buildDshEnv(input: {
   env.TEKON_ARTIFACT_MANIFEST = input.manifestPath;
   env.TEKON_RUN_ID = input.runId;
   env.TEKON_NODE_ID = input.nodeId;
-  // Credential passthrough only when the operator provided it.
+  // Explicit environment credential passthrough only when the operator supplied
+  // it. This does not disable DSH's own worktree `.env` fallback.
   if (source.DEEPSEEK_API_KEY) {
     env.DEEPSEEK_API_KEY = source.DEEPSEEK_API_KEY;
   }
@@ -205,14 +198,21 @@ export function createDshHeadlessAdapter(
   options?: {
     /**
      * Version-probe override for tests. Returns the raw `dsh --version` stdout.
-     * Defaults to spawning the configured `dsh` command with `--version`. Only
-     * invoked for a real `dsh` command (basename === 'dsh'), lazily on first
-     * run, and cached — fake-binary tests never spawn a probe.
+     * The shared runDshPreflight implementation owns the real process probe and
+     * its timeout so Web, CLI, and direct adapter execution cannot drift.
      */
     probeVersion?: (command: string) => Promise<string>;
+    /** Help-probe override for tests. */
+    probeHelp?: (command: string) => Promise<string>;
+    /** Default-config probe override for tests. */
+    probeConfig?: (command: string) => Promise<string>;
     /** Escape hatch: accept this exact untested version (design §5.1). */
     allowVersion?: string;
     onWarn?: (message: string) => void;
+    /** Test injection: override the host Node.js version. */
+    hostNodeVersion?: string;
+    /** Optional timeout for each built-in metadata probe. */
+    probeTimeoutMs?: number;
   },
 ): AgentAdapter {
   // Runs the capability guard, including the phase-5b network-ack carve-out:
@@ -222,30 +222,34 @@ export function createDshHeadlessAdapter(
 
   const dshCommand = config.command ?? 'dsh';
   const realDsh = isRealDshCommand(dshCommand);
-  const probeVersion = options?.probeVersion ?? defaultProbeVersion;
-  let versionGate: Promise<void> | null = null;
+  let capabilityGate: Promise<void> | null = null;
 
-  // Lazily version-gate the real dsh binary once (design §5.1): the first run
-  // spawns `dsh --version`, compares against the pin, and fails closed on
-  // drift. Cached so subsequent runs skip it. Never gates a fake binary.
-  const ensureVersionGate = (): Promise<void> => {
+  // Lazily run the complete shared preflight once. This is intentionally kept
+  // in addition to the pre-persistence Web/CLI check: it catches a binary or
+  // environment change between planning and actual job execution. The shared
+  // probe owns version, Host Node, help/config checks, and timeout semantics.
+  const ensureCapabilityGate = (): Promise<void> => {
     if (!realDsh) return Promise.resolve();
-    if (!versionGate) {
-      versionGate = (async () => {
-        const raw = await probeVersion(dshCommand);
-        assertDshVersionAllowed(parseDshVersion(raw), {
+    if (!capabilityGate) {
+      capabilityGate = (async () => {
+        await runDshPreflight(dshCommand, {
+          probeVersion: options?.probeVersion,
+          probeHelp: options?.probeHelp,
+          probeConfig: options?.probeConfig,
           allowVersion: options?.allowVersion,
           onWarn: options?.onWarn,
+          hostNodeVersion: options?.hostNodeVersion,
+          probeTimeoutMs: options?.probeTimeoutMs,
         });
       })();
     }
-    return versionGate;
+    return capabilityGate;
   };
 
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      await ensureVersionGate();
+      await ensureCapabilityGate();
       const command = buildDshHeadlessCommand(config, { prompt: input.prompt });
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({

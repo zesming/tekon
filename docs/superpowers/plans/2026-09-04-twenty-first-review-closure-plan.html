@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tekon 第二十一轮复审收口执行方案</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172126;
+        --muted: #59676d;
+        --line: #cbd5d9;
+        --paper: #ffffff;
+        --canvas: #eef2f3;
+        --green: #116149;
+        --green-soft: #e5f3ed;
+        --amber: #8a4b08;
+        --amber-soft: #fff2d7;
+        --code: #f3f6f7;
+      }
+      * { box-sizing: border-box; }
+      html { background: var(--canvas); }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--canvas);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 16px;
+        line-height: 1.68;
+        letter-spacing: 0;
+      }
+      header {
+        border-top: 6px solid var(--green);
+        border-bottom: 1px solid var(--line);
+        background: var(--paper);
+      }
+      .wrap { width: min(100% - 40px, 1040px); margin: 0 auto; }
+      header .wrap { padding: 42px 0 34px; }
+      main { min-width: 0; padding: 28px 0 64px; }
+      main > h1:first-child { display: none; }
+      section { padding: 24px 0; border-bottom: 1px solid var(--line); }
+      section:last-child { border-bottom: 0; }
+      h1, h2, h3 { line-height: 1.28; letter-spacing: 0; }
+      h1 { max-width: 780px; margin: 0 0 14px; font-size: clamp(2rem, 5vw, 3.35rem); }
+      h2 { margin: 0 0 16px; font-size: 1.55rem; }
+      h3 { margin: 26px 0 10px; font-size: 1.1rem; color: var(--green); }
+      p, ul, ol, pre, table { margin: 10px 0 16px; }
+      ul, ol { min-width: 0; padding-left: 24px; overflow-wrap: anywhere; }
+      li { min-width: 0; overflow-wrap: anywhere; }
+      li + li { margin-top: 5px; }
+      a { color: var(--green); text-underline-offset: 3px; }
+      code {
+        padding: 0.14em 0.36em;
+        border-radius: 3px;
+        background: var(--code);
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.9em;
+        overflow-wrap: anywhere;
+      }
+      pre { overflow-x: auto; padding: 16px; border-left: 4px solid var(--green); background: var(--code); }
+      pre code { padding: 0; background: transparent; }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); }
+      .decision { padding: 16px 18px; border-left: 4px solid var(--green); background: var(--green-soft); }
+      .warning { padding: 16px 18px; border-left: 4px solid var(--amber); background: var(--amber-soft); }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
+      table { display: block; width: 100%; max-width: 100%; margin: 0 0 16px; overflow-x: auto; border-collapse: collapse; }
+      th, td { padding: 11px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+      th { background: var(--code); }
+      tr:last-child td { border-bottom: 0; }
+      .eyebrow { margin: 0 0 8px; color: var(--green); font-weight: 700; }
+      @media (max-width: 700px) {
+        .wrap { width: min(100% - 28px, 1040px); }
+        header .wrap { padding: 30px 0 26px; }
+        main { padding-top: 14px; }
+        section { padding: 20px 0; }
+        h1 { font-size: 2rem; }
+        h2 { font-size: 1.35rem; }
+      }
+      @media print {
+        html, body { background: white; }
+        .wrap { width: 100%; }
+        header { border-top-width: 3px; }
+        section { break-inside: avoid; }
+      }
+    </style>
+  </head>
+  <body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">PR #11 · 2026-09-04 · 设计基线 34a542f</p>
+      <h1>Tekon 第二十一轮复审收口执行方案</h1>
+      <div class="meta">
+        <span>当前版本：0.20.6</span>
+        <span>本轮版本：保持 0.20.6</span>
+        <span>状态：实施证据已通过，待文档证据 Head 验证</span>
+      </div>
+    </div>
+  </header>
+  <main class="wrap"><h1>Tekon 第二十一轮复审收口执行方案</h1>
+<ul>
+<li><strong>日期</strong>：2026-09-04</li>
+<li><strong>对应 PR</strong>：<a href="https://github.com/zesming/tekon/pull/11">#11</a></li>
+<li><strong>设计基线 Head</strong>：<code>34a542f963b495673b4f7adc48c2c5a574fc7052</code></li>
+<li><strong>当前产品版本</strong>：<code>0.20.6</code></li>
+<li><strong>本轮版本裁决</strong>：保持 <code>0.20.6</code></li>
+<li><strong>方案状态</strong>：实施证据已通过，待文档证据 Head 验证</li>
+</ul>
+<h2>1. 目标与验收口径</h2>
+<p>本方案只收敛第二十一轮中已经具备明确合同、可用自动化验证且不需要架构迁移的事项：</p>
+<ol>
+<li>在现有 <code>CI</code> workflow 中新增独立 Node compatibility job，覆盖 <code>20.19.x</code>、<code>22.12.x</code>、<code>22.19.x</code>、<code>24.x</code>；</li>
+<li>用结构化 YAML 合同测试锁定矩阵、执行步骤和独立运行语义；</li>
+<li>恢复第二十一轮正式报告 HTML 审阅版，纠正 Markdown-only 违规表述；</li>
+<li>重建 <code>docs/reviews/current.md</code> 的 Head、CI、本地测试和历史证据链；</li>
+<li>同步 CHANGELOG 的 Unreleased 记录、Issue #24/#33 和 PR 描述；</li>
+<li>在同一 PR 提交，等待最终 Head 的全部检查通过。</li>
+</ol>
+<p>验收成功不等于 Tekon 整体产品验收通过，也不等于分支保护已经启用。最终结论必须继续区分：</p>
+<ul>
+<li>Node 兼容性矩阵通过：Linux x64 上的 install/build/typecheck/Core unit/CLI unit 与 CLI smoke 有持续证据；</li>
+<li>仓库强制合并门：本轮不配置，仍未成立；</li>
+<li>Windows、macOS、浏览器矩阵、DSH L3、Runtime/Session 架构：本轮不证明。</li>
+</ul>
+<h2>2. 已验证事实</h2>
+<h3>2.1 当前基线</h3>
+<ul>
+<li>本地 <code>pnpm test</code>：144 files、1551 passed、1 skipped；</li>
+<li>唯一 skip：无 <code>DSH_CLI_PATH</code> 时跳过合并后的真实 DSH L2 wrapper case；</li>
+<li>Core #426：run <code>33759049251</code>，<code>completed/success</code>；</li>
+<li>CI #335：run <code>33759049201</code>，<code>completed/success</code>；</li>
+<li>当前 7 个远端 checks 全绿。</li>
+</ul>
+<h3>2.2 Node 下界实测</h3>
+<p>设计阶段已在 Linux x64 干净 checkout 中验证：</p>
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>install</th>
+<th>build/typecheck</th>
+<th>Core unit</th>
+<th>CLI unit/smoke</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>20.19.0</td>
+<td>通过，<code>better-sqlite3</code> 从源码构建</td>
+<td>通过</td>
+<td>1076 passed、1 skipped</td>
+<td>64 passed，版本输出正确</td>
+<td>可进入矩阵</td>
+</tr>
+<tr>
+<td>22.12.0</td>
+<td>通过</td>
+<td>通过</td>
+<td>1076 passed、1 skipped</td>
+<td>64 passed，版本输出正确</td>
+<td>可进入矩阵</td>
+</tr>
+</tbody></table>
+<p>Node 20 使用 ABI 115，<code>better-sqlite3@12.10.0</code> 没有对应预编译包，会依赖 <code>ubuntu-latest</code> 的 Python、make 与 C++ 编译器。该事实决定矩阵必须保留真实 install 和会加载 SQLite native binding 的 Core unit，不能只做 <code>--version</code>。</p>
+<p>实现期独立 reviewer 复现了另一条版本边界：Node 22.12.0 自带 Corepack 0.29.4，无法验证 pnpm 10.12.1 的新签名密钥，会在首次执行 pnpm 时确定性失败。矩阵因此在启用 shim 前固定安装兼容四腿的 <code>corepack@0.34.1</code>；不使用已提高 Node engines 下界的最新 Corepack。</p>
+<h2>3. 设计决策</h2>
+<h3>3.1 一个 workflow 内的独立 job</h3>
+<p>在 <code>.github/workflows/ci.yml</code> 新增 <code>node-compat</code>，不新建 workflow 文件：</p>
+<ul>
+<li>复用现有 <code>CI</code> 的触发器、权限和 concurrency；</li>
+<li>不设置 <code>needs</code>，与 <code>audit</code> 一样独立运行，其他 job 失败不会压掉矩阵诊断；</li>
+<li><code>strategy.fail-fast: false</code>，一个版本失败时其他版本继续提供证据；</li>
+<li><code>timeout-minutes: 20</code>，覆盖 Node 20 native source build 的合理波动；</li>
+<li>不修改 <code>.github/workflows/core.yml</code> 的主 Node 24 lane；</li>
+<li>不修改 branch protection/ruleset。</li>
+</ul>
+<h3>3.2 矩阵版本</h3>
+<p>固定四腿：</p>
+<pre><code class="language-yaml">node-version: [&#39;20.19.x&#39;, &#39;22.12.x&#39;, &#39;22.19.x&#39;, &#39;24.x&#39;]
+</code></pre>
+<ul>
+<li><code>20.19.x</code>：根 <code>engines</code> 的 Node 20 最低 minor；</li>
+<li><code>22.12.x</code>：根 <code>engines</code> 的 Node 22 最低 minor；</li>
+<li><code>22.19.x</code>：DSH engines 的 Node 22 最低 minor，验证 Tekon 在 DSH 声明支持的最低 Node 22 上可运行；</li>
+<li><code>24.x</code>：主 lane 基线，使矩阵可独立比较。</li>
+</ul>
+<p>版本必须加引号，避免 YAML 将版本误解析为数字。</p>
+<h3>3.3 每腿执行合同</h3>
+<p>每个版本依次执行：</p>
+<pre><code class="language-text">checkout
+→ setup-node(matrix.node-version)
+→ npm install --global corepack@0.34.1
+→ corepack enable pnpm
+→ pnpm install --frozen-lockfile
+→ pnpm -r build
+→ pnpm -r typecheck
+→ pnpm --filter @tekon/core test:unit
+→ pnpm --filter @tekon/cli test:unit
+→ built CLI --version / --help smoke
+</code></pre>
+<p>不把 Web unit 或 Playwright 放进矩阵。全包 build 已覆盖 Vite 在声明下界的构建；浏览器 e2e 继续只在主 Node 24 lane 执行。</p>
+<p>CLI smoke 必须校验实际输出与根 <code>package.json</code> 版本一致，并确认 <code>--help</code> 正常退出。CLI unit 保留，因为它能覆盖 child process、Git fixture 与 SQLite 等更容易出现 Node 差异的路径。</p>
+<h3>3.4 暂不启用缓存</h3>
+<p>首版不配置 pnpm store cache：</p>
+<ul>
+<li>四腿并行，实测单腿约 2 至 4 分钟；</li>
+<li>Corepack shim 与 setup-node cache 的初始化顺序会增加额外合同；</li>
+<li>当前 job 尚未进入 required checks，不需要先引入缓存 key 和失效策略。</li>
+</ul>
+<p>若远端连续运行显示成本过高，再以独立变更加入缓存并验证 native build 缓存边界。</p>
+<h2>4. 测试先行方案</h2>
+<h3>4.1 先写 RED 合同</h3>
+<p>新增 <code>packages/core/__tests__/ci/github-workflows.test.ts</code>，使用 <code>yaml</code> 包解析 workflow。第一步只新增测试，不修改 workflow，并运行 focused test，必须因为 <code>jobs.node-compat</code> 不存在而失败。</p>
+<p>测试使用结构化断言，不使用整段 YAML 字符串匹配。至少锁定：</p>
+<ol>
+<li><code>node-compat</code> 存在，且无 <code>needs</code>；</li>
+<li><code>runs-on</code> 为 <code>ubuntu-latest</code>，<code>timeout-minutes</code> 为 20；</li>
+<li><code>strategy.fail-fast</code> 为 false；</li>
+<li>matrix 精确包含四个字符串版本；</li>
+<li>matrix 不允许 <code>exclude</code> 静默排除任何版本，job 与必需 steps 不允许用 <code>if</code> 条件跳过；</li>
+<li>matrix 覆盖根 <code>engines.node</code> 的 20.19 与 22.12 下界；</li>
+<li>matrix 包含主 <code>env.NODE_VERSION</code> 对应 major；</li>
+<li>setup-node 使用 <code>${{ matrix.node-version }}</code>；</li>
+<li>固定 Corepack、install、全包 build/typecheck、Core unit、CLI unit 与二进制 smoke 命令存在且顺序正确；</li>
+<li>新 job 使用的 action 版本已在当前 workflow 中使用；</li>
+<li><code>core.yml</code> 的主 Node 版本与 <code>ci.yml</code> 的 <code>env.NODE_VERSION</code> 一致；</li>
+<li>job 与所有 steps 均未启用 <code>continue-on-error</code>，失败版本不能被标成允许失败。</li>
+</ol>
+<h3>4.2 再写 GREEN 实现</h3>
+<p>在测试失败证据确认后新增 <code>node-compat</code> job，再运行同一 focused test，必须通过。随后运行 Core unit，确认新测试没有重复进入 e2e lane。</p>
+<h3>4.3 测试质量自检</h3>
+<ul>
+<li><strong>正确性</strong>：故意删除或 exclude 一个 matrix 版本、加入 <code>if</code>/<code>needs</code>、删除固定 Corepack 或命令时，测试应失败；</li>
+<li><strong>完整性</strong>：覆盖版本集合、独立性、超时和所有命令，不只检查 job 名称；</li>
+<li><strong>无冗余</strong>：按“job 结构”“版本来源”“命令顺序”分组，每个断言只承担一个合同；</li>
+<li><strong>不过拟合</strong>：不锁定无语义影响的空行、注释、step display name 或 YAML 键顺序。</li>
+</ul>
+<h2>5. 文档与版本同步</h2>
+<h3>5.1 正式报告</h3>
+<p>第二十一轮 Markdown 报告新增主 Agent 批注，并同步生成同名 HTML。统一表述：</p>
+<ul>
+<li>Markdown 是内容源；</li>
+<li>HTML 是 <code>AGENTS.md</code> 要求的正式人审呈现；</li>
+<li>两者必须同步结论、版本、Head 和 CI 证据；</li>
+<li>不再出现 Markdown-only 或 HTML 可省略的表述。</li>
+</ul>
+<p>当前环境没有 <code>/frontend-design:frontend-design</code> skill，因此沿用第二十轮自包含 HTML 的排版语言，完成桌面与移动视口人工检查，并明确记录该环境限制。</p>
+<h3>5.2 权威快照</h3>
+<p><code>docs/reviews/current.md</code> 恢复并更新：</p>
+<ul>
+<li>设计基线 <code>34a542f...</code>、本轮实施证据 Head 及其 runs；</li>
+<li>Core #426 / CI #335，以及实施证据 Head 对应的 Core/CI runs；</li>
+<li>v0.20.6 本地 144 files、1551 passed、1 skipped；</li>
+<li>Chromium 48 项与 320/390/700/1440 四视口 4/4；</li>
+<li>历史关键 runs <code>33747232853</code>、<code>33747232722</code>、<code>33753603954</code>、<code>33753603924</code>；</li>
+<li>旧 <code>3 skipped</code> 到当前 <code>1 skipped</code> 的原因；</li>
+<li>Node matrix 的证明范围与 branch protection 未启用边界；</li>
+<li>Markdown/HTML 同步维护规则。</li>
+</ul>
+<p><code>current.md</code> 是导航索引和稳定入口，不是独立正式评审报告；它不复制完整报告，只保留当前结论、正式报告 MD/HTML 链接和可追踪证据，因此不另建 <code>current.html</code>。</p>
+<h3>5.3 版本号</h3>
+<p>产品版本保持 <code>0.20.6</code>。<code>docs/technical/tekon-replatform-current-scope.md</code> §6 与 <code>CHANGELOG.md</code> 的 Unreleased 策略明确：纯复审、批注、措辞订正与验收状态调整不单独抬高产品版本，避免 <code>tekon update</code> 因无产品行为变化而触发完整安装和构建。</p>
+<p>本轮新增的是仓库 CI 兼容性检查，不改变用户命令、工作流模板、Provider、产品 Gate、运行时合同、安装产物或 <code>.tekon</code> 数据格式；因此不修改四个 <code>package.json</code>、lockfile 或用户手册中的产品版本。只在 <code>CHANGELOG.md</code> 的 Unreleased 复审记录中说明 Node matrix 与文档纠偏。</p>
+<h3>5.4 外部状态</h3>
+<ul>
+<li>#24：修改正文，明确 Node matrix 经用户决定在 PR #11 落地；required checks、SBOM、provenance、签名继续 OPEN，并由后续独立 PR/仓库设置处理；</li>
+<li>#33：补 <code>bug</code> label，并补充 CLI <code>tekon clean</code> 也需纳入后续治理；</li>
+<li>PR #11：同步产品版本不变、最终 Head、报告 MD/HTML、测试结果、11 个 checks 和明确非目标；</li>
+<li>不修改 branch protection/ruleset，不执行 merge、release 或 deploy。</li>
+</ul>
+<h2>6. 实施顺序</h2>
+<ol>
+<li>完成本方案 MD/HTML；</li>
+<li>由最高思考等级 <code>reviewer</code> 审查技术正确性，由 <code>doc_reviewer</code> 审查可读性；</li>
+<li>修复必须项并重新审阅，直到无必须修复项；</li>
+<li>新增 YAML 合同测试并记录 RED；</li>
+<li>新增 <code>node-compat</code> job 并记录 GREEN；</li>
+<li>同步 CHANGELOG Unreleased、<code>current.md</code> 和正式报告 MD/HTML；</li>
+<li>运行 focused tests、<code>pnpm test</code>、lint/typecheck/build/audit/actionlint、Core/CLI/Web e2e；</li>
+<li>运行 Web 四视口与报告 HTML 多视口检查，清理临时截图；</li>
+<li>委派 <code>reviewer</code> 与 <code>doc_reviewer</code> 审查实现和文档；</li>
+<li>修复并复查到无必须修复项；</li>
+<li>提交并推送实施结果，等待该实施证据 Head 的 Core/CI 全部成功；</li>
+<li>把实施证据 Head 及其 run ids 回填报告与 <code>current.md</code>，提交并推送文档证据 Head，等待它的 11 个 checks 全部成功；</li>
+<li>只在 PR 与 Issue 这些外部状态中记录最终文档证据 Head 及其 runs，不再为回填自身检查产生新提交；</li>
+<li>最终 reviewer 按用户要求 0-7 逐项验收。</li>
+</ol>
+<h2>7. 完整验证矩阵</h2>
+<h3>7.1 本地代码与合同</h3>
+<pre><code class="language-bash">pnpm exec vitest --run packages/core/__tests__/ci/github-workflows.test.ts
+pnpm test
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm audit --prod
+pnpm lint:actions
+pnpm --filter @tekon/core test:e2e
+pnpm --filter @tekon/cli test:e2e
+pnpm --filter @tekon/web test:e2e
+</code></pre>
+<p><code>pnpm test</code> 是每次 commit 前的强制门。其他命令按最终工作树执行；失败必须修复或给出可复现的外部原因，不能静默略过。</p>
+<h3>7.2 UI 与 HTML</h3>
+<ul>
+<li>Playwright 48 项全部通过；</li>
+<li>320、390、700、1440px 下两个 Run 入口无横溢、重叠或文本裁切；</li>
+<li>第二十一轮报告 HTML 与方案 HTML 在移动和桌面视口可读，无横向滚动和内容遮挡；</li>
+<li>HTML 标题、产品版本、Head、run ids、裁决与 Markdown 一致；</li>
+<li>临时截图与 server 日志验后删除。</li>
+</ul>
+<h3>7.3 远端</h3>
+<p>实施证据 Head 与最后的文档证据 Head 均预期 11 个 checks：原 7 个加四个 Node compatibility legs。每组证据内部必须绑定同一 Head、attempt 1、<code>completed/success</code>；被后续提交自动取消的旧 run 不作为证据。仓库内文档记录实施证据 Head 及其 runs，最终文档证据 Head 及其 runs 只回填到 PR/Issue 外部状态，避免提交自引用。</p>
+<h2>8. 风险、回滚与非目标</h2>
+<h3>8.1 风险与缓解</h3>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>影响</th>
+<th>缓解</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Node 20 native source build 波动</td>
+<td>install 变慢或工具链失败</td>
+<td>20 分钟上限、保留真实 Core unit、先观察再决定缓存</td>
+</tr>
+<tr>
+<td>四腿增加 CI 成本</td>
+<td>PR 反馈稍慢</td>
+<td>四腿并行，Web unit/Playwright 不进入矩阵</td>
+</tr>
+<tr>
+<td>YAML 合同测试过度锁死</td>
+<td>正常重排也失败</td>
+<td>解析结构，只锁行为字段与命令集合/顺序</td>
+</tr>
+<tr>
+<td>MD/HTML 漂移</td>
+<td>人审结论冲突</td>
+<td>Markdown 单一内容源，关键事实机械比对并由 doc reviewer 复核</td>
+</tr>
+<tr>
+<td>检查被误写成强制门</td>
+<td>治理成熟度夸大</td>
+<td>明确 branch protection 本轮不变，#24 保持 OPEN</td>
+</tr>
+</tbody></table>
+<p>若矩阵引入不可接受的远端不稳定，回滚只删除 <code>node-compat</code> job 及对应合同测试，不改 <code>engines</code>；在 #24 记录失败证据后重新设计。不得为了让 CI 变绿而跳过最低版本或把失败版本标成允许失败。</p>
+<h3>8.2 非目标</h3>
+<ul>
+<li>不修改 branch protection/ruleset；</li>
+<li>不修 Windows <code>.cmd</code> launcher 或 Provider identity；</li>
+<li>不做 DSH L3 或升 tested pin；</li>
+<li>不改 Provider health/admission、Runtime、Session、RunPlan、shutdown/restart；</li>
+<li>不改 <code>project.clean</code>/<code>tekon clean</code> 行为；</li>
+<li>不定义或修改 <code>onWarn</code> 公共语义；</li>
+<li>不新增 SBOM、provenance、签名或 release pipeline；</li>
+<li>不清理全仓格式债务；</li>
+<li>不 merge、release 或 deploy。</li>
+</ul>
+<h2>9. 放行标准</h2>
+<p>只有以下条件全部满足，才可判定本轮完成：</p>
+<ol>
+<li>方案与实现均经最高思考等级 reviewer 放行；</li>
+<li>YAML 合同测试有明确 RED→GREEN 证据；</li>
+<li>最终工作树 <code>pnpm test</code> 全绿且只有 1 个有解释的 L2 skip；</li>
+<li>完整本地验证与 UI/HTML 多视口检查通过；</li>
+<li>正式报告 MD/HTML、<code>current.md</code>、CHANGELOG、Issue 与 PR 无事实漂移；</li>
+<li>实施证据 Head 与最终 PR 文档证据 Head 的 11 个 checks 分别全部 <code>completed/success</code>；</li>
+<li>工作树干净，无临时产物；</li>
+<li>最终 reviewer 按用户 0-7 要求确认无必须修复项。</li>
+</ol>
+</main>
+</body>
+</html>

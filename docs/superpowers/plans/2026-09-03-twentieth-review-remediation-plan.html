@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>第二十轮复审整改执行方案（2026-09-03）</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #526071;
+        --line: #d8e0ea;
+        --soft: #eef4fa;
+        --accent: #1d6fd8;
+        --ok: #067647;
+        --ok-bg: #edfcf2;
+        --ok-line: #a6f4c5;
+        --warn: #9a5b00;
+        --warn-bg: #fff8e8;
+        --warn-line: #fcd89b;
+        --risk: #b42318;
+        --risk-bg: #fff1f0;
+        --risk-line: #fecdca;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        font-size: 15px;
+        line-height: 1.7;
+        letter-spacing: 0;
+      }
+      main {
+        width: min(1140px, calc(100% - 32px));
+        margin: 28px auto 60px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 30px 36px;
+      }
+      section {
+        margin-top: 20px;
+      }
+      header {
+        border-top: 4px solid var(--accent);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 28px;
+        line-height: 1.25;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      h2 {
+        margin: 0 0 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--line);
+        font-size: 20px;
+        line-height: 1.35;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      h3 {
+        margin: 24px 0 10px;
+        font-size: 17px;
+        line-height: 1.4;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9em;
+        padding: 2px 5px;
+        color: #0f172a;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      pre {
+        overflow-x: auto;
+        max-width: 100%;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 8px;
+        color: #f3f4f6;
+        padding: 16px 18px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13.5px;
+        line-height: 1.55;
+        margin: 14px 0;
+      }
+      pre code {
+        background: transparent;
+        border-radius: 0;
+        color: inherit;
+        font-size: inherit;
+        padding: 0;
+        overflow-wrap: normal;
+        word-break: normal;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 16px 0;
+        padding: 14px 18px;
+        background: var(--soft);
+        border-left: 4px solid var(--accent);
+        border-radius: 0 6px 6px 0;
+      }
+      blockquote p {
+        margin: 4px 0;
+        color: var(--ink);
+        font-size: 14.5px;
+      }
+      .meta-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .callout {
+        margin: 16px 0;
+        padding: 14px 18px;
+        border-radius: 8px;
+        font-size: 14.5px;
+        line-height: 1.6;
+      }
+      .callout-ok {
+        background: var(--ok-bg);
+        border: 1px solid var(--ok-line);
+        color: var(--ok);
+      }
+      .callout-warn {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        color: var(--warn);
+      }
+      .callout-risk {
+        background: var(--risk-bg);
+        border: 1px solid var(--risk-line);
+        color: var(--risk);
+      }
+      .callout p {
+        margin: 4px 0;
+      }
+      .callout strong {
+        font-weight: 650;
+      }
+      ol, ul {
+        margin: 10px 0;
+        padding-left: 24px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      table {
+        width: 100%;
+        margin: 16px 0;
+        border-collapse: collapse;
+        font-size: 14px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      th, td {
+        border: 1px solid var(--line);
+        padding: 10px 14px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      tr:nth-child(even) td {
+        background: #fafbfd;
+      }
+      footer {
+        margin-top: 36px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13.5px;
+        text-align: center;
+      }
+      @media (max-width: 768px) {
+        main {
+          width: calc(100% - 20px);
+          margin-top: 14px;
+        }
+        header, section {
+          padding: 20px 18px;
+        }
+        h1 {
+          font-size: 23px;
+        }
+        h2 {
+          font-size: 18px;
+        }
+        table {
+          display: block;
+          width: 100%;
+          overflow-x: auto;
+          white-space: normal;
+        }
+      }
+      @media (max-width: 480px) {
+        main {
+          width: calc(100% - 12px);
+          margin: 10px auto 40px;
+        }
+        header, section {
+          padding: 16px 14px;
+        }
+        h1 {
+          font-size: 20px;
+        }
+        h2 {
+          font-size: 16px;
+        }
+        body {
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>第二十轮复审整改执行方案（2026-09-03）</h1>
+        <blockquote>
+          <p><strong>依据：</strong><code>docs/reviews/2026-09-03-tekon-product-runtime-harness-twentieth-review.md</code></p>
+          <p><strong>基线快照：</strong>Commit <code>6fd86ee</code> / Core #419 / CI #328</p>
+          <p><strong>整改前自动化基线：</strong>144 个测试文件 / 1541 passed / 3 skipped（Core e2e 26 passed、CLI e2e 8 passed、Web Playwright 42 passed；最终数字在整改后按实跑更新）</p>
+          <p><strong>范围控制与治理例外：</strong>PR #11 原则上不承载跨 PR 架构演进。本轮对 reviewer 检出的 DSH metadata probe 直接环境缺陷执行一次窄范围治理例外收口；其余中长期问题继续保持独立 issue 推进。</p>
+        </blockquote>
+        <div class="meta-bar">
+          <span>方案日期：2026-09-03</span>
+          <span>目标版本：v0.20.6（四包同步 lockstep）</span>
+          <span>所属分支：review/human-first-harness-2026-08-28</span>
+          <span class="tag">PR #11 整改</span>
+          <span class="tag">DSH Preflight 隔离工作区</span>
+          <span class="tag">fail-closed</span>
+          <span class="tag">SessionComposer 重试</span>
+        </div>
+      </header>
+
+      <!-- 1. 执行摘要、根因分析与收口目标 -->
+      <section id="section-1">
+        <h2>1. 执行摘要、根因分析与收口目标</h2>
+        <h3>1.1 背景与现状</h3>
+        <p>在第十九轮收口与第二十轮全面复审中，Tekon 验证了 Advanced Run 的纯状态准入选择器、默认与高级入口的同步单飞锁（<code>useRef</code> latch）、草案 plan approval 门、移动端单列布局以及 DSH 正式 Run 的 telemetry hard opt-out。Reviewer 随后在 commit <code>b2bfa45</code> 中对 metadata probe 实施了最小环境变量白名单并实现了 config/help 顺序执行。</p>
+        <p>然而，二十轮深度安全审计与架构复核表明，当前实现仍存在以下 5 项具体缺陷与根因：</p>
+        <ol>
+          <li><strong>DSH Preflight 宿主环境依赖与自动 fallback 隐式读取风险</strong>：
+            <br /><em>根因精确界定：</em>上游 <code>dsh@0.1.2-rc.1</code> 的源码实现表明，DSH 在启动加载环境时仅精确读取 <code>&lt;invocation cwd&gt;/.env</code> 与 <code>$DSH_HOME/.env</code>，并不向上递归遍历父级目录树；同时 <code>credentials-local</code> 插件会读取 <code>$DSH_HOME/.credentials.yaml</code>。此外，<code>--version</code> 与 <code>--dump-default-config</code> 属于 boot-free 命令，并不调用 <code>loadLayeredEnv</code>；只有 <code>--profile headless --help</code> 在启动 profile 与插件阶段会加载分层环境。前轮修复虽然移除了敏感环境变量，但探测进程仍直接在宿主调用方的 cwd 中执行，并透传了宿主 <code>DSH_HOME</code> 与 <code>DSH_AGENTS_HOME</code>。这导致当宿主调用方 cwd 存在 <code>.env</code> 或宿主 <code>DSH_HOME</code> 存在残留配置时，rc.1 的自动 fallback 机制仍会隐式读取宿主文件凭据。
+            <br /><em>隔离边界澄清：</em>为探测进程分配独立临时工作目录（下称“隔离临时 probe workspace”），只能有效切断 rc.1 经测试验证的自动 fallback 与共享状态路径。它不是操作系统级沙箱（OS sandbox，未启用内核 cgroups/chroot/seccomp 隔离），也无法阻止同 UID 下运行的任意恶意二进制主动读取宿主文件。方案将其严格表述为“隔离临时 probe workspace”，不使用“彻底隔离”、“杜绝凭据外泄”等夸大表述。
+            <br /><em>平台防御：</em>白名单遗漏了 Windows 平台可能依赖的 <code>SystemDrive</code>、<code>windir</code> 与 <code>WINDIR</code>。由于当前 CI 环境缺少原生 Windows runner，将其界定为兼容性纵深防御变量，不宣称为“已确认必需”。
+          </li>
+          <li><strong>切换工作目录导致的相对路径命令解析失效风险</strong>：
+            <br /><em>根因：</em>若将 probe 切换到隔离临时 probe workspace 运行，外部传入的形如 <code>./bin/dsh</code> 或 <code>../dsh</code> 等带有路径分隔符的相对命令将因当前工作目录（cwd）的改变而找不到目标二进制（<code>ENOENT</code>）；而纯命令名（如 <code>dsh</code>）必须保留以便子进程依靠系统的 <code>PATH</code> 机制进行解析。
+          </li>
+          <li><strong>测试断言语义过度宣称（Mock 顺序冒充物理锁）</strong>：
+            <br /><em>根因：</em>现有针对 <code>config</code> 与 <code>help</code> 的 mock 串行测试仅能验证 Tekon 应用层调度 Promise 的先后顺序（scheduling order），无法也不应宣称为操作系统底层的物理文件互斥锁。测试用例命名与断言应实事求是。
+          </li>
+          <li><strong>SessionComposer 交互闭环与测试规范性遗漏</strong>：
+            <br /><em>根因：</em>默认 Session 启动入口在 <code>plan && !planDigest</code> 分支下仅渲染了静态错误文本，缺少重试按钮（<code>refetchPlan</code>），导致计划摘要生成异常时用户无法在当前界面原地恢复；同时，在首次 <code>project.run</code> 失败后，尽管代码中有 <code>finally { startInFlightRef.current = false; }</code>，但缺少真实 Chromium 场景断言证明 latch 释放且允许用户重试；此外，新增的 e2e 测试文件命名为 <code>session-composer-admission.test.ts</code>，未遵循 <code>AGENTS.md</code> 约定的 <code>*.e2e.test.ts</code> 文件命名规范。
+          </li>
+          <li><strong>上游基线与证据分级混淆风险</strong>：
+            <br /><em>根因：</em>DeepSeek Harness 官方于 2026-09-03 发布了 <code>0.1.2-rc.1</code>。需严格防范将官方发布 tag（<code>a66e4702047846cdaa10c66c9d3df3951f5ea70d</code>）与 github <code>master</code> 分支（<code>76fda729799fe9b3848dbe2c211d4b231032b81e</code>）混为一谈。虽然二者 <code>package.json</code> 中的版本号相同，但 master 分支包含未发布的代理配置与持久化重构。目前已通过真实 Node 22.19 环境完成官方 npm rc.1 的裸命令执行基准（raw binary smoke），但在完成整改后的包装复测（wrapped L2）与带凭据模型调用（L3）前，Tekon 生产 tested pin 必须维持 <code>0.1.2-alpha.3</code>。
+          </li>
+        </ol>
+
+        <h3>1.2 本轮收口目标</h3>
+        <p>本整改方案聚焦于解决上述 5 项具体风险，交付可验证、可审计的干净增量：</p>
+        <ul>
+          <li><strong>DSH Preflight 隔离临时 probe workspace 机制：</strong>为每次内置 preflight 分配独立临时目录，统一建立规范目录结构（<code>cwd = root</code>，<code>DSH_HOME = root/dsh-home</code>，<code>DSH_AGENTS_HOME = root/agents-home</code>）；只要任一 probe 为 default 就创建并在 <code>finally</code> 中通过 <code>safeWarnCleanup</code> 清理；切 cwd 前将相对路径命令绝对化，保留裸命令 PATH 查找与分阶段 ENOENT 语义，清理失败仅记录 warning。</li>
+          <li><strong>环境变量白名单严密闭环：</strong>补充 Windows 兼容性防御变量（<code>SystemDrive</code>、<code>windir</code>、<code>WINDIR</code>），维持对动态链接注入变量（<code>LD_LIBRARY_PATH</code>、<code>DYLD_*</code>、<code>LD_PRELOAD</code>、<code>NODE_OPTIONS</code> 等）和网络代理/凭据的严格 fail-closed。</li>
+          <li><strong>TDD 测试先行与语义规范：</strong>先红后绿扩展 Core 隔离测试集（含受控 callerDir seam、ambient 凭据切断断言、分阶段 ENOENT 断言、双故障与 safe warning sink 断言、3 种 probe 组合用例），将 mock 顺序测试正名为调度顺序测试，严格遵守测试卫生。</li>
+          <li><strong>SessionComposer 交互完备与测试命名合规：</strong>补齐缺摘要分支重试按钮，补全真实 Chromium 失败后重试与摘要重新拉取断言，规范 e2e 文件命名，Web 端到端测试由 42 项增至至少 44 项。</li>
+          <li><strong>事实与追踪对齐：</strong>解耦 rc.1 tag 与 master 分支并固定 commit 引用，确立基于隔离 npm 安装与 production build 的 Wrapped L2 复测断言标准，更新 #17、#27、#32，梳理 #13–#33 职责并补全遗漏的 #23。</li>
+          <li><strong>四包 lockstep 升级：</strong>全仓四包版本统一提升至 <code>0.20.6</code>，同步更新变更日志（使用 <code>## v0.20.6</code> 标题）与相关文档。</li>
+          <li><strong>响应式证据常驻化：</strong>将四档默认正常态以及 320px/390px 动态高风险态的几何检查固化为 4 个 Chromium 用例，使 Web 端到端测试总数达到 48 项；据 RED 修复 Advanced 高级设置三列挤压与 dsh 选项裁切，临时截图只用于本轮目视检查，验后删除。</li>
+        </ul>
+      </section>
+
+      <!-- 2. 已定决策与产品/设计细节 -->
+      <section id="section-2">
+        <h2>2. 已定决策与产品/设计细节</h2>
+
+        <h3>2.1 隔离临时 Probe Workspace 机制与路径结构</h3>
+        <ul>
+          <li><strong>统一路径结构定义：</strong>
+            <ul>
+              <li>根目录：<code>const root = mkdtempSync(join(tmpdir(), 'tekon-dsh-probe-'));</code>；</li>
+              <li>工作目录：子进程 <code>cwd = root</code>；</li>
+              <li>探测状态目录：环境变量 <code>DSH_HOME = join(root, 'dsh-home')</code>；</li>
+              <li>代理配置目录：环境变量 <code>DSH_AGENTS_HOME = join(root, 'agents-home')</code>；</li>
+              <li><em>设置原则：</em>三者拥有清晰的层级关系，<code>cwd</code> 为根目录 <code>root</code>，<code>DSH_HOME</code> 与 <code>DSH_AGENTS_HOME</code> 分别为其独立子路径，严禁表述为“三者同一路径”。无需提前 <code>mkdirSync</code> 子目录，避免设置阶段泄漏与额外系统调用，由外部命令按需自建；<code>mkdtempSync</code> 成功后立即进入 <code>try / finally</code> 块。</li>
+            </ul>
+          </li>
+          <li><strong>创建与生命周期触发条件：</strong>
+            <ul>
+              <li>只要 <code>probeVersion</code>、<code>probeHelp</code>、<code>probeConfig</code> 中有任一为默认 probe，就必须创建该临时工作区并在 <code>finally</code> 块中清理；</li>
+              <li>默认 probe 使用绝对化后的命令 + 隔离 options（<code>cwd: root</code>, <code>env: probeEnv</code>）；</li>
+              <li>自定义 probe（custom probe）继续接收调用方传入的原始未修改 <code>dshCommand</code> 与其自身环境；</li>
+              <li>若三项 probe 全部传入自定义函数，则不创建任何临时目录，避免无谓的文件系统开销；</li>
+              <li>在 Core 测试集中覆盖“全默认”、“部分自定义”、“全自定义”三类组合。</li>
+            </ul>
+          </li>
+          <li><strong>切断 Fallback 与共享状态路径：</strong>
+            <ul>
+              <li>子进程在空临时目录 <code>root</code> 中执行，切断向 <code>&lt;invocation cwd&gt;/.env</code> 的隐式读取；</li>
+              <li>外部环境（ambient）中的 <code>process.env.DSH_HOME</code> 与 <code>process.env.DSH_AGENTS_HOME</code> 不传给子进程，切断向宿主 <code>$DSH_HOME/.env</code> 与 <code>$DSH_HOME/.credentials.yaml</code> 的回退路径。</li>
+            </ul>
+          </li>
+          <li><strong>清理容错、双故障保障与 Safe Warning Sink：</strong>
+            <ul>
+              <li>实现专用辅助函数 <code>safeWarnCleanup(root: string, options?: RunDshPreflightOptions): Promise&lt;void&gt;</code>；</li>
+              <li>清理操作在 <code>finally</code> 块中执行：<code>rmSync(root, { recursive: true, force: true })</code>（或调用 <code>options?.probeCleanup</code> seam）；</li>
+              <li>双故障语义明确：
+                <ul>
+                  <li>主流程正常且清理异常：正常返回主探测结果，将清理异常格式化后记入 <code>onWarn</code>；</li>
+                  <li>主流程抛错且清理异常：必须重新抛出主探测异常，将清理异常格式化后记入 <code>onWarn</code>，绝不因清理错误掩盖主异常；</li>
+                  <li>Safe Warning Sink：<code>options?.onWarn</code> 调用必须被内部 <code>try ... catch</code> 包裹。若用户提供的 <code>onWarn</code> 回调自身发生异常，该异常被内部静默丢弃（sink 保护），绝不击穿并覆盖主结果或主异常。</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><strong>命令路径解析安全与分阶段 ENOENT 契约：</strong>
+            <ul>
+              <li>相对命令解析：若传入的 <code>dshCommand</code> 包含路径分隔符（<code>dshCommand.includes('/') || dshCommand.includes('\\')</code>），在切换 cwd 之前通过 <code>path.resolve(options?.probeInvocationCwd ?? process.cwd(), dshCommand)</code> 转换为绝对路径，确保切入临时 cwd 后依然可执行；</li>
+              <li>裸命令解析：若为纯命令名（如 <code>'dsh'</code>），保持原样，依托子进程的 <code>PATH</code> 环境寻找二进制；</li>
+              <li>分阶段 ENOENT 契约明确：
+                <ul>
+                  <li>全默认模式下版本探测缺失裸命令：<code>defaultProbeVersion</code> 执行 <code>execFileAsync(bareCommand, ...)</code> 失败，系统原样抛出带有 <code>error.code === 'ENOENT'</code> 且 <code>error.path === bareCommand</code> 的系统级错误；</li>
+                  <li>自定义 version 成功但后续 default config 探测缺失命令：按照既有 <code>dsh-bridge-probe.ts</code> 契约，<code>probeConfig</code> 抛错后被 <code>runDshPreflight</code> 外层的 <code>catch</code> 捕获并包装为 <code>new DshCapabilityError(error.message, actualVersion)</code>。该场景下不保留底层的 code 与 path 属性，方案实事求是，不虚构 code/path 原样保留；</li>
+                  <li>上述两类阶段均需断言 <code>finally</code> 中的 workspace 清理逻辑已被完整执行。</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+
+        <h3>2.2 环境变量白名单加固与 Fail-Closed 原则</h3>
+        <ul>
+          <li><strong>Windows 兼容性防御变量：</strong>将 <code>SystemDrive</code>、<code>windir</code>、<code>WINDIR</code> 加入 <code>DSH_PROBE_SAFE_ENV_KEYS</code> 白名单。由于 CI 仅在 Linux runner 上执行，缺乏原生 Windows smoke 测试，因此此项界定为跨平台兼容性纵深防御，不写为“已确认必需”。</li>
+          <li><strong>严格封堵注入攻击面：</strong>
+            <ul>
+              <li>严禁放行动态链接器控制变量：<code>LD_LIBRARY_PATH</code>、<code>DYLD_LIBRARY_PATH</code>、<code>DYLD_INSERT_LIBRARIES</code>、<code>LD_PRELOAD</code> 等；</li>
+              <li>严禁放行 Node 运行时注入变量：<code>NODE_OPTIONS</code> 等；</li>
+              <li>严禁放行代理与网络凭据变量：<code>HTTP_PROXY</code>、<code>HTTPS_PROXY</code>、<code>ALL_PROXY</code>、<code>NO_PROXY</code> 等；</li>
+              <li>严禁放行模型与平台凭据：<code>DEEPSEEK_API_KEY</code>、<code>OPENAI_API_KEY</code>、<code>GH_TOKEN</code> 等。</li>
+            </ul>
+          </li>
+          <li><em>设计考量：</em>Metadata probe 的职责仅为提取版本号、帮助文本与默认配置行，无需动态装载外部共享库或发起带凭据的网络访问。动态链接变量具备直接的进程注入面，必须保持严格 fail-closed。</li>
+        </ul>
+
+        <h3>2.3 SessionComposer 准入完备性与重试机制</h3>
+        <ul>
+          <li><strong>缺失校验摘要分支支持重试：</strong>在 <code>SessionComposer.tsx</code> 的 <code>plan && !planDigest</code> 渲染分支中，增加与 <code>planError</code> 风格一致的“重试”按钮，点击调用 <code>refetchPlan</code>。</li>
+          <li><strong>失败后 Latch 释放与重试保证：</strong>验证首次 <code>project.run</code> RPC 失败（例如 500 异常或网络中断）后，<code>startInFlightRef.current = false</code> 正常生效，错误提示正常展示，提交按钮恢复可点击态，用户无需刷新页面即可重新提交。</li>
+          <li><strong>真实 Chromium E2E 场景补充（2 个新场景，最低 44 tests）：</strong>
+            <ul>
+              <li>场景 1（提交失败重试）：通过 Playwright 拦截 <code>project.run</code> RPC，模拟首次调用返回 HTTP 500，断言错误提示正常呈现，提交按钮重新变为可点击（<code>toBeEnabled</code>）；恢复正常路由后再次点击，断言成功发起第二次 RPC 请求并完成会话创建与页面跳转；</li>
+              <li>场景 2（摘要缺失重试）：通过 Playwright 拦截 <code>workflow.plan</code> RPC，模拟首次返回缺少 <code>digest</code> 的畸形数据，断言界面呈现缺少摘要警告与“重试”按钮；点击“重试”按钮后，必须严格断言 <code>workflow.plan</code> 的 RPC 调用计数增加，返回正常 digest，且提交按钮恢复为可用状态。</li>
+            </ul>
+          </li>
+          <li><strong>E2E 测试文件规范化：</strong>将 <code>packages/web/__tests__/e2e/session-composer-admission.test.ts</code> 重命名为 <code>packages/web/__tests__/e2e/session-composer-admission.e2e.test.ts</code>。重命名理由仅为严格遵守 <code>AGENTS.md</code> 约定的 <code>*.e2e.test.ts</code> 文件命名规范，不声称当前 Web unit lane 存在双跑（因 Web unit 配置已将 <code>__tests__/e2e/**</code> 排除）。验收标准仅要求本轮新增与重命名的文件合规，不强制重构既有遗留 Web e2e 测试文件。补充上述 2 个新场景后，Web 端到端测试由 42 项增至至少 44 项。</li>
+          <li><strong>四视口常驻回归：</strong><code>responsive-run-surfaces.e2e.test.ts</code> 在 320px、390px、700px、1440px 下打开 SessionComposer 与 StartRunForm，检查 document/body 横溢、可见控件越界、控件重叠与关键文本横向裁切；4 个矩阵用例加入后 Web 端到端总数为 48 项。</li>
+        </ul>
+
+        <h3>2.4 UI 边界控制（克制设计原则）</h3>
+        <ul>
+          <li><strong>不增加不可达的默认网络确认控件：</strong>默认 Session 启动模式为 <code>mode: 'workflow'</code>，在当前系统配置下并不请求非受限网络访问（unrestricted network）。增加网络确认对话框或复选框属于当前阶段不可达的冗余代码，坚决不做。</li>
+          <li><strong>不进行过早的跨组件 Hook 抽取：</strong>虽然 <code>SessionComposer</code> 与 <code>StartRunForm</code> 在启动准入与单飞逻辑上有相似性，但在单一 Runtime 权威（#16）与规范 RunPlan 准入（#31）尚未成型前，抽取大而全的表单 Hook 会过早锁定接口，带来二次重构成本。</li>
+          <li><strong>UI 重复逻辑保留为 Backlog 跟踪项：</strong>两套启动界面的准入状态机重复作为 P2 待办继续在 Issue 中跟踪，当前通过分层测试保障各自的 fail-closed。</li>
+          <li><strong>320px 动态态收口：</strong>Advanced 高级设置内部移除强制三列 inline 网格，恢复 <code>.form-row</code> 的自适应列；闭合 dsh 选项缩短为 <code>dsh-headless（仅 Goal）</code>，完整 experimental、仅 Goal 与联网不受限边界继续由相邻帮助和警告承担。</li>
+        </ul>
+
+        <h3>2.5 DeepSeek Harness 事实基线与官方资料引用</h3>
+        <ul>
+          <li><strong>发布 Tag 与 Master 分支严格分离：</strong>官方发布 Tag <code>dsh-v0.1.2-rc.1</code>（Commit: <code>a66e4702047846cdaa10c66c9d3df3951f5ea70d</code>）。基于 <code>git diff --name-status dsh-v0.1.2-alpha.5..dsh-v0.1.2-rc.1</code> 分析，变更的全部 252 个文件均仅涉及 package.json 中的版本号更新，无运行时源码行为差异。而 GitHub Master 分支（Commit <code>76fda729799fe9b3848dbe2c211d4b231032b81e</code>）包含未发布的代理配置与持久化重构。Tekon 绝不引入 master 未发布代码。</li>
+          <li><strong>官方资料引用列表（明确区分并固定 Commit）：</strong>
+            <ul>
+              <li><strong>Release Tag <code>dsh-v0.1.2-rc.1</code>（Commit <code>a66e4702047846cdaa10c66c9d3df3951f5ea70d</code>）</strong>：
+                <ul>
+                  <li>CLI 执行入口：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/apps/cli/src/bin.ts">rc.1 apps/cli/src/bin.ts</a></li>
+                  <li>应用引导与分层环境加载：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/packages/boot/app-boot/src/index.ts">rc.1 packages/boot/app-boot/src/index.ts</a></li>
+                  <li>本地凭据读取实现：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/packages/credentials/credentials-local/README.md">rc.1 credentials-local</a></li>
+                  <li>Headless 契约说明：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-rc.1/packages/bundle/headless/README.md">rc.1 Headless README</a></li>
+                </ul>
+              </li>
+              <li><strong>GitHub Master 分支（Commit <code>76fda729799fe9b3848dbe2c211d4b231032b81e</code>）</strong>：
+                <ul>
+                  <li>出站代理策略架构笔记：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/76fda729799fe9b3848dbe2c211d4b231032b81e/.agents/notes/implemented/architecture/2026-08-27-outbound-proxy-policy.md">master outbound-proxy-policy.md</a></li>
+                  <li>网络代理用户指南：<a href="https://github.com/deepseek-ai/deepseek-harness/blob/76fda729799fe9b3848dbe2c211d4b231032b81e/docs/user/guide/network-proxy.md">master network-proxy.md</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><strong>Tested Pin 保持策略：</strong>Tekon 生产配置 <code>TESTED_DSH_VERSION</code> 保持 <code>0.1.2-alpha.3</code>。裸命令执行基准证明 rc.1 在 CLI 命令面、帮助文本锚点和五项插件配置行上符合契约；但在完成整改后的包装复测与带凭证 L3 交互前，不盲目升 pin。</li>
+        </ul>
+
+        <h3>2.6 Issue #13–#33 职责矩阵、#23 补全与治理例外声明</h3>
+        <div class="callout callout-warn">
+          <p><strong>单次治理例外声明：</strong>此前权威评审决议要求 #17/#27/#32 等后续任务拆分到独立 PR 推进。针对二十轮发现的 DSH probe 隔离直接缺陷，用户明确要求在本轮 PR #11 中收口。本方案对此记录为一次窄范围治理例外：仅收敛已验证的 probe 临时工作区直接缺陷，#32 仅关闭其内部的 <code>probe-home</code> 子项，#32 issue 整体继续保持 OPEN（因 Run credential provenance 与内部工具执行管控仍未完成），绝不将其他长期架构演进回填到 PR #11。</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 14%;">Issue ID</th>
+              <th style="width: 10%;">严重度</th>
+              <th style="width: 14%;">领域</th>
+              <th>核心职责与边界（术语纠偏）</th>
+              <th style="width: 22%;">本轮整改关系</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>#13</strong></td><td>P0</td><td>Data</td><td>Authoritative Session / Event Outbox / Durable Inbox</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#14</strong></td><td>P0</td><td>Product</td><td>ACP (<strong>Agent Client Protocol</strong>，代理客户端协议) 双向流式切片</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#15</strong></td><td>P0</td><td>Runtime</td><td>Executor 静默与确定性退出（<strong>Quiescent Executor / Process Settlement</strong>）及重启恢复</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#16</strong></td><td>P0</td><td>Arch</td><td>Repo 级 Single-Owner Runtime 物理互斥锁与守护生命周期</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#17</strong></td><td>P1</td><td>DSH</td><td>DSH 0.1.2-rc.1 验证（L1 源码合同分析已完成，Wrapped L2 待复测，L3 待启动）</td><td>记录 L2 复测方案与 L3 缺口</td></tr>
+            <tr><td><strong>#18</strong></td><td>P1</td><td>Lifecycle</td><td>完整生命周期治理：模型 Compaction、导出归档、安全 Purge</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#19</strong></td><td>P0</td><td>Product</td><td>Collaborate 模式与 Deliver 受控轨道的双轨交互演进</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#20</strong></td><td>P1</td><td>Workflow</td><td>RunPlan 权威化（作为准入、执行与恢复的唯一事实）</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#21</strong></td><td>P1</td><td>A11y</td><td>全站屏幕阅读器、多浏览器矩阵、缩放与弱网体验验收</td><td>质量主线，本轮不闭环</td></tr>
+            <tr><td><strong>#22</strong></td><td>P1</td><td>DSH</td><td>Provider 例外准入知情同意、快照绑定与审计</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#23</strong></td><td>P1</td><td>Process</td><td><strong>PR 体量治理（PR Scale Governance，超大 PR 拆解与防膨胀）</strong></td><td><strong>本轮补全职责说明</strong></td></tr>
+            <tr><td><strong>#24</strong></td><td>P1</td><td>Governance</td><td>发布工程：Required Checks、SBOM、代码签名与 Release 渠道</td><td>工程治理，本轮不闭环</td></tr>
+            <tr><td><strong>#25</strong></td><td>P2</td><td>Code</td><td>CommandGateway 重构：剥离超时状态机与进程采样职责</td><td>代码健康，本轮不闭环</td></tr>
+            <tr><td><strong>#26</strong></td><td>P2</td><td>Code</td><td>静态分析治理：真实语义级 Lint 与格式技术债务收敛</td><td>代码健康，本轮不闭环</td></tr>
+            <tr><td><strong>#27</strong></td><td>P1</td><td>Tracking</td><td>架构重构主线任务追踪（Checklist 索引）</td><td>同步更新任务状态</td></tr>
+            <tr><td><strong>#28</strong></td><td>P1</td><td>Provider</td><td>Provider 命令身份推断统一与参数帧安全合同</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#29</strong></td><td>P1</td><td>Admission</td><td>Provider 凭证健康、能力检测与请求级准入三层解耦</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#30</strong></td><td>P3</td><td>Process</td><td>追踪平台化扩展（已按 not_planned 关闭，保持轻量）</td><td>维持关闭状态</td></tr>
+            <tr><td><strong>#31</strong></td><td>P1</td><td>Admission</td><td><strong>原子 Run admission / saga 补偿状态机</strong>与请求幂等性（非分布式事务）</td><td>架构主线，本轮不闭环</td></tr>
+            <tr><td><strong>#32</strong></td><td>P1</td><td>Security</td><td>DSH 运行环境与能力证据（<strong>仅关闭 probe-home 子项，issue 整体保持 OPEN</strong>）</td><td>记录窄范围例外收口</td></tr>
+            <tr><td><strong>#33</strong></td><td>P1</td><td>Security</td><td><code>project.clean</code> 入口安全防误删防护（全量 fail-closed）</td><td>维持独立 Issue，本轮不改代码</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 3. 实现细节与文件级变更计划 -->
+      <section id="section-3">
+        <h2>3. 实现细节与文件级变更计划</h2>
+        <h3>3.1 <code>packages/core/src/runtime/dsh-bridge-probe.ts</code></h3>
+        <ul>
+          <li><strong>扩展白名单与环境构建：</strong>在 <code>DSH_PROBE_SAFE_ENV_KEYS</code> 中增加 <code>'SystemDrive'</code>, <code>'windir'</code>, <code>'WINDIR'</code>。同时排除 <code>'DSH_HOME'</code> 与 <code>'DSH_AGENTS_HOME'</code>（改由隔离临时 probe workspace 注入）。重构环境构建函数签名：<code>buildProbeTelemetryEnv(tempHome: string, source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv</code>。强制设置 <code>DSH_TELEMETRY_DISABLED = '1'</code>，并覆盖设置 <code>env.DSH_HOME = join(tempHome, 'dsh-home')</code> 与 <code>env.DSH_AGENTS_HOME = join(tempHome, 'agents-home')</code>。</li>
+          <li><strong>程序化测试 Seam（不暴露至 CLI/RPC）：</strong>在 <code>RunDshPreflightOptions</code> 中增加仅供测试的字段：<code>probeInvocationCwd?: string</code>（相对命令解析基准目录，实现优先使用此 seam，避免全局 <code>process.chdir</code> 污染测试运行器）与 <code>probeCleanup?: (dir: string) => void | Promise&lt;void&gt;</code>（确定性测试清理异常触发 onWarn）。</li>
+          <li><strong>命令执行与沙箱生命周期控制：</strong>修改 <code>defaultProbeVersion</code>、<code>defaultProbeHelp</code>、<code>defaultProbeConfig</code> 签名，接受 <code>{ cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number }</code>，在 <code>execFileAsync</code> 中传入 <code>cwd</code>。在 <code>runDshPreflight</code> 中判断是否需要创建临时工作区：若 <code>!options?.probeVersion || !options?.probeHelp || !options?.probeConfig</code>（即任一 probe 为默认实现），创建临时工作区 <code>const root = mkdtempSync(join(tmpdir(), 'tekon-dsh-probe-'))</code>；若三者均由外部自定义传入，则 <code>root = null</code>，不创建任何文件系统目录。相对命令若包含路径分隔符，通过 <code>path.resolve(options?.probeInvocationCwd ?? process.cwd(), dshCommand)</code> 转换为绝对路径；否则保留原始 bare command。</li>
+          <li><strong>安全清理与 ENOENT 契约：</strong>
+            <p>建立专用辅助函数 <code>safeWarnCleanup</code>：在 <code>finally</code> 中执行清理，捕获异常后通过 <code>try { options?.onWarn?.(...) } catch {}</code> 安全吸收，确保 <code>onWarn</code> 自身崩溃不会覆盖主结果或主异常。ENOENT 分阶段锁定：全默认版本探测缺失裸命令时保留原生 <code>error.code === 'ENOENT'</code> 与 <code>error.path === bareCommand</code>；后续配置阶段抛错时包装为 <code>DshCapabilityError</code> 并保留 <code>actualVersion</code>，不虚称保留底层 code/path。两阶段均在 <code>finally</code> 中调用 <code>safeWarnCleanup</code>。</p>
+          </li>
+        </ul>
+
+        <h3>3.2 <code>packages/core/__tests__/runtime/dsh-bridge-probe-isolation.test.ts</code></h3>
+        <ul>
+          <li><strong>测试卫生准则：</strong>严禁调用全局 <code>process.chdir</code>；严禁向 git 仓库工作树写入 <code>.env</code> 或测试临时文件；所有测试必须在各自的 <code>mkdtemp</code> 临时 caller 目录中完成。</li>
+          <li><strong>扩充 TDD 隔离断言套件：</strong>
+            <ol>
+              <li>验证三个 probe 记录的子进程 <code>cwd</code> 为 <code>root</code>，<code>DSH_HOME</code> 为 <code>join(root, 'dsh-home')</code>，<code>DSH_AGENTS_HOME</code> 为 <code>join(root, 'agents-home')</code>；</li>
+              <li>在测试传入的宿主 <code>DSH_HOME</code> 目录中写入 <code>.env</code>（含 <code>DEEPSEEK_API_KEY=ambient-secret</code>）与 <code>.credentials.yaml</code> 凭证哨兵，验证在旧实现下子进程会读取宿主值，而在新实现下被切断且子进程读不到这些哨兵；</li>
+              <li>从测试进程启动辅助 Node 进程，并通过该子进程的 <code>{ cwd: callerDir }</code> 令 callerDir 成为调用 <code>runDshPreflight</code> 时的真实进程 cwd；在 callerDir 写入 <code>.env</code> 哨兵，由 recording DSH 模拟读取执行 cwd 下的 <code>.env</code>。旧实现因默认 probe 继承 callerDir 而读取哨兵并 RED；新实现即使同时把 <code>probeInvocationCwd</code> 指向 callerDir，也必须把默认 probe 的子进程 cwd 切换为隔离 <code>root</code>，从而读不到哨兵并 GREEN。全程不调用测试运行器的全局 <code>process.chdir</code>；</li>
+              <li>在 probe 执行成功、以及触发 contract 校验失败时，均验证临时工作区目录 <code>root</code> 被完全移除；</li>
+              <li>分阶段 ENOENT 契约断言：全默认模式下传入不存在的命令抛出 <code>code === 'ENOENT'</code> 且 <code>path === bareCommand</code>；自定义 version 成功但 default config 阶段命令缺失抛出 <code>DshCapabilityError</code> 且保留 <code>actualVersion</code>；两阶段均断言 <code>root</code> 被清理；</li>
+              <li>双故障与 Safe Warning Sink 断言：主异常 + cleanup 抛错依然抛出主异常且记 warning；主成功 + cleanup 抛错正常返回结果且记 warning；<code>onWarn</code> 自身崩溃被 safe warning sink 吸收；</li>
+              <li>利用 <code>probeInvocationCwd</code> 传入相对路径 <code>./recording-dsh.mjs</code>，断言命令在切换 cwd 后依然成功执行；</li>
+              <li>宿主环境中若存在 <code>SystemDrive</code>、<code>windir</code>、<code>WINDIR</code>，断言其被正确透传至 probe 子进程；</li>
+              <li>验证三种组合：全默认时创建并清理临时工作区，三个 default probe 都收到隔离 cwd、隔离环境和绝对化后的相对命令；部分自定义时同样创建并清理工作区，每个 default probe 收到隔离参数，而 custom probe 收到原始 <code>dshCommand</code>；全自定义时不调用 <code>mkdtempSync</code>，三个 custom probe 都收到原始命令。</li>
+            </ol>
+          </li>
+          <li><strong>规范化调度顺序测试描述：</strong>更新 <code>finishes default-config validation before starting the help probe</code> 测试说明，明确声明该测试仅验证应用层 Promise 调度顺序（scheduling order），不冒充底层文件排他锁。</li>
+        </ul>
+
+        <h3>3.3 <code>packages/web/src/client/components/sessions/SessionComposer.tsx</code></h3>
+        <ul>
+          <li>在 <code>plan && !planDigest</code> 分支渲染重试按钮，对齐 <code>StartRunForm.tsx</code> 与 <code>planError</code> 分支的恢复体验。</li>
+        </ul>
+
+        <h3>3.4 <code>packages/web/__tests__/e2e/session-composer-admission.e2e.test.ts</code></h3>
+        <ul>
+          <li>将 <code>packages/web/__tests__/e2e/session-composer-admission.test.ts</code> 重命名为 <code>packages/web/__tests__/e2e/session-composer-admission.e2e.test.ts</code>，遵守 <code>AGENTS.md</code> 命名规范。</li>
+          <li>补充真实 Chromium 断言（2 个新场景，最低 44 tests）：模拟首次 <code>project.run</code> 失败后释放 latch 允许重试；模拟缺少 <code>planDigest</code> 时点击“重试”按钮重新发起 <code>workflow.plan</code> 请求，断言请求计数增加并恢复可提交状态。重命名与扩充后，Web 端到端测试由 42 项增至至少 44 项。</li>
+        </ul>
+
+        <h3>3.5 StartRunForm 与四视口常驻回归</h3>
+        <ul>
+          <li><code>StartRunForm.tsx</code> 的高级设置移除 inline 三列覆盖，dsh 选项标签缩短为 <code>dsh-headless（仅 Goal）</code>；同步更新现有精确标签断言；</li>
+          <li><code>responsive-run-surfaces.e2e.test.ts</code> 固化 320px、390px、700px、1440px 四档默认正常态，并在 320px/390px 覆盖缺摘要重试和 Advanced dsh 联网警告/高级设置展开态；</li>
+          <li>对 document/body 横溢、关键可见控件边界、控件/文字交叉重叠、文本节点相互重叠、裁切祖先和表单当前文本宽度做结构化断言，并锁定关键控件与最低采样数；</li>
+          <li>定向矩阵 4/4 通过后，Web Chromium 全量由 44 项增至 48 项。</li>
+        </ul>
+
+        <h3>3.6 版本、变更日志与文档同步</h3>
+        <ul>
+          <li><strong>四包 Lockstep 升级：</strong>根目录与 <code>core</code>、<code>cli</code>、<code>web</code> 四个 <code>package.json</code> 版本统一递增至 <code>0.20.6</code>。</li>
+          <li><strong>CHANGELOG.md：</strong>新增 <code>## v0.20.6</code> 条目（规范标题格式），详细说明 DSH preflight 隔离临时 probe workspace、Windows 兼容性防御变量、SessionComposer 缺摘要原地重试与端到端测试命名规范化。</li>
+          <li><strong>README.md 与用户手册：</strong><code>README.md</code> 保持受控交付的高层阐述，不展开内部临时目录等实现细节；<code>docs/manual/tekon-user-manual.md</code> 与 <code>.html</code> 同步核实 DSH 环境依赖与沙箱边界说明。</li>
+          <li><strong>复审报告与当前权威指针：</strong><code>2026-09-03-tekon-product-runtime-harness-twentieth-review.md</code> 追加主 Agent 视角批注并生成同名 HTML；<code>current.md</code> 删除“不再生成重复的 HTML 报告镜像”冲突描述，恢复双入口导航；在最终整改代码与文档提交推送到远端分支后，按实际产生的 commit sha、Core workflow run ID 与 CI workflow run ID 更新权威记录，不预留占位标记。</li>
+        </ul>
+      </section>
+
+      <!-- 4. TDD 测试先行与 RED-GREEN 预期 -->
+      <section id="section-4">
+        <h2>4. TDD 测试先行与 RED-GREEN 预期</h2>
+        <p>所有改动遵循严格的测试先行与可证伪原则：</p>
+        <pre><code>[Phase 1: RED]
+1. 扩展 dsh-bridge-probe-isolation.test.ts:
+   - 由 cwd=callerDir 的辅助 Node 进程调用 preflight，断言默认 probe 不读取 callerDir/.env (旧实现继承真实进程 cwd 并读取哨兵: 失败)
+   - 断言 ambient DSH_HOME/.env 和 .credentials 哨兵对子进程不可见 (旧实现透传宿主路径能够读取: 失败)
+   - 断言全默认模式下缺失裸命令抛出原生 code === 'ENOENT' 且 path === bareCommand (旧实现未切入隔离逻辑或缺少断言: 失败)
+   - 断言主异常 + cleanup 抛错时抛出主异常且记录 onWarn (旧接口无 probeCleanup seam: 失败)
+   - 断言 onWarn 自身抛错时被 safe warning sink 吸收 (旧接口无 safeWarnCleanup: 失败)
+   - 断言全自定义 probe 时完全不调用 mkdtempSync (当前无区分逻辑: 失败)
+2. 重命名并扩充 session-composer-admission.e2e.test.ts:
+   - 增加 project.run 首次 500 失败后重新点击成功的 Playwright 断言
+   - 增加 planDigest 缺失时点击“重试”按钮触发 workflow.plan 请求计数增加并恢复 digest 的 Playwright 断言 (当前缺少重试按钮: 失败)
+
+[Phase 2: GREEN]
+1. 实现 dsh-bridge-probe.ts 隔离工作区逻辑:
+   - mkdtempSync 创建独立工作区，设置隔离 cwd / DSH_HOME / DSH_AGENTS_HOME
+   - path.resolve 基于 probeInvocationCwd 预处理相对命令
+   - DSH_PROBE_SAFE_ENV_KEYS 增加 SystemDrive, windir, WINDIR
+   - safeWarnCleanup 保证工作区清理与 safe warning sink 兜底
+   → Core 隔离测试集全部断言转绿 (GREEN)
+2. 实现 SessionComposer.tsx 重试按钮:
+   - 补充 plan && !planDigest 状态下的重试按钮与 refetchPlan 绑定
+   → Web Chromium e2e 测试全部转绿 (GREEN，共 48 项通过，含四视口矩阵 4/4)</code></pre>
+      </section>
+
+      <!-- 5. 真实 DSH 0.1.2-rc.1 验证分级与事实基线 -->
+      <section id="section-5">
+        <h2>5. 真实 DSH 0.1.2-rc.1 验证分级与事实基线</h2>
+        <h3>5.1 验证层级定义</h3>
+        <ul>
+          <li><strong>L1（源码与 Fixture 合同分析）：</strong>通过分析官方源码与本地 fixture，核验 CLI 参数、输出数据结构与插件配置树。已在二十轮评审中完成。</li>
+          <li><strong>Raw Binary Smoke（裸命令执行基准）：</strong>在隔离环境（Node.js v22.19.0）下直接执行官方发布包 <code>@deepseek-ai/dsh@0.1.2-rc.1</code>（Release Tag: <code>a66e4702047846cdaa10c66c9d3df3951f5ea70d</code>）的裸命令基准：
+            <ul>
+              <li><code>dsh --version</code>：<strong>54ms</strong></li>
+              <li><code>dsh --profile headless --dump-default-config</code>：<strong>70ms</strong></li>
+              <li><code>dsh --profile headless --help</code>：<strong>558ms</strong></li>
+              <li>输出包含全部 5 个核心插件行：<code>headless-runner</code>、<code>sandbox-policy</code>、<code>approval</code>、<code>session-persistence-jsonl</code>、<code>agent-default-model</code>；</li>
+              <li>Headless 帮助文本包含契约锚点：<code>print the final assistant message</code>。</li>
+            </ul>
+          </li>
+          <li><strong>Wrapped L2（Tekon 生产封装复测）：</strong>通过 Tekon 生产构建的 <code>runDshPreflight</code> 进行集成调用复测（详见 5.2）。</li>
+          <li><strong>L3（真实模型交互与全链路验证）：</strong>配置真实 API Key，运行端到端任务并验证 ACP 协议与长会话恢复。当前尚未开展。</li>
+        </ul>
+
+        <h3>5.2 整改后的 Wrapped L2 验收规范</h3>
+        <p>整改实现后，必须按照以下完整规范执行 Wrapped L2 复测：</p>
+        <ol>
+          <li><strong>隔离 npm 安装与完整性核对：</strong>在独立临时目录中安装 <code>@deepseek-ai/dsh@0.1.2-rc.1</code>，严格记录 npm 发布元数据中的 <code>dist.integrity</code>：<code>sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA==</code>；</li>
+          <li><strong>无凭据受控执行环境：</strong>运行环境：Node.js v22.19.0 / Linux x64 / 无 API key（确保环境未注入真实 <code>DEEPSEEK_API_KEY</code>）。npm 安装与 Node runner 启动时不设置无效代理或 <code>NODE_OPTIONS</code> 哨兵；runner 成功启动并载入 Tekon 构建产物后，再通过 <code>probeEnvSource</code>（或等价的运行期 <code>process.env</code> 修改）注入 <code>DEEPSEEK_API_KEY=parent-secret</code>、<code>HTTP_PROXY=http://parent.invalid</code>、<code>NODE_OPTIONS=--require=/tmp/parent-hook.js</code>，避免不存在的 require hook 在 recorder 启动前终止 Node 进程；</li>
+          <li><strong>Delegating Recorder Wrapper 转发与记录：</strong>编写代理记录脚本，记录 Tekon 传给实际 <code>dsh</code> rc.1 的 <code>cwd</code> 与环境变量字典，并将所有输入输出及退出码透传给真实 rc.1 二进制；</li>
+          <li><strong>生产构建导出调用：</strong>执行 <code>pnpm build</code>，通过 Node.js 直接调用构建产物 <code>packages/core/dist/index.js</code> 导出的 <code>runDshPreflight</code>；</li>
+          <li><strong>断言清单：</strong>
+            <ul>
+              <li>runner 启动后注入上述哨兵，再调用 <code>runDshPreflight(wrapperExecutable, { allowVersion: '0.1.2-rc.1', probeEnvSource })</code>（若采用运行期修改 <code>process.env</code>，则在 <code>finally</code> 中恢复原值）；</li>
+              <li><code>result.versionCompatible === false</code>；</li>
+              <li><code>result.versionBypassed === true</code>；</li>
+              <li>捕获到预期的版本 bypass 警告日志（<code>onWarn</code>）；</li>
+              <li>5 项核心插件行与 help 契约锚点（<code>print the final assistant message</code>）校验通过；</li>
+              <li>父环境注入的哨兵变量均未流入实际命令；</li>
+              <li><code>clean-home</code> 产生的所有配置与状态文件仅出现在隔离临时目录 <code>root</code>（及其子路径 <code>dsh-home</code>/<code>agents-home</code>）内；</li>
+              <li>探测完成后临时目录被完全清理；</li>
+              <li>进程退出码与预期一致。</li>
+            </ul>
+          </li>
+        </ol>
+        <p>完成上述包装复测后，方可在报告与文档中记为“L2 验证通过”。</p>
+
+        <h3>5.3 维持 Pin 版本的裁决理由</h3>
+        <div class="callout callout-warn">
+          <p><strong>维持 <code>0.1.2-alpha.3</code> Pin 版本的裁决理由：</strong></p>
+          <p>即使 Wrapped L2 验证通过，<strong>Tekon 生产 tested pin 仍必须维持 <code>0.1.2-alpha.3</code></strong>。原因在于：L3 真实模型联调与 ACP（Agent Client Protocol）流式交互尚未完成验证。维持 alpha.3 的 fail-closed 门禁是保护系统稳定性的必要底线。</p>
+        </div>
+      </section>
+
+      <!-- 6. 验证矩阵 -->
+      <section id="section-6">
+        <h2>6. 验证矩阵</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 32%;">验证层级</th>
+              <th style="width: 33%;">执行命令 / 路径</th>
+              <th>检验目标与准入标准</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>定向单元测试（RED→GREEN）</strong></td><td><code>pnpm --filter @tekon/core test dsh-bridge-probe-isolation</code></td><td>验证工作区 cwd 隔离、ambient 凭据切断、受控 callerDir、相对路径绝对化、Windows 防御变量、分阶段 ENOENT、双故障/safe warning sink 与 3 类 probe 组合</td></tr>
+            <tr><td><strong>Core 端到端测试</strong></td><td><code>pnpm --filter @tekon/core test:e2e</code></td><td>确保 8 个 Core e2e 测试文件、26 项测试全量通过（Core26 基线）</td></tr>
+            <tr><td><strong>CLI 端到端测试</strong></td><td><code>pnpm --filter @tekon/cli test:e2e</code></td><td>确保 3 个 CLI e2e 测试文件、8 项测试全量通过（CLI8 基线）</td></tr>
+            <tr><td><strong>Web Chromium 端到端</strong></td><td><code>pnpm --filter @tekon/web test:e2e</code></td><td>确保 48 项 Playwright 浏览器用例全绿（含失败重试、摘要重试与四视口常驻矩阵）</td></tr>
+            <tr><td><strong>全仓单元与集成回归</strong></td><td><code>pnpm test</code></td><td>全量 144+ 测试文件、1541+ 项用例通过，无意外回归</td></tr>
+            <tr><td><strong>静态类型与规范检查</strong></td><td><code>pnpm lint && pnpm typecheck</code></td><td>全仓无 TypeScript 类型错误；说明：当前 lint 脚本主要由 <code>tsc -p tsconfig.json --noEmit</code> 执行，不声称 ESLint</td></tr>
+            <tr><td><strong>生产构建验证</strong></td><td><code>pnpm build</code></td><td>全包构建产物正常生成，无打包报错</td></tr>
+            <tr><td><strong>安全依赖审计</strong></td><td><code>pnpm audit --prod</code></td><td>生产依赖无中高危已知安全漏洞</td></tr>
+            <tr><td><strong>响应式多视口视觉验收</strong></td><td>Playwright Viewport Matrix (320px / 390px / 700px / 1440px)</td><td>四档验证两个入口默认正常态；320px/390px 加测缺摘要重试与 dsh 警告/高级设置展开态；检查无横溢、关键控件越界/重叠和文本横向裁切</td></tr>
+            <tr><td><strong>多角色 Review</strong></td><td>代码/测试审查、技术架构审查、文档编辑审查</td><td>独立最高思考等级审查，达成 <code>hasMustFix=false</code></td></tr>
+            <tr><td><strong>远端 CI 状态绑定</strong></td><td>GitHub Actions Workflow (<code>core.yml</code> & <code>ci.yml</code>)</td><td>提交推送到远端后，按实际 Actions Run 绑定终态 <code>completed/success</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 7. 风险与回滚方案 -->
+      <section id="section-7">
+        <h2>7. 风险与回滚方案</h2>
+        <h3>7.1 识别风险与防护机制</h3>
+        <ol>
+          <li><strong>临时工作区目录清理异常风险：</strong>在受限文件系统或 Windows 下，<code>rmSync</code> 可能偶发 <code>EBUSY</code> 或 <code>EPERM</code>，若未捕获将导致 preflight 意外崩溃。清理操作必须由 <code>safeWarnCleanup</code> 统一处理，捕获异常后降级为 <code>options?.onWarn?.(...)</code>，且吞掉 <code>onWarn</code> 自身可能抛出的异常，绝不覆盖主探测结果或主异常。</li>
+          <li><strong>相对路径命令解析歧义风险：</strong>若使用者传入形如 <code>.\\dsh.cmd</code> 的相对路径，切换 cwd 后可能找不到文件。利用 Node 原生 <code>path.resolve</code> 基于 <code>probeInvocationCwd ?? process.cwd()</code> 绝对化命令；纯命令名继续交由底层系统的 <code>PATH</code> 解析。</li>
+          <li><strong>Windows 环境变量大小写敏感性：</strong>Windows 环境变量大小写不敏感，但 Node.js 的 <code>process.env</code> 可能保留大小写特征。白名单同时包含 <code>windir</code> 与 <code>WINDIR</code>，<code>Path</code> 与 <code>PATH</code>，消除键名漂移隐患。</li>
+        </ol>
+        <h3>7.2 回滚策略</h3>
+        <p>本次整改所有变更均被约束在受控的单分支内。若在实施或 CI 阶段发现不可预测的系统性衰退，可通过 Git 单 commit 原子回退（<code>git revert</code>）恢复至基线状态 <code>6fd86ee</code>，保持受控低爆炸半径。</p>
+      </section>
+
+      <!-- 8. 文档、版本与 Issue 状态同步 -->
+      <section id="section-8">
+        <h2>8. 文档、版本与 Issue 状态同步</h2>
+        <h3>8.1 版本与文件同步判断说明</h3>
+        <ul>
+          <li><strong>四包 Lockstep <code>0.20.6</code>：</strong>Core 核心探测、Web 启动交互组件与端到端测试均有代码与规范变更，按语义化版本统一递增至 <code>0.20.6</code>；</li>
+          <li><strong>CHANGELOG.md：</strong>必须同步。新增 <code>## v0.20.6</code> 标题条目，向终端用户与下游集成方明确说明 DSH preflight 隔离临时 probe workspace 的安全隔离意义、Windows 兼容性防御变量以及界面重试交互改善；</li>
+          <li><strong>README.md 与用户手册：</strong><code>README.md</code> 保持受控交付的高层阐述，不展开内部临时目录等实现细节；<code>docs/manual/tekon-user-manual.md</code> 与 <code>.html</code> 同步核实 DSH 环境依赖与沙箱边界说明；</li>
+          <li><strong>AGENTS.md：</strong>不修改 <code>AGENTS.md</code> 本身。严格遵守其关于 e2e 测试命名（<code>*.e2e.test.ts</code>）的现有规则，通过重命名测试文件主动向其规范靠拢。</li>
+        </ul>
+
+        <h3>8.2 Issue 状态更新</h3>
+        <ul>
+          <li><strong>Issue #17（DSH rc.1 验证）：</strong>记录官方 npm rc.1 裸命令耗时数据（54ms / 70ms / 558ms）与契约匹配事实，明确标注基于生产构建的 Wrapped L2 验收规范，保持 tested pin 为 alpha.3，标注 L3 缺口；</li>
+          <li><strong>Issue #27（主线架构追踪）：</strong>更新治理清单，保持架构主线与 PR #11 收口的明确分界；</li>
+          <li><strong>Issue #32（DSH 环境与凭据管理）：</strong>明确标注 Probe 执行层的 <code>probe-home</code> 临时工作区隔离子项已关闭；正式 Run 阶段的凭据来源（credential provenance）与内部工具执行管控依然保持 OPEN；</li>
+          <li><strong>Issue #23（PR 体量治理）：</strong>正式纳入管理清单，明确超大 PR 风险，确立后续主线架构必须通过独立小 PR 推进的原则；</li>
+          <li><strong>Issue #33（Clean 目录防误删安全防护）：</strong>确认生产代码保持不变，完整物理清理与生命周期继续在独立 issue 中推进。</li>
+        </ul>
+
+        <h3>8.3 <code>current.md</code> 规则修复与基线绑定</h3>
+        <ul>
+          <li>纠正此前“不再生成重复的 HTML 报告镜像”的规则冲突，恢复规范的双入口导航（Markdown 源码 + 单文件无依赖自包含 HTML）；</li>
+          <li>准确记录二十轮基线（<code>6fd86ee</code> / Core #419 / CI #328），并明确整改提交推送到远端分支后，按实际产生的 commit sha、Core workflow run ID 与 CI workflow run ID 更新权威记录。</li>
+        </ul>
+      </section>
+
+      <!-- 9. 验收标准与非目标 -->
+      <section id="section-9">
+        <h2>9. 验收标准与非目标</h2>
+        <h3>9.1 验收标准清单</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 35%;">验收领域</th>
+              <th>具体准入要求</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>临时工作区隔离有效性</strong></td><td>Core 隔离测试证明默认 probe 在隔离临时 probe workspace 中运行（<code>cwd = root</code>，<code>DSH_HOME = root/dsh-home</code>，<code>DSH_AGENTS_HOME = root/agents-home</code>），不继承宿主 DSH_HOME，无法读取宿主工作区中的 <code>.env</code>，相对命令与 Windows 变量正确处理。</td></tr>
+            <tr><td><strong>Probe 组合与清理保证</strong></td><td>覆盖全默认、部分自定义、全自定义三类 probe 组合；存在默认 probe 时无论成功或异常均执行清理；全自定义时不创建目录；清理异常仅记录 warning，不覆盖主结果。</td></tr>
+            <tr><td><strong>ENOENT 错误契约完整</strong></td><td>版本探测阶段不存在命令时抛出 <code>code === 'ENOENT'</code>，<code>path</code> 为原 bare command；配置阶段缺失时正确包装 <code>DshCapabilityError</code>；两阶段清理逻辑均被执行。</td></tr>
+            <tr><td><strong>双故障与 Warning 吸收</strong></td><td>主异常或主结果不被 cleanup 异常覆盖；<code>onWarn</code> 回调自身崩溃被 safe warning sink 吸收。</td></tr>
+            <tr><td><strong>SessionComposer 交互闭环</strong></td><td>缺少 planDigest 时界面渲染“重试”按钮，点击重新请求计划；首次提交失败后用户可直接再次点击重试。</td></tr>
+            <tr><td><strong>测试套件规范与 e2e 命名合规</strong></td><td>本轮新增与重命名的 e2e 测试文件均以 <code>*.e2e.test.ts</code> 命名，Web 端到端测试总数达到 48 项。</td></tr>
+            <tr><td><strong>全量门禁全绿</strong></td><td><code>pnpm test</code>、<code>pnpm lint</code>（<code>tsc -p tsconfig.json --noEmit</code>）、<code>pnpm typecheck</code>、<code>pnpm build</code>、<code>pnpm audit --prod</code> 以及 Core/CLI/Web 各自的 <code>test:e2e</code> 全部无错误通过。</td></tr>
+            <tr><td><strong>响应式布局无横溢</strong></td><td>320px、390px、700px 与 1440px 的被测默认正常态，以及 320px/390px 的缺摘要重试和 dsh 警告/高级设置展开态，无页面横溢、关键控件越界/重叠或文本横向裁切。</td></tr>
+            <tr><td><strong>无占位内容</strong></td><td>方案、代码与报告中无任何 <code>TBD</code>、<code>TODO</code>、<code>FIXME</code> 或 placeholder。</td></tr>
+            <tr><td><strong>版本一致性</strong></td><td>四包版本号严格统一为 <code>0.20.6</code>。</td></tr>
+            <tr><td><strong>HTML 与 Markdown 双向同步</strong></td><td>HTML 文件样式精简、自包含且与 Markdown 内容严格一致。</td></tr>
+            <tr><td><strong>Reviewer 签收</strong></td><td>独立最高思考等级 Reviewer 审查给出 <code>hasMustFix=false</code> 结论。</td></tr>
+          </tbody>
+        </table>
+
+        <h3>9.2 明确非目标（Explicit Non-Goals）</h3>
+        <div class="callout callout-warn">
+          <p><strong>PR #11 本轮明确不做项（范围边界守卫）：</strong></p>
+          <ul>
+            <li>不实现 <code>project.clean</code> 的短期全量 fail-closed 或生命周期清理（保持 #33 独立处理）；</li>
+            <li>不实现单一所有权运行时（#16）与守护进程生命周期；</li>
+            <li>不实现执行器静默重启（#15）；</li>
+            <li>不实现原子 Run 准入事务或 Saga 补偿机制（#31）；</li>
+            <li>不重构 RunPlan 成为唯一执行事实权威（#20）；</li>
+            <li>不重写权威 Session 事实源与持久化收件箱（#13）；</li>
+            <li>不接入 ACP 协议或实现持续流式协作（#14、#19）；</li>
+            <li>不开展 DSH rc.1 的 L3 真实模型联调，不提升生产 tested pin；</li>
+            <li>不修改仓库的分支保护规则（Branch Protection Rules）；</li>
+            <li>不执行 Git Merge、PR 合入或版本 Release 操作。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 10. 阶段实施顺序与甘特安排 -->
+      <section id="section-10">
+        <h2>10. 阶段实施顺序与甘特安排</h2>
+        <pre><code>阶段 1: TDD RED 扩展 (Core 单元隔离断言 + Web 重试 e2e 先行)
+  └── 编写 dsh-bridge-probe-isolation.test.ts 9 项新断言与 3 类组合测试
+  └── 重命名并扩充 session-composer-admission.e2e.test.ts (失败重试 + 计划摘要重新拉取)
+  └── 运行测试确认红灯 (RED)
+
+阶段 2: GREEN 生产代码修复
+  └── packages/core/src/runtime/dsh-bridge-probe.ts 隔离工作区、safeWarnCleanup 与 Windows 白名单实现
+  └── packages/web/src/client/components/sessions/SessionComposer.tsx 重试按钮实现
+  └── 重新运行上述测试确认全部转绿 (GREEN)
+
+阶段 3: 真实 Wrapped L2 规范复测
+  └── 生产构建 pnpm build 后，调用 packages/core/dist/index.js 针对本地 rc.1 执行包装复测并记录证据
+
+阶段 4: 文档、报告、批注、HTML 与版本号同步
+  └── 提升四包版本号至 0.20.6
+  └── 同步 CHANGELOG.md (## v0.20.6) 与用户手册
+  └── 第二十轮报告追加批注并生成同名 HTML
+  └── current.md 消除冲突规则并链接双入口
+
+阶段 5: 全量验证、多角色 Review 与 CI 终态绑定
+  └── 代码与文档就绪后执行最终 pnpm test、分包 test:e2e、Playwright 全量回归 (48 tests)
+  └── 执行 pnpm lint / typecheck / build / audit 全门禁
+  └── 代码审查、技术方案审查与文档编辑审查达成 hasMustFix=false
+  └── 推送后按实际产生的 commit / Actions ID 绑定最新 GitHub Actions Core / CI 终态</code></pre>
+      </section>
+      <footer>
+        <p>Tekon Superpowers Plans · 2026-09-03 · PR #11 Twentieth Review Remediation Plan</p>
+      </footer>
+    </main>
+  </body>
+</html>

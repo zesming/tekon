@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>第十九轮复审整改执行方案（2026-09-03）</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5f7fb;
+        --paper: #ffffff;
+        --ink: #172033;
+        --muted: #526071;
+        --line: #d8e0ea;
+        --soft: #eef4fa;
+        --accent: #1d6fd8;
+        --ok: #067647;
+        --ok-bg: #edfcf2;
+        --ok-line: #a6f4c5;
+        --warn: #9a5b00;
+        --warn-bg: #fff8e8;
+        --warn-line: #fcd89b;
+        --risk: #b42318;
+        --risk-bg: #fff1f0;
+        --risk-line: #fecdca;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Microsoft YaHei', sans-serif;
+        font-size: 15px;
+        line-height: 1.7;
+        letter-spacing: 0;
+      }
+      main {
+        width: min(1140px, calc(100% - 32px));
+        margin: 28px auto 60px;
+      }
+      header,
+      section {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 30px 36px;
+      }
+      section {
+        margin-top: 20px;
+      }
+      header {
+        border-top: 4px solid var(--accent);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 28px;
+        line-height: 1.25;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      h2 {
+        margin: 0 0 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--line);
+        font-size: 20px;
+        line-height: 1.35;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      h3 {
+        margin: 24px 0 10px;
+        font-size: 17px;
+        line-height: 1.4;
+        color: var(--ink);
+        letter-spacing: 0;
+      }
+      p {
+        margin: 10px 0;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      code {
+        background: #eef2f7;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.9em;
+        padding: 2px 5px;
+        color: #0f172a;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      pre {
+        overflow-x: auto;
+        max-width: 100%;
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 8px;
+        color: #f3f4f6;
+        padding: 16px 18px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13.5px;
+        line-height: 1.55;
+        margin: 14px 0;
+      }
+      pre code {
+        background: transparent;
+        border-radius: 0;
+        color: inherit;
+        font-size: inherit;
+        padding: 0;
+        overflow-wrap: normal;
+        word-break: normal;
+        white-space: pre;
+      }
+      blockquote {
+        margin: 16px 0;
+        padding: 14px 18px;
+        background: var(--soft);
+        border-left: 4px solid var(--accent);
+        border-radius: 0 6px 6px 0;
+      }
+      blockquote p {
+        margin: 4px 0;
+        color: var(--ink);
+        font-size: 14.5px;
+      }
+      .meta-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13.5px;
+      }
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--soft);
+        color: var(--accent);
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .callout {
+        margin: 16px 0;
+        padding: 14px 18px;
+        border-radius: 8px;
+        font-size: 14.5px;
+        line-height: 1.6;
+      }
+      .callout-ok {
+        background: var(--ok-bg);
+        border: 1px solid var(--ok-line);
+        color: var(--ok);
+      }
+      .callout-warn {
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-line);
+        color: var(--warn);
+      }
+      .callout-risk {
+        background: var(--risk-bg);
+        border: 1px solid var(--risk-line);
+        color: var(--risk);
+      }
+      .callout p {
+        margin: 4px 0;
+      }
+      .callout strong {
+        font-weight: 650;
+      }
+      ol, ul {
+        margin: 10px 0;
+        padding-left: 24px;
+      }
+      li {
+        margin: 6px 0;
+      }
+      table {
+        width: 100%;
+        margin: 16px 0;
+        border-collapse: collapse;
+        font-size: 14px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      th, td {
+        border: 1px solid var(--line);
+        padding: 10px 14px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--soft);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      tr:nth-child(even) td {
+        background: #fafbfd;
+      }
+      footer {
+        margin-top: 36px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13.5px;
+        text-align: center;
+      }
+      @media (max-width: 768px) {
+        main {
+          width: calc(100% - 20px);
+          margin-top: 14px;
+        }
+        header, section {
+          padding: 20px 18px;
+        }
+        h1 {
+          font-size: 23px;
+        }
+        h2 {
+          font-size: 18px;
+        }
+        table {
+          display: table;
+          width: 100%;
+          table-layout: fixed;
+          white-space: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>第十九轮复审整改执行方案（2026-09-03）</h1>
+        <blockquote>
+          <p><strong>依据：</strong><code>docs/reviews/2026-09-03-tekon-product-runtime-harness-nineteenth-review.md</code></p>
+          <p><strong>范围：</strong>PR #11 内只关闭可独立验证的 telemetry、Advanced Run 准入测试和正式交付缺口；架构主线继续拆独立 PR。</p>
+        </blockquote>
+        <div class="meta-bar">
+          <span>方案日期：2026-09-03</span>
+          <span>目标版本：v0.20.5</span>
+          <span>所属分支：review/human-first-harness-2026-08-28</span>
+          <span class="tag">PR #11 整改</span>
+          <span class="tag">DSH 内置 session telemetry 硬关断</span>
+          <span class="tag">准入选择器</span>
+        </div>
+      </header>
+
+      <!-- 1. 目标与裁决 -->
+      <section id="section-1">
+        <h2>1. 目标与裁决</h2>
+        <p>本方案验收后应完成以下 5 项收敛：</p>
+        <ol>
+          <li><strong>DSH 内置 session telemetry 硬关断：</strong>正式 Run 与 metadata preflight 均明确硬关断内置 session telemetry。</li>
+          <li><strong>Advanced Run 准入重构：</strong>提交门成为可单测的纯状态选择器，并用同步 latch 防止同一页面内重复提交。</li>
+          <li><strong>第一批交付同步：</strong>用户手册（Markdown/HTML）、CHANGELOG 与四包版本号（v0.20.5）在本批同步。</li>
+          <li><strong>第二批交付补齐：</strong>第十九轮复审报告（Markdown 视角批注与完整 HTML 审阅版）、<code>current.md</code> 与 PR 元数据在第二批补齐。</li>
+          <li><strong>即时安全风险分拆：</strong><code>project.clean</code> 的即时风险拆为独立 issue #33，完整生命周期继续由 #18 承载。</li>
+        </ol>
+
+        <div class="callout callout-warn">
+          <p><strong>明确不实现项（PR #11 范围控制）：</strong></p>
+          <p>当前 PR 不实现 daemon、authoritative Session、Run admission saga、ACP、RunPlan schema、完整 purge、DSH alpha.5 升 pin、共享 admission UI 大重构或新的 capability DSL。避免把长期架构演进与当前整改混合。</p>
+        </div>
+      </section>
+
+      <!-- 2. 产品与设计细节 -->
+      <section id="section-2">
+        <h2>2. 产品与设计细节</h2>
+
+        <h3>2.1 DSH 内置 session telemetry 边界</h3>
+        <ul>
+          <li><strong>正式 Run 子进程：</strong>保持 <code>envMode: exact</code> 与显式白名单机制。</li>
+          <li><strong>Metadata probe 子进程：</strong>保留 <code>PATH</code>、<code>DSH_HOME</code> 等必要运行环境，但显式剥除宿主环境（ambient）中的 <code>DSH_TELEMETRY_MODE</code> 与 <code>DSH_TELEMETRY_OTLP_URL</code>，并固定设置 <code>DSH_TELEMETRY_DISABLED=1</code>。</li>
+          <li><strong>作用域边界：</strong>该策略只作用于 Tekon 启动的 DSH 子进程，绝不修改用户宿主环境中独立运行的 DSH。</li>
+          <li><strong>合同语义规范化：</strong>上游对任意非空 <code>DSH_TELEMETRY_DISABLED</code> 都视为关闭，固定 <code>1</code> 是 Tekon 的规范化表达，不代表宿主环境中的 <code>0</code> 会开启 telemetry。</li>
+          <li><strong>风险事实澄清：</strong>在 alpha.3 中，<code>--version</code> 与 <code>--dump-default-config</code> 为 boot-free，但 <code>--profile headless --help</code> 会进入 profile/plugin boot；无证据表明此前发生外传，但不能用不 boot 排除风险，故 preflight 改动属于纵深防御（defense-in-depth），<strong>不表述为已发生的数据外传修复</strong>。此外，worktree 中的 <code>.env</code> 凭证回退读取仍是独立安全风险，宿主环境继承不等于凭证隔离。</li>
+        </ul>
+
+        <h3>2.2 Advanced Run 准入与交互</h3>
+        <p>提交门设计为只返回阻断原因的纯状态选择器，不承载 UI 文案或发展为通用 DSL。阻断优先级固定为：</p>
+        <pre><code>no-token
+> submitting
+> plan-loading
+> plan-error
+> no-plan
+> no-demand
+> draft-not-ready
+> missing-plan-digest
+> network-unacknowledged</code></pre>
+        <ul>
+          <li><strong>交互与文案分层：</strong>组件继续使用既有中文提示和 plan error/digest 重试 UI。空需求的初始状态只禁用按钮，不主动显示警告；若发生程序化绕过，仍由 handler 弹出防御性提示。</li>
+          <li><strong>同步防重入保护：</strong>采用同步 <code>useRef</code> latch：在所有校验通过后、调用 mutation 前同步置位，并在 <code>finally</code> 块中释放。React 的 <code>isPending</code> 仅负责视觉交互与按钮禁用，无法在 JavaScript 异步事件循环的微任务前独立保证同一 tick 的 single-flight。</li>
+        </ul>
+
+        <h3>2.3 <code>project.clean</code> 分拆</h3>
+        <ul>
+          <li><strong>Issue #33 职责：</strong>仅负责在完整生命周期方案前关闭活动期误删入口，首选暂停所有物理删除。即使认证、confirm、格式与 scope 校验均通过，也暂停物理删除，并在返回拒绝前写入不含 token 的 Audit；未认证、非法或越权请求不向目标 Run 写 Audit。</li>
+          <li><strong>边界划定：</strong>Issue #33 不宣称 lifecycle-safe。完整 export、compaction、retention、tombstone、路径修正和事务/补偿机制仍然归属 Issue #18。</li>
+        </ul>
+      </section>
+
+      <!-- 3. 实现细节 -->
+      <section id="section-3">
+        <h2>3. 实现细节</h2>
+
+        <h3>3.1 Core</h3>
+        <ul>
+          <li><code>dsh-bridge-probe.ts</code>：在 <code>runDshPreflight()</code> 入口构造一次 inherited-minus-telemetry 环境快照。</li>
+          <li><strong>默认 probe 复用：</strong>三个默认 probe（help、version、config）复用同一环境快照；自定义 probe 继续自行负责环境注入。</li>
+          <li><strong>测试 seam 隔离：</strong><code>probeEnvSource</code> 仅作为程序化测试 seam 暴露，不接入 CLI、RPC 或 Provider registry。</li>
+          <li><code>dsh-headless-adapter.ts</code>：不改变生产运行行为，仅补充宿主环境下的 <code>DSH_TELEMETRY_DISABLED=0</code> 被固定为 <code>1</code> 的回归断言。</li>
+        </ul>
+
+        <h3>3.2 Web</h3>
+        <ul>
+          <li><strong>纯状态选择器：</strong>新增小型 <code>startRunSubmitState()</code> 纯函数与表驱动单测（<code>packages/web/__tests__/client/start-run-submit-state.test.ts</code>）。</li>
+          <li><strong>表单组件集成：</strong><code>StartRunForm</code>（<code>packages/web/src/client/components/runs/StartRunForm.tsx</code>）使用该函数计算 disabled 状态与 reason，并增加同步 in-flight latch 防重入。</li>
+          <li><strong>规范化 e2e 测试：</strong>新增合规命名的 <code>packages/web/__tests__/e2e/start-run-admission.e2e.test.ts</code>，先证明无 latch 时能观察到两个 <code>project.run</code> 请求，再验证修复后只有一个。</li>
+          <li><strong>匹配精度提升：</strong>现有 digest e2e（<code>packages/web/__tests__/e2e/start-run-form.test.ts</code>）的响应匹配收窄到 RPC body 中 <code>path === 'project.run'</code>，避免被并发或预检请求干扰。</li>
+          <li><strong>窄屏视觉收敛：</strong>真实浏览器验收发现 390px/700px 选择器文本被裁切后，新增 RED→GREEN e2e；768px 及以下使用单列选择器，闭合标签保持简短，完整风险与自动化边界保留在相邻帮助中。</li>
+        </ul>
+
+        <h3>3.3 文档与版本</h3>
+        <ul>
+          <li><strong>复审报告：</strong>第十九轮复审报告（Markdown 视角批注与完整 HTML 审阅版）待第二批一同交付。</li>
+          <li><strong>用户手册与边界：</strong>用户手册 Markdown/HTML §5.7 补充 Tekon 子进程 telemetry 边界、流式事实与独立凭证风险说明；README 保持高层摘要，不堆砌实现细节。</li>
+          <li><strong>变更日志与版本：</strong>CHANGELOG 新增 <code>v0.20.5</code>，在本批完成；根包与 <code>@tekon/core</code>、<code>@tekon/cli</code>、<code>@tekon/web</code> 四个 <code>package.json</code> lockstep bump（v0.20.5）。</li>
+          <li><strong>上下文与 PR：</strong><code>current.md</code>（补 HTML 入口、#33、最终验证和新 Head）与 PR 标题/元数据待第二批同步。</li>
+        </ul>
+      </section>
+
+      <!-- 4. 测试先行顺序 -->
+      <section id="section-4">
+        <h2>4. 测试先行顺序</h2>
+        <p>所有改动遵循严格的测试先行与可证伪原则：</p>
+        <ol>
+          <li><strong>Core 环境继承证伪（RED）：</strong>先新增 Core fake DSH 环境测试，确认现状会继承宿主 telemetry 配置并断言失败。</li>
+          <li><strong>Web 选择器单测先红（RED）：</strong>先新增 Web <code>start-run-submit-state.test.ts</code> 单测，确认模块缺失而失败。</li>
+          <li><strong>Web 并发双发证伪（RED）：</strong>先新增重复提交 e2e（<code>packages/web/__tests__/e2e/start-run-admission.e2e.test.ts</code>），稳定观察到两个 <code>project.run</code> 请求后再实施 latch 保护。</li>
+          <li><strong>功能实现转绿（GREEN）：</strong>实现 Core 环境裁剪与 Web 状态选择器 + latch，使上述测试全部转绿。</li>
+          <li><strong>定向回归套件验证：</strong>运行相关 Core 单元测试与 Web e2e 测试套件。</li>
+          <li><strong>第一批全量门禁与视觉检查：</strong>第一批交付（代码、测试、手册、CHANGELOG 与版本号）就绪后执行全量类型检查、代码检查、构建验证与视觉检查。</li>
+          <li><strong>第二批再次验证：</strong>第二批交付（复审报告 Markdown/HTML、<code>current.md</code> 与 PR 元数据）完成后执行 <code>pnpm test</code> 与相关门禁再次验证。</li>
+          <li><strong>独立 Reviewer 双轮复核：</strong>代码/测试、技术文档、文字编辑和报告完成度分别交独立 reviewer 复核。</li>
+        </ol>
+      </section>
+
+      <!-- 5. 验收标准 -->
+      <section id="section-5">
+        <h2>5. 验收标准</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 38%;">验收领域</th>
+              <th>具体准入要求</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>测试有效性与反欺骗</strong></td>
+              <td>新增行为测试均记录明确的 RED 和 GREEN 证据，不保留天然通过的假测试。</td>
+            </tr>
+            <tr>
+              <td><strong>全局工程门禁</strong></td>
+              <td><code>pnpm test</code>、<code>pnpm lint</code>、<code>pnpm typecheck</code>、<code>pnpm build</code>、<code>pnpm audit --prod</code> 全部通过。</td>
+            </tr>
+            <tr>
+              <td><strong>端到端测试合规</strong></td>
+              <td>Core/CLI/Web e2e 全部通过，Playwright 真实浏览器测试无 flaky retry。</td>
+            </tr>
+            <tr>
+              <td><strong>响应式布局健康</strong></td>
+              <td><code>StartRunForm</code> 在桌面与移动视口均无错位、重叠或横向溢出。</td>
+            </tr>
+            <tr>
+              <td><strong>文档一致性与排版</strong></td>
+              <td>第十九轮报告 HTML 在桌面与移动视口清晰可读，章节、链接和主结论与 Markdown 源稿完全一致（第二批交付时验收）。</td>
+            </tr>
+            <tr>
+              <td><strong>交付物无占位符</strong></td>
+              <td>报告、手册及其 HTML 无 <code>TBD</code>、<code>TODO</code>、<code>FIXME</code> 或 placeholder 等未完工标记。</td>
+            </tr>
+            <tr>
+              <td><strong>版本一致性（Lockstep）</strong></td>
+              <td>根包与 <code>core</code>、<code>cli</code>、<code>web</code> 三个内部包版本统一为 <code>0.20.5</code>。</td>
+            </tr>
+            <tr>
+              <td><strong>安全边界冻结</strong></td>
+              <td><code>project.clean</code> 生产代码在 PR #11 中保持不变，高危逻辑移交 #33 承载。</td>
+            </tr>
+            <tr>
+              <td><strong>评审门禁最终关闭</strong></td>
+              <td>独立最高思考等级 reviewer 明确给出 <code>hasMustFix=false</code> 最终签收结论。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 6. 设计评审结论 -->
+      <section id="section-6">
+        <h2>6. 设计评审结论</h2>
+        <div class="callout callout-ok">
+          <p><strong>两轮评审过程与签收裁决：</strong></p>
+          <p>最高思考等级 reviewer 第一轮指出 <strong>#33 边界</strong>、<strong>React state 防重入缺陷</strong>、<strong>plan error 优先级缺失</strong>、<strong>用户手册遥测说明漂移</strong> 和 <strong>e2e 命名不规范</strong> 五项必须修正项。</p>
+          <p>以上整改方案全部吸收并固化到本方案后，第二轮复查结论明确为 <code>hasMustFix=false</code>。</p>
+          <p>第二轮后按技术 review 纠正 <code>--help</code> boot 事实（<code>--profile headless --help</code> 会进入 profile/plugin boot，不能用不 boot 排除外传风险）并收窄 telemetry 表述为“内置 session telemetry 硬关断”；该纠正属于事实勘误与表述收窄，不改变 PR #11 的范围控制裁决。</p>
+          <p>实现后的真实浏览器视觉验收发现 390px/700px 选择器文本裁切，并补充单列布局、短标签与对应 e2e；独立 reviewer 复查后 <code>hasMustFix=false</code>。</p>
+        </div>
+      </section>
+
+      <footer>
+        <p>Tekon Superpowers Plans · 2026-09-03 · PR #11 Nineteenth Review Remediation Plan</p>
+      </footer>
+    </main>
+  </body>
+</html>

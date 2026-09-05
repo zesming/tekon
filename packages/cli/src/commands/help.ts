@@ -50,6 +50,13 @@ function writeGeneralHelp(
   lines.push('');
   lines.push('用法: tekon <command> [options]');
   lines.push('');
+  lines.push('推荐开始方式:');
+  lines.push('  tekon ui                    启动面向人的本地 Web 操作界面');
+  lines.push('  tekon run "你的需求"         直接发起一次受控交付');
+  lines.push('  tekon help <command>        查看高级命令和参数');
+  lines.push('');
+  lines.push('全部命令:');
+  lines.push('');
 
   const groups = new Map<string, typeof commands>();
   for (const cmd of commands) {
