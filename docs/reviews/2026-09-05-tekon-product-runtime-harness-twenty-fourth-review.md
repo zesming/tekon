@@ -84,12 +84,14 @@
 已确认模板：commandRef=build
 → 受理后修改 repo profile 的 commands.build
 → 执行时重新读取当前 profile
-→ 同一 RunPlan 使用不同 tool/args/env
+→ 同一 RunPlan 使用不同 tool/args
 ```
 
-另外，解析结果若变成 not-applicable，GateRunner 会生成 skipReason；GateEngine 对支持的命令 Gate 直接记录 skipped。这是可从实现确定的条件路径，本轮未另行执行完整 Provider/Git 场景，不能写成已观察到的生产事故或恶意绕过。
+RepoProfile 当前支持的执行字段为 tool/args，description 只作说明，不包含 env 字段。另外，解析结果若变成 not-applicable，GateRunner 会生成 skipReason；GateEngine 对支持的命令 Gate 直接记录 skipped。这是可从实现确定的条件路径，本轮未另行执行完整 Provider/Git 场景，不能写成已观察到的生产事故或恶意绕过。
 
 依据：[GateRunner 的运行时解析](https://github.com/zesming/tekon/blob/f86e0c86fd3eba8b9823bb6efc64914993900bea/packages/core/src/workflow/gate-runner.ts#L116-L156)、[GateEngine 的 skip 分支](https://github.com/zesming/tekon/blob/f86e0c86fd3eba8b9823bb6efc64914993900bea/packages/core/src/gate/engine.ts#L53-L69)。
+
+[RepoProfile schema 与解析器](https://github.com/zesming/tekon/blob/f86e0c86fd3eba8b9823bb6efc64914993900bea/packages/core/src/repo/profile.ts#L28-L38)也已核对，命令解析只返回 tool/args。
 
 ### 为什么重要
 
@@ -99,7 +101,7 @@
 
 在 #20 的后续小切片中，解析本次确实使用的 commandRef，把有效命令、明确的不适用事实和来源版本纳入受理快照；执行/恢复使用该解析结果，或检测到变化时明确暂停并重新确认。不要只在每次新 Engine 构造时缓存 profile，因为那仍未绑定用户确认时刻；也不要无差别哈希整个仓库。
 
-验收至少覆盖：受理后改变 tool/args/env、从命令改为 not-applicable、恢复时 profile 已变化、显式内联 command 不受无关 profile 项影响、旧快照迁移或诚实降级。数据绑定不意味着把秘密展示在浏览器预览中；当前 whitelist preview 应保留。
+验收至少覆盖：受理后改变 tool/args、从命令改为 not-applicable、恢复时 profile 已变化、显式内联 command 不受无关 profile 项影响、旧快照迁移或诚实降级。数据绑定不意味着把秘密展示在浏览器预览中；当前 whitelist preview 应保留。
 
 本轮没有将其混入缓存补丁：这涉及新的持久执行事实和旧 Run 兼容策略，不是改一行加载位置就能正确关闭的问题。在修复或收窄承诺前，不给“执行环境完整不可变”无条件通过。
 
