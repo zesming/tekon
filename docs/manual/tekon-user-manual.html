@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════
-   天工 TEKON — User Manual  v0.23.0  2026.09.05
+   天工 TEKON — User Manual  v0.23.1  2026.09.05
    Aesthetic: Ink & Seal (水墨印章)
    ═══════════════════════════════════════════════ */
 :root{
@@ -220,7 +220,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
         <button type="button" class="lang-btn active" data-lang="zh">中</button>
         <button type="button" class="lang-btn" data-lang="en">EN</button>
       </div>
-      <span class="header-date">v0.23.0 · 2026.09.05</span>
+      <span class="header-date">v0.23.1 · 2026.09.05</span>
     </div>
     <button type="button" class="mobile-menu-btn" id="menuBtn" aria-label="菜单" aria-expanded="false">☰</button>
   </div>
@@ -270,7 +270,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cc"><h4>多 Provider 执行入口</h4><p>支持 mock、Claude Code 和 Codex provider；另含 experimental 的 <code>dsh-headless</code>（DeepSeek Harness）。<strong>⚠️ dsh-headless 默认关闭、网络出口不受限（弱于 codex）、仅适用于 <code>--goal</code> 运行，详见 5.7。</strong></p></div>
 </div>
 <div class="cl"><span class="cl-lb">名称说明</span>天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。</div>
-<div class="cl cl-t" data-doc-lang="en"><span class="cl-lb">Translation coverage</span>The v0.23.0 updates below are available in English. Earlier sections remain primarily in Chinese; switching languages does not load a complete English translation.</div>
+<div class="cl cl-t" data-doc-lang="en"><span class="cl-lb">Translation coverage</span>The v0.23.1 updates below are available in English. Earlier sections remain primarily in Chinese; switching languages does not load a complete English translation.</div>
 </div>
 
 <!-- ════ TAB 1: 解决什么问题 ════ -->
@@ -574,7 +574,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">-h</span>
 
 <span class="cm"># 查看版本</span>
-<span class="c">tekon</span> <span class="a">--version</span>     <span class="cm"># 输出 v0.23.0</span>
+<span class="c">tekon</span> <span class="a">--version</span>     <span class="cm"># 输出 v0.23.1</span>
 <span class="c">tekon</span> <span class="a">-v</span>            <span class="cm"># 同上</span></code></pre></div>
 </div>
 
@@ -597,6 +597,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cl cl-w" data-update="r24-web-preview" data-doc-lang="en"><span class="cl-lb">Review checks before starting</span><p>Both the default and advanced forms show “检查配置与适用性”. Read the summary, then expand “查看逐项检查配置” to see whether each check comes from the template, repository configuration or detected project scripts. Use its stated behavior: execute the bound command, skip, or fail because a command is missing. An inapplicable configuration does not necessarily skip security checks: <code>security-scan</code> still runs its built-in scan without an external command. Follow the per-check explanation. Previews do not show raw tools, arguments, environment variables or inapplicability reasons; inspect the local template, <code>.tekon/repo-profile.yaml</code> or <code>package.json</code> to review command details.</p><p>Choose “刷新检查配置” to see checks added, removed or changed since the previous preview. A “template or run settings changed” message also requires review. Submit explicitly after reviewing; refreshing does not accept a new plan. On <code>PLAN_DIGEST_MISMATCH</code>, choose “刷新执行计划” and confirm again. On <code>PLAN_CONFIG_INVALID</code>, fix the indicated configuration file or read permissions before refreshing, rather than repeatedly submitting.</p><p>Per-check comparisons require the same service instance and starting context. Restarting the service invalidates the comparison scope; changing credentials, repository, template or other context clears the old baseline. “暂无逐项变化信息” means comparison is unavailable, not that checks are unchanged. Without a previous preview, no differences are inferred. Accepted runs retain their bindings; see 6.7 for legacy and integrity limits.</p><p>Detailed timeouts and Profile settings remain in the advanced section. For <code>dsh-headless</code>, acknowledge unrestricted networking before submitting; that acknowledgement is recorded in the run audit.</p></div>
 <div class="cl cl-t" data-update="r23-web-pending" data-doc-lang="zh"><span class="cl-lb">找回待确认的提交</span><p>两个发起入口都会保留 Request ID。“受理状态待确认”时点“查询受理结果”，或保持原内容重新提交。“尚未查到”只表示查询时没有记录，原请求仍可能在处理中；保留原身份，不能据此另建。查到已受理后，点“观察原会话”。“已受理，等待目录恢复”时先修复目录，再按原内容重试或重启 UI 服务；查询本身不负责恢复。“已受理，等待目录就绪”表示目录还在准备，任务尚未执行。已经确认受理后，即使后续查询失败，原身份和已受理事实仍保留；另行提示当前状态不可用。确定另建时选择“明确新建另一个任务”，旧请求仍可查询。</p><p>当前标签页的 sessionStorage 账本按物理仓库和凭据作用域隔离；同仓库、同凭据刷新后仍可查询旧请求。账本只存作用域指纹、意图指纹、requestId 和状态，不存正文或 token；登录令牌另由认证功能保存。刷新后若要重新提交，需要自己恢复原输入。存储不可用或账本损坏时，在发出 Run 请求前阻止提交，不要清除待确认记录来绕过。</p></div>
 <div class="cl cl-t" data-update="r23-web-pending" data-doc-lang="en"><span class="cl-lb">Recover an uncertain submission</span><p>Both forms keep the Request ID. When acceptance is unknown, choose “查询受理结果” (query acceptance), or submit the same content again. “Not found yet” only describes that query: the original request may still be in progress. Keep its identity. Once accepted, open the original Session. “Accepted, waiting for directory recovery” means you should fix the directory and retry unchanged content or restart the UI service; querying alone does not recover it. “Accepted, waiting for directory readiness” means preparation is incomplete and the task has not executed. After acceptance is confirmed, later query failures retain the original identity and acceptance fact, with a separate notice that current status is unavailable. Choose “明确新建另一个任务” only to deliberately create another task; older requests remain queryable.</p><p>The current tab's sessionStorage ledger is scoped by physical repository and credentials, so a refresh with the same scope can find pending requests. It stores only scope and intent fingerprints, requestId and state, never demand text or tokens. Authentication stores its login token separately. To resubmit after a refresh, restore the original input yourself. Unavailable storage or a damaged ledger blocks the Run request before dispatch; do not clear pending records to bypass it.</p></div>
+<div class="cl cl-t" data-update="r25-web-receipt" data-doc-lang="zh"><span class="cl-lb">已受理但浏览器后续操作失败</span><p>若提示“浏览器请求记录更新或页面跳转未完成”，服务端已经确认原请求，请点“观察原会话”或“观察原运行”，不要重复新建。当前页面会保留该身份，等待目录恢复的请求仍可用原内容重试；重读账本、查询暂未找到或重试断网不会推翻已经收到的确认。默认入口跳转失败时保留输入；跳转等待期间后来编辑的内容也不会被旧回调清空。</p><p>这里不保证修复损坏的存储或把全部内存提示保存到刷新后的页面。刷新后，若原请求仍在待确认列表，点“查询受理结果”；若记录已移除，到受控交付列表打开已有会话。重新提交前需自行恢复原输入，不要为找回会话另建任务。</p></div>
+<div class="cl cl-t" data-update="r25-web-receipt" data-doc-lang="en"><span class="cl-lb">Accepted request, incomplete browser follow-up</span><p>If the notice says browser record updates or navigation did not complete, the server has confirmed the original request. Open the original Session or Run instead of creating another task. The current page retains that identity; a request waiting for directory recovery can still be retried with its original content. Rereading the ledger, a not-found query or a disconnected retry does not undo a received confirmation. Failed navigation keeps the default form's input, and an older callback cannot clear text edited while navigation was pending.</p><p>This does not repair damaged storage or persist every in-memory notice across reloads. After reloading, query the admission result if the original request is still listed. If its record was removed, open the existing Session from the controlled-delivery list. Restore the original input yourself before retrying; do not create another task just to find the Session.</p></div>
 <div class="cl" data-update="r23-web-alias" data-doc-lang="zh"><span class="cl-lb">仓库别名与历史会话</span>从 symlink 路径启动同一物理仓库时，新旧 Run/Session 均可查看；历史 alias Workspace 的列表与事件订阅保持可见，原 ID 不变。此能力不提供跨仓库 Workspace 切换，其他物理仓库的记录不在当前访问范围。</div>
 <div class="cl" data-update="r23-web-alias" data-doc-lang="en"><span class="cl-lb">Repository aliases and historical Sessions</span>Starting the same physical repository through a symlink keeps new and historical Runs/Sessions visible. Lists and event subscriptions include historical alias Workspaces without changing their IDs. This does not add cross-repository Workspace switching; records belonging to another physical repository remain outside the current scope.</div>
 <div class="cl cl-w"><span class="cl-lb">失败处理与长会话</span>受控交付列表中失败的会话可"确认/归档"，确认后下沉历史区、不再置顶（未处理的失败仍置顶提醒）；列表在会话状态变化时自动上屏（保留短轮询兜底）；会话事件流默认只渲染最近若干条，更早内容点"加载更早历史"按需加载，每次加载都会真正向更早记录推进。当网络恢复或客户端较慢导致在线回放历史量超过预算时，会话顶部会出现一条可关闭的非阻断提示，说明已切换到最近记录、完整历史仍可按页读取，不影响事件流继续上屏。</div>
@@ -682,7 +684,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="tg"><span class="tg-j">内部工具</span><span class="tg-j">研发效能工具</span><span class="tg-j">测试补齐</span><span class="tg-j">文档补齐</span><span class="tg-j">低风险 bugfix</span><span class="tg-j">可回滚的中小需求</span></div>
 <h3>手册更新规则</h3>
 <p>后续每次功能、CLI/Web 入口、参数、错误处理、边界或用户流程变化后，都必须评估是否需要更新本手册。当前主手册路径：<code>docs/manual/tekon-user-manual.md</code></p>
-<div class="ft"><div class="ft-s">工</div><div class="ft-t">tekon-user-manual · v0.23.0 · 2026.09.05</div></div>
+<div class="ft"><div class="ft-s">工</div><div class="ft-t">tekon-user-manual · v0.23.1 · 2026.09.05</div></div>
 </div>
 
 </main>

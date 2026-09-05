@@ -42,10 +42,10 @@ export function SessionComposer() {
   const admission = useRunAdmission({
     token,
     payload: { demandText: text.trim(), planDigest: plan?.digest },
-    onAccepted: (result) => {
+    onAccepted: async (result) => {
       if (result.sessionId) {
-        setText('');
-        navigate(routes.session(result.sessionId));
+        // 成功离开首页会卸载表单；不让旧导航的 continuation 清空后来输入。
+        await navigate(routes.session(result.sessionId));
       }
     },
   });

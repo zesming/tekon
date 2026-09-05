@@ -371,6 +371,10 @@ for (const scenario of inFlightCases) {
       await observeWorkspaceReads(page);
       const session = await createListSession(store, fixture.projectRoot);
       await page.goto(server.url);
+      // 共享启动钩子可能已打开同一路径；补 token 的 goto 只是同文档导航。
+      // setup 必须重建文档以读取新 Session，并安装 addInitScript 中的 SSE 观察器。
+      // 下方场景内的 SPA 离开/重挂载仍保留原 cache，不使用 reload。
+      await page.reload();
       const row = page.locator(`a.session-list-link[href="/sessions/${session.id}"]`);
       await expect(row.locator('.badge[title="active"]')).toBeVisible();
       await expect.poll(async () => (await workspaceReads(page)).connections.length).toBe(1);

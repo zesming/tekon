@@ -41,10 +41,25 @@ interface Options {
   lookup: (
     input: RpcProcedureMap['project.admission']['input'],
   ) => Promise<LookupResult>;
-  onAccepted: (result: RunResult) => void;
+  onAccepted: (result: RunResult) => void | Promise<void>;
 }
 const LOCAL_RECEIPT_ERROR =
   '请求已受理，但浏览器请求记录更新或页面跳转未完成。请通过下方入口观察原运行，不要重复新建。';
+class AdmissionIdentityConflict extends Error {
+  constructor() {
+    super(
+      '浏览器请求记录与已确认身份冲突，已停止本次操作。请保留记录并观察原运行，恢复请求记录后再重试。',
+    );
+  }
+}
+type RequestIdentity = Pick<
+  AdmissionRecord,
+  'scope' | 'requestId' | 'fingerprint'
+>;
+const requestKey = (record: RequestIdentity) =>
+  JSON.stringify([record.scope, record.requestId]);
+const errorKey = (record: RequestIdentity) =>
+  JSON.stringify([record.scope, record.requestId, record.fingerprint]);
 
 const emptySnapshot = (): Snapshot => ({
   isPending: false,
@@ -77,15 +92,17 @@ export class RunAdmissionController {
   private contextKey = '';
   private epoch = 0;
   private authEpoch = 0;
+  private scopeEpoch = 0;
   private scopeRequest = 0;
   private scope: string | null = null;
   private active: object | null = null;
   private live = true;
   private forceNew = false;
   private current: { fingerprint: string; requestId: string } | null = null;
-  // Acceptance is monotonic for a scope/request identity. Keep its observation
-  // route even when an older lookup settles after the POST has cleared disk.
-  private acceptedRecords = new Map<string, AdmissionView>();
+  // Both receipts establish admission; only accepted makes recovery unnecessary.
+  private confirmedRecords = new Map<string, AdmissionView>();
+  private errorOwner: string | object | null = null;
+  private readonly scopeErrorOwner = {};
   private listeners = new Set<() => void>();
 
   constructor(private readonly options: Options) {}
@@ -114,6 +131,7 @@ export class RunAdmissionController {
     this.epoch++;
     this.active = null;
     this.current = null;
+    this.errorOwner = null;
     this.payload = { ...context.payload };
     this.contextKey = nextKey;
     this.snapshot = {
@@ -139,26 +157,28 @@ export class RunAdmissionController {
     const token = this.token;
     if (!token) return;
     const authEpoch = this.authEpoch;
+    let scopeEpoch = this.scopeEpoch;
     const request = ++this.scopeRequest;
     const current = () =>
       this.live &&
       this.token === token &&
       this.authEpoch === authEpoch &&
+      this.scopeEpoch === scopeEpoch &&
       this.scopeRequest === request;
     try {
       const result = await this.options.intent({ token });
       if (!current()) return;
-      const records = this.options.ledger.list(result.scope);
-      if (this.scope && this.scope !== result.scope) {
-        this.epoch++;
-        this.active = null;
-        this.current = null;
-        this.snapshot = { ...this.snapshot, isPending: false };
-      }
-      this.scope = result.scope;
-      this.patch({ scopeReady: true, records, error: null });
+      // Revoke the old scope before local I/O, which can fail independently.
+      this.changeScope(result.scope);
+      scopeEpoch = this.scopeEpoch;
+      const records = this.mergeRecords(this.options.ledger.list(result.scope));
+      this.patch({ scopeReady: true, records });
+      this.clearError(this.scopeErrorOwner);
     } catch (error) {
-      if (current()) this.patch({ scopeReady: false, error: asError(error) });
+      if (current()) {
+        this.errorOwner = this.scopeErrorOwner;
+        this.patch({ scopeReady: false, error: asError(error), outcome: null });
+      }
     }
   }
 
@@ -176,19 +196,40 @@ export class RunAdmissionController {
       this.epoch === epoch &&
       this.token === token;
     let dispatched = false;
-    let submittedRecord: AdmissionRecord | undefined;
-    let receiptObserved = false;
+    let submittedRecord: RequestIdentity | undefined =
+      this.scope && this.current
+        ? { scope: this.scope, ...this.current }
+        : undefined;
+    let localOperation = false;
+    this.errorOwner = owner;
     this.patch({ isPending: true, error: null, outcome: null });
     try {
       if (!this.snapshot.scopeReady) await this.loadScope();
       if (!current() || !this.snapshot.scopeReady || !this.scope) return;
+      this.errorOwner = owner;
       const scope = this.scope;
       const intent = await this.options.intent({ token, run: payload });
       if (!current()) return;
-      if (intent.scope !== scope || !intent.fingerprint || !intent.requestId) {
+      if (intent.scope !== scope) {
+        this.changeScope(intent.scope);
+        this.errorOwner = this.scopeErrorOwner;
+        this.patch({
+          error: new Error('仓库或连接凭据已变化，请重新读取请求记录后确认。'),
+        });
+        return;
+      }
+      if (!intent.fingerprint || !intent.requestId) {
         throw new Error('仓库或连接凭据已变化，请刷新页面后重新确认请求。');
       }
+      // This candidate is already bound to the current input. Preserve its
+      // receipt even if the first ledger read fails before request preparation.
+      submittedRecord =
+        this.current?.fingerprint === intent.fingerprint
+          ? { scope, ...this.current }
+          : undefined;
+      localOperation = true;
       const records = this.options.ledger.list(scope);
+      this.mergeRecords(records); // Validate conflicts before any write or POST.
       const existing =
         this.current?.fingerprint === intent.fingerprint
           ? this.current
@@ -205,12 +246,14 @@ export class RunAdmissionController {
         state: 'unknown',
       };
       submittedRecord = record;
+      this.errorOwner = errorKey(record);
       if (!current()) return;
-      const resolved = this.acceptedRecords.get(`${scope}\0${requestId}`);
-      if (resolved) {
+      const resolved = this.checkIdentity(record);
+      if (resolved?.state === 'accepted') {
         this.updateRecord(resolved);
         return;
       }
+      if (resolved) record.state = 'recovery-required';
       this.options.ledger.upsert(record);
       this.current = { fingerprint: record.fingerprint, requestId };
       this.forceNew = false;
@@ -220,20 +263,18 @@ export class RunAdmissionController {
       });
       if (!current()) return;
       dispatched = true;
+      localOperation = false;
       const result = await this.options.run({ ...payload, token, requestId });
       if (!current()) return;
       if (result.requestId !== requestId)
         throw new Error('服务端返回的请求身份不一致，请查询原请求。');
-      const alreadyAccepted = this.acceptedRecords.get(
-        `${scope}\0${requestId}`,
-      );
-      if (alreadyAccepted) {
+      const alreadyAccepted = this.confirmedFor(record);
+      if (alreadyAccepted?.state === 'accepted') {
         this.updateRecord(alreadyAccepted);
         return;
       }
       // A matching server receipt is stronger evidence than subsequent browser
       // storage or navigation failures. Publish its identity before local I/O.
-      receiptObserved = true;
       this.updateRecord({
         ...record,
         state: result.admissionState,
@@ -241,30 +282,34 @@ export class RunAdmissionController {
         sessionId: result.sessionId,
         filesState: result.run.filesState,
       });
-      this.patch({ outcome: null });
+      this.clearError(errorKey(record));
+      localOperation = true;
       if (result.admissionState === 'recovery-required') {
         this.options.ledger.upsert({ ...record, state: 'recovery-required' });
       } else {
         this.options.ledger.remove(scope, requestId);
-        if (current()) this.options.onAccepted(result);
+        if (current()) await this.options.onAccepted(result);
       }
     } catch (error) {
       if (!current()) return;
-      const submitted = submittedRecord;
-      const known = submitted && this.snapshot.records.find(record =>
-        record.scope === submitted.scope &&
-        record.requestId === submitted.requestId &&
-        record.fingerprint === submitted.fingerprint &&
-        record.state !== 'unknown' && record.runId,
-      );
+      if (error instanceof AdmissionIdentityConflict) {
+        this.errorOwner = submittedRecord ? errorKey(submittedRecord) : owner;
+        this.patch({ error, planExpired: false, outcome: null });
+        return;
+      }
+      const known = this.confirmedFor(submittedRecord);
       if (known) {
         // A concurrent lookup can confirm the POST before its response fails.
         // Neither that transport error nor local receipt handling can undo it.
-        this.patch({
-          error: receiptObserved ? new Error(LOCAL_RECEIPT_ERROR) : null,
-          planExpired: false,
-          outcome: null,
-        });
+        if (localOperation) {
+          this.errorOwner = errorKey(known);
+          this.patch({
+            error: new Error(LOCAL_RECEIPT_ERROR),
+            planExpired: false,
+            outcome: null,
+          });
+        } else if (this.snapshot.outcome !== null)
+          this.clearError(errorKey(known));
         return;
       }
       const failure = asError(error);
@@ -272,6 +317,9 @@ export class RunAdmissionController {
         (failure instanceof ApiClientError &&
           failure.code === 'PLAN_DIGEST_MISMATCH') ||
         /^PLAN_DIGEST_MISMATCH\b/.test(failure.message);
+      // Bind only a failure we actually publish. An ignored late transport
+      // error must not reassign an unrelated request's visible error.
+      this.errorOwner = submittedRecord ? errorKey(submittedRecord) : owner;
       this.patch({
         error: planExpired
           ? new Error('计划已变化，请刷新预览后重试')
@@ -298,32 +346,45 @@ export class RunAdmissionController {
     const token = this.token;
     const scope = this.scope;
     const authEpoch = this.authEpoch;
+    const scopeEpoch = this.scopeEpoch;
+    const epoch = this.epoch;
     const record = this.snapshot.records.find(
-      (entry) => entry.requestId === requestId,
+      (entry) => entry.scope === scope && entry.requestId === requestId,
     );
     if (!record) return;
     const current = () =>
       this.live &&
       this.token === token &&
       this.scope === scope &&
+      this.scopeEpoch === scopeEpoch &&
       this.authEpoch === authEpoch;
-    const alreadyAccepted = () =>
-      this.acceptedRecords.has(`${scope}\0${requestId}`);
+    const knownAtStart = this.confirmedFor(record);
+    const key = errorKey(record);
+    const mayReport = () =>
+      this.epoch === epoch &&
+      (this.errorOwner === null || this.errorOwner === key);
     let receiptObserved = false;
-    this.patch({ checkingId: requestId, error: null });
+    this.patch({ checkingId: requestId });
+    if (this.errorOwner === key) this.patch({ error: null });
     try {
       const result = await this.options.lookup({ token, requestId });
-      if (!current() || alreadyAccepted()) return;
+      if (!current()) return;
       if (result.requestId !== requestId)
         throw new Error('服务端返回的请求身份不一致，请保留原请求。');
+      const known = this.confirmedFor(record);
+      if (known?.state === 'accepted') return;
       if (result.state === 'not-found') {
+        if (known) return;
         this.updateRecord({
           ...record,
           state: 'unknown',
           lookupState: 'not-found',
         });
       } else {
-        receiptObserved = true;
+        // A newer POST receipt wins over an older non-ready GET. Ready may
+        // still advance the same request, regardless of response ordering.
+        if (result.state !== 'accepted' && known && known !== knownAtStart)
+          return;
         this.updateRecord({
           ...record,
           state: result.state,
@@ -332,7 +393,8 @@ export class RunAdmissionController {
           sessionId: result.sessionId,
           filesState: result.filesState,
         });
-        this.patch({ outcome: null, planExpired: false });
+        receiptObserved = true;
+        this.clearError(key);
         if (result.state === 'accepted')
           this.options.ledger.remove(scope, requestId);
         else
@@ -344,10 +406,15 @@ export class RunAdmissionController {
           });
       }
     } catch (error) {
-      if (!current()) return;
+      if (!current() || !mayReport()) return;
       if (receiptObserved) {
+        this.errorOwner = key;
         this.patch({ error: new Error(LOCAL_RECEIPT_ERROR), outcome: null });
-      } else if (!alreadyAccepted()) {
+      } else if (
+        error instanceof AdmissionIdentityConflict ||
+        !this.confirmedFor(record)
+      ) {
+        this.errorOwner = key;
         this.patch({ error: asError(error) });
       }
     } finally {
@@ -359,6 +426,7 @@ export class RunAdmissionController {
     this.epoch++;
     this.active = null;
     this.current = null;
+    this.errorOwner = null;
     this.forceNew = true;
     this.patch({
       isPending: false,
@@ -372,6 +440,7 @@ export class RunAdmissionController {
     this.epoch++;
     this.active = null;
     this.current = null;
+    this.errorOwner = null;
     this.patch({
       isPending: false,
       planExpired: false,
@@ -381,27 +450,80 @@ export class RunAdmissionController {
     refetch();
   }
 
-  private mergeRecords(records: AdmissionRecord[]): AdmissionView[] {
-    return [
-      ...this.snapshot.records.filter(
-        (record) =>
-          record.state === 'accepted' &&
-          !records.some((entry) => entry.requestId === record.requestId),
-      ),
-      ...records,
-    ];
+  private changeScope(scope: string): void {
+    if (this.scope === scope) return;
+    if (this.scope !== null) {
+      this.epoch++;
+      this.active = null;
+      this.current = null;
+    }
+    this.scopeEpoch++;
+    this.scope = scope;
+    this.errorOwner = null;
+    this.forceNew = false;
+    this.patch({
+      ...emptySnapshot(),
+      isPending: Boolean(this.active),
+      records: this.mergeRecords([]),
+    });
+  }
+  private clearError(owner: string | object): void {
+    if (this.errorOwner !== owner) return;
+    this.errorOwner = null;
+    this.patch({ error: null, outcome: null, planExpired: false });
+  }
+  private confirmedFor(
+    record: RequestIdentity | undefined,
+  ): AdmissionView | undefined {
+    if (!record) return;
+    const known = this.confirmedRecords.get(requestKey(record));
+    return known?.fingerprint === record.fingerprint ? known : undefined;
+  }
+  private checkIdentity(record: AdmissionView): AdmissionView | undefined {
+    const known = this.confirmedRecords.get(requestKey(record));
+    if (
+      known &&
+      (known.fingerprint !== record.fingerprint ||
+        (record.runId && known.runId !== record.runId) ||
+        (record.sessionId &&
+          known.sessionId &&
+          known.sessionId !== record.sessionId))
+    ) {
+      throw new AdmissionIdentityConflict();
+    }
+    return known;
+  }
+  private mergeRecords(records: AdmissionView[]): AdmissionView[] {
+    const merged = new Map<string, AdmissionView>();
+    for (const record of records) {
+      if (record.scope === this.scope)
+        merged.set(record.requestId, this.checkIdentity(record) ?? record);
+    }
+    for (const record of this.confirmedRecords.values()) {
+      if (record.scope === this.scope) merged.set(record.requestId, record);
+    }
+    return [...merged.values()];
   }
   private updateRecord(record: AdmissionView): void {
-    const key = `${record.scope}\0${record.requestId}`;
-    record = this.acceptedRecords.get(key) ?? record;
-    if (record.state === 'accepted') this.acceptedRecords.set(key, record);
+    const known = this.checkIdentity(record);
+    if (
+      known &&
+      (known.state === 'accepted' ||
+        record.state === 'unknown' ||
+        !record.runId)
+    ) {
+      record = known;
+    } else if (record.state !== 'unknown' && record.runId) {
+      record = { ...record, sessionId: record.sessionId ?? known?.sessionId };
+      this.confirmedRecords.set(requestKey(record), record);
+    }
     this.patch({
-      records: [
+      records: this.mergeRecords([
         ...this.snapshot.records.filter(
           (entry) => entry.requestId !== record.requestId,
         ),
         record,
-      ],
+      ]),
     });
   }
   private patch(update: Partial<Snapshot>): void {
@@ -417,7 +539,7 @@ function asError(error: unknown): Error {
 export function useRunAdmission(options: {
   token: string | null;
   payload: RunPayload;
-  onAccepted: (result: RunResult) => void;
+  onAccepted: (result: RunResult) => void | Promise<void>;
 }) {
   const acceptedRef = useRef(options.onAccepted);
   acceptedRef.current = options.onAccepted;
@@ -436,7 +558,7 @@ export function useRunAdmission(options: {
           'project.overview',
         ])
           queryCache.invalidate(key);
-        acceptedRef.current(result);
+        return acceptedRef.current(result);
       },
     });
   const controller = controllerRef.current;

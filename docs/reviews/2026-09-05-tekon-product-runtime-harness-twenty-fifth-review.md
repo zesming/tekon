@@ -2,6 +2,8 @@
 
 **日期：2026-09-05 · 产品版本：0.23.0 · [PR #11](https://github.com/zesming/tekon/pull/11)**
 
+> 时点说明：§1–8 保留报告作者在 `c4f6939` 修复后的判断；§9 起记录接续代理同步至 `4bb7c26` 后的独立复核与补充整改。原文中的“未发现增量问题”不是后续完整验证的结论。当前 v0.23.1 实施与验收状态见 §10。
+
 | 核验对象 | 快照与证据 |
 | --- | --- |
 | 用户远端基线 | `8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0` |
@@ -178,3 +180,99 @@ SQLite admission 不覆盖后续命令；节点执行、取消和重启恢复仍
 本轮已修 R25-01，不新增未修复的增量 P1。下一阶段按实际价值选择：真实 Provider 的执行/取消/退出/恢复证据；完整只读历史导出；再做持久协作及必要的执行所有权演进。每项有独立测试和失败边界，不将所有长期能力绑定成一个“全部重做才能通过”的门槛。
 
 本轮未执行 merge、release、deploy、强推、物理数据清理或仓库规则修改。
+
+## 9. 接续独立复核与整改裁决（2026-09-05）
+
+### 9.1 同步与独立验证
+
+主代理从干净工作区的 `8a7bb3fccb9d7a63eddba61b41ac30e2b4849bb0` 快进到 `4bb7c260da2f8557f23beab42e01baca65f3ef2a`，保留作者 `c4f6939` 的修复与 9 项测试。R24 实施交付是 `8a7bb3f`，`0a6edc9` 是该轮整改前基线；这里澄清首表“上轮实际交付”的版本指向，不重写历史正文。
+
+DSH 已实际 `git fetch origin --tags`，HEAD 与 origin/master 仍为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`，标签 `dsh-v0.1.3-alpha.1`，工作区干净。tested pin 不变。最高思考等级独立代理分别调查回执/账本、产品/UI 接线和整体执行框架/DSH，以下不是把主代理自检换个名称。
+
+本地完整依赖环境中，作者 9 项回执测试全部通过；初步定向 3 文件 43 项通过；全包 build/typecheck 通过；同步基线全量为 179 文件、1998 passed、1 项既有 opt-in DSH live contract skipped。这个基线说明已覆盖合同未回归，不能证明尚未覆盖的组合时序正确。
+
+### 9.2 原修复成立，但已确认身份仍会被后续读取覆盖
+
+独立 review 与主代理发现同一根因：私有 acceptedRecords 只保护目录 ready 的 accepted，且 `mergeRecords`、`loadScope` 仍会直接使用四字段账本替换完整回执。主代理用真实 Controller/Ledger、内存 Storage 和确定性异步门执行探针，没有修改业务：
+
+| 探针时序 | 变更前已观察到的事实 | 当前实际结果 |
+| --- | --- | --- |
+| GET 开始 → POST 回 recovery-required → 旧 GET 返回 not-found | recovery-required、Run/Session、recovery_required | 被改为 unknown，Run/Session 和目录细分消失 |
+| POST 回 recovery-required → 原内容重试 → 网络失败 | 已确认的同一 Run/Session | 重试写入 unknown，最终 outcome=unknown，观察入口所需身份消失 |
+| POST 回 recovery-required → 同 scope loadScope | 已确认 Run/Session/filesState | 仅余账本中的 recovery-required，无 Run/Session/filesState |
+
+三个探针均使用固定 `r25-probe-request`、`run-confirmed`、`session-confirmed`；这些是内存时序标识，不是真实服务端 Run 或模型产物。源码层另确认 accepted 的同类路径：删除旧账本失败后，提交另一任务会用磁盘 unknown 覆盖已知 accepted；再次查询又可能因 Map 已知而直接返回，无法补回观察入口。
+
+因此接受 R25-01 的原修复，但补充判定仍有 P2：已确认身份的保护需要覆盖所有合并路径，而不只 catch 中的一次性本地后处理失败。没有证据把这些页面问题升级成服务端事务回滚或幂等失效。
+
+方案独立审阅还指出作用域切换的错误路径：loadScope 目前先读取新 scope 账本，再撤销旧 scope；若新账本不可读，旧仓库记录和查询归属仍可能留在页面。修订先切断旧作用域再读取新账本，并补派发前 scope/intent 网络失败零 POST、恢复重试首次 list 失败，以及查询 A 不清除未知 B 错误的定向断言。该补充仍属于同一共享合并边界，尚不冒称已通过实现验证。
+
+### 9.3 真实导航还有 Promise 边界
+
+源码事实：项目使用 `createBrowserRouter`；当前 lockfile 和安装包的 React Router 7.18.3 的 Data Router navigate 返回 Promise。默认入口在调用 navigate 前清空输入，且 Controller、hook wrapper、组件均未完整等待返回值。原 9 项测试覆盖同步 throw，没有验证真实异步拒绝。
+
+据 [React Router useNavigate 合同](https://reactrouter.com/api/hooks/useNavigate) 及本地安装源码，建议让后处理支持 `void | Promise<void>` 并等待，导航失败保留需求、已确认身份与固定本地失败提示；浏览器以一次目标 Session 导航的 DataCloneError 注入验证。此处尚是源码确认路径，必须先取得真实页面红测，不能把普通导航一概说成失败。
+
+方案首轮两名独立 reviewer 均指出，简单改成“await 导航后清空”仍可能由旧 continuation 清掉等待期间的新输入。修订采用更小方案：默认入口不主动清空，正常成功路由切换时由组件卸载重置；回调调用前校验 owner，旧拒绝不发布到新上下文，不承诺撤回已经开始的 Router 导航。补 deferred 导航后编辑/换凭据/新建/卸载的 React 回归及成功返回首页的真实路由断言，再行复查。
+
+### 9.4 采用最小共享合并，不重做执行内核
+
+具体实施合同见 [第 25 轮整改方案](../superpowers/plans/2026-09-05-twenty-fifth-review-remediation-plan.html)：复用 Controller 内 Map 保存两类已确认回执；scope/requestId/fingerprint 同一身份才能合并；未知、not-found 和裸账本不能覆盖确认。只有 accepted 短路重发，recovery 仍能原 ID 重试并升级；目录非终态信息仍可更新。捕获异步后处理错误，不新增 RPC、持久字段、全局状态机或清空账本。拟版本 0.23.1，按既有承诺修复的 PATCH 计。
+
+整体执行与 DSH 独立复核未发现此次增量破坏 v3 物化、旧版恢复、Job owner/取消防护或上游限制。补充 §2.2 的准确边界：新受理强制 v3；已有 admission 的无快照/v1 降级路径会被拒绝，合法 v2 兼容仍保留；这不等于防御全库写权限者同时重写快照、摘要、节点及历史。无需为此新增签名平台。
+
+DSH Headless reasoning 向 stderr 输出且首 token 前无心跳，是将来升级 pin 时应验收的输出量/留存与时延边界，不是本次恢复整份环境继承或重做 Provider 的理由。依据：[固定 Headless 源稿](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/bundle/headless/README.md)、[ACP](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/acp/acp/README.md)、[Safety](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/SAFETY.md)。
+
+以上记录实施前的调查和裁决；方案已完成最高等级循环评审，实施与验收接续记录在 §10。真实 Provider 生命周期、完整只读导出和 ACP 继续按原报告后续顺序推进，不以这些长期目标阻塞可独立验收的本轮修复，也不把它们说成已完成。
+
+## 10. v0.23.1 接续实施与验收
+
+### 10.1 已落实的修复与独立审阅
+
+共享 Controller 使用私有 confirmedRecords 保存 accepted 与 recovery-required 的完整回执；按 scope、requestId、fingerprint 和已有 Run/Session 身份合并。旧账本、未知查询与迟到失败不再覆盖已确认身份；恢复仍可原 ID 重试并升级 ready。scope 先隔离再读新账本，避免读取失败留下旧仓库入口。
+
+Controller 等待 onAccepted，hook 返回真实回调结果，SessionComposer 等待实际 Router 导航且不主动清空输入。成功离开首页自然卸载表单；导航失败保留原需求和观察入口，旧 continuation 不清空后来编辑的内容。服务端协议、Core、CLI、四字段账本及 DSH tested pin 未改。
+
+两名最高思考等级独立 reviewer 先审方案，修正导航清理归属和作用域失败隔离后放行。Controller 代码与测试三轮复查中，两次发现多请求错误归属 P2：派发前失败未绑定原请求；忽略 A 的迟到错误时又改写了 B 的错误归属。两者均先补红测再修复，最终仅在实际发布错误时绑定 owner，第三轮明确未检出必须修复项。组件、生产浏览器与 React 测试由另一名未实施对应代码的 reviewer 审阅。
+
+### 10.2 红测、通过记录与证据边界
+
+| 验证 | 已取得结果 | 证明范围 |
+| --- | --- | --- |
+| Controller 新测试先行 | 初轮 15 失败 / 14 通过；后续 scope 与三条错误归属测试各取得有效红测 | 确认缺口来自具体合并/归属时序，不以测试数量代替行为证据 |
+| Controller 最终定向 | 新 36 + 作者 9 + 原控制器 27 = 72/72 | 合并、恢复、派发前后故障、身份隔离与异步回调 |
+| 旧构建真实浏览器 | 显式 mock 夹具修正后，accepted 清理失败再新建、真实 Data Router 拒绝两项均在功能断言失败 | 不计入此前 preview 字段缺失或同文档导航导致的夹具失败 |
+| 真实 React 导航 | 专项 10/10；与 R24 联合执行 17/17，其中 React 10 项全部通过 | 等待 resolve/reject × 未编辑、A→B→A、明确新建、token 切换、卸载；组件最初两项红测确认输入被过早清空 |
+| 生产页面 R25 定向 | 39/39，禁用自动重试 | 两入口 22 项 I/O、1 项真实导航、16 项四宽度交互 |
+| 完整 Chromium | 两片串行 84/84 + 64/64 = 148/148，零重试、零跳过 | 全部已登记浏览器旅程，包含本轮 49 项；不是把定向测试累加成完整覆盖 |
+| 全仓 Vitest | 180 files、2034 passed、1 skipped | Core/CLI/Web；skip 为既有 opt-in DSH live contract，不算通过 |
+| CLI 独立真进程 e2e | 6 files、22/22 | 全部已登记 CLI e2e，与全仓测试重叠，不重复累加为新覆盖 |
+| 构建与静态类型 | 全包 pnpm build、pnpm typecheck 通过 | 四包版本 0.23.1，CLI 构建与 Web 生产构建 |
+| 生产依赖审计 | 无已知生产依赖漏洞 | 当前锁文件与审计时点，不保证未来无新公告 |
+
+39 项生产页面测试使用真实 HTTP、SQLite 与文件系统；默认入口在测试传输层将 plan、intent、run 三处统一改为 mock，高级入口实际选择 mock。断言核对持久 Provider、计划摘要、Run/Session/受理表总增量各一及初始执行 Job 唯一性；readiness-evaluate 派生 Job 不算重复受理。10 项 React 测试使用 Vite 加载真实组件与同一个 Router 实例，回执为受控 DTO，不计作真实服务端受理证据。
+
+运行期间用进程级 PATH 防护阻止调用本机 codex、claude、dsh；已有显式 fake Provider 仍按测试自己的 PATH 使用。本轮不提供真实模型执行、取消、退出或重启恢复证据，也不启用现有 DSH live opt-in。
+
+完整 Chromium 首轮在 124/148 附近以 SIGTERM（143）退出，没有全套终态结果；其中 React 第一项因尚在 about:blank 就读 sessionStorage 而失败。修正为测试自身显式打开真实 origin 并确认凭据，不依赖共享模块顶层钩子的跨文件注册。组合复验还暴露 R24 初始化依赖同路径导航的问题：新增 Session 后的 goto 只补 token，没有重新加载文档、列表或 SSE 观察器。仅在 setup 补 reload，保留场景内 SPA 重挂载的缓存竞争断言；17 项组合复验全绿，两处夹具修正均经独立 review 放行。最终完整 Chromium 分两片串行取得上述全绿结果，不将首轮中断记成通过，也不臆断 SIGTERM 原因。
+
+### 10.3 四宽度与文档验收
+
+新截图独立归档在 `assets/r25-v0.23.1/`，不覆盖 R23/R24。主代理与独立代理实际打开初轮全部 16 张后，拒收其中仍有列表加载动画的过渡图。采图条件现已补齐：真实 Job、相关事件序号、Run/Session/目录状态连续稳定至少 750ms，覆盖服务端 500ms 评估延迟窗口；随后点击真实刷新按钮，核对 HTTP 与 DOM 的目标身份及状态，无加载动画后采图。恢复请求以目录未就绪、初始 Job queued 且零角色执行为稳定态，不要求它执行到终态。此条件通过完整浏览器第二片；最终归档专跑再次 16/16，零重试。
+
+| 宽度 | 默认入口：已受理 / 等待恢复 | 高级入口：已受理 / 等待恢复 |
+| --- | --- | --- |
+| 320px | [已受理](assets/r25-v0.23.1/r25-320-simple-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-320-simple-recovery-required-local-warning.png) | [已受理](assets/r25-v0.23.1/r25-320-advanced-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-320-advanced-recovery-required-local-warning.png) |
+| 390px | [已受理](assets/r25-v0.23.1/r25-390-simple-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-390-simple-recovery-required-local-warning.png) | [已受理](assets/r25-v0.23.1/r25-390-advanced-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-390-advanced-recovery-required-local-warning.png) |
+| 700px | [已受理](assets/r25-v0.23.1/r25-700-simple-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-700-simple-recovery-required-local-warning.png) | [已受理](assets/r25-v0.23.1/r25-700-advanced-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-700-advanced-recovery-required-local-warning.png) |
+| 1440px | [已受理](assets/r25-v0.23.1/r25-1440-simple-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-1440-simple-recovery-required-local-warning.png) | [已受理](assets/r25-v0.23.1/r25-1440-advanced-accepted-local-warning.png) / [等待恢复](assets/r25-v0.23.1/r25-1440-advanced-recovery-required-local-warning.png) |
+
+[可复核状态摘要](assets/r25-v0.23.1/evidence.json) 保存每张图的 SHA-256、Request/Run/Session ID、Job/目录状态、稳定窗口及采图前后几何结果。16 种场景均保留另一条 128 字符 unknown 请求，原观察与查询入口可经 Tab 到达并实际打开原会话；回执文字及控件无横裁、越界或重叠。默认入口最终列表显示已完成的 mock 会话或等待恢复；高级列表保留对应行。高级列表的 Running 汇总沿用持久 run.status，不能据此推断目录未就绪的任务已经执行，应以行内恢复徽标及“任务尚未执行”说明为准。
+
+主代理及未参与 UI/浏览器测试实现的独立代理均重新实际打开最终 16/16 张，前轮加载动画必须项关闭，复查未检出新的必须修复视觉问题。这些是临时 fixture 的 mock 受理/恢复证据：accepted 的合成流程完成不是真实任务交付，recovery 的角色执行数必须为零。本轮没有新增真实 Provider 风险 Gate 结果或交付 eval 分数。静态截图不证明真实设备、辅助技术或表格横向滚动的全部交互；键盘证据来自对应 e2e，不能仅从截图推出。宿主缺少 emoji 字体，采图使用临时进程级 Noto Color Emoji 配置，不改系统字体或业务样式。
+
+README、CHANGELOG、用户手册 MD/HTML 已同步当前页回执保护、导航失败及刷新后的操作分流。文档独立审阅曾指出“刷新后按 Request ID 查询”遗漏账本已清理的情况，现已修正：仍有记录则查询，记录已移除则从受控交付列表打开已有会话；复查未检出必须项。未改安装/更新脚本与 AGENTS，因为安装流程、命令合同及仓库协作规则均未变化。
+
+### 10.4 交付条件
+
+最高思考等级独立完成度复查未检出必须修复项，本轮本地整改放行。Git 推送与远端检查仍是交付步骤，不用本地通过替代最终 Head 的 Core/CI。包含全部源码、测试、文档与图片的最终提交及检查链接记录在 PR #11，避免文档写入自身 SHA 后再次产生新 Head 的循环。不得合入、发布、部署或强推。
