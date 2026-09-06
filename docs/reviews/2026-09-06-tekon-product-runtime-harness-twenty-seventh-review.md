@@ -159,3 +159,45 @@ v0.24.1 为补丁升级：根和三个内部包仅改变版本字段，不调整
 **交付裁决：排队前暂停缺陷已修复，新增回归在远端实际通过；在本轮审阅范围内未再确认必须阻断本次增量的新问题。** 整体生产就绪仍应按 Provider、操作系统、真实交付任务及恢复/负载场景逐项验收，不能用一次绿色 CI 总括。
 
 未执行合并、发布、部署、强推、物理清理或仓库规则修改。
+
+## 10. 维护方追加批注与整改裁决
+
+以下为 2026-09-06 对远端 `31680f9bfd9424dd6466734ac97a8d172debfa42` 的补充评估，保留上文原作者的观察时间与验证范围。独立 reviewer 已评估报告及关键执行链，并审阅整改方案；方案已放行，完成状态以本轮最终验收记录为准。
+
+### 10.1 R27-01：认可修复方向，补齐恢复与认领竞争
+
+认可原报告证明的暂停前置语义：已暂停的初始 workflow/goal Job 不应启动 Agent。原测试也证明顺序执行的两种恢复路径。但 `SessionService.resumeRun` 在读取 queued Job 后，以独立写入解除 Run 的 paused；这两个操作不在同一数据库事务中，终态 CAS 不能同时保证 Job 身份仍可执行。
+
+独立代码审阅识别的交错是：恢复读到 queued → 另一 owner 认领该 Job → 默认执行器读到 paused 而跳过执行并结算 done → 恢复调用解除 paused 并返回旧 Job。最终可能出现 Run running、Session idle、RoleRun 为零且无活动 Job，原恢复请求未被执行。证据：[原快速返回分支](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/packages/core/src/session/session-service.ts#L387)、[暂停分派](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/packages/core/src/session/workflow-job-executor.ts#L173)。这项判断针对具体交错，不否定 R26 已实现的 owner fencing。
+
+整改要求：在现有同库事务内复核原 Admission Job 的 queued 状态、Run 身份、最新代次与确认参数，并解除 paused；已认领时返回活动执行结果，已排空时走正常恢复入队。补充先红后绿的确定性交错和独立进程用例，不以增加轮询或自动重跑规避恢复意图丢失。
+
+### 10.2 R27-02：落实请求语义与持续错误提示
+
+接受低优先级反馈建议并在本轮落实。暂停和恢复的成功提示分别说明“请求已记录”和“已受理恢复”，不宣称进程已暂停或模型已启动。所有控制入口复用 RunControls，状态仍取服务端快照；响应期间已结束的 Run 显示终态提示。暂停失败与恢复/取消保持一致，错误在通知关闭后仍可查看并重试。浏览器验收覆盖四视口、键盘、请求去重、错误重试及终态竞争。
+
+### 10.3 证据增量与长期建议
+
+| 原报告内容 | 维护方裁决、理由与验证要求 |
+| --- | --- |
+| §2 已认可的 R26 机制 | 保留取消同库补偿、Job 退出证据、恢复代次确认和实际写入 fence；最终全量回归核验，不重新描述为尚未实现。 |
+| §4.3 状态理解与历史可发现性 | 在本轮浏览器验收检查受理/暂停/恢复/退出未知/审批反馈及历史入口；完整只读导出仍由 [#18](https://github.com/zesming/tekon/issues/18) 承担，分页历史不冒充导出。 |
+| §4.4 视觉证据 | 本轮重新运行全部 Chromium，并生成四视口主要页面截图、几何检查及实际查看记录；不借报告 HTML 排版或旧截图证明当前应用。 |
+| §5 负载指标与事实源 | 当前有界扫描及数据库事务有用例支撑；没有新增负载证据时，不因缺复杂调度器判为缺陷。后续 Session feed 仍为观察投影，持久消息/模型历史需另定可靠提交与重放语义。 |
+| §6 真实 Provider 下一步 | 接受。增加真实 Claude 修改隔离项目、生成 Artifact、真实构建 Gate、中断后跨宿主恢复及 eval 摘要；没有远端交付证据时，保留 readiness=false 的真实结果。 |
+| §7 上游同步与 pin | 最新源码已同步至 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；源码/Release 与可安装发行包分别核对。未通过新版本兼容性验收不变更 tested pin，不用 Claude 证明 DSH 兼容。 |
+| §8 避免过度设计 | 接受。复用原子入队、RunControls 与现有投影，不新增暂停表、控制平台、全域 outbox 或通用诊断框架。 |
+| §9 文档交付 | 补齐 CHANGELOG 中缺失的 0.24.1 条目，将现行合同从过程计划归并到产品/技术/设计/手册，保留正式历史报告和证据。审阅报告不能替代用户变更日志。 |
+
+本轮合并由用户明确授权，仍以代码复审、完整 e2e、文档审阅、逐项验收及当前 PR Head 的 CI 全部通过为前置。此授权针对仓库 PR #11，不改变 Tekon 产品内的人工批准边界。
+
+### 10.4 上游独立复核共识
+
+独立 reviewer 重新核对官方源码与发行元数据：GitHub `dsh-v0.1.3-alpha.1` Release 存在（2026-09-04 发布），公开 npm registry 对该版本仍返回 E404；dist-tags 为 latest/next=`0.1.2-rc.1`、alpha=`0.1.2-alpha.5`。本轮维持 CLI tested pin `0.1.2-alpha.3`。Headless 一次任务、最终 stdout、结束退出的适配判断成立；SAFETY 仍明确未经安全审计且不保证隔离。
+
+补充两点边界：
+
+- 官方 alpha.3 CLI 的 `dsh-base`、`dsh-headless` npm 依赖范围为 `^0.1.2-alpha.3`。因此精确顶层 CLI 版本并不锁定完整依赖组合；Tekon 的版本/Help/Config preflight 不能替代依赖树核验。后续 [#17](https://github.com/zesming/tekon/issues/17) 的 L2/L3 需要记录实际安装树与锁定证据。本轮只查询元数据，没有宣称实测了新的安装解析结果。
+- SDK 与 ACP 的控制能力不同。[SDK 协议](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/sdk/protocol/README.md) 目前只有 initialize、session/prompt、shutdown，没有协议协商、取消、单 Session 关闭和实际权限请求；[ACP](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/acp/acp/src/index.ts) 提供取消、关闭和权限问答，适合作为后续控制面候选，仍需单独验收消息持久化与重连历史。
+
+上游 Node 要求 `^22.19.0 || >=24.0.0` 与 Tekon 的 DSH preflight 一致；Tekon 本身支持 `^20.19.0 || >=22.12.0`，能运行 Tekon 不等于能运行 DSH。Tekon DSH 环境白名单未透传宿主代理变量，不将升级视为自动获得代理能力。上述裁决经主代理与独立 reviewer 复核达成一致，不新增 DSH L2/L3 或全平台已验收结论。
