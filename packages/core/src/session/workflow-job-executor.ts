@@ -165,9 +165,17 @@ export function createWorkflowJobExecutor(deps: {
         let workflow: WorkflowInstance;
         switch (job.kind) {
           case 'workflow-run':
-          case 'goal-run':
-            workflow = await engine.executePreparedRun(runId);
+          case 'goal-run': {
+            // Pause may have been recorded before claim, while no owner could
+            // receive an in-memory pause flag. Do not turn initial delivery
+            // into an implicit resume. An explicit workflow-resume still uses
+            // the engine's guarded resume path below.
+            const current = await repositories.getWorkflowInstance(runId);
+            workflow = current?.status === 'paused'
+              ? current
+              : await engine.executePreparedRun(runId);
             break;
+          }
           case 'workflow-resume':
             workflow = (await engine.resumeRun(runId)).workflow;
             break;

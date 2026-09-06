@@ -390,6 +390,14 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
           // This is the original durable admission, not an abandoned resume.
           // Return its queued identity so CLI can start its runner and wait;
           // never cancel/re-enqueue it just because the server was offline.
+          // Explicit resume must release a pause recorded before this Job was
+          // claimed. CAS preserves a concurrent terminal winner.
+          const resumed = await repositories.casWorkflowInstanceStatus(
+            input.runId, 'paused', 'running',
+          );
+          if (resumed.workflow && ['passed', 'failed', 'cancelled'].includes(resumed.workflow.status)) {
+            return { outcome: 'terminal', runId: input.runId, status: resumed.workflow.status };
+          }
           return { outcome: 'enqueued', runId: input.runId,
             sessionId: admission.sessionId, jobId: admission.jobId };
         }
