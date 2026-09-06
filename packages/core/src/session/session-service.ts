@@ -10,6 +10,7 @@ import {
 } from '../db/admission-store.js';
 import type { SessionEventBus } from './event-bus.js';
 import type { DurableJobRunner } from './job-runner.js';
+import type { ResumeConfirmation } from '../types/session-contract.js';
 import type { JobRepository, SessionEventStore } from './session-store.js';
 import { isWorkflowTerminalError } from '../workflow/errors.js';
 import { RunAdmissionError } from '../workflow/admission-error.js';
@@ -94,12 +95,15 @@ export type SessionServiceResumeResult =
   | { outcome: 'pending-decisions'; runId: string }
   | { outcome: 'terminal'; runId: string; status: WorkflowStatus }
   | { outcome: 'active-job'; runId: string }
+  | { outcome: 'exit-unconfirmed'; runId: string; previousJobId: string | null }
+  | { outcome: 'stale-confirmation'; runId: string; previousJobId: string | null }
   | { outcome: 'recovery-required'; runId: string; lastError?: string | null }
   | {
       outcome: 'enqueued';
       runId: string;
       sessionId: string;
       jobId: string;
+      previousJobId?: string | null;
     };
 
 export type SessionServicePauseResult =
@@ -138,7 +142,7 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
   resumeRun(input: {
     runId: string;
     afterApproval?: boolean;
-  }): Promise<SessionServiceResumeResult>;
+  } & ResumeConfirmation): Promise<SessionServiceResumeResult>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -335,7 +339,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
   async function resumeRun(input: {
     runId: string;
     afterApproval?: boolean;
-  }): Promise<SessionServiceResumeResult> {
+  } & ResumeConfirmation): Promise<SessionServiceResumeResult> {
     // Terminal is the strictly stronger stop condition: a passed/failed/
     // cancelled run can never be resumed, regardless of any lingering pending
     // decision. Check it FIRST so a cancelled run with an orphaned pending
@@ -393,7 +397,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     }
 
     // No two active jobs per run. Reclaim queued + stale-paused jobs first.
-    await jobs.cancelStaleActiveJobs(input.runId);
+
     // Resolve (or create) the run's session before the atomic enqueue. For a
     // resumable (paused) run the session already exists from startRun; the
     // createSession branch only fires for the rare no-session case.
@@ -417,15 +421,17 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       runId: input.runId,
       sessionId: session.id,
       kind: 'workflow-resume',
+      ...(input.confirmStopped !== undefined ? { confirmStopped: input.confirmStopped } : {}),
+      ...(input.previousJobId !== undefined ? { previousJobId: input.previousJobId } : {}),
     });
-    if (result.outcome === 'active-job') {
-      return { outcome: 'active-job', runId: input.runId };
-    }
+    if (result.outcome === 'active-job') return { outcome: 'active-job', runId: input.runId };
+    if (result.outcome !== 'enqueued') return { ...result, runId: input.runId };
     return {
       outcome: 'enqueued',
       runId: input.runId,
       sessionId: session.id,
       jobId: result.job.id,
+      ...(result.previousJobId !== undefined ? { previousJobId: result.previousJobId } : {}),
     };
   }
 
@@ -463,26 +469,11 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
   async function requestCancel(input: {
     runId: string;
   }): Promise<SessionServiceCancelResult> {
-    // The web cancel route is the single emission point for
-    // agent/cancel-requested + agent/cancelled. writeWorkflowTerminal is
-    // idempotent — a repeat cancel returns written=false and re-emits
-    // nothing. It is also the CAS guard against false "passed": an external
-    // cancel lands the workflow terminal state FIRST, so a racing engine
-    // completion's passed write throws WorkflowTerminalError.
-    let written = false;
+    // Persist the terminal winner before delivery; observation can be repaired.
     try {
-      const result = await writeWorkflowTerminal(
-        repositories,
-        input.runId,
-        'cancelled',
-      );
-      written = result.written;
+      await writeWorkflowTerminal(repositories, input.runId, 'cancelled');
     } catch (error) {
-      if (isWorkflowTerminalError(error)) {
-        // Already in a different terminal status (passed/failed): nothing to
-        // cancel, return the current run.
-        return { runId: input.runId, terminalConflict: true };
-      }
+      if (isWorkflowTerminalError(error)) return { runId: input.runId, terminalConflict: true };
       throw error;
     }
     // A cancelled workflow row is the durable intent, not proof that the job
@@ -492,36 +483,15 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     if (active) {
       await jobRunner.requestCancel(active.id, 'web cancel');
     }
-    const session = await sessions.findSessionByRunId(input.runId);
-    if (!written) {
-      return {
-        runId: input.runId,
-        terminalConflict: false,
-        ...(session ? { sessionId: session.id } : {}),
-        ...(active ? { jobId: active.id } : {}),
-      };
+    const observation = await sessions.reconcileCancelledRun(input.runId);
+    for (const event of observation.events) {
+      try { bus.publish(event); } catch { /* committed events replay on reconnect */ }
     }
-    if (session) {
-      const requested = await sessions.appendEvent({
-        sessionId: session.id,
-        type: 'agent/cancel-requested',
-        payload: { runId: input.runId },
-      });
-      bus.publish(requested);
-    }
-    if (session) {
-      await sessions.updateSessionStatus(session.id, 'cancelled');
-      const cancelled = await sessions.appendEvent({
-        sessionId: session.id,
-        type: 'agent/cancelled',
-        payload: { runId: input.runId },
-      });
-      bus.publish(cancelled);
-    }
+
     return {
       runId: input.runId,
       terminalConflict: false,
-      ...(session ? { sessionId: session.id } : {}),
+      ...(observation.sessionId ? { sessionId: observation.sessionId } : {}),
       ...(active ? { jobId: active.id } : {}),
     };
   }

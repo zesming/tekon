@@ -1,4 +1,5 @@
 import type { SessionEvent } from '../types/session-contract.js';
+import { withoutExecutionWriteScope } from '../db/write-queue.js';
 
 export interface SessionEventBus {
   publish(event: SessionEvent): void;
@@ -49,7 +50,7 @@ export function createSessionEventBus(
     event: SessionEvent,
   ): void {
     try {
-      listener(event);
+      withoutExecutionWriteScope(() => listener(event));
     } catch (error) {
       options.onError?.(error, event);
     }

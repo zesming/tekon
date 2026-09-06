@@ -1,5 +1,6 @@
 import {
   evaluateHumanApprovalSummary,
+  readRunRecovery,
   classifyExecutionBinding,
   type TekonDatabase,
   type WorkflowInstance,
@@ -40,6 +41,7 @@ export function mapWorkflow(
   const readiness = enrich ? admissionProjection(enrich.db, run.id) : {};
   return {
     ...readiness,
+    ...(enrich ? recoveryProjection(enrich.db, run.id) : {}),
     id: run.id,
     projectId: run.project_id,
     demandId: run.demand_id,
@@ -50,6 +52,12 @@ export function mapWorkflow(
     createdAt: run.created_at,
     updatedAt: run.updated_at,
   };
+}
+
+export function recoveryProjection(db: TekonDatabase, runId: string | null) {
+  return { recovery: runId ? readRunRecovery(db, runId) : {
+    runStatus: null, cancelRecovery: null, resumeRecovery: null,
+  } };
 }
 
 export function admissionProjection(db: TekonDatabase, runId: string | null): Pick<WorkflowOutput, 'admissionState' | 'filesState' | 'executionBinding'> {

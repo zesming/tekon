@@ -1559,11 +1559,14 @@ tbody tr:last-child td {
 /* ── Tabs ── */
 .tabs {
   display: flex;
+  overflow-x: auto;
+  max-width: 100%;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
 }
 
 .tab {
+  flex-shrink: 0;
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 500;
@@ -2469,13 +2472,15 @@ tbody tr:last-child td {
   .page-header,
   .card-header,
   .toolbar,
-  .filter-group {
+  .filter-group,
+  .run-header {
     flex-wrap: wrap;
   }
 
   .page-header,
   .card-header,
-  .toolbar {
+  .toolbar,
+  .run-header {
     min-width: 0;
   }
 
@@ -2496,4 +2501,27 @@ tbody tr:last-child td {
     width: 100%;
     min-width: 0;
   }
+}
+
+/* 恢复说明属于运行控制，随容器换行并保留完整 Job 身份。 */
+.run-controls { min-width: 0; }
+.run-recovery-notice,
+.run-recovery-error,
+.run-recovery-confirmation {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.run-recovery-error { color: var(--fail); }
+.run-recovery-confirmation input { margin-right: 6px; }
+
+/* 恢复长文独立成行，避免宽屏运行身份被操作区挤窄。 */
+.run-header:has(.run-recovery-notice, .run-recovery-error, .run-recovery-confirmation) {
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (max-width: 390px) {
+  .approval-meta { grid-template-columns: minmax(0, 1fr); }
 }

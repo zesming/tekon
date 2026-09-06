@@ -169,3 +169,47 @@ JobRunner 已有排队 Job 条件取消、owned-job 持久取消状态和 owner 
 修复属于尚未合并的 v0.23.1；没有新命令、参数或安装流程，因此不另发版本。已检查 README/手册的受理与取消边界：原入口和操作步骤不变，本轮细化见本报告；不重复改写其主流程。安装脚本、协作规则与 AGENTS 未变；本补丁的修复摘要集中记录在此正式报告及 PR，不向 CHANGELOG 追加另一份复审过程。没有合并、发布、部署、强推、清理用户文件或修改仓库规则。
 
 **交付判断：本轮两处具体缺陷已修复并通过代码提交集成回归，未再确认必须阻断本次增量的新问题。最终文档 Head 仍需成功检查；不将未验证的真实进程终态或完整持续协作写成已通过。**
+
+## 10. Codex 追加批注：取消恢复与本轮执行依据
+
+**2026-09-05 · 复核基线 `8141c4b69fb59988ff7c7e6266f3d5639c386131`。** 本节保留原作者报告的历史判断，补充当前工作区实证；原文“未执行”的范围不因本节开始整改而自动关闭。执行方案和最终验收记录分别说明计划与实际结果。
+
+### 10.1 认可原修复，但取消闭环仍有缺口
+
+**对 §3、§4 的判断：认可。** 本地通过真实仓库测试重新执行 `session-service-cancel-recovery.test.ts` 与 `run-controls-cancel-feedback.test.ts`，2 个文件、12 项全部通过。该证据支持取消投递顺序与终态提示，仍不等于浏览器交互或真实 Provider 已停止。
+
+**对 §6.3 第 2 项的补充：Session 观察不收敛是当前可复现缺陷。** 独立 reviewer 用真实源码与内存 SQLite 令首次 `agent/cancel-requested` 写入失败，随后成功重调取消两次，结果为 Run/Job 均 cancelled，而 Session 仍 active，事件仅有 `job/status`。原因是 [SessionService](../../packages/core/src/session/session-service.ts) 在 `written=false` 时提前返回，绕过 Session 状态修复。应让重复取消基于权威终态修复观察，兼顾事件幂等；不能把重复请求没有抛错当作恢复完成。
+
+**对 §5.1 的补充：有效的 API 重试还需要用户入口。** [RunControls](../../packages/web/src/client/components/runs/RunControls.tsx) 仅对 running/paused 提供取消。Run 已写 cancelled、Job 投递失败后，重新读取状态会移除取消按钮。应保留与原 Run 绑定的重试路径，并区分“取消已记录”“控制投递失败”和“后台退出尚未证明”，不从数据库终态推导进程状态。
+
+### 10.2 快速重启存在真实的租约恢复缺口
+
+**对 §6.3 第 1 项的补充：本轮应修复，不仅补文档。** [JobRunner](../../packages/core/src/session/job-runner.ts) 只在 `start()` 时调用一次 stale lease 恢复；后续 `poll()` 不再扫描过期租约。独立 reviewer 使用真实内存 SQLite，将 Job claim 给停止工作的 owner，以 TTL 100ms、poll 10ms 立即启动新 runner；400ms 后执行次数仍为 0，Job 仍 running 且属于旧 owner。显式调用 `recoverStale()` 返回 1 后，Job 才完成。
+
+该复现证明“在旧 lease 过期前快速重启”会错过启动时恢复；并非实际生产事故，也不证明所有重启失败。方案需要将有界恢复纳入持续轮询，并覆盖尚未过期、随后过期、取消中、健康 owner 和关闭竞争。已有 owner fencing 必须保留；通过这一用例不能宣称所有外部副作用都已隔离。
+
+**对恢复方式的进一步裁决：不能简单定期 requeue。** 独立 reviewer 复核真实 Node/Gate 路径发现，未完成 Agent 有部分 stale-running 防护，但在飞 Gate 尚未写出 passed/skipped 结果时会重启同一命令。Linux 实进程诊断也确认：与 Gateway 相同的 detached 子进程在 owner 被 SIGKILL 后仍以 PPID=1 存活，诊断进程随后已清理。因此新方案选择过期已认领 Job 保守 interrupted、禁止自动重跑，并要求退出未确认时显式绑定旧 Job 的人工确认。旧 abortState=stopped 和 Gateway 注销句柄也不能单独证明 close，须增加按 Job 绑定的新版退出证据；历史无证据保持未知。详见[整改执行方案](../superpowers/plans/2026-09-05-twenty-sixth-review-remediation-plan.html)。
+
+### 10.3 产品与视觉判断按可验证事实修正
+
+**对 §4.2、§5.2 的补充：** [FlashMessages](../../packages/web/src/client/components/ui/FlashMessages.tsx) 当前没有状态通知的 Live Region 语义；[主用户手册](../manual/tekon-user-manual.md) 未说明取消按钮的 3 秒二次确认。应补齐可感知通知、失败后持续可见的恢复说明及手册，并通过真实浏览器验证键盘操作、终态竞争和窄屏长消息。
+
+**撤回“max-width 360px 必然导致 320px 溢出”的推断。** 主代理用现有 CSS 和真实取消提示文字在 Chromium 320×800 中诊断，通知容器 x=0、宽 304px，页面 scrollWidth=320px，并未复现横向溢出。该结果只是样式切片诊断，不是应用截图验收；长错误文本、操作按钮与完整页面仍需在最终浏览器矩阵核查。后续样式调整须由实际失败场景支持。
+
+### 10.4 上游版本与证据边界
+
+**对 §7 的判断：最新源码合同仍成立，不能等同于最新二进制已验证。** 同步上游后，master 与 origin/master 均为 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；GitHub 最新发布仍为 [`dsh-v0.1.3-alpha.1`](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.3-alpha.1)，发布时间为 2026-09-04 11:34:32 UTC，release assets 为空。该版本保留一次性 Headless 与 ACP 生命周期合同，不能据此宣称 Tekon 已提供多轮协作。
+
+尝试从默认 registry 及显式 `https://registry.npmjs.org` 获取 `@deepseek-ai/dsh@0.1.3-alpha.1`，均返回 E404/ETARGET；随后读取 npm dist-tags 得到 latest/next=`0.1.2-rc.1`、alpha=`0.1.2-alpha.5`。这说明本次观察到的 GitHub release 与 npm 分发状态不同，未取得该候选二进制，因此本次尝试未形成 L2 通过证据。Tekon tested pin 保持 `0.1.2-alpha.3`；精确版本旁路不是兼容性验收。一个真实 Provider 的执行、取消、退出、关闭和重启恢复应单独取得运行证据，不用上游源码或伪进程替代。
+
+### 10.5 后续建议逐项裁决
+
+§6.3 的执行生命周期、取消观察恢复和用户重试入口进入本轮方案与验收。只读完整导出及持续协作也须在方案中逐项评估其产品合同、依赖和处置，不能因为报告称为后续方向而从本次审核清单消失；是否属于本轮实现以设计和独立评审的证据为依据。正式放行前，将逐条对照用户要求、报告结论、执行方案及实际测试，尚无证据的事项保持未完成或明确的能力边界，不以测试总数替代结论。
+
+## 11. 整改结果与最新验收入口
+
+**2026-09-06 · v0.24.0。** §1–9 保留原 v0.23.1 复审的历史结论，§10 记录本轮整改依据；当前实现和验证请以[第 26 轮整改验收](2026-09-06-r26-recovery-acceptance.html)及[当前索引](current.html)为准。
+
+本轮已实现取消观察同库事务协调、有界取消补发、持久重试入口、过期已认领 Job 保守 interrupted、按 Job 退出证据和显式恢复守卫。独立审阅同时关闭审批/取消终态竞争、旧执行迟到写入、在线 Session 状态通知及实际布局问题。正式验收分列全仓测试、完整 Chromium、四视口页面、受控 OS 进程故障与真实 Claude 跨宿主恢复，避免把状态标签或 runner 重建扩大为物理退出证明。
+
+§6.3.1/2 的本轮实现结果与证据集中在验收记录；完整导出、ACP 持续协作和真实 DSH L2/L3 保留独立范围及 Issue，不宣称完成。根产品版本随新增恢复行为升为 0.24.0，README、CHANGELOG 和主手册中英增量/HTML 同步。

@@ -33,6 +33,7 @@ import type {
   ProjectRunIntent,
   ProjectCleanInput,
   TokenRunInput,
+  ResumeInput,
 } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSafeName, assertSessionToken } from '../common.js';
@@ -412,12 +413,17 @@ export function createProjectRouter(
       }
     },
 
-    async resume(runInput: TokenRunInput) {
+    async resume(runInput: ResumeInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
       const result = await context.sessionService.resumeRun({
         runId: runInput.runId,
+        confirmStopped: runInput.confirmStopped,
+        previousJobId: runInput.previousJobId,
       });
+      if (result.outcome === 'exit-unconfirmed' || result.outcome === 'stale-confirmation') {
+        throw new ApiError('CONFLICT', `${result.outcome}: 旧进程退出未确认或确认已过期；刷新后确认已停止旧执行，previousJobId=${result.previousJobId ?? 'null'}`);
+      }
       if (result.outcome === 'pending-decisions') {
         throw new ApiError(
           'BAD_REQUEST',

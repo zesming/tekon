@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-本文对应 v0.23.1。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
+本文对应 v0.24.0。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
 
 名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取”天工”。
 
@@ -730,6 +730,18 @@ tekon resume --approve-human
 - 旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock。
 - run 已处于终态(`passed`/`failed`/`cancelled`)时，`resume` 会拒绝并以非 0 退出、打印中文提示("运行已处于终态 …，无法恢复"),不会把已结束的运行重新拉起。
 
+恢复中断的运行时，先查看当前状态。租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent 或 Gate。若提示旧进程退出未确认，先检查并停止旧执行，再按错误信息给出的旧 Job 身份确认：
+
+```bash
+tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId>
+```
+
+历史运行没有 Job 记录时，最后一个参数使用字面 `none`。省略身份或使用过期身份都会被拒绝，刷新状态后重新确认。同一确认也适用于 `resume --approve-human`：可提前识别退出风险时不记录审批；若审批已记录后才发生竞争，会明确显示“审批已记录，运行尚未恢复”，此时检查原运行再恢复，不要重新批准。
+
+人工确认仅表示你已检查旧执行，不是 Tekon 的物理退出检测。界面中的退出确认只覆盖 Tekon 管理的执行句柄。终态运行仍不能恢复。
+
+**English — interrupted runs:** An expired lease interrupts a claimed Job without replaying its Agent or Gate. If exit is unconfirmed, check and stop the old execution, then use `--confirm-stopped --previous-job-id <previousJobId>` with the ID shown in the error. Use literal `none` for historical runs without a Job. Missing or stale identities are refused. The same guard applies to `--approve-human`; an approval can remain recorded even when a race prevents recovery. Inspect and resume the original run instead of approving again. Human confirmation is an audit record, not an OS exit observation; managed-exit evidence covers only handles managed by Tekon.
+
 ### 6.11 `approval reject`
 
 用途：拒绝 pending human decision 并阻断 workflow。
@@ -956,7 +968,7 @@ tekon ui
 - Web 是本地 dashboard，不是远程服务。
 - Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
 
-**Web 使用要点（v0.23.1）**：
+**Web 使用要点（v0.24.0）**：
 
 - **连接状态**：顶栏分开显示凭据与 Provider；连接面板可重填、应用或断开会话令牌，Provider 可单独重试并查看检查时间。凭据校验不等待 Provider，通过 `#token=` URL 打开时自动校验。
 - **执行计划预览**：默认入口和高级表单展示“检查配置与适用性”，可展开查看逐项来源和实际执行方式；刷新后核对差异，再显式提交。毫秒级超时、profile 等参数收在“高级”折叠区。详见 §7。
@@ -1062,7 +1074,7 @@ tekon -h            # 等同于 tekon help
 **查看版本**：
 
 ```bash
-tekon --version     # 输出 v0.23.1
+tekon --version     # 输出 v0.24.0
 tekon -v            # 同上
 ```
 
@@ -1141,7 +1153,10 @@ Session UI 适合：
 - **发起运行、批准 human gate、恢复运行采用“返回结果、后台推进”**：发起运行先完成校验和受理；只有目录 ready 的 Job 才能在后台执行，已受理不等于已经开始执行。
   - **Session UI（默认）会通过事件流实时反映进展**：列表在首次连接或断线重连后自动读取最新状态，无需等下一次变更；中间栏追加已持久化事件，右侧审批卡片随新增审批或其他入口的决定更新。读取期间收到新变化时，会重新读取，旧成功响应或错误不会覆盖新状态。审批通过后运行继续按 gate 规则推进。
   - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
-  - 需要中止时点“取消”，然后确认运行状态是否已变为 `cancelled`。
+  - 需要中止时点“取消”，在 3 秒内再次点“确认取消？”，然后检查真实状态。已先完成或失败的运行保持原终态；“已记录取消”不代表全部后台进程已经停止。
+  - 取消投递或观察更新失败时，原运行保留取消意图。详情和 Session 侧栏可显示“重试取消”，刷新后仍可处理同一个运行；同时检查退出证据是否已确认。
+  - 恢复入口提示旧进程退出未确认时，先检查并停止旧执行，再勾选确认。确认绑定当时的旧 Job；页面过期时必须刷新并重新确认。审批已记录但未恢复时，进入原运行继续处理。
+  - **English:** Click Cancel, then confirm within 3 seconds. Check the actual terminal state: a completed or failed run keeps its result. Recorded cancellation does not prove all background processes have stopped. If control delivery or observation repair is pending, Retry cancellation remains available on the original Run/Session after refresh. Before resuming an execution with unknown exit, stop and check the old execution and confirm its displayed Job identity. If approval was recorded but recovery did not start, continue from the original run.
   - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
 
 > 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。

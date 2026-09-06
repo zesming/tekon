@@ -14,6 +14,7 @@ export * from './db/repositories.js';
 export * from './db/write-queue.js';
 export * from './db/admission-store.js';
 export * from './session/session-store.js';
+export * from './session/run-recovery.js';
 export * from './session/event-bus.js';
 export * from './artifact/schemas.js';
 export * from './artifact/store.js';

@@ -144,7 +144,7 @@ for (const action of ['none', 'edit-cycle', 'new-intent', 'token-cycle', 'unmoun
           await expect(submit).toBeEnabled();
         }
         if (action === 'none' && outcome === 'reject') {
-          await expect(page.getByRole('alert')).toContainText(LOCAL_WARNING);
+          await expect(page.locator('.session-composer').getByRole('alert')).toContainText(LOCAL_WARNING);
           await expect(page.getByRole('link', { name: '观察原会话' })).toHaveAttribute('href', '/sessions/session-r25-react-navigation');
         } else {
           await expect(page.getByText(LOCAL_WARNING, { exact: false })).toHaveCount(0);

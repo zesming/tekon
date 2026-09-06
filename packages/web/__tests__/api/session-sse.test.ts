@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import {
   createSessionEventBus,
   createSessionEventStore,
+  createJobRepository,
+  createJobRunner,
+  createSubprocessRegistry,
   createWriteQueue,
   openTekonDatabase,
   type SessionEventBus,
@@ -352,6 +355,33 @@ describe('web SSE endpoint — HTTP auth + replay (S8)', () => {
 // ---------------------------------------------------------------------------
 
 describe('handleSessionEventsSse — live + M6 boundary (S8)', () => {
+  it('R26: an already connected stream observes a lease becoming stale and can refresh interrupted recovery', async () => {
+    const fixture = await createWebFixtureProject();
+    const db = openTekonDatabase({ filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite') });
+    const queue = createWriteQueue();
+    const sessions = createSessionEventStore(db, queue);
+    const jobs = createJobRepository(db, queue);
+    const bus = createSessionEventBus();
+    const workspace = await sessions.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await sessions.createSession({ workspaceId: workspace.id, runId: 'run_1', title: null, profile: 'human-web' });
+    db.prepare("update workflow_instances set status='running' where id='run_1'").run();
+    const runner = createJobRunner({ jobs, sessions, bus, registry: createSubprocessRegistry(), pollIntervalMs: 5, leaseTtlMs: 100,
+      executor: { execute: async () => { throw new Error('stale execution must never restart'); } } });
+    const job = await runner.enqueue({ sessionId: session.id, kind: 'workflow-resume' });
+    // The lease is still healthy when the observer connects and runner starts.
+    await jobs.updateJob(job.id, { status: 'running', owner: 'old-owner', lease: new Date(Date.now() + 100).toISOString(), exitEvidence: null });
+    const fake = makeFakeReqRes(`/api/sessions/${session.id}/events?sinceSeq=0`);
+    cleanupTasks.push(async () => { fake.close(); await runner.stop(); db.close(); fixture.cleanup(); });
+    await handleSessionEventsSse({ request: fake.request, response: fake.response, sessionId: session.id, sessions, bus, heartbeatMs: 60_000, catchUpMs: 5 });
+    expect((await sessions.getRunRecovery('run_1')).runStatus).toBe('running');
+    runner.start();
+    const deadline = Date.now() + 2000;
+    while (!fake.frames().some(f => f.event === 'job/status') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+    const frame = fake.frames().find(f => f.event === 'job/status');
+    expect(frame).toBeDefined();
+    expect(JSON.parse(frame!.data!).payload).toMatchObject({ jobId: job.id, status: 'interrupted' });
+    expect(await sessions.getRunRecovery('run_1')).toMatchObject({ runStatus: 'interrupted', resumeRecovery: { previousJobId: job.id, requiresConfirmation: true } });
+  });
   it('pushes live events after replay completes', async () => {
     const fixture = await createWebFixtureProject();
     const s = openStore(fixture.projectRoot);

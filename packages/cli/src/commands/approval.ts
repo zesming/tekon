@@ -7,6 +7,7 @@ import {
   createRepositories,
   evaluateHumanApprovalSummary,
   migrateDatabase,
+  readRunRecovery,
   WorkflowTerminalError,
 } from '@tekon/core';
 
@@ -206,9 +207,19 @@ export async function commandResume(
       'run-id': { type: 'string' },
       'decision-id': { type: 'string' },
       'approve-human': { type: 'boolean', default: false },
+      'confirm-stopped': { type: 'boolean', default: false },
+      'previous-job-id': { type: 'string' },
     },
     allowPositionals: true,
   });
+  const rawPreviousJobId = args.values['previous-job-id'];
+  const confirmation = {
+    confirmStopped: args.values['confirm-stopped'],
+    ...(rawPreviousJobId !== undefined ? { previousJobId: rawPreviousJobId === 'none' ? null : rawPreviousJobId } : {}),
+  };
+  if (rawPreviousJobId !== undefined && !confirmation.confirmStopped) {
+    throw new Error('--previous-job-id 必须与 --confirm-stopped 配合；请先检查旧进程是否退出。');
+  }
   const repoPath = resolveProjectRepoPath(args.values.repo);
   await ensureInitialized(repoPath, io);
   // 4c §4.2.1 (S5): resume goes through SessionService + an embedded job
@@ -252,6 +263,13 @@ export async function commandResume(
       );
     }
 
+    const recovery = readRunRecovery(db, runId).resumeRecovery;
+    if (recovery && (recovery.requiresConfirmation || confirmation.confirmStopped)) {
+      if (!confirmation.confirmStopped || confirmation.previousJobId !== recovery.previousJobId) {
+        throw new Error(`旧进程退出未确认或确认已过期。检查并停止旧执行后，使用 --confirm-stopped --previous-job-id ${recovery.previousJobId ?? 'none'} 重试同一运行。`);
+      }
+    }
+
     if (args.values['approve-human']) {
       if (!decisionContext?.decisionId) {
         throw new Error(
@@ -272,16 +290,24 @@ export async function commandResume(
       const humanGate = createHumanGate({
         repositories,
       });
-      await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
-      await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
-      await audit.append({
-        runId,
-        type: 'human.gate.approved',
-        payload: {
-          decisionId: decision.id,
-          nodeId: decision.nodeId,
-        },
-      });
+      try {
+        await humanGate.approveHumanGate(decision.id, 'cli', 'approved by CLI');
+        await repositories.transitionNode(decision.nodeId, 'awaiting-gate');
+        await audit.append({
+          runId,
+          type: 'human.gate.approved',
+          payload: {
+            decisionId: decision.id,
+            nodeId: decision.nodeId,
+          },
+        });
+      } catch (error) {
+        const recorded = await repositories.getHumanDecision(decision.id);
+        if (recorded?.status === 'approved') {
+          throw new Error(`审批已记录，运行尚未恢复：${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw error;
+      }
     }
 
     // When --approve-human just approved a decision, mirror web's gate.approve:
@@ -290,7 +316,17 @@ export async function commandResume(
     const result = await sessionService.resumeRun({
       runId,
       afterApproval: args.values['approve-human'],
+      ...confirmation,
+    }).catch((error: unknown) => {
+      if (args.values['approve-human']) throw new Error(`审批已记录，运行尚未恢复：${error instanceof Error ? error.message : String(error)}`);
+      throw error;
     });
+    if (result.outcome !== 'enqueued' && args.values['approve-human']) {
+      io.stderr.write(`审批已记录，运行尚未恢复（${result.outcome}）。请检查状态后重试。\n`);
+    }
+    if (result.outcome === 'exit-unconfirmed' || result.outcome === 'stale-confirmation') {
+      throw new Error(`旧进程退出未确认或确认已过期。检查并停止旧执行后，使用 --confirm-stopped --previous-job-id ${result.previousJobId ?? 'none'} 重试。`);
+    }
     if (result.outcome === 'pending-decisions') {
       throw new Error(
         '运行存在待审批的人工决策，请先使用 tekon resume --approve-human 批准或 tekon approval reject 拒绝。',
@@ -314,11 +350,14 @@ export async function commandResume(
     };
     process.on('SIGINT', onSigint);
     try {
-      await awaitJobTerminal({
+      const jobStatus = await awaitJobTerminal({
         jobs,
         jobRunner,
         jobId: result.jobId,
       });
+      if (jobStatus === 'interrupted') {
+        io.stderr.write(`任务已中断；检查旧执行退出情况后，使用 tekon resume --run-id ${runId} 显式恢复。\n`);
+      }
     } finally {
       process.removeListener('SIGINT', onSigint);
     }

@@ -74,10 +74,10 @@ export function SessionDetailPage() {
     [liveState, session?.actionKind, session?.runId, session?.status],
   );
 
-  // session.get is a point-in-time snapshot while the event stream keeps
-  // advancing. The merged state uses the snapshot until the live projection is
-  // known, then prefers the newer event-derived workflow status.
-  const displayedStatus = sidePanelState.runStatus ?? session?.status ?? null;
+  // 标题与控制共用服务端权威 Run 状态；观察事件可能滞后或缺失。
+  const displayedStatus = session?.runId
+    ? session.runStatus ?? null
+    : session?.status ?? null;
 
   return (
     <div className="session-detail">
@@ -143,7 +143,7 @@ export function SessionDetailPage() {
               目录就绪前不会执行任务。当前仅可观察受理记录。
             </p>
           ) : (
-            <SessionSidePanel state={sidePanelState} />
+            <SessionSidePanel state={sidePanelState} recovery={session?.recovery} runStatus={session?.runStatus} />
           )}
         </aside>
       </div>

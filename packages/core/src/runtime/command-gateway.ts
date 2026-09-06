@@ -63,9 +63,9 @@ export interface CommandGatewayRunInput {
    * 若 spawn 前信号已 aborted，则不起进程，直接返回带 `cancelled: true` 的 rejected 结果。
    */
   signal?: AbortSignal;
-  /** 子进程注册表；与 registryKey 同时传入时，spawn 后注册、settle 时注销。 */
+  /** 子进程注册表；与 registryKey 同时传入时，spawn 后注册、actual close 时注销。 */
   registry?: SubprocessRegistry;
-  /** 注册表 key，通常为 runId（S7：gate 命令与 agent 子进程共用同一 key）。 */
+  /** 注册表 key；生产后台使用 Job ID 隔离执行代次。 */
   registryKey?: string;
 }
 
@@ -501,9 +501,6 @@ async function runProcess(input: {
         input.signal.removeEventListener('abort', abortHandler);
         abortHandler = null;
       }
-      if (registryHandle && input.registry && input.registryKey) {
-        input.registry.unregister(input.registryKey, registryHandle);
-      }
       clearInterval(progressInterval);
       if (noProgressInterval) {
         clearInterval(noProgressInterval);
@@ -554,6 +551,11 @@ async function runProcess(input: {
       });
     });
     child.once('close', (exitCode, signal) => {
+      if (registryHandle && input.registry && input.registryKey) {
+        input.registry.confirmClosed(input.registryKey, registryHandle);
+        input.registry.unregister(input.registryKey, registryHandle);
+      }
+
       if (input.stdin !== undefined && stdinError) {
         settle({
           status: 'rejected',

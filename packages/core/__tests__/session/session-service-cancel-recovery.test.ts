@@ -51,17 +51,13 @@ async function setup() {
     sessions, jobs, jobRunner, bus, repositories, audit, projectRoot,
     createEngine: () => { throw new Error('Cancellation must not build an engine'); },
   });
-  return { repositories, sessions, jobs, jobRunner, service, session, job };
+  return { db, repositories, sessions, jobs, jobRunner, service, session, job };
 }
 
 describe('cancel delivery is independent of observation and repeat terminal writes', () => {
   it('delivers cancellation before a cancel-requested event write fails', async () => {
     const env = await setup();
-    const append = env.sessions.appendEvent.bind(env.sessions);
-    vi.spyOn(env.sessions, 'appendEvent').mockImplementation(async input => {
-      if (input.type === 'agent/cancel-requested') throw new Error('event write failed');
-      return append(input);
-    });
+    env.db.exec("create trigger fail_requested before insert on session_events when NEW.type='agent/cancel-requested' begin select raise(abort, 'event write failed'); end");
     await expect(env.service.requestCancel({ runId: 'run' })).rejects.toThrow('event write failed');
     expect((await env.repositories.getWorkflowInstance('run'))?.status).toBe('cancelled');
     expect((await env.jobs.get(env.job.id))?.status).toBe('cancelled');
@@ -90,12 +86,12 @@ describe('cancel delivery is independent of observation and repeat terminal writ
       status: 'cancelling', abortState: 'requested', owner: 'another-worker',
     });
     // This proves durable delivery, not that a foreign process has exited.
-    expect(await env.sessions.listEventsSince(env.session.id, 0)).toEqual([]);
+    expect((await env.sessions.listEventsSince(env.session.id, 0)).map(e => e.type)).toEqual(['agent/cancel-requested', 'agent/cancelled']);
   });
 
   it('does not let a Session lookup failure prevent job cancellation', async () => {
     const env = await setup();
-    vi.spyOn(env.sessions, 'findSessionByRunId').mockRejectedValueOnce(new Error('session read failed'));
+    vi.spyOn(env.sessions, 'reconcileCancelledRun').mockRejectedValueOnce(new Error('session read failed'));
     await expect(env.service.requestCancel({ runId: 'run' })).rejects.toThrow('session read failed');
     expect((await env.jobs.get(env.job.id))?.status).toBe('cancelled');
   });

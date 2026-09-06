@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation } from '../../hooks/index.js';
+import { useResumeConfirmation } from '../../hooks/use-resume-confirmation.js';
+import { ResumeConfirmation } from './ResumeConfirmation.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
+import { queryCache } from '../../lib/query-cache.js';
+import type { ApiWorkflow } from '../../../shared/api-types.js';
 import { rpc } from '../../lib/rpc-client.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
@@ -12,6 +16,7 @@ import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 export interface RunControlsProps {
   runId: string;
   status: string;
+  recovery?: ApiWorkflow['recovery'];
   /** Compact mode for table rows */
   compact?: boolean;
   /**
@@ -64,6 +69,7 @@ export function runControlAffordances(status: string): RunControlAffordances {
 export function RunControls({
   runId,
   status,
+  recovery,
   compact,
   onView,
 }: RunControlsProps) {
@@ -71,6 +77,9 @@ export function RunControls({
   const { addFlash } = useFlash();
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const confirmation = useResumeConfirmation(runId, recovery);
+  const actionInFlight = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear any pending-action timer on unmount
@@ -86,7 +95,17 @@ export function RunControls({
     'review.',
     'gate.results',
     'audit.',
+    'session.detail.',
+    'session.list.',
   ];
+
+  const refreshObservations = () => {
+    for (const key of invalidateKeys) queryCache.invalidate(key);
+  };
+  const resumeRecovery = recovery?.resumeRecovery;
+  const confirmed = confirmation.confirmed;
+  const cancelRecovery = status === 'cancelled' ? recovery?.cancelRecovery : null;
+  const canRetryCancel = Boolean(cancelRecovery && (cancelRecovery.needsControlRetry || cancelRecovery.needsObservationRepair));
 
   const pauseMutation = useMutation<
     RpcProcedureMap['project.pause']['input'],
@@ -96,12 +115,12 @@ export function RunControls({
   const resumeMutation = useMutation<
     RpcProcedureMap['project.resume']['input'],
     RpcProcedureMap['project.resume']['output']
-  >((input) => rpc.call('project.resume', input), { invalidateKeys });
+  >((input) => rpc.call('project.resume', input));
 
   const cancelMutation = useMutation<
     RpcProcedureMap['project.cancel']['input'],
     RpcProcedureMap['project.cancel']['output']
-  >((input) => rpc.call('project.cancel', input), { invalidateKeys });
+  >((input) => rpc.call('project.cancel', input));
 
   if (!token) return null;
 
@@ -120,21 +139,32 @@ export function RunControls({
 
   const handleResume = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (actionInFlight.current || (resumeRecovery?.requiresConfirmation && !confirmed)) return;
+    actionInFlight.current = true;
+    setActionError(null);
     try {
-      await resumeMutation.mutate({ runId, token });
+      await resumeMutation.mutate({ runId, token,
+        ...confirmation.input,
+      });
       addFlash('success', `Run ${runId.slice(0, 8)} resumed`);
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : 'Failed to resume run',
+        err instanceof Error ? err.message : '恢复运行失败',
       );
+      setActionError(err instanceof Error ? err.message : '恢复运行失败');
+      confirmation.setConfirmed(false);
+    } finally {
+      actionInFlight.current = false;
+      refreshObservations();
     }
   };
 
   const handleCancel = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (pendingAction !== 'cancel') {
+    if (actionInFlight.current) return;
+    if (!canRetryCancel && pendingAction !== 'cancel') {
       setPendingAction('cancel');
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setPendingAction(null), 3000);
@@ -145,6 +175,8 @@ export function RunControls({
     setPendingAction(null);
     if (timerRef.current) clearTimeout(timerRef.current);
 
+    actionInFlight.current = true;
+    setActionError(null);
     try {
       const result = await cancelMutation.mutate({ runId, token });
       // A successful request can return an already passed/failed run. The
@@ -161,8 +193,12 @@ export function RunControls({
     } catch (err) {
       addFlash(
         'error',
-        err instanceof Error ? err.message : 'Failed to cancel run',
+        err instanceof Error ? err.message : '取消请求失败',
       );
+      setActionError(err instanceof Error ? err.message : '取消请求失败');
+    } finally {
+      actionInFlight.current = false;
+      refreshObservations();
     }
   };
 
@@ -179,11 +215,20 @@ export function RunControls({
 
   return (
     <div
-      className="flex gap-2"
-      style={{ alignItems: 'center' }}
+      className="flex gap-2 run-controls"
+      style={{ alignItems: 'center', flexWrap: 'wrap' }}
       role="group"
       aria-label="运行控制"
     >
+      {status === 'cancelled' && (
+        <p className="run-recovery-notice">
+          已记录取消。{cancelRecovery
+            ? `${cancelRecovery.needsControlRetry ? '取消控制待重试。' : '取消控制无需补发。'}${cancelRecovery.needsObservationRepair ? '运行观察待修复。' : ''}${cancelRecovery.exitStatus === 'confirmed' ? '已确认 Tekon 受管理执行句柄退出；不代表所有后台进程已退出。' : '退出未确认；请检查旧进程。'}`
+            : '恢复信息未知，无法确认退出；请刷新后核对。'}
+        </p>
+      )}
+      {actionError && <p className="run-recovery-error">{actionError}</p>}
+      {canResume && <ResumeConfirmation recovery={recovery} checked={confirmed} disabled={isPending} onChange={confirmation.setConfirmed} />}
       {canPause && (
         <button
           type="button"
@@ -203,14 +248,14 @@ export function RunControls({
           className={btnClass}
           title="恢复运行"
           aria-label="恢复运行"
-          disabled={isPending}
+          disabled={isPending || Boolean(resumeRecovery?.requiresConfirmation && !confirmed)}
           onClick={handleResume}
         >
           {compact ? '▶' : '恢复'}
         </button>
       )}
 
-      {canCancel && (
+      {(canCancel || canRetryCancel) && (
         <button
           type="button"
           className={
@@ -218,12 +263,12 @@ export function RunControls({
           }
           title="取消运行"
           aria-label={
-            pendingAction === 'cancel' ? '确认取消运行' : '请求取消运行'
+            canRetryCancel ? '重试取消运行' : pendingAction === 'cancel' ? '确认取消运行' : '请求取消运行'
           }
           disabled={isPending}
           onClick={handleCancel}
         >
-          {pendingAction === 'cancel'
+          {canRetryCancel ? '重试取消' : pendingAction === 'cancel'
             ? '确认取消？'
             : compact
               ? '✕'

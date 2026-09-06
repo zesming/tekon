@@ -18,6 +18,8 @@ export function createWriteQueue(options?: WriteQueueOptions): WriteQueue {
 
   return {
     enqueue<T>(operation: () => T | Promise<T>): Promise<T> {
+      const scope = executionWriteScope.getStore();
+      const execute = () => scope ? scope(operation) : operation();
       if (checkClosed()) {
         return Promise.reject(
           new Error('WriteQueue is closed (shutdown fence active)'),
@@ -28,13 +30,13 @@ export function createWriteQueue(options?: WriteQueueOptions): WriteQueue {
           if (checkClosed()) {
             throw new Error('WriteQueue is closed (shutdown fence active)');
           }
-          return operation();
+          return execute();
         },
         () => {
           if (checkClosed()) {
             throw new Error('WriteQueue is closed (shutdown fence active)');
           }
-          return operation();
+          return execute();
         },
       );
       tail = next.then(
@@ -50,4 +52,18 @@ export function createWriteQueue(options?: WriteQueueOptions): WriteQueue {
       return checkClosed();
     },
   };
+}
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+type WriteScope = <T>(operation: () => T | Promise<T>) => T | Promise<T>;
+const executionWriteScope = new AsyncLocalStorage<WriteScope>();
+
+/** Propagates an execution's ownership fence through repository/Session writes. */
+export function withExecutionWriteScope<T>(scope: WriteScope, operation: () => T): T {
+  return executionWriteScope.run(scope, operation);
+}
+
+/** Event subscribers own separate operations; they do not inherit publisher leases. */
+export function withoutExecutionWriteScope<T>(operation: () => T): T {
+  return executionWriteScope.exit(operation);
 }

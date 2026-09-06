@@ -109,7 +109,7 @@ describe('admission 文件就绪是实际认领和执行前置条件', () => {
     expect(await f.jobs.claimNext('readiness-worker')).toMatchObject({ id: 'job_legacy_queued', status: 'running' });
     expect(await f.jobs.claimNext('readiness-worker')).toBeNull();
     expect(await f.jobs.cancelStaleActiveJobs(f.prepared.runId, undefined, cutoff)).toBe(0);
-    expect(await f.jobs.cancelStaleActiveJobs(legacyRunId, undefined, cutoff)).toBe(1);
+    expect(await f.jobs.cancelStaleActiveJobs(legacyRunId, undefined, cutoff)).toBe(0);
     expect(f.runJobs()).toEqual(protectedJobs);
 
     const recovered = await f.restoreFiles();

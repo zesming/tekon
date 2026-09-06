@@ -322,7 +322,8 @@ export async function awaitJobTerminal(input: {
     if (
       job.status === 'done' ||
       job.status === 'failed' ||
-      job.status === 'cancelled'
+      job.status === 'cancelled' ||
+      job.status === 'interrupted'
     ) {
       return job.status;
     }

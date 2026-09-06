@@ -19,6 +19,8 @@ for (const firstSnapshot of ['delayed', '500'] as const) {
     const store = createSessionEventStore(db, createWriteQueue());
     let sessionId: string;
     try {
+      // workflow/started 描述真实运行，Session active 不能代替 Run 权威状态。
+      expect(db.prepare("UPDATE workflow_instances SET status = 'running' WHERE id = 'run_1'").run().changes).toBe(1);
       const workspace = await store.getOrCreateDefaultWorkspace(
         fixture.projectRoot,
       );
@@ -43,24 +45,24 @@ for (const firstSnapshot of ['delayed', '500'] as const) {
       releaseSnapshot = resolve;
     });
     let snapshotCount = 0;
+    let snapshotFault = firstSnapshot === '500';
     let filesState: 'pending' | 'ready' = 'pending';
     await page.route('**/api/rpc', async (route) => {
       const body = route.request().postDataJSON();
       if (body.path !== 'session.get') return route.continue();
       snapshotCount++;
-      if (snapshotCount === 1) {
-        await snapshotGate;
-        if (firstSnapshot === '500')
-          return route.fulfill({
-            status: 500,
-            json: {
-              error: {
-                code: 'INTERNAL_ERROR',
-                message: 'admission snapshot unavailable',
-              },
+      // SSE 重连/生命周期会重新读取快照；全部读取受同一故障门控制。
+      await snapshotGate;
+      if (snapshotFault)
+        return route.fulfill({
+          status: 500,
+          json: {
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'admission snapshot unavailable',
             },
-          });
-      }
+          },
+        });
       const response = await route.fetch();
       const result = await response.json();
       expect(result.result.session.id).toBe(sessionId);
@@ -78,6 +80,7 @@ for (const firstSnapshot of ['delayed', '500'] as const) {
     await expect(
       page.locator('[data-event-type="workflow/started"]'),
     ).toBeVisible();
+    await expect.poll(() => snapshotCount).toBeGreaterThanOrEqual(1);
     await expect(page.getByRole('button', { name: '暂停运行' })).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: '请求取消运行' }),
@@ -90,6 +93,7 @@ for (const firstSnapshot of ['delayed', '500'] as const) {
       await expect(page.getByRole('button', { name: '暂停运行' })).toHaveCount(
         0,
       );
+      snapshotFault = false;
       await page.getByRole('button', { name: '↻ 重试', exact: true }).click();
     }
     await expect(page.getByTestId('admission-readiness')).toContainText(

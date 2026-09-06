@@ -1,4 +1,8 @@
-import { createHumanApprovalSummary } from '@tekon/core';
+import {
+  createHumanApprovalSummary,
+  readRunRecovery,
+  type RunRecovery,
+} from '@tekon/core';
 
 import type { ServerContext, DecisionInput } from '../context.js';
 import { ApiError } from '../errors.js';
@@ -73,6 +77,9 @@ async function updateDecision(input: {
   decision: ReturnType<typeof mapHumanDecision>;
   sessionId?: string;
   jobId?: string;
+  resumeOutcome?: string;
+  resumeMessage?: string;
+  recovery?: RunRecovery;
 }> {
   const { context } = input;
   const { repositories, audit, projectContext, db } = context;
@@ -111,15 +118,18 @@ async function updateDecision(input: {
     await assertRunCanResume({ repositories, runId: existing.run_id });
   }
 
-  // MF2/S1 (mirror project.resume): a run may have at most one active job.
-  // Reclaim safe stale jobs (queued + stale-paused, S3), then reject if a live
-  // job (running/cancelling/live-paused) still owns the run. This guards BOTH
-  // branches: approve would enqueue a second resume job (double-drive); reject
-  // must not flip the decision/node while a resume job is mid-flight, because
-  // its run-level CAS (paused→blocked) would no-op against a `running` run and
-  // return a misleading success with the run left non-blocked. Checked BEFORE
-  // the decision flip so a loser 409s with no side effects.
-  await context.jobs.cancelStaleActiveJobs(existing.run_id);
+  // Approval must not record a decision when the current exit uncertainty
+  // can already be identified. Admission rechecks this snapshot in its write
+  // transaction, so a racing generation can still refuse after approval.
+  if (input.status === 'approved') {
+    const recovery = readRunRecovery(db, existing.run_id).resumeRecovery;
+    if (recovery && (recovery.requiresConfirmation || input.input.confirmStopped)) {
+      if (!input.input.confirmStopped || input.input.previousJobId !== recovery.previousJobId) {
+        throw new ApiError('CONFLICT', `旧进程退出未确认或确认已过期；确认已停止旧执行后重试，previousJobId=${recovery.previousJobId ?? 'null'}`);
+      }
+    }
+  }
+
   const active = await context.jobs.findActiveByRunId(existing.run_id);
   if (active) {
     throw new ApiError(
@@ -150,13 +160,6 @@ async function updateDecision(input: {
     );
   }
 
-  if (existing.gate_result_id) {
-    await repositories.updateGateResultStatus(existing.gate_result_id, {
-      status: input.gateStatus,
-      failureClassification: input.gateFailureClassification,
-    });
-  }
-
   const mappedDecision = {
     decision: redactObject(mapHumanDecisionRow(db, decision)) as ReturnType<
       typeof mapHumanDecision
@@ -164,48 +167,57 @@ async function updateDecision(input: {
   };
 
   if (input.status === 'approved') {
-    await repositories.transitionNode(existing.node_id, 'running');
-    await repositories.transitionNode(existing.node_id, 'awaiting-gate');
-    await audit.append({
-      runId: existing.run_id,
-      type: 'human.gate.approved',
-      payload: {
-        decisionId: existing.id,
-        nodeId: existing.node_id,
-        actor: input.input.actor,
-      },
-    });
-    // M9: resume runs asynchronously via the job runner (no blocking resume;
-    // preserves P0-02 cancellability). The single-active-job guard + stale
-    // reclaim already ran above (before the decision flip); here we just bind a
-    // session and enqueue the workflow-resume job.
-    let session = await context.sessions.findSessionByRunId(existing.run_id);
-    if (!session) {
-      const workspace = await context.sessions.getOrCreateDefaultWorkspace(
-        projectContext.projectRoot,
-      );
-      session = await context.sessions.createSession({
-        workspaceId: workspace.id,
-        title: null,
-        profile: 'human-web',
+    try {
+      if (existing.gate_result_id) {
+        await repositories.updateGateResultStatus(existing.gate_result_id, {
+          status: input.gateStatus,
+          failureClassification: input.gateFailureClassification,
+        });
+      }
+      await repositories.transitionNode(existing.node_id, 'running');
+      await repositories.transitionNode(existing.node_id, 'awaiting-gate');
+      await audit.append({
         runId: existing.run_id,
+        type: 'human.gate.approved',
+        payload: {
+          decisionId: existing.id,
+          nodeId: existing.node_id,
+          actor: input.input.actor,
+        },
       });
+      const result = await context.sessionService.resumeRun({
+        runId: existing.run_id,
+        afterApproval: true,
+        confirmStopped: input.input.confirmStopped,
+        previousJobId: input.input.previousJobId,
+      });
+      if (result.outcome === 'enqueued') return {
+        ...mappedDecision,
+        resumeOutcome: result.outcome,
+        sessionId: result.sessionId,
+        jobId: result.jobId,
+      };
+      return {
+        ...mappedDecision,
+        resumeOutcome: result.outcome,
+        resumeMessage: `审批已记录，运行尚未恢复（${result.outcome}）。请刷新后检查运行状态及旧执行退出情况。`,
+        recovery: readRunRecovery(db, existing.run_id),
+      };
+    } catch (error) {
+      // A recorded decision is durable even if recovery admission fails.
+      return {
+        ...mappedDecision,
+        resumeOutcome: 'error',
+        resumeMessage: `审批已记录，运行尚未恢复：${redactObject(error instanceof Error ? error.message : String(error))}`,
+      };
     }
-    // F5-P0-01: same atomic guard as SessionService.resumeRun. gate.approve is
-    // a second concurrent-resume entry point (two approvals, or approval + a
-    // `tekon resume`, could both enqueue a workflow-resume job for one run). The
-    // atomic enqueue re-checks for an active job inside a BEGIN IMMEDIATE
-    // transaction and rejects the loser, so the run is never double-executed.
-    const enqueued = await context.jobRunner.enqueueIfNoActiveByRunId({
-      runId: existing.run_id,
-      sessionId: session.id,
-      kind: 'workflow-resume',
+  }
+
+  if (existing.gate_result_id) {
+    await repositories.updateGateResultStatus(existing.gate_result_id, {
+      status: input.gateStatus,
+      failureClassification: input.gateFailureClassification,
     });
-    return {
-      ...mappedDecision,
-      sessionId: enqueued.job.sessionId,
-      jobId: enqueued.job.id,
-    };
   }
 
   // reject: block the node synchronously; no resume (MF3 guard already applied).

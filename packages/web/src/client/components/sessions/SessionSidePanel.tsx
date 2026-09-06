@@ -14,8 +14,12 @@ import type {
   SidePanelState,
 } from '../../lib/session-side-panel.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
-import type { DecisionInput, DecisionOutput } from '../../../shared/api-types.js';
+import type { ApiWorkflow, DecisionInput, DecisionOutput } from '../../../shared/api-types.js';
 
+import { useResumeConfirmation } from '../../hooks/use-resume-confirmation.js';
+import { ResumeConfirmation } from '../runs/ResumeConfirmation.js';
+import { approvalFeedback } from '../../lib/approval-feedback.js';
+import { queryCache } from '../../lib/query-cache.js';
 import { RunControls } from '../runs/RunControls.js';
 import { DecisionCard } from '../approvals/DecisionCard.js';
 import { CodeBlock } from '../ui/CodeBlock.js';
@@ -33,11 +37,13 @@ const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
 };
 const DEFAULT_SUPPORTING_CARD_LIMIT = 6;
 
-export function SessionSidePanel({ state }: { state: SidePanelState }) {
+export function SessionSidePanel({ state, recovery, runStatus }: { state: SidePanelState; recovery?: ApiWorkflow['recovery']; runStatus?: string | null }) {
   const scope = useAuthScope();
   const { token } = useSessionToken();
   const flash = useFlash();
   const runId = state.runId;
+  const confirmation = useResumeConfirmation(runId, recovery);
+  const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
   const [showAllCards, setShowAllCards] = useState(false);
 
   // Full decision context (risk, command, approvalSummary) lives in gate.list —
@@ -50,6 +56,7 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
     'session.detail.',
     'session.list.',
     'project.overview',
+    'review.',
   ];
   const { data: gateData, refetch } = useQuery<
     RpcProcedureMap['gate.list']['output']
@@ -62,11 +69,9 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
 
   const approveMutation = useMutation<DecisionInput, DecisionOutput>(
     (input) => rpc.call('gate.approve', input),
-    { invalidateKeys },
   );
   const rejectMutation = useMutation<DecisionInput, DecisionOutput>(
     (input) => rpc.call('gate.reject', input),
-    { invalidateKeys },
   );
   const isPending = approveMutation.isPending || rejectMutation.isPending;
 
@@ -81,24 +86,33 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
         flash.addFlash('error', '请先在顶栏设置会话令牌');
         return;
       }
+      if (verb === 'approved' && confirmation.required && !confirmation.confirmed) return;
       try {
-        await mutation.mutate({
+        const result = await mutation.mutate({
           runId,
           decisionId,
           actor: 'web-user',
           note: note || undefined,
           token,
+          ...(verb === 'approved' ? confirmation.input : {}),
         });
-        flash.addFlash('success', `Decision ${decisionId} ${verb}`);
-        refetch();
+        if (verb === 'approved') {
+          const feedback = approvalFeedback(result);
+          setApprovalNotice(feedback.message);
+          flash.addFlash(feedback.variant, feedback.message);
+        } else flash.addFlash('success', `Decision ${decisionId} ${verb}`);
       } catch (err) {
         flash.addFlash(
           'error',
           `${verb} failed: ${err instanceof Error ? err.message : String(err)}`,
         );
+        setApprovalNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        confirmation.setConfirmed(false);
+        for (const key of invalidateKeys) queryCache.invalidate(key);
       }
     },
-    [token, runId, flash, refetch],
+    [token, runId, flash, refetch, confirmation, invalidateKeys],
   );
 
   const pendingDecisions = gateData?.pendingDecisions ?? [];
@@ -136,19 +150,23 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
             <RunControls
               key={runId}
               runId={runId}
-              status={state.runStatus ?? 'unknown'}
+              status={runStatus ?? 'unknown'}
+              recovery={recovery}
             />
           </div>
         </div>
       ) : null}
 
+      {approvalNotice && <p className="run-recovery-notice">{approvalNotice}</p>}
       {pendingDecisions.length > 0 ? (
         <div className="session-side-approvals" data-testid="session-approvals">
+          <ResumeConfirmation recovery={recovery} checked={confirmation.confirmed} disabled={isPending} onChange={confirmation.setConfirmed} />
           {pendingDecisions.map((decision) => (
             <DecisionCard
               key={decision.id}
               decision={decision}
               isPending={isPending}
+              approveDisabled={confirmation.required && !confirmation.confirmed}
               onApprove={(id, note) =>
                 decide(approveMutation, 'approved', id, note)
               }

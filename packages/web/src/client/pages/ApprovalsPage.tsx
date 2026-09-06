@@ -1,9 +1,14 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useQuery, useMutation, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { useAuth } from '../context/auth-context.js';
 import { useFlash } from '../context/flash-context.js';
+import { useResumeConfirmation } from '../hooks/use-resume-confirmation.js';
+import { ResumeConfirmation } from '../components/runs/ResumeConfirmation.js';
+import { approvalFeedback } from '../lib/approval-feedback.js';
+import { queryCache } from '../lib/query-cache.js';
+import { routes } from '../lib/route-paths.js';
 import { queryKeys } from '../lib/query-keys.js';
 import type {
   ProjectOverviewOutput,
@@ -34,6 +39,9 @@ export function ApprovalsPage() {
 
   const latestRunId = overviewQuery.data?.latestRun?.id ?? null;
 
+  const confirmation = useResumeConfirmation(latestRunId, overviewQuery.data?.latestRun?.recovery);
+  const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
+
   // ── 2. Gate list → pending decisions ───────────────────────────────────────
   const gateListKey = latestRunId ? queryKeys.gateResults(latestRunId, scope) : null;
   const gatesQuery = useQuery<GateListOutput>(
@@ -51,13 +59,15 @@ export function ApprovalsPage() {
     () => [
       'project.overview',
       'gate.results',
+      'session.detail.',
+      'session.list.',
+      'review.',
     ],
     [],
   );
 
   const approveMutation = useMutation<DecisionInput, DecisionOutput>(
     (input) => rpc.call('gate.approve', input),
-    { invalidateKeys },
   );
 
   const rejectMutation = useMutation<DecisionInput, DecisionOutput>(
@@ -74,25 +84,32 @@ export function ApprovalsPage() {
         flash.addFlash('error', '请先登录并提供 token');
         return;
       }
-      if (!latestRunId) return;
+      if (!latestRunId || (confirmation.required && !confirmation.confirmed)) return;
 
       try {
-        await approveMutation.mutate({
+        const result = await approveMutation.mutate({
           runId: latestRunId,
           decisionId,
           actor: 'web-user',
           note: note || undefined,
           token,
+          ...confirmation.input,
         });
-        flash.addFlash('success', `Decision ${decisionId} approved`);
+        const feedback = approvalFeedback(result);
+        setApprovalNotice(feedback.message);
+        flash.addFlash(feedback.variant, feedback.message);
       } catch (err) {
         flash.addFlash(
           'error',
-          `Approve failed: ${err instanceof Error ? err.message : String(err)}`,
+          `批准失败：${err instanceof Error ? err.message : String(err)}`,
         );
+        setApprovalNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        confirmation.setConfirmed(false);
+        for (const key of invalidateKeys) queryCache.invalidate(key);
       }
     },
-    [token, latestRunId, approveMutation, flash],
+    [token, latestRunId, approveMutation, flash, confirmation, invalidateKeys],
   );
 
   const handleReject = useCallback(
@@ -206,6 +223,9 @@ export function ApprovalsPage() {
         />
       ) : null}
 
+      {approvalNotice && <p className="run-recovery-notice">{approvalNotice} {latestRunId && <a href={routes.run(latestRunId)}>查看运行并恢复</a>}</p>}
+      {pendingDecisions.length > 0 && <ResumeConfirmation recovery={overviewQuery.data?.latestRun?.recovery} checked={confirmation.confirmed} disabled={isMutating} onChange={confirmation.setConfirmed} />}
+
       {/* Pending decisions list */}
       {pendingDecisions.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
@@ -214,6 +234,7 @@ export function ApprovalsPage() {
               key={decision.id}
               decision={decision}
               isPending={isMutating}
+              approveDisabled={confirmation.required && !confirmation.confirmed}
               onApprove={handleApprove}
               onReject={handleReject}
             />

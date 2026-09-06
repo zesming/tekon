@@ -75,7 +75,7 @@ test('StartRunForm exposes keyboard disclosure, renders execution plan preview, 
   );
 
   // T2: Unrestricted network warning appears and submit button is blocked until acknowledged
-  const networkAlert = page.getByRole('alert');
+  const networkAlert = page.locator('#start-run-form-body').getByRole('alert');
   await expect(networkAlert).toBeVisible();
   await expect(networkAlert).toContainText('联网不受限');
 

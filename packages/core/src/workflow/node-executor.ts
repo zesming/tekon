@@ -183,7 +183,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         'node.transition.checked',
         { fromStatus },
       );
-      await repositories.updateWorkflowInstanceStatus(
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'running',
         node.id,

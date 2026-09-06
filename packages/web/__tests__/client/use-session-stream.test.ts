@@ -224,6 +224,20 @@ describe('useSessionStream (MUST-1 + MUST-2)', () => {
     });
   }
 
+  it.each(['agent/cancelled', 'agent/status', 'turn/end', 'job/status', 'live'])('R26 %s refreshes authoritative recovery only for the current Session', type => {
+    const scope = authScope(mockToken);
+    const key = queryKeys.sessionDetail('session-current', scope);
+    const otherKey = queryKeys.sessionDetail('session-other', scope);
+    queryCache.set(key, 'old recovery');
+    queryCache.set(otherKey, 'other recovery');
+    const harness = renderHook((id: string) => useSessionStream(id), 'session-current');
+    if (type === 'live') lastStreamOptions.onStateChange('live');
+    else lastStreamOptions.onEvent(makeEvent(1, type));
+    expect(queryCache.get(key)?.stale).toBe(true);
+    expect(queryCache.get(otherKey)?.stale).toBe(false);
+    harness.unmount();
+  });
+
   it('ignores the old subscription after credentials change and after unmount', () => {
     const harness = renderHook((id: string) => useSessionStream(id), 'session-current');
     const previousOptions = lastStreamOptions;

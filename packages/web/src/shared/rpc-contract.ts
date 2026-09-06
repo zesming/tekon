@@ -53,6 +53,25 @@ export const tokenRunInputSchema = z.object({
   token: z.string().min(1),
 });
 
+export const resumeInputSchema = tokenRunInputSchema.extend({
+  confirmStopped: z.boolean().optional(),
+  previousJobId: z.string().min(1).nullable().optional(),
+});
+
+export const runRecoverySchema = z.object({
+  runStatus: z.string().nullable(),
+  cancelRecovery: z.object({
+    needsControlRetry: z.boolean(),
+    needsObservationRepair: z.boolean(),
+    jobId: z.string().nullable(),
+    exitStatus: z.enum(['confirmed', 'unconfirmed']),
+  }).nullable(),
+  resumeRecovery: z.object({
+    previousJobId: z.string().nullable(),
+    requiresConfirmation: z.boolean(),
+  }).nullable(),
+});
+
 export const projectRunInputSchema = z
   .object({
     demandText: z.string(),
@@ -151,6 +170,8 @@ export const deliveryCreatePrInputSchema = z.object({
 });
 
 export const decisionInputSchema = z.object({
+  confirmStopped: z.boolean().optional(),
+  previousJobId: z.string().min(1).nullable().optional(),
   runId: z.string().min(1),
   decisionId: z.string().min(1),
   actor: z.string().min(1),
@@ -223,6 +244,7 @@ export const apiProjectSchema = z
 
 export const apiWorkflowSchema = z
   .object({
+    recovery: runRecoverySchema.optional(),
     executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
     id: z.string(),
     projectId: z.string(),
@@ -489,6 +511,7 @@ export const reviewEvidenceGroupSchema = z.object({
 // surface with many nested arrays. Field drift here is low-risk (read-only UI
 // data) and strict validation would be too brittle as sub-schemas evolve.
 export const workReviewSurfaceSchema = z.object({
+  recovery: runRecoverySchema.optional(),
   executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
   admissionState: z.enum(['accepted', 'recovery-required']).optional(),
   filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
@@ -670,6 +693,9 @@ export const gateListOutputSchema = z.object({
 });
 
 export const decisionOutputSchema = z.object({
+  resumeOutcome: z.string().optional(),
+  resumeMessage: z.string().optional(),
+  recovery: runRecoverySchema.optional(),
   decision: apiHumanDecisionSchema,
   // S7d/M9: gate.approve resumes the run asynchronously via the job runner and
   // returns the bound session + enqueued job so the client can follow it. reject
@@ -803,6 +829,8 @@ export type SessionActionKind = z.infer<typeof sessionActionKindSchema>;
 // needsAction / actionKind projection fields.
 // Reuses core's sessionStatusSchema to avoid a drifting duplicate enum.
 export const apiSessionSchema = z.object({
+  recovery: runRecoverySchema.optional(),
+  runStatus: z.string().nullable().optional(),
   executionBinding: z.enum(['frozen', 'legacy-unbound', 'invalid', 'unknown']).optional(),
   admissionState: z.enum(['accepted', 'recovery-required']).optional(),
   filesState: z.enum(['pending', 'ready', 'recovery_required']).optional(),
@@ -917,7 +945,7 @@ export const procedureSpecs = {
   },
   'project.resume': {
     auth: 'token' as const,
-    input: tokenRunInputSchema,
+    input: resumeInputSchema,
     output: runWrapperOutputSchema,
   },
   'project.cancel': {

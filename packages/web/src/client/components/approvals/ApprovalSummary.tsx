@@ -81,7 +81,7 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
                   >
                     {checkLabel(check.id)}
                   </span>
-                  <span style={{ color: 'var(--text-s)', flex: 1 }}>
+                  <span style={{ color: 'var(--text-s)', flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
                     {check.evidence}
                   </span>
                 </div>

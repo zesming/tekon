@@ -306,6 +306,8 @@ export function migrateDatabase(db: TekonDatabase): void {
     addColumnIfMissing(db, 'sessions', 'acknowledged_at', 'text');
 
     rebuildSessionChildTablesIfMissingFk(db);
+    // No backfill: legacy stopped/queued rows do not prove physical exit.
+    addColumnIfMissing(db, 'jobs', 'exit_evidence', 'text');
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

@@ -403,7 +403,7 @@ describe('job repository', () => {
     expect(await jobs.claimNext('worker_1')).toBeNull();
   });
 
-  it('requeues stale jobs by abort state and leaves live leases untouched (M4/M2)', async () => {
+  it('interrupts stale jobs by abort state and leaves live leases untouched (M4/M2)', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
     const stale = '2026-08-20T00:00:00.000Z';
@@ -454,28 +454,28 @@ describe('job repository', () => {
     await jobs.enqueue(makeJob(session.id, { id: 'job_queued' }));
 
     const result = await jobs.requeueStale('2026-08-21T00:00:00.000Z');
-    expect(result).toEqual({ requeued: 2, cancelled: 2 });
+    expect(result).toEqual({ requeued: 0, cancelled: 4 });
 
     expect(await jobs.get('job_running')).toMatchObject({
-      status: 'queued',
+      status: 'interrupted',
       owner: null,
       lease: null,
       abortState: 'none',
     });
     expect(await jobs.get('job_paused')).toMatchObject({
-      status: 'queued',
+      status: 'interrupted',
       owner: null,
       lease: null,
     });
     expect(await jobs.get('job_requested')).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      exitEvidence: null,
       owner: null,
       lease: null,
     });
     expect(await jobs.get('job_paused_cancel')).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_live')).toMatchObject({
       status: 'running',
@@ -485,7 +485,7 @@ describe('job repository', () => {
     expect(await jobs.get('job_queued')).toMatchObject({ status: 'queued' });
   });
 
-  it('cancels only queued and stale-paused jobs for a run (S3)', async () => {
+  it('legacy stale cleanup cannot cancel queued or paused jobs without exit evidence', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
     // Explicit cutoff keeps this deterministic: with the default (wall-clock)
@@ -538,15 +538,15 @@ describe('job repository', () => {
       'job_except',
       cutoff,
     );
-    expect(count).toBe(2);
+    expect(count).toBe(0);
 
     expect(await jobs.get('job_queued')).toMatchObject({
-      status: 'cancelled',
-      abortState: 'stopped',
+      status: 'queued',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_stale_paused')).toMatchObject({
-      status: 'cancelled',
-      abortState: 'stopped',
+      status: 'paused',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_live_paused')).toMatchObject({
       status: 'paused',
@@ -561,7 +561,7 @@ describe('job repository', () => {
     expect(await jobs.cancelStaleActiveJobs('run_missing')).toBe(0);
   });
 
-  it('A1: cancelStaleActiveJobs reclaims OLD queued jobs but spares fresh ones', async () => {
+  it('legacy cleanup preserves both old and fresh queued jobs', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
 
@@ -587,10 +587,10 @@ describe('job repository', () => {
     );
 
     const cancelled = await jobs.cancelStaleActiveJobs('run_1');
-    expect(cancelled).toBe(1);
+    expect(cancelled).toBe(0);
     expect(await jobs.get('job_old_queued')).toMatchObject({
-      status: 'cancelled',
-      abortState: 'stopped',
+      status: 'queued',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_fresh_queued')).toMatchObject({
       status: 'queued',
@@ -630,7 +630,7 @@ describe('job repository', () => {
     expect(await jobs.findActiveByRunId('run_missing')).toBeNull();
   });
 
-  it('cancelStaleActiveJobs honors a custom lease cutoff (S4 parameterization)', async () => {
+  it('legacy cleanup cannot use any lease cutoff as exit evidence', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
     const staleLease = '2020-01-01T00:00:00.000Z';
@@ -659,10 +659,10 @@ describe('job repository', () => {
       undefined,
       new Date(Date.now() - 1000).toISOString(),
     );
-    expect(count).toBe(1);
+    expect(count).toBe(0);
     expect(await jobs.get('job_paused_old')).toMatchObject({
-      status: 'cancelled',
-      abortState: 'stopped',
+      status: 'paused',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_paused_new')).toMatchObject({
       status: 'paused',
@@ -673,10 +673,10 @@ describe('job repository', () => {
     await jobs.enqueue(
       makeJob(session.id, { id: 'job_queued', status: 'queued' }),
     );
-    expect(await jobs.cancelStaleActiveJobs('run_1')).toBe(1);
+    expect(await jobs.cancelStaleActiveJobs('run_1')).toBe(0);
     expect(await jobs.get('job_queued')).toMatchObject({
-      status: 'cancelled',
-      abortState: 'stopped',
+      status: 'queued',
+      exitEvidence: null,
     });
     expect(await jobs.get('job_paused_new')).toMatchObject({
       status: 'paused',

@@ -543,7 +543,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         onExhausted: gate.onExhausted,
       },
     );
-    await repositories.updateWorkflowInstanceStatus(
+    await repositories.updateWorkflowInstanceStatusIfActive(
       runId,
       exhaustedNodeStatus,
       node.id,

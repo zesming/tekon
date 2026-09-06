@@ -19,6 +19,7 @@ import {
   createSessionDualWriteBridge,
   createSessionEventBus,
   createSessionEventStore,
+  createSessionService,
   createSubprocessRegistry,
   createWorkflowEngine,
   createWorktreeManager,
@@ -694,7 +695,7 @@ describe('phase 1 session/job e2e (S9)', () => {
     await h.close();
   }, 30_000);
 
-  it('journey 3 (crash A): a stale running job left by a dead worker is recovered and driven to passed', async () => {
+  it('journey 3 (crash A): a stale running job left by a dead worker is interrupted without automatically repeating execution', async () => {
     const repoPath = createGitRepo();
     const h = createHarness({ repoPath, adapter: createMockAgentAdapter() });
 
@@ -741,17 +742,17 @@ describe('phase 1 session/job e2e (S9)', () => {
       updatedAt: '2020-01-01T00:00:00.000Z',
     });
 
-    h.jobRunner.start(); // recoverStale requeues job_crashed_a, then it runs.
+    h.jobRunner.start(); // periodic recovery fences the expired job without executing it.
 
     await waitFor(() => {
       const row = h.db
         .prepare('select status from workflow_instances where id = ?')
         .get(runId) as { status: string } | undefined;
-      return row?.status === 'passed';
+      return row?.status === 'interrupted';
     });
-    // The same job row was requeued and settled done (not duplicated).
+    // The original Job is fenced and left interrupted; no automatic execution.
     await waitFor(
-      async () => (await h.jobs.get('job_crashed_a'))?.status === 'done',
+      async () => (await h.jobs.get('job_crashed_a'))?.status === 'interrupted',
     );
 
     await h.close();
@@ -776,15 +777,10 @@ describe('phase 1 session/job e2e (S9)', () => {
     h.jobRunner.start();
     await latch.entered; // node is mid-execution (lease + role_run open)
 
-    // Simulate the crash: age the job lease (crashed worker no longer renews it)
-    // and recover on the SAME durable runner. requeueStale requeues it (running
-    // + abort_state='none' + stale lease → queued); on re-execution the node
-    // still shows running with an open execution lease and no completed agent
-    // run → stale-running detection interrupts the run (first job outcome), and
-    // the executor maps interrupted → job failed (design journey B).
+    // Age the lease: recovery fences the old executor without replaying work.
     await h.jobs.updateJob(jobId, { lease: '2020-01-01T00:00:00.000Z' });
-    const requeued = await h.jobRunner.recoverStale();
-    expect(requeued).toBeGreaterThanOrEqual(1);
+    const interrupted = await h.jobRunner.recoverStale();
+    expect(interrupted).toBeGreaterThanOrEqual(1);
 
     await waitFor(() => {
       const row = h.db
@@ -792,19 +788,8 @@ describe('phase 1 session/job e2e (S9)', () => {
         .get(runId) as { status: string } | undefined;
       return row?.status === 'interrupted';
     });
-    expect(await repoRoleRunInterrupted(h, runId)).toBe(true);
-    // The recovered job settled failed (interrupted → failed). The original
-    // latched execution is now a zombie; when released, its settle CANNOT flip
-    // the recovered outcome because the state machine already interrupted the
-    // node — a zombie engine that resumed would be rejected by the node's
-    // status, not by job ownership (this harness reclaims on the SAME worker, so
-    // the job-runner's owner check would pass; the safety here is the state
-    // machine + the deterministic release-after-settle ordering below). Release
-    // it now and let the run settle interrupted.
-    await waitFor(async () => {
-      const s = (await h.jobs.get(jobId))?.status;
-      return s === 'failed' || s === 'cancelled';
-    });
+    // Lease interruption fences the old Job before explicit node handoff.
+    expect((await h.jobs.get(jobId))?.status).toBe('interrupted');
     latch.release();
     await h.close();
 
@@ -812,24 +797,13 @@ describe('phase 1 session/job e2e (S9)', () => {
     // the interrupted run is picked up and driven to passed (design journey B
     // "two jobs": first failed on crash-detect, second resumes to completion).
     const h2 = createHarness({ repoPath, adapter: createMockAgentAdapter() });
-    const workspace2 = await h2.sessions.getOrCreateDefaultWorkspace(repoPath);
-    const resumeSession = await h2.sessions.createSession({
-      workspaceId: workspace2.id,
-      title: null,
-      profile: 'human-web',
-      runId,
-    });
-    h2.bus.publish(
-      await h2.sessions.appendEvent({
-        sessionId: resumeSession.id,
-        type: 'workflow/started',
-        payload: { runId, resumed: true, kind: 'workflow' },
-      }),
-    );
-    await h2.jobRunner.enqueue({
-      sessionId: resumeSession.id,
-      kind: 'workflow-resume',
-    });
+    const audit = createAuditLogger({ repositories: h2.repositories });
+    const service = createSessionService({ repositories: h2.repositories, audit,
+      sessions: h2.sessions, jobs: h2.jobs, jobRunner: h2.jobRunner, bus: h2.bus,
+      projectRoot: repoPath, createEngine: () => { throw new Error('resume does not prepare'); } });
+    expect(await service.resumeRun({ runId })).toMatchObject({ outcome: 'exit-unconfirmed' });
+    expect(await service.resumeRun({ runId, confirmStopped: true, previousJobId: jobId }))
+      .toMatchObject({ outcome: 'enqueued', runId });
     h2.jobRunner.start();
 
     await waitFor(() => {

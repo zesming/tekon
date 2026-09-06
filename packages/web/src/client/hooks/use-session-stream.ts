@@ -28,6 +28,8 @@ const SESSION_LIST_REFRESH_EVENTS = new Set([
   // cancel path (agent/cancelled) also flip the list status badge.
   'agent/status',
   'agent/cancelled',
+  // Job settlement may publish managed-exit evidence after Run cancellation.
+  'job/status',
 ]);
 
 export interface UseSessionStreamResult {
@@ -169,6 +171,7 @@ export function useSessionStream(
         setHasEarlier((eventsRef.current[0]?.seq ?? 1) > 1);
         if (SESSION_LIST_REFRESH_EVENTS.has(event.type)) {
           queryCache.invalidate(queryKeys.sessionList(scope));
+          queryCache.invalidate(queryKeys.sessionDetail(sessionId, scope));
         }
         if (event.type === 'approval/requested' || event.type === 'approval/decided') {
           const runId = event.payload?.runId;
@@ -180,7 +183,10 @@ export function useSessionStream(
         }
       },
       onStateChange(state) {
-        if (current()) setConnState(state);
+        if (!current()) return;
+        setConnState(state);
+        // Reconnection can miss projection events; re-read persistent recovery.
+        if (state === 'live') queryCache.invalidate(queryKeys.sessionDetail(sessionId, scope));
       },
     });
 

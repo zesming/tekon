@@ -414,7 +414,7 @@ describe('job runner stop race and shutdown semantics (Item 8)', () => {
     const settledJob = await jobs.get(job.id);
     expect(settledJob).toMatchObject({
       status: 'interrupted',
-      abortState: 'stopped',
+      exitEvidence: null,
     });
 
     db.close();
@@ -603,9 +603,9 @@ describe('job runner stop race and shutdown semantics (Item 8)', () => {
     const outcome = await executor.execute(ctx);
     expect(outcome.status).toBe('interrupted');
 
-    // Session is NOT marked cancelled or failed
+    // Interrupted Session asks for recovery without claiming cancellation
     const currentSession = await sessions.getSession(session.id);
-    expect(currentSession?.status).toBe('active');
+    expect(currentSession?.status).toBe('awaiting-input');
 
     // No turn/end with status cancelled was emitted, no agent/error
     const events = await sessions.listEventsSince(session.id, 0);

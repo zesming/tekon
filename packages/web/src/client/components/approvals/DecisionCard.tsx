@@ -11,6 +11,7 @@ import { getRiskLabel } from '../../lib/check-labels.js';
 interface DecisionCardProps {
   decision: ApiHumanDecision;
   isPending: boolean;
+  approveDisabled?: boolean;
   onApprove: (decisionId: string, note: string) => void | Promise<void>;
   onReject: (decisionId: string, note: string) => void | Promise<void>;
 }
@@ -34,6 +35,7 @@ function decisionTitle(decision: ApiHumanDecision): string {
 export function DecisionCard({
   decision,
   isPending,
+  approveDisabled,
   onApprove,
   onReject,
 }: DecisionCardProps) {
@@ -121,6 +123,7 @@ export function DecisionCard({
       <DecisionForm
         riskLabel={risk}
         isPending={isPending}
+        approveDisabled={approveDisabled}
         onApprove={handleApprove}
         onReject={handleReject}
       />

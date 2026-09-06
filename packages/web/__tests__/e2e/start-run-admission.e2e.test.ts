@@ -24,7 +24,8 @@ test.describe('Advanced Run Admission & Single Submit', () => {
     // Initial empty demand: button must be disabled, no warning banner actively rendered
     await expect(demandInput).toHaveValue('');
     await expect(submitButton).toBeDisabled();
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('#start-run-form-body').getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('.flash-container').getByRole('alert')).toBeEmpty();
 
     // Filling demand text enables submit button
     await demandInput.fill('准入测试有效需求');
@@ -348,7 +349,7 @@ test.describe('Advanced Run Admission & Single Submit', () => {
     await expect(modeHelp).toContainText(
       '网络访问不受 Tekon 限制',
     );
-    await expect(page.getByRole('alert')).toContainText('联网不受限');
+    await expect(page.locator('#start-run-form-body').getByRole('alert')).toContainText('联网不受限');
 
     await modeSelect.selectOption('workflow');
     await expect(agentSelect).toHaveValue('codex');

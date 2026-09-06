@@ -486,8 +486,9 @@ export function createAdmissionStore(options: {
           openingEvents.push(ev1, ev2, ev3);
 
           db.prepare(
-            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at) values (?, ?, ?, 'queued', 'none', '{}', ?, ?)"
-          ).run(jobId, sessionId, data.sessionData.jobKind, createdAt, createdAt);
+            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at, exit_evidence) values (?, ?, ?, 'queued', 'none', '{}', ?, ?, ?)"
+          ).run(jobId, sessionId, data.sessionData.jobKind, createdAt, createdAt,
+            JSON.stringify({ version: 1, kind: 'never-started', observedAt: createdAt }));
         }
 
         db.prepare(

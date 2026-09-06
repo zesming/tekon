@@ -6,7 +6,7 @@ import {
 
 import type { ServerContext } from '../context.js';
 import { ApiError } from '../errors.js';
-import { admissionProjection } from '../mappers.js';
+import { admissionProjection, recoveryProjection } from '../mappers.js';
 import { createWebProjectScope, listScopedWorkspaces } from '../queries.js';
 import type { SessionActionKind } from '../../../shared/rpc-contract.js';
 
@@ -204,7 +204,10 @@ export function createSessionRouter(context: ServerContext) {
           updatedAt: session.updatedAt,
         });
         const action = deriveSessionAction(session.status, acknowledgedAt);
+        const { recovery } = recoveryProjection(context.db, session.runId);
         return {
+          recovery,
+          runStatus: recovery.runStatus,
           ...admissionProjection(context.db, session.runId),
           id: session.id,
           workspaceId: session.workspaceId,
@@ -261,8 +264,11 @@ export function createSessionRouter(context: ServerContext) {
         updatedAt: session.updatedAt,
       });
       const action = deriveSessionAction(session.status, acknowledgedAt);
+      const { recovery } = recoveryProjection(context.db, runId);
       return {
         session: {
+          recovery,
+          runStatus: recovery.runStatus,
           ...admissionProjection(context.db, runId),
           id: session.id,
           workspaceId: session.workspaceId,

@@ -1,5 +1,7 @@
 import type {
   AuditLogger,
+  RunRecovery,
+  ResumeConfirmation,
   DraftShape,
   DurableJobRunner,
   HumanApprovalSummary,
@@ -47,6 +49,7 @@ export interface WebRunEngineInput {
  * provider snapshot was recorded for the run.
  */
 export type WorkReviewSurfaceOutput = WorkReviewSurface & {
+  recovery?: RunRecovery;
   executionBinding?: ExecutionBinding;
   admissionState?: 'accepted' | 'recovery-required';
   filesState?: 'pending' | 'ready' | 'recovery_required';
@@ -75,6 +78,8 @@ export interface TokenRunInput {
   runId: string;
   token: string;
 }
+
+export interface ResumeInput extends TokenRunInput, ResumeConfirmation {}
 
 export interface ProjectRunInput {
   demandText: string;
@@ -161,7 +166,7 @@ export interface ProjectCleanInput extends TokenRunInput {
   confirm: 'delete-run-dir';
 }
 
-export interface DecisionInput {
+export interface DecisionInput extends ResumeConfirmation {
   runId: string;
   decisionId: string;
   actor: string;
@@ -177,6 +182,7 @@ export interface ProjectOutput {
 }
 
 export interface WorkflowOutput {
+  recovery?: RunRecovery;
   executionBinding?: ExecutionBinding;
   id: string;
   projectId: string;
@@ -323,7 +329,7 @@ export interface ApiCaller {
       fingerprint?: string;
       requestId?: string;
     }>;
-    resume(input: TokenRunInput): Promise<{
+    resume(input: ResumeInput): Promise<{
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
@@ -404,6 +410,9 @@ export interface ApiCaller {
       pendingDecisions: HumanDecisionOutput[];
     }>;
     approve(input: DecisionInput): Promise<{
+      resumeOutcome?: string;
+      resumeMessage?: string;
+      recovery?: RunRecovery;
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;

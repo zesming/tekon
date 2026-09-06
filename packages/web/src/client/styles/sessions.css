@@ -304,6 +304,10 @@
   flex-direction: column;
   gap: 12px;
 }
+/* 侧栏宽度独立于视口，审批命令使用完整卡片宽度。 */
+.session-side-approvals .approval-meta {
+  grid-template-columns: minmax(0, 1fr);
+}
 .session-side-cards {
   display: flex;
   flex-direction: column;

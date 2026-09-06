@@ -9,6 +9,24 @@ import {
 } from '../../src/index.js';
 
 describe('human gate', () => {
+  it.each(['request', 'approve', 'reject'] as const)('R26: %s preserves cancellation that wins after the precheck', async (action) => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    try {
+      await createRunFixture(repositories);
+      if (action !== 'request') await repositories.createHumanDecision({
+        id: 'decision_race', runId: 'run_1', nodeId: 'node_1', status: 'pending', createdAt: new Date().toISOString(),
+      });
+      db.exec(`create trigger cancel_during_decision after ${action === 'request' ? 'insert' : 'update'} on human_decisions
+        begin update workflow_instances set status='cancelled' where id=new.run_id; end`);
+      const gate = createHumanGate({ repositories });
+      const operation = action === 'request' ? gate.requestHumanGate({ runId: 'run_1', nodeId: 'node_1' })
+        : action === 'approve' ? gate.approveHumanGate('decision_race', 'reviewer') : gate.rejectHumanGate('decision_race', 'reviewer');
+      await expect(operation).rejects.toMatchObject({ name: 'WorkflowTerminalError' });
+      expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({ status: 'cancelled' });
+    } finally { db.close(); }
+  });
   it('pauses a workflow for human approval and resumes the blocked node', async () => {
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);

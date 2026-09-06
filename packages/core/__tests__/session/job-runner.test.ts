@@ -220,7 +220,7 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'done');
 
     const done = await jobs.get(job.id);
-    expect(done).toMatchObject({ status: 'done', abortState: 'stopped' });
+    expect(done).toMatchObject({ status: 'done', abortState: 'none', exitEvidence: null });
   });
 
   it('publishes a job/status bus notification when a job settles', async () => {
@@ -264,7 +264,8 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'failed');
     expect(await jobs.get(job.id)).toMatchObject({
       status: 'failed',
-      abortState: 'stopped',
+      abortState: 'none',
+      exitEvidence: null,
     });
   });
 
@@ -344,7 +345,7 @@ describe('durable job runner', () => {
     // Abort propagated to the in-memory controller.
     expect(ctx?.signal.aborted).toBe(true);
     // Subprocess registry killed by runId (resolved from the session).
-    expect(killSpy).toHaveBeenCalledWith('run_cancel', 'SIGKILL');
+    expect(killSpy).toHaveBeenCalledWith(job.id, 'SIGKILL');
     // Job is mid-cancel with abort propagated.
     const cancelling = await jobs.get(job.id);
     expect(cancelling).toMatchObject({
@@ -357,7 +358,8 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'cancelled');
     expect(await jobs.get(job.id)).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      abortState: 'propagated',
+      exitEvidence: null,
     });
   });
 
@@ -384,7 +386,8 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'done');
     expect(await jobs.get(job.id)).toMatchObject({
       status: 'done',
-      abortState: 'stopped',
+      abortState: 'none',
+      exitEvidence: null,
     });
   });
 
@@ -592,7 +595,7 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'done');
   });
 
-  it('recoverStale requeues stale running jobs and cancels stale cancel-requested jobs (M4/M2)', async () => {
+  it('recoverStale interrupts stale running jobs and cancels stale cancel-requested jobs (M4/M2)', async () => {
     const { sessions, jobs, runner } = setup({ executor: immediateExecutor() });
     const session = await seedSession(sessions);
 
@@ -649,19 +652,20 @@ describe('durable job runner', () => {
     expect(recovered).toBe(3);
 
     expect(await jobs.get(staleRunning.id)).toMatchObject({
-      status: 'queued',
+      status: 'interrupted',
       owner: null,
       lease: null,
       abortState: 'none',
     });
     expect(await jobs.get(stalePaused.id)).toMatchObject({
-      status: 'queued',
+      status: 'interrupted',
       owner: null,
       lease: null,
     });
     expect(await jobs.get(staleCancelRequested.id)).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      abortState: 'requested',
+      exitEvidence: null,
       owner: null,
       lease: null,
     });
@@ -671,7 +675,7 @@ describe('durable job runner', () => {
     });
   });
 
-  it('start() recovers stale jobs before polling, then drives the recovered job to done', async () => {
+  it('start() recovers stale jobs before polling, without executing the expired job', async () => {
     const executor = new ControllableExecutor();
     const { sessions, jobs, runner } = setup({ executor });
     const session = await seedSession(sessions);
@@ -689,15 +693,9 @@ describe('durable job runner', () => {
     });
 
     runner.start();
-    await waitFor(() => executor.started.length === 1);
-    expect(executor.started[0]?.job.id).toBe(stale.id);
-    expect(await jobs.get(stale.id)).toMatchObject({
-      status: 'running',
-      owner: 'worker_test',
-    });
-
-    executor.release(stale.id);
-    await waitFor(async () => (await jobs.get(stale.id))?.status === 'done');
+    await waitFor(async () => (await jobs.get(stale.id))?.status === 'interrupted');
+    expect(executor.started).toHaveLength(0);
+    expect(await jobs.get(stale.id)).toMatchObject({ status: 'interrupted', owner: null, exitEvidence: null });
   });
 
   it('SHOULD13: settle is discarded when the owner changed (zombie executor cannot flip the job)', async () => {
@@ -827,7 +825,7 @@ describe('durable job runner', () => {
     // Register a fake subprocess so we can assert the kill takes effect, not
     // just that killAll was called.
     let killed = false;
-    registry.register('run_quiescent', {
+    registry.register(job.id, {
       pid: 12345,
       kill: () => {
         killed = true;
@@ -841,7 +839,7 @@ describe('durable job runner', () => {
 
     // Deterministic drain: nothing left in flight after stop() resolves.
     expect(ctx?.signal.aborted).toBe(true);
-    expect(killSpy).toHaveBeenCalledWith('run_quiescent', 'SIGKILL');
+    expect(killSpy).toHaveBeenCalledWith(job.id, 'SIGKILL');
     // Kill effect (not just the spy call): the registered handle received it.
     expect(killed).toBe(true);
     // The aborted executor ran its final settle() write and dequeued; the job
@@ -976,7 +974,7 @@ describe('durable job runner', () => {
     await requester.requestCancel(job.id, 'external cli cancel');
     await waitFor(() => ownerContext?.signal.aborted === true);
     expect(ownerKill).toHaveBeenCalledWith(
-      'run_cross_process_cancel',
+      job.id,
       'SIGKILL',
     );
     expect(await jobs.get(job.id)).toMatchObject({
@@ -990,7 +988,8 @@ describe('durable job runner', () => {
     await waitFor(async () => (await jobs.get(job.id))?.status === 'cancelled');
     expect(await jobs.get(job.id)).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      abortState: 'propagated',
+      exitEvidence: null,
     });
   });
 });

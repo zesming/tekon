@@ -55,6 +55,17 @@ function spyRunner(): DurableJobRunner & {
 }
 
 describe('awaitJobTerminal (4c M2 observation loop)', () => {
+  it('returns interrupted without polling forever or relaying cancellation', async () => {
+    const runner = spyRunner();
+    const status = await awaitJobTerminal({
+      jobs: scriptedJobs('job_interrupted', ['interrupted', 'done']),
+      jobRunner: runner,
+      jobId: 'job_interrupted',
+      pollIntervalMs: 1,
+    });
+    expect(status).toBe('interrupted');
+    expect(runner.requestCancel).not.toHaveBeenCalled();
+  });
   it('returns immediately on a terminal status without relaying any request', async () => {
     const jobs = scriptedJobs('job_done', ['done']);
     const runner = spyRunner();

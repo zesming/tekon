@@ -76,7 +76,7 @@ export function RunDetailPage() {
   }, [admissionPending, reviewQuery.refetch]);
 
   // ── Loading state ──
-  if (reviewQuery.isLoading) {
+  if (reviewQuery.isLoading && !reviewQuery.data) {
     return (
       <>
         <nav className="breadcrumb">
@@ -108,7 +108,7 @@ export function RunDetailPage() {
   }
 
   const surface = reviewQuery.data;
-  const status = surface.workflowStatus;
+  const status = surface.recovery ? surface.recovery.runStatus ?? 'unknown' : surface.workflowStatus;
   const demandTitle = surface.demand.title || surface.demand.body.slice(0, 80);
   const shortId = runId
     ? runId.length > 14
@@ -186,7 +186,7 @@ export function RunDetailPage() {
         </div>
         <div className="run-header-actions">
           {!admissionPending ? (
-            <RunControls runId={runId!} status={status} />
+            <RunControls key={runId} runId={runId!} status={status} recovery={surface.recovery} />
           ) : null}
         </div>
       </div>

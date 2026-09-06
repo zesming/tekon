@@ -432,7 +432,7 @@ describe('SessionService.requestCancel', () => {
     expect(session?.status).toBe('cancelled');
   });
 
-  it('is idempotent: a repeat cancel (written=false) emits nothing and leaves the session untouched', async () => {
+  it('repairs cancellation observations after a previous terminal write', async () => {
     const env = setup();
     await seedRun(env, 'run_cancel3', 'cancelled');
     const sessionId = await seedSession(env, 'run_cancel3');
@@ -443,9 +443,9 @@ describe('SessionService.requestCancel', () => {
     expect(result.terminalConflict).toBe(false);
     expect(result.sessionId).toBe(sessionId);
     const events = await env.sessions.listEventsSince(sessionId, 0);
-    expect(events).toHaveLength(0);
+    expect(events.map(e => e.type)).toEqual(['agent/cancel-requested', 'agent/cancelled']);
     const session = await env.sessions.getSession(sessionId);
-    expect(session?.status).toBe('active');
+    expect(session?.status).toBe('cancelled');
   });
 
   it('returns terminalConflict when the run is already in a different terminal status, emitting nothing', async () => {

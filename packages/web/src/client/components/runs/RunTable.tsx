@@ -118,13 +118,20 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
               </tr>
             </thead>
             <tbody>
-              {runs.map((run) => (
+              {runs.map((run) => {
+                const status = run.recovery ? run.recovery.runStatus ?? 'unknown' : run.status;
+                return (
                 <tr
                   key={run.id}
                   tabIndex={0}
                   role="button"
-                  onClick={() => navigate(routes.run(run.id))}
+                  onClick={(event) => {
+                    // 表内控件保留自身行为，只有普通单元格点击才进入详情。
+                    if (event.target instanceof Element && event.target.closest('button, input, label, a, select, textarea')) return;
+                    navigate(routes.run(run.id));
+                  }}
                   onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       navigate(routes.run(run.id));
@@ -136,12 +143,12 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                   <td>
                     <span
                       className={statusBadge(
-                        admissionNeedsRecovery(run) ? 'pending' : run.status,
+                        admissionNeedsRecovery(run) ? 'pending' : status,
                       )}
                     >
                       {admissionNeedsRecovery(run)
                         ? admissionReadinessLabel(run)
-                        : run.status}
+                        : status}
                     </span>
                   </td>
                   <td className="cell-primary" style={{ maxWidth: 200 }}>
@@ -173,21 +180,26 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                       <button
                         type="button"
                         className="btn btn-ghost btn-xs"
-                        onClick={() => navigate(routes.run(run.id))}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(routes.run(run.id));
+                        }}
                       >
                         观察
                       </button>
                     ) : (
                       <RunControls
                         runId={run.id}
-                        status={run.status}
+                        status={status}
+                        recovery={run.recovery}
                         compact
                         onView={(id) => navigate(routes.run(id))}
                       />
                     )}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>

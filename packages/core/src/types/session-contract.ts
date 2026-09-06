@@ -99,6 +99,25 @@ export const jobStatusSchema = z.enum([
 ]);
 export type JobStatus = z.infer<typeof jobStatusSchema>;
 
+export const jobExitEvidenceSchema = z.object({
+  version: z.literal(1),
+  kind: z.enum(['never-started', 'managed-handles-closed']),
+  observedAt: z.string().datetime(),
+});
+export type JobExitEvidence = z.infer<typeof jobExitEvidenceSchema>;
+
+export interface ResumeConfirmation {
+  confirmStopped?: boolean;
+  previousJobId?: string | null;
+}
+
+export type JobEnqueueResult =
+  | { outcome: 'enqueued'; job: Job; previousJobId?: string | null }
+  | { outcome: 'active-job'; job: Job }
+  | { outcome: 'terminal'; status: 'passed' | 'failed' | 'cancelled' }
+  | { outcome: 'exit-unconfirmed'; previousJobId: string | null }
+  | { outcome: 'stale-confirmation'; previousJobId: string | null };
+
 export const jobSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -110,6 +129,8 @@ export const jobSchema = z.object({
     .enum(['none', 'requested', 'propagated', 'stopped'])
     .default('none'),
   checkpoint: z.string().nullable(),
+  /** Missing legacy evidence is unknown, regardless of abortState. */
+  exitEvidence: jobExitEvidenceSchema.nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -270,9 +291,7 @@ export interface JobRunner {
     runId: string;
     sessionId: string;
     kind: string;
-  }): Promise<
-    { outcome: 'enqueued'; job: Job } | { outcome: 'active-job'; job: Job }
-  >;
+  } & ResumeConfirmation): Promise<JobEnqueueResult>;
   get(jobId: string): Promise<Job | null>;
   requestCancel(jobId: string, reason?: string): Promise<void>;
   checkpoint(jobId: string, checkpoint: string): Promise<void>;

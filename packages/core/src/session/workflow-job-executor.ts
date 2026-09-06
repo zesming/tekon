@@ -98,16 +98,16 @@ export function createWorkflowJobExecutor(deps: {
 
   async function buildEngine(runId: string, ctx: JobExecutionContext) {
     // Wrap the gateway so every subprocess it spawns (agent, gate commands,
-    // worktree git) registers under runId and honors the job's abort signal.
+    // worktree git) registers under this Job ID and honors its abort signal.
     // This is the last hop of the cancel chain (D6): jobRunner.requestCancel →
-    // registry.killAll(runId) can only kill children that were registered here.
+    // registry.killAll(ctx.job.id) can only kill children that were registered here.
     const base = createCommandGateway({ repositories });
     const gateway = {
       run: (input: Parameters<typeof base.run>[0]) =>
         base.run({
           ...input,
           registry,
-          registryKey: runId,
+          registryKey: ctx.job.id,
           signal: input.signal ?? ctx.signal,
         }),
     };
@@ -145,6 +145,7 @@ export function createWorkflowJobExecutor(deps: {
   return {
     async execute(ctx) {
       const { job } = ctx;
+      if (!deps.engineFactory) ctx.markManagedExecution?.();
       const runId = await sessions.getRunIdBySessionId(job.sessionId);
       if (!runId) {
         // No run bound to this session — nothing to execute.
@@ -187,6 +188,7 @@ export function createWorkflowJobExecutor(deps: {
           return { status: 'failed' as JobStatus };
         }
         if (isJobShutdownAbort(ctx.signal)) {
+          await sessions.updateSessionStatus(job.sessionId, 'awaiting-input');
           return { status: 'interrupted' as JobStatus };
         }
         if (isJobCancellationAbort(ctx.signal)) {
@@ -236,6 +238,7 @@ export function createWorkflowJobExecutor(deps: {
     }
 
     if (isJobShutdownAbort(ctx.signal)) {
+      await sessions.updateSessionStatus(sessionId, 'awaiting-input');
       return { status: 'interrupted' };
     }
 
@@ -272,10 +275,10 @@ export function createWorkflowJobExecutor(deps: {
         return { status: 'done' };
       }
       case 'interrupted': {
-        await sessions.updateSessionStatus(sessionId, 'failed');
+        await sessions.updateSessionStatus(sessionId, 'awaiting-input');
         await emit(sessionId, 'agent/error', { runId, status: 'interrupted' });
         await emit(sessionId, 'turn/end', { runId, status: 'interrupted' });
-        return { status: 'failed' };
+        return { status: 'interrupted' };
       }
       default: {
         // A background executor returning running/pending is a contract breach.

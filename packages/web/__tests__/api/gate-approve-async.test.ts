@@ -90,15 +90,12 @@ async function waitFor(
 }
 
 describe('gate.approve async resume (S7d)', () => {
-  it('reclaims a stale queued resume job (S3) before enqueuing a fresh one, then drives the run to passed', async () => {
+  it('R26: preserves an old queued job and refuses approval without creating a second execution', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
 
-    // Seed a session bound to run_1 plus a leftover OLD queued resume job for
-    // it (created_at in the distant past). cancelStaleActiveJobs reclaims only
-    // aged queued jobs (A1: a fresh queued job is a concurrent enqueue and must
-    // survive), so this stale one is cancelled before approve enqueues the real
-    // one — two active jobs never race the same run (S3/MF2).
+    // Queue age is not evidence of a dead owner or an unstarted historical
+    // execution. The original queued identity remains the runner's work.
     const seedDb = openDb(fixture.projectRoot);
     try {
       const nowIso = new Date().toISOString();
@@ -128,41 +125,17 @@ describe('gate.approve async resume (S7d)', () => {
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
-    const result = await api.gate.approve({
-      runId: 'run_1',
-      decisionId: 'decision_1',
-      actor: 'human-reviewer',
-      note: 'approve with a stale queued job present',
-      token: fixture.sessionToken,
-    });
-
-    expect(result.decision).toMatchObject({
-      id: 'decision_1',
-      status: 'approved',
-    });
-    expect(result.sessionId).toBeTruthy();
-    expect(result.jobId).toBeTruthy();
-    // The fresh job must not be the stale one.
-    expect(result.jobId).not.toBe('job_stale_queued');
-
-    // S3: the pre-existing queued job was reclaimed (cancelled) so it can never
-    // be claimed and double-drive the run.
-    expect(jobStatus(fixture.projectRoot, 'job_stale_queued')).toBe('cancelled');
-
-    // The enqueued resume job drives run_1 to passed out of band.
-    await waitFor(() => runStatus(fixture.projectRoot, 'run_1') === 'passed');
-
-    const audit = await api.audit.list({ runId: 'run_1' });
-    expect(audit.events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'human.gate.approved' }),
-        expect.objectContaining({ type: 'run.resumed' }),
-      ]),
-    );
-
-    await api.close();
-    // After close() awaits the in-flight job, it has settled to done.
-    expect(jobStatus(fixture.projectRoot, result.jobId!)).toBe('done');
+    try {
+      await expect(api.gate.approve({
+        runId: 'run_1', decisionId: 'decision_1', actor: 'human-reviewer',
+        token: fixture.sessionToken,
+      })).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(jobStatus(fixture.projectRoot, 'job_stale_queued')).not.toBe('cancelled');
+      expect(jobCountByKind(fixture.projectRoot, 'workflow-resume')).toBe(1);
+      expect((await api.gate.list({ runId: 'run_1' })).pendingDecisions).toContainEqual(
+        expect.objectContaining({ id: 'decision_1', status: 'pending' }),
+      );
+    } finally { await api.close(); }
   }, 30_000);
 
   it('rebinds the existing run-bound session instead of creating a duplicate', async () => {

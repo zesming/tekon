@@ -9,6 +9,7 @@ interface DecisionFormProps {
   riskLabel: string;
   /** Whether a mutation is currently in flight */
   isPending: boolean;
+  approveDisabled?: boolean;
   /** Called with the note text when the user approves */
   onApprove: (note: string) => void | Promise<void>;
   /** Called with the note text when the user rejects */
@@ -17,6 +18,7 @@ interface DecisionFormProps {
 
 export function DecisionForm({
   isPending,
+  approveDisabled,
   onApprove,
   onReject,
 }: DecisionFormProps) {
@@ -37,6 +39,7 @@ export function DecisionForm({
   }, []);
 
   const handleApproveClick = useCallback(async () => {
+    if (isPending || approveDisabled) return;
     if (pendingAction !== 'approve') {
       setPendingAction('approve');
       scheduleReset();
@@ -47,7 +50,7 @@ export function DecisionForm({
     if (timerRef.current) clearTimeout(timerRef.current);
     await onApprove(note);
     setNote('');
-  }, [pendingAction, note, onApprove, scheduleReset]);
+  }, [pendingAction, note, onApprove, scheduleReset, isPending, approveDisabled]);
 
   const handleRejectClick = useCallback(async () => {
     if (pendingAction !== 'reject') {
@@ -77,7 +80,7 @@ export function DecisionForm({
           type="button"
           className="btn btn-primary"
           style={{ flex: 1 }}
-          disabled={isPending}
+          disabled={isPending || approveDisabled}
           onClick={handleApproveClick}
         >
           {isPending

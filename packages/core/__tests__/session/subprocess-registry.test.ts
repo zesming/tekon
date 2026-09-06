@@ -15,6 +15,16 @@ function fakeHandle(killSignals: NodeJS.Signals[]): SubprocessHandle {
 }
 
 describe('subprocess registry', () => {
+  it('does not treat unregister or kill as actual close evidence', () => {
+    const registry = createSubprocessRegistry();
+    const handle = fakeHandle([]);
+    registry.register('old-job', handle);
+    registry.killAll('old-job', 'SIGKILL');
+    registry.unregister('old-job', handle);
+    expect(registry.hasUnconfirmed('old-job')).toBe(true);
+    registry.confirmClosed('old-job', handle);
+    expect(registry.hasUnconfirmed('old-job')).toBe(false);
+  });
   it('kills every handle registered under a key and returns the killed count', () => {
     const registry = createSubprocessRegistry();
     const killSignals: NodeJS.Signals[] = [];

@@ -1001,12 +1001,15 @@ describe('command gateway', () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-timeout-hang-'));
     tempDirs.push(cwd);
     const signals: NodeJS.Signals[] = [];
+    const registry = createSubprocessRegistry();
+    let oldChild!: ChildProcessWithoutNullStreams;
     const processKill = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
     });
     const gateway = createCommandGateway({
       spawnImpl: () => {
         const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        oldChild = child;
         child.pid = 987_654;
         child.stdout = new PassThrough();
         child.stderr = new PassThrough();
@@ -1029,6 +1032,7 @@ describe('command gateway', () => {
           command: { tool: 'node', args: ['ignore-sigterm.js'] },
           cwd,
           timeoutMs: 10,
+          registry, registryKey: 'old-job',
           policy: {
             allow: [{ tool: 'node', args: [] }],
             deny: [],
@@ -1051,6 +1055,12 @@ describe('command gateway', () => {
       expect(processKill).toHaveBeenCalledWith(-987_654, 'SIGKILL');
       expect(signals).toContain('SIGTERM');
       expect(signals).toContain('SIGKILL');
+      expect(registry.list('old-job')).toHaveLength(1);
+      const newHandle = { pid: 987_655, kill: vi.fn() };
+      registry.register('new-job', newHandle);
+      oldChild.emit('close', null, 'SIGKILL');
+      expect(registry.list('old-job')).toEqual([]);
+      expect(registry.list('new-job')).toEqual([newHandle]);
     } finally {
       processKill.mockRestore();
     }

@@ -563,7 +563,7 @@ export function createWorkflowEngine(
           await nodeExecutor.hasMissingArtifactDependency(runId, node);
         if (dependencyMissing) {
           await options.repositories.transitionNode(node.id, 'blocked');
-          await options.repositories.updateWorkflowInstanceStatus(
+          await options.repositories.updateWorkflowInstanceStatusIfActive(
             runId,
             'blocked',
             node.id,

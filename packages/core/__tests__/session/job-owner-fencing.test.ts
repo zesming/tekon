@@ -116,7 +116,8 @@ describe('atomic job owner fencing', () => {
 
     expect(settled).toMatchObject({
       status: 'cancelled',
-      abortState: 'stopped',
+      abortState: 'requested',
+      exitEvidence: null,
       owner: 'worker_new',
     });
   });
