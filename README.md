@@ -1,232 +1,96 @@
-# 天工（Tekon）
+# 天工 Tekon
 
-天工（Tekon）是一个本地 Agent workflow 框架。它把一个研发需求从自然语言输入推进到结构化需求卡、受控 workflow、隔离执行、验证 gate、审阅证据和 PR 准备材料。
+**把研发需求推进到可审阅的交付。**
 
-天工的核心思路是"受控研发工作台"：让 Agent 承担可自动化的执行和整理工作，让人保留需求批准、风险确认、PR 创建、合入和上线等关键控制权。
+本地 Agent workflow 框架：按固定流程分工，在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
 
-> 📖 **用户手册** — [在线查看 / View Online](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)（中文为主，本轮新增内容提供 English，页面内可切换语言）
-
-## 项目定位
-
-天工解决 AI 辅助研发进入真实工作流后的几个核心问题：
-
-- **需求塑形**：把一句话需求塑形成需求卡，明确目标、非目标、风险、开放问题和验收标准。
-- **受控 workflow**：使用固定模板，而不是让 Agent 自由决定所有步骤。内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`、`standard-delivery`。
-- **可审阅产出**：角色产出结构化 artifact，统一收集 gate 日志、审计事件、diff 和 PR 包，通过 `review` 或 Web dashboard 查看；Web 证据链接可定位对应产物、门禁、审计事件和交付章节。
-- **副作用受控**：push、创建 PR 等远端动作必须显式人工批准。
-- **效果可评估**：用 readiness、work usability eval 判断一次 run 是否真的可交付。
-
-核心原则是 **Autonomy-first, Risk-gated**：低风险、可验证的工作尽量自动推进；高风险、不可逆或外部副作用动作必须受控。
-
-## 工作流概览
-
-```
-需求输入
-  -> draft shape 生成需求卡
-  -> draft approve 人工批准
-  -> workflow select / run 选择并执行模板
-  -> role agent 在隔离 worktree 中产出 artifact
-  -> build / lint / test / security-scan / human gate 验证
-  -> review 聚合证据、日志、diff、失败诊断和下一步建议
-  -> delivery prepare 生成 PR 准备包
-  -> delivery create-pr --approve-human 受控创建远端 PR
-  -> delivery ci-status / ci-watch 记录远端 CI 证据
-  -> eval readiness 判断 PR/CI 证据是否完整
-```
-
-不同任务可选不同模板，也支持动态 workflow dry-run 预览。
-
-## 核心能力
-
-| 能力          | 说明                                                                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 需求塑形      | `tekon draft shape` 生成需求卡和 Markdown 审阅稿，`draft approve` 批准后进入执行                                                                                |
-| workflow 模板 | 内置 6 个受控模板，`workflow select` 自动推荐                                                                                                                   |
-| 角色系统      | PM、RD、QA、Reviewer、PMO 等角色，决定 prompt、知识和工具策略                                                                                                   |
-| 执行隔离      | 真实 git worktree lease，交付分支 `tekon-delivery/<runId>`                                                                                                      |
-| Provider 接入 | 支持 mock、Claude Code、Codex，以及 experimental 的 dsh-headless（DeepSeek Harness，默认关闭、网络不受限、仅 goal 可用），通过 artifact manifest 交付结构化产物 |
-| Gate 与证据   | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness                                  |
-| 审阅面        | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包                                                                                         |
-| 可靠发起      | Request ID 绑定提交意图；同内容重试返回原运行身份，目录未就绪时保留身份并等待恢复                                                                               |
-| 运行控制      | 暂停在活动步骤边界生效；取消可重试补发；恢复保留原 Run，退出未知时需绑定旧 Job 确认                                                                             |
-| 检查绑定      | 发起前查看逐项检查的来源、执行或跳过方式及刷新差异；新运行保留受理时的命令与适用性，供执行和恢复使用                                                           |
-| 交付管理      | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控                                                                                       |
-| 效果评估      | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性                                                                           |
-| Web Dashboard | `tekon ui` 一键启动本地 Vite + React Dashboard，支持 human approval、run 发起、PR 准备、审阅面                                                                  |
-
-## 当前边界与实验性特性
-
-Tekon 的 Session UI / 事件脊柱 / 后台 Job 目前处于**基础设施里程碑**阶段。为避免过度宣称，以下能力的现状明确如下：
-
-- **默认发起 = 受控交付全链路**：Web「启动受控交付」与 `tekon run`（默认 `standard-delivery`）会进入 PM/RD/QA/Reviewer 完整交付流程，而非轻量对话。轻量协作会话（Collaborate）为后续方向。
-- **Session feed 非完整模型 streaming**：中间栏的 Agent 消息当前为「产物元数据合成的摘要」（DSH headless 会展示官方最终 assistant 文本），**不是逐块的模型原文增量**（`assistant/chunk`）。真流式为后续里程碑。
-- **follow-up / steer 未开放**：进入 Session 后暂不能继续追问或中途转向，Composer 仅用于发起新 run。
-- **Event log 仍非完整事实源**：新 Session 的三个开场事件（创建会话、开始 workflow、用户需求）与 Run/初始 Job 一起原子受理；后续事件仍可能因 best-effort 投影缺失，不能仅从 event log 完整重建运行。
-- **检查绑定有范围**：新运行冻结实际使用的仓库命令描述符、来源及不适用/缺失决定，不冻结 package scripts 正文、PATH 二进制、依赖或宿主环境。历史 v1/v2/无快照运行不会自动升级；其中使用 `commandRef` 的检查仍按当前配置解析。
-- **automation（自动准备交付 / readiness）仅长驻进程内触发**：由 CLI 完成的 run 不会触发另一 Web 进程的 automation；CLI 交付仍走显式 `tekon delivery prepare`。
-- **交付审批记录未绑定内容指纹**：`delivery create-pr` 每次仍要求当次人工批准（安全边界不变），但失败后自动重新准备会保留上一次的 `approvedBy/approvedAt`，若分支或 PR body 已变，审批记录可能与当前内容不一致。绑定内容哈希的能力留待交付治理里程碑。
-- **Goal 模式为实验性**：`goal` 单节点 run 无 gate/artifact，且**默认拒绝源码改动**（agent 若改动 worktree 源文件，run 会失败而非静默 promote）；不适合作为交付路径。
-- **Workspace 仍限当前项目**：同一物理仓库的 symlink 路径及历史 alias Workspace 可共同查看，保留原 Session ID；暂不支持多 workspace 切换/增删。
-- **物理清理暂不可用**：`tekon clean` 与 Web `project.clean` 当前统一返回 `CLEAN_SUSPENDED`，不会删除 worktree 或 run 目录。待完整导出、retention、active job/lease 协调和可审计 purge 闭环前，不提供物理删除。
+[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) · [产品范围](docs/product/tekon-current-product-scope.md) · [验收证据](docs/reviews/current.md) · [更新记录](CHANGELOG.md)
 
 ## 快速开始
 
-### 安装
+需要 Git、npm 和 Node.js（`^20.19.0` 或 `>=22.12.0`）。已测 Node：20.19、22.12、22.19、24.x；未列出的版本不代表已获验证。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-脚本自动完成克隆、安装依赖、构建，并输出 PATH 配置命令。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。CI 精确验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 Node `24.x` 最新补丁；这四腿是已测集合，不代表开放上界中的未来 major 自动获得生产支持。
-
-安装完成后，按脚本输出的提示将 `tekon` 加入 PATH，`source` 对应 rc 文件即可使用。
-
-### 更新
+按安装输出配置 PATH，并进入**目标 Git 仓库**。默认 Provider 为 Codex，需要安装 CLI、完成认证并配置可用的 `internal` profile（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
 
 ```bash
-tekon update
+tekon ui                         # 启动本地 Web，按终端链接进入
+# 或直接用 CLI
+tekon run "为列表增加筛选条件"
 ```
 
-CLI 的 `--version`、帮助页和安装/更新脚本都以根 `package.json` 作为同一个产品版本来源。
+使用 Claude Code 时先安装并认证，再执行 `tekon run "你的需求" --agent claude-code`；Web 需在「高级 Advanced → 新建运行」的 Agent 下拉框选择 `claude-code`，默认受控交付入口固定用 Codex。
 
-### 最短路径（推荐）
+首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行 `standard-delivery` 完整流程。更新用 `tekon update`。
 
-进入目标仓库后直接执行：
+![Tekon Web：输入需求，查看执行前计划与检查配置](docs/reviews/evidence/2026-09-06-r27/pages/1440-sessions.png)
+
+*Web 实际页面截图，使用验收测试数据。*
+
+## 从需求到交付
+
+```mermaid
+flowchart LR
+    A[需求与计划] --> B[执行 · 检查 · 审阅]
+    B --> C[本地 PR 包]
+    C --> D{人工批准}
+    D --> E[Push · 创建 PR]
+    E --> F[CI · 就绪度评估]
+```
+
+| 你要做什么 | 选择的模板 |
+| --- | --- |
+| 完整研发交付（默认） | `standard-delivery` |
+| 开发功能 / 修复缺陷 | `standard-feature` / `bugfix` |
+| 补测试 / 改文档 | `test-improvement` / `docs-update` |
+| 只做方案 | `plan-only` |
+
+运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。
+
+## 日常操作
+
+| 操作 | CLI |
+| --- | --- |
+| 检查仓库命令 | `tekon workflow preflight` |
+| 看运行 / 审阅代码与证据 | `tekon status` / `tekon review` |
+| 批准等待中的人工 Gate | `tekon resume --approve-human` |
+| 生成本地 PR 材料 | `tekon delivery prepare` |
+| 批准 push 并创建 PR | `tekon delivery create-pr --approve-human` |
+| 等待 CI / 评估交付完整性 | `tekon delivery ci-watch` / `tekon eval readiness` |
+
+多次运行时加 `--run-id <id>` 指定目标。断连后保留原 Request ID 重试；暂停、取消、旧进程退出确认和恢复见[手册 §7.1](docs/manual/tekon-user-manual.md#71-暂停取消与恢复)。完整命令用 `tekon help`。
+
+## 当前边界
+
+| 可用 | 限制 |
+| --- | --- |
+| 本地 CLI / Web、受控 workflow、结构化产物、检查与审计 | Session 尚不支持连续追问、中途转向或完整模型流式输出 |
+| mock、Codex、Claude Code | `dsh-headless` 为实验性 Provider，默认关闭、网络不受限、仅 Goal 可用 |
+| 原请求重试、暂停与显式恢复 | 取消为不可恢复终态；Goal 不接交付流程，默认拒绝源码改动 |
+| 当前项目与历史运行查看 | 无多 Workspace 管理；`clean` 暂停物理删除 |
+
+适合可回滚、可人工审阅的中小任务。完整权限、执行环境和交付限制见[产品范围](docs/product/tekon-current-product-scope.md)。
+
+## 开发与文档
+
+在 **Tekon 源码仓库**执行：
 
 ```bash
-tekon
+npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
+pnpm build
+pnpm typecheck
+pnpm test --run
+pnpm lint
 ```
 
-它会显示三条常用入口。普通使用者优先从本地 Web 开始：
+后续命令也可用 `npm exec --yes -- pnpm@10.12.1` 代替 `pnpm`。
 
-```bash
-tekon ui
-```
-
-需要从命令行直接发起一次受控交付时，也可以写成：
-
-```bash
-tekon run "你的需求"
-```
-
-> 当前 `run` 默认进入 `standard-delivery` 完整治理链路，并不是轻量对话。真实 streaming、同一 Session 内继续追问和中途转向仍属于后续里程碑。
-
-普通 workflow/Goal 启动前会向 stderr 打印 `Request ID: …`。保存这个标识；超时、断连或返回结果丢失后，用相同需求和参数加 `--request-id <原标识>` 重试，继续观察原 Run。若显示 `REQUEST_ID_CONFLICT`，说明该标识已用于另一提交意图；确认要另建任务后使用新标识。
-
-目录尚未就绪或准备失败时，会保留 Run/Session 身份并显示“已受理，等待目录就绪”或“已受理，等待目录恢复”；任务尚未执行。修复目录后按原请求重试，用 `tekon status --run-id <runId>` 查看 `admission`、`filesState` 与 `executionBinding`。Web 两个发起入口也会保留待确认请求，支持查询受理结果；暂未查到记录不代表原请求失败。
-
-服务端已经确认的请求，不会因当前页面的账本更新、导航或后续重试失败而变回未知。若提示本地记录或跳转未完成，先点原会话/运行入口观察，不要重复新建；目录恢复仍使用原请求身份。刷新后，若原请求仍在待确认列表，查询受理结果；若记录已移除，到受控交付列表打开已有会话。
-
-取消需要在 3 秒内二次确认；取消投递或观察更新失败后，可在原运行详情和 Session 中重试。已认领任务的租约过期会转为 `interrupted`，不会自动重跑。旧进程退出未确认时，先检查并停止旧执行，再使用 `tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId>`（历史无 Job 用 `none`），或在 Web 勾选对应确认。人工确认不等于物理退出检测；审批已记录但恢复被拒时，继续处理原运行。详见[用户手册](docs/manual/tekon-user-manual.md#610-resume---approve-human)。
-
-Web 预览绑定完整模板、workflow/Goal 模式与实际使用的仓库检查配置。在“检查配置与适用性”中展开逐项详情；刷新后核对变化，再显式提交。出现 `PLAN_DIGEST_MISMATCH` 时也按此流程重新确认。服务重启或切换仓库、凭据等上下文后，旧预览不能继续作为逐项比较依据。CLI 在启动请求时捕获检查配置，普通 workflow 没有交互预览；`--dry-run` 仅支持 `--dynamic`。
-
-Session 列表在事件流首次连接和断线重连后会自动读取最新状态，审批卡片也会随其他入口的审批变化更新。顶栏分开显示凭据与 Provider 的检查状态、检查时间和重试入口。
-
-### 受控交付 CLI（高级）
-
-```bash
-tekon init                                    # 初始化目标仓库
-tekon workflow preflight                      # 检查命令画像
-tekon help                                    # 查看完整命令帮助
-tekon draft new                               # 交互式创建需求草案（支持 Agent 澄清）
-tekon draft shape "你的需求描述"               # 塑形需求
-tekon draft approve                           # 批准需求卡
-tekon run                                     # 发起 workflow（默认 standard-delivery + codex）
-tekon run --template standard-delivery --agent mock  # 使用 mock provider 回归
-tekon run "一次性小任务" --goal --agent mock    # 轻量目标运行（单节点 goal 模板，不接交付）
-tekon status                                  # 查看状态
-tekon review                                  # 查看审阅面
-tekon delivery prepare                        # 生成 PR 准备包
-tekon delivery create-pr --approve-human      # 受控创建远端 PR
-tekon delivery ci-status                      # 查询远端 CI
-tekon delivery ci-watch                       # 等待 CI 终态
-tekon eval readiness                          # 评估交付完整度
-tekon update                                  # 更新 Tekon 到最新版本
-tekon ui                                      # 启动 Web Dashboard
-```
-
-## 常用命令
-
-| 场景               | 命令                                         |
-| ------------------ | -------------------------------------------- |
-| 查看推荐入口       | `tekon`                                      |
-| 查看完整命令帮助   | `tekon help`                                 |
-| 初始化目标仓库     | `tekon init`                                 |
-| 创建需求草案       | `tekon draft new`                            |
-| 塑形需求           | `tekon draft shape "<需求>"`                 |
-| 批准需求卡         | `tekon draft approve`                        |
-| 推荐 workflow      | `tekon workflow select "<需求>"`             |
-| 检查命令画像       | `tekon workflow preflight`                   |
-| 预检 dsh 环境      | `tekon provider preflight dsh-headless`（宿主 Node 硬拦截 + 隔离 metadata workspace） |
-| 发起运行           | `tekon run`                                  |
-| 重试原提交         | `tekon run "<原需求>" --request-id <原标识>`（其他参数也保持一致） |
-| 查看状态           | `tekon status`                               |
-| 查看审阅面         | `tekon review`                               |
-| 审批摘要           | `tekon approval summary`                     |
-| 批准 human gate    | `tekon resume --approve-human`               |
-| 拒绝 human gate    | `tekon approval reject`                      |
-| 生成 PR 包         | `tekon delivery prepare`                     |
-| 创建 PR            | `tekon delivery create-pr --approve-human`   |
-| 查询 CI            | `tekon delivery ci-status`                   |
-| 等待 CI            | `tekon delivery ci-watch`                    |
-| 评估 readiness     | `tekon eval readiness`                       |
-| 评估样本集         | `tekon eval work-usability --samples <yaml>` |
-| 清理运行产物       | `tekon clean`（当前暂停，返回 `CLEAN_SUSPENDED`，不会删除） |
-| 更新 Tekon         | `tekon update`                               |
-| 启动 Web Dashboard | `tekon ui`                                   |
-
-更多命令和详细参数见[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html)。
-
-## 本地运行产物
-
-目标仓库初始化后生成 `.tekon/` 运行态目录（不提交）：
-
-```text
-.tekon/
-  config.yaml          repo-profile.yaml      web-session.json
-  tekon.sqlite         demands/               runs/
-  roles/               workflows/             worktrees/
-  eval/
-```
-
-常见产物包括需求卡、审阅稿、run 状态、artifact、gate 日志、审计事件、PR body/package、readiness 结果和评估报告。
-
-## 仓库结构
-
-```text
-packages/core/          workflow engine、role/gate/artifact/audit/delivery/eval
-packages/cli/           tekon CLI
-packages/web/           本地 Web dashboard
-roles/                  内置角色定义
-workflows/              内置 workflow 模板
-docs/manual/            用户手册
-docs/technical/         技术方案
-docs/reviews/           审阅记录和验收报告
-scripts/                安装和 CI 脚本
-```
-
-## 开发与验证
-
-在 Tekon 仓库目录（默认为 `~/.tekon`）中执行：
-
-```bash
-cd ~/.tekon
-npx pnpm install --frozen-lockfile
-npx pnpm build
-npx pnpm typecheck
-npx pnpm test -- --run
-npm run lint:actions
-```
-
-> 如已全局安装 pnpm，可直接用 `pnpm` 替换 `npx pnpm`。
-
-## 文档
-
-- [现行产品范围](docs/product/tekon-current-product-scope.md) · [HTML](docs/product/tekon-current-product-scope.html)
-- [运行时与 Harness 集成合同](docs/technical/tekon-runtime-contract.md) · [HTML](docs/technical/tekon-runtime-contract.html)
-- [Web 发起与运行控制设计](docs/design/tekon-run-control-design.md) · [HTML](docs/design/tekon-run-control-design.html)
-- [用户手册](docs/manual/tekon-user-manual.md) · [HTML](docs/manual/tekon-user-manual.html)
-- [V2 历史技术方案](docs/technical/tekon-v2-technical-plan.md)
-- [当前权威产品与架构评审（HTML）](docs/reviews/current.html)
-- [变更日志](CHANGELOG.md)
+| 入口 | 内容 |
+| --- | --- |
+| `packages/core` · `packages/cli` · `packages/web` | 工作流引擎 · 命令行 · Web |
+| [用户手册](docs/manual/tekon-user-manual.md) | 操作步骤、命令和故障处理 |
+| [运行时合同](docs/technical/tekon-runtime-contract.md) · [Web 设计](docs/design/tekon-run-control-design.md) | 状态、恢复、权限与交互约定 |
+| [当前验收](docs/reviews/current.md) | 已验证能力、证据和剩余限制 |
