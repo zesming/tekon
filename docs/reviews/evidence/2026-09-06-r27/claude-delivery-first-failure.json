@@ -1,0 +1,49 @@
+{
+  "outcome": "failed-before-fix",
+  "provider": "Claude Code 2.1.261",
+  "scope": "Same-machine Linux process shutdown during the first controlled build Gate, after a real model edit and Artifact output. This attempt is not counted as successful acceptance.",
+  "workflow": [
+    {
+      "id": "run_e25f5865-658e-4255-bf6a-3733d3a69d84",
+      "status": "blocked"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "run_e25f5865-658e-4255-bf6a-3733d3a69d84_fix-add",
+      "role": "rd",
+      "status": "blocked"
+    }
+  ],
+  "roleRuns": [
+    {
+      "id": "role_run_ee04ef80-4d81-4ac2-9bac-f1e665a852aa",
+      "node_id": "run_e25f5865-658e-4255-bf6a-3733d3a69d84_fix-add",
+      "role": "rd",
+      "status": "passed"
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate_28e192c3-260c-46fc-88d6-4e2635726733",
+      "node_id": "run_e25f5865-658e-4255-bf6a-3733d3a69d84_fix-add",
+      "gate_type": "build",
+      "status": "failed",
+      "failure_classification": "exit-code"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_ad031d88-aaeb-48fc-8511-bde6274364bc",
+      "kind": "workflow-run",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-06T06:00:19.913Z"
+      }
+    }
+  ],
+  "defect": "The stopped Gate was treated as a quality failure: Job interrupted with managed-handles-closed, but Run/Node blocked instead of interrupted/awaiting-gate. Explicit resume would rerun the completed Agent."
+}

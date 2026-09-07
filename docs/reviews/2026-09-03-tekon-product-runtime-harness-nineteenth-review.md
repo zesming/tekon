@@ -656,7 +656,7 @@ single-owner Runtime
 - [`packages/core/src/session/session-service.ts`](../../packages/core/src/session/session-service.ts)
 - [`packages/web/src/server/api/routers/project.ts`](../../packages/web/src/server/api/routers/project.ts)
 - [`packages/core/src/workflow/run-plan.ts`](../../packages/core/src/workflow/run-plan.ts)
-- [`docs/superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md`](../superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md)
+- [[历史方案 2026-09-03-nineteenth-review-remediation-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md)](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-03-nineteenth-review-remediation-plan.md)
 
 ### DeepSeek Harness alpha.5
 

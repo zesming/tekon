@@ -188,7 +188,7 @@ JobRunner 已有排队 Job 条件取消、owned-job 持久取消状态和 owner 
 
 该复现证明“在旧 lease 过期前快速重启”会错过启动时恢复；并非实际生产事故，也不证明所有重启失败。方案需要将有界恢复纳入持续轮询，并覆盖尚未过期、随后过期、取消中、健康 owner 和关闭竞争。已有 owner fencing 必须保留；通过这一用例不能宣称所有外部副作用都已隔离。
 
-**对恢复方式的进一步裁决：不能简单定期 requeue。** 独立 reviewer 复核真实 Node/Gate 路径发现，未完成 Agent 有部分 stale-running 防护，但在飞 Gate 尚未写出 passed/skipped 结果时会重启同一命令。Linux 实进程诊断也确认：与 Gateway 相同的 detached 子进程在 owner 被 SIGKILL 后仍以 PPID=1 存活，诊断进程随后已清理。因此新方案选择过期已认领 Job 保守 interrupted、禁止自动重跑，并要求退出未确认时显式绑定旧 Job 的人工确认。旧 abortState=stopped 和 Gateway 注销句柄也不能单独证明 close，须增加按 Job 绑定的新版退出证据；历史无证据保持未知。详见[整改执行方案](../superpowers/plans/2026-09-05-twenty-sixth-review-remediation-plan.html)。
+**对恢复方式的进一步裁决：不能简单定期 requeue。** 独立 reviewer 复核真实 Node/Gate 路径发现，未完成 Agent 有部分 stale-running 防护，但在飞 Gate 尚未写出 passed/skipped 结果时会重启同一命令。Linux 实进程诊断也确认：与 Gateway 相同的 detached 子进程在 owner 被 SIGKILL 后仍以 PPID=1 存活，诊断进程随后已清理。因此新方案选择过期已认领 Job 保守 interrupted、禁止自动重跑，并要求退出未确认时显式绑定旧 Job 的人工确认。旧 abortState=stopped 和 Gateway 注销句柄也不能单独证明 close，须增加按 Job 绑定的新版退出证据；历史无证据保持未知。详见[整改执行方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-sixth-review-remediation-plan.html)。
 
 ### 10.3 产品与视觉判断按可验证事实修正
 

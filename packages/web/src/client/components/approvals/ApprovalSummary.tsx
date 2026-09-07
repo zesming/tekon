@@ -1,5 +1,7 @@
 import type { ApiHumanDecision } from '../../../shared/api-types.js';
+import { Link } from 'react-router';
 import { checkLabel, getReadinessLabel } from '../../lib/check-labels.js';
+import { evidenceHref } from '../../lib/route-paths.js';
 
 // ---------------------------------------------------------------------------
 // ApprovalSummary — renders the pre-formatted summary text for a decision
@@ -113,10 +115,10 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
           </div>
           <div className="link-strip">
             {summary.evidenceLinks.map((link, i) => (
-              <a
+              <Link
                 key={`${link.kind}-${i}`}
-                href={link.href}
-                target="_blank"
+                to={evidenceHref(decision.runId, link) ?? link.href}
+                target={evidenceHref(decision.runId, link) ? undefined : '_blank'}
                 rel="noopener noreferrer"
                 style={{
                   display: 'inline-flex',
@@ -134,7 +136,7 @@ export function ApprovalSummary({ decision }: ApprovalSummaryProps) {
                 title={link.summary}
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </div>
         </div>

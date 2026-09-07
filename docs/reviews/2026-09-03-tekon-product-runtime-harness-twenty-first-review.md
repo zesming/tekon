@@ -648,7 +648,7 @@ PR #11 已远超适合继续增长的规模。最终建议 squash merge；合并
 
 这一变更只增加持续验证，不改变用户命令、运行时合同或 `.tekon` 数据格式。按既有版本政策，纯复审与 CI 证据收敛不单独抬高产品版本，仍保持 `0.20.6`。本轮不配置 required checks，因此新矩阵仍是 GitHub Actions 检查，不得表述为仓库强制合并规则。
 
-具体测试先行顺序与验收矩阵见 [第二十一轮收口执行方案](../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md)。
+具体测试先行顺序与验收矩阵见 [第二十一轮收口执行方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md)。
 
 ### 14.5 实现期本地证据
 

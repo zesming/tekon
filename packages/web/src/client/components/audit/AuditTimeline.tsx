@@ -6,6 +6,7 @@ import type { ApiAuditEvent } from '../../../shared/api-types.js';
 
 interface AuditTimelineProps {
   events: ApiAuditEvent[];
+  selectedEventId?: string;
 }
 
 /** Format an ISO timestamp to a short time string like "14:32:18". */
@@ -27,15 +28,21 @@ function formatPayload(payload: Record<string, unknown>): string {
     .join(' ');
 }
 
-export function AuditTimeline({ events }: AuditTimelineProps) {
+export function AuditTimeline({ events, selectedEventId }: AuditTimelineProps) {
   return (
     <div className="audit-list">
       {events.map((event) => (
-        <div key={event.id} className="audit-item">
+        <div key={event.id} id={`audit-${event.id}`} className="audit-item" tabIndex={event.id === selectedEventId ? -1 : undefined}>
           <div className="audit-chain" />
           <div className="audit-type">{event.type}</div>
           <div className="audit-payload">{formatPayload(event.payload)}</div>
           <div className="audit-time">{formatTime(event.createdAt)}</div>
+          {event.id === selectedEventId ? (
+            <div className="audit-event-detail">
+              <code>{event.id}</code>
+              <pre>{JSON.stringify(event.payload, null, 2)}</pre>
+            </div>
+          ) : null}
         </div>
       ))}
     </div>

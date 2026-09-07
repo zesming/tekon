@@ -601,7 +601,7 @@ Tekon 必须继续拥有自己的：
 - [当前权威入口](current.md)
 - [第八轮报告](2026-08-30-tekon-human-first-harness-eighth-review.md)
 - [Runtime authority ADR](../technical/adr-0001-runtime-authority-and-collaborate.md)
-- [第八轮整改方案](../superpowers/plans/2026-08-30-eighth-review-remediation-plan.md)
+- [第八轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md)
 
 ### DeepSeek Harness 官方（固定基线）
 
@@ -695,7 +695,7 @@ beforeSeq(=earliestSeq)
 
 ### 16.6 v0.20.0 整改落地状态
 
-本节四项已在 v0.20.0 落地，对应方案 `docs/superpowers/plans/2026-08-30-ninth-review-annotation-remediation-plan.md`：
+本节四项已在 v0.20.0 落地，对应方案 [历史方案 2026-08-30-ninth-review-annotation-remediation-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-30-ninth-review-annotation-remediation-plan.md)：
 
 1. **DSH pin 升级**：`TESTED_DSH_VERSION` 升级到 `0.1.2-alpha.1`，三份 fixture（version/help/config）按官方 `cd5ef81` 源码核对更新，L1 fixture 测试通过。**诚实边界**：本机无 `dsh` 二进制与 `DEEPSEEK_API_KEY`，真实 provider smoke 未执行，已在 CHANGELOG 与 fixture 注释如实标注。
 2. **backward cursor 历史分页**：新增 `listEventsBefore`（`seq < beforeSeq ORDER BY seq DESC`）+ `nextBeforeSeq` continuation；`loadEarlier` 改用 `beforeSeq`，"到底"信号统一为 `nextBeforeSeq === null`，删除"空数组即停"旧分支；retainFloor 只在窗口真正前进时累加。新增测试构造连续 >5 页内部事件，证明不再中断。

@@ -580,7 +580,7 @@ CLI / Web 两套 composition root
 - [`RunPlan`](../../packages/core/src/workflow/run-plan.ts)
 - [`DSH bridge contract`](../../packages/core/__tests__/runtime/dsh-bridge-contract.test.ts)
 - [Full-stack CI](../../.github/workflows/ci.yml)
-- [第十三轮整改方案](../superpowers/plans/2026-09-01-thirteenth-review-remediation-plan.md)
+- [第十三轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-01-thirteenth-review-remediation-plan.md)
 
 ### DeepSeek Harness 官方
 

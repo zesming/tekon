@@ -217,7 +217,7 @@ DSH 已实际 `git fetch origin --tags`，HEAD 与 origin/master 仍为 `d347e70
 
 ### 9.4 采用最小共享合并，不重做执行内核
 
-具体实施合同见 [第 25 轮整改方案](../superpowers/plans/2026-09-05-twenty-fifth-review-remediation-plan.html)：复用 Controller 内 Map 保存两类已确认回执；scope/requestId/fingerprint 同一身份才能合并；未知、not-found 和裸账本不能覆盖确认。只有 accepted 短路重发，recovery 仍能原 ID 重试并升级；目录非终态信息仍可更新。捕获异步后处理错误，不新增 RPC、持久字段、全局状态机或清空账本。拟版本 0.23.1，按既有承诺修复的 PATCH 计。
+具体实施合同见 [第 25 轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-fifth-review-remediation-plan.html)：复用 Controller 内 Map 保存两类已确认回执；scope/requestId/fingerprint 同一身份才能合并；未知、not-found 和裸账本不能覆盖确认。只有 accepted 短路重发，recovery 仍能原 ID 重试并升级；目录非终态信息仍可更新。捕获异步后处理错误，不新增 RPC、持久字段、全局状态机或清空账本。拟版本 0.23.1，按既有承诺修复的 PATCH 计。
 
 整体执行与 DSH 独立复核未发现此次增量破坏 v3 物化、旧版恢复、Job owner/取消防护或上游限制。补充 §2.2 的准确边界：新受理强制 v3；已有 admission 的无快照/v1 降级路径会被拒绝，合法 v2 兼容仍保留；这不等于防御全库写权限者同时重写快照、摘要、节点及历史。无需为此新增签名平台。
 

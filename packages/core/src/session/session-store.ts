@@ -647,6 +647,20 @@ export function createJobRepository(
             )
             .get({ runId }) as JobRow | undefined;
           if (existing) {
+            // Claim/drain cannot interleave between checking the original Job
+            // and releasing its durable pause. A consumed Job instead falls
+            // through to the normal guarded resume insertion below.
+            if (existing.status === 'queued' && existing.id === latest?.id) {
+              const admission = db.prepare(
+                'select job_id from run_admissions where run_id = ? and session_id = ?',
+              ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
+              if (admission?.job_id === existing.id) {
+                db.prepare(
+                  "update workflow_instances set status = 'running', updated_at = ? where id = ? and status = 'paused'",
+                ).run(now(), runId);
+                return { outcome: 'enqueued' as const, job: mapJob(existing) };
+              }
+            }
             return { outcome: 'active-job' as const, job: mapJob(existing) };
           }
           const needsConfirmation = latest ? !hasExitEvidence(latest.exit_evidence) : run?.status === 'interrupted';

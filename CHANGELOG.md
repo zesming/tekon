@@ -1,5 +1,19 @@
 # 变更日志
 
+## 0.25.0 — 2026-09-07
+
+- 修复初始 queued Job 暂停后的恢复竞争：原子复核后复用仍排队的原 Job；已排空时按正常恢复入队，终态和已有活动执行保持不变。
+- Run/Session/列表共用暂停与恢复请求反馈，错误保持可见，终态竞争反馈在控件移除后仍可查看。
+- 修复 Web 证据链接仅改变地址片段、未打开实际内容的问题：定位产物、门禁日志、审计事件及交付章节，缺失或读取失败时显示原因。
+- 修复窄屏检查证据与长链接裁切，以及侧栏显示断点处运行列表撑出页面的问题；列表保留局部横向滚动。
+- 新增手册暂停、取消与恢复章节；归并产品范围、运行时与 Web 运行控制合同并提供 HTML，已完成过程计划移出工作树，历史证据链接保留固定快照。
+- DSH tested CLI pin 仍为 `0.1.2-alpha.3`；顶层版本不锁定传递依赖树，新版完整树及 L2/L3、持续协作、完整导出继续独立验收。
+- 正常关停打断 Gate 时保留已完成 Agent 和对应工作树，显式恢复从 Gate 继续；已完成自动修复的工作树关联支持服务进程重启后恢复，缺失或歧义时明确阻断。关停/取消不再被误判为质量失败而触发自动修复。主动取消仍为 cancelled 终态，不可恢复。
+
+## 0.24.1 — 2026-09-06
+
+- 修复初始 queued Job 被暂停后仍执行的路径：暂停状态下排空初始 Job 而不运行 Agent/Gate，保留原 Run 供显式恢复。
+
 ## 0.24.0 — 2026-09-06
 
 - 取消意图已持久化但控制投递或观察更新失败时，允许同 Run 重试，并由有界后台巡检补发；取消生命周期事件与 Session 状态在同库事务内协调。
@@ -847,7 +861,7 @@ Harness-inspired replatform 阶段 0：修稳既有 flaky 测试、P1 纯 UI/API
 ### 文档
 
 - `docs/reviews/2026-08-20-...migration-review.md`：新增 §0 维护方决策批注（事实核验结论 + 定位判断 + 处置决策）
-- 新增 `docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md`：六阶段总体执行方案
+- 新增 [历史方案 2026-08-20-harness-replatform-execution-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md)：六阶段总体执行方案
 
 ## v0.7.0
 

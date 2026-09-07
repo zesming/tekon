@@ -12,6 +12,7 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { AuditTimeline } from '../../components/audit/AuditTimeline.js';
 import { HashChainStatus } from '../../components/audit/HashChainStatus.js';
+import { useEvidenceTarget } from '../../hooks/use-evidence-target.js';
 
 // ---------------------------------------------------------------------------
 // AuditTab — hash chain verification, filters, timeline
@@ -24,6 +25,7 @@ export function AuditTab() {
   const nodeFilter = searchParams.get('node') ?? '';
   const gateFilter = searchParams.get('gate') ?? '';
   const roleFilter = searchParams.get('role') ?? '';
+  const selectedEventId = searchParams.get('event') ?? '';
 
   const setNodeFilter = (value: string) => {
     setSearchParams((prev) => {
@@ -110,6 +112,11 @@ export function AuditTab() {
       return true;
     });
   }, [auditQuery.data, nodeFilter, gateFilter, roleFilter]);
+
+  const targetHidden = !auditQuery.isLoading && !!auditQuery.data?.events.some(event => event.id === selectedEventId) &&
+    !filteredEvents.some(event => event.id === selectedEventId);
+  useEvidenceTarget(selectedEventId && !targetHidden ? `audit-${selectedEventId}` : null,
+    !auditQuery.isLoading && !auditQuery.error && filteredEvents.some(event => event.id === selectedEventId), runId);
 
   if (auditQuery.isLoading)
     return <LoadingState message="Loading audit events..." />;
@@ -271,6 +278,11 @@ export function AuditTab() {
       </div>
 
       {/* ── Event count ── */}
+      {selectedEventId && !events.some(event => event.id === selectedEventId) ? (
+        <p role="status">未找到该审计事件</p>
+      ) : selectedEventId && !filteredEvents.some(event => event.id === selectedEventId) ? (
+        <p role="status">目标事件不符合当前筛选条件，请清除筛选后查看。</p>
+      ) : null}
       <div
         className="text-sm text-muted"
         style={{ marginBottom: '12px' }}
@@ -294,7 +306,7 @@ export function AuditTab() {
         </Card>
       ) : (
         <Card compact>
-          <AuditTimeline events={filteredEvents} />
+          <AuditTimeline events={filteredEvents} selectedEventId={selectedEventId} />
         </Card>
       )}
     </>

@@ -1,0 +1,685 @@
+{
+  "scope": "Chromium actual page screenshots; contact sheets are scaled previews. Fixture includes a completed reviewer with its real active lease. Main-agent visual review is recorded in the acceptance report.",
+  "screenshots": [
+    {
+      "file": "320-sessions.png",
+      "sha256": "ef4ef958db7f6e3090238773e4674546a0a4f0bf7cfc0c4fc617a75e0fccb4df"
+    },
+    {
+      "file": "320-session.png",
+      "sha256": "7faf105946924586d7f8544670bbde17ac44e47e6c28f9c3ae6966e65d43e998"
+    },
+    {
+      "file": "320-runs.png",
+      "sha256": "f9c0d0eda4094740cc64f8bfa64b453e19878871a1d3480cb45051c67d658e8d"
+    },
+    {
+      "file": "320-run.png",
+      "sha256": "9ab7fc0ccd9d95de9342e2c2bc40673dcfcd9a1056a8366152f6a213c2f59717"
+    },
+    {
+      "file": "320-approvals.png",
+      "sha256": "320e3788612e53ed36acdd26d479ea74582df95e4d8ccede439dc4e094b8a51f"
+    },
+    {
+      "file": "320-delivery.png",
+      "sha256": "d01a91f308bcd2e9a03bd79c8543bd0a1355c153bc7927e62ec408839396d65a"
+    },
+    {
+      "file": "320-config.png",
+      "sha256": "3b9b54ed730a25422eb2c50bae0ceb0a10fa8511ea4a009db2ed73373ff35f22"
+    },
+    {
+      "file": "320-eval.png",
+      "sha256": "075fa514cfb7dc235128208f1430e70a88bbcae0322c127d5620b40e5e06cb26"
+    },
+    {
+      "file": "390-sessions.png",
+      "sha256": "0b6814b7cb9935f85cdbd7f45afd848e419c115060f64c8692c9c6ef8b836b2d"
+    },
+    {
+      "file": "390-session.png",
+      "sha256": "8c7362fc279e294b87f6c1213f41028bc105ba24297363be3cee109f660940d1"
+    },
+    {
+      "file": "390-runs.png",
+      "sha256": "cceb75fa619b77e8a968f8c5e13d09e0d302e833f7fd6e4a536fe523664984b0"
+    },
+    {
+      "file": "390-run.png",
+      "sha256": "b1900fa0195cbfd3b1acb15d3f57745bf1c128b6cd73ceb55618d7dc8a618816"
+    },
+    {
+      "file": "390-approvals.png",
+      "sha256": "e898b02007a4f6ed87bbeb2599b6320d65a2ee5bc7ae99d2f2435c9bf120e524"
+    },
+    {
+      "file": "390-delivery.png",
+      "sha256": "bb760d8a4b2fac3a31f6807f730a55bb42a347ee910e65de983f0a1a44213511"
+    },
+    {
+      "file": "390-config.png",
+      "sha256": "73ad3d9083cea33ca0b60f49e94e0e9bb4c3d382437137f2d5e7dd8c5c340f6a"
+    },
+    {
+      "file": "390-eval.png",
+      "sha256": "8584e23657235f53c129281372df51c2e1488eb1c93256cc47e851dfd2176258"
+    },
+    {
+      "file": "600-sessions.png",
+      "sha256": "87dab20e8c678421c49ae622fd9ee8cf8ecbe6fdbe34e50542fdf40ef79e271d"
+    },
+    {
+      "file": "600-session.png",
+      "sha256": "2b8ddcd4fbdace1c992aa34c149f08ee6357d8fd2a4b63a1faafa86a95912ce0"
+    },
+    {
+      "file": "600-runs.png",
+      "sha256": "09ca6ac234a7676f57055d7f5238ac555ff72d4bbe88611b43d5b2552adeeefc"
+    },
+    {
+      "file": "600-run.png",
+      "sha256": "c843cad4b896cecbed010f1fbdb97d2833da3188fc7f025cbcd483ce7c158b07"
+    },
+    {
+      "file": "600-approvals.png",
+      "sha256": "9f20b4df1df4077b1cf90aa49d113a25e5d89aa9e493d52ec600fab27e91fb2b"
+    },
+    {
+      "file": "600-delivery.png",
+      "sha256": "e85234b660ce5c1e1c2e0533fbeaf802fb10840bb361fac11dc938c2a3097eb0"
+    },
+    {
+      "file": "600-config.png",
+      "sha256": "a533b952f81bdb875c94a29694b17a07d02eb7d55346a935d132f34c9906d7c6"
+    },
+    {
+      "file": "600-eval.png",
+      "sha256": "381987cb24274097c52170a1989ad02ab111edec58a13b625d94da2d2d0f0ed1"
+    },
+    {
+      "file": "601-sessions.png",
+      "sha256": "d29e394c3e59bc46eaf79bacbfd1a658250011f581bb217a03fb016f099010ae"
+    },
+    {
+      "file": "601-session.png",
+      "sha256": "f46564697d0d48d218cdb135e60f090a44d69847053eb9a467263290a6470d1d"
+    },
+    {
+      "file": "601-runs.png",
+      "sha256": "23f795e72e2df350ed2a970df9f641775f9a789834673348036ecb0d29e29f76"
+    },
+    {
+      "file": "601-run.png",
+      "sha256": "a62904a613c9258d3999e1cf25bc7c70b4755f47821c6b82d9132472daa0db61"
+    },
+    {
+      "file": "601-approvals.png",
+      "sha256": "20345087d5524bdbf40d1d9bfd654ff83bfbf45649685ee69b4934085f7c3070"
+    },
+    {
+      "file": "601-delivery.png",
+      "sha256": "b0326b30bbf9b3b9b1d2dfb2ba5b580b61170e1a283f2641e9e28e642b69b1ff"
+    },
+    {
+      "file": "601-config.png",
+      "sha256": "871241afe067389e143cd908112e183aacd82d6187f411ead85219778f10f508"
+    },
+    {
+      "file": "601-eval.png",
+      "sha256": "500ff389a078b5b675c69807e20e0832360d3565aa73d50fb0ea8c19b730be15"
+    },
+    {
+      "file": "768-sessions.png",
+      "sha256": "b10953aed9a2d1db91ced10fc54ba1292ab0ac27a104a1154424c665474693cd"
+    },
+    {
+      "file": "768-session.png",
+      "sha256": "def2e206d786a1afa5d01535fe3487915c225f2e731b2340ceb7f9fcf2dd4387"
+    },
+    {
+      "file": "768-runs.png",
+      "sha256": "0b326b70b13254d141a59cff29d8cf2f402067fc425e47e6c6dba2108fe2c0b6"
+    },
+    {
+      "file": "768-run.png",
+      "sha256": "90e5685d06233ff40e5a1e9ccd5f47f3ea01eee9c3cc7974d33d4b30d9a1bdcd"
+    },
+    {
+      "file": "768-approvals.png",
+      "sha256": "d6603dcdf37564754e4a730ca1b8c519db1ca3839707d8bc005c8673dac7bc3a"
+    },
+    {
+      "file": "768-delivery.png",
+      "sha256": "9708948670a1677bcd4e7cf847c9b9dad3c004944663735014a86ee5a1f0d88a"
+    },
+    {
+      "file": "768-config.png",
+      "sha256": "b6e7bf69edde6d3f6321db5d01c5a8c75a4da71d6024a68738b5b0ba450ca1e9"
+    },
+    {
+      "file": "768-eval.png",
+      "sha256": "9b185d658dc4a2122e165c9600656cafed5cc86a220d372525c2d6b7c2e351d4"
+    },
+    {
+      "file": "769-sessions.png",
+      "sha256": "05bbbb6da53674fcd338febd00e4679ae781fba4364aebb1ef96cfa24e08ab1f"
+    },
+    {
+      "file": "769-session.png",
+      "sha256": "07e7f00c0d7a4276fdac6e8ec7f58d77b0301c83683f7c22ac6e653b5bb72205"
+    },
+    {
+      "file": "769-runs.png",
+      "sha256": "0dfa8315084192e3d2ebfec7ab146c882fda878ffa764321abcab0fc80955b1f"
+    },
+    {
+      "file": "769-run.png",
+      "sha256": "cc81571aa9ef83c76f91c37f003206972088942107191d56cfa9e0466d906b85"
+    },
+    {
+      "file": "769-approvals.png",
+      "sha256": "239ee396fc35f2522770f44e26deb551396dcc90b1b492ba0c2ee496aaa4f3ac"
+    },
+    {
+      "file": "769-delivery.png",
+      "sha256": "d80f159c68168eec0bfcc87e5dab8cee511e88739b15276d67f4906930256553"
+    },
+    {
+      "file": "769-config.png",
+      "sha256": "88ae3e7d1a567707d0e55190315cc617890d8dcf0070bae8c8c669e9d5ec6f70"
+    },
+    {
+      "file": "769-eval.png",
+      "sha256": "d16b22e7cc8d92c055288cb2e2e93343c99fa2203ed197772af013cdac825ab6"
+    },
+    {
+      "file": "1440-sessions.png",
+      "sha256": "aef2640edcbc4714d6fb22d2e00ad542815d713415e0155fa6e941bf0b879466"
+    },
+    {
+      "file": "1440-session.png",
+      "sha256": "f12ff921f7fff12de9fb1c2538a229f82ededb5fda825974329bb703487abf82"
+    },
+    {
+      "file": "1440-runs.png",
+      "sha256": "2e6056d8f99d0084015e0245822ac71ef98d0b79dfbb2d6e7e3a354e8323ba94"
+    },
+    {
+      "file": "1440-run.png",
+      "sha256": "c1501965f140d4e4bd5944c2b4ad4a48ca0678f5835cf52327a12b773cb341ce"
+    },
+    {
+      "file": "1440-approvals.png",
+      "sha256": "84555e61247b2e4d211be52930ce081763a0ad9b60d87f5457cc1ab3c0dfbb6f"
+    },
+    {
+      "file": "1440-delivery.png",
+      "sha256": "a1aff1a086960617e504ff9c91db947fc411f7aa3627fac999d6ce696fdef60e"
+    },
+    {
+      "file": "1440-config.png",
+      "sha256": "185fc04d39f35b20c998112d99f83fd96e0ba058dc7d61d6ea536702953bc46f"
+    },
+    {
+      "file": "1440-eval.png",
+      "sha256": "8726b168edec2496a0fa0da56f8c8da7e9036e4eaab7c0d922a7403ea933d384"
+    },
+    {
+      "file": "r27-320-pause.png",
+      "sha256": "1295477ed0b09ce97d5b039bb595ed20969595e207f606ae1151625424ad8994"
+    },
+    {
+      "file": "r27-320-resume.png",
+      "sha256": "92d15c2efb436f2278ae433ed8759f4cd6c0657b02d78d535a1c0478cb91441b"
+    },
+    {
+      "file": "r27-390-pause.png",
+      "sha256": "597a44952c6611ab803bc7f859257a12558bb970f89af982e405a38fd3790d42"
+    },
+    {
+      "file": "r27-390-resume.png",
+      "sha256": "1142a4c32d14bc8077e1ecc19a99f824c76f514351896f052743305ecce2a1e2"
+    },
+    {
+      "file": "r27-768-pause.png",
+      "sha256": "3a1e95b5ad820abe6f575567602b9b53b686b29000aca4122e4c785dd33f9d7b"
+    },
+    {
+      "file": "r27-768-resume.png",
+      "sha256": "c58b8706c70768524bc60be3a133d051f3f2c7d19fa55e6a5170859f6e19ec8f"
+    },
+    {
+      "file": "r27-1440-pause.png",
+      "sha256": "8d3e488dfa27fb22ce4b2e0d6cccdad6f231f6067d67a34535f2b3589d57e338"
+    },
+    {
+      "file": "r27-1440-resume.png",
+      "sha256": "f0a83282fe305a3a64dcb72a88a6c03aef6be5ac31ad624549fce78e63f539f4"
+    }
+  ],
+  "geometry": [
+    {
+      "page": "sessions",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 320,
+      "scrollWidth": 320,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 390,
+      "scrollWidth": 390,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 600,
+      "scrollWidth": 600,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 601,
+      "scrollWidth": 601,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 768,
+      "scrollWidth": 768,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 769,
+      "scrollWidth": 769,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "sessions",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "session",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "runs",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "run",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "approvals",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "delivery",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "config",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    },
+    {
+      "page": "eval",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "controlsOverlap": false,
+      "controlsOutside": false
+    }
+  ],
+  "chromiumStats": {
+    "startTime": "2026-09-07T03:05:08.245Z",
+    "duration": 330623.552,
+    "expected": 202,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "visualReview": {
+    "reviewedAt": "2026-09-07T03:13:20.540972+00:00",
+    "reviewer": "main agent",
+    "overviewWidths": [
+      320,
+      390,
+      600,
+      601,
+      768,
+      769,
+      1440
+    ],
+    "originalFiles": [
+      "320-session.png",
+      "320-run.png",
+      "r27-320-pause.png",
+      "r27-320-resume.png",
+      "769-runs.png"
+    ],
+    "observed": "Narrow evidence text and links remain inside cards; stable notices are opaque; sidebar breakpoint preserves page width and local table scrolling. No new overlap or clipping found in inspected surfaces.",
+    "boundary": "Scaled overviews support layout review; selected originals support text checks. Browser fixture and controlled response screenshots do not prove a live delivery workflow or readiness recomputation."
+  }
+}

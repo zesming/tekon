@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 
 import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
@@ -13,6 +13,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge.js';
 import { DeliveryPipeline } from '../../components/delivery/DeliveryPipeline.js';
 import { DiffViewer } from '../../components/delivery/DiffViewer.js';
 import { CodeBlock } from '../../components/ui/CodeBlock.js';
+import { useEvidenceTarget } from '../../hooks/use-evidence-target.js';
 
 // ---------------------------------------------------------------------------
 // DeliveryTab — pipeline stepper, diff summary, PR package/body preview
@@ -21,11 +22,17 @@ import { CodeBlock } from '../../components/ui/CodeBlock.js';
 export function DeliveryTab() {
   const { runId } = useParams<{ runId: string }>();
   const scope = useAuthScope();
+  const [searchParams] = useSearchParams();
+  const section = searchParams.get('section');
+  const sectionIds = { 'pr-body': 'pr-body', 'pr-package': 'pr-package', diff: 'delivery-diff' };
+  const targetId = section && Object.hasOwn(sectionIds, section) ? sectionIds[section as keyof typeof sectionIds] : null;
 
   const query = useQuery<ApiWorkReviewSurface>(
     runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
+
+  useEvidenceTarget(targetId, !query.isLoading && !query.error && !!query.data, runId);
 
   if (query.isLoading)
     return <LoadingState message="Loading delivery status..." />;
@@ -39,6 +46,7 @@ export function DeliveryTab() {
 
   return (
     <>
+      {section && !targetId ? <p role="status">未找到该交付章节</p> : null}
       {/* ── Delivery Pipeline Stepper ── */}
       <Card
         title="交付管道 Delivery Pipeline"
@@ -80,7 +88,7 @@ export function DeliveryTab() {
       </Card>
 
       {/* ── Diff Summary ── */}
-      <div className="section">
+      <div className="section evidence-target" id="delivery-diff" tabIndex={-1}>
         <div className="section-title">变更 Diff</div>
         <Card>
           <DiffViewer diff={delivery.diff} />
@@ -89,6 +97,7 @@ export function DeliveryTab() {
 
       {/* ── PR Package Preview ── */}
       <div className="panel-grid">
+        <section id="pr-package" tabIndex={-1} className="evidence-target">
         <Card
           title="PR Package"
           headerRight={
@@ -116,7 +125,9 @@ export function DeliveryTab() {
             />
           )}
         </Card>
+        </section>
 
+        <section id="pr-body" tabIndex={-1} className="evidence-target">
         <Card
           title="PR Body"
           headerRight={
@@ -146,6 +157,7 @@ export function DeliveryTab() {
             />
           )}
         </Card>
+        </section>
       </div>
     </>
   );

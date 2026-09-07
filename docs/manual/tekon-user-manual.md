@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-本文对应 v0.24.0。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
+本文对应 v0.25.0。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
 
 名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取”天工”。
 
@@ -968,7 +968,7 @@ tekon ui
 - Web 是本地 dashboard，不是远程服务。
 - Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
 
-**Web 使用要点（v0.24.0）**：
+**Web 使用要点（v0.25.0）**：
 
 - **连接状态**：顶栏分开显示凭据与 Provider；连接面板可重填、应用或断开会话令牌，Provider 可单独重试并查看检查时间。凭据校验不等待 Provider，通过 `#token=` URL 打开时自动校验。
 - **执行计划预览**：默认入口和高级表单展示“检查配置与适用性”，可展开查看逐项来源和实际执行方式；刷新后核对差异，再显式提交。毫秒级超时、profile 等参数收在“高级”折叠区。详见 §7。
@@ -1074,7 +1074,7 @@ tekon -h            # 等同于 tekon help
 **查看版本**：
 
 ```bash
-tekon --version     # 输出 v0.24.0
+tekon --version     # 输出 v0.25.0
 tekon -v            # 同上
 ```
 
@@ -1122,6 +1122,10 @@ Session UI 适合：
 - 触发 `delivery prepare`。
 - 在人工批准下触发 `delivery create-pr`。
 
+**查看证据**：点击证据链接会打开并定位对应的产物、门禁日志、审计事件或交付章节。目标不存在、文件缺失、读取失败或被筛选隐藏时，按页面说明检查原运行；不要把链接已打开当作证据已通过。
+
+**English — evidence navigation:** Evidence links open and locate the matching artifact, Gate log, audit event or delivery section. If the target is absent, a file is missing, loading fails or filters hide the target, follow the page guidance and inspect the original run. Opening a link does not mean the evidence passed.
+
 写操作需要 session token。用 `tekon ui` 输出的完整 URL（含 `#token=`）打开时，令牌已自动载入，可直接发起运行、批准/拒绝审批。若你手动访问了不带片段的地址（令牌丢失），token 保存在：
 
 ```text
@@ -1152,16 +1156,54 @@ Session UI 适合：
 - **发起运行时可选 Profile**：新建运行表单的 `Profile` 下拉默认 `human-web`（人工驱动，不自动推进人工点）。选 `autonomous-delivery` 后，运行**通过（passed）时会自动准备交付**（打包证据、生成 PR 准备包、进入待审批状态）；**但绝不自动创建 PR**——创建远端 PR 始终需要人工在交付面板显式批准。此边界是硬约束，不因 Profile 放宽。自动准备只在长驻的 Web/服务模式下触发；CLI `tekon run` 跑完即退出，交付仍走显式 `tekon delivery prepare`。
 - **发起运行、批准 human gate、恢复运行采用“返回结果、后台推进”**：发起运行先完成校验和受理；只有目录 ready 的 Job 才能在后台执行，已受理不等于已经开始执行。
   - **Session UI（默认）会通过事件流实时反映进展**：列表在首次连接或断线重连后自动读取最新状态，无需等下一次变更；中间栏追加已持久化事件，右侧审批卡片随新增审批或其他入口的决定更新。读取期间收到新变化时，会重新读取，旧成功响应或错误不会覆盖新状态。审批通过后运行继续按 gate 规则推进。
-  - 旧 Dashboard（`/advanced`）页面**不会自动刷新状态**，需刷新页面或重新进入 run 列表/详情查看最新进展（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
+  - 旧 Dashboard（`/advanced`）在控制操作完成后会自动读取一次状态；后续进展仍需刷新页面或重新进入 run 列表/详情查看（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
   - 需要中止时点“取消”，在 3 秒内再次点“确认取消？”，然后检查真实状态。已先完成或失败的运行保持原终态；“已记录取消”不代表全部后台进程已经停止。
   - 取消投递或观察更新失败时，原运行保留取消意图。详情和 Session 侧栏可显示“重试取消”，刷新后仍可处理同一个运行；同时检查退出证据是否已确认。
   - 恢复入口提示旧进程退出未确认时，先检查并停止旧执行，再勾选确认。确认绑定当时的旧 Job；页面过期时必须刷新并重新确认。审批已记录但未恢复时，进入原运行继续处理。
   - **English:** Click Cancel, then confirm within 3 seconds. Check the actual terminal state: a completed or failed run keeps its result. Recorded cancellation does not prove all background processes have stopped. If control delivery or observation repair is pending, Retry cancellation remains available on the original Run/Session after refresh. Before resuming an execution with unknown exit, stop and check the old execution and confirm its displayed Job identity. If approval was recorded but recovery did not start, continue from the original run.
-  - 同一个运行同一时刻只允许一个后台任务：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），等它结束或先取消即可。
+  - 同一个运行同一时刻只允许一个运行执行 Job（独立的 readiness/delivery 后台任务不参与此限制）：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），观察原运行并等待当前任务处理；只有决定结束整个运行时才取消，取消后不可恢复。
 
 > 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
 >
 > **事件日志定位（迁移期）**：新 Session 的 `session/created`、`workflow/started`、`user/message` 三个开场事件，与 Run、必需治理 Audit 和初始 Job 一起原子受理；重试不会重复这三个事件。后续 `session_events` 仍可能因 best-effort 投影缺失，运行状态仍需结合 `workflow_instances` / `jobs` 等持久记录判断。它不是可完整重建所有运行的权威事件日志，全域事务化 outbox 仍为后续范围。
+
+### 7.1 暂停、取消与恢复
+
+在 Session 侧栏、Run 详情或运行列表操作前，先确认原 Run 身份和当前状态。请求中按钮会禁用，避免重复提交；反馈说明请求处理结果，不能代替后续状态观察。
+
+| 目的 | 如何操作 | 如何判断结果 |
+| --- | --- | --- |
+| 暂时停下 | 点“暂停” | “暂停请求已记录，活动步骤将在边界停下”表示已记录请求；当前 Agent/Gate 可能继续到检查边界。 |
+| 继续原任务 | 点“恢复” | “已受理恢复，请观察原运行”表示已受理，模型可能尚未开始；观察原 Run，不另建任务。 |
+| 结束任务 | 点“取消”，3 秒内再点“确认取消？” | 检查实际终态和退出证据；已先通过/失败时保留原结果，取消回执不代表全部进程退出。 |
+| 补发取消 | 详情或 Session 显示“重试取消”时点击 | 原取消意图保留，重试处理控制投递或观察更新，不生成新运行。 |
+
+初始任务还在排队时暂停，它可以先被排空而不执行；随后恢复继续原 Run。若在认领前恢复，会复用原排队 Job；若已排空，则由服务端安排恢复 Job。两种情况都不需要重新提交需求。若提示已有活跃任务，观察原运行并等待其处理，不要用新任务绕过。
+
+恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。确认绑定当时的身份，提示过期时刷新并重新检查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是操作系统退出检测，受管理退出证据也不覆盖逃逸进程。`passed`、`failed`、`cancelled` 终态不可恢复。
+
+审批后若显示“审批已记录，运行尚未恢复”，保留审批事实，进入原运行处理恢复，不重新批准。服务端拒绝或终态竞争显示真实反馈；错误保持可见，依据提示修复后重试。不要仅凭通知消失、按钮变化或 feed 缺少新事件推断进程状态。
+
+正常关闭服务打断构建或测试检查时，已完成的 Agent 或自动修复产物与对应工作树会保留，显式恢复从尚未完成的检查继续。自动修复本身未完成时，按实际节点状态继续处理，不保证跳过 Agent。若提示工作树关联或恢复证据缺失，先检查原运行的产物和工作树，再处理恢复；不要另建任务绕过。主动取消仍不可恢复。
+
+### 7.1 Pause, cancel and resume
+
+Check the original Run identity and current state in the Session sidebar, Run details or run list. Controls disable duplicate requests while pending. Feedback describes request handling; inspect subsequent state separately.
+
+| Intent | Action | Interpret the result |
+| --- | --- | --- |
+| Pause temporarily | Choose Pause | “暂停请求已记录，活动步骤将在边界停下” means the request is recorded; the active Agent/Gate may continue to its next control boundary. |
+| Continue the original task | Choose Resume | “已受理恢复，请观察原运行” means recovery was accepted, not that the model has started. Observe the original Run. |
+| End the task | Choose Cancel, then confirm within 3 seconds | Check the actual terminal state and exit evidence. Earlier success/failure wins; a cancellation receipt does not prove all processes have exited. |
+| Repair cancellation | Choose Retry cancellation when offered | Retry pending control delivery or observation updates on the original Run. No new run is created. |
+
+A paused initial queued Job may drain without executing. Resume keeps the same Run: it reuses the initial Job if still queued, or schedules recovery after it drains. Do not submit the demand again. If an active Job is reported, observe the original run and wait for it to settle.
+
+If exit is unconfirmed, check and stop the old execution before confirming its displayed Job identity. Refresh and recheck after a stale confirmation; see 6.10 for historical runs without Jobs. Human confirmation is not an OS exit observation, and managed-handle evidence does not cover escaped processes. Terminal passed, failed or cancelled runs cannot resume.
+
+If approval was recorded but recovery was not accepted, continue recovery from the original Run instead of approving again. Server refusals and terminal races retain their actual feedback; errors remain visible. Do not infer process state from a dismissed notice, disappearing controls or missing feed events.
+
+When normal service shutdown interrupts a build or test check, completed Agent or repair outputs and the corresponding worktree are retained. Explicit resume continues unfinished checks. If the repair itself was incomplete, recovery follows the actual node state and may run the Agent again. If worktree association or recovery evidence is missing, inspect the original run’s outputs and worktree before resolving recovery; do not bypass the error by starting another task. An explicitly cancelled run remains non-resumable.
 
 ## 8. 如何判断结果是否可信
 
@@ -1305,7 +1347,7 @@ Session UI 适合：
 - 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。
 - 确认 artifact JSON/YAML/Markdown 满足 Tekon schema；结构化 JSON 必须有非空 `title` 和 `body`。
 - 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。
-- 参考 `docs/manual/codex-provider-smoke.md` 的自举 smoke 流程。
+- 参考[Codex 自举验证记录](../reviews/2026-06-10-tekon-codex-self-bootstrap-report.md)中的历史样本与限制；它不能替代当前任务的真实 Provider 验证。
 
 ## 10. 参数速查
 

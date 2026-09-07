@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai:wght@300;400;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════════════════════════════════
-   天工 TEKON — User Manual  v0.24.0  2026.09.06
+   天工 TEKON — User Manual  v0.25.0  2026.09.06
    Aesthetic: Ink & Seal (水墨印章)
    ═══════════════════════════════════════════════ */
 :root{
@@ -220,7 +220,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
         <button type="button" class="lang-btn active" data-lang="zh">中</button>
         <button type="button" class="lang-btn" data-lang="en">EN</button>
       </div>
-      <span class="header-date">v0.24.0 · 2026.09.06</span>
+      <span class="header-date">v0.25.0 · 2026.09.06</span>
     </div>
     <button type="button" class="mobile-menu-btn" id="menuBtn" aria-label="菜单" aria-expanded="false">☰</button>
   </div>
@@ -270,7 +270,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cc"><h4>多 Provider 执行入口</h4><p>支持 mock、Claude Code 和 Codex provider；另含 experimental 的 <code>dsh-headless</code>（DeepSeek Harness）。<strong>⚠️ dsh-headless 默认关闭、网络出口不受限（弱于 codex）、仅适用于 <code>--goal</code> 运行，详见 5.7。</strong></p></div>
 </div>
 <div class="cl"><span class="cl-lb">名称说明</span>天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取"天工"，源自《天工开物》。</div>
-<div class="cl cl-t" data-doc-lang="en"><span class="cl-lb">Translation coverage</span>The v0.24.0 updates below are available in English. Earlier sections remain primarily in Chinese; switching languages does not load a complete English translation.</div>
+<div class="cl cl-t" data-doc-lang="en"><span class="cl-lb">Translation coverage</span>The v0.25.0 updates below are available in English. Earlier sections remain primarily in Chinese; switching languages does not load a complete English translation.</div>
 </div>
 
 <!-- ════ TAB 1: 解决什么问题 ════ -->
@@ -576,7 +576,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <span class="c">tekon</span> <span class="a">-h</span>
 
 <span class="cm"># 查看版本</span>
-<span class="c">tekon</span> <span class="a">--version</span>     <span class="cm"># 输出 v0.24.0</span>
+<span class="c">tekon</span> <span class="a">--version</span>     <span class="cm"># 输出 v0.25.0</span>
 <span class="c">tekon</span> <span class="a">-v</span>            <span class="cm"># 同上</span></code></pre></div>
 </div>
 
@@ -593,6 +593,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <p>打开后默认进入 <strong>Session UI（会话视图）</strong>：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条<strong>连续、可实时刷新的叙事</strong>——左侧会话列表与发起入口，中间栏实时事件流（断线自动重连续播），右侧 inline 审批卡片与暂停/取消/恢复控制。旧的 run-centric Dashboard（overview / run 列表 / run 详情）完整保留在侧栏"高级 Advanced"入口下（<code>/advanced</code>），功能不变。</p>
 <div class="cl cl-w"><span class="cl-lb">当前边界</span>从会话输入框「启动受控交付」发起的运行，默认走 <code>standard-delivery</code> <strong>受控交付全链路</strong>（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。</div>
 <p>旧 Dashboard（<code>/advanced</code>）适合：查看项目 overview、选择历史 run、查看 readiness/evidence/diff/artifact/gate log/PR 包、处理 human approval、发起受控模板 run、触发 delivery prepare 和 delivery create-pr。</p>
+<div class="cl" data-update="r27-evidence" data-doc-lang="zh"><span class="cl-lb">查看证据</span><p>点击证据链接会打开并定位对应的产物、门禁日志、审计事件或交付章节。目标不存在、文件缺失、读取失败或被筛选隐藏时，按页面说明检查原运行；不要把链接已打开当作证据已通过。</p></div>
+<div class="cl" data-update="r27-evidence" data-doc-lang="en"><span class="cl-lb">Evidence navigation</span><p>Evidence links open and locate the matching artifact, Gate log, audit event or delivery section. If the target is absent, a file is missing, loading fails or filters hide the target, follow the page guidance and inspect the original run. Opening a link does not mean the evidence passed.</p></div>
 <div class="cl cl-w" data-update="r23-web-connection" data-doc-lang="zh"><span class="cl-lb">连接状态</span>写操作依赖 <code>init</code> 生成的 <code>.tekon/web-session.json</code>。顶栏将凭据与 Provider 分开显示；连接面板可重填、应用或断开令牌，Provider 可单独重试并查看检查时间。凭据校验不等待可选 Provider，凭据有效不保证 Provider 可用。通过 <code>tekon ui</code> 输出的 <code>#token=</code> URL 打开时自动载入并校验；token 不应提交。</div>
 <div class="cl cl-w" data-update="r23-web-connection" data-doc-lang="en"><span class="cl-lb">Connection status</span>Writes require the token in <code>.tekon/web-session.json</code>, created by <code>init</code>. The top bar separates credentials from Provider status. Use the connection panel to apply or disconnect a token, and retry the Provider check or view its timestamp independently. Valid credentials do not guarantee Provider availability. Opening the <code>#token=</code> URL printed by <code>tekon ui</code> loads and checks the token automatically. Never commit tokens.</div>
 <div class="cl cl-w" data-update="r24-web-preview" data-doc-lang="zh"><span class="cl-lb">发起前核对检查</span><p>默认输入框和高级表单都提供“检查配置与适用性”。先看汇总，再展开“查看逐项检查配置”，确认来源是模板定义、仓库检查配置还是项目脚本自动识别，并按实际方式判断结果：“将执行已绑定命令”“将跳过此检查”“缺少命令，检查将失败”等。配置标记不适用不一定会跳过安全检查；<code>security-scan</code> 没有外部命令时仍执行内置安全扫描，以逐项说明为准。预览不显示原始工具、参数、环境变量或不适用理由；需要核对命令正文时，在本地检查模板、<code>.tekon/repo-profile.yaml</code> 或 <code>package.json</code>。</p><p>点击“刷新检查配置”后，页面会标明相较上一份预览新增、移除或变化的检查；若只见“模板或运行设置已变化”，也需重新审阅。确认后再次点击提交，刷新本身不会受理新计划。出现 <code>PLAN_DIGEST_MISMATCH</code> 时按“刷新执行计划”重新确认；出现 <code>PLAN_CONFIG_INVALID</code> 时先修正提示中的配置文件或读取权限，再刷新，不要仅反复提交。</p><p>逐项比较只适用于同一服务实例和发起上下文。服务重启会使比较范围失效；切换凭据、仓库、模板等上下文会清除旧基线。“暂无逐项变化信息”表示无法比较，不能解读成检查未变化；没有旧预览时也不会推断差异。已受理运行保留原绑定，历史与完整性边界见 6.7。</p><p>毫秒级超时、Profile 等参数收在“高级”区。选择联网不受限的 <code>dsh-headless</code> 时，须勾选“我已知悉本次运行联网不受限”；确认写入运行审计。</p></div>
@@ -606,10 +608,86 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="cl cl-w"><span class="cl-lb">失败处理与长会话</span>受控交付列表中失败的会话可"确认/归档"，确认后下沉历史区、不再置顶（未处理的失败仍置顶提醒）；列表在会话状态变化时自动上屏（保留短轮询兜底）；会话事件流默认只渲染最近若干条，更早内容点"加载更早历史"按需加载，每次加载都会真正向更早记录推进。当网络恢复或客户端较慢导致在线回放历史量超过预算时，会话顶部会出现一条可关闭的非阻断提示，说明已切换到最近记录、完整历史仍可按页读取，不影响事件流继续上屏。</div>
 <p>Web 是本地 dashboard，不是远程服务。Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。</p>
 <div class="cl cl-w"><span class="cl-lb">Profile</span>新建运行表单的 <code>Profile</code> 下拉默认 <code>human-web</code>（人工驱动，不自动推进人工点）。选 <code>autonomous-delivery</code> 后，运行<strong>通过（passed）时自动准备交付</strong>（打包证据、生成 PR 准备包、进入待审批），<strong>但绝不自动创建 PR</strong>——创建远端 PR 始终需人工在交付面板显式批准；此边界是硬约束，不因 Profile 放宽。自动准备只在长驻 Web/服务模式触发，CLI <code>tekon run</code> 跑完即退出，交付仍走显式 <code>tekon delivery prepare</code>。</div>
-<div class="cl cl-w" data-update="r24-background" data-doc-lang="zh"><span class="cl-lb">受理后后台推进与自动追平</span>发起运行先校验并受理，只有目录 ready 的 Job 才能后台执行；已有 Run ID 不等于已开始执行。Session 列表在事件流首次连接或断线重连后自动读取最新状态，无需等下一次变更；中间栏追加已持久化事件，右侧审批卡片随新增审批或其他入口的决定更新。读取期间收到新变化时，会重新读取，旧成功响应或错误不会覆盖新状态；审批通过后运行继续按 Gate 规则推进。旧 Dashboard（<code>/advanced</code>）需刷新查看最新状态。点“取消”后，需在 3 秒内再次点“确认取消？”，然后检查实际终态；已先完成或失败时保留原结果。“已记录取消”不代表所有后台进程退出。投递或观察更新失败后，详情和 Session 侧栏的“重试取消”可在刷新后继续处理原运行。恢复提示退出未确认时，先检查并停止旧执行，再勾选绑定旧 Job 的确认；页面过期需刷新后重新确认。审批已记录但未恢复时，进入原运行继续处理；已有活跃任务时，重复恢复/批准可能被拒绝。事件入口为 <code>GET /api/sessions/:sessionId/events</code>，用 <code>x-session-token</code> 鉴权，支持 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放。事件涵盖 agent 步骤和治理记录，但不是完整事实源；逐块 <code>assistant/chunk</code> streaming 尚未开放。</div>
-<div class="cl cl-w" data-update="r24-background" data-doc-lang="en"><span class="cl-lb">Background execution and automatic catch-up</span>A run is validated and accepted first. Only Jobs with ready directories can execute; a Run ID alone does not mean execution has started. On the first event-stream connection and after reconnection, the Session list reads current state without waiting for another change. The feed appends persisted events, and approval cards update when approvals are added or decided through another entry point. Changes arriving during a read trigger another read; stale success or error responses cannot overwrite newer state. After approval, execution continues according to Gate rules. Refresh the legacy Dashboard (<code>/advanced</code>) to see current status. Click Cancel, then confirm within 3 seconds. Check the actual terminal state; completed or failed runs keep their result. Recorded cancellation does not prove all background processes have stopped. Retry cancellation remains available on the original Run/Session after refresh when delivery or observation repair is pending. Before resuming an execution with unknown exit, stop and check the old execution and confirm its displayed Job identity. If approval was recorded but recovery did not start, continue from the original run; duplicate resume/approval may be rejected while a Job is active. The event endpoint is <code>GET /api/sessions/:sessionId/events</code>, authenticated by <code>x-session-token</code>, with <code>sinceSeq</code>/<code>Last-Event-ID</code> replay. It carries agent and governance events but is not a complete source of truth. Incremental <code>assistant/chunk</code> streaming is not available yet.</div>
+<div class="cl cl-w" data-update="r24-background" data-doc-lang="zh"><span class="cl-lb">受理后后台推进与自动追平</span>发起运行先校验并受理，只有目录 ready 的 Job 才能后台执行；已有 Run ID 不等于已开始执行。Session 列表在事件流首次连接或断线重连后自动读取最新状态，无需等下一次变更；中间栏追加已持久化事件，右侧审批卡片随新增审批或其他入口的决定更新。读取期间收到新变化时，会重新读取，旧成功响应或错误不会覆盖新状态；审批通过后运行继续按 Gate 规则推进。旧 Dashboard（<code>/advanced</code>）在控制操作完成后会自动读取一次状态；后续进展仍需刷新页面或重新进入列表/详情查看。点“取消”后，需在 3 秒内再次点“确认取消？”，然后检查实际终态；已先完成或失败时保留原结果。“已记录取消”不代表所有后台进程退出。投递或观察更新失败后，详情和 Session 侧栏的“重试取消”可在刷新后继续处理原运行。恢复提示退出未确认时，先检查并停止旧执行，再勾选绑定旧 Job 的确认；页面过期需刷新后重新确认。审批已记录但未恢复时，进入原运行继续处理；已有活跃任务时，重复恢复/批准可能被拒绝。观察原运行并等待当前任务处理；只有决定结束整个运行时才取消，取消后不可恢复。事件入口为 <code>GET /api/sessions/:sessionId/events</code>，用 <code>x-session-token</code> 鉴权，支持 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放。事件涵盖 agent 步骤和治理记录，但不是完整事实源；逐块 <code>assistant/chunk</code> streaming 尚未开放。</div>
+<div class="cl cl-w" data-update="r24-background" data-doc-lang="en"><span class="cl-lb">Background execution and automatic catch-up</span>A run is validated and accepted first. Only Jobs with ready directories can execute; a Run ID alone does not mean execution has started. On the first event-stream connection and after reconnection, the Session list reads current state without waiting for another change. The feed appends persisted events, and approval cards update when approvals are added or decided through another entry point. Changes arriving during a read trigger another read; stale success or error responses cannot overwrite newer state. After approval, execution continues according to Gate rules. The legacy Dashboard (<code>/advanced</code>) reads state once after a control action completes. Refresh or reopen the list/details to see later progress. Click Cancel, then confirm within 3 seconds. Check the actual terminal state; completed or failed runs keep their result. Recorded cancellation does not prove all background processes have stopped. Retry cancellation remains available on the original Run/Session after refresh when delivery or observation repair is pending. Before resuming an execution with unknown exit, stop and check the old execution and confirm its displayed Job identity. If approval was recorded but recovery did not start, continue from the original run; duplicate resume/approval may be rejected while a Job is active. The event endpoint is <code>GET /api/sessions/:sessionId/events</code>, authenticated by <code>x-session-token</code>, with <code>sinceSeq</code>/<code>Last-Event-ID</code> replay. It carries agent and governance events but is not a complete source of truth. Incremental <code>assistant/chunk</code> streaming is not available yet.</div>
 <div class="cl cl-w" data-update="r23-events" data-doc-lang="zh"><span class="cl-lb">事件日志定位（迁移期）</span>新 Session 的 <code>session/created</code>、<code>workflow/started</code>、<code>user/message</code> 三个开场事件，与 Run、必需治理 Audit 和初始 Job 一起原子受理；重试不会重复开场事件。后续事件仍可能因 best-effort 投影缺失，运行状态仍需结合 <code>workflow_instances</code> / <code>jobs</code> 等持久记录判断；全域事务化 outbox 和可完整重建的权威事件日志仍属后续范围。</div>
 <div class="cl cl-w" data-update="r23-events" data-doc-lang="en"><span class="cl-lb">Event log boundary</span>A new Session's three opening events—<code>session/created</code>, <code>workflow/started</code> and <code>user/message</code>—are admitted atomically with its Run, required governance Audit and initial Job. Retries do not duplicate that prefix. Later events remain best-effort projections and may be missing. Judge runtime state with durable records such as <code>workflow_instances</code> and <code>jobs</code>. A global transactional outbox and fully reconstructable authoritative event log remain future work.</div>
+<div data-update="r27-run-controls" data-doc-lang="zh"><h3>7.1 暂停、取消与恢复</h3>
+<p>在 Session 侧栏、Run 详情或运行列表操作前，先确认原 Run 身份和当前状态。请求中按钮会禁用，避免重复提交；反馈说明请求处理结果，不能代替后续状态观察。</p>
+<div class="tbl-w"><table>
+<thead>
+<tr>
+<th>目的</th>
+<th>如何操作</th>
+<th>如何判断结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>暂时停下</td>
+<td>点“暂停”</td>
+<td>“暂停请求已记录，活动步骤将在边界停下”表示已记录请求；当前 Agent/Gate 可能继续到检查边界。</td>
+</tr>
+<tr>
+<td>继续原任务</td>
+<td>点“恢复”</td>
+<td>“已受理恢复，请观察原运行”表示已受理，模型可能尚未开始；观察原 Run，不另建任务。</td>
+</tr>
+<tr>
+<td>结束任务</td>
+<td>点“取消”，3 秒内再点“确认取消？”</td>
+<td>检查实际终态和退出证据；已先通过/失败时保留原结果，取消回执不代表全部进程退出。</td>
+</tr>
+<tr>
+<td>补发取消</td>
+<td>详情或 Session 显示“重试取消”时点击</td>
+<td>原取消意图保留，重试处理控制投递或观察更新，不生成新运行。</td>
+</tr>
+</tbody>
+</table></div>
+<p>初始任务还在排队时暂停，它可以先被排空而不执行；随后恢复继续原 Run。若在认领前恢复，会复用原排队 Job；若已排空，则由服务端安排恢复 Job。两种情况都不需要重新提交需求。若提示已有活跃任务，观察原运行并等待其处理，不要用新任务绕过。</p>
+<p>恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。确认绑定当时的身份，提示过期时刷新并重新检查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是操作系统退出检测，受管理退出证据也不覆盖逃逸进程。<code>passed</code>、<code>failed</code>、<code>cancelled</code> 终态不可恢复。</p>
+<p>审批后若显示“审批已记录，运行尚未恢复”，保留审批事实，进入原运行处理恢复，不重新批准。服务端拒绝或终态竞争显示真实反馈；错误保持可见，依据提示修复后重试。不要仅凭通知消失、按钮变化或 feed 缺少新事件推断进程状态。</p>
+<p>正常关闭服务打断构建或测试检查时，已完成的 Agent 或自动修复产物与对应工作树会保留，显式恢复从尚未完成的检查继续。自动修复本身未完成时，按实际节点状态继续处理，不保证跳过 Agent。若提示工作树关联或恢复证据缺失，先检查原运行的产物和工作树，再处理恢复；不要另建任务绕过。主动取消仍不可恢复。</p>
+</div>
+<div data-update="r27-run-controls" data-doc-lang="en"><h3>7.1 Pause, cancel and resume</h3>
+<p>Check the original Run identity and current state in the Session sidebar, Run details or run list. Controls disable duplicate requests while pending. Feedback describes request handling; inspect subsequent state separately.</p>
+<div class="tbl-w"><table>
+<thead>
+<tr>
+<th>Intent</th>
+<th>Action</th>
+<th>Interpret the result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pause temporarily</td>
+<td>Choose Pause</td>
+<td>“暂停请求已记录，活动步骤将在边界停下” means the request is recorded; the active Agent/Gate may continue to its next control boundary.</td>
+</tr>
+<tr>
+<td>Continue the original task</td>
+<td>Choose Resume</td>
+<td>“已受理恢复，请观察原运行” means recovery was accepted, not that the model has started. Observe the original Run.</td>
+</tr>
+<tr>
+<td>End the task</td>
+<td>Choose Cancel, then confirm within 3 seconds</td>
+<td>Check the actual terminal state and exit evidence. Earlier success/failure wins; a cancellation receipt does not prove all processes have exited.</td>
+</tr>
+<tr>
+<td>Repair cancellation</td>
+<td>Choose Retry cancellation when offered</td>
+<td>Retry pending control delivery or observation updates on the original Run. No new run is created.</td>
+</tr>
+</tbody>
+</table></div>
+<p>A paused initial queued Job may drain without executing. Resume keeps the same Run: it reuses the initial Job if still queued, or schedules recovery after it drains. Do not submit the demand again. If an active Job is reported, observe the original run and wait for it to settle.</p>
+<p>If exit is unconfirmed, check and stop the old execution before confirming its displayed Job identity. Refresh and recheck after a stale confirmation; see 6.10 for historical runs without Jobs. Human confirmation is not an OS exit observation, and managed-handle evidence does not cover escaped processes. Terminal passed, failed or cancelled runs cannot resume.</p>
+<p>If approval was recorded but recovery was not accepted, continue recovery from the original Run instead of approving again. Server refusals and terminal races retain their actual feedback; errors remain visible. Do not infer process state from a dismissed notice, disappearing controls or missing feed events.</p>
+<p>When normal service shutdown interrupts a build or test check, completed Agent or repair outputs and the corresponding worktree are retained. Explicit resume continues unfinished checks. If the repair itself was incomplete, recovery follows the actual node state and may run the Agent again. If worktree association or recovery evidence is missing, inspect the original run’s outputs and worktree before resolving recovery; do not bypass the error by starting another task. An explicitly cancelled run remains non-resumable.</p>
+</div>
 </div>
 
 <!-- ════ TAB 7: 判断结果 ════ -->
@@ -639,7 +717,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <h3>9.6 ci-status 查询失败</h3><p>常见原因：run 没有 PR URL、selector 不对。处理：用 <code>--selector</code> 明确指定。</p>
 <h3>9.7 Artifact 被拒绝入库</h3><p>原因：产物命中密钥模式。处理：删除密钥内容，使用安全摘要。</p>
 <h3>9.8 Web 写操作被拒绝</h3><p>处理：重新执行 <code>init</code> 生成 token → 确认 <code>TEKON_PROJECT_ROOT</code> 正确。</p>
-<h3>9.9 Codex provider 运行失败</h3><p>处理：先验证 <code>codex --version</code> → 查看 <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下产物。不要把失败降级成 mock 通过。</p>
+<p data-doc-lang="zh">历史样本参见 <a href="../reviews/2026-06-10-tekon-codex-self-bootstrap-report.html">Codex 自举验证记录</a>；它不能替代当前任务的真实 Provider 验证。</p><p data-doc-lang="en">See the historical <a href="../reviews/2026-06-10-tekon-codex-self-bootstrap-report.html">Codex bootstrap validation record</a>; it does not replace real Provider validation for the current task.</p><h3>9.9 Codex provider 运行失败</h3><p>处理：先验证 <code>codex --version</code> → 查看 <code>.tekon/runs/&lt;runId&gt;/&lt;nodeId&gt;/</code> 下产物。不要把失败降级成 mock 通过。</p>
 </div>
 
 <!-- ════ TAB 9: 参数速查 ════ -->
@@ -686,7 +764,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(201,169,110,.015
 <div class="tg"><span class="tg-j">内部工具</span><span class="tg-j">研发效能工具</span><span class="tg-j">测试补齐</span><span class="tg-j">文档补齐</span><span class="tg-j">低风险 bugfix</span><span class="tg-j">可回滚的中小需求</span></div>
 <h3>手册更新规则</h3>
 <p>后续每次功能、CLI/Web 入口、参数、错误处理、边界或用户流程变化后，都必须评估是否需要更新本手册。当前主手册路径：<code>docs/manual/tekon-user-manual.md</code></p>
-<div class="ft"><div class="ft-s">工</div><div class="ft-t">tekon-user-manual · v0.24.0 · 2026.09.06</div></div>
+<div class="ft"><div class="ft-s">工</div><div class="ft-t">tekon-user-manual · v0.25.0 · 2026.09.06</div></div>
 </div>
 
 </main>

@@ -479,7 +479,7 @@ single-owner Runtime
 
 - [当前权威入口](current.md)
 - [第十三轮报告](2026-09-01-tekon-product-runtime-harness-thirteenth-review.md)
-- [第十四轮整改方案](../superpowers/plans/2026-09-01-fourteenth-review-remediation-plan.md)
+- [第十四轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-01-fourteenth-review-remediation-plan.md)
 - [`command-gateway`](../../packages/core/src/runtime/command-gateway.ts)
 - [`command-gateway` no-progress 边界测试](../../packages/core/__tests__/runtime/command-gateway-no-progress-boundary.test.ts)
 - [`SessionComposer`](../../packages/web/src/client/components/sessions/SessionComposer.tsx)
@@ -527,7 +527,7 @@ single-owner Runtime
 - 用户影响（推断，本轮未做 Node 20 + 真实 dsh 实测）：Node 20.x / 22.12–22.18 是 Tekon 合法运行环境（根 `package.json` engines），这些用户选 DSH 时，按手册 §5.7 的表述"可能无法安装或运行"，且目前只会得到底层子进程错误，而非明确的版本指引；
 - 与本 PR 已有的 fail-closed preflight 风格一致（`DshVersionGateError` / `DshCapabilityError` 模式可直接复用）。
 
-因此主 Agent 判断：本轮在本 PR 内以最小改动关闭它，而不是再滚一轮。实现与测试方案见 `docs/superpowers/plans/2026-09-01-fourteenth-review-remediation-plan.md` §8（该节是本轮整改的执行记录，不代表新开第十五轮评审；本报告仍是当前权威报告）。
+因此主 Agent 判断：本轮在本 PR 内以最小改动关闭它，而不是再滚一轮。实现与测试方案见 [历史方案 2026-09-01-fourteenth-review-remediation-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-01-fourteenth-review-remediation-plan.md) §8（该节是本轮整改的执行记录，不代表新开第十五轮评审；本报告仍是当前权威报告）。
 
 reviewer 对方案初稿提出 8 项 must-fix（宿主 Node 与 dsh 运行时 Node 可能不同、需逃生口；`actualVersion=null` 会被 CLI 误诊为"未安装"；本机 Node v22.16.0 会让既有测试转红；§6/§8 矛盾需勘误；手册/CHANGELOG 需同步；版本 bump 需决策；§14.1 措辞；快照重绑定承诺），已全部纳入修订后的方案 §8。
 

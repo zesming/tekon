@@ -154,9 +154,9 @@ Web server 和 CLI 都会构造并启动 JobRunner，访问同一项目 SQLite�
 
 ### 依据
 
-- `docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md`
-- `docs/superpowers/plans/2026-08-24-phase2-streaming-agent-loop-design.md`
-- `docs/superpowers/plans/2026-08-24-phase3-session-ui-design.md`
+- [历史方案 2026-08-20-harness-replatform-execution-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md)
+- [历史方案 2026-08-24-phase2-streaming-agent-loop-design.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-24-phase2-streaming-agent-loop-design.md)
+- [历史方案 2026-08-24-phase3-session-ui-design.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-24-phase3-session-ui-design.md)
 - `README.md`
 - PR #10 当前说明
 

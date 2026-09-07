@@ -195,7 +195,7 @@
   <nav class="quick-nav" aria-label="报告入口">
     <a href="current.md">当前权威入口</a>
     <a href="2026-09-03-tekon-product-runtime-harness-twenty-first-review.md">Markdown 源稿</a>
-    <a href="../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.html">收口方案</a>
+    <a href="https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-04-twenty-first-review-closure-plan.html">收口方案</a>
     <a href="https://github.com/zesming/tekon/pull/11">PR #11</a>
   </nav>
   <main><h1>Tekon 产品、UI/UX、Runtime 与 DeepSeek Harness 第二十一轮全面复审</h1>
@@ -863,7 +863,7 @@ RunPlanDisclosure data model
 </code></pre>
 <p>该 job 不设置 <code>needs</code>，矩阵 <code>fail-fast: false</code>，单腿上限 20 分钟，暂不增加缓存。Node 20 的 <code>better-sqlite3</code> 可能从源码构建，因此 Core unit 必须保留，用真实 SQLite 加载证明 ABI 可用。Node 22.12 的 bundled Corepack 太旧，固定 <code>0.34.1</code> 是签名兼容前置条件。Node 24 虽与主 lane 重叠，但保留它可让矩阵自身完整、便于独立比较。</p>
 <p>这一变更只增加持续验证，不改变用户命令、运行时合同或 <code>.tekon</code> 数据格式。按既有版本政策，纯复审与 CI 证据收敛不单独抬高产品版本，仍保持 <code>0.20.6</code>。本轮不配置 required checks，因此新矩阵仍是 GitHub Actions 检查，不得表述为仓库强制合并规则。</p>
-<p>具体测试先行顺序与验收矩阵见 <a href="../superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md">第二十一轮收口执行方案</a>。</p>
+<p>具体测试先行顺序与验收矩阵见 <a href="https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-04-twenty-first-review-closure-plan.md">第二十一轮收口执行方案</a>。</p>
 <h3>14.5 实现期本地证据</h3>
 <p>Node workflow 合同经过三轮明确 RED→GREEN：</p>
 <ol>

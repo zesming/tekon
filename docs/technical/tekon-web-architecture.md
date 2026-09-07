@@ -1,5 +1,8 @@
 # Tekon Cockpit Web UI 技术方案
 
+> **历史方案（2026-09-06 标记）**：正文保留当时的架构设想与数据，不代表现行能力、权限或实施顺序。当前产品以[产品范围](../product/tekon-current-product-scope.md)、运行时以[现行合同](tekon-runtime-contract.md)、Web 以[运行控制设计](../design/tekon-run-control-design.md)为准。旧自动推进、token 存储、无持久 fencing 等表述不得用于当前验收。
+
+
 > 状态：正式技术方案  
 > 创建日期：2026-06-12  
 > 审阅版：`docs/technical/tekon-web-architecture.html`  
@@ -20,7 +23,7 @@
 
 事实：当前 `packages/web/src/client/App.tsx` 约 1040 行，`packages/web/src/server/api/root.ts` 约 1617 行；现有 Web 已支持概览、run 列表、artifact/gate/audit/review、human approval、受控 run、delivery prepare/create-pr 的基本路径。  
 推断：继续在单文件 SPA 和单文件 API 上叠 UI 会放大回归风险，必须先收紧契约、拆分服务端和前端边界。  
-建议：本文对应路线图 P2-B Web Cockpit V2 的详细技术方案，实施优先级仍以 `docs/superpowers/plans/2026-06-10-tekon-priority-roadmap.md` 为准；进入该阶段后按本文 Phase 0-5 实施，不把所有页面和所有 CLI 能力挤进第一轮。
+建议：本文对应路线图 P2-B Web Cockpit V2 的详细技术方案，实施优先级仍以 [历史方案 2026-06-10-tekon-priority-roadmap.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-06-10-tekon-priority-roadmap.md) 为准；进入该阶段后按本文 Phase 0-5 实施，不把所有页面和所有 CLI 能力挤进第一轮。
 
 ## 2. 外部资料依据
 

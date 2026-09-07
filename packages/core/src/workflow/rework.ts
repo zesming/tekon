@@ -570,12 +570,8 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     // --- Step 7: Put review node back to awaiting-gate ---
     await repositories.transitionNode(reviewNode.id, 'awaiting-gate');
 
-    try {
-      await leaseService.finalizeExecutionLease(runId, reviewNode.id);
-    } catch {
-      // Lease finalize failed for review re-run — non-fatal for rework flow.
-    }
-
+    // The review Gate still needs this worktree. NodeExecutor finalizes it
+    // after all Gates pass, just as it does for the first review execution.
     await audit.append({
       runId,
       type: 'gate.rework.completed',

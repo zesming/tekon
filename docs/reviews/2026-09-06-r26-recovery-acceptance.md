@@ -1,6 +1,6 @@
 # 第 26 轮整改验收：取消恢复与安全重启
 
-2026-09-06 · v0.24.0 · [PR #11](https://github.com/zesming/tekon/pull/11) · [原报告及追加批注](2026-09-05-tekon-product-runtime-harness-twenty-sixth-review.html) · [执行方案](../superpowers/plans/2026-09-05-twenty-sixth-review-remediation-plan.html)
+2026-09-06 · v0.24.0 · [PR #11](https://github.com/zesming/tekon/pull/11) · [原报告及追加批注](2026-09-05-tekon-product-runtime-harness-twenty-sixth-review.html) · [执行方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-sixth-review-remediation-plan.html)
 
 本轮以 `8141c4b69fb59988ff7c7e6266f3d5639c386131` 为工作基线，补齐取消观察恢复、持久重试入口、过期租约的安全处置、退出证据与显式恢复。本地全仓测试、完整 Chromium 和真实 Claude 生命周期均通过，独立 reviewer 已按用户要求 0–6 逐项核对并放行，无必须修复项。第 7 项的提交、远端检查与清理按实际交付另行核对；本记录不复用历史 CI 结论。
 

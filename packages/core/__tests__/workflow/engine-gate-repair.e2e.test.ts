@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -6,6 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createAuditLogger,
+  createCommandGateway,
+  createWorktreeManager,
+  JOB_ABORT_REASON_SHUTDOWN,
   createMockAgentAdapter,
   createRepositories,
   createWorkflowEngine,
@@ -25,6 +29,102 @@ describe('workflow engine gate repair e2e', () => {
       rmSync(dir, { force: true, recursive: true });
     }
   });
+
+  it.each(['fallback-pass', 'second-repair', 'exhausted', 'shutdown', 'lease-created-shutdown', 'finalize-error'] as const)(
+    'ordinary repair failure preserves physical lease and retry semantics: %s', async scenario => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-repair-retry-')); tempDirs.push(repoPath);
+      const git = (...args: string[]) => execFileSync('git', args, { cwd: repoPath, stdio: 'pipe' });
+      git('init', '-b', 'main'); git('config', 'user.email', 'tekon@example.com'); git('config', 'user.name', 'Tekon Test');
+      writeFileSync(join(repoPath, 'README.md'), 'fixture\n'); git('add', '.'); git('commit', '-m', 'init');
+      const db = openTekonDatabase({ filename: ':memory:' }); migrateDatabase(db);
+      try {
+        const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
+        const manager = createWorktreeManager({ repositories, gateway: createCommandGateway({ repositories }) });
+        const adapter = createMockAgentAdapter(); const originalAgent = adapter.runAgent.bind(adapter);
+        let repairCalls = 0; let gateCalls = 0; const gateLeases: string[] = [];
+        const controller = new AbortController();
+        if (scenario === 'lease-created-shutdown') {
+          let sourceCreations = 0; const append = audit.append.bind(audit);
+          vi.spyOn(audit, 'append').mockImplementation(async event => {
+            const result = await append(event);
+            if (event.type === 'worktree.lease.created' && !String(event.payload.nodeId).startsWith('repair_') && ++sourceCreations === 2) {
+              controller.abort(JOB_ABORT_REASON_SHUTDOWN);
+            }
+            return result;
+          });
+        }
+        vi.spyOn(adapter, 'runAgent').mockImplementation(async input => {
+          if (input.worktreeLease.nodeId.startsWith('repair_') && ++repairCalls === 1) throw new Error('ordinary repair failure');
+          return originalAgent(input);
+        });
+        if (scenario === 'finalize-error') {
+          const promote = manager.promoteLeaseToRunBranch.bind(manager);
+          vi.spyOn(manager, 'promoteLeaseToRunBranch').mockImplementation(async input => {
+            const lease = await repositories.getWorktreeLease(input.leaseId);
+            if (lease?.nodeId.startsWith('repair_')) throw new Error('repair promotion failed');
+            return promote(input);
+          });
+        }
+        const realGate = createGateEngine({ repositories });
+        const gateEngine: GateEngine = { ...realGate, async runGate(input) {
+          const active = (await repositories.listWorktreeLeases(input.runId)).filter(lease => !lease.releasedAt);
+          expect(active).toHaveLength(1); expect(input.cwd).toBe(active[0].worktreePath); expect(input.cwd).not.toBe(repoPath);
+          gateLeases.push(active[0].id); gateCalls++;
+          if (scenario === 'shutdown' && gateCalls === 2) controller.abort(JOB_ABORT_REASON_SHUTDOWN);
+          return repositories.recordGateResult({ id: `gate_retry_${gateCalls}`, runId: input.runId, nodeId: input.nodeId,
+            gateType: input.gate.type, gateKey: input.gate.gateKey,
+            status: gateCalls >= (['second-repair', 'shutdown'].includes(scenario) ? 3 : 2) ? 'passed' : 'failed',
+            durationMs: 0, retries: 0, createdAt: new Date().toISOString() });
+        } };
+        const makeEngine = (signal?: AbortSignal) => createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories,
+          audit, adapter, gateEngine, worktreeManager: manager, signal });
+        const spec = buildGateWorkflowSpec(); spec.phases[0].nodes[0].gates[0].maxRetries = scenario === 'exhausted' ? 1 : 2;
+        let result = await makeEngine(controller.signal).startRun({ demandText: 'repair retry', mode: 'template', workflowSpec: spec });
+        const sourceId = `${result.runId}_rd-code`;
+        if (scenario === 'finalize-error') {
+          expect(result.workflow.status).toBe('interrupted'); expect(gateCalls).toBe(1); expect(repairCalls).toBe(1);
+          const events = await repositories.listAuditEvents(result.runId);
+          expect(events.some(event => event.type === 'gate.execution.error' && String(event.payload.error).includes('repair promotion failed'))).toBe(true);
+          return;
+        }
+        if (scenario === 'exhausted') {
+          expect(result.workflow.status).toBe('blocked'); expect(gateCalls).toBe(1); expect(repairCalls).toBe(1); return;
+        }
+        if (scenario === 'lease-created-shutdown') {
+          expect(result.workflow.status).toBe('interrupted');
+          expect((await repositories.getNode(sourceId))?.status).toBe('needs-revision');
+          const before = await repositories.listWorktreeLeases(result.runId);
+          expect(before.filter(lease => !lease.releasedAt)).toHaveLength(1);
+          result = await makeEngine().resumeRun(result.runId);
+          expect(adapter.runAgent).toHaveBeenCalledTimes(2);
+          expect((await repositories.listWorktreeLeases(result.runId)).map(lease => lease.id)).toEqual(before.map(lease => lease.id));
+        }
+        if (scenario === 'shutdown') {
+          expect(result.workflow.status).toBe('interrupted');
+          expect((await repositories.getNode(sourceId))?.status).toBe('awaiting-gate');
+          const active = (await repositories.listWorktreeLeases(result.runId)).filter(lease => !lease.releasedAt);
+          expect(active.map(lease => lease.id)).toEqual([gateLeases[1]]);
+          // Fresh engine has no in-memory execution aliases; only durable identity can resume this Gate.
+          result = await makeEngine().resumeRun(result.runId);
+          expect(gateLeases[2]).toBe(gateLeases[1]); expect(repairCalls).toBe(1);
+        }
+        expect(result.workflow.status).toBe('passed');
+        expect((await repositories.getNode(sourceId))?.status).toBe('passed');
+        expect(gateCalls).toBe(['fallback-pass', 'lease-created-shutdown'].includes(scenario) ? 2 : 3);
+        expect(repairCalls).toBe(scenario === 'second-repair' ? 2 : 1);
+        expect(gateLeases[1]).not.toBe(gateLeases[0]);
+        const leases = await repositories.listWorktreeLeases(result.runId);
+        expect(leases.every(lease => Boolean(lease.releasedAt))).toBe(true);
+        const events = await repositories.listAuditEvents(result.runId);
+        expect(events.some(event => event.type === 'gate.execution.error')).toBe(false);
+        for (const id of new Set(gateLeases)) {
+          expect(events.some(event => event.type === 'worktree.lease.promoted' && event.payload.leaseId === id)).toBe(true);
+          expect(events.some(event => event.type === 'worktree.lease.released' && event.payload.leaseId === id)).toBe(true);
+        }
+        expect((await audit.verify(result.runId)).valid).toBe(true);
+      } finally { db.close(); }
+    },
+  );
 
   it('creates a repair node when an auto-fix gate fails', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-'));

@@ -3,29 +3,17 @@ import { z } from 'zod';
 /**
  * Session/Event/Agent contract — schema v1.
  *
- * This is the "contract freeze" from the Harness-inspired replatform plan
- * (docs/superpowers/plans/2026-08-20-harness-replatform-execution-plan.md). It
- * defines the shared vocabulary and interfaces. As of phases 1–4 it is wired
- * into the running engine: SessionService, the job runner, the dual-write
- * session-event store and the LegacyAgentDriver all build against these types
- * (the streaming AgentHandle below is provided by the phase-2a legacy bridge as
- * a one-shot adapter; true incremental streaming / follow-up / steer remain
- * later-phase work — see the AgentHandle docs).
+ * Current authority: docs/technical/tekon-runtime-contract.md.
+ * SessionService, the job runner, dual-write projection and LegacyAgentDriver
+ * share these types. The legacy bridge is one-shot; incremental model output,
+ * follow-up, steer and durable model-history reconstruction remain future work.
  *
- * Design provenance:
- * - Event vocabulary mirrors the DeepSeek Harness session model (append-only
- *   typed SessionEvent log; model history derived from the log; turn = one user
- *   input, step = one model call + its tool executions). Verified against the
- *   official docs/subsystems/session.md and docs/architecture.md.
- * - Governance events (workflow/gate/artifact/worktree/delivery/evaluation) are
- *   Tekon-specific extensions layered on the same log, per report §8.3.
- *
- * Compatibility rules (report §8.3):
- * - Every event is JSON-serializable and carries an explicit schema version.
- * - Events carry a per-session monotonic sequence number.
- * - Projections render UI from the log; the UI never stitches together several
- *   inconsistent endpoints.
- * - Unknown event types are ignorable; a small required core must be present.
+ * Session events borrow the Harness vocabulary, but Tekon's feed is an
+ * observation projection. Only the three opening events are admitted atomically
+ * with Run/Audit/Job; later events are best-effort. Domain records retain their
+ * own authority. Governance events are Tekon extensions, not model-history proof.
+ * Events are JSON-serializable, versioned and ordered by per-session sequence.
+ * Unknown event types may be ignored; state views also reconcile domain snapshots.
  */
 
 export const SESSION_EVENT_SCHEMA_VERSION = 1 as const;

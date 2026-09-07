@@ -95,6 +95,9 @@ describe('project.clean suspended guard and audit', () => {
     const seedDb = openTekonDatabase({ filename: dbPath });
     const seedQueue = createWriteQueue({ isClosed: () => seedDb.isClosed() });
     const seedRepositories = createRepositories(seedDb, seedQueue);
+    const fixtureLeases = await seedRepositories.listWorktreeLeases('run_1');
+    expect(fixtureLeases).toHaveLength(1);
+    expect(fixtureLeases[0].releasedAt).toBeNull();
     const seedSessions = createSessionEventStore(seedDb, seedQueue);
     const seedJobs = createJobRepository(seedDb, seedQueue);
     cleanupTasks.unshift(() => {
@@ -195,11 +198,14 @@ describe('project.clean suspended guard and audit', () => {
       (event) => event.type === 'project.clean.suspended',
     );
     expect(suspendedEvent).toBeDefined();
-    expect(suspendedEvent?.payload).toEqual({
+    expect({
+      ...suspendedEvent?.payload,
+      unreleasedLeaseIds: [...(suspendedEvent?.payload.unreleasedLeaseIds as string[])].sort(),
+    }).toEqual({
       reason: 'CLEAN_SUSPENDED',
       runStatus: 'paused',
       activeJobId: 'job_clean_active',
-      unreleasedLeaseIds: ['lease_clean_active'],
+      unreleasedLeaseIds: ['lease_clean_active', fixtureLeases[0].id].sort(),
     });
     expect(Object.keys(suspendedEvent?.payload ?? {}).sort()).toEqual([
       'activeJobId',

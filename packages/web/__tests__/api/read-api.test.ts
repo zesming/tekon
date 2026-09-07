@@ -23,7 +23,7 @@ describe('web read API', () => {
     expect(overview.counts).toMatchObject({
       artifacts: 1,
       gates: 1,
-      audit: 2,
+      audit: 3,
       pendingApprovals: 1,
       roles: 1,
     });
@@ -141,7 +141,10 @@ describe('web read API', () => {
     await expect(
       api.audit.list({ runId: 'run_1', role: 'reviewer' }),
     ).resolves.toMatchObject({
-      events: [expect.objectContaining({ role: 'reviewer' })],
+      events: [
+        expect.objectContaining({ type: 'worktree.lease.created', role: 'reviewer' }),
+        expect.objectContaining({ type: 'human.decision.pending', role: 'reviewer' }),
+      ],
     });
     await expect(
       api.audit.list({ runId: 'run_1', role: 'qa' }),

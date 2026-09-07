@@ -344,7 +344,7 @@
 </table></div>
 <p>探针临时目录已清理；本表保留关键 Run/Gate 结论，不将其称作真实 Provider 可交付性 eval。后续实施前，Workspace 重连与跨入口审批已由真实 HTTP/SSE、SQLite 和 Chromium 复现为失败；修后对应旅程通过。新增观察测试还覆盖迟到成功、迟到 500、多帧失效合并和重新挂载，不以仅调用 cache 函数替代页面证据。</p>
 <h3>10.2 执行绑定：采用冻结事实，不在执行中切换配置</h3>
-<p>采用 <a href="../superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html">第 24 轮整改方案</a>：RunPlan v3 记录实际消费的 ref 解析结果与来源，结果区分 resolved、not-applicable、missing；内联命令优先，无消费引用时不读 profile。先以原模板生成稳定 Gate key，再将绑定物化进持久执行 Gate 并移除动态 ref 入口。执行/恢复以同一快照校验期望节点，repair/rework 继承原物化事实。</p>
+<p>采用 <a href="https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html">第 24 轮整改方案</a>：RunPlan v3 记录实际消费的 ref 解析结果与来源，结果区分 resolved、not-applicable、missing；内联命令优先，无消费引用时不读 profile。先以原模板生成稳定 Gate key，再将绑定物化进持久执行 Gate 并移除动态 ref 入口。执行/恢复以同一快照校验期望节点，repair/rework 继承原物化事实。</p>
 <p>拒绝“仅在 Engine 构造时缓存 profile”的方案：它既不绑定用户确认时刻，也会使 v3 恢复与 requestId 重放依赖当前坏配置。文件读取放新受理同步分支，纯准备 helper 只接收已捕获事实；所有输入/选项摘要继续比较。旧 v2/v1/无快照不重写历史，在观察入口明确历史绑定边界。</p>
 <p>预览仍采用白名单；只增加检查状态、来源、实际行为说明和不透明比较标识，用于提示哪些检查变化，不公开 tool/args/env 或不适用原始理由。方案首轮独立 review 指出模板 skipReason 优先级不能遗漏、公开逐 Gate 无密钥摘要会增加低熵字段猜测入口；已补齐物化后行为优先级和服务端临时 HMAC 比较作用域，并通过第二轮最高等级技术复查及编辑性审阅后实施。持久计划摘要不包含这些临时显示标识。新预览和历史绑定提示是新增用户可见能力，本轮与缺陷修复合并按 MINOR 目标 <code class="notranslate">0.23.0</code> 管理，而不是仅按最初纯绑定补丁的 PATCH 建议计。</p>
 <p>绑定 <code class="notranslate">npm/pnpm</code> 调用不等于冻结 package script 正文、测试代码、依赖、PATH、Git/base 或 Provider。关闭 R24-02 不代表整个 #20 的执行环境已不可变。</p>

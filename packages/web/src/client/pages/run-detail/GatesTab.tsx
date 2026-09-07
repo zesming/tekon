@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 
 import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
@@ -20,6 +20,8 @@ import { LoadingState } from '../../components/ui/LoadingState.js';
 import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
+import { CodeBlock } from '../../components/ui/CodeBlock.js';
+import { useEvidenceTarget } from '../../hooks/use-evidence-target.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,6 +76,8 @@ function gateIconClass(status: string): string {
 export function GatesTab() {
   const { runId } = useParams<{ runId: string }>();
   const scope = useAuthScope();
+  const [searchParams] = useSearchParams();
+  const selectedGateId = searchParams.get('gate');
 
   const gateQuery = useQuery<GateListOutput>(
     runId ? queryKeys.gateResults(runId, scope) : null,
@@ -85,6 +89,10 @@ export function GatesTab() {
     runId ? queryKeys.reviewDetail(runId, scope) : null,
     () => rpc.call('review.get', { runId: runId! }),
   );
+
+  useEvidenceTarget(selectedGateId ? `gate-log-${selectedGateId}` : null,
+    !gateQuery.isLoading && !gateQuery.error && !reviewQuery.isLoading && !reviewQuery.error &&
+      !!gateQuery.data?.gates.some(gate => gate.id === selectedGateId), runId);
 
   if (gateQuery.isLoading)
     return <LoadingState message="加载门禁数据中…" />;
@@ -100,6 +108,7 @@ export function GatesTab() {
 
   // Merge classification from review surface into gate list
   const reviewGateMap = new Map(reviewGates.map((g) => [g.id, g]));
+  const selectedOutput = selectedGateId ? reviewGateMap.get(selectedGateId)?.output : null;
 
   const passedCount = gates.filter((g) => g.status === 'passed').length;
   const failedCount = gates.filter((g) => g.status === 'failed').length;
@@ -206,6 +215,20 @@ export function GatesTab() {
       </div>
 
       {/* ── Pending Decisions ── */}
+      {selectedGateId ? (
+        !gates.some(gate => gate.id === selectedGateId) ? <p role="status">未找到该门禁</p> : (
+          <section id={`gate-log-${selectedGateId}`} tabIndex={-1} className="section evidence-target">
+            <Card title={`门禁日志 ${selectedGateId}`}>
+              {reviewQuery.isLoading ? <LoadingState message="加载门禁日志中…" /> :
+                reviewQuery.error ? <ErrorBanner error={reviewQuery.error} onRetry={reviewQuery.refetch} /> :
+                !selectedOutput ? <EmptyState message="该门禁没有输出日志" /> :
+                !selectedOutput.exists ? <EmptyState message="门禁日志文件不存在" /> :
+                <CodeBlock content={selectedOutput.content} truncated={selectedOutput.truncated} />}
+            </Card>
+          </section>
+        )
+      ) : null}
+
       {pendingDecisions.length > 0 ? (
         <div className="section">
           <div className="section-title">

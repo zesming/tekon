@@ -209,6 +209,8 @@ table {
 .main {
   margin-left: 232px;
   flex: 1;
+  /* Flex 内容可以收缩；宽表格由自身滚动容器承接。 */
+  min-width: 0;
   min-height: 100vh;
 }
 
@@ -453,6 +455,12 @@ table {
 
 .panel-grid .card.full {
   grid-column: 1 / -1;
+}
+
+.link-strip a {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ── Badges ── */
@@ -889,6 +897,7 @@ tbody tr:last-child td {
 
 .audit-item {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-l);
@@ -927,6 +936,8 @@ tbody tr:last-child td {
 .audit-type {
   font-weight: 600;
   min-width: 160px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .audit-payload {
@@ -934,6 +945,30 @@ tbody tr:last-child td {
   font-family: var(--font-m);
   font-size: 11px;
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-detail {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-detail pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evidence-target {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-list .preview-block pre,
+.evidence-target .preview-block pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .audit-time {
@@ -1508,7 +1543,8 @@ tbody tr:last-child td {
   font-size: 11px;
   color: var(--text-t);
   max-width: 260px;
-  flex-shrink: 0;
+  min-width: 0;
+  flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2410,12 +2446,6 @@ tbody tr:last-child td {
 @media (max-width: 768px) {
   .main {
     margin-left: 0;
-    /* .main is a flex child of #root (display:flex). Its default min-width:auto
-       refuses to shrink below the widest content (e.g. a <select>'s intrinsic
-       option width), which blows the whole page past the viewport. min-width:0
-       lets it collapse to the available width — the root fix for mobile
-       horizontal overflow; descendant caps below are belt-and-suspenders. */
-    min-width: 0;
   }
 
   .sidebar {
@@ -2500,6 +2530,34 @@ tbody tr:last-child td {
   .filter-group .input {
     width: 100%;
     min-width: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .check-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 10px;
+  }
+
+  .check-label {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .check-evidence,
+  .check-evidence:hover {
+    grid-column: 2;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    position: static;
+    padding: 0;
+    border: 0;
+    background: none;
   }
 }
 

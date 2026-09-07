@@ -201,3 +201,17 @@ v0.24.1 为补丁升级：根和三个内部包仅改变版本字段，不调整
 - SDK 与 ACP 的控制能力不同。[SDK 协议](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/sdk/protocol/README.md) 目前只有 initialize、session/prompt、shutdown，没有协议协商、取消、单 Session 关闭和实际权限请求；[ACP](https://github.com/deepseek-ai/deepseek-harness/blob/d347e703908d0406b7a7ef80e3a0e594d86b2215/packages/acp/acp/src/index.ts) 提供取消、关闭和权限问答，适合作为后续控制面候选，仍需单独验收消息持久化与重连历史。
 
 上游 Node 要求 `^22.19.0 || >=24.0.0` 与 Tekon 的 DSH preflight 一致；Tekon 本身支持 `^20.19.0 || >=22.12.0`，能运行 Tekon 不等于能运行 DSH。Tekon DSH 环境白名单未透传宿主代理变量，不将升级视为自动获得代理能力。上述裁决经主代理与独立 reviewer 复核达成一致，不新增 DSH L2/L3 或全平台已验收结论。
+
+### 10.5 真实交付暴露的 Gate 关停缺口
+
+按 §6 建议运行真实 Claude 交付时，Agent 已完成源文件修改并产出两份 Artifact。构建 Gate 执行中正常关闭宿主，Job 正确记为 interrupted 且有 managed-handles-closed，但 Run/Node 被 gate-runner 按 onExhausted 写为 blocked，Gate 留下被终止的 failed 尝试。具体 Run 为 `run_e25f5865-658e-4255-bf6a-3733d3a69d84`。独立 reviewer 复核确认：blocked 不满足从 Gate 继续的条件，会重新执行已经完成的 Agent；fail 配置还会错误结束整个 Run。
+
+这补充了原报告的实证范围，不能用上轮最小只读生命周期测试关闭。整改在 Gate 结果、异常、修复和最终提交边界区分关停/取消与质量失败，首次 Gate 中断保留原工作树和完成的 Agent，正常恢复从 Gate 继续。真实进程与迟到结果/修复阶段测试先行，代码复审后重做真实 Claude 交付。最终验收将记录实际 Gate、Artifact、工作树/提交及 eval 检查结果，不把该失败尝试计入成功样本。
+
+### 10.6 最终整改与验收批注（2026-09-07）
+
+queued 恢复竞争、请求反馈、Gate 关停/repair 租约/提交释放边界均已修复并经独立审阅。最终总审又补普通 repair 异常的剩余预算与新租约创建后关停窗口；真实 Git 红测证明缺陷，恢复资格绑定已完成 Agent、原节点租约及严格事件顺序，缺失证据仍明确阻断。Web 修复窄屏内部裁切、769px 侧栏边界与六类证据链接，键盘验证实际内容，不再只核对地址片段。
+
+最终全仓 191 文件、2176 passed / 1 既有 opt-in skipped；Core e2e 65/65、CLI e2e 25/25、Chromium 202/202（零重试），构建/类型/lint 通过。完整浏览器运行曾以 143 中止且无完整报告，该次不计通过；后续单独完整运行通过。最终真实 Claude 在两个同机独立服务进程间保留 Run、RoleRun、Artifact 与租约，实际构建/测试/Audit 通过；readiness=false 的缺失远端交付证据没有被删除。
+
+产品版本为 v0.25.0；41 份过程计划归并到现行产品、运行时、设计与手册，历史证据保留固定提交快照。[正式验收](2026-09-06-r27-delivery-acceptance.html)记录设计、红绿、独立审阅、源码摘要、真实 Provider、64 张截图及清理范围；[当前入口](current.html)同步更新。上述为本地验收，PR #11 必须读取该次 Head 的 Core/CI 与九个 CI Job 全部成功后，才按用户已授权范围合入 main；不提前宣称远端检查或合并完成。

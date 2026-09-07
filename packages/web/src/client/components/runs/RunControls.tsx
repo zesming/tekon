@@ -126,14 +126,23 @@ export function RunControls({
 
   const handlePause = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setActionError(null);
     try {
-      await pauseMutation.mutate({ runId, token });
-      addFlash('success', `Run ${runId.slice(0, 8)} paused`);
+      const result = await pauseMutation.mutate({ runId, token });
+      if (TERMINAL_STATUSES.has(result.run.status)) {
+        addFlash('info', `运行已结束（${result.run.status}），请核对最新运行状态。`);
+      } else {
+        addFlash('success', '暂停请求已记录，活动步骤将在边界停下。');
+      }
     } catch (err) {
-      addFlash(
-        'error',
-        err instanceof Error ? err.message : 'Failed to pause run',
-      );
+      const message = err instanceof Error ? err.message : '暂停请求失败';
+      addFlash('error', message);
+      setActionError(message);
+    } finally {
+      actionInFlight.current = false;
+      refreshObservations();
     }
   };
 
@@ -143,10 +152,14 @@ export function RunControls({
     actionInFlight.current = true;
     setActionError(null);
     try {
-      await resumeMutation.mutate({ runId, token,
+      const result = await resumeMutation.mutate({ runId, token,
         ...confirmation.input,
       });
-      addFlash('success', `Run ${runId.slice(0, 8)} resumed`);
+      if (TERMINAL_STATUSES.has(result.run.status)) {
+        addFlash('info', `运行已结束（${result.run.status}），请核对最新运行状态。`);
+      } else {
+        addFlash('success', '已受理恢复，请观察原运行。');
+      }
     } catch (err) {
       addFlash(
         'error',

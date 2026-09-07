@@ -611,7 +611,7 @@ Tekon 必须继续使用独立的：
 - [当前权威入口](current.md)
 - [Runtime authority ADR](../technical/adr-0001-runtime-authority-and-collaborate.md)
 - [当前迁移范围](../technical/tekon-replatform-current-scope.md)
-- [第七轮整改方案](../superpowers/plans/2026-08-30-seventh-review-remediation-plan.md)
+- [第七轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-30-seventh-review-remediation-plan.md)
 
 ### DeepSeek Harness 官方
 
@@ -676,13 +676,13 @@ Tekon 必须继续使用独立的：
 2. **本轮增量、不宣称关闭（P0-ARCH-02）**：shutdown 后增加 closed 栅栏，使 deadline 后迟到的 repository/文件写入快速失败而非静默 late write，并用故障注入测试证明；完整 quiescence 仍依赖 executor 进程隔离，保留为架构后续。
 3. **本轮不触碰（架构级）**：P0-ARCH-01 single-owner daemon、P0-ARCH-03 Session 事实源选型、P0-PRODUCT-01 Collaborate 主链路、DSH pin 升级。这些需要独立 ADR、迁移设计与真实 provider smoke，不以本 PR 顺手补丁替代，按第 14 节顺序推进。
 
-整改方案与 reviewer 循环评审记录见 `docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md`。
+整改方案与 reviewer 循环评审记录见 [历史方案 2026-08-30-eighth-review-remediation-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md)。
 
 ---
 
 ## 19. 第 18 节批注整改结果（v0.19.0）
 
-本节记录第 18 节维护者批注后的整改落地情况。整改方案见 `docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md`（经三轮 reviewer 循环评审，第三轮"未检出必须修复项"）；实施后经两轮 code review，第二轮结论"可放行"。
+本节记录第 18 节维护者批注后的整改落地情况。整改方案见 [历史方案 2026-08-30-eighth-review-remediation-plan.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-08-30-eighth-review-remediation-plan.md)（经三轮 reviewer 循环评审，第三轮"未检出必须修复项"）；实施后经两轮 code review，第二轮结论"可放行"。
 
 ### 19.1 已闭环
 

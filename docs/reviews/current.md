@@ -1,34 +1,21 @@
 # Tekon 当前产品与架构评审
 
-**2026-09-06 · v0.24.1 · 第二十七轮**
+**2026-09-07 · v0.25.0 · 第二十七轮维护方整改验收**
 
-[完整 HTML 人审版](2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.html) · [Markdown 源稿](2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.md) · [原 PR #11](https://github.com/zesming/tekon/pull/11)
+[本轮正式验收 HTML](2026-09-06-r27-delivery-acceptance.html) · [验收 Markdown](2026-09-06-r27-delivery-acceptance.md) · [原报告及追加批注](2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.html) · [PR #11](https://github.com/zesming/tekon/pull/11)
 
 ## 当前结论
 
-v0.24.0 的取消补偿、退出证据、恢复确认及迟到写入保护有效；本轮另确认并修复了“初始 Job 尚未认领时，已记录的暂停仍可能被忽略”。没有重新报告已关闭的受理原子性、命令绑定、共享回执控制器、健康检查分层或裸清理问题。
+本轮修复排队暂停后的恢复竞态，统一暂停/恢复请求反馈，并解决真实交付暴露的 Gate 关停被误判为质量失败的问题。已完成 Agent 的检查可在同 Run、对应工作树继续；自动修复后的租约关联、连续关停及 rework 审阅 Gate 均补齐恢复与释放边界。主动取消仍不可恢复，缺失或歧义工作树证据明确阻断。
 
-- 用户基线：`f0c007b791d1da0f0f3b45b7b81718a905e760aa`；Core #449 / CI #358 成功。
-- 代码修复：`7bbb9ff27a2fb18814916e077de0edcd7f836e1a`；[Core #450](https://github.com/zesming/tekon/actions/runs/34005898445) / [CI #359](https://github.com/zesming/tekon/actions/runs/34005897725) 均 completed/success，九个 CI Job 全部成功。
-- 新增六项真实 SQLite、默认执行器与显式 mock Provider 测试，远端实际 6/6。Core 单测 1373 passed / 1 项既有 opt-in skipped；Core e2e 49 passed。
-- 本地真实源码受控端口复现：4 失败 / 4 通过 → 8/8，不冒充本地全仓集成。
+最终全仓测试 191 文件、2176 passed / 1 既有 opt-in skipped；Core e2e 65/65、CLI e2e 25/25、Chromium 202/202（零重试）。构建、typecheck、lint 均通过。七档主要页面与四档控制反馈共 64 张原始截图随正式验收归档，已结合文字边界检查实际查看；窄屏裁切及六类证据链接无法进入实际内容的问题已修复。
 
-## 本轮行为
+真实 Claude 在隔离 Git 项目修改代码并输出两份 Artifact，服务进程正常关闭后由另一进程恢复，实际构建、测试与 Audit 通过。readiness 仍为 false：PR、远端 CI、验收标准、QA 和安全扫描证据尚缺，不能把该样本称为远端交付就绪。
 
-初始 workflow/goal Job 分派前尊重持久 paused 状态，不开始 Agent；明确恢复尚未认领的原 Job 时，以 CAS 解除暂停并保留原身份。cancelled/passed/failed 的并发赢家不会被覆盖。没有新状态表、迁移或控制平台。
+## 文档与后续范围
 
-本修复限定于暂停先于初始 Job 认领的场景，不将暂停描述为任意时刻的物理中断，也不保证全部外部副作用恰好执行一次。暂停/恢复 Toast 可进一步区分“请求已记录”和“执行已开始”，列为 P3 建议。
+已将阶段计划归并到[产品范围](../product/tekon-current-product-scope.html)、[运行时合同](../technical/tekon-runtime-contract.html)、[运行控制设计](../design/tekon-run-control-design.html)与[手册](../manual/tekon-user-manual.html)。历史报告保留原观察时间和证据，过程计划引用使用固定提交快照。
 
-## 已认可与下一阶段
+deepseek-harness 核对至 `d347e703908d0406b7a7ef80e3a0e594d86b2215`；GitHub 0.1.3-alpha.1 Release 已发布，截至 2026-09-06 npm 对应版本查询仍 E404。Tekon 已验证 CLI 固定版本保持 `0.1.2-alpha.3`，顶层版本不能锁定整棵依赖树。新版本兼容、持续协作、完整导出、其他 OS/读屏/生产负载及全部外部副作用隔离仍需分别验收。
 
-作者已归档 Claude Code 2.1.261 的 Linux 只读任务及独立宿主重开 SQLite 验证，见[验收材料](2026-09-06-r26-recovery-acceptance.html)。本轮不再说“没有真实 Provider 证据”，也不将有限任务及 1.2 秒文件观察窗口扩大为全部生产保证。
-
-下一步在同一 Provider 上增加含真实 Gate、Artifact 的交付恢复任务，并独立推进完整只读历史导出。持续协作是另一产品场景；单一执行所有权是需求，daemon/事件溯源是可选方案，不按名称缺失一概判为 P0。
-
-DSH 最新发布观察为 `0.1.3-alpha.1`，Tekon tested pin 仍为 `0.1.2-alpha.3`；Headless 一次性任务与 ACP 持久语义会话分别验收。上游未经安全审计，不作为唯一安全控制。
-
-## 验证与维护边界
-
-容器 DNS 不可用，未执行本地全仓测试；集成来自指定提交的远端 CI。无独立 subagent，本轮为保守自检；未新增应用截图式审计、真实读屏、Windows 或模型调用。HTML 排版检查不计作应用 UX 验收。
-
-报告自身的最终 Head、Core/CI 与九个 Job 终态由 PR #11 独立回读记录，不复用代码提交的绿色。旧报告为历史；不覆盖作者原有验收证据。未合并、发布、部署、强推或改仓库规则。
+本地验收不替代该 PR Head 的远端检查。用户已授权提交并在 CI 全部通过后合入 main；提交后独立回读 Core/CI、九个 CI Job 终态及实际合并结果，不复用历史提交绿色。部署和发布不在本轮操作范围。

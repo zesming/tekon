@@ -1,0 +1,21 @@
+{
+  "manualSectionsVerified": [
+    "7.1 zh",
+    "7.1 en",
+    "evidence navigation zh",
+    "evidence navigation en"
+  ],
+  "documents": 54,
+  "localLinks": 512,
+  "generatedPairsVerified": [
+    "docs/design/tekon-run-control-design.html",
+    "docs/product/tekon-current-product-scope.html",
+    "docs/reviews/2026-09-06-r27-delivery-acceptance.html",
+    "docs/reviews/2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.html",
+    "docs/reviews/current.html",
+    "docs/technical/adr-0001-runtime-authority-and-collaborate.html",
+    "docs/technical/tekon-replatform-current-scope.html",
+    "docs/technical/tekon-runtime-contract.html"
+  ],
+  "errors": []
+}

@@ -55,7 +55,7 @@ test.describe('Tekon main flow', () => {
     await expect(page.getByRole('link', { name: 'Artifacts' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Gates' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Audit' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Delivery' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Delivery', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Progress' })).toBeVisible();
 
     // Navigate to Artifacts tab
@@ -71,7 +71,7 @@ test.describe('Tekon main flow', () => {
     await page.waitForURL('**/runs/run_1/audit');
 
     // Navigate to Delivery tab
-    await page.getByRole('link', { name: 'Delivery' }).click();
+    await page.getByRole('link', { name: 'Delivery', exact: true }).click();
     await page.waitForURL('**/runs/run_1/delivery');
     await expect(
       page.getByText('交付管道 Delivery Pipeline'),

@@ -199,7 +199,7 @@ ACP 的取消是协议交互，不是收到 UI 点击就可判定完成；应验
 - Web Goal 预览可读取项目同名 override，实际 SessionService 固定内置 goal，且提交曾忽略 Goal digest。统一内置来源，并校验所有收到的 digest；旧 API 无 digest 的兼容调用不冒充用户已确认预览。
 - 历史 v1 摘要使用冻结算法，只能验证旧投影；无快照旧 Run 保留已有恢复能力。未知/缺损 v2 拒绝而非降级。不批量重算历史或套用当前模板。
 
-建议已纳入 [执行方案 HTML](../superpowers/plans/2026-09-05-twenty-third-review-remediation-plan.html) 的 §3；完整 demand/base/Provider/权限证据绑定仍留在 #20，不因模板切片完成而关闭整个 issue。
+建议已纳入 [执行方案 HTML](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-third-review-remediation-plan.html) 的 §3；完整 demand/base/Provider/权限证据绑定仍留在 #20，不因模板切片完成而关闭整个 issue。
 
 ### 10.3 对 R23-05 的方案取舍
 

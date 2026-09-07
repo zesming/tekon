@@ -218,7 +218,7 @@ Tekon 已从 `f86e0c8` 快进至 `0a6edc95363965daad081ab23ddf254ce2feaa65`，�
 
 ### 10.2 执行绑定：采用冻结事实，不在执行中切换配置
 
-采用 [第 24 轮整改方案](../superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html)：RunPlan v3 记录实际消费的 ref 解析结果与来源，结果区分 resolved、not-applicable、missing；内联命令优先，无消费引用时不读 profile。先以原模板生成稳定 Gate key，再将绑定物化进持久执行 Gate 并移除动态 ref 入口。执行/恢复以同一快照校验期望节点，repair/rework 继承原物化事实。
+采用 [第 24 轮整改方案](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-09-05-twenty-fourth-review-remediation-plan.html)：RunPlan v3 记录实际消费的 ref 解析结果与来源，结果区分 resolved、not-applicable、missing；内联命令优先，无消费引用时不读 profile。先以原模板生成稳定 Gate key，再将绑定物化进持久执行 Gate 并移除动态 ref 入口。执行/恢复以同一快照校验期望节点，repair/rework 继承原物化事实。
 
 拒绝“仅在 Engine 构造时缓存 profile”的方案：它既不绑定用户确认时刻，也会使 v3 恢复与 requestId 重放依赖当前坏配置。文件读取放新受理同步分支，纯准备 helper 只接收已捕获事实；所有输入/选项摘要继续比较。旧 v2/v1/无快照不重写历史，在观察入口明确历史绑定边界。
 

@@ -12,7 +12,7 @@
 
 - **需求塑形**：把一句话需求塑形成需求卡，明确目标、非目标、风险、开放问题和验收标准。
 - **受控 workflow**：使用固定模板，而不是让 Agent 自由决定所有步骤。内置 `standard-feature`、`bugfix`、`test-improvement`、`docs-update`、`plan-only`、`standard-delivery`。
-- **可审阅产出**：角色产出结构化 artifact，统一收集 gate 日志、审计事件、diff 和 PR 包，通过 `review` 或 Web dashboard 查看。
+- **可审阅产出**：角色产出结构化 artifact，统一收集 gate 日志、审计事件、diff 和 PR 包，通过 `review` 或 Web dashboard 查看；Web 证据链接可定位对应产物、门禁、审计事件和交付章节。
 - **副作用受控**：push、创建 PR 等远端动作必须显式人工批准。
 - **效果可评估**：用 readiness、work usability eval 判断一次 run 是否真的可交付。
 
@@ -48,6 +48,7 @@
 | Gate 与证据   | build、lint、test、security-scan、schema、human、independent-review、role-scope、ac-evidence、qa-signoff、process-completeness                                  |
 | 审阅面        | `tekon review` 和 Web dashboard 汇总 readiness、证据、诊断、diff、PR 包                                                                                         |
 | 可靠发起      | Request ID 绑定提交意图；同内容重试返回原运行身份，目录未就绪时保留身份并等待恢复                                                                               |
+| 运行控制      | 暂停在活动步骤边界生效；取消可重试补发；恢复保留原 Run，退出未知时需绑定旧 Job 确认                                                                             |
 | 检查绑定      | 发起前查看逐项检查的来源、执行或跳过方式及刷新差异；新运行保留受理时的命令与适用性，供执行和恢复使用                                                           |
 | 交付管理      | dry-run → prepare → create-pr（人工批准）→ ci-status → ci-watch，层层受控                                                                                       |
 | 效果评估      | `eval readiness`（单次 run）、`eval work-usability`（样本集）评估交付质量和工具可用性                                                                           |
@@ -222,6 +223,10 @@ npm run lint:actions
 
 ## 文档
 
-- [V2 技术方案](docs/technical/tekon-v2-technical-plan.md)
+- [现行产品范围](docs/product/tekon-current-product-scope.md) · [HTML](docs/product/tekon-current-product-scope.html)
+- [运行时与 Harness 集成合同](docs/technical/tekon-runtime-contract.md) · [HTML](docs/technical/tekon-runtime-contract.html)
+- [Web 发起与运行控制设计](docs/design/tekon-run-control-design.md) · [HTML](docs/design/tekon-run-control-design.html)
+- [用户手册](docs/manual/tekon-user-manual.md) · [HTML](docs/manual/tekon-user-manual.html)
+- [V2 历史技术方案](docs/technical/tekon-v2-technical-plan.md)
 - [当前权威产品与架构评审（HTML）](docs/reviews/current.html)
 - [变更日志](CHANGELOG.md)

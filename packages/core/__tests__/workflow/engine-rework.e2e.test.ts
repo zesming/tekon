@@ -172,7 +172,7 @@ describe('workflow engine changes-requested rework e2e', () => {
         },
       });
 
-      expect(result.workflow.status).toBe('paused');
+      expect(result.workflow.status, JSON.stringify((await repositories.listAuditEvents(result.runId)).filter(event => event.type.endsWith('.error') || event.type.endsWith('.failed')).map(event => event.payload))).toBe('paused');
       const verified = await validateAndBuildExecutionPlan(result.runId, repositories, audit);
       expect(verified.phases[0].nodes.map(node => node.id)).toEqual([
         `${result.runId}_rd-node`, `${result.runId}_rd-node_rework_1`,
@@ -232,6 +232,12 @@ describe('workflow engine changes-requested rework e2e', () => {
       const leases = await repositories.listWorktreeLeases(result.runId);
       expect(leases.length).toBeGreaterThanOrEqual(2);
       expect(leases.every((lease) => lease.releasedAt)).toBe(true);
+      const reviewerLeases = leases.filter(lease => lease.nodeId === `${result.runId}_reviewer-node`);
+      expect(reviewerLeases).toHaveLength(2);
+      expect(observedGateCalls.filter(call => call.gateType === 'independent-review').map(call => call.cwd))
+        .toEqual(reviewerLeases.map(lease => lease.worktreePath));
+      expect(reviewerLeases.every(lease => lease.worktreePath !== repoPath)).toBe(true);
+
 
       // ── Git delivery branch has the file ──
       expect(
@@ -264,6 +270,11 @@ function createChangesRequestedGateEngine(
 
   return {
     async runGate(input) {
+      if (input.gate.type === 'independent-review') {
+        const lease = (await repositories.listWorktreeLeases(input.runId))
+          .find(lease => lease.nodeId === input.nodeId && lease.worktreePath === input.cwd);
+        expect(lease).toMatchObject({ worktreePath: input.cwd, releasedAt: null });
+      }
       observedCalls.push({
         nodeId: input.nodeId,
         gateType: input.gate.type,

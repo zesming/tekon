@@ -1,5 +1,8 @@
 # Tekon V2 技术方案
 
+> **历史方案（2026-09-06 标记）**：正文保留当时的架构设想与数据，不代表现行能力、权限或实施顺序。当前产品以[产品范围](../product/tekon-current-product-scope.md)、运行时以[现行合同](tekon-runtime-contract.md)、Web 以[运行控制设计](../design/tekon-run-control-design.md)为准。旧自动推进、token 存储、无持久 fencing 等表述不得用于当前验收。
+
+
 > 本文档是 Tekon 重构版本（V2）的完整技术方案。V2 保留 V1 的核心定位（面向技术基建团队的 AI 自动交付系统），在架构上进行了根本性重构：从单块 CLI 工具演进为基于角色文件系统 + 可编排 Workflow 引擎的 AI 原生产研流程执行系统。
 
 ## 一、产品定位与核心思路
