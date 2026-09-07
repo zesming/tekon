@@ -1,178 +1,126 @@
 # 天工（Tekon）用户使用手册
 
-本文对应 v0.25.0。HTML 审阅版保留导航和语言切换；本轮更新内容提供中英对照，历史章节仍以中文为主。
-
-名称说明：天工的英文名是 Tekon，取 Tech + Kong 的融合谐音，中文名取”天工”。
+适用版本：**v0.25.1**。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
-天工（Tekon）是一个本地 Agent workflow 框架——一个”受控研发工作台”：用户把研发需求交给天工，天工会按固定 workflow 拆成角色任务、在隔离 worktree 中执行、跑验证 gate、沉淀 artifact 和审计记录，最后整理出可审阅材料和 PR 准备包。
+天工（Tekon）是本地 Agent workflow 框架。它把研发需求拆成角色任务，在隔离 worktree 中执行，运行验证关卡（Gate），并集中保存产物、日志、审批和交付证据。
 
-天工的核心目标是增强人类交付能力。它帮助你把需求推进到”可以人工审阅、可以准备 PR、可以继续验证”的状态；合入、上线、权限扩大、生产变更仍然由人控制。
+你可以通过 CLI 或 Web 发起任务、查看进展、处理审批，最后准备可人工审阅的 PR 材料。push 和创建 PR 需要当次人工批准；合入、上线、权限扩大及生产变更仍由人控制。
 
-当前定位：
-
-- 本地 CLI/Web 工具。
-- 受控 workflow 执行器。
-- 证据和审阅材料收集器。
-- PR 准备助手。
-- 研发工作样本评估器。
-- 支持 mock、Claude Code 和 Codex provider 的本地执行入口；另含 experimental 的 dsh-headless（DeepSeek Harness）provider。
-  - ⚠️ **dsh-headless 使用前必读**：默认关闭；agent 子进程**网络出口不受限**（弱于 codex，dsh 无法禁网）；**仅适用于 `--goal` 运行**（无法写产物目录，交付类 workflow 节点会失败）；需自行安装 `@deepseek-ai/dsh` 并配 `DEEPSEEK_API_KEY`。详见 §5.7。
+当前支持 `codex`、`claude-code`、`mock`，以及 experimental 的 `dsh-headless`。DSH 必须显式选用，仅支持 Goal，联网不受限；使用前见 §5.7。
 
 ## 2. 天工解决什么问题
 
 ### 2.1 需求进入研发前不清楚
 
-真实工作里，很多需求只有一句话：“帮我补个功能”“修一下这个问题”。直接交给 Agent 容易出现边界不清、验收标准不清、风险不清。天工提供 `draft shape`，先把需求塑形成需求卡，包含：
-
-- 需求标题和正文。
-- 推荐 workflow 模板。
-- 风险等级和风险标签。
-- 非目标。
-- 开放问题。
-- 验收标准。
-
-用户可以先审阅和批准需求卡，再发起执行。
+`draft shape` 把一句需求整理成需求卡：标题、正文、推荐模板、风险、非目标、开放问题和验收标准。先审阅并批准需求卡，再执行；需要终端交互澄清时使用 `draft new "需求文本"`。
 
 ### 2.2 不知道该选什么 workflow
 
-不同工作不应该都套同一个流程。天工提供受控模板推荐：
+`workflow select` 推荐模板并给出理由，`eval workflow-selection` 评估选择是否合适。
 
-- `standard-feature`：标准功能。
-- `bugfix`：缺陷修复。
-- `test-improvement`：测试补齐。
-- `docs-update`：文档更新。
-- `plan-only`：只做方案，不执行代码改动。
-- `standard-delivery`：标准交付治理流程，包含 PM/RD/QA/Reviewer/PMO 完整角色链路、独立评审、AC evidence、QA signoff 和流程完整性 gate。
+| 模板 | 用途 |
+| --- | --- |
+| `standard-feature` | 标准功能 |
+| `bugfix` | 缺陷修复 |
+| `test-improvement` | 补充测试 |
+| `docs-update` | 更新文档 |
+| `plan-only` | 只做方案 |
+| `standard-delivery` | 完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署 |
 
-`workflow select` 会给出推荐模板和理由；`eval workflow-selection` 会检查人工选择是否合理。
+不传 `--template` 时，`run` 使用 `standard-delivery`；不会自动采用需求卡的推荐模板。
 
 ### 2.3 Agent 输出不可审阅
 
-很多 Agent 工具会把结果散落在对话、文件和日志里。天工要求 provider 输出结构化 artifact，并把 gate、日志、审计事件和 PR 包统一组织起来。用户可以通过 `review` 或 Web dashboard 看：
-
-- readiness 失败项。
-- 证据入口。
-- Gate 失败诊断。
-- 影响文件和 diff。
-- Artifact 正文预览。
-- Gate 日志。
-- PR 准备包。
-- 下一步命令建议。
+`review` 和 Web 把失败检查、影响文件、diff、产物正文、Gate 日志、审批及 PR 包集中展示。先看失败原因，再沿证据入口核对实际结果。
 
 ### 2.4 远端副作用需要人控制
 
-真实 push、创建 PR、等待远端 CI 都属于有副作用或外部依赖的动作。天工把这些动作拆开：
+| 命令 | 实际作用 |
+| --- | --- |
+| `delivery dry-run` | 查看交付计划 |
+| `delivery prepare` | 生成本地 PR 包 |
+| `delivery create-pr --approve-human` | 人工批准后 push 分支并创建 PR |
+| `delivery ci-status` / `ci-watch` | 只读查询远端 checks，写回本地证据 |
 
-- `delivery dry-run`：只看交付计划。
-- `delivery prepare`：只生成本地 PR 包。
-- `delivery create-pr --approve-human`：人工明确批准后才 push 和创建 PR。
-- `delivery ci-status` / `ci-watch`：只读查询 PR checks，不 rerun CI、不 merge、不上线。
+查询 CI 不会重跑 CI、合入或上线。
 
 ### 2.5 需要判断一次 run 是否真的可交付
 
-`eval readiness` 会评估单个 run 的交付证据是否完整。当前 `pr-prepared`、`pr-created` 和 `remote-ci-passed` 都是 required，因此在 PR 准备、真实 PR 创建或远端 CI 证据写回之前，`ready=false` 是预期状态。`eval work-usability` 会评估一组真实样本是否达到试用门槛，避免只靠 fixture 或 demo 宣称可用。
+`eval readiness` 检查单次运行的交付证据；`eval work-usability` 检查真实工作样本集。
+
+完整 readiness 要求本地 PR 包、真实 PR 和远端 CI 均有证据。因此，本地 workflow 通过后仍可能 `ready=false`。mock 通过也不能证明真实 Provider 可用。
 
 ## 3. 核心用户场景
 
-> 以下流程中标 `◇ 可选` 的步骤属于人类观察操作，不做也不影响流程推进，但建议在关键节点执行以便审阅。
+以下是推荐路径。查看状态和证据不会推进远端交付；审批前应先完成审阅。
 
 ### 场景 A：我有一个小功能，希望推进到可审 PR
 
-适用例子：
+适合可回滚、影响范围明确的小功能。
 
-- 给内部工具增加一个筛选条件。
-- 为 CLI 补一个低风险命令。
-- 给 Web dashboard 增加一个入口。
-
-推荐流程（Human ↔ Tekon 交替时序）：
-
-1. **Tekon**: `tekon init` 初始化目标仓库。
-2. **Tekon**: `draft shape` 把需求写成需求卡。
-3. **Human**: 人工审阅需求卡，确认边界和验收标准。
-4. **Human**: `draft approve` 批准需求卡。
-5. **Tekon**: `run` 发起 workflow。
-6. **Human** ◇ 可选: `status` 和 `review` 查看结果和审阅面。
-7. **Tekon**: `delivery prepare` 生成 PR 准备包。
-8. **Human**: 人工确认后 `delivery create-pr --approve-human` 创建远端 PR。
-9. **Tekon**: `delivery ci-status` 或 `ci-watch` 写回远端 CI 证据；`eval readiness` 判断完整性。
+1. `tekon init`，然后运行 `tekon workflow preflight`。
+2. `tekon draft shape "需求文本"`，人工核对需求卡。
+3. `tekon draft approve`，再 `tekon run`。
+4. `tekon status`、`tekon review`，处理失败和待审批项。
+5. `tekon delivery prepare`，人工审阅 PR 包与 diff。
+6. 明确批准后执行 `tekon delivery create-pr --approve-human`。
+7. `tekon delivery ci-status`，再用 `tekon eval readiness` 检查交付证据。
 
 ### 场景 B：我只想修一个 bug，但需要人工确认风险
 
-适用例子：
+使用 `tekon run "缺陷与复现步骤" --template bugfix`。遇到 human gate：
 
-- 修改一个已有逻辑分支。
-- 修复一个低风险接口问题。
-- 调整一个内部工具的状态处理。
+1. `tekon approval summary` 查看风险、命令和证据。
+2. `tekon eval approval-summary` 检查摘要完整性。
+3. 人工决定后执行 `tekon resume --approve-human` 或 `tekon approval reject`。
 
-推荐流程：
-
-1. **Tekon**: 使用 `bugfix` 模板运行 workflow。
-2. **Tekon**: 如果触发 human gate，先执行 `approval summary` 生成审批摘要。
-3. **Tekon**: 用 `eval approval-summary` 检查审批摘要是否完整。
-4. **Human**: 人工判断后选择：
-   - `resume --approve-human`：批准继续。
-   - `approval reject`：拒绝并阻断 workflow。
+`bugfix` 不等于完整交付治理；当前 `delivery prepare` 只支持 `standard-delivery`。
 
 ### 场景 C：我只想补测试
 
-适用例子：
+```bash
+tekon workflow select "补齐 CLI 失败路径的测试"
+tekon run "补齐 CLI 失败路径的测试" --template test-improvement
+tekon review
+```
 
-- 为某个模块补单测。
-- 为失败路径补回归测试。
-- 为 CLI 或 Web API 增加覆盖。
-
-推荐流程：
-
-1. **Tekon**: `workflow select` 确认是否推荐 `test-improvement`。
-2. **Tekon**: `run --template test-improvement` 执行。
-3. **Human** ◇ 可选: 查看 gate 是否通过。
-4. **Human** ◇ 可选: 用 `review` 检查 artifact 和测试证据。
+核对新增断言、实际测试日志和覆盖缺口，不只看测试数量。
 
 ### 场景 D：我只想写文档或方案
 
-适用例子：
+选择 `docs-update` 更新文档，或 `plan-only` 生成方案。需要完整角色链路及交付证据时才选 `standard-delivery`。
 
-- 更新用户手册。
-- 整理验收报告。
-- 写技术方案或产品方案。
-
-推荐模板：
-
-- `docs-update`：文档更新。
-- `plan-only`：只做计划或方案，不推进代码改动。
-- `standard-delivery`：需要验证完整角色链路时使用；当前适合 Tekon 自身 dogfooding 和低风险种子任务，不适合直接承诺生产级强治理。
+当前完整治理适合 Tekon 自身 dogfooding 和低风险种子任务，不能据此承诺生产级治理。
 
 ### 场景 E：我要判断天工是否已经能用于真实工作
 
-推荐流程：
+选择 2–3 个低风险真实仓库，准备约 10 个真实或历史需求。每次运行后用 `eval work-usability record` 记录样本，再用 `eval work-usability --samples` 汇总评估。
 
-1. 挑选 2 到 3 个真实但低风险的仓库。
-2. 准备 10 个真实或历史需求。
-3. 每次 run 后用 `eval work-usability record` 写入样本清单。
-4. 用 `eval work-usability --samples` 评估样本集。
-5. 把 Markdown/HTML 报告保存到 `docs/reviews/`。
+正式验收时，把 Markdown/HTML 报告保存到 `docs/reviews/`，注明真实 Provider、失败与恢复、人工介入和未覆盖范围。
 
 ## 4. Quick Start
 
-以下示例假设已通过安装脚本将 `tekon` 配置到 PATH，并且你正在目标项目根目录执行命令。从其它目录操作目标仓库时，显式追加 `--repo /path/to/project`。
+先安装，再进入目标 Git 仓库。首次试用建议选范围明确、可回滚的任务。
 
 ### 4.1 安装
 
-一键安装（推荐）：
+前置依赖：`git`、`npm`，以及 Node `^20.19.0 || >=22.12.0`。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-安装脚本会自动完成克隆、安装依赖、构建，安装完成后输出 PATH 配置命令。按提示将 `tekon` 加入 PATH 并 `source` 对应 rc 文件即可。前置依赖：`git`、`node`（`^20.19.0` 或 `>=22.12.0`）、`npm`。CI 精确验证 `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x` 最新补丁；该集合不等于对 Node 23/25/26 或未来 major 的生产支持承诺。
+脚本会克隆仓库、安装依赖并构建。按完成提示设置 PATH，再重新加载对应 shell 配置。
 
-如需指定安装目录或分支：
+自定义安装目录或分支时，环境变量应传给执行脚本的 `bash`：
 
 ```bash
-TEKON_HOME=/opt/tekon TEKON_VERSION=main curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | TEKON_HOME=/opt/tekon TEKON_VERSION=main bash
 ```
+
+CI 验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
 
 ### 4.1.1 更新
 
@@ -180,7 +128,7 @@ TEKON_HOME=/opt/tekon TEKON_VERSION=main curl -fsSL https://raw.githubuserconten
 tekon update
 ```
 
-自动拉取最新代码、安装依赖、重新构建，完成后输出版本变更。
+拉取代码、安装依赖并重新构建；完成后显示版本结果。
 
 ### 4.2 初始化目标仓库
 
@@ -188,7 +136,7 @@ tekon update
 tekon init
 ```
 
-初始化会在目标仓库生成 `.tekon/` 运行态目录，包含配置、数据库、工作区、workflow、角色和 Web session token。
+生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。该目录通常不提交。
 
 ### 4.3 检查目标仓库命令画像
 
@@ -196,13 +144,14 @@ tekon init
 tekon workflow preflight
 ```
 
-重点看：
+| 状态 | 含义 |
+| --- | --- |
+| `resolved` | 已解析检查命令，尚不代表命令执行成功 |
+| `missing` | 缺少命令，需补充仓库配置 |
+| `not-applicable` | 已显式声明不适用 |
+| `not-command-gate` | 语义 Gate，不需要外部命令 |
 
-- `status=resolved`：该 gate 命令已解析。
-- `status=missing`：目标仓库缺少对应命令，需要补 repo profile。
-- `status=not-applicable`：用户显式声明不适用。
-- `status=not-command-gate`：schema、role-scope、QA signoff 等语义 gate 不需要 repo profile 命令。
-- `suggestedCommand`：天工从 `package.json` 中推断出的候选命令，需要人确认。
+检查 `suggestedCommand`，确认后写入 `.tekon/repo-profile.yaml`，再运行预检。
 
 ### 4.4 塑形需求
 
@@ -210,17 +159,14 @@ tekon workflow preflight
 tekon draft shape "给 Web dashboard 增加审批摘要展示，要求 e2e 通过"
 ```
 
-命令会输出 `shapePath` 和 `reviewPath`。先读 Markdown 审阅稿，确认需求边界后批准：
+读取输出的 `reviewPath` 审阅稿，核对范围和验收标准后批准：
 
 ```bash
 tekon draft approve
-```
-
-可选：评估需求卡质量。
-
-```bash
 tekon eval demand-shape
 ```
+
+评估可以辅助审阅，但不会代替人工批准。
 
 ### 4.5 发起运行
 
@@ -228,23 +174,21 @@ tekon eval demand-shape
 tekon run
 ```
 
-普通 workflow/Goal 启动前，CLI 向 stderr 打印 `Request ID: …`；保存它，超时或结果丢失后可加 `--request-id <原标识>` 按相同需求和参数重试。受理后输出 `runId`，同一请求的重试返回原运行身份。后续常规命令默认读取最近一次 run；查看历史 run 或避免歧义时传 `--run-id`。目录未就绪时显示“已受理，等待目录就绪”或“已受理，等待目录恢复”；任务尚未执行，处理方式见 §6.6。
+没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 `standard-delivery`；Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `codex`。
 
-明确长程任务可以在 run 级别显式放大外层预算，例如 2 小时总超时、20 分钟无输出进展超时、30 秒 heartbeat：
-
-```bash
-tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heartbeat-ms 30000
-```
-
-未传 `--template` 时默认运行 `standard-delivery`；未传 `--agent` 时默认使用 Codex provider。离线回归或演示时，可显式切到 mock provider：
-
-> **计划预览与实际执行绑定**：Web 的 workflow/Goal 预览绑定完整模板、执行模式、确认参数与实际使用的仓库检查配置；Goal 使用内置 goal 模板。在“检查配置与适用性”中展开详情，查看每项检查的来源及执行或跳过方式；刷新后核对变化，再点击提交。出现 `PLAN_DIGEST_MISMATCH` 时，点击“刷新执行计划”重新审阅，不自动接受新计划。预览不会展示原始工具、参数、环境变量或不适用理由。新运行保留受理时的检查命令、来源与适用性，执行、恢复和返工沿用原记录；这不冻结脚本正文或整个环境。历史绑定边界见 §6.7，完整确认步骤见 §7。
+真实 Codex 运行需要本机 CLI 和可用的 `internal` profile。只检查流程时可显式使用 mock：
 
 ```bash
 tekon run --template standard-delivery --agent mock
 ```
 
-Codex provider 使用本机 `codex exec` 非交互模式，通过 `TEKON_OUTPUT_DIR` 和 `$TEKON_ARTIFACT_MANIFEST` 写回结构化 artifact。真实 provider 默认总超时 1 小时，无输出或产物进展超时 15 分钟，可用 `--timeout-ms`、`--no-progress-timeout-ms`、`--progress-heartbeat-ms` 覆盖。执行过程会写入 progress JSON 支持 resume，QA validation 会记录 tested ref 确保所测即所得。远端副作用仍由 `delivery create-pr --approve-human` 人工批准后执行。
+保存启动时 stderr 打印的 `Request ID` 和受理后返回的 `runId`。超时或结果丢失时，保持原需求与参数，追加原 `--request-id` 重试，避免重复任务。受理与目录未就绪的处理见 §6.6。
+
+真实 Provider 默认总超时 1 小时、无输出或产物进展超时 15 分钟。长任务可调整：
+
+```bash
+tekon run --timeout-ms 7200000 --no-progress-timeout-ms 1200000 --progress-heartbeat-ms 30000
+```
 
 ### 4.6 查看结果
 
@@ -253,7 +197,7 @@ tekon status
 tekon review
 ```
 
-此时可以先看审阅面、gate、artifact、diff 和 PR 包建议。PR/CI 证据尚未写回前，`eval readiness` 通常会因为 `pr-prepared`、`pr-created` 或 `remote-ci-passed` 失败而保持 `ready=false`。
+核对 Gate、产物、diff 和待审批项。完整 PR/CI 证据写回前，readiness 保持 `ready=false` 可能是预期结果。
 
 ### 4.7 准备 PR 材料
 
@@ -261,17 +205,19 @@ tekon review
 tekon delivery prepare
 ```
 
-这一步当前只支持 `standard-delivery` 治理 run，只生成本地 PR 包，不 push、不创建 PR。生成前会执行 pre-PR readiness：workflow 必须 passed、无 pending human gate、验证 gate 与安全扫描满足、AC evidence 完整、QA release signoff 必须通过且绑定 QA validation 记录的 tested ref。未满足时不会生成 PR 包。
+仅支持 `standard-delivery`，生成本地 PR 包。要求 workflow 通过、无待审批 Gate、验证与安全扫描满足、验收证据完整，且 QA release signoff 通过并绑定 QA validation 的 tested ref。
+
+不满足前置检查时不会生成 PR 包。
 
 ### 4.8 创建远端 PR
 
-确认 PR 包、diff、gate 和审阅面后，才执行：
+审阅 PR 包、diff 和验证证据后，由人明确批准：
 
 ```bash
 tekon delivery create-pr --approve-human
 ```
 
-这一步会产生真实远端副作用：push 分支并调用 GitHub CLI 创建 PR。执行前会重新生成并校验 PR 包，因此不会绕过 pre-PR readiness、QA signoff 和所测即所得校验。受控 `git/gh` 命令和 create-pr 前置只读 probe 默认 1 小时总超时、15 分钟无 stdout/stderr 或受控输出目录文件进展超时，并写入 progress JSON；delivery 分支名和 base branch 会拒绝 `--mirror`、`:branch`、空白、`..`、`@{` 等不安全 ref。
+命令重新生成并校验 PR 包，然后 push 分支并调用 GitHub CLI 创建 PR。需要 `gh` 已认证、远端权限有效、主工作区除 `.tekon` 外无未提交改动。
 
 ### 4.9 查询远端 CI
 
@@ -279,1154 +225,655 @@ tekon delivery create-pr --approve-human
 tekon delivery ci-status
 ```
 
-如果希望等待 checks 到终态：
+需要等待 checks 结束时：
 
 ```bash
 tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
-```
-
-远端 CI 证据写回后，再执行：
-
-```bash
 tekon eval readiness
 ```
 
 ### 4.10 默认上下文规则
 
-天工的常规 CLI 使用方式是“进入目标仓库根目录后执行短命令”。默认推断规则如下：
+| 对象 | 省略参数时的选择 |
+| --- | --- |
+| Repo | 从当前目录向上找 `.tekon/config.yaml`，否则取当前 Git 根目录；`--repo` 优先 |
+| 需求卡 | `draft shape` 写入 `.tekon/demands/`；批准、查看与评估默认取最近卡片 |
+| Run | `run` 无文本和文件时要求最近卡片已批准；普通查看与交付命令默认取最近 Run |
+| 人工决策 | 审批相关命令定位待审批项；同一 Run 有多个 pending decision 时必须传 `--decision-id` |
 
-- Repo：优先使用 `--repo`；不传时从当前目录向上查找 `.tekon/config.yaml`，找不到时使用当前 Git 仓库根目录。
-- Demand shape：`draft shape` 默认写入 `.tekon/demands/`；`draft approve` 默认批准最近需求卡，如果最近需求卡已经批准，历史未批准需求卡必须显式传 `--shape <path>`；`eval demand-shape` 默认评估最近一张需求卡。
-- Run：`run` 没有需求文本且没有 `--demand-file` 时，默认读取最近需求卡，且该需求卡必须已批准；`status`、`review`、`eval readiness`、`delivery prepare` 等默认使用最近一次 run。
-- Human decision：`approval summary`、`eval approval-summary`、`approval reject` 和 `resume --approve-human` 默认使用最近的 pending human decision；如果同一 run 同时存在多个 pending decision，必须显式传 `--decision-id`。
+最近需求卡已批准时，`draft approve` 不会自动找更早的未批准卡片；请用 `--shape` 指定。
 
-需要显式传参的情况通常只有三类：从其它目录操作目标仓库时传 `--repo`；查看或处理历史对象时传 `--run-id`、`--shape`、`--demand-file`、`--decision-id`；执行高风险动作时保留 `--approve-human` 或 `--allow-dirty-base` 作为明确人工确认。
-
-如果你显式传了 `--repo`、`--run-id` 或 `--decision-id` 查看跨仓库或历史对象，`review` 和 `approval summary` 会输出带 id 和 repo 的精确后续命令，避免复制短命令后误操作到最新 run、最新待审批项或当前 shell 目录。
+跨仓库或历史对象使用 `--repo`、`--run-id`、`--shape`、`--demand-file`、`--decision-id`。显式定位时，`review` 和 `approval summary` 会提供带身份的后续命令，复制前仍应核对目标。
 
 ## 5. 核心概念
 
 ### 5.1 Repo
 
-目标仓库，也就是你希望天工处理的项目。天工自身仓库和目标仓库可以相同，也可以不同。
+希望 Tekon 处理的目标仓库。它可以是 Tekon 自身，也可以是其他项目。
 
 ### 5.2 `.tekon/`
 
-天工在目标仓库中的运行态目录。它保存：
+目标仓库的运行态目录，保存配置、SQLite 数据库、worktree、需求卡、产物、日志和 Web 令牌。
 
-- 配置。
-- SQLite 数据库。
-- run artifact。
-- gate 日志。
-- worktree。
-- draft shape 文件。
-- Web session token。
-
-通常不提交 `.tekon/`。重要结论应写入 `docs/reviews/` 或其它可提交文档。
+通常不提交。正式验收或发布依据应另存到可提交文档中，并排除凭证。
 
 ### 5.3 Run
 
-一次 workflow 执行。每个 run 有唯一 `runId`，例如 `run_xxx`。用户查看状态、审阅材料、准备 PR、查询 CI 都围绕 run id 进行。
+一次 workflow 或 Goal 执行，以唯一 `runId` 标识。查看、审批、恢复和交付均围绕原 Run 进行。
 
 ### 5.4 Workflow
 
-一组有顺序和依赖的角色节点。当前常用内置模板：
-
-- `standard-feature`
-- `bugfix`
-- `test-improvement`
-- `docs-update`
-- `plan-only`
-- `standard-delivery`
+有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。
 
 ### 5.5 Role
 
-执行节点的角色，例如 PM、RD、QA、Reviewer、PMO。角色决定 prompt、知识和工具策略。
+节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。
 
 ### 5.6 Gate
 
-验证关卡。常见 gate：
+验证关卡，包括 build、lint、test、schema、security-scan、human，以及独立评审、角色范围、验收证据、QA 签署和流程完整性检查。
 
-- build
-- lint
-- test
-- schema
-- security-scan
-- human
-- independent-review
-- role-scope
-- ac-evidence
-- qa-signoff
-- process-completeness
-
-Gate 不通过时 workflow 不应被当成可交付。
+Gate 通过说明该项检查满足规则；是否可交付还需结合其他证据。human gate 必须由人处理。
 
 ### 5.7 Provider
 
-Provider 是执行节点的 agent 后端。当前用户可见选项：
+| Provider | 适用范围与前提 |
+| --- | --- |
+| `codex` | 默认后端；本机安装 Codex CLI，配置并认证 `internal` profile |
+| `claude-code` | 本机 Claude Code adapter；需安装、认证和当前环境的真实验证 |
+| `mock` | 确定性流程演示与回归；不能证明真实 Agent 能力 |
+| `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
 
-- `mock`：确定性本地 provider，适合 fixture、回归测试和流程验收。
-- `claude-code`：本机 Claude Code adapter，需本机认证和单独 smoke 证据。
-- `codex`：本机 Codex CLI adapter，使用 `codex --profile internal ... exec` 非交互执行，需本机 Codex CLI 已安装并认证 internal profile。
-- `dsh-headless`（**experimental，默认关闭**）：本机 DeepSeek Harness（`dsh`）adapter，经 `dsh --profile headless "<task>"` 一次性子进程边界执行。**使用前必读的硬边界：**
-  - ⚠️ **网络出口不受限，弱于 codex**：dsh 沙箱只管文件写效果，任何模式都无法关闭网络出口（4 处官方 README 实证）。codex 的 `workspace-write` 默认禁网，dsh 不能。选用 `dsh-headless` 即接受 agent 子进程可任意联网；要真正断网只能自行在 OS 层（网络命名空间/防火墙/容器）隔离。
-  - ⚠️ **仅适用于 goal / 无产物节点**：dsh 只有单一工作区可写根（=运行目录），无 codex `--add-dir` 等价机制，无法写 worktree 之外的产物目录。因此 standard-delivery 等交付类 workflow 的每个产物节点都会确定性失败；实际可用范围只有 `--goal` 运行与无 outputs 的自定义 workflow。
-  - 一次性、未向 Session/UI 投影执行期流、无 follow-up：跑完出结果，取消靠杀子进程。需自行安装 `@deepseek-ai/dsh`（Tekon 不捆绑），并配置 `DEEPSEEK_API_KEY`。Tekon 钉死该版本（当前 `0.1.2-alpha.3`），版本不符即显式报错退出（developer-preview，随时可能不兼容变更）。官方参考参见 [DeepSeek Harness alpha.3 CLI Reference](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.3/apps/cli/reference/README.md)（资料内容：DSH headless 会把 reasoning delta 流式写 stderr、最终文本写 stdout，并定义参数规范与内置会话遥测机制；对 Tekon 判断：当前 adapter 仅收集日志、未向 Session/UI 投影该 stream，且缺乏多工作区产物外写机制，仅可作为 experimental goal-only provider，且 preflight 与 Run 必须硬关断内置 session telemetry）。
-  - ⚠️ **Node 版本要求与 Tekon 主合同不同**：DSH 要求 Node `^22.19.0 || >=24.0.0`，而 Tekon 主合同允许 Node `^20.19.0 || >=22.12.0`。preflight 会在探测 dsh 二进制之前硬拦截不兼容的宿主 Node（Node 20.x、22.12 及以上但低于 22.19、奇数版本线如 23.x），并给出升级指引。若确认 dsh 实际运行在更高版本 Node 上（如全局安装在 Node 24 下），可设置 `TEKON_DSH_ALLOW_HOST_NODE=<当前版本号>` 精确放行，preflight 会输出旁路警告。
-  - ⚠️ **Metadata 预检采用最小环境和隔离临时 workspace**：Tekon 为内置 Version/Config/Help probe 创建一次临时 root，统一设置 `cwd=root`、`DSH_HOME=root/dsh-home`、`DSH_AGENTS_HOME=root/agents-home`，只透传命令启动、home/temp/locale 等白名单值，并固定 `DSH_TELEMETRY_DISABLED=1`。这会切断 DeepSeek Harness rc.1 已确认的 invocation cwd `.env`、DSH home `.env` 与 `.credentials.yaml` 自动 fallback；完成后临时 root 会清理。它**不是 OS sandbox**，不能阻止同 UID 恶意二进制主动读取宿主文件，也不修改用户宿主环境。正式 Run 仍使用独立的 `envMode: exact` 白名单，但 worktree `.env`、代理配置、凭据来源与内部工具执行证据仍是独立风险，不因 metadata 隔离而关闭。2026-09-03 的无凭据 Wrapped L2 已验证官方 [`0.1.2-rc.1`](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-rc.1) 的 Version/Config/Help 合同；因 L3 真实模型调用尚未完成，Tekon tested pin 继续保持 `0.1.2-alpha.3`。
+真实 workflow 节点通过 artifact manifest 交回声明的产物。Run 保存 Provider 配置快照，恢复沿用原快照，避免意外切换后端。
 
-**Provider 环境预检**：使用 `dsh-headless` 前，可先运行预检命令确认本机环境与 Tekon 钉死版本兼容：
+**DSH 使用条件**：自行安装 `@deepseek-ai/dsh` 并配置 `DEEPSEEK_API_KEY`；当前 tested pin 为 `0.1.2-alpha.3`，宿主 Node 要求 `^22.19.0 || >=24.0.0`。先运行：
 
 ```bash
 tekon provider preflight dsh-headless
 ```
 
-它会检查实际安装的 `dsh` 版本、headless help 合同与默认配置插件组合，输出 tested 版本、actual 版本、合同校验结果与精确的兼容安装命令；兼容时退出码 0，不兼容时退出码 1。Web 与 CLI 在使用 `dsh-headless` 发起运行时，也会在任何运行记录产生之前自动执行同样的预检，不兼容时立即给出可读错误，不会带着残缺能力进入执行。
+预检检查 Node、版本、headless help 和默认插件配置，返回结果及兼容安装命令。CLI/Web 新运行会在创建运行记录前预检，执行时也会校验能力。
 
-Web 顶栏将凭据和 Provider 分开显示。凭据校验不等待可选 DSH 探测；凭据有效后，独立检查 `dsh-headless`，显示“检查中 / 可用 / 不可用 / 检查失败”，并提供上次检查时间和重试按钮。页面按服务端返回的过期时间刷新结果；检查失败时保留的旧时间不代表本次检查成功。凭据有效只说明连接授权有效，不保证 Provider 可执行；需要诊断时运行上述 `tekon provider preflight dsh-headless`。
+确认联网边界后，才能发起：
 
-真实 provider 都必须提供 artifact manifest。Tekon 会把 provider 产物写入 Artifact Store，并把 provider/config 摘要落库到 run provider snapshot；resume 时按快照恢复，避免旧 run 意外换成其它 provider。
+```bash
+tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headless --acknowledge-unrestricted-network
+```
+
+使用前理解以下限制：
+
+- **仅支持 Goal**：CLI/Web 会在受理前拒绝 DSH workflow，包括无 outputs 的自定义 workflow。DSH 只有单一可写工作区，无法写入 worktree 外的交付产物目录。
+- **Goal 默认不接受源码改动**：内置 Goal 不声明 `code-changes`；节点完成时若发现仓库文件或 HEAD 改变，会拒绝提升结果。它不等于操作系统只读沙箱，不适合交付代码修改。
+- **网络出口不受限**：DSH 文件沙箱无法关闭联网；确认参数只记录知情，不会提供网络隔离。需要禁网时由 OS、容器或网络策略实现。
+- **一次性执行**：当前 adapter 收集日志，不向 Session UI 投影执行期流，也不支持后续追问；取消依靠受管理子进程终止。
+- **预检隔离有限**：metadata probe 使用临时工作区、隔离 DSH home 和最小环境，并关闭内置 session telemetry；这不是 OS 沙箱，不能阻止同 UID 恶意二进制主动读取宿主文件。正式 Run 的 worktree `.env`、代理及凭据回退仍需自行核查。
+
+版本或宿主 Node 不兼容时，优先按预检提示安装/升级。`TEKON_DSH_ALLOW_VERSION=<实际版本>` 和 `TEKON_DSH_ALLOW_HOST_NODE=<当前版本>` 是精确匹配的人工旁路，会给出警告，不代表该组合已验证。
+
+外部依据：[DSH alpha.3 CLI Reference](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.2-alpha.3/apps/cli/reference/README.md) 描述 headless 参数、输出和遥测合同；[rc.1 发布页](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-rc.1) 对应后续版本。Tekon 对 rc.1 的无凭据 metadata 检查不能替代真实模型调用，tested pin 仍为 alpha.3。
 
 ### 5.8 Artifact
 
-结构化产物，例如需求卡、代码变更说明、测试报告、审阅报告、PR 包、CI 状态。Artifact 是人工审阅和自动评估的主要证据。
+可存储、审阅和评估的结构化产物，如需求卡、变更说明、测试报告、审阅报告、PR 包及 CI 状态。产物存在不等于内容正确，应核对正文与日志。
 
 ### 5.9 Review Surface
 
-聚合审阅面。CLI 命令是 `review`，Web dashboard 也使用同一套数据。它把用户最需要看的东西放在一起。
+聚合审阅面，供 CLI `review` 与 Web 共用，集中显示检查结果、证据和后续操作。
 
 ### 5.10 Readiness
 
-单次 run 的工作就绪度评估。它回答：“这次 run 的 workflow、gate、artifact、PR 准备、真实 PR 和远端 CI 证据是否已经完整？”
+单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。
 
 ### 5.11 Work Usability
 
-样本集级评估。它回答：“天工是否已经在足够多真实样本上表现稳定，可以作为受控工作工具试用？”
+样本集评估，用真实任务、Provider 和交付结果判断是否达到受控试用门槛。
 
 ## 6. 命令详解
 
 ### 6.1 `init`
 
-用途：初始化目标仓库。
-
 ```bash
 tekon init
+tekon init --repo /path/to/project
 ```
 
-常用参数：
+创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
 
-- `--repo <path>`：从其它目录初始化指定仓库时使用。不传时自动使用当前 Git 仓库根目录或当前目录。
-
-结果：
-
-- 创建 `.tekon/`。
-- 创建 `.tekon/config.yaml`。
-- 创建 `.tekon/repo-profile.yaml`。
-- 创建 `.tekon/web-session.json`。
-- 创建运行所需目录。
-
-问题处理：
-
-- 如果目标目录不是 Git 仓库，后续涉及 diff、worktree、delivery 的功能可能失败。
-- 如果 `.tekon/web-session.json` 被删除，Web 写操作会缺 token；可重新执行 `init`。
+Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。
 
 ### 6.2 `workflow preflight`
 
-用途：在真正运行前检查 workflow 会用哪些命令。
-
 ```bash
 tekon workflow preflight
+tekon workflow preflight bugfix
 ```
 
-常用参数：
+模板名是位置参数，默认 `standard-delivery`。输出状态含义见 §4.3。`resolved` 仅说明命令已解析，仍需实际运行验证。
 
-- 第一个位置参数：模板名；不传时默认 `standard-delivery`。
-- `--repo <path>`：只在跨仓库检查时使用。
-
-如何判断结果：
-
-- `resolved`：可执行。
-- `missing`：缺命令，需要补 repo profile。
-- `not-applicable`：用户已显式声明不适用。
-- `not-command-gate`：语义 gate，不需要 repo profile 命令。
-
-常见处理：
-
-- 如果提示 `missing-command`，先看 `suggestedCommand`，确认语义后写入 `.tekon/repo-profile.yaml`。
-- 不要为了通过 gate 随意配置 `notApplicable`；必须写清楚原因。
-- `security-scan` 不应通过 `notApplicable` 绕过。
+缺命令时确认候选并更新 `.tekon/repo-profile.yaml`。`notApplicable` 必须有实际理由；不能用它绕过 `security-scan`，无外部安全命令时仍可能执行内置扫描。
 
 ### 6.3 `workflow select`
-
-用途：根据需求文本推荐受控模板。
 
 ```bash
 tekon workflow select "补齐 CLI 单元测试"
 ```
 
-结果：
+返回推荐、候选和理由。可用 `--shape <path>` 指定需求卡、`--template <name>` 评估人工选择、`--json` 输出结构化结果。
 
-- 推荐模板。
-- 候选模板。
-- 推荐理由。
-
-注意：
-
-- 这不是动态规划。
-- 不会自动保存 workflow。
-- 人可以覆盖推荐，但建议用 `eval workflow-selection` 检查。
+推荐不会保存 workflow，也不会改变 `run` 的默认模板。
 
 ### 6.4 `draft shape`
-
-用途：把原始需求转成可审阅需求卡。
 
 ```bash
 tekon draft shape "需求文本"
 ```
 
-> **交互式替代**：`tekon draft new` 提供 Agent 驱动的交互式需求澄清流程（见 6.22），可根据需求内容生成针对性问题并自动精炼草案。推荐在需求不明确时优先使用。
+生成需求卡 JSON 和 Markdown 审阅稿。`--no-write` 仅预览，`--format json` 输出 JSON。
 
-常用参数：
-
-- `--no-write`：只预览，不写入 `.tekon/demands/`。
-- `--repo <path>`：只在跨仓库塑形时使用。
-- `--format json`：输出 JSON。
-
-结果：
-
-- JSON 源文件。
-- Markdown 审阅稿。
-- 推荐模板。
-- 风险和验收信息。
-
-问题处理：
-
-- 如果 `openQuestions` 不为空，建议先补充需求；也可以在明确接受风险后批准。
-- 如果推荐模板不符合预期，先用 `workflow select` 和 `eval workflow-selection` 核对原因。
+先补齐 `openQuestions`，再确认非目标、风险和验收标准；需要交互澄清时使用 §6.22 的 `draft new`。
 
 ### 6.5 `draft approve`
 
-用途：人工批准需求卡进入执行阶段。
-
 ```bash
 tekon draft approve
+tekon draft approve --shape /path/to/demand.json --actor your-name
 ```
 
-常用参数：
+批准指定或最近需求卡，记录操作者和时间。路径也可作为位置参数。
 
-- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认批准最近需求卡。如果最近需求卡已经批准，历史未批准需求卡必须显式指定。
-- `--actor <name>`：记录批准操作者；建议使用真实账号或姓名。
-
-结果：
-
-- 需求卡标记为 approved。
-- 写入批准时间和批准人。
-
-注意：
-
-- 批准需求卡不等于批准 PR 创建。
-- 批准需求卡不绕过后续 gate。
+需求批准不等于计划批准、Gate 批准或 PR 创建批准。
 
 ### 6.5.1 `draft plan` / `draft plan-approve`（可选计划审批）
 
-用途：在需求批准之外，为需求卡显式生成一份「计划产物」并单独审批。计划审批与需求审批相互独立——需求审批确认「要不要做」，计划审批确认「按这个计划做」。这一步是可选的：不生成计划的需求卡（含所有旧需求卡）不受计划审批点约束。
-
-生成计划：
-
 ```bash
 tekon draft plan
-```
-
-- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
-- 结果：需求卡标记 `hasPlan=true`、`planApproved=false`。计划内容是该需求卡的验收标准、推荐模板与 Non-goals 的结构化快照。
-- 重新生成计划会使之前的计划审批失效（`planApproved` 重置为 false）。
-
-审批计划：
-
-```bash
 tekon draft plan-approve
 ```
 
-- 位置参数或 `--shape <path>`：指定需求卡 JSON 路径；不传时默认取最近需求卡。
-- `--actor <name>`：记录计划审批操作者。
-- 前置：必须先 `draft plan` 生成计划，否则报错。
-- 结果：需求卡标记 `planApproved=true`，写入审批人与时间。
+`plan` 生成验收标准、推荐模板和非目标的结构化计划快照，并标记 `hasPlan=true`、`planApproved=false`；`plan-approve` 记录计划批准。
 
-对运行的影响：
+两个命令均可用 `--shape <path>` 或位置参数选择需求卡；批准可用 `--actor <name>`。
 
-- **已生成计划的需求卡**：必须先 `draft plan-approve`，否则 `tekon run`（及 Web 发起运行）拒绝执行。
-- **未生成计划的需求卡**：不受影响，`approve` 后即可运行（向后兼容）。
-- 计划审批同样不等于批准 PR 创建，也不绕过后续 gate。
+未生成计划的需求卡只需需求批准。生成计划后必须再批准计划才能运行；重新生成会使旧计划批准失效。计划批准不绕过后续 Gate 或 PR 人工批准。
 
 ### 6.6 `run`
 
-用途：发起一次 workflow。
-
-模板运行：
-
 ```bash
-tekon run "需求文本" --template standard-delivery --agent mock
-```
-
-需求卡运行：
-
-```bash
-tekon run
-```
-
-动态 dry-run：
-
-```bash
+tekon run "需求文本" --template standard-delivery
+tekon run --demand-file /path/to/approved-demand.json
+tekon run "梳理模块职责，不修改文件" --goal
 tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
-轻量目标运行（goal 模式）：
+普通运行默认 `standard-delivery`；无文本时读取最近需求卡，并要求它已批准。`--goal` 使用内置单节点模板，不进入交付链路，与 `--template` 互斥，也不支持 `autonomous-delivery`。内置 Goal 默认不允许仓库源码改动，见 §5.7。
+
+Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明确接受基于未提交改动运行，不是安全证明。
+
+**同一次请求重试**：保存启动时打印的 Request ID，保持原需求、文件引用和执行参数，追加原 ID：
 
 ```bash
-tekon run "做一个一次性小任务" --goal --agent mock
+tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 ```
 
-`--goal` 使用内置单节点 goal 模板执行一次轻量 Agent 目标，不套用完整交付工作流（不产出 code-changes、不进入交付流程）；与 `--template` 互斥。
+相同 ID 与意图返回原 Run/Session/Job。`REQUEST_ID_CONFLICT` 表示 ID 已绑定其他意图；先核对参数，只有确定新建任务时才换 ID。受理后配置或 Provider 环境变化不会使原请求另建运行。
 
-常用参数：
-
-- `--template <name>`：使用内置模板。
-- `--goal`：轻量目标运行（内置单节点 goal 模板，不接交付）；不能与 `--template` 同时使用。
-- `--demand-file <path>`：使用指定已批准需求卡；不传需求文本时默认读取最近需求卡并要求它已批准。
-- `--agent mock`：使用 mock provider。
-- `--agent claude-code`：使用 Claude Code adapter。
-- `--agent codex`：使用本机 Codex CLI adapter；要求 `codex` 在 PATH 中且已完成本机认证。
-- `--agent dsh-headless`（experimental，默认关闭）：使用本机 DeepSeek Harness adapter；要求 `dsh` 在 PATH 中、版本与 Tekon 钉死版本一致、已配置 `DEEPSEEK_API_KEY`。**网络出口不受限、仅适用于 `--goal` 运行**（详见 §5.7 provider 列表的硬边界）。
-- `--dynamic --dry-run`：只生成动态 workflow 预览。
-- `--request-id <id>`：复用一次提交意图的标识；8–128 个 ASCII 字母、数字、下划线或连字符，省略时自动生成。
-- `--allow-dirty-base`：允许基于当前未提交业务改动运行。
-- `--repo <path>`：只在跨仓库运行时使用。
-
-如何判断结果：
-
-- 输出 `runId` 后，用 `status` 和 `review` 继续检查。
-- `status=passed` 不代表可以自动合入。
-- 有 pending human gate 时，需要先处理审批。
-
-**重试同一次提交**：普通 workflow/Goal 在启动前向 stderr 打印 Request ID。超时、断连或未收到结果时，保留原需求、文件引用和所有执行参数，追加原标识重试：
-
-```bash
-tekon run "给列表增加筛选" --agent mock --request-id delivery-20260905-01
-```
-
-相同 requestId 与相同意图返回原 Run/Session/Job；已受理后，不会因为当前需求卡、模板或 Provider 环境变化而另建运行。`REQUEST_ID_CONFLICT` 表示该标识已绑定其他意图：先核对是否误改参数；如果确定要另建任务，换一个新标识。不要为一次尚待确认的原请求盲目换号。
-
-| 看到的状态 | 如何判断与处理 |
+| 返回状态 | 下一步 |
 | --- | --- |
-| 本次未创建 | 本次校验失败或事务回滚。修正输入；同内容重试继续用原标识。它不证明同标识的其他在途调用永远不会受理。 |
-| 已受理 | 已有持久运行身份。观察原 Run/Session；重试不创建第二份。 |
-| 已受理，等待目录就绪 | `filesState=pending`，请求已受理，目录尚未准备完成，任务尚未执行。保留原身份继续观察。 |
-| 已受理，等待目录恢复 | `filesState=recovery_required`，请求已受理，任务尚未执行。修复目录的类型、权限或链接问题后，按原请求重试。 |
-| 受理状态待确认 | 网络或数据库问题使结果无法确定。保留原标识，查询或原样重试；不要据此新建另一运行。 |
+| 本次未创建 | 修正校验错误后重试；同 ID 可能还有在途请求，先查询确认 |
+| 已受理 | 观察原 Run/Session，避免另建 |
+| 已受理，等待目录就绪 | `filesState=pending`；任务尚未执行，继续观察 |
+| 已受理，等待目录恢复 | `filesState=recovery_required`；修复目录类型、权限或链接问题后按原请求重试 |
+| 受理状态待确认 | 保留原 ID，查询或原样重试 |
 
-CLI 目录失败会打印 Run/Session ID 并以非零状态退出。用 `tekon status --run-id <runId>` 检查 `admission` 和 `filesState`；Web 可在修复目录后重启 UI 服务触发恢复，查询按钮本身不会修复目录。恢复保留原始 Job，不复活已取消或终态运行。
+目录失败时 CLI 输出原 Run/Session ID 并非零退出。用 `status --run-id <runId>` 查看 `admission`、`filesState`；Web 可在修复目录后重启 UI 服务触发恢复。查询本身不修目录，恢复不会复活已取消或终态运行。
 
-**本次运行使用哪些检查**：普通 CLI 在启动请求时捕获模板实际使用的仓库命令及来源、不适用和缺失决定，没有逐项交互预览。新受理计划为 v3；后续执行、恢复、修复重试及返工沿用原记录，修改或删除当前配置不会替换它。无命令引用的模板不依赖仓库命令配置，模板内联命令优先。绑定只覆盖 Tekon 解析出的命令描述符与适用性，不冻结 `package.json` scripts 正文、测试代码、PATH 二进制、依赖或宿主环境。需要采用新配置时，应明确发起另一个任务。
+**执行检查绑定**：新受理计划为 v3，记录模板实际使用的命令、来源、缺失与不适用决定；执行、恢复、修复重试和返工沿用原记录。内联命令优先，无命令引用的模板不依赖仓库命令配置。
 
-**dry-run 的当前限制**：`--dry-run` 仅支持 `--dynamic`；普通 workflow 和 `--goal` 搭配 `--dry-run` 会在项目初始化前返回 `DRY_RUN_UNSUPPORTED`。动态预览不受理 Run，不支持 `--request-id`；它仍可能初始化本地目录，`--save-as` 会保存预览，不应当作“完全不写本地文件”的命令。
+绑定不冻结 `package.json` 脚本正文、测试代码、PATH 二进制、依赖或宿主环境。希望采用新配置时，应明确发起新任务。历史绑定含义见 §6.7。
+
+**动态预览**：`--dynamic` 必须配 `--dry-run`，不受理 Run，也不支持 `--request-id`；可能初始化本地目录，`--save-as <name>` 会保存预览。普通 workflow/Goal 的 `--dry-run` 会在初始化前报 `DRY_RUN_UNSUPPORTED`。
 
 ### 6.7 `status`
 
-用途：查看 run 当前状态。
-
 ```bash
 tekon status
+tekon status --run-id <runId>
 ```
 
-常见字段：
+查看整体 `status`、当前节点、产物与 Gate 数量、待人工决策，以及新运行的 `requestId`、`admission`、`filesState`。已有 Run ID 不代表任务已经执行。
 
-- `status`：整体状态。
-- `currentNode`：当前节点。
-- `artifacts`：产物数量。
-- `gates`：gate 数量。
-- `pendingHumanDecisions`：待人工决策数量。
-- `admission` / `filesState` / `requestId`：新运行的受理、目录就绪状态和原请求标识。`admission=recovery-required` 表示请求已受理、目录未就绪；`filesState` 区分等待就绪的 `pending` 和等待恢复的 `recovery_required`。不要仅看 `status` 或已有 Run ID 判断执行进度。
-- `executionBinding`：仓库检查绑定状态，含义如下；Web Run 详情和关联 Run 的 Session 详情也显示相应提示。
-
-| `executionBinding` | 如何判断 |
+| `executionBinding` | 含义 |
 | --- | --- |
-| `frozen` | 检查命令与适用性已记录，执行和恢复沿用它；不代表整个环境冻结，也不替代执行前的完整性校验。 |
-| `legacy-unbound` | 历史 v1/v2/无快照计划未记录仓库命令绑定；使用 `commandRef` 时会按当前配置解析。v2 已记录的内联命令仍在原模板中，历史运行不会自动升级。 |
-| `invalid` | 计划记录无效，无法按此记录执行或恢复。保留原运行，请仓库维护者核查。 |
-| `unknown` | 当前无法识别或未取得绑定信息；刷新查看，不能据此认定检查已绑定，执行前仍须通过服务端校验。 |
+| `frozen` | 已记录命令和适用性；不代表环境冻结，执行前仍校验完整性 |
+| `legacy-unbound` | 历史 v1/v2/无快照计划未绑定仓库命令，`commandRef` 按当前配置解析；原 v2 内联命令保留 |
+| `invalid` | 计划记录无效，不能据此执行或恢复；保留原运行并核查 |
+| `unknown` | 信息缺失或无法识别，刷新核对，不能当成已绑定 |
 
 ### 6.8 `approval summary`
-
-用途：生成可复制审批摘要。
 
 ```bash
 tekon approval summary
 ```
 
-常用参数：
+输出决策、Run、节点、风险、准确命令、影响文件、readiness 失败项、证据，以及批准/拒绝入口。它是审批材料，不会发送通知。
 
-- `--run-id <runId>`：查看指定历史 run 的审批项时使用；不传时默认最近的 pending human decision。同一 run 有多个 pending decision 时必须传 `--decision-id`。
-- `--decision-id <decisionId>`：同一 run 有多个 pending decision 或需要指定历史决策时使用。
-- `--max-chars <n>`：限制 artifact 和日志预览长度，默认 1200。
-- `--json`：输出结构化 JSON，便于接入其它工具。
-
-摘要包含：
-
-- decision id。
-- run id。
-- node id。
-- 需求标题。
-- 风险。
-- exact command。
-- 影响文件状态。
-- readiness 失败项。
-- 证据入口。
-- 批准命令。
-- 拒绝命令。
-- Web 处理入口。
-
-注意：
-
-- 摘要是审批材料，不是通知机器人。
-- 默认拒绝命令不携带操作者示例，避免复制错误审计信息。
+| 参数 | 用途 |
+| --- | --- |
+| `--run-id <id>` | 定位 Run |
+| `--decision-id <id>` | 精确定位决策；同一 Run 多个待审批项时必填 |
+| `--max-chars <n>` | 产物和日志预览长度，默认 1200 |
+| `--json` | 输出结构化结果 |
 
 ### 6.9 `eval approval-summary`
-
-用途：检查审批摘要是否完整。
 
 ```bash
 tekon eval approval-summary
 ```
 
-判断方式：
-
-- `ready=true`：摘要具备基本审批材料。
-- `ready=false`：不建议拿给 reviewer 决策，应先补证据。
-
-当前会检查：
-
-- pending decision 是否存在。
-- 风险信息是否存在。
-- exact command 是否存在。
-- 影响信息是否存在。
-- 批准入口是否可复制。
-- 拒绝入口是否可复制。
-- 证据上下文是否存在。
-- 正文是否包含关键命令。
+检查 pending decision、风险、准确命令、影响、证据和可复制的批准/拒绝入口。`ready=false` 时先补材料；`ready=true` 仅表示摘要基本完整，仍需人判断风险。
 
 ### 6.10 `resume --approve-human`
 
-用途：批准 pending human gate 并继续运行。
+审阅待审批 Gate 后：
 
 ```bash
 tekon resume --approve-human
 ```
 
-注意：
+多个 pending decision 时加 `--decision-id <id>`，只批准该条。恢复使用原 Provider 快照；快照缺失或不可重放时拒绝继续。
 
-- 只在你已经审阅风险和证据后使用。
-- 会按 run 创建时落库的 provider 快照恢复。
-- 同一 run 有多个 pending decision 时必须传 `--decision-id <decisionId>`；显式指定后只批准这一条 decision。
-- 旧 run 缺 provider 快照时会拒绝继续，避免从真实 provider 意外切到 mock。
-- run 已处于终态(`passed`/`failed`/`cancelled`)时，`resume` 会拒绝并以非 0 退出、打印中文提示("运行已处于终态 …，无法恢复"),不会把已结束的运行重新拉起。
+普通暂停/中断恢复不需要假造一次审批：
 
-恢复中断的运行时，先查看当前状态。租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent 或 Gate。若提示旧进程退出未确认，先检查并停止旧执行，再按错误信息给出的旧 Job 身份确认：
+```bash
+tekon pause --run-id <runId>
+tekon resume --run-id <runId>
+```
+
+若提示旧进程退出未确认，先检查并停止旧执行，再按提示确认旧 Job 身份：
 
 ```bash
 tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId>
 ```
 
-历史运行没有 Job 记录时，最后一个参数使用字面 `none`。省略身份或使用过期身份都会被拒绝，刷新状态后重新确认。同一确认也适用于 `resume --approve-human`：可提前识别退出风险时不记录审批；若审批已记录后才发生竞争，会明确显示“审批已记录，运行尚未恢复”，此时检查原运行再恢复，不要重新批准。
+历史无 Job 记录时用字面 `none`。缺失或过期身份会被拒绝，须刷新后重新核对。人工确认不是 OS 退出检测，受管理退出证据也不覆盖逃逸进程。
 
-人工确认仅表示你已检查旧执行，不是 Tekon 的物理退出检测。界面中的退出确认只覆盖 Tekon 管理的执行句柄。终态运行仍不能恢复。
+租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`failed`、`cancelled` 终态不可恢复。
 
-**English — interrupted runs:** An expired lease interrupts a claimed Job without replaying its Agent or Gate. If exit is unconfirmed, check and stop the old execution, then use `--confirm-stopped --previous-job-id <previousJobId>` with the ID shown in the error. Use literal `none` for historical runs without a Job. Missing or stale identities are refused. The same guard applies to `--approve-human`; an approval can remain recorded even when a race prevents recovery. Inspect and resume the original run instead of approving again. Human confirmation is an audit record, not an OS exit observation; managed-exit evidence covers only handles managed by Tekon.
+审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。
 
 ### 6.11 `approval reject`
 
-用途：拒绝 pending human decision 并阻断 workflow。
-
 ```bash
-tekon approval reject
+tekon approval reject --note "证据不足，需要补充风险说明"
 ```
 
-常用参数：
+可用 `--run-id`、`--decision-id`、`--actor` 精确记录。决策变为 rejected，workflow 阻断，Gate 分类为 `human-rejected`。
 
-- `--run-id <runId>`：拒绝指定 run 的 pending decision 时使用。
-- `--decision-id <decisionId>`：同一 run 有多个 pending decision 或要精确拒绝某个 decision 时使用。
-- `--actor <name>`：记录拒绝操作者；建议使用真实账号或姓名。
-- `--note <text>`：记录拒绝原因。
-- `--repo <path>`：只在跨仓库操作时使用。
-
-结果：
-
-- human decision 变为 rejected。
-- workflow 阻断。
-- human gate 分类为 `human-rejected`。
-- `review` 会显示人工拒绝语义，不会误判成命令策略拒绝。
-- run 已处于终态时,`approval reject` 会拒绝并以非 0 退出、打印中文提示,不会把终态运行改写为 blocked(避免"终态→拒绝→阻断→恢复"复活链)。
+终态 Run 拒绝此操作，不会被改回 blocked。
 
 ### 6.12 `review`
-
-用途：看完整审阅材料。
 
 ```bash
 tekon review
 ```
 
-重点章节：
+建议按以下顺序阅读：
 
-- `Readiness Failed Checks`
-- `Evidence Navigation`
-- `Gate Failure Triage`
-- `Delivery`
-- `Changed Files`
-- `Artifacts`
-- `Gate Logs`
-- `PR Body`
-- `PR Package`
-- `Next Commands`
-
-如何使用：
-
-- 先看 readiness 失败项。
-- 再看 Evidence Navigation 指向的证据。
-- Gate 失败时先看 triage 分类和建议命令。
-- 准备 PR 前看 Changed Files 和 PR Body。
+1. `Readiness Failed Checks`：哪些检查缺失或失败。
+2. `Evidence Navigation`、`Gate Failure Triage`：证据在哪、失败如何处理。
+3. `Changed Files`、`Artifacts`、`Gate Logs`：实际改动与验证。
+4. `PR Body`、`PR Package`、`Delivery`：交付材料。
+5. `Next Commands`：核对目标身份后执行后续命令。
 
 ### 6.13 `delivery dry-run`
-
-用途：只看交付计划，不产生远端副作用。
 
 ```bash
 tekon delivery dry-run
 ```
 
-适合：
-
-- 第一次接入仓库。
-- 不确定 PR 命令是否正确。
-- 只想审阅 evidence 和命令计划。
+查看交付证据和命令计划，不产生远端副作用。适合首次接入或在准备 PR 前核对流程。
 
 ### 6.14 `delivery prepare`
-
-用途：生成本地 PR 准备包。
 
 ```bash
 tekon delivery prepare
 ```
 
-结果：
+仅支持 `standard-delivery`；满足 §4.7 前置检查后生成：
 
 - `.tekon/runs/<runId>/delivery/pr-package.md`
 - `.tekon/runs/<runId>/delivery/pr-body.md`
-- `delivery-package` artifact。
-- `delivery.pr-prepared` 审计事件。
+- `delivery-package` 产物及 `delivery.pr-prepared` 审计事件。
 
-> ⚠️ **当前边界（审批记录未绑定内容指纹）**：`create-pr` 本身**每次都要求当次 `--approve-human` 人工批准**（安全边界不变）。但当一次交付失败后自动/手动重新准备时，会**保留上一次的 `approvedBy/approvedAt` 记录**；若此时分支 HEAD、PR body 或证据包已变化，审批记录可能与当前内容不再一致（审计可信度问题，非绕过人工批准）。绑定内容哈希使旧审批自动失效的能力留待交付治理里程碑。
+**审批记录限制**：重新准备可能保留旧 `approvedBy/approvedAt`，这些记录未绑定当前 HEAD、PR body 或证据包的内容指纹。应重新审阅当前材料；`create-pr` 每次仍要求当次人工批准。
 
 ### 6.15 `delivery create-pr`
-
-用途：人工批准后创建远端 PR。
 
 ```bash
 tekon delivery create-pr --approve-human
 ```
 
-必要条件：
+会重新校验交付前置条件，并产生 push/PR 远端副作用。要求 `gh` 已认证、远端有权限、主工作区干净、QA tested ref 与签署相符。
 
-- 已安装并认证 `gh`。
-- 目标远端有创建 PR 权限。
-- 主工作区除 `.tekon` 外没有未提交改动。
-- 用户明确传入 `--approve-human`。
-- workflow 已 passed，AC evidence、安全扫描和 QA release signoff 已满足，且 QA signoff 绑定 QA validation tested ref。
-- 长程 push、`gh pr create` 或 create-pr 前置只读 probe 会写入 command progress JSON；默认 1 小时总超时、15 分钟无 stdout/stderr 或受控输出目录文件进展超时。
+受控 `git/gh` 和前置只读探测默认总超时 1 小时、无进展超时 15 分钟，写入 progress JSON。不安全分支 ref 会被拒绝。
 
-常见失败：
-
-- `gh auth status` 不通过。
-- 工作区 dirty。
-- pre-PR readiness 不满足，例如缺 QA signoff、QA signoff 未绑定 tested ref、AC evidence 不完整或安全扫描失败。
-- delivery 分支名或 base branch 不安全。
-- 远端已有同分支 PR。
-- 网络或 GitHub 权限失败。
-
-处理方式：
-
-- 先修认证和 dirty worktree。
-- 如果 PR 已存在，天工会尝试恢复 PR URL。
-- 失败后看 `review` 和 delivery log，不要直接重跑高风险命令。
+失败后先看 `review` 和 `.tekon/runs/<runId>/delivery/`，修复认证、权限、工作区或证据问题。远端已有同分支 PR 时会尝试恢复 URL；不要在结果未明时盲目重复创建。
 
 ### 6.16 `delivery ci-status`
 
-用途：只读查询 PR checks 并写回证据。
-
 ```bash
 tekon delivery ci-status
+tekon delivery ci-status --selector "<PR URL 或分支>"
 ```
 
-可选：
-
-```bash
-tekon delivery ci-status --selector <prUrl|branch>
-```
-
-结果：
-
-- 写入 `ci-status` artifact。
-- 记录 `delivery.ci.checked` 审计事件。
-- 后续 PR 包和 readiness 可看到远端 CI 证据。
+只读查询 PR checks，写入 `ci-status` 产物和 `delivery.ci.checked` 审计事件，供 PR 包与 readiness 使用。
 
 ### 6.17 `delivery ci-watch`
-
-用途：轮询 PR checks，直到终态或达到次数上限。
 
 ```bash
 tekon delivery ci-watch --max-attempts 20 --interval-ms 15000
 ```
 
-常用参数：
-
-- `--max-attempts <n>`：最大查询次数。
-- `--interval-ms <ms>`：初始等待间隔。
-- `--backoff <n>`：退避倍率。
-- `--selector <prUrl|branch>`：指定查询对象。
-
-注意：
-
-- 不 rerun CI。
-- 不 merge。
-- 不上线。
+轮询到 checks 终态或次数上限。支持 `--selector`、`--max-attempts`、`--interval-ms`、`--backoff`；不会重跑 CI、合入或上线。
 
 ### 6.18 `eval readiness`
-
-用途：判断单次 run 的交付证据是否完整。
 
 ```bash
 tekon eval readiness
 ```
 
-常见失败项：
+检查 workflow、审计哈希、Gate、待审批项、验收证据、安全扫描和交付证据。
 
-- workflow 未 passed。
-- audit hash 无效。
-- gate 失败。
-- delivery package 缺失。
-- pending human gate 未处理。
-- 验收标准没有 evidence。
-- security scan 失败。
-- PR 准备包不存在。
-- 真实 PR 未创建。
-- 远端 CI 未通过或未写回。
-
-说明：`pr-prepared`、`pr-created` 和 `remote-ci-passed` 是 required。PR 准备、真实 PR 创建或远端 CI 证据写回之前，`ready=false` 是预期状态；这不代表本地 workflow 或治理 gate 一定失败。
+`pr-prepared`、`pr-created`、`remote-ci-passed` 均为 required。缺少本地 PR 包、真实 PR 或已通过的远端 CI 证据时，`ready=false` 不必然表示本地 workflow 失败。通过 `review` 查看具体失败项。
 
 ### 6.19 `eval work-usability`
 
-用途：评估样本集是否达到真实试用门槛。
-
-```bash
-tekon eval work-usability --samples /path/to/work-usability-samples.yaml
-```
-
-记录样本：
+记录并评估样本：
 
 ```bash
 tekon eval work-usability record --samples /path/to/work-usability-samples.yaml
+tekon eval work-usability --samples /path/to/work-usability-samples.yaml
 ```
 
-生成报告：
+正式验收时生成可提交报告：
 
 ```bash
 tekon eval work-usability --samples /path/to/work-usability-samples.yaml --report-md docs/reviews/work-usability.md --report-html docs/reviews/work-usability.html
 ```
 
-记录 Codex 自举样本时，应把 provider 和 PR 要求写入样本：
+记录真实 Codex 与 PR 要求：
 
 ```bash
-tekon eval work-usability record --id tekon-codex-self-bootstrap --expected-provider codex --require-real-provider --require-pr --samples docs/reviews/tekon-codex-samples.yaml
+tekon eval work-usability record --id tekon-codex-sample --expected-provider codex --require-real-provider --require-pr --samples docs/reviews/tekon-codex-samples.yaml
 ```
 
 ### 6.20 `ui`
 
-用途：一键启动本地 Web Dashboard。
-
 ```bash
 tekon ui
+tekon ui --repo /path/to/project --port 3001
 ```
 
-常用参数：
+默认端口 3000。先 `init`，再打开终端输出的完整 URL：`http://127.0.0.1:3000/#token=<会话令牌>`。
 
-- `--repo <path>`：跨仓库或从其它目录启动时指定目标仓库。
-- `--port <port>`：指定端口，默认 3000。
+前端读取片段令牌后写入当前标签页的 sessionStorage，并从地址栏清除；刷新后仍可使用。片段不会随初次 URL 请求发送，后续 API 使用令牌鉴权。`Ctrl+C` 停止本地服务。
 
-启动后终端输出形如 `http://127.0.0.1:3000/#token=<会话令牌>` 的完整 URL——令牌放在 URL 片段（`#` 之后），不会随请求发往服务端。在浏览器中打开该 URL 即可直接使用：前端会读取片段中的令牌、写入 sessionStorage（当前标签页刷新后仍保持登录）、并把令牌从地址栏清除。按 `Ctrl+C` 停止服务。
-
-注意：
-
-- 目标仓库必须先执行过 `tekon init`（需要 `.tekon/web-session.json`）。
-- Web 是本地 dashboard，不是远程服务。
-- Web Dashboard 的写操作和 CLI 一样遵循受控审批规则。
-
-**Web 使用要点（v0.25.0）**：
-
-- **连接状态**：顶栏分开显示凭据与 Provider；连接面板可重填、应用或断开会话令牌，Provider 可单独重试并查看检查时间。凭据校验不等待 Provider，通过 `#token=` URL 打开时自动校验。
-- **执行计划预览**：默认入口和高级表单展示“检查配置与适用性”，可展开查看逐项来源和实际执行方式；刷新后核对差异，再显式提交。毫秒级超时、profile 等参数收在“高级”折叠区。详见 §7。
-- **提交结果可找回**：两个发起入口共享待确认请求账本；网络错误后先查询原 Request ID，或保持原内容重试。目录未就绪时明确显示已受理、等待目录就绪或恢复。详见 §7。
-- **联网不受限确认**：选择 `dsh-headless` 等会带来不受限网络出口的 agent 时，预览会显式告警并要求勾选“我已知悉本次运行联网不受限”；未勾选无法提交，确认会写入运行审计。
-- **失败任务处理**：受控交付列表中失败的会话可点“确认/归档”，确认后下沉到历史区、不再占据待处理置顶位；未处理的失败仍会置顶提醒。
-- **实时刷新与长会话**：Session 列表在事件流首次连接、重连及会话状态变化后读取最新状态（保留短轮询兜底）；其他入口的审批决定或新增审批会更新详情卡片。会话事件流默认只渲染最近若干条，更早内容点“加载更早历史”按需加载。
-- **历史截断提示**：当网络恢复或客户端较慢导致在线回放的历史量超过预算时，会话顶部会出现一条非阻断提示，说明已切换到最近记录、完整历史仍可按页读取；该提示可手动关闭，不影响事件流继续上屏。
+顶栏分开显示凭据和 Provider 状态；凭据有效不代表 Provider 可执行。可在连接面板重新应用令牌或单独重试 Provider 检查。完整页面流程见 §7。
 
 ### 6.21 `update`
-
-用途：更新 Tekon 到最新版本。
 
 ```bash
 tekon update
 ```
 
-拉取最新代码 → 安装依赖 → 重新构建。已是最新版本时直接退出。更新完成后输出旧版本 → 新版本。
+更新安装目录的代码、依赖与构建产物，输出版本结果。自定义安装目录时保留 `TEKON_HOME` 配置。
 
 ### 6.22 `draft`
 
-用途：创建和管理需求草案。
-
-**交互式创建（推荐）**：
-
 ```bash
-tekon draft new
-```
-
-`draft new` 会启动交互式需求澄清流程：
-
-1. 输入需求描述后，如果本机已安装 Claude Code，天工会调用 Agent 根据需求内容生成 3-5 个针对性澄清问题。
-2. 用户在终端中逐一回答这些问题。
-3. Agent 根据回答精炼需求草案，补充验收标准、风险标签和边界条件。
-4. 如果 Agent 不可用（未安装 Claude Code 或调用失败），自动回退到静态问题生成和本地更新。
-
-**快速塑形**：
-
-```bash
-tekon draft shape "需求文本"
-```
-
-等同于 `draft shape`，直接将需求文本转为需求卡。
-
-**批准草案**：
-
-```bash
+tekon draft new "新增列表筛选，保留原有排序行为"
+tekon draft show
 tekon draft approve
 ```
 
-等同于 `draft approve`，批准最近的需求草案。
+`draft new` 必须提供需求文本。TTY 中可逐题回答；Enter 跳过，Ctrl+C 保留已填内容。`--no-interactive` 或非 TTY 跳过交互；`--json` 输出结构化结果。
 
-**查看草案**：
+仅当项目 `defaultAgent` 显式设为 `claude-code` 且本机 CLI 可用时，才尝试 Claude Code 辅助澄清；其他配置、未安装或调用失败时使用本地预设问题。此命令不支持 `--agent`。
 
-```bash
-tekon draft show
-```
+该澄清调用是独立 CLI 路径，使用 Claude 的 `bypassPermissions`，不沿用 workflow Provider 的执行约束。只需本地塑形时使用 `draft shape` 或 `draft new "需求文本" --no-interactive`。
 
-显示最近需求草案的详细信息。
-
-常用参数：
-
-- `--repo <path>`：跨仓库操作时指定目标仓库。
-- `--agent claude-code`：显式指定 Agent（`draft new` 默认使用配置中的默认 Agent）。
-- `--no-write`（`draft shape`）：只预览，不写入文件。
+需求卡仍需人工批准；可选计划审批见 §6.5.1。
 
 ### 6.23 `clean`（当前暂停）
-
-用途：历史版本中用于递归清理 worktree；当前在生命周期安全清理完成前 fail-closed。
 
 ```bash
 tekon clean
 ```
 
-命令固定以 exit code 1 退出，并在 stderr 输出 `CLEAN_SUSPENDED`；不会扫描、删除或重建 `.tekon/worktrees/`。Web 的 `project.clean` 同样不会删除 `.tekon/runs/<runId>`。这是数据保护措施，不表示已经完成导出、retention 或可审计 purge。
+当前固定非零退出（exit code 1），stderr 返回 `CLEAN_SUSPENDED`。不会扫描、删除或重建 `.tekon/worktrees/`；Web `project.clean` 也不会删除 Run 目录。
+
+生命周期安全清理尚未开放，此限制不代表已具备导出、保留期管理或可审计清除能力。
 
 ### 6.24 `help`
 
-用途：查看命令帮助。
-
 ```bash
 tekon help
-```
-
-输出所有命令的分组概览，包含 6 个分组：项目管理、运行控制、工作流与角色、交付、审阅与评估、工具。
-
-**查看子命令**：
-
-```bash
 tekon help draft
 tekon help workflow
+tekon --version
 ```
 
-显示指定命令的子命令列表和描述。
+`tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-**等效写法**：
-
-```bash
-tekon --help        # 等同于 tekon help
-tekon -h            # 等同于 tekon help
-```
-
-**查看版本**：
-
-```bash
-tekon --version     # 输出 v0.25.0
-tekon -v            # 同上
-```
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.25.1`。
 
 ## 7. Web Dashboard
 
-启动：
+`tekon ui` 启动本地界面，打开带 `#token=` 的完整 URL。令牌丢失时可从 `.tekon/web-session.json` 读取并填入顶栏连接面板；不要提交或共享令牌。
 
-```bash
-tekon ui
-```
+默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。旧 Run Dashboard 保留在侧栏 **高级 Advanced**（`/advanced`），用于查看 overview、历史 Run、diff、日志、PR 包和交付操作。
 
-可指定端口：
+**发起任务**：默认“启动受控交付”使用 Codex 与 `standard-delivery` 完整角色链路；使用 Claude Code 时，到「高级 Advanced → 新建运行」选择 `claude-code`。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
 
-```bash
-tekon ui --port 3001
-```
+**核对执行计划**：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。
 
-跨仓库使用时显式传目标仓库：
+预览不展示原始工具、参数、环境变量或不适用理由。需要看命令正文时检查本地模板、`.tekon/repo-profile.yaml` 和 `package.json`。
 
-```bash
-tekon ui --repo /path/to/project
-```
+| 页面提示 | 操作 |
+| --- | --- |
+| 刷新检查配置 | 看新增、移除或变化项，再显式提交；刷新本身不受理 |
+| `PLAN_DIGEST_MISMATCH` | 刷新执行计划并重新审阅，不自动接受新计划 |
+| `PLAN_CONFIG_INVALID` | 先修配置或读取权限，再刷新 |
+| 暂无逐项变化信息 | 仅表示无法比较，不能推断配置未变 |
 
-启动后终端会输出形如 `http://127.0.0.1:3000/#token=<会话令牌>` 的完整 URL（令牌在 URL 片段中，不发往服务端），在浏览器中打开即可直接使用——前端自动读取令牌、写入 sessionStorage（刷新保持）并从地址栏清除。按 `Ctrl+C` 停止。
+比较范围限于同一服务实例和发起上下文；服务重启、切换凭据/仓库/模板会使旧基线失效。受理后沿用原检查绑定，历史边界见 §6.7。
 
-打开后默认进入 **Session UI（会话视图）**：以"会话"为主轴，把一次运行的用户消息、Agent 步骤、工具调用、产物、门禁和审批组织成一条**连续、可实时刷新的叙事**。旧的 run-centric Dashboard（overview / run 列表 / run 详情各页签）完整保留在侧栏"高级 Advanced"入口下（`/advanced`），功能不变。
+**提交结果待确认**：两个入口共享 Request ID 账本。网络错误后先“查询受理结果”，或恢复原输入并原样重试。“尚未查到”不排除原请求仍在处理中，不应直接换 ID。
 
-> ⚠️ **当前边界**：从会话输入框「启动受控交付」发起的运行，默认走 `standard-delivery` **受控交付全链路**（PM/RD/QA/Reviewer + 门禁 + 审批），而不是轻量对话。发起后不能在会话内继续追问或中途转向（follow-up/steer 未开放），Composer 仅用于发起新运行；轻量协作会话为后续方向。
+- 已受理：进入原 Session/Run 观察；后续查询失败不会撤销已受理事实。
+- 等待目录就绪：任务尚未执行，继续观察。
+- 等待目录恢复：修复目录后按原内容重试或重启 UI 服务；查询按钮不修目录。
+- 浏览器记录更新或跳转失败：点“观察原会话/运行”；服务端已确认，不要为找回页面另建任务。
 
-Session UI 适合：
+账本按物理仓库和凭据作用域保存在当前标签页 sessionStorage，只记录指纹、ID 和受理状态，不保存需求正文。刷新后可以查询旧请求，重新提交则需自行恢复原输入。存储不可用或账本损坏时会在 Run 请求发出前阻止提交；不要删除待确认记录绕过提示。
 
-- 在左侧会话列表选择或用输入框发起一个新会话（运行）。
-- 在会话详情中间栏**实时**查看事件流：用户消息、步骤开始/结束、工具调用与结果、Agent 消息（当前为产物元数据合成的**摘要**，非模型原文）、错误。断线会自动重连并续播已持久化的事件，仍受下方事件日志边界约束。
-- 在右侧就地处理 human approval（inline 审批卡片，展示风险、命令、就绪度与证据），并暂停/取消/恢复运行。
+若刷新后记录已移除，可从受控交付列表找原会话。只有明确选择“明确新建另一个任务”才使用新身份。symlink 路径指向同一物理仓库时历史 Run/Session 保持可见，不提供跨物理仓库切换。
 
-旧 Dashboard（`/advanced`）适合：
+**查看进展与证据**：Session 事件流实时刷新，断线后自动重连。列表在连接、重连或状态变化时重新读取；审批卡片会反映其他入口的决定。更早记录通过“加载更早历史”读取；在线回放超出预算时的历史截断提示不表示历史被删除。
 
-- 查看项目 overview。
-- 查看 run 列表。
-- 选择历史 run。
-- 查看 readiness、evidence、diff、artifact、gate log、PR 包。
-- 处理 human approval。
-- 发起受控模板 run。
-- 选择 `mock`、`claude-code` 或 `codex` provider 发起 run。
-- 触发 `delivery prepare`。
-- 在人工批准下触发 `delivery create-pr`。
+Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant 文本，均不提供模型原文逐块流。后续事件可能因 best-effort 投影缺失，不能仅凭 feed 重建运行或推断进程退出。新 Session 的三个开场事件与 Run、必需审计和初始 Job 原子受理，重试不重复创建。
 
-**查看证据**：点击证据链接会打开并定位对应的产物、门禁日志、审计事件或交付章节。目标不存在、文件缺失、读取失败或被筛选隐藏时，按页面说明检查原运行；不要把链接已打开当作证据已通过。
+证据链接定位产物、Gate 日志、审计或交付章节；不存在、读取失败或被筛选隐藏时按页面说明核对原运行。链接打开不等于证据通过。失败会话可“确认/归档”移至历史区，此操作不改变失败结果。
 
-**English — evidence navigation:** Evidence links open and locate the matching artifact, Gate log, audit event or delivery section. If the target is absent, a file is missing, loading fails or filters hide the target, follow the page guidance and inspect the original run. Opening a link does not mean the evidence passed.
+**Profile 与交付**：默认 `human-web` 由人推进人工点。`autonomous-delivery` 仅在常驻 Web/服务模式下于运行 passed 后自动准备证据和 PR 包，仍停在人工批准前；CLI 需显式 `delivery prepare`。任何 Profile 都不会自动批准 human gate、push、创建 PR、合入或上线。Goal 不支持 `autonomous-delivery`。
 
-写操作需要 session token。用 `tekon ui` 输出的完整 URL（含 `#token=`）打开时，令牌已自动载入，可直接发起运行、批准/拒绝审批。若你手动访问了不带片段的地址（令牌丢失），token 保存在：
+发起、恢复和批准返回受理结果后由后台推进，只有目录 ready 的 Job 才能执行。同一 Run 同时只允许一个运行执行 Job；重复恢复或批准提示已有活跃任务时，继续观察原任务。独立 readiness/delivery Job 不参与此限制。
 
-```text
-/path/to/project/.tekon/web-session.json
-```
-
-可在页面顶栏的连接管理面板粘贴该 token 作为兜底；会话列表和事件流在配置令牌后加载。面板将凭据与 Provider 状态分列，显示检查时间并提供 Provider 重试；“凭据有效”不代表 Provider 可用。
-
-**发起前核对检查**：默认输入框和高级表单都提供“检查配置与适用性”。先看汇总，再展开“查看逐项检查配置”，确认来源是模板定义、仓库检查配置还是项目脚本自动识别，并按实际方式判断结果：“将执行已绑定命令”“将跳过此检查”“缺少命令，检查将失败”等。配置标记不适用不一定会跳过安全检查；`security-scan` 没有外部命令时仍执行内置安全扫描，以逐项说明为准。预览不显示原始工具、参数、环境变量或不适用理由；需要核对命令正文时，在本地检查模板、`.tekon/repo-profile.yaml` 或 `package.json`。
-
-点击“刷新检查配置”后，页面会标明相较上一份预览新增、移除或变化的检查；若只见“模板或运行设置已变化”，也需重新审阅。确认后再次点击提交，刷新本身不会受理新计划。出现 `PLAN_DIGEST_MISMATCH` 时按“刷新执行计划”重新确认；出现 `PLAN_CONFIG_INVALID` 时先修正提示中的配置文件或读取权限，再刷新，不要仅反复提交。
-
-逐项比较只适用于同一服务实例和发起上下文。服务重启会使比较范围失效；切换凭据、仓库、模板等上下文会清除旧基线。看到“暂无逐项变化信息”只表示无法比较，不能解读成检查未变化；没有旧预览时也不会推断差异。已受理运行保留原绑定，`status` 和详情提示的历史与完整性边界见 §6.7。
-
-**提交后没有确定结果时**：默认输入框和高级表单都会保留 Request ID。“受理状态待确认”时点“查询受理结果”，或保持原内容重新提交；“尚未查到”只表示查询时还没有记录，原请求仍可能在处理中，必须保留原身份。查到已受理后进入原 Session 观察；“已受理，等待目录恢复”时先修复目录，再用原内容重试或重启 UI 服务，查询本身不负责恢复。“已受理，等待目录就绪”表示目录还在准备，任务尚未执行。已经确认受理后，即使后续查询失败，原身份和已受理事实仍保留；另行提示当前状态不可用。明确选择“明确新建另一个任务”才使用新身份，旧待确认请求仍可查询。
-
-账本按物理仓库及凭据作用域隔离，保存在当前标签页的 sessionStorage 中；同仓库、同凭据刷新后仍能找回待确认请求。账本只存作用域指纹、意图指纹、requestId 和受理状态，不存需求正文或 token；登录令牌另由认证功能保存到 sessionStorage。刷新后可以直接查旧请求，但若要重新提交内容，需要自己恢复原输入。会话存储不可用或账本损坏时，会在发出 Run 请求前阻止提交；不要清除尚待确认的记录来绕过提示。
-
-**已受理但浏览器后续操作失败时**：若提示“浏览器请求记录更新或页面跳转未完成”，服务端已经确认原请求，请点“观察原会话”或“观察原运行”，不要重复新建。当前页面会保留该身份，等待目录恢复的请求仍可用原内容重试；重读账本、查询暂未找到或重试断网不会推翻已经收到的确认。默认入口跳转失败时保留输入；跳转等待期间后来编辑的内容也不会被旧回调清空。这里不保证修复损坏的存储或把全部内存提示保存到刷新后的页面。刷新后，若原请求仍在待确认列表，点“查询受理结果”；若记录已移除，到受控交付列表打开已有会话。重新提交前需自行恢复原输入，不要为找回会话另建任务。
-
-使用 symlink 路径启动同一个物理仓库时，新旧 Run/Session 仍可查看；历史 alias Workspace 的列表和事件订阅也保持可见，原 ID 不变。它不提供跨仓库 Workspace 切换；指向其他物理仓库的记录不在当前访问范围。
-
-注意：
-
-- Web 是本地 dashboard，不是远程服务。
-- token 不应提交。
-- Web create-pr 和 CLI 一样，未批准时只落库等待审批，批准后才 push 和创建 PR。
-- **发起运行时可选 Profile**：新建运行表单的 `Profile` 下拉默认 `human-web`（人工驱动，不自动推进人工点）。选 `autonomous-delivery` 后，运行**通过（passed）时会自动准备交付**（打包证据、生成 PR 准备包、进入待审批状态）；**但绝不自动创建 PR**——创建远端 PR 始终需要人工在交付面板显式批准。此边界是硬约束，不因 Profile 放宽。自动准备只在长驻的 Web/服务模式下触发；CLI `tekon run` 跑完即退出，交付仍走显式 `tekon delivery prepare`。
-- **发起运行、批准 human gate、恢复运行采用“返回结果、后台推进”**：发起运行先完成校验和受理；只有目录 ready 的 Job 才能在后台执行，已受理不等于已经开始执行。
-  - **Session UI（默认）会通过事件流实时反映进展**：列表在首次连接或断线重连后自动读取最新状态，无需等下一次变更；中间栏追加已持久化事件，右侧审批卡片随新增审批或其他入口的决定更新。读取期间收到新变化时，会重新读取，旧成功响应或错误不会覆盖新状态。审批通过后运行继续按 gate 规则推进。
-  - 旧 Dashboard（`/advanced`）在控制操作完成后会自动读取一次状态；后续进展仍需刷新页面或重新进入 run 列表/详情查看（run 状态会从 `running` 走向 `passed`/`blocked`/`failed`）。
-  - 需要中止时点“取消”，在 3 秒内再次点“确认取消？”，然后检查真实状态。已先完成或失败的运行保持原终态；“已记录取消”不代表全部后台进程已经停止。
-  - 取消投递或观察更新失败时，原运行保留取消意图。详情和 Session 侧栏可显示“重试取消”，刷新后仍可处理同一个运行；同时检查退出证据是否已确认。
-  - 恢复入口提示旧进程退出未确认时，先检查并停止旧执行，再勾选确认。确认绑定当时的旧 Job；页面过期时必须刷新并重新确认。审批已记录但未恢复时，进入原运行继续处理。
-  - **English:** Click Cancel, then confirm within 3 seconds. Check the actual terminal state: a completed or failed run keeps its result. Recorded cancellation does not prove all background processes have stopped. If control delivery or observation repair is pending, Retry cancellation remains available on the original Run/Session after refresh. Before resuming an execution with unknown exit, stop and check the old execution and confirm its displayed Job identity. If approval was recorded but recovery did not start, continue from the original run.
-  - 同一个运行同一时刻只允许一个运行执行 Job（独立的 readiness/delivery 后台任务不参与此限制）：若已有任务在跑，重复的恢复/批准会被拒绝（提示"已有活跃任务"），观察原运行并等待当前任务处理；只有决定结束整个运行时才取消，取消后不可恢复。
-
-> 事件流：Web 暴露 `GET /api/sessions/:sessionId/events`(Server-Sent Events)，用 `x-session-token` 头鉴权，可按 `sinceSeq`/`Last-Event-ID` 回放历史事件并接收实时事件。事件流包含每个执行步骤的 agent 事件（`step/start`、`tool/call`、`tool/result`、`assistant/message`、`step/end`）与治理事件（门禁、产物、审批）。**Session UI 客户端已消费该事件流实现页面内实时刷新**；该端点同时可供外部集成使用。真正的逐块流式（`assistant/chunk` 模型原文增量）为后续阶段规划。
->
-> **事件日志定位（迁移期）**：新 Session 的 `session/created`、`workflow/started`、`user/message` 三个开场事件，与 Run、必需治理 Audit 和初始 Job 一起原子受理；重试不会重复这三个事件。后续 `session_events` 仍可能因 best-effort 投影缺失，运行状态仍需结合 `workflow_instances` / `jobs` 等持久记录判断。它不是可完整重建所有运行的权威事件日志，全域事务化 outbox 仍为后续范围。
+高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
 
 ### 7.1 暂停、取消与恢复
 
-在 Session 侧栏、Run 详情或运行列表操作前，先确认原 Run 身份和当前状态。请求中按钮会禁用，避免重复提交；反馈说明请求处理结果，不能代替后续状态观察。
+先核对原 Run 和当前状态。按钮反馈说明请求处理结果，后续仍需观察状态与退出证据。
 
-| 目的 | 如何操作 | 如何判断结果 |
-| --- | --- | --- |
-| 暂时停下 | 点“暂停” | “暂停请求已记录，活动步骤将在边界停下”表示已记录请求；当前 Agent/Gate 可能继续到检查边界。 |
-| 继续原任务 | 点“恢复” | “已受理恢复，请观察原运行”表示已受理，模型可能尚未开始；观察原 Run，不另建任务。 |
-| 结束任务 | 点“取消”，3 秒内再点“确认取消？” | 检查实际终态和退出证据；已先通过/失败时保留原结果，取消回执不代表全部进程退出。 |
-| 补发取消 | 详情或 Session 显示“重试取消”时点击 | 原取消意图保留，重试处理控制投递或观察更新，不生成新运行。 |
+| 目的 | 操作与判断 |
+| --- | --- |
+| 暂时停下 | 点“暂停”；请求记录后，活动 Agent/Gate 可继续到检查边界 |
+| 继续原任务 | 点“恢复”；已受理不代表模型已启动，观察原 Run |
+| 结束任务 | 点“取消”，3 秒内再确认；检查实际终态和退出证据 |
+| 补发取消 | 出现“重试取消”时在原运行处理投递或观察更新，不新建 Run |
 
-初始任务还在排队时暂停，它可以先被排空而不执行；随后恢复继续原 Run。若在认领前恢复，会复用原排队 Job；若已排空，则由服务端安排恢复 Job。两种情况都不需要重新提交需求。若提示已有活跃任务，观察原运行并等待其处理，不要用新任务绕过。
+暂停的初始排队 Job 可先排空而不执行；恢复复用未排空的 Job，或由服务端安排恢复 Job，Run 身份不变。提示已有活跃任务时等待原任务处理。
 
-恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。确认绑定当时的身份，提示过期时刷新并重新检查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是操作系统退出检测，受管理退出证据也不覆盖逃逸进程。`passed`、`failed`、`cancelled` 终态不可恢复。
+恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。身份过期须刷新重查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是 OS 退出检测，受管理退出证据不覆盖逃逸进程。
 
-审批后若显示“审批已记录，运行尚未恢复”，保留审批事实，进入原运行处理恢复，不重新批准。服务端拒绝或终态竞争显示真实反馈；错误保持可见，依据提示修复后重试。不要仅凭通知消失、按钮变化或 feed 缺少新事件推断进程状态。
+`passed`、`failed`、`cancelled` 终态不可恢复。取消回执不代表所有进程已退出；先通过或失败的 Run 保留原终态。CLI 可用 `tekon cancel --run-id <runId>` 结束指定运行。
 
-正常关闭服务打断构建或测试检查时，已完成的 Agent 或自动修复产物与对应工作树会保留，显式恢复从尚未完成的检查继续。自动修复本身未完成时，按实际节点状态继续处理，不保证跳过 Agent。若提示工作树关联或恢复证据缺失，先检查原运行的产物和工作树，再处理恢复；不要另建任务绕过。主动取消仍不可恢复。
+审批已记录但尚未恢复时，处理原 Run 的恢复，不再次批准。不要凭通知消失、按钮变化或 feed 缺新事件判断进程状态。
+
+正常关闭服务打断构建/测试检查时，已完成 Agent 或自动修复产物及对应 worktree 会保留；显式恢复继续未完成检查。修复本身未完成时可能重跑 Agent。若提示 worktree 关联或恢复证据缺失，先核查原产物和工作树，不新建任务绕过。主动取消仍不可恢复。
 
 ### 7.1 Pause, cancel and resume
 
-Check the original Run identity and current state in the Session sidebar, Run details or run list. Controls disable duplicate requests while pending. Feedback describes request handling; inspect subsequent state separately.
+Check the original Run and its current state. A control response describes request handling; inspect subsequent state and exit evidence.
 
-| Intent | Action | Interpret the result |
-| --- | --- | --- |
-| Pause temporarily | Choose Pause | “暂停请求已记录，活动步骤将在边界停下” means the request is recorded; the active Agent/Gate may continue to its next control boundary. |
-| Continue the original task | Choose Resume | “已受理恢复，请观察原运行” means recovery was accepted, not that the model has started. Observe the original Run. |
-| End the task | Choose Cancel, then confirm within 3 seconds | Check the actual terminal state and exit evidence. Earlier success/failure wins; a cancellation receipt does not prove all processes have exited. |
-| Repair cancellation | Choose Retry cancellation when offered | Retry pending control delivery or observation updates on the original Run. No new run is created. |
+| Intent | Action and result |
+| --- | --- |
+| Pause | Choose Pause; the active Agent/Gate may continue to its next control boundary |
+| Resume | Choose Resume; acceptance does not mean the model has started. Observe the original Run |
+| Cancel | Choose Cancel and confirm within 3 seconds; check the actual terminal state and exit evidence |
+| Retry cancellation | Repair pending delivery or observation on the original Run; no new Run is created |
 
-A paused initial queued Job may drain without executing. Resume keeps the same Run: it reuses the initial Job if still queued, or schedules recovery after it drains. Do not submit the demand again. If an active Job is reported, observe the original run and wait for it to settle.
+A paused initial queued Job may drain without execution. Resume reuses the pending Job or schedules recovery after it drains, keeping the original Run. If an active Job is reported, wait for it to settle.
 
-If exit is unconfirmed, check and stop the old execution before confirming its displayed Job identity. Refresh and recheck after a stale confirmation; see 6.10 for historical runs without Jobs. Human confirmation is not an OS exit observation, and managed-handle evidence does not cover escaped processes. Terminal passed, failed or cancelled runs cannot resume.
+If exit is unconfirmed, check and stop the old execution before confirming its displayed Job identity. Refresh stale identities; see §6.10 for historical runs without Jobs. Human confirmation is not an OS exit observation; managed-exit evidence does not cover escaped processes.
 
-If approval was recorded but recovery was not accepted, continue recovery from the original Run instead of approving again. Server refusals and terminal races retain their actual feedback; errors remain visible. Do not infer process state from a dismissed notice, disappearing controls or missing feed events.
+Terminal `passed`, `failed` and `cancelled` runs cannot resume. A cancellation receipt does not prove all processes exited; an earlier success or failure retains its result.
 
-When normal service shutdown interrupts a build or test check, completed Agent or repair outputs and the corresponding worktree are retained. Explicit resume continues unfinished checks. If the repair itself was incomplete, recovery follows the actual node state and may run the Agent again. If worktree association or recovery evidence is missing, inspect the original run’s outputs and worktree before resolving recovery; do not bypass the error by starting another task. An explicitly cancelled run remains non-resumable.
+If approval was recorded but recovery was not accepted, resume the original Run instead of approving again. Missing feed events, dismissed notices or changed controls do not prove process state.
+
+When normal service shutdown interrupts build/test checks, completed Agent or repair outputs and their worktree are retained. Explicit resume continues unfinished checks; an incomplete repair may run the Agent again. Inspect missing worktree association or recovery evidence on the original Run instead of bypassing the error with a new task. Explicit cancellation remains non-resumable.
 
 ## 8. 如何判断结果是否可信
 
-不要只看“命令退出 0”。建议按顺序看：
+按以下顺序核对，不能只看命令退出码：
 
-1. `status`：workflow 是否 passed。
-2. `review`：失败项和证据是否能解释。
-3. Changed Files：影响文件是否符合预期。
-4. Artifacts：需求、变更、测试、审阅证据是否完整。
-5. Gate Logs：build/lint/test/security 是否真的跑过。
-6. PR Package：PR body 是否能让 reviewer 看懂。
-7. CI Status：远端 checks 是否已记录。
-8. `eval readiness`：PR/CI 证据是否完整。
+1. **状态**：workflow 是否 passed，是否仍有待审批项。
+2. **范围**：Changed Files 和 diff 是否符合需求与非目标。
+3. **证据**：需求、变更、测试、审阅产物能否对应验收标准。
+4. **验证**：Gate Logs 是否显示实际执行、结果与测试对象。
+5. **交付**：PR 包是否准确，远端 checks 是否已记录。
+6. **评估**：`eval readiness` 的失败项是否已解释或补齐。
 
-如果其中任何一步说不清楚，不要继续创建 PR 或批准高风险动作。
+证据不清时先补证据，再决定是否创建 PR 或批准高风险动作。
 
 ## 9. 常见问题处理
 
 ### 9.1 `workflow preflight` 显示 missing command
 
-原因：目标仓库没有配置对应命令。
-
-处理：
-
-1. 看 `suggestedCommand` 是否合理。
-2. 把确认后的命令写入 `.tekon/repo-profile.yaml`。
-3. 再跑 `workflow preflight`。
-
-不要直接跳过 gate，除非该命令确实不适用且你能写出原因。
+确认 `suggestedCommand` 的语义，写入 `.tekon/repo-profile.yaml` 后重跑预检。只有确实不适用且说明原因时才配置跳过；安全扫描不能借此绕过。
 
 ### 9.2 run 拒绝 dirty base
 
-原因：目标仓库有未提交业务改动。
-
-处理：
-
-- 先提交、stash 或清理无关改动。
-- 如果你明确要基于当前改动运行，追加 `--allow-dirty-base`。
-
-注意：`--allow-dirty-base` 是人工确认，不是安全证明。
+目标仓库有未提交业务改动。先提交、stash 或整理无关改动；明确需要带入当前改动时加 `--allow-dirty-base`。该参数只记录确认，不证明改动安全。
 
 ### 9.3 pending human gate
 
-处理：
-
-1. 执行 `approval summary`。
-2. 执行 `eval approval-summary`。
-3. 如果摘要不完整，先看 `review` 补证据。
-4. 如果批准，执行 `resume --approve-human`。
-5. 如果拒绝，执行 `approval reject`。
+运行 `approval summary` 和 `eval approval-summary`，通过 `review` 补齐证据。人工决定后用 `resume --approve-human` 批准，或 `approval reject` 拒绝。多个 pending decision 必须指定 `--decision-id`。
 
 ### 9.4 readiness 不通过
 
-常见原因：
-
-- workflow 还没 passed。
-- 还有 pending human gate。
-- 验证 gate 失败。
-- PR 准备包不存在。
-- security scan 失败。
-- artifact 缺验收标准 evidence。
-
-处理：
-
-- 先看 `review` 的 failed checks。
-- 看 Evidence Navigation 指向哪里。
-- 按 Gate Failure Triage 的建议处理。
+先看 `review` 的失败检查，再沿证据入口查看日志和产物。常见原因包括 workflow/Gate 失败、待审批项、验收证据缺失、安全扫描失败，以及尚未准备 PR、创建 PR 或写回通过的远端 CI。
 
 ### 9.5 `delivery create-pr` 失败
 
-常见原因：
-
-- 没有 `gh`。
-- `gh auth status` 失败。
-- 目标远端没有权限。
-- 主工作区 dirty。
-- PR 已存在。
-
-处理：
-
-- 先修认证和工作区状态。
-- 若 PR 已存在，看命令是否恢复了 PR URL。
-- 不要直接重复执行高风险命令，先看 `.tekon/runs/<runId>/delivery/` 和 `review`。
+检查 `gh auth status`、远端权限、主工作区、pre-PR readiness 和 delivery 日志。已有同分支 PR 时先确认是否已恢复 URL。结果不明时不要重复高风险命令。
 
 ### 9.6 `ci-status` 查询失败
 
-常见原因：
-
-- run 没有 PR URL。
-- selector 不对。
-- `gh pr checks` 不支持目标。
-- 远端无 checks。
-- 权限不足。
-
-处理：
-
-- 用 `--selector <prUrl|branch>` 明确指定。
-- 先手动确认 `gh pr checks` 是否可用。
-- 对非 GitHub host，当前需要后续 adapter 支持。
+确认 Run 有 PR URL、`gh pr checks` 可用且权限足够；必要时用 `--selector "<PR URL 或分支>"` 指定。远端可能尚无 checks；非 GitHub host 仍需相应 adapter 支持。
 
 ### 9.7 Artifact 被拒绝入库
 
-原因：产物命中了明显密钥或 token 模式。
-
-处理：
-
-- 删除密钥内容。
-- 使用安全摘要或脱敏示例。
-- 重新运行相关节点或 provider。
-
-注意：这只是基础扫描，不等于完整 DLP。
+产物可能命中密钥或 token 模式。移除凭证，改用脱敏摘要，再按原运行的合法恢复路径补产物；终态失败 Run 不能直接 resume。基础扫描不等于完整 DLP。
 
 ### 9.8 Web 写操作被拒绝
 
-常见原因：
-
-- session token 错误。
-- `.tekon/web-session.json` 不存在。
-- 当前项目 root 不在允许范围。
-
-处理：
-
-- 重新执行 `init` 生成 token。
-- 确认 Web 启动时的 `TEKON_PROJECT_ROOT` 正确。
-- 不要提交 token。
+核对会话令牌、`.tekon/web-session.json` 和目标项目范围。令牌文件缺失可重新 `init`，再用 `tekon ui --repo /path/to/project` 启动并打开完整 URL。手动启动 Web 时检查 `TEKON_PROJECT_ROOT`。
 
 ### 9.9 Codex provider 运行失败
 
-常见原因：
+先确认本机 `codex` 在 PATH、认证与 `internal` profile 可用：
 
-- 本机未安装 `codex`，或 `codex` 不在 `PATH` 中。
-- 本机 Codex CLI 未完成认证。
-- provider 没有按 Tekon artifact manifest 协议写入必需 artifact。
-- 用户传入的 Codex args 试图覆盖 profile、sandbox、approval、文件系统、配置或危险 bypass 参数。
-- Codex 在当前仓库需要人工批准，但 Tekon 节点执行没有拿到可恢复的 artifact 证据。
+```bash
+codex --version
+codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help
+```
 
-处理：
+这些命令仅核对 CLI 参数入口，不验证真实模型调用或认证成功。真实 workflow 节点会受控追加 `--add-dir <TEKON_OUTPUT_DIR>` 开放本节点产物目录。
 
-- 先执行 `codex --version` 和一个最小 `codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help` smoke，确认本机 CLI 与 internal profile 可用。
-- 该 `exec --help` smoke 只验证 CLI 与 internal profile；真实 Tekon run 会在 `exec` 前受控追加 `--add-dir <TEKON_OUTPUT_DIR>`，只开放本节点 artifact 输出目录。
-- 查看 `.tekon/runs/<runId>/<nodeId>/` 下 stdout/stderr、`artifact-manifest.json`、字面 `TEKON_ARTIFACT_MANIFEST` 和 artifact 内容。
-- 确认 artifact JSON/YAML/Markdown 满足 Tekon schema；结构化 JSON 必须有非空 `title` 和 `body`。
-- 不要把失败降级成 mock 通过；真实 provider 的失败应写入审阅报告或样本评估。
-- 参考[Codex 自举验证记录](../reviews/2026-06-10-tekon-codex-self-bootstrap-report.md)中的历史样本与限制；它不能替代当前任务的真实 Provider 验证。
+查看 `.tekon/runs/<runId>/<nodeId>/` 的 stdout/stderr、manifest 和产物；确认声明的文件存在且符合 schema，结构化 JSON 的 `title`、`body` 非空。不要通过参数覆盖 sandbox、approval 或危险 bypass，也不要把真实失败换成 mock 通过作为验收。
+
+[历史 Codex 自举验证记录](../reviews/2026-06-10-tekon-codex-self-bootstrap-report.md) 可供参考，不能替代当前任务的真实验证。
 
 ## 10. 参数速查
 
 ### 全局常见参数
 
-| 参数                  | 用途                                                                        |
-| --------------------- | --------------------------------------------------------------------------- |
-| `--help`, `-h`        | 查看命令帮助；`tekon --help` 显示命令概览，`tekon help <cmd>` 查看子命令。  |
-| `--version`, `-v`     | 输出版本号。                                                                |
-| `--repo <path>`       | 跨仓库或从其它目录操作时指定目标仓库；常规用法自动发现。                    |
-| `--run-id <runId>`    | 指定历史或非最近 workflow run；常规审阅默认使用最近 run。                   |
-| `--agent mock`        | 使用 mock provider，适合本地验收和 fixture。                                |
-| `--agent claude-code` | 使用 Claude Code adapter，需本机认证和额外真实 smoke 证据。                 |
-| `--agent codex`       | 使用本机 Codex CLI adapter，需本机安装、认证和真实 smoke 证据。             |
-| `--approve-human`     | 明确批准人工 gate 或远端副作用。                                            |
-| `--allow-dirty-base`  | 允许基于当前未提交业务改动运行。                                            |
-| `--shape <path>`      | 指定需求卡；常规批准/查看默认使用最近需求卡。                               |
-| `--decision-id <id>`  | 指定人工决策；同一 run 有多个 pending decision 或处理历史 decision 时使用。 |
+以下是多个命令常用的参数，并非所有子命令都接受。
+
+| 参数 | 用途 |
+| --- | --- |
+| `--help` / `-h` | 顶层命令概览；子命令摘要用 `tekon help <command>` |
+| `--version` / `-v` | 版本号 |
+| `--repo <path>` | 指定目标仓库 |
+| `--run-id <id>` | 指定历史或非最近 Run |
+| `--approve-human` | 当次明确批准人工 Gate 或远端交付 |
+| `--allow-dirty-base` | 允许基于未提交改动运行 |
+| `--shape <path>` | 指定需求卡 |
+| `--decision-id <id>` | 指定人工决策 |
 
 ### `run` 参数
 
-| 参数                            | 用途                                                                    |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `--template <name>`             | 使用内置模板。                                                          |
-| `--demand-file <path>`          | 指定历史或非最近需求卡；常规运行默认读取最近需求卡且要求它已批准。      |
-| `--dynamic`                     | 动态 workflow 预览，必须搭配 `--dry-run`，不开放实际执行。                |
-| `--dry-run`                     | 仅支持 `--dynamic`；普通 workflow/Goal 会在初始化前拒绝。                 |
-| `--request-id <id>`             | 普通 workflow/Goal 的原意图重试标识；8–128 个字母、数字、下划线或连字符。 |
-| `--save-as <name>`              | 保存动态 workflow 预览。                                                |
-| `--timeout-ms <ms>`             | 覆盖真实 provider 外层总超时，明确长程任务可配置为 2 小时以上。         |
-| `--no-progress-timeout-ms <ms>` | 覆盖无 stdout/stderr 或受控输出目录文件进展超时，用来判断任务是否卡死。 |
-| `--progress-heartbeat-ms <ms>`  | 覆盖 progress JSON heartbeat 间隔。                                     |
+| 参数 | 用途 |
+| --- | --- |
+| `--template <name>` | 指定模板，默认 `standard-delivery` |
+| `--goal` | 一次性轻量目标；与 `--template` 互斥，默认不接受源码修改 |
+| `--agent <name>` | `codex`、`claude-code`、`mock` 或仅 Goal 可用的 `dsh-headless` |
+| `--demand-file <path>` | 指定已批准需求卡；`--draft-file` 也受支持 |
+| `--acknowledge-unrestricted-network` | 显式确认 DSH 等所用后端的联网不受限边界 |
+| `--dynamic --dry-run` | 动态预览；普通 workflow/Goal 不支持 `--dry-run` |
+| `--request-id <id>` | 原意图重试标识；8–128 个 ASCII 字母、数字、下划线或连字符 |
+| `--save-as <name>` | 保存动态预览模板 |
+| `--timeout-ms <ms>` | 真实 Provider 外层总超时 |
+| `--no-progress-timeout-ms <ms>` | 无 stdout/stderr 或受控产物文件进展超时 |
+| `--progress-heartbeat-ms <ms>` | progress JSON 心跳间隔 |
 
 ### `draft shape` 参数
 
-| 参数            | 用途                                           |
-| --------------- | ---------------------------------------------- |
-| `--no-write`    | 只预览需求塑形结果，不写入 `.tekon/demands/`。 |
-| `--format json` | 输出 JSON，便于其它工具消费。                  |
+| 参数 | 用途 |
+| --- | --- |
+| `--no-write` | 预览需求卡，不写入需求卡文件 |
+| `--format json` | 输出 JSON |
 
 ### `delivery ci-watch` 参数
 
-| 参数                         | 用途             |
-| ---------------------------- | ---------------- |
-| `--selector <prUrl或branch>` | 指定 PR 或分支。 |
-| `--max-attempts <n>`         | 最大轮询次数。   |
-| `--interval-ms <ms>`         | 每次轮询间隔。   |
-| `--backoff <n>`              | 轮询退避倍率。   |
+| 参数 | 用途 |
+| --- | --- |
+| `--selector <值>` | 指定 PR URL 或分支 |
+| `--max-attempts <n>` | 最大查询次数 |
+| `--interval-ms <ms>` | 初始轮询间隔 |
+| `--backoff <n>` | 退避倍率 |
 
 ## 11. 使用说明
 
-天工的核心设计理念是增强人类交付，合入、上线、权限扩大等关键决策始终由人控制。
+优先用于内部工具、测试与文档补齐、低风险缺陷，以及可回滚、可人工审阅的中小需求。
 
-适用场景：
-
-- 内部工具和研发效能工具。
-- 测试补齐和文档补齐。
-- 低风险 bugfix。
-- 可回滚、可人工审阅的中小需求。
+交付质量取决于需求、仓库检查、真实 Provider 和人工审阅。保留失败证据与恢复记录；合入、上线、权限扩大等决策始终由人控制。
 
 ## 12. 每次迭代后的手册更新规则
 
-后续每次功能、行为、CLI/Web 入口、参数、错误处理、边界或用户流程发生变化后，都必须评估是否需要更新本手册。
+CLI/Web 入口、参数、Gate、评估、产物目录、Provider、安全边界或故障处理变化后，应核对本手册，并同步 HTML 人审版。
 
-需要更新本手册的典型情况：
+更新时说明当前行为和限制，核对示例与源码；仅文档变更检查结构、链接和中英对应，不据此宣称运行行为已验收。无需更新时，在交付说明中注明理由。
 
-- 新增或删除 CLI 命令。
-- 参数语义变化。
-- Web dashboard 新增写操作。
-- Gate、readiness、work-usability 规则变化。
-- 运行目录、artifact、PR 包或审计结构变化。
-- 新增真实 provider 支持。
-- 安全边界、人工审批边界或远端副作用规则变化。
-- 用户常见故障处理方式变化。
-
-如果一次迭代判断不需要更新本手册，应在最终回复或提交说明中说明理由。
-
-当前主手册路径：
-
-```text
-docs/manual/tekon-user-manual.md
-```
+主稿：`docs/manual/tekon-user-manual.md`；人审版：`docs/manual/tekon-user-manual.html`。
