@@ -9,6 +9,7 @@ import { createGateEngine } from '../gate/engine.js';
 import {
   isJobCancellationAbort,
   isJobOwnershipLostAbort,
+  isJobShutdownAbort,
   type JobExecutionContext,
   type JobExecutor,
 } from './job-runner.js';
@@ -97,16 +98,16 @@ export function createWorkflowJobExecutor(deps: {
 
   async function buildEngine(runId: string, ctx: JobExecutionContext) {
     // Wrap the gateway so every subprocess it spawns (agent, gate commands,
-    // worktree git) registers under runId and honors the job's abort signal.
+    // worktree git) registers under this Job ID and honors its abort signal.
     // This is the last hop of the cancel chain (D6): jobRunner.requestCancel →
-    // registry.killAll(runId) can only kill children that were registered here.
+    // registry.killAll(ctx.job.id) can only kill children that were registered here.
     const base = createCommandGateway({ repositories });
     const gateway = {
       run: (input: Parameters<typeof base.run>[0]) =>
         base.run({
           ...input,
           registry,
-          registryKey: runId,
+          registryKey: ctx.job.id,
           signal: input.signal ?? ctx.signal,
         }),
     };
@@ -144,6 +145,7 @@ export function createWorkflowJobExecutor(deps: {
   return {
     async execute(ctx) {
       const { job } = ctx;
+      if (!deps.engineFactory) ctx.markManagedExecution?.();
       const runId = await sessions.getRunIdBySessionId(job.sessionId);
       if (!runId) {
         // No run bound to this session — nothing to execute.
@@ -163,9 +165,17 @@ export function createWorkflowJobExecutor(deps: {
         let workflow: WorkflowInstance;
         switch (job.kind) {
           case 'workflow-run':
-          case 'goal-run':
-            workflow = await engine.executePreparedRun(runId);
+          case 'goal-run': {
+            // Pause may have been recorded before claim, while no owner could
+            // receive an in-memory pause flag. Do not turn initial delivery
+            // into an implicit resume. An explicit workflow-resume still uses
+            // the engine's guarded resume path below.
+            const current = await repositories.getWorkflowInstance(runId);
+            workflow = current?.status === 'paused'
+              ? current
+              : await engine.executePreparedRun(runId);
             break;
+          }
           case 'workflow-resume':
             workflow = (await engine.resumeRun(runId)).workflow;
             break;
@@ -184,6 +194,10 @@ export function createWorkflowJobExecutor(deps: {
         // or session terminal state; the new owner is authoritative.
         if (isJobOwnershipLostAbort(ctx.signal)) {
           return { status: 'failed' as JobStatus };
+        }
+        if (isJobShutdownAbort(ctx.signal)) {
+          await sessions.updateSessionStatus(job.sessionId, 'awaiting-input');
+          return { status: 'interrupted' as JobStatus };
         }
         if (isJobCancellationAbort(ctx.signal)) {
           // Abort raced the run to completion. Settle the workflow cancelled
@@ -231,6 +245,11 @@ export function createWorkflowJobExecutor(deps: {
       return { status: 'failed' };
     }
 
+    if (isJobShutdownAbort(ctx.signal)) {
+      await sessions.updateSessionStatus(sessionId, 'awaiting-input');
+      return { status: 'interrupted' };
+    }
+
     // User cancellation remains authoritative over an engine result.
     if (isJobCancellationAbort(ctx.signal) || workflow.status === 'cancelled') {
       await sessions.updateSessionStatus(sessionId, 'cancelled');
@@ -264,10 +283,10 @@ export function createWorkflowJobExecutor(deps: {
         return { status: 'done' };
       }
       case 'interrupted': {
-        await sessions.updateSessionStatus(sessionId, 'failed');
+        await sessions.updateSessionStatus(sessionId, 'awaiting-input');
         await emit(sessionId, 'agent/error', { runId, status: 'interrupted' });
         await emit(sessionId, 'turn/end', { runId, status: 'interrupted' });
-        return { status: 'failed' };
+        return { status: 'interrupted' };
       }
       default: {
         // A background executor returning running/pending is a contract breach.

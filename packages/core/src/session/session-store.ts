@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { handOffInterruptedExecutionTxn, hasExitEvidence, latestExecutionJob, readRunRecovery, reconcileCancelledRunTxn, type RunRecovery } from './run-recovery.js';
+import type { JobEnqueueResult, JobExitEvidence, ResumeConfirmation } from '../types/session-contract.js';
 
 import type { TekonDatabase } from '../db/connection.js';
 import type { WriteQueue } from '../db/write-queue.js';
@@ -40,14 +42,26 @@ export interface JobUpdateCondition {
 }
 
 /**
- * A session as surfaced to the Session List read-path (phase 3 3a). The frozen
- * `Session` schema has no runId (session-contract.ts), so the list entry
- * extends it with the run_id column value — carried through, not persisted
- * separately. Used by the web `session.list` RPC.
+ * A session as surfaced to the Session List read-path (phase 3 3a / phase 4 P1-04).
+ * The frozen `Session` schema has no runId (session-contract.ts), so the list
+ * entry extends it with the run_id column value and aggregated lastActivityAt
+ * timestamp — carried through, not persisted separately on the session table.
+ * Used by the web `session.list` RPC.
  */
-export type SessionListEntry = Session & { runId: string | null };
+export type SessionListEntry = Session & {
+  runId: string | null;
+  lastActivityAt: string;
+  /**
+   * P1-UX-02: human-attention state. NULL until a human acknowledges/archives
+   * the session; a failed session stays pinned (needsAction) while this is null.
+   */
+  acknowledgedAt: string | null;
+};
 
 export interface SessionEventStore {
+  getRunRecovery(runId: string): Promise<RunRecovery>;
+  reconcileCancelledRun(runId: string): Promise<{ sessionId?: string; events: SessionEvent[] }>;
+  listCancelledRunIds(afterId: string, limit: number): Promise<string[]>;
   getOrCreateDefaultWorkspace(root: string): Promise<Workspace>;
   createSession(input: {
     workspaceId: string;
@@ -58,18 +72,26 @@ export interface SessionEventStore {
   getSession(sessionId: string): Promise<Session | null>;
   findSessionByRunId(runId: string): Promise<Session | null>;
   /**
-   * List a workspace's sessions newest-first (created_at desc) for the Session
-   * List UI. Pure SELECT, zero migration; returns [] for an unknown workspace.
-   * Carries run_id from the column (SessionListEntry).
+   * List a workspace's sessions ordered by last activity desc (most recent
+   * event timestamp, falling back to created_at) for the Session List UI. Pure
+   * SELECT, zero migration; returns [] for an unknown workspace. Carries run_id
+   * and lastActivityAt from the query (SessionListEntry).
    */
   listSessions(workspaceId: string): Promise<SessionListEntry[]>;
   /**
    * Reverse lookup: the runId a session is associated with, or null when the
    * session has no run (or does not exist). The job runner uses this to map a
-   * job's sessionId to the runId key used by the subprocess registry.
+   * job's sessionId to its workflow identity; subprocess scopes use Job IDs.
    */
   getRunIdBySessionId(sessionId: string): Promise<string | null>;
   updateSessionStatus(sessionId: string, status: SessionStatus): Promise<void>;
+  /**
+   * P1-UX-02: mark a session as acknowledged/archived by a human. Sets
+   * acknowledged_at to now() (idempotent overwrite). Unknown session ids are a
+   * no-op. The Session List uses this to drop a handled failure out of the
+   * needs-action band. Returns the timestamp written, or null when no row matched.
+   */
+  acknowledgeSession(sessionId: string): Promise<string | null>;
   appendEvent(input: {
     sessionId: string;
     type: string;
@@ -80,7 +102,42 @@ export interface SessionEventStore {
     correlationId?: string | null;
   }): Promise<SessionEvent>;
   listEventsSince(sessionId: string, sinceSeq: number): Promise<SessionEvent[]>;
+  /**
+   * Bounded page read for the long-session tail window (review P1-UX-03):
+   * returns at most `limit` events with seq > sinceSeq in ascending order,
+   * plus hasMore when further rows exist. listEventsSince stays unbounded
+   * for internal contiguous catch-up; callers that need a bounded window
+   * must use this method.
+   */
+  listEventsPage(
+    sessionId: string,
+    sinceSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
+  /**
+   * Backward cursor page read for "load earlier history" (ninth-review
+   * annotation 16.3): returns at most `limit` RAW events with seq < beforeSeq
+   * in DESCENDING order, plus hasMore when older rows exist. The caller filters
+   * visible events and derives the next cursor. Descending order is what lets
+   * the server return a continuation cursor even when a whole raw page is
+   * filtered out, fixing the old fixed-scan "empty visible page + hasMore but
+   * no cursor" dead end.
+   */
+  listEventsBefore(
+    sessionId: string,
+    beforeSeq: number,
+    limit: number,
+  ): Promise<{ events: SessionEvent[]; hasMore: boolean }>;
   latestSeq(sessionId: string): Promise<number>;
+  /**
+   * Lightweight tail read for session.get's lastActivityAt: returns only the
+   * tail event's timestamp (max seq, sharing listSessions' seq-desc tail
+   * semantics) without deserializing the full event payload. Null when no
+   * matching event rows exist for the given sessionId. (session_events has no
+   * FK on session_id — see P1-DATA-01 — so "no events" is the real contract,
+   * not "session does not exist".)
+   */
+  getLatestEventTimestamp(sessionId: string): Promise<string | null>;
   upsertProjectionCheckpoint(
     sessionId: string,
     name: string,
@@ -89,6 +146,7 @@ export interface SessionEventStore {
 }
 
 export interface JobRepository {
+  withOwnedWrite<T>(jobId: string, owner: string, operation: () => T | Promise<T>): T | Promise<T>;
   enqueue(job: JobEnqueueInput): Promise<Job>;
   get(jobId: string): Promise<Job | null>;
   findActiveByRunId(runId: string): Promise<Job | null>;
@@ -106,14 +164,9 @@ export interface JobRepository {
   enqueueIfNoActiveByRunId(
     runId: string,
     job: JobEnqueueInput,
-  ): Promise<
-    { outcome: 'enqueued'; job: Job } | { outcome: 'active-job'; job: Job }
-  >;
-  // 回收该 run 下"旧"的可安全清理 job:created_at 早于 cutoff 的 queued,以及
-  // lease 早于 cutoff 的 paused;running/cancelling/新鲜 queued 不动。
-  // `leaseCutoffIso` 缺省时沿用 30s 默认(= runner 默认 leaseTtlMs);
-  // 自定义 leaseTtlMs 的 runner 应传入 `new Date(now - leaseTtlMs).toISOString()`,
-  // 避免 stale 判定与 runner 的租约 TTL 偏离(设计 §2.2 实现注)。
+    confirmation?: ResumeConfirmation,
+  ): Promise<JobEnqueueResult>;
+  /** Compatibility no-op: lease age never authorizes cancellation or requeue. */
   cancelStaleActiveJobs(
     runId: string,
     exceptJobId?: string,
@@ -127,7 +180,7 @@ export interface JobRepository {
   updateJob(
     jobId: string,
     patch: Partial<
-      Pick<Job, 'status' | 'owner' | 'lease' | 'abortState' | 'checkpoint'>
+      Pick<Job, 'status' | 'owner' | 'lease' | 'abortState' | 'checkpoint' | 'exitEvidence'>
     >,
     condition?: JobUpdateCondition,
   ): Promise<Job | null>;
@@ -139,19 +192,14 @@ export interface JobRepository {
     jobId: string,
     owner: string,
     desiredStatus: JobStatus,
+    exitEvidence?: JobExitEvidence | null,
   ): Promise<Job | null>;
+  interruptOwnedJob(jobId: string, owner: string): Promise<void>;
+  interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{ processed: number; lastId: string | null; events: SessionEvent[] }>;
   requeueStale(
     leaseOlderThanIso: string,
   ): Promise<{ requeued: number; cancelled: number }>;
 }
-
-/**
- * `cancelStaleActiveJobs` treats a job as abandoned when it is older than this:
- * a paused job whose lease predates it, or a queued job whose created_at
- * predates it. Matches the runner's default lease TTL (30s), comfortably above
- * the ~200ms poll interval so a just-enqueued job is never mistaken for stale.
- */
-const DEFAULT_STALE_PAUSED_LEASE_MS = 30_000;
 
 type WorkspaceRow = {
   id: string;
@@ -171,6 +219,11 @@ type SessionRow = {
   run_id: string | null;
   created_at: string;
   updated_at: string;
+  acknowledged_at: string | null;
+};
+
+type SessionListRow = SessionRow & {
+  last_activity_at: string;
 };
 
 type SessionEventRow = {
@@ -195,6 +248,7 @@ type JobRow = {
   owner: string | null;
   lease: string | null;
   abort_state: string;
+  exit_evidence: string | null;
   checkpoint: string | null;
   payload: string;
   created_at: string;
@@ -208,6 +262,14 @@ export function createSessionEventStore(
   const now = () => new Date().toISOString();
 
   return {
+    async getRunRecovery(runId) { return readRunRecovery(db, runId); },
+    async reconcileCancelledRun(runId) {
+      return writeQueue.enqueue(() => db.transaction(() => reconcileCancelledRunTxn(db, runId)).immediate());
+    },
+    async listCancelledRunIds(afterId, limit) {
+      return (db.prepare(`select id from workflow_instances where status='cancelled' and id>?
+        order by id limit ?`).all(afterId, Math.max(1, Math.min(100, limit))) as Array<{ id: string }>).map(row => row.id);
+    },
     async getOrCreateDefaultWorkspace(root) {
       return writeQueue.enqueue(() => {
         // Web and CLI open independent SQLite connections. Acquire the writer
@@ -311,16 +373,33 @@ export function createSessionEventStore(
     },
 
     async listSessions(workspaceId) {
+      // P1-PERF-01: 使用相关子查询按 seq desc limit 1 取尾事件的 timestamp，
+      // 避免全量 left join session_events + group by 的 O(全事件) 聚合代价。
+      // 正确性依据：appendEvent 在同一 BEGIN IMMEDIATE 事务内 seq=max(seq)+1 与
+      // timestamp=now() 同序分配，故 max(seq) 的事件恒为最新 timestamp；
+      // 毫秒 tie 时 seq-desc 比 max(timestamp) 更精确。语义与旧查询一致（无事件回退 created_at）。
+      // 依赖墙钟单调：若发生 NTP step-back，高 seq 事件可能拿到更早的墙钟标签，此时
+      // seq-desc 取的是因果/追加序上最近发生的事件，比 max(timestamp) 更贴近"最近活动"。
       const rows = db
         .prepare(
-          // created_at desc, then rowid desc as a stable tiebreak so sessions
-          // created within the same millisecond keep a deterministic
-          // insertion-newest-first order (rowid is monotonic on this rowid
-          // table; `id text primary key` does not remove it).
-          'select * from sessions where workspace_id = ? order by created_at desc, rowid desc',
+          `select s.*,
+             coalesce(
+               (select e.timestamp from session_events e
+                where e.session_id = s.id
+                order by e.seq desc limit 1),
+               s.created_at
+             ) as last_activity_at
+           from sessions s
+           where s.workspace_id = ?
+           order by last_activity_at desc, s.rowid desc`,
         )
-        .all(workspaceId) as SessionRow[];
-      return rows.map((row) => ({ ...mapSession(row), runId: row.run_id }));
+        .all(workspaceId) as SessionListRow[];
+      return rows.map((row) => ({
+        ...mapSession(row),
+        runId: row.run_id,
+        lastActivityAt: row.last_activity_at,
+        acknowledgedAt: row.acknowledged_at ?? null,
+      }));
     },
 
     async getRunIdBySessionId(sessionId) {
@@ -335,6 +414,18 @@ export function createSessionEventStore(
         db.prepare(
           'update sessions set status = ?, updated_at = ? where id = ?',
         ).run(status, now(), sessionId);
+      });
+    },
+
+    async acknowledgeSession(sessionId) {
+      return writeQueue.enqueue(() => {
+        const acknowledgedAt = now();
+        const info = db
+          .prepare(
+            'update sessions set acknowledged_at = ?, updated_at = ? where id = ?',
+          )
+          .run(acknowledgedAt, acknowledgedAt, sessionId);
+        return info.changes > 0 ? acknowledgedAt : null;
       });
     },
 
@@ -399,6 +490,38 @@ export function createSessionEventStore(
       return rows.map(mapSessionEvent);
     },
 
+    async listEventsPage(sessionId, sinceSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq > ?
+           order by seq asc
+           limit ?`,
+        )
+        .all(sessionId, sinceSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
+    },
+
+    async listEventsBefore(sessionId, beforeSeq, limit) {
+      const rows = db
+        .prepare(
+          `select * from session_events
+           where session_id = ? and seq < ?
+           order by seq desc
+           limit ?`,
+        )
+        .all(sessionId, beforeSeq, limit + 1) as SessionEventRow[];
+      const hasMore = rows.length > limit;
+      return {
+        events: rows.slice(0, limit).map(mapSessionEvent),
+        hasMore,
+      };
+    },
+
     async latestSeq(sessionId) {
       const row = db
         .prepare(
@@ -406,6 +529,21 @@ export function createSessionEventStore(
         )
         .get(sessionId) as { max_seq: number };
       return row.max_seq;
+    },
+
+    async getLatestEventTimestamp(sessionId) {
+      // Tail read via the (session_id, seq) index: reverse-scan to the last
+      // row and project only timestamp, avoiding payload deserialization.
+      // Same seq-desc tail semantics as listSessions' correlated subquery.
+      const row = db
+        .prepare(
+          `select timestamp from session_events
+           where session_id = ?
+           order by seq desc
+           limit 1`,
+        )
+        .get(sessionId) as { timestamp: string } | undefined;
+      return row?.timestamp ?? null;
     },
 
     async upsertProjectionCheckpoint(sessionId, name, lastSeq) {
@@ -429,16 +567,25 @@ export function createJobRepository(
   const now = () => new Date().toISOString();
 
   return {
+    withOwnedWrite(jobId, owner, operation) {
+      return db.transaction(() => {
+        const current = db.prepare('select owner,status from jobs where id=?').get(jobId) as { owner: string | null; status: string } | undefined;
+        if (!current || current.owner !== owner || !['running','paused','cancelling'].includes(current.status)) {
+          throw new Error(`JOB_FENCING: execution ${jobId} no longer owns writes`);
+        }
+        return operation();
+      }).immediate();
+    },
     async enqueue(job) {
       const parsed = jobSchema.parse(job);
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into jobs (
              id, session_id, kind, status, owner, lease, abort_state,
-             checkpoint, payload, created_at, updated_at
+             checkpoint, payload, created_at, updated_at, exit_evidence
            ) values (
              @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-             @checkpoint, @payload, @createdAt, @updatedAt
+             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
            )`,
         ).run({
           ...parsed,
@@ -446,12 +593,13 @@ export function createJobRepository(
           lease: parsed.lease ?? null,
           checkpoint: parsed.checkpoint ?? null,
           payload: JSON.stringify(job.payload ?? {}),
+          exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
         });
         return parsed;
       });
     },
 
-    async enqueueIfNoActiveByRunId(runId, job) {
+    async enqueueIfNoActiveByRunId(runId, job, confirmation = {}) {
       const parsed = jobSchema.parse(job);
       if (!RUN_EXECUTION_JOB_KINDS.has(parsed.kind)) {
         throw new Error(
@@ -478,6 +626,15 @@ export function createJobRepository(
             );
           }
 
+          const run = db.prepare('select status from workflow_instances where id=?').get(runId) as { status: string } | undefined;
+          if (run && ['passed','failed','cancelled'].includes(run.status)) {
+            return { outcome: 'terminal' as const, status: run.status as 'passed'|'failed'|'cancelled' };
+          }
+          const latest = latestExecutionJob(db, runId);
+          const previousJobId = latest?.id ?? null;
+          if (confirmation.previousJobId !== undefined && confirmation.previousJobId !== previousJobId) {
+            return { outcome: 'stale-confirmation' as const, previousJobId };
+          }
           const existing = db
             .prepare(
               `select j.* from jobs j
@@ -490,15 +647,39 @@ export function createJobRepository(
             )
             .get({ runId }) as JobRow | undefined;
           if (existing) {
+            // Claim/drain cannot interleave between checking the original Job
+            // and releasing its durable pause. A consumed Job instead falls
+            // through to the normal guarded resume insertion below.
+            if (existing.status === 'queued' && existing.id === latest?.id) {
+              const admission = db.prepare(
+                'select job_id from run_admissions where run_id = ? and session_id = ?',
+              ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
+              if (admission?.job_id === existing.id) {
+                db.prepare(
+                  "update workflow_instances set status = 'running', updated_at = ? where id = ? and status = 'paused'",
+                ).run(now(), runId);
+                return { outcome: 'enqueued' as const, job: mapJob(existing) };
+              }
+            }
             return { outcome: 'active-job' as const, job: mapJob(existing) };
           }
+          const needsConfirmation = latest ? !hasExitEvidence(latest.exit_evidence) : run?.status === 'interrupted';
+          if (needsConfirmation && (!confirmation.confirmStopped || confirmation.previousJobId === undefined)) {
+            return { outcome: 'exit-unconfirmed' as const, previousJobId };
+          }
+          // Monotonic generation ordering even when admissions share a millisecond.
+          if (latest && parsed.createdAt <= latest.created_at) {
+            parsed.createdAt = new Date(Date.parse(latest.created_at) + 1).toISOString();
+            parsed.updatedAt = parsed.createdAt;
+          }
+          if (run) handOffInterruptedExecutionTxn(db, runId, confirmation, previousJobId, parsed.id);
           db.prepare(
             `insert into jobs (
                id, session_id, kind, status, owner, lease, abort_state,
-               checkpoint, payload, created_at, updated_at
+               checkpoint, payload, created_at, updated_at, exit_evidence
              ) values (
                @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-               @checkpoint, @payload, @createdAt, @updatedAt
+               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
              )`,
           ).run({
             ...parsed,
@@ -506,8 +687,9 @@ export function createJobRepository(
             lease: parsed.lease ?? null,
             checkpoint: parsed.checkpoint ?? null,
             payload,
+            exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
           });
-          return { outcome: 'enqueued' as const, job: parsed };
+          return { outcome: 'enqueued' as const, job: parsed, ...(confirmation.confirmStopped ? { previousJobId } : {}) };
         });
         return tx.immediate();
       });
@@ -535,34 +717,10 @@ export function createJobRepository(
       return row ? mapJob(row) : null;
     },
 
-    async cancelStaleActiveJobs(runId, exceptJobId, leaseCutoffIso) {
-      return writeQueue.enqueue(() => {
-        const cutoff =
-          leaseCutoffIso ??
-          new Date(Date.now() - DEFAULT_STALE_PAUSED_LEASE_MS).toISOString();
-        // Only reclaim OLD jobs (design §2.2): a queued job younger than the
-        // cutoff is very likely a concurrent enqueue in flight (the runner
-        // polls every ~200ms; the lease TTL cutoff is 30s), NOT an abandoned
-        // one. Without the created_at guard, two concurrent approves/resumes
-        // race: the loser's reclaim cancels the winner's just-enqueued job,
-        // leaving the run stuck at paused with a dead job (the winner already
-        // returned 200). The age guard keeps the fresh job alive so the loser
-        // instead 409s on findActiveByRunId (A1).
-        const result = db
-          .prepare(
-            `update jobs
-             set status = 'cancelled', abort_state = 'stopped', updated_at = @now
-             where session_id in (select id from sessions where run_id = @runId)
-               and kind in ('workflow-run', 'workflow-resume', 'goal-run')
-               and (
-                 (status = 'queued' and created_at < @cutoff)
-                 or (status = 'paused' and lease is not null and lease < @cutoff)
-               )
-               and (@exceptJobId is null or id != @exceptJobId)`,
-          )
-          .run({ now: now(), runId, cutoff, exceptJobId: exceptJobId ?? null });
-        return result.changes;
-      });
+    async cancelStaleActiveJobs() {
+      // Legacy callers cannot turn a stale lease into proof of exit. Recovery is
+      // performed by interruptStale and the guarded explicit resume transaction.
+      return 0;
     },
 
     async claimNext(owner) {
@@ -575,9 +733,14 @@ export function createJobRepository(
         // 错回上一个 job)。
         const target = db
           .prepare(
-            `select id from jobs
-             where status = 'queued'
-             order by created_at asc, id asc
+            `select j.id from jobs j
+             left join sessions s on s.id = j.session_id
+             left join run_admissions a on a.run_id = s.run_id
+             left join workflow_instances w on w.id = s.run_id
+             where j.status = 'queued'
+               and (a.files_state is null or a.files_state = 'ready')
+               and (j.kind not in ('workflow-run','workflow-resume','goal-run') or w.status is null or w.status not in ('passed','failed','cancelled'))
+             order by j.created_at asc, j.id asc
              limit 1`,
           )
           .get() as { id: string } | undefined;
@@ -587,7 +750,7 @@ export function createJobRepository(
         const result = db
           .prepare(
             `update jobs
-             set status = 'running', owner = @owner, lease = @now, updated_at = @now
+             set status = 'running', owner = @owner, lease = @now, updated_at = @now, exit_evidence = null
              where id = @id and status = 'queued'`,
           )
           .run({ owner, now: claimedAt, id: target.id });
@@ -623,6 +786,10 @@ export function createJobRepository(
         if (patch.abortState !== undefined) {
           sets.push('abort_state = @abortState');
           params.abortState = patch.abortState;
+        }
+        if (patch.exitEvidence !== undefined) {
+          sets.push('exit_evidence = @exitEvidence');
+          params.exitEvidence = patch.exitEvidence ? JSON.stringify(patch.exitEvidence) : null;
         }
         if (patch.checkpoint !== undefined) {
           sets.push('checkpoint = @checkpoint');
@@ -672,7 +839,7 @@ export function createJobRepository(
       });
     },
 
-    async settleOwnedJob(jobId, owner, desiredStatus) {
+    async settleOwnedJob(jobId, owner, desiredStatus, exitEvidence = null) {
       return writeQueue.enqueue(() => {
         // The owner check, cancellation precedence, and terminal update must be
         // one SQL statement. A read-then-write sequence lets a stale executor
@@ -686,13 +853,14 @@ export function createJobRepository(
                    then 'cancelled'
                    else @desiredStatus
                  end,
-                 abort_state = 'stopped',
+                 abort_state = case when @exitEvidence is not null then 'stopped' else abort_state end,
+                 exit_evidence = @exitEvidence,
                  updated_at = @now
              where id = @jobId
                and owner = @owner
                and status in ('running', 'paused', 'cancelling')`,
           )
-          .run({ jobId, owner, desiredStatus, now: now() });
+          .run({ jobId, owner, desiredStatus, exitEvidence: exitEvidence ? JSON.stringify(exitEvidence) : null, now: now() });
         if (result.changes !== 1) {
           return null;
         }
@@ -703,38 +871,70 @@ export function createJobRepository(
       });
     },
 
+    async interruptOwnedJob(jobId, owner) {
+      await writeQueue.enqueue(() => db.transaction(() => {
+        const row = db.prepare(`select j.*,s.run_id from jobs j left join sessions s on s.id=j.session_id
+          where j.id=? and j.owner=? and j.status in ('running','paused','cancelling')`).get(jobId,owner) as (JobRow & { run_id: string | null }) | undefined;
+        if (row) interruptJobTxn(db,row,null);
+      }).immediate());
+    },
+
+    async interruptStale(leaseOlderThanIso, afterId, limit) {
+      return writeQueue.enqueue(() => db.transaction(() => {
+        const rows = db.prepare(`select j.*,s.run_id from jobs j left join sessions s on s.id=j.session_id
+          where j.id>? and j.status in ('running','cancelling','paused') and j.lease<?
+          order by j.id limit ?`).all(afterId,leaseOlderThanIso,Math.max(1,Math.min(100,limit))) as Array<JobRow & { run_id: string | null }>;
+        let processed = 0;
+        const events: SessionEvent[] = [];
+        for (const row of rows) {
+          try {
+            // A failing row rolls back only itself, and its cursor still advances.
+            const committed = db.transaction(() => {
+              const rowEvents: SessionEvent[] = [];
+              const count = interruptJobTxn(db, row, leaseOlderThanIso, rowEvents);
+              return { count, rowEvents };
+            }).immediate();
+            processed += committed.count;
+            events.push(...committed.rowEvents);
+          } catch { /* next page progresses; retry after wrap */ }
+        }
+        return { processed, lastId: rows.at(-1)?.id ?? null, events };
+      }).immediate());
+    },
+
     async requeueStale(leaseOlderThanIso) {
-      return writeQueue.enqueue(() => {
-        const staleRows = db
-          .prepare(
-            `select abort_state from jobs
-             where status in ('running', 'cancelling', 'paused')
-               and lease < ?`,
-          )
-          .all(leaseOlderThanIso) as Array<{ abort_state: string }>;
-        const cancelled = staleRows.filter((row) =>
-          ['requested', 'propagated'].includes(row.abort_state),
-        ).length;
-        const result = db
-          .prepare(
-            `update jobs
-             set status = case
-                   when abort_state in ('requested', 'propagated') then 'cancelled'
-                   else 'queued'
-                 end,
-                 abort_state = case
-                   when abort_state in ('requested', 'propagated') then 'stopped'
-                   else abort_state
-                 end,
-                 owner = null, lease = null, updated_at = @now
-             where status in ('running', 'cancelling', 'paused')
-               and lease < @cutoff`,
-          )
-          .run({ now: now(), cutoff: leaseOlderThanIso });
-        return { requeued: result.changes - cancelled, cancelled };
-      });
+      // Compatibility entry point; never automatically re-executes stale work.
+      const result = await this.interruptStale(leaseOlderThanIso, '', 100);
+      return { requeued: 0, cancelled: result.processed };
     },
   };
+}
+
+/** The caller holds the writer lock. Never turns an expired lease into exit proof. */
+function interruptJobTxn(db: TekonDatabase, row: JobRow & { run_id: string | null }, cutoff: string | null, events?: SessionEvent[]): number {
+  const now = new Date().toISOString();
+  const run = row.run_id ? db.prepare('select status from workflow_instances where id=?').get(row.run_id) as { status: string } | undefined : undefined;
+  const execution = RUN_EXECUTION_JOB_KINDS.has(row.kind);
+  const cancelled = row.status === 'cancelling' || ['requested','propagated'].includes(row.abort_state) || (execution && run?.status === 'cancelled');
+  const changed = db.prepare(`update jobs set status=?,owner=null,lease=null,exit_evidence=null,updated_at=?
+    where id=? and owner is ? and status=? and (? is null or lease<?)`)
+    .run(cancelled ? 'cancelled':'interrupted',now,row.id,row.owner,row.status,cutoff,cutoff);
+  if (!changed.changes) return 0;
+  if (execution && row.run_id && latestExecutionJob(db,row.run_id)?.id === row.id) {
+    db.prepare("update workflow_instances set status='interrupted',updated_at=? where id=? and status not in ('passed','failed','cancelled')").run(now,row.run_id);
+    const authoritative = db.prepare('select status from workflow_instances where id=?').get(row.run_id) as { status: string } | undefined;
+    if (authoritative?.status === 'interrupted') db.prepare("update sessions set status='awaiting-input',updated_at=? where id=?").run(now,row.session_id);
+  }
+  // Persist the notification with the state change. SSE catch-up still sees it
+  // if the owner exits before the runner can publish the committed event.
+  const { seq } = db.prepare('select coalesce(max(seq),0)+1 as seq from session_events where session_id=?')
+    .get(row.session_id) as { seq: number };
+  const event = sessionEventSchema.parse({ sessionId: row.session_id, seq, type: 'job/status', version: 1,
+    timestamp: now, payload: { jobId: row.id, kind: row.kind, status: cancelled ? 'cancelled' : 'interrupted' } });
+  db.prepare('insert into session_events(session_id,seq,type,version,timestamp,payload) values(?,?,?,?,?,?)')
+    .run(row.session_id, seq, event.type, event.version, event.timestamp, JSON.stringify(event.payload));
+  events?.push(event);
+  return 1;
 }
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
@@ -786,6 +986,7 @@ function mapJob(row: JobRow): Job {
     owner: row.owner,
     lease: row.lease,
     abortState: row.abort_state,
+    exitEvidence: row.exit_evidence ? JSON.parse(row.exit_evidence) : null,
     checkpoint: row.checkpoint,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

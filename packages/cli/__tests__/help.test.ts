@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { runCli, type CliIO } from '../src/index.js';
@@ -32,7 +34,29 @@ function createMemoryIo(): CliIO & {
   };
 }
 
+function readRootVersion(): string {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
+  ) as { version: string };
+  return pkg.version;
+}
+
 describe('tekon help', () => {
+  it('tekon help shows human-first entry points before the full command inventory', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['help'], io);
+    const stdout = io.takeStdout();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('推荐开始方式');
+    expect(stdout).toContain('tekon ui');
+    expect(stdout).toContain('tekon run "你的需求"');
+    expect(stdout).toContain('全部命令');
+    expect(stdout.indexOf('推荐开始方式')).toBeLessThan(
+      stdout.indexOf('项目管理'),
+    );
+  });
+
   it('tekon help shows all commands grouped by category with Chinese descriptions', async () => {
     const io = createMemoryIo();
     const exitCode = await runCli(['help'], io);
@@ -54,6 +78,7 @@ describe('tekon help', () => {
     expect(stdout).toContain('run');
     expect(stdout).toContain('status');
     expect(stdout).toContain('clean');
+    expect(stdout).toContain('清理暂不可用（等待生命周期安全清理）');
     expect(stdout).toContain('ui');
     expect(stdout).toContain('update');
 
@@ -97,22 +122,22 @@ describe('tekon help', () => {
     expect(stdout2).toBe(stdout1);
   });
 
-  it('tekon --version outputs version string', async () => {
+  it('tekon --version outputs the root product version', async () => {
     const io = createMemoryIo();
     const exitCode = await runCli(['--version'], io);
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/v\d+\.\d+\.\d+/);
+    expect(stdout).toBe(`v${readRootVersion()}\n`);
   });
 
-  it('tekon -v outputs version string', async () => {
+  it('tekon -v outputs the root product version', async () => {
     const io = createMemoryIo();
     const exitCode = await runCli(['-v'], io);
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/v\d+\.\d+\.\d+/);
+    expect(stdout).toBe(`v${readRootVersion()}\n`);
   });
 
   it('tekon help <command> shows subcommands and usage', async () => {
@@ -152,15 +177,19 @@ describe('tekon help', () => {
     expect(stdout).toBe('');
   });
 
-  it('tekon with no args shows guided error on stderr', async () => {
+  it('tekon with no args shows the same human-first help as tekon help', async () => {
+    const helpIo = createMemoryIo();
+    await runCli(['help'], helpIo);
+    const expected = helpIo.takeStdout();
+
     const io = createMemoryIo();
     const exitCode = await runCli([], io);
     const stdout = io.takeStdout();
     const stderr = io.takeStderr();
 
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain('tekon help');
-    expect(stdout).toBe('');
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(expected);
+    expect(stderr).toBe('');
   });
 
   it('tekon <unknown> shows guided error on stderr', async () => {
@@ -184,12 +213,33 @@ describe('tekon help', () => {
     expect(stdout).toContain('tekon help');
   });
 
-  it('tekon help output contains version number', async () => {
+  it('tekon help output contains the root product version', async () => {
     const io = createMemoryIo();
     const exitCode = await runCli(['help'], io);
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/v\d+\.\d+\.\d+/);
+    expect(stdout).toContain(`Tekon CLI v${readRootVersion()}`);
   });
+
+  it('tekon workflow list lists built-in workflow template ids sorted one per line', async () => {
+    const io = createMemoryIo();
+    const exitCode = await runCli(['workflow', 'list'], io);
+    const stdout = io.takeStdout();
+
+    expect(exitCode).toBe(0);
+    const lines = stdout.trim().split('\n');
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'bugfix',
+        'docs-update',
+        'goal',
+        'plan-only',
+        'standard-delivery',
+        'standard-feature',
+        'test-improvement',
+      ]),
+    );
+  });
+
 });

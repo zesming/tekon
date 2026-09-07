@@ -1,0 +1,869 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "0.23.1",
+  "scope": "临时 fixture 的真实 HTTP/SQLite + mock 受理与恢复，不是真实 Provider 交付评估",
+  "startTime": "2026-09-05T12:12:22.774Z",
+  "passed": 16,
+  "skipped": 0,
+  "retries": 0,
+  "riskGate": "未执行真实 Provider 风险 Gate；页面回执及初始执行 Job 唯一性断言通过",
+  "deliveryEval": "未生成真实交付质量或成功率分数",
+  "cases": [
+    {
+      "title": "R25 320px simple: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-320-simple-accepted-local-warning.png",
+      "sha256": "40d9fb2008c0f3998d3ed12de54c53c354c9da1822d8fd29f43e55385cccad98",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_2ff0b6cc-5957-491f-a419-6553c27b0426",
+        "sessionId": "sess_8c3afa97-6c93-42fb-a8ce-76f83e93b384",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_60ca83df-4d1c-4ea8-98b2-303ea958ad0a",
+            "kind": "workflow-run",
+            "status": "done"
+          },
+          {
+            "id": "job_e6e342d4-331c-4c1d-828a-be211c176bcc",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 810.4482589999998
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 320px simple: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-320-simple-recovery-required-local-warning.png",
+      "sha256": "b2c2e7d133d88d059e52bd0f2bcc20ce0b7ea778c27ded82495d01bbb312dd73",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_1432e694-c4ec-429e-8be6-1bfc3952c53c",
+        "sessionId": "sess_3156d8bb-8540-4f4c-8164-b3f1fa3dde10",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_b05d5a1b-12dc-4c86-92bf-0ac193613d97",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 807.8785590000007
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 27,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 27,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 320px advanced: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-320-advanced-accepted-local-warning.png",
+      "sha256": "2ed41e72ae37bae9fb089d9b1d082bc498435015a19daa7b0909ce9a0e882124",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_7fed4701-d574-4a77-ba16-f7525be68d01",
+        "sessionId": "sess_9853457b-0d5f-4a55-9eb5-eb9ad721c4e7",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_386dffa0-f7c4-4c49-ba6e-ba025cad3ea1",
+            "kind": "workflow-run",
+            "status": "done"
+          },
+          {
+            "id": "job_bbdb32a8-a4d1-4be7-afb6-34778f7c8a73",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 809.4671099999996
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 320px advanced: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-320-advanced-recovery-required-local-warning.png",
+      "sha256": "773402b68a9798fab1635276c0f75f936e61013519cd8cddfecfaa854acb9324",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_f2ff0185-1a5a-41c1-98c7-9476b9bf9588",
+        "sessionId": "sess_d4d26ce0-2851-4f1e-a729-2f23e7bb9c1f",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_079e13b3-fec3-4ba5-b71c-cc76501ad7f0",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 807.4602700000014
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 24,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 320,
+          "documentWidth": 320,
+          "fragments": 24,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 390px simple: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-390-simple-accepted-local-warning.png",
+      "sha256": "40ea9085ad5f89f3abbfda297e2a2a5f7ea10d872e2ab9fd98e31b8fc9a5f2ab",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_43708b12-465b-443e-91e9-e05496d04593",
+        "sessionId": "sess_12f56fa3-5ebe-4c8e-9fa5-b25fe80871ef",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_3b694827-34f8-4a02-a78b-391e68970712",
+            "kind": "workflow-run",
+            "status": "done"
+          },
+          {
+            "id": "job_9f93a268-3860-45ef-96b1-a549b6263426",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 809.673064999999
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 390px simple: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-390-simple-recovery-required-local-warning.png",
+      "sha256": "cfeeb9db7737157f4759264a616a44bf8f12b40783ada784b458bd8c85ab002b",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_43e8675b-ea9e-4bd4-8322-4d5709ef357a",
+        "sessionId": "sess_afca7abe-0256-4d40-b2a1-a9532eddc87b",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_1cd46d66-d22d-4ee8-aca1-a6de5aee380f",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 812.0570910000024
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 390px advanced: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-390-advanced-accepted-local-warning.png",
+      "sha256": "e1e356ca5afd283cccb3fbf69e20c29b255b2a389898e7da0841831235d31078",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_e6984b82-9caf-440b-bfe7-3a862f843c16",
+        "sessionId": "sess_db7b2d15-2431-4c2f-ac1c-68820bbadee4",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_0c251cb5-dec4-4b2d-b938-7742f1352c86",
+            "kind": "workflow-run",
+            "status": "done"
+          },
+          {
+            "id": "job_a53b141f-3aff-4849-a3d4-9606251de9e0",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 811.682041
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 20,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 390px advanced: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-390-advanced-recovery-required-local-warning.png",
+      "sha256": "ade71d3721d648690103fcb961f7a3c612abddfb3031b67f95cc30554eccc8ba",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_aa83b6be-0285-426f-8b07-adc9ea6c4530",
+        "sessionId": "sess_9454f11b-66e1-4e63-b5db-d5cf53099195",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_b683683b-3260-427e-b7a8-818ef6565a63",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 808.889016000001
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 390,
+          "documentWidth": 390,
+          "fragments": 23,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 700px simple: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-700-simple-accepted-local-warning.png",
+      "sha256": "1ea1b7394ff16e3dd340551d9b894bb1eeb0b87094fb3452f7ab9a864feee52e",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_615df53b-c86d-4977-bfb4-f7e4307bc6b0",
+        "sessionId": "sess_d8b0e83f-3c8f-495a-acaa-7a655811bb76",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_7bad6e80-17aa-4256-8c1b-ef2cdef51ba8",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          },
+          {
+            "id": "job_96ec71d5-ce4a-4e78-af15-b3f01995b5dc",
+            "kind": "workflow-run",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 811.7882860000027
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 16,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 16,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 700px simple: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-700-simple-recovery-required-local-warning.png",
+      "sha256": "8b4a45c14a91db6fc658fdcd050308e49d2c13db0f3021237265a1bb9dd29cea",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_f5e74cd2-297a-401c-a220-c3742ee24bb7",
+        "sessionId": "sess_7848fc92-0545-459f-a619-ac00fe50f291",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_499ea897-4380-448f-b219-f9ba1fe61bfd",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 808.3362930000003
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 19,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 19,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 700px advanced: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-700-advanced-accepted-local-warning.png",
+      "sha256": "56575f8e7986e960691b5e39fb7b5b71c873794d95a046f9e1ddcf9729659b41",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_b42e4c4b-e7da-48ac-ae08-d46528499a6e",
+        "sessionId": "sess_2ff15381-24da-4f9d-8ad2-3f0e16f26eab",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_5854020d-a0a3-4759-8a12-a4f2712d2044",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          },
+          {
+            "id": "job_e1c4550b-da5e-4ce2-9149-93fd9204fd7f",
+            "kind": "workflow-run",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 808.2807919999977
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 16,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 16,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 700px advanced: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-700-advanced-recovery-required-local-warning.png",
+      "sha256": "7bafc083f90608c5e1e04fef6ddbc4561c7ff001ddc4ba386c236b0b740885d6",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_9664f7b6-125e-4fcf-b4b0-1cb853ef1813",
+        "sessionId": "sess_7f5b802f-d8d4-4589-b472-7cde79f48ece",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_27aa4936-9cfe-495e-b66e-9d09f1bd9b70",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 809.5295929999993
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 18,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 700,
+          "documentWidth": 700,
+          "fragments": 18,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 1440px simple: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-1440-simple-accepted-local-warning.png",
+      "sha256": "713546e90987afc27f640b2f9b3e83046e036224cbab734b0abaee58e318f6b4",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_4f7926e0-dde0-4c60-8bf8-de80d939822e",
+        "sessionId": "sess_553e9333-200c-45d5-9028-0107e5834ef9",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_5d301fd6-eafc-4f8b-9f40-a6da4daadf0b",
+            "kind": "workflow-run",
+            "status": "done"
+          },
+          {
+            "id": "job_a2acb8cb-72f0-4792-8e0f-c254682ce643",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 809.0416889999979
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 12,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 12,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 1440px simple: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-1440-simple-recovery-required-local-warning.png",
+      "sha256": "f53abdbda0132825268146f0e70a3e6c65b48ff903ecb1cb8446c1d3794bf9c8",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_eac2efa4-0745-470c-9339-1c8e5418bebb",
+        "sessionId": "sess_625349c9-73cb-4002-bb7b-9706d9703dbd",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_9d103a05-78e8-4000-a6e3-a8bbd20c74c6",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 807.2147209999966
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 14,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 14,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 1440px advanced: accepted local warning coexists with a long unknown request",
+      "screenshot": "r25-1440-advanced-accepted-local-warning.png",
+      "sha256": "c298105f2fa5da41c44ca7377e3c5eca1ecdab447ce4bdc825bf0ced8333c6e9",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_f326e8aa-4a0b-4b3c-aeae-ca049546a8e8",
+        "sessionId": "sess_14f7a7ac-1bd1-45d8-9b6a-d7e1f26a6da0",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_8d90cf43-4443-40cd-8ddf-8dd932569f90",
+            "kind": "readiness-evaluate",
+            "status": "done"
+          },
+          {
+            "id": "job_b7d046c2-9dca-44c1-9884-88a4f98bb244",
+            "kind": "workflow-run",
+            "status": "done"
+          }
+        ],
+        "filesState": "ready",
+        "sessionStatus": "done",
+        "runStatus": "passed",
+        "trigger_seq": 209,
+        "evaluated_seq": 215,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 809.7490739999994
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 12,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 12,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    },
+    {
+      "title": "R25 1440px advanced: recovery-required local warning coexists with a long unknown request",
+      "screenshot": "r25-1440-advanced-recovery-required-local-warning.png",
+      "sha256": "f6e6be577caf678ffbb29bb3ea8f68af91223e4b4ba1c83fa22702850734044c",
+      "result": "passed",
+      "retry": 0,
+      "state": {
+        "requestId": "r25-request-2-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "runId": "run_9ef27965-e683-4f3a-aa08-521a091e035a",
+        "sessionId": "sess_f70302d8-6ced-4ac8-9f09-794d624db8cf",
+        "stable": true,
+        "jobs": [
+          {
+            "id": "job_671b15dc-687b-42c0-9580-b79874ad92cd",
+            "kind": "workflow-run",
+            "status": "queued"
+          }
+        ],
+        "filesState": "recovery_required",
+        "sessionStatus": "active",
+        "runStatus": "running",
+        "trigger_seq": 0,
+        "evaluated_seq": 0,
+        "stabilityWindowMs": 750,
+        "observedStableMs": 810.8491849999991
+      },
+      "geometry": [
+        {
+          "stage": "before",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 14,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        },
+        {
+          "stage": "after",
+          "viewport": 1440,
+          "documentWidth": 1440,
+          "fragments": 14,
+          "outside": [],
+          "overlaps": [],
+          "clipped": [],
+          "textOutside": [],
+          "textClipped": []
+        }
+      ]
+    }
+  ]
+}

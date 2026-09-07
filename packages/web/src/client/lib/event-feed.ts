@@ -259,3 +259,36 @@ export function groupEventsByTurn(events: readonly StreamEvent[]): FeedGroup[] {
   }
   return groups;
 }
+
+export const DEFAULT_EVENT_WINDOW = 250;
+
+export interface EventWindowState<T = unknown> {
+  hasEarlierEvents: boolean;
+  hiddenEarlierCount: number;
+  visibleEvents: T[];
+}
+
+/**
+ * Pure calculation for DOM windowing of long event feeds (T6).
+ * - total <= windowSize or expanded: all events visible, no earlier events.
+ * - total > windowSize and !expanded: only latest windowSize events visible,
+ *   hiddenEarlierCount = total - windowSize.
+ */
+export function computeEventWindow<T>(
+  events: readonly T[],
+  expanded: boolean = false,
+  windowSize: number = DEFAULT_EVENT_WINDOW,
+): EventWindowState<T> {
+  const total = events.length;
+  const hasEarlierEvents = total > windowSize && !expanded;
+  const hiddenEarlierCount = hasEarlierEvents ? total - windowSize : 0;
+  const visibleEvents = hasEarlierEvents
+    ? events.slice(-windowSize)
+    : [...events];
+
+  return {
+    hasEarlierEvents,
+    hiddenEarlierCount,
+    visibleEvents,
+  };
+}

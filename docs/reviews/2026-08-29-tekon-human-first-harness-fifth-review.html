@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Tekon 产品、UI/UX、Runtime、Session 事实链与 DeepSeek Harness 最新边界的第五轮全面复审。">
+<title>Tekon 人类可用性与 Harness 架构第五轮全面复审</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#d8dee9;--paper:#fff;--soft:#f5f7fb;--navy:#101c34;--blue:#2859a8;--red:#a12a2a;--amber:#8b5700;--green:#216e45;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#eef2f7;color:var(--ink);line-height:1.72}.hero{background:linear-gradient(135deg,#101c34,#244a7c);color:#fff;padding:58px max(22px,calc((100vw - 1140px)/2))}.eyebrow{font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;opacity:.76}.hero h1{max-width:980px;margin:.5rem 0 .8rem;font-size:clamp(2rem,4vw,3.55rem);line-height:1.12}.hero p{max-width:900px;color:#dce5f5;margin:.35rem 0}.verdict{display:inline-block;margin-top:18px;padding:8px 13px;border:1px solid #ffc0c0;border-radius:999px;background:#4e232b;font-weight:750}.shell{max-width:1140px;margin:0 auto;padding:28px 20px 72px}.card{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);margin-bottom:20px;box-shadow:0 14px 34px rgba(25,38,60,.07)}h2{margin:0 0 17px;font-size:1.55rem}h3{margin:24px 0 7px;font-size:1.08rem}p,li{max-width:92ch}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.metric{padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.metric strong{display:block;margin-bottom:5px}.p0{border-left:5px solid var(--red)}.p1{border-left:5px solid var(--amber)}.pass{border-left:5px solid var(--green)}table{width:100%;border-collapse:collapse;font-size:.92rem}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:11px 9px}th{background:var(--soft)}code{font-family:"SFMono-Regular",Consolas,monospace;background:#edf1f7;padding:.1em .35em;border-radius:5px;font-size:.9em}pre{overflow:auto;background:#101827;color:#e9eef8;padding:15px;border-radius:10px}a{color:var(--blue)}blockquote{margin:1rem 0;padding:.8rem 1rem;border-left:4px solid var(--blue);background:var(--soft)}.small{font-size:.88rem;color:var(--muted)}.decision{font-size:1.14rem;font-weight:750}.tag{display:inline-block;margin:0 5px 5px 0;padding:3px 8px;border-radius:999px;background:#eaf0fa;color:#244f8d;font-size:.82rem}@media(max-width:760px){.hero{padding:38px 22px}.shell{padding:18px 12px 48px}.grid{grid-template-columns:1fr}.card{border-radius:12px;padding:20px 17px}table{display:block;overflow-x:auto}}@media print{body{background:#fff}.hero{background:#fff;color:#000;padding:0 0 24px}.hero p{color:#333}.verdict{background:#fff;color:#000;border-color:#666}.shell{max-width:none;padding:0}.card{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<header class="hero">
+<div class="eyebrow">Tekon · Fifth Comprehensive Review · 2026-08-29</div>
+<h1>人类可用性与 Harness 架构第五轮全面复审</h1>
+<p>基于用户最新整改 <code>71930359</code> 与本轮修复 <code>706c89a8</code>，覆盖产品逻辑、CLI/Web UI、可访问性、Runtime、Session 事实链、数据完整性、DeepSeek Harness 最新官方接口、代码质量和过度设计。</p>
+<div class="verdict">增量代码通过 · 稳定产品验收仍不通过</div>
+</header>
+<main class="shell">
+<section class="card pass">
+<h2>执行结论</h2>
+<div class="grid">
+<div class="metric"><strong>用户最新整改</strong>Goal/dsh 浏览器断言和尾事件注释勘误均通过；Core #281、CI #190 成功。</div>
+<div class="metric"><strong>本轮代码修复</strong>关闭高级运行表单的鼠标专用折叠入口和字段标签缺失；Core #282、CI #191 成功。</div>
+<div class="metric"><strong>受控交付合同</strong>Deliver、Goal 与 Provider 边界基本成立，非法组合已在持久副作用前失败。</div>
+<div class="metric"><strong>产品验收</strong>持续协作、单一 Runtime owner、quiescent shutdown 和权威 Session log 仍未成立。</div>
+</div>
+<p><a href="2026-08-29-tekon-human-first-harness-fifth-review.md">打开完整 Markdown 权威报告</a></p>
+</section>
+
+<section class="card">
+<h2>最新整改裁决</h2>
+<table><thead><tr><th>整改项</th><th>裁决</th><th>理由</th></tr></thead><tbody>
+<tr><td>Goal/dsh Playwright</td><td><strong>通过</strong></td><td>真实验证 dsh→Goal、Goal→Workflow、Template/Profile enable/disable，未启动外部 provider。</td></tr>
+<tr><td>尾事件注释勘误</td><td><strong>通过</strong></td><td>数据库无 Session 外键，“无匹配事件行返回 null”与 SQL 事实一致。</td></tr>
+<tr><td>P1-CODE-01</td><td><strong>保持关闭</strong></td><td><code>session.get</code> 只读取尾事件 timestamp，不再解析完整 payload。</td></tr>
+<tr><td>P1-DATA-01</td><td><strong>仍未关闭</strong></td><td>子表无统一外键/孤儿策略；正确注释不能替代引用完整性。</td></tr>
+<tr><td>CHANGELOG 继续写评审过程</td><td><strong>不接受为长期模式</strong></td><td>与 <code>current.md</code> 单一裁决入口冲突，继续放大维护成本。</td></tr>
+</tbody></table>
+</section>
+
+<section class="card pass">
+<h2>本轮修复：键盘与辅助技术可用性</h2>
+<p>原“✦ 新建运行”是仅带 <code>onClick</code> 的 <code>div</code>，不能 Tab 聚焦或通过 Enter/Space 操作；多项可见 label 也没有与控件关联。新增测试依赖 CSS 容器定位，无法证明可访问名称存在。</p>
+<ul>
+<li>改为原生 button，补 <code>aria-expanded</code> / <code>aria-controls</code>；</li>
+<li>装饰 SVG 从可访问树隐藏；</li>
+<li>需求、模式、模板、代理、Profile 和超时字段补齐 <code>id/htmlFor</code>；</li>
+<li>Playwright 改用 <code>getByRole</code> / <code>getByLabel</code>，覆盖 Enter 展开、Space 收起。</li>
+</ul>
+<p class="small">这关闭了 StartRunForm 的具体缺陷，但不冒充全站 WCAG 或屏幕阅读器验收。</p>
+</section>
+
+<section class="card">
+<h2>产品与 UX</h2>
+<h3>已成立：Deliver / Goal 边界</h3>
+<p>默认入口、受控交付文案、人工副作用审批以及 Workflow/Goal/provider policy 已基本一致。dsh-headless 被诚实限制为 Goal one-shot，不再伪装成交付 provider。</p>
+<h3>未成立：Collaborate</h3>
+<p>同一 Session 仍不能持续输入、follow-up、steer、resume 或在进程重启后恢复；多数 assistant 内容仍是完成后投影。当前是运行观察与治理界面，不是持续协作工作台。</p>
+<h3>仍需补强</h3>
+<p><span class="tag">run plan</span><span class="tag">workspace 实时流</span><span class="tag">失败 acknowledge</span><span class="tag">Token 连接状态</span><span class="tag">长 Session 有界化</span><span class="tag">产品词汇表</span></p>
+</section>
+
+<section class="card p0">
+<h2>P0：Runtime 与权威事实链</h2>
+<h3>多 owner</h3>
+<p>Web 与 CLI 分别启动 JobRunner，却共享 SQLite、Git、worktree、运行目录和子进程。jobs CAS 不能 fence Artifact、Gate、Audit、Delivery 与文件副作用。</p>
+<h3>非 quiescent shutdown</h3>
+<p>固定等待后清理进程内状态，不能证明 provider、子进程、listener、Git 和文件写入均已结束，也没有 late-write 故障注入证据。</p>
+<h3>Event 仍是 projection</h3>
+<p>Session Event 可以在旧事实成功后 best-effort 失败或被跳过，无法承担权威模型历史、durable inbox、完整 replay/fork/resume。</p>
+</section>
+
+<section class="card p1">
+<h2>DeepSeek Harness 最新边界</h2>
+<p>官方仍将 Harness 标为 developer preview，并明确说明未经过安全审计、sandbox/审批/权限不保证隔离。Tekon 的 experimental 与 fail-closed 姿态正确，但不能据此宣称生产安全。</p>
+<p>headless 官方边界仍是一 task、一 final answer、随后退出；限制在 Goal 是正确的。与此同时，官方已经公开 SDK stdio JSON-RPC 与 ACP profile，持续协作不应继续建立在旧 one-shot bridge 上。</p>
+<table><thead><tr><th>事实</th><th>Tekon 当前状态</th><th>裁决</th></tr></thead><tbody>
+<tr><td>官方最新 GitHub prerelease 为 <code>dsh-v0.1.2-alpha.1</code></td><td>钉死 <code>0.1.1-rc.2</code></td><td>保留 fail-closed；重新做 contract 验证前不盲目 bump。</td></tr>
+<tr><td>官方 SDK/ACP 已公开</td><td>设计注释仍把 headless 当唯一机器边界</td><td>建立独立 ADR，选择一个真实 Collaborate vertical slice。</td></tr>
+<tr><td>网络访问不可视为安全隔离</td><td>内部 ack 固定为 true，人类无端到端确认事实</td><td>在 run plan、CLI/Web、snapshot/audit 中闭环。</td></tr>
+<tr><td>用户需自行安装 DSH</td><td>缺精确安装命令和副作用前 preflight</td><td>增加 provider compatibility/preflight。</td></tr>
+</tbody></table>
+</section>
+
+<section class="card">
+<h2>过度实现与过度设计</h2>
+<p>Profile、Automation、Goal、LegacyAgentDriver、dual-write、Provider registry 和两套 Runtime composition 已经形成横向平台，但最基本的“真实流 → durable inbox → follow-up/steer → 重启恢复 → Collaborate→Deliver”仍未闭环。后续应冻结不服务该 vertical slice 的新抽象。</p>
+<p>同时，超长 CHANGELOG、多轮“权威报告”和重复批注已成为流程性过度设计。从第五轮开始，<code>current.md</code> 是稳定入口，CHANGELOG 不再追加评审过程。</p>
+</section>
+
+<section class="card">
+<h2>推荐实施顺序</h2>
+<pre>single-owner daemon + repo lock
+→ quiescent shutdown + 故障注入
+→ 权威 Session log + durable inbox
+→ DSH SDK/ACP 真实 streaming vertical slice
+→ follow-up / steer / resume / restart recovery
+→ Collaborate → Deliver + run plan
+→ summary / realtime / ack / pagination / virtualize
+→ 外键与孤儿迁移 + 全站可访问性</pre>
+</section>
+
+<section class="card">
+<h2>验收结论</h2>
+<p class="decision">本 PR 的用户最新整改、本轮代码修复和自动化验证可继续合并审阅；Tekon 稳定产品验收仍不通过。</p>
+<blockquote>允许的成熟度表述：Tekon 已形成测试较强、边界逐步诚实的实验性受控交付执行与观察基础设施；它尚未完成持续协作产品、单一 Runtime 权威、quiescent shutdown 和权威 Session 事实链。</blockquote>
+<p class="small">本 PR 合并不得被解释为上述 P0/P1 已自动关闭。本轮未执行 merge、release 或 deploy。</p>
+</section>
+</main>
+</body>
+</html>

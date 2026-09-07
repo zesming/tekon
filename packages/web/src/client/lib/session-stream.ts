@@ -164,11 +164,7 @@ export function lastEventId(events: readonly StreamEvent[]): number {
   return max;
 }
 
-export type StreamConnState =
-  | 'connecting'
-  | 'live'
-  | 'reconnecting'
-  | 'closed';
+export type StreamConnState = 'connecting' | 'live' | 'reconnecting' | 'closed';
 
 /**
  * HTTP statuses that will never recover on retry: an origin/Sec-Fetch guard
@@ -186,6 +182,12 @@ export interface OpenSessionStreamOptions {
   /** Called with the parsed event for each incoming data frame. */
   onEvent(event: StreamEvent): void;
   onStateChange(state: StreamConnState): void;
+  /**
+   * Called when the server signals that replay was truncated (reconnect budget
+   * or slow-client backpressure cap exceeded). The stream has switched to the
+   * recent tail; the UI should show a non-blocking notice. Optional.
+   */
+  onTruncated?: (cursor: number | null) => void;
   /** Resume point for the first connection (default 0 = full replay). */
   sinceSeq?: number;
   /** Overridable for tests; defaults to global fetch. */
@@ -195,15 +197,28 @@ export interface OpenSessionStreamOptions {
   maxBackoffMs?: number;
 }
 
+function asStreamEvent(value: unknown): StreamEvent | null {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    typeof (value as { seq?: unknown }).seq !== 'number' ||
+    !Number.isFinite((value as { seq: number }).seq) ||
+    typeof (value as { type?: unknown }).type !== 'string'
+  ) {
+    return null;
+  }
+  return value as StreamEvent;
+}
+
 /**
  * Open a resilient SSE stream to GET /api/sessions/:id/events. Returns a
  * `close()` that aborts the fetch and stops reconnection. On disconnect it
  * reconnects with exponential backoff, resuming from the max seq seen via the
  * `Last-Event-ID` header (server stitches 0..k ∪ k..end with no loss/dup).
  */
-export function openSessionStream(
-  options: OpenSessionStreamOptions,
-): { close(): void } {
+export function openSessionStream(options: OpenSessionStreamOptions): {
+  close(): void;
+} {
   const fetchImpl = options.fetchImpl ?? fetch;
   const baseBackoff = options.baseBackoffMs ?? 500;
   const maxBackoff = options.maxBackoffMs ?? 10_000;
@@ -238,6 +253,10 @@ export function openSessionStream(
         headers,
         signal: controller.signal,
       });
+      if (closed) {
+        await response.body?.cancel().catch(() => undefined);
+        return;
+      }
       if (!response.ok || !response.body) {
         // A fatal client error (bad token, unknown session) will never recover
         // on retry — stop rather than hammer the server. Anything else (5xx,
@@ -255,12 +274,37 @@ export function openSessionStream(
       const decoder = new TextDecoder();
       for (;;) {
         const { done, value } = await reader.read();
+        if (closed) {
+          await reader.cancel().catch(() => undefined);
+          return;
+        }
         if (done) break;
-        for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
+        for (const frame of parser.push(
+          decoder.decode(value, { stream: true }),
+        )) {
+          if (closed) return;
           if (frame.data === undefined) continue;
           try {
-            const event = JSON.parse(frame.data) as StreamEvent;
-            if (typeof event.seq === 'number' && event.seq > maxSeq) {
+            const parsed = JSON.parse(frame.data) as unknown;
+            if (frame.event === 'replay-truncated') {
+              const cursor =
+                typeof parsed === 'object' &&
+                parsed !== null &&
+                typeof (parsed as { cursor?: unknown }).cursor === 'number'
+                  ? (parsed as { cursor: number }).cursor
+                  : null;
+              if (cursor !== null && Number.isFinite(cursor)) {
+                maxSeq = Math.max(maxSeq, cursor);
+              }
+              options.onTruncated?.(
+                cursor !== null && Number.isFinite(cursor) ? cursor : null,
+              );
+              continue;
+            }
+
+            const event = asStreamEvent(parsed);
+            if (!event) continue;
+            if (event.seq > maxSeq) {
               maxSeq = event.seq;
             }
             options.onEvent(event);

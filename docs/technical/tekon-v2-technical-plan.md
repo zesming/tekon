@@ -1,5 +1,8 @@
 # Tekon V2 技术方案
 
+> **历史方案（2026-09-06 标记）**：正文保留当时的架构设想与数据，不代表现行能力、权限或实施顺序。当前产品以[产品范围](../product/tekon-current-product-scope.md)、运行时以[现行合同](tekon-runtime-contract.md)、Web 以[运行控制设计](../design/tekon-run-control-design.md)为准。旧自动推进、token 存储、无持久 fencing 等表述不得用于当前验收。
+
+
 > 本文档是 Tekon 重构版本（V2）的完整技术方案。V2 保留 V1 的核心定位（面向技术基建团队的 AI 自动交付系统），在架构上进行了根本性重构：从单块 CLI 工具演进为基于角色文件系统 + 可编排 Workflow 引擎的 AI 原生产研流程执行系统。
 
 ## 一、产品定位与核心思路
@@ -1168,7 +1171,7 @@ tekon constraints show        # 查看约束规则
 tekon log [--project <id>]    # 查看审计日志
 
 # ── 清理 ──
-tekon clean                   # 清理 worktree
+tekon clean                   # 当前返回 CLEAN_SUSPENDED；生命周期安全清理完成前不删除 worktree
 ```
 
 ### 9.2 status 输出示例
@@ -1330,7 +1333,7 @@ Phase 1 期间让 Tekon 管理 Tekon 自身的开发：
 | -------------------------------- | ---- | ---- | ------------------------------------------------------ |
 | Agent 产出质量波动               | 高   | 高   | Schema Gate 强制结构校验 + 重试 + onExhausted escalate |
 | Agent 陷入修复死循环             | 中   | 中   | maxRetries 限制 + onExhausted block + 审计日志可追溯   |
-| Worktree 泄漏磁盘空间            | 中   | 低   | tekon clean 命令 + 定期清理策略                        |
+| Worktree 泄漏磁盘空间            | 中   | 低   | 当前 `tekon clean` 已暂停物理删除；由 #18/#33 设计导出、retention 与生命周期安全 purge |
 | 动态 Workflow 生成不合理         | 中   | 中   | 三层约束系统 + --dry-run 预览 + --save-as 可修正       |
 | Claude Code/Codex 版本更新不兼容 | 低   | 中   | Agent command 可自定义，用户可替换任何 CLI             |
 

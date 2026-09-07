@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 
-import { type TekonDatabase } from '@tekon/core';
+import { type SessionEventStore, type TekonDatabase } from '@tekon/core';
 
 import type { WebProjectContext } from '../project-context.js';
 import { ApiError } from './errors.js';
@@ -15,6 +16,64 @@ import type {
 
 export type { TekonDatabase };
 
+/** Internal transport handle: a symbol cannot be addressed as an RPC namespace. */
+export const webProjectScope = Symbol('tekon.web.project-scope');
+
+export interface WebProjectScope {
+  assertSession(sessionId: string): void;
+  assertWorkspace(workspaceId: string): void;
+  listSessions(): ReturnType<SessionEventStore['listSessions']>;
+}
+
+function isPhysicalRootInScope(root: string, context: WebProjectContext): boolean {
+  try {
+    // projectRoot is frozen to the canonical root at composition time. A later
+    // retargeted historical alias cannot redefine the server's repository.
+    return realpathSync(resolve(root)) === context.projectRoot;
+  } catch {
+    return false;
+  }
+}
+
+export function listScopedWorkspaces(db: TekonDatabase, context: WebProjectContext): Array<{ id: string; root: string }> {
+  const workspaces = db.prepare('select id, root from workspaces order by created_at, rowid').all() as Array<{ id: string; root: string }>;
+  return workspaces.filter((workspace) => isPhysicalRootInScope(workspace.root, context));
+}
+
+export function assertWorkspaceInScope(db: TekonDatabase, context: WebProjectContext, workspaceId: string): void {
+  const workspace = db.prepare('select root from workspaces where id = ?').get(workspaceId) as { root: string } | undefined;
+  if (!workspace || !isPhysicalRootInScope(workspace.root, context)) {
+    throw new ApiError('NOT_FOUND', `Workspace not found: ${workspaceId}`);
+  }
+}
+
+export function assertSessionInScope(db: TekonDatabase, context: WebProjectContext, sessionId: string): void {
+  const session = db.prepare('select workspace_id, run_id from sessions where id = ?').get(sessionId) as
+    { workspace_id: string; run_id: string | null } | undefined;
+  if (!session) throw new ApiError('NOT_FOUND', `Session not found: ${sessionId}`);
+  assertWorkspaceInScope(db, context, session.workspace_id);
+  if (session.run_id) assertRunInScope(db, context, session.run_id);
+}
+
+export function createWebProjectScope(db: TekonDatabase, context: WebProjectContext, sessions: SessionEventStore): WebProjectScope {
+  return {
+    assertSession: (sessionId) => assertSessionInScope(db, context, sessionId),
+    assertWorkspace: (workspaceId) => assertWorkspaceInScope(db, context, workspaceId),
+    async listSessions() {
+      const groups = await Promise.all(listScopedWorkspaces(db, context).map((workspace) => sessions.listSessions(workspace.id)));
+      return groups.flat().filter((session) => {
+        try {
+          assertSessionInScope(db, context, session.id);
+          return true;
+        } catch (error) {
+          if (error instanceof ApiError && error.code === 'NOT_FOUND') return false;
+          throw error;
+        }
+      });
+    },
+  };
+}
+
 export function listScopedProjects(
   db: TekonDatabase,
   context: WebProjectContext,
@@ -23,7 +82,7 @@ export function listScopedProjects(
     db
       .prepare('select * from projects order by created_at, id')
       .all() as ProjectRow[]
-  ).filter((project) => resolve(project.repo_path) === context.projectRoot);
+  ).filter((project) => isPhysicalRootInScope(project.repo_path, context));
 }
 
 export function firstProjectOrFallback(

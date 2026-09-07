@@ -27,6 +27,24 @@ const cleanupTasks: Array<() => void> = [];
  * downstream effects (delivery, artifacts). Reads directly from the db so it
  * does not depend on scoped-project query shaping.
  */
+
+async function startRun(api: any, input: any) {
+  if (input.mode !== "goal" && !input.planDigest) {
+    const plan = await api.workflow.plan({
+      template: input.template,
+      mode: input.mode,
+      agent: input.agent,
+      profile: input.profile,
+      allowDirtyBase: input.allowDirtyBase,
+      timeoutMs: input.timeoutMs,
+      noProgressTimeoutMs: input.noProgressTimeoutMs,
+      progressHeartbeatMs: input.progressHeartbeatMs,
+    });
+    return (api.project as any).run({ ...input, planDigest: plan.digest });
+  }
+  return (api.project as any).run(input);
+}
+
 async function waitForRunStatus(
   projectRoot: string,
   runId: string,
@@ -329,7 +347,7 @@ describe('web write authorization', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: 'Web should be able to start a controlled mock run.',
         template: 'project-feature',
         agent: 'mock',
@@ -337,7 +355,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Web should be able to start a controlled mock run.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -399,7 +417,7 @@ describe('web write authorization', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     try {
-      const started = await api.project.run({
+      const started = await startRun(api, {
         demandText:
           'Web should be able to start a controlled Codex provider run.',
         template: 'project-feature',
@@ -466,7 +484,7 @@ describe('web write authorization', () => {
     );
 
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: '',
         demandShapePath: shaped.shapePath,
         agent: 'mock',
@@ -484,7 +502,7 @@ describe('web write authorization', () => {
       approvedBy: 'web-test',
     });
 
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
       agent: 'mock',
@@ -527,7 +545,7 @@ describe('web write authorization', () => {
 
     // Server must reject: approved is not sufficient, readyForRun is required.
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: '',
         demandShapePath: shaped.shapePath,
         agent: 'mock',
@@ -580,7 +598,7 @@ describe('web write authorization', () => {
     // A plan exists but is not plan-approved → project.run must reject, even
     // though the demand itself is approved + readyForRun.
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: '',
         demandShapePath: shaped.shapePath,
         agent: 'mock',
@@ -600,7 +618,7 @@ describe('web write authorization', () => {
     });
 
     // Now the run is admitted and drives to passed.
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
       agent: 'mock',
@@ -632,7 +650,7 @@ describe('web write authorization', () => {
     });
 
     // The唯一回归点 lock: an old draft (no hasPlan) is admitted straight through.
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
       agent: 'mock',
@@ -691,7 +709,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: '',
         demandShapePath: shaped.shapePath,
         agent: 'mock',
@@ -725,7 +743,7 @@ describe('web write authorization', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: '',
         demandShapePath: escapedViaDraftDir,
         agent: 'mock',
@@ -768,7 +786,7 @@ describe('web write authorization', () => {
     writeFileSync(join(fixture.projectRoot, 'README.md'), 'dirty\n', 'utf8');
 
     await expect(
-      api.project.run({
+      startRun(api, {
         demandText: 'This run should be blocked by dirty base.',
         template: 'standard-feature',
         agent: 'mock',
@@ -788,7 +806,7 @@ describe('web write authorization', () => {
       rmSync(remotePath, { recursive: true, force: true }),
     );
     cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
       cwd: fixture.projectRoot,
     });
@@ -797,7 +815,7 @@ describe('web write authorization', () => {
       projectRoot: fixture.projectRoot,
       env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}` },
     });
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText:
         'Web should create a PR only after standard delivery evidence is complete.',
       template: 'standard-delivery',
@@ -833,7 +851,7 @@ describe('web write authorization', () => {
 });
 
 describe('project.clean', () => {
-  it('removes the run directory from disk and reports removedRunDir true', async () => {
+  it('rejects with CONFLICT (CLEAN_SUSPENDED) and preserves the run directory on disk', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -841,13 +859,17 @@ describe('project.clean', () => {
     const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
     expect(existsSync(runDir)).toBe(true);
 
-    const result = await dispatchApiCall(api, 'project.clean', {
-      runId: 'run_1',
-      token: fixture.sessionToken,
-      confirm: 'delete-run-dir',
+    await expect(
+      dispatchApiCall(api, 'project.clean', {
+        runId: 'run_1',
+        token: fixture.sessionToken,
+        confirm: 'delete-run-dir',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringMatching(/CLEAN_SUSPENDED.*lifecycle-safe purge/),
     });
-    expect(result).toMatchObject({ removedRunDir: true });
-    expect(existsSync(runDir)).toBe(false);
+    expect(existsSync(runDir)).toBe(true);
 
     await api.close();
   });
@@ -1036,7 +1058,7 @@ describe('delivery.dryRun', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     // Start a fresh run that will complete with status 'passed'
-    const started = await api.project.run({
+    const started = await startRun(api, {
       demandText: 'Dry run readiness check with all pre-conditions met.',
       template: 'standard-delivery',
       agent: 'mock',
@@ -1166,7 +1188,7 @@ describe('security characterization (documents current behavior, some will chang
       ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
       await expect(
-        api.project.run({
+        startRun(api, {
           demandText: 'should fail with empty token',
           template: 'project-feature',
           agent: 'mock',
@@ -1342,7 +1364,7 @@ describe('security characterization (documents current behavior, some will chang
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
       await expect(
-        api.project.run({
+        startRun(api, {
           demandText: '',
           demandShapePath: join(fixture.projectRoot, 'package.json'),
           agent: 'mock',
@@ -1379,7 +1401,7 @@ describe('security characterization (documents current behavior, some will chang
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
       await expect(
-        api.project.run({
+        startRun(api, {
           demandText: '',
           demandShapePath: shaped.shapePath,
           agent: 'mock',
@@ -1466,7 +1488,7 @@ describe('security characterization (documents current behavior, some will chang
       expect(shaped.shape.approved).toBe(false);
 
       await expect(
-        api.project.run({
+        startRun(api, {
           demandText: '',
           demandShapePath: shaped.shapePath,
           agent: 'mock',
@@ -1489,7 +1511,7 @@ describe('security characterization (documents current behavior, some will chang
       );
 
       await expect(
-        api.project.run({
+        startRun(api, {
           demandText: 'Security test: dirty base without allowDirtyBase.',
           template: 'standard-feature',
           agent: 'mock',

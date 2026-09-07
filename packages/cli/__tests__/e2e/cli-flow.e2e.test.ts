@@ -1,0 +1,477 @@
+import { execFileSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, describe, expect, it } from 'vitest';
+
+describe('tekon cli e2e', () => {
+  const tempDirs: string[] = [];
+  const cliPackageRoot = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+  );
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
+
+  it('runs init -> bugfix mock -> status -> log -> clean against persisted state', () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const cliPath = join(cliPackageRoot, 'dist', 'index.js');
+
+    const initOutput = runCli(cliPath, ['init', '--repo', repoPath], repoPath);
+    expect(initOutput).toContain('项目初始化完成');
+    expect(existsSync(join(repoPath, '.tekon', 'config.yaml'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'tekon.sqlite'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'web-session.json'))).toBe(true);
+    expect(existsSync(join(repoPath, '.tekon', 'repo-profile.yaml'))).toBe(
+      true,
+    );
+
+    const standardRunOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '给示例模块加批量重试',
+        '--template',
+        'standard-delivery',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
+      standardRunOutput,
+    )?.[1];
+    expect(standardRunId).toBeTruthy();
+    expect(standardRunOutput).toContain('状态: passed');
+    expect(
+      existsSync(join(repoPath, '.tekon', 'runs', standardRunId!, 'artifacts')),
+    ).toBe(true);
+
+    const dynamicOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '--dynamic',
+        '--dry-run',
+        '给支付模块加退款功能，属于高风险数据变更',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(dynamicOutput).toContain('dryRun=true');
+    expect(dynamicOutput).toContain('conditional-high-risk-human-gate');
+    expect(dynamicOutput).toContain('conditional-rollback-plan');
+
+    const runOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '修复登录失败后的重试提示',
+        '--template',
+        'bugfix',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
+    expect(runId).toBeTruthy();
+    expect(runOutput).toContain('状态: paused');
+    expect(runOutput).toContain('人工确认: pending');
+    expect(existsSync(join(repoPath, '.tekon', 'runs', runId!))).toBe(true);
+
+    const statusOutput = runCli(
+      cliPath,
+      ['status', '--run-id', runId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(statusOutput).toContain(`runId=${runId}`);
+    expect(statusOutput).toContain('status=paused');
+    expect(statusOutput).toContain('pendingHumanDecisions=1');
+
+    const deliveryOutput = runCli(
+      cliPath,
+      ['delivery', 'dry-run', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(deliveryOutput).toContain(`runId=${standardRunId}`);
+    expect(deliveryOutput).toContain('prDryRun=true');
+    expect(deliveryOutput).toContain('requiresHumanApproval=true');
+
+    const prepareOutput = runCli(
+      cliPath,
+      ['delivery', 'prepare', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(prepareOutput).toContain(`runId=${standardRunId}`);
+    expect(prepareOutput).toContain('packagePath=');
+    expect(prepareOutput).toContain('prBodyPath=');
+    expect(prepareOutput).toContain('requiresHumanApproval=true');
+
+    const readinessOutput = runCli(
+      cliPath,
+      ['eval', 'readiness', '--run-id', standardRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(readinessOutput).toContain(`runId=${standardRunId}`);
+    expect(readinessOutput).toContain('ready=false');
+    expect(readinessOutput).toContain('failed=pr-created,remote-ci-passed');
+
+    const logOutput = runCli(
+      cliPath,
+      ['log', '--run-id', runId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(logOutput).toContain('run.started');
+    expect(logOutput).toContain('human.gate.pending');
+
+    const resumeOutput = runCli(
+      cliPath,
+      ['resume', '--run-id', runId!, '--approve-human', '--repo', repoPath],
+      repoPath,
+    );
+    expect(resumeOutput).toContain(`runId=${runId}`);
+    expect(resumeOutput).toContain('status=passed');
+
+    // Terminal states are monotonic: a passed run cannot be revived as paused.
+    expect(() =>
+      runCli(
+        cliPath,
+        ['pause', '--run-id', runId!, '--repo', repoPath],
+        repoPath,
+      ),
+    ).toThrow();
+
+    // Cancel is idempotent against a different terminal outcome: it reports the
+    // existing passed status instead of mutating the run.
+    const cancelOutput = runCli(
+      cliPath,
+      ['cancel', '--run-id', runId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(cancelOutput).toContain('status=passed');
+
+    expect(
+      runCli(cliPath, ['role', 'list', '--repo', repoPath], repoPath),
+    ).toContain('reviewer');
+    expect(
+      runCli(cliPath, ['role', 'show', 'rd', '--repo', repoPath], repoPath),
+    ).toContain('Research and Development');
+    expect(
+      runCli(cliPath, ['role', 'path', 'rd', '--repo', repoPath], repoPath),
+    ).toContain('roles/rd');
+    expect(
+      runCli(cliPath, ['role', 'create', 'qa', '--repo', repoPath], repoPath),
+    ).toContain('.tekon/roles/qa');
+
+    expect(
+      runCli(cliPath, ['workflow', 'list', '--repo', repoPath], repoPath),
+    ).toContain('bugfix');
+    expect(
+      runCli(
+        cliPath,
+        ['workflow', 'show', 'standard-feature', '--repo', repoPath],
+        repoPath,
+      ),
+    ).toContain('standard-feature');
+    expect(
+      runCli(
+        cliPath,
+        [
+          'workflow',
+          'create',
+          'custom-bugfix',
+          '--from',
+          'bugfix',
+          '--repo',
+          repoPath,
+        ],
+        repoPath,
+      ),
+    ).toContain('.tekon/workflows/custom-bugfix.yaml');
+
+    expect(
+      runCli(cliPath, ['constraints', 'show', '--repo', repoPath], repoPath),
+    ).toContain('code-changes-need-build-test');
+
+    const worktreesDir = join(repoPath, '.tekon', 'worktrees');
+    mkdirSync(join(worktreesDir, 'sample-worktree'), { recursive: true });
+    writeFileSync(
+      join(worktreesDir, 'sample-worktree', 'preserved.txt'),
+      'preserved',
+    );
+
+    let cleanError: any;
+    try {
+      runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
+    } catch (err) {
+      cleanError = err;
+    }
+    expect(cleanError).toBeDefined();
+    expect(cleanError.status).toBe(1);
+    expect(cleanError.stderr.toString()).toContain('CLEAN_SUSPENDED');
+    expect(cleanError.stderr.toString()).toMatch(/#33.*#18|#18.*#33/);
+    expect(cleanError.stdout.toString()).toBe('');
+
+    // Worktree content is preserved
+    expect(
+      existsSync(join(worktreesDir, 'sample-worktree', 'preserved.txt')),
+    ).toBe(true);
+    expect(
+      readFileSync(
+        join(worktreesDir, 'sample-worktree', 'preserved.txt'),
+        'utf8',
+      ),
+    ).toBe('preserved');
+
+    // Status and log commands remain functional
+    const statusOutputAfterClean = runCli(
+      cliPath,
+      ['status', '--repo', repoPath],
+      repoPath,
+    );
+    expect(statusOutputAfterClean).toContain('status=passed');
+    const logOutputAfterClean = runCli(
+      cliPath,
+      ['log', '--run-id', runId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(logOutputAfterClean).toContain('run.started');
+
+    expect(
+      readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
+    ).toContain('repoPath');
+    // Real subprocess init→run→clean flow; 30s was too tight under parallel
+    // test-suite load (observed 31s). Give headroom to avoid flaky timeouts.
+  }, 90_000);
+
+  it('draft plan → plan-approve gates run; old draft without a plan still runs', () => {
+    const cliPath = join(cliPackageRoot, 'dist', 'index.js');
+    const repoPath = createFixtureRepo(tempDirs);
+    runCli(cliPath, ['init', '--repo', repoPath], repoPath);
+
+    // Create + approve a draft (demand approval).
+    const newOutput = runCli(
+      cliPath,
+      [
+        'draft',
+        'new',
+        '给示例模块增加批量导出能力，要求本地 e2e 通过。',
+        '--no-interactive',
+        '--json',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const draftPlanPath = (JSON.parse(newOutput) as { jsonPath: string })
+      .jsonPath;
+    expect(existsSync(draftPlanPath)).toBe(true);
+    runCli(
+      cliPath,
+      ['draft', 'approve', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+
+    // Generate a plan → hasPlan=true, planApproved=false.
+    const planOutput = runCli(
+      cliPath,
+      ['draft', 'plan', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+    expect(planOutput).toContain('hasPlan=true');
+    expect(planOutput).toContain('planApproved=false');
+
+    // A plan exists but is not plan-approved → run is rejected.
+    expect(() =>
+      runCli(
+        cliPath,
+        [
+          'run',
+          '--draft-file',
+          draftPlanPath,
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        repoPath,
+      ),
+    ).toThrow(/审批计划/u);
+
+    // Plan-approve, then the run is admitted.
+    const planApproveOutput = runCli(
+      cliPath,
+      ['draft', 'plan-approve', draftPlanPath, '--repo', repoPath],
+      repoPath,
+    );
+    expect(planApproveOutput).toContain('planApproved=true');
+
+    const runOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '--draft-file',
+        draftPlanPath,
+        '--template',
+        'standard-delivery',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(runOutput).toContain('状态: passed');
+
+    // Backward compat: a draft that never generated a plan (no hasPlan) runs
+    // straight through after demand approval — the plan gate stays disengaged.
+    const oldDraftOutput = runCli(
+      cliPath,
+      [
+        'draft',
+        'new',
+        '给示例模块增加批量导入能力，要求本地 e2e 通过。',
+        '--no-interactive',
+        '--json',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    const oldDraftPath = (JSON.parse(oldDraftOutput) as { jsonPath: string })
+      .jsonPath;
+    runCli(
+      cliPath,
+      ['draft', 'approve', oldDraftPath, '--repo', repoPath],
+      repoPath,
+    );
+    const oldRunOutput = runCli(
+      cliPath,
+      [
+        'run',
+        '--draft-file',
+        oldDraftPath,
+        '--template',
+        'standard-delivery',
+        '--agent',
+        'mock',
+        '--repo',
+        repoPath,
+      ],
+      repoPath,
+    );
+    expect(oldRunOutput).toContain('状态: passed');
+  }, 30_000);
+
+  it('help command works without initialized repo and with initialized repo', () => {
+    const cliPath = join(cliPackageRoot, 'dist', 'index.js');
+    const repoPath = createFixtureRepo(tempDirs);
+
+    // Help works without init
+    const helpOutput = runCli(cliPath, ['help'], repoPath);
+    expect(helpOutput).toContain('项目管理');
+    expect(helpOutput).toContain('init');
+    expect(helpOutput).toContain('draft');
+    expect(helpOutput).toContain('run');
+    expect(helpOutput).toContain('status');
+    expect(helpOutput).toContain('工具');
+    expect(helpOutput).toContain('clean');
+    expect(helpOutput).toContain('ui');
+    expect(helpOutput).toContain('update');
+    expect(helpOutput).toContain('用法: tekon <command>');
+
+    // --help alias
+    const dashHelpOutput = runCli(cliPath, ['--help'], repoPath);
+    expect(dashHelpOutput).toBe(helpOutput);
+
+    // -h alias
+    const hOutput = runCli(cliPath, ['-h'], repoPath);
+    expect(hOutput).toBe(helpOutput);
+
+    // --version
+    const versionOutput = runCli(cliPath, ['--version'], repoPath);
+    expect(versionOutput).toMatch(/v\d+\.\d+\.\d+/);
+
+    // -v alias
+    const vOutput = runCli(cliPath, ['-v'], repoPath);
+    expect(vOutput).toBe(versionOutput);
+
+    // help <command>
+    const helpDraftOutput = runCli(cliPath, ['help', 'draft'], repoPath);
+    expect(helpDraftOutput).toContain('new');
+    expect(helpDraftOutput).toContain('shape');
+    expect(helpDraftOutput).toContain('approve');
+    expect(helpDraftOutput).toContain('plan');
+    expect(helpDraftOutput).toContain('plan-approve');
+    expect(helpDraftOutput).toContain('show');
+
+    // help after init still works
+    const initOutput = runCli(cliPath, ['init', '--repo', repoPath], repoPath);
+    expect(initOutput).toContain('项目初始化完成');
+
+    const helpAfterInitOutput = runCli(cliPath, ['help'], repoPath);
+    expect(helpAfterInitOutput).toContain('项目管理');
+    expect(helpAfterInitOutput).toContain('init');
+  }, 15_000);
+});
+
+function runCli(cliPath: string, args: string[], cwd: string): string {
+  return execFileSync(process.execPath, [cliPath, ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
+}
+
+function createFixtureRepo(tempDirs: string[]) {
+  const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-e2e-'));
+  tempDirs.push(repoPath);
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
+  execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
+    cwd: repoPath,
+  });
+  execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
+    cwd: repoPath,
+  });
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      scripts: {
+        build: 'node -e "process.exit(0)"',
+        lint: 'node -e "process.exit(0)"',
+        test: 'node -e "process.exit(0)"',
+      },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
+  );
+  execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
+  execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  return repoPath;
+}

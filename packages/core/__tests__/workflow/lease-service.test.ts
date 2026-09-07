@@ -612,3 +612,96 @@ describe('nodeAllowsSourceChanges', () => {
     expect(nodeAllowsSourceChanges(null)).toBe(false);
   });
 });
+
+async function repairRecoveryFixture() {
+  const { db, repositories, audit } = createTestDb(); const now = new Date().toISOString();
+  await repositories.createProject({ id: 'proj_1', name: 'Test', repoPath: '/tmp/repo', createdAt: now });
+  await repositories.createDemand({ id: 'demand_1', title: 'Test', body: 'Body', createdAt: now });
+  await repositories.createWorkflowInstance({ id: 'run_1', projectId: 'proj_1', demandId: 'demand_1', status: 'running', createdAt: now, updatedAt: now });
+  await repositories.createNode({ id: 'source', runId: 'run_1', role: 'rd', status: 'awaiting-gate', createdAt: now, updatedAt: now });
+  await repositories.recordGateResult({ id: 'failure', runId: 'run_1', nodeId: 'source', gateType: 'build', gateKey: 'source:build', status: 'failed', durationMs: 1, retries: 0, createdAt: now });
+  await repositories.createNode({ id: 'repair_failure', runId: 'run_1', role: 'rd', status: 'passed', dependencies: ['source'], createdAt: now, updatedAt: now });
+  await audit.append({ runId: 'run_1', type: 'gate.repair.intent', payload: { sourceNodeId: 'source', repairNodeId: 'repair_failure', gateResultId: 'failure', gateType: 'build', gateKey: 'source:build', fixerRole: 'rd' } });
+  const lease: WorktreeLease = { id: 'repair_lease', runId: 'run_1', nodeId: 'repair_failure', role: 'rd', repoPath: '/tmp/repo', worktreePath: '/tmp/repo/repair', branchName: 'repair', createdAt: now };
+  await repositories.recordWorktreeLease(lease);
+  const executionLeases = new Map<string, WorktreeLease>();
+  const service = createLeaseService({ repoPath: '/tmp/repo', repositories, audit, executionLeases, worktreeManager: makeStubWorktreeManager() });
+  return { db, repositories, audit, service, executionLeases, lease };
+}
+
+describe('durable repair lease recovery', () => {
+  it('keeps legacy execution without a worktree manager independent of incomplete repair identity', async () => {
+    const f = await repairRecoveryFixture();
+    try {
+      await f.audit.append({ runId: 'run_1', type: 'gate.repair.intent', payload: { sourceNodeId: 'source', repairNodeId: 'repair_unfinished', gateResultId: 'unfinished' } });
+      const legacy = createLeaseService({ repoPath: '/tmp/repo', repositories: f.repositories, audit: f.audit, executionLeases: new Map() });
+      await expect(legacy.activeExecutionLease('run_1', 'source', { required: true })).resolves.toBeUndefined();
+    } finally { f.db.close(); }
+  });
+
+  it('restores the latest authorized passed repair lease as the source alias', async () => {
+    const f = await repairRecoveryFixture();
+    try {
+      expect(await f.service.activeExecutionLease('run_1', 'source', { required: true })).toMatchObject(f.lease);
+      expect(f.executionLeases.get('source')?.id).toBe(f.lease.id);
+    } finally { f.db.close(); }
+  });
+
+  it.each(['wrong-run', 'wrong-role', 'wrong-dependency', 'not-passed', 'ambiguous', 'latest-unfinished', 'missing-intent'] as const)('rejects %s repair lease recovery without using an older lease', async mismatch => {
+    const f = await repairRecoveryFixture();
+    try {
+      if (mismatch === 'wrong-run') f.db.prepare("update worktree_leases set run_id='other' where id=?").run(f.lease.id);
+      if (mismatch === 'wrong-role') f.db.prepare("update worktree_leases set role='qa' where id=?").run(f.lease.id);
+      if (mismatch === 'wrong-dependency') f.db.prepare("update nodes set dependencies='[\"other\"]' where id='repair_failure'").run();
+      if (mismatch === 'not-passed') await f.repositories.transitionNode('repair_failure', 'running');
+      if (mismatch === 'ambiguous') await f.repositories.recordWorktreeLease({ ...f.lease, id: 'duplicate' });
+      if (mismatch === 'latest-unfinished') await f.audit.append({ runId: 'run_1', type: 'gate.repair.intent', payload: { sourceNodeId: 'source', repairNodeId: 'repair_new', gateResultId: 'new' } });
+      if (mismatch === 'missing-intent') f.db.prepare("delete from audit_events where type='gate.repair.intent'").run();
+      await expect(f.service.activeExecutionLease('run_1', 'source', { required: true })).rejects.toThrow(/lease/i);
+      expect(f.executionLeases.has('source')).toBe(false);
+    } finally { f.db.close(); }
+  });
+
+  it.each([false, true])('unmaterialized repair intent permits source finalization only without a repair-created record (%s)', async wasCreated => {
+    const f = await repairRecoveryFixture();
+    try {
+      f.db.prepare("delete from nodes where id='repair_failure'").run();
+      f.db.prepare('delete from worktree_leases where id=?').run(f.lease.id);
+      const direct = { ...f.lease, id: 'original_source', nodeId: 'source', releasedAt: new Date().toISOString() };
+      await f.repositories.recordWorktreeLease(direct);
+      if (wasCreated) await f.audit.append({ runId: 'run_1', type: 'gate.repair.created', payload: { nodeId: 'source', repairNodeId: 'repair_failure', gateResultId: 'failure' } });
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.promoted', payload: { nodeId: 'source', leaseId: direct.id } });
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.released', payload: { nodeId: 'source', leaseId: direct.id } });
+      if (wasCreated) await expect(f.service.finalizeExecutionLease('run_1', 'source')).rejects.toThrow(/lease/i);
+      else await expect(f.service.finalizeExecutionLease('run_1', 'source')).resolves.toBeUndefined();
+      await expect(f.service.activeExecutionLease('run_1', 'source', { required: true })).rejects.toThrow(/lease/i);
+    } finally { f.db.close(); }
+  });
+
+  it('a newer source execution supersedes an older repair when recovering finalization', async () => {
+    const f = await repairRecoveryFixture();
+    try {
+      const direct = { ...f.lease, id: 'new_source', nodeId: 'source', releasedAt: new Date().toISOString() };
+      await f.repositories.recordWorktreeLease(direct);
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.created', payload: { nodeId: 'source', leaseId: direct.id } });
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.promoted', payload: { nodeId: 'source', leaseId: direct.id } });
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.released', payload: { nodeId: 'source', leaseId: direct.id } });
+      await expect(f.service.finalizeExecutionLease('run_1', 'source')).resolves.toBeUndefined();
+      expect(f.executionLeases.has('source')).toBe(false);
+      await expect(f.service.activeExecutionLease('run_1', 'source', { required: true })).rejects.toThrow(/lease/i);
+    } finally { f.db.close(); }
+  });
+
+  it.each(['complete', 'missing-promote', 'missing-release'] as const)('requires %s finalization evidence before completing an awaiting-gate node without an active lease', async evidence => {
+    const f = await repairRecoveryFixture();
+    try {
+      f.db.prepare('update worktree_leases set released_at=? where id=?').run(new Date().toISOString(), f.lease.id);
+      if (evidence !== 'missing-promote') await f.audit.append({ runId: 'run_1', type: 'worktree.lease.promoted', payload: { nodeId: 'source', leaseId: f.lease.id } });
+      if (evidence !== 'missing-release') await f.audit.append({ runId: 'run_1', type: 'worktree.lease.released', payload: { nodeId: 'source', leaseId: f.lease.id } });
+      if (evidence === 'complete') await expect(f.service.finalizeExecutionLease('run_1', 'source')).resolves.toBeUndefined();
+      else await expect(f.service.finalizeExecutionLease('run_1', 'source')).rejects.toThrow(/lease/i);
+      // Even a fully finalized lease is insufficient to execute a fresh Gate.
+      await expect(f.service.activeExecutionLease('run_1', 'source', { required: true })).rejects.toThrow(/lease/i);
+    } finally { f.db.close(); }
+  });
+});

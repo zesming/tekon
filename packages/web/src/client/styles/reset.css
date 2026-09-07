@@ -209,6 +209,8 @@ table {
 .main {
   margin-left: 232px;
   flex: 1;
+  /* Flex 内容可以收缩；宽表格由自身滚动容器承接。 */
+  min-width: 0;
   min-height: 100vh;
 }
 
@@ -453,6 +455,12 @@ table {
 
 .panel-grid .card.full {
   grid-column: 1 / -1;
+}
+
+.link-strip a {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ── Badges ── */
@@ -889,6 +897,7 @@ tbody tr:last-child td {
 
 .audit-item {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border-l);
@@ -927,6 +936,8 @@ tbody tr:last-child td {
 .audit-type {
   font-weight: 600;
   min-width: 160px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .audit-payload {
@@ -934,6 +945,30 @@ tbody tr:last-child td {
   font-family: var(--font-m);
   font-size: 11px;
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-detail {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-event-detail pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.evidence-target {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.artifact-list .preview-block pre,
+.evidence-target .preview-block pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .audit-time {
@@ -1176,6 +1211,16 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
+.start-run-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 768px) {
+  .start-run-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Toolbar ── */
 .toolbar {
   display: flex;
@@ -1303,6 +1348,11 @@ tbody tr:last-child td {
   gap: 16px;
 }
 
+.run-header > div:first-child {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .run-header-id {
   font-family: var(--font-m);
   font-size: 12px;
@@ -1321,6 +1371,7 @@ tbody tr:last-child td {
 
 .run-header-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
   color: var(--text-s);
@@ -1330,6 +1381,16 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.run-header-meta > span {
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.run-header-meta > .badge {
+  white-space: nowrap;
 }
 
 .run-header-actions {
@@ -1482,7 +1543,8 @@ tbody tr:last-child td {
   font-size: 11px;
   color: var(--text-t);
   max-width: 260px;
-  flex-shrink: 0;
+  min-width: 0;
+  flex-shrink: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1533,11 +1595,14 @@ tbody tr:last-child td {
 /* ── Tabs ── */
 .tabs {
   display: flex;
+  overflow-x: auto;
+  max-width: 100%;
   border-bottom: 1px solid var(--border);
   margin-bottom: 20px;
 }
 
 .tab {
+  flex-shrink: 0;
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 500;
@@ -2381,12 +2446,6 @@ tbody tr:last-child td {
 @media (max-width: 768px) {
   .main {
     margin-left: 0;
-    /* .main is a flex child of #root (display:flex). Its default min-width:auto
-       refuses to shrink below the widest content (e.g. a <select>'s intrinsic
-       option width), which blows the whole page past the viewport. min-width:0
-       lets it collapse to the available width — the root fix for mobile
-       horizontal overflow; descendant caps below are belt-and-suspenders. */
-    min-width: 0;
   }
 
   .sidebar {
@@ -2443,13 +2502,15 @@ tbody tr:last-child td {
   .page-header,
   .card-header,
   .toolbar,
-  .filter-group {
+  .filter-group,
+  .run-header {
     flex-wrap: wrap;
   }
 
   .page-header,
   .card-header,
-  .toolbar {
+  .toolbar,
+  .run-header {
     min-width: 0;
   }
 
@@ -2470,4 +2531,55 @@ tbody tr:last-child td {
     width: 100%;
     min-width: 0;
   }
+}
+
+@media (max-width: 600px) {
+  .check-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: start;
+    gap: 4px 10px;
+  }
+
+  .check-label {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .check-evidence,
+  .check-evidence:hover {
+    grid-column: 2;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    position: static;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+}
+
+/* 恢复说明属于运行控制，随容器换行并保留完整 Job 身份。 */
+.run-controls { min-width: 0; }
+.run-recovery-notice,
+.run-recovery-error,
+.run-recovery-confirmation {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.run-recovery-error { color: var(--fail); }
+.run-recovery-confirmation input { margin-right: 6px; }
+
+/* 恢复长文独立成行，避免宽屏运行身份被操作区挤窄。 */
+.run-header:has(.run-recovery-notice, .run-recovery-error, .run-recovery-confirmation) {
+  flex-direction: column;
+  align-items: stretch;
+}
+@media (max-width: 390px) {
+  .approval-meta { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -72,6 +72,52 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
 
     return { repoPath, runId: runId!, decisionId };
   }
+
+  it.each([{confirmation: []}, {confirmation: ['--confirm-stopped', '--previous-job-id', 'wrong-job']}])('R26: refuses uncertain exit before recording approval: %j', async ({confirmation}) => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
+    try {
+      db.prepare("update workflow_instances set status='interrupted' where id=?").run(runId);
+      db.prepare("update jobs set status='interrupted',abort_state='stopped' where kind in ('workflow-run','goal-run','workflow-resume')").run();
+      // Pre-migration fixtures have no exit_evidence column; null is the
+      // equivalent legacy state after migration.
+      const cols = db.prepare('pragma table_info(jobs)').all() as Array<{name:string}>;
+      if (cols.some((c) => c.name === 'exit_evidence')) db.prepare('update jobs set exit_evidence=null').run();
+      const io = createMemoryIo();
+      expect(await runCli(['resume','--run-id',runId,'--decision-id',decisionId,'--approve-human','--repo',repoPath,...confirmation],io)).toBe(1);
+      expect(io.takeStderr()).toContain('退出');
+      expect(await createRepositories(db).getHumanDecision(decisionId)).toMatchObject({status:'pending'});
+    } finally { db.close(); }
+  });
+
+  it('R26: reports durable approval if a subsequent audit write fails', async () => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
+    try {
+      db.prepare("update workflow_instances set status='paused' where id=?").run(runId);
+      db.exec(`create trigger fail_approval_audit before insert on audit_events
+        when new.type='human.gate.approved' begin select raise(abort,'injected approval audit failure'); end`);
+      const io = createMemoryIo();
+      expect(await runCli(['resume','--run-id',runId,'--decision-id',decisionId,'--approve-human','--repo',repoPath],io)).toBe(1);
+      expect(io.takeStderr()).toContain('审批已记录，运行尚未恢复');
+      expect(await createRepositories(db).getHumanDecision(decisionId)).toMatchObject({status:'approved'});
+    } finally { db.close(); }
+  });
+
+  it('R26: approval cannot overwrite a racing cancellation and enqueue recovery', async () => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
+    try {
+      db.prepare("update workflow_instances set status='paused' where id=?").run(runId);
+      db.exec(`create trigger cancel_after_decision after update of status on human_decisions
+        when new.status='approved' begin update workflow_instances set status='cancelled' where id=new.run_id; end`);
+      const io = createMemoryIo();
+      expect(await runCli(['resume','--run-id',runId,'--decision-id',decisionId,'--approve-human','--repo',repoPath],io)).toBe(1);
+      expect(io.takeStderr()).toContain('审批已记录，运行尚未恢复');
+      expect(await createRepositories(db).getWorkflowInstance(runId)).toMatchObject({status:'cancelled'});
+      expect(db.prepare("select count(*) as n from jobs where kind='workflow-resume'").get()).toEqual({n:0});
+    } finally { db.close(); }
+  });
 
   it('M5: tekon resume on a cancelled run exits 1 with a Chinese terminal message', async () => {
     const { repoPath, runId } = await createCancelledRunWithPendingDecision();
@@ -197,20 +243,25 @@ function createMemoryIo(): CliIO & {
 function createFixtureRepo(tempDirs: string[]): string {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-approval-terminal-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
   execFileSync('git', ['config', 'user.name', 'Tekon Test'], {
     cwd: repoPath,
   });
-  execFileSync('npm', ['init', '-y'], { cwd: repoPath });
-  execFileSync(
-    'npm',
-    ['pkg', 'set', 'scripts.test=node -e "process.exit(0)"'],
-    {
-      cwd: repoPath,
-    },
+  writeFileSync(
+    join(repoPath, 'package.json'),
+    JSON.stringify({
+      name: 'fixture',
+      version: '1.0.0',
+      main: 'index.js',
+      scripts: { test: 'node -e "process.exit(0)"' },
+      keywords: [],
+      author: '',
+      license: 'ISC',
+      description: '',
+    }),
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });

@@ -1,0 +1,290 @@
+[
+  {
+    "name": "sessions",
+    "path": "/",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "受控交付",
+    "file": "320-00-sessions.png"
+  },
+  {
+    "name": "session",
+    "path": "/sessions/sess_a25b0eda-fbfa-46ab-a11a-3e24149f2562",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "R26 审批与恢复",
+    "file": "320-01-session.png"
+  },
+  {
+    "name": "runs",
+    "path": "/advanced/runs",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "运行管理 Runs",
+    "file": "320-02-runs.png"
+  },
+  {
+    "name": "run",
+    "path": "/advanced/runs/run_1",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": null,
+    "file": "320-03-run.png"
+  },
+  {
+    "name": "approvals",
+    "path": "/advanced/approvals",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "Approvals",
+    "file": "320-04-approvals.png"
+  },
+  {
+    "name": "delivery",
+    "path": "/advanced/delivery",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "Delivery",
+    "file": "320-05-delivery.png"
+  },
+  {
+    "name": "config",
+    "path": "/advanced/config",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "Config",
+    "file": "320-06-config.png"
+  },
+  {
+    "name": "eval",
+    "path": "/advanced/eval",
+    "width": 320,
+    "viewport": 320,
+    "scrollWidth": 320,
+    "heading": "Evaluations",
+    "file": "320-07-eval.png"
+  },
+  {
+    "name": "sessions",
+    "path": "/",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "受控交付",
+    "file": "390-00-sessions.png"
+  },
+  {
+    "name": "session",
+    "path": "/sessions/sess_a25b0eda-fbfa-46ab-a11a-3e24149f2562",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "R26 审批与恢复",
+    "file": "390-01-session.png"
+  },
+  {
+    "name": "runs",
+    "path": "/advanced/runs",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "运行管理 Runs",
+    "file": "390-02-runs.png"
+  },
+  {
+    "name": "run",
+    "path": "/advanced/runs/run_1",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": null,
+    "file": "390-03-run.png"
+  },
+  {
+    "name": "approvals",
+    "path": "/advanced/approvals",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "Approvals",
+    "file": "390-04-approvals.png"
+  },
+  {
+    "name": "delivery",
+    "path": "/advanced/delivery",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "Delivery",
+    "file": "390-05-delivery.png"
+  },
+  {
+    "name": "config",
+    "path": "/advanced/config",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "Config",
+    "file": "390-06-config.png"
+  },
+  {
+    "name": "eval",
+    "path": "/advanced/eval",
+    "width": 390,
+    "viewport": 390,
+    "scrollWidth": 390,
+    "heading": "Evaluations",
+    "file": "390-07-eval.png"
+  },
+  {
+    "name": "sessions",
+    "path": "/",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "受控交付",
+    "file": "768-00-sessions.png"
+  },
+  {
+    "name": "session",
+    "path": "/sessions/sess_a25b0eda-fbfa-46ab-a11a-3e24149f2562",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "R26 审批与恢复",
+    "file": "768-01-session.png"
+  },
+  {
+    "name": "runs",
+    "path": "/advanced/runs",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "运行管理 Runs",
+    "file": "768-02-runs.png"
+  },
+  {
+    "name": "run",
+    "path": "/advanced/runs/run_1",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": null,
+    "file": "768-03-run.png"
+  },
+  {
+    "name": "approvals",
+    "path": "/advanced/approvals",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "Approvals",
+    "file": "768-04-approvals.png"
+  },
+  {
+    "name": "delivery",
+    "path": "/advanced/delivery",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "Delivery",
+    "file": "768-05-delivery.png"
+  },
+  {
+    "name": "config",
+    "path": "/advanced/config",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "Config",
+    "file": "768-06-config.png"
+  },
+  {
+    "name": "eval",
+    "path": "/advanced/eval",
+    "width": 768,
+    "viewport": 768,
+    "scrollWidth": 768,
+    "heading": "Evaluations",
+    "file": "768-07-eval.png"
+  },
+  {
+    "name": "sessions",
+    "path": "/",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "受控交付",
+    "file": "1440-00-sessions.png"
+  },
+  {
+    "name": "session",
+    "path": "/sessions/sess_a25b0eda-fbfa-46ab-a11a-3e24149f2562",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "R26 审批与恢复",
+    "file": "1440-01-session.png"
+  },
+  {
+    "name": "runs",
+    "path": "/advanced/runs",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "运行管理 Runs",
+    "file": "1440-02-runs.png"
+  },
+  {
+    "name": "run",
+    "path": "/advanced/runs/run_1",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": null,
+    "file": "1440-03-run.png"
+  },
+  {
+    "name": "approvals",
+    "path": "/advanced/approvals",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "Approvals",
+    "file": "1440-04-approvals.png"
+  },
+  {
+    "name": "delivery",
+    "path": "/advanced/delivery",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "Delivery",
+    "file": "1440-05-delivery.png"
+  },
+  {
+    "name": "config",
+    "path": "/advanced/config",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "Config",
+    "file": "1440-06-config.png"
+  },
+  {
+    "name": "eval",
+    "path": "/advanced/eval",
+    "width": 1440,
+    "viewport": 1440,
+    "scrollWidth": 1440,
+    "heading": "Evaluations",
+    "file": "1440-07-eval.png"
+  }
+]

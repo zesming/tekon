@@ -102,8 +102,8 @@ RD worktree 残留：
 
 本轮已按上述结论调整方案：
 
-- `docs/superpowers/plans/2026-06-11-tekon-standard-delivery-next-phase.md`
-- `docs/superpowers/plans/2026-06-11-tekon-standard-delivery-next-phase.html`
+- [历史方案 2026-06-11-tekon-standard-delivery-next-phase.md](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-06-11-tekon-standard-delivery-next-phase.md)
+- [历史方案 2026-06-11-tekon-standard-delivery-next-phase.html](https://github.com/zesming/tekon/blob/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans/2026-06-11-tekon-standard-delivery-next-phase.html)
 
 并在实现范围中加入：
 

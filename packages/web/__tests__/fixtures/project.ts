@@ -6,6 +6,8 @@ import { join } from 'node:path';
 
 import {
   createAuditLogger,
+  createCommandGateway,
+  createWorktreeManager,
   createRepositories,
   migrateDatabase,
   openTekonDatabase,
@@ -373,8 +375,27 @@ export async function createWebFixtureProject(
     runId: 'run_1',
     nodeId: 'node_1',
     role: 'reviewer',
-    status: 'paused',
+    status: 'running',
     startedAt: '2026-06-05T00:00:00.000Z',
+  });
+
+  await repositories.markRoleRunCompleted({
+    roleRunId: 'role_run_1',
+    completedAt: '2026-06-05T00:00:01.000Z',
+  });
+
+  // A paused human approval keeps the completed Agent's real execution lease.
+  // Approval resumes that checkpoint and finalizes the same worktree.
+  const worktreeManager = createWorktreeManager({
+    repositories,
+    gateway: createCommandGateway({ repositories }),
+  });
+  const runBranch = await worktreeManager.ensureRunBranch({
+    repoPath: projectRoot, runId: 'run_1', baseRef: 'HEAD',
+  });
+  const reviewerLease = await worktreeManager.createLease({
+    repoPath: projectRoot, runId: 'run_1', nodeId: 'node_1', role: 'reviewer',
+    baseRef: runBranch, allowDirtyBase: true,
   });
 
   const audit = createAuditLogger({ repositories });
@@ -399,6 +420,15 @@ export async function createWebFixtureProject(
     type: 'run.started',
     payload: { templateId: 'standard-delivery', mode: 'template' },
     createdAt: '2026-06-05T00:00:03.500Z',
+  });
+  await audit.append({
+    runId: 'run_1',
+    type: 'worktree.lease.created',
+    payload: {
+      nodeId: 'node_1', leaseId: reviewerLease.id,
+      worktreePath: reviewerLease.worktreePath, branchName: reviewerLease.branchName,
+    },
+    createdAt: '2026-06-05T00:00:03.750Z',
   });
   await audit.append({
     runId: 'run_1',

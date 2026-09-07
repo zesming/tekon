@@ -1,0 +1,11 @@
+{
+  "completedAt": "2026-09-07T03:13:57.584429+00:00",
+  "removed": [
+    ".tekon/r27-work/",
+    "packages/web/test-results/"
+  ],
+  "ownedProviderRepositoryCount": 6,
+  "ownedDocumentationTemporaryFileCount": 6,
+  "ownershipCheck": "Explicit root list; fixture package/build markers verified; no live process references any root. No wildcard deletion of unrelated /tmp or .tekon runs.",
+  "retained": "Formal acceptance, source hashes, command/result summaries, first failed and final real Provider snapshots, original page screenshots and geometry."
+}

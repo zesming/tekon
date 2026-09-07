@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tekon 第六轮全面复审</title>
+<style>
+:root{color-scheme:light;--bg:#f5f7fb;--card:#fff;--text:#182033;--muted:#60708a;--line:#dbe2ec;--pass:#087443;--pass-bg:#eaf8f0;--warn:#a85a00;--warn-bg:#fff5df;--fail:#b42318;--fail-bg:#fff0ef;--accent:#4158d0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.72 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}main{max-width:1120px;margin:0 auto;padding:48px 24px 96px}h1{font-size:34px;line-height:1.25;margin:0 0 14px}h2{font-size:23px;margin:0 0 14px}h3{font-size:18px;margin:22px 0 8px}p{margin:8px 0}a{color:var(--accent)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#eef1f6;padding:1px 5px;border-radius:4px}.lead{font-size:17px;color:#344057}.meta{color:var(--muted);font-size:13px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin:18px 0;box-shadow:0 4px 18px rgba(34,51,84,.05)}.pass{border-left:5px solid var(--pass)}.warn{border-left:5px solid var(--warn)}.fail{border-left:5px solid var(--fail)}.badge{display:inline-block;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:700}.badge.pass{border:0;background:var(--pass-bg);color:var(--pass)}.badge.warn{border:0;background:var(--warn-bg);color:var(--warn)}.badge.fail{border:0;background:var(--fail-bg);color:var(--fail)}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}th{background:#f1f4f8;font-size:13px}ul,ol{padding-left:22px}pre{overflow:auto;background:#172033;color:#edf2ff;padding:16px;border-radius:10px;font-size:13px}.check{list-style:none;padding-left:0}.check li{margin:7px 0}.check .yes::before{content:"✓ ";color:var(--pass);font-weight:800}.check .no::before{content:"□ ";color:var(--warn);font-weight:800}.small{font-size:13px;color:var(--muted)}@media(max-width:640px){main{padding:28px 14px 64px}h1{font-size:28px}.card{padding:17px}table{display:block;overflow-x:auto;white-space:normal}}
+</style>
+</head>
+<body><main>
+<header class="card">
+  <div class="meta">2026-08-30 · PR #11 · 用户整改 ca30e8c · 审阅修复 772e7a7 / e32aa78 / 3d7f8c1</div>
+  <h1>Tekon 人类可用性与 Harness 架构第六轮全面复审</h1>
+  <p class="lead"><strong>代码合并门通过，稳定持续协作产品验收仍不通过。</strong> v0.17.0 是有效产品增量；本轮补齐跨入口安全确认、默认入口计划、失败处理、连接语义、停机竞态、workspace SSE 隔离与查询状态污染。</p>
+  <p class="small">允许表述：Tekon 已形成测试较强、启动与风险边界更透明的实验性受控交付执行与观察基础设施；尚未完成持续协作、单一 Runtime 权威、权威 Session 事实链和全链路长会话有界化。</p>
+</header>
+
+<section class="card pass"><h2>总体裁决</h2>
+<div class="grid">
+<div><span class="badge pass">可继续合并审阅</span><p>用户整改与本轮低风险修复方向正确，未发现已知阻断回归。</p></div>
+<div><span class="badge warn">有条件通过</span><p>受控交付执行、观察、Gate、Artifact、审批与交付准备基础设施。</p></div>
+<div><span class="badge fail">产品验收不通过</span><p>持续协作、重启恢复、单一 Runtime authority、权威 Session log 与长会话全链路有界化仍缺失。</p></div>
+</div></section>
+
+<section class="card"><h2>本轮发现并修复的合同断点</h2>
+<ol>
+<li><strong>CLI dsh 联网确认绕过：</strong>Web 有确认，CLI 无参数、无 fail-fast、无审计。现已新增 <code>--acknowledge-unrestricted-network</code> 并落审计。</li>
+<li><strong>默认主入口绕过 run plan：</strong>高级页有计划，Session Composer 直接启动完整交付。现已补服务端计划摘要并在失败时阻止主入口启动。</li>
+<li><strong>失败确认代际错误：</strong>可预确认非 failed Session，list/get 不一致，新失败可能被旧确认遮蔽。现已统一当前状态语义。</li>
+<li><strong>连接管理是假显式：</strong>Token 输入仍会自动应用，“已连接”仅表示字符串存在。现改为草稿 + 显式应用，状态改为“凭据已设置”。</li>
+<li><strong>stop/poll 竞态：</strong>已经进入的 poll 可在 stop 快照 pending 后 claim/spawn。现追踪 pollTask 并先等待 poll 屏障。</li>
+<li><strong>workspace SSE 越界：</strong>subscribeAll 把其它 workspace 的事件标成当前 workspace。现按持久 membership 过滤并有反例测试。</li>
+<li><strong>查询键旧数据污染：</strong>mode/provider/auth key 切换时短暂返回上一 key 的计划。现把状态与 key/generation 绑定。</li>
+</ol></section>
+
+<section class="card"><h2>用户整改裁决矩阵</h2>
+<table><thead><tr><th>方向</th><th>裁决</th><th>核心依据</th></tr></thead><tbody>
+<tr><td>安全停机</td><td><span class="badge warn">部分完成</span></td><td>三阶段 drain 和 poll 屏障有效；不合作 executor 的硬终止上界、cancel vs recover 语义仍未定义。</td></tr>
+<tr><td>执行计划</td><td><span class="badge warn">部分通过</span></td><td>默认/高级入口均有摘要；计划未与实际 run 绑定，缺 provider/permission/artifact/完整 timeout/cost 因素。</td></tr>
+<tr><td>dsh 网络确认</td><td><span class="badge pass">当前入口关闭</span></td><td>Web + CLI + runtime guard + Audit 已贯通；不代表 dsh 本身安全。</td></tr>
+<tr><td>失败处理</td><td><span class="badge pass">主要闭环</span></td><td>持久 acknowledge、排序、UI、list/get 和新失败重开已成立；长期应使用 failure generation。</td></tr>
+<tr><td>连接管理</td><td><span class="badge warn">交互通过</span></td><td>显式应用成立；仍无服务端握手、身份、过期与健康状态。</td></tr>
+<tr><td>workspace 实时刷新</td><td><span class="badge pass">轻量合同通过</span></td><td>SSE + catch-up + workspace 隔离成立；它是刷新通知而非 durable event stream。</td></tr>
+<tr><td>长 Session</td><td><span class="badge warn">DOM 层部分完成</span></td><td>初始渲染窗口有效，但客户端 events 数组、服务端 replay 和网络传输仍无界。</td></tr>
+<tr><td>可访问性</td><td><span class="badge warn">部分完成</span></td><td>核心控件明显改善；未完成全站屏幕阅读器、多浏览器和对比度审计。</td></tr>
+</tbody></table></section>
+
+<section class="card"><h2>关键代码修复</h2>
+<h3>772e7a7：跨入口安全与人类主路径</h3>
+<ul>
+<li><a href="../../packages/cli/src/commands/run.ts">CLI run</a>：显式网络确认、fail-fast、审计。</li>
+<li><a href="../../packages/web/src/client/components/sessions/SessionComposer.tsx">SessionComposer</a>：默认入口执行计划。</li>
+<li><a href="../../packages/web/src/server/api/routers/session.ts">Session router</a>：失败确认当前代际、list/get 一致。</li>
+<li><a href="../../packages/web/src/client/layouts/TopBar.tsx">TopBar</a>：凭据草稿与显式应用。</li>
+</ul>
+<h3>e32aa78：停机竞态与 SSE 隔离</h3>
+<ul>
+<li><a href="../../packages/core/src/session/job-runner.ts">JobRunner</a>：active poll barrier、drain 集合冻结顺序。</li>
+<li><a href="../../packages/core/__tests__/session/job-runner-stop-race.test.ts">故障测试</a>：delayed claim 验证 stop 不提前返回。</li>
+<li><a href="../../packages/web/src/server/sse.ts">SSE</a>：按 workspace membership 过滤。</li>
+<li><a href="../../packages/web/__tests__/api/workspace-sse.test.ts">隔离测试</a>：foreign event 无 frame。</li>
+</ul>
+<h3>3d7f8c1：查询状态隔离</h3>
+<ul>
+<li><a href="../../packages/web/src/client/hooks/use-query.ts">useQuery</a>：key-changing render 屏蔽旧数据，异步写回检查 key/generation。</li>
+<li><a href="../../packages/web/src/client/lib/workspace-summary-stream.ts">workspace client</a>：轻量 catch-up 类型对齐并拒绝 workspaceId 不匹配 frame。</li>
+</ul></section>
+
+<section class="card warn"><h2>仍未关闭的产品主链</h2>
+<pre>single-owner runtime
+→ shutdown / recovery 持久语义
+→ 权威 Session log + durable inbox
+→ SDK/ACP 或真实 Provider streaming
+→ follow-up / steer / resume / restart recovery
+→ Collaborate → Deliver 显式升级
+→ Session 数据、网络、内存、DOM 全链路有界</pre>
+<p>当前 Session UI 是运行观察与治理界面，不是持续协作界面。<code>LegacyAgentDriver</code> 的 follow-up、steer、resume 仍未实现。</p></section>
+
+<section class="card"><h2>架构与数据结论</h2>
+<h3>Runtime authority</h3><p>Web 与 CLI 仍独立创建 JobRunner，共享 SQLite、Git、worktree、Artifact、Audit 和子进程。jobs CAS 不能 fence 所有文件/Git 副作用。建议 repo-scoped daemon + lock，CLI/Web 客户端化。</p>
+<h3>Shutdown</h3><p>明确的 late-claim 竞态已关闭；仍需定义服务关闭时 cancel/interrupted/recoverable 的持久语义，以及 provider 不响应 abort 时的 hard deadline。</p>
+<h3>Session Event</h3><p><code>dual-write</code> 仍是 best-effort 观察投影，不能承担模型历史、durable inbox、完整 replay 与 fork/resume 的唯一事实源。</p>
+<h3>引用完整性</h3><p><code>session_events</code>、<code>jobs</code>、<code>projection_checkpoints</code> 对 Session 无统一外键和孤儿迁移策略，应独立做 SQLite 表重建与老库验证。</p></section>
+
+<section class="card"><h2>UI / UX 结论</h2>
+<ul>
+<li><strong>高级启动页过密：</strong>默认应只展示角色链、控制点、权限/网络和人工确认；phase/node/gate key/毫秒参数放入展开详情。</li>
+<li><strong>连接状态要诚实：</strong>“凭据已设置”已正确；只有完成服务端 probe 后才能显示“已连接”。</li>
+<li><strong>长历史仍无界：</strong>EventFeed 只限制 DOM，<code>useSessionStream</code> 仍永久累积全部事件。</li>
+<li><strong>run plan 不是权威合同：</strong>后续应保存 template digest、provider/model、permission/network、timeouts、artifacts、human gates 和 actual adopted plan。</li>
+</ul></section>
+
+<section class="card"><h2>DeepSeek Harness 最新对齐</h2>
+<p>截至 2026-08-30，官方最新 GitHub prerelease 是 <a href="https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-alpha.1">dsh-v0.1.2-alpha.1</a>；Tekon 仍钉死 <code>0.1.1-rc.2</code>。</p>
+<ul>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/sdk">SDK</a>：stdio JSON-RPC，可开 Session、发 prompt，并实时观察 Session event、Agent 状态和 subagent completion。</li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/acp/acp">ACP</a>：标准 persistent session new/list/resume/close、prompt/cancel、permission 与 semantic updates，并明确 quiescent close。</li>
+<li><strong>建议：</strong>headless 保持 experimental Goal provider；Collaborate 优先评估 SDK，标准互操作再评估 ACP。</li>
+<li><a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/SAFETY.md">官方 Safety</a> 仍声明 developer preview、未安全审计，sandbox/approval/permission 不保证隔离。</li>
+</ul></section>
+
+<section class="card"><h2>过度实现 / 过度设计</h2>
+<p>Profile、Automation、Goal、LegacyAgentDriver、dual-write、DSH probe、两套 Runtime composition 已明显多于已经闭环的持续协作能力。下一阶段应冻结不服务于“真实流 → durable input → follow-up/steer → restart resume → Deliver 升级”的横向抽象。</p>
+<p>第五轮报告在声明单一入口后又追加大段代理批注和整改回填，重新制造权威性噪声。本轮只更新 <code>current.md</code> 和第六轮报告，不再扩写 CHANGELOG 或旧报告。</p></section>
+
+<section class="card"><h2>推荐顺序</h2>
+<ol>
+<li>single-owner daemon、repo lock、shutdown/recovery 语义与故障注入；</li>
+<li>权威 Session log、durable inbox、外键/孤儿 migration；</li>
+<li>SDK vs ACP ADR，一个真实 streaming vertical slice；</li>
+<li>follow-up/steer/resume 与浏览器/进程恢复；</li>
+<li>权威 run plan 和 Collaborate → Deliver 升级；</li>
+<li>summary/cursor、服务端分页、客户端窗口/虚拟化、connection validation 与全站可访问性。</li>
+</ol></section>
+
+<section class="card"><h2>验收清单</h2>
+<ul class="check">
+<li class="yes">用户 v0.17.0 是有效产品增量，用户快照 Core #284 / CI #193 通过。</li>
+<li class="yes">当前 Web/CLI dsh 不受限网络确认统一，并有审计与测试。</li>
+<li class="yes">默认入口有执行计划，失败处理、连接语义、SSE 隔离和停机竞态已补强。</li>
+<li class="no">同一 Session 的持续输入、follow-up、steer、真实流与重启恢复。</li>
+<li class="no">单一 Runtime authority 或全副作用持久 fencing。</li>
+<li class="no">权威 Session log / durable inbox。</li>
+<li class="no">与实际 run 绑定的权威计划快照。</li>
+<li class="no">长 Session 数据、网络、浏览器内存和 DOM 全部有界。</li>
+<li class="no">DSH SDK/ACP、版本、preflight、安装与安全边界形成长期合同。</li>
+<li class="no">引用完整性 migration、真实用户试用和全站可访问性验收。</li>
+</ul></section>
+
+<footer class="card fail"><h2>最终结论</h2><p><strong>PR #11 最新代码可以继续合并审阅；合并不得被解释为 Tekon 已通过稳定持续协作研发工作台验收，也不应继续在同一 PR 中扩展新的横向平台能力。</strong></p></footer>
+</main></body></html>

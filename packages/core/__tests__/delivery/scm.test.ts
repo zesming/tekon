@@ -101,7 +101,7 @@ describe('scm delivery', () => {
     const remotePath = mkdtempSync(join(tmpdir(), 'tekon-remote-'));
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-fake-gh-'));
     tempDirs.push(remotePath, binDir);
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     execFileSync('git', ['remote', 'add', 'origin', remotePath], {
       cwd: repoPath,
     });

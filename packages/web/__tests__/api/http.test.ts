@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -96,6 +102,27 @@ describe('web http rpc', () => {
       }).then((response) => response.status),
     ).resolves.toBe(401);
 
+    const cleanResponse = await rawRpc(server.url, {
+      path: 'project.clean',
+      input: {
+        runId: 'run_1',
+        token: fixture.sessionToken,
+        confirm: 'delete-run-dir',
+      },
+    });
+    expect(cleanResponse.status).toBe(409);
+    const cleanError = (await cleanResponse.json()) as {
+      error: { code: string; message: string };
+    };
+    expect(cleanError.error).toEqual({
+      code: 'CONFLICT',
+      message:
+        'CLEAN_SUSPENDED: project.clean is suspended pending lifecycle-safe purge',
+    });
+    expect(
+      existsSync(join(fixture.projectRoot, '.tekon', 'runs', 'run_1')),
+    ).toBe(true);
+
     const approval = await rpc<{ decision: { status: string } }>(server.url, {
       path: 'gate.approve',
       input: {
@@ -177,10 +204,7 @@ describe('web http rpc', () => {
       await server.listen();
 
       // %2e%2e%2f decodes to ../
-      const response = await rawGet(
-        server.url,
-        '/assets/%2e%2e%2findex.html',
-      );
+      const response = await rawGet(server.url, '/assets/%2e%2e%2findex.html');
       expect(response.status).toBe(400);
       expect(response.body).toBe('Bad request');
     });
@@ -202,10 +226,7 @@ describe('web http rpc', () => {
       });
       await server.listen();
 
-      const response = await rawGet(
-        server.url,
-        '/assets/sub/../../index.html',
-      );
+      const response = await rawGet(server.url, '/assets/sub/../../index.html');
       expect(response.status).toBe(400);
     });
 
@@ -533,9 +554,8 @@ describe('web http rpc', () => {
 
       // Use dispatchApiCall directly with a mock caller whose handler returns
       // output that violates the contract schema.
-      const { dispatchApiCall } = await import(
-        '../../src/server/api/dispatch.js'
-      );
+      const { dispatchApiCall } =
+        await import('../../src/server/api/dispatch.js');
       const { ApiError } = await import('../../src/server/api/errors.js');
       const mockCaller = {
         project: {

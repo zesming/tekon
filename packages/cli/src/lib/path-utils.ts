@@ -33,9 +33,7 @@ export function findGitRoot(): string | null {
   }
 }
 
-export function findInitializedRepoRoot(
-  startDir: string,
-): string | null {
+export function findInitializedRepoRoot(startDir: string): string | null {
   return findUp(startDir, (dir) =>
     existsSync(join(dir, '.tekon', 'config.yaml')),
   );
@@ -97,16 +95,30 @@ export function resolveExplicitPath(
   if (inputPath.startsWith('/')) {
     return inputPath;
   }
-  const cwdPath = resolve(process.cwd(), inputPath);
-  if (existsSync(cwdPath)) {
-    return cwdPath;
+  const reference = explicitPathReference(repoPath, inputPath);
+  if (existsSync(reference.cwdCandidate)) {
+    return reference.cwdCandidate;
   }
-  return resolve(repoPath, inputPath);
+  return reference.repoCandidate;
 }
 
-export function listDemandShapeCandidates(
-  repoPath: string,
-): Array<{
+/**
+ * Stable identity of the existing absolute / cwd-first / repo-fallback rule.
+ * Both candidates are bound before any existence check: deleting or creating
+ * a candidate after admission cannot change an accepted request's identity.
+ */
+export function explicitPathReference(repoPath: string, inputPath: string) {
+  // Absolute references are read verbatim: collapsing '..' before traversing
+  // a symlink can name a different file. Preserve the same reference in intent.
+  const absoluteReference = inputPath.startsWith('/') ? inputPath : undefined;
+  return {
+    resolution: 'absolute-or-cwd-existing-then-repo-v1',
+    cwdCandidate: absoluteReference ?? resolve(process.cwd(), inputPath),
+    repoCandidate: absoluteReference ?? resolve(repoPath, inputPath),
+  };
+}
+
+export function listDemandShapeCandidates(repoPath: string): Array<{
   path: string;
   shape: DraftShape;
   mtimeMs: number;

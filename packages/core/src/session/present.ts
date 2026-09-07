@@ -7,8 +7,8 @@ import type {
 /**
  * Present 投影(阶段 1 S6)。
  *
- * 设计权威:`docs/superpowers/plans/2026-08-21-phase1-event-spine-detailed-design.md`
- * §3.2(脱敏与限长)、§0.2-21 / S8(modelVisible 放宽到 1MB)。
+ * 设计权威:`docs/technical/tekon-runtime-contract.md`
+ * §7(Session 观察合同)；具体脱敏和限长规则见下述实现。
  *
  * 职责:把 session_events 行投影为可下发给 UI / 模型的视图——
  * - 递归对 payload 字符串值跑 redactSecrets(C5:永不携带 token/密钥);

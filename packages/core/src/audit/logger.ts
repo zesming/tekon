@@ -17,84 +17,74 @@ export interface AuditLogger {
   ): Promise<{ valid: true } | { valid: false; brokenEventId: string }>;
 }
 
+export function appendAuditEventTxn(
+  db: TekonDatabase,
+  input: {
+    runId: string;
+    type: string;
+    payload: Record<string, unknown>;
+    createdAt?: string;
+  },
+): AuditEvent {
+  if (!db.inTransaction) {
+    throw new Error('AUDIT_TRANSACTION_REQUIRED');
+  }
+  const lastRow = db
+    .prepare(
+      `select hash, created_at from audit_events
+       where run_id = ?
+       order by created_at desc, id desc
+       limit 1`,
+    )
+    .get(input.runId) as
+    | { hash: string; created_at: string }
+    | undefined;
+  const createdAt = nextMonotonicTimestamp(lastRow?.created_at, input.createdAt);
+  const eventWithoutHash = {
+    id: `event_${randomUUID()}`,
+    runId: input.runId,
+    type: input.type,
+    // Hash the persisted JSON value so optional fields cannot break verification.
+    payload: JSON.parse(JSON.stringify(input.payload)) as Record<string, unknown>,
+    prevHash: lastRow?.hash ?? null,
+    createdAt,
+  };
+  const event: AuditEvent = {
+    ...eventWithoutHash,
+    hash: hashEvent(eventWithoutHash),
+  };
+  db.prepare(
+    `insert into audit_events (id, run_id, type, payload, prev_hash, hash, created_at)
+     values (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    event.id,
+    event.runId,
+    event.type,
+    JSON.stringify(event.payload),
+    event.prevHash,
+    event.hash,
+    event.createdAt,
+  );
+  return event;
+}
+
 export function createAuditLogger(options: {
   repositories: TekonRepositories;
   /**
-   * When both `db` and `writeQueue` are provided (web composition root),
-   * append runs read-hash-insert as a single writeQueue task operating on
-   * `db` directly. It must not call `repositories.appendAuditEvent` — that
-   * would enqueue another task on the same serial queue and self-deadlock
-   * (S6/MF4). When omitted, the legacy two-phase path is used (CLI).
+   * Explicit handles must belong to the same database/queue as repositories.
+   * The default construction uses the repositories' shared handles.
    */
   db?: TekonDatabase;
   writeQueue?: WriteQueue;
 }): AuditLogger {
-  const directWrite = options.db !== undefined && options.writeQueue !== undefined;
+  const resolvedDb = options.db ?? options.repositories.getDatabase();
+  const resolvedWriteQueue = options.writeQueue ?? options.repositories.getWriteQueue();
 
   return {
     async append(input) {
-      if (directWrite) {
-        const db = options.db as TekonDatabase;
-        const writeQueue = options.writeQueue as WriteQueue;
-        return writeQueue.enqueue(() => {
-          const lastRow = db
-            .prepare(
-              `select hash, created_at from audit_events
-               where run_id = ?
-               order by created_at desc, id desc
-               limit 1`,
-            )
-            .get(input.runId) as
-            | { hash: string; created_at: string }
-            | undefined;
-          const createdAt =
-            input.createdAt ??
-            nextMonotonicTimestamp(lastRow?.created_at);
-          const eventWithoutHash = {
-            id: `event_${randomUUID()}`,
-            runId: input.runId,
-            type: input.type,
-            payload: input.payload,
-            prevHash: lastRow?.hash ?? null,
-            createdAt,
-          };
-          const event: AuditEvent = {
-            ...eventWithoutHash,
-            hash: hashEvent(eventWithoutHash),
-          };
-          db.prepare(
-            `insert into audit_events (id, run_id, type, payload, prev_hash, hash, created_at)
-             values (?, ?, ?, ?, ?, ?, ?)`,
-          ).run(
-            event.id,
-            event.runId,
-            event.type,
-            JSON.stringify(event.payload),
-            event.prevHash,
-            event.hash,
-            event.createdAt,
-          );
-          return event;
-        });
-      }
-
-      const events = await options.repositories.listAuditEvents(input.runId);
-      const prevHash = events.at(-1)?.hash ?? null;
-      const createdAt =
-        input.createdAt ?? nextMonotonicTimestamp(events.at(-1)?.createdAt);
-      const eventWithoutHash = {
-        id: `event_${randomUUID()}`,
-        runId: input.runId,
-        type: input.type,
-        payload: input.payload,
-        prevHash,
-        createdAt,
-      };
-      const event: AuditEvent = {
-        ...eventWithoutHash,
-        hash: hashEvent(eventWithoutHash),
-      };
-      return options.repositories.appendAuditEvent(event);
+      return resolvedWriteQueue.enqueue(() => resolvedDb.transaction(
+        () => appendAuditEventTxn(resolvedDb, input),
+      ).immediate());
     },
 
     async verify(runId) {
@@ -127,14 +117,13 @@ export function createAuditLogger(options: {
   };
 }
 
-function nextMonotonicTimestamp(previous?: string): string {
-  const now = Date.now();
-  if (!previous) {
-    return new Date(now).toISOString();
+function nextMonotonicTimestamp(previous?: string, requested?: string): string {
+  const requestedMs = requested === undefined ? Date.now() : Date.parse(requested);
+  const previousMs = previous === undefined ? -Infinity : Date.parse(previous);
+  if (!Number.isFinite(requestedMs) || Number.isNaN(previousMs)) {
+    throw new Error('INVALID_AUDIT_TIMESTAMP');
   }
-
-  const previousMs = Date.parse(previous);
-  return new Date(Math.max(now, previousMs + 1)).toISOString();
+  return new Date(Math.max(requestedMs, previousMs + 1)).toISOString();
 }
 
 function hashEvent(event: Omit<AuditEvent, 'hash'>): string {

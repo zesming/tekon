@@ -23,6 +23,16 @@ async function startRun(
   baseUrl: string,
   token: string,
 ): Promise<{ runId: string; sessionId: string }> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'standard-delivery', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   const response = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-session-token': token },
@@ -33,6 +43,7 @@ async function startRun(
         template: 'standard-delivery',
         agent: 'mock',
         token,
+        planDigest: planJson.result.digest,
       },
     }),
   });
@@ -123,7 +134,7 @@ test.describe('mobile layout (390px)', () => {
     await expect(navLink).toBeVisible();
 
     // Tapping the overlay closes the drawer.
-    await page.locator('.nav-overlay').click();
+    await page.locator('.nav-overlay').click({ position: { x: 380, y: 400 } });
     await expect(sidebar).toBeHidden();
     await expect(page.getByRole('button', { name: '打开导航' })).toHaveAttribute(
       'aria-expanded',

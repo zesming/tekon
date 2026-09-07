@@ -20,6 +20,7 @@ import {
   openTekonDatabase,
   type GateEngine,
 } from '../../src/index.js';
+import { validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
 
 describe('workflow engine changes-requested rework e2e', () => {
   const tempDirs: string[] = [];
@@ -44,6 +45,7 @@ describe('workflow engine changes-requested rework e2e', () => {
       const audit = createAuditLogger({ repositories });
       const gateway = createCommandGateway({ repositories });
       const mock = createMockAgentAdapter();
+      let pauseRequested = false;
 
       const observedGateCalls: Array<{
         nodeId: string;
@@ -73,9 +75,11 @@ describe('workflow engine changes-requested rework e2e', () => {
           observedGateCalls,
         ),
         worktreeManager: createWorktreeManager({ repositories, gateway }),
+        isPauseRequested: () => pauseRequested,
+        onNodeCheckpoint: async nodeId => { if (nodeId.endsWith('_reviewer-node')) pauseRequested = true; },
       });
 
-      const result = await engine.startRun({
+      let result = await engine.startRun({
         demandText: 'changes-requested rework 测试',
         mode: 'template',
         workflowSpec: {
@@ -168,6 +172,13 @@ describe('workflow engine changes-requested rework e2e', () => {
         },
       });
 
+      expect(result.workflow.status, JSON.stringify((await repositories.listAuditEvents(result.runId)).filter(event => event.type.endsWith('.error') || event.type.endsWith('.failed')).map(event => event.payload))).toBe('paused');
+      const verified = await validateAndBuildExecutionPlan(result.runId, repositories, audit);
+      expect(verified.phases[0].nodes.map(node => node.id)).toEqual([
+        `${result.runId}_rd-node`, `${result.runId}_rd-node_rework_1`,
+      ]);
+      pauseRequested = false;
+      result = await engine.resumeRun(result.runId);
       // ── Overall: workflow passed ──
       expect(result.workflow.status).toBe('passed');
 
@@ -221,6 +232,12 @@ describe('workflow engine changes-requested rework e2e', () => {
       const leases = await repositories.listWorktreeLeases(result.runId);
       expect(leases.length).toBeGreaterThanOrEqual(2);
       expect(leases.every((lease) => lease.releasedAt)).toBe(true);
+      const reviewerLeases = leases.filter(lease => lease.nodeId === `${result.runId}_reviewer-node`);
+      expect(reviewerLeases).toHaveLength(2);
+      expect(observedGateCalls.filter(call => call.gateType === 'independent-review').map(call => call.cwd))
+        .toEqual(reviewerLeases.map(lease => lease.worktreePath));
+      expect(reviewerLeases.every(lease => lease.worktreePath !== repoPath)).toBe(true);
+
 
       // ── Git delivery branch has the file ──
       expect(
@@ -253,6 +270,11 @@ function createChangesRequestedGateEngine(
 
   return {
     async runGate(input) {
+      if (input.gate.type === 'independent-review') {
+        const lease = (await repositories.listWorktreeLeases(input.runId))
+          .find(lease => lease.nodeId === input.nodeId && lease.worktreePath === input.cwd);
+        expect(lease).toMatchObject({ worktreePath: input.cwd, releasedAt: null });
+      }
       observedCalls.push({
         nodeId: input.nodeId,
         gateType: input.gate.type,
@@ -302,7 +324,7 @@ function createChangesRequestedGateEngine(
 function createGitRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-rework-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });

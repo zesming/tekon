@@ -10,6 +10,16 @@ async function startApprovalRun(
   baseUrl: string,
   token: string,
 ): Promise<{ runId: string; sessionId: string }> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'feature-approval', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   const response = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-session-token': token },
@@ -20,6 +30,7 @@ async function startApprovalRun(
         template: 'feature-approval',
         agent: 'mock',
         token,
+        planDigest: planJson.result.digest,
       },
     }),
   });
@@ -79,13 +90,23 @@ test('inline approval: approve a pending human decision from the session UI', as
     'blocked',
   ]);
 
+  // Phase 4 P1-04: SessionsPage lists the session with a "待审批" action badge.
+  await page.goto(`${server.url}/?approvalList=${Date.now()}`);
+  const sessionItem = page.locator(`a[href="/sessions/${sessionId}"]`);
+  await expect(sessionItem).toBeVisible({ timeout: 15_000 });
+  await expect(
+    sessionItem.locator('.session-list-action-approval'),
+  ).toHaveText('待审批');
+
   await page.goto(`${server.url}/sessions/${sessionId}`);
 
   // Enter the session token in the TopBar (mirrors a real user): this populates
   // AuthContext so the inline approval's body token is set. gate.approve
   // validates the body token server-side (assertSessionToken), so the header
   // monkeypatch alone is not enough for the write.
+  await page.getByRole('button', { name: /连接/ }).click();
   await page.getByLabel('Session token').fill(fixture.sessionToken);
+  await page.getByRole('button', { name: '应用连接' }).click();
 
   // The inline approval card renders (context pulled from gate.list).
   const approvals = page.getByTestId('session-approvals');

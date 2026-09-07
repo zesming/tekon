@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,6 +73,14 @@ export interface WorkflowTemplatePhase {
   dependsOn: string[];
   parallel: boolean;
   nodes: WorkflowTemplateNode[];
+}
+
+
+export interface WorkflowCatalogEntry {
+  id: string;
+  name: string;
+  builtin: boolean;
+  path?: string;
 }
 
 export interface WorkflowTemplate {
@@ -198,6 +206,16 @@ export function loadWorkflowTemplateFile(path: string): WorkflowTemplate {
   return parseWorkflowTemplate(readFileSync(path, 'utf8'));
 }
 
+function parseWorkflowFileEntry(entryName: string): { id: string; ext: string } | null {
+  if (entryName.endsWith('.yaml')) {
+    return { id: entryName.slice(0, -'.yaml'.length), ext: '.yaml' };
+  }
+  if (entryName.endsWith('.yml')) {
+    return { id: entryName.slice(0, -'.yml'.length), ext: '.yml' };
+  }
+  return null;
+}
+
 export function loadWorkflowTemplate(options: {
   name: string;
   workflowsDir?: string;
@@ -205,9 +223,99 @@ export function loadWorkflowTemplate(options: {
   if (!/^[a-zA-Z0-9_-]+$/u.test(options.name)) {
     throw new Error(`invalid workflow template name: ${options.name}`);
   }
+  const dir = getWorkflowsDir(options.workflowsDir);
+  for (const ext of ['.yaml', '.yml']) {
+    const filePath = join(dir, `${options.name}${ext}`);
+    if (existsSync(filePath)) {
+      return loadWorkflowTemplateFile(filePath);
+    }
+  }
   return loadWorkflowTemplateFile(
-    join(getWorkflowsDir(options.workflowsDir), `${options.name}.yaml`),
+    join(dir, `${options.name}.yaml`),
   );
+}
+
+
+export function listWorkflowCatalog(options?: {
+  projectWorkflowsDir?: string;
+}): WorkflowCatalogEntry[] {
+  const catalogMap = new Map<string, WorkflowCatalogEntry>();
+
+  const builtinDir = getWorkflowsDir();
+  if (existsSync(builtinDir)) {
+    try {
+      const entries = readdirSync(builtinDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const parsed = parseWorkflowFileEntry(entry.name);
+        if (!parsed) continue;
+        const { id, ext } = parsed;
+        if (catalogMap.has(id) && ext === '.yml') {
+          continue;
+        }
+        const fullPath = join(builtinDir, entry.name);
+        let name = id;
+        try {
+          const raw = parseYaml(readFileSync(fullPath, 'utf8')) as {
+            name?: unknown;
+          } | null;
+          if (raw && typeof raw.name === 'string' && raw.name.trim().length > 0) {
+            name = raw.name.trim();
+          }
+        } catch {
+          // fallback to id
+        }
+        catalogMap.set(id, {
+          id,
+          name,
+          builtin: true,
+          path: fullPath,
+        });
+      }
+    } catch {
+      // directory read failure ignored
+    }
+  }
+
+  if (options?.projectWorkflowsDir && existsSync(options.projectWorkflowsDir)) {
+    try {
+      const entries = readdirSync(options.projectWorkflowsDir, {
+        withFileTypes: true,
+      });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const parsed = parseWorkflowFileEntry(entry.name);
+        if (!parsed) continue;
+        const { id, ext } = parsed;
+        const existing = catalogMap.get(id);
+        if (existing && !existing.builtin && ext === '.yml') {
+          continue;
+        }
+        const fullPath = join(options.projectWorkflowsDir, entry.name);
+        let name = id;
+        try {
+          const raw = parseYaml(readFileSync(fullPath, 'utf8')) as {
+            name?: unknown;
+          } | null;
+          if (raw && typeof raw.name === 'string' && raw.name.trim().length > 0) {
+            name = raw.name.trim();
+          }
+        } catch {
+          // fallback to id
+        }
+        catalogMap.set(id, {
+          id,
+          name,
+          builtin: false,
+          path: fullPath,
+        });
+      }
+    } catch {
+      // directory read failure ignored
+    }
+  }
+
+  return [...catalogMap.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function loadBuiltInWorkflowTemplate(
@@ -215,6 +323,80 @@ export function loadBuiltInWorkflowTemplate(
   options: { workflowsDir?: string } = {},
 ): WorkflowTemplate {
   return loadWorkflowTemplate({ name: id, workflowsDir: options.workflowsDir });
+}
+
+const normalizedOutputSchema = z.object({
+  id: z.string().min(1),
+  type: artifactTypeSchema,
+}).strict();
+const normalizedGateSchema = z.object({
+  type: gateTypeSchema,
+  gateKey: z.string().min(1).optional(),
+  command: commandInvocationSchema.strict().optional(),
+  commandRef: commandRefSchema.optional(),
+  skipReason: z.string().min(1).optional(),
+  artifactType: artifactTypeSchema.optional(),
+  requiresHumanApproval: z.boolean().default(false),
+  maxRetries: z.number().int().nonnegative().default(0),
+  timeoutMs: z.number().int().positive().optional(),
+  retryPolicy: workflowRetryPolicySchema.strict().default(defaultRetryPolicy),
+  autoFix: z.boolean().optional(),
+  onExhausted: z.enum(['block', 'pause', 'fail']).optional(),
+}).strict();
+const normalizedTemplateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  version: z.number().int().positive(),
+  retryPolicy: workflowRetryPolicySchema.strict(),
+  phases: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    dependsOn: z.array(z.string().min(1)),
+    parallel: z.boolean(),
+    nodes: z.array(z.object({
+      id: z.string().min(1),
+      role: roleSchema,
+      inputs: z.array(normalizedOutputSchema.extend({ fromNodeId: z.string().min(1) })),
+      outputs: z.array(normalizedOutputSchema),
+      gates: z.array(normalizedGateSchema),
+      dependsOn: z.array(z.string().min(1)),
+    }).strict()).min(1),
+  }).strict()).min(1),
+}).strict();
+
+/** 校验已经解析的执行结构，不重新解释 YAML 的 from/artifact 简写。 */
+export function normalizeExecutableTemplate(input: unknown): WorkflowTemplate {
+  const result = normalizedTemplateSchema.safeParse(input);
+  if (!result.success) {
+    const path = result.error.issues[0]?.path.map(String).join('.') ?? 'template';
+    throw new Error(`INVALID_WORKFLOW_TEMPLATE: template.${path}`);
+  }
+  const template = result.data;
+  const phaseIds = new Set<string>();
+  const nodeIds = new Set<string>();
+  const outputs = new Map<string, WorkflowArtifactOutputRef[]>();
+  for (const [phaseIndex, phase] of template.phases.entries()) {
+    if (phaseIds.has(phase.id) || phase.dependsOn.some(id => !phaseIds.has(id))) {
+      throw new Error(`INVALID_WORKFLOW_TEMPLATE: template.phases.${phaseIndex}.dependsOn`);
+    }
+    for (const [nodeIndex, node] of phase.nodes.entries()) {
+      const path = `template.phases.${phaseIndex}.nodes.${nodeIndex}`;
+      if (nodeIds.has(node.id) || node.dependsOn.some(id => !nodeIds.has(id))) {
+        throw new Error(`INVALID_WORKFLOW_TEMPLATE: ${path}.dependsOn`);
+      }
+      if (node.inputs.some(input => !outputs.get(input.fromNodeId)?.some(output => output.type === input.type))) {
+        throw new Error(`INVALID_WORKFLOW_TEMPLATE: ${path}.inputs`);
+      }
+      const effectiveKeys = node.gates.map((gate, index) => gate.gateKey ?? stableGateKey(gate, index));
+      if (new Set(effectiveKeys).size !== effectiveKeys.length) {
+        throw new Error(`INVALID_WORKFLOW_TEMPLATE: ${path}.gates`);
+      }
+      nodeIds.add(node.id);
+      outputs.set(node.id, node.outputs);
+    }
+    phaseIds.add(phase.id);
+  }
+  return template;
 }
 
 function normalizeWorkflowTemplate(

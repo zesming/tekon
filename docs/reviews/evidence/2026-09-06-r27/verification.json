@@ -1,0 +1,370 @@
+{
+  "scope": "Final local command runs; duplicate coverage between root and dedicated e2e commands is not counted as distinct tests. Chromium retries=0. No claim about remote CI or other platforms.",
+  "node": "v22.16.0",
+  "pnpm": "10.12.1",
+  "checks": [
+    {
+      "name": "build",
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "startedAt": "2026-09-07T02:56:32.213789+00:00",
+      "endedAt": "2026-09-07T02:56:37.227999+00:00",
+      "exitCode": 0,
+      "logSha256": "3fef72bc0e79f39d80d78c17de4d53f3c29f3cbff9a6d42de572b3690693e2f1",
+      "summary": []
+    },
+    {
+      "name": "full-test",
+      "command": [
+        "pnpm",
+        "test",
+        "--run"
+      ],
+      "startedAt": "2026-09-07T03:04:23.885082+00:00",
+      "exitCode": 0,
+      "endedAt": "2026-09-07T03:04:49.558480+00:00",
+      "logSha256": "70769a03e4329328d6f52836bc593640ce16c005c4b603a07190ee385631dd10",
+      "summary": [
+        "Test Files  191 passed (191)",
+        "Tests  2176 passed | 1 skipped (2177)",
+        "Duration  24.99s (transform 10.54s, setup 0ms, collect 119.87s, tests 218.20s, environment 39ms, prepare 19.23s)"
+      ]
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "pnpm",
+        "typecheck"
+      ],
+      "startedAt": "2026-09-07T02:57:02.222046+00:00",
+      "endedAt": "2026-09-07T02:57:11.392799+00:00",
+      "exitCode": 0,
+      "logSha256": "24cbf95f2f428570306f13e2d8a6c56dd154b4807b27b3ea3a224885e5bf58f6",
+      "summary": []
+    },
+    {
+      "name": "lint",
+      "command": [
+        "pnpm",
+        "lint"
+      ],
+      "startedAt": "2026-09-07T02:57:11.393146+00:00",
+      "endedAt": "2026-09-07T02:57:20.446854+00:00",
+      "exitCode": 0,
+      "logSha256": "93d5a210d57b3eb5f85c281a47ab8153c331e9ddbdd052b3de017ec5ea3cfc4f",
+      "summary": []
+    },
+    {
+      "name": "core-e2e",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@tekon/core",
+        "test:e2e"
+      ],
+      "startedAt": "2026-09-07T02:57:20.447264+00:00",
+      "endedAt": "2026-09-07T02:57:36.650064+00:00",
+      "exitCode": 0,
+      "logSha256": "41da996d5653f7a7579e2d2590373cb8a3ac198a4ce69e5103a532d449c653fc",
+      "summary": [
+        "Test Files  12 passed (12)",
+        "Tests  65 passed (65)",
+        "Duration  15.54s (transform 1.10s, setup 0ms, collect 8.25s, tests 20.55s, environment 2ms, prepare 1.17s)"
+      ]
+    },
+    {
+      "name": "cli-e2e",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@tekon/cli",
+        "test:e2e"
+      ],
+      "startedAt": "2026-09-07T02:57:36.650413+00:00",
+      "endedAt": "2026-09-07T02:57:58.015141+00:00",
+      "exitCode": 0,
+      "logSha256": "c846cd903f1c35301004e41a208940afe450a997e7788c379d423de3c747a5a2",
+      "summary": [
+        "Test Files  7 passed (7)",
+        "Tests  25 passed (25)",
+        "Duration  15.80s (transform 563ms, setup 0ms, collect 2.78s, tests 40.91s, environment 1ms, prepare 722ms)"
+      ]
+    },
+    {
+      "name": "chromium",
+      "command": [
+        "pnpm",
+        "--filter",
+        "@tekon/web",
+        "exec",
+        "playwright",
+        "test",
+        "--project=chromium",
+        "--retries=0",
+        "--reporter=list,json"
+      ],
+      "startedAt": "2026-09-07T03:05:07.415608+00:00",
+      "exitCode": 0,
+      "endedAt": "2026-09-07T03:10:38.901237+00:00",
+      "logSha256": "21d9f03ff6e8e6320c3bc95c6fad43155af7634f683af3b606810758414b4c08",
+      "summary": [
+        "202 passed (5.5m)"
+      ]
+    }
+  ],
+  "sourceSha256": {
+    "packages/core/src/session/dual-write.ts": "34b86317856fafdb319bd93892676f9c60a271ee7a6c4395dc6a51888fde2696",
+    "packages/core/src/session/present.ts": "68de23ea8325b1203157c1f31607794c792cc77eca5926277ab78979e1c0483a",
+    "packages/core/src/session/session-service.ts": "89e6455b25dc746f0e52b05e0747e446f57ba850d123474d7314f5aed7cc5b2f",
+    "packages/core/src/session/session-store.ts": "76d6d86361dd38dd2d885404156406545f780b60e372bfa449bc4010330148e3",
+    "packages/core/src/types/session-contract.ts": "d4d1d42456a2c36a6943e6e02f0539e5d95264f824b652c01e13bb2541d49f8b",
+    "packages/core/src/workflow/gate-runner.ts": "9fdc8e1f053d8dc06534b5e8be148004ada8b9739be7257f7635172394964664",
+    "packages/core/src/workflow/lease-service.ts": "19f8d22da451473ba978c01015679745284dba0d53dbbb5445e36928feff6003",
+    "packages/core/src/workflow/node-executor.ts": "2e4aea6d6c08f94adc7f5bb041a38aaa8ee512cedb7c0fb7a73011e73583aaea",
+    "packages/core/src/workflow/rework.ts": "8fb2d045d12f2bcebe77ef863de58bad0953db90b95a50337622ff1631d3a24b",
+    "packages/web/src/client/components/approvals/ApprovalSummary.tsx": "be9c98523511453eece5a3526fb213b1b8afe633f9939814f453bab9a3b93713",
+    "packages/web/src/client/components/audit/AuditTimeline.tsx": "9688f125052cfa3b9006335667aa59bb39e13e8dea7f4249d43563ab19ca8474",
+    "packages/web/src/client/components/runs/RunControls.tsx": "fc72719a4302673911261a7e90fd38ce213e810c96dcdf5e2947d0d08bdc3cd1",
+    "packages/web/src/client/hooks/use-evidence-target.ts": "180401634dbbc087b1deaf3900789e25942734384f858031eba898fd5c4d5c2f",
+    "packages/web/src/client/lib/route-paths.ts": "cb6085b7e56e1e6b09ccef5fdbee3d89fd89031beef98fa3679946d3c6f29e29",
+    "packages/web/src/client/pages/run-detail/ArtifactsTab.tsx": "60ded7faa533a47b7748088ca2922f0adf9ef3a3b85c31a1ff64a6eacd7efd6a",
+    "packages/web/src/client/pages/run-detail/AuditTab.tsx": "5279aed8d53a03c526cd2b685c5adae1a7617909c7116479a496dfc9aec5420b",
+    "packages/web/src/client/pages/run-detail/DeliveryTab.tsx": "750d92826e91fb38e22161ecc51afcc0c4910f61dfce5c4d5edd9d03ee853460",
+    "packages/web/src/client/pages/run-detail/GatesTab.tsx": "61317fd59173a4047d83d0676983deab38c687c0a1f66cee6a331e003aa8c50a",
+    "packages/web/src/client/pages/run-detail/OverviewTab.tsx": "30e6b3afba1fc29b32ffca0edd2042041825a645d08972f517cfd6485066f931",
+    "packages/web/src/client/styles/reset.css": "1ba0c33a86ac8a2a4927fbfdb506196360fc8ab0f7927228fda29721d3a80b7f"
+  },
+  "earlierFailures": [
+    {
+      "name": "initial-root-scm-timeout",
+      "outcome": "2128 passed, 1 failed (original 5000ms SCM timeout), 1 opt-in skipped; isolated SCM 18/18; final root must independently pass",
+      "logSha256": "97663bb900ccb56737369201fc5a282001afcd0652c27611edbd91dea847036c",
+      "summary": [
+        "Test Files  1 failed | 189 passed (190)",
+        "Tests  1 failed | 2128 passed | 1 skipped (2130)",
+        "Duration  27.32s (transform 9.86s, setup 0ms, collect 113.19s, tests 192.79s, environment 42ms, prepare 18.68s)"
+      ]
+    },
+    {
+      "name": "root-fixture-audit-regression",
+      "outcome": "2168 passed, 1 failed, 1 opt-in skipped; clean audit correctly included the added fixture lease. Updated the exact expected identities while preserving unchanged-file/database and privacy assertions.",
+      "logSha256": "08f85aa15b886669f7fba042a98c6ddbc9cef4b9e592a0103fc7bedfc407b7b5",
+      "summary": [
+        "Test Files  1 failed | 190 passed (191)",
+        "Tests  1 failed | 2168 passed | 1 skipped (2170)",
+        "Duration  25.35s (transform 9.51s, setup 0ms, collect 113.54s, tests 208.49s, environment 43ms, prepare 18.82s)"
+      ]
+    },
+    {
+      "name": "root-lease-regression",
+      "outcome": "2165 passed, 4 failed, 1 opt-in skipped; rework lease released before Gate and missing physical lease in Web approval fixture; repaired without weakening production guards",
+      "logSha256": "224ab44eb615bceaa14e2a2710b0d07a10ceb60c1810f7a50ddb150d4e04280e",
+      "summary": [
+        "Test Files  3 failed | 188 passed (191)",
+        "Tests  4 failed | 2165 passed | 1 skipped (2170)",
+        "Duration  43.83s (transform 9.90s, setup 0ms, collect 111.83s, tests 251.46s, environment 41ms, prepare 18.67s)"
+      ]
+    },
+    {
+      "name": "chromium-fixture-selector",
+      "outcome": "179 passed, 1 failed; exact Delivery tab selector disambiguated from valid Delivery diff link; URL and content assertions retained",
+      "logSha256": "591cedf23dd8d51022cb6edfc1618342ed8d5d2f11b14ed1bc9b54a9de993c35",
+      "summary": [
+        "179 passed (5.1m)"
+      ]
+    },
+    {
+      "name": "chromium-execution-terminated",
+      "outcome": "Execution process terminated with 143 after 188 passing test reports out of 202; no complete result or cause established; not counted as a passing suite. Complete suite rerun separately.",
+      "logSha256": "fc9afa24f543f5b14e2f7004308523588082557457ac856bb963db220f77dc1c",
+      "summary": []
+    }
+  ],
+  "focusedEvidence": [
+    {
+      "name": "core-red.log",
+      "logSha256": "28f90fb03bfdb155f48451931d9ef120344fbb1816e4f56d83f211a8ecf859fe",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  3 failed | 8 passed (11)",
+        "Duration  1.55s (transform 510ms, setup 0ms, collect 768ms, tests 532ms, environment 0ms, prepare 92ms)"
+      ]
+    },
+    {
+      "name": "core-green.log",
+      "logSha256": "1e8e8147bcdc2313b5ca8dd34521a018a947b188b27665ae1c3a6d173bdbeb60",
+      "summary": [
+        "Test Files  3 passed (3)",
+        "Tests  53 passed (53)",
+        "Duration  1.69s (transform 556ms, setup 0ms, collect 2.28s, tests 1.27s, environment 1ms, prepare 283ms)"
+      ]
+    },
+    {
+      "name": "core-e2e.log",
+      "logSha256": "0f92d53679bb25882c0b04e72424809562141ccc5927511fddeda3b1e69b1b74",
+      "summary": [
+        "Test Files  3 passed (3)",
+        "Tests  20 passed (20)",
+        "Duration  7.05s (transform 559ms, setup 0ms, collect 2.21s, tests 8.11s, environment 1ms, prepare 275ms)"
+      ]
+    },
+    {
+      "name": "web-red.log",
+      "logSha256": "664b59e8166ad5890df9337147bef414b9b761f16e4841aff32d9cc39f24183b",
+      "summary": []
+    },
+    {
+      "name": "web-green.log",
+      "logSha256": "d07fca2219688493b5059acdc6b590590c70105740b6e63c278439c7ae8e7975",
+      "summary": [
+        "12 passed (11.6s)"
+      ]
+    },
+    {
+      "name": "gate-process-red.log",
+      "logSha256": "953b0510035512a670561fa2196ed30deee0c464b3d73725b43ef07e1057cb98",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  3 failed | 6 skipped (9)",
+        "Duration  2.85s (transform 521ms, setup 0ms, collect 765ms, tests 1.83s, environment 0ms, prepare 104ms)"
+      ]
+    },
+    {
+      "name": "gate-boundaries-red.log",
+      "logSha256": "789036e718673d9f57be92005b4d70450d276959f65fcdd69e3a86cede32453f",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  11 failed | 3 passed (14)",
+        "Duration  1.29s (transform 495ms, setup 0ms, collect 735ms, tests 298ms, environment 0ms, prepare 80ms)"
+      ]
+    },
+    {
+      "name": "gate-repair-resume-red.log",
+      "logSha256": "1029e4eb92f159adaec40a5d33e2d281c07e98cb2f20f39fff7786a7b3f85e2f",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  1 failed | 9 skipped (10)",
+        "Duration  2.31s (transform 497ms, setup 0ms, collect 746ms, tests 1.31s, environment 0ms, prepare 73ms)"
+      ]
+    },
+    {
+      "name": "gate-lease-red.log",
+      "logSha256": "3701092bc62ee2fa162db7fcc0f7e4f5c1fb5936746342c3291392fbfafa26cf",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  11 failed | 18 skipped (29)",
+        "Duration  599ms (transform 164ms, setup 0ms, collect 284ms, tests 60ms, environment 0ms, prepare 75ms)"
+      ]
+    },
+    {
+      "name": "gate-combined-boundary-red.log",
+      "logSha256": "8c833809bae4d239b7580e425a545d825ed3af8fde00347b373b6c932663f95b",
+      "summary": [
+        "Test Files  2 failed (2)",
+        "Tests  2 failed | 1 passed | 43 skipped (46)",
+        "Duration  12.47s (transform 554ms, setup 0ms, collect 1.03s, tests 11.51s, environment 0ms, prepare 178ms)"
+      ]
+    },
+    {
+      "name": "gate-combined-boundary-green.log",
+      "logSha256": "e61269864252c2ae95d0cdd1ebf63826ae256cac87eb0601ffa7c2c25873f4ad",
+      "summary": [
+        "Test Files  6 passed (6)",
+        "Tests  82 passed (82)",
+        "Duration  15.48s (transform 936ms, setup 0ms, collect 4.36s, tests 16.03s, environment 1ms, prepare 526ms)"
+      ]
+    },
+    {
+      "name": "gate-web-fixture-green.log",
+      "logSha256": "1489f553efdcaecc8f18f18f0175593b1aad3445528ab576db5b0796ce969579",
+      "summary": [
+        "Test Files  3 passed (3)",
+        "Tests  58 passed (58)",
+        "Duration  14.53s (transform 621ms, setup 0ms, collect 2.38s, tests 15.82s, environment 0ms, prepare 242ms)"
+      ]
+    },
+    {
+      "name": "clean-fixture-green.log",
+      "logSha256": "204596b72464a86fb6878b0f32b77e0628ce59293311820f012191b3d399acb5",
+      "summary": [
+        "Test Files  1 passed (1)",
+        "Tests  6 passed (6)",
+        "Duration  1.36s (transform 463ms, setup 0ms, collect 755ms, tests 364ms, environment 0ms, prepare 78ms)"
+      ]
+    },
+    {
+      "name": "gate-retry-red.log",
+      "logSha256": "bdd89d1c3a2ad80380038b29ab0f840d0e3252828cb6298b93ce0625ecc80fac",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  4 failed | 1 passed | 5 skipped (10)",
+        "Duration  1.57s (transform 492ms, setup 0ms, collect 744ms, tests 574ms, environment 0ms, prepare 76ms)"
+      ]
+    },
+    {
+      "name": "gate-retry-created-red.log",
+      "logSha256": "e4c71ac488aceda272e1e3a1e4a07cdc005deb0b38f4bf771fe8003ea9f206b3",
+      "summary": [
+        "Test Files  1 failed (1)",
+        "Tests  1 failed | 10 skipped (11)",
+        "Duration  1.21s (transform 504ms, setup 0ms, collect 749ms, tests 218ms, environment 0ms, prepare 100ms)"
+      ]
+    },
+    {
+      "name": "gate-retry-checkpoint-green.log",
+      "logSha256": "daa352a60d263f174d4acb4489a645e4b4a38769913f3bb98260ccac47284d07",
+      "summary": [
+        "Test Files  4 passed (4)",
+        "Tests  76 passed (76)",
+        "Duration  15.20s (transform 690ms, setup 0ms, collect 2.53s, tests 15.58s, environment 1ms, prepare 394ms)"
+      ]
+    },
+    {
+      "name": "ui-red-boundaries.log",
+      "logSha256": "62a3d82b6e2ea32d0005d9d21c9f3d6cc8c34aba93135f31493ab646d2b1991a",
+      "summary": [
+        "3 passed (19.0s)"
+      ]
+    },
+    {
+      "name": "ui-green-final.log",
+      "logSha256": "5b38e18290a428dece9bdc8dc538c84382b12080948a3feaa4ee5502d261106c",
+      "summary": [
+        "19 passed (36.7s)"
+      ]
+    },
+    {
+      "name": "ui-green-geometry-final.log",
+      "logSha256": "a9aa55689582c7db4cfc69d5e7b41d43bcbfb0570048cdda91e566e72316542b",
+      "summary": [
+        "7 passed (14.9s)"
+      ]
+    },
+    {
+      "name": "ui-audit-red.log",
+      "logSha256": "d2dc042700c7f24d4c4c95d579bce8dd237a460668382212f6dac275779fe3e4",
+      "summary": []
+    },
+    {
+      "name": "ui-evidence-red.log",
+      "logSha256": "ad1bd2e2df202e0a2426c61c8cca6ccb573d7c59da4cbd8d8917da00c624dfba",
+      "summary": []
+    },
+    {
+      "name": "ui-evidence-green.log",
+      "logSha256": "ce73b368a1d8edf8165b0794fbeb53a7ae4abccf20abdaad1f4570bb021b9be1",
+      "summary": [
+        "35 passed (43.3s)"
+      ]
+    },
+    {
+      "name": "ui-evidence-green-final.log",
+      "logSha256": "b10ced8747e095a06a8c1c0c0bc708f597da6dcd3e8074884b4cf80256287e65",
+      "summary": [
+        "38 passed (44.6s)"
+      ]
+    }
+  ]
+}

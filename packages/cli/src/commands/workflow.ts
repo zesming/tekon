@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 
 import {
   evaluateWorkflowSelection,
+  listWorkflowCatalog,
   loadRepoProfile,
   readDraftShapeFile,
   repoProfileCommandGuidance,
@@ -22,10 +23,8 @@ import {
 } from '../lib/path-utils.js';
 import {
   ensureSafeName,
-  getBuiltInWorkflowsDir,
   getRepoRoot,
   getWorkflowFilePath,
-  listWorkflowNames,
   loadWorkflowByName,
 } from '../lib/utils.js';
 
@@ -104,7 +103,6 @@ export async function commandWorkflow(
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  const builtInWorkflowsDir = getBuiltInWorkflowsDir();
   const projectWorkflowsDir = join(
     repoPath,
     '.tekon',
@@ -112,11 +110,9 @@ export async function commandWorkflow(
   );
 
   if (subcommand === 'list') {
-    const names = new Set([
-      ...listWorkflowNames(builtInWorkflowsDir),
-      ...listWorkflowNames(projectWorkflowsDir),
-    ]);
-    io.stdout.write(`${[...names].sort().join('\n')}\n`);
+    const catalog = listWorkflowCatalog({ projectWorkflowsDir });
+    const ids = catalog.map((entry) => entry.id);
+    io.stdout.write(`${ids.join('\n')}\n`);
     return;
   }
 

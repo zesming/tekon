@@ -48,8 +48,15 @@ export interface HumanGate {
 export function createHumanGate(options: {
   repositories: TekonRepositories;
 }): HumanGate {
+  async function setActiveStatus(runId: string, status: WorkflowStatus, nodeId: string) {
+    const workflow = await options.repositories.updateWorkflowInstanceStatusIfActive(runId, status, nodeId);
+    if (workflow && TERMINAL_WORKFLOW_STATUSES.includes(workflow.status)) {
+      throw new WorkflowTerminalError(runId, workflow.status);
+    }
+  }
   return {
     async requestHumanGate(input) {
+      await assertRunNotTerminal(options.repositories, input.runId);
       const decision = await options.repositories.createHumanDecision({
         id: `decision_${randomUUID()}`,
         runId: input.runId,
@@ -60,7 +67,7 @@ export function createHumanGate(options: {
         createdAt: new Date().toISOString(),
       });
       await options.repositories.transitionNode(input.nodeId, 'paused');
-      await options.repositories.updateWorkflowInstanceStatus(
+      await setActiveStatus(
         input.runId,
         'paused',
         input.nodeId,
@@ -111,7 +118,7 @@ export function createHumanGate(options: {
         });
       }
       await options.repositories.transitionNode(existing.nodeId, 'running');
-      await options.repositories.updateWorkflowInstanceStatus(
+      await setActiveStatus(
         existing.runId,
         'running',
         existing.nodeId,
@@ -151,7 +158,7 @@ export function createHumanGate(options: {
         );
       }
       await options.repositories.transitionNode(existing.nodeId, 'blocked');
-      await options.repositories.updateWorkflowInstanceStatus(
+      await setActiveStatus(
         existing.runId,
         'blocked',
         existing.nodeId,

@@ -1,0 +1,176 @@
+{
+  "method": "Four sequential independent Node processes; each opens and closes the on-disk SQLite database. Production executor/Gateway with real Claude Code.",
+  "result": "passed",
+  "phases": [
+    {
+      "startedAt": "2026-09-06T01:02:10.860Z",
+      "node": "v22.16.0",
+      "providerVersion": "2.1.261 (Claude Code)",
+      "phase": "cancel",
+      "hostPid": 2875795,
+      "checks": [
+        {
+          "runId": "run_e83c8f49-0684-4423-8973-bd6d62df6aef",
+          "jobId": "job_8b1aa07b-7a91-4b72-9c6f-efff9c970843",
+          "pid": 2875832,
+          "hostPid": 2875795,
+          "roleCount": 1,
+          "jobCount": 1,
+          "pidExited": true,
+          "exitEvidence": {
+            "version": 1,
+            "kind": "managed-handles-closed",
+            "observedAt": "2026-09-06T01:02:11.989Z"
+          },
+          "fileStability": {
+            "intervalMs": 1200,
+            "excludes": [
+              ".git",
+              "node_modules",
+              "tekon.sqlite*"
+            ],
+            "before": {
+              "fileCount": 22,
+              "totalBytes": 4195,
+              "sha256": "cef898420be6629e2af2c418fde98d3475bf2260dd417bf4870e010ff43e05eb"
+            },
+            "after": {
+              "fileCount": 22,
+              "totalBytes": 4195,
+              "sha256": "cef898420be6629e2af2c418fde98d3475bf2260dd417bf4870e010ff43e05eb"
+            }
+          }
+        }
+      ],
+      "result": "passed",
+      "finishedAt": "2026-09-06T01:02:13.236Z"
+    },
+    {
+      "startedAt": "2026-09-06T01:02:13.424Z",
+      "node": "v22.16.0",
+      "providerVersion": "2.1.261 (Claude Code)",
+      "phase": "verify-cancel",
+      "hostPid": 2876052,
+      "checks": [
+        {
+          "runId": "run_e83c8f49-0684-4423-8973-bd6d62df6aef",
+          "jobId": "job_8b1aa07b-7a91-4b72-9c6f-efff9c970843",
+          "pid": 2875832,
+          "hostPid": 2875795,
+          "roleCount": 1,
+          "jobCount": 1,
+          "newHostPid": 2876052,
+          "priorHostExited": true,
+          "priorProviderExited": true,
+          "runStatus": "cancelled",
+          "roleCountAfter": 1,
+          "jobCountAfter": 1,
+          "fileStability": {
+            "intervalMs": 1200,
+            "excludes": [
+              ".git",
+              "node_modules",
+              "tekon.sqlite*"
+            ],
+            "before": {
+              "fileCount": 22,
+              "totalBytes": 4195,
+              "sha256": "cef898420be6629e2af2c418fde98d3475bf2260dd417bf4870e010ff43e05eb"
+            },
+            "after": {
+              "fileCount": 22,
+              "totalBytes": 4195,
+              "sha256": "cef898420be6629e2af2c418fde98d3475bf2260dd417bf4870e010ff43e05eb"
+            }
+          }
+        }
+      ],
+      "result": "passed",
+      "finishedAt": "2026-09-06T01:02:16.457Z"
+    },
+    {
+      "startedAt": "2026-09-06T01:02:16.635Z",
+      "node": "v22.16.0",
+      "providerVersion": "2.1.261 (Claude Code)",
+      "phase": "interrupt",
+      "hostPid": 2876105,
+      "checks": [
+        {
+          "runId": "run_d46c486f-e21a-416c-bb9f-8d0ce4051306",
+          "jobId": "job_d4f1eee9-f144-445d-9b6b-df4ed1ca80a4",
+          "pid": 2876130,
+          "hostPid": 2876105,
+          "status": "interrupted",
+          "exitEvidence": {
+            "version": 1,
+            "kind": "managed-handles-closed",
+            "observedAt": "2026-09-06T01:02:22.747Z"
+          },
+          "pidExited": true,
+          "fileStability": {
+            "intervalMs": 1200,
+            "excludes": [
+              ".git",
+              "node_modules",
+              "tekon.sqlite*"
+            ],
+            "before": {
+              "fileCount": 42,
+              "totalBytes": 8339,
+              "sha256": "65311fbd8a527697bf96c56374e59f85e265e0603fca6fda2ee38cfc648f285e"
+            },
+            "after": {
+              "fileCount": 42,
+              "totalBytes": 8339,
+              "sha256": "65311fbd8a527697bf96c56374e59f85e265e0603fca6fda2ee38cfc648f285e"
+            }
+          }
+        }
+      ],
+      "result": "passed",
+      "finishedAt": "2026-09-06T01:02:23.970Z"
+    },
+    {
+      "startedAt": "2026-09-06T01:02:24.160Z",
+      "node": "v22.16.0",
+      "providerVersion": "2.1.261 (Claude Code)",
+      "phase": "resume",
+      "hostPid": 2876524,
+      "checks": [
+        {
+          "runId": "run_d46c486f-e21a-416c-bb9f-8d0ce4051306",
+          "jobId": "job_d4f1eee9-f144-445d-9b6b-df4ed1ca80a4",
+          "pid": 2876130,
+          "hostPid": 2876105,
+          "newHostPid": 2876524,
+          "priorHostExited": true,
+          "resumedJobId": "job_1aba2472-4956-4f04-8584-039d6fd43730",
+          "resumedPid": 2876615,
+          "pidExited": true,
+          "finalRunStatus": "passed",
+          "finalJobStatus": "done",
+          "fileStability": {
+            "intervalMs": 1200,
+            "excludes": [
+              ".git",
+              "node_modules",
+              "tekon.sqlite*"
+            ],
+            "before": {
+              "fileCount": 66,
+              "totalBytes": 15943,
+              "sha256": "1f253720b7b048aed945a8eb484544ce9c1824e97f10f90ac5a102d21aa47fdd"
+            },
+            "after": {
+              "fileCount": 66,
+              "totalBytes": 15943,
+              "sha256": "1f253720b7b048aed945a8eb484544ce9c1824e97f10f90ac5a102d21aa47fdd"
+            }
+          }
+        }
+      ],
+      "result": "passed",
+      "finishedAt": "2026-09-06T01:02:57.225Z"
+    }
+  ]
+}

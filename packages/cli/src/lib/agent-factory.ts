@@ -96,6 +96,9 @@ export function providerRuntimeFromCliOptions(
       values['progress-heartbeat-ms'],
       '--progress-heartbeat-ms',
     ),
+    ...(values['acknowledge-unrestricted-network'] === true
+      ? { acknowledgeUnrestrictedNetwork: true }
+      : {}),
   };
 }
 

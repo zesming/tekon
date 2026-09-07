@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 
 import { useQuery, useAuthScope } from '../../hooks/index.js';
 import { rpc } from '../../lib/rpc-client.js';
@@ -14,6 +14,7 @@ import { EmptyState } from '../../components/ui/EmptyState.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
 import { CheckList } from '../../components/eval/CheckList.js';
 import { buildFailedChecksSummary } from '../../lib/check-labels.js';
+import { evidenceHref } from '../../lib/route-paths.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -226,10 +227,10 @@ export function OverviewTab() {
                     style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
                   >
                     {group.links.map((link, idx) => (
-                      <a
+                      <Link
                         key={idx}
-                        href={link.href}
-                        target="_blank"
+                        to={evidenceHref(runId!, link) ?? link.href}
+                        target={evidenceHref(runId!, link) ? undefined : '_blank'}
                         rel="noopener noreferrer"
                         style={{
                           color: 'var(--accent)',
@@ -239,7 +240,7 @@ export function OverviewTab() {
                         }}
                       >
                         {link.label} →
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 ) : null}

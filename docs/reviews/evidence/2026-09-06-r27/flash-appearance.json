@@ -1,0 +1,29 @@
+{
+  "flash-success-appearance": [
+    {
+      "alpha": 1,
+      "backgroundColor": "rgb(236, 253, 245)",
+      "opacity": "1",
+      "clipped": false,
+      "outsideViewport": false
+    }
+  ],
+  "flash-error-appearance": [
+    {
+      "alpha": 1,
+      "backgroundColor": "rgb(254, 242, 242)",
+      "opacity": "1",
+      "clipped": false,
+      "outsideViewport": false
+    }
+  ],
+  "flash-info-appearance": [
+    {
+      "alpha": 1,
+      "backgroundColor": "rgb(238, 242, 255)",
+      "opacity": "1",
+      "clipped": false,
+      "outsideViewport": false
+    }
+  ]
+}

@@ -8,6 +8,24 @@
 
 const ADV = '/advanced';
 
+/** 将 Core 的证据语义锚点接到当前 Web 路由，不改变 Core 合同。 */
+export function evidenceHref(runId: string, link: { kind: string; href: string }): string | null {
+  const ids = {
+    'audit-event': { prefix: '#audit-', path: routes.audit(runId), query: 'event' },
+    artifact: { prefix: '#artifact-', path: routes.runArtifacts(runId), query: 'artifact' },
+    'gate-log': { prefix: '#gate-log-', path: routes.runGates(runId), query: 'gate' },
+  };
+  const target = ids[link.kind as keyof typeof ids];
+  if (target && link.href.startsWith(target.prefix) && link.href.length > target.prefix.length) {
+    return `${target.path}?${target.query}=${encodeURIComponent(link.href.slice(target.prefix.length))}`;
+  }
+  const sections = { 'pr-body': '#pr-body', 'pr-package': '#pr-package', diff: '#delivery-diff' };
+  if (Object.hasOwn(sections, link.kind) && sections[link.kind as keyof typeof sections] === link.href) {
+    return `${routes.runDelivery(runId)}?section=${link.kind}`;
+  }
+  return null;
+}
+
 export const routes = {
   home: '/',
   sessions: '/',
@@ -44,4 +62,3 @@ export function parseRunId(pathname: string): string | null {
   const match = pathname.match(/\/runs\/([^/]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
-

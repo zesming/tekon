@@ -19,7 +19,10 @@ import { dshHeadlessProviderConfig } from './dsh-headless-adapter.js';
 export type ProviderRuntimeOverrides = Partial<
   Pick<
     AgentAdapterConfig,
-    'timeoutMs' | 'progressHeartbeatMs' | 'noProgressTimeoutMs'
+    | 'timeoutMs'
+    | 'progressHeartbeatMs'
+    | 'noProgressTimeoutMs'
+    | 'acknowledgeUnrestrictedNetwork'
   >
 >;
 
@@ -169,6 +172,9 @@ export function applyProviderRuntimeOverrides(
       runtime?.noProgressTimeoutMs ?? config.noProgressTimeoutMs,
     progressHeartbeatMs:
       runtime?.progressHeartbeatMs ?? config.progressHeartbeatMs,
+    ...(runtime?.acknowledgeUnrestrictedNetwork !== undefined
+      ? { acknowledgeUnrestrictedNetwork: runtime.acknowledgeUnrestrictedNetwork }
+      : {}),
   };
 }
 

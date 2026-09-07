@@ -1,4 +1,5 @@
 import { test, expect } from './shared-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 const MOBILE = { width: 390, height: 844 };
 
@@ -62,7 +63,7 @@ test.describe('mobile navigation accessibility', () => {
         ),
       )
       .toBe(true);
-    await expect(page.getByLabel('Session token')).not.toBeFocused();
+    await expect(credentialStatus(page, 'valid')).not.toBeFocused();
 
     await page.locator('.nav-overlay').click({ position: { x: 380, y: 400 } });
     await expect(sidebar).toBeHidden();

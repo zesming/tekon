@@ -14,8 +14,12 @@ import type {
   SidePanelState,
 } from '../../lib/session-side-panel.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
-import type { DecisionInput, DecisionOutput } from '../../../shared/api-types.js';
+import type { ApiWorkflow, DecisionInput, DecisionOutput } from '../../../shared/api-types.js';
 
+import { useResumeConfirmation } from '../../hooks/use-resume-confirmation.js';
+import { ResumeConfirmation } from '../runs/ResumeConfirmation.js';
+import { approvalFeedback } from '../../lib/approval-feedback.js';
+import { queryCache } from '../../lib/query-cache.js';
 import { RunControls } from '../runs/RunControls.js';
 import { DecisionCard } from '../approvals/DecisionCard.js';
 import { CodeBlock } from '../ui/CodeBlock.js';
@@ -33,18 +37,27 @@ const CARD_LABEL: Record<SidePanelCard['kind'], string> = {
 };
 const DEFAULT_SUPPORTING_CARD_LIMIT = 6;
 
-export function SessionSidePanel({ state }: { state: SidePanelState }) {
+export function SessionSidePanel({ state, recovery, runStatus }: { state: SidePanelState; recovery?: ApiWorkflow['recovery']; runStatus?: string | null }) {
   const scope = useAuthScope();
   const { token } = useSessionToken();
   const flash = useFlash();
   const runId = state.runId;
+  const confirmation = useResumeConfirmation(runId, recovery);
+  const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
   const [showAllCards, setShowAllCards] = useState(false);
 
   // Full decision context (risk, command, approvalSummary) lives in gate.list —
-  // approval/requested only carries ids (S1). Fetch it when an approval pends.
-  // Invalidate the actual gate-results key prefix (queryKeys.gateResults =
-  // "gate.results."), not "gate.list", so a decision refetches the context.
-  const invalidateKeys = ['gate.results.', 'session.list.', 'project.overview'];
+  // approval/requested only carries ids (S1). The event stream or authoritative
+  // Session snapshot decides when to fetch; gate.list remains the authority for
+  // which decisions are currently pending, so a missing best-effort projection
+  // cannot hide an approval and a stale event cannot keep a decided card alive.
+  const invalidateKeys = [
+    'gate.results.',
+    'session.detail.',
+    'session.list.',
+    'project.overview',
+    'review.',
+  ];
   const { data: gateData, refetch } = useQuery<
     RpcProcedureMap['gate.list']['output']
   >(
@@ -56,11 +69,9 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
 
   const approveMutation = useMutation<DecisionInput, DecisionOutput>(
     (input) => rpc.call('gate.approve', input),
-    { invalidateKeys },
   );
   const rejectMutation = useMutation<DecisionInput, DecisionOutput>(
     (input) => rpc.call('gate.reject', input),
-    { invalidateKeys },
   );
   const isPending = approveMutation.isPending || rejectMutation.isPending;
 
@@ -75,36 +86,36 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
         flash.addFlash('error', '请先在顶栏设置会话令牌');
         return;
       }
+      if (verb === 'approved' && confirmation.required && !confirmation.confirmed) return;
       try {
-        await mutation.mutate({
+        const result = await mutation.mutate({
           runId,
           decisionId,
           actor: 'web-user',
           note: note || undefined,
           token,
+          ...(verb === 'approved' ? confirmation.input : {}),
         });
-        flash.addFlash('success', `Decision ${decisionId} ${verb}`);
-        refetch();
+        if (verb === 'approved') {
+          const feedback = approvalFeedback(result);
+          setApprovalNotice(feedback.message);
+          flash.addFlash(feedback.variant, feedback.message);
+        } else flash.addFlash('success', `Decision ${decisionId} ${verb}`);
       } catch (err) {
         flash.addFlash(
           'error',
           `${verb} failed: ${err instanceof Error ? err.message : String(err)}`,
         );
+        setApprovalNotice(err instanceof Error ? err.message : String(err));
+      } finally {
+        confirmation.setConfirmed(false);
+        for (const key of invalidateKeys) queryCache.invalidate(key);
       }
     },
-    [token, runId, flash, refetch],
+    [token, runId, flash, refetch, confirmation, invalidateKeys],
   );
 
-  // Card existence is driven by the derived pending set (stable while the run
-  // is paused), and its rich context is filled from gate.list once loaded.
-  // Deriving existence from gateData alone would unmount/remount the card on a
-  // transient refetch, resetting DecisionForm's two-step state mid-approval.
-  const gateById = new Map(
-    (gateData?.pendingDecisions ?? []).map((d) => [d.id, d]),
-  );
-  const pendingDecisions = state.pendingDecisionIds
-    .map((id) => gateById.get(id))
-    .filter((d): d is NonNullable<typeof d> => Boolean(d));
+  const pendingDecisions = gateData?.pendingDecisions ?? [];
 
   // The inspector should answer "what is true now", not repeat the full feed.
   // Keep terminal results and errors visible, then show only the latest few
@@ -137,20 +148,25 @@ export function SessionSidePanel({ state }: { state: SidePanelState }) {
         <div className="card session-side-controls">
           <div className="card-body">
             <RunControls
+              key={runId}
               runId={runId}
-              status={state.runStatus ?? 'running'}
+              status={runStatus ?? 'unknown'}
+              recovery={recovery}
             />
           </div>
         </div>
       ) : null}
 
+      {approvalNotice && <p className="run-recovery-notice">{approvalNotice}</p>}
       {pendingDecisions.length > 0 ? (
         <div className="session-side-approvals" data-testid="session-approvals">
+          <ResumeConfirmation recovery={recovery} checked={confirmation.confirmed} disabled={isPending} onChange={confirmation.setConfirmed} />
           {pendingDecisions.map((decision) => (
             <DecisionCard
               key={decision.id}
               decision={decision}
               isPending={isPending}
+              approveDisabled={confirmation.required && !confirmation.confirmed}
               onApprove={(id, note) =>
                 decide(approveMutation, 'approved', id, note)
               }

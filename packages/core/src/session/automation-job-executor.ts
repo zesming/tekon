@@ -5,7 +5,11 @@ import { evaluatePrePullRequestReadiness } from '../delivery/pre-pr-readiness.js
 import { redactSecrets } from '../security/secrets.js';
 import type { JobStatus } from '../types/session-contract.js';
 import type { SessionEventBus } from './event-bus.js';
-import type { JobExecutionContext, JobExecutor } from './job-runner.js';
+import {
+  isJobShutdownAbort,
+  type JobExecutionContext,
+  type JobExecutor,
+} from './job-runner.js';
 import type { SessionEventStore } from './session-store.js';
 
 /**
@@ -145,6 +149,9 @@ export function createAutomationJobExecutor(deps: {
             throw new Error(`Unknown automation job kind: ${job.kind}`);
         }
       } catch (error) {
+        if (isJobShutdownAbort(ctx.signal)) {
+          return { status: 'interrupted' as JobStatus };
+        }
         // M1: automation failure is isolated — record + emit, but DO NOT touch
         // workflow/session terminal state. Only the job row settles failed.
         // getRunIdBySessionId is inside the try (S1) so even a store error emits

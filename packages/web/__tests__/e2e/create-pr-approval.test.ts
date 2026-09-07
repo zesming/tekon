@@ -51,6 +51,16 @@ async function startAndPrepareRun(
   baseUrl: string,
   sessionToken: string,
 ): Promise<string> {
+  const planRes = await fetch(`${baseUrl}/api/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: 'workflow.plan',
+      input: { template: 'standard-delivery', agent: 'mock' },
+    }),
+  });
+  const planJson = (await planRes.json()) as { result: { digest: string } };
+
   // 1. Start a run with standard-delivery template (mock agent completes it)
   const runResponse = await fetch(`${baseUrl}/api/rpc`, {
     method: 'POST',
@@ -63,6 +73,7 @@ async function startAndPrepareRun(
         template: 'standard-delivery',
         agent: 'mock',
         token: sessionToken,
+        planDigest: planJson.result.digest,
       },
     }),
   });
@@ -136,7 +147,7 @@ const test = sharedTest.extend<CreatePrFixtures>({
 
   remotePath: async ({}, use) => {
     const remotePath = mkdtempSync(join(tmpdir(), 'tekon-e2e-remote-'));
-    execFileSync('git', ['init', '--bare'], { cwd: remotePath });
+    execFileSync('git', ['init', '--bare', '-b', 'main'], { cwd: remotePath });
     await use(remotePath);
     rmSync(remotePath, { recursive: true, force: true });
   },
@@ -195,7 +206,9 @@ test.describe('Create PR requires explicit confirmation', () => {
     expect(readGhLog(binDir)).toBe('');
 
     // ── 2. Enter the session token ─────────────────────────────────────────
+    await page.getByRole('button', { name: /连接/ }).click();
     await page.getByLabel('Session token').fill(fixture.sessionToken);
+    await page.getByRole('button', { name: '应用连接' }).click();
 
     // ── PROOF 3: After entering token, fake gh still NOT called ────────────
     expect(readGhLog(binDir)).toBe('');

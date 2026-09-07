@@ -19,9 +19,10 @@ import {
   type ApiCaller,
 } from './api/root.js';
 import { ApiError } from './api/errors.js';
+import { webProjectScope } from './api/queries.js';
 import { procedureSpecs, type ProcedureName } from '../shared/rpc-contract.js';
 import { resolveProjectRoot } from './project-context.js';
-import { handleSessionEventsSse } from './sse.js';
+import { handleSessionEventsSse, handleWorkspaceSummarySse } from './sse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -64,6 +65,18 @@ export async function createWebServer(
         response,
         sessionPath,
         sessionId: sseSessionId,
+      });
+      return;
+    }
+
+    const sseWorkspaceId = matchWorkspaceSummaryEventsPath(request.url);
+    if (sseWorkspaceId !== null) {
+      await handleWorkspaceSummarySseRoute({
+        api,
+        request,
+        response,
+        sessionPath,
+        workspaceId: sseWorkspaceId,
       });
       return;
     }
@@ -329,12 +342,94 @@ async function handleSseRoute(input: {
       sessionId: input.sessionId,
       sessions: input.api.sessions,
       bus: input.api.bus,
+      scope: input.api[webProjectScope],
     });
-  } catch {
+  } catch (error) {
     // Headers may already be sent (stream opened); just end the response. If
     // the failure happened before the stream opened (e.g. getSession threw on a
     // db error), surface a 500 rather than a misleading empty 200.
     if (!input.response.headersSent) {
+      if (error instanceof ApiError && error.code === 'NOT_FOUND') {
+        writeJson(input.response, 404, { error: { code: error.code, message: error.message } });
+        return;
+      }
+      input.response.statusCode = 500;
+    }
+    if (!input.response.writableEnded) {
+      input.response.end();
+    }
+  }
+}
+
+
+/**
+ * Match `GET /api/workspaces/:workspaceId/summary/events` and return the decoded
+ * workspaceId, or null when the path/method does not match.
+ */
+function matchWorkspaceSummaryEventsPath(rawUrl: string | undefined): string | null {
+  if (!rawUrl) {
+    return null;
+  }
+  const path = rawUrl.split("?")[0];
+  const match = /^\/api\/workspaces\/([^/]+)\/summary\/events$/.exec(path);
+  if (!match) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function handleWorkspaceSummarySseRoute(input: {
+  api: ApiCaller;
+  request: IncomingMessage;
+  response: ServerResponse;
+  sessionPath: string;
+  workspaceId: string;
+}): Promise<void> {
+  if (input.request.method !== "GET") {
+    writeJson(input.response, 405, {
+      error: { code: "BAD_REQUEST", message: "Only GET is supported" },
+    });
+    return;
+  }
+
+  try {
+    assertRequestAllowed(input.request);
+    const token = input.request.headers["x-session-token"];
+    assertSessionTokenFromFile(
+      input.sessionPath,
+      typeof token === "string" ? token : "",
+    );
+  } catch (error) {
+    const code = error instanceof ApiError ? error.code : "BAD_REQUEST";
+    const status = code === "UNAUTHORIZED" ? 401 : 400;
+    writeJson(input.response, status, {
+      error: {
+        code,
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return;
+  }
+
+  try {
+    await handleWorkspaceSummarySse({
+      request: input.request,
+      response: input.response,
+      workspaceId: input.workspaceId,
+      sessions: input.api.sessions,
+      bus: input.api.bus,
+      scope: input.api[webProjectScope],
+    });
+  } catch (error) {
+    if (!input.response.headersSent) {
+      if (error instanceof ApiError && error.code === 'NOT_FOUND') {
+        writeJson(input.response, 404, { error: { code: error.code, message: error.message } });
+        return;
+      }
       input.response.statusCode = 500;
     }
     if (!input.response.writableEnded) {

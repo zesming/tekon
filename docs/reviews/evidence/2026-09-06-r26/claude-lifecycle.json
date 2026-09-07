@@ -1,0 +1,39 @@
+{
+  "startedAt": "2026-09-06T00:43:21.960Z",
+  "node": "v22.16.0",
+  "providerVersion": "2.1.261 (Claude Code)",
+  "checks": [
+    {
+      "name": "execute-cancel-close-stop-restart",
+      "runId": "run_b8dda95e-8f23-4bbc-89b2-b6844d18407b",
+      "jobId": "job_9e971098-db1a-4eba-a3ab-e897810c9737",
+      "pid": 2791675,
+      "pidExited": true,
+      "exitEvidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-06T00:43:23.085Z"
+      },
+      "restartedRunStatus": "cancelled",
+      "roleCountBefore": 1,
+      "roleCountAfter": 1
+    },
+    {
+      "name": "execute-stop-interrupted-explicit-resume",
+      "runId": "run_96eec270-5453-4322-9c0e-99012a6fa706",
+      "previousJobId": "job_d1c5ff88-cc9e-4f3a-b045-7873e4e7c766",
+      "jobId": "job_103a9bf3-f708-4e8d-9ad8-7da511a06f20",
+      "previousPid": 2793198,
+      "resumedPid": 2794688,
+      "previousExitEvidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-06T00:43:30.989Z"
+      },
+      "finalStatus": "passed",
+      "finalJobStatus": "done"
+    }
+  ],
+  "result": "passed",
+  "finishedAt": "2026-09-06T00:43:44.889Z"
+}

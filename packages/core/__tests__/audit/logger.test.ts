@@ -8,6 +8,22 @@ import {
 } from '../../src/index.js';
 
 describe('audit logger', () => {
+  it('hashes the exact JSON payload that is persisted, including omitted optional fields', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    try {
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories);
+      const logger = createAuditLogger({ repositories });
+      const event = await logger.append({ runId: 'run_1', type: 'run.policy-checked', payload: {
+        optional: undefined, config: { digest: 'bound', optional: undefined }, values: [undefined, 1],
+      } });
+      expect(event.payload).toEqual({ config: { digest: 'bound' }, values: [null, 1] });
+      expect(await repositories.listAuditEvents('run_1')).toEqual([event]);
+      expect(await logger.verify('run_1')).toEqual({ valid: true });
+    } finally { db.close(); }
+  });
+
   it('appends audit events as a hash chain and detects tampering', async () => {
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);

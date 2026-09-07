@@ -1,4 +1,8 @@
 import { test, expect } from './prod-bootstrap-fixture.js';
+import {
+  BUTTON_LABELS,
+  credentialStatus,
+} from './helpers/locators.js';
 
 test('stripping a bootstrap fragment preserves current router history state', async ({
   page,
@@ -24,9 +28,9 @@ test('stripping a bootstrap fragment preserves current router history state', as
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, fixture.sessionToken);
 
-  await expect(page.getByLabel('Session token')).toHaveValue(
-    fixture.sessionToken,
-  );
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(page.url()).not.toContain('token=');
   expect(
     await page.evaluate(
@@ -47,13 +51,13 @@ test('manual token fallback authenticates the first request for the new scope', 
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await page.waitForLoadState('networkidle');
 
   const unauthorized: string[] = [];
   page.on('response', (response) => {
     if (
       (response.url().includes('/api/rpc') ||
-        response.url().includes('/api/sessions')) &&
+        response.url().includes('/api/sessions') ||
+        response.url().includes('/api/workspaces')) &&
       response.status() === 401
     ) {
       unauthorized.push(response.url());
@@ -63,12 +67,16 @@ test('manual token fallback authenticates the first request for the new scope', 
   // TopBar is the documented fallback when a user opened a bare URL. The RPC
   // credential must be updated synchronously before descendant query effects
   // issue the first request for the token-derived auth scope.
+  await credentialStatus(page, 'not-configured').click();
   await page.getByLabel('Session token').fill(fixture.sessionToken);
+  await page.getByRole('button', { name: BUTTON_LABELS.APPLY_CONNECTION }).click();
 
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByText('还没有交付任务')).toBeVisible({
     timeout: 15_000,
   });
-  await page.waitForLoadState('networkidle');
   expect(
     unauthorized,
     `manual token recovery sent an unauthenticated request: ${unauthorized.join(', ')}`,

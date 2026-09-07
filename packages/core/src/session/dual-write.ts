@@ -7,9 +7,8 @@ import type { EventVisibility } from '../types/session-contract.js';
 /**
  * Dual-write 包装器(阶段 1 S6)。
  *
- * 设计权威:`docs/superpowers/plans/2026-08-21-phase1-event-spine-detailed-design.md`
- * §1.2(映射表 + S9 显式不映射清单)、§0.1-2(best-effort,C1 治理零回归)、
- * §2.10(web 组合根接线)。
+ * 设计权威:`docs/technical/tekon-runtime-contract.md`
+ * §1(领域事实与观察投影)、§7(Session 观察合同)。
  *
  * 语义:
  * - 包装器在**原有写入之外**追加一条 session_event(经 SessionEventStore),

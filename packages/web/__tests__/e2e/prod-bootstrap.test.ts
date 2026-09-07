@@ -1,4 +1,5 @@
 import { test, expect } from './prod-bootstrap-fixture.js';
+import { credentialStatus } from './helpers/locators.js';
 
 // F7-P0-01: the production browser bootstrap. `tekon ui` prints a URL with the
 // session token in the fragment (`/#token=<token>`); the client must capture
@@ -22,7 +23,9 @@ test('first paint authenticates from the #token fragment (no manual paste)', asy
   page.on('response', (response) => {
     const url = response.url();
     if (
-      (url.includes('/api/rpc') || url.includes('/api/sessions')) &&
+      (url.includes('/api/rpc') ||
+        url.includes('/api/sessions') ||
+        url.includes('/api/workspaces')) &&
       response.status() === 401
     ) {
       unauthorized.push(url);
@@ -36,16 +39,15 @@ test('first paint authenticates from the #token fragment (no manual paste)', asy
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await page.waitForLoadState('networkidle');
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(unauthorized, `unexpected 401s: ${unauthorized.join(', ')}`).toEqual(
     [],
   );
 
-  // The token was captured into state (the TopBar input is pre-filled) and the
-  // fragment was stripped from the address bar.
-  await expect(page.getByLabel('Session token')).toHaveValue(
-    fixture.sessionToken,
-  );
+  // The token was captured into state (the TopBar reports credentials set) and
+  // the fragment was stripped from the address bar.
   expect(page.url()).not.toContain('token=');
 });
 
@@ -65,24 +67,25 @@ test('the session survives a refresh via sessionStorage', async ({
   // persist from sessionStorage so the entry stays usable.
   const unauthorized: string[] = [];
   page.on('response', (response) => {
+    const url = response.url();
     if (
-      (response.url().includes('/api/rpc') ||
-        response.url().includes('/api/sessions')) &&
+      (url.includes('/api/rpc') ||
+        url.includes('/api/sessions') ||
+        url.includes('/api/workspaces')) &&
       response.status() === 401
     ) {
-      unauthorized.push(response.url());
+      unauthorized.push(url);
     }
   });
   await page.reload();
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await page.waitForLoadState('networkidle');
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(unauthorized, `401s after refresh: ${unauthorized.join(', ')}`).toEqual(
     [],
-  );
-  await expect(page.getByLabel('Session token')).toHaveValue(
-    fixture.sessionToken,
   );
 });
 
@@ -111,10 +114,11 @@ test('the token is never sent to the server in a request URL or Referer', async 
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await page.waitForLoadState('networkidle');
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(leaks, `token leaked to server: ${leaks.join(', ')}`).toEqual([]);
 });
-
 
 test('an already-open tab accepts a fresh #token fragment without reloading', async ({
   page,
@@ -127,7 +131,9 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
   await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByLabel('Session token')).toHaveValue('');
+  await expect(credentialStatus(page, 'not-configured')).toBeVisible({
+    timeout: 15_000,
+  });
 
   await page.evaluate(() => {
     (window as Window & { __tekonBootstrapMarker?: string })
@@ -138,9 +144,9 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
     window.location.hash = new URLSearchParams({ token }).toString();
   }, fixture.sessionToken);
 
-  await expect(page.getByLabel('Session token')).toHaveValue(
-    fixture.sessionToken,
-  );
+  await expect(credentialStatus(page, 'valid')).toBeVisible({
+    timeout: 15_000,
+  });
   expect(page.url()).not.toContain('token=');
   expect(
     await page.evaluate(
@@ -154,19 +160,21 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
   page.on('response', (response) => {
     if (
       (response.url().includes('/api/rpc') ||
-        response.url().includes('/api/sessions')) &&
+        response.url().includes('/api/sessions') ||
+        response.url().includes('/api/workspaces')) &&
       response.status() === 401
     ) {
       unauthorized.push(response.url());
     }
   });
 
-  const refreshed = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/rpc') && response.status() === 200,
-  );
-  await page.getByRole('button', { name: /刷新/ }).click();
-  await refreshed;
+  await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/rpc') && response.status() === 200 &&
+      response.request().postDataJSON()?.path === 'session.list',
+    ),
+    page.getByRole('button', { name: '↻ 刷新', exact: true }).click(),
+  ]);
   expect(
     unauthorized,
     `401s after same-document bootstrap: ${unauthorized.join(', ')}`,

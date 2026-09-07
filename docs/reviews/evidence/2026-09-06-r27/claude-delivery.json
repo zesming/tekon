@@ -1,0 +1,467 @@
+{
+  "startedAt": "2026-09-07T03:00:20.418Z",
+  "endedAt": "2026-09-07T03:01:21.970Z",
+  "providerVersion": "2.1.263 (Claude Code)",
+  "testedSourceSha256": {
+    "packages/core/src/session/session-service.ts": "89e6455b25dc746f0e52b05e0747e446f57ba850d123474d7314f5aed7cc5b2f",
+    "packages/core/src/session/session-store.ts": "76d6d86361dd38dd2d885404156406545f780b60e372bfa449bc4010330148e3",
+    "packages/core/src/workflow/gate-runner.ts": "9fdc8e1f053d8dc06534b5e8be148004ada8b9739be7257f7635172394964664",
+    "packages/core/src/workflow/lease-service.ts": "19f8d22da451473ba978c01015679745284dba0d53dbbb5445e36928feff6003",
+    "packages/core/src/workflow/node-executor.ts": "2e4aea6d6c08f94adc7f5bb041a38aaa8ee512cedb7c0fb7a73011e73583aaea",
+    "packages/core/src/workflow/rework.ts": "8fb2d045d12f2bcebe77ef863de58bad0953db90b95a50337622ff1631d3a24b"
+  },
+  "first": {
+    "hostPid": 3810931,
+    "run": {
+      "requestId": "88878b49-ce45-47f5-a832-09720c745d98",
+      "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+      "sessionId": "sess_5d90745f-eea5-4257-92f5-054d6c2ed5f5",
+      "jobId": "job_2366efae-820e-41ca-a042-eeefccd17a34",
+      "workflow": {
+        "id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "projectId": "project_c718c0dc-128d-4b70-af92-85dacba449f3",
+        "demandId": "demand_ebc0f27e-392f-4c90-bb6e-9534409561ab",
+        "status": "running",
+        "kind": "workflow",
+        "allowDirtyBase": false,
+        "planSnapshot": "{\"agent\":\"claude-code\",\"digest\":\"9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad\",\"digestVersion\":3,\"gates\":[{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":120000,\"type\":\"build\"},{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":15000,\"type\":\"test\"}],\"mode\":\"workflow\",\"phases\":[{\"id\":\"implementation\",\"name\":\"Implementation\",\"nodeIds\":[\"fix-add\"],\"parallel\":false}],\"profile\":\"human-web\",\"repoCommands\":[],\"requiresUnrestrictedNetwork\":false,\"roleChain\":[\"rd\"],\"template\":{\"id\":\"r27-real-delivery\",\"name\":\"R27 real build and recovery\",\"phases\":[{\"dependsOn\":[],\"id\":\"implementation\",\"name\":\"Implementation\",\"nodes\":[{\"dependsOn\":[],\"gates\":[{\"command\":{\"args\":[\"run\",\"build\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":120000,\"type\":\"build\"},{\"command\":{\"args\":[\"test\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":15000,\"type\":\"test\"}],\"id\":\"fix-add\",\"inputs\":[],\"outputs\":[{\"id\":\"changes\",\"type\":\"code-changes\"},{\"id\":\"delivery\",\"type\":\"delivery-package\"}],\"role\":\"rd\"}],\"parallel\":false}],\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"version\":1},\"templateId\":\"r27-real-delivery\",\"templateVersion\":1}",
+        "planDigest": "9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad",
+        "currentNodeId": null,
+        "createdAt": "2026-09-07T03:00:20.626Z",
+        "updatedAt": "2026-09-07T03:00:20.626Z"
+      },
+      "replayed": false,
+      "admissionState": "ready"
+    },
+    "workflow": {
+      "id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+      "projectId": "project_c718c0dc-128d-4b70-af92-85dacba449f3",
+      "demandId": "demand_ebc0f27e-392f-4c90-bb6e-9534409561ab",
+      "status": "interrupted",
+      "kind": "workflow",
+      "allowDirtyBase": false,
+      "planSnapshot": "{\"agent\":\"claude-code\",\"digest\":\"9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad\",\"digestVersion\":3,\"gates\":[{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":120000,\"type\":\"build\"},{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":15000,\"type\":\"test\"}],\"mode\":\"workflow\",\"phases\":[{\"id\":\"implementation\",\"name\":\"Implementation\",\"nodeIds\":[\"fix-add\"],\"parallel\":false}],\"profile\":\"human-web\",\"repoCommands\":[],\"requiresUnrestrictedNetwork\":false,\"roleChain\":[\"rd\"],\"template\":{\"id\":\"r27-real-delivery\",\"name\":\"R27 real build and recovery\",\"phases\":[{\"dependsOn\":[],\"id\":\"implementation\",\"name\":\"Implementation\",\"nodes\":[{\"dependsOn\":[],\"gates\":[{\"command\":{\"args\":[\"run\",\"build\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":120000,\"type\":\"build\"},{\"command\":{\"args\":[\"test\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":15000,\"type\":\"test\"}],\"id\":\"fix-add\",\"inputs\":[],\"outputs\":[{\"id\":\"changes\",\"type\":\"code-changes\"},{\"id\":\"delivery\",\"type\":\"delivery-package\"}],\"role\":\"rd\"}],\"parallel\":false}],\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"version\":1},\"templateId\":\"r27-real-delivery\",\"templateVersion\":1}",
+      "planDigest": "9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad",
+      "currentNodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+      "createdAt": "2026-09-07T03:00:20.626Z",
+      "updatedAt": "2026-09-07T03:01:19.500Z"
+    },
+    "nodes": [
+      {
+        "id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "phaseId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_implementation",
+        "role": "rd",
+        "status": "awaiting-gate",
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "changes",
+            "type": "code-changes"
+          },
+          {
+            "id": "delivery",
+            "type": "delivery-package"
+          }
+        ],
+        "gates": [
+          {
+            "type": "build",
+            "gateKey": "00:build",
+            "command": {
+              "tool": "npm",
+              "args": [
+                "run",
+                "build"
+              ]
+            },
+            "requiresHumanApproval": false,
+            "maxRetries": 0,
+            "timeoutMs": 120000,
+            "retryPolicy": {
+              "maxAttempts": 1,
+              "maxRetries": 0,
+              "backoffMs": 0,
+              "strategy": "fixed",
+              "onExhausted": "block"
+            }
+          },
+          {
+            "type": "test",
+            "gateKey": "01:test",
+            "command": {
+              "tool": "npm",
+              "args": [
+                "test"
+              ]
+            },
+            "requiresHumanApproval": false,
+            "maxRetries": 0,
+            "timeoutMs": 15000,
+            "retryPolicy": {
+              "maxAttempts": 1,
+              "maxRetries": 0,
+              "backoffMs": 0,
+              "strategy": "fixed",
+              "onExhausted": "block"
+            }
+          }
+        ],
+        "dependencies": [],
+        "order": 0,
+        "createdAt": "2026-09-07T03:00:20.626Z",
+        "updatedAt": "2026-09-07T03:01:19.315Z"
+      }
+    ],
+    "job": {
+      "id": "job_2366efae-820e-41ca-a042-eeefccd17a34",
+      "sessionId": "sess_5d90745f-eea5-4257-92f5-054d6c2ed5f5",
+      "kind": "workflow-run",
+      "status": "interrupted",
+      "owner": "web-3810931-7ced330c",
+      "lease": "2026-09-07T03:01:19.443Z",
+      "abortState": "stopped",
+      "checkpoint": null,
+      "exitEvidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-07T03:01:19.500Z"
+      },
+      "createdAt": "2026-09-07T03:00:20.626Z",
+      "updatedAt": "2026-09-07T03:01:19.500Z"
+    },
+    "artifacts": [
+      {
+        "id": "artifact_f9dda07c-cf2d-42ea-8095-04f746bf720c",
+        "type": "code-changes",
+        "version": 1,
+        "path": ".tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/artifacts/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add/code-changes.v1.md",
+        "sha256": "394c0b5d1ba725536dee3c7fe6514c2b0d908acde5821522e30d8cf173e4a78e",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "sizeBytes": 1213,
+        "summary": "src/add.ts: add(a, b) now returns a + b instead of a - b; no other files changed.",
+        "createdAt": "2026-09-07T03:01:19.313Z"
+      },
+      {
+        "id": "artifact_bb325bbf-28fd-4a28-a640-081c0da73203",
+        "type": "delivery-package",
+        "version": 1,
+        "path": ".tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/artifacts/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add/delivery-package.v1.md",
+        "sha256": "37abe4d70343f97b4458dd69908fbfa103e832179b75199b2d70da784daeb8bf",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "sizeBytes": 1229,
+        "summary": "Delivery package for the add() addition fix: scope, acceptance criteria, gate evidence, and rollback.",
+        "createdAt": "2026-09-07T03:01:19.314Z"
+      }
+    ],
+    "artifactHashes": [
+      {
+        "id": "artifact_bb325bbf-28fd-4a28-a640-081c0da73203",
+        "type": "delivery-package",
+        "sha256": "37abe4d70343f97b4458dd69908fbfa103e832179b75199b2d70da784daeb8bf"
+      },
+      {
+        "id": "artifact_f9dda07c-cf2d-42ea-8095-04f746bf720c",
+        "type": "code-changes",
+        "sha256": "394c0b5d1ba725536dee3c7fe6514c2b0d908acde5821522e30d8cf173e4a78e"
+      }
+    ],
+    "roles": [
+      {
+        "id": "role_run_3d6870d2-70b6-487d-8ff0-881aaee76ebe",
+        "run_id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "node_id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "role": "rd",
+        "status": "passed",
+        "started_at": "2026-09-07T03:00:20.642Z",
+        "completed_at": "2026-09-07T03:01:19.315Z",
+        "interrupted_at": null
+      }
+    ],
+    "build": {
+      "pid": 3816301,
+      "cwd": "<isolated-repo>/.tekon/worktrees/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa"
+    },
+    "worktree": {
+      "protectedFiles": {
+        "build.cjs": "f816eea4419eb3dd6b2a944db49aa11ea9a09767fd885ade18ef903b78c4c235",
+        "test.cjs": "bf5059bea0ca622e0f149f37fad9deb227cae744a86b2c371d89cfcf4cb0e9e4",
+        "package.json": "d009742fb90507f53a7babe8240fda795fe41b76da465b28ef5539954f9f064a"
+      },
+      "diff": "diff --git a/src/add.ts b/src/add.ts\nindex dd76e0b..532d47f 100644\n--- a/src/add.ts\n+++ b/src/add.ts\n@@ -1 +1 @@\n-export function add(a: number, b: number): number { return a - b; }\n+export function add(a: number, b: number): number { return a + b; }",
+      "sourceHash": "b13498489d597dfeb549016931fa73ae401e42b5e754a7cc7a33e0196e9e401d"
+    },
+    "leases": [
+      {
+        "id": "lease_0dadfc77-169d-4c90-968e-256a21d01a13",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "role": "rd",
+        "repoPath": "<isolated-repo>",
+        "worktreePath": "<isolated-repo>/.tekon/worktrees/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa",
+        "branchName": "tekon/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa",
+        "baseHead": "0254eee6bcf202650827d8086242f2e733d07954",
+        "createdAt": "2026-09-07T03:00:20.670Z",
+        "releasedAt": null
+      }
+    ],
+    "gates": [
+      {
+        "id": "gate_92a3ae24-5ed3-4e22-bd34-5322ef5d840e",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "gateType": "build",
+        "gateKey": "00:build",
+        "status": "failed",
+        "outputPath": "<isolated-repo>/.tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/gates/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-00-build.log",
+        "durationMs": 182,
+        "retries": 0,
+        "fixAttemptId": null,
+        "failureClassification": "exit-code",
+        "createdAt": "2026-09-07T03:01:19.498Z"
+      }
+    ],
+    "oldBuildExited": true
+  },
+  "final": {
+    "hostPid": 3816312,
+    "resumed": {
+      "outcome": "enqueued",
+      "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+      "sessionId": "sess_5d90745f-eea5-4257-92f5-054d6c2ed5f5",
+      "jobId": "job_e2f7e690-1c05-4a74-9252-99fb0de0686c"
+    },
+    "job": {
+      "id": "job_e2f7e690-1c05-4a74-9252-99fb0de0686c",
+      "sessionId": "sess_5d90745f-eea5-4257-92f5-054d6c2ed5f5",
+      "kind": "workflow-resume",
+      "status": "done",
+      "owner": "web-3816312-be412fbe",
+      "lease": "2026-09-07T03:01:21.723Z",
+      "abortState": "stopped",
+      "checkpoint": "node:run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+      "exitEvidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-07T03:01:21.907Z"
+      },
+      "createdAt": "2026-09-07T03:01:19.719Z",
+      "updatedAt": "2026-09-07T03:01:21.907Z"
+    },
+    "roles": [
+      {
+        "id": "role_run_3d6870d2-70b6-487d-8ff0-881aaee76ebe",
+        "run_id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "node_id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "role": "rd",
+        "status": "passed",
+        "started_at": "2026-09-07T03:00:20.642Z",
+        "completed_at": "2026-09-07T03:01:19.315Z",
+        "interrupted_at": null
+      }
+    ],
+    "artifacts": [
+      {
+        "id": "artifact_f9dda07c-cf2d-42ea-8095-04f746bf720c",
+        "type": "code-changes",
+        "version": 1,
+        "path": ".tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/artifacts/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add/code-changes.v1.md",
+        "sha256": "394c0b5d1ba725536dee3c7fe6514c2b0d908acde5821522e30d8cf173e4a78e",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "sizeBytes": 1213,
+        "summary": "src/add.ts: add(a, b) now returns a + b instead of a - b; no other files changed.",
+        "createdAt": "2026-09-07T03:01:19.313Z"
+      },
+      {
+        "id": "artifact_bb325bbf-28fd-4a28-a640-081c0da73203",
+        "type": "delivery-package",
+        "version": 1,
+        "path": ".tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/artifacts/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add/delivery-package.v1.md",
+        "sha256": "37abe4d70343f97b4458dd69908fbfa103e832179b75199b2d70da784daeb8bf",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "sizeBytes": 1229,
+        "summary": "Delivery package for the add() addition fix: scope, acceptance criteria, gate evidence, and rollback.",
+        "createdAt": "2026-09-07T03:01:19.314Z"
+      }
+    ],
+    "artifactHashes": [
+      {
+        "id": "artifact_bb325bbf-28fd-4a28-a640-081c0da73203",
+        "type": "delivery-package",
+        "sha256": "37abe4d70343f97b4458dd69908fbfa103e832179b75199b2d70da784daeb8bf"
+      },
+      {
+        "id": "artifact_f9dda07c-cf2d-42ea-8095-04f746bf720c",
+        "type": "code-changes",
+        "sha256": "394c0b5d1ba725536dee3c7fe6514c2b0d908acde5821522e30d8cf173e4a78e"
+      }
+    ],
+    "leases": [
+      {
+        "id": "lease_0dadfc77-169d-4c90-968e-256a21d01a13",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "role": "rd",
+        "repoPath": "<isolated-repo>",
+        "worktreePath": "<isolated-repo>/.tekon/worktrees/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa",
+        "branchName": "tekon/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa",
+        "baseHead": "0254eee6bcf202650827d8086242f2e733d07954",
+        "createdAt": "2026-09-07T03:00:20.670Z",
+        "releasedAt": "2026-09-07T03:01:21.903Z"
+      }
+    ],
+    "worktree": {
+      "commit": "f7ac4b79968e44eb44e906be010e5566fd8f8a10",
+      "protectedFiles": {
+        "build.cjs": "f816eea4419eb3dd6b2a944db49aa11ea9a09767fd885ade18ef903b78c4c235",
+        "test.cjs": "bf5059bea0ca622e0f149f37fad9deb227cae744a86b2c371d89cfcf4cb0e9e4",
+        "package.json": "d009742fb90507f53a7babe8240fda795fe41b76da465b28ef5539954f9f064a"
+      },
+      "sourceHash": "b13498489d597dfeb549016931fa73ae401e42b5e754a7cc7a33e0196e9e401d",
+      "diff": "diff --git a/src/add.ts b/src/add.ts\nindex dd76e0b..532d47f 100644\n--- a/src/add.ts\n+++ b/src/add.ts\n@@ -1 +1 @@\n-export function add(a: number, b: number): number { return a - b; }\n+export function add(a: number, b: number): number { return a + b; }",
+      "released": true
+    },
+    "gates": [
+      {
+        "id": "gate_92a3ae24-5ed3-4e22-bd34-5322ef5d840e",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "gateType": "build",
+        "gateKey": "00:build",
+        "status": "failed",
+        "outputPath": "<isolated-repo>/.tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/gates/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-00-build.log",
+        "durationMs": 182,
+        "retries": 0,
+        "fixAttemptId": null,
+        "failureClassification": "exit-code",
+        "createdAt": "2026-09-07T03:01:19.498Z"
+      },
+      {
+        "id": "gate_b53e5c18-8908-45e4-899b-481755a1954e",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "gateType": "build",
+        "gateKey": "00:build",
+        "status": "passed",
+        "outputPath": "<isolated-repo>/.tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/gates/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-00-build.log",
+        "durationMs": 2018,
+        "retries": 0,
+        "fixAttemptId": null,
+        "failureClassification": null,
+        "createdAt": "2026-09-07T03:01:21.758Z"
+      },
+      {
+        "id": "gate_90678f2d-5512-465e-90f5-a43e7cccf069",
+        "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+        "nodeId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add",
+        "gateType": "test",
+        "gateKey": "01:test",
+        "status": "passed",
+        "outputPath": "<isolated-repo>/.tekon/runs/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/gates/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-01-test.log",
+        "durationMs": 113,
+        "retries": 0,
+        "fixAttemptId": null,
+        "failureClassification": null,
+        "createdAt": "2026-09-07T03:01:21.872Z"
+      }
+    ],
+    "audit": {
+      "valid": true
+    },
+    "evaluation": {
+      "runId": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+      "ready": false,
+      "score": 0.45454545454545453,
+      "checks": [
+        {
+          "id": "workflow-passed",
+          "severity": "required",
+          "passed": true,
+          "evidence": "workflow status is passed"
+        },
+        {
+          "id": "audit-valid",
+          "severity": "required",
+          "passed": true,
+          "evidence": "audit hash chain is valid"
+        },
+        {
+          "id": "validation-gates-passed",
+          "severity": "required",
+          "passed": true,
+          "evidence": "2/2 validation gates passed or explicitly skipped"
+        },
+        {
+          "id": "delivery-package-present",
+          "severity": "required",
+          "passed": true,
+          "evidence": "1 delivery-package artifacts"
+        },
+        {
+          "id": "pr-prepared",
+          "severity": "required",
+          "passed": false,
+          "evidence": "PR preparation event missing"
+        },
+        {
+          "id": "no-pending-human-gates",
+          "severity": "required",
+          "passed": true,
+          "evidence": "0 pending human decisions"
+        },
+        {
+          "id": "acceptance-criteria-evidenced",
+          "severity": "required",
+          "passed": false,
+          "evidence": "0/0 acceptance criteria evidenced"
+        },
+        {
+          "id": "qa-release-signoff-passed",
+          "severity": "required",
+          "passed": false,
+          "evidence": "QA release signoff missing"
+        },
+        {
+          "id": "security-scans-passed",
+          "severity": "required",
+          "passed": false,
+          "evidence": "0/0 security scans passed"
+        },
+        {
+          "id": "pr-created",
+          "severity": "required",
+          "passed": false,
+          "evidence": "PR status is not-created"
+        },
+        {
+          "id": "remote-ci-passed",
+          "severity": "required",
+          "passed": false,
+          "evidence": "remote CI status not checked"
+        }
+      ]
+    },
+    "build": {
+      "cwd": "<isolated-repo>/.tekon/worktrees/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef/run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef_fix-add-rd-lease-5eadac39-43da-4dd4-b008-5a7b31a5a1fa",
+      "result": 5
+    },
+    "workflow": {
+      "id": "run_17ac4d83-7e8a-45a2-bf5a-2fc72f5822ef",
+      "projectId": "project_c718c0dc-128d-4b70-af92-85dacba449f3",
+      "demandId": "demand_ebc0f27e-392f-4c90-bb6e-9534409561ab",
+      "status": "passed",
+      "kind": "workflow",
+      "allowDirtyBase": false,
+      "planSnapshot": "{\"agent\":\"claude-code\",\"digest\":\"9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad\",\"digestVersion\":3,\"gates\":[{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":120000,\"type\":\"build\"},{\"nodeId\":\"fix-add\",\"requiresHumanApproval\":false,\"role\":\"rd\",\"timeoutMs\":15000,\"type\":\"test\"}],\"mode\":\"workflow\",\"phases\":[{\"id\":\"implementation\",\"name\":\"Implementation\",\"nodeIds\":[\"fix-add\"],\"parallel\":false}],\"profile\":\"human-web\",\"repoCommands\":[],\"requiresUnrestrictedNetwork\":false,\"roleChain\":[\"rd\"],\"template\":{\"id\":\"r27-real-delivery\",\"name\":\"R27 real build and recovery\",\"phases\":[{\"dependsOn\":[],\"id\":\"implementation\",\"name\":\"Implementation\",\"nodes\":[{\"dependsOn\":[],\"gates\":[{\"command\":{\"args\":[\"run\",\"build\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":120000,\"type\":\"build\"},{\"command\":{\"args\":[\"test\"],\"tool\":\"npm\"},\"maxRetries\":0,\"requiresHumanApproval\":false,\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"maxRetries\":0,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"timeoutMs\":15000,\"type\":\"test\"}],\"id\":\"fix-add\",\"inputs\":[],\"outputs\":[{\"id\":\"changes\",\"type\":\"code-changes\"},{\"id\":\"delivery\",\"type\":\"delivery-package\"}],\"role\":\"rd\"}],\"parallel\":false}],\"retryPolicy\":{\"backoffMs\":0,\"maxAttempts\":1,\"onExhausted\":\"block\",\"strategy\":\"fixed\"},\"version\":1},\"templateId\":\"r27-real-delivery\",\"templateVersion\":1}",
+      "planDigest": "9e7806927ebd6ebbf2762fa486f85e3565ff283b32f2ce85df4b2586901cc1ad",
+      "currentNodeId": null,
+      "createdAt": "2026-09-07T03:00:20.626Z",
+      "updatedAt": "2026-09-07T03:01:21.906Z"
+    }
+  },
+  "boundary": "Linux real Claude code edit and artifacts; independent hosts; interrupted controlled waiting before actual TypeScript build; resumed real build/test; no model/Git push/PR during recovery, no full delivery readiness claim."
+}

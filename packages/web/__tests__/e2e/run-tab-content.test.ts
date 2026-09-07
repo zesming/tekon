@@ -55,7 +55,10 @@ test.describe('Run detail tab content', () => {
   test('run detail page shows error for non-existent run', async ({ page, server }) => {
     await page.goto(`${server.url}/advanced/runs/non-existent-run-id`);
 
-    // Error page or error message should be visible
-    await expect(page.getByText(/not found|404|不存在|错误/)).toBeVisible();
+    // Lock the actual API error rather than matching unrelated page text such
+    // as a temporary project path that happens to contain "error".
+    await expect(
+      page.getByText('Run not found: non-existent-run-id', { exact: true }),
+    ).toBeVisible();
   });
 });

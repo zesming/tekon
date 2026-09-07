@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 
 import { useQuery, useAuthScope } from '../../hooks/index.js';
@@ -14,6 +14,7 @@ import { LoadingState } from '../../components/ui/LoadingState.js';
 import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { CodeBlock } from '../../components/ui/CodeBlock.js';
+import { useEvidenceTarget } from '../../hooks/use-evidence-target.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,7 +65,9 @@ export function ArtifactsTab() {
   );
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const selectedArtifactId = searchParams.get('artifact');
+  const [expandedId, setExpandedId] = useState<string | null>(selectedArtifactId);
+  useEffect(() => { setExpandedId(selectedArtifactId); }, [selectedArtifactId]);
   const nodeFilter = searchParams.get('node') ?? '';
   const typeFilter = searchParams.get('type') ?? '';
 
@@ -97,11 +100,12 @@ export function ArtifactsTab() {
 
   // Build a map of artifact id → content preview from review surface
   const contentMap = useMemo(() => {
-    const map = new Map<string, { content: string; truncated: boolean }>();
+    const map = new Map<string, { content: string; truncated: boolean; exists: boolean }>();
     for (const ra of reviewArtifacts) {
       map.set(ra.id, {
         content: ra.content.content,
         truncated: ra.content.truncated,
+        exists: ra.content.exists,
       });
     }
     return map;
@@ -112,6 +116,7 @@ export function ArtifactsTab() {
     () => [...new Set(artifacts.map((a) => a.nodeId))].sort(),
     [artifacts],
   );
+
   const types = useMemo(
     () => [...new Set(artifacts.map((a) => a.type))].sort(),
     [artifacts],
@@ -127,6 +132,12 @@ export function ArtifactsTab() {
       ),
     [artifacts, nodeFilter, typeFilter],
   );
+
+  const targetHidden = !artifactQuery.isLoading && artifacts.some(artifact => artifact.id === selectedArtifactId) &&
+    !filtered.some(artifact => artifact.id === selectedArtifactId);
+  useEvidenceTarget(selectedArtifactId && !targetHidden ? `artifact-${selectedArtifactId}` : null,
+    !artifactQuery.isLoading && !artifactQuery.error && !reviewQuery.isLoading && !reviewQuery.error &&
+      expandedId === selectedArtifactId && filtered.some(artifact => artifact.id === selectedArtifactId), runId);
 
   // ── Loading ──
   if (artifactQuery.isLoading)
@@ -180,6 +191,15 @@ export function ArtifactsTab() {
       </div>
 
       {/* ── Artifact List ── */}
+      {selectedArtifactId && !artifacts.some(artifact => artifact.id === selectedArtifactId) ? (
+        <p role="status">未找到该产物</p>
+      ) : selectedArtifactId && !filtered.some(artifact => artifact.id === selectedArtifactId) ? (
+        <p role="status">目标产物不符合当前筛选条件。{' '}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearchParams(prev => {
+            const next = new URLSearchParams(prev); next.delete('node'); next.delete('type'); return next;
+          })}>清除筛选</button>
+        </p>
+      ) : null}
       {filtered.length === 0 ? (
         <Card>
           <EmptyState
@@ -202,6 +222,7 @@ export function ArtifactsTab() {
                 <div key={artifact.id}>
                   <div
                     className="artifact-item"
+                    id={`artifact-${artifact.id}`}
                     tabIndex={0}
                     role="button"
                     aria-expanded={isExpanded}
@@ -234,7 +255,13 @@ export function ArtifactsTab() {
                         padding: '0 20px 16px 64px',
                       }}
                     >
-                      {preview ? (
+                      {reviewQuery.isLoading ? (
+                        <LoadingState message="加载产物预览中…" />
+                      ) : reviewQuery.error ? (
+                        <ErrorBanner error={reviewQuery.error} onRetry={reviewQuery.refetch} />
+                      ) : preview?.exists === false ? (
+                        <EmptyState message="产物文件不存在" />
+                      ) : preview ? (
                         <CodeBlock
                           content={preview.content}
                           truncated={preview.truncated}

@@ -11,6 +11,7 @@ import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  TESTED_DSH_VERSION,
   buildDshHeadlessCommand,
   createDshHeadlessAdapter,
   dshHeadlessProviderConfig,
@@ -422,7 +423,10 @@ describe('dsh-headless adapter', () => {
     const adapter = createDshHeadlessAdapter(
       { ...ackConfig(repoPath), command: 'dsh', args: [] },
       gateway,
-      { probeVersion: async () => '0.9.9-wrong\n' },
+      {
+        probeVersion: async () => '0.9.9-wrong\n',
+        hostNodeVersion: '22.19.0',
+      },
     );
     await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
       /version mismatch/i,
@@ -447,8 +451,12 @@ describe('dsh-headless adapter', () => {
       gateway,
       {
         probeVersion: async () => '0.9.9-wrong\n',
+        probeHelp: async () => 'usage: print the final assistant message\n',
+        probeConfig: async () =>
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
         allowVersion: '0.9.9-wrong',
         onWarn: (w) => warnings.push(w),
+        hostNodeVersion: '22.19.0',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));
@@ -471,8 +479,12 @@ describe('dsh-headless adapter', () => {
       {
         probeVersion: async () => {
           probeCount += 1;
-          return '0.1.1-rc.2\n';
+          return TESTED_DSH_VERSION + '\n';
         },
+        probeHelp: async () => 'usage: print the final assistant message\n',
+        probeConfig: async () =>
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
+        hostNodeVersion: '22.19.0',
       },
     );
     await adapter.runAgent(baseRunInput(repoPath));
@@ -491,7 +503,7 @@ describe('dsh-headless adapter', () => {
       {
         probeVersion: async () => {
           probeCount += 1;
-          return '0.1.1-rc.2\n';
+          return TESTED_DSH_VERSION + '\n';
         },
       },
     );
@@ -539,5 +551,101 @@ describe('dsh-headless adapter', () => {
     for (const tool of invocations) {
       expect(basename(tool)).not.toBe('dsh');
     }
+  });
+
+  // ── capability preflight gate (P1-DSH-01) ──────────────────────────────
+
+  it('fails closed and rejects runAgent when dsh --profile headless --help misses contract anchor', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-dsh-help-gate-'));
+    tempDirs.push(repoPath);
+    let spawned = false;
+    const gateway: CommandGateway = {
+      async run() {
+        spawned = true;
+        return { status: 'rejected', reason: 'should not reach' };
+      },
+    };
+    const adapter = createDshHeadlessAdapter(
+      { ...ackConfig(repoPath), command: 'dsh', args: [] },
+      gateway,
+      {
+        probeVersion: async () => TESTED_DSH_VERSION + '\n',
+        probeHelp: async () => 'dsh options: --help\n', // missing HEADLESS_HELP_ANCHOR
+        probeConfig: async () =>
+          '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n',
+        hostNodeVersion: '22.19.0',
+      },
+    );
+    await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
+      /stdout contract anchor/i,
+    );
+    expect(spawned).toBe(false);
+  });
+
+  it('fails closed and rejects runAgent when dsh --dump-default-config misses required plugin id', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-dsh-cfg-gate-'));
+    tempDirs.push(repoPath);
+    let spawned = false;
+    const gateway: CommandGateway = {
+      async run() {
+        spawned = true;
+        return { status: 'rejected', reason: 'should not reach' };
+      },
+    };
+    const adapter = createDshHeadlessAdapter(
+      { ...ackConfig(repoPath), command: 'dsh', args: [] },
+      gateway,
+      {
+        probeVersion: async () => TESTED_DSH_VERSION + '\n',
+        probeHelp: async () => 'print the final assistant message\n',
+        probeConfig: async () =>
+          '- id: headless-runner\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n', // missing sandbox-policy only
+        hostNodeVersion: '22.19.0',
+      },
+    );
+    await expect(adapter.runAgent(baseRunInput(repoPath))).rejects.toThrow(
+      /missing the required plugin id 'sandbox-policy'/i,
+    );
+    expect(spawned).toBe(false);
+  });
+
+  it('passes capability preflight when help and config contracts match and runs gate only once (cached)', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-dsh-cap-ok-'));
+    tempDirs.push(repoPath);
+    let versionCount = 0;
+    let helpCount = 0;
+    let configCount = 0;
+    let runCount = 0;
+    const gateway: CommandGateway = {
+      async run() {
+        runCount += 1;
+        return { status: 'rejected', reason: 'stop after gate' };
+      },
+    };
+    const adapter = createDshHeadlessAdapter(
+      { ...ackConfig(repoPath), command: 'dsh', args: [] },
+      gateway,
+      {
+        probeVersion: async () => {
+          versionCount += 1;
+          return TESTED_DSH_VERSION + '\n';
+        },
+        probeHelp: async () => {
+          helpCount += 1;
+          return 'usage: print the final assistant message\n';
+        },
+        probeConfig: async () => {
+          configCount += 1;
+          return '- id: headless-runner\n- id: sandbox-policy\n- id: approval\n- id: session-persistence-jsonl\n- id: agent-default-model\n';
+        },
+        hostNodeVersion: '22.19.0',
+      },
+    );
+    await adapter.runAgent(baseRunInput(repoPath));
+    await adapter.runAgent(baseRunInput(repoPath));
+    expect(runCount).toBe(2);
+    expect(versionCount).toBe(1);
+    expect(helpCount).toBe(1);
+    expect(configCount).toBe(1);
   });
 });

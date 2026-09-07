@@ -9,6 +9,7 @@ import {
   apiHumanDecisionContextSchema,
   apiArtifactSchema,
   apiGateSchema,
+  sessionPresentedEventSchema,
 } from '../../src/shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -178,4 +179,33 @@ describe('strict output schemas — field drift detection', () => {
       ).toThrow();
     },
   );
+  // --- sessionPresentedEventSchema -----------------------------------------
+
+  it("sessionPresentedEventSchema validates full PresentedEvent contract fields", () => {
+    const valid = {
+      seq: 1,
+      type: "turn/start",
+      timestamp: "2026-08-30T00:00:00.000Z",
+      payload: { foo: "bar" },
+      visibility: "model",
+      modelVisible: true,
+      correlationId: "corr-123",
+    };
+    expect(() => sessionPresentedEventSchema.parse(valid)).not.toThrow();
+
+    // correlationId can be null
+    expect(() =>
+      sessionPresentedEventSchema.parse({ ...valid, correlationId: null })
+    ).not.toThrow();
+
+    // Invalid visibility is rejected
+    expect(() =>
+      sessionPresentedEventSchema.parse({ ...valid, visibility: "unknown-vis" })
+    ).toThrow();
+
+    // Missing modelVisible is rejected
+    const { modelVisible, ...missingModelVisible } = valid;
+    expect(() => sessionPresentedEventSchema.parse(missingModelVisible)).toThrow();
+  });
+
 });

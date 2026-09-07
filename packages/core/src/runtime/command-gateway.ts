@@ -63,9 +63,9 @@ export interface CommandGatewayRunInput {
    * 若 spawn 前信号已 aborted，则不起进程，直接返回带 `cancelled: true` 的 rejected 结果。
    */
   signal?: AbortSignal;
-  /** 子进程注册表；与 registryKey 同时传入时，spawn 后注册、settle 时注销。 */
+  /** 子进程注册表；与 registryKey 同时传入时，spawn 后注册、actual close 时注销。 */
   registry?: SubprocessRegistry;
-  /** 注册表 key，通常为 runId（S7：gate 命令与 agent 子进程共用同一 key）。 */
+  /** 注册表 key；生产后台使用 Job ID 隔离执行代次。 */
   registryKey?: string;
 }
 
@@ -416,15 +416,10 @@ async function runProcess(input: {
     let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
     let hardSettleTimeout: ReturnType<typeof setTimeout> | null = null;
     let timeoutReason: 'total' | 'no-progress' | undefined;
+    let noProgressCandidateActivityAt: number | null = null;
+    let abortHandler: (() => void) | null = null;
+    let abortHandled = false;
     const terminationGraceMs = getTerminationGraceMs(input.timeoutMs);
-    if (input.signal) {
-      input.signal.addEventListener('abort', () => {
-        // settle 后不再杀进程，避免 PID 回收误伤无关进程。
-        if (!settled) {
-          killChildProcess(child, 'SIGKILL');
-        }
-      });
-    }
     const recordOutputDirProgress = () => {
       const activity = outputDirMonitor.sample();
       if (activity) {
@@ -467,13 +462,28 @@ async function runProcess(input: {
       ? setInterval(
           () => {
             recordOutputDirProgress();
-            if (
-              input.noProgressTimeoutMs &&
-              Date.now() - progress.lastActivityAt() >=
-                input.noProgressTimeoutMs
-            ) {
-              triggerTimeout('no-progress');
+            if (!input.noProgressTimeoutMs) {
+              return;
             }
+
+            const observedActivityAt = progress.lastActivityAt();
+            if (
+              Date.now() - observedActivityAt < input.noProgressTimeoutMs
+            ) {
+              noProgressCandidateActivityAt = null;
+              return;
+            }
+
+            // Timers and filesystem writes can become runnable in the same
+            // event-loop turn. Require the same inactivity watermark on two
+            // consecutive samples so boundary activity receives one final
+            // observation instead of being falsely labelled as no progress.
+            if (noProgressCandidateActivityAt !== observedActivityAt) {
+              noProgressCandidateActivityAt = observedActivityAt;
+              return;
+            }
+
+            triggerTimeout('no-progress');
           },
           Math.min(input.progressIntervalMs, input.noProgressTimeoutMs),
         )
@@ -487,8 +497,9 @@ async function runProcess(input: {
         return;
       }
       settled = true;
-      if (registryHandle && input.registry && input.registryKey) {
-        input.registry.unregister(input.registryKey, registryHandle);
+      if (input.signal && abortHandler) {
+        input.signal.removeEventListener('abort', abortHandler);
+        abortHandler = null;
       }
       clearInterval(progressInterval);
       if (noProgressInterval) {
@@ -540,6 +551,11 @@ async function runProcess(input: {
       });
     });
     child.once('close', (exitCode, signal) => {
+      if (registryHandle && input.registry && input.registryKey) {
+        input.registry.confirmClosed(input.registryKey, registryHandle);
+        input.registry.unregister(input.registryKey, registryHandle);
+      }
+
       if (input.stdin !== undefined && stdinError) {
         settle({
           status: 'rejected',
@@ -562,6 +578,23 @@ async function runProcess(input: {
     child.stdin.prependListener('error', (error: Error) => {
       stdinError = error;
     });
+    if (input.signal) {
+      abortHandler = () => {
+        if (settled || abortHandled) {
+          return;
+        }
+        abortHandled = true;
+        killChildProcess(child, 'SIGKILL');
+      };
+      input.signal.addEventListener('abort', abortHandler, { once: true });
+      // AbortSignal does not replay an abort that happened between the initial
+      // pre-spawn check and listener registration. Re-check after all child
+      // lifecycle listeners are installed so that narrow window still kills
+      // and settles the spawned process.
+      if (input.signal.aborted) {
+        abortHandler();
+      }
+    }
     if (input.stdin === undefined) {
       child.stdin.end();
     } else {

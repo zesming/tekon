@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { ArtifactType } from '../types/domain.js';
+import type { ArtifactType, AuditEvent } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { AgentAdapter } from '../runtime/agent-adapter.js';
@@ -20,7 +20,7 @@ import type { PromptBuilder } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
-import { isJobCancellationAbort, isJobOwnershipLostAbort } from '../session/job-runner.js';
+import { isJobCancellationAbort, isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
 
 export interface NodeExecutorDeps {
   repositories: TekonRepositories;
@@ -32,9 +32,9 @@ export interface NodeExecutorDeps {
   gateRunner: GateRunner;
   getCheckedTransition(): CheckedTransitionFn;
   /**
-   * S5: job-level abort signal. When aborted, the agent run is short-
-   * circuited and the workflow settles `cancelled` (M2 idempotent) instead
-   * of `interrupted`. Absent = legacy behavior.
+   * Job-level abort signal: user cancellation settles cancelled, shutdown
+   * preserves an interrupted checkpoint, and ownership loss fences writes.
+   * Absent means legacy behavior.
    */
   signal?: AbortSignal;
   /**
@@ -145,15 +145,19 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       });
       return false;
     }
+    const fallbackGateCheckpoint = current.status === 'needs-revision' && completedAgentRun &&
+      resumableLease?.nodeId === node.id && hasPendingFallbackGate(
+        await repositories.listAuditEvents(runId), node.id, resumableLease.id,
+      );
     const resumeFromGate =
-      current.status === 'awaiting-gate' ||
+      fallbackGateCheckpoint || current.status === 'awaiting-gate' ||
       (Boolean(resumableLease) &&
         ['paused', 'running'].includes(current.status) &&
         completedAgentRun);
 
     if (resumeFromGate) {
-      if (current.status === 'paused') {
-        // State machine: paused → running → awaiting-gate
+      if (current.status === 'paused' || fallbackGateCheckpoint) {
+        // A newly persisted fallback lease may precede its Gate checkpoint.
         await repositories.transitionNode(node.id, 'running');
         await repositories.transitionNode(node.id, 'awaiting-gate');
       } else if (current.status === 'running') {
@@ -183,7 +187,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         'node.transition.checked',
         { fromStatus },
       );
-      await repositories.updateWorkflowInstanceStatus(
+      await repositories.updateWorkflowInstanceStatusIfActive(
         runId,
         'running',
         node.id,
@@ -388,25 +392,41 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         'node.transition.checked',
       );
     }
+    // A completed Agent is resumable at its Gates. Shutdown/cancellation must
+    // leave that checkpoint and lease intact; repair may instead have left the
+    // source needs-revision, which must also remain truthful for recovery.
+    async function stopAbortedGateExecution(): Promise<boolean> {
+      if (!deps.signal?.aborted) return false;
+      if (isJobOwnershipLostAbort(deps.signal)) return true;
+      if (isJobCancellationAbort(deps.signal)) {
+        await writeWorkflowTerminal(repositories, runId, 'cancelled', node.id);
+      } else {
+        await repositories.updateWorkflowInstanceStatusIfActive(runId, 'interrupted', node.id);
+      }
+      return true;
+    }
+
     const configuredGates = gatesWithStableKeys(node.gates, node.id);
     try {
       for (const gate of configuredGates) {
+        if (await stopAbortedGateExecution()) return false;
         const passed = await gateRunner.runGateWithRepair(runId, node, gate);
+        if (await stopAbortedGateExecution()) return false;
         if (!passed) {
           return false;
         }
       }
     } catch (error) {
-      // Ownership-lost fencing: a stale executor whose gate work raced a new
-      // owner's completion must NOT write node/workflow state — the new owner
-      // (which may have already settled `passed`) is authoritative.
-      if (isJobOwnershipLostAbort(deps.signal)) {
+      if (await stopAbortedGateExecution()) {
         await audit.append({
           runId,
-          type: 'gate.execution.error',
+          type: 'gate.execution.interrupted',
           payload: {
             nodeId: node.id,
-            error: 'job ownership lost during gates (fenced)',
+            reason: isJobOwnershipLostAbort(deps.signal)
+              ? 'ownership-lost'
+              : isJobShutdownAbort(deps.signal) ? 'shutdown' : 'cancelled',
+            error: error instanceof Error ? error.message : String(error),
           },
         });
         return false;
@@ -430,43 +450,12 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
     }
 
     try {
-      // F4-P0-03 (4.3.4): fence the SUCCESS path too. The catch below only
-      // guards ownership-lost when finalize THROWS; when finalize SUCCEEDS
-      // while fenced, a stale executor would promote its worktree onto the run
-      // branch the recovering owner already owns and transition the node to
-      // `passed`, reverting/overwriting the new owner's authoritative state.
-      // promoteLeaseToRunBranch now uses `git update-ref` expected-old-OID CAS,
-      // which stops the branch overwrite, but the stale executor would still
-      // run finalize/transition side effects; stand down here as defense in
-      // depth before any finalize/promote/transition.
-      if (isJobOwnershipLostAbort(deps.signal)) {
-        await audit.append({
-          runId,
-          type: 'worktree.lease.finalize.failed',
-          payload: {
-            nodeId: node.id,
-            error: 'job ownership lost before finalize (fenced)',
-          },
-        });
-        return false;
-      }
+      if (await stopAbortedGateExecution()) return false;
       await helpers.recordQaValidationRef(runId, node);
+      if (await stopAbortedGateExecution()) return false;
       await leaseService.finalizeExecutionLease(runId, node.id);
     } catch (error) {
-      // Ownership-lost fencing: same stand-down as above. The new owner already
-      // finalized/promoted this node's lease; this stale executor must not
-      // touch shared node/workflow rows.
-      if (isJobOwnershipLostAbort(deps.signal)) {
-        await audit.append({
-          runId,
-          type: 'worktree.lease.finalize.failed',
-          payload: {
-            nodeId: node.id,
-            error: 'job ownership lost during finalize (fenced)',
-          },
-        });
-        return false;
-      }
+      if (await stopAbortedGateExecution()) return false;
       await repositories.transitionNode(node.id, 'interrupted');
       // Guarded: never overwrite a terminal status settled by another writer.
       await repositories.updateWorkflowInstanceStatusIfActive(
@@ -485,6 +474,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       return false;
     }
 
+    if (await stopAbortedGateExecution()) return false;
     await checkedTransitionNode(runId, node.id, 'passed', 'node.passed');
     await appendPmoNodeCheckpoint(runId, node);
     return true;
@@ -548,4 +538,16 @@ function requiredArtifactTypesForNode(input: {
     }
   }
   return [...required];
+}
+
+// An ordinary failed repair can persist its replacement source lease before
+// shutdown prevents the node checkpoint. A later repair intent supersedes it.
+export function hasPendingFallbackGate(
+  events: Pick<AuditEvent, 'type' | 'payload'>[], nodeId: string, leaseId: string,
+): boolean {
+  const created = events.map(event => event.type === 'worktree.lease.created' &&
+    event.payload.nodeId === nodeId && event.payload.leaseId === leaseId).lastIndexOf(true);
+  const failed = events.map(event => event.type === 'gate.repair.failed' && event.payload.nodeId === nodeId).lastIndexOf(true);
+  const intent = events.map(event => event.type === 'gate.repair.intent' && event.payload.sourceNodeId === nodeId).lastIndexOf(true);
+  return failed >= 0 && created > failed && created > intent;
 }

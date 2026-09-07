@@ -1,0 +1,85 @@
+{
+  "date": "2026-09-06",
+  "version": "0.24.0",
+  "baseline": "8141c4b69fb59988ff7c7e6266f3d5639c386131",
+  "environment": {
+    "platform": "Linux",
+    "node": "v22.16.0",
+    "pnpm": "10.12.1"
+  },
+  "rootTests": {
+    "command": "pnpm test --run",
+    "files": 188,
+    "passed": 2115,
+    "skipped": 1,
+    "skipReason": "existing opt-in DSH bridge contract",
+    "breakdown": {
+      "@tekon/core unit": {
+        "files": 100,
+        "tests": 1368,
+        "skipped": 1
+      },
+      "@tekon/web unit": {
+        "files": 60,
+        "tests": 603,
+        "skipped": 0
+      },
+      "@tekon/core e2e": {
+        "files": 11,
+        "tests": 49,
+        "skipped": 0
+      },
+      "@tekon/cli e2e": {
+        "files": 7,
+        "tests": 25,
+        "skipped": 0
+      },
+      "@tekon/cli unit": {
+        "files": 10,
+        "tests": 71,
+        "skipped": 0
+      }
+    }
+  },
+  "cliE2e": {
+    "files": 7,
+    "passed": 25,
+    "command": "pnpm --filter @tekon/cli test:e2e"
+  },
+  "chromium": {
+    "passed": 164,
+    "failed": 0,
+    "retries": 0,
+    "command": "pnpm exec playwright test --project=chromium --retries=0"
+  },
+  "typecheck": "passed",
+  "lint": "passed",
+  "build": "Core/CLI/Web passed; Web rebuilt after last sidebar CSS change",
+  "realProviderEvidence": [
+    "claude-lifecycle.json",
+    "claude-host-restart.json"
+  ],
+  "visual": {
+    "viewports": [
+      320,
+      390,
+      768,
+      1440
+    ],
+    "pages": 32,
+    "height": 900,
+    "pageOverflowCount": 0,
+    "evidence": "pages/index.html",
+    "geometry": "pages/geometry.json",
+    "boundary": "Fixed-height page captures and Chromium interaction tests; no screen-reader, Windows, or load certification"
+  },
+  "documents": {
+    "markdownHtmlFilesChecked": 13,
+    "generatedPairsContentMatched": 4,
+    "htmlLayoutChecks": 12,
+    "viewports": [
+      320,
+      1440
+    ]
+  }
+}

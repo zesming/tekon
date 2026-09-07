@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -76,6 +76,13 @@ export const repoProfileSchema = z
 export type RepoProfile = z.infer<typeof repoProfileSchema>;
 export type RepoProfileCommandName = (typeof repoProfileCommandNames)[number];
 
+export interface RepoCommandSource {
+  kind: 'repo-profile' | 'package-json-detection' | 'empty-default';
+  resolverVersion: 1;
+  profileVersion?: number;
+  path?: '.tekon/repo-profile.yaml' | 'package.json';
+}
+
 export interface RepoProfileCommandFixSuggestion {
   commandRef: RepoProfileCommandName;
   profilePath: string;
@@ -111,12 +118,33 @@ export type RepoProfileCommandResolution =
     };
 
 export function loadRepoProfile(repoPath: string): RepoProfile {
-  const profilePath = repoProfilePath(repoPath);
-  if (!existsSync(profilePath)) {
-    return detectRepoProfile(repoPath);
-  }
+  return loadRepoProfileWithSource(repoPath).profile;
+}
 
-  return repoProfileSchema.parse(parseYaml(readFileSync(profilePath, 'utf8')));
+/** 同一次读取产生配置和来源，避免随后重读另一份配置来解释本次决定。 */
+export function loadRepoProfileWithSource(repoPath: string): {
+  profile: RepoProfile;
+  source: RepoCommandSource;
+} {
+  const profilePath = repoProfilePath(repoPath);
+  let content: string;
+  try {
+    content = readFileSync(profilePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    const scripts = readPackageScripts(repoPath);
+    return {
+      profile: profileFromPackageScripts(scripts),
+      source: scripts
+        ? { kind: 'package-json-detection', resolverVersion: 1, path: 'package.json' }
+        : { kind: 'empty-default', resolverVersion: 1 },
+    };
+  }
+  const profile = repoProfileSchema.parse(parseYaml(content));
+  return { profile, source: {
+    kind: 'repo-profile', resolverVersion: 1,
+    profileVersion: profile.version, path: '.tekon/repo-profile.yaml',
+  } };
 }
 
 export function writeDefaultRepoProfile(repoPath: string): RepoProfile {
@@ -237,7 +265,10 @@ export function suggestRepoProfileCommandFixes(
 }
 
 export function detectRepoProfile(repoPath: string): RepoProfile {
-  const packageScripts = readPackageScripts(repoPath);
+  return profileFromPackageScripts(readPackageScripts(repoPath));
+}
+
+function profileFromPackageScripts(packageScripts: ReturnType<typeof readPackageScripts>): RepoProfile {
   if (!packageScripts) {
     return repoProfileSchema.parse({});
   }
@@ -297,14 +328,18 @@ function readPackageScripts(
   repoPath: string,
 ): { runner: 'npm' | 'pnpm'; scripts: Record<string, string> } | null {
   const packageJsonPath = join(repoPath, 'package.json');
-  if (!existsSync(packageJsonPath)) {
-    return null;
+  let content: string;
+  try {
+    content = readFileSync(packageJsonPath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
   }
 
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-    scripts?: Record<string, string>;
-    packageManager?: string;
-  };
+  const packageJson = z.object({
+    scripts: z.record(z.string(), z.string()).optional(),
+    packageManager: z.string().optional(),
+  }).parse(JSON.parse(content));
   return {
     runner: packageJson.packageManager?.startsWith('pnpm@') ? 'pnpm' : 'npm',
     scripts: packageJson.scripts ?? {},

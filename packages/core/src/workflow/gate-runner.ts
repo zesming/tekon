@@ -30,7 +30,7 @@ import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
-import { isJobOwnershipLostAbort } from '../session/job-runner.js';
+import { isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
 
 export interface GateRunnerDeps {
   repoPath: string;
@@ -46,11 +46,9 @@ export interface GateRunnerDeps {
   getCheckedTransition(): CheckedTransitionFn;
   getReworkHandler(): ReworkHandler;
   /**
-   * S5 fencing: the job-level abort signal (same one node-executor consumes).
-   * When it carries an ownership-lost reason, the repair/exhausted paths must
-   * NOT write node/workflow state — a new owner recovered the job and is
-   * authoritative (terminal-state monotonicity). Optional: absent ⇒ no fencing
-   * (legacy/standalone gate runs).
+   * Job-level lifecycle signal shared with node-executor. Any abort stops Gate
+   * success, repair, and exhaustion; ownership loss also fences shared writes.
+   * Absent means legacy/standalone Gate execution without lifecycle fencing.
    */
   getSignal?(): AbortSignal | undefined;
   /**
@@ -108,7 +106,9 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
     nodeId: string,
     gate: WorkflowGateConfig,
   ): Promise<GateResult> {
-    const cwd = executionLeases.get(nodeId)?.worktreePath ?? repoPath;
+    const lease = await leaseService.activeExecutionLease(runId, nodeId, { required: true });
+    if (deps.getSignal?.()?.aborted) throw new Error('Gate execution aborted before command start');
+    const cwd = lease?.worktreePath ?? repoPath;
     const resolvedGate = resolveGateCommand(gate);
     return gateEngine.runGate({
       runId,
@@ -217,6 +217,29 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
     const checkedTransitionNode = getCheckedTransition();
     const reworkHandler = getReworkHandler();
 
+    // Gate results describe command quality; executor aborts describe lifecycle.
+    // Classify lifecycle first, including late success, before any repair or settle.
+    let result: GateResult | undefined;
+    async function interrupted(): Promise<boolean> {
+      const signal = deps.getSignal?.();
+      if (!signal?.aborted) return false;
+      await audit.append({
+        runId,
+        type: 'gate.execution.interrupted',
+        payload: {
+          nodeId: node.id,
+          gateType: gate.type,
+          gateKey: gate.gateKey,
+          gateResultId: result?.id,
+          reason: isJobOwnershipLostAbort(signal)
+            ? 'ownership-lost'
+            : isJobShutdownAbort(signal) ? 'shutdown' : 'cancelled',
+        },
+      });
+      return true;
+    }
+    if (await interrupted()) return false;
+
     if (!gateOpts?.forceRerun) {
       const existingResult = await latestGateResult(
         runId,
@@ -225,6 +248,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         gate.gateKey,
         gate.type === 'human' && isFirstHumanGate(node.gates, gate.gateKey),
       );
+      if (await interrupted()) return false;
       if (
         existingResult?.status === 'passed' ||
         existingResult?.status === 'skipped'
@@ -245,7 +269,9 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
     if (gate.type === 'qa-signoff') {
       await helpers.recordQaValidationRef(runId, node);
     }
-    let result = await runGate(runId, node.id, gate);
+    if (await interrupted()) return false;
+    result = await runGate(runId, node.id, gate);
+    if (await interrupted()) return false;
     if (result.status === 'passed' || result.status === 'skipped') {
       await audit.append({
         runId,
@@ -257,26 +283,6 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         },
       });
       return true;
-    }
-
-    // S5 fencing: a non-passed gate result while this executor is fenced
-    // (ownership lost) is almost certainly the fallout of its own gate
-    // subprocess being killed by the recovering owner — not a genuine gate
-    // failure. The repair/exhausted paths below write node/workflow state with
-    // bare UPDATEs; a fenced executor must NOT run them, or it would revert the
-    // new owner's already-settled terminal status. Stand down.
-    if (isJobOwnershipLostAbort(deps.getSignal?.())) {
-      await audit.append({
-        runId,
-        type: 'gate.execution.error',
-        payload: {
-          nodeId: node.id,
-          gateType: gate.type,
-          gateKey: gate.gateKey,
-          error: 'job ownership lost during gate (fenced)',
-        },
-      });
-      return false;
     }
 
     if (result.status === 'blocked' && gate.type === 'human') {
@@ -294,28 +300,32 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
 
       while (retryAttempt < gate.maxRetries && !repairPassed) {
         retryAttempt++;
-        // S5 fencing: bail before the bare needs-revision write if this
-        // executor lost ownership mid-repair-loop — the recovering owner owns
-        // the node's terminal state now.
-        if (isJobOwnershipLostAbort(deps.getSignal?.())) {
-          await audit.append({
-            runId,
-            type: 'gate.execution.error',
-            payload: {
-              nodeId: node.id,
-              gateType: gate.type,
-              gateKey: gate.gateKey,
-              error: 'job ownership lost during gate repair (fenced)',
-            },
-          });
-          return false;
-        }
+        if (await interrupted()) return false;
+        const repairNodeId = `repair_${result.id}`;
+        await audit.append({
+          runId,
+          type: 'gate.repair.intent',
+          payload: {
+            sourceNodeId: node.id,
+            repairNodeId,
+            gateResultId: result.id,
+            gateType: gate.type,
+            gateKey: gate.gateKey,
+            fixerRole: node.role,
+            attempt: retryAttempt,
+            maxAttempts: gate.maxRetries,
+          },
+        });
+        if (await interrupted()) return false;
         await repositories.transitionNode(node.id, 'needs-revision');
+        if (await interrupted()) return false;
         await leaseService.finalizeExecutionLease(runId, node.id);
+        if (await interrupted()) return false;
         const repairNode = await gateEngine.createAutoFixRepairNode({
           failedGateResult: result,
           fixerRole: node.role,
         });
+        if (await interrupted()) return false;
         await audit.append({
           runId,
           type: 'gate.repair.created',
@@ -327,8 +337,11 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             maxAttempts: gate.maxRetries,
           },
         });
+        if (await interrupted()) return false;
         await repositories.transitionNode(repairNode.id, 'running');
+        if (await interrupted()) return false;
         let repairSucceeded = false;
+        let repairFinalizationFailed = false;
         try {
           const repairLease = await leaseService.createExecutionLease(runId, {
             id: repairNode.id,
@@ -336,6 +349,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             phaseId: repairNode.phaseId,
           });
           try {
+            if (await interrupted()) return false;
             const repairInput = await helpers.agentInputForLease(
               runId,
               {
@@ -346,6 +360,8 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               repairLease,
               await promptBuilder.buildRepairPrompt(runId, repairNode, result),
             );
+            if (await interrupted()) return false;
+            repairInput.signal = deps.getSignal?.();
             const repairResult = await runAgentWithStepEvents(
               adapter,
               repairInput,
@@ -357,25 +373,28 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               },
               deps.agentEventSink,
             );
+            if (await interrupted()) return false;
             assertSuccessfulAgentRun(repairResult);
             repairSucceeded = true;
           } finally {
             if (!repairSucceeded) {
-              // S5 fencing (S6): do NOT finalize a fenced executor's repair
-              // lease — finalize commits + promotes the stale repair worktree
-              // onto the run branch the recovering owner already delivered.
-              // Promotion now uses `git update-ref` expected-old-OID CAS, so the
-              // branch overwrite itself is blocked, but standing down here also
-              // avoids the stale commit/finalize side effects. The new owner
-              // owns this node's worktree/branch now.
-              if (!isJobOwnershipLostAbort(deps.getSignal?.())) {
-                await leaseService
-                  .finalizeExecutionLease(runId, repairNode.id)
-                  .catch(() => {});
+              // Aborted repair work remains available for explicit recovery;
+              // do not commit/promote work from a stopped or fenced executor.
+              if (!deps.getSignal?.()?.aborted) {
+                try {
+                  await leaseService.finalizeExecutionLease(runId, repairNode.id);
+                } catch (error) {
+                  repairFinalizationFailed = true;
+                  throw error;
+                }
               }
             }
           }
         } catch (error) {
+          if (await interrupted()) return false;
+          // A failed promotion/release is not a completed repair attempt. Keep
+          // its real error and stop before creating another execution lease.
+          if (repairFinalizationFailed) throw error;
           await repositories.transitionNode(
             repairNode.id,
             'interrupted',
@@ -394,28 +413,44 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
           if (retryAttempt >= gate.maxRetries) {
             break;
           }
+          if (await interrupted()) return false;
+          // Both previous leases were finalized. Check the promoted Run branch
+          // in a new source lease; never run the fallback Gate in repoPath.
+          await leaseService.createExecutionLease(runId, node);
+          if (await interrupted()) return false;
+          await repositories.transitionNode(node.id, 'running');
+          if (await interrupted()) return false;
+          await repositories.transitionNode(node.id, 'awaiting-gate');
+          if (await interrupted()) return false;
           result = await runGate(runId, node.id, gate);
+          if (await interrupted()) return false;
           if (result.status === 'passed' || result.status === 'skipped') {
             repairPassed = true;
           }
           continue;
         }
+        if (await interrupted()) return false;
         await repositories.transitionNode(repairNode.id, 'passed');
         const repairLease = await leaseService.activeExecutionLease(
           runId,
           repairNode.id,
         );
+        if (await interrupted()) return false;
         if (repairLease) {
           executionLeases.set(node.id, repairLease);
         }
         await repositories.transitionNode(node.id, 'running');
+        if (await interrupted()) return false;
         await repositories.transitionNode(node.id, 'awaiting-gate');
+        if (await interrupted()) return false;
         result = await runGate(runId, node.id, gate);
+        if (await interrupted()) return false;
         if (result.status === 'passed' || result.status === 'skipped') {
           repairPassed = true;
         }
       }
 
+      if (await interrupted()) return false;
       if (repairPassed) {
         await audit.append({
           runId,
@@ -431,6 +466,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
       }
     }
 
+    if (await interrupted()) return false;
     const shouldRework = isChangesRequested(
       result.failureClassification,
       gate.type,
@@ -447,18 +483,23 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         let reworkPassed = false;
 
         while (reworkAttempt < maxReworkAttempts && !reworkPassed) {
+          if (await interrupted()) return false;
           reworkAttempt++;
           await audit.append({
             runId,
             type: 'gate.rework.attempt',
             payload: {
               nodeId: node.id,
+              reviewNodeId: node.id,
               targetNodeId,
+              reworkNodeId: `${targetNodeId}_rework_${reworkAttempt}`,
               attempt: reworkAttempt,
               maxAttempts: maxReworkAttempts,
+              gateResultId: result.id,
             },
           });
 
+          if (await interrupted()) return false;
           await reworkHandler.attemptChangesRequestedRework(
             runId,
             node,
@@ -468,12 +509,15 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             reworkAttempt,
           );
 
+          if (await interrupted()) return false;
           result = await runGate(runId, node.id, gate);
+          if (await interrupted()) return false;
           if (result.status === 'passed' || result.status === 'skipped') {
             reworkPassed = true;
           }
         }
 
+        if (await interrupted()) return false;
         if (reworkPassed) {
           await audit.append({
             runId,
@@ -497,22 +541,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         : gate.onExhausted === 'fail'
           ? 'failed'
           : 'blocked';
-    // S5 fencing: a fence that landed mid-repair-loop must not write the
-    // exhausted node/workflow status (bare UPDATE below) over a terminal state
-    // the recovering owner already settled. Stand down.
-    if (isJobOwnershipLostAbort(deps.getSignal?.())) {
-      await audit.append({
-        runId,
-        type: 'gate.execution.error',
-        payload: {
-          nodeId: node.id,
-          gateType: gate.type,
-          gateKey: gate.gateKey,
-          error: 'job ownership lost before gate-exhausted settle (fenced)',
-        },
-      });
-      return false;
-    }
+    if (await interrupted()) return false;
     await checkedTransitionNode(
       runId,
       node.id,
@@ -525,7 +554,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         onExhausted: gate.onExhausted,
       },
     );
-    await repositories.updateWorkflowInstanceStatus(
+    await repositories.updateWorkflowInstanceStatusIfActive(
       runId,
       exhaustedNodeStatus,
       node.id,

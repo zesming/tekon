@@ -1,3 +1,4 @@
+import { withExecutionWriteScope } from '../db/write-queue.js';
 import { randomUUID } from 'node:crypto';
 
 import type { Job, JobRunner, JobStatus } from '../types/session-contract.js';
@@ -9,6 +10,9 @@ import type { SubprocessRegistry } from './subprocess-registry.js';
 export const JOB_ABORT_REASON_OWNERSHIP_LOST =
   'tekon:job-ownership-lost' as const;
 
+/** Abort reason used only when the job runner is shutting down. */
+export const JOB_ABORT_REASON_SHUTDOWN = 'tekon:job-shutdown' as const;
+
 /** True when an AbortSignal fences a stale executor rather than user cancel. */
 export function isJobOwnershipLostAbort(
   signal: AbortSignal | undefined,
@@ -18,18 +22,29 @@ export function isJobOwnershipLostAbort(
   );
 }
 
-/** User cancellation excludes the internal ownership-loss fencing signal. */
+/** True when an AbortSignal was triggered by runner shutdown. */
+export function isJobShutdownAbort(signal: AbortSignal | undefined): boolean {
+  return Boolean(
+    signal?.aborted && signal.reason === JOB_ABORT_REASON_SHUTDOWN,
+  );
+}
+
+/** User cancellation excludes internal signals (ownership-loss fencing and runner shutdown). */
 export function isJobCancellationAbort(
   signal: AbortSignal | undefined,
 ): boolean {
-  return Boolean(signal?.aborted && !isJobOwnershipLostAbort(signal));
+  return Boolean(
+    signal?.aborted &&
+      !isJobOwnershipLostAbort(signal) &&
+      !isJobShutdownAbort(signal),
+  );
 }
 
 /**
  * Thrown when a job operation detects that the job is no longer owned by this
  * runner (owner changed) or is in a status that forbids the operation. The
  * engine/executor must stop touching the job — this is what prevents a
- * double-run after a stale lease was requeued and reclaimed by another worker.
+ * late mutation after a stale lease was interrupted or ownership changed.
  */
 export class JobFencingError extends Error {
   readonly code = 'JOB_FENCING' as const;
@@ -47,6 +62,8 @@ export class JobFencingError extends Error {
 export interface JobExecutionContext {
   readonly job: Job;
   readonly signal: AbortSignal;
+  /** Production executor confirms all command paths share this Job registry scope. */
+  markManagedExecution?(): void;
   /** True once `requestPause` has been called for this job. */
   pauseRequested(): boolean;
   /**
@@ -66,12 +83,11 @@ export interface JobExecutor {
 
 /**
  * Durable polling job runner (design §2.5). Claims queued jobs atomically,
- * renews a lease while the executor is in flight, recovers stale leases on
- * start, and fences every job-row write on ownership so a zombie executor
- * cannot mutate a job that was requeued/reclaimed underneath it.
+ * renews a lease while the executor is in flight, periodically interrupts stale leases, and fences every job-row write on ownership so a zombie executor
+ * cannot mutate a job after its execution scope loses ownership.
  */
 export interface DurableJobRunner extends JobRunner {
-  /** Recover stale leases, then poll for queued jobs on an unref'd interval. */
+  /** Serialize controls, bounded recovery, and queued claims on each poll. */
   start(): void;
   /** Stop polling and wait for in-flight jobs to settle (5s cap). */
   stop(): Promise<void>;
@@ -83,7 +99,7 @@ export interface DurableJobRunner extends JobRunner {
    * row. The in-memory flag is process-local and only set for owned jobs.
    */
   requestPause(jobId: string): Promise<void>;
-  /** Requeue/cancel jobs whose lease is older than `leaseTtlMs`. */
+  /** Interrupt stale claimed jobs without re-executing them. */
   recoverStale(): Promise<number>;
 }
 
@@ -97,12 +113,24 @@ export interface CreateJobRunnerDeps {
   heartbeatMs?: number;
   leaseTtlMs?: number;
   workerId?: string;
+  /**
+   * Bounded wait for in-flight jobs to settle on their own during stop(),
+   * before the runner escalates to explicit abort + subprocess kill. Test
+   * override only; production keeps the 5s default.
+   */
+  stopSettleTimeoutMs?: number;
+  /**
+   * Hard deadline for uncooperative executors during stop() phase 3 drain
+   * barrier. Test override only; production keeps the 10s default.
+   */
+  stopHardTimeoutMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const STOP_SETTLE_TIMEOUT_MS = 5_000;
+const DEFAULT_STOP_HARD_TIMEOUT_MS = 10_000;
 
 /** Statuses an executor may legitimately settle a job to. */
 const SETTLEABLE_STATUSES: readonly JobStatus[] = [
@@ -110,6 +138,7 @@ const SETTLEABLE_STATUSES: readonly JobStatus[] = [
   'failed',
   'cancelled',
   'paused',
+  'interrupted',
 ];
 
 export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
@@ -117,6 +146,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const heartbeatMs = deps.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
   const leaseTtlMs = deps.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+  const stopSettleTimeoutMs =
+    deps.stopSettleTimeoutMs ?? STOP_SETTLE_TIMEOUT_MS;
+  const stopHardTimeoutMs =
+    deps.stopHardTimeoutMs ?? DEFAULT_STOP_HARD_TIMEOUT_MS;
   const workerId =
     deps.workerId ?? `web-${process.pid}-${randomUUID().slice(0, 8)}`;
 
@@ -130,7 +163,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   const pending = new Set<Promise<void>>();
   let pollTimer: NodeJS.Timeout | null = null;
   let stopped = true;
-  let pollInFlight = false;
+  let pollTask: Promise<void> | null = null;
+  let cancelCursor = '';
+  let staleCursor = '';
+  const managedExecutions = new Set<string>();
 
   const nowIso = (): string => new Date().toISOString();
 
@@ -217,7 +253,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       job.id,
       workerId,
       desiredStatus,
+      managedExecutions.has(job.id) && !registry.hasUnconfirmed(job.id)
+        ? { version: 1, kind: 'managed-handles-closed', observedAt: nowIso() } : null,
     );
+    managedExecutions.delete(job.id);
 
     controllers.delete(job.id);
     executionTokens.delete(job.id);
@@ -262,8 +301,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
           const activeController = controllers.get(job.id);
           if (activeController && !activeController.signal.aborted) {
             activeController.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
-            const runId = await sessions.getRunIdBySessionId(job.sessionId);
-            if (runId) registry.killAll(runId, 'SIGKILL');
+            registry.killAll(job.id, 'SIGKILL');
           }
           executionTokens.delete(job.id);
           clearHeartbeat(job.id);
@@ -280,6 +318,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     const ctx: JobExecutionContext = {
       job,
       signal: controller.signal,
+      markManagedExecution: () => { managedExecutions.add(job.id); },
       pauseRequested: () =>
         executionTokens.get(job.id) === executionToken &&
         pauseFlags.has(job.id),
@@ -294,7 +333,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     let result: { status: JobStatus; summary?: string } | undefined;
     let failure: unknown;
     try {
-      result = await executor.execute(ctx);
+      result = await withExecutionWriteScope(
+        operation => jobs.withOwnedWrite(job.id, workerId, operation),
+        () => executor.execute(ctx),
+      );
     } catch (error) {
       failure = error;
     }
@@ -313,20 +355,18 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   async function syncOwnedControls(): Promise<void> {
     for (const [jobId, controller] of controllers) {
       const current = await jobs.get(jobId);
-      if (!current || current.owner !== workerId) {
+      if (!current || current.owner !== workerId || !['running','paused','cancelling'].includes(current.status)) {
         // Ownership changed: fence the local execution and kill only processes
         // registered in this process. The new owner will continue from durable
         // state; the zombie must stop touching the workspace.
         if (!controller.signal.aborted) {
           controller.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
-          const runId = current
-            ? await sessions.getRunIdBySessionId(current.sessionId)
-            : null;
-          if (runId) registry.killAll(runId, 'SIGKILL');
+          registry.killAll(jobId, 'SIGKILL');
         }
         // Invalidate this local generation immediately. A same-worker reclaim
         // may install a new controller/token for the same durable job id.
         executionTokens.delete(jobId);
+        managedExecutions.delete(jobId);
         clearHeartbeat(jobId);
         controllers.delete(jobId);
         pauseFlags.delete(jobId);
@@ -345,8 +385,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
 
       if (!controller.signal.aborted) {
         controller.abort();
-        const runId = await sessions.getRunIdBySessionId(current.sessionId);
-        if (runId) registry.killAll(runId, 'SIGKILL');
+        registry.killAll(jobId, 'SIGKILL');
       }
       if (current.abortState !== 'propagated') {
         await jobs.updateJob(
@@ -358,29 +397,64 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     }
   }
 
-  async function poll(): Promise<void> {
-    if (stopped || pollInFlight) {
-      return;
+  function poll(): Promise<void> {
+    if (stopped) {
+      return Promise.resolve();
     }
-    pollInFlight = true;
-    try {
+    if (pollTask) {
+      return pollTask;
+    }
+
+    const task = (async () => {
       // Process-local AbortControllers and registries cannot be mutated by a
       // second CLI/Web process. Observe the durable job row on every owner poll
       // and relay foreign pause/cancel requests into this process first.
       await syncOwnedControls();
+      if (stopped) return;
+      await recoverStaleJobs();
+      if (stopped) return;
+      await reconcileCancelledRuns();
+      // stop() may begin while syncOwnedControls() is awaiting SQLite. Do not
+      // enter a fresh claim after the runner crossed into draining.
+      if (stopped) return;
+
       const job = await jobs.claimNext(workerId);
       if (job) {
         spawnJob(job);
       }
-    } finally {
-      pollInFlight = false;
-    }
+    })();
+    pollTask = task;
+    const clearPollTask = () => {
+      if (pollTask === task) pollTask = null;
+    };
+    void task.then(clearPollTask, clearPollTask);
+    return task;
   }
 
   async function recoverStaleJobs(): Promise<number> {
     const cutoff = new Date(Date.now() - leaseTtlMs).toISOString();
-    const { requeued, cancelled } = await jobs.requeueStale(cutoff);
-    return requeued + cancelled;
+    const result = await jobs.interruptStale(cutoff, staleCursor, 100);
+    staleCursor = result.lastId ?? '';
+    for (const event of result.events) {
+      try { bus.publish(event); } catch { /* committed; SSE can catch up */ }
+    }
+    return result.processed;
+  }
+
+  async function reconcileCancelledRuns(): Promise<void> {
+    const ids = await sessions.listCancelledRunIds(cancelCursor, 100);
+    if (!ids.length) { cancelCursor = ''; return; }
+    for (const runId of ids) {
+      if (stopped) return;
+      // A failing item cannot prevent later IDs from progressing.
+      cancelCursor = runId;
+      try {
+        const active = await jobs.findActiveByRunId(runId);
+        if (active) await runner.requestCancel(active.id, 'durable run cancellation');
+        const observation = await sessions.reconcileCancelledRun(runId);
+        for (const event of observation.events) { try { bus.publish(event); } catch { /* durable */ } }
+      } catch { /* retry after cursor wraps */ }
+    }
   }
 
   const runner: DurableJobRunner = {
@@ -394,6 +468,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         owner: null,
         lease: null,
         abortState: 'none',
+        exitEvidence: { version: 1, kind: 'never-started', observedAt: now },
         checkpoint: null,
         createdAt: now,
         updatedAt: now,
@@ -410,10 +485,11 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         owner: null,
         lease: null,
         abortState: 'none',
+        exitEvidence: { version: 1, kind: 'never-started', observedAt: now },
         checkpoint: null,
         createdAt: now,
         updatedAt: now,
-      });
+      }, input);
     },
 
     async get(jobId) {
@@ -430,7 +506,8 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       if (
         job.status === 'done' ||
         job.status === 'failed' ||
-        job.status === 'cancelled'
+        job.status === 'cancelled' ||
+        job.status === 'interrupted'
       ) {
         return;
       }
@@ -439,7 +516,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         // unclaimed; if claimNext won the race, retry against the live owner.
         const cancelled = await jobs.updateJob(
           jobId,
-          { status: 'cancelled', abortState: 'stopped' },
+          { status: 'cancelled', abortState: job.exitEvidence?.kind === 'never-started' ? 'stopped' : job.abortState },
           { owner: null, statuses: ['queued'] },
         );
         if (!cancelled) {
@@ -468,10 +545,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
 
       const controller = controllers.get(jobId);
       controller?.abort();
-      const runId = await sessions.getRunIdBySessionId(requested.sessionId);
-      if (runId) {
-        registry.killAll(runId, 'SIGKILL');
-      }
+      registry.killAll(jobId, 'SIGKILL');
       await jobs.updateJob(
         jobId,
         { abortState: 'propagated' },
@@ -502,7 +576,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         return;
       }
       stopped = false;
-      void recoverStaleJobs().catch(() => {});
+      void poll().catch(() => {});
       pollTimer = setInterval(() => {
         void poll().catch(() => {});
       }, pollIntervalMs);
@@ -512,29 +586,77 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     },
 
     async stop() {
-      if (!pollTimer && pending.size === 0) {
+      if (!pollTimer && pending.size === 0 && !pollTask) {
         return;
       }
+      // Enter draining and prevent any new poll from beginning.
       stopped = true;
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
-      // Wait for in-flight jobs to settle, capped at 5s. Jobs that do not
-      // settle in time have their heartbeats cleared below (lease goes stale)
-      // and are recovered by the next start()'s recoverStale().
-      const allSettled = Promise.allSettled([...pending]);
-      let timer: NodeJS.Timeout | undefined;
-      const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, STOP_SETTLE_TIMEOUT_MS);
-        if (typeof timer.unref === 'function') {
-          timer.unref();
+
+      // A poll may already be inside syncOwnedControls() or claimNext(). Wait
+      // for that exact poll to finish before snapshotting pending. If it had
+      // already claimed and spawned a job, the task is now present in pending;
+      // after this barrier no later poll can add another one.
+      const activePoll = pollTask;
+      if (activePoll) {
+        await Promise.allSettled([activePoll]);
+      }
+
+      // Phase 1: give in-flight jobs a bounded window to settle on their own.
+      // A job that completes normally deletes itself from `controllers` (in
+      // settle()) before its task drains from `pending`, so `controllers`
+      // membership — not elapsed time — is the authoritative "still in-flight"
+      // marker used by phase 2.
+      const settleWithinWindow = Promise.allSettled([...pending]);
+      let settleTimer: NodeJS.Timeout | undefined;
+      const settleWindow = new Promise<void>((resolve) => {
+        settleTimer = setTimeout(resolve, stopSettleTimeoutMs);
+        if (typeof settleTimer.unref === 'function') {
+          settleTimer.unref();
         }
       });
-      await Promise.race([allSettled, timeout]);
-      if (timer) {
-        clearTimeout(timer);
+      await Promise.race([settleWithinWindow, settleWindow]);
+      if (settleTimer) {
+        clearTimeout(settleTimer);
       }
+
+      // Phase 2: escalate. Any controller still present is a genuinely
+      // in-flight job (completed jobs already removed theirs). Abort it and
+      // kill its subprocesses so its executor stops issuing further writes.
+      // Completed-but-not-yet-dequeued jobs are never touched here.
+      for (const [jobId, controller] of controllers) {
+        if (!controller.signal.aborted) {
+          controller.abort(JOB_ABORT_REASON_SHUTDOWN);
+        }
+        registry.killAll(jobId, 'SIGKILL');
+      }
+
+      // Phase 3: deterministic drain barrier. Re-await every pending task so
+      // each aborted executor runs its catch/finally — including its final
+      // synchronous settle() write — and dequeues from `pending` before we
+      // return. Callers only close the (synchronous, better-sqlite3) database
+      // after stop() resolves, so no late write can hit a closed handle.
+      // Bounded by stopHardTimeoutMs to avoid hanging forever on uncooperative executors.
+      const drainTasks = Promise.allSettled([...pending]);
+      let hardTimer: NodeJS.Timeout | undefined;
+      const hardDeadline = new Promise<void>((resolve) => {
+        hardTimer = setTimeout(resolve, stopHardTimeoutMs);
+        if (typeof hardTimer.unref === 'function') {
+          hardTimer.unref();
+        }
+      });
+      await Promise.race([drainTasks, hardDeadline]);
+      if (hardTimer) {
+        clearTimeout(hardTimer);
+      }
+
+      for (const jobId of controllers.keys()) {
+        await jobs.interruptOwnedJob(jobId, workerId);
+      }
+      managedExecutions.clear();
       for (const jobId of [...heartbeats.keys()]) {
         clearHeartbeat(jobId);
       }

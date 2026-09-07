@@ -19,7 +19,8 @@ import { WorkflowDetailPanel } from '../../components/config/WorkflowDetailPanel
 // ---------------------------------------------------------------------------
 
 /** Derive a human-readable source label from the file path. */
-function sourceLabel(path: string): string {
+function sourceLabel(path: string | undefined): string {
+  if (!path) return 'built-in';
   if (/\.ya?ml$/u.test(path)) return 'yaml';
   const ext = path.split('.').pop();
   return ext ?? 'file';

@@ -30,7 +30,7 @@ check_command() {
     log_error "缺少命令: $1。请先安装后再运行本脚本。"
     case "$1" in
       git)   log_info "安装 Git: https://git-scm.com/downloads" ;;
-      node)  log_info "安装 Node.js (>=18): https://nodejs.org" ;;
+      node)  log_info "安装 Node.js (^20.19.0 或 >=22.12.0): https://nodejs.org" ;;
       npm)   log_info "npm 通常随 Node.js 一起安装" ;;
     esac
     exit 1
@@ -44,9 +44,16 @@ check_command git
 check_command node
 check_command npm
 
-NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-  log_error "Node.js >= 18 版本，当前: $(node -v)"
+NODE_VERSION=$(node -p 'process.versions.node')
+if ! node -e '
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  const supported =
+    (major === 20 && minor >= 19) ||
+    (major === 22 && minor >= 12) ||
+    major > 22;
+  process.exit(supported ? 0 : 1);
+'; then
+  log_error "需要 Node.js ^20.19.0 或 >=22.12.0，当前: v${NODE_VERSION}"
   exit 1
 fi
 
@@ -83,10 +90,9 @@ fi
 TEKON_BIN="$TEKON_HOME/bin"
 mkdir -p "$TEKON_BIN"
 
-cat > "$TEKON_BIN/tekon" << 'SCRIPT'
-#!/usr/bin/env bash
-exec node "$HOME/.tekon/packages/cli/dist/index.js" "$@"
-SCRIPT
+# Embed the resolved CLI path so a custom TEKON_HOME remains usable even when
+# the caller does not export TEKON_HOME in every future shell.
+printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$CLI_PATH" > "$TEKON_BIN/tekon"
 chmod +x "$TEKON_BIN/tekon"
 
 SEMVER=$(node -e "console.log(require('./package.json').version)")

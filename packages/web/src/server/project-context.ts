@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import type { RunProjectContext } from '@tekon/core';
@@ -27,7 +27,7 @@ export function resolveProjectRoot(
     );
   }
 
-  return resolve(explicitRoot);
+  return realpathSync(resolve(explicitRoot));
 }
 
 export function createProjectContext(
