@@ -348,6 +348,45 @@ export function exitCodeForWorkflowStatus(status: string): number {
 }
 
 /**
+ * A CLI holder observes the Job it started, while the workflow status is a
+ * separate durable state. A failed, interrupted, or cancelled Job must
+ * therefore fail the CLI process even when a race or an executor boundary
+ * leaves the Workflow in a non-terminal state. Keep the workflow status in the
+ * normal stdout receipt and give the operator the Job identity plus the durable
+ * log entry point.
+ */
+export function exitCodeForJobOutcome(input: {
+  io: CliIO;
+  runId: string;
+  jobId: string;
+  jobStatus: JobStatus;
+  workflowStatus: string;
+}): number {
+  if (
+    input.jobStatus === 'failed' ||
+    input.jobStatus === 'interrupted' ||
+    input.jobStatus === 'cancelled'
+  ) {
+    const label =
+      input.jobStatus === 'failed'
+        ? '任务执行失败'
+        : input.jobStatus === 'interrupted'
+          ? '任务已中断'
+          : '任务已取消';
+    const resumeHint =
+      input.jobStatus === 'interrupted'
+        ? `检查旧执行退出情况后，使用 tekon resume --run-id ${input.runId} 显式恢复。`
+        : '';
+    input.io.stderr.write(
+      `${label}：jobStatus=${input.jobStatus} jobId=${input.jobId} workflowStatus=${input.workflowStatus}。` +
+        `请使用 tekon log --run-id ${input.runId} 查看详细日志。${resumeHint}\n`,
+    );
+    return 1;
+  }
+  return exitCodeForWorkflowStatus(input.workflowStatus);
+}
+
+/**
  * Parse `--repo` / `--run-id` (same resolution rules as withCommandCtx) but
  * provide the session composition root, for the pause/cancel governance
  * commands.

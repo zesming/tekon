@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const ports = vi.hoisted(() => ({ call: vi.fn(), flash: vi.fn(), invalidate: vi.fn(), navigate: vi.fn(), states: [] as unknown[], index: 0 }));
 vi.mock('react', async original => ({ ...await original<typeof import('react')>(),
-  useState: (initial: unknown) => [ports.states[ports.index++] ?? initial, vi.fn()],
+  useState: (initial: unknown) => {
+    const slot = ports.index++;
+    if (!(slot in ports.states)) ports.states[slot] = initial;
+    return [ports.states[slot], (next: unknown) => { ports.states[slot] = next; }];
+  },
   useEffect: () => {}, useRef: () => ({ current: null }),
 }));
 vi.mock('react-router', () => ({ useNavigate: () => ports.navigate }));
@@ -14,6 +18,7 @@ vi.mock('../../src/client/lib/rpc-client.js', () => ({ rpc: { call: ports.call }
 vi.mock('../../src/client/lib/query-cache.js', () => ({ queryCache: { invalidate: ports.invalidate } }));
 import { RunControls, type RunControlsProps } from '../../src/client/components/runs/RunControls.js';
 import { RunTable, type ApiWorkflow } from '../../src/client/components/runs/RunTable.js';
+import { ResumeConfirmation } from '../../src/client/components/runs/ResumeConfirmation.js';
 import { FlashMessages } from '../../src/client/components/ui/FlashMessages.js';
 const recovery = { runStatus: 'cancelled', cancelRecovery: { needsControlRetry: true, needsObservationRepair: true, jobId: 'job-original', exitStatus: 'unconfirmed' as const }, resumeRecovery: null };
 function render(props: Partial<RunControlsProps> = {}) {
@@ -24,6 +29,12 @@ function button(tree: ReactElement | null, label: string): ReactElement<{ onClic
   const found = (tree?.props as {children: ReactElement[]}).children.find(child => child && child.props && (child.props as Record<string, unknown>)['aria-label'] === label);
   if (!found) throw new Error(`missing button ${label}`);
   return found as ReturnType<typeof button>;
+}
+function confirmPreviousExecution(tree: ReactElement | null) {
+  const children = (tree?.props as { children: ReactElement[] }).children;
+  const confirmation = children.find(child => child && child.type === ResumeConfirmation);
+  if (!confirmation) throw new Error('missing resume confirmation');
+  (confirmation.props as { onChange: (checked: boolean) => void }).onChange(true);
 }
 beforeEach(() => { vi.clearAllMocks(); ports.states = []; ports.index = 0; });
 describe('R26 persistent recovery controls', () => {
@@ -39,7 +50,6 @@ describe('R26 persistent recovery controls', () => {
     ports.call.mockRejectedValue(new Error('control unavailable'));
     await button(render({ recovery }), '重试取消运行').props.onClick({ stopPropagation() {} } as MouseEvent);
     for (const key of ['review.', 'session.detail.', 'session.list.', 'project.overview']) expect(ports.invalidate).toHaveBeenCalledWith(key);
-    ports.states = [null, 'control unavailable'];
     expect(renderToStaticMarkup(render({ recovery })!)).toContain('control unavailable');
   });
   it.each(['passed', 'failed'])('never retries cancellation for a %s winner', status => {
@@ -52,13 +62,16 @@ describe('R26 persistent recovery controls', () => {
   it.each(['old-job', null])('requires explicit confirmation bound to previous job %s', async previousJobId => {
     const props = { status: 'interrupted', recovery: { runStatus: 'interrupted', cancelRecovery: null, resumeRecovery: { previousJobId, requiresConfirmation: true } } };
     expect(button(render(props), '恢复运行').props.disabled).toBe(true);
-    ports.states = [null, null, { runId: 'original-run', previousJobId }];
+    confirmPreviousExecution(render(props));
+    expect(button(render(props), '恢复运行').props.disabled).toBe(false);
     ports.call.mockResolvedValue({ run: { status: 'running' } });
     await button(render(props), '恢复运行').props.onClick({ stopPropagation() {} } as MouseEvent);
     expect(ports.call).toHaveBeenCalledWith('project.resume', { runId: 'original-run', token: 'token', confirmStopped: true, previousJobId });
   });
   it('does not reuse confirmation after job generation changes', () => {
-    ports.states = [null, null, { runId: 'original-run', previousJobId: 'old-job' }];
+    const previous = { status: 'interrupted', recovery: { runStatus: 'interrupted', cancelRecovery: null, resumeRecovery: { previousJobId: 'old-job', requiresConfirmation: true } } };
+    confirmPreviousExecution(render(previous));
+    expect(button(render(previous), '恢复运行').props.disabled).toBe(false);
     expect(button(render({ status: 'interrupted', recovery: { runStatus: 'interrupted', cancelRecovery: null, resumeRecovery: { previousJobId: 'new-job', requiresConfirmation: true } } }), '恢复运行').props.disabled).toBe(true);
   });
   it('mounts separate empty notification regions before messages exist', () => {

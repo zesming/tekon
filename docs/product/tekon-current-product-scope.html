@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 
-<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Tekon 现行产品范围</title><style>body{margin:0;background:#f5f4ef;color:#202b33;font:17px/1.8 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:36px 24px 80px}h1,h2,h3{line-height:1.35}h1{border-bottom:3px solid #26756d;padding-bottom:20px}h2{margin-top:2.4em}a{color:#17635c;overflow-wrap:anywhere}code{background:#e8eae4;padding:2px 5px;font-size:.88em;overflow-wrap:anywhere}pre{overflow:auto;padding:16px;background:#e8eae4}table{border-collapse:collapse;display:block;overflow:auto}td,th{border:1px solid #bdc9c4;padding:10px;text-align:left;min-width:100px}blockquote{border-left:4px solid #26756d;margin:24px 0;padding:0 20px;color:#465b57}@media(max-width:480px){main{padding:24px 16px}body{font-size:16px}}@media print{body{background:white}main{max-width:none;padding:0}}</style></head><body><main><h1>Tekon 现行产品范围</h1>
-<p>2026-09-07 · v0.25.0 · <a href="../manual/tekon-user-manual.md">用户手册</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a></p>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Tekon 现行产品范围</title><style>body{margin:0;background:#f5f4ef;color:#202b33;font:17px/1.8 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:36px 24px 80px}h1,h2,h3{line-height:1.35}h1{border-bottom:3px solid #26756d;padding-bottom:20px}h2{margin-top:2.4em}a{color:#17635c;overflow-wrap:anywhere}code{background:#e8eae4;padding:2px 5px;font-size:.88em;overflow-wrap:anywhere}pre{overflow:auto;padding:16px;background:#e8eae4}table{border-collapse:collapse;display:block;overflow:auto}td,th{border:1px solid #bdc9c4;padding:10px;text-align:left;min-width:100px}blockquote{border-left:4px solid #26756d;margin:24px 0;padding:0 20px;color:#465b57}@media(max-width:480px){main{padding:24px 16px}body{font-size:16px}}@media print{body{background:white}main{max-width:none;padding:0}}footer{overflow-wrap:anywhere}</style></head><body><main><h1>Tekon 现行产品范围</h1>
+<p>2026-09-08 · 当前版本以根 <code>package.json</code> 为准 · <a href="../README.md">文档总索引</a> · <a href="../manual/tekon-user-manual.md">用户手册</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a></p>
 <h2>用户与价值</h2>
 <p>Tekon 面向需要把研发需求推进到可审阅交付材料的仓库维护者。用户提出目标、确认计划与风险，Agent 在隔离 worktree 中执行角色任务，Tekon 收集 Artifact、Gate、Audit、diff 和 PR 准备包。用户据证据决定是否创建 PR、合入和上线。</p>
 <p>适合边界清楚、能用仓库命令验证的小功能、缺陷修复、测试和文档任务。需求不清晰时先塑形和批准需求卡；命令画像不完整时先确认检查如何执行。它是本地工作台，当前不提供远程多租户服务。</p>
@@ -57,8 +57,9 @@
 <li>完整只读导出、snapshot/manifest、retention/purge 和生命周期安全清理：<a href="https://github.com/zesming/tekon/issues/18">#18</a>、<a href="https://github.com/zesming/tekon/issues/33">#33</a>。当前 <code>clean</code> 停用，历史分页不等于完整导出。</li>
 <li>DSH 新发行版本与完整依赖树的兼容性验收：<a href="https://github.com/zesming/tekon/issues/17">#17</a>。tested CLI pin 保持 <code>0.1.2-alpha.3</code>，不代表整棵传递依赖树已锁定。</li>
 <li>全域权威事件日志、OS 级隔离及所有外部副作用的硬 fencing。现有 SQLite owner fence 保护其覆盖的写入，不等于能停止逃逸进程或撤回外部动作。</li>
+<li><code>roles/*/tools.yaml</code>、<code>permissionProfile</code> 和 workflow helper 主要提供角色提示与顶层命令策略；它们不是 Provider 内部工具或 OS 沙箱。Gateway/Human Gate 能约束 Tekon 管理的顶层动作，但当前验证不足以证明 Agent 在 Provider 内部自行调用 <code>git</code>、<code>gh</code> 或其他外部工具时会被完整阻断。</li>
 </ul>
 <h2>证据与发布口径</h2>
-<p><a href="../reviews/current.md">正式审阅入口</a>记录各轮结论与边界。单元测试、真实 SQLite 竞争、真实进程 e2e、Chromium 交互和真实 Provider 任务各有不同证明范围；mock 或只读 smoke 不能替代真实交付。没有 push/PR/CI 的样本不能宣称 readiness 全通过；浏览器视口矩阵不等于读屏、其他 OS 或生产负载验收。</p>
-<p>旧阶段计划已完成归并，不再作为当前能力承诺。历史方案和验收证据仍可追溯至<a href="https://github.com/zesming/tekon/tree/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans">归并前固定快照</a>。</p>
-<footer>Markdown SHA-256: a421186f99decc1ddac64c11f3a8ea8fa7508287296a31555755121290a65e53</footer></main></body></html>
+<p><a href="../reviews/current.md">正式审阅入口</a>记录各轮结论与边界；<a href="../reviews/current.md#保留的正式验收与发布证据">第 26/27 轮正式验收</a>提供可复核的运行与截图证据。单元测试、真实 SQLite 竞争、真实进程 e2e、Chromium 交互和真实 Provider 任务各有不同证明范围；mock 或只读 smoke 不能替代真实交付。没有 push/PR/CI 的样本不能宣称 readiness 全通过；浏览器视口矩阵不等于读屏、其他 OS 或生产负载验收。</p>
+<p>旧阶段计划已完成归并，不再作为当前能力承诺。历史方案和过程报告可由<a href="https://github.com/zesming/tekon/tree/86a3d48/docs">基线 86a3d48 的文档目录</a>或 Git 历史检索；正式验收和发布证据仍保留在 <code>docs/reviews/</code>。</p>
+<footer>Markdown SHA-256: 4b6a24b74c9d236e15612df2d599b89de81f013850a7ec8afe4516620d2ef7da</footer></main></body></html>

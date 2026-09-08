@@ -23,7 +23,7 @@ import type { CliIO } from '../lib/context.js';
 import { ensureInitialized } from '../lib/context.js';
 import {
   awaitJobTerminal,
-  exitCodeForWorkflowStatus,
+  exitCodeForJobOutcome,
   withCliSessionContext,
 } from '../lib/session-context.js';
 import {
@@ -291,8 +291,9 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         .catch(() => {});
     };
     process.on('SIGINT', onSigint);
+    let jobStatus: Awaited<ReturnType<typeof awaitJobTerminal>>;
     try {
-      await awaitJobTerminal({
+      jobStatus = await awaitJobTerminal({
         jobs: ctx.jobs,
         jobRunner: ctx.jobRunner,
         jobId: result.jobId,
@@ -320,7 +321,13 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         .filter(Boolean)
         .join('\n') + '\n',
     );
-    return exitCodeForWorkflowStatus(status);
+    return exitCodeForJobOutcome({
+      io,
+      runId: result.runId,
+      jobId: result.jobId,
+      jobStatus,
+      workflowStatus: status,
+    });
   });
 }
 

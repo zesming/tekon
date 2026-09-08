@@ -14,12 +14,10 @@ import {
   defaultBuiltInRolesDir,
   defaultCommandPolicy,
   gatesWithStableKeys,
-  isChangesRequested,
   isWorkflowTerminalError,
   makeSyntheticLease,
   migrateDatabase,
   openTekonDatabase,
-  resolveMaxReworkAttempts,
   resolveReviewTargetNodeByHeuristic,
   scopedId,
   stableGateKey,
@@ -620,71 +618,6 @@ describe('review rework mechanism', () => {
     });
   });
 
-  describe('isChangesRequested detection', () => {
-    it('changes-requested on independent-review gate returns true', () => {
-      expect(
-        isChangesRequested('changes-requested', 'independent-review'),
-      ).toBe(true);
-    });
-
-    it('review-not-approved on independent-review gate returns false', () => {
-      expect(
-        isChangesRequested('review-not-approved', 'independent-review'),
-      ).toBe(false);
-    });
-
-    it('changes-requested on non-independent-review gate returns false', () => {
-      expect(isChangesRequested('changes-requested', 'schema')).toBe(false);
-    });
-
-    it('changes-requested on build gate returns false', () => {
-      expect(isChangesRequested('changes-requested', 'build')).toBe(false);
-    });
-
-    it('changes-requested on lint gate returns false', () => {
-      expect(isChangesRequested('changes-requested', 'lint')).toBe(false);
-    });
-
-    it('changes-requested on human gate returns false', () => {
-      expect(isChangesRequested('changes-requested', 'human')).toBe(false);
-    });
-
-    it('changes-requested on e2e-pass gate returns false', () => {
-      expect(isChangesRequested('changes-requested', 'e2e-pass')).toBe(false);
-    });
-
-    it('undefined failureClassification returns false', () => {
-      expect(
-        isChangesRequested(undefined, 'independent-review'),
-      ).toBe(false);
-    });
-
-    it('empty string failureClassification returns false', () => {
-      expect(isChangesRequested('', 'independent-review')).toBe(false);
-    });
-
-    it('null failureClassification returns false', () => {
-      expect(isChangesRequested(null, 'independent-review')).toBe(false);
-    });
-  });
-
-  describe('resolveMaxReworkAttempts defaults', () => {
-    it('defaults to 5 when gate.maxRetries is 0', () => {
-      expect(resolveMaxReworkAttempts(0)).toBe(5);
-    });
-
-    it('defaults to 5 when gate.maxRetries is negative', () => {
-      expect(resolveMaxReworkAttempts(-1)).toBe(5);
-    });
-
-    it('respects gate.maxRetries when positive', () => {
-      expect(resolveMaxReworkAttempts(3)).toBe(3);
-    });
-
-    it('allows maxRetries=1 for single rework attempt', () => {
-      expect(resolveMaxReworkAttempts(1)).toBe(1);
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------

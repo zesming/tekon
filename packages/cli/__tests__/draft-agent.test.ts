@@ -46,7 +46,7 @@ describe('isAgentAvailable', () => {
   });
 
   it('returns true for available command', () => {
-    const result = isAgentAvailable({ agentCommand: 'node' });
+    const result = isAgentAvailable({ agentCommand: 'node', repoPath: '/tmp' });
     expect(result).toBe(true);
   });
 });
@@ -78,7 +78,7 @@ describe('refineDraftWithAgent', () => {
     const result = refineDraftWithAgent(
       draft,
       [{ question: 'Who is the user?', answer: 'Developers' }],
-      { agentCommand: 'nonexistent_cmd_xyz_123' },
+      { agentCommand: 'nonexistent_cmd_xyz_123', repoPath: '/tmp' },
     );
     expect(result).toBeNull();
   });
@@ -89,18 +89,8 @@ describe('refineDraftWithAgent', () => {
     const result = refineDraftWithAgent(
       draft,
       [{ question: 'Who is the user?', answer: 'Developers' }],
-      { agentCommand: 'node' },
+      { agentCommand: 'node', repoPath: '/tmp' },
     );
     expect(result).toBeNull();
-  });
-});
-
-describe('AgentClarificationConfig', () => {
-  it('accepts valid agentCommand', () => {
-    // Verify the type compiles — this is a compile-time only check
-    // Runtime assertion just confirms the structure is accepted
-    const config = { agentCommand: 'claude', repoPath: '/tmp' };
-    const ok = typeof config.agentCommand === 'string' && typeof config.repoPath === 'string';
-    expect(ok).toBe(true);
   });
 });

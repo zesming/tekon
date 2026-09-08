@@ -24,3 +24,6 @@ __pycache__/
 *.pyc
 .superpowers/
 .claude/worktrees/
+
+# 本地审查与开发临时文件
+/tmp/

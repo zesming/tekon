@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "scope": "真实 Claude 节点首次执行的失败取证；不是恢复结果或完整发布验收",
+  "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+  "nodeId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+  "sessionId": "b2daa8d5-e2eb-431e-8556-ffeb7ad3675e",
+  "provider": "claude-code",
+  "cliVersion": "2.1.250",
+  "modelReportedByProvider": "deepseek-v4-flash",
+  "time": {
+    "timezone": "UTC",
+    "commandStartedAt": "2026-09-08T03:46:25.295Z",
+    "commandCompletedAt": "2026-09-08T03:47:21.544Z",
+    "roleRunInterruptedAt": "2026-09-08T03:47:21.546Z",
+    "nodeInterruptedAuditAt": "2026-09-08T03:47:21.675Z"
+  },
+  "sources": {
+    "nodeOutputDirectoryRelativeToFixture": ".tekon/runs/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+    "commandLogBasename": "1788839185295-3ab82e85-27ee-4c49-a756-14486f184e38",
+    "files": [
+      "1788839185295-3ab82e85-27ee-4c49-a756-14486f184e38.stdout.log",
+      "1788839185295-3ab82e85-27ee-4c49-a756-14486f184e38.stderr.log",
+      "1788839185295-3ab82e85-27ee-4c49-a756-14486f184e38.progress.json",
+      "requirement-interface-review.json",
+      "artifact-manifest.json"
+    ],
+    "nativeTranscriptFilename": "b2daa8d5-e2eb-431e-8556-ffeb7ad3675e.jsonl",
+    "databaseRelativeToFixture": ".tekon/tekon.sqlite",
+    "inspectionMethod": "只读文件解析及 SQLite mode=ro 查询；未修改 fixture 产物或数据库，未启动模型"
+  },
+  "providerCompletion": {
+    "type": "result",
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "stop_reason": "end_turn",
+    "api_error_status": null,
+    "duration_ms": 55329,
+    "duration_api_ms": 54568,
+    "num_turns": 12,
+    "progressStatus": "completed",
+    "progressElapsedMs": 56249,
+    "timeoutMs": 600000,
+    "noProgressTimeoutMs": 300000,
+    "timeoutReason": null,
+    "stderrDiagnostic": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}",
+    "interpretation": "Provider 完成元数据无 API 错误或超时；stderr 的模型识别提示不是本次中断原因。"
+  },
+  "artifactFailure": {
+    "filename": "requirement-interface-review.json",
+    "nativeWriteLine": 50,
+    "nativeWriteAt": "2026-09-08T03:47:16.095Z",
+    "nativeWriteResultLine": 51,
+    "nativeWriteSucceeded": true,
+    "parser": "Python json.loads，只读解析原文件",
+    "error": "Expecting ',' delimiter: line 3 column 1289 (char 1356)",
+    "lineOneBased": 3,
+    "columnOneBased": 1289,
+    "characterOffsetZeroBased": 1356,
+    "firstInvalidFragment": "约束\"不修改测试\"下以 npm test 全绿为准",
+    "additionalInvalidFragment": "实现验证须以\"红→绿\"完整观察为准",
+    "fragmentExplanation": "上述片段中的 ASCII 双引号在原 artifact 的 JSON 字符串内部没有转义；此归档文件本身已正确转义。",
+    "adapterReportedExitCode": 1,
+    "nodeAuditError": "agent failed: provider=claude-code exitCode=1",
+    "codePath": [
+      "packages/core/src/runtime/manifest-artifacts.ts: ingestAgentManifestArtifacts → validateArtifactContent",
+      "packages/core/src/runtime/claude-code-adapter.ts: artifact 导入异常的 catch 返回 exitCode=1"
+    ],
+    "conclusion": "模型生成的 artifact JSON 无效，导入校验拒绝；不是已证实的外部 Provider 故障。"
+  },
+  "permissionAndCommandEvidence": {
+    "initialCompoundAttempt": {
+      "command": "npm test 2>&1; echo \"exit=$?\"; npm run build 2>&1; echo \"exit=$?\"; npm run lint 2>&1; echo \"exit=$?\"",
+      "nativeResultLine": 26,
+      "at": "2026-09-08T03:46:52.253Z",
+      "is_error": true,
+      "message": "This Bash command contains multiple operations. The following part requires approval: echo \"exit=$?\""
+    },
+    "subsequentDirectCommands": [
+      {
+        "command": "npm test",
+        "nativeToolUseLine": 32,
+        "nativeToolResultLine": 33,
+        "completedAt": "2026-09-08T03:46:54.261Z",
+        "executed": true,
+        "is_error": true,
+        "exitCodeExplicitInToolResult": 1,
+        "script": "node --test math.test.js",
+        "tests": 4,
+        "passed": 2,
+        "failed": 2,
+        "assertionExcerpts": ["-1 !== 5", "1 !== -5"],
+        "interpretation": "真实 TAP 结果复现 fixture 既有加法缺陷；失败来自测试断言，非权限拒绝。"
+      },
+      {
+        "command": "npm run build",
+        "nativeToolUseLine": 36,
+        "nativeToolResultLine": 37,
+        "completedAt": "2026-09-08T03:46:56.045Z",
+        "executed": true,
+        "is_error": false,
+        "outputExcerpt": "> build\n> node --check math.js",
+        "interpretation": "工具结果成功；该结果正文未单列数字退出码。"
+      },
+      {
+        "command": "npm run lint",
+        "nativeToolUseLine": 40,
+        "nativeToolResultLine": 41,
+        "completedAt": "2026-09-08T03:46:58.066Z",
+        "executed": true,
+        "is_error": false,
+        "outputExcerpt": "> lint\n> node --check math.js",
+        "interpretation": "工具结果成功；该结果正文未单列数字退出码。"
+      }
+    ],
+    "conclusion": "本次三个直接 npm 命令均实际执行。初始复合命令的审批拒绝未阻止模型改用已授权精确命令；无需据此扩大允许规则。",
+    "limit": "本证据不证明 OS 沙箱、网络隔离或脚本子进程的完整权限控制，也不代表整个 run 已通过。"
+  },
+  "databaseObservationBeforeResume": {
+    "nodeStatus": "interrupted",
+    "roleRunId": "role_run_088388a4-abe0-4f33-b5db-a4089db6aad3",
+    "roleRunStatus": "interrupted",
+    "artifactCountForNode": 0,
+    "leaseCountForNode": 1,
+    "unreleasedLeaseCountForNode": 0,
+    "leaseId": "lease_fe833851-e02e-4086-8ae0-2b0b7ea33c6e",
+    "leasePromotedAt": "2026-09-08T03:47:21.660Z",
+    "leasePromotionCommitted": false,
+    "leaseReleasedAt": "2026-09-08T03:47:21.674Z"
+  },
+  "recovery": {
+    "status": "not_verified_in_this_record",
+    "recommendedAction": "通过普通 resume 重跑 interrupted 节点，重新生成有效 JSON artifact；可明确要求正确转义字符串并使用直接 npm 验证命令。",
+    "expectedBehavior": "原租约已释放，恢复可创建新的执行租约；重新执行与 artifact 校验成功后才可继续 Gate。",
+    "preservedBoundary": "本归档不记录已恢复；不人工修正 fixture artifact、不修改数据库、不放宽 schema 或权限、不把失败节点标为通过。"
+  }
+}

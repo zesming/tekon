@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "scope": "旧真实 run 的需求接口评审节点首次执行失败取证；使用首次原始 Write 内容，不使用恢复后覆盖的 artifact，不代表完整发布验收",
+  "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+  "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+  "sessionId": "ec333314-f639-4a7d-a84c-4c6c91fee59e",
+  "provider": "claude-code",
+  "modelReportedByProvider": "deepseek-v4-flash",
+  "time": {
+    "timezone": "UTC",
+    "commandStartedAt": "2026-09-08T02:06:24.072Z",
+    "commandCompletedAt": "2026-09-08T02:07:04.773Z",
+    "roleRunInterruptedAt": "2026-09-08T02:07:04.776Z",
+    "nodeInterruptedAuditAt": "2026-09-08T02:07:04.901Z"
+  },
+  "sources": {
+    "nodeOutputDirectoryRelativeToFixture": ".tekon/runs/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+    "commandLogBasename": "1788833184071-ede798b7-169a-4c25-bc7a-feb7ed3af1a0",
+    "files": [
+      "1788833184071-ede798b7-169a-4c25-bc7a-feb7ed3af1a0.stdout.log",
+      "1788833184071-ede798b7-169a-4c25-bc7a-feb7ed3af1a0.stderr.log",
+      "1788833184071-ede798b7-169a-4c25-bc7a-feb7ed3af1a0.progress.json"
+    ],
+    "nativeTranscriptFilename": "ec333314-f639-4a7d-a84c-4c6c91fee59e.jsonl",
+    "databaseRelativeToFixture": ".tekon/tekon.sqlite",
+    "inspectionMethod": "只读原始 JSONL，提取首次 Write.input.content 后用 json.loads 解析；SQLite mode=ro 查询历史 role_run 与审计事件。未修改 fixture 文件或数据库，未启动模型。",
+    "overwriteBoundary": "后续普通 resume 已重新生成同名产物；本次 JSON 缺陷证据仅来自首次 session 的原始 Write 内容。"
+  },
+  "providerCompletion": {
+    "subtype": "success",
+    "is_error": false,
+    "terminal_reason": "completed",
+    "stop_reason": "end_turn",
+    "api_error_status": null,
+    "duration_ms": 39711,
+    "duration_api_ms": 39534,
+    "num_turns": 7,
+    "progressStatus": "completed",
+    "progressElapsedMs": 40701,
+    "timeoutMs": 180000,
+    "noProgressTimeoutMs": 120000,
+    "timeoutReason": null,
+    "stderrDiagnostic": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}",
+    "interpretation": "Provider 正常完成，无 API 错误或超时。unrecognized_model 仅保留为实际模型识别限制，不能据此归因为本次节点中断，也不能将本次调用表述为已验证的 Anthropic 原生模型执行。"
+  },
+  "artifactFailure": {
+    "filename": "requirement-interface-review.json",
+    "nativeWriteLine": 26,
+    "nativeWriteAt": "2026-09-08T02:06:59.735Z",
+    "nativeWriteToolUseId": "call_00_frhtN8tVfcBckhW2UT4O2878",
+    "nativeWriteResultLine": 27,
+    "nativeWriteSucceeded": true,
+    "parser": "Python json.loads，只读解析首次原始 Write.input.content",
+    "error": "Expecting ',' delimiter: line 3 column 793 (char 844)",
+    "lineOneBased": 3,
+    "columnOneBased": 793,
+    "characterOffsetZeroBased": 844,
+    "firstInvalidFragment": "与需求\"复用已有测试\"口径一致",
+    "fragmentExplanation": "片段中的 ASCII 双引号在原 artifact 的 body JSON 字符串内部没有转义；此归档文件本身已正确转义。",
+    "manifest": {
+      "filename": "artifact-manifest.json",
+      "nativeWriteLine": 32,
+      "nativeWriteAt": "2026-09-08T02:07:01.804Z",
+      "nativeWriteResultLine": 33,
+      "jsonValid": true,
+      "writeSucceeded": true,
+      "artifactType": "requirement-interface-review",
+      "artifactPath": "requirement-interface-review.json"
+    },
+    "laterArtifactCorrectionInFirstSession": false,
+    "adapterReportedExitCode": 1,
+    "nodeAuditError": "agent failed: provider=claude-code exitCode=1",
+    "codePath": [
+      "packages/core/src/runtime/manifest-artifacts.ts: ingestAgentManifestArtifacts → validateArtifactContent",
+      "packages/core/src/runtime/claude-code-adapter.ts: artifact 导入异常的 catch 返回 exitCode=1"
+    ],
+    "conclusion": "首次原始 Write 证明 artifact JSON 无效，足以触发导入拒绝；与 Provider 成功而 adapter 返回 exitCode=1 的记录一致。首次中断原因可由 undetermined 修正为非法 JSON artifact，不应归因于模型识别提示。"
+  },
+  "historicalDatabaseEvidence": {
+    "roleRunId": "role_run_f6737490-c5ba-4638-bb78-c2f9e304a7c8",
+    "roleRunStatus": "interrupted",
+    "roleRunStartedAt": "2026-09-08T02:06:24.011Z",
+    "roleRunCompletedAt": null,
+    "leaseId": "lease_ea862dc8-f284-4f1f-8377-71e81cb7df94",
+    "leaseCreatedAuditAt": "2026-09-08T02:06:24.068Z",
+    "leaseReleasedAuditAt": "2026-09-08T02:07:04.900Z",
+    "nodeInterruptedAuditId": "event_fc89df8c-e11f-4d49-92c9-75d7de9eaf62",
+    "artifactCountAtFirstFailure": null,
+    "artifactCountLimitation": "当前数据库已包含后续恢复结果，未用当前 artifact 数量冒充首次失败时的数量。"
+  },
+  "recoveryBoundary": {
+    "scope": "本归档只判定首次失败根因，不审查后续恢复产物或整个 run 的通过情况。",
+    "preservedBoundary": "未人工修正 fixture artifact、未修改数据库、未放宽 schema 或权限。"
+  }
+}

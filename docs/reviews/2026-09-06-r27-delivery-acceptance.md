@@ -1,6 +1,6 @@
 # 第 27 轮整改验收：排队恢复、Gate 关停与交付证据
 
-2026-09-06 建档 · 2026-09-07 收尾 · v0.25.0 · [PR #11](https://github.com/zesming/tekon/pull/11) · [原报告及维护方批注](2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.html)
+2026-09-06 建档 · 2026-09-07 收尾 · v0.25.0 · [PR #11](https://github.com/zesming/tekon/pull/11) · [验收索引](current.md)
 
 本轮基于 `31680f9bfd9424dd6466734ac97a8d172debfa42` 补齐排队恢复竞争、运行控制反馈和真实交付中暴露的 Gate 关停恢复缺口。以下分别记录实现、测试、真实模型和人工查看的证明范围，不以 Run 通过代替远端交付就绪。
 
@@ -85,7 +85,7 @@ SDK 的 initialize/session-prompt/shutdown 不等于 ACP 的取消、Session 关
 | 过程内容 | 现行维护入口 |
 | --- | --- |
 | 用户、场景、人工控制、当前能力及后续范围 | [产品范围](../product/tekon-current-product-scope.html) |
-| RunPlan、Admission、Session/Job、owner fence、退出与恢复、Harness | [运行时合同](../technical/tekon-runtime-contract.html)、[ADR](../technical/adr-0001-runtime-authority-and-collaborate.html) |
+| RunPlan、Admission、Session/Job、owner fence、退出与恢复、Harness | [运行时合同](../technical/tekon-runtime-contract.html) |
 | 页面责任、受理回执、运行控制、错误、刷新与可访问性 | [运行控制设计](../design/tekon-run-control-design.html) |
 | 如何操作及判断结果 | [手册 §7.1 中英](../manual/tekon-user-manual.html)，同步 README 与 CHANGELOG 0.24.1/0.25.0 |
 | 本轮方案、失败与最终验收依据 | 本报告、R27 追加批注与脱敏证据 |

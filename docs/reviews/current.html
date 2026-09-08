@@ -1,13 +1,66 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tekon 当前产品与架构评审</title><style>*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f2f5f7;color:#263441;font-family:system-ui,-apple-system,"Noto Sans CJK SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.85}.masthead{background:#142b3e;color:#e5f2fc;padding:22px max(20px,calc((100vw - 1080px)/2));font-size:12px;letter-spacing:.13em}.paper{max-width:1080px;margin:30px auto;padding:38px 50px;background:#fff;border:1px solid #dce4e9;border-radius:12px}h1{font-size:33px;line-height:1.4;margin:0 0 22px;color:#12314a;letter-spacing:-.025em}h2{font-size:24px;line-height:1.5;border-top:2px solid #dbe6ed;padding-top:22px;margin:44px 0 18px;scroll-margin-top:20px}h3{font-size:19px;margin:26px 0 12px}p{margin:12px 0 18px}a{color:#12638d;text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible,summary:focus-visible,.table-wrap:focus-visible{outline:3px solid #b77712;outline-offset:3px}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#edf3f7;padding:2px 5px;border-radius:4px;font-size:.88em;overflow-wrap:anywhere}pre{padding:17px 20px;background:#172f43;color:#f2f7fb;overflow:auto;border-radius:8px}pre code{background:none;color:inherit;padding:0;overflow-wrap:normal}.table-wrap{overflow:auto;margin:20px 0 24px;border:1px solid #dce4e9;border-radius:8px}table{border-collapse:collapse;width:100%;min-width:580px;font-size:14px;line-height:1.7}th,td{text-align:left;vertical-align:top;padding:12px 15px;border-bottom:1px solid #e1e8ed}th{background:#eaf2f8;color:#153c59}tr:last-child td{border-bottom:0}tr:nth-child(even) td{background:#fafcfd}ul,ol{padding-left:25px}li{margin:8px 0}strong{color:#16384f}.toc{background:#f1f6fa;border-left:4px solid #3685a6;padding:16px 20px;margin:24px 0;border-radius:5px}.toc summary{font-weight:650;cursor:pointer}.toc ol{columns:2;font-size:14px}.toc li{break-inside:avoid}.foot{border-top:1px solid #dce4e9;margin-top:32px;padding-top:18px;font-size:13px;color:#61717c}.skip{position:absolute;left:-10000px}.skip:focus{position:static}blockquote{border-left:4px solid #3685a6;background:#f5f8fb;padding:4px 20px;margin:18px 0}@media(max-width:700px){body{font-size:15px}.paper{margin:12px;padding:24px 20px}h1{font-size:26px}h2{font-size:21px}.toc ol{columns:1}}@media(max-width:360px){.paper{margin:8px;padding:22px 14px}h1{font-size:23px}h2{font-size:20px}.masthead{padding:16px 20px}code{font-size:.83em}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white}.paper{border:0;max-width:none;margin:0;padding:0}.masthead,.toc,.skip{display:none}h2,h3{break-after:avoid}pre{white-space:pre-wrap}.table-wrap{overflow:visible}table{min-width:0;font-size:10pt}a{color:inherit}.foot{font-size:9pt}}img{display:block;max-width:100%;height:auto;border:1px solid #dce4e9;margin:20px 0}</style></head><body><a class="skip" href="#main">跳到正文</a><header class="masthead">TEKON / R27 DELIVERY / 2026-09-06</header><main class="paper" id="main"><h1 id="section-1">Tekon 当前产品与架构评审</h1><details class="toc"><summary>阅读目录</summary><ol><li><a href="#section-2">当前结论</a></li><li><a href="#section-3">文档与后续范围</a></li></ol></details>
-<p><strong>2026-09-07 · v0.25.0 · 第二十七轮维护方整改验收</strong></p>
-<p><a href="2026-09-06-r27-delivery-acceptance.html">本轮正式验收 HTML</a> · <a href="2026-09-06-r27-delivery-acceptance.md">验收 Markdown</a> · <a href="2026-09-06-tekon-product-runtime-harness-twenty-seventh-review.html">原报告及追加批注</a> · <a href="https://github.com/zesming/tekon/pull/11">PR #11</a></p>
-<h2 id="section-2">当前结论</h2>
-<p>本轮修复排队暂停后的恢复竞态，统一暂停/恢复请求反馈，并解决真实交付暴露的 Gate 关停被误判为质量失败的问题。已完成 Agent 的检查可在同 Run、对应工作树继续；自动修复后的租约关联、连续关停及 rework 审阅 Gate 均补齐恢复与释放边界。主动取消仍不可恢复，缺失或歧义工作树证据明确阻断。</p>
-<p>最终全仓测试 191 文件、2176 passed / 1 既有 opt-in skipped；Core e2e 65/65、CLI e2e 25/25、Chromium 202/202（零重试）。构建、typecheck、lint 均通过。七档主要页面与四档控制反馈共 64 张原始截图随正式验收归档，已结合文字边界检查实际查看；窄屏裁切及六类证据链接无法进入实际内容的问题已修复。</p>
-<p>真实 Claude 在隔离 Git 项目修改代码并输出两份 Artifact，服务进程正常关闭后由另一进程恢复，实际构建、测试与 Audit 通过。readiness 仍为 false：PR、远端 CI、验收标准、QA 和安全扫描证据尚缺，不能把该样本称为远端交付就绪。</p>
-<h2 id="section-3">文档与后续范围</h2>
-<p>已将阶段计划归并到<a href="../product/tekon-current-product-scope.html">产品范围</a>、<a href="../technical/tekon-runtime-contract.html">运行时合同</a>、<a href="../design/tekon-run-control-design.html">运行控制设计</a>与<a href="../manual/tekon-user-manual.html">手册</a>。历史报告保留原观察时间和证据，过程计划引用使用固定提交快照。</p>
-<p>deepseek-harness 核对至 <code>d347e703908d0406b7a7ef80e3a0e594d86b2215</code>；GitHub 0.1.3-alpha.1 Release 已发布，截至 2026-09-06 npm 对应版本查询仍 E404。Tekon 已验证 CLI 固定版本保持 <code>0.1.2-alpha.3</code>，顶层版本不能锁定整棵依赖树。新版本兼容、持续协作、完整导出、其他 OS/读屏/生产负载及全部外部副作用隔离仍需分别验收。</p>
-<p>本地验收不替代该 PR Head 的远端检查。用户已授权提交并在 CI 全部通过后合入 main；提交后独立回读 Core/CI、九个 CI Job 终态及实际合并结果，不复用历史提交绿色。部署和发布不在本轮操作范围。</p>
-<footer class="foot">Markdown SHA-256: 11cd243df5a93e07fa099e3cad0b9d5acafdaeced4f0d77f312efbcd6c98513a</footer></main></body></html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tekon 验收与发布证据索引</title>
+  <style>
+    :root{--ink:#19313b;--muted:#5b6f77;--line:#dce7e8;--accent:#126b62;--soft:#eef7f4;--page:#f5f8f7;--paper:#fff;--warn:#8b5b15}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--page);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+    .masthead{background:#163c43;color:#eaf7f4;padding:20px max(20px,calc((100vw - 1120px)/2));letter-spacing:.12em;font-size:12px}
+    main{max-width:1120px;margin:28px auto;padding:38px 50px 50px;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 35px rgba(23,57,61,.06)}
+    h1{margin:0 0 8px;color:#123f46;font-size:34px;line-height:1.35;letter-spacing:-.02em}h2{margin:42px 0 16px;padding-top:20px;border-top:2px solid var(--line);font-size:24px;line-height:1.45}h3{font-size:19px;margin:26px 0 10px}p{margin:12px 0 18px}a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible,summary:focus-visible,.scroll:focus-visible{outline:3px solid #c18b2d;outline-offset:3px}code{padding:2px 5px;border-radius:4px;background:#edf4f2;font: .88em ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}.scroll{overflow:auto;border:1px solid var(--line);border-radius:8px;margin:18px 0 22px}table{width:100%;min-width:700px;border-collapse:collapse;font-size:14px;line-height:1.7}th,td{padding:12px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:#e9f4f1;color:#194c50}tr:nth-child(even) td{background:#fbfdfc}tr:last-child td{border-bottom:0}li{margin:8px 0}.toc{padding:15px 20px;background:var(--soft);border-left:4px solid #2d8a7c;border-radius:5px}.toc summary{cursor:pointer;font-weight:650}.toc ol{columns:2}.toc li{break-inside:avoid}.note{padding:14px 18px;background:#fff8e8;border-left:4px solid #bf8426}.foot{margin-top:35px;padding-top:17px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.foot{overflow-wrap:anywhere}.skip{position:absolute;left:-10000px}.skip:focus{position:static}@media(max-width:700px){body{font-size:15px}main{margin:12px;padding:25px 20px 34px}h1{font-size:27px}h2{font-size:21px}.toc ol{columns:1}}@media(max-width:360px){main{margin:8px;padding:22px 14px}.masthead{padding:15px 18px}h1{font-size:23px}table{min-width:620px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:#fff}main{max-width:none;margin:0;padding:0;border:0;box-shadow:none}.masthead,.toc,.skip{display:none}.scroll{overflow:visible}table{min-width:0;font-size:10pt}a{color:inherit}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">跳到正文</a>
+  <header class="masthead">TEKON / ACCEPTANCE &amp; RELEASE EVIDENCE / 2026-09-08</header>
+  <main id="main">
+    <h1>Tekon 验收与发布证据索引</h1>
+    <p>维护日期：2026-09-08 · 当前版本以根 <code>package.json</code> 为准</p>
+    <details class="toc"><summary>阅读目录</summary><ol><li><a href="#当前结论">当前结论</a></li><li><a href="#保留的正式验收与发布证据">保留的正式验收与发布证据</a></li><li><a href="#证据使用规则">证据使用规则</a></li><li><a href="#历史过程资料的归并">历史过程资料的归并</a></li><li><a href="#维护边界">维护边界</a></li></ol></details>
+    <p>这是 <code>docs/reviews/</code> 的固定入口。当前产品、交互和运行时口径见<a href="../README.md">文档总索引</a>；本页只登记正式验收、发布证据和仍需人工判断的边界。历史过程报告不再作为第二套规范。</p>
+
+    <h2 id="当前结论">当前结论</h2>
+    <p>本次 2026-09-08 发布审核已归档源码、回归日志、视觉证据与真实 Claude 调用记录。当前结果、失败修复、恢复状态和未覆盖范围统一见<a href="2026-09-08-release-audit.md">发布审核报告</a>，本索引不重复维护计数或临时运行状态。历史记录仅证明其原始快照，不能宣称所有真实 Provider 或远端交付已通过。</p>
+    <p>当前固定边界：</p>
+    <ul>
+      <li><code>Run</code>、<code>Node</code>、<code>Job</code>、<code>Artifact</code>、<code>Gate</code>、<code>Audit</code> 和 <code>Delivery</code> 的持久记录是领域事实源；<code>Session</code> feed 是观察投影。</li>
+      <li>push、创建 PR、合入、上线和权限扩大保留人工控制；<code>readiness=false</code> 可能只是缺少真实 PR/CI/QA/安全证据，不表示本地 workflow 一定失败。</li>
+      <li><code>roles/*/tools.yaml</code>、<code>permissionProfile</code> 和顶层 CommandGateway 不能扩大为 Provider 内部工具或 OS 沙箱。当前编译与顶层调用测试不足以证明阻断 Agent 内部自行执行 <code>git</code>、<code>gh</code> 或其他外部工具。</li>
+    </ul>
+
+    <h2 id="保留的正式验收与发布证据">保留的正式验收与发布证据</h2>
+    <div class="scroll" role="region" aria-label="正式验收与发布证据表格" tabindex="0"><table><thead><tr><th>记录</th><th>保留原因与证明范围</th></tr></thead><tbody>
+      <tr><td><a href="2026-09-08-release-audit.md">2026-09-08 发布前全面审核（MD）</a> · <a href="2026-09-08-release-audit.html">HTML</a></td><td>当前发布审核；记录全量测试、CLI/Chromium e2e、构建/类型/lint/audit、72 张图像与专项交互证据、真实 Claude 生命周期和外部 Provider 验证缺口。摘要、运行记录、源码哈希、日志和截图见 <a href="evidence/2026-09-08-release/">evidence/2026-09-08-release/</a>。</td></tr>
+      <tr><td><a href="2026-09-06-r27-delivery-acceptance.md">R27 排队恢复、Gate 关停与交付验收（MD）</a> · <a href="2026-09-06-r27-delivery-acceptance.html">HTML</a></td><td>历史最近专项验收；包含独立宿主恢复、真实 Claude 交付、四档视口、控制反馈和证据边界。原始 JSON、截图和验证摘要见 <a href="evidence/2026-09-06-r27/">evidence/2026-09-06-r27/</a>。</td></tr>
+      <tr><td><a href="2026-09-06-r26-recovery-acceptance.md">R26 取消恢复与安全重启验收（MD）</a> · <a href="2026-09-06-r26-recovery-acceptance.html">HTML</a></td><td>正式记录取消补偿、退出证据、owner fence、显式恢复和跨宿主 Claude 生命周期；证据见 <a href="evidence/2026-09-06-r26/">evidence/2026-09-06-r26/</a>。</td></tr>
+      <tr><td><a href="2026-06-12-tekon-final-self-bootstrap-delivery.md">最终自举交付归档（MD）</a> · <a href="2026-06-12-tekon-final-self-bootstrap-delivery.html">HTML</a></td><td>早期标准交付自举与真实 PR #5 的历史正式证据；保留原始运行、QA signoff、PR/CI 和人工控制边界，不代表当前版本。</td></tr>
+      <tr><td><a href="2026-06-10-tekon-codex-self-bootstrap-report.md">Codex 自举闭环归档（MD）</a> · <a href="2026-06-10-tekon-codex-self-bootstrap-report.html">HTML</a></td><td>早期真实 Codex provider → PR #2 闭环证据；保留 provider 认证、artifact、Gate、PR/CI 和 readiness 局限，不代表当前版本。</td></tr>
+    </tbody></table></div>
+    <p>R23–R25 的视觉证据资产仍保留，报告正文已归并并删除：</p>
+    <ul>
+      <li><a href="assets/r23-v0.22.0/">assets/r23-v0.22.0/</a>：Provider/受理/目录未就绪/错误状态的 320/390/700/1440px 截图。</li>
+      <li><a href="assets/r24-v0.23.0/">assets/r24-v0.23.0/</a>：简单/高级入口和 Session/Run 恢复身份绑定截图。</li>
+      <li><a href="assets/r25-v0.23.1/">assets/r25-v0.23.1/</a>：受理回执与 recovery-required 状态截图及 <a href="assets/r25-v0.23.1/evidence.json">evidence.json</a>。</li>
+    </ul>
+
+    <h2 id="证据使用规则">证据使用规则</h2>
+    <p>证据声明必须写清代码或文档快照、运行环境、实际命令/Provider、结果和未覆盖范围。单元测试、SQLite 竞争、真实进程 e2e、Chromium 截图和真实 Provider 任务各自只证明对应范围；mock 或只读 smoke 不能替代真实交付。截图需结合人工查看，不能仅用整页宽度或自动化计数推导无裁切、无重叠或可访问性通过。</p>
+    <p class="note">正式证据中的真实 ID、日志、截图和上游资料保持原始时点，不回填为当前状态。新一轮发布审计应创建新的正式记录，并在本页登记；旧记录不因新版本自动获得更宽证明范围。</p>
+
+    <h2 id="历史过程资料的归并">历史过程资料的归并</h2>
+    <p>重复的增量报告、方案批注和多轮复审正文已从工作树清理，仍适用的判断已写入固定入口：</p>
+    <div class="scroll" role="region" aria-label="历史资料归并表格" tabindex="0"><table><thead><tr><th>历史资料组</th><th>归并位置</th><th>处理</th></tr></thead><tbody>
+      <tr><td>2026-06-08 需求塑形、审批摘要、Gate triage、repo profile、CI、证据导航、secret governance、Web 多运行和工作可用性增量</td><td><a href="../product/tekon-current-product-scope.md">产品范围</a>、<a href="../technical/tekon-runtime-contract.md">运行时合同</a>、<a href="../design/tekon-run-control-design.md">运行控制设计</a>、<a href="../manual/tekon-user-manual.md">手册</a></td><td>正文删除，当前边界保留；历史可由 Git 检索</td></tr>
+      <tr><td>2026-06-09–06-13 CLI/手册评审、标准交付 bootstrap、seed run、长程任务和 Web UI 过程记录</td><td><a href="../manual/tekon-user-manual.md">手册</a>、<a href="../product/tekon-current-product-scope.md">产品范围</a>、<a href="../technical/tekon-runtime-contract.md">运行时合同</a></td><td>重复过程删除；真实 Codex/最终自举正式记录保留</td></tr>
+      <tr><td>2026-08-20–09-06 Harness/replatform、人类可用性、Runtime/产品多轮复审</td><td><a href="../product/tekon-current-product-scope.md">产品范围</a>、<a href="../design/tekon-run-control-design.md">运行控制设计</a>、<a href="../technical/tekon-runtime-contract.md">运行时合同</a></td><td>多轮正文删除；R26/R27 正式验收和证据资产保留</td></tr>
+    </tbody></table></div>
+    <p>完整旧目录仍可从<a href="https://github.com/zesming/tekon/tree/86a3d48/docs">基线 86a3d48 的 docs 目录</a>和 Git 历史检索。技术方案的逐文件迁移对照见<a href="../technical/tekon-runtime-contract.md#91-历史方案迁移对照">运行时合同 §9.1</a>。</p>
+
+    <h2 id="维护边界">维护边界</h2>
+    <p>本页不保存新的过程日志或临时运行态。正式验收、发布决策或用户要求归档时，才在 <code>docs/reviews/</code> 增加记录和证据资产；日常实现结论先更新固定产品/设计/技术/手册入口，再由这里登记相应正式证据。</p>
+    <footer class="foot">Markdown SHA-256: cffa5c10aa8c8b37cd1a3fec14fae84c7fd164a5e21b24e4ec116f7aeeb2fc34</footer>
+  </main>
+</body>
+</html>

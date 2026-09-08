@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tekon 文档入口</title>
+<style>
+:root{--ink:#172b35;--muted:#5b7076;--paper:#fbfcfa;--page:#edf2ef;--line:#d8e2de;--teal:#126b5c;--teal-soft:#e1f0eb;--amber:#a85d1d;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--page);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--teal);text-underline-offset:4px;overflow-wrap:anywhere}a:focus-visible,summary:focus-visible{outline:3px solid #277ea0;outline-offset:4px}.masthead{padding:26px max(20px,calc((100vw - 1080px)/2));background:#143c43;color:#edf8f3;letter-spacing:.14em;font:11px var(--mono)}main{max-width:1080px;margin:28px auto 72px;padding:42px 50px;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 30px #193b3110}h1{margin:0 0 12px;color:#123f42;font-size:clamp(28px,4vw,42px);letter-spacing:-.04em;line-height:1.25}h2{margin:44px 0 16px;padding-top:18px;border-top:2px solid var(--line);font-size:23px;line-height:1.4}p{margin:12px 0 18px}table{width:100%;border-collapse:collapse;margin:18px 0 24px;font-size:14px;line-height:1.7}th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}th{background:var(--teal-soft);color:#164c46;white-space:nowrap}tr:last-child td{border-bottom:0}code{padding:2px 5px;border-radius:4px;background:#eaf0ed;color:#245c51;font:.9em var(--mono);overflow-wrap:anywhere}blockquote{margin:20px 0;padding:12px 18px;border-left:4px solid var(--amber);background:#fff6e8;color:#664727}ul{padding-left:23px}li{margin:7px 0}.meta{color:var(--muted);font-size:13px}.eyebrow{margin:0 0 24px;color:var(--amber);font:11px var(--mono);letter-spacing:.13em}.foot{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font:11px var(--mono)}.foot{overflow-wrap:anywhere}@media(max-width:700px){main{margin:10px 8px 35px;padding:28px 20px;border-radius:10px}body{font-size:15px}table{display:block;overflow:auto;white-space:normal}th,td{min-width:170px;padding:10px 11px}.masthead{padding:18px 20px}h2{font-size:21px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white}.masthead{display:none}main{margin:0;max-width:none;padding:0;border:0;box-shadow:none}a{color:inherit}}
+</style>
+</head>
+<body>
+<header class="masthead">TEKON / DOCUMENTATION MAP / 2026-09-08</header>
+<main>
+<p class="eyebrow">FIXED ENTRIES <span aria-hidden="true">·</span> 当前行为与证据</p>
+<h1>Tekon 文档入口</h1>
+<p class="meta">维护日期：2026-09-08 · 当前版本以根 <code>package.json</code> 为准</p>
+<p>这里是 Tekon 文档的固定入口。当前行为、产品边界、交互规则和运行时不变式只在下表的现行文档中维护；正式验收与发布证据进入 <code>docs/reviews/</code>。过程计划、复审批注和旧方案不再作为第二套规范，历史需要时从 Git 检索。</p>
+<h2>先看哪一份</h2>
+<table><thead><tr><th>文档</th><th>适合回答的问题</th><th>权威范围</th></tr></thead><tbody>
+<tr><td><a href="product/tekon-current-product-scope.html">产品范围</a><br><a href="product/tekon-current-product-scope.md">Markdown</a></td><td>Tekon 当前解决什么问题？哪些路径已开放？哪些动作仍由人控制？</td><td>当前用户价值、开放场景、未开放能力、发布口径</td></tr>
+<tr><td><a href="design/tekon-run-control-design.html">运行控制设计</a><br><a href="design/tekon-run-control-design.md">Markdown</a></td><td>Web 页面如何发起、观察、暂停、取消、恢复和进入证据？</td><td>页面责任、反馈、错误、可访问性、视口与证据导航</td></tr>
+<tr><td><a href="technical/tekon-runtime-contract.html">运行时与 Harness 合同</a><br><a href="technical/tekon-runtime-contract.md">Markdown</a></td><td>Run、Session、Job、Gate、Artifact、恢复和 Provider 的事实源与边界是什么？</td><td>持久状态、事务、owner fence、退出证据、代次恢复、Harness 接入</td></tr>
+<tr><td><a href="manual/tekon-user-manual.html">用户使用手册</a><br><a href="manual/tekon-user-manual.md">Markdown</a></td><td>用户怎样安装、发起、审阅、恢复和判断结果？</td><td>CLI/Web 操作、参数、故障处理和限制</td></tr>
+<tr><td><a href="reviews/current.html">验收与发布证据</a><br><a href="reviews/current.md">Markdown</a></td><td>哪些行为有正式证据？证据覆盖到哪里？</td><td>当前验收索引、保留的正式记录和证据资产</td></tr>
+</tbody></table>
+<h2>当前边界</h2>
+<p>Tekon 是本地、单项目优先的 Agent workflow 工作台。标准交付会收集需求、角色产物、Gate、Audit、diff 和 PR 准备材料；push、创建 PR、合入、上线及权限扩大仍需人工控制。<code>Session</code> feed 是观察投影，不能代替领域记录、完整模型历史或持续协作接口。</p>
+<p>角色 <code>tools.yaml</code>、<code>permissionProfile</code> 和 workflow helper 主要提供提示和顶层策略；它们不是 Provider 内部工具或 OS 沙箱。CommandGateway、工作树和 human gate 只覆盖 Tekon 管理且能观测到的动作，不能据编译或顶层调用测试宣称阻断 Agent 在 Provider 内部自行调用 <code>git</code>、<code>gh</code> 或其他外部工具。</p>
+<h2>维护规则</h2>
+<ul><li>用户可见的路径、限制和判断口径先更新<a href="product/tekon-current-product-scope.md">产品范围</a>或<a href="manual/tekon-user-manual.md">用户手册</a>。</li><li>状态、事务、恢复、Provider 和安全边界先更新<a href="technical/tekon-runtime-contract.md">运行时合同</a>；页面行为先更新<a href="design/tekon-run-control-design.md">运行控制设计</a>。</li><li>正式发布或验收的命令结果、截图、真实 Provider 记录保留在 <code>docs/reviews/</code>，并从<a href="reviews/current.md">验收索引</a>进入。测试通过不自动扩大产品声明。</li><li>Markdown 主稿修改后同步 HTML 人审版；仅修改文档时检查差异、链接、章节、占位内容和 Markdown/HTML 一致性，不把文档检查写成运行验收。</li></ul>
+<h2>历史资料与清理边界</h2>
+<p>旧技术方案 <code>tekon-v2-technical-plan</code>、<code>tekon-web-architecture</code>、<code>tekon-replatform-current-scope</code> 和 <code>adr-0001</code> 的有效结论已归入现行技术合同；多轮 reviews 的过程结论已归入产品、设计、技术和手册，正式验收文件与证据资产按<a href="reviews/current.md">验收索引</a>保留。</p>
+<p>删除只针对重复的过程正文；旧报告、计划和批注可在<a href="https://github.com/zesming/tekon/tree/86a3d48/docs">基线 86a3d48 的 docs 目录</a>及 Git 历史中检索。<code>design/tekon-cockpit-mockup.html</code> 保留为历史视觉输入，<code>research/2026-06-10-external-research-report.md</code> 保留为带日期的外部资料，不代表当前实现或验收结论。</p>
+<p class="foot">Markdown source: <a href="README.md">docs/README.md</a> · HTML human-review edition</p>
+</main>
+</body>
+</html>

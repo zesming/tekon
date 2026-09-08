@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildClaudeProviderEnv,
@@ -7,7 +7,9 @@ import {
 } from '../../src/runtime/claude-code-support.js';
 
 describe('claude provider smoke support', () => {
+  afterEach(() => vi.useRealTimers());
   it('does not record smoke environment variable assignments in evidence', () => {
+    vi.useFakeTimers().setSystemTime(new Date('2026-09-08T01:00:00.000Z'));
     const evidence = {
       version: '2.1.163 (Claude Code)',
       durationMs: 1234,
@@ -19,6 +21,7 @@ describe('claude provider smoke support', () => {
     const html = buildClaudeProviderSmokeEvidenceHtml(evidence);
 
     for (const body of [markdown, html]) {
+      expect(body).toContain('生成日期：2026-09-08');
       expect(body).toContain('npm run smoke:claude-provider');
       expect(body).toContain('具体值不记录');
       expect(body).not.toContain('TEKON_CLAUDE_PROVIDER_SMOKE=');

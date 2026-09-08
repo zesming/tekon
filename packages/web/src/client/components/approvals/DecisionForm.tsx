@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useId } from 'react';
 
 // ---------------------------------------------------------------------------
 // DecisionForm — note input + Approve / Reject buttons (two-step confirmation)
@@ -24,6 +24,7 @@ export function DecisionForm({
 }: DecisionFormProps) {
   const [note, setNote] = useState('');
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const noteId = useId();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear any pending-action timer on unmount
@@ -67,8 +68,12 @@ export function DecisionForm({
 
   return (
     <div className="approval-actions" style={{ flexDirection: 'column', gap: '12px' }}>
+      <label className="sr-only" htmlFor={noteId}>
+        审批备注
+      </label>
       <input
         type="text"
+        id={noteId}
         className="approval-note"
         placeholder="添加备注（可选）..."
         value={note}

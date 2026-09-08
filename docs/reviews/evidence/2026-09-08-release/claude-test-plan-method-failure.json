@@ -1,0 +1,205 @@
+{
+  "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+  "nodeId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+  "sourceSha256": "08ca01f1a92b0f0a5ffb48a620330ea857156bac848dea8d4949fb8eb5430fab",
+  "failure": "native provider completed; artifact ingestion rejected schema-invalid testCases[].method",
+  "issues": [
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        0,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        1,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        2,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        3,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        4,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        5,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        6,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        7,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        8,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    },
+    {
+      "code": "invalid_value",
+      "values": [
+        "unit",
+        "integration",
+        "e2e",
+        "manual",
+        "static"
+      ],
+      "path": [
+        "testCases",
+        9,
+        "method"
+      ],
+      "message": "Invalid option: expected one of \"unit\"|\"integration\"|\"e2e\"|\"manual\"|\"static\""
+    }
+  ],
+  "promptFix": "Describe the optional method enum; put executable commands in description. Schema unchanged.",
+  "recovery": {
+    "method": "ordinary tekon resume with corrected prompt and unchanged schema",
+    "nodeStatus": "passed",
+    "testCaseCount": 8,
+    "methodValues": [
+      "manual",
+      "static",
+      "unit"
+    ],
+    "sourceSha256": "edd83b346fbd566f5af1806f278bb5ef31a3ca51abc8135f07883548745d56ed",
+    "gates": [
+      {
+        "gate_type": "schema",
+        "gate_key": "00:schema:artifact=test-plan",
+        "status": "passed"
+      }
+    ]
+  },
+  "invalidMethodExamples": [
+    {
+      "id": "TC-01",
+      "method": "git status；git log -1 --oneline；npm test（留存输出）"
+    },
+    {
+      "id": "TC-02",
+      "method": "单行修正 return a - b → return a + b 后运行 npm test"
+    }
+  ],
+  "originalArtifactPath": ".tekon/runs/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan/test-plan.json",
+  "providerResult": {
+    "session_id": "67f47eee-17f7-4b5d-a101-2d603d90cabc",
+    "duration_ms": 76590,
+    "is_error": false,
+    "subtype": "success",
+    "terminal_reason": "completed"
+  }
+}

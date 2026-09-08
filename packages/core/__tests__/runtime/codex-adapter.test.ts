@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -440,6 +441,91 @@ describe('codex adapter', () => {
       exitCode: null,
       timedOut: true,
     });
+  });
+
+  it('does not spawn a Codex command when its abort signal is already set', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-codex-abort-before-spawn-'),
+    );
+    tempDirs.push(repoPath);
+    const markerPath = join(repoPath, 'spawned');
+    const scriptPath = join(repoPath, 'marker.mjs');
+    writeFileSync(
+      scriptPath,
+      "import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'spawned');\n",
+      'utf8',
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [scriptPath, markerPath],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      signal: controller.signal,
+    });
+
+    expect(existsSync(markerPath)).toBe(false);
+  });
+
+  it('terminates a running Codex subprocess when its abort signal fires', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-abort-running-'));
+    tempDirs.push(repoPath);
+    const startedPath = join(repoPath, 'started');
+    const heartbeatPath = join(repoPath, 'heartbeat');
+    const scriptPath = join(repoPath, 'long-running.mjs');
+    writeFileSync(
+      scriptPath,
+      [
+        "import { appendFileSync, writeFileSync } from 'node:fs';",
+        "writeFileSync(process.argv[3], 'started');",
+        'writeFileSync(process.argv[2], String(process.pid));',
+        "setInterval(() => appendFileSync(process.argv[3], 'x'), 10);",
+      ].join('\n'),
+      'utf8',
+    );
+    const controller = new AbortController();
+    const adapter = createCodexAdapter(
+      {
+        provider: 'codex',
+        command: process.execPath,
+        args: [scriptPath, startedPath, heartbeatPath],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const resultPromise = adapter.runAgent({
+      ...baseRunInput(repoPath),
+      signal: controller.signal,
+    });
+    await waitForFile(startedPath);
+    controller.abort();
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({
+      provider: 'codex',
+      exitCode: null,
+      timedOut: false,
+    });
+    const heartbeatAfterClose = readFileSync(heartbeatPath, 'utf8').length;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(readFileSync(heartbeatPath, 'utf8').length).toBe(
+      heartbeatAfterClose,
+    );
   });
 
   it('does not inherit the full parent environment for Codex runs', async () => {
@@ -1135,6 +1221,16 @@ function safePermissionProfile(repoPath: string) {
     network: 'restricted' as const,
     tools: { allow: ['Read', 'Edit', 'Bash(git *)'], deny: ['Bash(rm *)'] },
   };
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${path}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 function baseRunInput(repoPath: string) {

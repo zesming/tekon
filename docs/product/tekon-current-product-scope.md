@@ -1,6 +1,6 @@
 # Tekon 现行产品范围
 
-2026-09-07 · v0.25.0 · [用户手册](../manual/tekon-user-manual.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)
+2026-09-08 · 当前版本以根 `package.json` 为准 · [文档总索引](../README.md) · [用户手册](../manual/tekon-user-manual.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)
 
 ## 用户与价值
 
@@ -33,9 +33,10 @@ push、创建 PR、合入、上线及高危动作保留人工控制。网络无�
 - 完整只读导出、snapshot/manifest、retention/purge 和生命周期安全清理：[#18](https://github.com/zesming/tekon/issues/18)、[#33](https://github.com/zesming/tekon/issues/33)。当前 `clean` 停用，历史分页不等于完整导出。
 - DSH 新发行版本与完整依赖树的兼容性验收：[#17](https://github.com/zesming/tekon/issues/17)。tested CLI pin 保持 `0.1.2-alpha.3`，不代表整棵传递依赖树已锁定。
 - 全域权威事件日志、OS 级隔离及所有外部副作用的硬 fencing。现有 SQLite owner fence 保护其覆盖的写入，不等于能停止逃逸进程或撤回外部动作。
+- `roles/*/tools.yaml`、`permissionProfile` 和 workflow helper 主要提供角色提示与顶层命令策略；它们不是 Provider 内部工具或 OS 沙箱。Gateway/Human Gate 能约束 Tekon 管理的顶层动作，但当前验证不足以证明 Agent 在 Provider 内部自行调用 `git`、`gh` 或其他外部工具时会被完整阻断。
 
 ## 证据与发布口径
 
-[正式审阅入口](../reviews/current.md)记录各轮结论与边界。单元测试、真实 SQLite 竞争、真实进程 e2e、Chromium 交互和真实 Provider 任务各有不同证明范围；mock 或只读 smoke 不能替代真实交付。没有 push/PR/CI 的样本不能宣称 readiness 全通过；浏览器视口矩阵不等于读屏、其他 OS 或生产负载验收。
+[正式审阅入口](../reviews/current.md)记录各轮结论与边界；[第 26/27 轮正式验收](../reviews/current.md#保留的正式验收与发布证据)提供可复核的运行与截图证据。单元测试、真实 SQLite 竞争、真实进程 e2e、Chromium 交互和真实 Provider 任务各有不同证明范围；mock 或只读 smoke 不能替代真实交付。没有 push/PR/CI 的样本不能宣称 readiness 全通过；浏览器视口矩阵不等于读屏、其他 OS 或生产负载验收。
 
-旧阶段计划已完成归并，不再作为当前能力承诺。历史方案和验收证据仍可追溯至[归并前固定快照](https://github.com/zesming/tekon/tree/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans)。
+旧阶段计划已完成归并，不再作为当前能力承诺。历史方案和过程报告可由[基线 86a3d48 的文档目录](https://github.com/zesming/tekon/tree/86a3d48/docs)或 Git 历史检索；正式验收和发布证据仍保留在 `docs/reviews/`。

@@ -266,7 +266,7 @@ describe('workflow engine recovery e2e', () => {
           createdAt: new Date().toISOString(),
         };
         leases.set(lease.id, lease);
-        return lease;
+        return repositories.recordWorktreeLease(lease);
       },
       async inspectLeaseSourceChanges() {
         return { changedPaths: [], headChanged: false, currentHead: 'HEAD' };
@@ -285,7 +285,9 @@ describe('workflow engine recovery e2e', () => {
         if (input.leaseId.endsWith('_rd-implementation')) promoteCalls += 1;
         return 'tekon/run';
       },
-      async releaseLease() {},
+      async releaseLease(leaseId) {
+        await repositories.releaseWorktreeLease(leaseId, new Date().toISOString());
+      },
       async pruneStaleLeases() {},
       async listLeases(runId) {
         return [...leases.values()].filter((l) => l.runId === runId);

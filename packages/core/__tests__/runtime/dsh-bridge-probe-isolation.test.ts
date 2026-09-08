@@ -27,6 +27,8 @@ const execFileAsync = promisify(execFile);
 interface RecordedProbe {
   argv: string[];
   cwd: string;
+  realDshHome: string;
+  realAgentsHome: string;
   PATH?: string;
   HOME?: string;
   DSH_HOME?: string;
@@ -74,8 +76,8 @@ function createRecordingDsh(
   writeFileSync(
     executable,
     `#!${process.execPath}\n` +
-      `import { appendFileSync, readFileSync } from 'node:fs';\n` +
-      `import { join } from 'node:path';\n` +
+      `import { appendFileSync, readFileSync, realpathSync } from 'node:fs';\n` +
+      `import { basename, dirname, join } from 'node:path';\n` +
       `const readOptional = (path) => {\n` +
       `  try { return readFileSync(path, 'utf8'); }\n` +
       `  catch (error) { if (error?.code === 'ENOENT') return undefined; throw error; }\n` +
@@ -108,6 +110,8 @@ function createRecordingDsh(
       `const entry = {\n` +
       `  argv: process.argv.slice(2),\n` +
       `  cwd: process.cwd(),\n` +
+      `  realDshHome: join(realpathSync(dirname(process.env.DSH_HOME)), basename(process.env.DSH_HOME)),\n` +
+      `  realAgentsHome: join(realpathSync(dirname(process.env.DSH_AGENTS_HOME)), basename(process.env.DSH_AGENTS_HOME)),\n` +
       `  ...Object.fromEntries(keys.map((key) => [key, process.env[key]])),\n` +
       `  cwdDotEnv: readOptional(join(process.cwd(), '.env')),\n` +
       `  dshHomeDotEnv: process.env.DSH_HOME ? readOptional(join(process.env.DSH_HOME, '.env')) : undefined,\n` +
@@ -146,8 +150,9 @@ function assertIsolatedWorkspace(records: RecordedProbe[]): string {
   const root = records[0]!.cwd;
   for (const record of records) {
     expect(record.cwd).toBe(root);
-    expect(record.DSH_HOME).toBe(join(root, 'dsh-home'));
-    expect(record.DSH_AGENTS_HOME).toBe(join(root, 'agents-home'));
+    // Compare filesystem identity before probe cleanup, including macOS /var aliases.
+    expect(record.realDshHome).toBe(join(root, 'dsh-home'));
+    expect(record.realAgentsHome).toBe(join(root, 'agents-home'));
   }
   return root;
 }

@@ -26,6 +26,8 @@ interface ProbeExecutionRecord {
   DSH_HOME?: string;
   DSH_AGENTS_HOME?: string;
   cwd: string;
+  realDshHome: string;
+  realAgentsHome: string;
 }
 
 /**
@@ -46,7 +48,8 @@ function createFakeDsh(tempDir: string): {
   const fakeDshPath = join(tempDir, 'fake-dsh.mjs');
 
   const scriptContent = `#!${process.execPath}
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, realpathSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 const logFilePath = ${JSON.stringify(logFilePath)};
 const entry = {
@@ -58,6 +61,8 @@ const entry = {
   DSH_HOME: process.env.DSH_HOME,
   DSH_AGENTS_HOME: process.env.DSH_AGENTS_HOME,
   cwd: process.cwd(),
+  realDshHome: join(realpathSync(dirname(process.env.DSH_HOME)), basename(process.env.DSH_HOME)),
+  realAgentsHome: join(realpathSync(dirname(process.env.DSH_AGENTS_HOME)), basename(process.env.DSH_AGENTS_HOME)),
 };
 
 appendFileSync(logFilePath, JSON.stringify(entry) + '\\n', 'utf8');
@@ -164,8 +169,8 @@ describe('dsh bridge probe telemetry environment', () => {
         expect(entry.DSH_TELEMETRY_OTLP_URL).toBeUndefined();
         expect(entry.PATH).toBe(process.env.PATH);
         expect(entry.DSH_HOME).not.toBe(expectedDshHome);
-        expect(dirname(entry.DSH_HOME!)).toBe(entry.cwd);
-        expect(entry.DSH_AGENTS_HOME).toBe(join(entry.cwd, 'agents-home'));
+        expect(dirname(entry.realDshHome)).toBe(entry.cwd);
+        expect(entry.realAgentsHome).toBe(join(entry.cwd, 'agents-home'));
       }
     } finally {
       if (priorDisabled === undefined)
@@ -224,8 +229,8 @@ describe('dsh bridge probe telemetry environment', () => {
       expect(entry.DSH_TELEMETRY_OTLP_URL).toBeUndefined();
       expect(entry.PATH).toBe(customPath);
       expect(entry.DSH_HOME).not.toBe(customDshHome);
-      expect(dirname(entry.DSH_HOME!)).toBe(entry.cwd);
-      expect(entry.DSH_AGENTS_HOME).toBe(join(entry.cwd, 'agents-home'));
+      expect(dirname(entry.realDshHome)).toBe(entry.cwd);
+      expect(entry.realAgentsHome).toBe(join(entry.cwd, 'agents-home'));
     }
   });
 });

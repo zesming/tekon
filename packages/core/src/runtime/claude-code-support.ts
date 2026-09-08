@@ -1,5 +1,6 @@
 export interface ClaudeProviderSmokeEvidenceInput {
   version: string;
+  executedAt?: Date;
   durationMs: number;
   stdoutPath: string;
   stderrPath: string;
@@ -37,7 +38,7 @@ export function buildClaudeProviderSmokeEvidenceMarkdown(
 ): string {
   return `# Claude Provider Smoke 证据
 
-生成日期：2026-06-05
+生成日期：${(input.executedAt ?? new Date()).toISOString().slice(0, 10)}
 
 ## 结论
 
@@ -103,7 +104,7 @@ export function buildClaudeProviderSmokeEvidenceHtml(
   <body>
     <main>
       <h1>Claude Provider Smoke 证据</h1>
-      <p>生成日期：2026-06-05</p>
+      <p>生成日期：${(input.executedAt ?? new Date()).toISOString().slice(0, 10)}</p>
       <h2>结论</h2>
       <p>真实 Claude provider smoke 已执行成功。</p>
       <h2>证据</h2>

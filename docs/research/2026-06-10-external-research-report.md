@@ -1,5 +1,7 @@
 # Tekon External Research Report
 
+> **资料状态**：2026-06-10 外部调研快照。本文保留独立来源和背景判断；当前产品、权限和运行时能力以 [文档总索引](../README.md) 下的固定入口为准，本文不构成现行实现或验收结论。
+
 > Generated: 2026-06-10
 > Scope: Competitive landscape, industry trends, ByteDance ecosystem, and best practices relevant to Tekon's domain (AI-assisted controlled software delivery workflow system)
 

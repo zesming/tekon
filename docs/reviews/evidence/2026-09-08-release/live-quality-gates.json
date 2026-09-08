@@ -1,0 +1,100 @@
+[
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "build",
+    "status": "passed",
+    "sourceSha256": "f45bcba7ec3cbdad824d8d3853ca0a7257e256c6643c6aa9f24e99fb41d48e7a",
+    "evidence": "\n> build\n> node --check math.js\n\n"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "lint",
+    "status": "passed",
+    "sourceSha256": "cb0ce2a5d3419ec9df794fd3fa28cfa49671a8ab026a4499987666240f0d3116",
+    "evidence": "\n> lint\n> node --check math.js\n\n"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "security-scan",
+    "status": "passed",
+    "sourceSha256": "821775ff05aa7671760204b2f974366f09a3b5e72b533e961fc897f812bf8878",
+    "evidence": "{\n  \"findings\": [],\n  \"scanner\": \"tekon-builtin\"\n}"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "test",
+    "status": "passed",
+    "sourceSha256": "855a690d5c1293acb36dcb0f514c79a0bf81a4f9406988e615a2ce36f8852344",
+    "evidence": "\n> test\n> node --test math.test.js\n\nTAP version 13\n# Subtest: adds positive numbers\nok 1 - adds positive numbers\n  ---\n  duration_ms: 0.500083\n  type: 'test'\n  ...\n# Subtest: adds negative numbers\nok 2 - adds negative numbers\n  ---\n  duration_ms: 0.042333\n  type: 'test'\n  ...\n# Subtest: handles zero\nok 3 - handles zero\n  ---\n  duration_ms: 0.03625\n  type: 'test'\n  ...\n# Subtest: rejects non-finite inputs\nok 4 - rejects non-finite inputs\n  ---\n  duration_ms: 0.155333\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 61.716375\n"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "ac-evidence",
+    "status": "passed",
+    "sourceSha256": "40acb303d622a028f16b9d340a2a811e3fcf5017461002c01f22e11aa59bf103",
+    "evidence": "AC evidence passed for 4 criteria"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "qa-signoff",
+    "status": "passed",
+    "sourceSha256": "c83ed7d75bf9c2a8ae9c9bfe74487b53fdddf3f239faecbd966c4aafda8f918c",
+    "evidence": "QA signoff passed for sha:e35069f7160d939a0f75100acb2afede48716918"
+  },
+  {
+    "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+    "type": "process-completeness",
+    "status": "failed",
+    "sourceSha256": "01f8cd0464f3a33fad202ba3db9366a8dc6ab6e0c949946bee8f493652e0e47e",
+    "evidence": "missing process gate evidence: run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card:00:schema:artifact=demand-card, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card:01:schema:artifact=prd, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review:00:schema:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review:01:independent-review:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review:02:role-scope:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review:00:schema:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review:01:independent-review:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review:02:role-scope:artifact=demand-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review:00:schema:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review:01:independent-review:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review:02:role-scope:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review:00:schema:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review:01:independent-review:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review:02:role-scope:artifact=requirement-interface-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan:00:schema:artifact=implementation-plan, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review:00:schema:artifact=technical-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review:01:independent-review:artifact=technical-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review:02:role-scope:artifact=technical-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan:00:schema:artifact=test-plan, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review:00:schema:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review:01:independent-review:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review:02:role-scope:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review:00:schema:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review:01:independent-review:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review:02:role-scope:artifact=test-plan-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change:00:build:commandRef=build, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change:01:lint:commandRef=lint, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change:02:security-scan:commandRef=security, run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change:03:schema:artifact=code-changes, run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review:00:schema:artifact=code-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review:01:independent-review:artifact=code-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review:02:role-scope:artifact=code-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation:00:test:commandRef=test, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation:01:schema:artifact=test-report, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation:02:schema:artifact=ac-evidence, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation:03:ac-evidence:artifact=ac-evidence, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff:00:schema:artifact=qa-release-signoff, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff:01:qa-signoff:artifact=qa-release-signoff, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review:00:schema:artifact=qa-release-signoff-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review:01:independent-review:artifact=qa-release-signoff-review, run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review:02:role-scope:artifact=qa-release-signoff-review"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "build",
+    "status": "passed",
+    "sourceSha256": "f45bcba7ec3cbdad824d8d3853ca0a7257e256c6643c6aa9f24e99fb41d48e7a",
+    "evidence": "\n> build\n> node --check math.js\n\n"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "lint",
+    "status": "passed",
+    "sourceSha256": "cb0ce2a5d3419ec9df794fd3fa28cfa49671a8ab026a4499987666240f0d3116",
+    "evidence": "\n> lint\n> node --check math.js\n\n"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "security-scan",
+    "status": "passed",
+    "sourceSha256": "821775ff05aa7671760204b2f974366f09a3b5e72b533e961fc897f812bf8878",
+    "evidence": "{\n  \"findings\": [],\n  \"scanner\": \"tekon-builtin\"\n}"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "test",
+    "status": "passed",
+    "sourceSha256": "e6c87f1c6aae372e9e7047d492144f4ffc11b22d95b11d934a458727e92a6da6",
+    "evidence": "\n> test\n> node --test math.test.js\n\nTAP version 13\n# Subtest: adds positive numbers\nok 1 - adds positive numbers\n  ---\n  duration_ms: 0.439208\n  type: 'test'\n  ...\n# Subtest: adds negative numbers\nok 2 - adds negative numbers\n  ---\n  duration_ms: 0.0375\n  type: 'test'\n  ...\n# Subtest: handles zero\nok 3 - handles zero\n  ---\n  duration_ms: 0.030625\n  type: 'test'\n  ...\n# Subtest: rejects non-finite inputs\nok 4 - rejects non-finite inputs\n  ---\n  duration_ms: 0.139292\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 54.382959\n"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "ac-evidence",
+    "status": "passed",
+    "sourceSha256": "40acb303d622a028f16b9d340a2a811e3fcf5017461002c01f22e11aa59bf103",
+    "evidence": "AC evidence passed for 4 criteria"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "qa-signoff",
+    "status": "passed",
+    "sourceSha256": "03be48bf3edcda680d9d4b00b353e686e1b6f51f0551e6468c998d1c1a587b78",
+    "evidence": "QA signoff passed for sha:8ab2b6a43c2a8274151da01adfd8ca94e10b7784"
+  },
+  {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "type": "process-completeness",
+    "status": "passed",
+    "sourceSha256": "169cce7b471a87700c9674aa328c2a7f38c581e211fe166c6d0426450764c74f",
+    "evidence": "process completeness passed for 15 nodes"
+  }
+]

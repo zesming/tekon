@@ -139,37 +139,9 @@ export function OverviewTab() {
         </div>
       </Card>
 
-      {/* ── Failed Checks ── */}
-      {failedChecks.length > 0 ? (
-        <Card
-          title="失败检查"
-          headerRight={
-            <span className="badge badge-failed badge-sm">
-              {failedChecks.length} 失败
-            </span>
-          }
-          compact
-          className="mb-6"
-        >
-          <div className="failed-checks-summary">
-            {buildFailedChecksSummary(
-              failedChecks.map((c) => ({ id: c.id, severity: c.severity })),
-            )}
-          </div>
-          <CheckList
-            items={failedChecks.map((c) => ({
-              id: c.id,
-              passed: c.passed,
-              evidence: c.evidence,
-              severity: c.severity,
-            }))}
-          />
-        </Card>
-      ) : null}
-
-      {/* ── All Checks ── */}
+      {/* Show each check once, with actionable failures before passed evidence. */}
       <Card
-        title="全部检查"
+        title="检查结果"
         headerRight={
           <span className="text-sm text-muted">
             {passedChecks.length}/{readiness.checks.length} 通过
@@ -178,14 +150,12 @@ export function OverviewTab() {
         compact
         className="mb-6"
       >
-        <CheckList
-          items={readiness.checks.map((c) => ({
-            id: c.id,
-            passed: c.passed,
-            evidence: c.evidence,
-            severity: c.severity,
-          }))}
-        />
+        {failedChecks.length > 0 && (
+          <div className="failed-checks-summary">
+            {buildFailedChecksSummary(failedChecks)}
+          </div>
+        )}
+        <CheckList items={[...failedChecks, ...passedChecks]} />
       </Card>
 
       {/* ── Evidence Groups ── */}
@@ -296,9 +266,9 @@ export function OverviewTab() {
                 }
               >
                 <div
+                  className="gate-triage-grid"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '120px 1fr',
                     gap: '8px 12px',
                     fontSize: '13px',
                   }}
@@ -306,7 +276,7 @@ export function OverviewTab() {
                   <span className="text-muted" style={{ fontWeight: 500 }}>
                     门禁
                   </span>
-                  <span style={{ fontWeight: 600 }}>
+                  <span className="gate-triage-value" style={{ fontWeight: 600 }}>
                     {triage.gateType}
                     <span className="text-mono text-muted"> ({triage.nodeId})</span>
                   </span>
@@ -314,7 +284,7 @@ export function OverviewTab() {
                     分类
                   </span>
                   <span
-                    className="badge badge-sm"
+                    className="gate-triage-value gate-triage-badge badge badge-sm"
                     style={{
                       background: 'var(--fail-bg)',
                       color: '#991b1b',
@@ -327,18 +297,18 @@ export function OverviewTab() {
                   <span className="text-muted" style={{ fontWeight: 500 }}>
                     重试
                   </span>
-                  <span>{triage.retry}</span>
+                  <span className="gate-triage-value">{triage.retry}</span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
                     摘要
                   </span>
-                  <span style={{ color: 'var(--text-s)' }}>
+                  <span className="gate-triage-value" style={{ color: 'var(--text-s)' }}>
                     {triage.summary}
                   </span>
                   <span className="text-muted" style={{ fontWeight: 500 }}>
                     建议操作
                   </span>
                   <span
-                    className="text-mono"
+                    className="gate-triage-value text-mono"
                     style={{ fontSize: '12px', color: 'var(--accent)' }}
                   >
                     $ {triage.suggestedCommand}

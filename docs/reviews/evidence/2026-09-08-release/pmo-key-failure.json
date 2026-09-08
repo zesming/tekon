@@ -1,0 +1,503 @@
+{
+  "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+  "gate": "process-completeness",
+  "status": "failed",
+  "sourceSha256": "104dc59d42e2715fa7a4843bf4c40cdd4a304408b21f1d76c0adb44e31d6c2ef",
+  "expectedPriorGates": [
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-card",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=prd",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=implementation-plan",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=technical-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=technical-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=technical-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "build",
+      "gate_key": "00:build:commandRef=build",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "lint",
+      "gate_key": "01:lint:commandRef=lint",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "security-scan",
+      "gate_key": "02:security-scan:commandRef=security",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "schema",
+      "gate_key": "03:schema:artifact=code-changes",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=code-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=code-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=code-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "test",
+      "gate_key": "00:test:commandRef=test",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=test-report",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "02:schema:artifact=ac-evidence",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "ac-evidence",
+      "gate_key": "03:ac-evidence:artifact=ac-evidence",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gate_type": "qa-signoff",
+      "gate_key": "01:qa-signoff:artifact=qa-release-signoff",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=qa-release-signoff-review",
+      "status": "passed"
+    },
+    {
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=qa-release-signoff-review",
+      "status": "passed"
+    }
+  ],
+  "observedGateEvidence": [
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gateType": "schema",
+      "gateKey": "schema:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gateType": "build",
+      "gateKey": "build:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gateType": "lint",
+      "gateKey": "lint:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gateType": "security-scan",
+      "gateKey": "security-scan:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gateType": "schema",
+      "gateKey": "schema:03",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gateType": "test",
+      "gateKey": "test:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gateType": "schema",
+      "gateKey": "schema:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gateType": "schema",
+      "gateKey": "schema:02",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gateType": "ac-evidence",
+      "gateKey": "ac-evidence:03",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gateType": "qa-signoff",
+      "gateKey": "qa-signoff:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gateType": "schema",
+      "gateKey": "schema:00",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gateType": "independent-review",
+      "gateKey": "independent-review:01",
+      "status": "passed"
+    },
+    {
+      "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gateType": "role-scope",
+      "gateKey": "role-scope:02",
+      "status": "passed"
+    }
+  ],
+  "diagnosis": "PMO shortened stable gateKey strings; actual eligible-result prompt omitted gateKey. Strict validation rejected mismatched evidence."
+}

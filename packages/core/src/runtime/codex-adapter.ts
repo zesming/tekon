@@ -102,6 +102,7 @@ export function createCodexAdapter(
           TEKON_NODE_ID: input.runContext.nodeId,
         },
         stdin: command.stdin,
+        signal: input.signal,
         runId: input.runContext.runId,
         nodeId: input.runContext.nodeId,
       });

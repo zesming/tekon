@@ -36,6 +36,7 @@ export * from './approval/summary.js';
 export * from './draft/shape.js';
 export * from './runtime/agent-adapter.js';
 export * from './runtime/claude-code-adapter.js';
+export * from './runtime/claude-code-permissions.js';
 export * from './runtime/codex-adapter.js';
 export * from './runtime/dsh-headless-adapter.js';
 export * from './runtime/dsh-bridge-probe.js';

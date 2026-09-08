@@ -1,0 +1,107 @@
+[
+  {
+    "file": "docs/README.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/README.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/README.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/product/tekon-current-product-scope.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/product/tekon-current-product-scope.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/product/tekon-current-product-scope.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/design/tekon-run-control-design.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/design/tekon-run-control-design.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/design/tekon-run-control-design.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 1440,
+    "scrollWidth": 1440
+  }
+]
