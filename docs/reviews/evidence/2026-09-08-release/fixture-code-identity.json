@@ -1,0 +1,26 @@
+{
+  "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+  "commit": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+  "comparedWithCommit": "e35069f7160d939a0f75100acb2afede48716918",
+  "files": [
+    {
+      "path": "math.js",
+      "sha256": "4c9e3334cc0992182a505b692ff34bf92ed1618758ba93ac994d9b4340a2f1bc",
+      "identicalToIndependentlyVerifiedOriginalRun": true
+    },
+    {
+      "path": "math.test.js",
+      "sha256": "ce654d08028627c2c795ff21fdc8087a313d459dd158122f9389e91e276ffc25",
+      "identicalToIndependentlyVerifiedOriginalRun": true
+    },
+    {
+      "path": "package.json",
+      "sha256": "cccbed5075aeaa4c8a88b8cf8a2969e680a01fbd4b010a868598fd0c9736d91c",
+      "identicalToIndependentlyVerifiedOriginalRun": true
+    }
+  ],
+  "validationReuse": "Same three source/test/package bytes as independent npm test (4/4), build and lint verification in logs/live-fixture-final.log; the new run also executed its own quality Gates.",
+  "changedFilesFromSeed": [
+    "math.js"
+  ]
+}

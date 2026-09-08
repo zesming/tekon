@@ -24,7 +24,7 @@ import {
 import { resolveProjectRepoPath } from '../lib/path-utils.js';
 import {
   awaitJobTerminal,
-  exitCodeForWorkflowStatus,
+  exitCodeForJobOutcome,
   withCliSessionContext,
   withSessionCommandCtx,
 } from '../lib/session-context.js';
@@ -349,15 +349,13 @@ export async function commandResume(
       void jobRunner.requestCancel(result.jobId, 'cli SIGINT').catch(() => {});
     };
     process.on('SIGINT', onSigint);
+    let jobStatus: Awaited<ReturnType<typeof awaitJobTerminal>>;
     try {
-      const jobStatus = await awaitJobTerminal({
+      jobStatus = await awaitJobTerminal({
         jobs,
         jobRunner,
         jobId: result.jobId,
       });
-      if (jobStatus === 'interrupted') {
-        io.stderr.write(`任务已中断；检查旧执行退出情况后，使用 tekon resume --run-id ${runId} 显式恢复。\n`);
-      }
     } finally {
       process.removeListener('SIGINT', onSigint);
     }
@@ -365,7 +363,13 @@ export async function commandResume(
     const latest = await repositories.getWorkflowInstance(runId);
     const status = latest?.status ?? 'unknown';
     io.stdout.write(`runId=${runId} status=${status}\n`);
-    return exitCodeForWorkflowStatus(status);
+    return exitCodeForJobOutcome({
+      io,
+      runId,
+      jobId: result.jobId,
+      jobStatus,
+      workflowStatus: status,
+    });
   });
 }
 

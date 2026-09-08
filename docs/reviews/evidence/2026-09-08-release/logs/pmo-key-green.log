@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ✓ __tests__/workflow/engine-role-prompt.test.ts (11 tests) 90ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  11:31:53
+   Duration  642ms (transform 243ms, setup 0ms, collect 364ms, tests 90ms, environment 0ms, prepare 26ms)
+

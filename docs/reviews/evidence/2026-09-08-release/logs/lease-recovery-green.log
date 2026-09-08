@@ -1,0 +1,30 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ✓ __tests__/workflow/lease-service.test.ts (41 tests) 49ms
+ ✓ __tests__/workflow/gate-shutdown.test.ts (19 tests) 215ms
+ ✓ __tests__/workflow/engine-worktree.e2e.test.ts (9 tests) 3635ms
+   ✓ workflow engine worktree execution e2e > reuses a blocked source lease across fresh engines without losing edits or creating ambiguity  561ms
+   ✓ workflow engine worktree execution e2e > leases real git worktrees, promotes passed node changes, and releases leases  472ms
+   ✓ workflow engine worktree execution e2e > blocks source changes from non-code workflow nodes after QA validation records the tested ref  648ms
+   ✓ workflow engine worktree execution e2e > blocks committed source changes from non-code workflow nodes before promotion  478ms
+   ✓ workflow engine worktree execution e2e > promotes repair worktree changes before rerunning a failed gate  541ms
+ ✓ __tests__/session/run-recovery.e2e.test.ts (13 tests) 13414ms
+   ✓ R26 production executor across OS processes > admits exactly one confirmed resume across independent processes and records one audit  317ms
+   ✓ R26 production executor across OS processes > cancels a controlled Agent command through the production provider adapter and confirms close  558ms
+   ✓ R26 production executor across OS processes > normal owner shutdown records real Agent close and a single resume continues the unfinished node  862ms
+   ✓ R26 production executor across OS processes > normal Gate shutdown preserves completed Agent and resumes only Gate: {"onExhausted":"block"}  1063ms
+   ✓ R26 production executor across OS processes > normal Gate shutdown preserves completed Agent and resumes only Gate: {"onExhausted":"fail"}  1100ms
+   ✓ R26 production executor across OS processes > normal Gate shutdown preserves completed Agent and resumes only Gate: {"onExhausted":"fail","autoFix":true,"maxRetries":2}  1025ms
+   ✓ R26 production executor across OS processes > resumes a post-repair Gate in the same durable repair worktree across hosts  1345ms
+   ✓ R26 production executor across OS processes > resumes after completed promotion/release but before node passed (repair=false)  842ms
+   ✓ R26 production executor across OS processes > resumes after completed promotion/release but before node passed (repair=true)  1181ms
+   ✓ R26 production executor across OS processes > resumes the original lease through repair-intent and post-finalize shutdowns  1254ms
+   ✓ R26 production executor across OS processes > cancels the managed Gate process, leaves another Run live, and restart makes no new invocation  1897ms
+   ✓ R26 production executor across OS processes > quick restart never repeats an orphaned Gate; one explicit old-Job confirmation resumes at the Gate  1699ms
+
+ Test Files  4 passed (4)
+      Tests  82 passed (82)
+   Start at  11:58:27
+   Duration  13.99s (transform 300ms, setup 0ms, collect 1.25s, tests 17.31s, environment 0ms, prepare 138ms)
+

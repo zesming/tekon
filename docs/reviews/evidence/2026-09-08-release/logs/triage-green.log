@@ -1,0 +1,21 @@
+
+Running 6 tests using 1 worker
+
+(node:41541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:41541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 320px shows each check once (allPassed=false) (698ms)
+
+  ✓  2 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 320px shows each check once (allPassed=true) (455ms)
+
+  ✓  3 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 1440px shows each check once (allPassed=false) (499ms)
+
+  ✓  4 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 1440px shows each check once (allPassed=true) (473ms)
+
+  ✓  5 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 320px keeps long gate failure triage content inside its card (476ms)
+
+  ✓  6 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 1440px keeps long gate failure triage content inside its card (513ms)
+
+  6 passed (3.9s)

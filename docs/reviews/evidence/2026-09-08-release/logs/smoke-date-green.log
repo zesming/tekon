@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ✓ |@tekon/core| __tests__/runtime/claude-provider-smoke-evidence.test.ts (2 tests) 2ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  09:57:25
+   Duration  206ms (transform 17ms, setup 0ms, collect 16ms, tests 2ms, environment 0ms, prepare 26ms)
+

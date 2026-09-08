@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 
-<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Tekon Web 发起与运行控制设计</title><style>body{margin:0;background:#f5f4ef;color:#202b33;font:17px/1.8 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:36px 24px 80px}h1,h2,h3{line-height:1.35}h1{border-bottom:3px solid #26756d;padding-bottom:20px}h2{margin-top:2.4em}a{color:#17635c;overflow-wrap:anywhere}code{background:#e8eae4;padding:2px 5px;font-size:.88em;overflow-wrap:anywhere}pre{overflow:auto;padding:16px;background:#e8eae4}table{border-collapse:collapse;display:block;overflow:auto}td,th{border:1px solid #bdc9c4;padding:10px;text-align:left;min-width:100px}blockquote{border-left:4px solid #26756d;margin:24px 0;padding:0 20px;color:#465b57}@media(max-width:480px){main{padding:24px 16px}body{font-size:16px}}@media print{body{background:white}main{max-width:none;padding:0}}</style></head><body><main><h1>Tekon Web 发起与运行控制设计</h1>
-<p>2026-09-07 · v0.25.0 · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../manual/tekon-user-manual.md">操作手册</a></p>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Tekon Web 发起与运行控制设计</title><style>body{margin:0;background:#f5f4ef;color:#202b33;font:17px/1.8 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:36px 24px 80px}h1,h2,h3{line-height:1.35}h1{border-bottom:3px solid #26756d;padding-bottom:20px}h2{margin-top:2.4em}a{color:#17635c;overflow-wrap:anywhere}code{background:#e8eae4;padding:2px 5px;font-size:.88em;overflow-wrap:anywhere}pre{overflow:auto;padding:16px;background:#e8eae4}table{border-collapse:collapse;display:block;overflow:auto}td,th{border:1px solid #bdc9c4;padding:10px;text-align:left;min-width:100px}blockquote{border-left:4px solid #26756d;margin:24px 0;padding:0 20px;color:#465b57}@media(max-width:480px){main{padding:24px 16px}body{font-size:16px}}@media print{body{background:white}main{max-width:none;padding:0}}footer{overflow-wrap:anywhere}</style></head><body><main><h1>Tekon Web 发起与运行控制设计</h1>
+<p>2026-09-08 · 当前版本以根 <code>package.json</code> 为准 · <a href="../README.md">文档总索引</a> · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../manual/tekon-user-manual.md">操作手册</a></p>
 <h2>1. 页面与信息责任</h2>
 <p>默认 Sessions 列表和 Session 详情提供受控交付发起、feed、审批和原 Run 控制；Advanced 下的 Runs 列表和 Run 详情保留运行与证据视角。Approvals、Delivery、Config、Eval 四个页面分别承载审批、远端动作、配置和质量判断。相同运行的控制共用 RunControls，Run/Session 恢复提示以同一服务端快照为准。</p>
 <p>用户应能判断三件事：请求是否被受理、运行当前实际状态、下一步能做什么。按钮回执、领域状态和进程退出证据分别呈现，不用 Toast 推导执行已经开始或已停止。</p>
+<p>概览中的“失败检查”和“全部检查”合并为一张“检查结果”卡，每项检查只出现一次：失败项排在前面，已通过项随后列出。卡片保留失败摘要、通过计数和每项检查的证据与建议入口，方便先处理阻断项，再核对完整结果。</p>
 <h2>2. 发起与不确定结果</h2>
 <p>默认与高级入口都展示模板/模式、Provider、风险和逐项检查来源/行为；高级项容纳 Profile、超时和动态预览。缺少 digest 或配置无效时阻止提交并提供刷新/修复入口。刷新后比较新旧检查结果并展示差异，由用户再次确认；原始命令和敏感环境不放进公开预览。</p>
 <p>提交前写当前标签页的请求账本；请求发出后、受理结果返回前禁止重复提交。网络错误保留 Request ID，查询原请求或同意图重试；not-found 只表示本次查询未找到记录，不等于请求未受理，因此不更换 Request ID。只有明确另建任务时才生成新的 Request ID。已受理的回执不会被账本、查询或导航失败覆盖，始终提供“观察原会话/运行”；目录未就绪时显示已受理且尚未执行，给出修复后重试原请求的路径。</p>
@@ -55,5 +56,6 @@
 <p>主要验证视口为 320/390/768/1440px，另检查 600/601/769px 断点边界；覆盖上述主要页面、错误/请求中/终态/确认状态、取消二次确认及恢复跳转，检查横溢、裁切、重叠和键盘操作。几何检查同时验证文本自身与卡片边界，不能仅用整页宽度判断内部裁切；截图禁用入场动画以捕获稳定通知。几何检查需结合截图人工查看；这些要求不是已经完成的验收结论，也不替代真实读屏、跨浏览器或其他 OS 验证。</p>
 <p>证据链接进入实际内容：产物打开 Artifacts 对应记录，门禁日志打开 Gates 对应门禁，审计事件打开 Audit 对应事件，PR 正文、交付包和差异打开 Delivery 对应章节。导航保留当前标签页的认证上下文，并将焦点和视口移到目标。目标不存在、读取失败或被筛选隐藏时说明原因，不能只改变 URL 就表示已找到证据；普通刷新不反复抢走焦点。</p>
 <h2>5. 演进边界</h2>
-<p>本设计沿用现有路由、表单、RunControls、服务端领域状态和 Job 机制，不新增调度服务或并行取消状态体系。持续协作与完整导出需要独立产品和技术合同。旧 <a href="tekon-cockpit-mockup.html">Cockpit 原型</a>与 <a href="../technical/tekon-web-architecture.md">Web 架构方案</a>作为历史设计输入，不代表当前界面或权限合同。</p>
-<footer>Markdown SHA-256: 909aff025772b403b7425d573ddcfde91a62c8ac7d39eac8398cfb925b2ed164</footer></main></body></html>
+<p>本设计沿用现有路由、表单、RunControls、服务端领域状态和 Job 机制，不新增调度服务或并行取消状态体系。持续协作与完整导出需要独立产品和技术合同。旧 <a href="tekon-cockpit-mockup.html">Cockpit 原型</a>作为历史视觉输入，不代表当前界面或权限合同；原 Web 架构方案的有效边界已归入<a href="../technical/tekon-runtime-contract.md#91-历史方案迁移对照">运行时合同的历史迁移对照</a>。</p>
+<p>本设计的验证入口是<a href="../reviews/current.md">正式审阅索引</a>：R26/R27 的截图和交互证据可从索引进入。视口与键盘要求描述应验证的行为，不代表每个浏览器、读屏、操作系统或生产负载已通过验收。</p>
+<footer>Markdown SHA-256: 69db9a0a35d4c167c393948a4a01d27e0e6619be7cb37fc92c6460836f6a192d</footer></main></body></html>

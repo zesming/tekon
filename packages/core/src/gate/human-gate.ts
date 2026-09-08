@@ -91,10 +91,13 @@ export function createHumanGate(options: {
           note: note ?? null,
           decidedAt: new Date().toISOString(),
         },
+        'pending',
       );
 
       if (!updated) {
-        throw new Error(`failed to update human decision: ${decisionId}`);
+        throw new Error(
+          `human decision was already decided: ${decisionId} (expected pending)`,
+        );
       }
 
       if (existing.gateResultId) {
@@ -142,10 +145,13 @@ export function createHumanGate(options: {
           note: note ?? null,
           decidedAt: new Date().toISOString(),
         },
+        'pending',
       );
 
       if (!updated) {
-        throw new Error(`failed to update human decision: ${decisionId}`);
+        throw new Error(
+          `human decision was already decided: ${decisionId} (expected pending)`,
+        );
       }
 
       if (existing.gateResultId) {

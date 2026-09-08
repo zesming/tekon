@@ -1,0 +1,2 @@
+任务已中断；检查旧执行退出情况后，使用 tekon resume --run-id run_41edcd7e-aa0b-44d9-8b82-39939485f459 显式恢复。
+runId=run_41edcd7e-aa0b-44d9-8b82-39939485f459 status=interrupted

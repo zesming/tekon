@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -244,6 +248,149 @@ describe('human gate', () => {
       status: 'running',
     });
     db.close();
+  });
+
+  it('does not rewrite a rejected decision when a later approval uses the pending CAS', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories);
+    await repositories.recordGateResult({
+      id: 'gate_reject_then_approve',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      status: 'blocked',
+      durationMs: 0,
+      retries: 0,
+      failureClassification: 'human-approval',
+      createdAt: '2026-08-21T00:00:00.000Z',
+    });
+    const humanGate = createHumanGate({ repositories });
+    const decision = await humanGate.requestHumanGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: 'gate_reject_then_approve',
+    });
+
+    await humanGate.rejectHumanGate(decision.id, 'reviewer-a', 'reject first');
+
+    await expect(
+      humanGate.approveHumanGate(decision.id, 'reviewer-b', 'approve later'),
+    ).rejects.toThrow(
+      `human decision was already decided: ${decision.id} (expected pending)`,
+    );
+
+    expect(await repositories.getHumanDecision(decision.id)).toMatchObject({
+      status: 'rejected',
+      actor: 'reviewer-a',
+      note: 'reject first',
+    });
+    expect(await repositories.getNode('node_1')).toMatchObject({
+      status: 'blocked',
+    });
+    expect(await repositories.getWorkflowInstance('run_1')).toMatchObject({
+      status: 'blocked',
+    });
+    expect(await repositories.listGateResults('run_1')).toContainEqual(
+      expect.objectContaining({
+        id: 'gate_reject_then_approve',
+        status: 'failed',
+        failureClassification: 'human-rejected',
+      }),
+    );
+    db.close();
+  });
+
+  it('allows only one decision from two real database connections', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'tekon-human-gate-cas-'));
+    const filename = join(directory, 'tekon.sqlite');
+    const db1 = openTekonDatabase({ filename });
+    const db2 = openTekonDatabase({ filename });
+    try {
+      migrateDatabase(db1);
+      const repositories1 = createRepositories(db1);
+      const repositories2 = createRepositories(db2);
+      await createRunFixture(repositories1);
+      await repositories1.recordGateResult({
+        id: 'gate_concurrent_decision',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateType: 'human',
+        status: 'blocked',
+        durationMs: 0,
+        retries: 0,
+        failureClassification: 'human-approval',
+        createdAt: '2026-08-21T00:00:00.000Z',
+      });
+      const decision = await createHumanGate({
+        repositories: repositories1,
+      }).requestHumanGate({
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateResultId: 'gate_concurrent_decision',
+      });
+
+      const [approved, rejected] = await Promise.allSettled([
+        createHumanGate({ repositories: repositories1 }).approveHumanGate(
+          decision.id,
+          'connection-1',
+          'approve concurrently',
+        ),
+        createHumanGate({ repositories: repositories2 }).rejectHumanGate(
+          decision.id,
+          'connection-2',
+          'reject concurrently',
+        ),
+      ]);
+      const settled = [approved, rejected];
+      expect(
+        settled.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      const loser = settled.find((result) => result.status === 'rejected');
+      expect(loser).toMatchObject({
+        status: 'rejected',
+        reason: expect.objectContaining({
+          message: `human decision was already decided: ${decision.id} (expected pending)`,
+        }),
+      });
+
+      const persisted = await repositories1.getHumanDecision(decision.id);
+      expect(persisted?.status).toMatch(/^(approved|rejected)$/u);
+      if (persisted?.status === 'approved') {
+        expect(await repositories1.getNode('node_1')).toMatchObject({
+          status: 'running',
+        });
+        expect(await repositories1.getWorkflowInstance('run_1')).toMatchObject({
+          status: 'running',
+        });
+        expect(await repositories1.listGateResults('run_1')).toContainEqual(
+          expect.objectContaining({
+            id: 'gate_concurrent_decision',
+            status: 'passed',
+            failureClassification: null,
+          }),
+        );
+      } else {
+        expect(await repositories1.getNode('node_1')).toMatchObject({
+          status: 'blocked',
+        });
+        expect(await repositories1.getWorkflowInstance('run_1')).toMatchObject({
+          status: 'blocked',
+        });
+        expect(await repositories1.listGateResults('run_1')).toContainEqual(
+          expect.objectContaining({
+            id: 'gate_concurrent_decision',
+            status: 'failed',
+            failureClassification: 'human-rejected',
+          }),
+        );
+      }
+    } finally {
+      db1.close();
+      db2.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 
   it('updateHumanDecision CAS: expectedStatus mismatch returns null and does not write', async () => {

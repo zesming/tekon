@@ -1,0 +1,4 @@
+
+> @tekon/web@0.26.0 typecheck /Users/zesming/Projects/tekon/packages/web
+> tsc -p tsconfig.json --noEmit
+

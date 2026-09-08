@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,6 +10,8 @@ import {
   createClaudeCodeAdapter,
   createCommandGateway,
   createRepositories,
+  defaultCommandPolicy,
+  defaultProviderConfig,
   migrateDatabase,
   openTekonDatabase,
   type CommandGatewayRunInput,
@@ -57,6 +59,8 @@ describe('claude code adapter', () => {
       args: ['--permission-mode=bypassPermissions'],
       message: 'permission mode is controlled by Tekon',
     },
+    { args: ['--permissionMode'], message: undefined },
+    { args: ['--permissionMode=acceptEdits'], message: undefined },
     {
       args: ['--dangerously-skip-permissions'],
       message: 'bypass permissions mode is not allowed',
@@ -69,6 +73,42 @@ describe('claude code adapter', () => {
       args: ['--mode=bypassPermissions'],
       message: 'bypass permissions mode is not allowed',
     },
+    { args: ['--allowedTools'], message: undefined },
+    { args: ['--allowedTools=Bash(npm test)'], message: undefined },
+    { args: ['--allowed-tools'], message: undefined },
+    { args: ['--allowed-tools=Bash(npm test)'], message: undefined },
+    { args: ['--disallowedTools'], message: undefined },
+    { args: ['--disallowedTools=Bash(git push)'], message: undefined },
+    { args: ['--disallowed-tools'], message: undefined },
+    { args: ['--disallowed-tools=Bash(git push)'], message: undefined },
+    { args: ['--settings'], message: undefined },
+    { args: ['--settings={"permissions":{"allow":[]}}'], message: undefined },
+    { args: ['--setting-sources'], message: undefined },
+    { args: ['--setting-sources=user'], message: undefined },
+    { args: ['--settingSources'], message: undefined },
+    { args: ['--settingSources=user'], message: undefined },
+    { args: ['--permission-prompt'], message: undefined },
+    { args: ['--permissionPrompt'], message: undefined },
+    { args: ['--permissionPrompt=none'], message: undefined },
+    { args: ['--permission-prompt-tool'], message: undefined },
+    { args: ['--permission-prompt-tool=none'], message: undefined },
+    { args: ['--permissionPromptTool'], message: undefined },
+    { args: ['--permissionPromptTool=none'], message: undefined },
+    { args: ['--tools'], message: undefined },
+    { args: ['--tools=Bash'], message: undefined },
+    { args: ['--add-dir'], message: undefined },
+    { args: ['--add-dir=/tmp/other'], message: undefined },
+    { args: ['--addDir'], message: undefined },
+    { args: ['--addDir=/tmp/other'], message: undefined },
+    { args: ['--agents'], message: undefined },
+    { args: ['--agents={}'], message: undefined },
+    { args: ['--dangerously-skip-permissions=true'], message: undefined },
+    { args: ['--dangerouslySkipPermissions'], message: undefined },
+    { args: ['--allowDangerouslySkipPermissions'], message: undefined },
+    { args: ['--allowDangerouslySkipPermissions=true'], message: undefined },
+    { args: ['--allow-dangerously-skip-permissions'], message: undefined },
+    { args: ['--allow-dangerously-skip-permissions=true'], message: undefined },
+    { args: ['--'], message: undefined },
   ])('rejects unsafe user Claude args %j', ({ args, message }) => {
     const safeConfig = {
       provider: 'claude-code' as const,
@@ -80,9 +120,153 @@ describe('claude code adapter', () => {
       permissionProfile: safePermissionProfile('/tmp/repo'),
     };
 
+    if (message) {
+      expect(() =>
+        buildClaudeCodeCommand(safeConfig, { prompt: 'hello' }),
+      ).toThrow(message);
+    } else {
+      expect(() =>
+        buildClaudeCodeCommand(safeConfig, { prompt: 'hello' }),
+      ).toThrow();
+    }
+  });
+
+  it('keeps ordinary model and output arguments compatible', () => {
+    const config = {
+      provider: 'claude-code' as const,
+      command: 'claude',
+      args: ['--model', 'sonnet', '--verbose'],
+      promptMode: 'stdin' as const,
+      outputFormat: 'json' as const,
+      timeoutMs: 1000,
+      permissionProfile: safePermissionProfile('/tmp/repo'),
+    };
+
     expect(() =>
-      buildClaudeCodeCommand(safeConfig, { prompt: 'hello' }),
-    ).toThrow(message);
+      buildClaudeCodeCommand(config, { prompt: 'hello' }),
+    ).not.toThrow();
+    expect(buildClaudeCodeCommand(config, { prompt: 'hello' }).args).toEqual(
+      expect.arrayContaining(['--model', 'sonnet', '--verbose']),
+    );
+  });
+
+  it('emits generated Claude permissions while keeping an arg prompt last', () => {
+    const repoPath = '/tmp/repo';
+    const config = {
+      ...defaultProviderConfig('claude-code', repoPath, {
+        approvalDefault: 'on-request',
+      }),
+      promptMode: 'arg-append' as const,
+    };
+    const prompt = '--dangerously-skip-permissions';
+    const command = buildClaudeCodeCommand(
+      config,
+      { prompt },
+      defaultCommandPolicy(repoPath),
+    );
+
+    expect(command.args).toContain('--permission-mode');
+    expect(command.args).toContain('default');
+    expect(
+      command.args.some(
+        (arg) => arg === '--allowedTools' || arg === '--allowed-tools',
+      ),
+    ).toBe(true);
+    expect(command.args.join('\u0000')).toContain('Bash(npm test)');
+    const separatorIndex = command.args.lastIndexOf('--');
+    expect(separatorIndex).toBe(command.args.length - 2);
+    expect(command.args.slice(separatorIndex + 1)).toEqual([prompt]);
+  });
+
+  it('serializes human approval separately as Claude permissions.ask', () => {
+    const repoPath = '/tmp/repo';
+    const config = {
+      ...defaultProviderConfig('claude-code', repoPath, {
+        approvalDefault: 'on-request',
+      }),
+      promptMode: 'stdin' as const,
+    };
+    const command = buildClaudeCodeCommand(
+      config,
+      { prompt: 'approval prompt' },
+      {
+        ...defaultCommandPolicy(repoPath),
+        requiresHumanApproval: [
+          { tool: 'git', args: ['status'], match: 'exact' },
+        ],
+      },
+    );
+
+    const settingsIndex = command.args.indexOf('--settings');
+    expect(settingsIndex).toBeGreaterThanOrEqual(0);
+    const settings = JSON.parse(command.args[settingsIndex + 1] ?? '{}') as {
+      permissions?: { ask?: string[] };
+    };
+    expect(settings.permissions?.ask).toContain('Bash(git status)');
+    expect(command.args.slice(0, settingsIndex).join(' ')).not.toContain(
+      'Bash(git status)',
+    );
+  });
+
+  it('does not synthesize Bash grants when no command policy is provided', () => {
+    const config = defaultProviderConfig('claude-code', '/tmp/repo');
+    const command = buildClaudeCodeCommand(config, { prompt: 'hello' });
+
+    expect(command.args).not.toContain('--allowedTools');
+    expect(command.args).not.toContain('--allowed-tools');
+    expect(command.args.join(' ')).not.toContain('Bash(npm');
+  });
+
+  it('passes the command policy to Claude permission compilation before spawn', async () => {
+    const repoPath = '/tmp/repo';
+    const policy = defaultCommandPolicy(repoPath);
+    let capturedInput: CommandGatewayRunInput | undefined;
+    const adapter = createClaudeCodeAdapter(
+      {
+        ...defaultProviderConfig('claude-code', repoPath, {
+          approvalDefault: 'on-request',
+        }),
+        promptMode: 'arg-append',
+      },
+      {
+        async run(input: CommandGatewayRunInput) {
+          capturedInput = input;
+          return {
+            status: 'executed',
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            stdoutPath: join(repoPath, 'stdout.log'),
+            stderrPath: join(repoPath, 'stderr.log'),
+            durationMs: 1,
+          };
+        },
+      },
+    );
+
+    await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      commandPolicy: policy,
+      prompt: '--dangerously-skip-permissions',
+    });
+
+    expect(capturedInput?.policy).toBe(policy);
+    expect(
+      capturedInput?.command.args.some(
+        (arg) => arg === '--allowedTools' || arg === '--allowed-tools',
+      ),
+    ).toBe(true);
+    expect(capturedInput?.command.args).toContain('Bash(npm test)');
+    const separatorIndex = capturedInput?.command.args.lastIndexOf('--') ?? -1;
+    expect(separatorIndex).toBe((capturedInput?.command.args.length ?? 0) - 2);
+    expect(capturedInput?.command.args.at(-1)).toBe(
+      '--dangerously-skip-permissions',
+    );
+    const addDirIndex = capturedInput?.command.args.indexOf('--add-dir') ?? -1;
+    expect(addDirIndex).toBeGreaterThanOrEqual(0);
+    expect(addDirIndex).toBeLessThan(
+      capturedInput?.command.args.indexOf('--') ?? -1,
+    );
   });
 
   it('streams large stdout/stderr without deadlock and reports timeout', async () => {
@@ -169,6 +353,91 @@ describe('claude code adapter', () => {
       timedOut: false,
     });
     expect(readFileSync(result.outputFiles[0]!, 'utf8')).toBe('stdin prompt');
+  });
+
+  it('does not spawn a Claude command when its abort signal is already set', async () => {
+    const repoPath = mkdtempSync(
+      join(tmpdir(), 'tekon-claude-abort-before-spawn-'),
+    );
+    tempDirs.push(repoPath);
+    const markerPath = join(repoPath, 'spawned');
+    const scriptPath = join(repoPath, 'marker.mjs');
+    writeFileSync(
+      scriptPath,
+      "import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], 'spawned');\n",
+      'utf8',
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const adapter = createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: [scriptPath, markerPath],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      signal: controller.signal,
+    });
+
+    expect(existsSync(markerPath)).toBe(false);
+  });
+
+  it('terminates a running Claude subprocess when its abort signal fires', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-abort-running-'));
+    tempDirs.push(repoPath);
+    const startedPath = join(repoPath, 'started');
+    const heartbeatPath = join(repoPath, 'heartbeat');
+    const scriptPath = join(repoPath, 'long-running.mjs');
+    writeFileSync(
+      scriptPath,
+      [
+        "import { appendFileSync, writeFileSync } from 'node:fs';",
+        "writeFileSync(process.argv[3], 'started');",
+        'writeFileSync(process.argv[2], String(process.pid));',
+        "setInterval(() => appendFileSync(process.argv[3], 'x'), 10);",
+      ].join('\n'),
+      'utf8',
+    );
+    const controller = new AbortController();
+    const adapter = createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: [scriptPath, startedPath, heartbeatPath],
+        promptMode: 'stdin',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const resultPromise = adapter.runAgent({
+      ...baseRunInput(repoPath),
+      signal: controller.signal,
+    });
+    await waitForFile(startedPath);
+    controller.abort();
+    const result = await resultPromise;
+
+    expect(result).toMatchObject({
+      provider: 'claude-code',
+      exitCode: null,
+      timedOut: false,
+    });
+    const heartbeatAfterClose = readFileSync(heartbeatPath, 'utf8').length;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(readFileSync(heartbeatPath, 'utf8').length).toBe(
+      heartbeatAfterClose,
+    );
   });
 
   it('passes progress and no-progress timeouts to the command gateway', async () => {
@@ -331,6 +600,16 @@ function safePermissionProfile(repoPath: string) {
     network: 'disabled' as const,
     tools: { allow: ['Read', 'Edit', 'Bash(git *)'], deny: ['Bash(rm *)'] },
   };
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!existsSync(path)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${path}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 function baseRunInput(repoPath: string) {

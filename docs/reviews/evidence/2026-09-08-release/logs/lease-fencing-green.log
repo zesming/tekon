@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ✓ __tests__/workflow/engine-recovery.e2e.test.ts (5 tests) 98ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  12:03:10
+   Duration  625ms (transform 226ms, setup 0ms, collect 349ms, tests 98ms, environment 0ms, prepare 30ms)
+

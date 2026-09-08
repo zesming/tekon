@@ -117,13 +117,23 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       ...priorNodes.map((item) => item.id),
       node.id,
     ]);
+    const processCheckpointRequired = node.outputs.some(
+      (output) => output.type === 'process-checkpoint',
+    );
     const eligibleGateResultLines = gateResults
       .filter(
         (gate) =>
           visibleGateNodeIds.has(gate.nodeId) &&
           (gate.status === 'passed' || gate.status === 'skipped'),
       )
-      .map(formatGateResultForPrompt);
+      .map((gate) => processCheckpointRequired
+        ? `- ${JSON.stringify({
+            nodeId: gate.nodeId,
+            gateType: gate.gateType,
+            gateKey: gate.gateKey ?? null,
+            status: gate.status,
+          })}`
+        : formatGateResultForPrompt(gate));
     const priorNodeLines = priorNodes.map((item) =>
       [
         `- ${item.id} role=${item.role} status=${item.status}`,
@@ -136,9 +146,6 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
               .join(',')}`
           : 'gates=none',
       ].join(' '),
-    );
-    const processCheckpointRequired = node.outputs.some(
-      (output) => output.type === 'process-checkpoint',
     );
     const pendingHumanDecisionCount = processCheckpointRequired
       ? (await repositories.listHumanDecisions(runId)).filter(
@@ -176,6 +183,8 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
               'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes.',
               'process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.',
               'process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.',
+              'Copy nodeId, gateType, gateKey, and status verbatim from the prior eligible gate JSON entries; never reconstruct or shorten gateKey.',
+              'If a source gateKey is null, report the missing key in missingInformation; do not invent a key or include null in gateEvidence.',
               'process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.',
               `process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: ${pendingHumanDecisionCount}. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.`,
             ].join('\n')
@@ -333,6 +342,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
             '- For test-plan JSON artifacts, include testBasis and testCases using the exact schema fields.',
             '- testBasis must be a non-empty string array.',
             '- testCases[].id and testCases[].description are required.',
+            '- testCases[].method is optional; when present use only unit, integration, e2e, manual, or static. Put executable commands in description, not method.',
             '- Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
           ]
         : []),

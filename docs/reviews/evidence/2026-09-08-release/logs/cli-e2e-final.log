@@ -1,0 +1,63 @@
+
+> @tekon/cli@0.26.0 test:e2e /Users/zesming/Projects/tekon/packages/cli
+> pnpm --filter @tekon/core build && pnpm --filter @tekon/cli build && vitest --run .e2e.test
+
+
+> @tekon/core@0.26.0 build /Users/zesming/Projects/tekon/packages/core
+> tsc -p tsconfig.json
+
+
+> @tekon/cli@0.26.0 build /Users/zesming/Projects/tekon/packages/cli
+> tsc -p tsconfig.json && chmod +x dist/index.js
+
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/cli
+
+ ✓ __tests__/e2e/run-dry-run.e2e.test.ts (2 tests) 274ms
+ ✓ __tests__/e2e/draft-agent.e2e.test.ts (6 tests) 438ms
+ ✓ __tests__/e2e/provider-preflight.e2e.test.ts (4 tests) 825ms
+ ✓ __tests__/e2e/run-command-binding.e2e.test.ts (2 tests) 2574ms
+   ✓ R24 CLI 真进程命令绑定与历史观察 > 新受理持久化v3和有效命令，坏配置不阻止原requestId重放，status输出frozen  1369ms
+   ✓ R24 CLI 真进程命令绑定与历史观察 > status区分历史v2、缺损admission及未知版本，并将解释留在stderr  1205ms
+ ✓ __tests__/e2e/job-failure-exit.e2e.test.ts (2 tests) 3894ms
+   ✓ CLI task failure exit status through a real process > returns non-zero when run job fails while the workflow remains running  1910ms
+   ✓ CLI task failure exit status through a real process > returns non-zero when resume job fails while the workflow remains running  1984ms
+ ✓ __tests__/e2e/resume-exit-confirmation.e2e.test.ts (3 tests) 4081ms
+   ✓ R26 CLI recovery confirmation through a real process > requires identity-bound confirmation then resumes the same Run once (historical=false)  1619ms
+   ✓ R26 CLI recovery confirmation through a real process > requires identity-bound confirmation then resumes the same Run once (historical=true)  1530ms
+   ✓ R26 CLI recovery confirmation through a real process > does not let --approve-human record a decision when old exit is unknown  932ms
+Request ID: 71e53689-7886-4bd4-b056-c9273b70e010
+Request ID: 91d2a2e0-09bf-4606-a3ce-f7947eaca212
+Request ID: 6139821b-67a0-4b64-a5d7-7dbaf6ca6cad
+Request ID: 764869a5-2365-4923-a112-18abbf092be5
+ ✓ __tests__/e2e/run-request-id.e2e.test.ts (10 tests) 8115ms
+   ✓ CLI requestId 真进程合同 > 绝对路径中的symlink/..保持实际读取引用，不与词法折叠路径共用身份  1012ms
+   ✓ CLI requestId 真进程合同 > 二次查询才发现已受理身份时，恢复错误仍保留赢家的全部ID  946ms
+   ✓ CLI requestId 真进程合同 > --draft-file 绑定 cwd 优先候选，删除后可重放，不同 cwd 同名文件冲突  1067ms
+   ✓ CLI requestId 真进程合同 > --demand-file 绑定 cwd 优先候选，删除后可重放，不同 cwd 同名文件冲突  1055ms
+   ✓ CLI requestId 真进程合同 > repo 后备读取的引用不随 cwd 候选后来出现而改变  902ms
+   ✓ CLI requestId 真进程合同 > 相同绝对文件引用不因发起 cwd 改变而冲突  894ms
+   ✓ CLI requestId 真进程合同 > 相同 requestId 重放同一 goal，仓库后来变脏也不创建新身份  1020ms
+   ✓ CLI requestId 真进程合同 > 目录失败在run/status中可辨识，修复后复用原ID完成  983ms
+运行已处于终态 passed，无法恢复或审批：runId=run_eb1545c8-8ce6-4b5a-905c-4715944bca77
+CLEAN_SUSPENDED: tekon clean is suspended pending lifecycle-safe purge (see #33, #18)
+正在分析需求
+正在分析需求 完成
+Request ID: 58dae9da-8bbb-48a7-8ba3-e5a85bbe2a8a
+需求草案已生成计划，必须先审批计划才能运行（tekon draft plan-approve）: /var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-cli-e2e-5a0lU9/.tekon/drafts/draft_shape_f9eb1eb8-e153-4d2d-abec-286b259c2a3b.json (requestId=58dae9da-8bbb-48a7-8ba3-e5a85bbe2a8a)
+ ✓ __tests__/e2e/release-flow.e2e.test.ts (1 test) 11181ms
+   ✓ tekon release flow e2e > executes init -> dynamic dry-run -> template run -> human approval -> delivery dry-run  11180ms
+Request ID: aa64b955-6923-4332-bcbf-629fb755eec3
+正在分析需求
+正在分析需求 完成
+Request ID: b2198d6b-b1b8-4945-8e57-5b3afb3f11b7
+ ✓ __tests__/e2e/cli-flow.e2e.test.ts (3 tests) 19557ms
+   ✓ tekon cli e2e > runs init -> bugfix mock -> status -> log -> clean against persisted state  10384ms
+   ✓ tekon cli e2e > draft plan → plan-approve gates run; old draft without a plan still runs  8257ms
+   ✓ tekon cli e2e > help command works without initialized repo and with initialized repo  916ms
+
+ Test Files  9 passed (9)
+      Tests  33 passed (33)
+   Start at  12:11:40
+   Duration  19.80s (transform 419ms, setup 0ms, collect 2.21s, tests 50.94s, environment 1ms, prepare 416ms)
+

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { DurableJobRunner, JobRepository, JobStatus } from '@tekon/core';
 
-import { awaitJobTerminal } from '../src/lib/session-context.js';
+import {
+  awaitJobTerminal,
+  exitCodeForJobOutcome,
+} from '../src/lib/session-context.js';
 
 // 4c M2 (design §4.3): awaitJobTerminal is the CLI holder's observation loop.
 // While the run's job executes in THIS process, the loop reads its own job row
@@ -132,5 +135,50 @@ describe('awaitJobTerminal (4c M2 observation loop)', () => {
         pollIntervalMs: 1,
       }),
     ).rejects.toThrow(/job not found/u);
+  });
+});
+
+describe('exitCodeForJobOutcome', () => {
+  const cases: Array<{
+    jobStatus: JobStatus;
+    workflowStatus: string;
+    expected: number;
+    diagnostic: boolean;
+  }> = [
+    { jobStatus: 'done', workflowStatus: 'paused', expected: 0, diagnostic: false },
+    { jobStatus: 'done', workflowStatus: 'blocked', expected: 0, diagnostic: false },
+    { jobStatus: 'failed', workflowStatus: 'running', expected: 1, diagnostic: true },
+    { jobStatus: 'interrupted', workflowStatus: 'running', expected: 1, diagnostic: true },
+    { jobStatus: 'cancelled', workflowStatus: 'running', expected: 1, diagnostic: true },
+  ];
+
+  it.each(cases)('maps $jobStatus with workflow=$workflowStatus', ({
+    jobStatus,
+    workflowStatus,
+    expected,
+    diagnostic,
+  }) => {
+    let stderr = '';
+    const io = {
+      stdout: { write: (_chunk: string) => {} },
+      stderr: { write: (chunk: string) => { stderr += chunk; } },
+    };
+
+    expect(
+      exitCodeForJobOutcome({
+        io,
+        runId: 'run_outcome',
+        jobId: 'job_outcome',
+        jobStatus,
+        workflowStatus,
+      }),
+    ).toBe(expected);
+    if (diagnostic) {
+      expect(stderr).toContain(`jobStatus=${jobStatus}`);
+      expect(stderr).toContain('jobId=job_outcome');
+      expect(stderr).toContain('tekon log --run-id run_outcome');
+    } else {
+      expect(stderr).toBe('');
+    }
   });
 });

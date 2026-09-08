@@ -1,12 +1,14 @@
 # Tekon Web 发起与运行控制设计
 
-2026-09-07 · v0.25.0 · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [操作手册](../manual/tekon-user-manual.md)
+2026-09-08 · 当前版本以根 `package.json` 为准 · [文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [操作手册](../manual/tekon-user-manual.md)
 
 ## 1. 页面与信息责任
 
 默认 Sessions 列表和 Session 详情提供受控交付发起、feed、审批和原 Run 控制；Advanced 下的 Runs 列表和 Run 详情保留运行与证据视角。Approvals、Delivery、Config、Eval 四个页面分别承载审批、远端动作、配置和质量判断。相同运行的控制共用 RunControls，Run/Session 恢复提示以同一服务端快照为准。
 
 用户应能判断三件事：请求是否被受理、运行当前实际状态、下一步能做什么。按钮回执、领域状态和进程退出证据分别呈现，不用 Toast 推导执行已经开始或已停止。
+
+概览中的“失败检查”和“全部检查”合并为一张“检查结果”卡，每项检查只出现一次：失败项排在前面，已通过项随后列出。卡片保留失败摘要、通过计数和每项检查的证据与建议入口，方便先处理阻断项，再核对完整结果。
 
 ## 2. 发起与不确定结果
 
@@ -44,4 +46,6 @@ Session feed 是可实时刷新的观察投影，首连/重连与治理事件触
 
 ## 5. 演进边界
 
-本设计沿用现有路由、表单、RunControls、服务端领域状态和 Job 机制，不新增调度服务或并行取消状态体系。持续协作与完整导出需要独立产品和技术合同。旧 [Cockpit 原型](tekon-cockpit-mockup.html)与 [Web 架构方案](../technical/tekon-web-architecture.md)作为历史设计输入，不代表当前界面或权限合同。
+本设计沿用现有路由、表单、RunControls、服务端领域状态和 Job 机制，不新增调度服务或并行取消状态体系。持续协作与完整导出需要独立产品和技术合同。旧 [Cockpit 原型](tekon-cockpit-mockup.html)作为历史视觉输入，不代表当前界面或权限合同；原 Web 架构方案的有效边界已归入[运行时合同的历史迁移对照](../technical/tekon-runtime-contract.md#91-历史方案迁移对照)。
+
+本设计的验证入口是[正式审阅索引](../reviews/current.md)：R26/R27 的截图和交互证据可从索引进入。视口与键盘要求描述应验证的行为，不代表每个浏览器、读屏、操作系统或生产负载已通过验收。

@@ -150,22 +150,6 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
     return undefined;
   }
 
-  function requiredArtifactTypesForNode(input: {
-    outputs?: WorkflowArtifactOutputRef[];
-    gates?: WorkflowGateConfig[];
-  }): ArtifactType[] {
-    const required = new Set<ArtifactType>();
-    for (const output of input.outputs ?? []) {
-      required.add(output.type);
-    }
-    for (const gate of input.gates ?? []) {
-      if (gate.type === 'schema' && gate.artifactType) {
-        required.add(gate.artifactType);
-      }
-    }
-    return [...required];
-  }
-
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {

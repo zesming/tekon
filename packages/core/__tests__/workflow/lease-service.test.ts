@@ -462,7 +462,8 @@ describe('createLeaseService — finalizeExecutionLease', () => {
       });
 
       const node = makeNode();
-      await service.createExecutionLease('run_1', node);
+      // The real manager persists each lease; mirror that durable contract.
+      await repositories.recordWorktreeLease(await service.createExecutionLease('run_1', node));
       await service.finalizeExecutionLease('run_1', node.id);
 
       expect(committed).toBe(true);
@@ -506,7 +507,8 @@ describe('createLeaseService — finalizeExecutionLease', () => {
       });
 
       const node = makeNode();
-      await service.createExecutionLease('run_1', node);
+      // The real manager persists each lease; mirror that durable contract.
+      await repositories.recordWorktreeLease(await service.createExecutionLease('run_1', node));
       expect(executionLeases.size).toBeGreaterThan(0);
 
       await service.finalizeExecutionLease('run_1', node.id);
@@ -573,7 +575,8 @@ describe('createLeaseService — finalizeExecutionLease', () => {
       });
 
       const node = makeNode({ id: 'run_1_node_reviewer', role: 'reviewer' });
-      await service.createExecutionLease('run_1', node);
+      // The real manager persists each lease; mirror that durable contract.
+      await repositories.recordWorktreeLease(await service.createExecutionLease('run_1', node));
 
       await expect(
         service.finalizeExecutionLease('run_1', node.id),
@@ -704,4 +707,33 @@ describe('durable repair lease recovery', () => {
       await expect(f.service.activeExecutionLease('run_1', 'source', { required: true })).rejects.toThrow(/lease/i);
     } finally { f.db.close(); }
   });
+});
+
+describe('durable direct lease recovery', () => {
+  it.each([false, true])('resolves the unique source lease with cache=%s', async cached => {
+    const f = await repairRecoveryFixture();
+    try {
+      const direct = { ...f.lease, id: 'source_lease', nodeId: 'source' };
+      await f.repositories.recordWorktreeLease(direct);
+      await f.audit.append({ runId: 'run_1', type: 'worktree.lease.created', payload: { nodeId: 'source', leaseId: direct.id } });
+      if (cached) f.executionLeases.set('source', direct);
+      await expect(f.service.activeExecutionLease('run_1', 'source')).resolves.toMatchObject(direct);
+    } finally { f.db.close(); }
+  });
+
+  it.each([false, true].flatMap(cached =>
+    ['duplicate', 'wrong-role', 'latest-mismatch'].map(mismatch => ({ cached, mismatch }))))(
+    'rejects direct $mismatch with cache=$cached before falling back to repair', async ({ cached, mismatch }) => {
+      const f = await repairRecoveryFixture();
+      try {
+        const direct = { ...f.lease, id: 'source_lease', nodeId: 'source' };
+        await f.repositories.recordWorktreeLease(direct);
+        await f.audit.append({ runId: 'run_1', type: 'worktree.lease.created', payload: { nodeId: 'source', leaseId: mismatch === 'latest-mismatch' ? 'newer_lease' : direct.id } });
+        if (cached) f.executionLeases.set('source', direct);
+        if (mismatch === 'duplicate') await f.repositories.recordWorktreeLease({ ...direct, id: 'duplicate_source' });
+        if (mismatch === 'wrong-role') f.db.prepare("update worktree_leases set role='qa' where id=?").run(direct.id);
+        await expect(f.service.activeExecutionLease('run_1', 'source')).rejects.toThrow(/lease/i);
+      } finally { f.db.close(); }
+    },
+  );
 });

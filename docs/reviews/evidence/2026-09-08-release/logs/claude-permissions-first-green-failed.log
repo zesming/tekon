@@ -1,0 +1,50 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ❯ __tests__/runtime/claude-code-permissions.test.ts (9 tests | 1 failed) 7ms
+   ✓ Claude Code permission compiler > compiles the real default provider and command policy into bounded grants 2ms
+   ✓ Claude Code permission compiler > does not add npm or Bash grants when either capability source is empty 0ms
+   ✓ Claude Code permission compiler > uses native Bash patterns only as candidate caps and never grants them directly 0ms
+   ✓ Claude Code permission compiler > does not treat structured Bash or native Bash(Bash *) as a command alias 0ms
+   ✓ Claude Code permission compiler > preserves scoped native deny rules without converting them to Bash 0ms
+   × Claude Code permission compiler > preserves native Agent and MCP deny rules verbatim 3ms
+     → expected [ 'Bash(Agent *)', 'mcp__server__*' ] to deeply equal ArrayContaining{…}
+   ✓ Claude Code permission compiler > keeps exact deny and human approval rules separate from grants 0ms
+   ✓ Claude Code permission compiler > preserves prefix deny and approval semantics without widening or narrowing them 0ms
+   ✓ Claude Code permission compiler > refuses rules that cannot be serialized as a single safe Claude argv token 0ms
+ ✓ __tests__/runtime/claude-code-adapter.test.ts (57 tests) 385ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/runtime/claude-code-permissions.test.ts > Claude Code permission compiler > preserves native Agent and MCP deny rules verbatim
+AssertionError: expected [ 'Bash(Agent *)', 'mcp__server__*' ] to deeply equal ArrayContaining{…}
+
+- Expected
++ Received
+
+- ArrayContaining [
+-   "Agent",
++ [
++   "Bash(Agent *)",
+    "mcp__server__*",
+  ]
+
+ ❯ __tests__/runtime/claude-code-permissions.test.ts:166:30
+    164|     );
+    165| 
+    166|     expect(permissions.deny).toEqual(
+       |                              ^
+    167|       expect.arrayContaining(['Agent', 'mcp__server__*']),
+    168|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 65 passed (66)
+   Start at  11:11:09
+   Duration  912ms (transform 245ms, setup 0ms, collect 704ms, tests 392ms, environment 0ms, prepare 61ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/runtime/claude-code-permissions.test.ts __tests__/runtime/claude-code-adapter.test.ts

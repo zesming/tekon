@@ -446,6 +446,29 @@ table {
   padding: 0;
 }
 
+.gate-triage-grid {
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  min-width: 0;
+  width: 100%;
+}
+
+.gate-triage-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.gate-triage-grid > .gate-triage-value {
+  overflow-wrap: anywhere;
+}
+
+.gate-triage-badge {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  justify-self: start;
+}
+
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2534,6 +2557,10 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 600px) {
+  .gate-triage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .check-item {
     display: grid;
     grid-template-columns: 18px minmax(0, 1fr);
@@ -2563,6 +2590,25 @@ tbody tr:last-child td {
 
 /* 恢复说明属于运行控制，随容器换行并保留完整 Job 身份。 */
 .run-controls { min-width: 0; }
+.run-control-receipt {
+  flex-basis: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.run-control-receipt > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .run-recovery-notice,
 .run-recovery-error,
 .run-recovery-confirmation {

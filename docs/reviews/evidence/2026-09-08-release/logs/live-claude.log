@@ -1,0 +1,8 @@
+Request ID: 5cac236a-848e-4acc-ab4d-7c89e68494c0
+🚀 运行已启动
+  Run ID: run_41edcd7e-aa0b-44d9-8b82-39939485f459
+  状态: interrupted
+  模板: standard-delivery
+后续操作:
+  tekon status          查看运行状态
+  tekon review          查看审阅面板

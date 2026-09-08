@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +29,7 @@ function isRunning(pid: number): boolean {
 }
 
 async function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'tekon-recovery-process-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'tekon-recovery-process-')));
   cleanups.push(() => rmSync(root, { recursive: true, force: true }));
   const git = (args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
   git(['init', '-b', 'main']); git(['config', 'user.email', 'test@example.com']); git(['config', 'user.name', 'Recovery test']);

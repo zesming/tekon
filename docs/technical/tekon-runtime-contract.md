@@ -1,6 +1,6 @@
 # Tekon 运行时与 Harness 集成合同
 
-2026-09-07 · v0.25.0 · 状态：现行维护合同；验证结果见[正式审阅入口](../reviews/current.md)
+2026-09-08 · 当前版本以根 `package.json` 为准 · 状态：现行维护合同；验证结果见[正式审阅入口](../reviews/current.md) · [文档总索引](../README.md)
 
 本文归并已落地的计划受理、Session/Job、运行控制和 Provider 边界。产品范围见[产品说明](../product/tekon-current-product-scope.md)，操作见[手册](../manual/tekon-user-manual.md)。规范描述预期不变式，不以本文代替发布验收。
 
@@ -11,6 +11,24 @@ CLI/Web 通过 `SessionService` 和默认 workflow executor 共享运行语义�
 `workflow_instances`、Node/RoleRun、`jobs`、Artifact、Gate、Audit、Delivery 等持久领域记录是相应事实源。`session_events` 是观察投影；新 Session 的三个开场事件具有下述原子保证，后续事件按尽力交付处理，可能缺失。Event Bus 通知失败不能推翻已持久化领域结果。
 
 Profile 只改变允许的策略，不替代安全权限。`autonomous-delivery` 只在长驻服务中自动准备已通过运行的材料；远端写仍需显式批准。内置 Goal 模板仅豁免必须包含 reviewer 节点的要求，其他治理约束仍生效；普通 Deliver 模板不适用此豁免。
+
+角色目录中的 `tools.yaml` 与 `permissionProfile` 主要用于 prompt summary、顶层命令策略和界面提示；workflow helper 使用的 `defaultCommandPolicy` 也不等于 Provider 内部工具的执行沙箱。CommandGateway、工作树、顶层 human gate 和 delivery 审批只覆盖 Tekon 管理并能观测到的动作；当前测试验证的是编译结果和顶层调用路径，不能据此宣称阻断 Agent 在 Provider 内部自行执行 `git`、`gh` 或其他外部工具。OS 隔离、网络出口和所有外部副作用仍是独立风险边界。
+
+Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 仍只作为节点提示，不等于这些运行时规则。
+
+资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
+
+### 1.1 已归并的架构决策
+
+| 决策 | 当前合同 |
+| --- | --- |
+| 执行权威 | CLI/Web 可各自运行 Runtime；SQLite owner fence、状态 CAS 和 Git expected-old OID 只保护各自覆盖的写入。single-owner daemon 仍是演进方向，不是当前部署前提。 |
+| Session 事实源 | 持久 Run/Node/Job/Artifact/Gate/Audit/Delivery 是领域事实源；`session_events` 只做观察投影，完整模型历史、durable inbox 和全域 outbox 尚未实现。 |
+| Harness 接入 | headless 只用于 experimental Goal；SDK 与 ACP 是不同控制面，不能把 SDK 的初始化/提示接口解释成持续协作或完整权限合同。 |
+| 高风险动作 | push、创建 PR、合入、上线及权限扩大保留人工控制；Gateway 与角色提示不能扩大为 OS/provider 沙箱。 |
+| Collaborate 与导出 | follow-up、steer、持续会话恢复和完整导出仍在独立工作项中，不能由 Session feed、分页或新接口名称推断已完成。 |
+
+PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
 
 ## 2. RunPlan v3 与检查绑定
 
@@ -83,6 +101,8 @@ Registry 按 Job scope 隔离，旧代 close/kill 不污染新代。退出证据
 
 若关停发生在工作树已提交释放、节点尚未完成的窗口，只有该次执行完整的 promoted→released 审计证据才允许完成收尾；不承诺撤回已经完成的 Git 写入。修复执行本身未完成时保留实际未完成状态，不承诺跳过 Agent。
 
+原节点从 blocked/interrupted 重跑 Agent 时，复用同 Run、节点和角色的未释放直接租约，保持工作树、分支、baseHead 与未提交修改；repair alias 不作为原节点租约复用。直接租约的缓存与冷恢复均校验唯一性、角色及最新创建事件标识，冲突明确失败，不自动挑选或释放旧租约。CLI 以 Job 终态和 Run 状态共同决定退出码，failed/interrupted/cancelled Job 即使留下 running Run 也返回非零并给出日志入口。
+
 普通修复 Agent 异常与关停分别处理：原有提交释放流程成功且仍有重试预算时，从当前 Run 分支为原节点创建新工作树，再进入 awaiting-gate 执行复查。新工作树已创建、节点仍为 needs-revision 时，只有最新 Agent 已完成、租约属于原节点，且该租约创建事件晚于最后修复失败与最后修复意图，才恢复为 Gate checkpoint；后续修复意图会撤销该资格。复查通过即可正常收尾，失败则继续剩余修复预算；该复查被关停后，新引擎沿持久租约恢复 Gate。工作树提交或释放失败保留真实错误并中止，不吞掉异常后继续，也不开放主仓库回退路径。
 
 Web/CLI 审批后恢复共用守卫：能预见退出风险时不写审批；审批写入后发生竞争时返回“审批已记录，运行尚未恢复”，不谎报审批回滚或执行已开始。Run 详情和 Session 用同快照 `getRunRecovery` 展示取消与恢复状态，不从缺失 SSE 或无活跃 Job 推导退出。
@@ -109,4 +129,15 @@ DSH 要求 Node `^22.19.0 || >=24.0.0`，Tekon 主合同为 `^20.19.0 || >=22.12
 
 验证需覆盖受理回滚/并发重试、计划漂移/历史兼容、取消补偿/终态赢家、真实 SQLite 多连接 owner 竞争、Job scope 退出、确认过期/无 Job、queued 暂停的认领交错以及 CLI/Web 恢复。真实进程用例证明执行与退出边界；真实 Provider 交付还需 Artifact、实际 Gate、同 Run 中断恢复、Audit 和 eval，不以 mock 代替。
 
-已完成过程计划迁移映射：阶段 1–4 的 Session/Job/治理合同归入 §1–7；阶段 5b 的 Provider 边界归入 §8；后续 Admission/RunPlan 与 R26 生命周期整改归入 §2–6。旧 roadmap 中尚未实现的持续协作、导出和平台隔离归入[产品边界](../product/tekon-current-product-scope.md)，不能因删除过程文件标成已完成。旧过程方案保留[固定 Git 快照](https://github.com/zesming/tekon/tree/31680f9bfd9424dd6466734ac97a8d172debfa42/docs/superpowers/plans)，正式 reviews 保留原证据范围。
+已完成过程计划迁移映射：阶段 1–4 的 Session/Job/治理合同归入 §1–7；阶段 5b 的 Provider 边界归入 §8；后续 Admission/RunPlan 与 R26 生命周期整改归入 §2–6。旧 roadmap 中尚未实现的持续协作、导出和平台隔离归入[产品边界](../product/tekon-current-product-scope.md)，不能因删除过程文件标成已完成。旧过程方案与报告可从[基线 86a3d48 的 docs 目录](https://github.com/zesming/tekon/tree/86a3d48/docs)和 Git 历史检索，正式 reviews 保留原证据范围。
+
+### 9.1 历史方案迁移对照
+
+| 已清理的旧入口 | 仍适用内容 | 现行入口 |
+| --- | --- | --- |
+| `tekon-v2-technical-plan.md/html` | 角色、Workflow、Gate、Artifact、Worktree、CLI/Web 的早期架构词汇；其中未来计划和权限承诺已失效 | 本合同 §1–§7；用户操作见[手册](../manual/tekon-user-manual.md) |
+| `tekon-web-architecture.md/html` | Sessions/Advanced 信息责任、路由与证据导航的设计输入 | [运行控制设计](../design/tekon-run-control-design.md)；本合同 §1、§7 |
+| `tekon-replatform-current-scope.md/html` | 阶段完成标签不能替代真实能力，Session feed 不是权威日志 | 本合同 §1、§7；[产品范围](../product/tekon-current-product-scope.md) |
+| `adr-0001-runtime-authority-and-collaborate.md/html` | SQLite owner fence、关停、headless/SDK/ACP、Collaborate 递延的修订结论 | 本合同 §1.1、§4–§8；[产品范围](../product/tekon-current-product-scope.md) |
+
+删除旧入口只减少重复正文，不删除固定快照、正式验收证据或截图资产。新结论必须先更新本合同、产品范围、设计或手册，再由 Git 历史承载过程讨论。

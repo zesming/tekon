@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.25.1**。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.26.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -499,6 +499,8 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`failed`、`cancelled` 终态不可恢复。
 
+CLI 的 `run` / `resume` 在后台 Job 失败、中断或取消时返回非零退出码，并显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
+
 审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。
 
 ### 6.11 `approval reject`
@@ -640,7 +642,11 @@ tekon draft approve
 
 仅当项目 `defaultAgent` 显式设为 `claude-code` 且本机 CLI 可用时，才尝试 Claude Code 辅助澄清；其他配置、未安装或调用失败时使用本地预设问题。此命令不支持 `--agent`。
 
-该澄清调用是独立 CLI 路径，使用 Claude 的 `bypassPermissions`，不沿用 workflow Provider 的执行约束。只需本地塑形时使用 `draft shape` 或 `draft new "需求文本" --no-interactive`。
+该澄清调用是独立 CLI 路径，使用 Claude 的 `default` 权限模式，显式关闭模型的内置工具和 MCP 工具，并禁止自动加载 MCP 配置；只向模型提供草稿与回答文本。失败时回退为静态澄清，不申请扩大权限。宿主 CLI 的启动 hook 和配置仍由本机管理，这不是 OS 沙箱。只需本地塑形时使用 `draft shape` 或 `draft new "需求文本" --no-interactive`。
+
+Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 仍只作为节点提示，不等于这些运行时规则。
+
+资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 
 需求卡仍需人工批准；可选计划审批见 §6.5.1。
 
@@ -665,7 +671,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.25.1`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.0`。
 
 ## 7. Web Dashboard
 
@@ -700,6 +706,8 @@ tekon --version
 若刷新后记录已移除，可从受控交付列表找原会话。只有明确选择“明确新建另一个任务”才使用新身份。symlink 路径指向同一物理仓库时历史 Run/Session 保持可见，不提供跨物理仓库切换。
 
 **查看进展与证据**：Session 事件流实时刷新，断线后自动重连。列表在连接、重连或状态变化时重新读取；审批卡片会反映其他入口的决定。更早记录通过“加载更早历史”读取；在线回放超出预算时的历史截断提示不表示历史被删除。
+
+运行概览中的“检查结果”卡把原先分开的失败检查和全部检查合并展示，每项只列一次。失败项排在前面，已通过项排在后面；卡片保留失败摘要、通过计数，以及检查证据和建议入口。先处理失败摘要，再按证据入口核对完整结果。
 
 Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant 文本，均不提供模型原文逐块流。后续事件可能因 best-effort 投影缺失，不能仅凭 feed 重建运行或推断进程退出。新 Session 的三个开场事件与 Run、必需审计和初始 Job 原子受理，重试不重复创建。
 

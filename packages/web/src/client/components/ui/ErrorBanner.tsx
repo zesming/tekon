@@ -151,6 +151,8 @@ export function ErrorBanner({ error, onRetry }: ErrorBannerProps) {
 
   return (
     <div
+      role="alert"
+      aria-atomic="true"
       style={{
         padding: '16px 20px',
         background: 'var(--fail-bg)',

@@ -1,0 +1,60 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/cli
+
+ ❯ __tests__/e2e/job-failure-exit.e2e.test.ts (2 tests | 2 failed) 1853ms
+   × CLI task failure exit status through a real process > returns non-zero when run job fails while the workflow remains running 764ms
+     → Request ID: 22d7acb1-4fc0-46ec-99b4-f92611408cf8
+: expected +0 to be 1 // Object.is equality
+   × CLI task failure exit status through a real process > returns non-zero when resume job fails while the workflow remains running 1089ms
+     → expected +0 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/e2e/job-failure-exit.e2e.test.ts > CLI task failure exit status through a real process > returns non-zero when run job fails while the workflow remains running
+AssertionError: Request ID: 22d7acb1-4fc0-46ec-99b4-f92611408cf8
+: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ __tests__/e2e/job-failure-exit.e2e.test.ts:56:44
+     54| 
+     55|       const result = await collect(child);
+     56|       expect(result.status, result.stderr).toBe(1);
+       |                                            ^
+     57|       expect(result.stdout).toContain(`状态: running`);
+     58|       expect(result.stderr).toContain('jobStatus=failed');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  __tests__/e2e/job-failure-exit.e2e.test.ts > CLI task failure exit status through a real process > returns non-zero when resume job fails while the workflow remains running
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ __tests__/e2e/job-failure-exit.e2e.test.ts:106:44
+    104| 
+    105|       const result = runCli(repo, ['resume', '--run-id', runId]);
+    106|       expect(result.status, result.stderr).toBe(1);
+       |                                            ^
+    107|       expect(result.stdout).toContain('status=running');
+    108|       expect(result.stderr).toContain('jobStatus=failed');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  11:55:49
+   Duration  2.33s (transform 169ms, setup 0ms, collect 285ms, tests 1.85s, environment 0ms, prepare 27ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/e2e/job-failure-exit.e2e.test.ts

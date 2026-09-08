@@ -18,7 +18,7 @@ describe('atomic run admissions', () => {
     directories.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }));
   });
   function fixture() {
-    const root = mkdtempSync(join(tmpdir(), 'tekon-admission-'));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'tekon-admission-')));
     directories.push(root);
     const repo = join(root, 'repo');
     mkdirSync(repo);

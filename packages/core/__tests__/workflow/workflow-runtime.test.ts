@@ -214,6 +214,7 @@ describe('isChangesRequested', () => {
     expect(isChangesRequested('changes-requested', 'build')).toBe(false);
     expect(isChangesRequested('changes-requested', 'lint')).toBe(false);
     expect(isChangesRequested('changes-requested', 'human')).toBe(false);
+    expect(isChangesRequested('changes-requested', 'e2e-pass')).toBe(false);
   });
 
   it('returns false for non-changes-requested classification on independent-review', () => {

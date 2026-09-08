@@ -78,6 +78,7 @@ export function RunControls({
 
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionReceipt, setActionReceipt] = useState<string | null>(null);
   const confirmation = useResumeConfirmation(runId, recovery);
   const actionInFlight = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -129,12 +130,17 @@ export function RunControls({
     if (actionInFlight.current) return;
     actionInFlight.current = true;
     setActionError(null);
+    setActionReceipt(null);
     try {
       const result = await pauseMutation.mutate({ runId, token });
       if (TERMINAL_STATUSES.has(result.run.status)) {
-        addFlash('info', `运行已结束（${result.run.status}），请核对最新运行状态。`);
+        const message = `运行已结束（${result.run.status}），请核对最新运行状态。`;
+        addFlash('info', message);
+        setActionReceipt(message);
       } else {
-        addFlash('success', '暂停请求已记录，活动步骤将在边界停下。');
+        const message = '暂停请求已记录，活动步骤将在边界停下。';
+        addFlash('success', message);
+        setActionReceipt(message);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '暂停请求失败';
@@ -151,14 +157,19 @@ export function RunControls({
     if (actionInFlight.current || (resumeRecovery?.requiresConfirmation && !confirmed)) return;
     actionInFlight.current = true;
     setActionError(null);
+    setActionReceipt(null);
     try {
       const result = await resumeMutation.mutate({ runId, token,
         ...confirmation.input,
       });
       if (TERMINAL_STATUSES.has(result.run.status)) {
-        addFlash('info', `运行已结束（${result.run.status}），请核对最新运行状态。`);
+        const message = `运行已结束（${result.run.status}），请核对最新运行状态。`;
+        addFlash('info', message);
+        setActionReceipt(message);
       } else {
-        addFlash('success', '已受理恢复，请观察原运行。');
+        const message = '已受理恢复，请观察原运行。';
+        addFlash('success', message);
+        setActionReceipt(message);
       }
     } catch (err) {
       addFlash(
@@ -177,6 +188,7 @@ export function RunControls({
     e.stopPropagation();
 
     if (actionInFlight.current) return;
+    setActionReceipt(null);
     if (!canRetryCancel && pendingAction !== 'cancel') {
       setPendingAction('cancel');
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -196,12 +208,18 @@ export function RunControls({
       // server's terminal winner, not the clicked action, determines feedback.
       const label = `运行 ${runId.slice(0, 8)}`;
       if (result.run.status === 'cancelled') {
-        addFlash('success', `${label} 已记录取消；这不代表所有后台进程已退出。`);
+        const message = `${label} 已记录取消；这不代表所有后台进程已退出。`;
+        addFlash('success', message);
+        setActionReceipt(message);
       } else if (result.run.status === 'passed' || result.run.status === 'failed') {
         const state = result.run.status === 'passed' ? '已完成' : '已失败';
-        addFlash('info', `${label}${state}，未改为取消。`);
+        const message = `${label}${state}，未改为取消。`;
+        addFlash('info', message);
+        setActionReceipt(message);
       } else {
-        addFlash('info', `${label}的取消请求已返回，请核对最新运行状态。`);
+        const message = `${label}的取消请求已返回，请核对最新运行状态。`;
+        addFlash('info', message);
+        setActionReceipt(message);
       }
     } catch (err) {
       addFlash(
@@ -241,6 +259,19 @@ export function RunControls({
         </p>
       )}
       {actionError && <p className="run-recovery-error">{actionError}</p>}
+      {actionReceipt && (
+        <div className="run-control-receipt" role="status" aria-live="polite">
+          <span>{actionReceipt}</span>
+          <button
+            type="button"
+            className="flash-dismiss"
+            aria-label="关闭运行回执"
+            onClick={() => setActionReceipt(null)}
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {canResume && <ResumeConfirmation recovery={recovery} checked={confirmed} disabled={isPending} onChange={confirmation.setConfirmed} />}
       {canPause && (
         <button

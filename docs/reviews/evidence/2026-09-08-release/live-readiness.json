@@ -1,0 +1,130 @@
+{
+  "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+  "prePr": {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "ready": true,
+    "checks": [
+      {
+        "id": "standard-delivery-template",
+        "passed": true,
+        "evidence": "workflow template is standard-delivery"
+      },
+      {
+        "id": "workflow-passed",
+        "passed": true,
+        "evidence": "workflow status is passed"
+      },
+      {
+        "id": "audit-valid",
+        "passed": true,
+        "evidence": "audit hash chain is valid"
+      },
+      {
+        "id": "validation-gates-passed",
+        "passed": true,
+        "evidence": "3/3 validation gates passed or explicitly skipped"
+      },
+      {
+        "id": "no-pending-human-gates",
+        "passed": true,
+        "evidence": "0 pending human decisions"
+      },
+      {
+        "id": "acceptance-criteria-evidenced",
+        "passed": true,
+        "evidence": "4/4 acceptance criteria evidenced"
+      },
+      {
+        "id": "qa-release-signoff-passed",
+        "passed": true,
+        "evidence": "qa-signoff gate passed; passed matchedRef=true expectedRef=sha:8ab2b6a43c2a8274151da01adfd8ca94e10b7784 criteriaEvidence=4 artifact=artifact_436915c2-fbae-40da-951c-4f637ac6ca8d"
+      },
+      {
+        "id": "standard-governance-gates-passed",
+        "passed": true,
+        "evidence": "required governance gates passed: independent-review, role-scope, ac-evidence, qa-signoff, process-completeness"
+      },
+      {
+        "id": "security-scans-passed",
+        "passed": true,
+        "evidence": "1/1 security scans passed"
+      }
+    ]
+  },
+  "readiness": {
+    "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+    "ready": false,
+    "score": 0.8181818181818182,
+    "checks": [
+      {
+        "id": "workflow-passed",
+        "severity": "required",
+        "passed": true,
+        "evidence": "workflow status is passed"
+      },
+      {
+        "id": "audit-valid",
+        "severity": "required",
+        "passed": true,
+        "evidence": "audit hash chain is valid"
+      },
+      {
+        "id": "validation-gates-passed",
+        "severity": "required",
+        "passed": true,
+        "evidence": "3/3 validation gates passed or explicitly skipped"
+      },
+      {
+        "id": "delivery-package-present",
+        "severity": "required",
+        "passed": true,
+        "evidence": "2 delivery-package artifacts"
+      },
+      {
+        "id": "pr-prepared",
+        "severity": "required",
+        "passed": true,
+        "evidence": "PR preparation event recorded"
+      },
+      {
+        "id": "no-pending-human-gates",
+        "severity": "required",
+        "passed": true,
+        "evidence": "0 pending human decisions"
+      },
+      {
+        "id": "acceptance-criteria-evidenced",
+        "severity": "required",
+        "passed": true,
+        "evidence": "4/4 acceptance criteria evidenced"
+      },
+      {
+        "id": "qa-release-signoff-passed",
+        "severity": "required",
+        "passed": true,
+        "evidence": "qa-signoff gate passed; passed matchedRef=true expectedRef=sha:8ab2b6a43c2a8274151da01adfd8ca94e10b7784 criteriaEvidence=4 artifact=artifact_436915c2-fbae-40da-951c-4f637ac6ca8d"
+      },
+      {
+        "id": "security-scans-passed",
+        "severity": "required",
+        "passed": true,
+        "evidence": "1/1 security scans passed"
+      },
+      {
+        "id": "pr-created",
+        "severity": "required",
+        "passed": false,
+        "evidence": "PR status is not-created"
+      },
+      {
+        "id": "remote-ci-passed",
+        "severity": "required",
+        "passed": false,
+        "evidence": "remote CI status not checked"
+      }
+    ]
+  },
+  "requiresHumanApproval": true,
+  "remoteActionsPerformed": [],
+  "scope": "Local standard-delivery fixture only; project PR is a separate user-authorized repository delivery."
+}

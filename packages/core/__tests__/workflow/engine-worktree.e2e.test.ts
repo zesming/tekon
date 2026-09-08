@@ -34,6 +34,71 @@ describe('workflow engine worktree execution e2e', () => {
     }
   });
 
+  it('reuses a blocked source lease across fresh engines without losing edits or creating ambiguity', async () => {
+    const repoPath = createGitRepo(tempDirs);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const gateway = createCommandGateway({ repositories });
+    const mock = createMockAgentAdapter();
+    const observed: Array<{ id: string; path: string; active: number; previous: string }> = [];
+    let gateCalls = 0;
+    const gateEngine: GateEngine = {
+      ...createGateEngine({ repositories }),
+      async runGate(input) {
+        return repositories.recordGateResult({
+          id: `retry_gate_${gateCalls}`,
+          runId: input.runId, nodeId: input.nodeId,
+          gateType: input.gate.type, gateKey: input.gate.gateKey,
+          status: gateCalls++ === 0 ? 'failed' : 'passed',
+          durationMs: 0, retries: 0, createdAt: new Date().toISOString(),
+        });
+      },
+    };
+    const engine = () => createWorkflowEngine({
+      repoPath, dataDir: '.tekon', repositories, audit, gateEngine,
+      worktreeManager: createWorktreeManager({ repositories, gateway }),
+      adapter: { async runAgent(input) {
+        const path = join(input.worktreeLease.worktreePath, 'carry.txt');
+        observed.push({
+          id: input.worktreeLease.id,
+          path: input.worktreeLease.worktreePath,
+          active: (await repositories.listWorktreeLeases(input.runContext.runId)).filter(lease => !lease.releasedAt).length,
+          previous: existsSync(path) ? readFileSync(path, 'utf8') : '',
+        });
+        writeFileSync(path, `attempt-${observed.length}`);
+        if (observed.length === 2) {
+          return { provider: 'custom', exitCode: 1, durationMs: 1, outputFiles: [], timedOut: false };
+        }
+        return mock.runAgent(input);
+      } },
+    });
+    try {
+      const first = await engine().startRun({ demandText: 'preserve retry edits', mode: 'template', workflowSpec: {
+        id: 'blocked-retry', name: 'Blocked retry', version: 1,
+        retryPolicy: { maxAttempts: 1, maxRetries: 0, backoffMs: 0, strategy: 'fixed', onExhausted: 'block' },
+        phases: [{ id: 'rd', name: 'RD', dependsOn: [], parallel: false, nodes: [{
+          id: 'rd-node', role: 'rd', inputs: [], outputs: [{ id: 'code', type: 'code-changes' }],
+          gates: [{ type: 'test', autoFix: false, onExhausted: 'block', command: { tool: 'npm', args: ['test'] } }], dependsOn: [],
+        }] }],
+      } });
+      expect(first.workflow.status).toBe('blocked');
+      expect((await repositories.listWorktreeLeases(first.runId)).filter(lease => !lease.releasedAt)).toHaveLength(1);
+      const second = await engine().resumeRun(first.runId);
+      expect(second.workflow.status).toBe('interrupted');
+      expect(observed[1]).toEqual({ ...observed[0], previous: 'attempt-1' });
+      expect((await repositories.listWorktreeLeases(first.runId)).filter(lease => !lease.releasedAt).length).toBeLessThanOrEqual(1);
+      const third = await engine().resumeRun(first.runId);
+      expect(third.workflow.status).toBe('passed');
+      expect(observed[2]?.previous).toBe('attempt-2');
+      expect(observed.every(item => item.active === 1)).toBe(true);
+      expect((await repositories.listWorktreeLeases(first.runId)).filter(lease => !lease.releasedAt)).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('leases real git worktrees, promotes passed node changes, and releases leases', async () => {
     const repoPath = createGitRepo(tempDirs);
     const db = openTekonDatabase({ filename: ':memory:' });

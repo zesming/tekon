@@ -1,0 +1,84 @@
+{
+  "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+  "node": "qa-validation",
+  "attempts": [
+    {
+      "attempt": 1,
+      "sessionId": "263c03f6-18f6-4afd-91e6-ef7b546e61ea",
+      "sourceSha256": "51745596e4220d8288c2599f76d7f670ae50a2268f8fe0d6398be4801bfe896e",
+      "denials": [
+        {
+          "requestedAt": "2026-09-08T02:27:51.451Z",
+          "tool": "Bash",
+          "command": "npm run build",
+          "resultAt": "2026-09-08T02:27:51.453Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:27:58.582Z",
+          "tool": "Bash",
+          "command": "npm test",
+          "resultAt": "2026-09-08T02:27:58.584Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:28:31.020Z",
+          "tool": "Bash",
+          "command": "npm test",
+          "resultAt": "2026-09-08T02:28:31.025Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:28:33.235Z",
+          "tool": "Bash",
+          "command": "pnpm test",
+          "resultAt": "2026-09-08T02:28:33.237Z",
+          "error": "This command requires approval",
+          "isError": true
+        }
+      ]
+    },
+    {
+      "attempt": 2,
+      "sessionId": "8d74b00e-09d3-472d-8d8d-0c2bf6fad93a",
+      "sourceSha256": "551d784f902a9989de744211e1ea18c107275abc003160d438738a0a7d23c4ec",
+      "denials": [
+        {
+          "requestedAt": "2026-09-08T02:33:26.106Z",
+          "tool": "Bash",
+          "command": "npm test",
+          "resultAt": "2026-09-08T02:33:26.112Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:33:26.376Z",
+          "tool": "Bash",
+          "command": "npm run build",
+          "resultAt": "2026-09-08T02:33:26.382Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:33:35.230Z",
+          "tool": "Bash",
+          "command": "node --test math.test.js",
+          "resultAt": "2026-09-08T02:33:35.237Z",
+          "error": "This command requires approval",
+          "isError": true
+        },
+        {
+          "requestedAt": "2026-09-08T02:33:35.430Z",
+          "tool": "Bash",
+          "command": "node --check math.js",
+          "resultAt": "2026-09-08T02:33:35.435Z",
+          "error": "This command requires approval",
+          "isError": true
+        }
+      ]
+    }
+  ]
+}

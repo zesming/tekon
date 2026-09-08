@@ -124,15 +124,17 @@ function writeEvidence(input: {
   );
   const reviewDir = join(repoRoot, 'docs', 'reviews');
   mkdirSync(reviewDir, { recursive: true });
+  const executedAt = new Date();
+  const evidenceName = `${executedAt.toISOString().slice(0, 10)}-claude-provider-smoke-evidence`;
   const markdownPath = join(
     reviewDir,
-    '2026-06-05-claude-provider-smoke-evidence.md',
+    `${evidenceName}.md`,
   );
   const htmlPath = join(
     reviewDir,
-    '2026-06-05-claude-provider-smoke-evidence.html',
+    `${evidenceName}.html`,
   );
-  const evidence: ClaudeProviderSmokeEvidenceInput = input;
+  const evidence: ClaudeProviderSmokeEvidenceInput = { ...input, executedAt };
   writeFileSync(
     markdownPath,
     buildClaudeProviderSmokeEvidenceMarkdown(evidence),

@@ -1,0 +1,2353 @@
+{
+  "run": [
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "status": "running",
+      "kind": "workflow",
+      "plan_digest": "9280abaedc1dd7805690e3bb6a1689ece030c446e17805eed5dffd56ac815d54",
+      "current_node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "created_at": "2026-09-08T02:02:17.827Z",
+      "updated_at": "2026-09-08T03:41:42.627Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "status": "passed",
+      "kind": "workflow",
+      "plan_digest": "b204df17cb166cf5797b07a058e83d3f3af3ef8ef9f1777b7298ac2f6822240b",
+      "current_node_id": null,
+      "created_at": "2026-09-08T03:43:01.734Z",
+      "updated_at": "2026-09-08T04:28:12.370Z"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:03:43.513Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:05:02.664Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:06:24.010Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:16:29.317Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:18:29.249Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:20:08.319Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:21:19.931Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:22:58.753Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:24:21.097Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:25:06.546Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:25:41.828Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "reviewer",
+      "status": "passed",
+      "updated_at": "2026-09-08T02:27:12.844Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:17:27.402Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:19:02.325Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:20:47.669Z"
+    },
+    {
+      "id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "role": "pmo",
+      "status": "interrupted",
+      "updated_at": "2026-09-08T03:36:22.652Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:43:54.517Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:45:00.245Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T03:46:25.232Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:00:53.102Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:02:11.233Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:03:50.165Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:05:04.605Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:15:06.532Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:16:42.787Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "pm",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:17:29.035Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "rd",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:18:13.667Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "reviewer",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:19:24.518Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:22:40.148Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:24:29.694Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "qa",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:26:30.204Z"
+    },
+    {
+      "id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "role": "pmo",
+      "status": "passed",
+      "updated_at": "2026-09-08T04:28:12.369Z"
+    }
+  ],
+  "gates": [
+    {
+      "id": "gate_3da4bba7-98cc-44b3-bf19-bd2033ded2de",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-card",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:03:43.370Z"
+    },
+    {
+      "id": "gate_f0c37830-5246-46e5-9260-40e818b647a9",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=prd",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:03:43.371Z"
+    },
+    {
+      "id": "gate_fd931ab4-1302-4d75-a63a-c46e0b66c3f6",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:05:02.542Z"
+    },
+    {
+      "id": "gate_d0ebae2c-348a-4347-8a8d-6e6b7b9e9d49",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:05:02.543Z"
+    },
+    {
+      "id": "gate_55e31753-d6ce-499e-ac23-c9f7c44cf9e6",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:05:02.544Z"
+    },
+    {
+      "id": "gate_1da6cbc2-4c8c-4fdf-835a-531eeef7b125",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:06:23.892Z"
+    },
+    {
+      "id": "gate_9e20bca0-bca9-46ec-82a6-e5a4b34b38f0",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:06:23.893Z"
+    },
+    {
+      "id": "gate_bb621945-144d-42f7-9c1e-0ce74ac49a72",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:06:23.894Z"
+    },
+    {
+      "id": "gate_db66b7bf-2a8b-47b2-8825-530b5f85293e",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:16:29.192Z"
+    },
+    {
+      "id": "gate_28f226d2-2a9d-4a03-9a3e-675403a7b955",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:16:29.193Z"
+    },
+    {
+      "id": "gate_89fcbd04-64bd-42c1-9908-4aad6a0a15c3",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:16:29.194Z"
+    },
+    {
+      "id": "gate_cdd7398f-6ab8-498e-a2c0-214e53bd2ddd",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:18:29.126Z"
+    },
+    {
+      "id": "gate_1f3a0201-3ef3-4c2b-9fdb-d790c7774e97",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:18:29.127Z"
+    },
+    {
+      "id": "gate_7bc37ba9-e831-4f74-8bbb-491f80909b09",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:18:29.127Z"
+    },
+    {
+      "id": "gate_222d9d0d-bb16-4706-98c5-33e191b92139",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=implementation-plan",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:20:08.193Z"
+    },
+    {
+      "id": "gate_c46ed85b-8654-4bf5-b4b3-1dbd378763dc",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:21:19.800Z"
+    },
+    {
+      "id": "gate_d1be1154-4392-4bef-bc77-0362724fda06",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:21:19.802Z"
+    },
+    {
+      "id": "gate_3d5ace69-1e00-43fb-a970-f6d266bab07b",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:21:19.803Z"
+    },
+    {
+      "id": "gate_5b2d7c20-b66c-40bb-aea7-0609b6a3f969",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:22:58.619Z"
+    },
+    {
+      "id": "gate_312156c1-aae0-4919-b7c8-08ded70eb6fd",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:24:20.956Z"
+    },
+    {
+      "id": "gate_fbfd902c-c65a-4f1f-994f-5f4ab962585d",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:24:20.956Z"
+    },
+    {
+      "id": "gate_4f8b9061-0e25-42ce-ace3-a9adb875e363",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:24:20.957Z"
+    },
+    {
+      "id": "gate_7c31fbdf-b00f-43b0-814c-1cab9fe02ca8",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:06.422Z"
+    },
+    {
+      "id": "gate_6ee6c6c1-16da-49c5-ae9e-34c396b34d92",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:06.423Z"
+    },
+    {
+      "id": "gate_83c394c6-89ea-427c-8684-bc83b973e993",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:06.423Z"
+    },
+    {
+      "id": "gate_129e0a51-e972-4238-925e-b647ec28f790",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "build",
+      "gate_key": "00:build:commandRef=build",
+      "status": "passed",
+      "duration_ms": 139,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:41.554Z"
+    },
+    {
+      "id": "gate_303283e0-c423-4de7-aa5e-cce05e9efcd7",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "lint",
+      "gate_key": "01:lint:commandRef=lint",
+      "status": "passed",
+      "duration_ms": 141,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:41.695Z"
+    },
+    {
+      "id": "gate_abfadae7-17e6-4db8-9fc6-18df1c34f34b",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "security-scan",
+      "gate_key": "02:security-scan:commandRef=security",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:41.696Z"
+    },
+    {
+      "id": "gate_98220d32-de17-4cdf-87d3-17fb0196790b",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "gate_type": "schema",
+      "gate_key": "03:schema:artifact=code-changes",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:25:41.697Z"
+    },
+    {
+      "id": "gate_1915c240-cf5a-4384-9245-3f3427a19b88",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:27:12.705Z"
+    },
+    {
+      "id": "gate_1d577079-6d65-4f77-b646-9b16c653e42c",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:27:12.705Z"
+    },
+    {
+      "id": "gate_c9fe4282-7450-453e-ad36-2cb4f85c59bd",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T02:27:12.706Z"
+    },
+    {
+      "id": "gate_3cdbbeb8-c6bc-490a-9316-ab4c32d0a015",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "test",
+      "gate_key": "00:test:commandRef=test",
+      "status": "passed",
+      "duration_ms": 207,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:17:27.257Z"
+    },
+    {
+      "id": "gate_e491590e-79db-470f-83f3-8d3fd2e594a0",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=test-report",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:17:27.258Z"
+    },
+    {
+      "id": "gate_6bca4ea0-a9dc-4c90-be49-591a61df35d9",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "02:schema:artifact=ac-evidence",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:17:27.259Z"
+    },
+    {
+      "id": "gate_dcb35bdb-f969-492c-ae79-09f074a9e085",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "gate_type": "ac-evidence",
+      "gate_key": "03:ac-evidence:artifact=ac-evidence",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:17:27.260Z"
+    },
+    {
+      "id": "gate_3ecf0ceb-bedf-4af7-91a0-509d5994fdbb",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:19:02.166Z"
+    },
+    {
+      "id": "gate_14e0f53f-3e11-41a4-bb5e-36eb8319fe45",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "gate_type": "qa-signoff",
+      "gate_key": "01:qa-signoff:artifact=qa-release-signoff",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:19:02.170Z"
+    },
+    {
+      "id": "gate_2b2ba426-3f17-4ae4-8a45-000eda9aa955",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:20:47.550Z"
+    },
+    {
+      "id": "gate_1a73d30e-8a16-453d-800d-e5b463759a31",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:20:47.551Z"
+    },
+    {
+      "id": "gate_7ea9091b-d416-4029-bf17-b80f8155ee14",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:20:47.552Z"
+    },
+    {
+      "id": "gate_0cb7f9fb-b432-42a8-9776-e3924022d8ba",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=process-checkpoint",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:26:10.959Z"
+    },
+    {
+      "id": "gate_8c65cde8-9b2e-427f-afd8-ba7e234b757b",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "gate_type": "process-completeness",
+      "gate_key": "01:process-completeness:artifact=process-checkpoint",
+      "status": "failed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": "process-gate-evidence-missing",
+      "created_at": "2026-09-08T03:26:10.962Z"
+    },
+    {
+      "id": "gate_e7b25aaa-ddcf-4e21-9f0f-f5386def7c26",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-card",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:43:54.393Z"
+    },
+    {
+      "id": "gate_6568332f-5ac7-43aa-b666-c136fd9b83da",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=prd",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:43:54.395Z"
+    },
+    {
+      "id": "gate_2ec1a400-f7b0-4eab-a9ee-a278a6495096",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:45:00.118Z"
+    },
+    {
+      "id": "gate_2cad178a-8f56-43e8-966c-dad3cd85dfe8",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:45:00.119Z"
+    },
+    {
+      "id": "gate_d36ef579-c428-4974-ad6a-60f8bd7e5f61",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:45:00.120Z"
+    },
+    {
+      "id": "gate_a96de6b3-b8bb-4a99-a1a7-2c1358e99e51",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:46:25.106Z"
+    },
+    {
+      "id": "gate_9e035332-cf06-4cfd-bad5-84b09496863e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:46:25.107Z"
+    },
+    {
+      "id": "gate_e38c2e0d-8b7b-4c1f-a9c8-ded4bb1da0ad",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=demand-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T03:46:25.108Z"
+    },
+    {
+      "id": "gate_4aba1aad-1ec7-47b2-9429-fc8ca38420e1",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:00:52.936Z"
+    },
+    {
+      "id": "gate_a8e10f12-d579-40fa-a9bb-9f7e798916ac",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:00:52.937Z"
+    },
+    {
+      "id": "gate_198e43da-d549-4186-b235-efab2dab1688",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:00:52.939Z"
+    },
+    {
+      "id": "gate_02e8e571-0240-4fe2-a095-75be0f75347e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:02:11.112Z"
+    },
+    {
+      "id": "gate_cc244c4e-58ba-4aa6-9ef9-e8e6afaf2822",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:02:11.113Z"
+    },
+    {
+      "id": "gate_6279a516-cd0c-407e-8060-e90ee3bc0173",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=requirement-interface-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:02:11.115Z"
+    },
+    {
+      "id": "gate_b34ced38-a6bf-4434-935c-7f69f040c4a0",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=implementation-plan",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:03:50.042Z"
+    },
+    {
+      "id": "gate_35a0d4aa-2180-41d2-9319-b69129e6dc6c",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:05:04.475Z"
+    },
+    {
+      "id": "gate_834efad1-91b1-4b07-ac24-0324393701fa",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:05:04.477Z"
+    },
+    {
+      "id": "gate_ea16483d-822a-46e1-85bd-7c8d25036473",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=technical-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:05:04.478Z"
+    },
+    {
+      "id": "gate_5a69312b-ca3a-46c8-a092-acb19209726e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:15:06.409Z"
+    },
+    {
+      "id": "gate_e4c39700-6f6f-4dd1-9766-50844514c622",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:16:42.663Z"
+    },
+    {
+      "id": "gate_da7062e7-cfdf-4020-8c90-14649f15dec2",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:16:42.665Z"
+    },
+    {
+      "id": "gate_e128a491-4468-43b2-9e02-fccabac1f2cd",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:16:42.667Z"
+    },
+    {
+      "id": "gate_d6efde8d-3c99-47c2-834f-d2542f072a0c",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:17:28.911Z"
+    },
+    {
+      "id": "gate_429fa6ee-1565-47b2-97a7-770d9b97a69c",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:17:28.913Z"
+    },
+    {
+      "id": "gate_1f3f02a2-8c4d-4e8a-80a7-ce77d3143470",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=test-plan-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:17:28.915Z"
+    },
+    {
+      "id": "gate_04b8ccaa-83bb-4ddd-9e8a-a65544cba05b",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "gate_type": "build",
+      "gate_key": "00:build:commandRef=build",
+      "status": "passed",
+      "duration_ms": 142,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:18:13.431Z"
+    },
+    {
+      "id": "gate_f9ffae1c-560a-4b90-8d4e-4904652dbd95",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "gate_type": "lint",
+      "gate_key": "01:lint:commandRef=lint",
+      "status": "passed",
+      "duration_ms": 124,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:18:13.556Z"
+    },
+    {
+      "id": "gate_2a9ad7fd-a3c0-4787-bb4f-21a8466e9d9d",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "gate_type": "security-scan",
+      "gate_key": "02:security-scan:commandRef=security",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:18:13.557Z"
+    },
+    {
+      "id": "gate_595ce19c-0036-4cf8-92fc-164b78859d8f",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "gate_type": "schema",
+      "gate_key": "03:schema:artifact=code-changes",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:18:13.558Z"
+    },
+    {
+      "id": "gate_472a0f2f-f069-4829-84f4-57f861ba1b64",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:19:24.388Z"
+    },
+    {
+      "id": "gate_fc0d7ccf-4d5f-4e71-b1c2-4e7a9e192584",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:19:24.391Z"
+    },
+    {
+      "id": "gate_51e11196-0858-4ba8-84d5-ada192132b9c",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=code-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:19:24.392Z"
+    },
+    {
+      "id": "gate_fc4e92dc-3bc9-4f72-8b14-d8a4d8fff787",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "gate_type": "test",
+      "gate_key": "00:test:commandRef=test",
+      "status": "passed",
+      "duration_ms": 205,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:22:40.012Z"
+    },
+    {
+      "id": "gate_e4426e76-587e-45b6-bb44-589fd0ada509",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "01:schema:artifact=test-report",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:22:40.014Z"
+    },
+    {
+      "id": "gate_26b4b161-96d2-4400-b099-71eb8208c2a9",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "gate_type": "schema",
+      "gate_key": "02:schema:artifact=ac-evidence",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:22:40.015Z"
+    },
+    {
+      "id": "gate_78495d1e-f9d7-4b56-a0c7-8d18bbea6867",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "gate_type": "ac-evidence",
+      "gate_key": "03:ac-evidence:artifact=ac-evidence",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:22:40.017Z"
+    },
+    {
+      "id": "gate_264ba88f-d1cd-413d-a1ab-9d126ee5e76e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:24:29.570Z"
+    },
+    {
+      "id": "gate_70ca4682-ff2a-4d6e-b854-86dceb7a7224",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff",
+      "gate_type": "qa-signoff",
+      "gate_key": "01:qa-signoff:artifact=qa-release-signoff",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:24:29.573Z"
+    },
+    {
+      "id": "gate_ca253817-60e4-4190-aafb-503334c34632",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:26:30.077Z"
+    },
+    {
+      "id": "gate_eab600ff-b131-46fd-bfc4-9121db3c6272",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "gate_type": "independent-review",
+      "gate_key": "01:independent-review:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:26:30.079Z"
+    },
+    {
+      "id": "gate_4aaa4b2d-04f5-4314-959f-b045919b1bbf",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "gate_type": "role-scope",
+      "gate_key": "02:role-scope:artifact=qa-release-signoff-review",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:26:30.081Z"
+    },
+    {
+      "id": "gate_92db7e8f-753d-422d-8e17-67cc3c6b2049",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "gate_type": "schema",
+      "gate_key": "00:schema:artifact=process-checkpoint",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:28:12.238Z"
+    },
+    {
+      "id": "gate_db3eeda4-1541-4c78-a076-3bcb42b5b7bc",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "gate_type": "process-completeness",
+      "gate_key": "01:process-completeness:artifact=process-checkpoint",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:28:12.241Z"
+    },
+    {
+      "id": "gate_3a37fad7-ee2f-4e2b-b8db-0a7db3b5b07a",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "gate_type": "schema",
+      "gate_key": "02:schema:artifact=delivery-package",
+      "status": "passed",
+      "duration_ms": 0,
+      "retries": 0,
+      "failure_classification": null,
+      "created_at": "2026-09-08T04:28:12.243Z"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_4de9596f-d444-40c3-8717-c7a1446e8795",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T02:07:04.901Z"
+      },
+      "created_at": "2026-09-08T02:02:17.827Z",
+      "updated_at": "2026-09-08T02:07:04.901Z"
+    },
+    {
+      "id": "job_e778d5cd-3b45-4b66-9651-989210fba93c",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T02:30:13.460Z"
+      },
+      "created_at": "2026-09-08T02:15:32.892Z",
+      "updated_at": "2026-09-08T02:30:13.460Z"
+    },
+    {
+      "id": "job_0ce64264-07b6-460b-a3ce-4c3b32d8bf38",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": null,
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T02:34:45.516Z"
+      },
+      "created_at": "2026-09-08T02:31:44.863Z",
+      "updated_at": "2026-09-08T02:34:45.516Z"
+    },
+    {
+      "id": "job_55c48b48-3db7-4480-9dcd-7dca71a9d767",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T03:23:48.367Z"
+      },
+      "created_at": "2026-09-08T03:15:07.850Z",
+      "updated_at": "2026-09-08T03:23:48.367Z"
+    },
+    {
+      "id": "job_f48d0711-52b9-4d2d-8703-9f2a8d97f00c",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "done",
+      "abort_state": "stopped",
+      "checkpoint": null,
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T03:26:10.963Z"
+      },
+      "created_at": "2026-09-08T03:24:20.727Z",
+      "updated_at": "2026-09-08T03:26:10.963Z"
+    },
+    {
+      "id": "job_0335a1a2-d7b1-4ce5-8234-da06a60e2eb8",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": null,
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T03:36:22.652Z"
+      },
+      "created_at": "2026-09-08T03:33:21.941Z",
+      "updated_at": "2026-09-08T03:36:22.652Z"
+    },
+    {
+      "id": "job_30f06f39-2ae7-4715-af87-27a9962f517d",
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+      "status": "failed",
+      "abort_state": "stopped",
+      "checkpoint": null,
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T03:41:42.631Z"
+      },
+      "created_at": "2026-09-08T03:41:42.606Z",
+      "updated_at": "2026-09-08T03:41:42.631Z"
+    },
+    {
+      "id": "job_9969de99-4213-4937-bbdb-2dbe0192e7cc",
+      "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "sessionId": "sess_044ffeac-7193-4ce0-8a47-0539c1b75dee",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T03:47:21.675Z"
+      },
+      "created_at": "2026-09-08T03:43:01.734Z",
+      "updated_at": "2026-09-08T03:47:21.675Z"
+    },
+    {
+      "id": "job_d33d6d9c-5be1-41df-bc5b-3c2eedfc8078",
+      "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "sessionId": "sess_044ffeac-7193-4ce0-8a47-0539c1b75dee",
+      "status": "interrupted",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T04:06:22.277Z"
+      },
+      "created_at": "2026-09-08T03:59:52.282Z",
+      "updated_at": "2026-09-08T04:06:22.277Z"
+    },
+    {
+      "id": "job_278c5d7f-7168-4e49-9a36-5aa9fffe85af",
+      "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "sessionId": "sess_044ffeac-7193-4ce0-8a47-0539c1b75dee",
+      "status": "done",
+      "abort_state": "stopped",
+      "checkpoint": "node:run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "exit_evidence": {
+        "version": 1,
+        "kind": "managed-handles-closed",
+        "observedAt": "2026-09-08T04:28:12.370Z"
+      },
+      "created_at": "2026-09-08T04:12:27.112Z",
+      "updated_at": "2026-09-08T04:28:12.370Z"
+    }
+  ],
+  "worktreeLeases": [
+    {
+      "id": "lease_ebb162ea-48f3-4e57-b50d-6309929d12a5",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card-pm-lease-18026579-69d2-45ba-947a-08bd17af00f0",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card-pm-lease-18026579-69d2-45ba-947a-08bd17af00f0",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:02:17.924Z",
+      "released_at": "2026-09-08T02:03:43.512Z"
+    },
+    {
+      "id": "lease_83614a88-8298-46eb-ad80-064729f11276",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review-pm-lease-69d261e8-1f67-4dba-97dd-b63999521f01",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review-pm-lease-69d261e8-1f67-4dba-97dd-b63999521f01",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:03:43.583Z",
+      "released_at": "2026-09-08T02:05:02.664Z"
+    },
+    {
+      "id": "lease_cfcf9721-a7c3-4397-9a57-0863db9af839",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review-pm-lease-ec787c8d-e608-4d30-ab22-ed825ce2072a",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review-pm-lease-ec787c8d-e608-4d30-ab22-ed825ce2072a",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:05:02.721Z",
+      "released_at": "2026-09-08T02:06:24.010Z"
+    },
+    {
+      "id": "lease_ea862dc8-f284-4f1f-8377-71e81cb7df94",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review-rd-lease-8ce8a7a6-54bc-41fa-b3f1-4bc1871a5fd2",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review-rd-lease-8ce8a7a6-54bc-41fa-b3f1-4bc1871a5fd2",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:06:24.068Z",
+      "released_at": "2026-09-08T02:07:04.900Z"
+    },
+    {
+      "id": "lease_7f83fb9c-a981-4209-8682-52fddd64632d",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review-rd-lease-9711764f-f3b6-4938-8c3e-7d5e87917614",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review-rd-lease-9711764f-f3b6-4938-8c3e-7d5e87917614",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:15:32.979Z",
+      "released_at": "2026-09-08T02:16:29.317Z"
+    },
+    {
+      "id": "lease_d71deae4-44d1-471b-b957-cb985dbccc88",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review-qa-lease-49bba7ee-67ea-44d4-86d0-7c6edf425df6",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review-qa-lease-49bba7ee-67ea-44d4-86d0-7c6edf425df6",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:16:29.378Z",
+      "released_at": "2026-09-08T02:18:29.249Z"
+    },
+    {
+      "id": "lease_62f5053e-a788-4ed5-a673-d72fdd33fc16",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan-rd-lease-0ac98f45-bacf-4ab5-9705-803f9d0eef5a",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan-rd-lease-0ac98f45-bacf-4ab5-9705-803f9d0eef5a",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:18:29.314Z",
+      "released_at": "2026-09-08T02:20:08.319Z"
+    },
+    {
+      "id": "lease_86e74aa5-9ebf-43fa-991d-b2e2ab57ed33",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review-rd-lease-87ff41f1-b01a-4a90-b598-ebf090b66f85",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review-rd-lease-87ff41f1-b01a-4a90-b598-ebf090b66f85",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:20:08.380Z",
+      "released_at": "2026-09-08T02:21:19.931Z"
+    },
+    {
+      "id": "lease_f4e01a65-6660-464e-8457-9b64abf76a8d",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-qa-lease-6cb63e3c-2517-475e-8d96-f2b8a0af80a8",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-qa-lease-6cb63e3c-2517-475e-8d96-f2b8a0af80a8",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:21:19.995Z",
+      "released_at": "2026-09-08T02:22:58.753Z"
+    },
+    {
+      "id": "lease_3898433f-efff-47d3-bb41-177bb0b45728",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review-qa-lease-1975620c-3213-4f2f-9859-fb0b034653ad",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review-qa-lease-1975620c-3213-4f2f-9859-fb0b034653ad",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:22:58.821Z",
+      "released_at": "2026-09-08T02:24:21.096Z"
+    },
+    {
+      "id": "lease_80f4bb20-5e56-4365-bfd6-fd87ec3b3e67",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review-pm-lease-563c0502-7feb-4308-979a-68c29c91f886",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review-pm-lease-563c0502-7feb-4308-979a-68c29c91f886",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:24:21.184Z",
+      "released_at": "2026-09-08T02:25:06.546Z"
+    },
+    {
+      "id": "lease_b34cba57-3bbf-450f-b434-7adbb8d703a2",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change-rd-lease-85c8847e-ef9a-492a-9831-503b4b105838",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change-rd-lease-85c8847e-ef9a-492a-9831-503b4b105838",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T02:25:06.629Z",
+      "released_at": "2026-09-08T02:25:41.828Z"
+    },
+    {
+      "id": "lease_adecb937-40df-4907-8a5c-380c9fe8c88e",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "role": "reviewer",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review-reviewer-lease-bad92117-1e35-4972-9671-36644933c1ef",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review-reviewer-lease-bad92117-1e35-4972-9671-36644933c1ef",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T02:25:41.905Z",
+      "released_at": "2026-09-08T02:27:12.843Z"
+    },
+    {
+      "id": "lease_17674956-c3a6-43a7-b2e9-76c6f9d36a05",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-7b537fc7-6059-45db-aedd-e2583f2fd126",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-7b537fc7-6059-45db-aedd-e2583f2fd126",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T02:27:12.931Z",
+      "released_at": "2026-09-08T02:30:13.459Z"
+    },
+    {
+      "id": "lease_0edb1ec3-6ce1-4d13-af85-5775a7e1a90f",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-6c7214f0-3ad9-4b46-898c-ae8b1ab0b6b8",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-6c7214f0-3ad9-4b46-898c-ae8b1ab0b6b8",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T02:31:44.964Z",
+      "released_at": "2026-09-08T02:34:45.515Z"
+    },
+    {
+      "id": "lease_c0309353-aaa7-4dac-8760-0dd0fb2545ae",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-6faa3e9f-b789-41c7-9b11-e688e024f2cf",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation-qa-lease-6faa3e9f-b789-41c7-9b11-e688e024f2cf",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:15:07.960Z",
+      "released_at": "2026-09-08T03:17:27.402Z"
+    },
+    {
+      "id": "lease_ba888e76-df31-4701-bfe8-aedb7047d913",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-qa-lease-0a584023-51a8-4e7a-a1ed-4107f9e83032",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-qa-lease-0a584023-51a8-4e7a-a1ed-4107f9e83032",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:17:27.478Z",
+      "released_at": "2026-09-08T03:19:02.325Z"
+    },
+    {
+      "id": "lease_a8e164a7-d44a-403f-9def-4edcbf610699",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review-qa-lease-5ed6a175-5952-48d2-9351-da62f89932fa",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review-qa-lease-5ed6a175-5952-48d2-9351-da62f89932fa",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:19:02.412Z",
+      "released_at": "2026-09-08T03:20:47.669Z"
+    },
+    {
+      "id": "lease_53f43ba9-0a87-45d5-8442-a1704c067bdc",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "role": "pmo",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-429ed537-d3f5-417f-b34d-01eb0ebc524c",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-429ed537-d3f5-417f-b34d-01eb0ebc524c",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:20:47.754Z",
+      "released_at": "2026-09-08T03:23:48.366Z"
+    },
+    {
+      "id": "lease_448c21b8-1bf9-4980-8803-57627b25d104",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "role": "pmo",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-85a43cfa-6d74-4f24-85da-7c0afc65258f",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-85a43cfa-6d74-4f24-85da-7c0afc65258f",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:24:20.838Z",
+      "released_at": null
+    },
+    {
+      "id": "lease_5197e42f-c345-4d31-9ddf-c27475a5cd95",
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "role": "pmo",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-d2a81197-e7b6-4d4a-9cb0-929b96bcaed7",
+      "branch_name": "tekon/run_41edcd7e-aa0b-44d9-8b82-39939485f459/run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint-pmo-lease-d2a81197-e7b6-4d4a-9cb0-929b96bcaed7",
+      "base_head": "e35069f7160d939a0f75100acb2afede48716918",
+      "created_at": "2026-09-08T03:33:22.046Z",
+      "released_at": "2026-09-08T03:36:22.651Z"
+    },
+    {
+      "id": "lease_5230e1c6-ad10-418f-8ed5-a0b13fa09f48",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card-pm-lease-cf271b81-85a2-48ae-b920-7c791ba4aa9d",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card-pm-lease-cf271b81-85a2-48ae-b920-7c791ba4aa9d",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T03:43:01.822Z",
+      "released_at": "2026-09-08T03:43:54.517Z"
+    },
+    {
+      "id": "lease_4fd1f6da-d21e-4277-8420-979e89c6969f",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review-pm-lease-bcb24bbf-207c-41d2-b1ee-1398884e93c8",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review-pm-lease-bcb24bbf-207c-41d2-b1ee-1398884e93c8",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T03:43:54.581Z",
+      "released_at": "2026-09-08T03:45:00.245Z"
+    },
+    {
+      "id": "lease_0c7e449e-8145-40b5-85d1-2630e6ba7be9",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review-pm-lease-6ae4c46d-08b0-42cf-9fb8-6f5212de6ca9",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review-pm-lease-6ae4c46d-08b0-42cf-9fb8-6f5212de6ca9",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T03:45:00.309Z",
+      "released_at": "2026-09-08T03:46:25.232Z"
+    },
+    {
+      "id": "lease_fe833851-e02e-4086-8ae0-2b0b7ea33c6e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review-rd-lease-d040d0c2-efa6-4233-9e85-3e36fdad809d",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review-rd-lease-d040d0c2-efa6-4233-9e85-3e36fdad809d",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T03:46:25.291Z",
+      "released_at": "2026-09-08T03:47:21.674Z"
+    },
+    {
+      "id": "lease_93cd2b31-3449-4a5e-8128-9013bbda33fc",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review-rd-lease-2c1a9b2d-e667-4c52-8ba6-2404c4e69360",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review-rd-lease-2c1a9b2d-e667-4c52-8ba6-2404c4e69360",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T03:59:52.370Z",
+      "released_at": "2026-09-08T04:00:53.101Z"
+    },
+    {
+      "id": "lease_0557bf67-a28e-4c28-a4bd-c089772e87d6",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review-qa-lease-2bf99a76-9fa2-49ed-b694-78d598afc8b2",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review-qa-lease-2bf99a76-9fa2-49ed-b694-78d598afc8b2",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:00:53.190Z",
+      "released_at": "2026-09-08T04:02:11.233Z"
+    },
+    {
+      "id": "lease_04778203-64aa-450e-b0bf-24a210e1e2f3",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan-rd-lease-798a4015-3240-4ac7-890a-6d338c8746c9",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan-rd-lease-798a4015-3240-4ac7-890a-6d338c8746c9",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:02:11.296Z",
+      "released_at": "2026-09-08T04:03:50.164Z"
+    },
+    {
+      "id": "lease_73a65ac6-743a-4190-8e59-f0ab35642d35",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review-rd-lease-2638b171-636c-48d8-91cc-4facd11d7505",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review-rd-lease-2638b171-636c-48d8-91cc-4facd11d7505",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:03:50.229Z",
+      "released_at": "2026-09-08T04:05:04.605Z"
+    },
+    {
+      "id": "lease_ae3d1507-21b5-4344-999b-5ca0203b2741",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-qa-lease-c1c7948e-4a8b-4d7a-8861-57042f8c1bf4",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-qa-lease-c1c7948e-4a8b-4d7a-8861-57042f8c1bf4",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:05:04.668Z",
+      "released_at": "2026-09-08T04:06:22.276Z"
+    },
+    {
+      "id": "lease_679be62c-f8f8-4daa-a128-c4d2a3fb104e",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-qa-lease-74591237-fea8-41c6-b252-812f1486a2cf",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-qa-lease-74591237-fea8-41c6-b252-812f1486a2cf",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:12:27.216Z",
+      "released_at": "2026-09-08T04:15:06.532Z"
+    },
+    {
+      "id": "lease_febd6468-5a52-4f16-9a3a-f57c321905c4",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review-qa-lease-df0f4151-1a07-41ca-8c98-2181fb6947cc",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review-qa-lease-df0f4151-1a07-41ca-8c98-2181fb6947cc",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:15:06.603Z",
+      "released_at": "2026-09-08T04:16:42.787Z"
+    },
+    {
+      "id": "lease_7711d89b-58dc-4a8d-b123-3939f90547d3",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "role": "pm",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review-pm-lease-ded1d237-2608-489b-a670-6a279541bed1",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review-pm-lease-ded1d237-2608-489b-a670-6a279541bed1",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:16:42.855Z",
+      "released_at": "2026-09-08T04:17:29.035Z"
+    },
+    {
+      "id": "lease_10a2ab4f-8959-4af4-a9e5-8e3a6c168147",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "role": "rd",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change-rd-lease-a0d4838b-f7f2-4ea8-aba7-fa7ec070d6df",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change-rd-lease-a0d4838b-f7f2-4ea8-aba7-fa7ec070d6df",
+      "base_head": "60612d0dd677ed39e5690cd84e9356412b1e22c9",
+      "created_at": "2026-09-08T04:17:29.096Z",
+      "released_at": "2026-09-08T04:18:13.667Z"
+    },
+    {
+      "id": "lease_629bcbad-6b96-472f-af0e-c5b4ac51c4b4",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "role": "reviewer",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review-reviewer-lease-18f54051-c3dc-4a50-9ed6-67c0214feb28",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review-reviewer-lease-18f54051-c3dc-4a50-9ed6-67c0214feb28",
+      "base_head": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+      "created_at": "2026-09-08T04:18:13.730Z",
+      "released_at": "2026-09-08T04:19:24.518Z"
+    },
+    {
+      "id": "lease_82b0035b-5ecf-46bf-a2c8-c31e1ff8f707",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation-qa-lease-e583721e-0e27-4771-95c0-df60cc3e9466",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation-qa-lease-e583721e-0e27-4771-95c0-df60cc3e9466",
+      "base_head": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+      "created_at": "2026-09-08T04:19:24.586Z",
+      "released_at": "2026-09-08T04:22:40.147Z"
+    },
+    {
+      "id": "lease_cc383f9e-e11b-40e1-b1f1-b21c60e89352",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-qa-lease-d8a43428-528b-4121-b910-cbdeaa0aa14e",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-qa-lease-d8a43428-528b-4121-b910-cbdeaa0aa14e",
+      "base_head": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+      "created_at": "2026-09-08T04:22:40.215Z",
+      "released_at": "2026-09-08T04:24:29.694Z"
+    },
+    {
+      "id": "lease_472e062b-c4eb-4868-a333-cece2605cb9c",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "role": "qa",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review-qa-lease-943daa71-d924-4caa-babe-896028c0deca",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review-qa-lease-943daa71-d924-4caa-babe-896028c0deca",
+      "base_head": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+      "created_at": "2026-09-08T04:24:29.762Z",
+      "released_at": "2026-09-08T04:26:30.204Z"
+    },
+    {
+      "id": "lease_8b4301e0-f203-4c03-9a61-63cbe474e708",
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "role": "pmo",
+      "worktree_path": "<fixture>/.tekon/worktrees/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint-pmo-lease-4f66c878-7862-4940-8485-0fd9de3cd845",
+      "branch_name": "tekon/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297/run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint-pmo-lease-4f66c878-7862-4940-8485-0fd9de3cd845",
+      "base_head": "8ab2b6a43c2a8274151da01adfd8ca94e10b7784",
+      "created_at": "2026-09-08T04:26:30.271Z",
+      "released_at": "2026-09-08T04:28:12.369Z"
+    }
+  ],
+  "artifacts": [
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "demand-card",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "sha256": "bda14efe722e56092bb566fe1ab8c3973acc0973ff02b34f28ac13226d465693",
+      "size_bytes": 1573
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "prd",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-card",
+      "sha256": "f22c55735fa64278097a3cfbce81d074427dbe8c3584dbdde6b3d06cb769f1d5",
+      "size_bytes": 4047
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "demand-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-demand-review",
+      "sha256": "7c6be73b66fec046872465fd10edbb73dda1c3b6c4b0935d80b748279eb231ea",
+      "size_bytes": 3217
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "demand-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-requirement-intent-review",
+      "sha256": "9e536a937178af0eb92f8245f644d21380ea62dc519f035a094bb771d02c7268",
+      "size_bytes": 4225
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "requirement-interface-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+      "sha256": "a353caf6b21fc8c9acdded01fa74048190ad3d3b0dd96194ac3d01ad190f4e69",
+      "size_bytes": 4310
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "requirement-interface-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-requirement-interface-review",
+      "sha256": "23d1ed8a2e222e160335c6fb8b4411bcc09015ba7a75c2c90f18b5e86faf4353",
+      "size_bytes": 4912
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "implementation-plan",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-implementation-plan",
+      "sha256": "f1214f01077aa1112d98108cb2e22476e9955cf35a96c649e16f7993f1feb14c",
+      "size_bytes": 8159
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "technical-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-technical-review",
+      "sha256": "d63adc45a43071885b3e87cc8c8e467aa4e5f44012ddb154d11fc9f273761392",
+      "size_bytes": 3815
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "test-plan",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan",
+      "sha256": "ac87b63cdda93e043fbb425177b213da0d5b2a9d7a5a7f41ec39aaa7697ba4e7",
+      "size_bytes": 13221
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "test-plan-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-test-plan-review",
+      "sha256": "b2b0f0a8004870d59ed60c76e7aaff568506b4d24b10c2be036a84410df410a8",
+      "size_bytes": 5527
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "test-plan-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pm-test-plan-intent-review",
+      "sha256": "85f9debc24b4eafda5a297b783652b6ea60c0200cc7804541a62d68d478ab45f",
+      "size_bytes": 4512
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "code-changes",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-code-change",
+      "sha256": "5ce0f8c6794330907ad1764c2861761b2e7c75cdf88f7d06cd845a361bcceca4",
+      "size_bytes": 2950
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "code-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_reviewer-change-review",
+      "sha256": "3042642f65e3df4706bdfabf3ba6cd72be40fc1f0e4325b1cc4a644499bf5240",
+      "size_bytes": 4295
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "test-report",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "sha256": "8223765743364ae49290ca11d8e49e170fa7f6df0ff0676fba2b54c964e2d2b8",
+      "size_bytes": 8421
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "ac-evidence",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+      "sha256": "2771f5c4501a3908c60b623cee5e8c05a10301b56f51580501c80b30a05a7af6",
+      "size_bytes": 7924
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "qa-release-signoff",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff",
+      "sha256": "2fcc7491470a8f872b9f3a7d737429ead86961c97e9580a8c5e87747a4294e32",
+      "size_bytes": 9610
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "qa-release-signoff-review",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-release-signoff-review",
+      "sha256": "0c4fd9f4dfad8f242c895c9265142c4fbf35e805b7a495bea4115c5c8087e576",
+      "size_bytes": 5834
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "process-checkpoint",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "sha256": "104dc59d42e2715fa7a4843bf4c40cdd4a304408b21f1d76c0adb44e31d6c2ef",
+      "size_bytes": 14620
+    },
+    {
+      "run_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "type": "delivery-package",
+      "node_id": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+      "sha256": "49df6cbc7693c4350347d10d167b793a126ceb6b663f8833cf11ed76e373c107",
+      "size_bytes": 14049
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "demand-card",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "sha256": "c569b7f95c509d4b4bce6598d03f1c742297dc9d33228abe20f2bda55201532b",
+      "size_bytes": 1894
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "prd",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-card",
+      "sha256": "33a8a44640da8446df82ce497820cf030eb4ae2529291de6b667eee6b813cc5d",
+      "size_bytes": 4789
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "demand-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-demand-review",
+      "sha256": "4b481541f85411f9134aa8b6ba950e8f0d6fb341c88772d4317fd3bcdef244bb",
+      "size_bytes": 3495
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "demand-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-requirement-intent-review",
+      "sha256": "99b92e5c162087b71982a392ede2ad680f26bc62fdf2d9126dd67df4224fb6c4",
+      "size_bytes": 3592
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "requirement-interface-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+      "sha256": "0b7f8ddf1acee39a172d438c47bf4c923b6342605720ec7335e10d28f1e592a6",
+      "size_bytes": 4425
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "requirement-interface-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-requirement-interface-review",
+      "sha256": "3cd0ffb925811eea04ce16357005ffeed452b60a6ca8f4e24ac89b3a64d32a85",
+      "size_bytes": 4288
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "implementation-plan",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-implementation-plan",
+      "sha256": "b1db3d20ccef59610db4f2d3fa00f35450fb458937557b5285467772496871e8",
+      "size_bytes": 8303
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "technical-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-technical-review",
+      "sha256": "8e430bb0ed140ce6eb5b7b8e142290d18c346a9d18347ab8192ad77df6694040",
+      "size_bytes": 3650
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "test-plan",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+      "sha256": "edd83b346fbd566f5af1806f278bb5ef31a3ca51abc8135f07883548745d56ed",
+      "size_bytes": 8139
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "test-plan-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan-review",
+      "sha256": "c81e30c321676e8d634e944cf3c42c094f35f3a1d0c1378ffc791bffea7aa08b",
+      "size_bytes": 5668
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "test-plan-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pm-test-plan-intent-review",
+      "sha256": "e5ca205317381acfd111f6a5f4352f81d431115cf4ad14de54ef1e80dd9334df",
+      "size_bytes": 3797
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "code-changes",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-code-change",
+      "sha256": "6bf95c9fcd1a8b3fb853618b36177ac3058ace6fcdd9026d81bc552ef234333a",
+      "size_bytes": 3222
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "code-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_reviewer-change-review",
+      "sha256": "d9559bea70d474f9985141ac50ebef2e986e4c18d20272a24f8a0e284db985c8",
+      "size_bytes": 3933
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "test-report",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "sha256": "a065020462955caf3d6f25f409fc1114f0a513bea5981a7e09b3c56efa8e3de0",
+      "size_bytes": 6108
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "ac-evidence",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-validation",
+      "sha256": "8e6401979b613e626cdaa5dfc3d26a3f61cb5cdf646eeb6682d579a53460bb9e",
+      "size_bytes": 5220
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "qa-release-signoff",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff",
+      "sha256": "b1378b92d23a009045b8ff38bc3459a8d232ed14f5171cc0261c88efd9a238bf",
+      "size_bytes": 8520
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "qa-release-signoff-review",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-release-signoff-review",
+      "sha256": "f8bf6be55ddfcdb5a7693f4457dd6008af3baff83671b03b28f46d64e5f5da35",
+      "size_bytes": 4734
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "process-checkpoint",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "sha256": "62fc4f8b00279bba79d40fb33c8eaecfc90f116f0124da12fb10218749453133",
+      "size_bytes": 13839
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "delivery-package",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "sha256": "8e7700613e55edf3c0dbb71f152b70e0440046305d0ceb6aa46145e6e4f446f0",
+      "size_bytes": 5840
+    },
+    {
+      "run_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "type": "delivery-package",
+      "node_id": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_pmo-checkpoint",
+      "sha256": "898491eed5524397292188e6cf9d5ca9698b4d802ae69bd6ea430bbb4ff214db",
+      "size_bytes": 14584
+    }
+  ],
+  "errorEvents": [
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:07:04.775Z",
+      "payload": {
+        "stepId": "step_bf460b84-8dba-4450-86ac-dab375fc7916",
+        "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_rd-requirement-interface-review",
+        "role": "rd",
+        "exitCode": 1,
+        "timedOut": false
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:07:04.900Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:30:13.327Z",
+      "payload": {
+        "stepId": "step_ccabf72f-10d9-4402-b628-815d4743518b",
+        "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+        "role": "qa",
+        "exitCode": 143,
+        "timedOut": true
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:30:13.460Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:34:45.374Z",
+      "payload": {
+        "stepId": "step_e027ab7a-f06b-4cb3-bd7e-0f4d5f5abaf0",
+        "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_qa-validation",
+        "role": "qa",
+        "exitCode": 143,
+        "timedOut": true
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T02:34:45.515Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:23:48.225Z",
+      "payload": {
+        "stepId": "step_7b4d79dc-50fd-47fe-877e-0f7ac719e44d",
+        "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+        "role": "pmo",
+        "exitCode": 143,
+        "timedOut": true
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:23:48.367Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:36:22.513Z",
+      "payload": {
+        "stepId": "step_e0437a18-f0ef-4887-93fc-83b65d95097d",
+        "nodeId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint",
+        "role": "pmo",
+        "exitCode": 143,
+        "timedOut": true
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:36:22.652Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:41:42.631Z",
+      "payload": {
+        "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+        "message": "ambiguous durable source lease for node run_41edcd7e-aa0b-44d9-8b82-39939485f459_pmo-checkpoint"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:47:21.546Z",
+      "payload": {
+        "stepId": "step_45c0e274-3c0b-4d39-94f9-6eab27d9a433",
+        "nodeId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_rd-requirement-interface-review",
+        "role": "rd",
+        "exitCode": 1,
+        "timedOut": false
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T03:47:21.674Z",
+      "payload": {
+        "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+        "status": "interrupted"
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T04:06:22.150Z",
+      "payload": {
+        "stepId": "step_6561de63-2301-4dc3-85e0-ec1f230ef180",
+        "nodeId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297_qa-test-plan",
+        "role": "qa",
+        "exitCode": 1,
+        "timedOut": false
+      }
+    },
+    {
+      "type": "agent/error",
+      "timestamp": "2026-09-08T04:06:22.277Z",
+      "payload": {
+        "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+        "status": "interrupted"
+      }
+    }
+  ],
+  "provider": "claude-code",
+  "cliVersion": "2.1.250",
+  "observedModel": "deepseek-v4-flash",
+  "initialArtifactFailureRootCause": "invalid artifact JSON proven by original native Write content; see claude-initial-artifact-failure.json and claude-final-artifact-failure.json",
+  "runSummaries": [
+    {
+      "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+      "workflowStatus": "running",
+      "nodes": {
+        "passed": 15,
+        "interrupted": 1
+      },
+      "latestGates": {
+        "passed": 42,
+        "failed": 1
+      },
+      "historicalGateResults": {
+        "passed": 42,
+        "failed": 1
+      },
+      "artifacts": 19,
+      "jobs": {
+        "interrupted": 5,
+        "done": 1,
+        "failed": 1
+      },
+      "latestJob": {
+        "id": "job_30f06f39-2ae7-4715-af87-27a9962f517d",
+        "sessionId": "sess_7ed0aa43-2c36-4b37-9417-2292cdef0543",
+        "status": "failed"
+      },
+      "activeWorktreeLeases": 1
+    },
+    {
+      "runId": "run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297",
+      "workflowStatus": "passed",
+      "nodes": {
+        "passed": 16
+      },
+      "latestGates": {
+        "passed": 44
+      },
+      "historicalGateResults": {
+        "passed": 44
+      },
+      "artifacts": 20,
+      "jobs": {
+        "interrupted": 2,
+        "done": 1
+      },
+      "latestJob": {
+        "id": "job_278c5d7f-7168-4e49-9a36-5aa9fffe85af",
+        "sessionId": "sess_044ffeac-7193-4ce0-8a47-0539c1b75dee",
+        "status": "done"
+      },
+      "activeWorktreeLeases": 0
+    }
+  ]
+}

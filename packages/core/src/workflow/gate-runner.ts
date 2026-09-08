@@ -78,7 +78,6 @@ export interface GateRunner {
     gates: GateResult[],
     nodeId: string,
   ): Record<string, GateResult['status']>;
-  formatGateResultForPrompt(gate: GateResult): string;
   isFirstHumanGate(
     gates: WorkflowGateConfig[],
     gateKey?: string,
@@ -202,10 +201,6 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
     return Object.fromEntries(
       [...latest.entries()].map(([gateKey, gate]) => [gateKey, gate.status]),
     );
-  }
-
-  function formatGateResultForPrompt(gate: GateResult): string {
-    return `- gateResultId: ${gate.id} (context only: nodeId=${gate.nodeId}; gateType=${gate.gateType}; status=${gate.status})`;
   }
 
   async function runGateWithRepair(
@@ -566,7 +561,6 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
     runGateWithRepair,
     latestGateResult,
     latestGateResultsForNode,
-    formatGateResultForPrompt,
     isFirstHumanGate,
   };
 }

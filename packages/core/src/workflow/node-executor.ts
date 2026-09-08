@@ -15,7 +15,10 @@ import {
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import {
+  assertSuccessfulAgentRun,
+  requiredArtifactTypesForNode,
+} from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
@@ -208,7 +211,13 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           status: 'running',
           startedAt: new Date().toISOString(),
         });
-        const lease = await leaseService.createExecutionLease(runId, node);
+        // A blocked/interrupted source execution still owns its working edits.
+        // Reuse only that source lease; repair aliases belong to another node.
+        const lease = resumableLease?.runId === runId &&
+          resumableLease.nodeId === node.id && resumableLease.role === node.role &&
+          !resumableLease.releasedAt
+          ? resumableLease
+          : await leaseService.createExecutionLease(runId, node);
         if (deps.signal?.aborted) {
           await repositories.markRoleRunInterrupted({
             roleRunId,
@@ -522,22 +531,6 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
     appendPmoNodeCheckpoint,
     hasMissingArtifactDependency,
   };
-}
-
-function requiredArtifactTypesForNode(input: {
-  outputs?: { type: string }[];
-  gates?: { type: string; artifactType?: string }[];
-}): ArtifactType[] {
-  const required = new Set<ArtifactType>();
-  for (const output of input.outputs ?? []) {
-    required.add(output.type as ArtifactType);
-  }
-  for (const gate of input.gates ?? []) {
-    if (gate.type === 'schema' && gate.artifactType) {
-      required.add(gate.artifactType as ArtifactType);
-    }
-  }
-  return [...required];
 }
 
 // An ordinary failed repair can persist its replacement source lease before

@@ -37,16 +37,7 @@ export function generateAgentQuestions(
 ): string[] {
   try {
     const prompt = buildQuestionsPrompt(draft, config.repoPath);
-    const output = execFileSync(
-      config.agentCommand,
-      ['-p', '--output-format', 'json', '--permission-mode', 'bypassPermissions'],
-      {
-        input: prompt,
-        encoding: 'utf8',
-        timeout: 60_000,
-        stdio: ['pipe', 'pipe', 'ignore'],
-      },
-    );
+    const output = invokeTextOnlyAgent(config.agentCommand, prompt);
 
     const parsed = parseAgentJson(output);
     if (parsed?.questions && Array.isArray(parsed.questions)) {
@@ -72,16 +63,7 @@ export function refineDraftWithAgent(
 ): Partial<DraftShape> | null {
   try {
     const prompt = buildRefinementPrompt(draft, answers, config.repoPath);
-    const output = execFileSync(
-      config.agentCommand,
-      ['-p', '--output-format', 'json', '--permission-mode', 'bypassPermissions'],
-      {
-        input: prompt,
-        encoding: 'utf8',
-        timeout: 60_000,
-        stdio: ['pipe', 'pipe', 'ignore'],
-      },
-    );
+    const output = invokeTextOnlyAgent(config.agentCommand, prompt);
 
     const parsed = parseAgentJson(output);
     if (parsed) {
@@ -243,34 +225,34 @@ risks, and acceptance criteria. Keep high-risk work gated for human control.
  * Parse agent output that may be wrapped in Claude's JSON result envelope
  * or be raw JSON.
  */
+function invokeTextOnlyAgent(command: string, prompt: string): string {
+  return execFileSync(command, [
+    '-p', '--output-format', 'json', '--permission-mode', 'default',
+    '--tools', '', '--disallowedTools', 'mcp__*',
+    '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+  ], {
+    input: prompt,
+    encoding: 'utf8',
+    timeout: 60_000,
+    stdio: ['pipe', 'pipe', 'ignore'],
+  });
+}
+
 function parseAgentJson(output: string): Record<string, unknown> | null {
-  const trimmed = output.trim();
-
-  // Try raw JSON first
   try {
-    return JSON.parse(trimmed) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(output.trim());
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const envelope = parsed as Record<string, unknown>;
+    if (envelope.is_error === true) return null;
+    if (typeof envelope.result !== 'string') return envelope;
+    const inner = envelope.result.trim();
+    const start = inner.indexOf('{');
+    const end = inner.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    return parseAgentJson(inner.slice(start, end + 1));
   } catch {
-    // Continue
+    return null;
   }
-
-  // Try Claude's JSON result format: {"type":"result","result":"..."}
-  try {
-    const envelope = JSON.parse(trimmed) as { result?: string };
-    if (typeof envelope.result === 'string') {
-      // The result field may itself be JSON
-      const inner = envelope.result.trim();
-      // Find the first '{' ... last '}' in the result text
-      const jsonStart = inner.indexOf('{');
-      const jsonEnd = inner.lastIndexOf('}');
-      if (jsonStart >= 0 && jsonEnd > jsonStart) {
-        return JSON.parse(inner.slice(jsonStart, jsonEnd + 1)) as Record<string, unknown>;
-      }
-    }
-  } catch {
-    // Continue
-  }
-
-  return null;
 }
 
 function extractDraftShapePatch(

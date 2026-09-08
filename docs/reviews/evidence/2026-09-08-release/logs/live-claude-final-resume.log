@@ -1,0 +1,2 @@
+runId=run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297 status=interrupted
+任务已中断：jobStatus=interrupted jobId=job_d33d6d9c-5be1-41df-bc5b-3c2eedfc8078 workflowStatus=interrupted。请使用 tekon log --run-id run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297 查看详细日志。检查旧执行退出情况后，使用 tekon resume --run-id run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297 显式恢复。

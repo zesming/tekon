@@ -1,0 +1,143 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ❯ __tests__/workflow/lease-service.test.ts (41 tests | 5 failed) 54ms
+   ✓ createLeaseService — createExecutionLease > creates a synthetic lease when no worktreeManager is provided 4ms
+   ✓ createLeaseService — createExecutionLease > creates a worktree lease via worktreeManager 3ms
+   ✓ createLeaseService — createExecutionLease > appends an audit event when worktreeManager creates a lease 2ms
+   ✓ createLeaseService — createExecutionLease > fails gracefully when worktreeManager.ensureRunBranch throws 1ms
+   ✓ createLeaseService — createExecutionLease > fails gracefully when worktreeManager.createLease throws 1ms
+   ✓ createLeaseService — activeExecutionLease > returns in-memory lease when available and not released 1ms
+   ✓ createLeaseService — activeExecutionLease > returns undefined when no lease exists for the node 1ms
+   ✓ createLeaseService — activeExecutionLease > skips in-memory lease that has been released and falls back to repository 1ms
+   ✓ createLeaseService — activeExecutionLease > caches repository lease into in-memory map for future lookups 1ms
+   ✓ createLeaseService — finalizeExecutionLease > does nothing when no active lease exists 1ms
+   ✓ createLeaseService — finalizeExecutionLease > does nothing when no worktreeManager is configured (synthetic lease) 1ms
+   ✓ createLeaseService — finalizeExecutionLease > commits, promotes, and releases lease via worktreeManager 1ms
+   ✓ createLeaseService — finalizeExecutionLease > removes lease from in-memory map after finalization 1ms
+   ✓ createLeaseService — finalizeExecutionLease > throws when non-code node has source changes 1ms
+   ✓ nodeAllowsSourceChanges > returns true when node has code-changes output 0ms
+   ✓ nodeAllowsSourceChanges > returns false when node has no code-changes output 0ms
+   ✓ nodeAllowsSourceChanges > returns false when node has empty outputs 0ms
+   ✓ nodeAllowsSourceChanges > returns false for null node 0ms
+   ✓ durable repair lease recovery > keeps legacy execution without a worktree manager independent of incomplete repair identity 1ms
+   ✓ durable repair lease recovery > restores the latest authorized passed repair lease as the source alias 2ms
+   ✓ durable repair lease recovery > rejects wrong-run repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > rejects wrong-role repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > rejects wrong-dependency repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > rejects not-passed repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > rejects ambiguous repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > rejects latest-unfinished repair lease recovery without using an older lease 2ms
+   ✓ durable repair lease recovery > rejects missing-intent repair lease recovery without using an older lease 1ms
+   ✓ durable repair lease recovery > unmaterialized repair intent permits source finalization only without a repair-created record (false) 1ms
+   ✓ durable repair lease recovery > unmaterialized repair intent permits source finalization only without a repair-created record (true) 1ms
+   ✓ durable repair lease recovery > a newer source execution supersedes an older repair when recovering finalization 1ms
+   ✓ durable repair lease recovery > requires complete finalization evidence before completing an awaiting-gate node without an active lease 1ms
+   ✓ durable repair lease recovery > requires missing-promote finalization evidence before completing an awaiting-gate node without an active lease 1ms
+   ✓ durable repair lease recovery > requires missing-release finalization evidence before completing an awaiting-gate node without an active lease 1ms
+   × durable direct lease recovery > resolves the unique source lease with cache=false 6ms
+     → expected { id: 'source_lease', …(9) } to deeply equal { id: 'source_lease', …(7) }
+   ✓ durable direct lease recovery > resolves the unique source lease with cache=true 1ms
+   ✓ durable direct lease recovery > rejects direct 'duplicate' with cache=false before falling back to repair 1ms
+   × durable direct lease recovery > rejects direct 'wrong-role' with cache=false before falling back to repair 2ms
+     → promise resolved "undefined" instead of rejecting
+   ✓ durable direct lease recovery > rejects direct 'latest-mismatch' with cache=false before falling back to repair 1ms
+   × durable direct lease recovery > rejects direct 'duplicate' with cache=true before falling back to repair 1ms
+     → promise resolved "{ id: 'source_lease', …(7) }" instead of rejecting
+   × durable direct lease recovery > rejects direct 'wrong-role' with cache=true before falling back to repair 1ms
+     → promise resolved "{ id: 'source_lease', …(7) }" instead of rejecting
+   × durable direct lease recovery > rejects direct 'latest-mismatch' with cache=true before falling back to repair 1ms
+     → promise resolved "{ id: 'source_lease', …(7) }" instead of rejecting
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/workflow/lease-service.test.ts > durable direct lease recovery > resolves the unique source lease with cache=false
+AssertionError: expected { id: 'source_lease', …(9) } to deeply equal { id: 'source_lease', …(7) }
+
+- Expected
++ Received
+
+  {
++   "baseHead": null,
+    "branchName": "repair",
+    "createdAt": "2026-09-08T03:56:33.283Z",
+    "id": "source_lease",
+    "nodeId": "source",
++   "releasedAt": null,
+    "repoPath": "/tmp/repo",
+    "role": "rd",
+    "runId": "run_1",
+    "worktreePath": "/tmp/repo/repair",
+  }
+
+ ❯ __tests__/workflow/lease-service.test.ts:717:7
+    715|       await f.audit.append({ runId: 'run_1', type: 'worktree.lease.cre…
+    716|       if (cached) f.executionLeases.set('source', direct);
+    717|       await expect(f.service.activeExecutionLease('run_1', 'source')).…
+       |       ^
+    718|     } finally { f.db.close(); }
+    719|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  __tests__/workflow/lease-service.test.ts > durable direct lease recovery > rejects direct 'wrong-role' with cache=false before falling back to repair
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected: 
+Error {
+  "message": "rejected promise",
+}
+
++ Received: 
+undefined
+
+ ❯ __tests__/workflow/lease-service.test.ts:732:71
+    730|         if (mismatch === 'duplicate') await f.repositories.recordWorkt…
+    731|         if (mismatch === 'wrong-role') f.db.prepare("update worktree_l…
+    732|         await expect(f.service.activeExecutionLease('run_1', 'source')…
+       |                                                                       ^
+    733|       } finally { f.db.close(); }
+    734|     },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  __tests__/workflow/lease-service.test.ts > durable direct lease recovery > rejects direct 'duplicate' with cache=true before falling back to repair
+ FAIL  __tests__/workflow/lease-service.test.ts > durable direct lease recovery > rejects direct 'wrong-role' with cache=true before falling back to repair
+ FAIL  __tests__/workflow/lease-service.test.ts > durable direct lease recovery > rejects direct 'latest-mismatch' with cache=true before falling back to repair
+AssertionError: promise resolved "{ id: 'source_lease', …(7) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "branchName": "repair",
++   "createdAt": "2026-09-08T03:56:33.294Z",
++   "id": "source_lease",
++   "nodeId": "source",
++   "repoPath": "/tmp/repo",
++   "role": "rd",
++   "runId": "run_1",
++   "worktreePath": "/tmp/repo/repair",
+  }
+
+ ❯ __tests__/workflow/lease-service.test.ts:732:71
+    730|         if (mismatch === 'duplicate') await f.repositories.recordWorkt…
+    731|         if (mismatch === 'wrong-role') f.db.prepare("update worktree_l…
+    732|         await expect(f.service.activeExecutionLease('run_1', 'source')…
+       |                                                                       ^
+    733|       } finally { f.db.close(); }
+    734|     },
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 36 passed (41)
+   Start at  11:56:32
+   Duration  370ms (transform 80ms, setup 0ms, collect 134ms, tests 54ms, environment 0ms, prepare 31ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/workflow/lease-service.test.ts

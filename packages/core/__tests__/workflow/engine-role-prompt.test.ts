@@ -427,6 +427,9 @@ describe('workflow engine role prompt integration', () => {
       'testCases[].id and testCases[].description are required.',
     );
     expect(prompts[0]).toContain(
+      'testCases[].method is optional; when present use only unit, integration, e2e, manual, or static. Put executable commands in description, not method.',
+    );
+    expect(prompts[0]).toContain(
       'Do not use testScenarios, gatePlan, or acceptanceCoverage as substitutes for testCases.',
     );
     db.close();
@@ -460,6 +463,19 @@ describe('workflow engine role prompt integration', () => {
             prompt: input.prompt,
           });
           if (input.runContext.nodeId.endsWith('_pm-review')) {
+            for (const [index, status] of (['passed', 'skipped', 'failed', 'passed'] as const).entries()) {
+              await repositories.recordGateResult({
+                id: `gate_source_${index}_${input.runContext.runId}`,
+                runId: input.runContext.runId,
+                nodeId: input.runContext.nodeId,
+                gateType: 'schema',
+                gateKey: index === 3 ? null : `0${index}:schema:artifact=source-${index}`,
+                status,
+                durationMs: 0,
+                retries: 0,
+                createdAt: new Date().toISOString(),
+              });
+            }
             await repositories.createHumanDecision({
               id: `decision_${input.runContext.runId}`,
               runId: input.runContext.runId,
@@ -543,6 +559,18 @@ describe('workflow engine role prompt integration', () => {
     expect(pmNodeId).toBeDefined();
     expect(pmoPrompt).toBeDefined();
     expect(pmoPrompt!).toContain('Prior workflow nodes:');
+    for (const [index, status] of (['passed', 'skipped'] as const).entries()) {
+      expect(pmoPrompt!).toContain(JSON.stringify({
+        nodeId: pmNodeId,
+        gateType: 'schema',
+        gateKey: `0${index}:schema:artifact=source-${index}`,
+        status,
+      }));
+    }
+    expect(pmoPrompt!).not.toContain('02:schema:artifact=source-2');
+    expect(pmoPrompt!).toContain(JSON.stringify({ nodeId: pmNodeId, gateType: 'schema', gateKey: null, status: 'passed' }));
+    expect(pmoPrompt!).toContain('If a source gateKey is null, report the missing key in missingInformation; do not invent a key or include null in gateEvidence.');
+    expect(pmoPrompt!).toContain('Copy nodeId, gateType, gateKey, and status verbatim from the prior eligible gate JSON entries; never reconstruct or shorten gateKey.');
     expect(pmoPrompt!).toContain(`${pmNodeId} role=pm status=passed`);
     expect(pmoPrompt!).toContain(
       'For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status',

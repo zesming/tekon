@@ -1,0 +1,120 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ❯ __tests__/workflow/engine-role-prompt.test.ts (11 tests | 1 failed) 109ms
+   ✓ workflow engine role prompt integration > injects role system prompt, skills, tools, knowledge, and project context into agent input 23ms
+   ✓ workflow engine role prompt integration > adds artifact boundary and exit instructions for nodes with required artifacts 7ms
+   ✓ workflow engine role prompt integration > adds strict role-scoped review artifact instructions with target context 11ms
+   ✓ workflow engine role prompt integration > adds strict QA test-plan artifact instructions 5ms
+   × workflow engine role prompt integration > includes prior node status context for process checkpoints 18ms
+     → expected '# Role: Test PMO\n\nsource: built-in\…' to contain '{"nodeId":"run_12ddcf04-0ac3-4c62-a52…'
+   ✓ workflow engine role prompt integration > keeps repository edit scope for code-changes nodes while preserving exit instructions 7ms
+   ✓ workflow engine role prompt integration > does not apply RD pre-manifest command bans to QA and reviewer artifact prompts 7ms
+   ✓ workflow engine role prompt integration > adds artifact id anchor guidance to QA release signoff prompts 7ms
+   ✓ workflow engine role prompt integration > exposes exact gate result ids for QA evidence anchors 11ms
+   ✓ workflow engine role prompt integration > interrupts the workflow when an agent returns a non-zero exit code 6ms
+   ✓ workflow engine role prompt integration > blocks the workflow when an auto-fix repair agent fails 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/workflow/engine-role-prompt.test.ts > workflow engine role prompt integration > includes prior node status context for process checkpoints
+AssertionError: expected '# Role: Test PMO\n\nsource: built-in\…' to contain '{"nodeId":"run_12ddcf04-0ac3-4c62-a52…'
+
+- Expected
++ Received
+
+- {"nodeId":"run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pm-review","gateType":"schema","gateKey":"00:schema:artifact=source-0","status":"passed"}
++ # Role: Test PMO
++
++ source: built-in
++ roleId: pmo
++
++ ## System
++ PMO system instructions
++
++ ## Task
++ Demand title: 补充流程检查点
++ Demand body:
++ 补充流程检查点
++ Execute workflow node run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pmo-checkpoint.
++ Declared input artifact aliases: none.
++ Prior workflow nodes:
++ - run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pm-review role=pm status=passed outputs=none gates=none
++ Prior eligible gate results:
++ - gateResultId: gate_source_0_run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37 (context only: nodeId=run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pm-review; gateType=schema; status=passed)
++ - gateResultId: gate_source_1_run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37 (context only: nodeId=run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pm-review; gateType=schema; status=skipped)
++ For process-checkpoint.requiredNodes, include every prior workflow node listed above with the exact nodeId and status; do not invent, omit, rename, or reorder required nodes.
++ process-checkpoint.artifactEvidence[] must use exact fields nodeId and type; do not use output, artifactId, path, exists, nonEmpty, sizeBytes, or sha256 as substitutes for type.
++ process-checkpoint.gateEvidence[] must use exact fields nodeId, gateType, gateKey, and status; status must be passed or skipped, and observedStatus is not a valid substitute.
++ process-checkpoint.humanDecisionEvidence.pending must be a non-negative integer count, not an array or list of pending actions.
++ process-checkpoint.humanDecisionEvidence.pending must equal the current unresolved Tekon human decision count: 1. Do not count manual review items, residual risks, PR/merge/release/deploy approvals, or future owner decisions unless they are currently pending Tekon human decisions.
++ Produce the requested artifacts and preserve evidence for gates.
++
++ ## Project Context
++ runId: run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37
++ nodeId: run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pmo-checkpoint
++ projectId: project_a3999291-3ad1-476c-a375-b4112cb1a2b8
++ repoPath: /var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-process-prompt-meJUlO
++ dataDir: .tekon
++
++ ## Tools
++ network: disabled
++ allow: none
++ deny: none
++ requires human approval: none
++
++ ## Skills
++ none
++
++ ## Knowledge
++ none
++
++ ## Artifacts
++ none
++
++ Tekon artifact protocol:
++ - Complete only this workflow node's responsibilities.
++ - This provider node produces internal Tekon artifacts; outer Tekon QA, reviewer, and PMO nodes handle workflow review and delivery evidence.
++ - Do not spawn subagents, delegate review, or wait for external agents inside this node.
++ - Required artifact types do not include code-changes; do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.
++ - Do not run git add, git commit, git push, or create PRs inside this node.
++ - Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.
++ - Write all node artifacts under TEKON_OUTPUT_DIR (/var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-process-prompt-meJUlO/.tekon/runs/run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37/run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pmo-checkpoint).
++ - Required artifact types: process-checkpoint.
++ - Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.
++ - Structured JSON artifacts must include non-empty title and body fields.
++ - Write the artifact manifest file to /var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-process-prompt-meJUlO/.tekon/runs/run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37/run_12ddcf04-0ac3-4c62-a52e-e3bf7e45fc37_pmo-checkpoint/artifact-manifest.json, containing an "artifacts" array with type, path, and summary for each artifact.
++ - Write required artifact files and the manifest file before optional checks or reviews.
++ - After the manifest file is written, stop work and exit immediately.
++ - Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.
++ - Manifest format example:
++ {
++   "artifacts": [
++     {
++       "type": "process-checkpoint",
++       "path": "process-checkpoint.json",
++       "summary": "process-checkpoint summary"
++     }
++   ]
++ }
++ - Do not include secrets, tokens, credentials, or production-only data in artifacts or logs.
+
+ ❯ __tests__/workflow/engine-role-prompt.test.ts:560:26
+    558|     expect(pmoPrompt!).toContain('Prior workflow nodes:');
+    559|     for (const [index, status] of (['passed', 'skipped'] as const).ent…
+    560|       expect(pmoPrompt!).toContain(JSON.stringify({
+       |                          ^
+    561|         nodeId: pmNodeId,
+    562|         gateType: 'schema',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 passed (11)
+   Start at  11:29:46
+   Duration  650ms (transform 244ms, setup 0ms, collect 365ms, tests 109ms, environment 0ms, prepare 27ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/workflow/engine-role-prompt.test.ts

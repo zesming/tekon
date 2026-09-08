@@ -1,0 +1,9 @@
+{
+  "runId": "run_41edcd7e-aa0b-44d9-8b82-39939485f459",
+  "sourceSha256": "f1bb5a7ef7fc965635e8d7c3ad8954ffa03869ad29c2660e1bae2f79bdbf2f12",
+  "expectedPriorKeys": 41,
+  "observedEntries": 42,
+  "missingExpectedKeys": [],
+  "providerCompleted": false,
+  "note": "Read-only comparison of partial output after timeout; does not mark the workflow or Gate passed."
+}

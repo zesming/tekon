@@ -1,0 +1,53 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ❯ __tests__/workflow/engine-worktree.e2e.test.ts (9 tests | 1 failed) 3054ms
+   × workflow engine worktree execution e2e > reuses a blocked source lease across fresh engines without losing edits or creating ambiguity 356ms
+     → expected { …(4) } to deeply equal { …(4) }
+   ✓ workflow engine worktree execution e2e > leases real git worktrees, promotes passed node changes, and releases leases  439ms
+   ✓ workflow engine worktree execution e2e > blocks source changes from non-code workflow nodes after QA validation records the tested ref  558ms
+   ✓ workflow engine worktree execution e2e > blocks committed source changes from non-code workflow nodes before promotion  454ms
+   ✓ workflow engine worktree execution e2e > finalizes and releases a worktree after a human gate is approved on resume 260ms
+   ✓ workflow engine worktree execution e2e > resumes an approved legacy human gate whose result has no gate key 203ms
+   ✓ workflow engine worktree execution e2e > does not reuse one approved legacy human gate for a second keyed human gate 140ms
+   ✓ workflow engine worktree execution e2e > resumes an approved manual human decision without a gate result id 207ms
+   ✓ workflow engine worktree execution e2e > promotes repair worktree changes before rerunning a failed gate  435ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/workflow/engine-worktree.e2e.test.ts > workflow engine worktree execution e2e > reuses a blocked source lease across fresh engines without losing edits or creating ambiguity
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+
+- Expected
++ Received
+
+  {
+-   "active": 1,
+-   "id": "lease_82277528-284a-48c0-8938-375af5a4039a",
+-   "path": "/var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-worktree-MGFc3R/.tekon/worktrees/run_5a85aa78-f363-46c7-adb6-a809fa2d336a/run_5a85aa78-f363-46c7-adb6-a809fa2d336a_rd-node-rd-lease-5095c932-7bbf-4e8b-8371-afcc04d22b84",
+-   "previous": "attempt-1",
++   "active": 2,
++   "id": "lease_bb570bc0-bdfa-480f-83d6-24c8ad86f269",
++   "path": "/var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-worktree-MGFc3R/.tekon/worktrees/run_5a85aa78-f363-46c7-adb6-a809fa2d336a/run_5a85aa78-f363-46c7-adb6-a809fa2d336a_rd-node-rd-lease-33103fc3-ea10-46a2-8432-8dca05b11703",
++   "previous": "",
+  }
+
+ ❯ __tests__/workflow/engine-worktree.e2e.test.ts:90:27
+     88|       const second = await engine().resumeRun(first.runId);
+     89|       expect(second.workflow.status).toBe('interrupted');
+     90|       expect(observed[1]).toEqual({ ...observed[0], previous: 'attempt…
+       |                           ^
+     91|       expect((await repositories.listWorktreeLeases(first.runId)).filt…
+     92|       const third = await engine().resumeRun(first.runId);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 passed (9)
+   Start at  11:52:19
+   Duration  3.60s (transform 229ms, setup 0ms, collect 350ms, tests 3.05s, environment 0ms, prepare 26ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/workflow/engine-worktree.e2e.test.ts

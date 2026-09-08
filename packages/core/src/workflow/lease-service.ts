@@ -91,8 +91,10 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
       event.type === 'gate.repair.intent' && event.payload.sourceNodeId === nodeId).lastIndexOf(true);
     if (source && source.runId !== runId) throw new Error(`execution lease source Run mismatch for node ${nodeId}`);
     const directLeases = (leases ?? await repositories.listWorktreeLeases(runId)).filter(lease =>
-      lease.runId === runId && lease.nodeId === nodeId &&
-      (!source || lease.role === source.role) && !lease.releasedAt);
+      lease.runId === runId && lease.nodeId === nodeId && !lease.releasedAt);
+    if (source && directLeases.some(lease => lease.role !== source.role)) {
+      throw new Error(`durable source lease role mismatch for node ${nodeId}`);
+    }
     const directLeaseId = events[lastSourceCreation]?.payload.leaseId;
     if (directLeases.length > 1 || (directLeases.length === 1 &&
       directLeaseId && directLeases[0].id !== directLeaseId)) {
@@ -145,7 +147,10 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
   ): Promise<WorktreeLease | undefined> {
     const inMemory = executionLeases.get(nodeId);
     if (inMemory && inMemory.runId === runId && !inMemory.releasedAt) {
-      return inMemory;
+      // Durable source executions must pass the same identity checks on hot
+      // retries as on cold recovery. Preserve standalone and repair aliases.
+      if (!worktreeManager || inMemory.nodeId !== nodeId ||
+        !await repositories.getNode(nodeId)) return inMemory;
     }
     const leases = await repositories.listWorktreeLeases(runId);
     if (!worktreeManager) {
