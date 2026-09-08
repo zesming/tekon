@@ -831,7 +831,11 @@ describe('codex adapter', () => {
       requiredArtifactTypes: ['demand-card'],
     });
 
-    expect(result).toMatchObject({ provider: 'codex', exitCode: 1 });
+    expect(result).toMatchObject({
+      provider: 'codex',
+      exitCode: 1,
+      diagnostic: { code: 'artifact-manifest-missing' },
+    });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
     ).toHaveLength(0);
@@ -881,7 +885,11 @@ describe('codex adapter', () => {
       requiredArtifactTypes: ['demand-card'],
     });
 
-    expect(result).toMatchObject({ provider: 'codex', exitCode: 1 });
+    expect(result).toMatchObject({
+      provider: 'codex',
+      exitCode: 1,
+      diagnostic: { code: 'required-artifacts-missing' },
+    });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
     ).toHaveLength(0);

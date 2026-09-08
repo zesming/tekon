@@ -1,0 +1,509 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ❯ |@tekon/core| __tests__/workflow/helpers.test.ts (27 tests | 1 failed) 27ms
+   ✓ assertSuccessfulAgentRun > passes on success (exitCode 0, not timed out) 1ms
+   ✓ assertSuccessfulAgentRun > throws when the agent timed out 0ms
+   ✓ assertSuccessfulAgentRun > throws on non-zero exit code 0ms
+   ✓ assertSuccessfulAgentRun > throws on null exit code (treated as non-zero) 0ms
+   ✓ assertSuccessfulAgentRun > includes provider name in timeout error 0ms
+   ✓ assertSuccessfulAgentRun > includes provider name and exit code in failure error 0ms
+   × assertSuccessfulAgentRun > includes a structured artifact diagnostic in failure error 3ms
+     → expected [Function] to throw error matching /artifact schema invalid.*acceptanceC…/u but got 'agent failed: provider=claude-code ex…'
+   ✓ isQaValidationNode > returns true for qa node with test-report output 0ms
+   ✓ isQaValidationNode > returns true for qa node with ac-evidence output 0ms
+   ✓ isQaValidationNode > returns false for qa node without test-report or ac-evidence 0ms
+   ✓ isQaValidationNode > returns false for non-qa role even with test-report 0ms
+   ✓ isQaValidationNode > returns false for qa node with empty outputs 0ms
+   ✓ requiredArtifactTypesForNode > collects artifact types from outputs 0ms
+   ✓ requiredArtifactTypesForNode > collects artifact types from schema gates 0ms
+   ✓ requiredArtifactTypesForNode > deduplicates artifact types 0ms
+   ✓ requiredArtifactTypesForNode > returns empty array when no outputs or gates 0ms
+   ✓ requiredArtifactTypesForNode > ignores non-schema gates 0ms
+   ✓ mustGetWorkflow > returns the workflow instance when it exists 11ms
+   ✓ mustGetWorkflow > throws when workflow does not exist 1ms
+   ✓ mustGetWorkflow > includes the runId in the error message 1ms
+   ✓ mustGetDemand > returns the demand when it exists 1ms
+   ✓ mustGetDemand > throws when demand does not exist 1ms
+   ✓ mustGetDemand > includes the demandId in the error message 1ms
+   ✓ hasCompletedAgentRun > returns true when latest role run is passed with completedAt 1ms
+   ✓ hasCompletedAgentRun > returns false when no role run exists 1ms
+   ✓ hasCompletedAgentRun > returns false when role run is running (not completed) 1ms
+   ✓ hasCompletedAgentRun > returns false when role run passed but has no completedAt 1ms
+ ❯ |@tekon/core| __tests__/runtime/agent-step-events.test.ts (11 tests | 1 failed) 8ms
+   ✓ runAgentWithStepEvents (S3) > success path emits step/start → tool/call → tool/result → assistant/message → step/end 2ms
+   ✓ runAgentWithStepEvents (S3) > cancel path emits ONLY step/end{cancelled}, never agent/error (MF1) 0ms
+   ✓ runAgentWithStepEvents (S3) > failure path (exitCode≠0) emits agent/error + step/end{failed} 0ms
+   × runAgentWithStepEvents (S3) > failure path preserves a bounded, redacted artifact diagnostic 4ms
+     → expected { …(5) } to match object { diagnostic: { …(3) } }
+(5 matching properties omitted from actual)
+   ✓ runAgentWithStepEvents (S3) > failure path (timedOut) emits agent/error + step/end{failed} 0ms
+   ✓ runAgentWithStepEvents (S3) > adapter throw emits agent/error + step/end{failed} then rethrows 1ms
+   ✓ runAgentWithStepEvents (S3) > C1: a sink that throws does not affect the returned result or throw 0ms
+   ✓ runAgentWithStepEvents (S3) > no sink → no events, result unchanged 0ms
+   ✓ runAgentWithStepEvents (S3) > uses documented provider assistant text instead of a synthetic summary 0ms
+   ✓ runAgentWithStepEvents (S3) > F-08: redacts secrets in the durable step/start prompt summary 0ms
+   ✓ runAgentWithStepEvents (S3) > F-08: redacts secrets in the durable agent/error message when the adapter throws 0ms
+ ❯ |@tekon/core| __tests__/runtime/dsh-headless-adapter.test.ts (31 tests | 1 failed) 74ms
+   ✓ dsh-headless adapter > pins --profile headless and passes the task as a single positional arg 1ms
+   ✓ dsh-headless adapter > honors a command override (enterprise dsh path) while keeping the contract 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--profile" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--profile=web" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--patch" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--patch=/tmp/evil.yml" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--dump-config" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--dump-default-config" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--version" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "web" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "plugin" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "-h" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > rejects launcher control arg "--help" (mirrors codex arg guard) 0ms
+   ✓ dsh-headless adapter > constructs only with an explicit unrestricted-network acknowledgment 0ms
+   ✓ dsh-headless adapter > refuses to construct when network is enabled without the ack (fail-closed) 0ms
+   ✓ dsh-headless adapter > refuses danger-full-access even with the network ack 0ms
+   ✓ dsh-headless adapter > maps a clean exit 0 with stdout to a passed AgentRunResult 11ms
+   ✓ dsh-headless adapter > reports timeouts (SIGKILL by gateway) as timedOut 25ms
+   ✓ dsh-headless adapter > maps a real dsh failure (exit 1) to a failed result 6ms
+   ✓ dsh-headless adapter > marks cancellation when the abort signal fires before spawn 1ms
+   ✓ dsh-headless adapter > pins governance env with exact mode, DSH_HOME outside the worktree 0ms
+   ✓ dsh-headless adapter > passes DEEPSEEK_API_KEY through only when present, never persists it 0ms
+   × dsh-headless adapter > fails a node that requires artifacts dsh cannot write (honest goal-only boundary) 18ms
+     → expected { provider: 'dsh-headless', …(4) } to match object { provider: 'dsh-headless', …(2) }
+(3 matching properties omitted from actual)
+   ✓ dsh-headless adapter > version-gates a real dsh: a drifted version rejects before any spawn 1ms
+   ✓ dsh-headless adapter > allowVersion escape hatch admits a drifted version with a warning 1ms
+   ✓ dsh-headless adapter > probes the dsh version only once across multiple runs (cached) 0ms
+   ✓ dsh-headless adapter > never probes a version for a non-dsh command (fake binary) 6ms
+   ✓ dsh-headless adapter > a codex run never spawns dsh (gateway spy: dsh code path is inert when unselected) 1ms
+   ✓ dsh-headless adapter > fails closed and rejects runAgent when dsh --profile headless --help misses contract anchor 0ms
+   ✓ dsh-headless adapter > fails closed and rejects runAgent when dsh --dump-default-config misses required plugin id 0ms
+   ✓ dsh-headless adapter > passes capability preflight when help and config contracts match and runs gate only once (cached) 0ms
+ ❯ |@tekon/core| __tests__/workflow/engine-role-prompt.test.ts (11 tests | 1 failed) 131ms
+   ✓ workflow engine role prompt integration > injects role system prompt, skills, tools, knowledge, and project context into agent input 26ms
+   ✓ workflow engine role prompt integration > adds artifact boundary and exit instructions for nodes with required artifacts 8ms
+   ✓ workflow engine role prompt integration > adds strict role-scoped review artifact instructions with target context 12ms
+   ✓ workflow engine role prompt integration > adds strict QA test-plan artifact instructions 8ms
+   ✓ workflow engine role prompt integration > includes prior node status context for process checkpoints 11ms
+   × workflow engine role prompt integration > keeps repository edit scope for code-changes nodes while preserving exit instructions 17ms
+     → expected '# Role: Test RD\n\nsource: built-in\n…' to contain 'Use JSON serialization with correct e…'
+   ✓ workflow engine role prompt integration > does not apply RD pre-manifest command bans to QA and reviewer artifact prompts 9ms
+   ✓ workflow engine role prompt integration > adds artifact id anchor guidance to QA release signoff prompts 9ms
+   ✓ workflow engine role prompt integration > exposes exact gate result ids for QA evidence anchors 13ms
+   ✓ workflow engine role prompt integration > interrupts the workflow when an agent returns a non-zero exit code 7ms
+   ✓ workflow engine role prompt integration > blocks the workflow when an auto-fix repair agent fails 9ms
+ ❯ |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts (58 tests | 2 failed) 421ms
+   ✓ claude code adapter > builds permission-aware commands without bypassPermissions by default 1ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode","bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode=bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode=acceptEdits"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--mode=bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools=Bash(npm test)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools=Bash(npm test)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools=Bash(git push)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools=Bash(git push)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settings"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settings={\"permissions\":{\"allow\":[]}}"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources=user"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settingSources"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settingSources=user"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--tools=Bash"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--add-dir"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--add-dir=/tmp/other"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--addDir"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--addDir=/tmp/other"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--agents"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--agents={}"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerouslySkipPermissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--"]} 0ms
+   ✓ claude code adapter > keeps ordinary model and output arguments compatible 0ms
+   ✓ claude code adapter > emits generated Claude permissions while keeping an arg prompt last 1ms
+   ✓ claude code adapter > serializes human approval separately as Claude permissions.ask 0ms
+   ✓ claude code adapter > does not synthesize Bash grants when no command policy is provided 0ms
+   ✓ claude code adapter > passes the command policy to Claude permission compilation before spawn 0ms
+   ✓ claude code adapter > streams large stdout/stderr without deadlock and reports timeout 114ms
+   ✓ claude code adapter > passes prompts through stdin when promptMode is stdin 51ms
+   ✓ claude code adapter > does not spawn a Claude command when its abort signal is already set 1ms
+   ✓ claude code adapter > terminates a running Claude subprocess when its abort signal fires 100ms
+   ✓ claude code adapter > passes progress and no-progress timeouts to the command gateway 0ms
+   ✓ claude code adapter > ingests provider artifact manifests into the artifact store 53ms
+   × claude code adapter > fails real provider runs when required artifact manifests are missing or invalid 48ms
+     → expected undefined to match object { code: 'artifact-manifest-missing' }
+   × claude code adapter > surfaces invalid artifact JSON from a real subprocess without model content 47ms
+     → expected { provider: 'claude-code', …(4) } to match object { provider: 'claude-code', …(2) }
+(3 matching properties omitted from actual)
+ ❯ |@tekon/core| __tests__/runtime/codex-adapter.test.ts (78 tests | 2 failed) 1196ms
+   ✓ codex adapter > builds codex exec commands with Tekon-controlled sandbox and approval 1ms
+   ✓ codex adapter > keeps codex exec first when safe user args are configured 0ms
+   ✓ codex adapter > defaults real Codex commands to the internal profile when a replayed config omits profile 0ms
+   ✓ codex adapter > requires a Tekon artifact output directory for real Codex commands 0ms
+   ✓ codex adapter > rejects real Codex artifact output directories outside Tekon run storage 0ms
+   ✓ codex adapter > rejects nested Tekon run-like artifact output directories outside the repo data root 0ms
+   ✓ codex adapter > rejects artifact output directories for a different run or node 0ms
+   ✓ codex adapter > requires run context for legal Codex artifact output directories 0ms
+   ✓ codex adapter > rejects symlinked Codex artifact output directories 2ms
+   ✓ codex adapter > rejects unsafe user Codex args "--" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--sandbox" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-s" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-sread-only" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--sandbox=danger-full-access" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ask-for-approval" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-a" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-anever" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ask-for-approval=never" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--approval-policy" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--config" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-c" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-csandbox_workspace_write.network_access=true" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--config=sandbox_workspace_write.network_access=true" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--enable" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--disable" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--remote" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--remote-auth-token-env" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--cd" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-C" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-C/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--cd=/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--add-dir" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--add-dir=/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--profile" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-p" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-punsafe" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--profile=unsafe" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--image" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-i" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-i/tmp/outside.png" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--image=/tmp/outside.png" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-last-message" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-o" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-o/tmp/final.txt" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-last-message=/tmp/final.txt" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-schema" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ignore-rules" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ignore-user-config" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--skip-git-repo-check" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ephemeral" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--search" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--oss" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--local-provider" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "resume" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "review" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "help" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--dangerously-bypass-approvals-and-sandbox" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--dangerously-bypass-hook-trust" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--yolo" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "danger-full-access" 0ms
+   ✓ codex adapter > rejects unsafe Tekon-controlled Codex profile names 0ms
+   ✓ codex adapter > passes prompts through stdin when promptMode is stdin 54ms
+   ✓ codex adapter > reports provider command timeouts 26ms
+   ✓ codex adapter > does not spawn a Codex command when its abort signal is already set 1ms
+   ✓ codex adapter > terminates a running Codex subprocess when its abort signal fires 107ms
+   ✓ codex adapter > does not inherit the full parent environment for Codex runs 0ms
+   ✓ codex adapter > ingests provider artifact manifests into the artifact store 54ms
+   ✓ codex adapter > recovers literal TEKON_ARTIFACT_MANIFEST files written by Codex 50ms
+   ✓ codex adapter > accepts non-zero Codex exits when required artifacts are complete 49ms
+   ✓ codex adapter > does not recover signaled Codex runs without a timeout 3ms
+   × codex adapter > rejects non-zero Codex exits when required artifact manifests are missing 48ms
+     → expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(3 matching properties omitted from actual)
+   × codex adapter > rejects non-zero Codex exits when required artifacts are incomplete 46ms
+     → expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(4 matching properties omitted from actual)
+   ✓ codex adapter > rejects non-zero Codex exits when artifact schemas are invalid 46ms
+   ✓ codex adapter > rejects literal TEKON_ARTIFACT_MANIFEST symlinks 45ms
+   ✓ codex adapter > rejects artifact symlinks declared by provider manifests 45ms
+   ✓ codex adapter > rejects manifest artifact paths that escape TEKON_OUTPUT_DIR 42ms
+   ✓ codex adapter > accepts valid required artifacts when Codex times out after writing the manifest  514ms
+   ✓ codex adapter > fails real provider runs when required artifact manifests are missing 59ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/agent-step-events.test.ts > runAgentWithStepEvents (S3) > failure path preserves a bounded, redacted artifact diagnostic
+AssertionError: expected { …(5) } to match object { diagnostic: { …(3) } }
+(5 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "artifactType": "code-changes",
+-     "code": "artifact-file-invalid-json",
+-     "path": "code-changes.json",
+-   },
++   "exitCode": 1,
++   "nodeId": "node_1",
++   "role": "rd",
++   "stepId": "step_237462d1-b39e-45e1-bfa6-b2f6c1aed690",
++   "timedOut": false,
+  }
+
+ ❯ __tests__/runtime/agent-step-events.test.ts:137:27
+    135| 
+    136|     const error = events.find((event) => event.type === 'agent/error')…
+    137|     expect(error.payload).toMatchObject({
+       |                           ^
+    138|       diagnostic: {
+    139|         code: 'artifact-file-invalid-json',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > fails real provider runs when required artifact manifests are missing or invalid
+AssertionError: expected undefined to match object { code: 'artifact-manifest-missing' }
+
+- Expected: 
+{
+  "code": "artifact-manifest-missing",
+}
+
++ Received: 
+undefined
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:587:33
+    585|         exitCode: 1,
+    586|       });
+    587|       expect(result.diagnostic).toMatchObject({
+       |                                 ^
+    588|         code:
+    589|           script === missingScript
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > surfaces invalid artifact JSON from a real subprocess without model content
+AssertionError: expected { provider: 'claude-code', …(4) } to match object { provider: 'claude-code', …(2) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "artifactType": "code-changes",
+-     "code": "artifact-file-invalid-json",
+-     "path": "code-changes.json",
+-   },
+    "exitCode": 1,
+    "provider": "claude-code",
+  }
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:643:20
+    641|     });
+    642| 
+    643|     expect(result).toMatchObject({
+       |                    ^
+    644|       provider: 'claude-code',
+    645|       exitCode: 1,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/codex-adapter.test.ts > codex adapter > rejects non-zero Codex exits when required artifact manifests are missing
+AssertionError: expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "code": "artifact-manifest-missing",
+-   },
+    "exitCode": 1,
+    "provider": "codex",
+  }
+
+ ❯ __tests__/runtime/codex-adapter.test.ts:834:20
+    832|     });
+    833| 
+    834|     expect(result).toMatchObject({
+       |                    ^
+    835|       provider: 'codex',
+    836|       exitCode: 1,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/codex-adapter.test.ts > codex adapter > rejects non-zero Codex exits when required artifacts are incomplete
+AssertionError: expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "code": "artifact-file-schema-invalid",
+-   },
+    "exitCode": 1,
+    "provider": "codex",
+  }
+
+ ❯ __tests__/runtime/codex-adapter.test.ts:888:20
+    886|     });
+    887| 
+    888|     expect(result).toMatchObject({
+       |                    ^
+    889|       provider: 'codex',
+    890|       exitCode: 1,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/dsh-headless-adapter.test.ts > dsh-headless adapter > fails a node that requires artifacts dsh cannot write (honest goal-only boundary)
+AssertionError: expected { provider: 'dsh-headless', …(4) } to match object { provider: 'dsh-headless', …(2) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "code": "artifact-manifest-missing",
+-   },
+    "exitCode": 1,
+    "provider": "dsh-headless",
+  }
+
+ ❯ __tests__/runtime/dsh-headless-adapter.test.ts:404:20
+    402|       requiredArtifactTypes: ['code-changes'],
+    403|     });
+    404|     expect(result).toMatchObject({
+       |                    ^
+    405|       provider: 'dsh-headless',
+    406|       exitCode: 1,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  |@tekon/core| __tests__/workflow/engine-role-prompt.test.ts > workflow engine role prompt integration > keeps repository edit scope for code-changes nodes while preserving exit instructions
+AssertionError: expected '# Role: Test RD\n\nsource: built-in\n…' to contain 'Use JSON serialization with correct e…'
+
+- Expected
++ Received
+
+- Use JSON serialization with correct escaping for structured artifacts and self-check the final JSON before submitting.
++ # Role: Test RD
++
++ source: built-in
++ roleId: rd
++
++ ## System
++ RD system instructions
++
++ ## Task
++ Demand title: 实现 smoke 文档更新
++ Demand body:
++ 实现 smoke 文档更新
++ Execute workflow node run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a_rd-change.
++ Declared input artifact aliases: none.
++ Prior workflow nodes: none.
++ Prior eligible gate results: none.
++ Produce the requested artifacts and preserve evidence for gates.
++
++ ## Project Context
++ runId: run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a
++ nodeId: run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a_rd-change
++ projectId: project_2874cc30-490d-4129-8109-25324bf6e50e
++ repoPath: /var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-code-changes-prompt-NpO6cb
++ dataDir: .tekon
++
++ ## Tools
++ network: disabled
++ allow: pnpm test
++ deny: none
++ requires human approval: none
++
++ ## Skills
++ ### test-skill
++ priority: 10
++ injectMode: append
++ skill body
++
++ ## Knowledge
++ ### knowledge/engineering.md
++ knowledge body
++
++ ## Artifacts
++ none
++
++ Tekon artifact protocol:
++ - Complete only this workflow node's responsibilities.
++ - This provider node produces internal Tekon artifacts; outer Tekon QA, reviewer, and PMO nodes handle workflow review and delivery evidence.
++ - Do not spawn subagents, delegate review, or wait for external agents inside this node.
++ - For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.
++ - Keep repository edits scoped to the requested code-changes artifact and this workflow node.
++ - Do not run git add, git commit, git push, or create PRs inside this node.
++ - Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.
++ - Write all node artifacts under TEKON_OUTPUT_DIR (/var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-code-changes-prompt-NpO6cb/.tekon/runs/run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a/run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a_rd-change).
++ - Required artifact types: code-changes.
++ - Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.
++ - Structured JSON artifacts must include non-empty title and body fields.
++ - Write the artifact manifest file to /var/folders/6v/ctzbdw7d5p14q0hxnqw34d040000gn/T/tekon-engine-code-changes-prompt-NpO6cb/.tekon/runs/run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a/run_ff71d13c-2fed-4a8e-a1e2-cc869b68377a_rd-change/artifact-manifest.json, containing an "artifacts" array with type, path, and summary for each artifact.
++ - Write required artifact files and the manifest file before optional checks or reviews.
++ - Do not run dependency installation, test, lint, typecheck, build, or package-manager commands before writing required code-changes artifacts and the manifest; Tekon gates run validation after artifact ingestion.
++ - After the manifest file is written, stop work and exit immediately.
++ - Do not continue editing, formatting, running checks, printing diffs, or explaining unless this workflow node explicitly requires it before manifest creation.
++ - Manifest format example:
++ {
++   "artifacts": [
++     {
++       "type": "code-changes",
++       "path": "code-changes.json",
++       "summary": "code-changes summary"
++     }
++   ]
++ }
++ - Do not include secrets, tokens, credentials, or production-only data in artifacts or logs.
+
+ ❯ __tests__/workflow/engine-role-prompt.test.ts:683:24
+    681|       'Structured JSON artifacts must include non-empty title and body…
+    682|     );
+    683|     expect(prompts[0]).toContain(
+       |                        ^
+    684|       'Use JSON serialization with correct escaping for structured art…
+    685|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  |@tekon/core| __tests__/workflow/helpers.test.ts > assertSuccessfulAgentRun > includes a structured artifact diagnostic in failure error
+AssertionError: expected [Function] to throw error matching /artifact schema invalid.*acceptanceC…/u but got 'agent failed: provider=claude-code ex…'
+
+- Expected: 
+/artifact schema invalid.*acceptanceCriteria/u
+
++ Received: 
+"agent failed: provider=claude-code exitCode=1"
+
+ ❯ __tests__/workflow/helpers.test.ts:143:52
+    141|       },
+    142|     };
+    143|     expect(() => assertSuccessfulAgentRun(result)).toThrow(
+       |                                                    ^
+    144|       /artifact schema invalid.*acceptanceCriteria/u,
+    145|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  8 failed | 208 passed (216)
+   Start at  14:28:01
+   Duration  1.82s (transform 431ms, setup 0ms, collect 2.27s, tests 1.86s, environment 0ms, prepare 266ms)
+

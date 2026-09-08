@@ -8,8 +8,9 @@ import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import { buildClaudeProviderEnv } from './claude-code-support.js';
 import { compileClaudePermissions } from './claude-code-permissions.js';
 import {
+  createMissingRequiredArtifactsDiagnostic,
+  artifactDiagnosticFromError,
   ingestAgentManifestArtifacts,
-  missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
 
 export interface BuiltClaudeCodeCommand extends CommandInvocation {
@@ -123,22 +124,24 @@ export function createClaudeCodeAdapter(
             manifestPath,
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
-        } catch {
+        } catch (error) {
+          const diagnostic = artifactDiagnosticFromError(error);
           return {
             provider: 'claude-code',
             exitCode: 1,
             durationMs: result.durationMs,
             outputFiles: [result.stdoutPath, result.stderrPath],
             timedOut: result.timedOut,
+            ...(diagnostic ? { diagnostic } : {}),
           };
         }
       }
 
-      if (
-        result.exitCode === 0 &&
-        missingRequiredArtifactTypes(input.requiredArtifactTypes, artifacts)
-          .length > 0
-      ) {
+      const diagnostic = createMissingRequiredArtifactsDiagnostic({
+        required: input.requiredArtifactTypes,
+        artifacts,
+      });
+      if (result.exitCode === 0 && diagnostic) {
         return {
           provider: 'claude-code',
           exitCode: 1,
@@ -150,6 +153,7 @@ export function createClaudeCodeAdapter(
           ],
           artifacts,
           timedOut: result.timedOut,
+          diagnostic,
         };
       }
 

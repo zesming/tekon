@@ -1,0 +1,147 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ✓ |@tekon/core| __tests__/workflow/helpers.test.ts (27 tests) 21ms
+ ❯ |@tekon/core| __tests__/runtime/agent-step-events.test.ts (11 tests | 1 failed) 7ms
+   ✓ runAgentWithStepEvents (S3) > success path emits step/start → tool/call → tool/result → assistant/message → step/end 2ms
+   ✓ runAgentWithStepEvents (S3) > cancel path emits ONLY step/end{cancelled}, never agent/error (MF1) 0ms
+   ✓ runAgentWithStepEvents (S3) > failure path (exitCode≠0) emits agent/error + step/end{failed} 0ms
+   × runAgentWithStepEvents (S3) > failure path preserves a bounded, redacted artifact diagnostic 3ms
+     → expected 501 to be less than or equal to 500
+   ✓ runAgentWithStepEvents (S3) > failure path (timedOut) emits agent/error + step/end{failed} 0ms
+   ✓ runAgentWithStepEvents (S3) > adapter throw emits agent/error + step/end{failed} then rethrows 1ms
+   ✓ runAgentWithStepEvents (S3) > C1: a sink that throws does not affect the returned result or throw 0ms
+   ✓ runAgentWithStepEvents (S3) > no sink → no events, result unchanged 0ms
+   ✓ runAgentWithStepEvents (S3) > uses documented provider assistant text instead of a synthetic summary 0ms
+   ✓ runAgentWithStepEvents (S3) > F-08: redacts secrets in the durable step/start prompt summary 0ms
+   ✓ runAgentWithStepEvents (S3) > F-08: redacts secrets in the durable agent/error message when the adapter throws 0ms
+ ✓ |@tekon/core| __tests__/runtime/dsh-headless-adapter.test.ts (31 tests) 72ms
+ ✓ |@tekon/core| __tests__/workflow/engine-role-prompt.test.ts (11 tests) 116ms
+ ✓ |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts (58 tests) 459ms
+ ❯ |@tekon/core| __tests__/runtime/codex-adapter.test.ts (78 tests | 1 failed) 1187ms
+   ✓ codex adapter > builds codex exec commands with Tekon-controlled sandbox and approval 1ms
+   ✓ codex adapter > keeps codex exec first when safe user args are configured 0ms
+   ✓ codex adapter > defaults real Codex commands to the internal profile when a replayed config omits profile 0ms
+   ✓ codex adapter > requires a Tekon artifact output directory for real Codex commands 0ms
+   ✓ codex adapter > rejects real Codex artifact output directories outside Tekon run storage 0ms
+   ✓ codex adapter > rejects nested Tekon run-like artifact output directories outside the repo data root 0ms
+   ✓ codex adapter > rejects artifact output directories for a different run or node 0ms
+   ✓ codex adapter > requires run context for legal Codex artifact output directories 0ms
+   ✓ codex adapter > rejects symlinked Codex artifact output directories 2ms
+   ✓ codex adapter > rejects unsafe user Codex args "--" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--sandbox" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-s" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-sread-only" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--sandbox=danger-full-access" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ask-for-approval" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-a" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-anever" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ask-for-approval=never" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--approval-policy" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--config" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-c" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-csandbox_workspace_write.network_access=true" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--config=sandbox_workspace_write.network_access=true" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--enable" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--disable" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--remote" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--remote-auth-token-env" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--cd" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-C" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-C/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--cd=/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--add-dir" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--add-dir=/tmp" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--profile" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-p" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-punsafe" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--profile=unsafe" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--image" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-i" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-i/tmp/outside.png" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--image=/tmp/outside.png" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-last-message" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-o" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "-o/tmp/final.txt" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-last-message=/tmp/final.txt" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--output-schema" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ignore-rules" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ignore-user-config" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--skip-git-repo-check" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--ephemeral" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--search" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--oss" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--local-provider" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "resume" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "review" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "help" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--dangerously-bypass-approvals-and-sandbox" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--dangerously-bypass-hook-trust" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "--yolo" 0ms
+   ✓ codex adapter > rejects unsafe user Codex args "danger-full-access" 0ms
+   ✓ codex adapter > rejects unsafe Tekon-controlled Codex profile names 0ms
+   ✓ codex adapter > passes prompts through stdin when promptMode is stdin 54ms
+   ✓ codex adapter > reports provider command timeouts 26ms
+   ✓ codex adapter > does not spawn a Codex command when its abort signal is already set 1ms
+   ✓ codex adapter > terminates a running Codex subprocess when its abort signal fires 105ms
+   ✓ codex adapter > does not inherit the full parent environment for Codex runs 0ms
+   ✓ codex adapter > ingests provider artifact manifests into the artifact store 52ms
+   ✓ codex adapter > recovers literal TEKON_ARTIFACT_MANIFEST files written by Codex 47ms
+   ✓ codex adapter > accepts non-zero Codex exits when required artifacts are complete 44ms
+   ✓ codex adapter > does not recover signaled Codex runs without a timeout 3ms
+   ✓ codex adapter > rejects non-zero Codex exits when required artifact manifests are missing 40ms
+   × codex adapter > rejects non-zero Codex exits when required artifacts are incomplete 50ms
+     → expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(4 matching properties omitted from actual)
+   ✓ codex adapter > rejects non-zero Codex exits when artifact schemas are invalid 45ms
+   ✓ codex adapter > rejects literal TEKON_ARTIFACT_MANIFEST symlinks 45ms
+   ✓ codex adapter > rejects artifact symlinks declared by provider manifests 48ms
+   ✓ codex adapter > rejects manifest artifact paths that escape TEKON_OUTPUT_DIR 45ms
+   ✓ codex adapter > accepts valid required artifacts when Codex times out after writing the manifest  515ms
+   ✓ codex adapter > fails real provider runs when required artifact manifests are missing 61ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/agent-step-events.test.ts > runAgentWithStepEvents (S3) > failure path preserves a bounded, redacted artifact diagnostic
+AssertionError: expected 501 to be less than or equal to 500
+ ❯ __tests__/runtime/agent-step-events.test.ts:147:48
+    145|     expect(serialized).not.toContain(secret);
+    146|     expect(serialized).toContain('REDACTED');
+    147|     expect(String(error.payload.error).length).toBeLessThanOrEqual(500…
+       |                                                ^
+    148|   });
+    149| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/codex-adapter.test.ts > codex adapter > rejects non-zero Codex exits when required artifacts are incomplete
+AssertionError: expected { Object (provider, exitCode, ...) } to match object { Object (provider, exitCode, ...) }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "diagnostic": {
+-     "code": "artifact-file-schema-invalid",
+-   },
+    "exitCode": 1,
+    "provider": "codex",
+  }
+
+ ❯ __tests__/runtime/codex-adapter.test.ts:888:20
+    886|     });
+    887| 
+    888|     expect(result).toMatchObject({
+       |                    ^
+    889|       provider: 'codex',
+    890|       exitCode: 1,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 4 passed (6)
+      Tests  2 failed | 214 passed (216)
+   Start at  14:31:47
+   Duration  1.78s (transform 391ms, setup 0ms, collect 2.13s, tests 1.86s, environment 0ms, prepare 242ms)
+

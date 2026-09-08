@@ -30,6 +30,8 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
 
+Provider 子进程成功退出与产物导入成功分开判断。manifest 缺失、格式/schema 不合法和必需产物缺失必须保留可诊断的失败原因，沿既有 Agent 失败事件与节点审计传播；诊断采用受控摘要，不回显完整产物或解析器携带的输入值。严格导入、超时与取消判定保持原有语义，不自动修补 JSON 或绕过 Gate。格式提示只能减少生成错误，不能保证模型输出合法。
+
 ## 2. RunPlan v3 与检查绑定
 
 [run-plan.ts](../../packages/core/src/workflow/run-plan.ts)保存完整模板、workflow/goal 模式、Provider/确认上下文及受模板引用的仓库命令描述符。v3 追加 `repoCommands`，记录来源、命令、适用性或缺失决定；模板内联命令优先，无 commandRef 的模板不依赖未使用的仓库配置。

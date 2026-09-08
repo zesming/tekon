@@ -1,0 +1,18 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ✓ |@tekon/core| __tests__/workflow/helpers.test.ts (27 tests) 21ms
+ ✓ |@tekon/core| __tests__/runtime/agent-step-events.test.ts (11 tests) 4ms
+ ✓ |@tekon/core| __tests__/runtime/dsh-headless-adapter.test.ts (31 tests) 73ms
+ ✓ |@tekon/core| __tests__/workflow/engine-role-prompt.test.ts (11 tests) 126ms
+ ✓ |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts (58 tests) 477ms
+ ✓ |@tekon/core| __tests__/runtime/codex-adapter.test.ts (78 tests) 1192ms
+   ✓ codex adapter > accepts valid required artifacts when Codex times out after writing the manifest  508ms
+ ✓ |@tekon/core| __tests__/phase1/session-job-e2e.test.ts (6 tests) 1300ms
+   ✓ phase 1 session/job e2e (S9) > journey 1: run-to-passed drives the run and emits the session event spine  312ms
+
+ Test Files  7 passed (7)
+      Tests  222 passed (222)
+   Start at  14:36:00
+   Duration  1.92s (transform 478ms, setup 0ms, collect 2.69s, tests 3.19s, environment 1ms, prepare 315ms)
+

@@ -644,6 +644,78 @@ describe('phase 1 session/job e2e (S9)', () => {
     await h.close();
   }, 30_000);
 
+  it('persists an artifact diagnostic in both node interruption and agent error events', async () => {
+    const repoPath = createGitRepo();
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    const h = createHarness({
+      repoPath,
+      adapter: {
+        async runAgent(): Promise<import('../../src/index.js').AgentRunResult> {
+          return {
+            provider: 'claude-code',
+            exitCode: 1,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+            diagnostic: {
+              code: 'artifact-file-invalid-json',
+              artifactType: 'code-changes',
+              path: 'code-changes.json',
+              message: `artifact invalid JSON: type=code-changes file=code-changes.json line=3 column=793 ${secret}`,
+            },
+          };
+        },
+      },
+    });
+
+    const prep = await h
+      .buildEngine('pending', new AbortController().signal)
+      .prepareRun({
+        demandText: 'Persist artifact diagnostics.',
+        mode: 'template',
+        workflowSpec: singleNodeWorkflow(),
+      });
+    const { sessionId, jobId } = await enqueueRun(
+      h,
+      prep.runId,
+      'workflow-run',
+      'Persist artifact diagnostics.',
+    );
+    h.jobRunner.start();
+
+    await waitFor(async () => {
+      const workflow = await h.repositories.getWorkflowInstance(prep.runId);
+      const job = await h.jobs.get(jobId);
+      return workflow?.status === 'interrupted' && job?.status === 'failed';
+    });
+
+    const interrupted = (await h.repositories.listAuditEvents(prep.runId)).find(
+      (event) => event.type === 'node.interrupted',
+    );
+    expect(interrupted?.payload.error).toContain(
+      'artifact invalid JSON: type=code-changes file=code-changes.json',
+    );
+    expect(interrupted?.payload.error).not.toContain(secret);
+
+    const events = await h.sessions.listEventsSince(sessionId, 0);
+    const diagnosticError = events.find(
+      (event) =>
+        event.type === 'agent/error' &&
+        (event.payload as { diagnostic?: { code?: string } }).diagnostic?.code ===
+          'artifact-file-invalid-json',
+    );
+    expect(diagnosticError?.payload).toMatchObject({
+      diagnostic: {
+        code: 'artifact-file-invalid-json',
+        artifactType: 'code-changes',
+        path: 'code-changes.json',
+      },
+    });
+    expect(JSON.stringify(diagnosticError?.payload)).not.toContain(secret);
+
+    await h.close();
+  }, 30_000);
+
   it('journey 2: cancel mid-flight aborts the job, settles the run cancelled, emits single cancel events (MF1)', async () => {
     const repoPath = createGitRepo();
     const latch = createLatchAdapter();

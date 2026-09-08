@@ -118,6 +118,36 @@ describe('runAgentWithStepEvents (S3)', () => {
     expect(events.at(-1)!.payload.status).toBe('failed');
   });
 
+  it('failure path preserves a bounded, redacted artifact diagnostic', async () => {
+    const { sink, events } = collectingSink();
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    const adapter = adapterReturning({
+      exitCode: 1,
+      diagnostic: {
+        code: 'artifact-file-invalid-json',
+        artifactType: 'code-changes',
+        path: 'code-changes.json',
+        message: `artifact JSON is invalid; ${secret} ${'x'.repeat(1000)}`,
+      },
+    });
+
+    await runAgentWithStepEvents(adapter, INPUT, META, sink);
+
+    const error = events.find((event) => event.type === 'agent/error')!;
+    expect(error.payload).toMatchObject({
+      diagnostic: {
+        code: 'artifact-file-invalid-json',
+        artifactType: 'code-changes',
+        path: 'code-changes.json',
+      },
+    });
+    const serialized = JSON.stringify(error.payload);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).toContain('REDACTED');
+    expect(error.payload.message).toBe(error.payload.error);
+    expect(String(error.payload.error).length).toBeLessThanOrEqual(500);
+  });
+
   it('failure path (timedOut) emits agent/error + step/end{failed}', async () => {
     const { sink, events } = collectingSink();
     const adapter = adapterReturning({ timedOut: true, exitCode: null });

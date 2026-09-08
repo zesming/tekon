@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ✓ |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts (60 tests) 527ms
+
+ Test Files  1 passed (1)
+      Tests  60 passed (60)
+   Start at  14:40:09
+   Duration  1.01s (transform 227ms, setup 0ms, collect 346ms, tests 527ms, environment 0ms, prepare 24ms)
+

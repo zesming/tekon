@@ -481,56 +481,59 @@ describe('claude code adapter', () => {
     });
   });
 
-  it('ingests provider artifact manifests into the artifact store', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifacts-'));
-    tempDirs.push(repoPath);
-    const artifactScript = join(repoPath, 'artifact-writer.mjs');
-    writeFileSync(
-      artifactScript,
-      [
-        "import { writeFileSync } from 'node:fs';",
-        "import { join } from 'node:path';",
-        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
-        'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
-        "writeFileSync(join(outputDir, 'code-changes.json'), JSON.stringify({ title: 'Code changes', body: 'Implemented fixture change.' }));",
-        "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json', summary: 'Implemented fixture change.' }] }));",
-      ].join('\n'),
-      'utf8',
-    );
-    const db = openTekonDatabase({ filename: ':memory:' });
-    migrateDatabase(db);
-    const repositories = createRepositories(db);
-    await seedRun(repositories);
-    const artifactStore = createArtifactStore({ repoPath, repositories });
-    const adapter = createClaudeCodeAdapter(
-      {
+  it.each(['', '\uFEFF', '\u00A0'])(
+    'ingests provider artifact manifests with accepted JSON padding %j',
+    async (padding) => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifacts-'));
+      tempDirs.push(repoPath);
+      const artifactScript = join(repoPath, 'artifact-writer.mjs');
+      writeFileSync(
+        artifactScript,
+        [
+          "import { writeFileSync } from 'node:fs';",
+          "import { join } from 'node:path';",
+          'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+          'const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;',
+          `writeFileSync(join(outputDir, 'code-changes.json'), ${JSON.stringify(padding)} + JSON.stringify({ title: 'Code changes', body: 'Implemented fixture change.' }) + ${JSON.stringify(padding)});`,
+          "writeFileSync(manifestPath, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json', summary: 'Implemented fixture change.' }] }));",
+        ].join('\n'),
+        'utf8',
+      );
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await seedRun(repositories);
+      const artifactStore = createArtifactStore({ repoPath, repositories });
+      const adapter = createClaudeCodeAdapter(
+        {
+          provider: 'claude-code',
+          command: process.execPath,
+          args: [artifactScript],
+          promptMode: 'arg-append',
+          outputFormat: 'text',
+          timeoutMs: 500,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        createCommandGateway(),
+      );
+
+      const result = await adapter.runAgent({
+        ...baseRunInput(repoPath),
+        artifactStore,
+        requiredArtifactTypes: ['code-changes'],
+      });
+
+      expect(result).toMatchObject({
         provider: 'claude-code',
-        command: process.execPath,
-        args: [artifactScript],
-        promptMode: 'arg-append',
-        outputFormat: 'text',
-        timeoutMs: 500,
-        permissionProfile: safePermissionProfile(repoPath),
-      },
-      createCommandGateway(),
-    );
-
-    const result = await adapter.runAgent({
-      ...baseRunInput(repoPath),
-      artifactStore,
-      requiredArtifactTypes: ['code-changes'],
-    });
-
-    expect(result).toMatchObject({
-      provider: 'claude-code',
-      exitCode: 0,
-      artifacts: [expect.objectContaining({ type: 'code-changes' })],
-    });
-    expect(
-      await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
-    ).toHaveLength(1);
-    db.close();
-  });
+        exitCode: 0,
+        artifacts: [expect.objectContaining({ type: 'code-changes' })],
+      });
+      expect(
+        await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
+      ).toHaveLength(1);
+      db.close();
+    },
+  );
 
   it('fails real provider runs when required artifact manifests are missing or invalid', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifact-fail-'));
@@ -584,10 +587,74 @@ describe('claude code adapter', () => {
         provider: 'claude-code',
         exitCode: 1,
       });
+      expect(result.diagnostic).toMatchObject({
+        code:
+          script === missingScript
+            ? 'artifact-manifest-missing'
+            : 'artifact-file-schema-invalid',
+      });
     }
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
     ).toHaveLength(0);
+    db.close();
+  });
+
+  it('surfaces invalid artifact JSON from a real subprocess without model content', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-artifact-json-'));
+    tempDirs.push(repoPath);
+    const artifactScript = join(repoPath, 'invalid-artifact-json.mjs');
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    writeFileSync(
+      artifactScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const outputDir = process.env.TEKON_OUTPUT_DIR;',
+        `const invalidArtifact = ${JSON.stringify(
+          `{"title":"broken "quote" and ${secret} body"}`,
+        )};`,
+        "writeFileSync(join(outputDir, 'code-changes.json'), invalidArtifact);",
+        "writeFileSync(process.env.TEKON_ARTIFACT_MANIFEST, JSON.stringify({ artifacts: [{ type: 'code-changes', path: 'code-changes.json', summary: 'Broken JSON.' }] }));",
+      ].join('\n'),
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const artifactStore = createArtifactStore({ repoPath, repositories });
+    const adapter = createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: [artifactScript],
+        promptMode: 'arg-append',
+        outputFormat: 'text',
+        timeoutMs: 500,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    );
+
+    const result = await adapter.runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore,
+      requiredArtifactTypes: ['code-changes'],
+    });
+
+    expect(result).toMatchObject({
+      provider: 'claude-code',
+      exitCode: 1,
+      diagnostic: {
+        code: 'artifact-file-invalid-json',
+        artifactType: 'code-changes',
+        path: 'code-changes.json',
+      },
+    });
+    expect(result.diagnostic?.message).toContain('file=code-changes.json');
+    expect(result.diagnostic?.message).not.toContain(secret);
+    expect(result.diagnostic?.message.length).toBeLessThanOrEqual(500);
     db.close();
   });
 });

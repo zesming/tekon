@@ -1,0 +1,107 @@
+[
+  {
+    "file": "docs/reviews/2026-09-08-release-followup.html",
+    "width": 320,
+    "scrollWidth": 320,
+    "title": "Tekon v0.26.1 发布影响评估与补修验收",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 320,
+    "scrollWidth": 320,
+    "title": "Tekon v0.26.0 发布前综合审核",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 320,
+    "scrollWidth": 320,
+    "title": "Tekon 验收与发布证据索引",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 320,
+    "scrollWidth": 320,
+    "title": "天工 Tekon · 用户手册",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 320,
+    "scrollWidth": 320,
+    "title": "Tekon 运行时与 Harness 集成合同",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-followup.html",
+    "width": 390,
+    "scrollWidth": 390,
+    "title": "Tekon v0.26.1 发布影响评估与补修验收",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 390,
+    "scrollWidth": 390,
+    "title": "Tekon v0.26.0 发布前综合审核",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 390,
+    "scrollWidth": 390,
+    "title": "Tekon 验收与发布证据索引",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 390,
+    "scrollWidth": 390,
+    "title": "天工 Tekon · 用户手册",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 390,
+    "scrollWidth": 390,
+    "title": "Tekon 运行时与 Harness 集成合同",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-followup.html",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "title": "Tekon v0.26.1 发布影响评估与补修验收",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/2026-09-08-release-audit.html",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "title": "Tekon v0.26.0 发布前综合审核",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/reviews/current.html",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "title": "Tekon 验收与发布证据索引",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/manual/tekon-user-manual.html",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "title": "天工 Tekon · 用户手册",
+    "brokenAnchors": []
+  },
+  {
+    "file": "docs/technical/tekon-runtime-contract.html",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "title": "Tekon 运行时与 Harness 集成合同",
+    "brokenAnchors": []
+  }
+]

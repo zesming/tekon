@@ -24,6 +24,8 @@ tekon run "为列表增加筛选条件"
 
 使用 Claude Code 时先安装并认证，再执行 `tekon run "你的需求" --agent claude-code`；Web 需在「高级 Advanced → 新建运行」的 Agent 下拉框选择 `claude-code`，默认受控交付入口固定用 Codex。
 
+v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；默认 Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
+
 首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行 `standard-delivery` 完整流程。更新用 `tekon update`。
 
 ![Tekon Web：输入需求，查看执行前计划与检查配置](docs/reviews/evidence/2026-09-06-r27/pages/1440-sessions.png)

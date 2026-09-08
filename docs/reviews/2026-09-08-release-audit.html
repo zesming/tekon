@@ -10,6 +10,7 @@
 <p>审核日期：2026-09-08。基线：<code>main@86a3d48fcf54ea663b1ce3bdf86595187a425d1e</code>，拉取后已是最新；提交分支：<code>codex/release-audit-20260908</code>。本记录覆盖该 PR 中的代码、测试、角色指令和文档调整。</p>
 <h2 id="发布判断">发布判断</h2>
 <p>本地自动化回归与人工视觉复核的结果见下表。已修复审批并发、取消信号、Claude 权限与提示、工作区租约恢复及 CLI 退出码问题，并精简检查列表、完善操作反馈和窄屏布局。可提交 PR 供人工合并评审；不能据此宣称所有真实 Provider、远端交付或生产场景全部通过。真实 Claude CLI 标准交付的最终结果与恢复证据在下文单独登记，历史 R26/R27 证据不替代本轮运行。</p>
+<p>补充评估：PR #35 已合并；问题的发布影响、人工处置条件及 v0.26.1 诊断补修见<a href="2026-09-08-release-followup.html">发布影响评估与补修验收</a>。原始计数与真实运行证据保留本轮快照。</p>
 <h2 id="五项审核与变更">五项审核与变更</h2>
 <div class="scroll" tabindex="0" role="region" aria-label="审核对照表"><table>
 <thead>
@@ -113,4 +114,4 @@
 </ul>
 <h2 id="文档与产物交付">文档与产物交付</h2>
 <p>代码、测试及最终报告已完成独立复核，必须修复项已清零；530 个源码哈希、验证计数和真实运行证据已交叉核对。README、CHANGELOG、用户手册及相关产品/设计/技术文档已随用户可见行为同步，版本统一为 v0.26.0。保留 R26/R27 与历史真实交付记录的原始时点，避免将旧证据回填为当前通过。仅此正式报告和可复用证据进入 docs/reviews；调试脚本、浏览器临时结果和测试仓库在归档后清理，重点移除本次创建的 <code>tmp/</code>。</p>
-<footer class="foot">Markdown SHA-256: b6e783809abc22de18a85e4c332352cf6bae1c6c8744fdaf7677817502292e0d</footer></main></body></html>
+<footer class="foot">Markdown SHA-256: ce195f8397c8d59c4b2300aa78ac3d4daaf36efa2ed90db6e99b0050518fdd56</footer></main></body></html>
