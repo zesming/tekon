@@ -1,0 +1,56 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ❯ |@tekon/core| __tests__/runtime/claude-provider-smoke-evidence.test.ts (2 tests | 1 failed) 5ms
+   × claude provider smoke support > does not record smoke environment variable assignments in evidence 4ms
+     → expected '# Claude Provider Smoke 证据\n\n生成日期：20…' to contain '生成日期：2026-09-08'
+   ✓ claude provider smoke support > uses an allowlisted environment for Claude provider preflight checks 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/claude-provider-smoke-evidence.test.ts > claude provider smoke support > does not record smoke environment variable assignments in evidence
+AssertionError: expected '# Claude Provider Smoke 证据\n\n生成日期：20…' to contain '生成日期：2026-09-08'
+
+- Expected
++ Received
+
+- 生成日期：2026-09-08
++ # Claude Provider Smoke 证据
++
++ 生成日期：2026-06-05
++
++ ## 结论
++
++ 真实 Claude provider smoke 已执行成功。
++
++ ## 证据
++
++ - Claude CLI version: 2.1.163 (Claude Code)
++ - command: `npm run smoke:claude-provider`
++ - enablement: 已显式设置 smoke 开关和命令覆盖，环境变量具体值不记录。
++ - exit code: 0
++ - durationMs: 1234
++ - stdout log path: `/tmp/tekon/stdout.log`
++ - stderr log path: `/tmp/tekon/stderr.log`
++
++ ## 脱敏说明
++
++ 未记录 API key、token、认证输出或环境变量值。
++
+
+ ❯ __tests__/runtime/claude-provider-smoke-evidence.test.ts:24:20
+     22| 
+     23|     for (const body of [markdown, html]) {
+     24|       expect(body).toContain('生成日期：2026-09-08');
+       |                    ^
+     25|       expect(body).toContain('npm run smoke:claude-provider');
+     26|       expect(body).toContain('具体值不记录');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  09:56:13
+   Duration  194ms (transform 18ms, setup 0ms, collect 17ms, tests 5ms, environment 0ms, prepare 30ms)
+

@@ -1,0 +1,229 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/core
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts (57 tests | 40 failed) 406ms
+   ✓ claude code adapter > builds permission-aware commands without bypassPermissions by default 1ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode","bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode=bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode"]} 3ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode=acceptEdits"]} 0ms
+     → expected [Function] to throw an error
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--mode=bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools=Bash(npm test)"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools=Bash(npm test)"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools=Bash(git push)"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools=Bash(git push)"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--settings"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--settings={\"permissions\":{\"allow\":[]}}"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources=user"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--settingSources"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--settingSources=user"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt=none"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool=none"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool=none"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--tools"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--tools=Bash"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--add-dir"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--add-dir=/tmp/other"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--addDir"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--addDir=/tmp/other"]} 1ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--agents"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--agents={}"]} 0ms
+     → expected [Function] to throw an error
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions=true"]} 0ms
+   × claude code adapter > rejects unsafe user Claude args {"args":["--dangerouslySkipPermissions"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions=true"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions=true"]} 0ms
+     → expected [Function] to throw an error
+   × claude code adapter > rejects unsafe user Claude args {"args":["--"]} 0ms
+     → expected [Function] to throw an error
+   ✓ claude code adapter > keeps ordinary model and output arguments compatible 0ms
+   × claude code adapter > emits generated Claude permissions while keeping an arg prompt last 1ms
+     → expected false to be true // Object.is equality
+   × claude code adapter > serializes human approval separately as Claude permissions.ask 0ms
+     → expected -1 to be greater than or equal to 0
+   ✓ claude code adapter > does not synthesize Bash grants when no command policy is provided 0ms
+   × claude code adapter > passes the command policy to Claude permission compilation before spawn 0ms
+     → expected false to be true // Object.is equality
+   ✓ claude code adapter > streams large stdout/stderr without deadlock and reports timeout 106ms
+   ✓ claude code adapter > passes prompts through stdin when promptMode is stdin 45ms
+   ✓ claude code adapter > does not spawn a Claude command when its abort signal is already set 1ms
+   ✓ claude code adapter > terminates a running Claude subprocess when its abort signal fires 98ms
+   ✓ claude code adapter > passes progress and no-progress timeouts to the command gateway 0ms
+   ✓ claude code adapter > ingests provider artifact manifests into the artifact store 56ms
+   ✓ claude code adapter > fails real provider runs when required artifact manifests are missing or invalid 88ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/runtime/claude-code-permissions.test.ts [ __tests__/runtime/claude-code-permissions.test.ts ]
+Error: Cannot find module '../../src/runtime/claude-code-permissions.js' imported from '/Users/zesming/Projects/tekon/packages/core/__tests__/runtime/claude-code-permissions.test.ts'
+ ❯ __tests__/runtime/claude-code-permissions.test.ts:7:1
+      5|   defaultProviderConfig,
+      6| } from '../../src/index.js';
+      7| import { compileClaudePermissions } from '../../src/runtime/claude-cod…
+       | ^
+      8| 
+      9| describe('Claude Code permission compiler', () => {
+
+Caused by: Error: Failed to load url ../../src/runtime/claude-code-permissions.js (resolved id: ../../src/runtime/claude-code-permissions.js) in /Users/zesming/Projects/tekon/packages/core/__tests__/runtime/claude-code-permissions.test.ts. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/.pnpm/vite@7.3.5_@types+node@25.9.1_tsx@4.22.4_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:22739:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/41]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 40 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode=acceptEdits"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools=Bash(npm test)"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools=Bash(npm test)"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools=Bash(git push)"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools=Bash(git push)"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--settings"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--settings={\"permissions\":{\"allow\":[]}}"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources=user"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--settingSources"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--settingSources=user"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt=none"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool=none"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool=none"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--tools"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--tools=Bash"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--add-dir"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--add-dir=/tmp/other"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--addDir"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--addDir=/tmp/other"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--agents"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--agents={}"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--dangerouslySkipPermissions"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions=true"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions=true"]}
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > rejects unsafe user Claude args {"args":["--"]}
+AssertionError: expected [Function] to throw an error
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:130:9
+    128|       expect(() =>
+    129|         buildClaudeCodeCommand(safeConfig, { prompt: 'hello' }),
+    130|       ).toThrow();
+       |         ^
+    131|     }
+    132|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/41]⎯
+
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > emits generated Claude permissions while keeping an arg prompt last
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:174:7
+    172|         (arg) => arg === '--allowedTools' || arg === '--allowed-tools',
+    173|       ),
+    174|     ).toBe(true);
+       |       ^
+    175|     expect(command.args.join('\u0000')).toContain('Bash(npm test)');
+    176|     const separatorIndex = command.args.lastIndexOf('--');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/41]⎯
+
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > serializes human approval separately as Claude permissions.ask
+AssertionError: expected -1 to be greater than or equal to 0
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:201:27
+    199| 
+    200|     const settingsIndex = command.args.indexOf('--settings');
+    201|     expect(settingsIndex).toBeGreaterThanOrEqual(0);
+       |                           ^
+    202|     const settings = JSON.parse(command.args[settingsIndex + 1] ?? '{}…
+    203|       permissions?: { ask?: string[] };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/41]⎯
+
+ FAIL  __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > passes the command policy to Claude permission compilation before spawn
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:258:7
+    256|         (arg) => arg === '--allowedTools' || arg === '--allowed-tools',
+    257|       ),
+    258|     ).toBe(true);
+       |       ^
+    259|     expect(capturedInput?.command.args).toContain('Bash(npm test)');
+    260|     const separatorIndex = capturedInput?.command.args.lastIndexOf('--…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/41]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  40 failed | 17 passed (57)
+   Start at  10:58:03
+   Duration  915ms (transform 239ms, setup 0ms, collect 359ms, tests 406ms, environment 0ms, prepare 65ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/core:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run __tests__/runtime/claude-code-permissions.test.ts __tests__/runtime/claude-code-adapter.test.ts --maxWorkers=4

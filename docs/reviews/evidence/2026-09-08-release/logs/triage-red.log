@@ -1,0 +1,75 @@
+
+Running 2 tests using 1 worker
+
+(node:38718) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:38718) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 320px keeps long gate failure triage content inside its card (506ms)
+(node:39129) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:39129) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  2 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 1440px keeps long gate failure triage content inside its card (496ms)
+
+
+  1) [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 320px keeps long gate failure triage content inside its card 
+
+    Error: expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 305
+    Received:    1885.53125
+
+      109 |     for (const cell of valueCells) {
+      110 |       expect(cell.left).toBeGreaterThanOrEqual(metrics.card!.left - 1);
+    > 111 |       expect(cell.right).toBeLessThanOrEqual(metrics.card!.right + 1);
+          |                          ^
+      112 |       expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth + 1);
+      113 |     }
+      114 |
+        at /Users/zesming/Projects/tekon/packages/web/__tests__/e2e/release-overview.e2e.test.ts:111:26
+
+    Error Context: test-results/release-overview.e2e-overv-2746a-age-content-inside-its-card-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/release-overview.e2e-overv-2746a-age-content-inside-its-card-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/release-overview.e2e-overv-2746a-age-content-inside-its-card-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 1440px keeps long gate failure triage content inside its card 
+
+    Error: expect(received).toBeLessThanOrEqual(expected)
+
+    Expected: <= 1401
+    Received:    2141.53125
+
+      109 |     for (const cell of valueCells) {
+      110 |       expect(cell.left).toBeGreaterThanOrEqual(metrics.card!.left - 1);
+    > 111 |       expect(cell.right).toBeLessThanOrEqual(metrics.card!.right + 1);
+          |                          ^
+      112 |       expect(cell.scrollWidth).toBeLessThanOrEqual(cell.clientWidth + 1);
+      113 |     }
+      114 |
+        at /Users/zesming/Projects/tekon/packages/web/__tests__/e2e/release-overview.e2e.test.ts:111:26
+
+    Error Context: test-results/release-overview.e2e-overv-5ae8e-age-content-inside-its-card-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/release-overview.e2e-overv-5ae8e-age-content-inside-its-card-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/release-overview.e2e-overv-5ae8e-age-content-inside-its-card-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 320px keeps long gate failure triage content inside its card 
+    [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 1440px keeps long gate failure triage content inside its card 
+undefined
+/Users/zesming/Projects/tekon/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test __tests__/e2e/release-overview.e2e.test.ts --grep triage --retries=0

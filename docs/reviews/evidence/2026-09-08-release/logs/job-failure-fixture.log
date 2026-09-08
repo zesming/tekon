@@ -1,0 +1,12 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/cli
+
+ ✓ __tests__/e2e/job-failure-exit.e2e.test.ts (2 tests) 3260ms
+   ✓ CLI task failure exit status through a real process > returns non-zero when run job fails while the workflow remains running  1577ms
+   ✓ CLI task failure exit status through a real process > returns non-zero when resume job fails while the workflow remains running  1683ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  12:09:20
+   Duration  3.73s (transform 176ms, setup 0ms, collect 294ms, tests 3.26s, environment 0ms, prepare 26ms)
+

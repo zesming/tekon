@@ -1,0 +1,11 @@
+
+> tekon@0.26.0 typecheck /Users/zesming/Projects/tekon
+> pnpm -r typecheck
+
+Scope: 3 of 4 workspace projects
+packages/core typecheck$ tsc -p tsconfig.json --noEmit
+packages/core typecheck: Done
+packages/cli typecheck$ tsc -p tsconfig.json --noEmit
+packages/web typecheck$ tsc -p tsconfig.json --noEmit
+packages/cli typecheck: Done
+packages/web typecheck: Done

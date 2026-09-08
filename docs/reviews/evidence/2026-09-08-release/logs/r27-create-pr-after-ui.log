@@ -1,0 +1,35 @@
+
+Running 13 tests using 1 worker
+
+(node:95209) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:95209) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓   1 [chromium] › __tests__/e2e/create-pr-approval.test.ts:179:3 › Create PR requires explicit confirmation › fake gh is only invoked after explicit confirmation, never before (5.9s)
+
+  ✓   2 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 320px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓   3 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 390px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓   4 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 768px pause/resume receipts and authoritative refresh (1.2s)
+
+  ✓   5 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 1440px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓   6 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:99:3 › R27 pause error remains visible and can retry (1.7s)
+
+  ✓   7 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent passed (1.6s)
+
+  ✓   8 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent failed (1.6s)
+
+  ✓   9 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent cancelled (1.6s)
+
+  ✓  10 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:99:3 › R27 resume error remains visible and can retry (1.7s)
+
+  ✓  11 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent passed (1.7s)
+
+  ✓  12 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent failed (1.6s)
+
+  ✓  13 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent cancelled (1.6s)
+
+  13 passed (24.6s)

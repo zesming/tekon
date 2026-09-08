@@ -1,0 +1,123 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/cli
+
+ ❯ __tests__/e2e/draft-agent.e2e.test.ts (6 tests | 4 failed) 359ms
+   × draft agent real process > disables built-in and MCP tools while parsing Claude question envelopes 44ms
+     → expected [] to deeply equal [ 'Which format?' ]
+   × draft agent real process > uses the same tool-free invocation and applies refinement envelopes 43ms
+     → expected {} to deeply equal { title: 'CLI help', …(1) }
+   × draft agent real process > keeps raw JSON compatibility and limits valid questions to six 41ms
+     → expected [ '-p', '--output-format', …(3) ] to deeply equal [ '-p', '--output-format', …(10) ]
+   × draft agent real process > falls back on error or non-object output {"type":"result","is_error":true,"result":"{\"title\":\"bad\",\"questions\":[\"bad\"]}"} 78ms
+     → expected {} to be null
+   ✓ draft agent real process > falls back on error or non-object output null 76ms
+   ✓ draft agent real process > falls back on a failed process even if stdout looks valid 77ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/e2e/draft-agent.e2e.test.ts > draft agent real process > disables built-in and MCP tools while parsing Claude question envelopes
+AssertionError: expected [] to deeply equal [ 'Which format?' ]
+
+- Expected
++ Received
+
+- [
+-   "Which format?",
+- ]
++ []
+
+ ❯ __tests__/e2e/draft-agent.e2e.test.ts:64:63
+     62|   it('disables built-in and MCP tools while parsing Claude question en…
+     63|     const agent = backend({ type: 'result', result: JSON.stringify({ q…
+     64|     expect(generateAgentQuestions(makeDraft(), agent.config)).toEqual(…
+       |                                                               ^
+     65|     expectTextOnly(agent.read().args);
+     66|     expect(agent.read().prompt).toContain('Add help command to CLI');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  __tests__/e2e/draft-agent.e2e.test.ts > draft agent real process > uses the same tool-free invocation and applies refinement envelopes
+AssertionError: expected {} to deeply equal { title: 'CLI help', …(1) }
+
+- Expected
++ Received
+
+- {
+-   "nonGoals": [
+-     "UI",
+-   ],
+-   "title": "CLI help",
+- }
++ {}
+
+ ❯ __tests__/e2e/draft-agent.e2e.test.ts:71:8
+     69|     const agent = backend({ type: 'result', result: JSON.stringify({ t…
+     70|     expect(refineDraftWithAgent(makeDraft(), [{ question: 'Format?', a…
+     71|       .toEqual({ title: 'CLI help', nonGoals: ['UI'] });
+       |        ^
+     72|     expectTextOnly(agent.read().args);
+     73|     expect(agent.read().prompt).toContain('A: Plain text');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  __tests__/e2e/draft-agent.e2e.test.ts > draft agent real process > keeps raw JSON compatibility and limits valid questions to six
+AssertionError: expected [ '-p', '--output-format', …(3) ] to deeply equal [ '-p', '--output-format', …(10) ]
+
+- Expected
++ Received
+
+  [
+    "-p",
+    "--output-format",
+    "json",
+    "--permission-mode",
+-   "default",
+-   "--tools",
+-   "",
+-   "--disallowedTools",
+-   "mcp__*",
+-   "--strict-mcp-config",
+-   "--mcp-config",
+-   "{\"mcpServers\":{}}",
++   "bypassPermissions",
+  ]
+
+ ❯ expectTextOnly __tests__/e2e/draft-agent.e2e.test.ts:57:16
+     55| 
+     56| function expectTextOnly(args: string[]) {
+     57|   expect(args).toEqual(['-p', '--output-format', 'json', '--permission…
+       |                ^
+     58|     '--tools', '', '--disallowedTools', 'mcp__*', '--strict-mcp-config…
+     59| }
+ ❯ __tests__/e2e/draft-agent.e2e.test.ts:78:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  __tests__/e2e/draft-agent.e2e.test.ts > draft agent real process > falls back on error or non-object output {"type":"result","is_error":true,"result":"{\"title\":\"bad\",\"questions\":[\"bad\"]}"}
+AssertionError: expected {} to be null
+
+- Expected: 
+null
+
++ Received: 
+{}
+
+ ❯ __tests__/e2e/draft-agent.e2e.test.ts:83:65
+     81|     const agent = backend(output);
+     82|     expect(generateAgentQuestions(makeDraft(), agent.config)).toEqual(…
+     83|     expect(refineDraftWithAgent(makeDraft(), [], agent.config)).toBeNu…
+       |                                                                 ^
+     84|   });
+     85|   it('falls back on a failed process even if stdout looks valid', () =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  11:00:59
+   Duration  557ms (transform 22ms, setup 0ms, collect 21ms, tests 359ms, environment 0ms, prepare 28ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/e2e/draft-agent.e2e.test.ts

@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ✓ |@tekon/web| __tests__/client/r26-run-recovery.test.ts (13 tests) 11ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  10:05:48
+   Duration  253ms (transform 47ms, setup 0ms, collect 66ms, tests 11ms, environment 0ms, prepare 31ms)
+

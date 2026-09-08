@@ -1,0 +1,46 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon/packages/cli
+
+ ❯ __tests__/await-job-terminal.test.ts (10 tests | 1 failed) 8ms
+   ✓ awaitJobTerminal (4c M2 observation loop) > returns interrupted without polling forever or relaying cancellation 1ms
+   ✓ awaitJobTerminal (4c M2 observation loop) > returns immediately on a terminal status without relaying any request 0ms
+   ✓ awaitJobTerminal (4c M2 observation loop) > relays an observed cross-process paused status to requestPause, then returns on terminal 2ms
+   ✓ awaitJobTerminal (4c M2 observation loop) > relays an observed cross-process cancelling status to requestCancel, then returns on cancelled 1ms
+   ✓ awaitJobTerminal (4c M2 observation loop) > throws when the job row disappears (jobs.get → null) 1ms
+   ✓ exitCodeForJobOutcome > maps 'done' with workflow='paused' 0ms
+   ✓ exitCodeForJobOutcome > maps 'done' with workflow='blocked' 0ms
+   ✓ exitCodeForJobOutcome > maps 'failed' with workflow='running' 0ms
+   ✓ exitCodeForJobOutcome > maps 'interrupted' with workflow='running' 0ms
+   × exitCodeForJobOutcome > maps 'cancelled' with workflow='running' 2ms
+     → expected +0 to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/await-job-terminal.test.ts > exitCodeForJobOutcome > maps 'cancelled' with workflow='running'
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ __tests__/await-job-terminal.test.ts:175:7
+    173|         workflowStatus,
+    174|       }),
+    175|     ).toBe(expected);
+       |       ^
+    176|     if (diagnostic) {
+    177|       expect(stderr).toContain(`jobStatus=${jobStatus}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  12:01:59
+   Duration  523ms (transform 192ms, setup 0ms, collect 315ms, tests 8ms, environment 0ms, prepare 34ms)
+
+undefined
+/Users/zesming/Projects/tekon/packages/cli:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest --run __tests__/await-job-terminal.test.ts

@@ -1,0 +1,8 @@
+Request ID: release-audit-final-20260908
+🚀 运行已启动
+  Run ID: run_6ba76d14-6f6d-4998-9cf5-4466b5ecb297
+  状态: interrupted
+  模板: standard-delivery
+后续操作:
+  tekon status          查看运行状态
+  tekon review          查看审阅面板

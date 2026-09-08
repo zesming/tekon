@@ -1,0 +1,20 @@
+
+> tekon@0.26.0 build /Users/zesming/Projects/tekon
+> pnpm -r build
+
+Scope: 3 of 4 workspace projects
+packages/core build$ tsc -p tsconfig.json
+packages/core build: Done
+packages/web build$ vite build
+packages/cli build$ tsc -p tsconfig.json && chmod +x dist/index.js
+packages/web build: vite v7.3.5 building client environment for production...
+packages/web build: transforming...
+packages/cli build: Done
+packages/web build: ✓ 132 modules transformed.
+packages/web build: rendering chunks...
+packages/web build: computing gzip size...
+packages/web build: dist/index.html                   0.40 kB │ gzip:   0.27 kB
+packages/web build: dist/assets/index-CR37CQhq.css   42.58 kB │ gzip:   8.81 kB
+packages/web build: dist/assets/index-BaMjw0EB.js   492.96 kB │ gzip: 147.82 kB
+packages/web build: ✓ built in 666ms
+packages/web build: Done

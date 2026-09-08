@@ -1,0 +1,431 @@
+
+Running 211 tests using 1 worker
+
+(node:79250) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:79250) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓    1 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:10:3 › evidence review-report artifact_1 opens and focuses its real content (627ms)
+
+  ✓    2 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:10:3 › evidence human gate_1 opens and focuses its real content (641ms)
+
+  ✓    3 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:10:3 › evidence PR body opens and focuses its real content (477ms)
+
+  ✓    4 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:10:3 › evidence PR package opens and focuses its real content (490ms)
+
+  ✓    5 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:10:3 › evidence Delivery diff opens and focuses its real content (479ms)
+
+  ✓    6 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:35:3 › missing evidence artifacts?artifact=missing gives visible feedback (371ms)
+
+  ✓    7 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:35:3 › missing evidence gates?gate=missing gives visible feedback (399ms)
+
+  ✓    8 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:35:3 › missing evidence delivery?section=missing gives visible feedback (346ms)
+
+  ✓    9 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:48:3 › artifact preview missing is explicit (381ms)
+
+  ✓   10 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:48:3 › gate preview missing is explicit (464ms)
+
+  ✓   11 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:48:3 › gate preview none is explicit (467ms)
+
+  ✓   12 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:48:3 › artifact preview error is explicit (299ms)
+
+  ✓   13 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:48:3 › gate preview error is explicit (293ms)
+
+  ✓   14 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:65:1 › artifact target hidden by filters can be revealed (713ms)
+
+  ✓   15 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:75:1 › approval evidence opens the exact audit event in the authenticated tab (562ms)
+
+  ✓   16 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:93:1 › audit target reports missing events and preserves RPC error feedback (441ms)
+
+  ✓   17 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:107:1 › audit target hidden by filters is explained and can be revealed (1.1s)
+
+  ✓   18 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:122:1 › long audit event types remain inside the selected evidence row (791ms)
+
+  ✓   19 [chromium] › __tests__/e2e/audit-evidence.e2e.test.ts:144:1 › same-document target changes refocus while unchanged targets keep keyboard focus (722ms)
+
+  ✓   20 [chromium] › __tests__/e2e/config-detail-dialog-a11y.test.ts:4:3 › Config detail dialog accessibility (P1-A11Y-01 / P2-UX-01) › RoleDetailPanel has aria-modal, aria-labelledby, traps Tab focus, closes on Escape, and restores focus (697ms)
+
+  ✓   21 [chromium] › __tests__/e2e/config-detail-dialog-a11y.test.ts:59:3 › Config detail dialog accessibility (P1-A11Y-01 / P2-UX-01) › WorkflowDetailPanel has aria-modal, aria-labelledby, traps Tab focus, and closes on backdrop click (712ms)
+
+  ✓   22 [chromium] › __tests__/e2e/config-eval-demand.test.ts:6:3 › Config, Eval, and Demand pages › config page loads with Roles, Workflows, and Constraints tabs (703ms)
+
+  ✓   23 [chromium] › __tests__/e2e/config-eval-demand.test.ts:38:3 › Config, Eval, and Demand pages › eval page loads with Readiness, Demand Shape, Approval Summary, and Workflow Selection tabs (700ms)
+
+  ✓   24 [chromium] › __tests__/e2e/config-eval-demand.test.ts:75:3 › Config, Eval, and Demand pages › demand page loads (256ms)
+
+  ✓   25 [chromium] › __tests__/e2e/create-pr-approval.test.ts:179:3 › Create PR requires explicit confirmation › fake gh is only invoked after explicit confirmation, never before (5.4s)
+
+  ✓   26 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 320px retain content and control geometry (1.3s)
+
+  ✓   27 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 390px retain content and control geometry (1.3s)
+
+  ✓   28 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 600px retain content and control geometry (1.3s)
+
+  ✓   29 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 601px retain content and control geometry (1.2s)
+
+  ✓   30 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 768px retain content and control geometry (1.2s)
+
+  ✓   31 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 769px retain content and control geometry (1.2s)
+
+  ✓   32 [chromium] › __tests__/e2e/dashboard-surfaces.e2e.test.ts:6:3 › Dashboard surfaces at 1440px retain content and control geometry (1.3s)
+
+  ✓   33 [chromium] › __tests__/e2e/dashboard.test.ts:5:3 › Tekon main flow › dashboard, run list, run detail tabs, approvals, and authenticated operations (1.5s)
+
+  ✓   34 [chromium] › __tests__/e2e/event-feed-boundary.test.ts:5:1 › EventFeed renders narrative and provides technical event controls (274ms)
+
+  ✓   35 [chromium] › __tests__/e2e/mobile-drawer-accessibility.test.ts:9:3 › mobile navigation accessibility › drawer is modal, traps focus, and restores focus on every close path (1.6s)
+
+  ✓   36 [chromium] › __tests__/e2e/mobile-drawer-accessibility.test.ts:95:3 › mobile navigation accessibility › widening the viewport clears a stale mobile drawer state (314ms)
+
+  ✓   37 [chromium] › __tests__/e2e/mobile-layout.test.ts:70:3 › mobile layout (390px) › sessions, session-detail, and an advanced page never overflow horizontally (3.8s)
+
+  ✓   38 [chromium] › __tests__/e2e/mobile-layout.test.ts:107:3 › mobile layout (390px) › the sidebar is an off-canvas drawer toggled by an accessible hamburger (1.6s)
+
+  ✓   39 [chromium] › __tests__/e2e/mobile-layout.test.ts:166:3 › desktop layout (1440px) — no regression › the persistent sidebar stays put and no hamburger appears (269ms)
+
+  ✓   40 [chromium] › __tests__/e2e/prod-bootstrap-history.test.ts:7:1 › stripping a bootstrap fragment preserves current router history state (267ms)
+
+  ✓   41 [chromium] › __tests__/e2e/prod-bootstrap-history.test.ts:44:1 › manual token fallback authenticates the first request for the new scope (388ms)
+
+  ✓   42 [chromium] › __tests__/e2e/prod-bootstrap.test.ts:11:1 › first paint authenticates from the #token fragment (no manual paste) (253ms)
+
+  ✓   43 [chromium] › __tests__/e2e/prod-bootstrap.test.ts:54:1 › the session survives a refresh via sessionStorage (288ms)
+
+  ✓   44 [chromium] › __tests__/e2e/prod-bootstrap.test.ts:92:1 › the token is never sent to the server in a request URL or Referer (260ms)
+
+  ✓   45 [chromium] › __tests__/e2e/prod-bootstrap.test.ts:123:1 › an already-open tab accepts a fresh #token fragment without reloading (667ms)
+
+  ✓   46 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:278:5 › R23 admission evidence 320px › TopBar provider error, prior check time and retry remain readable and reachable (766ms)
+
+  ✓   47 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:338:5 › R23 admission evidence 320px › simple unknown and advanced recovery records fit without hiding recovery actions (2.3s)
+
+  ✓   48 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:444:5 › R23 admission evidence 320px › Session and Run unready and error details preserve readable guidance and reachable retry (2.1s)
+
+  ✓   49 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:278:5 › R23 admission evidence 390px › TopBar provider error, prior check time and retry remain readable and reachable (765ms)
+
+  ✓   50 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:338:5 › R23 admission evidence 390px › simple unknown and advanced recovery records fit without hiding recovery actions (2.3s)
+
+  ✓   51 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:444:5 › R23 admission evidence 390px › Session and Run unready and error details preserve readable guidance and reachable retry (2.1s)
+
+  ✓   52 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:278:5 › R23 admission evidence 700px › TopBar provider error, prior check time and retry remain readable and reachable (748ms)
+
+  ✓   53 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:338:5 › R23 admission evidence 700px › simple unknown and advanced recovery records fit without hiding recovery actions (2.3s)
+
+  ✓   54 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:444:5 › R23 admission evidence 700px › Session and Run unready and error details preserve readable guidance and reachable retry (2.1s)
+
+  ✓   55 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:278:5 › R23 admission evidence 1440px › TopBar provider error, prior check time and retry remain readable and reachable (756ms)
+
+  ✓   56 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:338:5 › R23 admission evidence 1440px › simple unknown and advanced recovery records fit without hiding recovery actions (2.3s)
+
+  ✓   57 [chromium] › __tests__/e2e/r23-responsive-admission.e2e.test.ts:444:5 › R23 admission evidence 1440px › Session and Run unready and error details preserve readable guidance and reachable retry (2.1s)
+
+  ✓   58 [chromium] › __tests__/e2e/r24-admission-files-state.e2e.test.ts:4:3 › simple: POST pending and GET directory states remain distinct after ledger reload (1.3s)
+
+  ✓   59 [chromium] › __tests__/e2e/r24-admission-files-state.e2e.test.ts:44:3 › simple: an unknown request and a not-found lookup never claim accepted directory preparation (730ms)
+
+  ✓   60 [chromium] › __tests__/e2e/r24-admission-files-state.e2e.test.ts:4:3 › advanced: POST pending and GET directory states remain distinct after ledger reload (1.3s)
+
+  ✓   61 [chromium] › __tests__/e2e/r24-admission-files-state.e2e.test.ts:44:3 › advanced: an unknown request and a not-found lookup never claim accepted directory preparation (821ms)
+
+  ✓   62 [chromium] › __tests__/e2e/r24-execution-binding.e2e.test.ts:7:3 › R24 320px: Run and Session retain accepted recovery and explain historical binding (472ms)
+
+  ✓   63 [chromium] › __tests__/e2e/r24-execution-binding.e2e.test.ts:7:3 › R24 390px: Run and Session retain accepted recovery and explain historical binding (412ms)
+
+  ✓   64 [chromium] › __tests__/e2e/r24-execution-binding.e2e.test.ts:7:3 › R24 700px: Run and Session retain accepted recovery and explain historical binding (432ms)
+
+  ✓   65 [chromium] › __tests__/e2e/r24-execution-binding.e2e.test.ts:7:3 › R24 1440px: Run and Session retain accepted recovery and explain historical binding (435ms)
+
+  ✓   66 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:4:3 › simple: refresh preserves the previous plan through loading and requires explicit submission (800ms)
+
+  ✓   67 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:4:3 › advanced: refresh preserves the previous plan through loading and requires explicit submission (881ms)
+
+  ✓   68 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:63:3 › R24 320px: both entry previews expose actual Gate behavior without clipped controls (1.4s)
+
+  ✓   69 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:63:3 › R24 390px: both entry previews expose actual Gate behavior without clipped controls (1.4s)
+
+  ✓   70 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:63:3 › R24 700px: both entry previews expose actual Gate behavior without clipped controls (1.4s)
+
+  ✓   71 [chromium] › __tests__/e2e/r24-plan-bindings.e2e.test.ts:63:3 › R24 1440px: both entry previews expose actual Gate behavior without clipped controls (1.4s)
+
+  ✓   72 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:195:1 › R24：真实 Workspace 流断开期间发生变更，重连后没有下一事件也追平列表 (1.2s)
+
+  ✓   73 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:278:3 › R24：另一入口 decided 时仍有待审批，Session 卡片自动反映 Gate 事实 (551ms)
+
+  ✓   74 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:278:3 › R24：另一入口 requested 时仍有待审批，Session 卡片自动反映 Gate 事实 (1.3s)
+
+  ✓   75 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:363:3 › R24：列表查询在途时迟到成功，丢弃旧发布并自动取得新事实 (2.4s)
+
+  ✓   76 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:363:3 › R24：列表查询在途时迟到 500，丢弃旧发布并自动取得新事实 (2.5s)
+
+  ✓   77 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:363:3 › R24：列表查询在途时多次 SSE 失效合并，丢弃旧发布并自动取得新事实 (4.5s)
+
+  ✓   78 [chromium] › __tests__/e2e/r24-query-observation.e2e.test.ts:363:3 › R24：列表查询在途时离开并重新挂载，丢弃旧发布并自动取得新事实 (2.8s)
+
+  ✓   79 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation none → resolve keeps current form ownership (1.1s)
+
+  ✓   80 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation none → reject keeps current form ownership (1.1s)
+
+  ✓   81 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation edit-cycle → resolve keeps current form ownership (1.1s)
+
+  ✓   82 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation edit-cycle → reject keeps current form ownership (1.0s)
+
+  ✓   83 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation new-intent → resolve keeps current form ownership (1.1s)
+
+  ✓   84 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation new-intent → reject keeps current form ownership (1.1s)
+
+  ✓   85 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation token-cycle → resolve keeps current form ownership (1.1s)
+
+  ✓   86 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation token-cycle → reject keeps current form ownership (1.1s)
+
+  ✓   87 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation unmount → resolve keeps current form ownership (1.1s)
+
+  ✓   88 [chromium] › __tests__/e2e/r25-react-navigation.e2e.test.ts:32:5 › 真实 React deferred navigation unmount → reject keeps current form ownership (1.1s)
+
+  ✓   89 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › simple: real accepted POST survives local removeItem (4.3s)
+
+  ✓   90 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › simple: real accepted POST survives local getItem (4.3s)
+
+  ✓   91 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › simple: real accepted POST survives local setItem with another unknown (4.5s)
+
+  ✓   92 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › simple: real recovery-required POST survives local setItem (1.2s)
+
+  ✓   93 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › simple: real recovery-required POST survives local getItem (879ms)
+
+  ✓   94 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:80:5 › simple: real accepted lookup keeps its identity when local ledger I/O fails (4.3s)
+
+  ✓   95 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:113:5 › simple: real accepted lookup wins over a later failure of the original POST (4.3s)
+
+  ✓   96 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:80:5 › simple: real recovery-required lookup keeps its identity when local ledger I/O fails (912ms)
+
+  ✓   97 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:113:5 › simple: real recovery-required lookup wins over a later failure of the original POST (912ms)
+
+  ✓   98 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:143:3 › simple: directory recovery retains one Run through pre-dispatch storage failure, retry disconnect and successful replay (4.7s)
+
+  ✓   99 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:209:3 › simple: an actual old not-found lookup cannot erase a later directory-recovery POST receipt (1.1s)
+
+  ✓  100 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › advanced: real accepted POST survives local removeItem (4.3s)
+
+  ✓  101 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › advanced: real accepted POST survives local getItem (4.4s)
+
+  ✓  102 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › advanced: real accepted POST survives local setItem with another unknown (4.5s)
+
+  ✓  103 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › advanced: real recovery-required POST survives local setItem (1.2s)
+
+  ✓  104 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:17:5 › advanced: real recovery-required POST survives local getItem (947ms)
+
+  ✓  105 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:80:5 › advanced: real accepted lookup keeps its identity when local ledger I/O fails (4.4s)
+
+  ✓  106 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:113:5 › advanced: real accepted lookup wins over a later failure of the original POST (4.4s)
+
+  ✓  107 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:80:5 › advanced: real recovery-required lookup keeps its identity when local ledger I/O fails (977ms)
+
+  ✓  108 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:113:5 › advanced: real recovery-required lookup wins over a later failure of the original POST (1.0s)
+
+  ✓  109 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:143:3 › advanced: directory recovery retains one Run through pre-dispatch storage failure, retry disconnect and successful replay (4.7s)
+
+  ✓  110 [chromium] › __tests__/e2e/r25-receipt-io.e2e.test.ts:209:3 › advanced: an actual old not-found lookup cannot erase a later directory-recovery POST receipt (1.1s)
+
+  ✓  111 [chromium] › __tests__/e2e/r25-receipt-navigation.e2e.test.ts:12:1 › default entry consumes a real Data Router navigation rejection and opens the original Session on retry (4.2s)
+
+  ✓  112 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 320px simple: accepted local warning coexists with a long unknown request (6.6s)
+
+  ✓  113 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 320px simple: recovery-required local warning coexists with a long unknown request (2.4s)
+
+  ✓  114 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 320px advanced: accepted local warning coexists with a long unknown request (6.8s)
+
+  ✓  115 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 320px advanced: recovery-required local warning coexists with a long unknown request (2.8s)
+
+  ✓  116 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 390px simple: accepted local warning coexists with a long unknown request (6.5s)
+
+  ✓  117 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 390px simple: recovery-required local warning coexists with a long unknown request (2.5s)
+
+  ✓  118 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 390px advanced: accepted local warning coexists with a long unknown request (6.6s)
+
+  ✓  119 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 390px advanced: recovery-required local warning coexists with a long unknown request (2.7s)
+
+  ✓  120 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 700px simple: accepted local warning coexists with a long unknown request (6.7s)
+
+  ✓  121 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 700px simple: recovery-required local warning coexists with a long unknown request (2.5s)
+
+  ✓  122 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 700px advanced: accepted local warning coexists with a long unknown request (6.6s)
+
+  ✓  123 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 700px advanced: recovery-required local warning coexists with a long unknown request (2.8s)
+
+  ✓  124 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 1440px simple: accepted local warning coexists with a long unknown request (6.7s)
+
+  ✓  125 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 1440px simple: recovery-required local warning coexists with a long unknown request (2.5s)
+
+  ✓  126 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 1440px advanced: accepted local warning coexists with a long unknown request (6.7s)
+
+  ✓  127 [chromium] › __tests__/e2e/r25-receipt-responsive.e2e.test.ts:10:7 › R25 1440px advanced: recovery-required local warning coexists with a long unknown request (2.8s)
+
+  ✓  128 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:65:3 › R26 320px: two-step keyboard cancel, failed delivery, reload and same-run retry (842ms)
+
+  ✓  129 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:116:3 › R26 320px: explicit old-job recovery confirmation with keyboard (421ms)
+
+  ✓  130 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:65:3 › R26 390px: two-step keyboard cancel, failed delivery, reload and same-run retry (821ms)
+
+  ✓  131 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:116:3 › R26 390px: explicit old-job recovery confirmation with keyboard (439ms)
+
+  ✓  132 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:65:3 › R26 768px: two-step keyboard cancel, failed delivery, reload and same-run retry (885ms)
+
+  ✓  133 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:116:3 › R26 768px: explicit old-job recovery confirmation with keyboard (427ms)
+
+  ✓  134 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:65:3 › R26 1440px: two-step keyboard cancel, failed delivery, reload and same-run retry (902ms)
+
+  ✓  135 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:116:3 › R26 1440px: explicit old-job recovery confirmation with keyboard (461ms)
+
+  ✓  136 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:139:3 › R26 cancellation race preserves passed (678ms)
+
+  ✓  137 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:139:3 › R26 cancellation race preserves failed (673ms)
+
+  ✓  138 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:152:3 › R26 320px: Session refresh preserves cancelled recovery and approval partial success stays explicit (2.6s)
+
+  ✓  139 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:152:3 › R26 390px: Session refresh preserves cancelled recovery and approval partial success stays explicit (2.6s)
+
+  ✓  140 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:152:3 › R26 768px: Session refresh preserves cancelled recovery and approval partial success stays explicit (2.6s)
+
+  ✓  141 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:152:3 › R26 1440px: Session refresh preserves cancelled recovery and approval partial success stays explicit (2.0s)
+
+  ✓  142 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:216:1 › R26 narrow approval metadata keeps commands readable (424ms)
+
+  ✓  143 [chromium] › __tests__/e2e/r26-run-recovery.e2e.test.ts:235:1 › R26 desktop Session approval metadata uses the rail width while the approval page keeps three columns (577ms)
+
+  ✓  144 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 320px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓  145 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 390px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓  146 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 768px pause/resume receipts and authoritative refresh (1.3s)
+
+  ✓  147 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:63:3 › R27 1440px pause/resume receipts and authoritative refresh (1.2s)
+
+  ✓  148 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:99:3 › R27 pause error remains visible and can retry (1.7s)
+
+  ✓  149 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent passed (1.6s)
+
+  ✓  150 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent failed (1.6s)
+
+  ✓  151 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 pause receipt respects concurrent cancelled (1.6s)
+
+  ✓  152 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:99:3 › R27 resume error remains visible and can retry (1.6s)
+
+  ✓  153 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent passed (1.6s)
+
+  ✓  154 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent failed (1.6s)
+
+  ✓  155 [chromium] › __tests__/e2e/r27-control-feedback.e2e.test.ts:118:5 › R27 resume receipt respects concurrent cancelled (1.6s)
+
+  ✓  156 [chromium] › __tests__/e2e/release-accessibility.e2e.test.ts:57:1 › approval notes have unique explicit labels for accessible form queries (271ms)
+
+  ✓  157 [chromium] › __tests__/e2e/release-accessibility.e2e.test.ts:87:1 › RPC failures are exposed as an alert and retry recovers the approval queue (724ms)
+
+  ✓  158 [chromium] › __tests__/e2e/release-accessibility.e2e.test.ts:156:1 › run control receipts survive a terminal refresh after the controls disappear (1.1s)
+
+  ✓  159 [chromium] › __tests__/e2e/release-dashboard.test.ts:5:3 › Tekon release dashboard › delivery pipeline display, PR preparation, and desktop screenshot (471ms)
+
+  ✓  160 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 320px shows each check once (allPassed=false) (418ms)
+
+  ✓  161 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 320px shows each check once (allPassed=true) (394ms)
+
+  ✓  162 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 1440px shows each check once (allPassed=false) (432ms)
+
+  ✓  163 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:17:5 › overview 1440px shows each check once (allPassed=true) (427ms)
+
+  ✓  164 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 320px keeps long gate failure triage content inside its card (426ms)
+
+  ✓  165 [chromium] › __tests__/e2e/release-overview.e2e.test.ts:57:3 › overview 1440px keeps long gate failure triage content inside its card (433ms)
+
+  ✓  166 [chromium] › __tests__/e2e/responsive-run-surfaces.e2e.test.ts:308:5 › run surfaces at 320px › keep default and advanced controls readable and within the viewport (877ms)
+
+  ✓  167 [chromium] › __tests__/e2e/responsive-run-surfaces.e2e.test.ts:308:5 › run surfaces at 390px › keep default and advanced controls readable and within the viewport (864ms)
+
+  ✓  168 [chromium] › __tests__/e2e/responsive-run-surfaces.e2e.test.ts:308:5 › run surfaces at 700px › keep default and advanced controls readable and within the viewport (771ms)
+
+  ✓  169 [chromium] › __tests__/e2e/responsive-run-surfaces.e2e.test.ts:308:5 › run surfaces at 1440px › keep default and advanced controls readable and within the viewport (780ms)
+
+  ✓  170 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:11:3 › persisted opening SSE cannot enable controls before a delayed snapshot then pending→ready (5.6s)
+
+  ✓  171 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:11:3 › persisted opening SSE cannot enable controls before a 500 snapshot then pending→ready (6.1s)
+
+  ✓  172 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:114:3 › simple: losing an accepted response retries the same durable Run (1.0s)
+
+  ✓  173 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:161:3 › simple: unknown admission survives reload, not-found and same-content retry (1.3s)
+
+  ✓  174 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:221:3 › simple: editing or token rotation while intent preparation waits cannot dispatch the captured payload (776ms)
+
+  ✓  175 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:279:3 › simple: expired plans require explicit refresh and another submit (915ms)
+
+  ✓  176 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:114:3 › advanced: losing an accepted response retries the same durable Run (1.0s)
+
+  ✓  177 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:161:3 › advanced: unknown admission survives reload, not-found and same-content retry (1.4s)
+
+  ✓  178 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:221:3 › advanced: editing or token rotation while intent preparation waits cannot dispatch the captured payload (860ms)
+
+  ✓  179 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:279:3 › advanced: expired plans require explicit refresh and another submit (947ms)
+
+  ✓  180 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:329:1 › sessionStorage write failure prevents dispatch instead of falling back to memory (715ms)
+
+  ✓  181 [chromium] › __tests__/e2e/run-admission-recovery.e2e.test.ts:355:1 › recovery-required sessions show their unready state in list and detail (681ms)
+
+  ✓  182 [chromium] › __tests__/e2e/run-tab-content.test.ts:4:3 › Run detail tab content › overview tab shows run header and basic info (316ms)
+
+  ✓  183 [chromium] › __tests__/e2e/run-tab-content.test.ts:14:3 › Run detail tab content › artifacts tab shows artifact list (308ms)
+
+  ✓  184 [chromium] › __tests__/e2e/run-tab-content.test.ts:27:3 › Run detail tab content › gates tab shows gate results (350ms)
+
+  ✓  185 [chromium] › __tests__/e2e/run-tab-content.test.ts:36:3 › Run detail tab content › audit tab shows audit events (307ms)
+
+  ✓  186 [chromium] › __tests__/e2e/run-tab-content.test.ts:47:3 › Run detail tab content › progress tab loads without errors (305ms)
+
+  ✓  187 [chromium] › __tests__/e2e/run-tab-content.test.ts:55:3 › Run detail tab content › run detail page shows error for non-existent run (247ms)
+
+  ✓  188 [chromium] › __tests__/e2e/session-acknowledge-ui.e2e.test.ts:12:1 › acknowledging a failed session clears its action badge and sinks it down (725ms)
+
+  ✓  189 [chromium] › __tests__/e2e/session-approval.test.ts:78:1 › inline approval: approve a pending human decision from the session UI (2.0s)
+
+  ✓  190 [chromium] › __tests__/e2e/session-composer-admission.e2e.test.ts:5:3 › Session Composer Admission & Single Submit › default Session composer synchronously blocks duplicate Run creation (1.1s)
+
+  ✓  191 [chromium] › __tests__/e2e/session-composer-admission.e2e.test.ts:62:3 › Session Composer Admission & Single Submit › releases submission latch on project.run failure and succeeds on subsequent retry (831ms)
+
+  ✓  192 [chromium] › __tests__/e2e/session-composer-admission.e2e.test.ts:134:3 › Session Composer Admission & Single Submit › renders retry button when plan digest is missing and recovers on retry (691ms)
+
+  ✓  193 [chromium] › __tests__/e2e/session-feed.test.ts:79:1 › Session Detail streams the event feed and reaches a live connection (4.6s)
+
+  ✓  194 [chromium] › __tests__/e2e/session-feed.test.ts:149:1 › Sessions list shows the started session and links to its detail (4.5s)
+
+  ✓  195 [chromium] › __tests__/e2e/session-routing.test.ts:8:1 › default route is the Session UI with a run plan; legacy Cockpit lives at /advanced (430ms)
+
+  ✓  196 [chromium] › __tests__/e2e/session-truncation-banner.test.ts:8:1 › Session view shows a dismissible truncation notice on replay-truncated (4.1s)
+
+  ✓  197 [chromium] › __tests__/e2e/shared-fixture-auth-lock.test.ts:8:1 › a deep-route launch authenticates from the injected token fragment when sessionStorage is empty (323ms)
+
+  ✓  198 [chromium] › __tests__/e2e/start-run-admission.e2e.test.ts:12:3 › Advanced Run Admission & Single Submit › empty demand initially keeps submit button disabled without warning, enables after filling (719ms)
+
+  ✓  199 [chromium] › __tests__/e2e/start-run-admission.e2e.test.ts:39:3 › Advanced Run Admission & Single Submit › single-submit: blocks duplicate concurrent submission via latch when double-clicked (1.6s)
+
+  ✓  200 [chromium] › __tests__/e2e/start-run-admission.e2e.test.ts:103:3 › Advanced Run Admission & Single Submit › mutation failure release: failed first attempt displays error and frees latch, subsequent attempt succeeds (842ms)
+
+  ✓  201 [chromium] › __tests__/e2e/start-run-admission.e2e.test.ts:173:3 › Advanced Run Admission & Single Submit › draft with unapproved plan keeps submit button disabled and shows unapproved plan warning (286ms)
+
+  ✓  202 [chromium] › __tests__/e2e/start-run-admission.e2e.test.ts:260:3 › Advanced Run Admission & Single Submit › mobile widths: keep run options in one column without overflow and use concise option labels (835ms)
+
+  ✓  203 [chromium] › __tests__/e2e/start-run-form.test.ts:7:1 › StartRunForm exposes keyboard disclosure, renders execution plan preview, and enforces unrestricted network acknowledgement (709ms)
+
+  ✓  204 [chromium] › __tests__/e2e/start-run-form.test.ts:130:1 › StartRunForm default workflow run submits with a matching plan digest (778ms)
+
+  ✓  205 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:13:1 › TopBar connection panel applies credentials explicitly and supports keyboard control (995ms)
+
+  ✓  206 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:71:1 › credential status resolves before a delayed provider probe (342ms)
+
+  ✓  207 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:125:1 › provider RPC failure does not downgrade valid credentials (265ms)
+
+  ✓  208 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:159:1 › token scope change hides old provider state before the new probe resolves (371ms)
+
+  ✓  209 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:243:1 › provider expiry triggers one refresh, preserves prior check time on error, and explicitly retries (407ms)
+
+  ✓  210 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:308:3 › real AuthProvider A→B→A fences late success and completes each current query (637ms)
+
+  ✓  211 [chromium] › __tests__/e2e/topbar-connection.e2e.test.ts:308:3 › real AuthProvider A→B→A fences late error and completes each current query (646ms)
+
+  211 passed (5.6m)

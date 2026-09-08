@@ -18,6 +18,7 @@ playwright-report/
 
 # 日志
 *.log
+!docs/reviews/evidence/**/logs/*.log
 
 # Python（如有跨语言依赖）
 __pycache__/
