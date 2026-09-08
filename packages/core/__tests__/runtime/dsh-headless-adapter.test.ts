@@ -401,7 +401,11 @@ describe('dsh-headless adapter', () => {
       artifactStore,
       requiredArtifactTypes: ['code-changes'],
     });
-    expect(result).toMatchObject({ provider: 'dsh-headless', exitCode: 1 });
+    expect(result).toMatchObject({
+      provider: 'dsh-headless',
+      exitCode: 1,
+      diagnostic: { code: 'artifact-manifest-missing' },
+    });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
     ).toHaveLength(0);

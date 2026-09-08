@@ -1,0 +1,106 @@
+
+ RUN  v3.2.6 /Users/zesming/Projects/tekon
+
+ ❯ |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts (60 tests | 2 failed) 535ms
+   ✓ claude code adapter > builds permission-aware commands without bypassPermissions by default 1ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode","bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-mode=bypassPermissions"],"message":"permission mode is controlled by Tekon"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionMode=acceptEdits"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--mode=bypassPermissions"],"message":"bypass permissions mode is not allowed"} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowedTools=Bash(npm test)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowed-tools=Bash(npm test)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowedTools=Bash(git push)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--disallowed-tools=Bash(git push)"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settings"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settings={\"permissions\":{\"allow\":[]}}"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--setting-sources=user"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settingSources"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--settingSources=user"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPrompt=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permission-prompt-tool=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--permissionPromptTool=none"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--tools"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--tools=Bash"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--add-dir"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--add-dir=/tmp/other"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--addDir"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--addDir=/tmp/other"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--agents"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--agents={}"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerously-skip-permissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--dangerouslySkipPermissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allowDangerouslySkipPermissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--allow-dangerously-skip-permissions=true"]} 0ms
+   ✓ claude code adapter > rejects unsafe user Claude args {"args":["--"]} 0ms
+   ✓ claude code adapter > keeps ordinary model and output arguments compatible 0ms
+   ✓ claude code adapter > emits generated Claude permissions while keeping an arg prompt last 0ms
+   ✓ claude code adapter > serializes human approval separately as Claude permissions.ask 0ms
+   ✓ claude code adapter > does not synthesize Bash grants when no command policy is provided 0ms
+   ✓ claude code adapter > passes the command policy to Claude permission compilation before spawn 0ms
+   ✓ claude code adapter > streams large stdout/stderr without deadlock and reports timeout 106ms
+   ✓ claude code adapter > passes prompts through stdin when promptMode is stdin 45ms
+   ✓ claude code adapter > does not spawn a Claude command when its abort signal is already set 1ms
+   ✓ claude code adapter > terminates a running Claude subprocess when its abort signal fires 99ms
+   ✓ claude code adapter > passes progress and no-progress timeouts to the command gateway 0ms
+   ✓ claude code adapter > ingests provider artifact manifests with accepted JSON padding "" 55ms
+   × claude code adapter > ingests provider artifact manifests with accepted JSON padding "﻿" 49ms
+     → expected { provider: 'claude-code', …(5) } to match object { provider: 'claude-code', …(2) }
+(8 matching properties omitted from actual)
+   × claude code adapter > ingests provider artifact manifests with accepted JSON padding " " 46ms
+     → expected { provider: 'claude-code', …(5) } to match object { provider: 'claude-code', …(2) }
+(8 matching properties omitted from actual)
+   ✓ claude code adapter > fails real provider runs when required artifact manifests are missing or invalid 84ms
+   ✓ claude code adapter > surfaces invalid artifact JSON from a real subprocess without model content 46ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > ingests provider artifact manifests with accepted JSON padding "﻿"
+ FAIL  |@tekon/core| __tests__/runtime/claude-code-adapter.test.ts > claude code adapter > ingests provider artifact manifests with accepted JSON padding " "
+AssertionError: expected { provider: 'claude-code', …(5) } to match object { provider: 'claude-code', …(2) }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "artifacts": [
+-     ObjectContaining {
+-       "type": "code-changes",
+-     },
+-   ],
+-   "exitCode": 0,
++   "exitCode": 1,
+    "provider": "claude-code",
+  }
+
+ ❯ __tests__/runtime/claude-code-adapter.test.ts:526:20
+    524|     });
+    525| 
+    526|     expect(result).toMatchObject({
+       |                    ^
+    527|       provider: 'claude-code',
+    528|       exitCode: 0,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 58 passed (60)
+   Start at  14:38:41
+   Duration  1.03s (transform 231ms, setup 0ms, collect 354ms, tests 535ms, environment 0ms, prepare 26ms)
+

@@ -297,6 +297,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',
       '- Structured JSON artifacts must include non-empty title and body fields.',
+      '- Use JSON serialization with correct escaping for structured artifacts and self-check the final JSON before submitting.',
       ...(input.requiredArtifactTypes.some(
         (type) => type === 'demand-card' || type === 'prd',
       )

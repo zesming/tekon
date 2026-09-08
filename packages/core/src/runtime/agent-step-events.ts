@@ -5,6 +5,7 @@ import type {
   AgentRunInput,
   AgentRunResult,
 } from './agent-adapter.js';
+import { sanitizeAgentRunDiagnostic } from './agent-adapter.js';
 import type { Role } from '../types/domain.js';
 import { redactSecrets } from '../security/secrets.js';
 
@@ -39,7 +40,9 @@ export interface StepEventMeta {
 function summarize(text: string | undefined, max = 500): string | undefined {
   if (!text) return undefined;
   const oneLine = redactSecrets(text.replace(/\s+/g, ' ').trim()).content;
-  return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
+  return oneLine.length > max
+    ? `${oneLine.slice(0, Math.max(0, max - 1))}…`
+    : oneLine;
 }
 
 /**
@@ -104,9 +107,7 @@ export async function runAgentWithStepEvents(
       stepId,
       nodeId: meta.nodeId,
       role: meta.role,
-      error: redactSecrets(
-        error instanceof Error ? error.message : String(error),
-      ).content,
+      error: summarize(error instanceof Error ? error.message : String(error)),
     });
     await emit('step/end', {
       stepId,
@@ -131,12 +132,20 @@ export async function runAgentWithStepEvents(
 
   // Failure path: timed out or non-zero exit → agent/error + step/end{failed}.
   if (result.timedOut || (result.exitCode != null && result.exitCode !== 0)) {
+    const diagnostic = sanitizeAgentRunDiagnostic(result.diagnostic);
     await emit('agent/error', {
       stepId,
       nodeId: meta.nodeId,
       role: meta.role,
       exitCode: result.exitCode,
       timedOut: result.timedOut ?? false,
+      ...(diagnostic
+        ? {
+            message: diagnostic.message,
+            error: diagnostic.message,
+            diagnostic,
+          }
+        : {}),
     });
     await emit('step/end', {
       stepId,

@@ -1,0 +1,58 @@
+{
+  "date": "2026-09-08",
+  "version": "0.26.1",
+  "branch": "codex/release-followup-20260908",
+  "baseCommit": "176b86f2008a5945c158fdb35a8709a0e9391a56",
+  "originalAuditSourceCommit": "110f3152fb2a8a41abf5e39eefd60407f1d60c61",
+  "root": {
+    "files": 194,
+    "passed": 2247,
+    "skipped": 1,
+    "skipReason": "DSH_CLI_PATH live probe not configured"
+  },
+  "cliE2e": {
+    "files": 9,
+    "passed": 33
+  },
+  "build": "passed",
+  "typecheck": "passed",
+  "lint": "passed",
+  "diagnosticsInitialGreen": {
+    "files": 7,
+    "passed": 222
+  },
+  "paddingRegression": {
+    "redFailed": 2,
+    "redPassed": 58,
+    "greenPassed": 60
+  },
+  "sourceFiles": 530,
+  "sourceChangesSinceOriginal": 19,
+  "sourceManifestSha256": "96fd0c6e98bfdeed3cc412fda325ae666573f1317060313cbb02a0094ca91869",
+  "independentReview": {
+    "mustFixRemaining": 0,
+    "fixedFinding": "JSON pre-parser now uses the same trimmed content accepted by the existing schema parser"
+  },
+  "limitations": [
+    "No new real Codex, DSH or Anthropic model acceptance",
+    "Original Claude CLI live run and Chromium evidence retain their original source snapshot",
+    "Historical conflicting worktree leases are not automatically reconciled",
+    "No new OS or provider-internal strong isolation guarantee"
+  ],
+  "docsLayout": {
+    "htmlFiles": 5,
+    "viewports": [
+      320,
+      390,
+      1440
+    ],
+    "checks": 15,
+    "pageOverflowFailures": 0,
+    "brokenAnchorFailures": 0,
+    "visualReview": [
+      "risks-390.png",
+      "risks-1440.png"
+    ],
+    "tableOverflow": "intentional container horizontal scrolling on narrow viewports"
+  }
+}

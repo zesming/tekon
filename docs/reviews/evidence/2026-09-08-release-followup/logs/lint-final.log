@@ -1,0 +1,11 @@
+
+> tekon@0.26.1 lint /Users/zesming/Projects/tekon
+> pnpm -r lint
+
+Scope: 3 of 4 workspace projects
+packages/core lint$ tsc -p tsconfig.json --noEmit
+packages/core lint: Done
+packages/cli lint$ tsc -p tsconfig.json --noEmit
+packages/web lint$ tsc -p tsconfig.json --noEmit
+packages/cli lint: Done
+packages/web lint: Done

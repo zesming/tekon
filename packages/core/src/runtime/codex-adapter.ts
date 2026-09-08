@@ -14,6 +14,8 @@ import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
+  artifactDiagnosticFromError,
+  createMissingRequiredArtifactsDiagnostic,
   ingestAgentManifestArtifacts,
   missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
@@ -132,7 +134,8 @@ export function createCodexAdapter(
             manifestPath,
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
-        } catch {
+        } catch (error) {
+          const diagnostic = artifactDiagnosticFromError(error);
           artifactIngestionFailed = true;
           if (result.timedOut) {
             return {
@@ -141,6 +144,7 @@ export function createCodexAdapter(
               durationMs: result.durationMs,
               outputFiles: [result.stdoutPath, result.stderrPath],
               timedOut: result.timedOut,
+              ...(diagnostic ? { diagnostic } : {}),
             };
           }
           return {
@@ -149,6 +153,7 @@ export function createCodexAdapter(
             durationMs: result.durationMs,
             outputFiles: [result.stdoutPath, result.stderrPath],
             timedOut: result.timedOut,
+            ...(diagnostic ? { diagnostic } : {}),
           };
         }
       }
@@ -157,6 +162,11 @@ export function createCodexAdapter(
         requiredArtifactTypes,
         artifacts,
       );
+      const missingRequiredDiagnostic =
+        createMissingRequiredArtifactsDiagnostic({
+          required: requiredArtifactTypes,
+          artifacts,
+        });
       const hasCompleteRequiredArtifacts =
         requiredArtifactTypes.length > 0 && missingRequiredTypes.length === 0;
       if (
@@ -190,6 +200,9 @@ export function createCodexAdapter(
           ],
           artifacts,
           timedOut: result.timedOut,
+          ...(missingRequiredDiagnostic
+            ? { diagnostic: missingRequiredDiagnostic }
+            : {}),
         };
       }
 
@@ -204,6 +217,9 @@ export function createCodexAdapter(
         ],
         artifacts,
         timedOut: result.timedOut,
+        ...(missingRequiredDiagnostic
+          ? { diagnostic: missingRequiredDiagnostic }
+          : {}),
       };
     },
   };

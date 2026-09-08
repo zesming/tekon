@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Tekon 用户手册：从发起需求到检查、审批、交付与恢复。">
-<meta name="source-sha256" content="71d758beea9d587ddca9823e858db6642e8740a648188e91b79ba3b5d41203ac">
+<meta name="source-sha256" content="41f6c5502bc686f4cb39d7cbdf662afed1ac23ae9db43fb6d0fdf3974e0f2549">
 <title>天工 Tekon · 用户手册</title>
 <style>:root{color-scheme:light;--ink:#192b35;--muted:#566971;--line:#e1e8e7;--accent:#116b59;--soft:#eef6f3;--paper:#fff;--page:#f8faf9;--sidebar:246px;--header:68px;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 *{box-sizing:border-box}html{scroll-padding-top:94px}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.8 var(--sans);-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:4px}a:hover{color:#064c3d}button{font:inherit;cursor:pointer}button,a{-webkit-tap-highlight-color:transparent}button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex="0"]:focus-visible{outline:3px solid #358cba;outline-offset:4px}h1:focus,h2:focus,h3:focus,main:focus{outline:none}[hidden]{display:none!important}::selection{background:#cae9df}strong{font-weight:650}.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.skip-link{position:fixed;left:18px;top:-80px;z-index:30;background:var(--ink);color:#fff;padding:10px 18px;border-radius:6px}.skip-link:focus{top:10px;color:#fff}
@@ -25,7 +25,7 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 <a class="skip-link" href="#main">跳到正文</a>
 <header class="site-header">
 <a class="brand" href="#1-天工是什么" aria-label="Tekon 手册首页"><span class="brand-mark" aria-hidden="true">T</span><strong>Tekon</strong><span class="brand-divider">/</span><span class="brand-label">用户手册</span></a>
-<div class="header-actions"><span class="version">v0.26.0</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
+<div class="header-actions"><span class="version">v0.26.1</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
 </header>
 <nav id="sidebar" class="sidebar" aria-label="手册章节">
 <p class="nav-heading">使用指南 <span>12 章</span></p>
@@ -45,7 +45,7 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 </nav>
 <main id="main" tabindex="-1">
 <div class="doc-heading"><p class="eyebrow">DOCUMENTATION <span>·</span> 使用与参考</p><h1 id="天工tekon用户使用手册" tabindex="-1">天工（Tekon）用户使用手册</h1>
-<p>适用版本：<strong>v0.26.0</strong>（当前版本以根 <code>package.json</code> 为准）。固定入口：<a href="../README.md">文档总索引</a> · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a>。在目标项目根目录执行示例命令；跨仓库操作时追加 <code>--repo /path/to/project</code>。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。</p>
+<p>适用版本：<strong>v0.26.1</strong>（当前版本以根 <code>package.json</code> 为准）。固定入口：<a href="../README.md">文档总索引</a> · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a>。在目标项目根目录执行示例命令；跨仓库操作时追加 <code>--repo /path/to/project</code>。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。</p>
 </div>
 <section class="chapter" id="p0" aria-labelledby="1-天工是什么"><div class="chapter-layout"><article class="prose"><h2 id="1-天工是什么" tabindex="-1">1. 天工是什么</h2>
 <p>天工（Tekon）是本地 Agent workflow 框架。它把研发需求拆成角色任务，在隔离 worktree 中执行，运行验证关卡（Gate），并集中保存产物、日志、审批和交付证据。</p>
@@ -506,6 +506,8 @@ tekon resume --run-id &lt;runId&gt;
 <p>历史无 Job 记录时用字面 <code>none</code>。缺失或过期身份会被拒绝，须刷新后重新核对。人工确认不是 OS 退出检测，受管理退出证据也不覆盖逃逸进程。</p>
 <p>租约过期的已认领任务会转为 <code>interrupted</code>，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；<code>passed</code>、<code>failed</code>、<code>cancelled</code> 终态不可恢复。</p>
 <p>CLI 的 <code>run</code> / <code>resume</code> 在后台 Job 失败、中断或取消时返回非零退出码，并显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。</p>
+<p>历史租约冲突不会因 <code>--confirm-stopped</code> 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 <code>tekon cancel --run-id &lt;runId&gt;</code> 终结；取消不会修复或清理租约，原 Run 随后不可恢复。</p>
+<p>审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。</p>
 <p>审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。</p>
 <h3 id="611-approval-reject" tabindex="-1">6.11 <code>approval reject</code></h3>
 <pre><code class="language-bash">tekon approval reject --note "证据不足，需要补充风险说明"
@@ -602,7 +604,7 @@ tekon help workflow
 tekon --version
 </code></pre>
 <p><code>tekon</code>、<code>tekon --help</code>、<code>tekon -h</code> 显示命令概览；<code>tekon help &lt;command&gt;</code> 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。</p>
-<p><code>tekon --version</code> 或 <code>tekon -v</code> 输出版本号，本版为 <code>v0.26.0</code>。</p>
+<p><code>tekon --version</code> 或 <code>tekon -v</code> 输出版本号，本版为 <code>v0.26.1</code>。</p>
 <nav class="page-turn" aria-label="章节翻页"><a href="#5-核心概念"><small>上一章</small>核心概念 <span aria-hidden="true">←</span></a><a href="#7-web-dashboard"><small>下一章</small>Web Dashboard <span aria-hidden="true">→</span></a></nav></article><aside class="section-toc" aria-label="本章目录"><details open><summary>本章内容</summary><nav><a href="#61-init">6.1 <code>init</code></a><a href="#62-workflow-preflight">6.2 <code>workflow preflight</code></a><a href="#63-workflow-select">6.3 <code>workflow select</code></a><a href="#64-draft-shape">6.4 <code>draft shape</code></a><a href="#65-draft-approve">6.5 <code>draft approve</code></a><a href="#651-draft-plan--draft-plan-approve可选计划审批">6.5.1 <code>draft plan</code> / <code>draft plan-approve</code>（可选计划审批）</a><a href="#66-run">6.6 <code>run</code></a><a href="#67-status">6.7 <code>status</code></a><a href="#68-approval-summary">6.8 <code>approval summary</code></a><a href="#69-eval-approval-summary">6.9 <code>eval approval-summary</code></a><a href="#610-resume---approve-human">6.10 <code>resume --approve-human</code></a><a href="#611-approval-reject">6.11 <code>approval reject</code></a><a href="#612-review">6.12 <code>review</code></a><a href="#613-delivery-dry-run">6.13 <code>delivery dry-run</code></a><a href="#614-delivery-prepare">6.14 <code>delivery prepare</code></a><a href="#615-delivery-create-pr">6.15 <code>delivery create-pr</code></a><a href="#616-delivery-ci-status">6.16 <code>delivery ci-status</code></a><a href="#617-delivery-ci-watch">6.17 <code>delivery ci-watch</code></a><a href="#618-eval-readiness">6.18 <code>eval readiness</code></a><a href="#619-eval-work-usability">6.19 <code>eval work-usability</code></a><a href="#620-ui">6.20 <code>ui</code></a><a href="#621-update">6.21 <code>update</code></a><a href="#622-draft">6.22 <code>draft</code></a><a href="#623-clean当前暂停">6.23 <code>clean</code>（当前暂停）</a><a href="#624-help">6.24 <code>help</code></a></nav></details></aside></div></section><section class="chapter" id="p6" aria-labelledby="7-web-dashboard"><div class="chapter-layout"><article class="prose"><h2 id="7-web-dashboard" tabindex="-1">7. Web Dashboard</h2>
 <p><code>tekon ui</code> 启动本地界面，打开带 <code>#token=</code> 的完整 URL。令牌丢失时可从 <code>.tekon/web-session.json</code> 读取并填入顶栏连接面板；不要提交或共享令牌。</p>
 <p>默认 <strong>Session UI</strong> 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。旧 Run Dashboard 保留在侧栏 <strong>高级 Advanced</strong>（<code>/advanced</code>），用于查看 overview、历史 Run、diff、日志、PR 包和交付操作。</p>
@@ -743,7 +745,8 @@ tekon --version
 <h3 id="96-ci-status-查询失败" tabindex="-1">9.6 <code>ci-status</code> 查询失败</h3>
 <p>确认 Run 有 PR URL、<code>gh pr checks</code> 可用且权限足够；必要时用 <code>--selector "&lt;PR URL 或分支&gt;"</code> 指定。远端可能尚无 checks；非 GitHub host 仍需相应 adapter 支持。</p>
 <h3 id="97-artifact-被拒绝入库" tabindex="-1">9.7 Artifact 被拒绝入库</h3>
-<p>产物可能命中密钥或 token 模式。移除凭证，改用脱敏摘要，再按原运行的合法恢复路径补产物；终态失败 Run 不能直接 resume。基础扫描不等于完整 DLP。</p>
+<p>先查看 <code>tekon log --run-id &lt;runId&gt;</code> 中的节点失败原因和本次产物目录。常见原因是 manifest 缺失、声明文件不存在、JSON 未正确转义、schema 字段/类型不符或缺少必需产物；子进程退出 0 也不代表产物已通过导入。使用 JSON 序列化生成结构化内容，不把命令字符串填入枚举字段；按诊断修正生成方式，再通过原 Run 的合法恢复路径重试，不能跳过 schema 或把失败标记改成通过。</p>
+<p>产物也可能命中密钥或 token 模式。移除凭证，改用脱敏摘要；终态失败 Run 不能直接 resume。基础扫描不等于完整 DLP，诊断摘要也不能替代对原文件的本地检查。</p>
 <h3 id="98-web-写操作被拒绝" tabindex="-1">9.8 Web 写操作被拒绝</h3>
 <p>核对会话令牌、<code>.tekon/web-session.json</code> 和目标项目范围。令牌文件缺失可重新 <code>init</code>，再用 <code>tekon ui --repo /path/to/project</code> 启动并打开完整 URL。手动启动 Web 时检查 <code>TEKON_PROJECT_ROOT</code>。</p>
 <h3 id="99-codex-provider-运行失败" tabindex="-1">9.9 Codex provider 运行失败</h3>

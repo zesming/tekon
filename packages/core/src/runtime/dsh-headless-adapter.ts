@@ -13,8 +13,9 @@ import type { CommandGateway } from './command-gateway.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
+  artifactDiagnosticFromError,
+  createMissingRequiredArtifactsDiagnostic,
   ingestAgentManifestArtifacts,
-  missingRequiredArtifactTypes,
 } from './manifest-artifacts.js';
 import { runDshPreflight } from './dsh-bridge-probe.js';
 
@@ -305,7 +306,7 @@ export function createDshHeadlessAdapter(
       let artifactOutputFiles: string[] = [];
       // dsh cannot write outputDir (outside its workspace sandbox, no add-dir),
       // so a manifest is normally absent. We still attempt ingestion (harmless
-      // when none exists) and let missingRequiredArtifactTypes turn any missing
+      // when none exists) and let the required-artifact diagnostic turn any missing
       // required output into a clean failure rather than a false pass — the
       // honest goal-only boundary (design §4.4 S3). Ingestion only reads under
       // outputDir/manifestPath, so it never picks up files the agent wrote
@@ -317,22 +318,24 @@ export function createDshHeadlessAdapter(
             manifestPath,
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
-        } catch {
+        } catch (error) {
+          const diagnostic = artifactDiagnosticFromError(error);
           return {
             provider: 'dsh-headless',
             exitCode: 1,
             durationMs: result.durationMs,
             outputFiles: [result.stdoutPath, result.stderrPath],
             timedOut: result.timedOut,
+            ...(diagnostic ? { diagnostic } : {}),
           };
         }
       }
 
-      if (
-        result.exitCode === 0 &&
-        missingRequiredArtifactTypes(input.requiredArtifactTypes, artifacts)
-          .length > 0
-      ) {
+      const diagnostic = createMissingRequiredArtifactsDiagnostic({
+        required: input.requiredArtifactTypes,
+        artifacts,
+      });
+      if (result.exitCode === 0 && diagnostic) {
         return {
           provider: 'dsh-headless',
           exitCode: 1,
@@ -344,6 +347,7 @@ export function createDshHeadlessAdapter(
           ],
           artifacts,
           timedOut: result.timedOut,
+          diagnostic,
         };
       }
 

@@ -4,7 +4,11 @@ import type { ArtifactStore } from '../artifact/store.js';
 import type { ArtifactType, WorkflowInstance } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
-import type { AgentRunInput, AgentRunResult } from '../runtime/agent-adapter.js';
+import {
+  formatAgentRunDiagnostic,
+  type AgentRunInput,
+  type AgentRunResult,
+} from '../runtime/agent-adapter.js';
 import type { WorktreeLease } from '../types/config.js';
 import type { WorktreeManager } from '../runtime/worktree-manager.js';
 import {
@@ -268,10 +272,11 @@ export function assertSuccessfulAgentRun(result: AgentRunResult): void {
   }
 
   if (result.exitCode !== 0) {
+    const diagnostic = formatAgentRunDiagnostic(result.diagnostic);
     throw new Error(
-      `agent failed: provider=${result.provider} exitCode=${String(
-        result.exitCode,
-      )}`,
+      `agent failed: provider=${result.provider} exitCode=${String(result.exitCode)}${
+        diagnostic ? ` reason=${diagnostic}` : ''
+      }`,
     );
   }
 }

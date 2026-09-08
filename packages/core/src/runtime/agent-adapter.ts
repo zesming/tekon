@@ -1,4 +1,5 @@
 import type { ArtifactStore } from '../artifact/store.js';
+import { redactSecrets } from '../security/secrets.js';
 import type {
   AgentAdapterConfig,
   CommandPolicy,
@@ -12,6 +13,7 @@ import type {
   NodeStatus,
   Role,
 } from '../types/domain.js';
+import { artifactTypeSchema } from '../types/domain.js';
 
 export interface RoleConfig {
   role: Role;
@@ -44,6 +46,92 @@ export interface AgentRunInput {
   signal?: AbortSignal;
 }
 
+/**
+ * A bounded, redaction-safe reason for a provider run that reached the
+ * adapter boundary but cannot be accepted as successful.  Keep the
+ * structured fields small and stable: durable events and node interruption
+ * audits must explain the failure without persisting provider output.
+ */
+export type AgentRunDiagnosticCode =
+  | 'artifact-manifest-missing'
+  | 'artifact-manifest-invalid-json'
+  | 'artifact-manifest-schema-invalid'
+  | 'artifact-manifest-invalid-path'
+  | 'artifact-manifest-unreadable'
+  | 'artifact-file-missing'
+  | 'artifact-file-invalid-json'
+  | 'artifact-file-schema-invalid'
+  | 'artifact-file-invalid-path'
+  | 'artifact-file-unreadable'
+  | 'required-artifacts-missing';
+
+export interface AgentRunDiagnostic {
+  code: AgentRunDiagnosticCode;
+  message: string;
+  artifactType?: ArtifactType;
+  /** Display-safe relative artifact or manifest path. */
+  path?: string;
+  /** Display-safe schema field path, when a schema issue identifies one. */
+  field?: string;
+}
+
+const MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS = 500;
+const MAX_AGENT_DIAGNOSTIC_FIELD_CHARS = 160;
+const AGENT_RUN_DIAGNOSTIC_CODES = new Set<AgentRunDiagnosticCode>([
+  'artifact-manifest-missing',
+  'artifact-manifest-invalid-json',
+  'artifact-manifest-schema-invalid',
+  'artifact-manifest-invalid-path',
+  'artifact-manifest-unreadable',
+  'artifact-file-missing',
+  'artifact-file-invalid-json',
+  'artifact-file-schema-invalid',
+  'artifact-file-invalid-path',
+  'artifact-file-unreadable',
+  'required-artifacts-missing',
+]);
+
+/** Keep custom adapter diagnostics safe before they enter durable events. */
+export function sanitizeAgentRunDiagnostic(
+  diagnostic: AgentRunDiagnostic | undefined,
+): AgentRunDiagnostic | undefined {
+  if (!diagnostic) return undefined;
+  const code = AGENT_RUN_DIAGNOSTIC_CODES.has(diagnostic.code)
+    ? diagnostic.code
+    : 'artifact-file-unreadable';
+  const artifactType = artifactTypeSchema.safeParse(diagnostic.artifactType);
+  return {
+    code,
+    message: boundRedactedText(
+      diagnostic.message,
+      MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS,
+    ),
+    ...(artifactType.success ? { artifactType: artifactType.data } : {}),
+    ...(diagnostic.path
+      ? { path: boundRedactedText(diagnostic.path) }
+      : {}),
+    ...(diagnostic.field
+      ? { field: boundRedactedText(diagnostic.field) }
+      : {}),
+  };
+}
+
+export function formatAgentRunDiagnostic(
+  diagnostic: AgentRunDiagnostic | undefined,
+): string | undefined {
+  return sanitizeAgentRunDiagnostic(diagnostic)?.message;
+}
+
+function boundRedactedText(
+  value: string,
+  max = MAX_AGENT_DIAGNOSTIC_FIELD_CHARS,
+): string {
+  const redacted = redactSecrets(String(value)).content;
+  return redacted.length > max
+    ? `${redacted.slice(0, Math.max(0, max - 1))}…`
+    : redacted;
+}
+
 export interface AgentRunResult {
   provider: 'mock' | 'claude-code' | 'codex' | 'dsh-headless' | 'custom';
   exitCode: number | null;
@@ -55,6 +143,8 @@ export interface AgentRunResult {
   timedOut?: boolean;
   /** adapter 因 signal abort 提前返回时置 true（exitCode 为 null）。 */
   cancelled?: boolean;
+  /** Structured, redaction-safe reason for an adapter-level failure. */
+  diagnostic?: AgentRunDiagnostic;
   tokenUsage?: {
     inputTokens?: number;
     outputTokens?: number;

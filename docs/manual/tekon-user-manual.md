@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.26.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.26.1**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -501,6 +501,8 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 CLI 的 `run` / `resume` 在后台 Job 失败、中断或取消时返回非零退出码，并显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
 
+历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
+
 审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。
 
 ### 6.11 `approval reject`
@@ -671,7 +673,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.1`。
 
 ## 7. Web Dashboard
 
@@ -802,7 +804,9 @@ When normal service shutdown interrupts build/test checks, completed Agent or re
 
 ### 9.7 Artifact 被拒绝入库
 
-产物可能命中密钥或 token 模式。移除凭证，改用脱敏摘要，再按原运行的合法恢复路径补产物；终态失败 Run 不能直接 resume。基础扫描不等于完整 DLP。
+先查看 `tekon log --run-id <runId>` 中的节点失败原因和本次产物目录。常见原因是 manifest 缺失、声明文件不存在、JSON 未正确转义、schema 字段/类型不符或缺少必需产物；子进程退出 0 也不代表产物已通过导入。使用 JSON 序列化生成结构化内容，不把命令字符串填入枚举字段；按诊断修正生成方式，再通过原 Run 的合法恢复路径重试，不能跳过 schema 或把失败标记改成通过。
+
+产物也可能命中密钥或 token 模式。移除凭证，改用脱敏摘要；终态失败 Run 不能直接 resume。基础扫描不等于完整 DLP，诊断摘要也不能替代对原文件的本地检查。
 
 ### 9.8 Web 写操作被拒绝
 

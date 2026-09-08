@@ -123,6 +123,27 @@ describe('assertSuccessfulAgentRun', () => {
     expect(() => assertSuccessfulAgentRun(result)).toThrow(/provider=mock/);
     expect(() => assertSuccessfulAgentRun(result)).toThrow(/exitCode=2/);
   });
+
+  it('includes a structured artifact diagnostic in failure error', () => {
+    const result: AgentRunResult = {
+      provider: 'claude-code',
+      exitCode: 1,
+      durationMs: 100,
+      outputFiles: [],
+      timedOut: false,
+      diagnostic: {
+        code: 'artifact-file-schema-invalid',
+        artifactType: 'demand-card',
+        path: 'demand-card.json',
+        field: 'acceptanceCriteria',
+        message:
+          'artifact schema invalid: type=demand-card file=demand-card.json field=acceptanceCriteria',
+      },
+    };
+    expect(() => assertSuccessfulAgentRun(result)).toThrow(
+      /artifact schema invalid.*acceptanceCriteria/u,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

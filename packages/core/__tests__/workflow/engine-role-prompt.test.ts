@@ -681,6 +681,9 @@ describe('workflow engine role prompt integration', () => {
       'Structured JSON artifacts must include non-empty title and body fields.',
     );
     expect(prompts[0]).toContain(
+      'Use JSON serialization with correct escaping for structured artifacts and self-check the final JSON before submitting.',
+    );
+    expect(prompts[0]).toContain(
       'Write the artifact manifest file to',
     );
     expect(prompts[0]).toContain(
@@ -1242,6 +1245,13 @@ describe('workflow engine role prompt integration', () => {
             durationMs: 1,
             outputFiles: [],
             timedOut: false,
+            diagnostic: {
+              code: 'artifact-file-invalid-json',
+              artifactType: 'code-changes',
+              path: 'code-changes.json',
+              message:
+                'artifact invalid JSON: type=code-changes file=code-changes.json line=3 column=793',
+            },
           };
         },
       },
@@ -1269,6 +1279,12 @@ describe('workflow engine role prompt integration', () => {
           }),
         }),
       ]),
+    );
+    const interrupted = (await repositories.listAuditEvents(result.runId)).find(
+      (event) => event.type === 'node.interrupted',
+    );
+    expect(interrupted?.payload.error).toContain(
+      'artifact invalid JSON: type=code-changes file=code-changes.json',
     );
     db.close();
   });
