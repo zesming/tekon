@@ -104,7 +104,7 @@
 - 现象：`init` 无条件写 `defaultAgent: codex`，不探测本机环境。本机未安装 Codex 时 run 立刻 interrupted。适配器固定传 `--profile internal --sandbox workspace-write --ask-for-approval on-request`（探针抓到的实际参数相同），OPENAI_API_KEY、CODEX_HOME、USER 被环境过滤丢掉（stub 复现）。`tekon provider preflight codex` 输出“暂不支持对 Provider 'codex' 进行预检，当前仅支持 dsh-headless”。首页绿灯“凭据有效（dsh-headless不可用）”只反映 token 和一个默认关闭的实验 provider。`--agent claude-code` 1 秒内 interrupted，阻断根因见 CD-01。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（README:17、手册:282、821 写明 internal profile 和 Codex 前提）。实现缺陷有两点：没有 profile 配置入口（`agent-runtime.ts:19-27` 的 overrides 里没有），没有预检。README:27 写明默认 Codex“尚缺本轮真实全链路证据”，默认项恰是验证最少的一项。未验证：Codex 只在未安装的环境测过，已安装且配好 profile 时能否跑通没有结论。
 - 影响：本机没有 Codex 或 internal profile 的新用户，按默认路径第一次就可能失败，失败原因又被 CD-02 遮住。
-- 修复建议：`init` 探测 claude、codex，写入可用项。新增 `tekon doctor`，合并 provider 预检和 workflow preflight，覆盖全部 provider。经用户确认（2026-11-06）：API key 和订阅登录都要支持，所以预检两种认证都要覆盖。run 前 fail-fast。默认不传 profile，由用户在配置里显式指定；适配器现在拒绝 `--profile`、`-c/--config` 这类用户参数（`codex-adapter.ts:360-431`），要由适配器翻译配置字段，并放开相应校验。Codex 的认证变量同样要透传（见 CD-01 现象）。
+- 修复建议：`init` 探测 claude、codex，写入可用项。新增 `tekon doctor`，合并 provider 预检和 workflow preflight，覆盖全部 provider。经用户确认（2026-11-06）：API key 和订阅登录都要能用，并由各 agent 自己管理，所以预检两种情况都要覆盖，只检测和提示，不增加认证配置。run 前 fail-fast。默认不传 profile，由用户在配置里显式指定；适配器现在拒绝 `--profile`、`-c/--config` 这类用户参数（`codex-adapter.ts:360-431`），要由适配器翻译配置字段，并放开相应校验。Codex 的认证变量同样要透传（见 CD-01 现象）。
 
 ### [PD-04] 校验命令被硬编码白名单拒绝，preflight 却报 resolved
 - 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认（合并 CD-07），另排（重构第 2 阶段）
@@ -160,7 +160,7 @@
 - 现象：role schema、适配器 config、runtime overrides、CLI run 选项、rpc-contract 都没有 model、effort 字段。`--model` 只出现在适配器测试里，经 `config.args` 传入，用户入口没有暴露。一次 run 只有一个 adapter，`run_provider_configs` 以 run_id 为主键，provider 按 run 固定。提示词能通过 `.tekon/roles/<role>/` 覆盖。tools 只进 prompt：`compileRoleToolPolicy` 在生产代码里只被 prompt-builder 调用且只取 `.promptSummary`，`runtime-policy.ts` 只有测试使用，`agent.yaml` 的 injectMode 从未被读取。Claude 的工具许可固定，没有扩展入口，make、python、cargo 这类命令要靠宿主权限配置批准，未获准时可能失败或等待超时。`role create` 只接受 5 个内置 ID，不能取新名字。`role list` 有 goal，`role show goal` 却报无效。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（范围文档:36、docs/README.md:21、手册:649 写明工具只是提示；model、effort 文档未提）。工具配置只是提示，不是隔离边界，文档已披露。帮助文案称“从内置角色复制创建自定义角色”，与实际不符。
 - 影响：目标基准③基本不成立，同一工作流做不到不同角色用不同模型，配置了工具也没有效果。
-- 修复建议：`agent.yaml` 增加 driver、model、effort、tools、permission，写入每节点计划快照，由各适配器翻译成 harness 参数。`config.args` 路径可复用的只有 model；Codex 拒绝 `-c/--config`、`--profile`，Claude 拒绝 `--tools`、`--allowedTools`、`--settings`、`--agents`（`claude-code-adapter.ts:183-230`），所以这些字段要由适配器翻译，并调整校验。经用户确认（2026-11-06）：会使用各种模型，字段不绑定 Claude、Codex。角色文件格式在重构第 5 阶段再改成 Markdown。tools 编译到每节点 provider 参数后删掉“提示文本”路径和没有读取方的字段。角色名放开与 PD-06 同一改动。修复 `role show goal`。
+- 修复建议：`agent.yaml` 增加可选的 driver、model、effort、tools、permission。不写 model、effort 时不传，用 agent 默认值；不写 driver 时用默认 agent；不写 tools、permission 时用 Tekon 的统一基线，因为官方文档写明 [claude -p](https://code.claude.com/docs/en/permission-modes.md) 和 [codex exec](https://learn.chatgpt.com/docs/non-interactive-mode) 默认只读。基线要统一 CLI 和 Web：Web 入口现在传 `on-request`，Claude 适配器映射成 `default`（`packages/web/src/server/api/agents.ts:27`，`claude-code-adapter.ts:176-181`），按文档推断写文件和交产物都会失败，未跑真实 provider。统一基线是待用户确认的建议，放在第 1 阶段随 PD-24 一起做；不统一时，Web 上的 Claude 写节点要在启动前明确报错。其余字段在第 2 阶段做，两个入口都要实测。写了的字段进入每节点计划快照，由各适配器翻译成 harness 参数。`config.args` 路径可复用的只有 model；Codex 拒绝 `-c/--config`、`--profile`，Claude 拒绝 `--tools`、`--allowedTools`、`--settings`、`--agents`（`claude-code-adapter.ts:183-230`），所以这些字段要由适配器翻译，并调整校验。经用户确认（2026-11-06）：会使用各种模型，字段不绑定 Claude、Codex。角色文件格式在重构第 5 阶段再改成 Markdown。tools 编译到每节点 provider 参数后删掉“提示文本”路径和没有读取方的字段。角色名放开与 PD-06 同一改动。修复 `role show goal`。
 
 ### [PD-11] Config 页只读且内容失真
 - 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
@@ -259,7 +259,7 @@
 - 现象：CLI 读取 `defaultAgent`，手改 `mock` 后 run 生效。Web 两个入口都默认 codex。重跑 `tekon init` 把 `mock` 重置回 `codex`，repo-profile 和 web-session 不受影响。`storage.dataDir` 写入配置但路径写死。projectName 写死 'tekon'，每个 run 新建 project（5 个 run 对应 5 个同名 project）。
 - 依据：Web 固定 Codex 是产品方向偏差：文档已声明，与目标基准冲突（README:25、手册:684）。`init` 覆盖是实现缺陷：同函数对 web-session.json 和 repo-profile 有 existsSync 保护，对 config.yaml 没有。
 - 影响：本机没有可用 Codex 的 Claude 用户在 Web 首页必败。用户配置被静默覆盖，配置文件里的字段看起来可改，实际无效。
-- 修复建议：Web 读取 `defaultAgent`。`init` 已存在就合并或跳过。删除无效字段。
+- 修复建议：Web 读取 `defaultAgent`，同一 PR 处理 Web 写权限基线（见 PD-10），用 fake claude 测试锁定 Web 入口的权限参数，合入前用真实 Claude 从 Web 跑通一个写节点。`init` 已存在就合并或跳过。删除无效字段。
 
 ### [PD-25] Web 双入口、双模型互不连通
 - 维度：产品 | 严重度：S1 | 工作量：L | 置信度：高 | 状态：已确认，另排（重构第 4 阶段）
@@ -442,9 +442,9 @@
   - 事实：`ANTHROPIC_BASE_URL` 按白名单代码同样被丢弃，未单独实测。
   - 推断：`packages/cli/src/draft-agent.ts:228-239` 用 `execFileSync` 继承完整环境，所以同一台机器上 draft 路径应能调到 Claude，`tekon run` 不能。
 - 影响：macOS Keychain 登录用户使用 `--agent claude-code` 会在首节点失败（已实测）。API key、代理、自定义配置目录的用户同样会失败或连不上，这是推断，真实认证未测；Linux 文件凭据可能不受影响。
-- 修复建议：经用户确认（2026-11-06）：Claude 白名单补 USER、LOGNAME、代理变量、`ANTHROPIC_*`、`CLAUDE_*`，并加显式透传配置项。
+- 修复建议：经用户确认（2026-11-06）：Claude 白名单补 USER、LOGNAME、代理变量、`ANTHROPIC_*`、`CLAUDE_*`，并加可选的显式透传配置项，作为白名单没覆盖时的兜底。
   - **只改 `claude-code-support.ts`。** 不要把这些键并进公共白名单：门禁命令和 Codex 走 `command-gateway.ts:290-321` 的默认环境（`gate/runners.ts:40-57` 不传 env），合并后目标仓库的 `npm run build` 会拿到 Anthropic 凭据。补测试锁定门禁命令收不到 provider 凭据。
-  - **透传 key 后行为会变。** 官方[认证优先级](https://code.claude.com/docs/en/authentication)写明 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 优先于订阅，`-p` 下有 key 就总用 key。hotfix 要显示实际认证来源，并写进 CHANGELOG 和手册；区分认证方式的配置在重构第 2 阶段做，订阅配置启动前至少要剔除这两个变量。
+  - **透传 key 后行为会变。** 官方[认证优先级](https://code.claude.com/docs/en/authentication)写明 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 优先于订阅，`-p` 下有 key 就总用 key。经用户确认（2026-11-06）：Tekon 不做认证配置，登录和 key 都用各 agent 自己的配置。所以要显示实际认证来源，并写进 CHANGELOG 和手册；工作和个人场景在同一台机器上时，由用户在 shell 或项目环境里分开。
   - **验证：** 同步修改上述测试并锁定 USER。真实运行 `tekon run --template bugfix --agent claude-code`，覆盖“只有订阅”和“已有订阅登录且 shell 有 key”两种环境，预期不再报未登录，后者走 key 且认证来源显示正确。Codex 的同类问题（`OPENAI_API_KEY`、`CODEX_HOME` 被丢弃）在 PD-02 处理。
 
 ### [CD-46] 默认流程中任一独立评审提出 changes-requested 并返工成功后，run 必定卡死在 pmo-checkpoint
@@ -513,7 +513,7 @@
 - 影响：运行中看不到 agent 在做什么，插不上手，也统计不了成本。runtime 维护成本高，用户能力反而弱于直接用 harness。违背目标基准第 2、5、6 条。
 - 修复建议：经用户确认（2026-11-06）：驱动现有 harness，在现仓库分阶段替换。
   - 契约改成事件流加 resume token，从 `session-contract.ts:245-261` 的接缝新增 driver 起步，先在 Claude Code 上做纵向验证。
-  - driver 同时支持 API key 和订阅登录，并加一条通用模型通道。
+  - API key 和订阅登录都由各 agent 自己管理，Tekon 不做认证配置；另加一条通用模型通道。
   - `session-contract.ts` 被 12 个源文件引用（Job、事件 schema 在用），只删 `AgentDriver/AgentHandle` 和 legacy driver，不整文件删。
 
 ### [CD-12] Provider 输出全量缓存到进程结束，运行中日志为 0 字节，内存无上界
@@ -1017,7 +1017,9 @@
 - **[PD-27] 历史验收证据是否留在主分支**：docs/reviews 占 45MB。候选：独立分支（推荐，工作树少约 45MB，README 配图单独留）；release 资产（下载方便，链接要改）；保留（不用动，克隆继续重）。
 - **[CD-36] Draft 是否保留**：候选：并入动态工作流的 planner，统一走 adapter（推荐，只留一条调用路径）；删除（最省，但失去澄清步骤）。这条依赖动态工作流的重做，可以到那一步再定。
 
-另有一项非条目决定：[Agent SDK 文档](https://code.claude.com/docs/en/agent-sdk/overview.md)对第三方产品使用订阅登录有限制，资料内容是登录方式的适用范围。Tekon 要同时支持 API key 和订阅登录，自用是否合规本次未判定，发布给他人使用前必须重新确认（仓库公开且有 install.sh）。
+另有一项非条目决定：[Agent SDK 文档](https://code.claude.com/docs/en/agent-sdk/overview.md)对第三方产品使用订阅登录有限制，资料内容是登录方式的适用范围。Tekon 驱动的 agent 可能走订阅登录，自用是否合规本次未判定，发布给他人使用前必须重新确认（仓库公开且有 install.sh）。
+
+还有一项待用户确认的决定：是否统一 Web 和 CLI 的写权限基线（见 PD-10）。
 
 ## 六、审查范围与局限
 
@@ -1050,7 +1052,7 @@
   - PD-05：默认冻结，提示差异，`--rebind` 显式采用。
   - CD-23、CD-04：blocked=2、paused=3；Codex 保留恢复并加告警。
   - PD-14、PD-25：任务一对多 run，Web 只留一套入口。前端改信息架构和数据来源，不换技术栈。
-  - 认证：API key 和订阅登录都要支持；会使用各种模型。
+  - 认证：API key 和订阅登录都要能用，由各 agent 自己管理，Tekon 不做认证配置；会使用各种模型，模型配置可选，不写就用 agent 默认值。
   - 交付：报告入库，不带截图；S0 单开 hotfix；安全细节只留本地。
 
 ### B. 基线数据
