@@ -5,7 +5,7 @@
 - PR/MR：https://github.com/zesming/tekon/pull/37
 - 审查维度与范围：产品逻辑、UI 与交互、代码实现、测试；全量。`docs/reviews` 的历史证据只统计规模，不逐篇审
 - 审查手段：静态阅读；安装依赖、构建、运行全量测试与覆盖率；Playwright 全量；用合成数据实际操作 Web 并截图；用本机 Claude Code 在临时仓库真实跑一次 bugfix；变异验证；探针复现
-- 内部评审：2 轮质证，驳回 0 条，经用户答复定案 15 问（含交付 4 问），仍需决策 2 条（其中未充分质证 0 条）
+- 内部评审：2 轮质证，驳回 0 条，经用户答复定案 15 问（含交付 4 问），仍需决策 1 条（其中未充分质证 0 条）
 
 ## 修复约定
 
@@ -59,7 +59,7 @@
 - **重构后删除**：dual-write 387 行现在是生产路径，事件表上线后再删（CD-31）。
 - **搬出默认路径**：delivery、语义 Gate，以及 review、approval 的治理评分部分搬进可选的 `delivery` 包（CD-11、PD-06）。用户保留了 standard-delivery，所以这部分是移出内核，不是删除。审批摘要和结果查看的通用部分留在内核，默认流程要用。eval 随包搬走，默认不加载；constraint 随动态编排重做删除；draft 见 CD-36；归一化在放宽 schema 或加上 agent 重试后分批删（CD-21）。
 - **合并**：组合根 2 份、脱敏 2 套，环境白名单只合并公共基础键（CD-26）；审批 3 条路径（CD-32）；Session 和 Run 双入口（PD-25）；用户层概念压成 6 个、状态压成 5 个（PD-15）。
-- **文档**：手册拆成上手页和参考页（PD-27）。
+- **文档**：过程性文档和产物整合精简，并入固定文档；手册拆成上手页和参考页（PD-27）。
 
 可从内核移除的量（估算）：
 
@@ -301,12 +301,12 @@
 - 修复建议：`clean` 恢复前从列表隐藏，自检类 eval 改为隐藏，下线 Coming Soon，`constraints show` 改读目标仓库，`draft plan` 改文案或真生成。`eval approval-summary`、`demand-shape` 是手册流程步骤（手册:76、166），改动要同步文档。
 
 ### [PD-27] 文档体量失衡，手册混入研发规则
-- 维度：产品 | 严重度：S2 | 工作量：M | 置信度：高 | 状态：待产品确认
+- 维度：产品 | 严重度：S2 | 工作量：M | 置信度：高 | 状态：已确认（2026-11-09 用户决定）；另排（重构第 4 阶段之后）
 - 位置：docs/reviews/，docs/manual/tekon-user-manual.md:500-504、745-764、885-891，scripts/install.sh:70，README.md
 - 现象：docs 共 46MB，其中 docs/reviews 45MB（242 png、60 log、34 json、16 html、7 md）。其余现行文档只有 12 个文件，约 364K。手册 891 行，HTML 版 1008 行。§7.1 中英对照重复，§12 是研发维护规则，§6.10（手册:500-504）等写租约等内部概念。
 - 依据：`du`、`find` 实测。仓库自己要求手册“面向工具使用者”。
 - 影响：`install.sh` 即使 `--depth 1` 也会检出全部工作树文件，迁出后工作树减少约 45MB（算式 46M−1M，压缩后实际下载量未实测）。用户手册违背仓库自己的要求。
-- 修复建议：手册拆成不超过 100 行的上手页和参考页，删除 §12 和 §7.1 重复部分。待产品确认：历史验收证据是否必须留在主分支？候选为 release 资产、独立分支、保留。推荐独立分支，README 配图单独留。
+- 修复建议：经用户确认（2026-11-09）：`docs/reviews` 不迁到独立分支，改为整合精简过程性文档和产物。有长期价值的结论并入产品范围、运行时合同、手册等固定文档，或合并成一份完整记录；截图、日志等中间产物只保留被固定文档引用的。手册拆成不超过 100 行的上手页和参考页，删除 §12 和 §7.1 重复部分。截图会随重构第 4 阶段的页面重做而变，所以放在第 4 阶段之后做。
 
 ### 4.2 UI 与交互
 
@@ -433,7 +433,7 @@
 ### 4.3 代码实现
 
 ### [CD-01] Claude 适配器的环境白名单丢 USER，macOS Keychain 登录下首节点失败
-- 维度：代码、产品 | 严重度：S0 | 工作量：S | 置信度：高 | 状态：已确认（经用户确认单开 hotfix PR）
+- 维度：代码、产品 | 严重度：S0 | 工作量：S | 置信度：高 | 状态：已修复（hotfix #39，合并提交 dc1a156，v0.26.2）
 - 位置：packages/core/src/runtime/claude-code-support.ts:9-18，:24-34，packages/core/src/runtime/claude-code-adapter.ts:94-101，packages/core/src/runtime/command-gateway.ts:290-321，packages/core/src/runtime/dsh-headless-adapter.ts:47-56，packages/core/__tests__/runtime/claude-provider-smoke-evidence.test.ts:33-48
 - 现象：`buildClaudeProviderEnv` 只复制 8 个键：PATH、HOME、TMPDIR、TMP、TEMP、LANG、LC_ALL、SHELL，适配器用 `envMode:'exact'` 启动子进程。白名单共 3 份。父进程设 USER、LOGNAME、ANTHROPIC_API_KEY、CLAUDE_CONFIG_DIR、HTTPS_PROXY、OPENAI_API_KEY、CODEX_HOME 时，Claude 和 Codex stub 收到的键都只有 `_ HOME LANG PATH PWD SHELL SHLVL TEKON_* TMPDIR`。
 - 依据：
@@ -446,9 +446,10 @@
   - **只改 `claude-code-support.ts`。** 不要把这些键并进公共白名单：门禁命令和 Codex 走 `command-gateway.ts:290-321` 的默认环境（`gate/runners.ts:40-57` 不传 env），合并后目标仓库的 `npm run build` 会拿到 Anthropic 凭据。补测试锁定门禁命令收不到 provider 凭据。
   - **透传 key 后行为会变。** 官方[认证优先级](https://code.claude.com/docs/en/authentication)写明 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 优先于订阅，`-p` 下有 key 就总用 key。经用户确认（2026-11-06）：Tekon 不做认证配置，登录和 key 都用各 agent 自己的配置。所以要显示实际认证来源，并写进 CHANGELOG 和手册；工作和个人场景在同一台机器上时，由用户在 shell 或项目环境里分开。
   - **验证：** 同步修改上述测试并锁定 USER。真实运行 `tekon run --template bugfix --agent claude-code`，覆盖“只有订阅”和“已有订阅登录且 shell 有 key”两种环境，预期不再报未登录，后者走 key 且认证来源显示正确。Codex 的同类问题（`OPENAI_API_KEY`、`CODEX_HOME` 被丢弃）在 PD-02 处理。
+- 修复记录：#39 补齐了白名单和前缀，并加了门禁命令收不到 provider 凭据的测试。真实 Claude 订阅登录跑通 bugfix 模板；用无效假 key 验证了 key 优先于订阅，没有用真实 key 跑通。显式透传配置项和认证来源显示属于新功能，移到重构第 1 阶段。行为变化已写进手册和 CHANGELOG：Claude 在节点里执行的命令也能读到 shell 里的 key。
 
 ### [CD-46] 默认流程中任一独立评审提出 changes-requested 并返工成功后，run 必定卡死在 pmo-checkpoint
-- 维度：代码 | 严重度：S0 | 工作量：S | 置信度：高（只验证了 mock 链路，真实 provider 未测） | 状态：已确认（经用户确认单开 hotfix PR）
+- 维度：代码 | 严重度：S0 | 工作量：S | 置信度：高（只验证了 mock 链路，真实 provider 未测） | 状态：已修复（hotfix #39，合并提交 dc1a156，v0.26.2）
 - 位置：packages/core/src/gate/engine.ts:801，:851-862，:874-905，packages/core/src/gate/runners/semantic.ts:292，packages/core/src/workflow/execution-plan.ts:164-174，packages/core/src/workflow/rework.ts:318-345，:374-387，:437-451，packages/core/__tests__/workflow/engine-rework.e2e.test.ts:73
 - 现象：不翻转时 16 次 agent 调用后 passed。逐个翻转 standard-delivery 的 9 个 independent-review 节点，9/9 全部 blocked：每次跑 18 次 agent 调用，最终 `pmo-checkpoint` 的 `process-completeness` 失败，分类 `process-artifact-evidence-missing`。两次 resume 各多调一次 pmo，然后仍 blocked。
 - 依据：
@@ -464,6 +465,7 @@
   - 补丁实测 9/9 passed；返工错误路径（rework-agent、target-gate、review-rerun）全部能通过；修复后 `delivery prepare` 成功。副作用是不再单独校验返工节点的证据，它本来没有独立产物，目标节点门禁也已在 rework.ts:437-451 强制重跑。
   - 用真实 gate engine 补 e2e：翻转一次，预期 passed。
 
+- 修复记录：#39 在两份实现里只对产物证据和门禁证据跳过返工节点，状态检查保留；用真实 gate engine 跑 standard-delivery 翻转评审的 e2e 测试锁定。修复时发现一个相关的既有缺陷：两个评审都对同一目标提出修改时，第二次返工节点 ID 冲突（`UNIQUE constraint failed: nodes.id`），run 中断；原因是 `workflow/gate-runner.ts:477` 每个评审都从 0 计数，`rework.ts:283,327` 只用“目标 + 次数”生成 ID。另排到重构第 1 阶段。
 ### [CD-02] Provider 失败原因被丢弃，所有失败都变成 interrupted 并提示 resume
 - 维度：代码、产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认（合并 PD-03）
 - 位置：packages/core/src/runtime/claude-code-adapter.ts:108-116，:120，:160-171，packages/core/src/runtime/codex-adapter.ts:112-120，packages/core/src/runtime/agent-adapter.ts:55-66，:80-101，packages/core/src/runtime/agent-step-events.ts:133-149，packages/core/src/workflow/helpers.ts:269-282，packages/core/src/workflow/node-executor.ts:386-393，packages/core/src/session/workflow-job-executor.ts:285-290，packages/cli/src/lib/session-context.ts:358-387，packages/cli/src/commands/provider.ts:128-133，packages/cli/src/commands/run.ts，packages/web/src/client/lib/event-feed.ts:125，packages/core/src/delivery/pre-pr-readiness.ts:174
@@ -1014,7 +1016,6 @@
 
 ## 五、需要决策的事项
 
-- **[PD-27] 历史验收证据是否留在主分支**：docs/reviews 占 45MB。候选：独立分支（推荐，工作树少约 45MB，README 配图单独留）；release 资产（下载方便，链接要改）；保留（不用动，克隆继续重）。
 - **[CD-36] Draft 是否保留**：候选：并入动态工作流的 planner，统一走 adapter（推荐，只留一条调用路径）；删除（最省，但失去澄清步骤）。这条依赖动态工作流的重做，可以到那一步再定。
 
 另有一项非条目决定：[Agent SDK 文档](https://code.claude.com/docs/en/agent-sdk/overview.md)对第三方产品使用订阅登录有限制，资料内容是登录方式的适用范围。Tekon 驱动的 agent 可能走订阅登录，自用是否合规本次未判定，发布给他人使用前必须重新确认（仓库公开且有 install.sh）。
