@@ -1,5 +1,13 @@
 # 变更日志
 
+## 0.27.0 — 2026-11-09
+
+- 安全加固：
+  - 日志、事件和产物的凭据识别规则补全并分为两档：高精度规则会拒绝写入产物、让安全扫描 Gate 失败；较宽的规则只做脱敏。Web 界面的脱敏复用同一套规则。
+  - `tekon init` 在 git 仓库里把 `.tekon/` 写入 `.git/info/exclude`（已被忽略时不写），不改 `.gitignore`。
+  - Web 服务只响应发往 `localhost`、`127.0.0.1`、`::1` 的请求，所有接口都校验来源；会话令牌校验合并为一份。
+  - `tekon ui` 默认直接服务构建好的页面，使用不允许内联脚本的 CSP；Vite 开发模式改为 `TEKON_WEB_DEV=1` 时启用。
+
 ## 0.26.4 — 2026-11-09
 
 - 修复开发依赖的已知漏洞：vitest 和 `@vitest/coverage-v8` 升到 4.1.12（随之移除有漏洞的 tinypool、minimatch、brace-expansion），删除已无作用的 brace-expansion override；vitest 与 coverage 插件同钉 4.1.12，coverage 显式列出源文件以保留未测文件。只影响开发和测试，不影响安装后的 `tekon`。
