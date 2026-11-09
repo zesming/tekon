@@ -1,0 +1,51 @@
+name: Dependency audit
+
+# Runs only when dependencies, the audit script or workflows change. New
+# advisories for existing dependencies are reported by Dependabot alerts.
+# Not a required check, so a newly published advisory does not block
+# unrelated pull requests.
+
+on:
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - '**/package.json'
+      - scripts/ci/audit-production.mjs
+      - .github/workflows/**
+  push:
+    branches:
+      - main
+    paths:
+      - pnpm-lock.yaml
+      - '**/package.json'
+      - scripts/ci/audit-production.mjs
+      - .github/workflows/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Retry once because the npm audit endpoint can time out on its own; a
+  # vulnerability or a second endpoint failure remains a hard failure.
+  audit:
+    name: Audit production dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Enable pinned pnpm
+        run: corepack enable pnpm
+
+      - name: Install lockfile dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Audit production dependencies
+        run: node scripts/ci/audit-production.mjs

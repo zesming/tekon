@@ -1,6 +1,6 @@
 {
   "name": "tekon",
-  "version": "0.26.2",
+  "version": "0.26.3",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.12.1",
@@ -10,7 +10,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "vitest --exclude \"**/__manual__/**\"",
-    "lint": "pnpm -r lint",
+    "lint": "pnpm -r typecheck",
     "lint:actions": "bash scripts/ci/actionlint.sh",
     "smoke:claude-provider": "npm exec --yes -- pnpm@10.12.1 --filter @tekon/core smoke:claude-provider",
     "typecheck": "pnpm -r typecheck",
@@ -28,6 +28,7 @@
       "brace-expansion@^2.0.0": "2.1.4",
       "brace-expansion@^5.0.0": "5.0.9",
       "postcss@^8.0.0": "8.5.26",
+      "source-map-js@^1.0.0": "^1.2.2",
       "nanoid@^3.0.0": "3.3.18",
       "browserslist": ">=4.28.7",
       "esbuild": ">=0.28.1"

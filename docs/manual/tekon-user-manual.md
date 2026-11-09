@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.26.2**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.26.3**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | TEKON_HOME=/opt/tekon TEKON_VERSION=main bash
 ```
 
-CI 验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
+CI 验证 Node `20.19.0`、`22.12.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
 
 ### 4.1.1 更新
 
@@ -679,7 +679,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.2`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.3`。
 
 ## 7. Web Dashboard
 
