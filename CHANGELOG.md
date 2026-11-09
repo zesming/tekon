@@ -2,7 +2,7 @@
 
 ## 0.26.4 — 2026-11-09
 
-- 修复开发依赖的已知漏洞：vitest 和 `@vitest/coverage-v8` 升到 4.1.12（随之移除有漏洞的 tinypool、minimatch、brace-expansion），删除已无作用的 brace-expansion override。只影响开发和测试，不影响安装后的 `tekon`。
+- 修复开发依赖的已知漏洞：vitest 和 `@vitest/coverage-v8` 升到 4.1.12（随之移除有漏洞的 tinypool、minimatch、brace-expansion），删除已无作用的 brace-expansion override；vitest 与 coverage 插件同钉 4.1.12，coverage 显式列出源文件以保留未测文件。只影响开发和测试，不影响安装后的 `tekon`。
 - 适配 Vitest 4：对已是 mock 的方法再 `vi.spyOn` 会返回同一个 mock，`gate-shutdown` 测试改为直接包装底层实现，避免递归。
 
 ## 0.26.3 — 2026-11-09
