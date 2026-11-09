@@ -182,8 +182,16 @@ function excludeTekonDirFromGit(repoPath: string): void {
     // exit 1: not ignored yet
   }
   const target = isAbsolute(excludePath) ? excludePath : join(repoPath, excludePath);
-  mkdirSync(dirname(target), { recursive: true });
-  const current = existsSync(target) ? readFileSync(target, 'utf8') : '';
-  const separator = current === '' || current.endsWith('\n') ? '' : '\n';
-  appendFileSync(target, `${separator}.tekon/\n`, 'utf8');
+  try {
+    mkdirSync(dirname(target), { recursive: true });
+    const current = existsSync(target) ? readFileSync(target, 'utf8') : '';
+    // A .gitignore rule such as `!.tekon/` overrides the exclude file; do not
+    // keep appending the same line on every init.
+    if (current.split(/\r?\n/u).includes('.tekon/')) return;
+    const separator = current === '' || current.endsWith('\n') ? '' : '\n';
+    appendFileSync(target, `${separator}.tekon/\n`, 'utf8');
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`warning: could not add .tekon/ to ${target}: ${reason}\n`);
+  }
 }

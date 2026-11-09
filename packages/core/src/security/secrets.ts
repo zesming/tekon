@@ -16,7 +16,7 @@ interface SecretRule {
   redactPattern: RegExp;
   message: string;
   /** Replacement for one match; defaults to a `[REDACTED_<ID>]` marker. */
-  replace?: (match: string, ...groups: string[]) => string;
+  replace?: (match: string, ...groups: Array<string | undefined>) => string;
 }
 
 /**
@@ -50,11 +50,12 @@ export function redactSecrets(content: string): {
   let redacted = content;
   const findings = scanTextForSecrets(content);
   for (const rule of [...BLOCKING_RULES, ...REDACTION_ONLY_RULES]) {
-    redacted = redacted.replace(rule.redactPattern, (match: string, ...rest: unknown[]) =>
-      rule.replace
-        ? rule.replace(match, ...rest.filter((value): value is string => typeof value === 'string'))
-        : marker(rule.id),
-    );
+    redacted = redacted.replace(rule.redactPattern, (match: string, ...rest: unknown[]) => {
+      if (!rule.replace) return marker(rule.id);
+      // String.replace passes the capture groups first, then the numeric offset.
+      const groups = rest.slice(0, rest.findIndex((value) => typeof value === 'number'));
+      return rule.replace(match, ...(groups as Array<string | undefined>));
+    });
   }
   return { content: redacted, findings };
 }
@@ -86,7 +87,14 @@ function marker(ruleId: string): string {
   return `[REDACTED_${ruleId.toUpperCase().replace(/-/g, '_')}]`;
 }
 
-const keepPrefix = (_match: string, prefix: string) => `${prefix}[REDACTED_SECRET]`;
+const keepPrefix = (_match: string, prefix?: string) => `${prefix ?? ''}[REDACTED_SECRET]`;
+
+// Key names whose values are credentials, matched case-insensitively.
+const CREDENTIAL_KEY =
+  '(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|secret|password|passwd|pwd|credentials?|private[_-]?key|cookie)';
+// Values that are code or placeholders rather than literal secrets.
+const NOT_A_LITERAL =
+  "(?![\\[<$])(?!(?:true|false|null|none|undefined)\\b)(?!process\\.env|os\\.environ)(?![^\\s'\",;]*[()])";
 
 const MAX_SCAN_DEPTH = 10;
 const MAX_SCAN_FILES = 10_000;
@@ -139,8 +147,10 @@ const BLOCKING_RULES: SecretRule[] = [
     id: 'private-key',
     severity: 'critical',
     pattern: /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/u,
-    // The whole block; a block cut off before its END line is masked to the end.
-    redactPattern: /-----BEGIN ((?:[A-Z]+ )*)PRIVATE KEY-----[\s\S]*?(?:-----END \1PRIVATE KEY-----|$)/gu,
+    // The whole block. Without an END line only the key lines right after
+    // BEGIN are masked, so the rest of a log stays readable.
+    redactPattern:
+      /-----BEGIN ((?:[A-Z]+ )*)PRIVATE KEY-----(?:[\s\S]*?-----END \1PRIVATE KEY-----|(?:\r?\n[ \t]*(?:[A-Za-z0-9+/=]+|Proc-Type:[^\n]*|DEK-Info:[^\n]*))*)/gu,
     message: 'Private key material is present.',
   },
   {
@@ -160,8 +170,8 @@ const BLOCKING_RULES: SecretRule[] = [
   {
     id: 'slack-token',
     severity: 'critical',
-    pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/u,
-    redactPattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/gu,
+    pattern: /\bxox[baprs]-\d{6,}-\d{6,}(?:-\d{6,})?-[A-Za-z0-9]{20,}\b/u,
+    redactPattern: /\bxox[baprs]-\d{6,}-\d{6,}(?:-\d{6,})?-[A-Za-z0-9]{20,}\b/gu,
     message: 'Slack token is present.',
   },
   {
@@ -174,8 +184,8 @@ const BLOCKING_RULES: SecretRule[] = [
   {
     id: 'aws-secret-access-key',
     severity: 'critical',
-    pattern: /\baws_secret_access_key\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}\b/iu,
-    redactPattern: /(\baws_secret_access_key\s*[:=]\s*['"]?)[A-Za-z0-9/+=]{40}\b/giu,
+    pattern: /\baws_secret_access_key\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/iu,
+    redactPattern: /(\baws_secret_access_key\s*[:=]\s*['"]?)[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/giu,
     replace: keepPrefix,
     message: 'AWS secret access key is present.',
   },
@@ -191,37 +201,72 @@ const BLOCKING_RULES: SecretRule[] = [
   },
 ];
 
+// Every pattern below starts with a lookbehind on its own leading character
+// class, so each run of characters has one starting point and matching stays
+// linear on adversarial input.
 const REDACTION_ONLY_RULES: SecretRule[] = [
+  {
+    id: 'slack-token',
+    severity: 'high',
+    pattern: /(?<![A-Za-z0-9-])xox[abposr]-[A-Za-z0-9-]{10,}/u,
+    redactPattern: /(?<![A-Za-z0-9-])xox[abposr]-[A-Za-z0-9-]{10,}/gu,
+    message: 'A Slack-style token is present.',
+  },
   {
     id: 'auth-header',
     severity: 'high',
-    pattern: /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{16,}/u,
-    redactPattern: /(\b(?:Bearer|Basic)\s+)[A-Za-z0-9._~+/=-]{16,}/gu,
+    pattern: /(?<![A-Za-z])(?:Bearer|Basic|Token|ApiKey|Digest)\s+[A-Za-z0-9._~+/=-]{16,}/iu,
+    redactPattern: /((?<![A-Za-z])(?:Bearer|Basic|Token|ApiKey|Digest)\s+)[A-Za-z0-9._~+/=-]{16,}/giu,
     replace: keepPrefix,
     message: 'An authorization header value is present.',
   },
   {
+    id: 'authorization-value',
+    severity: 'high',
+    pattern: /(?<![A-Za-z0-9_-])authorization["']?\s*[:=]\s*(?:(?:Bearer|Basic|Token|ApiKey|Digest)\s+)?(?![[<$])(?!(?:Bearer|Basic|Token|ApiKey|Digest)\b)[^\s'",;]+/iu,
+    redactPattern: /((?<![A-Za-z0-9_-])authorization["']?\s*[:=]\s*(?:(?:Bearer|Basic|Token|ApiKey|Digest)\s+)?)(?![[<$])(?!(?:Bearer|Basic|Token|ApiKey|Digest)\b)[^\s'",;]+/giu,
+    replace: keepPrefix,
+    message: 'An authorization value is present.',
+  },
+  {
     id: 'jwt',
     severity: 'high',
-    pattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/u,
-    redactPattern: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/u,
+    redactPattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/gu,
     message: 'A JSON web token is present.',
   },
   {
     id: 'url-credentials',
     severity: 'high',
-    pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s@/]+@/iu,
-    redactPattern: /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+@/giu,
-    replace: (_match, prefix) => `${prefix}[REDACTED_SECRET]@`,
+    pattern: /(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:[^\s@/]+@/iu,
+    redactPattern: /((?<![a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+@/giu,
+    replace: (_match, prefix) => `${prefix ?? ''}[REDACTED_SECRET]@`,
     message: 'Credentials embedded in a URL are present.',
   },
   {
-    id: 'unquoted-secret-assignment',
+    id: 'credential-assignment',
     severity: 'high',
-    // Values must be 8+ characters, unquoted and not already a [REDACTED…] marker.
-    pattern: /\b[A-Za-z0-9_]*(?:api[_-]?key|token|secret|password|passwd)\s*[:=]\s*(?![['"<])[^\s'",;]{8,}/iu,
-    redactPattern: /(\b[A-Za-z0-9_]*(?:api[_-]?key|token|secret|password|passwd)\s*[:=]\s*)(?![['"<])[^\s'",;]{8,}/giu,
+    // KEY=value, KEY: "value", "key": "value" and --key=value, of any length.
+    pattern: new RegExp(
+      `(?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*(?:"(?![<$[])[^"\\n]+"|'(?![<$[])[^'\\n]+'|${NOT_A_LITERAL}[^\\s'",;]+)`,
+      'iu',
+    ),
+    redactPattern: new RegExp(
+      `((?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*)(?:"(?![<$[])([^"\\n]+)"|'(?![<$[])([^'\\n]+)'|${NOT_A_LITERAL}[^\\s'",;]+)`,
+      'giu',
+    ),
+    replace: (_match, prefix, doubleQuoted, singleQuoted) => {
+      const quote = doubleQuoted !== undefined ? '"' : singleQuoted !== undefined ? "'" : '';
+      return `${prefix ?? ''}${quote}[REDACTED_SECRET]${quote}`;
+    },
+    message: 'A credential assignment is present.',
+  },
+  {
+    id: 'credential-flag',
+    severity: 'high',
+    pattern: new RegExp(`(?<!-)--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+(?!-)${NOT_A_LITERAL}[^\\s'",;]+`, 'iu'),
+    redactPattern: new RegExp(`((?<!-)--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+)(?!-)${NOT_A_LITERAL}[^\\s'",;]+`, 'giu'),
     replace: keepPrefix,
-    message: 'A likely unquoted secret assignment is present.',
+    message: 'A credential passed as a command-line flag is present.',
   },
 ];

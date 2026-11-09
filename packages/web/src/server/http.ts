@@ -56,8 +56,7 @@ export async function createWebServer(
   const server = createServer(async (request, response) => {
     setSecurityHeaders(response, vite !== null);
 
-    // Only answer requests addressed to a local host name, so a page whose DNS
-    // name is rebound to this machine cannot read or call the local server.
+    // Only answer requests addressed to a local host name.
     if (!isAllowedHost(request.headers.host, allowedHostnames)) {
       writeJson(response, 403, {
         error: { code: 'FORBIDDEN', message: 'Host not allowed' },

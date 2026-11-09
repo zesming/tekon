@@ -111,6 +111,74 @@ describe('secret scanning and redaction', () => {
     expect(scanTextForSecrets(content)).toEqual([]);
   });
 
+  it('does not block common Slack placeholders but still masks them in logs', () => {
+    for (const placeholder of [j('xox', 'b-your-bot-token'), j('xox', 'b-your-token'), j('xox', 'b-xxxxxxxxxx-xxxx')]) {
+      expect(scanTextForSecrets(`SLACK_BOT_TOKEN=${placeholder}`)).toEqual([]);
+    }
+    expect(scanTextForSecrets(j('xox', 'p-', '123456789012-123456789012-123456789012-', 'a'.repeat(32))).map((f) => f.ruleId)).toEqual(['slack-token']);
+  });
+
+  it('catches AWS secrets that end in / or +', () => {
+    const slashEnd = j('a'.repeat(39), '/');
+    for (const content of [`aws_secret_access_key = ${slashEnd}\n`, `aws_secret_access_key = "${slashEnd}"`, `aws_secret_access_key=${j('b'.repeat(39), '+')}`]) {
+      expect(scanTextForSecrets(content).map((f) => f.ruleId)).toEqual(['aws-secret-access-key']);
+      expect(redactSecrets(content).content).not.toMatch(/[ab]{39}/u);
+    }
+    expect(scanTextForSecrets(`aws_secret_access_key = ${'c'.repeat(41)}`)).toEqual([]);
+  });
+
+  it('redacts keyed credentials of any length in core', () => {
+    const cases: Array<[string, string]> = [
+      ['password = "hunter2hunter2"', 'hunter2hunter2'],
+      ['DB_PASSWORD="correct-horse-battery"', 'correct-horse-battery'],
+      ['API_KEY="abcdef1234567890"', 'abcdef1234567890'],
+      ['{"password": "pa55word-json"}', 'pa55word-json'],
+      ['run --password hunter2cli now', 'hunter2cli'],
+      ['run --api-key=keyvalue99 now', 'keyvalue99'],
+      ['authorization: bearer lowercasevalue1', 'lowercasevalue1'],
+      ['Authorization: token ghostvalue42', 'ghostvalue42'],
+      ['Cookie: session=cookievalue77', 'cookievalue77'],
+      ['pwd=shortpw', 'shortpw'],
+    ];
+    for (const [content, secret] of cases) {
+      const redacted = redactSecrets(content).content;
+      expect(redacted, content).not.toContain(secret);
+      expect(scanTextForSecrets(content), content).toEqual([]);
+    }
+  });
+
+  it('leaves code expressions readable', () => {
+    const content = [
+      'const token = getToken();',
+      'api_key = os.environ["API_KEY"]',
+      'secret: process.env.SECRET',
+      'token: ${{ secrets.GH_TOKEN }}',
+    ].join('\n');
+    expect(redactSecrets(content).content).toBe(content);
+  });
+
+  it('only masks key material after a BEGIN line that has no END line', () => {
+    const log = [
+      j('rejects keys that do not start with "-----BEGIN RSA ', 'PRIVATE KEY-----"'),
+      'AssertionError: expected false to be true',
+      'Tests  1 failed | 20 passed',
+    ].join('\n');
+    expect(redactSecrets(log).content).toContain('Tests  1 failed | 20 passed');
+    expect(redactSecrets(log).content).toContain('AssertionError');
+    const truncated = [j('-----BEGIN ', 'PRIVATE KEY-----'), keyBody, keyBody, '', 'next log line'].join('\n');
+    const redacted = redactSecrets(truncated).content;
+    expect(redacted).not.toContain(keyBody);
+    expect(redacted).toContain('next log line');
+  });
+
+  it('keeps redaction linear on adversarial input', () => {
+    for (const input of ['a.'.repeat(64_000), 'eyJ-'.repeat(32_000), 'a'.repeat(128_000), 'password'.repeat(16_000)]) {
+      const started = performance.now();
+      redactSecrets(input);
+      expect(performance.now() - started, input.slice(0, 8)).toBeLessThan(500);
+    }
+  });
+
   it('scans repository files while ignoring .tekon runtime output', () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-secret-scan-'));
     tempDirs.push(repoPath);

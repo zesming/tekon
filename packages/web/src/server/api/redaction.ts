@@ -16,7 +16,9 @@ function isSensitiveKey(key: string): boolean {
  * Used by redactObject to redact ALL string values (not just sensitive-keyed ones).
  */
 export function redactString(text: string): string {
-  let result = text;
+  // Core rules run first: they mask whole private key blocks and token shapes
+  // before the broader key=value rules below can split them.
+  let result = redactSecrets(text).content;
   // 1. Auth schemes FIRST: Bearer, Basic, ApiKey, Token, Digest + their credentials
   //    This handles "Authorization: Bearer xxx" and standalone "Bearer xxx"
   result = result.replace(/((?:Bearer|Basic|ApiKey|Token|Digest)\s+)\S+/gi, '$1[REDACTED]');
@@ -47,9 +49,7 @@ export function redactString(text: string): string {
     /("(?:token|password|passwd|pwd|secret|apiKey|api_key|api-key|access_token|access-token|refresh_token|refresh-token|authorization|cookie|session|private_key|private-key|auth|credentials?)"\s*:\s*)"[^"]*"/gi,
     '$1"[REDACTED]"'
   );
-  // 8. Token shapes without a key name (private key blocks, GitHub, Slack, JWT,
-  //    URL credentials…) come from the core rules, the single source for them.
-  return redactSecrets(result).content;
+  return result;
 }
 
 /**

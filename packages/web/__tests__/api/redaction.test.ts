@@ -14,6 +14,20 @@ describe('redactString shares the core token-shape rules', () => {
   });
 });
 
+describe('redactString masks private keys that follow a key name', () => {
+  const body = ['MIIEvQIBADANBgkqhkiG9w0BAQEFAASC', 'BKcwggSjAgEAAoIBAQC7'].join('');
+  const begin = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
+  const end = ['-----END ', 'PRIVATE KEY-----'].join('');
+  it.each([
+    ['quoted env value', `GOOGLE_PRIVATE_KEY="${begin}\n${body}\n${end}\n"`],
+    ['multi-line dotenv', `PRIVATE_KEY=${begin}\n${body}\n${end}`],
+    ['yaml value on the next line', `private_key: |\n  ${begin}\n  ${body}\n  ${end}`],
+    ['log line', `secret: ${begin}\n${body}\n${end}`],
+  ])('%s', (_name, input) => {
+    expect(redactString(input)).not.toContain(body);
+  });
+});
+
 describe('redactTextPreview', () => {
   it('redacts token=value patterns without leaking the original value', () => {
     const input = 'token=abc123';

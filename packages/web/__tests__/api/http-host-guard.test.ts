@@ -21,7 +21,7 @@ async function startServer(): Promise<RunningWebServer> {
   return server;
 }
 
-/** Raw request so the Host header can be set the way a rebinding page would send it. */
+/** Raw request so the test can set any Host header. */
 function send(
   server: RunningWebServer,
   input: { method: 'GET' | 'POST'; path: string; headers?: Record<string, string>; body?: unknown },
@@ -63,7 +63,7 @@ describe('web server request host guard', () => {
 
   it('rejects any request whose Host is not local, before routing it', async () => {
     const server = await startServer();
-    const host = `rebind.example:${new URL(server.url).port}`;
+    const host = `other.example:${new URL(server.url).port}`;
     const origin = `http://${host}`;
     const rpc = await send(server, { method: 'POST', path: '/api/rpc', headers: { host, origin }, body: listProjects });
     const page = await send(server, { method: 'GET', path: '/', headers: { host } });
