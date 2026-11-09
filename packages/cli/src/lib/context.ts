@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -145,6 +146,7 @@ export function initializeProject(
   if (!existsSync(profilePath)) {
     writeDefaultRepoProfile(repoPath);
   }
+  excludeTekonDirFromGit(repoPath);
   io.stdout.write(
     [
       '项目初始化完成',
@@ -157,4 +159,31 @@ export function initializeProject(
       '',
     ].join('\n'),
   );
+}
+
+/**
+ * Keeps the runtime directory (session token, database, logs) out of commits by
+ * adding it to the repository's local exclude file. The user's .gitignore is not
+ * touched; nothing happens outside a git repository or when it is already ignored.
+ */
+function excludeTekonDirFromGit(repoPath: string): void {
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: repoPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  let excludePath: string;
+  try {
+    excludePath = git('rev-parse', '--git-path', 'info/exclude');
+  } catch {
+    return;
+  }
+  try {
+    git('check-ignore', '-q', '.tekon/');
+    return;
+  } catch {
+    // exit 1: not ignored yet
+  }
+  const target = isAbsolute(excludePath) ? excludePath : join(repoPath, excludePath);
+  mkdirSync(dirname(target), { recursive: true });
+  const current = existsSync(target) ? readFileSync(target, 'utf8') : '';
+  const separator = current === '' || current.endsWith('\n') ? '' : '\n';
+  appendFileSync(target, `${separator}.tekon/\n`, 'utf8');
 }

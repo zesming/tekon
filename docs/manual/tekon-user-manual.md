@@ -136,7 +136,7 @@ tekon update
 tekon init
 ```
 
-生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。该目录通常不提交。
+生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。在 git 仓库里，`init` 会把 `.tekon/` 写入本仓库的 `.git/info/exclude`（已被忽略时不写），不改你的 `.gitignore`，避免误提交令牌和数据库。
 
 ### 4.3 检查目标仓库命令画像
 

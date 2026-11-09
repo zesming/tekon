@@ -175,7 +175,7 @@ tekon review
 <h3 id="42-初始化目标仓库" tabindex="-1">4.2 初始化目标仓库</h3>
 <pre><code class="language-bash">tekon init
 </code></pre>
-<p>生成 <code>.tekon/</code> 配置、仓库检查配置、运行目录和 Web 会话令牌。该目录通常不提交。</p>
+<p>生成 <code>.tekon/</code> 配置、仓库检查配置、运行目录和 Web 会话令牌。在 git 仓库里，<code>init</code> 会把 <code>.tekon/</code> 写入本仓库的 <code>.git/info/exclude</code>（已被忽略时不写），不改你的 <code>.gitignore</code>，避免误提交令牌和数据库。</p>
 <h3 id="43-检查目标仓库命令画像" tabindex="-1">4.3 检查目标仓库命令画像</h3>
 <pre><code class="language-bash">tekon workflow preflight
 </code></pre>
