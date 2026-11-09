@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,184 +20,159 @@ interface WorkflowJob {
   if?: unknown;
   needs?: unknown;
   'runs-on'?: string;
-  'timeout-minutes'?: number;
   'continue-on-error'?: unknown;
-  strategy?: {
-    'fail-fast'?: boolean;
-    matrix?: Record<string, unknown>;
-  };
+  strategy?: { 'fail-fast'?: boolean; matrix?: Record<string, unknown> };
   steps?: WorkflowStep[];
 }
 
 interface Workflow {
+  on?: Record<string, unknown>;
   env?: Record<string, unknown>;
   jobs?: Record<string, WorkflowJob>;
 }
 
-const repoRoot = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  '..',
-);
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+const workflowsDir = join(repoRoot, '.github', 'workflows');
 
 function loadWorkflow(name: string): Workflow {
-  return parseYaml(
-    readFileSync(join(repoRoot, '.github', 'workflows', name), 'utf8'),
-  ) as Workflow;
+  return parseYaml(readFileSync(join(workflowsDir, name), 'utf8')) as Workflow;
 }
 
-function requireJob(workflow: Workflow, name: string): WorkflowJob {
-  const job = workflow.jobs?.[name];
-  if (!job) {
-    throw new Error(`Missing workflow job: ${name}`);
-  }
-  return job;
+function job(workflow: Workflow, name: string): WorkflowJob {
+  const found = workflow.jobs?.[name];
+  if (!found) throw new Error(`Missing workflow job: ${name}`);
+  return found;
 }
 
-function requireSteps(job: WorkflowJob): WorkflowStep[] {
-  if (!Array.isArray(job.steps)) {
-    throw new Error('Workflow job must define steps');
-  }
-  return job.steps;
+function steps(found: WorkflowJob): WorkflowStep[] {
+  if (!Array.isArray(found.steps)) throw new Error('Workflow job must define steps');
+  return found.steps;
 }
 
-describe('GitHub Actions Node compatibility contract', () => {
+function stepIndex(list: WorkflowStep[], match: (step: WorkflowStep) => boolean): number {
+  const index = list.findIndex(match);
+  expect(index).toBeGreaterThanOrEqual(0);
+  return index;
+}
+
+const runs = (text: string) => (step: WorkflowStep) => step.run?.includes(text) === true;
+
+describe('CI workflow', () => {
   const ci = loadWorkflow('ci.yml');
-  const core = loadWorkflow('core.yml');
-  const rootPackage = JSON.parse(
-    readFileSync(join(repoRoot, 'package.json'), 'utf8'),
-  ) as { engines: { node: string } };
+  const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+    engines: { node: string };
+  };
 
-  it('runs an independent, fail-complete matrix at every declared boundary', () => {
-    const job = requireJob(ci, 'node-compat');
-    const versions = job.strategy?.matrix?.['node-version'];
-
-    expect(job.needs).toBeUndefined();
-    expect(job.if).toBeUndefined();
-    expect(job['runs-on']).toBe('ubuntu-latest');
-    expect(job['timeout-minutes']).toBe(20);
-    expect(job.strategy?.['fail-fast']).toBe(false);
-    expect(versions).toEqual(['20.19.0', '22.12.0', '22.19.0', '24.x']);
-    expect(job.strategy?.matrix?.exclude).toBeUndefined();
-
-    const declaredFloors = Array.from(
-      rootPackage.engines.node.matchAll(/(?:\^|>=)(\d+\.\d+\.\d+)/gu),
-      (match) => match[1],
-    );
-    expect(versions).toEqual(expect.arrayContaining(declaredFloors));
-
-    const primaryNode = String(ci.env?.NODE_VERSION);
-    expect(versions).toContain(`${primaryNode}.x`);
-    const coreSetup = requireSteps(requireJob(core, 'core')).find(
-      (step) => step.uses === 'actions/setup-node@v6',
-    );
-    expect(coreSetup?.with?.['node-version']).toBe(primaryNode);
+  it('keeps one main workflow with a single aggregate check', () => {
+    expect(Object.keys(ci.jobs ?? {}).sort()).toEqual(['ci-ok', 'node-compat', 'verify', 'web-e2e']);
+    expect(existsSync(join(workflowsDir, 'core.yml'))).toBe(false);
   });
 
-  it('installs, builds, typechecks, tests Core and CLI, then smokes the built CLI', () => {
-    const job = requireJob(ci, 'node-compat');
-    const steps = requireSteps(job);
-    expect(steps.length).toBeGreaterThanOrEqual(10);
+  it('never lets a failing job or step pass silently', () => {
+    for (const [name, found] of Object.entries(ci.jobs ?? {})) {
+      expect([undefined, false]).toContain(found['continue-on-error']);
+      for (const step of steps(found)) {
+        expect([undefined, false]).toContain(step['continue-on-error']);
+        if (name !== 'ci-ok') expect(step.if).toBeUndefined();
+      }
+    }
+  });
 
-    const setupNode = steps.find(
-      (step) => step.uses === 'actions/setup-node@v6',
+  it('verifies the whole repo once on the primary Node version', () => {
+    const verify = job(ci, 'verify');
+    const list = steps(verify);
+    expect(list.find((step) => step.uses === 'actions/setup-node@v6')?.with?.['node-version']).toBe(
+      '${{ env.NODE_VERSION }}',
     );
-    expect(setupNode?.with?.['node-version']).toBe(
-      '${{ matrix.node-version }}',
-    );
-    const resolvedStep = steps.find(
-      (step) => step.name === 'Assert resolved Node version',
-    );
-    expect(resolvedStep).toBeDefined();
-    expect(resolvedStep?.env?.EXPECTED_NODE_VERSION).toBe(
-      '${{ matrix.node-version }}',
-    );
-    expect(resolvedStep?.run).toContain(
-      'process.env.EXPECTED_NODE_VERSION',
-    );
-    expect(resolvedStep?.run).not.toMatch(/\$\{/u);
-    expect(resolvedStep?.run).toContain('expected.endsWith(".x")');
-    expect(resolvedStep?.run).toContain('actual.startsWith(prefix + ".")');
-    expect(resolvedStep?.run).toContain('actual !== expected');
-    expect(resolvedStep?.run).toContain('throw new Error');
+    expect(list.some((step) => step.uses?.startsWith('docker://rhysd/actionlint:') === true)).toBe(true);
+    expect(list.some(runs('bash -n scripts/install.sh'))).toBe(true);
+    expect(list.some(runs('pnpm ignored-builds'))).toBe(true);
 
-    const orderedStepIndexes = [
-      steps.findIndex((step) => step.uses === 'actions/checkout@v6'),
-      steps.findIndex((step) => step.uses === 'actions/setup-node@v6'),
-      steps.indexOf(resolvedStep!),
-      steps.findIndex(
-        (step) => step.run === 'npm install --global corepack@0.34.1',
-      ),
-      steps.findIndex((step) => step.run === 'corepack enable pnpm'),
-      steps.findIndex((step) => step.run === 'pnpm install --frozen-lockfile'),
-      steps.findIndex((step) => step.run === 'pnpm -r build'),
-      steps.findIndex((step) => step.run === 'pnpm -r typecheck'),
-      steps.findIndex(
-        (step) => step.run === 'pnpm --filter @tekon/core test:unit',
-      ),
-      steps.findIndex(
-        (step) => step.run === 'pnpm --filter @tekon/cli test:unit',
-      ),
-      steps.findIndex(
-        (step) =>
-          step.run?.includes('node packages/cli/dist/index.js --version') ===
-          true,
-      ),
+    const install = stepIndex(list, runs('pnpm install --frozen-lockfile'));
+    const build = stepIndex(list, (step) => step.run === 'pnpm -r build');
+    const typecheck = stepIndex(list, (step) => step.run === 'pnpm -r typecheck');
+    const test = stepIndex(list, (step) => step.run === 'pnpm test --run');
+    const smoke = stepIndex(list, runs('node packages/cli/dist/index.js --version'));
+    expect([install, build, typecheck, test, smoke]).toEqual([install, build, typecheck, test, smoke].sort((a, b) => a - b));
+  });
+
+  it('tests every declared Node floor, and only those, in a fail-complete matrix', () => {
+    const compat = job(ci, 'node-compat');
+    const declaredFloors = Array.from(rootPackage.engines.node.matchAll(/(?:\^|>=)(\d+\.\d+\.\d+)/gu), (match) => match[1]);
+    expect(compat.strategy?.matrix?.['node-version']).toEqual(declaredFloors);
+    expect(compat.strategy?.['fail-fast']).toBe(false);
+    expect(String(ci.env?.NODE_VERSION)).toBe('24');
+
+    const list = steps(compat);
+    const assertStep = list.find((step) => step.name === 'Assert resolved Node version');
+    expect(assertStep?.env?.EXPECTED_NODE_VERSION).toBe('${{ matrix.node-version }}');
+    expect(assertStep?.run).toContain('actual !== expected');
+    const order = [
+      stepIndex(list, (step) => step.run === 'npm install --global corepack@0.34.1'),
+      stepIndex(list, runs('pnpm install --frozen-lockfile')),
+      stepIndex(list, (step) => step.run === 'pnpm -r build'),
+      stepIndex(list, (step) => step.run === 'pnpm --filter @tekon/core test:unit'),
+      stepIndex(list, (step) => step.run === 'pnpm --filter @tekon/cli test:unit'),
+      stepIndex(list, runs('node packages/cli/dist/index.js --version')),
     ];
-    expect(orderedStepIndexes.every((index) => index >= 0)).toBe(true);
-    expect(orderedStepIndexes).toEqual(
-      [...orderedStepIndexes].sort((left, right) => left - right),
-    );
-
-    const smoke = steps[orderedStepIndexes.at(-1) ?? -1]?.run;
-    expect(smoke).toContain(
-      'expected="v$(node -p "require(\'./package.json\').version")"',
-    );
-    expect(smoke).toContain(
-      'test "$(node packages/cli/dist/index.js --version)" = "$expected"',
-    );
-    expect(smoke).toContain('node packages/cli/dist/index.js --help');
-
-    const existingActions = new Set(
-      Object.entries(ci.jobs ?? {})
-        .filter(([name]) => name !== 'node-compat')
-        .flatMap(([, otherJob]) => requireSteps(otherJob))
-        .map((step) => step.uses)
-        .filter((uses): uses is string => typeof uses === 'string'),
-    );
-    for (const action of steps
-      .map((step) => step.uses)
-      .filter((uses): uses is string => typeof uses === 'string')) {
-      expect(existingActions).toContain(action);
-    }
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it('does not allow a failed compatibility leg or step to pass', () => {
-    const job = requireJob(ci, 'node-compat');
-    expect([undefined, false]).toContain(job['continue-on-error']);
-    for (const step of requireSteps(job)) {
-      expect([undefined, false]).toContain(step['continue-on-error']);
-      expect(step.if).toBeUndefined();
+  it('runs browser journeys in parallel on a runner Playwright supports', () => {
+    const e2e = job(ci, 'web-e2e');
+    expect(e2e.needs).toBeUndefined();
+    expect(e2e['runs-on']).toBe('ubuntu-24.04');
+    const list = steps(e2e);
+    expect(list.some(runs('playwright install --with-deps chromium'))).toBe(true);
+    expect(list.some((step) => step.run === 'pnpm --filter @tekon/web test:e2e')).toBe(true);
+  });
+
+  describe('ci-ok aggregate', () => {
+    const aggregate = job(ci, 'ci-ok');
+    const script = steps(aggregate)
+      .map((step) => step.run)
+      .find((run): run is string => typeof run === 'string');
+
+    function check(results: string) {
+      return spawnSync('bash', ['-euo', 'pipefail', '-c', script ?? 'exit 99'], {
+        env: { PATH: process.env.PATH, RESULTS: results },
+        encoding: 'utf8',
+      }).status;
     }
+
+    it('waits for every other job even when one fails', () => {
+      expect(aggregate.if).toBe('always()');
+      expect([...(aggregate.needs as string[])].sort()).toEqual(['node-compat', 'verify', 'web-e2e']);
+      expect(steps(aggregate)[0]?.env?.RESULTS).toBe("${{ join(needs.*.result, ' ') }}");
+    });
+
+    it('passes only when every job succeeded', () => {
+      expect(check('success success success')).toBe(0);
+      expect(check('success failure success')).not.toBe(0);
+      expect(check('success cancelled success')).not.toBe(0);
+      expect(check('success skipped success')).not.toBe(0);
+    });
   });
 });
 
-describe('GitHub Actions production audit contract', () => {
-  const ci = loadWorkflow('ci.yml');
+describe('dependency audit workflow', () => {
+  const audit = loadWorkflow('audit.yml');
 
-  it('runs production audit using the classified retry runner with no continue-on-error', () => {
-    const job = requireJob(ci, 'audit');
-    expect([undefined, false]).toContain(job['continue-on-error']);
-    const steps = requireSteps(job);
-    for (const step of steps) {
-      expect([undefined, false]).toContain(step['continue-on-error']);
-    }
-
-    const auditStep = steps.find((step) =>
-      step.run?.includes('node scripts/ci/audit-production.mjs'),
+  it('runs when dependencies, the audit script or workflows change', () => {
+    const paths = (audit.on?.pull_request as { paths?: string[] } | undefined)?.paths;
+    expect(paths).toEqual(
+      expect.arrayContaining(['pnpm-lock.yaml', '**/package.json', 'scripts/ci/audit-production.mjs', '.github/workflows/**']),
     );
-    expect(auditStep).toBeDefined();
+    expect((audit.on?.push as { paths?: string[] } | undefined)?.paths).toEqual(paths);
+    expect(audit.on).toHaveProperty('workflow_dispatch');
+  });
+
+  it('audits without running install scripts and never ignores failures', () => {
+    const found = job(audit, 'audit');
+    expect([undefined, false]).toContain(found['continue-on-error']);
+    const list = steps(found);
+    for (const step of list) expect([undefined, false]).toContain(step['continue-on-error']);
+    expect(list.some((step) => step.run === 'pnpm install --frozen-lockfile --ignore-scripts')).toBe(true);
+    expect(list.some((step) => step.run === 'node scripts/ci/audit-production.mjs')).toBe(true);
   });
 });

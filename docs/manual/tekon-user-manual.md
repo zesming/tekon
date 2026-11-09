@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | TEKON_HOME=/opt/tekon TEKON_VERSION=main bash
 ```
 
-CI 验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
+CI 验证 Node `20.19.0`、`22.12.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
 
 ### 4.1.1 更新
 
