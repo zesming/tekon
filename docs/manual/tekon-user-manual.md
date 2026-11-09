@@ -345,7 +345,7 @@ tekon init --repo /path/to/project
 
 创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
 
-在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目重新执行一次 `init` 即可补上。
+在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上；重新执行 `init` 也可以，但会重写 `config.yaml`。
 
 Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。
 
@@ -628,7 +628,7 @@ tekon ui --repo /path/to/project --port 3001
 
 默认端口 3000。先 `init`，再打开终端输出的完整 URL：`http://127.0.0.1:3000/#token=<会话令牌>`。
 
-服务只响应以 `localhost`、`127.0.0.1`、`::1` 主机名访问的请求；通过局域网 IP、反向代理域名或云 IDE 端口转发访问会返回 403 `Host not allowed`，请在本机用上面的地址打开。
+服务只响应以 `localhost`、`127.0.0.1`、`::1` 主机名访问的请求；通过局域网 IP、反向代理域名或云 IDE 端口转发访问会返回 403 `Host not allowed`，请在本机用上面的地址打开（SSH 等转发到本机 localhost 的方式不受影响）。
 
 前端读取片段令牌后写入当前标签页的 sessionStorage，并从地址栏清除；刷新后仍可使用。片段不会随初次 URL 请求发送，后续 API 使用令牌鉴权。`Ctrl+C` 停止本地服务。
 

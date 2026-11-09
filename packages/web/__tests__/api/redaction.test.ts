@@ -21,7 +21,8 @@ describe('redactString masks private keys that follow a key name', () => {
   it.each([
     ['quoted env value', `GOOGLE_PRIVATE_KEY="${begin}\n${body}\n${end}\n"`],
     ['multi-line dotenv', `PRIVATE_KEY=${begin}\n${body}\n${end}`],
-    ['yaml value on the next line', `private_key: |\n  ${begin}\n  ${body}\n  ${end}`],
+    ['yaml value on the next line', `private_key:\n  ${begin}\n  ${body}\n  ${end}`],
+    ['single-line dotenv with escaped newlines', `PRIVATE_KEY="${begin}\\n${body}\\n${end}\\n"`],
     ['log line', `secret: ${begin}\n${body}\n${end}`],
   ])('%s', (_name, input) => {
     expect(redactString(input)).not.toContain(body);

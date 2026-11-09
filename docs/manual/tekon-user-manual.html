@@ -356,7 +356,7 @@ tekon eval readiness
 tekon init --repo /path/to/project
 </code></pre>
 <p>创建 <code>.tekon/config.yaml</code>、<code>repo-profile.yaml</code>、<code>web-session.json</code> 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。</p>
-<p>在 git 仓库里会把 <code>.tekon/</code> 写入 <code>.git/info/exclude</code>（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目重新执行一次 <code>init</code> 即可补上。</p>
+<p>在 git 仓库里会把 <code>.tekon/</code> 写入 <code>.git/info/exclude</code>（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 <code>echo '.tekon/' &gt;&gt; "$(git rev-parse --git-path info/exclude)"</code> 补上；重新执行 <code>init</code> 也可以，但会重写 <code>config.yaml</code>。</p>
 <p>Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。</p>
 <h3 id="62-workflow-preflight" tabindex="-1">6.2 <code>workflow preflight</code></h3>
 <pre><code class="language-bash">tekon workflow preflight
@@ -582,7 +582,7 @@ tekon eval work-usability --samples /path/to/work-usability-samples.yaml
 tekon ui --repo /path/to/project --port 3001
 </code></pre>
 <p>默认端口 3000。先 <code>init</code>，再打开终端输出的完整 URL：<code>http://127.0.0.1:3000/#token=&lt;会话令牌&gt;</code>。</p>
-<p>服务只响应以 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 主机名访问的请求；通过局域网 IP、反向代理域名或云 IDE 端口转发访问会返回 403 <code>Host not allowed</code>，请在本机用上面的地址打开。</p>
+<p>服务只响应以 <code>localhost</code>、<code>127.0.0.1</code>、<code>::1</code> 主机名访问的请求；通过局域网 IP、反向代理域名或云 IDE 端口转发访问会返回 403 <code>Host not allowed</code>，请在本机用上面的地址打开（SSH 等转发到本机 localhost 的方式不受影响）。</p>
 <p>前端读取片段令牌后写入当前标签页的 sessionStorage，并从地址栏清除；刷新后仍可使用。片段不会随初次 URL 请求发送，后续 API 使用令牌鉴权。<code>Ctrl+C</code> 停止本地服务。</p>
 <p>顶栏分开显示凭据和 Provider 状态；凭据有效不代表 Provider 可执行。可在连接面板重新应用令牌或单独重试 Provider 检查。完整页面流程见 §7。</p>
 <h3 id="621-update" tabindex="-1">6.21 <code>update</code></h3>

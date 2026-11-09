@@ -114,6 +114,7 @@ describe('secret scanning and redaction', () => {
   it('does not block common Slack placeholders but still masks them in logs', () => {
     for (const placeholder of [j('xox', 'b-your-bot-token'), j('xox', 'b-your-token'), j('xox', 'b-xxxxxxxxxx-xxxx')]) {
       expect(scanTextForSecrets(`SLACK_BOT_TOKEN=${placeholder}`)).toEqual([]);
+      expect(redactSecrets(`slack ${placeholder}`).content).not.toContain(placeholder);
     }
     expect(scanTextForSecrets(j('xox', 'p-', '123456789012-123456789012-123456789012-', 'a'.repeat(32))).map((f) => f.ruleId)).toEqual(['slack-token']);
   });
@@ -139,6 +140,13 @@ describe('secret scanning and redaction', () => {
       ['Authorization: token ghostvalue42', 'ghostvalue42'],
       ['Cookie: session=cookievalue77', 'cookievalue77'],
       ['pwd=shortpw', 'shortpw'],
+      ['SECRET_KEY=django-insecure-abc123', 'django-insecure-abc123'],
+      ['STRIPE_SECRET_KEY=sk_live_abcdef', 'sk_live_abcdef'],
+      ['secret_key: plainvalue1', 'plainvalue1'],
+      ['ENCRYPTION_KEY=enc0ded-value', 'enc0ded-value'],
+      ['mysql --password "s3cretpw"', 's3cretpw'],
+      ["deploy --token 'tok-abc-123'", 'tok-abc-123'],
+      ['{"content":"DB_PASSWORD=\\"supersecret\\"\\nnext"}', 'supersecret'],
     ];
     for (const [content, secret] of cases) {
       const redacted = redactSecrets(content).content;
@@ -153,6 +161,9 @@ describe('secret scanning and redaction', () => {
       'api_key = os.environ["API_KEY"]',
       'secret: process.env.SECRET',
       'token: ${{ secrets.GH_TOKEN }}',
+      'if (token === flag) return;',
+      'token: string | null;',
+      'password: string; }',
     ].join('\n');
     expect(redactSecrets(content).content).toBe(content);
   });
@@ -169,10 +180,22 @@ describe('secret scanning and redaction', () => {
     const redacted = redactSecrets(truncated).content;
     expect(redacted).not.toContain(keyBody);
     expect(redacted).toContain('next log line');
+
+    const truncatedForms = [
+      // JSON-escaped newlines, cut off before END.
+      `{"private_key": "${j('-----BEGIN ', 'PRIVATE KEY-----')}\\n${keyBody}\\n${keyBody}`,
+      // Whitespace collapsed to one line.
+      `${j('-----BEGIN ', 'PRIVATE KEY-----')} ${keyBody} ${keyBody}`,
+      // Encrypted traditional PEM with headers and a blank line.
+      [j('-----BEGIN RSA ', 'PRIVATE KEY-----'), 'Proc-Type: 4,ENCRYPTED', 'DEK-Info: AES-128-CBC,0123456789ABCDEF', '', keyBody, keyBody].join('\n'),
+    ];
+    for (const form of truncatedForms) {
+      expect(redactSecrets(form).content, form.slice(0, 40)).not.toContain(keyBody);
+    }
   });
 
   it('keeps redaction linear on adversarial input', () => {
-    for (const input of ['a.'.repeat(64_000), 'eyJ-'.repeat(32_000), 'a'.repeat(128_000), 'password'.repeat(16_000)]) {
+    for (const input of ['a.'.repeat(64_000), 'eyJ-'.repeat(32_000), 'a'.repeat(128_000), 'password'.repeat(16_000), `${'token='.repeat(20_000)}(`, '--token'.repeat(20_000), j('-----BEGIN ', 'PRIVATE KEY-----\n').repeat(10_000)]) {
       const started = performance.now();
       redactSecrets(input);
       expect(performance.now() - started, input.slice(0, 8)).toBeLessThan(500);

@@ -13,7 +13,9 @@ interface SecretRule {
   id: string;
   severity: 'high' | 'critical';
   pattern: RegExp;
-  redactPattern: RegExp;
+  /** Either a pattern to replace, or a custom pass over the whole text. */
+  redactPattern?: RegExp;
+  redact?: (content: string) => string;
   message: string;
   /** Replacement for one match; defaults to a `[REDACTED_<ID>]` marker. */
   replace?: (match: string, ...groups: Array<string | undefined>) => string;
@@ -50,6 +52,11 @@ export function redactSecrets(content: string): {
   let redacted = content;
   const findings = scanTextForSecrets(content);
   for (const rule of [...BLOCKING_RULES, ...REDACTION_ONLY_RULES]) {
+    if (rule.redact) {
+      redacted = rule.redact(redacted);
+      continue;
+    }
+    if (!rule.redactPattern) continue;
     redacted = redacted.replace(rule.redactPattern, (match: string, ...rest: unknown[]) => {
       if (!rule.replace) return marker(rule.id);
       // String.replace passes the capture groups first, then the numeric offset.
@@ -91,10 +98,65 @@ const keepPrefix = (_match: string, prefix?: string) => `${prefix ?? ''}[REDACTE
 
 // Key names whose values are credentials, matched case-insensitively.
 const CREDENTIAL_KEY =
-  '(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|secret|password|passwd|pwd|credentials?|private[_-]?key|cookie)';
-// Values that are code or placeholders rather than literal secrets.
+  '(?:api[_-]?key|secret[_-]?key|access[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key|private[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|secret|password|passwd|pwd|credentials?|session|cookie)';
+// Values that are code, types or placeholders rather than literal secrets.
+// Kept free of unbounded lookaheads so matching stays linear.
 const NOT_A_LITERAL =
-  "(?![\\[<$])(?!(?:true|false|null|none|undefined)\\b)(?!process\\.env|os\\.environ)(?![^\\s'\",;]*[()])";
+  "(?![\\[<$=`\\\\])(?!(?:true|false|null|none|undefined|string|number|boolean|any|unknown|object|never|void)\\b)(?!process\\.env|os\\.environ)";
+// A quoted value, also when the quotes are escaped inside a JSON string.
+const QUOTED_VALUE = `(\\\\?["'])(?![<$[])([^"'\\n\\\\]+)\\\\?["']`;
+const UNQUOTED_VALUE = `${NOT_A_LITERAL}[^\\s'",;\\\\]+`;
+
+/** Masks the value but leaves call expressions such as `getToken()` alone. */
+const maskCredentialValue = (match: string, prefix?: string, quote?: string, quoted?: string) => {
+  if (quote !== undefined && quoted !== undefined) return `${prefix ?? ''}${quote}[REDACTED_SECRET]${quote}`;
+  const value = match.slice((prefix ?? '').length);
+  if (/[()]/u.test(value)) return match;
+  return `${prefix ?? ''}[REDACTED_SECRET]`;
+};
+
+const PRIVATE_KEY_BEGIN = /-----BEGIN ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
+const PRIVATE_KEY_END = /-----END ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
+// Key lines right after a BEGIN line that has no END line: real or
+// JSON-escaped newlines, PEM headers, blank lines, or 20+ character pieces when
+// whitespace was collapsed. Always matches, possibly empty.
+const TRUNCATED_KEY_TAIL =
+  /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+(?=\r?\n|\\(?:r\\)?n|["']|$))?|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
+
+/**
+ * Replaces each private key block, BEGIN through its matching END, with one
+ * marker. A block cut off before END loses only the key lines after BEGIN, so
+ * the rest of a log stays readable. END positions are indexed once per key type,
+ * so text full of BEGIN lines is still handled in linear time.
+ */
+function redactPrivateKeyBlocks(content: string): string {
+  if (!content.includes('PRIVATE KEY-----')) return content;
+  const endsByType = new Map<string, { positions: Array<[number, number]>; next: number }>();
+  for (const match of content.matchAll(PRIVATE_KEY_END)) {
+    const type = match[1] ?? '';
+    const entry = endsByType.get(type) ?? { positions: [], next: 0 };
+    entry.positions.push([match.index, match.index + match[0].length]);
+    endsByType.set(type, entry);
+  }
+  let output = '';
+  let cursor = 0;
+  for (const match of content.matchAll(PRIVATE_KEY_BEGIN)) {
+    if (match.index < cursor) continue;
+    const headerEnd = match.index + match[0].length;
+    const ends = endsByType.get(match[1] ?? '');
+    while (ends && ends.next < ends.positions.length && ends.positions[ends.next]![0] < headerEnd) ends.next++;
+    let stop: number;
+    if (ends && ends.next < ends.positions.length) {
+      stop = ends.positions[ends.next]![1];
+    } else {
+      TRUNCATED_KEY_TAIL.lastIndex = headerEnd;
+      stop = headerEnd + (TRUNCATED_KEY_TAIL.exec(content)?.[0].length ?? 0);
+    }
+    output += `${content.slice(cursor, match.index)}${marker('private-key')}`;
+    cursor = stop;
+  }
+  return output + content.slice(cursor);
+}
 
 const MAX_SCAN_DEPTH = 10;
 const MAX_SCAN_FILES = 10_000;
@@ -147,10 +209,7 @@ const BLOCKING_RULES: SecretRule[] = [
     id: 'private-key',
     severity: 'critical',
     pattern: /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/u,
-    // The whole block. Without an END line only the key lines right after
-    // BEGIN are masked, so the rest of a log stays readable.
-    redactPattern:
-      /-----BEGIN ((?:[A-Z]+ )*)PRIVATE KEY-----(?:[\s\S]*?-----END \1PRIVATE KEY-----|(?:\r?\n[ \t]*(?:[A-Za-z0-9+/=]+|Proc-Type:[^\n]*|DEK-Info:[^\n]*))*)/gu,
+    redact: redactPrivateKeyBlocks,
     message: 'Private key material is present.',
   },
   {
@@ -248,25 +307,22 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
     severity: 'high',
     // KEY=value, KEY: "value", "key": "value" and --key=value, of any length.
     pattern: new RegExp(
-      `(?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*(?:"(?![<$[])[^"\\n]+"|'(?![<$[])[^'\\n]+'|${NOT_A_LITERAL}[^\\s'",;]+)`,
+      `(?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
       'iu',
     ),
     redactPattern: new RegExp(
-      `((?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*)(?:"(?![<$[])([^"\\n]+)"|'(?![<$[])([^'\\n]+)'|${NOT_A_LITERAL}[^\\s'",;]+)`,
+      `((?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
       'giu',
     ),
-    replace: (_match, prefix, doubleQuoted, singleQuoted) => {
-      const quote = doubleQuoted !== undefined ? '"' : singleQuoted !== undefined ? "'" : '';
-      return `${prefix ?? ''}${quote}[REDACTED_SECRET]${quote}`;
-    },
+    replace: maskCredentialValue,
     message: 'A credential assignment is present.',
   },
   {
     id: 'credential-flag',
     severity: 'high',
-    pattern: new RegExp(`(?<!-)--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+(?!-)${NOT_A_LITERAL}[^\\s'",;]+`, 'iu'),
-    redactPattern: new RegExp(`((?<!-)--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+)(?!-)${NOT_A_LITERAL}[^\\s'",;]+`, 'giu'),
-    replace: keepPrefix,
+    pattern: new RegExp(`(?<![A-Za-z0-9-])--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+(?!-)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`, 'iu'),
+    redactPattern: new RegExp(`((?<![A-Za-z0-9-])--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+)(?!-)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`, 'giu'),
+    replace: maskCredentialValue,
     message: 'A credential passed as a command-line flag is present.',
   },
 ];
