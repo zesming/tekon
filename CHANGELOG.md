@@ -1,5 +1,9 @@
 # 变更日志
 
+## 0.26.3 — 2026-11-09
+
+- 升级有已知漏洞的依赖：vite 7.3.7、zod 4.6.7、source-map-js 1.2.2，生产依赖审计恢复为 0 条。
+
 ## 0.26.2 — 2026-11-09
 
 - 修复 Claude Code 节点在 macOS Keychain 登录下报未登录：Claude 子进程现在会收到登录用户、代理变量、`NODE_EXTRA_CA_CERTS` 以及 `ANTHROPIC_*`、`CLAUDE_*` 变量。

@@ -1,6 +1,6 @@
 {
   "name": "@tekon/core",
-  "version": "0.26.2",
+  "version": "0.26.3",
   "private": true,
   "type": "module",
   "exports": {
@@ -24,7 +24,7 @@
   "dependencies": {
     "better-sqlite3": "^12.10.0",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
