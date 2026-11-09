@@ -99,20 +99,22 @@ const keepPrefix = (_match: string, prefix?: string) => `${prefix ?? ''}[REDACTE
 // Key names whose values are credentials, matched case-insensitively.
 const CREDENTIAL_KEY =
   '(?:api[_-]?key|secret[_-]?key|access[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key|private[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|token|secret|password|passwd|pwd|credentials?|session|cookie)';
-// Values that are code, types or placeholders rather than literal secrets.
-// Kept free of unbounded lookaheads so matching stays linear.
-const NOT_A_LITERAL =
-  "(?![\\[<$=`\\\\])(?!(?:true|false|null|none|undefined|string|number|boolean|any|unknown|object|never|void)\\b)(?!process\\.env|os\\.environ)";
-// A quoted value, also when the quotes are escaped inside a JSON string.
-const QUOTED_VALUE = `(\\\\?["'])(?![<$[])([^"'\\n\\\\]+)\\\\?["']`;
-const UNQUOTED_VALUE = `${NOT_A_LITERAL}[^\\s'",;\\\\]+`;
+// Values that are code, types or placeholders rather than literal secrets: a
+// type or keyword only counts when a terminator follows it, so a password such
+// as `any-secret` is still masked. Kept free of unbounded lookaheads.
+const NOT_A_LITERAL = String.raw`(?![\[<$=` + '`' + String.raw`\\])(?!(?:true|false|null|none|undefined|string|number|boolean|any|unknown|object|never|void|await|new|typeof)(?=[\s'",;)|}\]>]|$))(?!process\.env|os\.environ)`;
+// Quoted values close with the same quote and may contain escapes; the third
+// form is a value quoted with escaped quotes inside a JSON string.
+const QUOTED_VALUE = String.raw`(")(?![<$[])((?:[^"\\\n]|\\.)+)"|(')(?![<$[])((?:[^'\\\n]|\\.)+)'|(\\")(?![<$[])((?:[^"\\\n]|\\[^"\n])+)\\"`;
+// Unquoted values may contain backslashes but stop at \n, \r, \t or an escaped quote.
+const UNQUOTED_VALUE = String.raw`${NOT_A_LITERAL}(?:[^\s'",;\\]|\\\\|\\(?![nrt"'\\]))+`;
 
 /** Masks the value but leaves call expressions such as `getToken()` alone. */
-const maskCredentialValue = (match: string, prefix?: string, quote?: string, quoted?: string) => {
-  if (quote !== undefined && quoted !== undefined) return `${prefix ?? ''}${quote}[REDACTED_SECRET]${quote}`;
-  const value = match.slice((prefix ?? '').length);
-  if (/[()]/u.test(value)) return match;
-  return `${prefix ?? ''}[REDACTED_SECRET]`;
+const maskCredentialValue = (match: string, prefix = '', ...quoted: Array<string | undefined>) => {
+  const quote = quoted.find((value, index) => index % 2 === 0 && value !== undefined);
+  if (quote !== undefined) return `${prefix}${quote}[REDACTED_SECRET]${quote}`;
+  if (/[()]/u.test(match.slice(prefix.length))) return match;
+  return `${prefix}[REDACTED_SECRET]`;
 };
 
 const PRIVATE_KEY_BEGIN = /-----BEGIN ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
@@ -121,7 +123,7 @@ const PRIVATE_KEY_END = /-----END ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
 // JSON-escaped newlines, PEM headers, blank lines, or 20+ character pieces when
 // whitespace was collapsed. Always matches, possibly empty.
 const TRUNCATED_KEY_TAIL =
-  /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+(?=\r?\n|\\(?:r\\)?n|["']|$))?|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
+  /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+(?=\r?\n|\\(?:r\\)?n|["']|$)|(?=\r?\n|\\(?:r\\)?n))|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
 
 /**
  * Replaces each private key block, BEGIN through its matching END, with one

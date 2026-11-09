@@ -147,6 +147,13 @@ describe('secret scanning and redaction', () => {
       ['mysql --password "s3cretpw"', 's3cretpw'],
       ["deploy --token 'tok-abc-123'", 'tok-abc-123'],
       ['{"content":"DB_PASSWORD=\\"supersecret\\"\\nnext"}', 'supersecret'],
+      [`DB_PASSWORD="p@ss'w0rd-xyz"`, 'w0rd-xyz'],
+      [`{"password": "don't-tell-anyone"}`, 't-tell-anyone'],
+      [`password='a"bcdef9'`, 'bcdef9'],
+      ['password = "abc\\def123"', 'def123'],
+      ['PASSWORD=abc\\def123', 'def123'],
+      ['password=any-secret-42', 'any-secret-42'],
+      ['password: never-gonna-guess', 'never-gonna-guess'],
     ];
     for (const [content, secret] of cases) {
       const redacted = redactSecrets(content).content;
@@ -164,6 +171,8 @@ describe('secret scanning and redaction', () => {
       'if (token === flag) return;',
       'token: string | null;',
       'password: string; }',
+      'const session = await deps.sessions.find(id);',
+      'session = new Session(opts)',
     ].join('\n');
     expect(redactSecrets(content).content).toBe(content);
   });
@@ -180,6 +189,7 @@ describe('secret scanning and redaction', () => {
     const redacted = redactSecrets(truncated).content;
     expect(redacted).not.toContain(keyBody);
     expect(redacted).toContain('next log line');
+    expect(redactSecrets([j('-----BEGIN ', 'PRIVATE KEY-----'), keyBody, 'tail text'].join('\n')).content).toBe('[REDACTED_PRIVATE_KEY]\ntail text');
 
     const truncatedForms = [
       // JSON-escaped newlines, cut off before END.

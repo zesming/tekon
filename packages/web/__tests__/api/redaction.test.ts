@@ -29,6 +29,12 @@ describe('redactString masks private keys that follow a key name', () => {
   });
 });
 
+describe('redactString keeps quoted values whole', () => {
+  it('does not leak the tail of a JSON value that contains an apostrophe', () => {
+    expect(redactString(`{"password": "don't-tell-anyone"}`)).not.toContain('tell-anyone');
+  });
+});
+
 describe('redactTextPreview', () => {
   it('redacts token=value patterns without leaking the original value', () => {
     const input = 'token=abc123';
