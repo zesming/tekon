@@ -15,7 +15,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Only pull requests cancel superseded runs; on main a cancelled run would
+  # make ci-ok (always()) report a failure.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: '24'
@@ -171,6 +173,8 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           echo "Job results: $RESULTS"
-          for result in $RESULTS; do
-            test "$result" = success
+          read -r -a results <<< "$RESULTS"
+          [ "${#results[@]}" -eq 3 ] || { echo "Expected 3 job results, got ${#results[@]}"; exit 1; }
+          for result in "${results[@]}"; do
+            [ "$result" = success ] || exit 1
           done

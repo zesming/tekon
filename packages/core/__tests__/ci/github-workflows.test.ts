@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +27,8 @@ interface WorkflowJob {
 
 interface Workflow {
   on?: Record<string, unknown>;
+  permissions?: unknown;
+  concurrency?: { group?: string; 'cancel-in-progress'?: unknown };
   env?: Record<string, unknown>;
   jobs?: Record<string, WorkflowJob>;
 }
@@ -61,19 +63,35 @@ describe('CI workflow', () => {
   const ci = loadWorkflow('ci.yml');
   const rootPackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
     engines: { node: string };
+    scripts: Record<string, string>;
   };
 
   it('keeps one main workflow with a single aggregate check', () => {
+    expect(readdirSync(workflowsDir).sort()).toEqual(['audit.yml', 'ci.yml']);
     expect(Object.keys(ci.jobs ?? {}).sort()).toEqual(['ci-ok', 'node-compat', 'verify', 'web-e2e']);
-    expect(existsSync(join(workflowsDir, 'core.yml'))).toBe(false);
+  });
+
+  it('runs on every pull request and on main, read-only', () => {
+    expect(ci.on).toHaveProperty('pull_request');
+    expect((ci.on?.push as { branches?: string[] }).branches).toEqual(['main']);
+    expect(ci.permissions).toEqual({ contents: 'read' });
+  });
+
+  it('cancels superseded runs only on pull requests, so main never shows a cancelled run as red', () => {
+    expect(ci.concurrency?.['cancel-in-progress']).toBe("${{ github.event_name == 'pull_request' }}");
+  });
+
+  it('keeps a root lint script for the lint gates of built-in workflow templates', () => {
+    expect(rootPackage.scripts.lint).toBe('pnpm -r typecheck');
   });
 
   it('never lets a failing job or step pass silently', () => {
     for (const [name, found] of Object.entries(ci.jobs ?? {})) {
       expect([undefined, false]).toContain(found['continue-on-error']);
+      expect(found.if, name).toBe(name === 'ci-ok' ? 'always()' : undefined);
       for (const step of steps(found)) {
         expect([undefined, false]).toContain(step['continue-on-error']);
-        if (name !== 'ci-ok') expect(step.if).toBeUndefined();
+        expect(step.if, name).toBeUndefined();
       }
     }
   });
@@ -99,6 +117,7 @@ describe('CI workflow', () => {
   it('tests every declared Node floor, and only those, in a fail-complete matrix', () => {
     const compat = job(ci, 'node-compat');
     const declaredFloors = Array.from(rootPackage.engines.node.matchAll(/(?:\^|>=)(\d+\.\d+\.\d+)/gu), (match) => match[1]);
+    expect(Object.keys(compat.strategy?.matrix ?? {})).toEqual(['node-version']);
     expect(compat.strategy?.matrix?.['node-version']).toEqual(declaredFloors);
     expect(compat.strategy?.['fail-fast']).toBe(false);
     expect(String(ci.env?.NODE_VERSION)).toBe('24');
@@ -129,12 +148,11 @@ describe('CI workflow', () => {
 
   describe('ci-ok aggregate', () => {
     const aggregate = job(ci, 'ci-ok');
-    const script = steps(aggregate)
-      .map((step) => step.run)
-      .find((run): run is string => typeof run === 'string');
+    const script = steps(aggregate)[0]?.run;
 
+    // GitHub runs `run:` scripts with `bash -e {0}` when no shell is set.
     function check(results: string) {
-      return spawnSync('bash', ['-euo', 'pipefail', '-c', script ?? 'exit 99'], {
+      return spawnSync('bash', ['-e', '-c', script ?? 'exit 99'], {
         env: { PATH: process.env.PATH, RESULTS: results },
         encoding: 'utf8',
       }).status;
@@ -142,6 +160,7 @@ describe('CI workflow', () => {
 
     it('waits for every other job even when one fails', () => {
       expect(aggregate.if).toBe('always()');
+      expect(steps(aggregate)).toHaveLength(1);
       expect([...(aggregate.needs as string[])].sort()).toEqual(['node-compat', 'verify', 'web-e2e']);
       expect(steps(aggregate)[0]?.env?.RESULTS).toBe("${{ join(needs.*.result, ' ') }}");
     });
@@ -151,6 +170,12 @@ describe('CI workflow', () => {
       expect(check('success failure success')).not.toBe(0);
       expect(check('success cancelled success')).not.toBe(0);
       expect(check('success skipped success')).not.toBe(0);
+      expect(check('failure success success')).not.toBe(0);
+    });
+
+    it('fails when a job result is missing', () => {
+      expect(check('')).not.toBe(0);
+      expect(check('success success')).not.toBe(0);
     });
   });
 });
@@ -164,6 +189,8 @@ describe('dependency audit workflow', () => {
       expect.arrayContaining(['pnpm-lock.yaml', '**/package.json', 'scripts/ci/audit-production.mjs', '.github/workflows/**']),
     );
     expect((audit.on?.push as { paths?: string[] } | undefined)?.paths).toEqual(paths);
+    expect((audit.on?.push as { branches?: string[] }).branches).toEqual(['main']);
+    expect(audit.permissions).toEqual({ contents: 'read' });
     expect(audit.on).toHaveProperty('workflow_dispatch');
   });
 

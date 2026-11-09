@@ -3,6 +3,10 @@
 ## 0.26.3 — 2026-11-09
 
 - 升级有已知漏洞的依赖：vite 7.3.7、zod 4.6.7、source-map-js 1.2.2，生产依赖审计恢复为 0 条。
+- CI 精简为一个 workflow，`CI OK` 汇总全部任务作为合入检查；Playwright 固定在 `ubuntu-24.04` 运行。
+- 依赖审计只在依赖、审计脚本或 workflow 变化时运行，不再拦截无关 PR；新公布的漏洞由 Dependabot 告警提示。
+- Node 兼容矩阵只测 `engines` 下限 `20.19.0`、`22.12.0` 和主版本 24，不再单独测 `22.19.0`（DSH 的宿主下限仍由 DSH preflight 检查）。
+- 开发命令：`pnpm lint` 现为 `pnpm -r typecheck` 的别名（内置模板的 lint 门禁使用它），子包不再各自定义 `lint`。
 
 ## 0.26.2 — 2026-11-09
 
