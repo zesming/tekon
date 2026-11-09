@@ -5,7 +5,7 @@
 - PR/MR：https://github.com/zesming/tekon/pull/37
 - 审查维度与范围：产品逻辑、UI 与交互、代码实现、测试；全量。`docs/reviews` 的历史证据只统计规模，不逐篇审
 - 审查手段：静态阅读；安装依赖、构建、运行全量测试与覆盖率；Playwright 全量；用合成数据实际操作 Web 并截图；用本机 Claude Code 在临时仓库真实跑一次 bugfix；变异验证；探针复现
-- 内部评审：2 轮质证，驳回 0 条，经用户答复定案 15 问（含交付 4 问），仍需决策 1 条（其中未充分质证 0 条）
+- 内部评审：2 轮质证，驳回 0 条，经用户答复定案 15 问（含交付 4 问），仍需决策 0 条（其中未充分质证 0 条）
 
 ## 修复约定
 
@@ -809,14 +809,14 @@
 - 修复建议：把输出写到临时日志，用 trap 在失败时打印尾部和日志路径。
 
 ### [CD-36] Draft 路径绕过 CommandGateway，吞掉错误，模板推荐靠关键词
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：待产品确认
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认（2026-11-09 用户授权维护方决定）；另排（重构第 5 阶段）
 - 位置：packages/cli/src/draft-agent.ts:14-18，:47-52，:228-239，packages/cli/src/draft-interactive.ts:108，:112，packages/core/src/draft/shape.ts:18，:442-480，docs/manual/tekon-user-manual.md:647
 - 现象：
   - `execFileSync` 直接调用，写死 Claude 的参数（注释称只支持 claude-code），`stdio` 忽略 stderr，超时 60 秒。任何异常都 `catch {}`，回退到静态问题。回退时会打印提示。
   - `classifyDraft` 和 `recommendTemplate` 用正则关键词选模板。
 - 依据：手册:647 写明是独立路径。`tekon run` 不走这条路径，默认 standard-delivery（run.ts:154）。
 - 影响：失败原因被吞。同一个 provider 两条调用路径并存，配置和输出处理不一致。“按任务描述选 workflow”实际是关键词匹配。
-- 修复建议：待产品确认是否保留 draft。候选：删除；或并入动态工作流的 planner。推荐并入，统一走 adapter。
+- 修复建议：已决定（2026-11-09）：保留澄清能力，并入动态工作流的 planner，统一走 adapter 和 CommandGateway，删除 `draft-agent.ts` 里的独立调用和关键词选模板；失败原因按 run 事件如实上报，不再静默回退。理由：只留一条 provider 调用路径，配置、日志和错误处理一致；删除虽然最省，但会失去任务开始前的澄清步骤。依赖动态工作流的重做，随重构第 5 阶段处理。
 
 ### [CD-42] 安全类，详情见私下渠道
 - 维度：代码 | 严重度：S2 | 状态：已确认，单独小 PR
@@ -1016,7 +1016,7 @@
 
 ## 五、需要决策的事项
 
-- **[CD-36] Draft 是否保留**：候选：并入动态工作流的 planner，统一走 adapter（推荐，只留一条调用路径）；删除（最省，但失去澄清步骤）。这条依赖动态工作流的重做，可以到那一步再定。
+已定（2026-11-09，用户授权维护方评估）：[CD-36] Draft 并入动态工作流的 planner，统一走 adapter，随重构第 5 阶段处理。条目区不再有待决条目。
 
 另有一项非条目决定：[Agent SDK 文档](https://code.claude.com/docs/en/agent-sdk/overview.md)对第三方产品使用订阅登录有限制，资料内容是登录方式的适用范围。Tekon 驱动的 agent 可能走订阅登录，自用是否合规本次未判定，发布给他人使用前必须重新确认（仓库公开且有 install.sh）。
 
