@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "tsx src/server/index.ts",
+    "dev": "TEKON_WEB_DEV=1 tsx src/server/index.ts",
     "test": "vitest --config vitest.config.ts",
     "test:e2e": "vite build && playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit"

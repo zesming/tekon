@@ -54,7 +54,7 @@ export async function createWebServer(
   const host = options.host ?? '127.0.0.1';
   const allowedHostnames = new Set(['localhost', '127.0.0.1', '::1', stripBrackets(host)]);
   const server = createServer(async (request, response) => {
-    setSecurityHeaders(response);
+    setSecurityHeaders(response, vite !== null);
 
     // Only answer requests addressed to a local host name, so a page whose DNS
     // name is rebound to this machine cannot read or call the local server.
@@ -492,15 +492,19 @@ function serveProductionHtml(response: ServerResponse, distDir: string): boolean
   return true;
 }
 
-function setSecurityHeaders(response: ServerResponse): void {
+/** Vite dev middleware (hot reload, inline scripts) is opt-in for Tekon developers. */
+export function webDevModeFromEnv(env: NodeJS.ProcessEnv): boolean {
+  return env.TEKON_WEB_DEV === '1';
+}
+
+function setSecurityHeaders(response: ServerResponse, devMode: boolean): void {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('X-Frame-Options', 'DENY');
   response.setHeader('Referrer-Policy', 'no-referrer');
-  // CSP: allow self for scripts/styles, inline styles for Vite dev
-  const csp =
-    process.env.NODE_ENV === 'production'
-      ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-      : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'";
+  // Built assets need no inline scripts; only the Vite dev middleware does.
+  const csp = devMode
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'";
   response.setHeader('Content-Security-Policy', csp);
 }
 

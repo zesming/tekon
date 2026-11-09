@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
-import { createWebServer, type RunningWebServer } from '../../src/server/http.js';
+import { createWebServer, webDevModeFromEnv, type RunningWebServer } from '../../src/server/http.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -84,5 +84,30 @@ describe('web server request host guard', () => {
     });
     expect(response.status).toBe(400);
     expect(response.body).toContain('Origin not allowed');
+  });
+});
+
+describe('web server content security policy', () => {
+  it('serves built assets with a script policy that forbids inline scripts, whatever NODE_ENV says', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const server = await startServer();
+      const response = await fetch(server.url);
+      const csp = response.headers.get('content-security-policy') ?? '';
+      expect(csp).toContain("script-src 'self'");
+      expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/u);
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
+  });
+});
+
+describe('web server dev mode switch', () => {
+  it('uses the Vite dev middleware only when TEKON_WEB_DEV=1', () => {
+    expect(webDevModeFromEnv({})).toBe(false);
+    expect(webDevModeFromEnv({ NODE_ENV: 'development' })).toBe(false);
+    expect(webDevModeFromEnv({ TEKON_WEB_DEV: '0' })).toBe(false);
+    expect(webDevModeFromEnv({ TEKON_WEB_DEV: '1' })).toBe(true);
   });
 });
