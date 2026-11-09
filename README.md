@@ -8,7 +8,7 @@
 
 ## 快速开始
 
-需要 Git、npm 和 Node.js（`^20.19.0` 或 `>=22.12.0`）。已测 Node：20.19、22.12、22.19、24.x；未列出的版本不代表已获验证。
+需要 Git、npm 和 Node.js（`^20.19.0` 或 `>=22.12.0`）。已测 Node：20.19、22.12、24.x；未列出的版本不代表已获验证。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
@@ -85,7 +85,6 @@ npm exec --yes -- pnpm@10.12.1 install --frozen-lockfile
 pnpm build
 pnpm typecheck
 pnpm test --run
-pnpm lint
 ```
 
 后续命令也可用 `npm exec --yes -- pnpm@10.12.1` 代替 `pnpm`。

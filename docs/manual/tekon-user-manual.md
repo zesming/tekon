@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.26.1**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.26.4**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -120,7 +120,7 @@ curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | TEKON_HOME=/opt/tekon TEKON_VERSION=main bash
 ```
 
-CI 验证 Node `20.19.0`、`22.12.0`、`22.19.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
+CI 验证 Node `20.19.0`、`22.12.0`，并跟踪 `24.x`；此验证范围不代表其他或未来 major 已获生产验证。DSH 另有更高 Node 要求，见 §5.7。
 
 ### 4.1.1 更新
 
@@ -285,6 +285,12 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 | `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
 
 真实 workflow 节点通过 artifact manifest 交回声明的产物。Run 保存 Provider 配置快照，恢复沿用原快照，避免意外切换后端。
+
+**Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量不会传给 Claude。
+
+- **认证方式跟着变量走**：shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 优先用它们，不用订阅登录（见 [Claude 认证](https://code.claude.com/docs/en/authentication)）。工作和个人场景在同一台机器上时，请在各自的 shell 里分开设置。
+- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key。
+- **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量不会传过去，请写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
 
 **DSH 使用条件**：自行安装 `@deepseek-ai/dsh` 并配置 `DEEPSEEK_API_KEY`；当前 tested pin 为 `0.1.2-alpha.3`，宿主 Node 要求 `^22.19.0 || >=24.0.0`。先运行：
 
@@ -673,7 +679,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.1`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.4`。
 
 ## 7. Web Dashboard
 

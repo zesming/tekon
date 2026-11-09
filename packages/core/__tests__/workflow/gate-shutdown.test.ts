@@ -20,23 +20,26 @@ function fixture() {
   const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
   const controller = new AbortController(); const adapter = createMockAgentAdapter();
   const realGate = createGateEngine({ repositories });
-  const gateEngine: GateEngine = { ...realGate, runGate: vi.fn(async input => repositories.recordGateResult({
+  // Tests wrap this directly: vi.spyOn on an existing vi.fn() returns that same mock (Vitest 4),
+  // so calling gateEngine.runGate from inside its own mockImplementation would recurse.
+  const baseRunGate: GateEngine['runGate'] = async input => repositories.recordGateResult({
     id: `gate_${(await repositories.listGateResults(input.runId)).length}`,
     runId: input.runId, nodeId: input.nodeId, gateType: input.gate.type, gateKey: input.gate.gateKey,
     status: 'failed', durationMs: 0, retries: 0, createdAt: new Date().toISOString(),
-  })) };
+  });
+  const gateEngine: GateEngine = { ...realGate, runGate: vi.fn(baseRunGate) };
   const spec: WorkflowTemplate = { id: 'gate-stop', name: 'Gate stop', version: 1,
     retryPolicy: { maxAttempts: 1, backoffMs: 0, strategy: 'fixed', onExhausted: 'fail' },
     phases: [{ id: 'phase', name: 'Phase', dependsOn: [], parallel: false, nodes: [{ id: 'node', role: 'rd',
       inputs: [], outputs: [], dependsOn: [], gates: [{ type: 'build', autoFix: true, maxRetries: 2, onExhausted: 'fail' }] }] }] };
   const start = () => createWorkflowEngine({ repoPath: root, dataDir: '.tekon', repositories, audit,
     adapter, gateEngine, signal: controller.signal }).startRun({ demandText: 'Gate stop', mode: 'template', workflowSpec: spec });
-  return { repositories, audit, controller, adapter, gateEngine, spec, start };
+  return { repositories, audit, controller, adapter, gateEngine, baseRunGate, spec, start };
 }
 
 describe('Gate execution abort boundaries', () => {
   it.each(['passed', 'failed', 'throw'] as const)('shutdown after initial Gate %s preserves the completed node', async status => {
-    const f = fixture(); const runGate = f.gateEngine.runGate;
+    const f = fixture(); const runGate = f.baseRunGate;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => {
       const result = await runGate(input);
       f.controller.abort(JOB_ABORT_REASON_SHUTDOWN);
@@ -53,7 +56,7 @@ describe('Gate execution abort boundaries', () => {
   });
 
   it.each(['passed', 'failed', 'throw'] as const)('cancellation wins over late Gate %s', async status => {
-    const f = fixture(); const runGate = f.gateEngine.runGate;
+    const f = fixture(); const runGate = f.baseRunGate;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => {
       const result = await runGate(input);
       await f.repositories.updateWorkflowInstanceStatus(input.runId, 'cancelled', input.nodeId);
@@ -68,7 +71,7 @@ describe('Gate execution abort boundaries', () => {
   });
 
   it.each(['passed', 'failed', 'throw'] as const)('ownership loss leaves new owner state untouched after Gate %s', async status => {
-    const f = fixture(); const runGate = f.gateEngine.runGate;
+    const f = fixture(); const runGate = f.baseRunGate;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => {
       const result = await runGate(input);
       await f.repositories.transitionNode(input.nodeId, 'passed');
@@ -103,7 +106,7 @@ describe('Gate execution abort boundaries', () => {
   });
 
   it.each(['passed', 'failed'] as const)('shutdown after repair Gate %s cannot advance or exhaust', async status => {
-    const f = fixture(); const runGate = f.gateEngine.runGate; let calls = 0;
+    const f = fixture(); const runGate = f.baseRunGate; let calls = 0;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => {
       const result = await runGate(input);
       if (++calls === 2) { f.controller.abort(JOB_ABORT_REASON_SHUTDOWN); return { ...result, status }; }
@@ -126,7 +129,7 @@ describe('Gate execution abort boundaries', () => {
       if (input.worktreeLease.nodeId.startsWith('repair_')) throw new Error('ordinary repair failure');
       return runAgent(input);
     });
-    const runGate = f.gateEngine.runGate; let calls = 0;
+    const runGate = f.baseRunGate; let calls = 0;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => {
       const result = await runGate(input);
       if (++calls === 2) { f.controller.abort(JOB_ABORT_REASON_SHUTDOWN); return { ...result, status }; }
@@ -146,7 +149,7 @@ describe('Gate execution abort boundaries', () => {
 
   it('shutdown after Gate success audit stops Node finalize and passed transition', async () => {
     const f = fixture(); const append = f.audit.append.bind(f.audit);
-    const runGate = f.gateEngine.runGate;
+    const runGate = f.baseRunGate;
     vi.spyOn(f.gateEngine, 'runGate').mockImplementation(async input => ({ ...await runGate(input), status: 'passed' }));
     vi.spyOn(f.audit, 'append').mockImplementation(async event => {
       const result = await append(event);

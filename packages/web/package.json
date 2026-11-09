@@ -1,12 +1,11 @@
 {
   "name": "@tekon/web",
-  "version": "0.26.1",
+  "version": "0.26.4",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "vite build",
     "dev": "tsx src/server/index.ts",
-    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest --config vitest.config.ts",
     "test:e2e": "vite build && playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -18,8 +17,8 @@
     "react-dom": "^19.2.7",
     "react-router": "^7.18.2",
     "tsx": "^4.22.4",
-    "vite": "^7.3.5",
-    "zod": "^4.4.3"
+    "vite": "^7.3.7",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
@@ -27,6 +26,6 @@
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.6"
+    "vitest": "4.1.12"
   }
 }

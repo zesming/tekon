@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildClaudeCodeCommand,
@@ -438,6 +438,53 @@ describe('claude code adapter', () => {
     expect(readFileSync(heartbeatPath, 'utf8').length).toBe(
       heartbeatAfterClose,
     );
+  });
+
+  it('starts Claude with the signed-in user and Claude settings but without unrelated secrets', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-env-'));
+    tempDirs.push(repoPath);
+    const envDump = join(repoPath, 'env.json');
+    const envScript = join(repoPath, 'env-dump.mjs');
+    writeFileSync(
+      envScript,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        `writeFileSync(${JSON.stringify(envDump)}, JSON.stringify(process.env));`,
+      ].join('\n'),
+      'utf8',
+    );
+    vi.stubEnv('USER', 'tekon-user');
+    vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+    vi.stubEnv('CLAUDE_CONFIG_DIR', join(repoPath, 'claude-config'));
+    vi.stubEnv('GITHUB_TOKEN', 'github-secret');
+    vi.stubEnv('OPENAI_API_KEY', 'openai-secret');
+    try {
+      const adapter = createClaudeCodeAdapter(
+        {
+          provider: 'claude-code',
+          command: process.execPath,
+          args: [envScript],
+          promptMode: 'arg-append',
+          outputFormat: 'text',
+          timeoutMs: 5_000,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        createCommandGateway(),
+      );
+
+      await adapter.runAgent(baseRunInput(repoPath));
+
+      const childEnv = JSON.parse(readFileSync(envDump, 'utf8')) as Record<string, string>;
+      expect(childEnv).toMatchObject({
+        USER: 'tekon-user',
+        ANTHROPIC_API_KEY: 'anthropic-key',
+        CLAUDE_CONFIG_DIR: join(repoPath, 'claude-config'),
+      });
+      expect(childEnv.GITHUB_TOKEN).toBeUndefined();
+      expect(childEnv.OPENAI_API_KEY).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('passes progress and no-progress timeouts to the command gateway', async () => {

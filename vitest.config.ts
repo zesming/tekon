@@ -11,6 +11,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
+      // Vitest 4 removed coverage.all; listing sources keeps untested files in the report.
+      include: ['packages/*/src/**/*.{ts,tsx}'],
       exclude: [
         '**/dist/**',
         '**/*.config.ts',

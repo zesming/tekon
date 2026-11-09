@@ -1,5 +1,24 @@
 # 变更日志
 
+## 0.26.4 — 2026-11-09
+
+- 修复开发依赖的已知漏洞：vitest 和 `@vitest/coverage-v8` 升到 4.1.12（随之移除有漏洞的 tinypool、minimatch、brace-expansion），删除已无作用的 brace-expansion override；vitest 与 coverage 插件同钉 4.1.12，coverage 显式列出源文件以保留未测文件。只影响开发和测试，不影响安装后的 `tekon`。
+- 适配 Vitest 4：对已是 mock 的方法再 `vi.spyOn` 会返回同一个 mock，`gate-shutdown` 测试改为直接包装底层实现，避免递归。
+
+## 0.26.3 — 2026-11-09
+
+- 升级有已知漏洞的依赖：vite 7.3.7、zod 4.6.7、source-map-js 1.2.2，生产依赖审计恢复为 0 条。
+- CI 精简为一个 workflow，`CI OK` 汇总全部任务作为合入检查；Playwright 固定在 `ubuntu-24.04` 运行。
+- 依赖审计只在依赖、审计脚本或 workflow 变化时运行，不再拦截无关 PR；新公布的漏洞由 Dependabot 告警提示。
+- CI 只测 Node `engines` 下限 `20.19.0`、`22.12.0` 和主版本 24，不再单独测 `22.19.0`（DSH 的宿主下限仍由 DSH preflight 检查）。
+- 开发命令：`pnpm lint` 现为 `pnpm -r typecheck` 的别名（内置模板的 lint 门禁使用它），子包不再各自定义 `lint`。
+
+## 0.26.2 — 2026-11-09
+
+- 修复 Claude Code 节点在 macOS Keychain 登录下报未登录：Claude 子进程现在会收到登录用户、代理变量、`NODE_EXTRA_CA_CERTS` 以及 `ANTHROPIC_*`、`CLAUDE_*` 变量。
+- 行为变化：以前 key 会被剔除，Claude 总用订阅登录；现在 shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 会改用它们，计费方式和账号会随之改变。Claude 在节点里执行的命令（包括免审批的 `npm test`、`npm run build`）也能读到这些变量；Tekon 自己运行的检查命令仍拿不到。处理不信任的仓库时，不要在 shell 里放 key。
+- 修复默认 `standard-delivery` 流程中，评审提出修改并返工成功后，run 卡在 PMO 流程检查点的问题。返工节点的产物和检查结果记在原节点上，流程完整性检查不再要求返工节点单独提供证据，返工节点仍须完成。
+
 ## 0.26.1 — 2026-09-08
 
 - 产物导入失败保留可诊断的原因，区分缺失 manifest、非法格式/schema 与必需产物缺失；补齐 JSON 序列化提示和历史租约冲突的人工处置说明，保持严格校验与原恢复边界。
