@@ -1,3 +1,5 @@
+import { redactSecrets } from '@tekon/core';
+
 const SENSITIVE_KEYS_LOWER = new Set([
   'apikey', 'api_key', 'api-key', 'token', 'secret', 'password', 'passwd', 'pwd',
   'authorization', 'cookie', 'session', 'accesstoken', 'access_token', 'access-token',
@@ -45,7 +47,9 @@ export function redactString(text: string): string {
     /("(?:token|password|passwd|pwd|secret|apiKey|api_key|api-key|access_token|access-token|refresh_token|refresh-token|authorization|cookie|session|private_key|private-key|auth|credentials?)"\s*:\s*)"[^"]*"/gi,
     '$1"[REDACTED]"'
   );
-  return result;
+  // 8. Token shapes without a key name (private key blocks, GitHub, Slack, JWT,
+  //    URL credentials…) come from the core rules, the single source for them.
+  return redactSecrets(result).content;
 }
 
 /**
