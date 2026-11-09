@@ -19,6 +19,7 @@ import {
   type ApiCaller,
 } from './api/root.js';
 import { ApiError } from './api/errors.js';
+import { assertSessionTokenFromFile } from './api/common.js';
 import { webProjectScope } from './api/queries.js';
 import { procedureSpecs, type ProcedureName } from '../shared/rpc-contract.js';
 import { resolveProjectRoot } from './project-context.js';
@@ -50,8 +51,19 @@ export async function createWebServer(
   const vite = options.vite ? await createViteMiddleware() : null;
   const distDir = options.distDir ?? resolve(__dirname, '../../dist');
   const sessionPath = join(projectRoot, '.tekon', 'web-session.json');
+  const host = options.host ?? '127.0.0.1';
+  const allowedHostnames = new Set(['localhost', '127.0.0.1', '::1', stripBrackets(host)]);
   const server = createServer(async (request, response) => {
     setSecurityHeaders(response);
+
+    // Only answer requests addressed to a local host name, so a page whose DNS
+    // name is rebound to this machine cannot read or call the local server.
+    if (!isAllowedHost(request.headers.host, allowedHostnames)) {
+      writeJson(response, 403, {
+        error: { code: 'FORBIDDEN', message: 'Host not allowed' },
+      });
+      return;
+    }
 
     // SSE: GET /api/sessions/:sessionId/events (design §3.1). Placed after
     // setSecurityHeaders and before /api/rpc. Reuses the RPC origin/Sec-Fetch
@@ -184,7 +196,6 @@ export async function createWebServer(
     }
   });
 
-  const host = options.host ?? '127.0.0.1';
   const port = options.port ?? 3000;
   let url = `http://${host}:${port}`;
 
@@ -237,11 +248,9 @@ async function handleRpc(input: {
       throw new ApiError('BAD_REQUEST', 'RPC path is required');
     }
 
-    // Origin + Sec-Fetch-Site check for mutation (token-auth) and session-auth procedures
+    // Origin + Sec-Fetch-Site check for every procedure, including token-free reads.
     const spec = procedureSpecs[body.path as ProcedureName];
-    if (spec && (spec.auth === 'token' || spec.auth === 'session')) {
-      assertRequestAllowed(input.request);
-    }
+    assertRequestAllowed(input.request);
 
     // Session token verification for read (session-auth) procedures
     if (spec && spec.auth === 'session') {
@@ -495,6 +504,21 @@ function setSecurityHeaders(response: ServerResponse): void {
   response.setHeader('Content-Security-Policy', csp);
 }
 
+function stripBrackets(hostname: string): string {
+  return hostname.replace(/^\[(.*)\]$/u, '$1').toLowerCase();
+}
+
+function isAllowedHost(hostHeader: string | undefined, allowed: Set<string>): boolean {
+  if (!hostHeader) {
+    return false;
+  }
+  try {
+    return allowed.has(stripBrackets(new URL(`http://${hostHeader}`).hostname));
+  } catch {
+    return false;
+  }
+}
+
 function assertOriginAllowed(request: IncomingMessage): void {
   const origin = request.headers.origin;
   if (!origin) {
@@ -525,30 +549,6 @@ function assertRequestAllowed(request: IncomingMessage): void {
     throw new ApiError('BAD_REQUEST', 'Cross-site requests are not allowed');
   }
   // Allow: same-origin, same-site, none (CLI/test requests)
-}
-
-function assertSessionTokenFromFile(
-  sessionPath: string,
-  providedToken: string,
-): void {
-  if (!providedToken) {
-    throw new ApiError('UNAUTHORIZED', 'Session token is required');
-  }
-
-  let expectedToken: string | undefined;
-  try {
-    const parsed = JSON.parse(readFileSync(sessionPath, 'utf8')) as {
-      token?: unknown;
-    };
-    expectedToken =
-      typeof parsed.token === 'string' ? parsed.token : undefined;
-  } catch {
-    throw new ApiError('UNAUTHORIZED', 'Web session token is not configured');
-  }
-
-  if (!expectedToken || providedToken !== expectedToken) {
-    throw new ApiError('UNAUTHORIZED', 'Invalid session token');
-  }
 }
 
 async function closeServer(server: Server): Promise<void> {

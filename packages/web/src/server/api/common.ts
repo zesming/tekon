@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import type { WebProjectContext } from '../project-context.js';
@@ -7,13 +8,21 @@ export function assertSessionToken(
   context: WebProjectContext,
   providedToken: string,
 ): void {
+  assertSessionTokenFromFile(context.sessionPath, providedToken);
+}
+
+/** The one session-token check: reads the token file and compares in constant time. */
+export function assertSessionTokenFromFile(
+  sessionPath: string,
+  providedToken: string,
+): void {
   if (!providedToken) {
     throw new ApiError('UNAUTHORIZED', 'Session token is required');
   }
 
   let expectedToken: string | undefined;
   try {
-    const parsed = JSON.parse(readFileSync(context.sessionPath, 'utf8')) as {
+    const parsed = JSON.parse(readFileSync(sessionPath, 'utf8')) as {
       token?: unknown;
     };
     expectedToken = typeof parsed.token === 'string' ? parsed.token : undefined;
@@ -21,9 +30,15 @@ export function assertSessionToken(
     throw new ApiError('UNAUTHORIZED', 'Web session token is not configured');
   }
 
-  if (providedToken !== expectedToken) {
+  if (!expectedToken || !tokensEqual(providedToken, expectedToken)) {
     throw new ApiError('UNAUTHORIZED', 'Invalid session token');
   }
+}
+
+function tokensEqual(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export function positiveIntOrUndefined(
