@@ -6,6 +6,11 @@ export interface ClaudeProviderSmokeEvidenceInput {
   stderrPath: string;
 }
 
+// Claude runs with an exact environment. Keep what it needs to find its
+// login (USER/LOGNAME for the macOS Keychain), reach the network through a
+// proxy, and read its own settings; drop everything else, such as other
+// providers' keys and NODE_OPTIONS. Gate commands use the gateway default
+// environment and never receive these values.
 const CLAUDE_PROVIDER_SAFE_ENV_KEYS = [
   'PATH',
   'HOME',
@@ -15,7 +20,20 @@ const CLAUDE_PROVIDER_SAFE_ENV_KEYS = [
   'LANG',
   'LC_ALL',
   'SHELL',
+  'USER',
+  'LOGNAME',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'all_proxy',
+  'NODE_EXTRA_CA_CERTS',
 ] as const;
+
+const CLAUDE_PROVIDER_ENV_PREFIXES = ['ANTHROPIC_', 'CLAUDE_'] as const;
 
 const SMOKE_COMMAND = 'npm run smoke:claude-provider';
 const SMOKE_ENABLEMENT_NOTE =
@@ -25,9 +43,12 @@ export function buildClaudeProviderEnv(
   source: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const key of CLAUDE_PROVIDER_SAFE_ENV_KEYS) {
-    if (source[key]) {
-      env[key] = source[key];
+  for (const [key, value] of Object.entries(source)) {
+    const allowed =
+      (CLAUDE_PROVIDER_SAFE_ENV_KEYS as readonly string[]).includes(key) ||
+      CLAUDE_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+    if (allowed && value) {
+      env[key] = value;
     }
   }
   return env;

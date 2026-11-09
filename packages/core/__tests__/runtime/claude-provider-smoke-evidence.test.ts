@@ -29,21 +29,44 @@ describe('claude provider smoke support', () => {
     }
   });
 
-  it('uses an allowlisted environment for Claude provider preflight checks', () => {
+  it('keeps the login, proxy and Claude settings Claude needs but drops unrelated secrets', () => {
     expect(
       buildClaudeProviderEnv({
         PATH: '/usr/bin',
         HOME: '/tmp/tekon-home',
         LANG: 'C.UTF-8',
-        ANTHROPIC_API_KEY: 'secret',
-        CLAUDE_CODE_API_KEY: 'secret',
+        USER: 'alice',
+        LOGNAME: 'alice',
+        HTTPS_PROXY: 'http://proxy.example:8080',
+        https_proxy: 'http://proxy.example:8080',
+        NO_PROXY: 'localhost',
+        NODE_EXTRA_CA_CERTS: '/etc/ssl/corp.pem',
+        ANTHROPIC_API_KEY: 'anthropic-key',
+        ANTHROPIC_BASE_URL: 'https://gateway.example',
+        CLAUDE_CONFIG_DIR: '/tmp/claude-config',
+        CLAUDE_CODE_USE_BEDROCK: '1',
         GITHUB_TOKEN: 'secret',
+        OPENAI_API_KEY: 'secret',
+        AWS_SECRET_ACCESS_KEY: 'secret',
+        MY_ANTHROPIC_KEY: 'secret',
         NODE_OPTIONS: '--require /tmp/evil.js',
+        EMPTY_IGNORED: '',
+        CLAUDE_EMPTY: '',
       }),
     ).toEqual({
       PATH: '/usr/bin',
       HOME: '/tmp/tekon-home',
       LANG: 'C.UTF-8',
+      USER: 'alice',
+      LOGNAME: 'alice',
+      HTTPS_PROXY: 'http://proxy.example:8080',
+      https_proxy: 'http://proxy.example:8080',
+      NO_PROXY: 'localhost',
+      NODE_EXTRA_CA_CERTS: '/etc/ssl/corp.pem',
+      ANTHROPIC_API_KEY: 'anthropic-key',
+      ANTHROPIC_BASE_URL: 'https://gateway.example',
+      CLAUDE_CONFIG_DIR: '/tmp/claude-config',
+      CLAUDE_CODE_USE_BEDROCK: '1',
     });
   });
 });

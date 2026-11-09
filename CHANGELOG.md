@@ -1,5 +1,11 @@
 # 变更日志
 
+## 0.26.2 — 2026-11-09
+
+- 修复 Claude Code 节点在 macOS Keychain 登录下报未登录：Claude 子进程现在会收到登录用户、代理变量、`NODE_EXTRA_CA_CERTS` 以及 `ANTHROPIC_*`、`CLAUDE_*` 变量。
+- 行为变化：以前 key 会被剔除，Claude 总用订阅登录；现在 shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 会改用它们，计费方式和账号会随之改变。Claude 在节点里执行的命令（包括免审批的 `npm test`、`npm run build`）也能读到这些变量；Tekon 自己运行的检查命令仍拿不到。处理不信任的仓库时，不要在 shell 里放 key。
+- 修复默认 `standard-delivery` 流程中，评审提出修改并返工成功后，run 卡在 PMO 流程检查点的问题。返工节点的产物和检查结果记在原节点上，流程完整性检查不再要求返工节点单独提供证据，返工节点仍须完成。
+
 ## 0.26.1 — 2026-09-08
 
 - 产物导入失败保留可诊断的原因，区分缺失 manifest、非法格式/schema 与必需产物缺失；补齐 JSON 序列化提示和历史租约冲突的人工处置说明，保持严格校验与原恢复边界。

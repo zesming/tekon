@@ -18,6 +18,8 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 
+Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/core/src/runtime/claude-code-support.ts)）：只保留 PATH、HOME、临时目录、语言、SHELL、登录用户（USER、LOGNAME）、代理变量、`NODE_EXTRA_CA_CERTS` 和 `ANTHROPIC_*`、`CLAUDE_*`，其他 Provider 的凭据、`AWS_*` 和 `NODE_OPTIONS` 不传。Gate 命令走 CommandGateway 默认环境，拿不到这些变量；Claude 在节点里执行的命令继承 Claude 的环境，能读到。资料事实：[Claude 认证优先级](https://code.claude.com/docs/en/authentication)中 API key 优先于订阅登录，所以 shell 设了 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时 Claude 节点会用它们；Tekon 不做认证配置。
+
 ### 1.1 已归并的架构决策
 
 | 决策 | 当前合同 |
@@ -28,7 +30,7 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 | 高风险动作 | push、创建 PR、合入、上线及权限扩大保留人工控制；Gateway 与角色提示不能扩大为 OS/provider 沙箱。 |
 | Collaborate 与导出 | follow-up、steer、持续会话恢复和完整导出仍在独立工作项中，不能由 Session feed、分页或新接口名称推断已完成。 |
 
-PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
+PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。评审返工生成的节点把产物和 Gate 结果记在原节点上，原节点 Gate 会重跑，所以只检查返工节点的状态，不单独要求它的产物和 Gate 证据。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
 
 Provider 子进程成功退出与产物导入成功分开判断。manifest 缺失、格式/schema 不合法和必需产物缺失必须保留可诊断的失败原因，沿既有 Agent 失败事件与节点审计传播；诊断采用受控摘要，不回显完整产物或解析器携带的输入值。严格导入、超时与取消判定保持原有语义，不自动修补 JSON 或绕过 Gate。格式提示只能减少生成错误，不能保证模型输出合法。
 
