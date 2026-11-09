@@ -159,6 +159,9 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
   };
 }
 
+// Only review rework nodes use this order. process-completeness relies on it
+// to skip their artifact and gate evidence (it lives on the original node);
+// a new kind of dynamic node with its own evidence needs a different marker.
 export const DYNAMIC_NODE_ORDER_OFFSET = 1_000_000;
 
 export function deriveReworkNode(

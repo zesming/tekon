@@ -2,9 +2,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createBuiltInGateRegistry,
   createCommandGateway,
   createArtifactStore,
   createAuditLogger,
@@ -13,6 +14,7 @@ import {
   migrateDatabase,
   openTekonDatabase,
 } from '../../src/index.js';
+import { DYNAMIC_NODE_ORDER_OFFSET } from '../../src/workflow/execution-plan.js';
 
 describe('gate engine', () => {
   const tempDirs: string[] = [];
@@ -62,6 +64,74 @@ describe('gate engine', () => {
     ]);
     db.close();
   });
+
+  it.each(['legacy', 'registry'] as const)(
+    'does not give provider credentials to repo check commands (%s engine)',
+    async (engineKind) => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-env-'));
+      tempDirs.push(repoPath);
+      const envDump = join(repoPath, 'gate-env.json');
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const repositories = createRepositories(db);
+      await createRunFixture(repositories, repoPath);
+      const gateway = createCommandGateway();
+      const engine =
+        engineKind === 'legacy'
+          ? createGateEngine({ repositories, gateway })
+          : createGateEngine({
+              repositories,
+              gateway,
+              registry: createBuiltInGateRegistry({ repositories, gateway }),
+            });
+      vi.stubEnv('ANTHROPIC_API_KEY', 'anthropic-key');
+      vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'anthropic-token');
+      vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', 'claude-oauth');
+      vi.stubEnv('CLAUDE_CONFIG_DIR', join(repoPath, 'claude-config'));
+      vi.stubEnv('OPENAI_API_KEY', 'openai-key');
+      try {
+        const result = await engine.runGate({
+          runId: 'run_1',
+          nodeId: 'node_1',
+          gate: {
+            type: 'build',
+            command: {
+              tool: process.execPath,
+              args: [
+                '-e',
+                `require('node:fs').writeFileSync(${JSON.stringify(envDump)}, JSON.stringify(process.env))`,
+              ],
+            },
+          },
+          cwd: repoPath,
+          outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+          policy: {
+            allow: [{ tool: process.execPath, args: [] }],
+            deny: [],
+            requiresHumanApproval: [],
+            cwdScope: [repoPath],
+            network: 'disabled',
+          },
+        });
+
+        expect(result).toMatchObject({ gateType: 'build', status: 'passed' });
+        const gateEnv = JSON.parse(readFileSync(envDump, 'utf8')) as Record<string, string>;
+        for (const key of [
+          'ANTHROPIC_API_KEY',
+          'ANTHROPIC_AUTH_TOKEN',
+          'CLAUDE_CODE_OAUTH_TOKEN',
+          'CLAUDE_CONFIG_DIR',
+          'OPENAI_API_KEY',
+        ]) {
+          expect(gateEnv[key]).toBeUndefined();
+        }
+        expect(gateEnv.PATH).toBeTruthy();
+      } finally {
+        vi.unstubAllEnvs();
+        db.close();
+      }
+    },
+  );
 
   it('records explicitly not applicable command gates as skipped', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-skip-'));
@@ -1385,6 +1455,165 @@ describe('gate engine', () => {
     });
     expect(readFileSync(result.outputPath!, 'utf8')).toContain('qa_validation');
     db.close();
+  });
+
+  describe('PMO checkpoint after review rework', () => {
+    const policy = (repoPath: string) => ({
+      allow: [],
+      deny: [],
+      requiresHumanApproval: [],
+      cwdScope: [repoPath],
+      network: 'disabled' as const,
+    });
+
+    async function seedReworkedRun(
+      repositories: ReturnType<typeof createRepositories>,
+      repoPath: string,
+      reworkStatus: 'passed' | 'running',
+      options: { omitArtifactEvidence?: boolean; omitGateEvidence?: boolean } = {},
+    ) {
+      await createRunFixture(repositories, repoPath);
+      const at = '2026-06-05T00:00:00.000Z';
+      await repositories.createPhase({ id: 'phase_build', runId: 'run_1', name: 'build', status: 'passed', order: 0, createdAt: at, updatedAt: at });
+      await repositories.createPhase({ id: 'phase_close', runId: 'run_1', name: 'close', status: 'running', order: 1, createdAt: at, updatedAt: at });
+      const outputs = [{ id: 'impl-code-changes', type: 'code-changes' as const }];
+      const gates = [{ type: 'schema' as const, gateKey: 'impl-schema', artifactType: 'code-changes' as const }];
+      await repositories.createNode({ id: 'impl', runId: 'run_1', phaseId: 'phase_build', role: 'rd', status: 'passed', outputs, gates, dependencies: [], order: 0, createdAt: at, updatedAt: at });
+      await repositories.createNode({ id: 'impl_rework_1', runId: 'run_1', phaseId: 'phase_build', role: 'rd', status: reworkStatus, outputs, gates, dependencies: ['impl'], order: DYNAMIC_NODE_ORDER_OFFSET, createdAt: at, updatedAt: at });
+      await repositories.createNode({ id: 'pmo_checkpoint', runId: 'run_1', phaseId: 'phase_close', role: 'pmo', status: 'running', gates: [], dependencies: ['impl_rework_1'], order: 0, createdAt: at, updatedAt: at });
+      // The rework agent writes its artifact and gate results onto the
+      // original node, so only `impl` carries the physical evidence.
+      const store = createArtifactStore({ repoPath, repositories });
+      await store.writeArtifact({ runId: 'run_1', nodeId: 'impl', type: 'code-changes', content: JSON.stringify({ title: 'Code changes', body: 'Reworked implementation.' }) });
+      await repositories.recordGateResult({ id: 'gate_impl_schema', runId: 'run_1', nodeId: 'impl', gateType: 'schema', gateKey: 'impl-schema', status: 'passed', durationMs: 0, retries: 0, createdAt: at });
+      await store.writeArtifact({
+        runId: 'run_1',
+        nodeId: 'pmo_checkpoint',
+        type: 'process-checkpoint',
+        content: JSON.stringify({
+          title: 'PMO checkpoint',
+          body: 'All nodes finished after one review rework.',
+          requiredNodes: [
+            { nodeId: 'node_1', status: 'passed' },
+            { nodeId: 'impl', status: 'passed' },
+            { nodeId: 'impl_rework_1', status: 'passed' },
+          ],
+          artifactEvidence: options.omitArtifactEvidence ? [] : [{ nodeId: 'impl', type: 'code-changes' }],
+          gateEvidence: options.omitGateEvidence ? [] : [{ nodeId: 'impl', gateType: 'schema', gateKey: 'impl-schema', status: 'passed' }],
+          humanDecisionEvidence: { pending: 0 },
+          missingInformation: [],
+        }),
+      });
+    }
+
+    const engines = {
+      legacy: (repositories: ReturnType<typeof createRepositories>) => createGateEngine({ repositories }),
+      registry: (repositories: ReturnType<typeof createRepositories>) =>
+        createGateEngine({ repositories, registry: createBuiltInGateRegistry({ repositories }) }),
+    };
+
+    it.each(['legacy', 'registry'] as const)(
+      'passes when the reworked node evidence is recorded on the original node (%s engine)',
+      async (engineKind) => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-pmo-rework-'));
+        tempDirs.push(repoPath);
+        const db = openTekonDatabase({ filename: ':memory:' });
+        migrateDatabase(db);
+        const repositories = createRepositories(db);
+        await seedReworkedRun(repositories, repoPath, 'passed');
+        await repositories.transitionNode('node_1', 'passed');
+
+        const result = await engines[engineKind](repositories).runGate({
+          runId: 'run_1',
+          nodeId: 'pmo_checkpoint',
+          gate: { type: 'process-completeness', artifactType: 'process-checkpoint' },
+          cwd: repoPath,
+          outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+          policy: policy(repoPath),
+        });
+
+        expect(result).toMatchObject({ gateType: 'process-completeness', status: 'passed' });
+        db.close();
+      },
+    );
+
+    it.each(['legacy', 'registry'] as const)(
+      'still blocks when the rework node has not finished (%s engine)',
+      async (engineKind) => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-pmo-rework-open-'));
+        tempDirs.push(repoPath);
+        const db = openTekonDatabase({ filename: ':memory:' });
+        migrateDatabase(db);
+        const repositories = createRepositories(db);
+        await seedReworkedRun(repositories, repoPath, 'running');
+        await repositories.transitionNode('node_1', 'passed');
+
+        const result = await engines[engineKind](repositories).runGate({
+          runId: 'run_1',
+          nodeId: 'pmo_checkpoint',
+          gate: { type: 'process-completeness', artifactType: 'process-checkpoint' },
+          cwd: repoPath,
+          outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+          policy: policy(repoPath),
+        });
+
+        expect(result).toMatchObject({ gateType: 'process-completeness', status: 'failed', failureClassification: 'process-incomplete' });
+        expect(readFileSync(result.outputPath!, 'utf8')).toContain('impl_rework_1');
+        db.close();
+      },
+    );
+
+    it.each(['legacy', 'registry'] as const)(
+      'still blocks when the original node artifact is missing from PMO evidence (%s engine)',
+      async (engineKind) => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-pmo-rework-evidence-'));
+        tempDirs.push(repoPath);
+        const db = openTekonDatabase({ filename: ':memory:' });
+        migrateDatabase(db);
+        const repositories = createRepositories(db);
+        await seedReworkedRun(repositories, repoPath, 'passed', { omitArtifactEvidence: true });
+        await repositories.transitionNode('node_1', 'passed');
+
+        const result = await engines[engineKind](repositories).runGate({
+          runId: 'run_1',
+          nodeId: 'pmo_checkpoint',
+          gate: { type: 'process-completeness', artifactType: 'process-checkpoint' },
+          cwd: repoPath,
+          outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+          policy: policy(repoPath),
+        });
+
+        expect(result).toMatchObject({ gateType: 'process-completeness', status: 'failed', failureClassification: 'process-artifact-evidence-missing' });
+        expect(readFileSync(result.outputPath!, 'utf8')).toContain('impl:code-changes');
+        db.close();
+      },
+    );
+
+    it.each(['legacy', 'registry'] as const)(
+      'still blocks when the original node gate result is missing from PMO evidence (%s engine)',
+      async (engineKind) => {
+        const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-pmo-rework-gate-evidence-'));
+        tempDirs.push(repoPath);
+        const db = openTekonDatabase({ filename: ':memory:' });
+        migrateDatabase(db);
+        const repositories = createRepositories(db);
+        await seedReworkedRun(repositories, repoPath, 'passed', { omitGateEvidence: true });
+        await repositories.transitionNode('node_1', 'passed');
+
+        const result = await engines[engineKind](repositories).runGate({
+          runId: 'run_1',
+          nodeId: 'pmo_checkpoint',
+          gate: { type: 'process-completeness', artifactType: 'process-checkpoint' },
+          cwd: repoPath,
+          outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+          policy: policy(repoPath),
+        });
+
+        expect(result).toMatchObject({ gateType: 'process-completeness', status: 'failed', failureClassification: 'process-gate-evidence-missing' });
+        expect(readFileSync(result.outputPath!, 'utf8')).toContain('impl:impl-schema');
+        db.close();
+      },
+    );
   });
 
   describe('independent review gate with changes-requested', () => {

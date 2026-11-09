@@ -16,6 +16,7 @@ import {
   latestGateResults,
 } from '../helpers.js';
 import type { GateDefinition } from '../registry.js';
+import { DYNAMIC_NODE_ORDER_OFFSET } from '../../workflow/execution-plan.js';
 
 export function semanticGateDefinitions(deps: {
   repositories: TekonRepositories;
@@ -339,7 +340,13 @@ async function runProcessCompletenessGate(
   const artifactEvidenceKeys = new Set(
     artifactEvidence.map((item) => `${item.nodeId}:${item.type}`),
   );
-  const missingArtifactEvidence = expectedPriorNodes.flatMap((node) =>
+  // Review rework nodes (dynamic order) record their artifacts and gate
+  // results on the original node, whose gates are re-run after rework, so
+  // they have no evidence of their own. Their status is still checked above.
+  const evidenceNodes = expectedPriorNodes.filter(
+    (node) => node.order < DYNAMIC_NODE_ORDER_OFFSET,
+  );
+  const missingArtifactEvidence = evidenceNodes.flatMap((node) =>
     node.outputs
       .filter(
         (output) =>
@@ -362,7 +369,7 @@ async function runProcessCompletenessGate(
       }),
     ),
   );
-  const missingGateEvidence = expectedPriorNodes.flatMap((node) =>
+  const missingGateEvidence = evidenceNodes.flatMap((node) =>
     node.gates
       .filter((gate) => {
         const expectedKey = gateReferenceKey({
