@@ -67,7 +67,7 @@ describe('CI workflow', () => {
   };
 
   it('keeps one main workflow with a single aggregate check', () => {
-    expect(readdirSync(workflowsDir).sort()).toEqual(['audit.yml', 'ci.yml']);
+    expect(readdirSync(workflowsDir).filter((file) => /\.ya?ml$/u.test(file)).sort()).toEqual(['audit.yml', 'ci.yml']);
     expect(Object.keys(ci.jobs ?? {}).sort()).toEqual(['ci-ok', 'node-compat', 'verify', 'web-e2e']);
   });
 
