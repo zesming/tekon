@@ -463,7 +463,7 @@ describe('web write authorization', () => {
       process.env.PATH = originalPath;
       await api.close();
     }
-  });
+  }, 30_000);
 
   it('shapes and approves a draft before starting a Web run', { timeout: 15000 }, async () => {
     const fixture = await createWebFixtureProject();

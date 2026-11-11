@@ -11,6 +11,7 @@ import {
 import type { AgentAdapterConfig } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
+import { classifyProviderFailure } from './provider-diagnostics.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
@@ -157,8 +158,26 @@ export function createCodexAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          diagnostic: classifyProviderFailure({
+            provider: 'codex',
+            command: command.tool,
+            result,
+            aborted: input.signal?.aborted,
+          }),
         };
       }
+
+      // When the process itself failed, that is the reason to report; a
+      // missing or incomplete manifest is only its consequence.
+      const processFailure =
+        result.exitCode !== 0 || result.timedOut
+          ? classifyProviderFailure({
+              provider: 'codex',
+              command: command.tool,
+              result,
+              aborted: input.signal?.aborted,
+            })
+          : undefined;
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
@@ -176,7 +195,8 @@ export function createCodexAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch (error) {
-          const diagnostic = artifactDiagnosticFromError(error);
+          const diagnostic =
+            processFailure ?? artifactDiagnosticFromError(error);
           artifactIngestionFailed = true;
           if (result.timedOut) {
             return {
@@ -258,8 +278,8 @@ export function createCodexAdapter(
         ],
         artifacts,
         timedOut: result.timedOut,
-        ...(missingRequiredDiagnostic
-          ? { diagnostic: missingRequiredDiagnostic }
+        ...(processFailure || missingRequiredDiagnostic
+          ? { diagnostic: processFailure ?? missingRequiredDiagnostic }
           : {}),
       };
     },

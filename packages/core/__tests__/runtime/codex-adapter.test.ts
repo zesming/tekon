@@ -833,6 +833,45 @@ describe('codex adapter', () => {
     db.close();
   });
 
+  it('explains Codex login and missing-command failures', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-diagnostic-'));
+    tempDirs.push(repoPath);
+    const authScript = join(repoPath, 'auth-fail.mjs');
+    writeFileSync(
+      authScript,
+      "process.stderr.write('Not logged in. Run codex login.\\n');\nprocess.exit(1);\n",
+      'utf8',
+    );
+    const run = (command: string, args: string[]) =>
+      createCodexAdapter(
+        {
+          provider: 'codex',
+          command,
+          args,
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 2_000,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        createCommandGateway(),
+      ).runAgent({
+        ...baseRunInput(repoPath),
+        commandPolicy: {
+          ...baseRunInput(repoPath).commandPolicy,
+          allow: [{ tool: command, args: [] }],
+        },
+      });
+
+    const auth = await run(process.execPath, [authScript]);
+    expect(auth).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-authenticated' },
+    });
+    expect(auth.diagnostic?.hint).toContain('codex login');
+    const missing = await run(join(repoPath, 'no-such-codex'), []);
+    expect(missing.diagnostic).toMatchObject({ code: 'not-installed' });
+  });
+
   it('rejects non-zero Codex exits when required artifact manifests are missing', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-codex-nonzero-missing-'),
@@ -867,7 +906,7 @@ describe('codex adapter', () => {
     expect(result).toMatchObject({
       provider: 'codex',
       exitCode: 1,
-      diagnostic: { code: 'artifact-manifest-missing' },
+      diagnostic: { code: 'exit-nonzero' },
     });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
@@ -921,7 +960,7 @@ describe('codex adapter', () => {
     expect(result).toMatchObject({
       provider: 'codex',
       exitCode: 1,
-      diagnostic: { code: 'required-artifacts-missing' },
+      diagnostic: { code: 'exit-nonzero' },
     });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),

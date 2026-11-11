@@ -2,8 +2,8 @@ import { join } from 'node:path';
 
 import type { AgentAdapterConfig, CommandPolicy } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
-import type { CommandGateway } from './command-gateway.js';
-import type { AgentAdapter } from './agent-adapter.js';
+import type { CommandGateway, CommandGatewayResult } from './command-gateway.js';
+import type { AgentAdapter, AgentRunDiagnostic } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import { buildClaudeProviderEnv } from './claude-code-support.js';
 import { compileClaudePermissions } from './claude-code-permissions.js';
@@ -12,6 +12,11 @@ import {
   artifactDiagnosticFromError,
   ingestAgentManifestArtifacts,
 } from './manifest-artifacts.js';
+import {
+  classifyProviderFailure,
+  lastClaudeError,
+  readTail,
+} from './provider-diagnostics.js';
 
 export interface BuiltClaudeCodeCommand extends CommandInvocation {
   stdin?: string;
@@ -112,12 +117,34 @@ export function createClaudeCodeAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          diagnostic: classifyProviderFailure({
+            provider: 'claude-code',
+            command: command.tool,
+            result,
+            aborted: input.signal?.aborted,
+          }),
+        };
+      }
+
+      if (result.exitCode !== 0 || result.timedOut) {
+        return {
+          provider: 'claude-code',
+          exitCode: result.exitCode === 0 ? 1 : result.exitCode,
+          durationMs: result.durationMs,
+          outputFiles: [result.stdoutPath, result.stderrPath],
+          timedOut: result.timedOut,
+          diagnostic: classifyProviderFailure({
+            provider: 'claude-code',
+            command: command.tool,
+            result,
+            aborted: input.signal?.aborted,
+          }),
         };
       }
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
-      if (result.exitCode === 0 && input.artifactStore) {
+      if (input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -125,7 +152,9 @@ export function createClaudeCodeAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch (error) {
-          const diagnostic = artifactDiagnosticFromError(error);
+          const diagnostic =
+            reportedErrorDiagnostic(result, command.tool) ??
+            artifactDiagnosticFromError(error);
           return {
             provider: 'claude-code',
             exitCode: 1,
@@ -141,7 +170,7 @@ export function createClaudeCodeAdapter(
         required: input.requiredArtifactTypes,
         artifacts,
       });
-      if (result.exitCode === 0 && diagnostic) {
+      if (diagnostic) {
         return {
           provider: 'claude-code',
           exitCode: 1,
@@ -153,7 +182,7 @@ export function createClaudeCodeAdapter(
           ],
           artifacts,
           timedOut: result.timedOut,
-          diagnostic,
+          diagnostic: reportedErrorDiagnostic(result, command.tool) ?? diagnostic,
         };
       }
 
@@ -171,6 +200,19 @@ export function createClaudeCodeAdapter(
       };
     },
   };
+}
+
+/**
+ * Claude can exit 0 with an error result (e.g. not logged in). When artifacts
+ * are then missing, that error explains the failure better than the
+ * artifact list does.
+ */
+function reportedErrorDiagnostic(
+  result: Extract<CommandGatewayResult, { status: 'executed' }>,
+  command: string,
+): AgentRunDiagnostic | undefined {
+  if (!lastClaudeError(readTail(result.stdoutPath))) return undefined;
+  return classifyProviderFailure({ provider: 'claude-code', command, result });
 }
 
 function permissionModeFor(config: AgentAdapterConfig): string {

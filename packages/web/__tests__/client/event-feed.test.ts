@@ -258,6 +258,20 @@ describe('describeEvent', () => {
     ).toBe('governance');
   });
 
+  it('shows why a run stopped and what to do next', () => {
+    const row = describeEvent(
+      ev('agent/error', {
+        status: 'interrupted',
+        kind: 'not-authenticated',
+        message: 'claude 未登录或凭据无效',
+        hint: '执行 claude /login',
+      }),
+    );
+    expect(row.kind).toBe('error');
+    expect(row.title).toBe('运行中断');
+    expect(row.body).toBe('claude 未登录或凭据无效\n下一步：执行 claude /login');
+  });
+
   it('flags agent/error as an error row', () => {
     const row = describeEvent(ev('agent/error', { message: 'boom' }));
     expect(row.kind).toBe('error');

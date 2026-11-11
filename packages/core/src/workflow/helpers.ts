@@ -5,7 +5,8 @@ import type { ArtifactType, WorkflowInstance } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import {
-  formatAgentRunDiagnostic,
+  sanitizeAgentRunDiagnostic,
+  type AgentRunDiagnostic,
   type AgentRunInput,
   type AgentRunResult,
 } from '../runtime/agent-adapter.js';
@@ -266,17 +267,44 @@ export function requiredArtifactTypesForNode(input: {
   return [...required];
 }
 
+/** An agent run that did not succeed, with the reason a user can act on. */
+export class AgentRunFailedError extends Error {
+  constructor(
+    message: string,
+    readonly diagnostic: AgentRunDiagnostic | undefined,
+  ) {
+    super(message);
+    this.name = 'AgentRunFailedError';
+  }
+}
+
 export function assertSuccessfulAgentRun(result: AgentRunResult): void {
+  const diagnostic = sanitizeAgentRunDiagnostic(result.diagnostic);
   if (result.timedOut) {
-    throw new Error(`agent timed out: provider=${result.provider}`);
+    throw new AgentRunFailedError(
+      `agent timed out: provider=${result.provider}`,
+      diagnostic,
+    );
   }
 
   if (result.exitCode !== 0) {
-    const diagnostic = formatAgentRunDiagnostic(result.diagnostic);
-    throw new Error(
+    throw new AgentRunFailedError(
       `agent failed: provider=${result.provider} exitCode=${String(result.exitCode)}${
-        diagnostic ? ` reason=${diagnostic}` : ''
+        diagnostic ? ` reason=${diagnostic.message}` : ''
       }`,
+      diagnostic,
     );
   }
+}
+
+/**
+ * Audit payload fragment for a failed node: the classified reason and next
+ * step, when the failure came from an agent run.
+ */
+export function agentFailureAuditPayload(
+  error: unknown,
+): { diagnostic?: Pick<AgentRunDiagnostic, 'code' | 'message' | 'hint'> } {
+  if (!(error instanceof AgentRunFailedError) || !error.diagnostic) return {};
+  const { code, message, hint } = error.diagnostic;
+  return { diagnostic: { code, message, ...(hint ? { hint } : {}) } };
 }

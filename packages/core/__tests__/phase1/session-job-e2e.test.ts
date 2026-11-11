@@ -696,8 +696,12 @@ describe('phase 1 session/job e2e (S9)', () => {
       'artifact invalid JSON: type=code-changes file=code-changes.json',
     );
     expect(interrupted?.payload.error).not.toContain(secret);
+    expect(interrupted?.payload.diagnostic).toMatchObject({
+      code: 'artifact-file-invalid-json',
+    });
 
     const events = await h.sessions.listEventsSince(sessionId, 0);
+
     const diagnosticError = events.find(
       (event) =>
         event.type === 'agent/error' &&

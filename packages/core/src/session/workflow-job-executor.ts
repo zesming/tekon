@@ -233,6 +233,37 @@ export function createWorkflowJobExecutor(deps: {
     },
   };
 
+  /**
+   * The newest classified failure the run recorded, so the session feed can
+   * say why the run stopped instead of only that it did.
+   */
+  async function latestFailureReason(
+    runId: string,
+  ): Promise<{ message?: string; kind?: string; hint?: string }> {
+    const events = await repositories.listAuditEvents(runId);
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event.type !== 'node.interrupted' && event.type !== 'gate.execution.error') {
+        continue;
+      }
+      const diagnostic = event.payload.diagnostic as
+        | { code?: unknown; message?: unknown; hint?: unknown }
+        | undefined;
+      if (diagnostic && typeof diagnostic.message === 'string') {
+        return {
+          message: diagnostic.message,
+          ...(typeof diagnostic.code === 'string' ? { kind: diagnostic.code } : {}),
+          ...(typeof diagnostic.hint === 'string' ? { hint: diagnostic.hint } : {}),
+        };
+      }
+      if (typeof event.payload.error === 'string') {
+        return { message: redactSecrets(event.payload.error).content };
+      }
+      return {};
+    }
+    return {};
+  }
+
   async function settleByWorkflowStatus(
     sessionId: string,
     runId: string,
@@ -284,9 +315,24 @@ export function createWorkflowJobExecutor(deps: {
       }
       case 'interrupted': {
         await sessions.updateSessionStatus(sessionId, 'awaiting-input');
-        await emit(sessionId, 'agent/error', { runId, status: 'interrupted' });
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'interrupted',
+          ...(await latestFailureReason(runId)),
+        });
         await emit(sessionId, 'turn/end', { runId, status: 'interrupted' });
         return { status: 'interrupted' };
+      }
+      case 'failed': {
+        await sessions.updateSessionStatus(sessionId, 'failed');
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'failed',
+          ...(await latestFailureReason(runId)),
+        });
+        await emit(sessionId, 'turn/end', { runId, status: 'failed' });
+        // The job ran to completion; it is the run that failed (as with passed).
+        return { status: 'done' };
       }
       default: {
         // A background executor returning running/pending is a contract breach.

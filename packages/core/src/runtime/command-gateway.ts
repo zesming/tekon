@@ -42,7 +42,13 @@ export type CommandGatewayResult =
       timeoutReason?: 'total' | 'no-progress';
       durationMs: number;
     }
-  | { status: 'rejected'; reason: string; cancelled?: boolean }
+  | {
+      status: 'rejected';
+      reason: string;
+      cancelled?: boolean;
+      /** errno code of a spawn failure, e.g. ENOENT when the tool is missing. */
+      errorCode?: string;
+    }
   | { status: 'blocked-for-approval'; decisionId: string };
 
 export interface CommandGatewayRunInput {
@@ -388,6 +394,7 @@ async function runProcess(input: {
     return {
       status: 'rejected',
       reason: error instanceof Error ? error.message : String(error),
+      ...errnoCode(error),
     };
   }
 
@@ -548,6 +555,7 @@ async function runProcess(input: {
       settle({
         status: 'rejected',
         reason: error.message,
+        ...errnoCode(error),
       });
     });
     child.once('close', (exitCode, signal) => {
@@ -556,7 +564,11 @@ async function runProcess(input: {
         input.registry.unregister(input.registryKey, registryHandle);
       }
 
-      if (input.stdin !== undefined && stdinError) {
+      // A process that exits non-zero before reading all of stdin (a
+      // missing login, a bad flag) breaks the pipe; its exit code and
+      // stderr are the real reason, so keep them.
+      const exitedEarly = exitCode !== 0 && exitCode !== null;
+      if (input.stdin !== undefined && stdinError && !exitedEarly) {
         settle({
           status: 'rejected',
           reason: `failed to write command stdin: ${stdinError.message}`,
@@ -1028,4 +1040,9 @@ async function endStream(stream: Writable): Promise<void> {
       stream.end();
     }
   });
+}
+
+function errnoCode(error: unknown): { errorCode?: string } {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return typeof code === 'string' ? { errorCode: code } : {};
 }
