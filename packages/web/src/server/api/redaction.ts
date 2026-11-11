@@ -1,3 +1,5 @@
+import { redactSecrets } from '@tekon/core';
+
 const SENSITIVE_KEYS_LOWER = new Set([
   'apikey', 'api_key', 'api-key', 'token', 'secret', 'password', 'passwd', 'pwd',
   'authorization', 'cookie', 'session', 'accesstoken', 'access_token', 'access-token',
@@ -14,7 +16,9 @@ function isSensitiveKey(key: string): boolean {
  * Used by redactObject to redact ALL string values (not just sensitive-keyed ones).
  */
 export function redactString(text: string): string {
-  let result = text;
+  // Core rules run first: they mask whole private key blocks and token shapes
+  // before the broader key=value rules below can split them.
+  let result = redactSecrets(text).content;
   // 1. Auth schemes FIRST: Bearer, Basic, ApiKey, Token, Digest + their credentials
   //    This handles "Authorization: Bearer xxx" and standalone "Bearer xxx"
   result = result.replace(/((?:Bearer|Basic|ApiKey|Token|Digest)\s+)\S+/gi, '$1[REDACTED]');
