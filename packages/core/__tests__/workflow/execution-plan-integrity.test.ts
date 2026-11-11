@@ -3,7 +3,7 @@ import { openTekonDatabase } from '../../src/db/connection.js';
 import { migrateDatabase } from '../../src/db/migrations.js';
 import { createRepositories } from '../../src/db/repositories.js';
 import { createAuditLogger } from '../../src/audit/logger.js';
-import { persistPlan, templateToPlan, runPlanToExecutionPlan, validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
+import { legacyReworkNodeId, persistPlan, reworkNodeIdFor, templateToPlan, runPlanToExecutionPlan, validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
 import { canonicalJson, canonicalJsonV1, computeRunPlanDigest, computeRunPlanDigestV1, projectRunPlan, projectRunPlanV3 } from '../../src/workflow/run-plan.js';
 import { parseWorkflowTemplate } from '../../src/workflow/template.js';
 import type { ExecutableNode } from '../../src/workflow/workflow-runtime.js';
@@ -39,9 +39,10 @@ async function fixture(autoFixReview = false, version: 2 | 3 = 2) {
   async function addNode(node: ExecutableNode, order = 1_000_000) {
     return repositories.createNode({ ...node, runId, status: 'pending', dependencies: node.dependsOn, order, createdAt: now, updatedAt: now });
   }
-  async function rework(target = source, attempt = 1, options: { needs?: boolean; attemptEvent?: boolean; create?: boolean; overrides?: Record<string, unknown> } = {}) {
+  async function rework(target = source, attempt = 1, options: { needs?: boolean; attemptEvent?: boolean; create?: boolean; legacyId?: boolean; overrides?: Record<string, unknown> } = {}) {
     const result = await addResult(`review-result-${attempt}-${target.id}`);
-    const node: ExecutableNode = { ...structuredClone(target), id: `${target.id}_rework_${attempt}`, dependsOn: [review.id] };
+    const id = options.legacyId ? legacyReworkNodeId(target.id, attempt) : reworkNodeIdFor(target.id, attempt, result.id);
+    const node: ExecutableNode = { ...structuredClone(target), id, dependsOn: [review.id] };
     const payload = { reviewNodeId: review.id, targetNodeId: target.id, gateResultId: result.id, attempt, reworkNodeId: node.id, ...options.overrides };
     if (options.needs !== false) await audit.append({ runId, type: 'gate.rework.needs-revision', payload });
     if (options.attemptEvent !== false) await audit.append({ runId, type: 'gate.rework.attempt', payload });
@@ -140,6 +141,31 @@ describe('审计授权的 rework / repair 派生图', () => {
     const f = await fixture(); const one = await f.rework(); const two = await f.rework(one, 2);
     expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, one.id, two.id]);
   });
+  it('两次评审结果对同一目标的第 1 次返工得到不同节点', async () => {
+    const f = await fixture();
+    const first = await f.rework();
+    const secondResult = await f.addResult('second-review-result');
+    const second: ExecutableNode = { ...structuredClone(f.source), id: reworkNodeIdFor(f.source.id, 1, secondResult.id), dependsOn: [f.review.id] };
+    const payload = { reviewNodeId: f.review.id, targetNodeId: f.source.id, gateResultId: secondResult.id, attempt: 1, reworkNodeId: second.id };
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.needs-revision', payload });
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.attempt', payload });
+    await f.addNode(second);
+    expect(first.id).not.toBe(second.id);
+    expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, first.id, second.id]);
+  });
+  it('兼容旧格式返工节点 ID', async () => {
+    const f = await fixture(); const node = await f.rework(f.source, 1, { legacyId: true });
+    expect(node.id).toBe(`${f.source.id}_rework_1`);
+    expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, node.id]);
+  });
+  it('payload 中的返工节点 ID 与推导不符时报 rework.nodeId', async () => {
+    const f = await fixture(); await f.rework(f.source, 1, { create: false, overrides: { reworkNodeId: `${f.source.id}_rework_1_forged00` } });
+    await expect(f.verify()).rejects.toThrow('PLAN_VERIFICATION_FAILED: rework.nodeId');
+  });
+  it('没有审计授权的旧格式节点报 nodes.unproven', async () => {
+    const f = await fixture(); await f.addNode({ ...f.source, id: legacyReworkNodeId(f.source.id, 1), dependsOn: [f.review.id] });
+    await expect(f.verify()).rejects.toThrow('PLAN_VERIFICATION_FAILED: nodes.unproven');
+  });
   it('允许只有意图且尚未创建的合法窗口', async () => {
     const f = await fixture(); await f.rework(f.source, 1, { create: false }); await f.repair({ create: false });
     expect(await f.verify()).toEqual(f.plan);
@@ -182,7 +208,7 @@ describe('审计授权的 rework / repair 派生图', () => {
     const repair: ExecutableNode = { id: `repair_${result.id}`, role: f.review.role, inputs: [], outputs: [], gates: [], dependsOn: [f.review.id] };
     await f.audit.append({ runId: f.runId, type: 'gate.repair.intent', payload: { sourceNodeId: f.review.id, repairNodeId: repair.id, gateResultId: result.id, gateType: 'independent-review', gateKey: f.review.gates[0].gateKey, fixerRole: f.review.role, attempt: 3, maxAttempts: 3 } });
     await f.addNode(repair, 0);
-    const rework: ExecutableNode = { ...f.source, id: `${f.source.id}_rework_1`, dependsOn: [f.review.id] };
+    const rework: ExecutableNode = { ...f.source, id: reworkNodeIdFor(f.source.id, 1, result.id), dependsOn: [f.review.id] };
     const payload = { reviewNodeId: f.review.id, targetNodeId: f.source.id, gateResultId: result.id, attempt: 1, reworkNodeId: rework.id };
     await f.audit.append({ runId: f.runId, type: 'gate.rework.attempt', payload });
     await f.audit.append({ runId: f.runId, type: 'gate.rework.needs-revision', payload });

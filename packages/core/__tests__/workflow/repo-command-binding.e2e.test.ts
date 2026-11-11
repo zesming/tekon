@@ -173,7 +173,7 @@ describe('已受理仓库检查的真实执行绑定', () => {
     expect(builds.map(gate => gate.status)).toEqual(['passed', 'passed']);
     expect(builds[0].gateKey).toBe(builds[1].gateKey);
     const nodes = await f.repositories.listNodes(result.runId);
-    const derived = nodes.find(node => node.id.endsWith('_rework_1'));
+    const derived = nodes.find(node => node.id.startsWith(`${result.runId}_rd_rework_1_`));
     expect(derived?.gates).toEqual(nodes.find(node => node.id === `${result.runId}_rd`)?.gates);
     await expect(validateAndBuildExecutionPlan(result.runId, f.repositories, f.audit)).resolves.toBeTruthy();
   });

@@ -28,6 +28,7 @@ import {
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
+import { reworkNodeIdFor } from './execution-plan.js';
 import { createAutoFixRepairNode } from './repair-node.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
@@ -488,7 +489,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               nodeId: node.id,
               reviewNodeId: node.id,
               targetNodeId,
-              reworkNodeId: `${targetNodeId}_rework_${reworkAttempt}`,
+              reworkNodeId: reworkNodeIdFor(targetNodeId, reworkAttempt, result.id),
               attempt: reworkAttempt,
               maxAttempts: maxReworkAttempts,
               gateResultId: result.id,

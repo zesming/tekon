@@ -1,4 +1,8 @@
-import { deriveReworkNode, DYNAMIC_NODE_ORDER_OFFSET } from './execution-plan.js';
+import {
+  deriveReworkNode,
+  DYNAMIC_NODE_ORDER_OFFSET,
+  reworkNodeIdFor,
+} from './execution-plan.js';
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -280,7 +284,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     const targetNode = await repositories.getNode(targetNodeId);
     if (!targetNode) return;
 
-    const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
+    const reworkNodeId = reworkNodeIdFor(targetNodeId, attempt, gateResult.id);
 
     // --- Step 1: Transition target to needs-revision ---
     await checkedTransitionNode(
@@ -323,7 +327,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       outputs: targetOutputs,
       gates: targetGates,
       dependsOn: targetNode.dependencies,
-    }, reviewNode.id, attempt);
+    }, reviewNode.id, attempt, gateResult.id);
     await repositories.createNode({
       id: derived.id,
       runId,

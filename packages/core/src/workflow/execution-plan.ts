@@ -164,14 +164,32 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
 // a new kind of dynamic node with its own evidence needs a different marker.
 export const DYNAMIC_NODE_ORDER_OFFSET = 1_000_000;
 
+/**
+ * Rework node id. The gate result suffix keeps ids unique when several
+ * reviews of the same target each start their own attempt counter.
+ */
+export function reworkNodeIdFor(
+  targetNodeId: string,
+  attempt: number,
+  gateResultId: string,
+): string {
+  return `${targetNodeId}_rework_${attempt}_${gateResultId.slice(-8)}`;
+}
+
+/** Id format of runs created before the gate result suffix; still accepted on resume. */
+export function legacyReworkNodeId(targetNodeId: string, attempt: number): string {
+  return `${targetNodeId}_rework_${attempt}`;
+}
+
 export function deriveReworkNode(
   targetNode: ExecutableNode,
   reviewNodeId: string,
   attempt: number,
+  gateResultId: string,
 ): ExecutableNode {
   return {
     ...structuredClone(targetNode),
-    id: `${targetNode.id}_rework_${attempt}`,
+    id: reworkNodeIdFor(targetNode.id, attempt, gateResultId),
     dependsOn: [reviewNodeId],
   };
 }
@@ -391,6 +409,7 @@ async function validateExecutionPlan(
   verifyCapturedAudit(events, runId);
   const results = new Map((await repositories.listGateResults(runId)).map(result => [result.id, result]));
   const reworkEvents = new Map<string, Set<string>>();
+  const reworkIds = new Map<string, string>();
 
   function sourceNode(id: unknown): ExecutableNode {
     if (typeof id !== 'string') verificationFailed('authorization.source');
@@ -451,10 +470,17 @@ async function validateExecutionPlan(
       verificationFailed('rework.gateResult');
     }
     const count = attempt(payload.attempt, resolveMaxReworkAttempts(gate.maxRetries));
-    const derived = deriveReworkNode(target, review.id, count);
+    const derived = deriveReworkNode(target, review.id, count, result.id);
     const key = canonicalJson([review.id, target.id, result.id, count]);
     if (event.type === 'gate.rework.attempt') {
-      same(payload.reworkNodeId, derived.id, 'rework.nodeId');
+      // Runs created before the gate result suffix carry the exact old id.
+      const legacyId = legacyReworkNodeId(target.id, count);
+      if (payload.reworkNodeId === legacyId) {
+        reworkIds.set(key, legacyId);
+      } else {
+        same(payload.reworkNodeId, derived.id, 'rework.nodeId');
+        reworkIds.set(key, derived.id);
+      }
       if (payload.maxAttempts !== undefined) same(payload.maxAttempts, resolveMaxReworkAttempts(gate.maxRetries), 'rework.maxAttempts');
     }
     const pair = reworkEvents.get(key) ?? new Set<string>();
@@ -462,7 +488,7 @@ async function validateExecutionPlan(
     pair.add(event.type);
     reworkEvents.set(key, pair);
     if (pair.size !== 2) continue;
-    authorize(derived, DYNAMIC_NODE_ORDER_OFFSET);
+    authorize({ ...derived, id: reworkIds.get(key)! }, DYNAMIC_NODE_ORDER_OFFSET);
   }
 
   // 检查所有节点，包括没有 phase、无法分组、具有可信前缀的孤立记录。
