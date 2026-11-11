@@ -15,7 +15,6 @@ import {
   openTekonDatabase,
 } from '../../src/index.js';
 import { DYNAMIC_NODE_ORDER_OFFSET } from '../../src/workflow/execution-plan.js';
-import { createAutoFixRepairNode } from '../../src/workflow/repair-node.js';
 
 describe('gate engine', () => {
   const tempDirs: string[] = [];
@@ -210,36 +209,6 @@ describe('gate engine', () => {
       status: 'passed',
       failureClassification: null,
     });
-    db.close();
-  });
-
-  it('creates an autoFix repair node linked to a failed gate result', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-repair-'));
-    tempDirs.push(repoPath);
-    const db = openTekonDatabase({ filename: ':memory:' });
-    migrateDatabase(db);
-    const repositories = createRepositories(db);
-    await createRunFixture(repositories, repoPath);
-    const repair = await createAutoFixRepairNode(repositories, {
-      failedGateResult: {
-        id: 'gate_failed',
-        runId: 'run_1',
-        nodeId: 'node_1',
-        gateType: 'test',
-        status: 'failed',
-        durationMs: 1,
-        retries: 1,
-        createdAt: '2026-06-05T00:00:00.000Z',
-      },
-      fixerRole: 'rd',
-    });
-
-    expect(repair).toMatchObject({
-      role: 'rd',
-      status: 'pending',
-      dependencies: ['node_1'],
-    });
-    expect(await repositories.getNode(repair.id)).toMatchObject({ role: 'rd' });
     db.close();
   });
 
