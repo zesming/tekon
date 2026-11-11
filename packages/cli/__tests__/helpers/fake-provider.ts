@@ -63,7 +63,8 @@ export function writeFakeCodex(
   process.exit(2);
 }
 `;
-  const body = `const execIndex = args.indexOf('exec');
+  const body = `function validateArgs() {
+const execIndex = args.indexOf('exec');
 if (execIndex === -1) {
   console.error('expected codex exec, got: ' + args.join(' '));
   process.exit(2);
@@ -83,6 +84,7 @@ if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex ||
 if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
   console.error('unsafe codex args');
   process.exit(3);
+}
 }
 function notAuthenticated() {
   console.error('Not logged in. Run codex login.');
@@ -109,7 +111,8 @@ export function writeFakeClaude(
       ? { email: 'fake-user@example.invalid', orgName: 'Fake Org' }
       : {}),
   });
-  const body = `if (args[0] === 'auth' && args[1] === 'status') {
+  const body = `function validateArgs() {}
+if (args[0] === 'auth' && args[1] === 'status') {
   console.log(${JSON.stringify(authJson)});
   process.exit(${auth.loggedIn ? 0 : 1});
 }
@@ -147,13 +150,17 @@ export interface RunCliWithEnvOptions {
   /** Prepended to PATH. With `isolatePath`, PATH is exactly these dirs. */
   binDirs?: string[];
   /**
-   * Hermetic child env: PATH is only `binDirs`, HOME is `home`, global and
-   * system git config are ignored, and host provider/Tekon variables
-   * (ANTHROPIC_*, CLAUDE_*, OPENAI_*, CODEX_*, TEKON_*) are dropped.
-   * `env` is applied afterwards, so a test can inject exactly what it needs.
+   * Isolated child env: PATH is only `binDirs`, HOME is `home`, global and
+   * system git config are ignored, and host git-local variables (GIT_DIR,
+   * GIT_CONFIG_PARAMETERS, ...) plus provider/Tekon variables (ANTHROPIC_*,
+   * CLAUDE_*, OPENAI_*, CODEX_*, TEKON_*) are dropped. `env` is applied last,
+   * so a test can inject exactly what it needs. Host basics such as USER,
+   * LANG, TMPDIR and proxies still pass through, so assert on env keys with
+   * contains / not-contains, never whole-list equality. Fixture repos must set
+   * a local user.name and user.email.
    */
   isolatePath?: boolean;
-  /** Required with `isolatePath`; caller owns cleanup. */
+  /** HOME for the child; required with `isolatePath`. Caller owns cleanup. */
   home?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
@@ -172,6 +179,7 @@ export function buildCliEnv(options: RunCliWithEnvOptions): NodeJS.ProcessEnv {
   if (!options.isolatePath) {
     return {
       ...process.env,
+      ...(options.home ? { HOME: options.home } : {}),
       ...options.env,
       PATH: [...binDirs, process.env.PATH ?? ''].join(delimiter),
     };
@@ -179,9 +187,16 @@ export function buildCliEnv(options: RunCliWithEnvOptions): NodeJS.ProcessEnv {
   if (!options.home) {
     throw new Error('isolatePath requires a temp home dir');
   }
+  const gitLocalVars = new Set(
+    execFileSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' })
+      .split('\n')
+      .filter(Boolean),
+  );
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter(
-      ([key]) => !HOST_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix)),
+      ([key]) =>
+        !gitLocalVars.has(key) &&
+        !HOST_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix)),
     ),
   );
   return {
@@ -210,7 +225,9 @@ export function runCliWithEnv(
 
 /**
  * Starts the built CLI without waiting, for tests that act while a run is in
- * flight (pause, cancel, release a `slow` fake). Caller must await exit or kill.
+ * flight (pause, cancel, release a `slow` fake). stdout and stderr are pipes:
+ * the caller must consume both (or the child blocks once a pipe buffer fills)
+ * and must await exit or kill the child.
  */
 export function spawnCliWithEnv(
   cliPath: string,
@@ -256,6 +273,7 @@ let prompt = dashIndex === -1 ? '' : args.slice(dashIndex + 1).join(' ');
 // Runs after stdin is fully read, like a real CLI, so an early exit never
 // turns into a broken pipe on the writer side.
 function start() {
+  validateArgs();
   if (behavior === 'not-authenticated') notAuthenticated();
   if (behavior === 'fail-once' && !existsSync(${JSON.stringify(failOnceMarker)})) {
     writeFileSync(${JSON.stringify(failOnceMarker)}, 'failed');
