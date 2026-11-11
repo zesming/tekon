@@ -1296,6 +1296,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     try {
       await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
       io.takeStdout();
+      // Codex no longer defaults to the internal profile; the repo opts in.
+      const configPath = join(repoPath, '.tekon', 'config.yaml');
+      writeFileSync(
+        configPath,
+        `${readFileSync(configPath, 'utf8')}providers:\n  codex:\n    profile: internal\n`,
+      );
 
       await expect(
         runCli(

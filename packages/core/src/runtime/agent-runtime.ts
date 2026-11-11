@@ -127,7 +127,6 @@ export function defaultProviderConfig(
       provider: 'codex',
       command: 'codex',
       args: [],
-      profile: 'internal',
       promptMode: 'stdin',
       outputFormat: 'text',
       timeoutMs: DEFAULT_REAL_PROVIDER_TIMEOUT_MS,
@@ -190,6 +189,7 @@ export function summarizeAgentConfig(
     command: config.command,
     args: config.args,
     profile: config.profile,
+    passthroughEnv: config.passthroughEnv,
     promptMode: config.promptMode,
     outputFormat: config.outputFormat,
     // Persisted so a dsh-headless snapshot round-trips through the capability

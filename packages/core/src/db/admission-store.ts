@@ -6,6 +6,7 @@ import type { TekonDatabase } from "./connection.js";
 import type { WriteQueue } from "./write-queue.js";
 import { canonicalJson } from "../workflow/run-plan.js";
 import { appendAuditEventTxn } from "../audit/logger.js";
+import { passthroughEnvAuditPayload } from "../config/tekon-config.js";
 import { sessionEventSchema, type SessionEvent } from "../types/session-contract.js";
 import { workflowInstanceSchema, type WorkflowInstance } from "../types/domain.js";
 
@@ -384,6 +385,7 @@ export function createAdmissionStore(options: {
             templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
             mode: data.demandSource ?? "template",
             kind: data.workflowKind,
+            ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),
           },
           createdAt,
         });

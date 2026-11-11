@@ -93,7 +93,7 @@ export function createClaudeCodeAdapter(
         noProgressTimeoutMs: config.noProgressTimeoutMs,
         envMode: 'exact',
         env: {
-          ...buildClaudeProviderEnv(),
+          ...buildClaudeProviderEnv(process.env, config.passthroughEnv),
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
           TEKON_RUN_ID: input.runContext.runId,

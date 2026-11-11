@@ -413,6 +413,12 @@ describe('web write authorization', () => {
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
     writeFakeCodex(binDir);
+    // Codex no longer defaults to the internal profile; the repo opts in.
+    const configPath = join(fixture.projectRoot, '.tekon', 'config.yaml');
+    writeFileSync(
+      configPath,
+      `${readFileSync(configPath, 'utf8')}providers:\n  codex:\n    profile: internal\n`,
+    );
     const originalPath = process.env.PATH;
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });

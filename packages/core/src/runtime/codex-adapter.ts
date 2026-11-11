@@ -30,8 +30,47 @@ const CONTROLLED_CODEX_GLOBAL_ARGS = [
   '--ask-for-approval',
   'on-request',
 ] as const;
-const DEFAULT_CODEX_PROFILE = 'internal';
 const CODEX_EXEC_SUBCOMMAND = 'exec';
+
+// Codex runs with an exact environment, merged in a fixed order: this allow
+// list, then the configured passthrough names, then Tekon's own variables
+// (written last by the adapter, so passthrough can never replace them).
+const CODEX_PROVIDER_SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'CODEX_HOME',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'all_proxy',
+  'NODE_EXTRA_CA_CERTS',
+] as const;
+
+export function buildCodexProviderEnv(
+  source: NodeJS.ProcessEnv = process.env,
+  passthroughEnv: readonly string[] = [],
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of [...CODEX_PROVIDER_SAFE_ENV_KEYS, ...passthroughEnv]) {
+    const value = source[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
 
 export function buildCodexCommand(
   config: AgentAdapterConfig,
@@ -97,7 +136,9 @@ export function createCodexAdapter(
         timeoutMs: config.timeoutMs,
         progressIntervalMs: config.progressHeartbeatMs,
         noProgressTimeoutMs: config.noProgressTimeoutMs,
+        envMode: 'exact',
         env: {
+          ...buildCodexProviderEnv(process.env, config.passthroughEnv),
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
           TEKON_RUN_ID: input.runContext.runId,
@@ -236,10 +277,9 @@ function controlledCodexGlobalArgs(
     runContext?: { nodeId: string; runId: string };
   },
 ): string[] {
-  const profileArgs = [
-    '--profile',
-    assertSafeCodexProfile(config.profile ?? DEFAULT_CODEX_PROFILE),
-  ];
+  const profileArgs = config.profile
+    ? ['--profile', assertSafeCodexProfile(config.profile)]
+    : [];
   const outputDir = assertSafeCodexArtifactOutputDir(
     config,
     input.artifactOutputDir,

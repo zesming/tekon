@@ -6,6 +6,7 @@ import {
 } from './dsh-headless-adapter.js';
 import { createMockAgentAdapter } from './mock-agent-adapter.js';
 import { agentAdapterConfigSchema } from '../types/config.js';
+import { readTekonConfig } from '../config/tekon-config.js';
 import type {
   AgentRuntimeConfig,
   AgentRuntimeResult,
@@ -92,14 +93,20 @@ const mockDefinition: ProviderDefinition = {
   },
 };
 
+// Version 2 adds `passthroughEnv` (and the codex `profile` from repo config).
+// Version 1 snapshots still restore: the fields are optional.
 const claudeCodeDefinition: ProviderDefinition = {
   name: 'claude-code',
-  snapshotVersion: 1,
+  snapshotVersion: 2,
   create(config) {
+    const repoConfig = readTekonConfig(config.repoPath).providers?.['claude-code'];
     const providerConfig = applyProviderRuntimeOverrides(
-      defaultProviderConfig('claude-code', config.repoPath, {
-        approvalDefault: config.approvalDefault,
-      }),
+      {
+        ...defaultProviderConfig('claude-code', config.repoPath, {
+          approvalDefault: config.approvalDefault,
+        }),
+        ...(repoConfig?.passthroughEnv ? { passthroughEnv: repoConfig.passthroughEnv } : {}),
+      },
       config.runtime,
     );
     return {
@@ -137,12 +144,17 @@ const claudeCodeDefinition: ProviderDefinition = {
 
 const codexDefinition: ProviderDefinition = {
   name: 'codex',
-  snapshotVersion: 1,
+  snapshotVersion: 2,
   create(config) {
+    const repoConfig = readTekonConfig(config.repoPath).providers?.codex;
     const providerConfig = applyProviderRuntimeOverrides(
-      defaultProviderConfig('codex', config.repoPath, {
-        approvalDefault: config.approvalDefault,
-      }),
+      {
+        ...defaultProviderConfig('codex', config.repoPath, {
+          approvalDefault: config.approvalDefault,
+        }),
+        ...(repoConfig?.profile ? { profile: repoConfig.profile } : {}),
+        ...(repoConfig?.passthroughEnv ? { passthroughEnv: repoConfig.passthroughEnv } : {}),
+      },
       config.runtime,
     );
     return {
@@ -165,7 +177,15 @@ const codexDefinition: ProviderDefinition = {
         `Run ${input.snapshot.runId} has a non-replayable codex provider snapshot; it may be corrupted or from an incompatible version.`,
       );
     }
-    const config = applyProviderRuntimeOverrides(parsed.data, input.runtime);
+    // Version 1 runs were started with the then-default `internal` profile.
+    const legacyProfile =
+      snapshotVersionOf(input.snapshot) < 2 && !parsed.data.profile
+        ? { profile: 'internal' }
+        : {};
+    const config = applyProviderRuntimeOverrides(
+      { ...parsed.data, ...legacyProfile },
+      input.runtime,
+    );
     return {
       adapter: createCodexAdapter(config, input.gateway),
       provider: 'codex',
@@ -256,13 +276,17 @@ function dshVersionGateOptions(): {
  * A missing schemaVersion (older snapshots) is treated as version 1 — backward
  * compatible. Never silently downgrades.
  */
+function snapshotVersionOf(snapshot: AgentSnapshotInput['snapshot']): number {
+  const raw = (snapshot.configSummary as { schemaVersion?: unknown })
+    .schemaVersion;
+  return typeof raw === 'number' ? raw : 1;
+}
+
 function assertSnapshotVersion(
   snapshot: AgentSnapshotInput['snapshot'],
   supportedVersion: number,
 ): void {
-  const raw = (snapshot.configSummary as { schemaVersion?: unknown })
-    .schemaVersion;
-  const version = typeof raw === 'number' ? raw : 1;
+  const version = snapshotVersionOf(snapshot);
   if (version > supportedVersion) {
     throw new ProviderSnapshotVersionError(
       snapshot.provider,
