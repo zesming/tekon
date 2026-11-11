@@ -943,20 +943,22 @@
 - 修复建议：exclude 增加 `**/__tests__/**`、`**/__manual__/**`；维护一张“核心路径到守护测试”的表，代替覆盖率判断；明确写清 client 不计量，或单独出报告（UI 实测覆盖率未验证）。
 
 ### [TS-11] `pnpm test` 不构建，CLI 和 Web 测试可能跑旧产物
-- 维度：测试 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：测试 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，提交 8003220，v0.27.1）
 - 位置：package.json:12，packages/core/package.json:6-11，packages/cli/package.json:22，packages/cli/__tests__/e2e/cli-flow.e2e.test.ts:32，packages/cli/__tests__/e2e/job-failure-exit.e2e.test.ts:19，AGENTS.md:23，.github/workflows/ci.yml:134-135、172-175、202-203、233-234，.github/workflows/core.yml:58
 - 现象：`@tekon/core` 的 exports 指向 `./dist/index.js`，根配置和 web 配置都没有 alias。43 个 CLI、Web 测试文件 import `@tekon/core`，e2e 跑 `packages/cli/dist/index.js`。`pnpm test` 不含构建，只有 `packages/cli/package.json:22` 的 `test:e2e` 才构建。CI 各测试 job 都先构建，风险只在本地。
 - 依据：AGENTS.md:23 要求提交前跑 `pnpm test --run`，涉及 CLI 产物才构建。变异验证（只跑 `run-cli.test.ts`）：改 `agent-runtime.ts:130` 的 profile，不构建 15 passed，构建 core 后 1 failed、14 passed。
 - 影响：改 core 后不构建直接跑测试，CLI 和 Web 测的是旧代码，会假绿。已构建过的仓库不会报错，所以不易察觉。
 - 修复建议：`test` 脚本显式前置 `pnpm -r build`。实测 4.225s，约为 vitest 墙钟 76-87s 的 5%，同时修好进程内测试和跑 dist 的 e2e。vitest alias 修不了真实进程 e2e，只作 watch 模式补充。
+- 修复记录：根 `test` 脚本先执行 `pnpm -r build` 再跑 vitest，`__manual__` 排除不变；AGENTS.md 同步。删掉全部 dist 后 `pnpm test --run` 仍全部通过。
 
 ### [TS-12] 治理子系统测试占比高，合同测试和单点 fixture 与其耦合
-- 维度：测试 | 严重度：S2 | 工作量：M | 置信度：中 | 状态：已确认
+- 维度：测试 | 严重度：S2 | 工作量：M | 置信度：中 | 状态：部分修复（PR #37，提交 cbdbe6b、30f4f09、884fc52、1b26d1a、1bad9b8、2c94825，v0.27.1；余下两项另排）
 - 位置：packages/core/__tests__/gate/，packages/core/__tests__/delivery/，packages/core/__tests__/eval/，packages/core/__tests__/constraint/，packages/core/__tests__/draft/，packages/web/__tests__/fixtures/project.ts:311、323，packages/core/__tests__/workflow/engine-worktree.e2e.test.ts，packages/core/__tests__/phase1/session-job-e2e.test.ts
 - 现象：gate、delivery、eval、constraint、draft 五个子系统共 7,793 行源码。直接失效的测试有 30 文件、13,145 行（真实换行数 13,115）、247 tests，占行 19.2%、占 tests 11.0%，其中子系统目录内 19 文件/8,405 行/156 tests，目录外直接 import 的 11 文件/4,740 行/91 tests。合同候选 `engine-worktree.e2e`、`session-job-e2e`、`kernel.e2e`、`repo-command-binding.e2e` 直接 import `createGateEngine`。`fixtures/project.ts`（517 行）同时种 run、gate 结果、delivery 目录和人工决策，被约 60 个文件依赖。
 - 依据：直接失效部分由 import 关系算出，较可靠。关键词上界是 89 文件、37,868 行、1,082 tests（占行 55.3%、占 tests 48.1%），只是文件级粗估：偏高来自假阳性（`\bdelivery\b` 命中 `standard-delivery`，`createPr` 命中 `createProviderHealthService`），偏低来自 helper 和 fixture 未计（10 文件/1,627 行）、38 个依赖 fixture 的文件（8,527 行）未计、Playwright tests 计 0。校准估算：块级 25,399/68,507 = 37.1%，严格 API 命中 20,165/68,507 = 29.4%。实际删除校准未执行，未验证。
 - 影响：删除治理子系统时估算约 30%-37% 的测试行要动，其中相当部分只是 setup 引用。不先解耦的话，安全网会和被删代码一起失效。
 - 修复建议：重构前先做三件事。拆 fixture：最小 run 种子，加可选的 gate、delivery 种子。给 engine 提供无 gate 的注入点，让合同测试不 import `createGateEngine`。分三批处理：子系统目录内的直接删，目录外直接 import 的逐个改，只命中关键词的 59 个文件在临时副本实际删除校准后再定。
+- 修复记录：fixture 拆出 `seedMinimalRun`，默认只写 run 骨架，gate、delivery、审计数据按需开启，`createWebFixtureProject` 保持全量；`GateEngine` 接口只保留 `runGate`，自动修复节点的创建移到 workflow；测试共用一份假 Codex，并新增假 Claude 和隔离环境的 CLI 运行助手。余下两项：无 gate 注入点随重构第 1 阶段批次 2 的合同测试加入；分三批处理受影响测试随治理子系统删减进行。
 
 ### [TS-14] `tekon ui`、`tekon update` 没有真实进程测试
 - 维度：测试 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
