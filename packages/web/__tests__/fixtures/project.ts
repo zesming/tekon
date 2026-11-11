@@ -20,12 +20,37 @@ export interface WebFixtureProject {
   cleanup(): void;
 }
 
-export async function createWebFixtureProject(
-  options: {
-    includeOutOfScopeProject?: boolean;
-    includeProviderSnapshot?: boolean;
-  } = {},
+export interface SeedMinimalRunOptions {
+  /** Gate results, the pending human decision and the reviewer lease. */
+  withGates?: boolean;
+  /** Delivery files (pr-body.md, pr-package.md) for run_1. */
+  withDelivery?: boolean;
+  /** Audit events for both runs. */
+  withAudit?: boolean;
+  includeOutOfScopeProject?: boolean;
+  includeProviderSnapshot?: boolean;
+}
+
+/** Full fixture: every seeded data class on. Callers rely on this shape. */
+export function createWebFixtureProject(
+  options: Pick<
+    SeedMinimalRunOptions,
+    'includeOutOfScopeProject' | 'includeProviderSnapshot'
+  > = {},
 ): Promise<WebFixtureProject> {
+  return seedMinimalRun(options);
+}
+
+/**
+ * Seeds a git repo with two runs (run_0 passed, run_1 paused on a human gate).
+ * Each data class defaults to on; turn one off to keep a test's data minimal.
+ */
+export async function seedMinimalRun(
+  options: SeedMinimalRunOptions = {},
+): Promise<WebFixtureProject> {
+  const withGates = options.withGates !== false;
+  const withDelivery = options.withDelivery !== false;
+  const withAudit = options.withAudit !== false;
   const projectRoot = mkFixtureRoot();
   seedGitRepo(projectRoot);
   const tekonDir = join(projectRoot, '.tekon');
@@ -35,12 +60,7 @@ export async function createWebFixtureProject(
   mkdirSync(join(tekonDir, 'runs', 'run_0', 'artifacts', 'node_0'), {
     recursive: true,
   });
-  mkdirSync(join(tekonDir, 'runs', 'run_0', 'gates'), { recursive: true });
   mkdirSync(join(tekonDir, 'runs', 'run_1', 'artifacts', 'node_1'), {
-    recursive: true,
-  });
-  mkdirSync(join(tekonDir, 'runs', 'run_1', 'gates'), { recursive: true });
-  mkdirSync(join(tekonDir, 'runs', 'run_1', 'delivery'), {
     recursive: true,
   });
 
@@ -161,11 +181,6 @@ export async function createWebFixtureProject(
     'utf8',
   );
   writeFileSync(
-    join(tekonDir, 'runs', 'run_0', 'gates', 'build.txt'),
-    'older build passed',
-    'utf8',
-  );
-  writeFileSync(
     join(
       tekonDir,
       'runs',
@@ -177,21 +192,35 @@ export async function createWebFixtureProject(
     'Review report body for dashboard.',
     'utf8',
   );
-  writeFileSync(
-    join(tekonDir, 'runs', 'run_1', 'gates', 'human.txt'),
-    'human approval is required',
-    'utf8',
-  );
-  writeFileSync(
-    join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-body.md'),
-    '# Add dashboard\n\nReview dashboard evidence.',
-    'utf8',
-  );
-  writeFileSync(
-    join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-package.md'),
-    '# PR Preparation\n\nReview dashboard evidence package.',
-    'utf8',
-  );
+  if (withGates) {
+    mkdirSync(join(tekonDir, 'runs', 'run_0', 'gates'), { recursive: true });
+    mkdirSync(join(tekonDir, 'runs', 'run_1', 'gates'), { recursive: true });
+    writeFileSync(
+      join(tekonDir, 'runs', 'run_0', 'gates', 'build.txt'),
+      'older build passed',
+      'utf8',
+    );
+    writeFileSync(
+      join(tekonDir, 'runs', 'run_1', 'gates', 'human.txt'),
+      'human approval is required',
+      'utf8',
+    );
+  }
+  if (withDelivery) {
+    mkdirSync(join(tekonDir, 'runs', 'run_1', 'delivery'), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-body.md'),
+      '# Add dashboard\n\nReview dashboard evidence.',
+      'utf8',
+    );
+    writeFileSync(
+      join(tekonDir, 'runs', 'run_1', 'delivery', 'pr-package.md'),
+      '# PR Preparation\n\nReview dashboard evidence package.',
+      'utf8',
+    );
+  }
 
   const db = openTekonDatabase({
     filename: join(tekonDir, 'tekon.sqlite'),
@@ -308,44 +337,46 @@ export async function createWebFixtureProject(
     createdAt: '2026-06-05T00:00:00.000Z',
     updatedAt: '2026-06-05T00:00:00.000Z',
   });
-  await repositories.recordGateResult({
-    id: 'gate_1',
-    runId: 'run_1',
-    nodeId: 'node_1',
-    gateType: 'human',
-    gateKey: '00:human',
-    status: 'blocked',
-    outputPath: '.tekon/runs/run_1/gates/human.txt',
-    durationMs: 0,
-    retries: 0,
-    createdAt: '2026-06-05T00:00:01.000Z',
-  });
-  await repositories.recordGateResult({
-    id: 'gate_0',
-    runId: 'run_0',
-    nodeId: 'node_0',
-    gateType: 'build',
-    gateKey: '00:build',
-    status: 'passed',
-    outputPath: '.tekon/runs/run_0/gates/build.txt',
-    durationMs: 10,
-    retries: 0,
-    createdAt: '2026-06-04T00:00:01.000Z',
-  });
-  await repositories.createHumanDecision({
-    id: 'decision_1',
-    runId: 'run_1',
-    nodeId: 'node_1',
-    gateResultId: 'gate_1',
-    status: 'pending',
-    note: [
-      'request: Review human gate context before continuing.',
-      'gate: gate_1 human blocked',
-      'exactCommand: tekon run --template standard-delivery --agent codex',
-      'risk: high',
-    ].join('\n'),
-    createdAt: '2026-06-05T00:00:02.000Z',
-  });
+  if (withGates) {
+    await repositories.recordGateResult({
+      id: 'gate_1',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      gateKey: '00:human',
+      status: 'blocked',
+      outputPath: '.tekon/runs/run_1/gates/human.txt',
+      durationMs: 0,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.recordGateResult({
+      id: 'gate_0',
+      runId: 'run_0',
+      nodeId: 'node_0',
+      gateType: 'build',
+      gateKey: '00:build',
+      status: 'passed',
+      outputPath: '.tekon/runs/run_0/gates/build.txt',
+      durationMs: 10,
+      retries: 0,
+      createdAt: '2026-06-04T00:00:01.000Z',
+    });
+    await repositories.createHumanDecision({
+      id: 'decision_1',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: 'gate_1',
+      status: 'pending',
+      note: [
+        'request: Review human gate context before continuing.',
+        'gate: gate_1 human blocked',
+        'exactCommand: tekon run --template standard-delivery --agent codex',
+        'risk: high',
+      ].join('\n'),
+      createdAt: '2026-06-05T00:00:02.000Z',
+    });
+  }
   await repositories.recordArtifact({
     id: 'artifact_0',
     runId: 'run_0',
@@ -384,63 +415,72 @@ export async function createWebFixtureProject(
     completedAt: '2026-06-05T00:00:01.000Z',
   });
 
-  // A paused human approval keeps the completed Agent's real execution lease.
-  // Approval resumes that checkpoint and finalizes the same worktree.
-  const worktreeManager = createWorktreeManager({
-    repositories,
-    gateway: createCommandGateway({ repositories }),
-  });
-  const runBranch = await worktreeManager.ensureRunBranch({
-    repoPath: projectRoot, runId: 'run_1', baseRef: 'HEAD',
-  });
-  const reviewerLease = await worktreeManager.createLease({
-    repoPath: projectRoot, runId: 'run_1', nodeId: 'node_1', role: 'reviewer',
-    baseRef: runBranch, allowDirtyBase: true,
-  });
+  let reviewerLease:
+    | { id: string; worktreePath: string; branchName: string }
+    | undefined;
+  if (withGates) {
+    // A paused human approval keeps the completed Agent's real execution lease.
+    // Approval resumes that checkpoint and finalizes the same worktree.
+    const worktreeManager = createWorktreeManager({
+      repositories,
+      gateway: createCommandGateway({ repositories }),
+    });
+    const runBranch = await worktreeManager.ensureRunBranch({
+      repoPath: projectRoot, runId: 'run_1', baseRef: 'HEAD',
+    });
+    reviewerLease = await worktreeManager.createLease({
+      repoPath: projectRoot, runId: 'run_1', nodeId: 'node_1', role: 'reviewer',
+      baseRef: runBranch, allowDirtyBase: true,
+    });
+  }
 
-  const audit = createAuditLogger({ repositories });
-  await audit.append({
-    runId: 'run_0',
-    type: 'run.started',
-    payload: { templateId: 'test-improvement', mode: 'template' },
-    createdAt: '2026-06-04T00:00:03.500Z',
-  });
-  await audit.append({
-    runId: 'run_0',
-    type: 'gate.passed',
-    payload: {
-      gateResultId: 'gate_0',
-      nodeId: 'node_0',
-      role: 'reviewer',
-    },
-    createdAt: '2026-06-04T00:00:04.000Z',
-  });
-  await audit.append({
-    runId: 'run_1',
-    type: 'run.started',
-    payload: { templateId: 'standard-delivery', mode: 'template' },
-    createdAt: '2026-06-05T00:00:03.500Z',
-  });
-  await audit.append({
-    runId: 'run_1',
-    type: 'worktree.lease.created',
-    payload: {
-      nodeId: 'node_1', leaseId: reviewerLease.id,
-      worktreePath: reviewerLease.worktreePath, branchName: reviewerLease.branchName,
-    },
-    createdAt: '2026-06-05T00:00:03.750Z',
-  });
-  await audit.append({
-    runId: 'run_1',
-    type: 'human.decision.pending',
-    payload: {
-      decisionId: 'decision_1',
-      gateResultId: 'gate_1',
-      nodeId: 'node_1',
-      role: 'reviewer',
-    },
-    createdAt: '2026-06-05T00:00:04.000Z',
-  });
+  if (withAudit) {
+    const audit = createAuditLogger({ repositories });
+    await audit.append({
+      runId: 'run_0',
+      type: 'run.started',
+      payload: { templateId: 'test-improvement', mode: 'template' },
+      createdAt: '2026-06-04T00:00:03.500Z',
+    });
+    await audit.append({
+      runId: 'run_1',
+      type: 'run.started',
+      payload: { templateId: 'standard-delivery', mode: 'template' },
+      createdAt: '2026-06-05T00:00:03.500Z',
+    });
+    if (reviewerLease) {
+      await audit.append({
+        runId: 'run_0',
+        type: 'gate.passed',
+        payload: {
+          gateResultId: 'gate_0',
+          nodeId: 'node_0',
+          role: 'reviewer',
+        },
+        createdAt: '2026-06-04T00:00:04.000Z',
+      });
+      await audit.append({
+        runId: 'run_1',
+        type: 'worktree.lease.created',
+        payload: {
+          nodeId: 'node_1', leaseId: reviewerLease.id,
+          worktreePath: reviewerLease.worktreePath, branchName: reviewerLease.branchName,
+        },
+        createdAt: '2026-06-05T00:00:03.750Z',
+      });
+      await audit.append({
+        runId: 'run_1',
+        type: 'human.decision.pending',
+        payload: {
+          decisionId: 'decision_1',
+          gateResultId: 'gate_1',
+          nodeId: 'node_1',
+          role: 'reviewer',
+        },
+        createdAt: '2026-06-05T00:00:04.000Z',
+      });
+    }
+  }
 
   if (options.includeOutOfScopeProject) {
     await repositories.createDemand({
