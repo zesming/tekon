@@ -18,7 +18,7 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 
-Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/core/src/runtime/claude-code-support.ts)）：只保留 PATH、HOME、临时目录、语言、SHELL、登录用户（USER、LOGNAME）、代理变量、`NODE_EXTRA_CA_CERTS` 和 `ANTHROPIC_*`、`CLAUDE_*`，其他 Provider 的凭据、`AWS_*` 和 `NODE_OPTIONS` 不传。Gate 命令走 CommandGateway 默认环境，拿不到这些变量；Claude 在节点里执行的命令继承 Claude 的环境，能读到。资料事实：[Claude 认证优先级](https://code.claude.com/docs/en/authentication)中 API key 优先于订阅登录，所以 shell 设了 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时 Claude 节点会用它们；Tekon 不做认证配置。
+Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/core/src/runtime/claude-code-support.ts)）：只保留 PATH、HOME、临时目录、语言、SHELL、登录用户（USER、LOGNAME）、代理变量、`NODE_EXTRA_CA_CERTS` 和 `ANTHROPIC_*`、`CLAUDE_*`，其他 Provider 的凭据、`AWS_*` 和 `NODE_OPTIONS` 不传。Codex 子进程同样使用精确环境（[codex-adapter.ts](../../packages/core/src/runtime/codex-adapter.ts)），只保留基础变量、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`；`--profile` 只在仓库配置 `providers.codex.profile` 后传入，升级前的 v1 快照恢复时仍用 `internal`。两者都可通过 `providers.<provider>.passthroughEnv`（[tekon-config.ts](../../packages/core/src/config/tekon-config.ts)）追加变量名：名字须为大写，改变加载方式或由 Tekon 控制的名字（`PATH`、`SHELL`、`NODE_*`、`LD_*`、`DYLD_*`、`GIT_*`、`TEKON_*`、`PYTHON*` 等）被拒绝，Tekon 自己的变量最后写入，不能被覆盖。透传名单随 Provider 快照冻结，恢复不读当前配置；审计只记名字。Gate 命令走 CommandGateway 默认环境，拿不到这些变量；Provider 在节点里执行的命令继承 Provider 的环境，能读到。资料事实：[Claude 认证优先级](https://code.claude.com/docs/en/authentication)中 API key 优先于订阅登录，所以 shell 设了 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时 Claude 节点会用它们；Tekon 不做认证配置。
 
 ### 1.1 已归并的架构决策
 
@@ -33,6 +33,10 @@ Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/cor
 PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。评审返工生成的节点把产物和 Gate 结果记在原节点上，原节点 Gate 会重跑，所以只检查返工节点的状态，不单独要求它的产物和 Gate 证据。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
 
 Provider 子进程成功退出与产物导入成功分开判断。manifest 缺失、格式/schema 不合法和必需产物缺失必须保留可诊断的失败原因，沿既有 Agent 失败事件与节点审计传播；诊断采用受控摘要，不回显完整产物或解析器携带的输入值。严格导入、超时与取消判定保持原有语义，不自动修补 JSON 或绕过 Gate。格式提示只能减少生成错误，不能保证模型输出合法。
+
+Provider 进程失败按原因归类（[provider-diagnostics.ts](../../packages/core/src/runtime/provider-diagnostics.ts)）：未安装、未登录或凭据无效、配置无效、非零退出、超时、取消、等待审批。分类只读日志末尾的有限字节，写入的说明经脱敏并截断，附一条下一步。进程失败时以进程原因为准，缺失的产物只是结果；Claude 退出 0 但结果标记错误且缺产物时按该错误归类。分类、说明和下一步写入 `node.interrupted`、`gate.execution.error` 审计与会话 `agent/error`；CLI `run`、`status` 和 Web 事件流只展示最近一次恢复之后的原因。状态机不变：确定性失败仍是 `interrupted`，不自动重试。
+
+启动、恢复和批准恢复前检查 Provider（[provider-probe.ts](../../packages/core/src/runtime/provider-probe.ts)）：启动时在准备运行之前检查，准备时读取的仓库事实仍在检查之后读取；命令不在 PATH 中时拒绝，不受理运行、不入队，批准路径在记录决定之前拒绝。未检测到登录只返回警告。Claude 认证方式来自 `claude auth status --json` 的登录状态与认证方式字段，在内存中解析，不经网关落盘；Codex 只检查 `OPENAI_API_KEY` 与 `CODEX_HOME/auth.json` 是否存在。每次检查把认证类别与透传变量名写入 `provider.preflight` 审计。认证类别是推断，凭据可能来自探测看不到的位置，以实际运行结果为准。
 
 ## 2. RunPlan v3 与检查绑定
 

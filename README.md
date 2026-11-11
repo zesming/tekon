@@ -14,7 +14,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-按安装输出配置 PATH，并进入**目标 Git 仓库**。默认 Provider 为 Codex，需要安装 CLI、完成认证并配置可用的 `internal` profile（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
+按安装输出配置 PATH，并进入**目标 Git 仓库**。`tekon init` 把已安装的 Claude Code 或 Codex 写成默认 Provider（都没有时为 Claude Code），运行前用 `tekon doctor` 检查安装、登录与检查命令（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
 
 ```bash
 tekon ui                         # 启动本地 Web，按终端链接进入
@@ -22,9 +22,9 @@ tekon ui                         # 启动本地 Web，按终端链接进入
 tekon run "为列表增加筛选条件"
 ```
 
-使用 Claude Code 时先安装并认证，再执行 `tekon run "你的需求" --agent claude-code`；Web 需在「高级 Advanced → 新建运行」的 Agent 下拉框选择 `claude-code`，默认受控交付入口固定用 Codex。
+CLI 不加 `--agent` 时使用 `defaultAgent`；Web 的默认受控交付入口目前固定用 Codex，用 Claude Code 时在「高级 Advanced → 新建运行」的 Agent 下拉框选择 `claude-code`。
 
-v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；默认 Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
+v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
 
 首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行 `standard-delivery` 完整流程。更新用 `tekon update`。
 
