@@ -154,6 +154,10 @@ describe('secret scanning and redaction', () => {
       ['PASSWORD=abc\\def123', 'def123'],
       ['password=any-secret-42', 'any-secret-42'],
       ['password: never-gonna-guess', 'never-gonna-guess'],
+      ["password: 'abc-def\\'", 'abc-def'],
+      ["export PASSWORD='p@ss-word\\'", 'p@ss-word'],
+      ['$env:API_KEY = "abc-def\\"', 'abc-def'],
+      ['{"result":"{\\"password\\": \\"hunter2-xyz\\"}"}', 'hunter2-xyz'],
     ];
     for (const [content, secret] of cases) {
       const redacted = redactSecrets(content).content;
@@ -199,6 +203,7 @@ describe('secret scanning and redaction', () => {
       // Encrypted traditional PEM with headers and a blank line.
       [j('-----BEGIN RSA ', 'PRIVATE KEY-----'), 'Proc-Type: 4,ENCRYPTED', 'DEK-Info: AES-128-CBC,0123456789ABCDEF', '', keyBody, keyBody].join('\n'),
     ];
+    truncatedForms.push([j('-----BEGIN ', 'PRIVATE KEY-----'), `${keyBody} `, `${keyBody}\t`].join('\n'));
     for (const form of truncatedForms) {
       expect(redactSecrets(form).content, form.slice(0, 40)).not.toContain(keyBody);
     }

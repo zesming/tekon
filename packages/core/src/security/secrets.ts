@@ -104,8 +104,9 @@ const CREDENTIAL_KEY =
 // as `any-secret` is still masked. Kept free of unbounded lookaheads.
 const NOT_A_LITERAL = String.raw`(?![\[<$=` + '`' + String.raw`\\])(?!(?:true|false|null|none|undefined|string|number|boolean|any|unknown|object|never|void|await|new|typeof)(?=[\s'",;)|}\]>]|$))(?!process\.env|os\.environ)`;
 // Quoted values close with the same quote and may contain escapes; the third
-// form is a value quoted with escaped quotes inside a JSON string.
-const QUOTED_VALUE = String.raw`(")(?![<$[])((?:[^"\\\n]|\\.)+)"|(')(?![<$[])((?:[^'\\\n]|\\.)+)'|(\\")(?![<$[])((?:[^"\\\n]|\\[^"\n])+)\\"`;
+// form is a value quoted with escaped quotes inside a JSON string; the last two
+// take a trailing backslash literally (YAML/shell single quotes, PowerShell).
+const QUOTED_VALUE = String.raw`(")(?![<$[])((?:[^"\\\n]|\\.)+)"|(')(?![<$[])((?:[^'\\\n]|\\.)+)'|(\\")(?![<$[])((?:[^"\\\n]|\\[^"\n])+)\\"|(")(?![<$[])([^"\n]+)"|(')(?![<$[])([^'\n]+)'`;
 // Unquoted values may contain backslashes but stop at \n, \r, \t or an escaped quote.
 const UNQUOTED_VALUE = String.raw`${NOT_A_LITERAL}(?:[^\s'",;\\]|\\\\|\\(?![nrt"'\\]))+`;
 
@@ -123,7 +124,7 @@ const PRIVATE_KEY_END = /-----END ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
 // JSON-escaped newlines, PEM headers, blank lines, or 20+ character pieces when
 // whitespace was collapsed. Always matches, possibly empty.
 const TRUNCATED_KEY_TAIL =
-  /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+(?=\r?\n|\\(?:r\\)?n|["']|$)|(?=\r?\n|\\(?:r\\)?n))|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
+  /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+[ \t]*(?=\r?\n|\\(?:r\\)?n|["']|$)|(?=\r?\n|\\(?:r\\)?n))|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
 
 /**
  * Replaces each private key block, BEGIN through its matching END, with one
@@ -309,11 +310,11 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
     severity: 'high',
     // KEY=value, KEY: "value", "key": "value" and --key=value, of any length.
     pattern: new RegExp(
-      `(?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
+      `(?<![A-Za-z0-9_-])(?:\\\\?["'])?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}(?:\\\\?["'])?\\s*[:=]\\s*(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
       'iu',
     ),
     redactPattern: new RegExp(
-      `((?<![A-Za-z0-9_-])["']?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}["']?\\s*[:=]\\s*)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
+      `((?<![A-Za-z0-9_-])(?:\\\\?["'])?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}(?:\\\\?["'])?\\s*[:=]\\s*)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
       'giu',
     ),
     replace: maskCredentialValue,
