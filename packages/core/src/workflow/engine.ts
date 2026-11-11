@@ -91,6 +91,8 @@ export interface WorkflowEngineResult {
 }
 
 export interface WorkflowEngine {
+  /** Provider this engine freezes into new runs, for checks before preparing. */
+  readonly providerSnapshot?: { provider: string; configSummary: Record<string, unknown> };
   /** Pure validated descriptor; only the admission transaction persists it. */
   buildPreparedRun(input: WorkflowEngineStartInput): PreparedAdmissionData;
   prepareRun(
@@ -270,6 +272,10 @@ export function createWorkflowEngine(
   });
 
   return {
+    providerSnapshot: {
+      provider: options.agentProvider,
+      configSummary: options.agentConfigSummary ?? {},
+    },
     buildPreparedRun: buildAdmissionData,
     prepareRun,
     executePreparedRun,

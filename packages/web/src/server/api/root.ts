@@ -9,6 +9,7 @@ import {
   createSessionDualWriteBridge,
   createSessionEventBus,
   createSessionEventStore,
+  createProviderPreflight,
   createSessionService,
   createSubprocessRegistry,
   createWorkflowEngine,
@@ -26,6 +27,7 @@ import {
   isHostNodeVersionCompatible,
   TESTED_DSH_VERSION,
   type AuditLogger,
+  type ProviderPreflight,
   type RunPlan,
   type SubprocessRegistry,
   type TekonRepositories,
@@ -147,6 +149,8 @@ function createWebRunEngineFactory(deps: {
 export async function createApiCaller(
   input: ResolveProjectRootInput & {
     providerProbe?: () => Promise<'available' | 'unavailable'>;
+    /** Start/resume provider check; defaults to probing the real PATH. */
+    providerPreflight?: ProviderPreflight;
   },
 ): Promise<ApiCaller> {
   const projectContext = createProjectContext(input);
@@ -314,6 +318,8 @@ export async function createApiCaller(
       audit: dualAudit,
       registry,
     }),
+    // DSH keeps its request-scoped check in the engine factory above.
+    preflight: input.providerPreflight ?? createProviderPreflight(),
   });
 
   const context: ServerContext = {

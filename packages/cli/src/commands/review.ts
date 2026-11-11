@@ -76,17 +76,36 @@ export async function commandReview(
         return;
       }
 
-      io.stdout.write(formatReviewSurface(surface));
+      io.stdout.write(
+        formatReviewSurface(surface, await repositories.listNodes(runId)),
+      );
     },
   );
 }
 
+const NODE_STATUS_LABEL: Record<string, string> = {
+  pending: '未执行',
+  running: '执行中',
+  'awaiting-gate': '等待检查',
+  paused: '已暂停',
+  passed: '已通过',
+  'needs-revision': '需要返工',
+  blocked: '等待处理',
+  failed: '失败',
+  interrupted: '中断',
+  skipped: '已跳过',
+};
+
 export function formatReviewSurface(
   surface: Awaited<ReturnType<typeof createWorkReviewSurface>>,
+  nodes: ReadonlyArray<{ id: string; role: string; status: string }> = [],
 ): string {
   const failedChecks = surface.readiness.checks.filter(
     (check) => !check.passed,
   );
+  // An unfinished run fails most checks only because later nodes have not
+  // run yet; say that before listing them.
+  const unfinished = surface.workflowStatus !== 'passed';
   const lines = [
     `runId=${surface.runId}`,
     `workflowStatus=${surface.workflowStatus}`,
@@ -94,6 +113,22 @@ export function formatReviewSurface(
     `score=${surface.readiness.score.toFixed(2)}`,
     `deliveryStatus=${surface.delivery.status}`,
     `prUrl=${surface.delivery.prUrl ?? ''}`,
+    ...(unfinished
+      ? [
+          '',
+          `运行未完成（状态 ${surface.workflowStatus}）：下面未通过的检查大多来自还没执行的节点。`,
+        ]
+      : []),
+    ...(nodes.length > 0
+      ? [
+          '',
+          '## Nodes',
+          ...nodes.map(
+            (node) =>
+              `- ${node.id} (${node.role}): ${NODE_STATUS_LABEL[node.status] ?? node.status}`,
+          ),
+        ]
+      : []),
     '',
     '## Readiness Failed Checks',
     ...(failedChecks.length === 0

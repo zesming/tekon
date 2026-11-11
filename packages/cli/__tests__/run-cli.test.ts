@@ -52,7 +52,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     });
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
-    ).toContain('defaultAgent: codex');
+    ).toMatch(/^defaultAgent: (claude-code|codex)\n$/u);
     expect(existsSync(join(repoPath, '.tekon', 'eval'))).toBe(true);
 
     await expect(
@@ -206,6 +206,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
     expect(gatedOutput).toContain('人工确认: pending');
+    expect(gatedOutput).toContain('⏸ 运行已暂停，等待人工确认');
 
     await expect(
       runCli(['status', '--run-id', gatedRunId!, '--repo', repoPath], io),
@@ -216,6 +217,8 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       runCli(['review', '--run-id', gatedRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
     const gatedReviewOutput = io.takeStdout();
+    expect(gatedReviewOutput).toContain('运行未完成（状态 paused）');
+    expect(gatedReviewOutput).toMatch(/## Nodes\n(- .+\n)*- .+: 未执行/u);
     expect(gatedReviewOutput).toContain('## Gate Failure Triage');
     expect(gatedReviewOutput).toContain(
       'classification=human-approval retry=after-approval',

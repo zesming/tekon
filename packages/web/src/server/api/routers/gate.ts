@@ -1,5 +1,6 @@
 import {
   createHumanApprovalSummary,
+  ProviderPreflightError,
   readRunRecovery,
   type RunRecovery,
 } from '@tekon/core';
@@ -12,6 +13,7 @@ import { assertRunInScope, listGates, listHumanDecisions } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';
 import { mapGate, mapHumanDecision, mapHumanDecisionRow } from '../mappers.js';
 import { redactObject } from '../redaction.js';
+import { providerPreflightApiError } from './project.js';
 
 export function createGateRouter(context: ServerContext) {
   return {
@@ -128,6 +130,15 @@ async function updateDecision(input: {
         throw new ApiError('CONFLICT', `旧进程退出未确认或确认已过期；确认已停止旧执行后重试，previousJobId=${recovery.previousJobId ?? 'null'}`);
       }
     }
+  }
+
+  // Check the provider before recording an approval, so a run that cannot
+  // start does not leave a decision approved but not resumed.
+  if (input.status === 'approved') {
+    await context.sessionService.preflightResume(existing.run_id).catch((error: unknown) => {
+      if (error instanceof ProviderPreflightError) throw providerPreflightApiError(error);
+      throw error;
+    });
   }
 
   const active = await context.jobs.findActiveByRunId(existing.run_id);

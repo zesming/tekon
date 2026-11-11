@@ -5,6 +5,7 @@ import { createWorktreeManager } from '../runtime/worktree-manager.js';
 import { redactSecrets } from '../security/secrets.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import { findLatestRunFailure } from '../workflow/run-failure.js';
 import { createGateEngine } from '../gate/engine.js';
 import {
   isJobCancellationAbort,
@@ -233,35 +234,9 @@ export function createWorkflowJobExecutor(deps: {
     },
   };
 
-  /**
-   * The newest classified failure the run recorded, so the session feed can
-   * say why the run stopped instead of only that it did.
-   */
-  async function latestFailureReason(
-    runId: string,
-  ): Promise<{ message?: string; kind?: string; hint?: string }> {
-    const events = await repositories.listAuditEvents(runId);
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-      const event = events[index];
-      if (event.type !== 'node.interrupted' && event.type !== 'gate.execution.error') {
-        continue;
-      }
-      const diagnostic = event.payload.diagnostic as
-        | { code?: unknown; message?: unknown; hint?: unknown }
-        | undefined;
-      if (diagnostic && typeof diagnostic.message === 'string') {
-        return {
-          message: diagnostic.message,
-          ...(typeof diagnostic.code === 'string' ? { kind: diagnostic.code } : {}),
-          ...(typeof diagnostic.hint === 'string' ? { hint: diagnostic.hint } : {}),
-        };
-      }
-      if (typeof event.payload.error === 'string') {
-        return { message: redactSecrets(event.payload.error).content };
-      }
-      return {};
-    }
-    return {};
+  /** Why the run stopped, so the session feed can say more than that it did. */
+  async function latestFailureReason(runId: string) {
+    return findLatestRunFailure(await repositories.listAuditEvents(runId)) ?? {};
   }
 
   async function settleByWorkflowStatus(

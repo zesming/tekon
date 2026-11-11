@@ -215,19 +215,87 @@ describe('SessionService.startRun', () => {
     expect(env.repositories.getDatabase().prepare('select count(*) as count from workflow_instances').get()).toEqual({ count: 0 });
   });
 
-  it('preflight rejection prevents pure preparation and all admission side effects', async () => {
+  it('preflight rejection prevents preparation and all admission side effects', async () => {
     const env = setup();
     const prepare = vi.spyOn(env.engine, 'buildPreparedRun');
+    const preflight = vi.fn(async () => { throw new Error('preflight rejected'); });
     const service = createSessionService({
       sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
       repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
-      createEngine: () => env.engine, preflight: async () => { throw new Error('preflight rejected'); },
+      createEngine: () => env.engine, preflight,
     });
     await expect(service.startRun({ demandText: 'Blocked', engine: null })).rejects.toThrow('preflight rejected');
+    // Checked against the provider the engine would freeze, before preparing.
+    expect(preflight).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'mock', phase: 'start' }),
+    );
     expect(prepare).not.toHaveBeenCalled();
     for (const table of ['workflow_instances', 'sessions', 'session_events', 'jobs', 'run_admissions']) {
       expect(env.repositories.getDatabase().prepare(`select count(*) as count from ${table}`).get()).toEqual({ count: 0 });
     }
+  });
+});
+
+describe('SessionService provider preflight', () => {
+  const found = {
+    provider: 'claude-code' as const,
+    auth: 'none' as const,
+    passthroughEnv: ['AWS_PROFILE'],
+    warnings: ['claude 未检测到登录或凭据'],
+  };
+
+  it('returns the start check and audits the auth category with the admission', async () => {
+    const env = setup();
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => env.engine, preflight: async () => found,
+    });
+    const result = await service.startRun({ demandText: 'Check', engine: null });
+    expect(result.preflight).toEqual(found);
+    const audits = await env.repositories.listAuditEvents(result.runId);
+    expect(audits.find((event) => event.type === 'provider.preflight')?.payload).toEqual({
+      phase: 'start',
+      provider: 'claude-code',
+      auth: 'none',
+      passthroughEnv: ['AWS_PROFILE'],
+    });
+  });
+
+  it('checks the frozen provider on resume and refuses before queuing', async () => {
+    const env = setup();
+    await seedRun(env, 'run_check', 'paused');
+    await env.repositories.recordRunProviderConfig({
+      runId: 'run_check',
+      provider: 'claude-code',
+      configSummary: { command: 'claude' },
+      createdAt: new Date().toISOString(),
+    });
+    const enqueue = vi.spyOn(env.jobRunner, 'enqueueIfNoActiveByRunId');
+    let refuse = true;
+    const preflight = vi.fn(async () => {
+      if (refuse) throw new Error('找不到 claude 命令');
+      return found;
+    });
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => env.engine, preflight,
+    });
+    await expect(service.resumeRun({ runId: 'run_check' })).rejects.toThrow('找不到 claude 命令');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(preflight).toHaveBeenCalledWith({
+      provider: 'claude-code',
+      phase: 'resume',
+      configSummary: { command: 'claude' },
+    });
+
+    refuse = false;
+    const result = await service.resumeRun({ runId: 'run_check' });
+    expect(result).toMatchObject({ outcome: 'enqueued', preflight: found });
+    const audits = await env.repositories.listAuditEvents('run_check');
+    expect(audits.filter((event) => event.type === 'provider.preflight')).toHaveLength(1);
+    await expect(service.preflightResume('run_check')).resolves.toEqual(found);
   });
 });
 

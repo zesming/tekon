@@ -23,6 +23,7 @@ import {
   renderDraftShapeForRun,
   runDshPreflight,
   RunAdmissionError,
+  ProviderPreflightError,
   type WorkflowTemplate,
   type SessionServiceStartRunResult,
 } from '@tekon/core';
@@ -289,6 +290,7 @@ export function createProjectRouter(
           admissionState: result.admissionState === 'ready'
             ? 'accepted' as const : 'recovery-required' as const,
           ...(result.detail ? { detail: result.detail } : {}),
+          ...(result.preflight ? { preflight: result.preflight } : {}),
         };
       }
       function mappedError(error: unknown): ApiError {
@@ -298,6 +300,8 @@ export function createProjectRouter(
           return new ApiError(error.cause.code, `${error.cause.message} (requestId=${requestId})`);
         }
         if (error instanceof ApiError) return new ApiError(error.code, `${error.message} (requestId=${requestId})`);
+        const preflightError = error instanceof RunAdmissionError && !error.runId ? error.cause : error;
+        if (preflightError instanceof ProviderPreflightError) return providerPreflightApiError(preflightError);
         if (error instanceof Error && error.message.startsWith('REQUEST_ID_CONFLICT')) {
           return new ApiError('CONFLICT', `REQUEST_ID_CONFLICT: requestId=${requestId}`);
         }
@@ -420,6 +424,9 @@ export function createProjectRouter(
         runId: runInput.runId,
         confirmStopped: runInput.confirmStopped,
         previousJobId: runInput.previousJobId,
+      }).catch((error: unknown) => {
+        if (error instanceof ProviderPreflightError) throw providerPreflightApiError(error);
+        throw error;
       });
       if (result.outcome === 'exit-unconfirmed' || result.outcome === 'stale-confirmation') {
         throw new ApiError('CONFLICT', `${result.outcome}: 旧进程退出未确认或确认已过期；刷新后确认已停止旧执行，previousJobId=${result.previousJobId ?? 'null'}`);
@@ -451,6 +458,7 @@ export function createProjectRouter(
         }),
         sessionId: result.sessionId,
         jobId: result.jobId,
+        ...(result.preflight ? { preflight: result.preflight } : {}),
       };
     },
 
@@ -680,4 +688,9 @@ function assertDraftShapeStorageInScope(
     throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   return draftsDir;
+}
+
+/** A provider that cannot start: the reason and the one next step. */
+export function providerPreflightApiError(error: ProviderPreflightError): ApiError {
+  return new ApiError('BAD_REQUEST', `${error.code}: ${error.message}。下一步：${error.hint}`);
 }

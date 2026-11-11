@@ -1,5 +1,6 @@
 import type {
   AuditLogger,
+  ProviderPreflightResult,
   RunRecovery,
   ResumeConfirmation,
   DraftShape,
@@ -322,6 +323,7 @@ export interface ApiCaller {
       replayed: boolean;
       admissionState: 'accepted' | 'recovery-required';
       detail?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     admission(input: { token: string; requestId: string }): Promise<ProjectAdmissionOutput>;
     admissionIntent(input: { token: string; run?: ProjectRunIntent }): Promise<{
@@ -333,6 +335,7 @@ export interface ApiCaller {
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     cancel(input: TokenRunInput): Promise<{
       run: WorkflowOutput;

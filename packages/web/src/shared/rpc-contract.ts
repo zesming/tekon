@@ -599,11 +599,24 @@ export const runWrapperOutputSchema = z.object({
   jobId: z.string().optional(),
 });
 
+/** What the provider check found when a run started or resumed. */
+export const providerPreflightOutputSchema = z.object({
+  provider: z.enum(['claude-code', 'codex']),
+  auth: z.enum(['api-key', 'auth-token', 'oauth-token', 'subscription', 'stored-login', 'none', 'unknown']),
+  passthroughEnv: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+
 export const projectRunOutputSchema = runWrapperOutputSchema.extend({
   requestId: z.string(),
   replayed: z.boolean(),
   admissionState: z.enum(['accepted', 'recovery-required']),
   detail: z.string().optional(),
+  preflight: providerPreflightOutputSchema.optional(),
+});
+
+export const projectResumeOutputSchema = runWrapperOutputSchema.extend({
+  preflight: providerPreflightOutputSchema.optional(),
 });
 
 export const projectAdmissionOutputSchema = z.discriminatedUnion('state', [
@@ -946,7 +959,7 @@ export const procedureSpecs = {
   'project.resume': {
     auth: 'token' as const,
     input: resumeInputSchema,
-    output: runWrapperOutputSchema,
+    output: projectResumeOutputSchema,
   },
   'project.cancel': {
     auth: 'token' as const,

@@ -17,6 +17,7 @@ import {
   createSessionEventStore,
   createSessionService,
   createSubprocessRegistry,
+  createProviderPreflight,
   createWorkflowEngine,
   DshCapabilityError,
   DshHostNodeError,
@@ -225,7 +226,7 @@ export async function withCliSessionContext<T>(
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
     });
 
-    let activeAgent: string | undefined;
+    const providerPreflight = createProviderPreflight();
     const engineFactory = createCliRunEngineFactory({
       projectRoot: repoPath,
       repositories: dualRepositories,
@@ -242,12 +243,10 @@ export async function withCliSessionContext<T>(
       projectRoot: repoPath,
       // Design §8 decision 2: CLI-created sessions are labeled 'cli'.
       sessionProfile: 'cli',
-      createEngine: (input: CliRunEngineInput) => {
-        activeAgent = input?.agent;
-        return engineFactory(input);
-      },
-      preflight: async () => {
-        if (activeAgent === 'dsh-headless') {
+      createEngine: (input: CliRunEngineInput) => engineFactory(input),
+      preflight: async (input) => {
+        if (input.provider !== 'dsh-headless') return providerPreflight(input);
+        if (input.phase === 'start') {
           const preflight = await runDshPreflight({
             onWarn: (msg) => {
               io.stderr.write(`${msg}\n`);

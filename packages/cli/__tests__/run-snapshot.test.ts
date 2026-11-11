@@ -69,7 +69,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
 
       const stdout = io.takeStdout();
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('运行已启动');
+      expect(stdout).toContain('✅ 运行已完成');
       expect(stdout).toContain('状态: passed');
 
       const runIdMatch = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(stdout);
@@ -133,7 +133,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
 
       const stdout = io.takeStdout();
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('运行已启动');
+      expect(stdout).toContain('✅ 运行已完成');
       expect(stdout).toContain('状态: passed');
     },
     WORKFLOW_SNAPSHOT_TIMEOUT_MS,

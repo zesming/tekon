@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { createWebFixtureProject } from '../fixtures/project.js';
+import { installFakeProviderCommands } from '../fixtures/fake-provider-bin.js';
 import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
 import { writeFakeCodex } from '../../../cli/__tests__/helpers/fake-provider.js';
 
@@ -247,6 +248,7 @@ describe('web write authorization', () => {
   it('approves a human gate when the run has a Codex provider snapshot', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(installFakeProviderCommands('codex'));
     const db = openTekonDatabase({
       filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
     });

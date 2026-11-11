@@ -7,6 +7,7 @@ import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
 import { commandEval } from './commands/eval.js';
 import { commandHelp } from './commands/help.js';
+import { commandDoctor } from './commands/doctor.js';
 import { commandInit } from './commands/init.js';
 import { commandReview } from './commands/review.js';
 import { commandRole } from './commands/role.js';
@@ -86,6 +87,7 @@ const COMMANDS: CommandMeta[] = [
   ] },
   { name: 'log', description: '查看运行审计日志', group: '审阅与评估' },
   // 工具
+  { name: 'doctor', description: '检查配置、Provider 安装与登录、工作流命令', group: '工具' },
   { name: 'provider', description: '管理与检查 Agent Provider', group: '工具', subcommands: [
     { name: 'preflight', description: '检查指定 Provider 的环境兼容性与合同' },
   ] },
@@ -167,6 +169,8 @@ export async function runCli(
       case 'ui':
         await commandUi(rest, io);
         return 0;
+      case 'doctor':
+        return await commandDoctor(rest, io);
       case 'provider':
         return await commandProvider(rest, io);
       case 'update':

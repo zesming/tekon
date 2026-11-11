@@ -5,6 +5,7 @@ import {
   createWebServer,
   type RunningWebServer,
 } from '../../src/server/http.js';
+import { installFakeProviderCommands } from '../fixtures/fake-provider-bin.js';
 import { credentialStatus } from './helpers/locators.js';
 
 type FixtureProject = Awaited<ReturnType<typeof createWebFixtureProject>>;
@@ -24,7 +25,9 @@ export const test = base.extend<SharedFixtures>({
   server: async ({ fixture }, use) => {
     // Exercise the production static-server path. The package test:e2e script
     // builds the client first, so route assertions are never coupled to Vite's
-    // dev-only on-demand transform timing.
+    // dev-only on-demand transform timing. Placeholder provider commands let
+    // runs pass the start check without ever starting a real provider.
+    const restorePath = installFakeProviderCommands('claude', 'codex');
     const server = await createWebServer({
       projectRoot: fixture.projectRoot,
       port: 0,
@@ -32,6 +35,7 @@ export const test = base.extend<SharedFixtures>({
     await server.listen();
     await use(server);
     await server.close();
+    restorePath();
   },
 
   // Business journeys use page.goto() to launch many deep routes as fresh

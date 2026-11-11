@@ -63,9 +63,6 @@ export function readStdinLine(): Promise<string> {
   });
 }
 
-export function basenameForProject(repoPath: string) {
-  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'tekon';
-}
 
 export function getRepoRoot() {
   return resolve(

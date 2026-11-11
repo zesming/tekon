@@ -15,6 +15,8 @@ import {
   saveDynamicTemplate,
   isValidRequestId,
   RunAdmissionError,
+  ProviderPreflightError,
+  findLatestRunFailure,
   type RunAdmissionEnvelope,
   readTekonConfig,
   resolveDefaultAgent,
@@ -28,6 +30,11 @@ import {
   exitCodeForJobOutcome,
   withCliSessionContext,
 } from '../lib/session-context.js';
+import {
+  formatPreflightNotice,
+  runOutcomeDetails,
+  runOutcomeHeader,
+} from '../lib/run-outcome.js';
 import {
   explicitPathReference,
   resolveDemandShapePath,
@@ -270,6 +277,10 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         }
       }
       if (!result) {
+        const cause = error instanceof RunAdmissionError ? error.cause : error;
+        if (cause instanceof ProviderPreflightError) {
+          throw new Error(`${cause.message}\n下一步: ${cause.hint}`);
+        }
         throw new Error(
           `${error instanceof Error ? error.message : '受理状态待确认'} (requestId=${requestId})`,
         );
@@ -285,6 +296,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       );
       return 1;
     }
+    io.stderr.write(formatPreflightNotice(result.preflight));
     ctx.jobRunner.start();
     const onSigint = () => {
       void ctx.jobRunner
@@ -308,13 +320,18 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
     const pendingHuman = (
       await ctx.repositories.listHumanDecisions(result.runId)
     ).filter((decision) => decision.status === 'pending');
+    const failure = findLatestRunFailure(
+      await ctx.repositories.listAuditEvents(result.runId),
+    );
     io.stdout.write(
       [
-        result.replayed ? '↩ 已受理请求，继续观察原运行' : '🚀 运行已启动',
+        result.replayed ? '↩ 已受理请求，继续观察原运行' : '',
+        runOutcomeHeader(status, pendingHuman.length > 0),
         `  Run ID: ${result.runId}`,
         `  状态: ${status}`,
         `  模板: ${templateName}`,
         pendingHuman.length > 0 ? '  人工确认: pending' : '',
+        ...runOutcomeDetails({ status, runId: result.runId, failure }),
         '后续操作:',
         '  tekon status          查看运行状态',
         '  tekon review          查看审阅面板',
