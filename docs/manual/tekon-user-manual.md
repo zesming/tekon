@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.26.4**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.27.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -136,7 +136,7 @@ tekon update
 tekon init
 ```
 
-生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。该目录通常不提交。
+生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。在 git 仓库里，`init` 会把 `.tekon/` 写入本仓库的 `.git/info/exclude`（已被忽略时不写），不改你的 `.gitignore`，避免误提交令牌和数据库。
 
 ### 4.3 检查目标仓库命令画像
 
@@ -344,6 +344,8 @@ tekon init --repo /path/to/project
 ```
 
 创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
+
+在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上；重新执行 `init` 也可以，但会重写 `config.yaml`。
 
 Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。
 
@@ -626,6 +628,8 @@ tekon ui --repo /path/to/project --port 3001
 
 默认端口 3000。先 `init`，再打开终端输出的完整 URL：`http://127.0.0.1:3000/#token=<会话令牌>`。
 
+服务只响应以 `localhost`、`127.0.0.1`、`::1` 主机名访问的请求；通过局域网 IP、反向代理域名或云 IDE 端口转发访问会返回 403 `Host not allowed`，请在本机用上面的地址打开（SSH 等转发到本机 localhost 的方式不受影响）。
+
 前端读取片段令牌后写入当前标签页的 sessionStorage，并从地址栏清除；刷新后仍可使用。片段不会随初次 URL 请求发送，后续 API 使用令牌鉴权。`Ctrl+C` 停止本地服务。
 
 顶栏分开显示凭据和 Provider 状态；凭据有效不代表 Provider 可执行。可在连接面板重新应用令牌或单独重试 Provider 检查。完整页面流程见 §7。
@@ -679,7 +683,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.26.4`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.27.0`。
 
 ## 7. Web Dashboard
 

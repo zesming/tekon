@@ -2,6 +2,39 @@ import { describe, expect, it } from 'vitest';
 
 import { redactObject, redactString, redactTextPreview } from '../../src/server/api/redaction.js';
 
+describe('redactString shares the core token-shape rules', () => {
+  it('removes a private key body and an unlabeled GitHub token', () => {
+    const body = ['MIIEvQIBADANBgkqhkiG9w0BAQEFAASC', 'BKcwggSjAgEAAoIBAQC7'].join('');
+    const github = ['ghp', '_', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'].join('');
+    const input = [['-----BEGIN ', 'PRIVATE KEY-----'].join(''), body, ['-----END ', 'PRIVATE KEY-----'].join(''), `push with ${github}`].join('\n');
+    const output = redactString(input);
+    expect(output).not.toContain(body);
+    expect(output).not.toContain(github);
+    expect(output).toContain('push with ');
+  });
+});
+
+describe('redactString masks private keys that follow a key name', () => {
+  const body = ['MIIEvQIBADANBgkqhkiG9w0BAQEFAASC', 'BKcwggSjAgEAAoIBAQC7'].join('');
+  const begin = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
+  const end = ['-----END ', 'PRIVATE KEY-----'].join('');
+  it.each([
+    ['quoted env value', `GOOGLE_PRIVATE_KEY="${begin}\n${body}\n${end}\n"`],
+    ['multi-line dotenv', `PRIVATE_KEY=${begin}\n${body}\n${end}`],
+    ['yaml value on the next line', `private_key:\n  ${begin}\n  ${body}\n  ${end}`],
+    ['single-line dotenv with escaped newlines', `PRIVATE_KEY="${begin}\\n${body}\\n${end}\\n"`],
+    ['log line', `secret: ${begin}\n${body}\n${end}`],
+  ])('%s', (_name, input) => {
+    expect(redactString(input)).not.toContain(body);
+  });
+});
+
+describe('redactString keeps quoted values whole', () => {
+  it('does not leak the tail of a JSON value that contains an apostrophe', () => {
+    expect(redactString(`{"password": "don't-tell-anyone"}`)).not.toContain('tell-anyone');
+  });
+});
+
 describe('redactTextPreview', () => {
   it('redacts token=value patterns without leaking the original value', () => {
     const input = 'token=abc123';

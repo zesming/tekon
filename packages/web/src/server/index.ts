@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createWebServer } from './http.js';
+import { createWebServer, webDevModeFromEnv } from './http.js';
 
 const projectRoot = process.env.TEKON_PROJECT_ROOT ?? process.cwd();
 const tokenPath = join(projectRoot, '.tekon', 'web-session.json');
@@ -18,7 +18,7 @@ if (typeof sessionToken !== 'string' || !sessionToken) {
 const server = await createWebServer({
   env: process.env,
   port: Number(process.env.PORT ?? 3000),
-  vite: true,
+  vite: webDevModeFromEnv(process.env),
 });
 
 await server.listen();
