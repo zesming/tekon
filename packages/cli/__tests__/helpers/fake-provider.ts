@@ -1,4 +1,10 @@
-import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import {
+  execFileSync,
+  spawn,
+  spawnSync,
+  type ChildProcess,
+  type SpawnSyncReturns,
+} from 'node:child_process';
 import { chmodSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
@@ -8,6 +14,9 @@ import { delimiter, join } from 'node:path';
  * Tekon prompt from stdin (or after `--`), writes schema-valid artifacts for
  * every "Required artifact types:" entry and a manifest at
  * TEKON_ARTIFACT_MANIFEST, so the run can pass its gates.
+ *
+ * The fakes are extensionless CommonJS scripts: put `binDir` in a temp dir,
+ * never under a `"type": "module"` package, or `require` is undefined.
  */
 export type FakeProviderBehavior =
   /** Write all artifacts and exit 0. */
@@ -16,7 +25,7 @@ export type FakeProviderBehavior =
   | 'not-authenticated'
   /** Exit 1 on the first run (marker file), then behave like success. */
   | 'fail-once'
-  /** Wait until `releaseFile` exists, then behave like success. */
+  /** Wait until `releaseFile` exists (exit 124 after 60s), then behave like success. */
   | 'slow'
   /** Exit 0 without writing any artifact. */
   | 'missing-artifact';
@@ -50,7 +59,7 @@ export function writeFakeCodex(
     expectProfile === null
       ? ''
       : `if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== ${JSON.stringify(expectProfile)}) {
-  console.error('expected ${expectProfile} profile before exec, got: ' + args.join(' '));
+  console.error(${JSON.stringify(`expected ${expectProfile} profile before exec, got: `)} + args.join(' '));
   process.exit(2);
 }
 `;
@@ -95,8 +104,10 @@ export function writeFakeClaude(
     loggedIn: auth.loggedIn,
     authMethod: auth.authMethod ?? (auth.loggedIn ? 'claude.ai' : 'none'),
     apiProvider: 'firstParty',
-    // Present so tests can assert Tekon never prints it.
-    email: 'fake-user@example.invalid',
+    // Identity fields are present so tests can assert Tekon never prints them.
+    ...(auth.loggedIn
+      ? { email: 'fake-user@example.invalid', orgName: 'Fake Org' }
+      : {}),
   });
   const body = `if (args[0] === 'auth' && args[1] === 'status') {
   console.log(${JSON.stringify(authJson)});
@@ -135,26 +146,81 @@ export interface RunCliWithEnvOptions {
   cwd: string;
   /** Prepended to PATH. With `isolatePath`, PATH is exactly these dirs. */
   binDirs?: string[];
+  /**
+   * Hermetic child env: PATH is only `binDirs`, HOME is `home`, global and
+   * system git config are ignored, and host provider/Tekon variables
+   * (ANTHROPIC_*, CLAUDE_*, OPENAI_*, CODEX_*, TEKON_*) are dropped.
+   * `env` is applied afterwards, so a test can inject exactly what it needs.
+   */
   isolatePath?: boolean;
+  /** Required with `isolatePath`; caller owns cleanup. */
+  home?: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
 }
 
-/** Runs the built CLI in a real child process with a controlled PATH. */
+const HOST_PROVIDER_ENV_PREFIXES = [
+  'ANTHROPIC_',
+  'CLAUDE_',
+  'OPENAI_',
+  'CODEX_',
+  'TEKON_',
+];
+
+export function buildCliEnv(options: RunCliWithEnvOptions): NodeJS.ProcessEnv {
+  const binDirs = options.binDirs ?? [];
+  if (!options.isolatePath) {
+    return {
+      ...process.env,
+      ...options.env,
+      PATH: [...binDirs, process.env.PATH ?? ''].join(delimiter),
+    };
+  }
+  if (!options.home) {
+    throw new Error('isolatePath requires a temp home dir');
+  }
+  const inherited = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([key]) => !HOST_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    ),
+  );
+  return {
+    ...inherited,
+    HOME: options.home,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    ...options.env,
+    PATH: binDirs.join(delimiter),
+  };
+}
+
+/** Runs the built CLI in a real child process and waits for it to exit. */
 export function runCliWithEnv(
   cliPath: string,
   args: string[],
   options: RunCliWithEnvOptions,
 ): SpawnSyncReturns<string> {
-  const binDirs = options.binDirs ?? [];
-  const path = options.isolatePath
-    ? binDirs.join(delimiter)
-    : [...binDirs, process.env.PATH ?? ''].join(delimiter);
   return spawnSync(process.execPath, [cliPath, ...args], {
     cwd: options.cwd,
     encoding: 'utf8',
     timeout: options.timeoutMs ?? 60_000,
-    env: { ...process.env, ...options.env, PATH: path },
+    env: buildCliEnv(options),
+  });
+}
+
+/**
+ * Starts the built CLI without waiting, for tests that act while a run is in
+ * flight (pause, cancel, release a `slow` fake). Caller must await exit or kill.
+ */
+export function spawnCliWithEnv(
+  cliPath: string,
+  args: string[],
+  options: Omit<RunCliWithEnvOptions, 'timeoutMs'>,
+): ChildProcess {
+  return spawn(process.execPath, [cliPath, ...args], {
+    cwd: options.cwd,
+    env: buildCliEnv(options),
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
 
@@ -178,20 +244,27 @@ const captureFile = ${JSON.stringify(options.captureFile ?? null)};
 if (captureFile) {
   appendFileSync(captureFile, JSON.stringify({ argv: args, envKeys: Object.keys(process.env).sort() }) + '\\n');
 }
-if (args.includes('--version')) {
+const dashIndex = args.indexOf('--');
+const flags = dashIndex === -1 ? args : args.slice(0, dashIndex);
+if (flags.includes('--version')) {
   console.log(${JSON.stringify(options.version ?? `fake-${name} 1.0.0`)});
   process.exit(0);
 }
 ${providerBody}
 const behavior = ${JSON.stringify(behavior)};
-if (behavior === 'not-authenticated') notAuthenticated();
-if (behavior === 'fail-once' && !existsSync(${JSON.stringify(failOnceMarker)})) {
-  writeFileSync(${JSON.stringify(failOnceMarker)}, 'failed');
-  console.error('${label} fixture failed on first attempt');
-  process.exit(1);
-}
-const dashIndex = args.indexOf('--');
 let prompt = dashIndex === -1 ? '' : args.slice(dashIndex + 1).join(' ');
+// Runs after stdin is fully read, like a real CLI, so an early exit never
+// turns into a broken pipe on the writer side.
+function start() {
+  if (behavior === 'not-authenticated') notAuthenticated();
+  if (behavior === 'fail-once' && !existsSync(${JSON.stringify(failOnceMarker)})) {
+    writeFileSync(${JSON.stringify(failOnceMarker)}, 'failed');
+    console.error(${JSON.stringify(`${label} fixture failed on first attempt`)});
+    process.exit(1);
+  }
+  waitForRelease();
+}
+const releaseDeadline = Date.now() + 60000;
 function finish() {
   const outputDir = process.env.TEKON_OUTPUT_DIR;
   const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;
@@ -213,15 +286,19 @@ function waitForRelease() {
     finish();
     return;
   }
+  if (Date.now() > releaseDeadline) {
+    console.error('release file never appeared');
+    process.exit(124);
+  }
   setTimeout(waitForRelease, 50);
 }
 if (dashIndex !== -1 || process.stdin.isTTY) {
-  waitForRelease();
+  start();
 } else {
   process.stdin.on('data', (chunk) => {
     prompt += chunk;
   });
-  process.stdin.on('end', waitForRelease);
+  process.stdin.on('end', start);
 }
 `;
   writeFileSync(scriptPath, script, 'utf8');
