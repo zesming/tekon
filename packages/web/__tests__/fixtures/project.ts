@@ -38,19 +38,25 @@ export function createWebFixtureProject(
     'includeOutOfScopeProject' | 'includeProviderSnapshot'
   > = {},
 ): Promise<WebFixtureProject> {
-  return seedMinimalRun(options);
+  return seedMinimalRun({
+    ...options,
+    withGates: true,
+    withDelivery: true,
+    withAudit: true,
+  });
 }
 
 /**
- * Seeds a git repo with two runs (run_0 passed, run_1 paused on a human gate).
- * Each data class defaults to on; turn one off to keep a test's data minimal.
+ * Seeds a git repo with two runs (run_0 passed, run_1 paused on a human gate):
+ * demands, projects, runs, phases, nodes, artifacts and role runs. Gate,
+ * delivery and audit data are off unless asked for.
  */
 export async function seedMinimalRun(
   options: SeedMinimalRunOptions = {},
 ): Promise<WebFixtureProject> {
-  const withGates = options.withGates !== false;
-  const withDelivery = options.withDelivery !== false;
-  const withAudit = options.withAudit !== false;
+  const withGates = options.withGates === true;
+  const withDelivery = options.withDelivery === true;
+  const withAudit = options.withAudit === true;
   const projectRoot = mkFixtureRoot();
   seedGitRepo(projectRoot);
   const tekonDir = join(projectRoot, '.tekon');
@@ -442,13 +448,7 @@ export async function seedMinimalRun(
       payload: { templateId: 'test-improvement', mode: 'template' },
       createdAt: '2026-06-04T00:00:03.500Z',
     });
-    await audit.append({
-      runId: 'run_1',
-      type: 'run.started',
-      payload: { templateId: 'standard-delivery', mode: 'template' },
-      createdAt: '2026-06-05T00:00:03.500Z',
-    });
-    if (reviewerLease) {
+    if (withGates) {
       await audit.append({
         runId: 'run_0',
         type: 'gate.passed',
@@ -459,6 +459,14 @@ export async function seedMinimalRun(
         },
         createdAt: '2026-06-04T00:00:04.000Z',
       });
+    }
+    await audit.append({
+      runId: 'run_1',
+      type: 'run.started',
+      payload: { templateId: 'standard-delivery', mode: 'template' },
+      createdAt: '2026-06-05T00:00:03.500Z',
+    });
+    if (reviewerLease) {
       await audit.append({
         runId: 'run_1',
         type: 'worktree.lease.created',
