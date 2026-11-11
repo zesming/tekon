@@ -1080,18 +1080,6 @@ describe('workflow engine role prompt integration', () => {
             createdAt: new Date().toISOString(),
           });
         },
-        async createAutoFixRepairNode(input) {
-          return repositories.createNode({
-            id: `repair_${input.failedGateResult.id}`,
-            runId: input.failedGateResult.runId,
-            role: input.fixerRole,
-            status: 'pending',
-            gates: [],
-            dependencies: [input.failedGateResult.nodeId],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-        },
       },
     });
 
@@ -1548,18 +1536,6 @@ function createFailingBuildGateEngine(
         createdAt: new Date().toISOString(),
       });
     },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
   };
 }
 
@@ -1577,18 +1553,6 @@ function createPassingGateEngine(
         durationMs: 0,
         retries: 0,
         createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
     },
   };

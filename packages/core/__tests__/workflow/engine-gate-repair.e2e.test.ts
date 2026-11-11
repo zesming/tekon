@@ -19,7 +19,6 @@ import {
   type GateEngine,
 } from '../../src/index.js';
 import { validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
-import { createGateEngine } from '../../src/gate/engine.js';
 
 describe('workflow engine gate repair e2e', () => {
   const tempDirs: string[] = [];
@@ -65,8 +64,7 @@ describe('workflow engine gate repair e2e', () => {
             return promote(input);
           });
         }
-        const realGate = createGateEngine({ repositories });
-        const gateEngine: GateEngine = { ...realGate, async runGate(input) {
+        const gateEngine: GateEngine = { async runGate(input) {
           const active = (await repositories.listWorktreeLeases(input.runId)).filter(lease => !lease.releasedAt);
           expect(active).toHaveLength(1); expect(input.cwd).toBe(active[0].worktreePath); expect(input.cwd).not.toBe(repoPath);
           gateLeases.push(active[0].id); gateCalls++;
@@ -335,18 +333,6 @@ describe('workflow engine gate repair e2e', () => {
           createdAt: new Date().toISOString(),
         });
       },
-      async createAutoFixRepairNode(input) {
-        return repositories.createNode({
-          id: `repair_${input.failedGateResult.id}`,
-          runId: input.failedGateResult.runId,
-          role: input.fixerRole,
-          status: 'pending',
-          gates: [],
-          dependencies: [input.failedGateResult.nodeId],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      },
     };
 
     const run = await engineWithBuildGate(
@@ -479,7 +465,6 @@ function createFailOnceGateEngine(
   repositories: ReturnType<typeof createRepositories>,
 ): GateEngine {
   let failed = false;
-  const realGateEngine = createGateEngine({ repositories });
 
   return {
     async runGate(input) {
@@ -496,9 +481,6 @@ function createFailOnceGateEngine(
         retries: shouldFail ? 0 : 1,
         createdAt: new Date().toISOString(),
       });
-    },
-    async createAutoFixRepairNode(input) {
-      return realGateEngine.createAutoFixRepairNode(input);
     },
   };
 }

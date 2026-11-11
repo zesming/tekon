@@ -15,6 +15,7 @@ import {
   openTekonDatabase,
 } from '../../src/index.js';
 import { DYNAMIC_NODE_ORDER_OFFSET } from '../../src/workflow/execution-plan.js';
+import { createAutoFixRepairNode } from '../../src/workflow/repair-node.js';
 
 describe('gate engine', () => {
   const tempDirs: string[] = [];
@@ -219,9 +220,7 @@ describe('gate engine', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     await createRunFixture(repositories, repoPath);
-    const engine = createGateEngine({ repositories });
-
-    const repair = await engine.createAutoFixRepairNode({
+    const repair = await createAutoFixRepairNode(repositories, {
       failedGateResult: {
         id: 'gate_failed',
         runId: 'run_1',

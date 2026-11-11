@@ -28,6 +28,7 @@ import {
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
 import { assertSuccessfulAgentRun } from './helpers.js';
+import { createAutoFixRepairNode } from './repair-node.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
 import { isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
@@ -316,7 +317,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         if (await interrupted()) return false;
         await leaseService.finalizeExecutionLease(runId, node.id);
         if (await interrupted()) return false;
-        const repairNode = await gateEngine.createAutoFixRepairNode({
+        const repairNode = await createAutoFixRepairNode(repositories, {
           failedGateResult: result,
           fixerRole: node.role,
         });

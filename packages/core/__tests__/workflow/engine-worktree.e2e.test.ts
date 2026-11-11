@@ -45,7 +45,6 @@ describe('workflow engine worktree execution e2e', () => {
     const observed: Array<{ id: string; path: string; active: number; previous: string }> = [];
     let gateCalls = 0;
     const gateEngine: GateEngine = {
-      ...createGateEngine({ repositories }),
       async runGate(input) {
         return repositories.recordGateResult({
           id: `retry_gate_${gateCalls}`,
@@ -894,18 +893,6 @@ function createObservedGateEngine(
         createdAt: new Date().toISOString(),
       });
     },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
   };
 }
 
@@ -926,18 +913,6 @@ function createRepairGateEngine(
         durationMs: 0,
         retries: repaired ? 1 : 0,
         createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
     },
   };
