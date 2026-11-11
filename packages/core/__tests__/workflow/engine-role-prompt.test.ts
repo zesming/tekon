@@ -47,6 +47,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -132,6 +133,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -231,6 +233,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -370,6 +373,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -456,6 +460,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -611,6 +616,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -719,6 +725,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -867,6 +874,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -995,6 +1003,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -1225,6 +1234,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(): Promise<AgentRunResult> {
           return {
@@ -1295,6 +1305,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           return {

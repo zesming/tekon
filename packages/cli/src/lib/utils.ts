@@ -3,12 +3,13 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parse as parseYaml } from 'yaml';
 
 import {
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
+  readTekonConfig,
+  resolveDefaultAgent,
 } from '@tekon/core';
 
 export function getVersion(): string {
@@ -149,24 +150,10 @@ export function assertCleanBase(
   }
 }
 
-export function readConfigDefaultAgent(
-  repoPath: string,
-): string | undefined {
-  try {
-    const configPath = join(repoPath, '.tekon', 'config.yaml');
-    if (!existsSync(configPath)) return undefined;
-    const raw = readFileSync(configPath, 'utf8');
-    const config = parseYaml(raw) as { defaultAgent?: string } | null;
-    return config?.defaultAgent ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function resolveAgentCommand(
   repoPath: string,
 ): string | undefined {
-  const agent = readConfigDefaultAgent(repoPath) ?? 'codex';
+  const agent = resolveDefaultAgent(readTekonConfig(repoPath));
   // Currently only claude-code supports interactive AI clarification
   // (codex uses different CLI flags not compatible with draft-agent.ts)
   switch (agent) {

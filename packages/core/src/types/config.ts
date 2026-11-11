@@ -5,6 +5,7 @@ import {
   gateConfigSchema,
   roleSchema,
 } from './domain.js';
+import { passthroughEnvSchema } from '../config/tekon-config.js';
 
 const unsafeToolNames = new Set(['rm', 'sudo', 'su', 'chmod', 'chown']);
 const shellMetaPattern = /[;&|`$<>]/u;
@@ -122,6 +123,12 @@ export const agentAdapterConfigSchema = z.object({
    * `enabled`.
    */
   acknowledgeUnrestrictedNetwork: z.boolean().optional(),
+  /**
+   * Extra variable names (never values) the provider receives, from the repo
+   * config `providers.<name>.passthroughEnv`. Values are read from the Tekon
+   * process environment at execution time; gate commands never see them.
+   */
+  passthroughEnv: passthroughEnvSchema.optional(),
   timeoutMs: z
     .number()
     .int()
@@ -162,20 +169,6 @@ export const runContextSchema = z.object({
   dataDir: z.string().min(1),
 });
 export type RunContext = z.infer<typeof runContextSchema>;
-
-export const tekonConfigSchema = z.object({
-  project: z.object({
-    name: z.string().min(1),
-    repoPath: z.string().min(1),
-  }),
-  storage: z.object({
-    dataDir: z.string().min(1).default('.tekon'),
-  }),
-  defaultAgent: z
-    .enum(['mock', 'claude-code', 'codex', 'dsh-headless', 'custom'])
-    .default('codex'),
-});
-export type TekonConfig = z.infer<typeof tekonConfigSchema>;
 
 export const workflowTemplateSchema = z.object({
   id: z.string().min(1),

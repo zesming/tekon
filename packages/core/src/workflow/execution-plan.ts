@@ -217,6 +217,13 @@ export interface PreparedRun {
   kind: 'workflow' | 'goal';
 }
 
+function requireAgent(agent: string | undefined): string {
+  if (!agent) {
+    throw new Error('buildPreparedRun requires agentProvider; resolve it with resolveDefaultAgent');
+  }
+  return agent;
+}
+
 export function buildPreparedRun(
   input: {
     workflowSpec: WorkflowTemplate;
@@ -245,7 +252,7 @@ export function buildPreparedRun(
   const repoCommands = normalizeRepoCommands(template, options.repoCommands ?? input.repoCommands ?? []);
   const canonicalPlan = projectRunPlanV3(template, {
     mode: kind,
-    agent: options.agentProvider ?? 'codex',
+    agent: requireAgent(options.agentProvider),
     allowDirtyBase: options.allowDirtyBase,
     profile: options.profile,
     timeoutMs: options.timeoutMs,

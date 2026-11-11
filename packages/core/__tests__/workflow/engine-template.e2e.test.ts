@@ -38,6 +38,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           observedNodesAtFirstAgentCall.push(
@@ -116,6 +117,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
     });
 
@@ -178,6 +180,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           await input.artifactStore?.writeArtifact({
@@ -286,6 +289,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('duplicate gate key spec must not run an agent');

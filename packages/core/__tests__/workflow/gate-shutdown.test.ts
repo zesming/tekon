@@ -32,6 +32,7 @@ function fixture() {
     phases: [{ id: 'phase', name: 'Phase', dependsOn: [], parallel: false, nodes: [{ id: 'node', role: 'rd',
       inputs: [], outputs: [], dependsOn: [], gates: [{ type: 'build', autoFix: true, maxRetries: 2, onExhausted: 'fail' }] }] }] };
   const start = () => createWorkflowEngine({ repoPath: root, dataDir: '.tekon', repositories, audit,
+    agentProvider: 'mock',
     adapter, gateEngine, signal: controller.signal }).startRun({ demandText: 'Gate stop', mode: 'template', workflowSpec: spec });
   return { repositories, audit, controller, adapter, gateEngine, baseRunGate, spec, start };
 }

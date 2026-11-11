@@ -239,7 +239,7 @@ export function agentRequiresUnrestrictedNetwork(
  * - Deeply normalizes the template to freeze execution facts before any async operations.
  * - Sets digestVersion: 2 and mode.
  * - Extracts roleChain, gates, and phases summaries.
- * - Normalizes agent to 'codex' if omitted.
+ * - Normalizes agent to 'codex' if omitted (frozen for historical digests).
  * - Includes execution configuration.
  * - Computes and attaches a deterministic digest over the full template and context.
  */
@@ -276,6 +276,9 @@ export function projectRunPlanV2(
     });
   }
 
+  // Frozen digest contract: historical plans without an agent were digested
+  // as codex, so re-verification must keep this default. New runs never reach
+  // it — buildPreparedRun and the engine require an explicit agent.
   const agent = context.agent ?? "codex";
   const mode = context.mode ?? "workflow";
   const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(agent);

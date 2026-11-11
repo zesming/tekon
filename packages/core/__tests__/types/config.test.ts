@@ -7,7 +7,6 @@ import {
   agentAdapterConfigSchema,
   commandPolicySchema,
   constraintRulesSchema,
-  tekonConfigSchema,
   dynamicWorkflowSpecSchema,
   permissionProfileSchema,
   workflowTemplateSchema,
@@ -15,21 +14,6 @@ import {
 
 describe('runtime config schemas', () => {
   it('accepts explicit provider, permission, workflow, and constraint configuration', () => {
-    expect(
-      tekonConfigSchema.parse({
-        project: { name: 'tekon', repoPath: '/tmp/tekon' },
-        storage: { dataDir: '.tekon' },
-        defaultAgent: 'mock',
-      }),
-    ).toMatchObject({ defaultAgent: 'mock' });
-
-    expect(
-      tekonConfigSchema.parse({
-        project: { name: 'tekon', repoPath: '/tmp/tekon' },
-        storage: { dataDir: '.tekon' },
-      }),
-    ).toMatchObject({ defaultAgent: 'codex' });
-
     expect(
       agentAdapterConfigSchema.parse({
         provider: 'claude-code',
@@ -50,14 +34,6 @@ describe('runtime config schemas', () => {
       progressHeartbeatMs: DEFAULT_COMMAND_PROGRESS_HEARTBEAT_MS,
       noProgressTimeoutMs: DEFAULT_COMMAND_NO_PROGRESS_TIMEOUT_MS,
     });
-
-    expect(
-      tekonConfigSchema.parse({
-        project: { name: 'tekon', repoPath: '/tmp/tekon' },
-        storage: { dataDir: '.tekon' },
-        defaultAgent: 'codex',
-      }),
-    ).toMatchObject({ defaultAgent: 'codex' });
 
     expect(
       agentAdapterConfigSchema.parse({

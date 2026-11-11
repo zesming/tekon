@@ -16,6 +16,8 @@ import {
   isValidRequestId,
   RunAdmissionError,
   type RunAdmissionEnvelope,
+  readTekonConfig,
+  resolveDefaultAgent,
 } from '@tekon/core';
 
 import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
@@ -34,7 +36,6 @@ import {
 import {
   assertCleanBase,
   loadWorkflowByName,
-  readConfigDefaultAgent,
 } from '../lib/utils.js';
 
 export async function commandRun(argv: string[], io: CliIO): Promise<number> {
@@ -187,7 +188,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       if (!result) {
         const { demandText } = resolveDemand();
         const agent =
-          args.values.agent ?? readConfigDefaultAgent(repoPath) ?? 'codex';
+          args.values.agent ?? resolveDefaultAgent(readTekonConfig(repoPath));
         const runModeIssue = getRunModePolicyIssue({
           agent,
           kind: isGoal ? 'goal' : 'workflow',

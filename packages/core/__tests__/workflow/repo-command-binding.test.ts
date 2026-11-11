@@ -94,7 +94,7 @@ describe('v3纯投影与确认校验', () => {
     const spec = template();
     const confirmed = projectRunPlanV3(spec, {}, [resolved]);
     expect(projectRunPlanV3(spec, {}, [entry as BoundRepoCommand]).digest).not.toBe(confirmed.digest);
-    expect(() => buildPreparedRun({ workflowSpec: spec, canonicalPlan: confirmed }, { repoCommands: [entry as BoundRepoCommand] })).toThrow(/PLAN_DIGEST_MISMATCH/);
+    expect(() => buildPreparedRun({ workflowSpec: spec, canonicalPlan: confirmed }, { agentProvider: 'codex', repoCommands: [entry as BoundRepoCommand] })).toThrow(/PLAN_DIGEST_MISMATCH/);
   });
   it.each([
     [], [resolved, resolved], [resolved, { ...resolved, commandRef: 'test' }],
@@ -108,11 +108,11 @@ describe('v3纯投影与确认校验', () => {
   it('纯准备逐份校验bindings/plan/snapshot/digest且深拷贝事实', () => {
     const spec = template(); const entries = structuredClone([resolved]);
     const plan = projectRunPlanV3(spec, {}, entries);
-    const prepared = buildPreparedRun({ workflowSpec: spec, canonicalPlan: plan, planSnapshot: canonicalJson(plan), planDigest: plan.digest, repoCommands: entries }, { repoCommands: entries });
+    const prepared = buildPreparedRun({ workflowSpec: spec, canonicalPlan: plan, planSnapshot: canonicalJson(plan), planDigest: plan.digest, repoCommands: entries }, { agentProvider: 'codex', repoCommands: entries });
     entries[0].source.profileVersion = 9;
     expect(validateRunPlanV3(JSON.parse(prepared.planSnapshot))).toEqual(plan);
-    expect(() => buildPreparedRun({ workflowSpec: spec, repoCommands: entries }, { repoCommands: [resolved] })).toThrow(/PLAN_DIGEST_MISMATCH/);
-    expect(() => buildPreparedRun({ workflowSpec: spec, canonicalPlan: projectRunPlanV2(spec) }, { repoCommands: [resolved] })).toThrow(/PLAN_DIGEST_MISMATCH/);
+    expect(() => buildPreparedRun({ workflowSpec: spec, repoCommands: entries }, { agentProvider: 'codex', repoCommands: [resolved] })).toThrow(/PLAN_DIGEST_MISMATCH/);
+    expect(() => buildPreparedRun({ workflowSpec: spec, canonicalPlan: projectRunPlanV2(spec) }, { agentProvider: 'codex', repoCommands: [resolved] })).toThrow(/PLAN_DIGEST_MISMATCH/);
   });
 });
 

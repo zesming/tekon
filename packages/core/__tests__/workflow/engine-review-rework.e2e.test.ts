@@ -124,6 +124,7 @@ describe('standard delivery review rework e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter,
       gateEngine: createGateEngine({ repositories, gateway }),
       worktreeManager: createWorktreeManager({ repositories, gateway }),

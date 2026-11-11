@@ -45,6 +45,7 @@ import {
 } from './execution-plan.js';
 import type { RunPlan } from './run-plan.js';
 import { captureRepoCommands } from './repo-command-binding.js';
+import { passthroughEnvAuditPayload } from '../config/tekon-config.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
 export type { ExecutableNode, ExecutionPlan } from './workflow-runtime.js';
@@ -116,7 +117,8 @@ export interface CreateWorkflowEngineOptions {
   worktreeManager?: WorktreeManager;
   baseRef?: string;
   allowDirtyBase?: boolean;
-  agentProvider?: AgentRunResult['provider'];
+  /** Provider recorded in the plan and snapshot; resolve the default with resolveDefaultAgent. */
+  agentProvider: AgentRunResult['provider'];
   agentConfigSummary?: Record<string, unknown>;
   profile?: string;
   timeoutMs?: number;
@@ -327,7 +329,10 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'run.resumed',
-        payload: { kind: existing.kind },
+        payload: {
+          kind: existing.kind,
+          ...passthroughEnvAuditPayload(options.agentConfigSummary),
+        },
       });
 
       const workflow = await executePlan(runId, plan);

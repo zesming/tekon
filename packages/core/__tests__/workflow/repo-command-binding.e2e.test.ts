@@ -28,7 +28,7 @@ function fixture() {
   migrateDatabase(db);
   const repositories = createRepositories(db);
   const audit = createAuditLogger({ repositories });
-  const options = { repoPath, dataDir: '.tekon', repositories, audit, adapter: createMockAgentAdapter() };
+  const options = { repoPath, dataDir: '.tekon', repositories, audit, adapter: createMockAgentAdapter(), agentProvider: 'mock' as const };
   const template = parseWorkflowTemplate({ id: 'bound', governance: 'none', phases: [{ id: 'dev', nodes: [{
     id: 'developer', role: 'rd', gates: [{ type: 'build', commandRef: 'build' }],
   }] }] });

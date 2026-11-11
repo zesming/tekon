@@ -14,7 +14,7 @@ function projectRunPlan(template: WorkflowTemplate, context: RunPlanContext = {}
   return projectRunPlanV3(template, context, emptyRepoFacts(template));
 }
 function buildPreparedRun(input: Parameters<typeof prepareWithCapturedFacts>[0], options: Parameters<typeof prepareWithCapturedFacts>[1] = {}) {
-  return prepareWithCapturedFacts(input, { repoCommands: emptyRepoFacts(input.workflowSpec), ...options });
+  return prepareWithCapturedFacts(input, { agentProvider: 'codex', repoCommands: emptyRepoFacts(input.workflowSpec), ...options });
 }
 
 describe('RunPlan v3 的完整确认绑定', () => {

@@ -75,7 +75,7 @@ describe('workflow engine gate repair e2e', () => {
             durationMs: 0, retries: 0, createdAt: new Date().toISOString() });
         } };
         const makeEngine = (signal?: AbortSignal) => createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories,
-          audit, adapter, gateEngine, worktreeManager: manager, signal });
+          audit, adapter, agentProvider: 'mock', gateEngine, worktreeManager: manager, signal });
         const spec = buildGateWorkflowSpec(); spec.phases[0].nodes[0].gates[0].maxRetries = scenario === 'exhausted' ? 1 : 2;
         let result = await makeEngine(controller.signal).startRun({ demandText: 'repair retry', mode: 'template', workflowSpec: spec });
         const sourceId = `${result.runId}_rd-code`;
@@ -150,6 +150,7 @@ describe('workflow engine gate repair e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
       gateEngine: createFailOnceGateEngine(repositories),
       agentEventSink,
@@ -454,6 +455,7 @@ function engineWithBuildGate(
     dataDir: '.tekon',
     repositories,
     audit,
+    agentProvider: 'mock',
     adapter: createMockAgentAdapter(),
     gateEngine,
     signal,

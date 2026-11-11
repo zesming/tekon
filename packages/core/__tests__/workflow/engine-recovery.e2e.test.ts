@@ -41,6 +41,7 @@ describe('workflow engine recovery e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (
@@ -72,6 +73,7 @@ describe('workflow engine recovery e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('_rd-implementation')) {
@@ -125,6 +127,7 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('_rd-implementation')) {
@@ -190,6 +193,7 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);
@@ -331,6 +335,7 @@ describe('workflow engine recovery e2e', () => {
       audit,
       signal: fence.signal,
       worktreeManager,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);
@@ -422,6 +427,7 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);

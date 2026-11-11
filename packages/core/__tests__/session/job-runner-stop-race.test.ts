@@ -122,6 +122,7 @@ function setupEngineHarness(
     dataDir: '.tekon',
     repositories,
     audit,
+    agentProvider: 'mock',
     adapter: { runAgent: (input) => runAgentSpy(input) },
     ...overrides,
   });

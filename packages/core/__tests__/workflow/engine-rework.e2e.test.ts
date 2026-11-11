@@ -58,6 +58,7 @@ describe('workflow engine changes-requested rework e2e', () => {
         dataDir: '.tekon',
         repositories,
         audit,
+        agentProvider: 'mock',
         adapter: {
           async runAgent(input) {
             if (input.runContext.nodeId.endsWith('rd-node')) {
