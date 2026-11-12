@@ -10,6 +10,7 @@ import {
   createWorktreeManager,
   createWriteQueue,
   migrateDatabase,
+  RunCleanupAuditError,
   type RunCleanupCandidate,
   type RunCleanupReport,
 } from '@tekon/core';
@@ -93,7 +94,11 @@ export async function commandClean(argv: string[], io: CliIO): Promise<number> {
         lines.push(describeReport(report));
       } catch (error) {
         failed = true;
-        lines.push(`未能清理 ${item.runId}：${error instanceof Error ? error.message : String(error)}`);
+        lines.push(
+          error instanceof RunCleanupAuditError
+            ? `已清理 ${item.runId}，但没能写入清理记录：${error.cause instanceof Error ? error.cause.message : String(error.cause)}`
+            : `未能清理 ${item.runId}：${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
     lines.push(KEPT, '');

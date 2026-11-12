@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { openTekonDatabase } from '@tekon/core';
+
 const cliPath = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 const roots: string[] = [];
 
@@ -102,4 +104,30 @@ describe('tekon clean through a real CLI process', () => {
     expect(status.stdout).toContain('status=cancelled');
     expect(cli(repo, ['clean', '--yes']).stdout).toContain('没有需要清理的运行');
   }, 180_000);
+  it('keeps cleaning the other runs when one of them fails', () => {
+    const repo = fixtureRepo();
+    expect(cli(repo, ['init']).status).toBe(0);
+    const start = (demand: string) => {
+      const run = cli(repo, ['run', demand, '--template', 'bugfix', '--agent', 'mock']);
+      const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(run.stdout)?.[1];
+      expect(runId, run.stdout + run.stderr).toBeTruthy();
+      expect(cli(repo, ['cancel', '--run-id', runId!]).status).toBe(0);
+      return runId!;
+    };
+    const first = start('修复按钮文案');
+    const second = start('修复标题文案');
+    // The first run's cleanup record cannot be written.
+    const db = openTekonDatabase({ filename: join(repo, '.tekon', 'tekon.sqlite') });
+    db.exec(`create trigger block_cleanup_audit before insert on audit_events
+      when new.run_id = '${first}' and new.type = 'run.cleanup'
+      begin select raise(abort, 'blocked'); end`);
+    db.close();
+
+    const cleaned = cli(repo, ['clean', '--yes']);
+
+    expect(cleaned.status).toBe(1);
+    expect(cleaned.stdout).toContain(`已清理 ${first}，但没能写入清理记录`);
+    expect(cleaned.stdout).toContain(`已清理 ${second}：`);
+    expect(nodeBranches(repo)).toEqual([]);
+  }, 240_000);
 });

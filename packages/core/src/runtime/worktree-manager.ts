@@ -539,15 +539,18 @@ async function runGit(
   return stdout;
 }
 
-/** The same directory reached through a symlink (e.g. /var on macOS) compares equal. */
 /** Whether a lease was recorded for this repository, after resolving links. */
 export function isLeaseOfRepo(lease: Pick<WorktreeLease, 'repoPath'>, repoPath: string): boolean {
   return canonicalPath(lease.repoPath) === canonicalPath(repoPath);
 }
 
+/**
+ * The same directory reached through a symlink (e.g. /var on macOS) or with
+ * different letter case on a case-insensitive file system compares equal.
+ */
 function canonicalPath(path: string): string {
   try {
-    return realpathSync(path);
+    return realpathSync.native(path);
   } catch {
     return resolve(path);
   }
