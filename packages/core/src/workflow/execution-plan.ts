@@ -452,6 +452,7 @@ async function validateExecutionPlan(
     }
   }
 
+  const legacyAuthorized = new Set<string>();
   for (const event of events) {
     if (!['gate.rework.needs-revision', 'gate.rework.attempt', 'gate.repair.intent'].includes(event.type)) continue;
     const payload = event.payload;
@@ -495,7 +496,13 @@ async function validateExecutionPlan(
     pair.add(event.type);
     reworkEvents.set(key, pair);
     if (pair.size !== 2) continue;
-    authorize({ ...derived, id: reworkIds.get(key)! }, DYNAMIC_NODE_ORDER_OFFSET);
+    const reworkId = reworkIds.get(key)!;
+    // Before the suffix, a second review asking to rework the same target
+    // derived the same old id and stopped the run before its node existed.
+    // That intent never became a node, so it authorizes nothing new.
+    if (reworkId !== derived.id && legacyAuthorized.has(reworkId)) continue;
+    if (reworkId !== derived.id) legacyAuthorized.add(reworkId);
+    authorize({ ...derived, id: reworkId }, DYNAMIC_NODE_ORDER_OFFSET);
   }
 
   // 检查所有节点，包括没有 phase、无法分组、具有可信前缀的孤立记录。

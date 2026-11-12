@@ -287,7 +287,7 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 
 | Provider | 适用范围与前提 |
 | --- | --- |
-| `claude-code` | 未配置 `defaultAgent` 时的默认后端；本机安装并登录 Claude Code |
+| `claude-code` | CLI 在未配置 `defaultAgent` 时的默认后端（Web 暂时仍默认 `codex`）；本机安装并登录 Claude Code |
 | `codex` | 本机安装并登录 Codex CLI；需要 profile 时在仓库配置里写明 |
 | `mock` | 确定性流程演示与回归；不能证明真实 Agent 能力 |
 | `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
@@ -297,10 +297,10 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 **Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量默认不会传给 Claude，需要时写进下面的 `passthroughEnv`。
 
 - **认证方式跟着变量走**：shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 优先用它们，不用订阅登录（见 [Claude 认证](https://code.claude.com/docs/en/authentication)）。工作和个人场景在同一台机器上时，请在各自的 shell 里分开设置。
-- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key。
+- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key，并先看一下仓库里 `.tekon/config.yaml` 的 `passthroughEnv`：列在那里的变量都会传给 Provider。
 - **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量默认不会传过去。可以把变量名写进 `passthroughEnv`，也可以写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
 
-**Codex 的登录与环境**：Codex 节点只收到固定的一组变量：`PATH`、`HOME`、临时目录、语言、`SHELL`、`USER`、`LOGNAME`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`，其他变量要写进 `passthroughEnv`。
+**Codex 的登录与环境**：Codex 节点只收到固定的一组变量：`PATH`、`HOME`、临时目录、语言、`SHELL`、`USER`、`LOGNAME`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`，其他变量要写进 `passthroughEnv`。shell 里的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME` 会原样传给 Codex，它们决定 Codex 用哪个账号或登录、请求发到哪里；`tekon doctor` 会显示 Codex 的认证方式。
 
 **Provider 配置**：写在 `.tekon/config.yaml` 的 `providers` 下，字段都可选：
 
@@ -316,9 +316,9 @@ providers:
 
 - `passthroughEnv` 是额外传给 Provider 的环境变量名，只写名字，值从启动 Tekon 的环境里读。名字必须是大写变量名；`PATH`、`SHELL`、`NODE_*`、`LD_*`、`DYLD_*`、`GIT_*`、`TEKON_*`、`PYTHON*` 等会改变程序加载方式或由 Tekon 控制的变量不能透传。值为空的变量会跳过。
 - 这些变量只给 Provider 进程，Tekon 自己运行的 build、test 等检查命令拿不到。Provider 在节点里执行的命令和 Provider 本身一样能读到。
-- `codex.profile` 只在配置后才以 `--profile` 传给 Codex。之前的版本默认使用 `internal`；升级后需要它时，请写 `providers.codex.profile: internal`。升级前启动的运行恢复时仍按原来的 `internal` 执行。
+- `codex.profile` 只在配置后才以 `--profile` 传给 Codex。之前的版本默认使用 `internal`；升级后需要它时，请写 `providers.codex.profile: internal`。升级前启动的运行恢复时仍按原来的 `internal` 执行。升级 Tekon 后请重启已经在运行的 `tekon ui`。
 - 运行启动时记录这些配置，恢复沿用记录，之后改配置不影响已有运行。启动和每次恢复都会在审计里写下透传的变量名和认证方式，不记录值。
-- 配置文件不是合法 YAML 或字段不对时，`run`、`doctor` 会直接报错，不再按默认值运行。
+- 配置文件不是合法 YAML、字段名拼错或字段值不对时，`run`、`doctor` 会直接报错，不再按默认值运行。
 
 **DSH 使用条件**：自行安装 `@deepseek-ai/dsh` 并配置 `DEEPSEEK_API_KEY`；当前 tested pin 为 `0.1.2-alpha.3`，宿主 Node 要求 `^22.19.0 || >=24.0.0`。先运行：
 
@@ -468,7 +468,7 @@ Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明�
 | --- | --- |
 | 找不到 Provider 命令 | 安装命令，或从能执行它的终端重新启动 Tekon，然后 `tekon resume` |
 | 未登录或凭据无效 | 执行 `claude /login`、`codex login`，或配置 API key，然后 `tekon resume` |
-| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml` 或 Provider 配置，然后 `tekon resume` |
+| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml` 或 Provider 配置，然后用 `tekon run` 新建运行（`tekon resume` 沿用启动时的 Provider 配置） |
 | 非零退出、超时 | 先 `tekon resume` 重试；仍失败时查看节点日志 |
 | 产物缺失或不合 schema | 查看节点目录里的产物与 manifest，修复后 `tekon resume` |
 

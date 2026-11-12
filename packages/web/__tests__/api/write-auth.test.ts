@@ -414,7 +414,7 @@ describe('web write authorization', () => {
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-web-codex-bin-'));
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
-    writeFakeCodex(binDir);
+    writeFakeCodex(binDir, { expectProfile: 'internal' });
     // Codex no longer defaults to the internal profile; the repo opts in.
     const configPath = join(fixture.projectRoot, '.tekon', 'config.yaml');
     writeFileSync(

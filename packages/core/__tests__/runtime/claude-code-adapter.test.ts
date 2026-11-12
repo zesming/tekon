@@ -442,7 +442,7 @@ describe('claude code adapter', () => {
     );
   });
 
-  it('starts Claude with the signed-in user and Claude settings but without unrelated secrets', async () => {
+  it('starts Claude with the signed-in user, Claude settings and listed passthrough names but without unrelated secrets', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-env-'));
     tempDirs.push(repoPath);
     const envDump = join(repoPath, 'env.json');
@@ -460,12 +460,15 @@ describe('claude code adapter', () => {
     vi.stubEnv('CLAUDE_CONFIG_DIR', join(repoPath, 'claude-config'));
     vi.stubEnv('GITHUB_TOKEN', 'github-secret');
     vi.stubEnv('OPENAI_API_KEY', 'openai-secret');
+    vi.stubEnv('AWS_PROFILE', 'bedrock-dev');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'aws-secret');
     try {
       const adapter = createClaudeCodeAdapter(
         {
           provider: 'claude-code',
           command: process.execPath,
           args: [envScript],
+          passthroughEnv: ['AWS_PROFILE'],
           promptMode: 'arg-append',
           outputFormat: 'text',
           timeoutMs: 5_000,
@@ -481,7 +484,9 @@ describe('claude code adapter', () => {
         USER: 'tekon-user',
         ANTHROPIC_API_KEY: 'anthropic-key',
         CLAUDE_CONFIG_DIR: join(repoPath, 'claude-config'),
+        AWS_PROFILE: 'bedrock-dev',
       });
+      expect(childEnv.AWS_SECRET_ACCESS_KEY).toBeUndefined();
       expect(childEnv.GITHUB_TOKEN).toBeUndefined();
       expect(childEnv.OPENAI_API_KEY).toBeUndefined();
     } finally {

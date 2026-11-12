@@ -55,7 +55,7 @@ export function classifyProviderFailure(input: {
     return diagnostic(
       'invalid-config',
       `${command} 没有启动：${detail(result.reason)}`,
-      '检查 .tekon/config.yaml 和 provider 配置，修改后执行 tekon resume',
+      '检查 .tekon/config.yaml 和 provider 配置；恢复运行沿用启动时的 provider 配置，修改后用 tekon run 新建运行',
     );
   }
   if (result.timedOut) {

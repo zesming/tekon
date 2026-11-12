@@ -158,6 +158,28 @@ describe('审计授权的 rework / repair 派生图', () => {
     expect(node.id).toBe(`${f.source.id}_rework_1`);
     expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, node.id]);
   });
+  it('旧版本两个评审撞同一个旧格式 ID 而中断的 run 仍可验证，第二个意图不授权新节点', async () => {
+    const f = await fixture(); const first = await f.rework(f.source, 1, { legacyId: true });
+    const result = await f.addResult('second-review-result');
+    const payload = { reviewNodeId: f.review.id, targetNodeId: f.source.id, gateResultId: result.id, attempt: 1, reworkNodeId: first.id };
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.needs-revision', payload });
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.attempt', payload });
+    expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, first.id]);
+  });
+  it('同一 run 里旧格式与新格式返工 ID 并存', async () => {
+    const f = await fixture(); const legacy = await f.rework(f.source, 1, { legacyId: true });
+    const current = await f.rework(f.source, 2);
+    expect(current.id).toMatch(new RegExp(`^${f.source.id}_rework_2_`));
+    expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, legacy.id, current.id]);
+  });
+  it('新格式 ID 不允许重复授权', async () => {
+    const f = await fixture(); const first = await f.rework(f.source, 1);
+    const result = await f.addResult('forged-dup-result');
+    const payload = { reviewNodeId: f.review.id, targetNodeId: f.source.id, gateResultId: result.id, attempt: 1, reworkNodeId: first.id };
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.needs-revision', payload });
+    await f.audit.append({ runId: f.runId, type: 'gate.rework.attempt', payload });
+    await expect(f.verify()).rejects.toThrow('PLAN_VERIFICATION_FAILED: rework.nodeId');
+  });
   it('payload 中的返工节点 ID 与推导不符时报 rework.nodeId', async () => {
     const f = await fixture(); await f.rework(f.source, 1, { create: false, overrides: { reworkNodeId: `${f.source.id}_rework_1_forged00` } });
     await expect(f.verify()).rejects.toThrow('PLAN_VERIFICATION_FAILED: rework.nodeId');

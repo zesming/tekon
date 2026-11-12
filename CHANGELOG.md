@@ -4,10 +4,10 @@
 
 - 运行前检查：新增 `tekon doctor`，列出配置、每个 Provider 是否安装和认证方式（不显示账号信息）、默认 workflow 的检查命令，只报告不修改。CLI 和 Web 发起、恢复运行前都会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行；批准人工 Gate 时先检查再记录决定。没检测到登录只提示。启动输出写出认证方式和透传的变量名。
 - 失败原因：Provider 失败按原因归类（未安装、未登录或凭据无效、配置无效、非零退出、超时、取消、等待审批），`run`、`status` 和 Web 事件流写明原因和下一步，只有非零退出和超时先建议 `tekon resume`。Claude 退出 0 但结果标记错误时按该错误归类。`run` 的第一行按结果写已完成、已暂停、中断、失败或已取消；`review` 在运行未完成时先说明，并列出各节点状态，没执行到的显示“未执行”。
-- 仓库配置：`.tekon/config.yaml` 统一读取，写错时直接报错，不再静默回退。未配置 `defaultAgent` 时默认用 `claude-code`（以前是 `codex`）。`init` 写入 PATH 里第一个找到的 Provider（先 `claude` 后 `codex`），已有的 `config.yaml` 不再覆盖。
+- 仓库配置：`.tekon/config.yaml` 统一读取，YAML 写错、字段名拼错或值不对时直接报错，不再静默回退。CLI 在未配置 `defaultAgent` 时默认用 `claude-code`（以前是 `codex`；Web 发起的运行暂时仍默认 `codex`）。`init` 写入 PATH 里第一个找到的 Provider（先 `claude` 后 `codex`），已有的 `config.yaml` 不再覆盖。
 - Provider 环境：新增 `providers.<provider>.passthroughEnv`，把指定的环境变量名额外传给 Provider；会改变程序加载方式或由 Tekon 控制的变量不能透传。Codex 改为只收到固定的一组变量加透传变量。
-- 行为变化：Codex 不再默认带 `--profile internal`，需要时在配置里写 `providers.codex.profile: internal`；升级前启动的运行恢复时仍用 `internal`。
-- 修复两个评审要求返工同一节点时返工节点 ID 冲突的问题。
+- 行为变化：Codex 不再默认带 `--profile internal`，需要时在配置里写 `providers.codex.profile: internal`；升级前启动的运行恢复时仍用 `internal`。`codex.profile` 必须以字母或数字开头。升级后请重启已在运行的 `tekon ui`。
+- 修复两个评审要求返工同一节点时返工节点 ID 冲突的问题；升级前因此中断的运行可以直接恢复。
 
 ## 0.27.1 — 2026-11-11
 

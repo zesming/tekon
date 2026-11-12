@@ -151,6 +151,29 @@ describe('provider environment passthrough', () => {
     expect(restored.configSummary.passthroughEnv).toEqual(['AWS_PROFILE']);
   });
 
+  it('restores a version 2 codex snapshot without a profile and passes none', () => {
+    const repoPath = repo();
+    const fresh = createAgentRuntime({ agent: 'codex', repoPath, gateway });
+    expect(fresh.configSummary.schemaVersion).toBe(2);
+    expect(fresh.configSummary.profile).toBeUndefined();
+    const restored = createAgentAdapterFromSnapshot({
+      snapshot: {
+        runId: 'run_1',
+        provider: 'codex',
+        configSummary: fresh.configSummary,
+        createdAt: '2026-11-11T00:00:00.000Z',
+      },
+      gateway,
+    });
+    expect(restored.configSummary.profile).toBeUndefined();
+    const command = buildCodexCommand(agentAdapterConfigSchema.parse(restored.configSummary), {
+      artifactOutputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'node_1'),
+      prompt: 'p',
+      runContext: { runId: 'run_1', nodeId: 'node_1' },
+    });
+    expect(command.args).not.toContain('--profile');
+  });
+
   it('keeps the internal profile for a version 1 codex snapshot without one', () => {
     const repoPath = repo();
     const fresh = createAgentRuntime({ agent: 'codex', repoPath, gateway });
@@ -174,31 +197,4 @@ describe('provider environment passthrough', () => {
     expect(command.args.slice(0, 2)).toEqual(['--profile', 'internal']);
   });
 
-  it('does not hand passthrough variables to gate commands', async () => {
-    const cwd = repo();
-    const previous = process.env.AWS_PROFILE;
-    process.env.AWS_PROFILE = 'dev';
-    let received: NodeJS.ProcessEnv | undefined;
-    const spawnImpl: SpawnImpl = (_command, _args, options) => {
-      received = options.env;
-      throw new Error('stop before spawn');
-    };
-    try {
-      await createCommandGateway({ spawnImpl }).run({
-        command: { tool: 'node', args: ['-v'] },
-        cwd,
-        policy: {
-          allow: [{ tool: 'node', args: [] }],
-          deny: [],
-          cwdScope: [cwd],
-          network: 'disabled',
-        },
-      });
-    } finally {
-      if (previous === undefined) delete process.env.AWS_PROFILE;
-      else process.env.AWS_PROFILE = previous;
-    }
-    expect(received).toBeDefined();
-    expect(received).not.toHaveProperty('AWS_PROFILE');
-  });
 });

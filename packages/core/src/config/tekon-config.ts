@@ -24,13 +24,18 @@ const BLOCKED_ENV_NAMES = new Set([
   'SHELL',
   'ENV',
   'BASH_ENV',
+  'BASHOPTS',
+  'SHELLOPTS',
+  'PS4',
   'ZDOTDIR',
   'PROMPT_COMMAND',
+  'XDG_CONFIG_HOME',
   'JAVA_TOOL_OPTIONS',
   '_JAVA_OPTIONS',
   'JDK_JAVA_OPTIONS',
   'PERL5OPT',
   'PERL5LIB',
+  'PERLLIB',
   'RUBYOPT',
   'RUBYLIB',
 ]);
@@ -46,7 +51,8 @@ const BLOCKED_ENV_PREFIXES = [
 
 export function passthroughEnvNameIssue(name: string): string | undefined {
   if (!ENV_NAME.test(name)) {
-    return `${name} is not an upper-case environment variable name`;
+    // A name written as NAME=value must not echo the value back.
+    return `${name.split('=')[0]!.slice(0, 64)} is not an upper-case environment variable name`;
   }
   if (BLOCKED_ENV_NAMES.has(name)) {
     return `${name} cannot be passed through`;
@@ -68,6 +74,9 @@ export const passthroughEnvSchema = z
     }
   });
 
+/** Codex profile names: no leading `-` or `.`, so a value never reads as a flag. */
+export const CODEX_PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+
 const tekonRepoConfigSchema = z
   .object({
     defaultAgent: z.enum(TEKON_DEFAULT_AGENTS).optional(),
@@ -76,28 +85,36 @@ const tekonRepoConfigSchema = z
         'claude-code': z
           .object({ passthroughEnv: passthroughEnvSchema.optional() })
           .strict()
-          .optional(),
+          .nullish(),
         codex: z
           .object({
             profile: z
               .string()
-              .regex(/^[A-Za-z0-9._-]+$/u, 'codex profile must be a safe profile name')
+              .regex(CODEX_PROFILE_NAME, 'codex profile must be a safe profile name')
               .optional(),
             passthroughEnv: passthroughEnvSchema.optional(),
           })
           .strict()
-          .optional(),
+          .nullish(),
       })
       .strict()
-      .optional(),
+      .nullish(),
+    // Older `tekon init` wrote project/storage; they are accepted and ignored.
+    project: z.unknown().optional(),
+    storage: z.unknown().optional(),
   })
-  // Older `tekon init` wrote project/storage; they are accepted and ignored.
-  .passthrough();
+  // Any other key is a typo (for example `defaultagent`) and is an error.
+  .strict();
 
-export type TekonRepoConfig = Pick<
-  z.infer<typeof tekonRepoConfigSchema>,
-  'defaultAgent' | 'providers'
->;
+type ParsedConfig = z.infer<typeof tekonRepoConfigSchema>;
+type ParsedProviders = NonNullable<ParsedConfig['providers']>;
+
+export interface TekonRepoConfig {
+  defaultAgent?: ParsedConfig['defaultAgent'];
+  providers?: {
+    [K in keyof ParsedProviders]?: NonNullable<ParsedProviders[K]>;
+  };
+}
 
 export class TekonConfigError extends Error {
   constructor(message: string) {
@@ -117,13 +134,21 @@ export function tekonConfigPath(repoPath: string): string {
 export function readTekonConfig(repoPath: string): TekonRepoConfig {
   const path = tekonConfigPath(repoPath);
   if (!existsSync(path)) return {};
-  let raw: unknown;
+  let text: string;
   try {
-    raw = parseYaml(readFileSync(path, 'utf8'));
+    text = readFileSync(path, 'utf8');
   } catch (error) {
     throw new TekonConfigError(
-      `.tekon/config.yaml is not valid YAML: ${(error as Error).message}`,
+      `.tekon/config.yaml cannot be read: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`,
     );
+  }
+  let raw: unknown;
+  try {
+    raw = parseYaml(text);
+  } catch (error) {
+    // Keep only the first line: the parser appends a source excerpt.
+    const reason = (error as Error).message.split('\n')[0];
+    throw new TekonConfigError(`.tekon/config.yaml is not valid YAML: ${reason}`);
   }
   const parsed = tekonRepoConfigSchema.safeParse(raw ?? {});
   if (!parsed.success) {
@@ -133,9 +158,12 @@ export function readTekonConfig(repoPath: string): TekonRepoConfig {
     throw new TekonConfigError(`.tekon/config.yaml is invalid: ${details}`);
   }
   const { defaultAgent, providers } = parsed.data;
+  const providerConfig: NonNullable<TekonRepoConfig['providers']> = {};
+  if (providers?.['claude-code']) providerConfig['claude-code'] = providers['claude-code'];
+  if (providers?.codex) providerConfig.codex = providers.codex;
   return {
     ...(defaultAgent ? { defaultAgent } : {}),
-    ...(providers ? { providers } : {}),
+    ...(providers ? { providers: providerConfig } : {}),
   };
 }
 

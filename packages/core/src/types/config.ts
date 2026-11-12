@@ -5,7 +5,7 @@ import {
   gateConfigSchema,
   roleSchema,
 } from './domain.js';
-import { passthroughEnvSchema } from '../config/tekon-config.js';
+import { CODEX_PROFILE_NAME, passthroughEnvSchema } from '../config/tekon-config.js';
 
 const unsafeToolNames = new Set(['rm', 'sudo', 'su', 'chmod', 'chown']);
 const shellMetaPattern = /[;&|`$<>]/u;
@@ -104,7 +104,7 @@ export const agentAdapterConfigSchema = z.object({
   args: z.array(z.string()).default([]),
   profile: z
     .string()
-    .regex(/^[A-Za-z0-9._-]+$/u, 'agent profile must be a safe profile name')
+    .regex(CODEX_PROFILE_NAME, 'agent profile must be a safe profile name')
     .optional(),
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
   outputFormat: z.enum(['text', 'json']).default('text'),

@@ -8,6 +8,7 @@ import {
   resolve,
 } from 'node:path';
 
+import { CODEX_PROFILE_NAME } from '../config/tekon-config.js';
 import type { AgentAdapterConfig } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
@@ -314,7 +315,7 @@ function controlledCodexGlobalArgs(
 }
 
 function assertSafeCodexProfile(profile: string): string {
-  if (!/^[A-Za-z0-9._-]+$/u.test(profile)) {
+  if (!CODEX_PROFILE_NAME.test(profile)) {
     throw new Error('codex profile must be a safe profile name');
   }
   return profile;

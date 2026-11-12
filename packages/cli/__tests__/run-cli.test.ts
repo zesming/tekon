@@ -11,11 +11,11 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join, relative } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
-import { writeFakeCodex } from './helpers/fake-provider.js';
+import { createIsolatedBinDir, writeFakeCodex } from './helpers/fake-provider.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
@@ -1291,7 +1291,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const repoPath = createFixtureRepo(tempDirs);
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-cli-codex-bin-'));
     tempDirs.push(binDir);
-    writeFakeCodex(binDir);
+    writeFakeCodex(binDir, { expectProfile: 'internal' });
     const originalPath = process.env.PATH;
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
     const io = createMemoryIo();
@@ -1459,6 +1459,30 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
   }, 30_000);
 
   // 4c: --goal and --template are mutually exclusive (goal ignores templates).
+  it('refuses to run when the repo config has a misspelled field', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    writeFileSync(join(repoPath, '.tekon', 'config.yaml'), 'defaultagent: codex\n');
+    // Only placeholder providers on PATH: even if the config were ignored,
+    // no real provider could start.
+    const binDir = createIsolatedBinDir();
+    tempDirs.push(binDir);
+    for (const name of ['claude', 'codex']) {
+      writeFileSync(join(binDir, name), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    }
+    vi.stubEnv('PATH', binDir);
+    try {
+      await expect(
+        runCli(['run', '拼错配置', '--template', 'bugfix', '--repo', repoPath], io),
+      ).resolves.toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(io.takeStderr()).toMatch(/config\.yaml is invalid.*defaultagent/u);
+  });
+
   it('rejects --goal combined with --template', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

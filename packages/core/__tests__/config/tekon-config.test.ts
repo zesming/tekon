@@ -39,6 +39,49 @@ describe('readTekonConfig', () => {
     );
   });
 
+  it.each([
+    ['defaultagent: codex\n', 'defaultagent'],
+    ['default_agent: codex\n', 'default_agent'],
+    ['provider:\n  codex:\n    profile: internal\n', 'provider'],
+  ])('rejects a misspelled top-level field (%s)', (yaml, field) => {
+    expect(() => readTekonConfig(repoWithConfig(yaml))).toThrow(new RegExp(field));
+  });
+
+  it('treats empty provider sections as unset', () => {
+    expect(readTekonConfig(repoWithConfig('providers:\n  codex:\n'))).toEqual({
+      providers: {},
+    });
+    expect(readTekonConfig(repoWithConfig('providers:\n'))).toEqual({});
+  });
+
+  it('reports a config path that cannot be read', () => {
+    const repo = repoWithConfig();
+    mkdirSync(join(repo, '.tekon', 'config.yaml'), { recursive: true });
+    expect(() => readTekonConfig(repo)).toThrow(/cannot be read/);
+  });
+
+  it.each(['-x', '--dangerously-bypass-approvals-and-sandbox', '.hidden'])(
+    'rejects codex profile %s',
+    (profile) => {
+      expect(() =>
+        readTekonConfig(repoWithConfig(`providers:\n  codex:\n    profile: "${profile}"\n`)),
+      ).toThrow(/profile/);
+    },
+  );
+
+  it('does not echo a value written into a passthrough name', () => {
+    let message = '';
+    try {
+      readTekonConfig(
+        repoWithConfig('providers:\n  claude-code:\n    passthroughEnv: ["API_TOKEN=s3cr3t-value"]\n'),
+      );
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/API_TOKEN/);
+    expect(message).not.toContain('s3cr3t-value');
+  });
+
   it('rejects an unknown defaultAgent', () => {
     expect(() => readTekonConfig(repoWithConfig('defaultAgent: gpt\n'))).toThrow(/defaultAgent/);
   });
@@ -67,7 +110,22 @@ describe('readTekonConfig', () => {
     'lower_case',
     '1STARTS_WITH_DIGIT',
     'PATH',
+    'SHELL',
+    'ENV',
     'BASH_ENV',
+    'BASHOPTS',
+    'SHELLOPTS',
+    'PS4',
+    'ZDOTDIR',
+    'PROMPT_COMMAND',
+    'XDG_CONFIG_HOME',
+    '_JAVA_OPTIONS',
+    'JDK_JAVA_OPTIONS',
+    'PERL5OPT',
+    'PERL5LIB',
+    'PERLLIB',
+    'RUBYOPT',
+    'RUBYLIB',
     'JAVA_TOOL_OPTIONS',
     'NODE_OPTIONS',
     'LD_PRELOAD',

@@ -69,6 +69,9 @@ describe('classifyProviderFailure', () => {
     });
     expect(diagnostic.code).toBe('invalid-config');
     expect(diagnostic.message).toContain('command not allowed by policy');
+    // resume keeps the provider settings frozen at start.
+    expect(diagnostic.hint).toContain('tekon run');
+    expect(diagnostic.hint).not.toMatch(/修改后执行 tekon resume/u);
   });
 
   it('classifies timeouts', () => {

@@ -45,7 +45,11 @@ export interface FakeProviderOptions {
 }
 
 export interface FakeCodexOptions extends FakeProviderOptions {
-  /** Profile the fake requires before `exec`; null accepts any (or none). */
+  /**
+   * Profile the fake requires before `exec`. By default it requires no
+   * `--profile` (Tekon only passes one when the repo config sets it); null
+   * accepts any or none.
+   */
   expectProfile?: string | null;
 }
 
@@ -53,12 +57,17 @@ export function writeFakeCodex(
   binDir: string,
   options: FakeCodexOptions = {},
 ): string {
-  const expectProfile =
-    options.expectProfile === undefined ? 'internal' : options.expectProfile;
+  const expectProfile = options.expectProfile;
   const profileCheck =
     expectProfile === null
       ? ''
-      : `if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== ${JSON.stringify(expectProfile)}) {
+      : expectProfile === undefined
+        ? `if (args.indexOf('--profile') !== -1) {
+  console.error('expected no --profile, got: ' + args.join(' '));
+  process.exit(2);
+}
+`
+        : `if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== ${JSON.stringify(expectProfile)}) {
   console.error(${JSON.stringify(`expected ${expectProfile} profile before exec, got: `)} + args.join(' '));
   process.exit(2);
 }

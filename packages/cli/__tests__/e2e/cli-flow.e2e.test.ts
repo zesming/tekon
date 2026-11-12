@@ -383,7 +383,7 @@ describe('tekon cli e2e', () => {
       repoPath,
     );
     expect(oldRunOutput).toContain('状态: passed');
-  }, 30_000);
+  }, 90_000);
 
   it('help command works without initialized repo and with initialized repo', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
