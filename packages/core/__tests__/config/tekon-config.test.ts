@@ -69,6 +69,19 @@ describe('readTekonConfig', () => {
     },
   );
 
+  it('does not echo a token written in place of a name', () => {
+    const token = 'ghp_Abcdefghijklmnopqrstuvwxyz0123456789';
+    let message = '';
+    try {
+      readTekonConfig(repoWithConfig(`providers:\n  claude-code:\n    passthroughEnv: [${token}]\n`));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/passthroughEnv/);
+    expect(message).not.toContain(token);
+    expect(message).not.toContain('ghp_');
+  });
+
   it.each(['API_TOKEN=s3cr3t-value', 'API_TOKEN: s3cr3t-value', 'API_TOKEN s3cr3t-value'])(
     'does not echo a value written into a passthrough name (%s)',
     (entry) => {
@@ -80,7 +93,7 @@ describe('readTekonConfig', () => {
       } catch (error) {
         message = (error as Error).message;
       }
-      expect(message).toMatch(/API_TOKEN/);
+      expect(message).toMatch(/passthroughEnv\.0/);
       expect(message).not.toContain('s3cr3t-value');
     },
   );
@@ -109,9 +122,18 @@ describe('readTekonConfig', () => {
     });
   });
 
+  it.each(['lower_case', '1STARTS_WITH_DIGIT'])('rejects malformed name %s without echoing it', (name) => {
+    let message = '';
+    try {
+      readTekonConfig(repoWithConfig(`providers:\n  claude-code:\n    passthroughEnv: [AWS_PROFILE, ${name}]\n`));
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(/passthroughEnv\.1: entry is not an upper-case environment variable name/);
+    expect(message).not.toContain(name);
+  });
+
   it.each([
-    'lower_case',
-    '1STARTS_WITH_DIGIT',
     'PATH',
     'SHELL',
     'ENV',

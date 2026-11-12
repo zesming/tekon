@@ -47,4 +47,24 @@ describe('findLatestRunFailure', () => {
       });
     },
   );
+
+  it('ignores a repair failure that a later attempt recovered from', () => {
+    expect(
+      findLatestRunFailure([
+        { type: 'gate.repair.failed', payload: { nodeId: 'rd', error: '529', diagnostic: { code: 'exit-nonzero', message: 'claude 退出码 1：529' } } },
+        { type: 'gate.passed-after-repair', payload: { nodeId: 'rd' } },
+        { type: 'node.passed', payload: { nodeId: 'rd' } },
+        { type: 'gate.failed', payload: { nodeId: 'qa' } },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('ignores a review rerun failure once the review node passed', () => {
+    expect(
+      findLatestRunFailure([
+        { type: 'gate.rework.review.re-execute.failed', payload: { reviewNodeId: 'review', error: 'x', diagnostic } },
+        { type: 'node.passed', payload: { nodeId: 'review' } },
+      ]),
+    ).toBeUndefined();
+  });
 });

@@ -130,8 +130,8 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     expect(io.takeStdout()).toBe('');
   });
 
-  it('reports the terminal state before checking the provider', async () => {
-    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+  it.each([false, true])('reports the terminal state before checking the provider (approve=%s)', async (approve) => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
     const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
     db.prepare("update run_provider_configs set provider = 'claude-code' where run_id = ?").run(runId);
     db.close();
@@ -142,7 +142,14 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     const io = createMemoryIo();
     try {
       await expect(
-        runCli(['resume', '--run-id', runId, '--repo', repoPath], io),
+        runCli(
+          [
+            'resume', '--run-id', runId,
+            ...(approve ? ['--decision-id', decisionId, '--approve-human'] : []),
+            '--repo', repoPath,
+          ],
+          io,
+        ),
       ).resolves.toBe(1);
     } finally {
       vi.unstubAllEnvs();

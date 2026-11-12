@@ -85,9 +85,12 @@ export function runOutcomeDetails(input: {
     const retryFirst = isRetryableFailure(failure);
     return [
       `  原因: ${failure.message}`,
-      retryFirst
-        ? `  下一步: 执行 ${resume} 重试；仍失败时 ${failure.hint ?? `用 tekon log --run-id ${runId} 查看日志`}`
-        : `  下一步: ${failure.hint ?? `修复后执行 ${resume}`}`,
+      // A hint that already leads with resume only needs the run id.
+      failure.hint?.startsWith('执行 tekon resume')
+        ? `  下一步: ${failure.hint.replace('tekon resume', resume)}`
+        : retryFirst
+          ? `  下一步: 执行 ${resume} 重试；仍失败时 ${failure.hint ?? `用 tekon log --run-id ${runId} 查看日志`}`
+          : `  下一步: ${failure.hint ?? `修复后执行 ${resume}`}`,
     ];
   }
   if (status === 'failed') {
@@ -102,6 +105,10 @@ export function runOutcomeDetails(input: {
       : [`  下一步: 执行 ${resume} 继续`];
   }
   if (status === 'blocked') {
+    // A login, install or config failure needs that fix, not a review.
+    if (failure?.hint && !isRetryableFailure(failure)) {
+      return [`  原因: ${failure.message}`, `  下一步: ${failure.hint}`];
+    }
     return [
       ...(failure ? [`  原因: ${failure.message}`] : []),
       `  下一步: tekon review 查看需要处理的内容，处理后执行 ${resume}`,

@@ -56,4 +56,27 @@ describe('run outcome output', () => {
       '  下一步: 执行 tekon resume --run-id run_1 继续',
     ]);
   });
+
+  it('gives the login hint for a run blocked by a failure retrying cannot fix', () => {
+    expect(
+      runOutcomeDetails({
+        status: 'blocked',
+        runId: 'run_1',
+        failure: { kind: 'not-authenticated', message: 'claude 未登录或凭据无效', hint: '执行 claude auth login，然后执行 tekon resume' },
+      }),
+    ).toEqual([
+      '  原因: claude 未登录或凭据无效',
+      '  下一步: 执行 claude auth login，然后执行 tekon resume',
+    ]);
+  });
+
+  it('does not repeat resume when the hint already leads with it', () => {
+    const lines = runOutcomeDetails({
+      status: 'interrupted',
+      runId: 'run_1',
+      failure: { kind: 'timeout', message: 'claude 运行超时', hint: '执行 tekon resume 重试；任务确实需要更久时，用更大的 --timeout-ms 重新执行 tekon run' },
+    });
+    expect(lines[1]).toBe('  下一步: 执行 tekon resume --run-id run_1 重试；任务确实需要更久时，用更大的 --timeout-ms 重新执行 tekon run');
+    expect(lines[1]!.match(/tekon resume/gu)).toHaveLength(1);
+  });
 });

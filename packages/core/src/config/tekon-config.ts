@@ -51,9 +51,9 @@ const BLOCKED_ENV_PREFIXES = [
 
 export function passthroughEnvNameIssue(name: string): string | undefined {
   if (!ENV_NAME.test(name)) {
-    // A name written as NAME=value (or NAME: value) must not echo the value.
-    const shown = (/^[A-Za-z0-9_]*/u.exec(name)?.[0] ?? '').slice(0, 64);
-    return `${shown || '(name)'} is not an upper-case environment variable name`;
+    // A malformed entry may be a value or token pasted in place of a name;
+    // never echo it. The issue path gives its position instead.
+    return 'entry is not an upper-case environment variable name';
   }
   if (BLOCKED_ENV_NAMES.has(name)) {
     return `${name} cannot be passed through`;
@@ -69,10 +69,10 @@ export function passthroughEnvNameIssue(name: string): string | undefined {
 export const passthroughEnvSchema = z
   .array(z.string())
   .superRefine((names, ctx) => {
-    for (const name of names) {
+    names.forEach((name, index) => {
       const issue = passthroughEnvNameIssue(name);
-      if (issue) ctx.addIssue({ code: 'custom', message: issue });
-    }
+      if (issue) ctx.addIssue({ code: 'custom', message: issue, path: [index] });
+    });
   });
 
 /** Codex profile names: no leading `-` or `.`, so a value never reads as a flag. */

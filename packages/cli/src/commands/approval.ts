@@ -292,8 +292,11 @@ export async function commandResume(
       }
       // Check the provider before recording the approval, so a run that
       // cannot start does not leave a decision approved but not resumed. A
-      // bare resume is checked inside resumeRun, after its state checks.
-      await sessionService.preflightResume(runId).catch(rethrowPreflight);
+      // bare resume is checked inside resumeRun, after its state checks; a
+      // finished run is reported as such by the approval below instead.
+      if (!['passed', 'failed', 'cancelled'].includes(workflow.status)) {
+        await sessionService.preflightResume(runId).catch(rethrowPreflight);
+      }
       const humanGate = createHumanGate({
         repositories,
       });
