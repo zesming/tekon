@@ -224,7 +224,8 @@ export async function createApiCaller(
       automation: automationExecutor,
     }),
     origin: 'web',
-    // A CLI process runs the jobs it queued; resuming one here retags it.
+    // A CLI process runs the jobs it queued. Resuming a run here whose CLI
+    // job is still queued hands that job over to this server.
     claimFilter: { excludeOrigin: 'cli' },
   });
   await repositories.admissionStore.scanAndRecoverAdmissions();

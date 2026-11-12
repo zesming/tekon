@@ -8,6 +8,7 @@ import {
   createSubprocessRegistry,
   createWriteQueue,
   JobFencingError,
+  JOB_ABORT_REASON_OWNERSHIP_LOST,
   migrateDatabase,
   openTekonDatabase,
   type DurableJobRunner,
@@ -148,6 +149,18 @@ function setup(options: SetupOptions) {
 
 const runners: DurableJobRunner[] = [];
 
+async function seedForeignRunning(
+  jobs: ReturnType<typeof createJobRepository>,
+  sessionId: string,
+  id: string,
+  lease: string,
+) {
+  return jobs.enqueue({
+    id, sessionId, kind: 'workflow-run', status: 'running', owner: 'worker_other',
+    lease, abortState: 'none', checkpoint: null, createdAt: lease, updatedAt: lease,
+  });
+}
+
 afterEach(async () => {
   // Release hung executions first so stop() settles immediately instead of
   // waiting out its 5s cap for every test that left a job in flight.
@@ -241,11 +254,94 @@ describe('durable job runner', () => {
     const own = await runner.enqueue({ sessionId: mine.id, kind: 'workflow-run' });
     expect(db.prepare('select origin from jobs where id=?').get(own.id)).toEqual({ origin: 'cli' });
 
+    const webRunning = await seedForeignRunning(jobs, other.id, 'job_0_web_running', new Date().toISOString());
+
     runner.start({ jobIds: [own.id] });
     await waitFor(() => executor.started.length === 1);
     expect(executor.started[0]!.job.id).toBe(own.id);
     await sleep(50);
     expect((await jobs.get(foreign.id))?.status).toBe('queued');
+    ControllableExecutor.releaseAll();
+    await runner.stop();
+    // Stopping leaves jobs it never claimed exactly as they were.
+    expect(await jobs.get(foreign.id)).toMatchObject({ status: 'queued', owner: null });
+    expect(await jobs.get(webRunning.id)).toMatchObject({ status: 'running', owner: 'worker_other' });
+  });
+
+  it('gives other workers a heartbeat again after a second suspension', async () => {
+    let offset = 0;
+    const clock = () => Date.now() + offset;
+    const { sessions, jobs, runner } = setup({
+      executor: immediateExecutor(), heartbeatMs: 200, leaseTtlMs: 1_000, now: clock,
+    });
+    const session = await seedSession(sessions, 'run_twice');
+    const foreign = await seedForeignRunning(jobs, session.id, 'job_twice', new Date().toISOString());
+    runner.start();
+    await sleep(30);
+
+    offset = 5_000;
+    await sleep(30);
+    // The other worker renews right after waking, then both sleep again.
+    await jobs.updateJob(foreign.id, { lease: new Date(clock()).toISOString() });
+    await sleep(30);
+    offset = 10_000;
+    await sleep(40);
+    expect((await jobs.get(foreign.id))?.status).toBe('running');
+    // Without further renewals it is reclaimed once its lease really expires.
+    await waitFor(async () => (await jobs.get(foreign.id))?.status === 'interrupted', 2_000);
+  });
+
+  it('treats a suspension in the middle of a poll as a gap', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({
+      executor, heartbeatMs: 200, leaseTtlMs: 1_000, now: () => Date.now() + offset,
+    });
+    const own = await seedSession(sessions, 'run_mid_own');
+    const other = await seedSession(sessions, 'run_mid_other');
+    await runner.enqueue({ sessionId: own.id, kind: 'workflow-run' });
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const foreign = await seedForeignRunning(jobs, other.id, 'job_mid', new Date().toISOString());
+    const get = jobs.get.bind(jobs);
+    let jumped = false;
+    vi.spyOn(jobs, 'get').mockImplementation(async (id) => {
+      // The poll reads its own job first; the clock jumps while it waits.
+      if (!jumped && id === executor.started[0]!.job.id) { jumped = true; offset = 5_000; }
+      return get(id);
+    });
+    await waitFor(() => jumped);
+    await sleep(40);
+    expect((await get(foreign.id))?.status).toBe('running');
+  });
+
+  it('reads the clock once at the start and once at the end of each poll', async () => {
+    let calls = 0;
+    const { runner } = setup({
+      executor: immediateExecutor(), pollIntervalMs: 1_000, now: () => { calls += 1; return Date.now(); },
+    });
+    runner.start();
+    await sleep(50);
+    expect(calls).toBe(2);
+  });
+
+  it('fences its execution when renewal reports the job lost', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, registry, runner } = setup({
+      executor, heartbeatMs: 10_000, leaseTtlMs: 30_000, now: () => Date.now() + offset,
+    });
+    const session = await seedSession(sessions, 'run_lost');
+    await runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+    const killAll = vi.spyOn(registry, 'killAll');
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    // The row still looks owned, so only the renewal result can fence.
+    vi.spyOn(jobs, 'renewOwnedLeaseIfOlder').mockResolvedValue('lost');
+    offset = 20_000;
+    await waitFor(() => executor.started[0]!.signal.aborted);
+    expect(executor.started[0]!.signal.reason).toBe(JOB_ABORT_REASON_OWNERSHIP_LOST);
+    expect(killAll).toHaveBeenCalledWith(executor.started[0]!.job.id, 'SIGKILL');
   });
 
   it('still reclaims stale jobs when every poll is slow', async () => {

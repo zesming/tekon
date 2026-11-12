@@ -92,8 +92,10 @@ export interface JobExecutor {
  * cannot mutate a job after its execution scope loses ownership.
  */
 export interface DurableJobRunner extends JobRunner {
-  /** Serialize controls, bounded recovery, and queued claims on each poll. */
-  /** Starts polling; with jobIds, claims only those jobs. */
+  /**
+   * Starts polling: each poll syncs controls, renews owned leases, recovers
+   * stale jobs and claims one queued job. With jobIds, claims only those.
+   */
   start(options?: { jobIds?: readonly string[] }): void;
   /** Stop polling and wait for in-flight jobs to settle (5s cap). */
   stop(): Promise<void>;
@@ -191,7 +193,17 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     ? (leaseTtlMs - heartbeatMs) / 2
     : Number.POSITIVE_INFINITY;
   let lastPollEndedAt: number | null = null;
-  let suspensionStartedAt: number | null = null;
+  // After a gap, other owners' leases are judged as if the gap had not
+  // happened, for one heartbeat. A later gap replaces the credit, so slow
+  // polls delay reclaim by at most one gap.
+  let gapCreditMs = 0;
+  let gapEndedAt = 0;
+  function noteGap(gapMs: number, endedAt: number): void {
+    if (gapMs > suspensionGapMs) {
+      gapCreditMs = gapMs;
+      gapEndedAt = endedAt;
+    }
+  }
 
   const toIso = (ms: number): string => new Date(ms).toISOString();
   const nowIso = (): string => toIso(now());
@@ -204,6 +216,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       registry.killAll(jobId, 'SIGKILL');
     }
     executionTokens.delete(jobId);
+    managedExecutions.delete(jobId);
     clearHeartbeat(jobId);
     controllers.delete(jobId);
     pauseFlags.delete(jobId);
@@ -382,18 +395,9 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       if (!current || current.owner !== workerId || !['running','paused','cancelling'].includes(current.status)) {
         // Ownership changed: fence the local execution and kill only processes
         // registered in this process. The new owner will continue from durable
-        // state; the zombie must stop touching the workspace.
-        if (!controller.signal.aborted) {
-          controller.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
-          registry.killAll(jobId, 'SIGKILL');
-        }
-        // Invalidate this local generation immediately. A same-worker reclaim
-        // may install a new controller/token for the same durable job id.
-        executionTokens.delete(jobId);
-        managedExecutions.delete(jobId);
-        clearHeartbeat(jobId);
-        controllers.delete(jobId);
-        pauseFlags.delete(jobId);
+        // state; the zombie must stop touching the workspace. A same-worker
+        // reclaim may install a new controller/token for the same job id.
+        fenceLostExecution(jobId);
         continue;
       }
 
@@ -429,28 +433,18 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       return pollTask;
     }
 
+    const startedAt = now();
     const task = (async () => {
       // Process-local AbortControllers and registries cannot be mutated by a
       // second CLI/Web process. Observe the durable job row on every owner poll
       // and relay foreign pause/cancel requests into this process first.
-      const startedAt = now();
-      if (lastPollEndedAt !== null && startedAt - lastPollEndedAt > suspensionGapMs) {
-        suspensionStartedAt ??= startedAt;
-      }
-      const inSuspensionWindow =
-        suspensionStartedAt !== null && startedAt - suspensionStartedAt < heartbeatMs;
+      if (lastPollEndedAt !== null) noteGap(startedAt - lastPollEndedAt, startedAt);
+      const creditMs = startedAt - gapEndedAt < heartbeatMs ? gapCreditMs : 0;
       await syncOwnedControls();
       if (stopped) return;
       await renewOwnedLeases(startedAt);
       if (stopped) return;
-      if (!inSuspensionWindow) {
-        // Slow polls keep the episode open but only delay reclaim by one
-        // heartbeat; a normal poll ends the episode.
-        if (suspensionStartedAt !== null && startedAt - lastPollEndedAt! <= suspensionGapMs) {
-          suspensionStartedAt = null;
-        }
-        await recoverStaleJobs(startedAt);
-      }
+      await recoverStaleJobs(startedAt - creditMs);
       if (stopped) return;
       await reconcileCancelledRuns();
       // stop() may begin while syncOwnedControls() is awaiting SQLite. Do not
@@ -467,7 +461,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     })();
     pollTask = task;
     const clearPollTask = () => {
-      lastPollEndedAt = now();
+      const endedAt = now();
+      // A suspension in the middle of this poll counts as a gap too.
+      noteGap(endedAt - startedAt, endedAt);
+      lastPollEndedAt = endedAt;
       if (pollTask === task) pollTask = null;
     };
     void task.then(clearPollTask, clearPollTask);
@@ -637,6 +634,8 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         return;
       }
       claimJobIds = options?.jobIds;
+      lastPollEndedAt = null;
+      gapCreditMs = 0;
       stopped = false;
       void poll().catch(() => {});
       pollTimer = setInterval(() => {

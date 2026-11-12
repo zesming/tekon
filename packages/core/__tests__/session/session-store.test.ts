@@ -383,6 +383,31 @@ describe('job repository', () => {
     await expect(jobs.claimNext('w')).resolves.toMatchObject({ id: 'job_cli' });
   });
 
+  it('hands a queued, unclaimed run job to whoever resumes it', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    // A CLI queued a resume and exited before claiming it.
+    const queued = await jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      id: 'job_orphan', kind: 'workflow-resume', origin: 'cli',
+    }));
+    expect(queued).toMatchObject({ outcome: 'enqueued', job: { id: 'job_orphan' } });
+
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'web',
+    }))).resolves.toMatchObject({ outcome: 'enqueued', job: { id: 'job_orphan' } });
+    expect(db.prepare('select count(*) as n from jobs').get()).toEqual({ n: 1 });
+    expect(db.prepare('select origin from jobs where id = ?').get('job_orphan')).toEqual({ origin: 'web' });
+    // A repeated resume from the same surface still sees the active Job.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'web',
+    }))).resolves.toMatchObject({ outcome: 'active-job', job: { id: 'job_orphan' } });
+    await expect(jobs.claimNext('web', { excludeOrigin: 'cli' })).resolves.toMatchObject({ id: 'job_orphan' });
+    // Once claimed it is active, not reusable.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'cli',
+    }))).resolves.toMatchObject({ outcome: 'active-job', job: { id: 'job_orphan' } });
+  });
+
   it('records why and from whom a stale job was taken', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);

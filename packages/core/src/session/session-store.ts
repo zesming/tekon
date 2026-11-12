@@ -26,14 +26,14 @@ const RUN_EXECUTION_JOB_KINDS = new Set<string>([
   'goal-run',
 ]);
 
+/** The surface that queued a job: a CLI process or the Web server. */
+export type JobOrigin = 'cli' | 'web';
+
 /**
  * `jobs.payload` is a runner implementation detail and intentionally outside
  * the frozen `Job` contract (S14). It may be supplied at enqueue time for
  * debugging; every read path strips it via `jobSchema.parse`.
  */
-/** The surface that queued a job: a CLI process or the Web server. */
-export type JobOrigin = 'cli' | 'web';
-
 export type JobEnqueueInput = Job & { payload?: Record<string, unknown>; origin?: JobOrigin };
 
 /**
@@ -271,6 +271,7 @@ type JobRow = {
   lease: string | null;
   abort_state: string;
   exit_evidence: string | null;
+  origin: JobOrigin | null;
   checkpoint: string | null;
   payload: string;
   created_at: string;
@@ -674,11 +675,15 @@ export function createJobRepository(
             // and releasing its durable pause. A consumed Job instead falls
             // through to the normal guarded resume insertion below.
             if (existing.status === 'queued' && existing.id === latest?.id) {
+              // Nobody has claimed the latest run Job. Reuse it when it is the
+              // admission Job, or when the other surface queued it (its process
+              // may have exited); whoever resumes then owns claiming it. A
+              // repeated resume from the same surface still sees active-job.
               const admission = db.prepare(
                 'select job_id from run_admissions where run_id = ? and session_id = ?',
               ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
-              if (admission?.job_id === existing.id) {
-                // Whoever resumes the queued Job now owns claiming it.
+              const handOver = job.origin !== undefined && existing.origin !== job.origin;
+              if (admission?.job_id === existing.id || handOver) {
                 if (job.origin) {
                   db.prepare('update jobs set origin = ? where id = ?').run(job.origin, existing.id);
                 }
@@ -793,9 +798,11 @@ export function createJobRepository(
           .prepare(
             `update jobs
              set status = 'running', owner = @owner, lease = @now, updated_at = @now, exit_evidence = null
-             where id = @id and status = 'queued'`,
+             where id = @id and status = 'queued'
+               and (@excludeOrigin is null or origin is null or origin <> @excludeOrigin)`,
           )
-          .run({ owner, now: claimedAt, id: target.id });
+          // Re-checked here: another process may hand the job over in between.
+          .run({ owner, now: claimedAt, id: target.id, excludeOrigin: filter.excludeOrigin ?? null });
         if (result.changes !== 1) {
           return null;
         }
