@@ -71,7 +71,7 @@ Run 领域记录、必需治理 Audit、Session、`session/created` / `workflow/
 
 事件订阅者启动独立 automation 操作，不继承发布者租约；否则原 Job 完成后，其租约不再允许写入，会错误阻断后续 readiness/delivery 投影。租约过期的已认领 Job 转 interrupted，不自动重放 Agent/Gate；queued 未认领路径独立处理。
 
-Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行，origin 为 null）。CLI 的 runner 只认领本进程发起或恢复的 jobId；Web 认领时排除 origin 为 `cli` 的 Job，null 照常认领。恢复时，若该 Run 最新的 queued Job 是受理 Job，或由另一端（origin 不同）排队，就在同一事务内把 origin 改为恢复方并复用它，因此 CLI 受理后退出、还没执行的 Job 可由 Web 恢复执行，反过来也一样；同一端重复恢复返回已有的活跃 Job。认领的 UPDATE 会再检查一次 origin，交接和认领同时发生时，被排除的一方认领不到。升级前启动的 Web 进程在重启前不按 origin 过滤。
+Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行，origin 为 null）。CLI 的 runner 只认领本进程发起或恢复的 jobId；Web 认领时排除 origin 为 `cli` 的 Job，null 照常认领。恢复时，若该 Run 最新的 queued Job 是受理 Job，或由另一端（origin 不同）排队，或恢复方是 CLI（每个 CLI 进程只认领自己的 jobId），就在同一事务内把 origin 改为恢复方并复用它，因此 CLI 受理后退出、还没执行的 Job 可由 Web 恢复执行，反过来也一样，另一条 CLI 命令也能接手；Web 重复恢复返回已有的活跃 Job。认领的 UPDATE 会再检查一次 origin，交接和认领同时发生时，被排除的一方认领不到。升级前启动的 Web 进程在重启前不按 origin 过滤。
 
 续租：setInterval 心跳与每轮 poll 共用 `renewOwnedLeaseIfOlder`，按 owner 和 running/paused/cancelling 条件更新；租约未超过阈值时不写库，失去所有权时 fence 本地执行。每轮 poll 在开始时取时钟，先续租本进程持有的 Job，再回收租约早于 cutoff 的 Job，cutoff 为开始时间减 leaseTtl。两轮 poll 之间（上一轮结束到本轮开始）或单轮 poll 内的间隔超过 (leaseTtl − heartbeat) / 2 时，视为本进程曾被挂起并记下这段间隔；此后一个 heartbeat 内，cutoff 再减去这段间隔，即按没有发生挂起来判定其他 owner 的租约，不算这段间隔也已过期的 Job 照常回收。新的间隔替换旧的，持续变慢的 poll 最多推迟一个间隔的回收。回收事件带 `reason: lease-expired`、`previousOwner`、`lease` 与 `cutoff`（判定所用的截止时间）。限制：多进程时，一个进程被挂起与它已退出无法区分；时钟回拨会推迟回收；leaseTtl 不大于 heartbeat 时不做挂起检测。
 

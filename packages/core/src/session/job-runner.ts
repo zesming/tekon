@@ -184,11 +184,12 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   let claimJobIds: readonly string[] | undefined;
   const managedExecutions = new Set<string>();
   const now = deps.now ?? Date.now;
-  // A poll that starts this long after the previous one ended means this
-  // process was suspended (sleep, SIGSTOP, debugger). Every lease, its own
-  // included, may look expired; it renews first and gives other workers one
-  // heartbeat to do the same before reclaiming anything. Without room between
-  // the heartbeat and the lease TTL there is no gap to detect.
+  // A gap this long between polls, or inside one, means this process was
+  // suspended (sleep, SIGSTOP, debugger). Every lease, its own included, may
+  // look expired; it renews its own first, and for one heartbeat judges other
+  // owners' leases as if the gap had not happened, so only leases that were
+  // already stale are reclaimed. Without room between the heartbeat and the
+  // lease TTL there is no gap to detect.
   const suspensionGapMs = leaseTtlMs > heartbeatMs
     ? (leaseTtlMs - heartbeatMs) / 2
     : Number.POSITIVE_INFINITY;
@@ -634,8 +635,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         return;
       }
       claimJobIds = options?.jobIds;
-      lastPollEndedAt = null;
-      gapCreditMs = 0;
+      // lastPollEndedAt is kept: time spent stopped counts as a gap.
       stopped = false;
       void poll().catch(() => {});
       pollTimer = setInterval(() => {

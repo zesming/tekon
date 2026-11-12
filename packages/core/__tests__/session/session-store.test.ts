@@ -408,6 +408,20 @@ describe('job repository', () => {
     }))).resolves.toMatchObject({ outcome: 'active-job', job: { id: 'job_orphan' } });
   });
 
+  it('lets another CLI command take over a queued job a CLI left behind', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    await jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      id: 'job_cli_orphan', kind: 'workflow-resume', origin: 'cli',
+    }));
+
+    // Each CLI command claims only its own job ids, so a second command reuses it.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'cli',
+    }))).resolves.toMatchObject({ outcome: 'enqueued', job: { id: 'job_cli_orphan' } });
+    expect(db.prepare('select count(*) as n from jobs').get()).toEqual({ n: 1 });
+  });
+
   it('records why and from whom a stale job was taken', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);

@@ -676,13 +676,16 @@ export function createJobRepository(
             // through to the normal guarded resume insertion below.
             if (existing.status === 'queued' && existing.id === latest?.id) {
               // Nobody has claimed the latest run Job. Reuse it when it is the
-              // admission Job, or when the other surface queued it (its process
-              // may have exited); whoever resumes then owns claiming it. A
-              // repeated resume from the same surface still sees active-job.
+              // admission Job, when the other surface queued it, or when a CLI
+              // command resumes: each CLI process claims only its own job ids,
+              // so a queued Job seen from another command may have no runner
+              // left. Claiming succeeds once, so reuse never runs it twice. A
+              // repeated resume from the Web server still sees active-job.
               const admission = db.prepare(
                 'select job_id from run_admissions where run_id = ? and session_id = ?',
               ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
-              const handOver = job.origin !== undefined && existing.origin !== job.origin;
+              const handOver = job.origin !== undefined &&
+                (existing.origin !== job.origin || job.origin === 'cli');
               if (admission?.job_id === existing.id || handOver) {
                 if (job.origin) {
                   db.prepare('update jobs set origin = ? where id = ?').run(job.origin, existing.id);
