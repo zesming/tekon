@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -36,7 +36,14 @@ function branches(repoPath: string): string[] {
     .sort();
 }
 
-async function setup() {
+function filesUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { recursive: true, encoding: 'utf8' }).sort();
+}
+
+type Gateway = ReturnType<typeof createCommandGateway>;
+
+async function setup(options: { wrapGateway?: (gateway: Gateway) => Gateway } = {}) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-run-cleanup-'));
   tempDirs.push(repoPath);
   git(repoPath, 'init', '-b', 'main');
@@ -52,7 +59,11 @@ async function setup() {
   const writeQueue = createWriteQueue();
   const repositories = createRepositories(db, writeQueue);
   const audit = createAuditLogger({ repositories, db, writeQueue });
-  const manager = createWorktreeManager({ repositories, gateway: createCommandGateway() });
+  const baseGateway = createCommandGateway();
+  const manager = createWorktreeManager({
+    repositories,
+    gateway: options.wrapGateway ? options.wrapGateway(baseGateway) : baseGateway,
+  });
   const cleanup = createRunCleanup({ db, repositories, audit, worktreeManager: manager, repoPath });
   await repositories.createDemand({
     id: 'demand_1', title: 'Cleanup', body: 'Cleanup.', createdAt: '2026-11-12T00:00:00.000Z',
@@ -181,5 +192,70 @@ describe('run cleanup', () => {
       missingBranches: [branchGone.branchName],
     });
     expect((await f.repositories.getWorkflowInstance('run_gone'))?.status).toBe('failed');
+  });
+  it('plans without writing anything into the runs’ evidence directories', async () => {
+    const f = await setup();
+    await f.createRun('run_done', 'passed');
+    await f.lease('run_done', 'node_a');
+    await f.createRun('run_old', 'failed');
+    const old = await f.lease('run_old', 'node_a');
+    await f.cleanup.clean('run_old');
+    expect(existsSync(old.worktreePath)).toBe(false);
+    const runs = join(f.repoPath, '.tekon', 'runs');
+    const before = filesUnder(runs);
+
+    await f.cleanup.plan();
+    await f.cleanup.plan('run_done');
+    await f.cleanup.plan('run_old');
+
+    expect(filesUnder(runs)).toEqual(before);
+  });
+
+  it('keeps the branch of a worktree it could not remove and ignores leases of another repository', async () => {
+    const f = await setup();
+    await f.createRun('run_mixed', 'cancelled');
+    const unmanaged = await f.lease('run_mixed', 'node_a');
+    const elsewhere = await f.lease('run_mixed', 'node_b');
+    const outside = join(f.repoPath, 'outside-worktree');
+    f.db.prepare('update worktree_leases set worktree_path = ? where id = ?').run(outside, unmanaged.id);
+    f.db.prepare('update worktree_leases set repo_path = ? where id = ?')
+      .run(join(tmpdir(), 'tekon-moved-repo'), elsewhere.id);
+
+    await expect(f.cleanup.plan('run_mixed')).resolves.toEqual([
+      { runId: 'run_mixed', status: 'cancelled', worktrees: [outside], branches: [unmanaged.branchName] },
+    ]);
+    const report = await f.cleanup.clean('run_mixed');
+
+    expect(report.failures).toEqual([
+      expect.objectContaining({ step: 'worktree', target: outside }),
+    ]);
+    expect(report.branchesDeleted).toBe(0);
+    expect(branches(f.repoPath)).toEqual(
+      ['main', unmanaged.branchName, elsewhere.branchName].sort(),
+    );
+    expect(existsSync(elsewhere.worktreePath)).toBe(true);
+    expect((await f.repositories.getWorktreeLease(elsewhere.id))?.releasedAt).toBeFalsy();
+  });
+
+  it('reports a branch listing it could not read instead of calling the branches gone', async () => {
+    let failListing = false;
+    const f = await setup({
+      wrapGateway: (gateway) => ({
+        ...gateway,
+        run: (input) =>
+          failListing && input.command.args[0] === 'for-each-ref'
+            ? Promise.resolve({ status: 'rejected', reason: 'listing unavailable' })
+            : gateway.run(input),
+      }),
+    });
+    await f.createRun('run_list', 'passed');
+    const lease = await f.lease('run_list', 'node_a');
+    failListing = true;
+
+    const report = await f.cleanup.clean('run_list');
+
+    expect(report).toMatchObject({ worktreesRemoved: 1, branchesDeleted: 0, branchesMissing: 0 });
+    expect(report.failures).toEqual([expect.objectContaining({ step: 'branch-list' })]);
+    expect(branches(f.repoPath)).toContain(lease.branchName);
   });
 });

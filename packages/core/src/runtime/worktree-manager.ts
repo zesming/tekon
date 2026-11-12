@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
 import type { Role } from '../types/domain.js';
@@ -42,7 +43,10 @@ export interface WorktreeManager {
   releaseLease(leaseId: string): Promise<void>;
   pruneStaleLeases(repoPath: string): Promise<void>;
   listLeases(runId: string): Promise<WorktreeLease[]>;
-  /** Node branches (`tekon/<runId>/…`) of this run that still exist. */
+  /**
+   * Node branches (`tekon/<runId>/…`) of this run that still exist. A read
+   * only query: it leaves no command output in the run's directory.
+   */
   listRunBranches(runId: string, repoPath: string): Promise<string[]>;
   /**
    * Removes a finished run's leftover worktrees and node branches. Each step
@@ -58,7 +62,7 @@ export interface RunCleanupResult {
   missingWorktrees: string[];
   deletedBranches: string[];
   missingBranches: string[];
-  failures: Array<{ step: 'worktree' | 'prune' | 'branch'; target: string; message: string }>;
+  failures: Array<{ step: 'worktree' | 'prune' | 'branch-list' | 'branch'; target: string; message: string }>;
 }
 
 export function createWorktreeManager(options: {
@@ -272,13 +276,14 @@ export function createWorktreeManager(options: {
         missingBranches: [], failures: [],
       };
       const message = (error: unknown) => error instanceof Error ? error.message : String(error);
-      const leases = await options.repositories.listWorktreeLeases(runId);
+      // Leases recorded for another repository path are left alone.
+      const leases = (await options.repositories.listWorktreeLeases(runId))
+        .filter((lease) => isLeaseOfRepo(lease, root));
+      // A branch stays while a worktree that checks it out could not be removed.
+      const keptBranches = new Set<string>();
 
       for (const lease of leases.filter((item) => !item.releasedAt)) {
         try {
-          if (canonicalPath(lease.repoPath) !== canonicalPath(root)) {
-            throw new Error('lease belongs to another repository');
-          }
           assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
           if (existsSync(lease.worktreePath)) {
             await runGit(options.gateway, {
@@ -292,6 +297,7 @@ export function createWorktreeManager(options: {
           }
           await options.repositories.releaseWorktreeLease(lease.id, new Date().toISOString());
         } catch (error) {
+          keptBranches.add(lease.branchName);
           result.failures.push({ step: 'worktree', target: lease.worktreePath, message: message(error) });
         }
       }
@@ -303,9 +309,16 @@ export function createWorktreeManager(options: {
         result.failures.push({ step: 'prune', target: root, message: message(error) });
       }
 
-      const existing = new Set(await listRunBranches(runId, root).catch(() => []));
+      let existing: Set<string>;
+      try {
+        existing = new Set(await listRunBranches(runId, root));
+      } catch (error) {
+        result.failures.push({ step: 'branch-list', target: root, message: message(error) });
+        return result;
+      }
       const prefix = `tekon/${runSegment}/`;
       for (const branchName of [...new Set(leases.map((lease) => lease.branchName))]) {
+        if (keptBranches.has(branchName)) continue;
         try {
           if (!branchName.startsWith(prefix)) {
             throw new Error(`not a node branch of ${runId}`);
@@ -331,12 +344,18 @@ export function createWorktreeManager(options: {
 
   async function listRunBranches(runId: string, repoPath: string): Promise<string[]> {
     const runSegment = assertSafePathSegment(runId);
-    const output = await runGit(options.gateway, {
-      repoPath: resolve(repoPath),
-      runId: runSegment,
-      args: ['for-each-ref', '--format=%(refname:short)', `refs/heads/tekon/${runSegment}/`],
-    });
-    return output.split('\n').map((line) => line.trim()).filter(Boolean);
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-git-read-'));
+    try {
+      const output = await runGit(options.gateway, {
+        repoPath: resolve(repoPath),
+        runId: runSegment,
+        outputDir,
+        args: ['for-each-ref', '--format=%(refname:short)', `refs/heads/tekon/${runSegment}/`],
+      });
+      return output.split('\n').map((line) => line.trim()).filter(Boolean);
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
   }
 
   async function meaningfulLeaseDirtyLines(
@@ -488,12 +507,14 @@ async function runGit(
     runId: string;
     args: string[];
     allowFailure?: boolean;
+    /** Defaults to the run's command log directory. */
+    outputDir?: string;
   },
 ): Promise<string> {
   const result = await gateway.run({
     command: { tool: 'git', args: input.args },
     cwd: input.repoPath,
-    outputDir: join(input.repoPath, '.tekon', 'runs', input.runId, 'commands'),
+    outputDir: input.outputDir ?? join(input.repoPath, '.tekon', 'runs', input.runId, 'commands'),
     policy: {
       allow: [{ tool: 'git', args: [] }],
       deny: [
@@ -519,6 +540,11 @@ async function runGit(
 }
 
 /** The same directory reached through a symlink (e.g. /var on macOS) compares equal. */
+/** Whether a lease was recorded for this repository, after resolving links. */
+export function isLeaseOfRepo(lease: Pick<WorktreeLease, 'repoPath'>, repoPath: string): boolean {
+  return canonicalPath(lease.repoPath) === canonicalPath(repoPath);
+}
+
 function canonicalPath(path: string): string {
   try {
     return realpathSync(path);

@@ -34,11 +34,14 @@ export async function commandClean(argv: string[], io: CliIO): Promise<number> {
     },
     allowPositionals: false,
   });
+  const runId = args.values['run-id'];
+  if (runId !== undefined && runId.trim() === '') {
+    throw new Error('--run-id 不能为空。要清理所有已结束的运行，请去掉 --run-id。');
+  }
   const repoPath = resolveProjectRepoPath(args.values.repo);
   if (!existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
     throw new Error(`项目未初始化: ${repoPath}。请运行 "tekon init" 初始化项目。`);
   }
-  const runId = args.values['run-id'];
   const dryRun = args.values['dry-run'] ?? false;
 
   const db = openProjectDb(repoPath);
@@ -82,10 +85,16 @@ export async function commandClean(argv: string[], io: CliIO): Promise<number> {
 
     let failed = false;
     const lines: string[] = [];
+    // One run failing does not stop the others; each gets its own line.
     for (const item of work) {
-      const report = await cleanup.clean(item.runId);
-      if (report.failures.length > 0) failed = true;
-      lines.push(describeReport(report));
+      try {
+        const report = await cleanup.clean(item.runId);
+        if (report.failures.length > 0) failed = true;
+        lines.push(describeReport(report));
+      } catch (error) {
+        failed = true;
+        lines.push(`未能清理 ${item.runId}：${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     lines.push(KEPT, '');
     io.stdout.write(lines.join('\n'));

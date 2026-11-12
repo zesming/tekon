@@ -61,4 +61,16 @@ describe('CLI clean command', () => {
     expect(io.takeStdout()).toBe('');
     expect(io.takeStderr()).toContain('项目未初始化');
   });
+
+  it('rejects an empty --run-id instead of cleaning every run', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'tekon-clean-empty-run-id-'));
+    tempDirs.push(repoDir);
+    const io = createMemoryIO();
+
+    const exitCode = await runCli(['clean', '--run-id', '', '--yes', '--repo', repoDir], io);
+
+    expect(exitCode).toBe(1);
+    expect(io.takeStdout()).toBe('');
+    expect(io.takeStderr()).toContain('--run-id 不能为空');
+  });
 });

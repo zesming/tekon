@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonDatabase } from '../db/connection.js';
 import type { TekonRepositories } from '../db/repositories.js';
-import type { WorktreeManager } from './worktree-manager.js';
+import { isLeaseOfRepo, type WorktreeManager } from './worktree-manager.js';
 
 /** Run statuses that can no longer resume, so their resources can go. */
 export const CLEANABLE_RUN_STATUSES = ['passed', 'failed', 'cancelled'] as const;
@@ -95,7 +95,9 @@ export function createRunCleanup(deps: {
   }
 
   async function candidate(runId: string, status: string): Promise<RunCleanupCandidate> {
-    const leases = await deps.repositories.listWorktreeLeases(runId);
+    // Same rule as the clean itself: leases of another repository path stay.
+    const leases = (await deps.repositories.listWorktreeLeases(runId))
+      .filter((lease) => isLeaseOfRepo(lease, repoPath));
     const existing = new Set(await deps.worktreeManager.listRunBranches(runId, repoPath));
     return {
       runId,

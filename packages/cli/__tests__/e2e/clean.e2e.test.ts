@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +74,9 @@ describe('tekon clean through a real CLI process', () => {
 
     expect(cli(repo, ['cancel', '--run-id', runId!]).status).toBe(0);
     const before = nodeBranches(repo);
+    const runDir = join(repo, '.tekon', 'runs', runId!);
+    const runFiles = () => readdirSync(runDir, { recursive: true, encoding: 'utf8' }).sort();
+    const filesBefore = runFiles();
 
     // Without --yes it only lists; --dry-run never changes anything either.
     const listed = cli(repo, ['clean']);
@@ -84,6 +87,7 @@ describe('tekon clean through a real CLI process', () => {
     const preview = cli(repo, ['clean', '--run-id', runId!, '--dry-run']);
     expect(preview.stdout).toContain('预览，没有做任何改动');
     expect(nodeBranches(repo)).toEqual(before);
+    expect(runFiles()).toEqual(filesBefore);
 
     const cleaned = cli(repo, ['clean', '--yes']);
     expect(cleaned.status, cleaned.stderr).toBe(0);

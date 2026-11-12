@@ -731,7 +731,7 @@ tekon clean --run-id <runId>             # 清理指定的运行
 tekon clean --run-id <runId> --dry-run   # 只预览
 ```
 
-只处理已结束（passed、failed、cancelled）且没有未结束任务的运行：移除仍被占用的 worktree，删除该运行的节点分支 `tekon/<runId>/…`。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/<runId>/` 下的证据、审计记录，以及不属于任何运行租约的目录。运行结束时不会自动清理。
+只处理已结束（passed、failed、cancelled）且没有未结束任务的运行：移除仍被占用的 worktree，删除运行租约记录的节点分支 `tekon/<runId>/…`；worktree 没能移除时，保留它检出的分支。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/<runId>/` 下的证据、审计记录，以及不属于任何运行租约的目录。运行结束时不会自动清理。
 
 指定的运行未结束（包括 paused、interrupted）或还有未结束的任务时，报错退出且不做改动：暂停或中断的运行恢复时还要用这些 worktree。已经不存在的目录或分支记为“已不存在”，继续下一步。个别项目没清理掉时退出码为 1，运行状态不变，原因见 `tekon log --run-id <runId>` 里的 `run.cleanup`。
 

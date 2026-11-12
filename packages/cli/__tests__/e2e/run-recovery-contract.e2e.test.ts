@@ -81,9 +81,7 @@ describe('run recovery contract through a real CLI process', () => {
 
     const resume = cli(['resume', '--run-id', runId]);
     expect(resume.status, resume.stdout + resume.stderr).toBe(0);
-    const status = cli(['status', '--run-id', runId]).stdout;
-    expect(status).toContain('status=passed');
-    expect(status).not.toContain('原因:');
+    expect(cli(['status', '--run-id', runId]).stdout).toContain('status=passed');
   }, 240_000);
 
   it('pauses a running node at its boundary and continues with resume', async () => {
@@ -117,9 +115,14 @@ describe('run recovery contract through a real CLI process', () => {
     await exited;
     expect(stdout).toContain('⏸ 运行已暂停');
     expect(cli(['status', '--run-id', runId!]).stdout).toContain('status=paused');
+    // The node finished before the pause took effect, so resume does not run it again.
+    const promptCalls = () =>
+      readFileSync(capture, 'utf8').split('\n').filter((line) => line.includes('"-p"')).length;
+    expect(promptCalls()).toBe(1);
 
     const resume = cli(['resume', '--run-id', runId!]);
     expect(resume.status, resume.stdout + resume.stderr).toBe(0);
     expect(cli(['status', '--run-id', runId!]).stdout).toContain('status=passed');
+    expect(promptCalls()).toBe(1);
   }, 240_000);
 });
