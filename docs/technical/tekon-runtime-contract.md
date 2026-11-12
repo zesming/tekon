@@ -71,6 +71,10 @@ Run 领域记录、必需治理 Audit、Session、`session/created` / `workflow/
 
 事件订阅者启动独立 automation 操作，不继承发布者租约；否则原 Job 完成后，其租约不再允许写入，会错误阻断后续 readiness/delivery 投影。租约过期的已认领 Job 转 interrupted，不自动重放 Agent/Gate；queued 未认领路径独立处理。
 
+Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行为 null）。CLI 的 runner 只认领本进程发起或恢复的 jobId；Web 认领时排除 origin 为 `cli` 的 Job，null 照常认领。恢复复用仍 queued 的受理 Job 时，在同一事务内把 origin 改为恢复方，因此 CLI 受理后退出的 Job 可由 Web 恢复执行，反方向也不会被 Web 抢走。升级前启动的 Web 进程在重启前不按 origin 过滤。
+
+续租：setInterval 心跳与每轮 poll 共用 `renewOwnedLeaseIfOlder`，按 owner 和 running/paused/cancelling 条件更新；租约未超过阈值时不写库，失去所有权时 fence 本地执行。每轮 poll 只取一次时钟，先续租本进程持有的 Job，再以“当前时间减 leaseTtl”为 cutoff 回收。从上一轮 poll 结束起间隔超过 (leaseTtl − heartbeat) / 2 时视为本进程曾被挂起，此后一个 heartbeat 内不回收其他 owner 的 Job；持续变慢的 poll 只推迟一个 heartbeat，仍会回收。回收事件带 `reason: lease-expired`、`previousOwner`、`lease` 与 `cutoff`。限制：多进程时，一个进程被挂起与它已退出无法区分；时钟回拨会推迟回收；leaseTtl 不大于 heartbeat 时不做挂起检测。
+
 关闭顺序为停止新轮询/claim、等待在途工作、超时 abort 与终止受管理进程，再进行有硬上限的 drain。JobRunner.stop 在硬截止时间后中断未结算执行、清理本地执行 token 并返回；单独调用 stop 不关闭写队列。CLI/Web 组合根在 runner.stop 返回后、关闭 SQLite 前调用 db.markClosed() 设置 closed 栅栏，再调用 db.close()；WriteQueue 通过 isClosed 检查拒绝迟到写入。硬超时和 closed 栅栏都不是物理退出证明。
 
 CLI/Web 仍可各自运行 Runtime；这不是 repo daemon 独占锁。SQLite 写 fence、状态 CAS 和 Git expected-old OID 各有范围，不能保证 OS 逃逸进程、任意文件写入或所有外部副作用都被物理隔离。旧文档“没有持久写 fencing”的判断已过期，“全副作用 fencing 已完成”的判断同样不成立。
@@ -112,6 +116,8 @@ Registry 按 Job scope 隔离，旧代 close/kill 不污染新代。退出证据
 原节点从 blocked/interrupted 重跑 Agent 时，复用同 Run、节点和角色的未释放直接租约，保持工作树、分支、baseHead 与未提交修改；repair alias 不作为原节点租约复用。直接租约的缓存与冷恢复均校验唯一性、角色及最新创建事件标识，冲突明确失败，不自动挑选或释放旧租约。CLI 以 Job 终态和 Run 状态共同决定退出码，failed/interrupted/cancelled Job 即使留下 running Run 也返回非零并给出日志入口。
 
 普通修复 Agent 异常与关停分别处理：原有提交释放流程成功且仍有重试预算时，从当前 Run 分支为原节点创建新工作树，再进入 awaiting-gate 执行复查。新工作树已创建、节点仍为 needs-revision 时，只有最新 Agent 已完成、租约属于原节点，且该租约创建事件晚于最后修复失败与最后修复意图，才恢复为 Gate checkpoint；后续修复意图会撤销该资格。复查通过即可正常收尾，失败则继续剩余修复预算；该复查被关停后，新引擎沿持久租约恢复 Gate。工作树提交或释放失败保留真实错误并中止，不吞掉异常后继续，也不开放主仓库回退路径。
+
+运行清理（`tekon clean`、Web `project.clean`）只处理 passed/failed/cancelled 且没有任何类型活跃 Job 的 Run：对未释放租约执行 `worktree remove --force` 并标记释放（目录已不存在时记为 missing），执行 `worktree prune`，再删除租约记录的 `tekon/<runId>/` 节点分支（须通过分支名校验，不存在时记为 missing）。每步幂等，单项失败不中断后续步骤，只写 `run.cleanup` 审计，不改 Run 状态；不触碰 `tekon-delivery/*`、`.tekon/runs/<run>/` 证据、审计和不在租约表里的目录。同一进程内同一 Run 的清理串行执行。
 
 Web/CLI 审批后恢复共用守卫：能预见退出风险时不写审批；审批写入后发生竞争时返回“审批已记录，运行尚未恢复”，不谎报审批回滚或执行已开始。Run 详情和 Session 用同快照 `getRunRecovery` 展示取消与恢复状态，不从缺失 SSE 或无活跃 Job 推导退出。
 

@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.28.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.29.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -722,15 +722,20 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 需求卡仍需人工批准；可选计划审批见 §6.5.1。
 
-### 6.23 `clean`（当前暂停）
+### 6.23 `clean`
 
 ```bash
-tekon clean
+tekon clean                              # 列出可以清理的运行，不做改动
+tekon clean --yes                        # 清理列出的全部运行
+tekon clean --run-id <runId>             # 清理指定的运行
+tekon clean --run-id <runId> --dry-run   # 只预览
 ```
 
-当前固定非零退出（exit code 1），stderr 返回 `CLEAN_SUSPENDED`。不会扫描、删除或重建 `.tekon/worktrees/`；Web `project.clean` 也不会删除 Run 目录。
+只处理已结束（passed、failed、cancelled）且没有未结束任务的运行：移除仍被占用的 worktree，删除该运行的节点分支 `tekon/<runId>/…`。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/<runId>/` 下的证据、审计记录，以及不属于任何运行租约的目录。运行结束时不会自动清理。
 
-生命周期安全清理尚未开放，此限制不代表已具备导出、保留期管理或可审计清除能力。
+指定的运行未结束（包括 paused、interrupted）或还有未结束的任务时，报错退出且不做改动：暂停或中断的运行恢复时还要用这些 worktree。已经不存在的目录或分支记为“已不存在”，继续下一步。个别项目没清理掉时退出码为 1，运行状态不变，原因见 `tekon log --run-id <runId>` 里的 `run.cleanup`。
+
+Web 的 `project.clean` 规则相同：传 `confirm: 'clean-terminal-runs'`，加 `dryRun: true` 只预览，返回移除的 worktree、删除的分支、已不存在和没清理掉的数量。
 
 ### 6.24 `help`
 
@@ -743,7 +748,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.28.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.29.0`。
 
 ## 7. Web Dashboard
 
@@ -790,6 +795,10 @@ Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant �
 发起、恢复和批准前都会检查 Provider：命令不在服务进程的 PATH 里时返回 `PROVIDER_NOT_INSTALLED` 和下一步，不创建运行；批准时先检查再记录，检查不通过时决定保持待处理。服务进程的 PATH 来自启动 `tekon ui` 的终端或服务，可能与你的 shell 不同。中断的会话在事件流里显示“运行中断”、原因和下一步。仓库配置了 `passthroughEnv` 时，事件流在“受控交付已开始”和“受控交付已恢复”这一行列出透传给 Provider 的变量名。
 
 发起、恢复和批准返回受理结果后由后台推进，只有目录 ready 的 Job 才能执行。同一 Run 同时只允许一个运行执行 Job；重复恢复或批准提示已有活跃任务时，继续观察原任务。独立 readiness/delivery Job 不参与此限制。
+
+CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI 发起的任务。CLI 受理后就退出、还没执行的运行，可以在 Web 上恢复，之后由 Web 执行。升级到 0.29.0 后请重启已在运行的 `tekon ui`：旧版本的服务仍会接手 CLI 的任务。
+
+执行中的进程被挂起（电脑休眠、调试器暂停）后恢复，会先续租自己的任务，不会把它判为中断。同一仓库还有另一个 Tekon 进程在运行时，它分不清挂起和退出，会在租约过期（默认 30 秒）后把任务标为中断，这时按 §7.1 恢复。系统时钟往回调会推迟这类回收。
 
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
 

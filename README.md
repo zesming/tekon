@@ -72,7 +72,7 @@ flowchart LR
 | 本地 CLI / Web、受控 workflow、结构化产物、检查与审计 | Session 尚不支持连续追问、中途转向或完整模型流式输出 |
 | mock、Codex、Claude Code | `dsh-headless` 为实验性 Provider，默认关闭、网络不受限、仅 Goal 可用 |
 | 原请求重试、暂停与显式恢复 | 取消为不可恢复终态；Goal 不接交付流程，默认拒绝源码改动 |
-| 当前项目与历史运行查看 | 无多 Workspace 管理；`clean` 暂停物理删除 |
+| 当前项目与历史运行查看、清理已结束运行的 worktree 和节点分支 | 无多 Workspace 管理；运行证据和审计不随清理删除 |
 
 适合可回滚、可人工审阅的中小任务。完整权限、执行环境和交付限制见[产品范围](docs/product/tekon-current-product-scope.md)。
 

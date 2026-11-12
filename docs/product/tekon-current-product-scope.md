@@ -30,7 +30,7 @@ push、创建 PR、合入、上线及高危动作保留人工控制。网络无�
 ## 尚未开放与独立工作项
 
 - 持续协作、follow-up、steer、完整 Provider 增量流，以及 Collaborate→Deliver 升级路径：[SDK/ACP 集成 #14](https://github.com/zesming/tekon/issues/14)、[持续协作 #19](https://github.com/zesming/tekon/issues/19)。
-- 完整只读导出、snapshot/manifest、retention/purge 和生命周期安全清理：[#18](https://github.com/zesming/tekon/issues/18)、[#33](https://github.com/zesming/tekon/issues/33)。当前 `clean` 停用，历史分页不等于完整导出。
+- 完整只读导出、snapshot/manifest、retention/purge 和生命周期安全清理：[#18](https://github.com/zesming/tekon/issues/18)、[#33](https://github.com/zesming/tekon/issues/33)。当前 `clean` 只清理已结束运行的 worktree 和节点分支，不删除证据和审计；历史分页不等于完整导出。
 - DSH 新发行版本与完整依赖树的兼容性验收：[#17](https://github.com/zesming/tekon/issues/17)。tested CLI pin 保持 `0.1.2-alpha.3`，不代表整棵传递依赖树已锁定。
 - 全域权威事件日志、OS 级隔离及所有外部副作用的硬 fencing。现有 SQLite owner fence 保护其覆盖的写入，不等于能停止逃逸进程或撤回外部动作。
 - `roles/*/tools.yaml`、`permissionProfile` 和 workflow helper 主要提供角色提示与顶层命令策略；它们不是 Provider 内部工具或 OS 沙箱。Gateway/Human Gate 能约束 Tekon 管理的顶层动作，但当前验证不足以证明 Agent 在 Provider 内部自行调用 `git`、`gh` 或其他外部工具时会被完整阻断。
