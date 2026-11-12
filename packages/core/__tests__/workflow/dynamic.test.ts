@@ -75,6 +75,24 @@ describe('dynamic workflow generation', () => {
     ).rejects.toThrow(/invalid PM workflow JSON/u);
   });
 
+  it('removes the temporary directory it created, on success and on failure, and keeps a given one', async () => {
+    const calls: AgentRunInput[] = [];
+    await generateDynamicWorkflow({ demandText: '加退款', adapter: createJsonAdapter(validDraft(), calls) });
+    const failing: AgentRunInput[] = [];
+    await expect(
+      generateDynamicWorkflow({ demandText: '加退款', adapter: createRawAdapter('{not-json', failing) }),
+    ).rejects.toThrow();
+    expect(existsSync(calls[0]!.outputDir)).toBe(false);
+    expect(existsSync(failing[0]!.outputDir)).toBe(false);
+
+    const given = mkdtempSync(join(tmpdir(), 'tekon-dynamic-given-'));
+    tempDirs.push(given);
+    await generateDynamicWorkflow({
+      demandText: '加退款', adapter: createJsonAdapter(validDraft(), []), outputDir: given,
+    });
+    expect(existsSync(join(given, 'workflow-spec.json'))).toBe(true);
+  });
+
   it('saves a schema-validated workflow YAML template under a safe name', () => {
     const root = mkdtempSync(join(tmpdir(), 'tekon-dynamic-template-'));
     tempDirs.push(root);
@@ -220,9 +238,10 @@ function createJsonAdapter(
   };
 }
 
-function createRawAdapter(content: string): AgentAdapter {
+function createRawAdapter(content: string, calls: AgentRunInput[] = []): AgentAdapter {
   return {
     async runAgent(input) {
+      calls.push(input);
       return writeAdapterOutput(input, content);
     },
   };

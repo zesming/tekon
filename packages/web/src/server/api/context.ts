@@ -164,7 +164,17 @@ export interface DeliveryCiStatusInput {
 }
 
 export interface ProjectCleanInput extends TokenRunInput {
-  confirm: 'delete-run-dir';
+  confirm: 'clean-terminal-runs';
+  dryRun?: boolean;
+}
+
+export interface ProjectCleanOutput {
+  runId: string;
+  dryRun: boolean;
+  worktrees: number;
+  branches: number;
+  missing: number;
+  failures: number;
 }
 
 export interface DecisionInput extends ResumeConfirmation {
@@ -342,7 +352,7 @@ export interface ApiCaller {
       sessionId?: string;
       jobId?: string;
     }>;
-    clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
+    clean(input: ProjectCleanInput): Promise<ProjectCleanOutput>;
     health(input?: { token?: string }): Promise<{
       credential: 'not-configured' | 'valid' | 'invalid';
       checkedAt: string;

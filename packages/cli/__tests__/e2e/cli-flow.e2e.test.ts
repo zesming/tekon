@@ -222,19 +222,13 @@ describe('tekon cli e2e', () => {
       'preserved',
     );
 
-    let cleanError: any;
-    try {
-      runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
-    } catch (err) {
-      cleanError = err;
-    }
-    expect(cleanError).toBeDefined();
-    expect(cleanError.status).toBe(1);
-    expect(cleanError.stderr.toString()).toContain('CLEAN_SUSPENDED');
-    expect(cleanError.stderr.toString()).toMatch(/#33.*#18|#18.*#33/);
-    expect(cleanError.stdout.toString()).toBe('');
+    // Without --yes clean only lists the finished run.
+    const cleanOutput = runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
+    expect(cleanOutput).toContain(`${runId}（passed）`);
+    expect(cleanOutput).toContain('确认后执行: tekon clean --yes');
+    runCli(cliPath, ['clean', '--yes', '--repo', repoPath], repoPath);
 
-    // Worktree content is preserved
+    // A directory without a lease is never touched
     expect(
       existsSync(join(worktreesDir, 'sample-worktree', 'preserved.txt')),
     ).toBe(true);

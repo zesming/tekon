@@ -107,18 +107,16 @@ describe('web http rpc', () => {
       input: {
         runId: 'run_1',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       },
     });
     expect(cleanResponse.status).toBe(409);
     const cleanError = (await cleanResponse.json()) as {
       error: { code: string; message: string };
     };
-    expect(cleanError.error).toEqual({
-      code: 'CONFLICT',
-      message:
-        'CLEAN_SUSPENDED: project.clean is suspended pending lifecycle-safe purge',
-    });
+    // run_1 is paused and can still resume, so nothing is cleaned.
+    expect(cleanError.error).toMatchObject({ code: 'CONFLICT' });
+    expect(cleanError.error.message).toContain('运行 run_1 的状态是 paused');
     expect(
       existsSync(join(fixture.projectRoot, '.tekon', 'runs', 'run_1')),
     ).toBe(true);

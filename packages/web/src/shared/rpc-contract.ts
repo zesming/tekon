@@ -160,7 +160,8 @@ export const draftShapePlanApproveInputSchema = z.object({
 export const projectCleanInputSchema = z.object({
   runId: z.string().min(1),
   token: z.string().min(1),
-  confirm: z.literal('delete-run-dir'),
+  confirm: z.literal('clean-terminal-runs'),
+  dryRun: z.boolean().optional(),
 });
 
 export const deliveryCreatePrInputSchema = z.object({
@@ -639,7 +640,16 @@ export const projectAdmissionIntentOutputSchema = z.object({
 });
 
 export const projectCleanOutputSchema = z.object({
-  removedRunDir: z.boolean(),
+  runId: z.string(),
+  dryRun: z.boolean(),
+  /** Planned (dry run) or removed worktrees. */
+  worktrees: z.number().int().nonnegative(),
+  /** Planned (dry run) or deleted node branches. */
+  branches: z.number().int().nonnegative(),
+  /** Already gone before this clean. */
+  missing: z.number().int().nonnegative(),
+  /** Could not be cleaned; details are in the run's audit log. */
+  failures: z.number().int().nonnegative(),
 });
 
 export const draftShapeOutputSchema = z.object({

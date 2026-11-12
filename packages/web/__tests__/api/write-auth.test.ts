@@ -324,7 +324,7 @@ describe('web write authorization', () => {
       api.project.clean({
         runId: 'run_escaped',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
@@ -860,7 +860,7 @@ describe('web write authorization', () => {
 });
 
 describe('project.clean', () => {
-  it('rejects with CONFLICT (CLEAN_SUSPENDED) and preserves the run directory on disk', async () => {
+  it('rejects a paused run with CONFLICT and preserves the run directory on disk', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -872,11 +872,11 @@ describe('project.clean', () => {
       dispatchApiCall(api, 'project.clean', {
         runId: 'run_1',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
-      message: expect.stringMatching(/CLEAN_SUSPENDED.*lifecycle-safe purge/),
+      message: expect.stringContaining('运行 run_1 的状态是 paused'),
     });
     expect(existsSync(runDir)).toBe(true);
 
@@ -889,7 +889,7 @@ describe('project.clean', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     await expect(
-      api.project.clean({ runId: 'run_1', token: 'wrong-token', confirm: 'delete-run-dir' }),
+      api.project.clean({ runId: 'run_1', token: 'wrong-token', confirm: 'clean-terminal-runs' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
     expect(
@@ -910,7 +910,7 @@ describe('project.clean', () => {
       dispatchApiCall(api, 'project.clean', {
         runId: 'run_escaped',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 

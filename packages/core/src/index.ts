@@ -30,6 +30,7 @@ export * from './session/dual-write.js';
 export * from './session/present.js';
 export * from './runtime/command-gateway.js';
 export * from './runtime/worktree-manager.js';
+export * from './runtime/run-cleanup.js';
 export * from './repo/profile.js';
 export * from './repo/safe-path.js';
 export * from './security/secrets.js';

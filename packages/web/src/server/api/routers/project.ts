@@ -23,7 +23,12 @@ import {
   renderDraftShapeForRun,
   runDshPreflight,
   RunAdmissionError,
+  RunCleanupAuditError,
+  RunCleanupError,
   ProviderPreflightError,
+  createCommandGateway,
+  createRunCleanup,
+  createWorktreeManager,
   type WorkflowTemplate,
   type SessionServiceStartRunResult,
 } from '@tekon/core';
@@ -82,6 +87,17 @@ export function createProjectRouter(
 ) {
   const providerHealthService = createProviderHealthService({
     probe: options?.probeProvider ?? probeProvider,
+  });
+  // One instance per router so concurrent cleans of a run take turns.
+  const runCleanup = createRunCleanup({
+    db: context.db,
+    repositories: context.repositories,
+    audit: context.audit,
+    worktreeManager: createWorktreeManager({
+      repositories: context.repositories,
+      gateway: createCommandGateway({ repositories: context.repositories }),
+    }),
+    repoPath: context.projectContext.projectRoot,
   });
 
   return {
@@ -479,60 +495,46 @@ export function createProjectRouter(
 
     async clean(runInput: ProjectCleanInput) {
       assertSessionToken(context.projectContext, runInput.token);
-      if (runInput.confirm !== 'delete-run-dir') {
+      if (runInput.confirm !== 'clean-terminal-runs') {
         throw new ApiError(
           'BAD_REQUEST',
-          "project.clean requires confirm: 'delete-run-dir'.",
+          "project.clean requires confirm: 'clean-terminal-runs'.",
         );
       }
       if (!/^[a-zA-Z0-9_-]+$/.test(runInput.runId)) {
         throw new ApiError('BAD_REQUEST', 'Invalid runId format');
       }
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-
-      const run = mustGetRun(context.db, runInput.runId);
-      // Clean evidence covers every active job kind, including delayed
-      // readiness/delivery automation. JobRepository.findActiveByRunId is
-      // intentionally limited to workflow controls and would omit those.
-      const activeJob = context.db
-        .prepare(
-          `select j.id from jobs j
-           join sessions s on s.id = j.session_id
-           where s.run_id = ?
-             and j.status in ('queued', 'running', 'paused', 'cancelling')
-           order by j.created_at desc, j.id desc
-           limit 1`,
-        )
-        .get(runInput.runId) as { id: string } | undefined;
-      const leases = await context.repositories.listWorktreeLeases(
-        runInput.runId,
-      );
-      const unreleasedLeaseIds = leases
-        .filter((lease) => !lease.releasedAt)
-        .map((lease) => lease.id);
-
       try {
-        await context.audit.append({
+        if (runInput.dryRun) {
+          const [planned] = await runCleanup.plan(runInput.runId);
+          return {
+            runId: runInput.runId,
+            dryRun: true,
+            worktrees: planned?.worktrees.length ?? 0,
+            branches: planned?.branches.length ?? 0,
+            missing: 0,
+            failures: 0,
+          };
+        }
+        const report = await runCleanup.clean(runInput.runId);
+        return {
           runId: runInput.runId,
-          type: 'project.clean.suspended',
-          payload: {
-            reason: 'CLEAN_SUSPENDED',
-            runStatus: run.status,
-            ...(activeJob?.id ? { activeJobId: activeJob.id } : {}),
-            unreleasedLeaseIds,
-          },
-        });
-      } catch {
-        throw new ApiError(
-          'INTERNAL_ERROR',
-          'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
-        );
+          dryRun: false,
+          worktrees: report.worktreesRemoved,
+          branches: report.branchesDeleted,
+          missing: report.worktreesMissing + report.branchesMissing,
+          failures: report.failures.length,
+        };
+      } catch (error) {
+        if (error instanceof RunCleanupError) {
+          throw new ApiError(error.code === 'RUN_NOT_FOUND' ? 'NOT_FOUND' : 'CONFLICT', error.message);
+        }
+        if (error instanceof RunCleanupAuditError) {
+          throw new ApiError('INTERNAL_ERROR', 'CLEAN_AUDIT_FAILED: unable to record the clean result');
+        }
+        throw error;
       }
-
-      throw new ApiError(
-        'CONFLICT',
-        'CLEAN_SUSPENDED: project.clean is suspended pending lifecycle-safe purge',
-      );
     },
   };
 }
