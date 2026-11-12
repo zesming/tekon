@@ -8,6 +8,7 @@ import {
   createSessionEventStore, createSessionService, createSubprocessRegistry,
   createWorkflowEngine, createWorkflowJobExecutor, createWriteQueue,
   migrateDatabase, openTekonDatabase,
+  type JobClaimFilter, type JobOrigin,
 } from '../../src/index.js';
 
 // Real SQLite, admission, runner and default workflow executor. The explicit
@@ -23,7 +24,18 @@ export async function waitFor(predicate: () => Promise<boolean>): Promise<void> 
     await new Promise(resolve => setTimeout(resolve, 5));
   }
 }
-export async function setup(mode: 'workflow' | 'goal' = 'goal', persistent = false) {
+export interface QueuedPauseOrigins {
+  /** Origin the admitting service writes. */
+  admit?: JobOrigin;
+  /** Origin and claim filter of the runner that resumes and executes. */
+  runner?: JobOrigin;
+  claimFilter?: JobClaimFilter;
+}
+export async function setup(
+  mode: 'workflow' | 'goal' = 'goal',
+  persistent = false,
+  origins: QueuedPauseOrigins = {},
+) {
   const root = mkdtempSync(join(tmpdir(), 'tekon-queued-pause-'));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
@@ -48,12 +60,15 @@ export async function setup(mode: 'workflow' | 'goal' = 'goal', persistent = fal
   const executor = createWorkflowJobExecutor({ repositories, audit,
     projectContext: { projectRoot: root }, sessions, bus, registry });
   const runner = createJobRunner({ jobs, sessions, bus, registry, executor,
-    pollIntervalMs: 5, heartbeatMs: 1000, stopSettleTimeoutMs: 100 });
+    pollIntervalMs: 5, heartbeatMs: 1000, stopSettleTimeoutMs: 100,
+    ...(origins.runner ? { origin: origins.runner } : {}),
+    ...(origins.claimFilter ? { claimFilter: origins.claimFilter } : {}) });
   cleanup.push(() => runner.stop());
   const engine = createWorkflowEngine({ repoPath: root, dataDir: '.tekon',
     repositories, audit, adapter: createMockAgentAdapter(), agentProvider: 'mock' });
   const service = createSessionService({ repositories, audit, sessions, jobs,
-    bus, jobRunner: runner, projectRoot: root, createEngine: () => engine });
+    bus, jobRunner: runner, projectRoot: root, createEngine: () => engine,
+    ...(origins.admit ? { jobOrigin: origins.admit } : {}) });
   const admitted = await service.startRun({ demandText: 'Verify queued pause',
     mode, templateName: 'goal', engine: null });
   const roleCount = () => (db.prepare('select count(*) as n from role_runs where run_id=?')

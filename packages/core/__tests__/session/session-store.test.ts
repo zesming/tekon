@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createJobRepository,
@@ -326,6 +326,80 @@ describe('session event store', () => {
 });
 
 describe('job repository', () => {
+  it('renews an owned lease only when it is older than the threshold', async () => {
+    const { writeQueue, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2026-11-12T00:00:10.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_lease', status: 'running', owner: 'w1', lease }));
+    const enqueue = vi.spyOn(writeQueue, 'enqueue');
+
+    // Fresh: no write at all.
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:05.000Z', '2026-11-12T00:00:20.000Z'),
+    ).resolves.toBe('fresh');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect((await jobs.get('job_lease'))?.lease).toBe(lease);
+
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:15.000Z', '2026-11-12T00:00:20.000Z'),
+    ).resolves.toBe('renewed');
+    expect((await jobs.get('job_lease'))?.lease).toBe('2026-11-12T00:00:20.000Z');
+
+    // Paused and cancelling jobs are still held, so they renew too.
+    for (const [status, at] of [['paused', '00:00:25'], ['cancelling', '00:00:26']] as const) {
+      await jobs.updateJob('job_lease', { status });
+      const iso = `2026-11-12T${at}.000Z`;
+      await expect(jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', iso, iso)).resolves.toBe('renewed');
+    }
+
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w2', '2026-11-12T00:00:30.000Z', '2026-11-12T00:00:40.000Z'),
+    ).resolves.toBe('lost');
+    await jobs.updateJob('job_lease', { status: 'done' });
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:30.000Z', '2026-11-12T00:00:40.000Z'),
+    ).resolves.toBe('lost');
+  });
+
+  it('claims only the listed jobs, or skips another origin', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const at = (second: number) => `2026-11-12T00:00:0${second}.000Z`;
+    await jobs.enqueue(makeJob(session.id, { id: 'job_cli', origin: 'cli', createdAt: at(1) }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_legacy', createdAt: at(2) }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_web', origin: 'web', createdAt: at(3) }));
+    expect(db.prepare('select id, origin from jobs order by id').all()).toEqual([
+      { id: 'job_cli', origin: 'cli' },
+      { id: 'job_legacy', origin: null },
+      { id: 'job_web', origin: 'web' },
+    ]);
+
+    await expect(jobs.claimNext('w', { jobIds: ['job_web'] })).resolves.toMatchObject({ id: 'job_web' });
+    await expect(jobs.claimNext('w', { jobIds: ['job_missing'] })).resolves.toBeNull();
+    await expect(jobs.claimNext('w', { jobIds: [] })).resolves.toBeNull();
+    // Rows written before origin existed stay claimable.
+    await expect(jobs.claimNext('w', { excludeOrigin: 'cli' })).resolves.toMatchObject({ id: 'job_legacy' });
+    await expect(jobs.claimNext('w', { excludeOrigin: 'cli' })).resolves.toBeNull();
+    await expect(jobs.claimNext('w')).resolves.toMatchObject({ id: 'job_cli' });
+  });
+
+  it('records why and from whom a stale job was taken', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2020-01-01T00:00:00.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_stale_reason', status: 'running', owner: 'w_old', lease }));
+    const cutoff = '2026-11-12T00:00:00.000Z';
+    const result = await jobs.interruptStale(cutoff, '', 10);
+    expect(result.events[0]?.payload).toMatchObject({
+      jobId: 'job_stale_reason',
+      status: 'interrupted',
+      reason: 'lease-expired',
+      previousOwner: 'w_old',
+      lease,
+      cutoff,
+    });
+  });
+
   it('strips the contract-extra payload column from every job read (S14)', async () => {
     const { db, sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);

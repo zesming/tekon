@@ -223,6 +223,9 @@ export async function createApiCaller(
       workflow: executor,
       automation: automationExecutor,
     }),
+    origin: 'web',
+    // A CLI process runs the jobs it queued; resuming one here retags it.
+    claimFilter: { excludeOrigin: 'cli' },
   });
   await repositories.admissionStore.scanAndRecoverAdmissions();
   jobRunner.start();
@@ -312,6 +315,7 @@ export async function createApiCaller(
     repositories: dualRepositories,
     audit: dualAudit,
     projectRoot: projectContext.projectRoot,
+    jobOrigin: 'web',
     createEngine: createWebRunEngineFactory({
       projectContext,
       repositories: dualRepositories,

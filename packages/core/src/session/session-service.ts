@@ -16,7 +16,7 @@ import {
 import type { SessionEventBus } from './event-bus.js';
 import type { DurableJobRunner } from './job-runner.js';
 import type { ResumeConfirmation } from '../types/session-contract.js';
-import type { JobRepository, SessionEventStore } from './session-store.js';
+import type { JobOrigin, JobRepository, SessionEventStore } from './session-store.js';
 import { isWorkflowTerminalError } from '../workflow/errors.js';
 import { RunAdmissionError } from '../workflow/admission-error.js';
 import { writeWorkflowTerminal } from '../workflow/state-machine.js';
@@ -193,6 +193,8 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
    * 'cli' (design §8 decision 2).
    */
   sessionProfile?: string;
+  /** Origin written on admitted jobs; resume takes the runner's origin. */
+  jobOrigin?: JobOrigin;
   /**
    * Provider check for every start and resume, before work is queued. It
    * throws to refuse the run and returns warnings to show otherwise.
@@ -328,6 +330,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
           sessionId: `sess_${randomUUID()}`,
           jobId: `job_${randomUUID()}`,
           jobKind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
+          ...(deps.jobOrigin ? { jobOrigin: deps.jobOrigin } : {}),
         },
       });
       if (!outcome.sessionId || !outcome.jobId) throw new Error('ADMISSION_SESSION_MISSING');

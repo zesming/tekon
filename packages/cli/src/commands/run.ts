@@ -297,7 +297,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       return 1;
     }
     io.stderr.write(formatPreflightNotice(result.preflight));
-    ctx.jobRunner.start();
+    ctx.jobRunner.start({ jobIds: [result.jobId] });
     const onSigint = () => {
       void ctx.jobRunner
         .requestCancel(result.jobId, 'cli SIGINT')

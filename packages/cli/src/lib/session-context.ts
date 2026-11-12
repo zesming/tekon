@@ -187,19 +187,11 @@ export async function withCliSessionContext<T>(
       createDualWriteRepositories(repositories, bridge);
     const dualAudit = createDualWriteAuditLogger(audit, bridge);
 
-    // 4e (review M1): CLI is run-to-exit and never *enqueues* automation kinds
-    // (delivery-auto-prepare / readiness-evaluate are long-lived-server
-    // features, wired only in web/headless — design §1.4/§2.2), and it does NOT
-    // install the auto-prepare/readiness listeners. BUT the jobs table is shared
-    // across processes: a web-enqueued automation job left `queued` (server
-    // stopped before draining) will be claimed by the CLI runner's poll
-    // (claimNext has no kind filter). Routing it through the automation executor
-    // keeps that stray job isolated (idempotent, never touches session/run
-    // terminal state); the plain workflow executor would set session 'active'
-    // before its kind switch, throw on the unknown kind, and flip the session to
-    // 'failed' — polluting an already-`passed` run's session cross-process.
-    // Autonomous delivery from CLI still stays explicit via `tekon delivery
-    // prepare`; routing only defends against inherited jobs.
+    // CLI is run-to-exit: run and resume start the runner with the one job
+    // they await, so it never claims Web jobs (including automation kinds such
+    // as delivery-auto-prepare). The automation route stays as a guard should
+    // such a job ever reach this executor; the plain workflow executor would
+    // mark an already-finished run's session failed.
     const executor = createWorkflowJobExecutor({
       repositories: dualRepositories,
       audit: dualAudit,
@@ -226,6 +218,7 @@ export async function withCliSessionContext<T>(
         automation: automationExecutor,
       }),
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
+      origin: 'cli',
     });
 
     const providerPreflight = createProviderPreflight();
@@ -245,6 +238,7 @@ export async function withCliSessionContext<T>(
       projectRoot: repoPath,
       // Design §8 decision 2: CLI-created sessions are labeled 'cli'.
       sessionProfile: 'cli',
+      jobOrigin: 'cli',
       createEngine: (input: CliRunEngineInput) => engineFactory(input),
       preflight: async (input) => {
         if (input.provider !== 'dsh-headless') return providerPreflight(input);

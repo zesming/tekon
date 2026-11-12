@@ -171,6 +171,8 @@ export interface PreparedAdmissionData {
     profile: string;
     jobId: string;
     jobKind: "workflow-run" | "goal-run";
+    /** Surface that admitted the run; decides which worker claims the job. */
+    jobOrigin?: "cli" | "web";
   };
   templateId?: string;
 }
@@ -489,9 +491,10 @@ export function createAdmissionStore(options: {
           openingEvents.push(ev1, ev2, ev3);
 
           db.prepare(
-            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at, exit_evidence) values (?, ?, ?, 'queued', 'none', '{}', ?, ?, ?)"
+            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at, exit_evidence, origin) values (?, ?, ?, 'queued', 'none', '{}', ?, ?, ?, ?)"
           ).run(jobId, sessionId, data.sessionData.jobKind, createdAt, createdAt,
-            JSON.stringify({ version: 1, kind: 'never-started', observedAt: createdAt }));
+            JSON.stringify({ version: 1, kind: 'never-started', observedAt: createdAt }),
+            data.sessionData.jobOrigin ?? null);
         }
 
         db.prepare(

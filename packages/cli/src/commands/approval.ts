@@ -355,7 +355,7 @@ export async function commandResume(
     }
 
     io.stderr.write(formatPreflightNotice(result.preflight));
-    jobRunner.start();
+    jobRunner.start({ jobIds: [result.jobId] });
     const onSigint = () => {
       void jobRunner.requestCancel(result.jobId, 'cli SIGINT').catch(() => {});
     };

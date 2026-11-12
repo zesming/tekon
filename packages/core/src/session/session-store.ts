@@ -31,7 +31,19 @@ const RUN_EXECUTION_JOB_KINDS = new Set<string>([
  * the frozen `Job` contract (S14). It may be supplied at enqueue time for
  * debugging; every read path strips it via `jobSchema.parse`.
  */
-export type JobEnqueueInput = Job & { payload?: Record<string, unknown> };
+/** The surface that queued a job: a CLI process or the Web server. */
+export type JobOrigin = 'cli' | 'web';
+
+export type JobEnqueueInput = Job & { payload?: Record<string, unknown>; origin?: JobOrigin };
+
+/**
+ * Which queued jobs a worker may claim. A CLI process claims only the jobs it
+ * is waiting for; the Web server leaves CLI jobs to their process.
+ */
+export interface JobClaimFilter {
+  jobIds?: readonly string[];
+  excludeOrigin?: JobOrigin;
+}
 
 /** Optional compare-and-set predicate for an atomic job update. */
 export interface JobUpdateCondition {
@@ -172,7 +184,7 @@ export interface JobRepository {
     exceptJobId?: string,
     leaseCutoffIso?: string,
   ): Promise<number>;
-  claimNext(owner: string): Promise<Job | null>;
+  claimNext(owner: string, filter?: JobClaimFilter): Promise<Job | null>;
   /**
    * Patch a job, optionally as an atomic compare-and-set. A conditional miss
    * returns null and never mutates the row.
@@ -195,6 +207,16 @@ export interface JobRepository {
     exitEvidence?: JobExitEvidence | null,
   ): Promise<Job | null>;
   interruptOwnedJob(jobId: string, owner: string): Promise<void>;
+  /**
+   * Heartbeat for a job this worker owns. Writes only when the stored lease is
+   * older than `olderThanIso`; 'lost' means another worker or a settle took it.
+   */
+  renewOwnedLeaseIfOlder(
+    jobId: string,
+    owner: string,
+    olderThanIso: string,
+    nowIso: string,
+  ): Promise<'renewed' | 'fresh' | 'lost'>;
   interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{ processed: number; lastId: string | null; events: SessionEvent[] }>;
   requeueStale(
     leaseOlderThanIso: string,
@@ -582,16 +604,17 @@ export function createJobRepository(
         db.prepare(
           `insert into jobs (
              id, session_id, kind, status, owner, lease, abort_state,
-             checkpoint, payload, created_at, updated_at, exit_evidence
+             checkpoint, payload, created_at, updated_at, exit_evidence, origin
            ) values (
              @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
+             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
            )`,
         ).run({
           ...parsed,
           owner: parsed.owner ?? null,
           lease: parsed.lease ?? null,
           checkpoint: parsed.checkpoint ?? null,
+          origin: job.origin ?? null,
           payload: JSON.stringify(job.payload ?? {}),
           exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
         });
@@ -655,6 +678,10 @@ export function createJobRepository(
                 'select job_id from run_admissions where run_id = ? and session_id = ?',
               ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
               if (admission?.job_id === existing.id) {
+                // Whoever resumes the queued Job now owns claiming it.
+                if (job.origin) {
+                  db.prepare('update jobs set origin = ? where id = ?').run(job.origin, existing.id);
+                }
                 db.prepare(
                   "update workflow_instances set status = 'running', updated_at = ? where id = ? and status = 'paused'",
                 ).run(now(), runId);
@@ -676,16 +703,17 @@ export function createJobRepository(
           db.prepare(
             `insert into jobs (
                id, session_id, kind, status, owner, lease, abort_state,
-               checkpoint, payload, created_at, updated_at, exit_evidence
+               checkpoint, payload, created_at, updated_at, exit_evidence, origin
              ) values (
                @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
+               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
              )`,
           ).run({
             ...parsed,
             owner: parsed.owner ?? null,
             lease: parsed.lease ?? null,
             checkpoint: parsed.checkpoint ?? null,
+            origin: job.origin ?? null,
             payload,
             exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
           });
@@ -723,9 +751,22 @@ export function createJobRepository(
       return 0;
     },
 
-    async claimNext(owner) {
+    async claimNext(owner, filter = {}) {
+      if (filter.jobIds && filter.jobIds.length === 0) return null;
       return writeQueue.enqueue(() => {
         const claimedAt = now();
+        const params: Record<string, unknown> = {};
+        const scope: string[] = [];
+        if (filter.jobIds) {
+          scope.push(`j.id in (${filter.jobIds.map((id, index) => {
+            params[`job${index}`] = id;
+            return `@job${index}`;
+          }).join(', ')})`);
+        }
+        if (filter.excludeOrigin) {
+          scope.push('(j.origin is null or j.origin <> @excludeOrigin)');
+          params.excludeOrigin = filter.excludeOrigin;
+        }
         // 选出最旧 queued job 的 id,再按该 id 条件写。better-sqlite3 同步执行,
         // 整个 enqueue 任务串行,select→update 之间无并发写者。以 id 回读被本次
         // 认领的确切行——不能用 "owner + updated_at desc" 回读:同 worker 认领多个
@@ -740,10 +781,11 @@ export function createJobRepository(
              where j.status = 'queued'
                and (a.files_state is null or a.files_state = 'ready')
                and (j.kind not in ('workflow-run','workflow-resume','goal-run') or w.status is null or w.status not in ('passed','failed','cancelled'))
+               ${scope.map((clause) => `and ${clause}`).join(' ')}
              order by j.created_at asc, j.id asc
              limit 1`,
           )
-          .get() as { id: string } | undefined;
+          .get(params) as { id: string } | undefined;
         if (!target) {
           return null;
         }
@@ -879,6 +921,21 @@ export function createJobRepository(
       }).immediate());
     },
 
+    async renewOwnedLeaseIfOlder(jobId, owner, olderThanIso, nowIso) {
+      const active = `owner=@owner and status in ('running','paused','cancelling')`;
+      const current = db
+        .prepare(`select lease from jobs where id=@jobId and ${active}`)
+        .get({ jobId, owner }) as { lease: string | null } | undefined;
+      if (!current) return 'lost';
+      if (current.lease !== null && current.lease >= olderThanIso) return 'fresh';
+      return writeQueue.enqueue(() => {
+        const changed = db
+          .prepare(`update jobs set lease=@nowIso, updated_at=@nowIso where id=@jobId and ${active}`)
+          .run({ jobId, owner, nowIso });
+        return changed.changes ? 'renewed' : 'lost';
+      });
+    },
+
     async interruptStale(leaseOlderThanIso, afterId, limit) {
       return writeQueue.enqueue(() => db.transaction(() => {
         const rows = db.prepare(`select j.*,s.run_id from jobs j left join sessions s on s.id=j.session_id
@@ -930,7 +987,13 @@ function interruptJobTxn(db: TekonDatabase, row: JobRow & { run_id: string | nul
   const { seq } = db.prepare('select coalesce(max(seq),0)+1 as seq from session_events where session_id=?')
     .get(row.session_id) as { seq: number };
   const event = sessionEventSchema.parse({ sessionId: row.session_id, seq, type: 'job/status', version: 1,
-    timestamp: now, payload: { jobId: row.id, kind: row.kind, status: cancelled ? 'cancelled' : 'interrupted' } });
+    timestamp: now, payload: {
+      jobId: row.id, kind: row.kind, status: cancelled ? 'cancelled' : 'interrupted',
+      // Stale reclaim records whose lease expired and against which cutoff.
+      ...(cutoff !== null
+        ? { reason: 'lease-expired', previousOwner: row.owner, lease: row.lease, cutoff }
+        : {}),
+    } });
   db.prepare('insert into session_events(session_id,seq,type,version,timestamp,payload) values(?,?,?,?,?,?)')
     .run(row.session_id, seq, event.type, event.version, event.timestamp, JSON.stringify(event.payload));
   events?.push(event);

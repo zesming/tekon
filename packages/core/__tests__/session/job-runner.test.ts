@@ -118,6 +118,7 @@ interface SetupOptions {
   leaseTtlMs?: number;
   workerId?: string;
   stopSettleTimeoutMs?: number;
+  now?: () => number;
 }
 
 function setup(options: SetupOptions) {
@@ -139,6 +140,7 @@ function setup(options: SetupOptions) {
     leaseTtlMs: options.leaseTtlMs ?? 30_000,
     workerId: options.workerId ?? 'worker_test',
     stopSettleTimeoutMs: options.stopSettleTimeoutMs,
+    ...(options.now ? { now: options.now } : {}),
   });
   runners.push(runner);
   return { db, sessions, jobs, bus, registry, runner };
@@ -174,6 +176,104 @@ async function seedSession(
 }
 
 describe('durable job runner', () => {
+  // These tests move the runner's clock instead of suspending the process:
+  // they rely on this runner being the only one polling the database.
+  it('renews its own lease before reclaiming after the process was suspended', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({
+      executor,
+      heartbeatMs: 200,
+      leaseTtlMs: 1_000,
+      now: () => Date.now() + offset,
+    });
+    const own = await seedSession(sessions, 'run_own');
+    const foreignSession = await seedSession(sessions, 'run_foreign');
+    await runner.enqueue({ sessionId: own.id, kind: 'workflow-run' });
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const ownJobId = executor.started[0]!.job.id;
+    const foreign = await jobs.enqueue({
+      id: 'job_foreign_suspended',
+      sessionId: foreignSession.id,
+      kind: 'workflow-run',
+      status: 'running',
+      owner: 'worker_other',
+      lease: new Date().toISOString(),
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // The process "wakes up" 5s later: every lease looks expired.
+    offset = 5_000;
+    await sleep(100);
+    expect(await jobs.get(ownJobId)).toMatchObject({ status: 'running', owner: 'worker_test' });
+    // Others get a heartbeat to renew before they are reclaimed.
+    expect((await jobs.get(foreign.id))?.status).toBe('running');
+
+    // Reclaimed on the moved clock, well before its real lease could expire.
+    offset = 5_000 + 400;
+    await waitFor(async () => (await jobs.get(foreign.id))?.status === 'interrupted', 500);
+    expect(await jobs.get(ownJobId)).toMatchObject({ status: 'running', owner: 'worker_test' });
+  });
+
+  it('stamps its origin and, when started for given jobs, claims only those', async () => {
+    const executor = new ControllableExecutor();
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+    const sessions = createSessionEventStore(db, writeQueue);
+    const jobs = createJobRepository(db, writeQueue);
+    const runner = createJobRunner({
+      jobs, sessions, bus: createSessionEventBus(), registry: createSubprocessRegistry(),
+      executor, pollIntervalMs: 5, workerId: 'worker_cli', origin: 'cli',
+    });
+    runners.push(runner);
+    const other = await seedSession(sessions, 'run_other');
+    const mine = await seedSession(sessions, 'run_mine');
+    const foreign = await jobs.enqueue({
+      id: 'job_0_foreign', sessionId: other.id, kind: 'workflow-run', status: 'queued',
+      owner: null, lease: null, abortState: 'none', checkpoint: null,
+      createdAt: OLD_ISO, updatedAt: OLD_ISO,
+    });
+    const own = await runner.enqueue({ sessionId: mine.id, kind: 'workflow-run' });
+    expect(db.prepare('select origin from jobs where id=?').get(own.id)).toEqual({ origin: 'cli' });
+
+    runner.start({ jobIds: [own.id] });
+    await waitFor(() => executor.started.length === 1);
+    expect(executor.started[0]!.job.id).toBe(own.id);
+    await sleep(50);
+    expect((await jobs.get(foreign.id))?.status).toBe('queued');
+  });
+
+  it('still reclaims stale jobs when every poll is slow', async () => {
+    let calls = 0;
+    const { sessions, jobs, runner } = setup({
+      executor: immediateExecutor(),
+      heartbeatMs: 200,
+      leaseTtlMs: 1_000,
+      // Each poll appears to start 600ms after the previous one ended.
+      now: () => Date.now() + 600 * calls++,
+    });
+    const session = await seedSession(sessions, 'run_slow');
+    const stale = await jobs.enqueue({
+      id: 'job_stale_slow',
+      sessionId: session.id,
+      kind: 'workflow-run',
+      status: 'running',
+      owner: 'worker_other',
+      lease: OLD_ISO,
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: OLD_ISO,
+      updatedAt: OLD_ISO,
+    });
+    runner.start();
+    await waitFor(async () => (await jobs.get(stale.id))?.status === 'interrupted');
+  });
+
   it('enqueues a queued job and exposes it via get', async () => {
     const { sessions, runner } = setup({ executor: immediateExecutor() });
     const session = await seedSession(sessions);
