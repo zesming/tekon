@@ -99,7 +99,7 @@
 - 修复建议：转为通用 workflow 框架，README、范围文档、默认入口一起改，研发交付退为一个内置模板。取舍是现有治理链路不再是默认路径。
 
 ### [PD-02] 默认 provider 写死 Codex，依赖本地前提且没有前置检查
-- 维度：产品、代码 | 严重度：S1 | 工作量：M | 置信度：高（真实 Codex 未验证，internal profile 缺失时的行为未验证） | 状态：已确认（合并 CD-03）
+- 维度：产品、代码 | 严重度：S1 | 工作量：M | 置信度：高（真实 Codex 未验证，internal profile 缺失时的行为未验证） | 状态：已修复（PR #37，提交 c682db1、9700634，v0.28.0；Web 界面显示检查提示另排；合并 CD-03）
 - 位置：packages/cli/src/lib/context.ts:129-136，packages/core/src/runtime/codex-adapter.ts:27-33、100-105、239-242，packages/core/src/runtime/agent-runtime.ts:19-27、102-147，packages/cli/src/commands/provider.ts:128-133，README.md:17、25、27，docs/manual/tekon-user-manual.md:282、821
 - 现象：`init` 无条件写 `defaultAgent: codex`，不探测本机环境。本机未安装 Codex 时 run 立刻 interrupted。适配器固定传 `--profile internal --sandbox workspace-write --ask-for-approval on-request`（探针抓到的实际参数相同），OPENAI_API_KEY、CODEX_HOME、USER 被环境过滤丢掉（stub 复现）。`tekon provider preflight codex` 输出“暂不支持对 Provider 'codex' 进行预检，当前仅支持 dsh-headless”。首页绿灯“凭据有效（dsh-headless不可用）”只反映 token 和一个默认关闭的实验 provider。`--agent claude-code` 1 秒内 interrupted，阻断根因见 CD-01。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（README:17、手册:282、821 写明 internal profile 和 Codex 前提）。实现缺陷有两点：没有 profile 配置入口（`agent-runtime.ts:19-27` 的 overrides 里没有），没有预检。README:27 写明默认 Codex“尚缺本轮真实全链路证据”，默认项恰是验证最少的一项。未验证：Codex 只在未安装的环境测过，已安装且配好 profile 时能否跑通没有结论。
@@ -254,7 +254,7 @@
 - 修复建议：审批队列查全部 pending（本 PR）。交付动作下沉到 run 详情，全局页删除，另排（重构第 4 阶段）。
 
 ### [PD-24] defaultAgent 只对 CLI 生效，重跑 init 还会覆盖配置
-- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认（合并 CD-22）
+- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：部分修复（PR #37，提交 279d366、2720ba3，v0.28.0：配置统一读取、CLI 默认值、init 不再覆盖；Web 读取 defaultAgent 另排；合并 CD-22）
 - 位置：packages/cli/src/lib/context.ts:128-137，packages/cli/src/commands/init.ts:37，packages/cli/src/commands/run.ts:190，packages/web/src/server/api/routers/project-with-run-mode-policy.ts:26，packages/web/src/client/components/runs/StartRunForm.tsx:69，packages/core/src/session/workflow-job-executor.ts:128，packages/core/src/workflow/engine.ts:399-400，packages/core/src/types/config.ts:166-177
 - 现象：CLI 读取 `defaultAgent`，手改 `mock` 后 run 生效。Web 两个入口都默认 codex。重跑 `tekon init` 把 `mock` 重置回 `codex`，repo-profile 和 web-session 不受影响。`storage.dataDir` 写入配置但路径写死。projectName 写死 'tekon'，每个 run 新建 project（5 个 run 对应 5 个同名 project）。
 - 依据：Web 固定 Codex 是产品方向偏差：文档已声明，与目标基准冲突（README:25、手册:684）。`init` 覆盖是实现缺陷：同函数对 web-session.json 和 repo-profile 有 existsSync 保护，对 config.yaml 没有。
@@ -433,7 +433,7 @@
 ### 4.3 代码实现
 
 ### [CD-01] Claude 适配器的环境白名单丢 USER，macOS Keychain 登录下首节点失败
-- 维度：代码、产品 | 严重度：S0 | 工作量：S | 置信度：高 | 状态：已修复（hotfix #39，合并提交 dc1a156，v0.26.2）
+- 维度：代码、产品 | 严重度：S0 | 工作量：S | 置信度：高 | 状态：已修复（hotfix #39，合并提交 dc1a156，v0.26.2；余项认证方式显示与显式透传：PR #37，提交 be79cdc、c682db1、2720ba3，v0.28.0）
 - 位置：packages/core/src/runtime/claude-code-support.ts:9-18，:24-34，packages/core/src/runtime/claude-code-adapter.ts:94-101，packages/core/src/runtime/command-gateway.ts:290-321，packages/core/src/runtime/dsh-headless-adapter.ts:47-56，packages/core/__tests__/runtime/claude-provider-smoke-evidence.test.ts:33-48
 - 现象：`buildClaudeProviderEnv` 只复制 8 个键：PATH、HOME、TMPDIR、TMP、TEMP、LANG、LC_ALL、SHELL，适配器用 `envMode:'exact'` 启动子进程。白名单共 3 份。父进程设 USER、LOGNAME、ANTHROPIC_API_KEY、CLAUDE_CONFIG_DIR、HTTPS_PROXY、OPENAI_API_KEY、CODEX_HOME 时，Claude 和 Codex stub 收到的键都只有 `_ HOME LANG PATH PWD SHELL SHLVL TEKON_* TMPDIR`。
 - 依据：
@@ -467,7 +467,7 @@
 
 - 修复记录：#39 在两份实现里只对产物证据和门禁证据跳过返工节点，状态检查保留；用真实 gate engine 跑 standard-delivery 翻转评审的 e2e 测试锁定。修复时发现一个相关的既有缺陷：两个评审都对同一目标提出修改时，第二次返工节点 ID 冲突（`UNIQUE constraint failed: nodes.id`），run 中断；原因是 `workflow/gate-runner.ts:477` 每个评审都从 0 计数，`rework.ts:283,327` 只用“目标 + 次数”生成 ID。另排到重构第 1 阶段。
 ### [CD-02] Provider 失败原因被丢弃，所有失败都变成 interrupted 并提示 resume
-- 维度：代码、产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认（合并 PD-03）
+- 维度：代码、产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已修复（PR #37，提交 f471830、c682db1、9700634、d89f8a5，v0.28.0；合并 PD-03）
 - 位置：packages/core/src/runtime/claude-code-adapter.ts:108-116，:120，:160-171，packages/core/src/runtime/codex-adapter.ts:112-120，packages/core/src/runtime/agent-adapter.ts:55-66，:80-101，packages/core/src/runtime/agent-step-events.ts:133-149，packages/core/src/workflow/helpers.ts:269-282，packages/core/src/workflow/node-executor.ts:386-393，packages/core/src/session/workflow-job-executor.ts:285-290，packages/cli/src/lib/session-context.ts:358-387，packages/cli/src/commands/provider.ts:128-133，packages/cli/src/commands/run.ts，packages/web/src/client/lib/event-feed.ts:125，packages/core/src/delivery/pre-pr-readiness.ts:174
 - 现象：
   - stub 输出 “Not logged in” 后 exit 1：CLI 先打印“运行已启动”，再显示 interrupted，并提示“检查旧执行退出情况后 resume”。`tekon log` 只有 `agent failed: provider=claude-code exitCode=1`，原因只在 stdout.log。
