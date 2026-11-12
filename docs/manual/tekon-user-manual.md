@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.29.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.30.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -748,7 +748,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.29.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.30.0`。
 
 ## 7. Web Dashboard
 
@@ -799,6 +799,10 @@ Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant �
 CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI 发起的任务。CLI 受理后就退出、还没执行的运行，可以再用 `tekon resume` 或在 Web 上恢复，由恢复的一方执行。升级到 0.29.0 后请重启已在运行的 `tekon ui`：旧版本的服务仍会接手 CLI 的任务。
 
 执行中的进程被挂起（电脑休眠、调试器暂停）后恢复，会先续租自己的任务，不会把它判为中断。同一仓库还有另一个 Tekon 进程在运行时，它分不清挂起和退出，会在租约过期（默认 30 秒）后把任务标为中断，这时按 §7.1 恢复。系统时钟往回调会推迟这类回收。
+
+节点和命令的输出脱敏后按行实时写入 `.tekon/runs/<runId>/` 下的 stdout/stderr 日志，运行中就能用 `tail -f` 查看；换行、`\r\n` 和单独的 `\r`（进度条）都算一行结束，单行超过 1MB 时分段写入。进度文件 `progress.json` 在持续输出时最多每秒更新一次。
+
+Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒后发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理。这两种情况下请手动结束剩下的进程。
 
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
 

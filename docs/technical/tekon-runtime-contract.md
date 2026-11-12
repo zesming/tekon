@@ -75,6 +75,10 @@ Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行，origin �
 
 续租：setInterval 心跳与每轮 poll 共用 `renewOwnedLeaseIfOlder`，按 owner 和 running/paused/cancelling 条件更新；租约未超过阈值时不写库，失去所有权时 fence 本地执行。每轮 poll 在开始时取时钟，先续租本进程持有的 Job，再回收租约早于 cutoff 的 Job，cutoff 为开始时间减 leaseTtl。两轮 poll 之间（上一轮结束到本轮开始）或单轮 poll 内的间隔超过 (leaseTtl − heartbeat) / 2 时，视为本进程曾被挂起并记下这段间隔；此后一个 heartbeat 内，cutoff 再减去这段间隔，即按没有发生挂起来判定其他 owner 的租约，不算这段间隔也已过期的 Job 照常回收。新的间隔替换旧的，持续变慢的 poll 最多推迟一个间隔的回收。回收事件带 `reason: lease-expired`、`previousOwner`、`lease` 与 `cutoff`（判定所用的截止时间）。限制：多进程时，一个进程被挂起与它已退出无法区分；时钟回拨会推迟回收；leaseTtl 不大于 heartbeat 时不做挂起检测。
 
+命令输出：网关把子进程的 stdout/stderr 经脱敏流按行写入日志（`\n`、`\r\n`、单独的 `\r` 都是行尾），单行上限 1MB，超出时在上限内最近的空白处切开；流式脱敏与 `redactSecrets` 共用一个行处理器，结果逐字相同，阻断用的检测规则不变。输出过程中 progress.json 最多每秒写一次，心跳和结束时照常写。
+
+进程组回收：registry 的句柄带启动时间。心跳与 poll 续租时把本 Job 的进程组（pgid 即 detached 子进程的 pid，加启动时间）写入 `jobs.process_groups`。`interruptStale` 在 CAS 成功的同一事务里读出并清空它，只返回给完成回收的一方；事务外用 `LC_ALL=C ps -o lstart=` 核对首进程启动时间（误差 2 秒内），一致才对整个进程组发 SIGTERM，宽限 5 秒后 SIGKILL，`stop()` 时立即补发未到期的 SIGKILL。每个进程组的结果写 `job.process-group` 审计：`signalled`、`start-time-mismatch`（pid 已被复用）或 `leader-gone`。限制：spawn 后到下一次续租之间被强杀的进程没有记录；首进程已退出的组不处理。
+
 关闭顺序为停止新轮询/claim、等待在途工作、超时 abort 与终止受管理进程，再进行有硬上限的 drain。JobRunner.stop 在硬截止时间后中断未结算执行、清理本地执行 token 并返回；单独调用 stop 不关闭写队列。CLI/Web 组合根在 runner.stop 返回后、关闭 SQLite 前调用 db.markClosed() 设置 closed 栅栏，再调用 db.close()；WriteQueue 通过 isClosed 检查拒绝迟到写入。硬超时和 closed 栅栏都不是物理退出证明。
 
 CLI/Web 仍可各自运行 Runtime；这不是 repo daemon 独占锁。SQLite 写 fence、状态 CAS 和 Git expected-old OID 各有范围，不能保证 OS 逃逸进程、任意文件写入或所有外部副作用都被物理隔离。旧文档“没有持久写 fencing”的判断已过期，“全副作用 fencing 已完成”的判断同样不成立。
