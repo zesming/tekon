@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+
 import {
   createAuditLogger,
   createMockAgentAdapter,
@@ -54,7 +56,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const interruptedRun = await firstEngine.startRun({
@@ -85,7 +87,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const resumed = await secondEngine.resumeRun(interruptedRun.runId);
@@ -147,7 +149,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const run = await engine.startRun({
@@ -199,7 +201,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
       onNodeCheckpoint: async () => {
         if (!fencedAtCheckpoint) {
           fencedAtCheckpoint = true;
@@ -451,24 +453,3 @@ describe('workflow engine recovery e2e', () => {
     db.close();
   });
 });
-
-function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  let gateCounter = 0;
-  return {
-    async runGate(input) {
-      gateCounter += 1;
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}_${gateCounter}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-  };
-}

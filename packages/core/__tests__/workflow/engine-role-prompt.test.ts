@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+
 import {
   createAuditLogger,
   createRepositories,
@@ -61,7 +63,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -147,7 +149,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -262,7 +264,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -387,7 +389,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -500,7 +502,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -630,7 +632,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -742,7 +744,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -903,7 +905,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -1254,7 +1256,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const result = await engine.startRun({
@@ -1598,25 +1600,6 @@ function createFailingBuildGateEngine(
         nodeId: input.nodeId,
         gateType: input.gate.type,
         status: 'failed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-  };
-}
-
-function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  return {
-    async runGate(input) {
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        status: 'passed',
         durationMs: 0,
         retries: 0,
         createdAt: new Date().toISOString(),
