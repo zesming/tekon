@@ -26,6 +26,18 @@ const RUN_EXECUTION_JOB_KINDS = new Set<string>([
   'goal-run',
 ]);
 
+/** A detached child process group a job started; its leader's pid is the pgid. */
+export interface ProcessGroupRecord {
+  pgid: number;
+  startedAt: string;
+}
+
+export interface ReclaimedProcessGroups {
+  jobId: string;
+  runId: string | null;
+  processGroups: ProcessGroupRecord[];
+}
+
 /** The surface that queued a job: a CLI process or the Web server. */
 export type JobOrigin = 'cli' | 'web';
 
@@ -210,14 +222,26 @@ export interface JobRepository {
   /**
    * Heartbeat for a job this worker owns. Writes only when the stored lease is
    * older than `olderThanIso`; 'lost' means another worker or a settle took it.
+   * A renewal also records the job's current process groups when given.
    */
   renewOwnedLeaseIfOlder(
     jobId: string,
     owner: string,
     olderThanIso: string,
     nowIso: string,
+    processGroups?: readonly ProcessGroupRecord[],
   ): Promise<'renewed' | 'fresh' | 'lost'>;
-  interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{ processed: number; lastId: string | null; events: SessionEvent[] }>;
+  /**
+   * Interrupts jobs whose lease is older than the cutoff. The process groups
+   * recorded for each reclaimed job are returned once and cleared in the same
+   * transaction, so whoever reclaimed a job is the only one to stop them.
+   */
+  interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{
+    processed: number;
+    lastId: string | null;
+    events: SessionEvent[];
+    reclaimedProcessGroups: ReclaimedProcessGroups[];
+  }>;
   requeueStale(
     leaseOlderThanIso: string,
   ): Promise<{ requeued: number; cancelled: number }>;
@@ -272,6 +296,7 @@ type JobRow = {
   abort_state: string;
   exit_evidence: string | null;
   origin: JobOrigin | null;
+  process_groups: string | null;
   checkpoint: string | null;
   payload: string;
   created_at: string;
@@ -931,7 +956,7 @@ export function createJobRepository(
       }).immediate());
     },
 
-    async renewOwnedLeaseIfOlder(jobId, owner, olderThanIso, nowIso) {
+    async renewOwnedLeaseIfOlder(jobId, owner, olderThanIso, nowIso, processGroups) {
       const active = `owner=@owner and status in ('running','paused','cancelling')`;
       const current = db
         .prepare(`select lease from jobs where id=@jobId and ${active}`)
@@ -940,8 +965,9 @@ export function createJobRepository(
       if (current.lease !== null && current.lease >= olderThanIso) return 'fresh';
       return writeQueue.enqueue(() => {
         const changed = db
-          .prepare(`update jobs set lease=@nowIso, updated_at=@nowIso where id=@jobId and ${active}`)
-          .run({ jobId, owner, nowIso });
+          .prepare(`update jobs set lease=@nowIso, updated_at=@nowIso,
+            process_groups=coalesce(@groups, process_groups) where id=@jobId and ${active}`)
+          .run({ jobId, owner, nowIso, groups: processGroups ? JSON.stringify(processGroups) : null });
         return changed.changes ? 'renewed' : 'lost';
       });
     },
@@ -953,6 +979,7 @@ export function createJobRepository(
           order by j.id limit ?`).all(afterId,leaseOlderThanIso,Math.max(1,Math.min(100,limit))) as Array<JobRow & { run_id: string | null }>;
         let processed = 0;
         const events: SessionEvent[] = [];
+        const reclaimedProcessGroups: ReclaimedProcessGroups[] = [];
         for (const row of rows) {
           try {
             // A failing row rolls back only itself, and its cursor still advances.
@@ -963,9 +990,13 @@ export function createJobRepository(
             }).immediate();
             processed += committed.count;
             events.push(...committed.rowEvents);
+            const processGroups = committed.count ? parseProcessGroups(row.process_groups) : [];
+            if (processGroups.length > 0) {
+              reclaimedProcessGroups.push({ jobId: row.id, runId: row.run_id, processGroups });
+            }
           } catch { /* next page progresses; retry after wrap */ }
         }
-        return { processed, lastId: rows.at(-1)?.id ?? null, events };
+        return { processed, lastId: rows.at(-1)?.id ?? null, events, reclaimedProcessGroups };
       }).immediate());
     },
 
@@ -977,13 +1008,27 @@ export function createJobRepository(
   };
 }
 
+function parseProcessGroups(value: string | null): ProcessGroupRecord[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ProcessGroupRecord =>
+      typeof item === 'object' && item !== null &&
+      Number.isInteger((item as ProcessGroupRecord).pgid) && (item as ProcessGroupRecord).pgid > 1 &&
+      typeof (item as ProcessGroupRecord).startedAt === 'string');
+  } catch {
+    return [];
+  }
+}
+
 /** The caller holds the writer lock. Never turns an expired lease into exit proof. */
 function interruptJobTxn(db: TekonDatabase, row: JobRow & { run_id: string | null }, cutoff: string | null, events?: SessionEvent[]): number {
   const now = new Date().toISOString();
   const run = row.run_id ? db.prepare('select status from workflow_instances where id=?').get(row.run_id) as { status: string } | undefined : undefined;
   const execution = RUN_EXECUTION_JOB_KINDS.has(row.kind);
   const cancelled = row.status === 'cancelling' || ['requested','propagated'].includes(row.abort_state) || (execution && run?.status === 'cancelled');
-  const changed = db.prepare(`update jobs set status=?,owner=null,lease=null,exit_evidence=null,updated_at=?
+  const changed = db.prepare(`update jobs set status=?,owner=null,lease=null,exit_evidence=null,process_groups=null,updated_at=?
     where id=? and owner is ? and status=? and (? is null or lease<?)`)
     .run(cancelled ? 'cancelled':'interrupted',now,row.id,row.owner,row.status,cutoff,cutoff);
   if (!changed.changes) return 0;

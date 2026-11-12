@@ -120,6 +120,7 @@ interface SetupOptions {
   workerId?: string;
   stopSettleTimeoutMs?: number;
   now?: () => number;
+  extra?: Partial<Parameters<typeof createJobRunner>[0]>;
 }
 
 function setup(options: SetupOptions) {
@@ -142,6 +143,7 @@ function setup(options: SetupOptions) {
     workerId: options.workerId ?? 'worker_test',
     stopSettleTimeoutMs: options.stopSettleTimeoutMs,
     ...(options.now ? { now: options.now } : {}),
+    ...options.extra,
   });
   runners.push(runner);
   return { db, sessions, jobs, bus, registry, runner };
@@ -1187,5 +1189,103 @@ describe('durable job runner', () => {
       abortState: 'propagated',
       exitEvidence: null,
     });
+  });
+});
+
+describe('process groups of reclaimed jobs', () => {
+  const startedAt = '2026-11-13T00:00:01.000Z';
+
+  function fakeReaper(startTime: number | null) {
+    const signals: Array<[number, string]> = [];
+    return {
+      signals,
+      reaper: {
+        leaderStartTime: () => startTime,
+        signal: (pgid: number, signal: NodeJS.Signals) => { signals.push([pgid, signal]); },
+      },
+    };
+  }
+
+  async function seedReclaimable(f: ReturnType<typeof setup>) {
+    const session = await seedSession(f.sessions);
+    await seedForeignRunning(f.jobs, session.id, 'job_orphaned', OLD_ISO);
+    f.db.prepare('update jobs set process_groups = ? where id = ?')
+      .run(JSON.stringify([{ pgid: 5555, startedAt }]), 'job_orphaned');
+  }
+
+  it('keeps the recorded process groups in step with its own running processes', async () => {
+    const executor = new ControllableExecutor();
+    const f = setup({ executor, heartbeatMs: 20 });
+    const session = await seedSession(f.sessions);
+    const job = await f.runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+    f.runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const handle = { pid: 4242, startedAt: Date.parse(startedAt), kill: () => {} };
+    f.registry.register(job.id, handle);
+    const recorded = () => (f.db.prepare('select process_groups from jobs where id = ?').get(job.id) as {
+      process_groups: string | null;
+    }).process_groups;
+
+    await waitFor(() => recorded() === JSON.stringify([{ pgid: 4242, startedAt }]));
+    f.registry.unregister(job.id, handle);
+    await waitFor(() => recorded() === '[]');
+    executor.release(job.id);
+  });
+
+  it('stops the process groups of a job it reclaimed: SIGTERM, then SIGKILL', async () => {
+    const { signals, reaper } = fakeReaper(Date.parse(startedAt) + 900);
+    const reaps: unknown[] = [];
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: {
+        processGroupReaper: reaper,
+        processGroupKillGraceMs: 20,
+        onProcessGroupReap: (entry) => { reaps.push(entry); },
+      },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+
+    await waitFor(() => signals.length === 2);
+    expect(signals).toEqual([[5555, 'SIGTERM'], [5555, 'SIGKILL']]);
+    expect(reaps).toEqual([
+      { jobId: 'job_orphaned', runId: 'run_1', pgid: 5555, startedAt, outcome: 'signalled' },
+    ]);
+  });
+
+  it('leaves a process group alone when its leader is another process or gone', async () => {
+    for (const [startTime, outcome] of [
+      [Date.parse(startedAt) + 60_000, 'start-time-mismatch'],
+      [null, 'leader-gone'],
+    ] as const) {
+      const { signals, reaper } = fakeReaper(startTime);
+      const reaps: Array<{ outcome: string }> = [];
+      const f = setup({
+        executor: immediateExecutor(),
+        extra: { processGroupReaper: reaper, onProcessGroupReap: (entry) => { reaps.push(entry); } },
+      });
+      await seedReclaimable(f);
+      f.runner.start();
+      await waitFor(() => reaps.length === 1);
+      expect(reaps[0]?.outcome).toBe(outcome);
+      await sleep(30);
+      expect(signals).toEqual([]);
+      await f.runner.stop();
+    }
+  });
+
+  it('sends the pending SIGKILL before stop() returns', async () => {
+    const { signals, reaper } = fakeReaper(Date.parse(startedAt));
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: { processGroupReaper: reaper, processGroupKillGraceMs: 60_000 },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+    await waitFor(() => signals.length === 1);
+
+    await f.runner.stop();
+
+    expect(signals).toEqual([[5555, 'SIGTERM'], [5555, 'SIGKILL']]);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  auditProcessGroupReaps,
   createAuditLogger,
   createCommandGateway,
   createDualWriteAuditLogger,
@@ -227,6 +228,7 @@ export async function createApiCaller(
     // A CLI process runs the jobs it queued. Resuming a run here whose CLI
     // job is still queued hands that job over to this server.
     claimFilter: { excludeOrigin: 'cli' },
+    onProcessGroupReap: auditProcessGroupReaps(audit),
   });
   await repositories.admissionStore.scanAndRecoverAdmissions();
   jobRunner.start();

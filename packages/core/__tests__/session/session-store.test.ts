@@ -422,6 +422,47 @@ describe('job repository', () => {
     expect(db.prepare('select count(*) as n from jobs').get()).toEqual({ n: 1 });
   });
 
+  it('records the process groups of a running job when its lease is renewed', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2026-11-13T00:00:00.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_groups', status: 'running', owner: 'w1', lease }));
+    const groups = [{ pgid: 4242, startedAt: '2026-11-13T00:00:01.000Z' }];
+
+    await expect(jobs.renewOwnedLeaseIfOlder('job_groups', 'w1', '2026-11-13T00:00:05.000Z',
+      '2026-11-13T00:00:05.000Z', groups)).resolves.toBe('renewed');
+    expect(JSON.parse((db.prepare('select process_groups from jobs where id = ?').get('job_groups') as {
+      process_groups: string;
+    }).process_groups)).toEqual(groups);
+    // Renewing without a list keeps the recorded one.
+    await jobs.renewOwnedLeaseIfOlder('job_groups', 'w1', '2026-11-13T00:00:10.000Z', '2026-11-13T00:00:10.000Z');
+    expect(db.prepare('select process_groups from jobs where id = ?').get('job_groups'))
+      .toEqual({ process_groups: JSON.stringify(groups) });
+  });
+
+  it('hands over the process groups of a reclaimed job once, and only after the reclaim', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const groups = [{ pgid: 4242, startedAt: '2026-11-13T00:00:01.000Z' }];
+    await jobs.enqueue(makeJob(session.id, { id: 'job_dead', status: 'running', owner: 'w_dead', lease: '2026-11-13T00:00:00.000Z' }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_alive', status: 'running', owner: 'w_alive', lease: '2026-11-13T00:00:00.000Z' }));
+    for (const id of ['job_dead', 'job_alive']) {
+      db.prepare('update jobs set process_groups = ? where id = ?').run(JSON.stringify(groups), id);
+    }
+    // The live owner renews before the reclaim runs.
+    await jobs.renewOwnedLeaseIfOlder('job_alive', 'w_alive', '2026-11-13T00:01:00.000Z', '2026-11-13T00:01:00.000Z');
+
+    const result = await jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10);
+
+    expect(result.reclaimedProcessGroups).toEqual([
+      { jobId: 'job_dead', runId: 'run_1', processGroups: groups },
+    ]);
+    expect(db.prepare('select process_groups from jobs where id = ?').get('job_dead')).toEqual({ process_groups: null });
+    expect(db.prepare('select status from jobs where id = ?').get('job_alive')).toEqual({ status: 'running' });
+    await expect(jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10))
+      .resolves.toMatchObject({ reclaimedProcessGroups: [] });
+  });
+
   it('records why and from whom a stale job was taken', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);

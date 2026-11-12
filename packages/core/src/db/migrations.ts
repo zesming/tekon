@@ -310,6 +310,8 @@ export function migrateDatabase(db: TekonDatabase): void {
     addColumnIfMissing(db, 'jobs', 'exit_evidence', 'text');
     // Which surface queued the job; null for rows written before it existed.
     addColumnIfMissing(db, 'jobs', 'origin', 'text');
+    // Process groups of a running job, refreshed with its lease.
+    addColumnIfMissing(db, 'jobs', 'process_groups', 'text');
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

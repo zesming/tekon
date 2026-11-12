@@ -21,6 +21,7 @@ export * from './artifact/schemas.js';
 export * from './artifact/store.js';
 export * from './audit/logger.js';
 export * from './session/subprocess-registry.js';
+export * from './session/process-group-reaper.js';
 export * from './session/job-runner.js';
 export * from './session/session-service.js';
 export * from './session/workflow-job-executor.js';

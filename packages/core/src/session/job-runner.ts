@@ -7,9 +7,16 @@ import type {
   JobClaimFilter,
   JobOrigin,
   JobRepository,
+  ReclaimedProcessGroups,
   SessionEventStore,
 } from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
+import {
+  createProcessGroupReaper,
+  PROCESS_START_TIME_TOLERANCE_MS,
+  type ProcessGroupReaper,
+  type ProcessGroupReapRecord,
+} from './process-group-reaper.js';
 
 /** Abort reason used only when a runner loses the durable job lease/owner. */
 export const JOB_ABORT_REASON_OWNERSHIP_LOST =
@@ -138,6 +145,12 @@ export interface CreateJobRunnerDeps {
   origin?: JobOrigin;
   /** Applied to every claim, e.g. the Web server skipping CLI jobs. */
   claimFilter?: JobClaimFilter;
+  /** Stops process groups left by jobs this runner reclaims. */
+  processGroupReaper?: ProcessGroupReaper;
+  /** Wait between SIGTERM and SIGKILL for a reclaimed job's processes. */
+  processGroupKillGraceMs?: number;
+  /** Told what happened to each process group of a reclaimed job. */
+  onProcessGroupReap?: (record: ProcessGroupReapRecord) => void | Promise<void>;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
@@ -145,6 +158,7 @@ const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const STOP_SETTLE_TIMEOUT_MS = 5_000;
 const DEFAULT_STOP_HARD_TIMEOUT_MS = 10_000;
+const DEFAULT_PROCESS_GROUP_KILL_GRACE_MS = 5_000;
 
 /** Statuses an executor may legitimately settle a job to. */
 const SETTLEABLE_STATUSES: readonly JobStatus[] = [
@@ -183,6 +197,45 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   // Set by start({ jobIds }): a CLI process claims only the jobs it awaits.
   let claimJobIds: readonly string[] | undefined;
   const managedExecutions = new Set<string>();
+  const reaper = deps.processGroupReaper ?? createProcessGroupReaper();
+  const killGraceMs = deps.processGroupKillGraceMs ?? DEFAULT_PROCESS_GROUP_KILL_GRACE_MS;
+  // SIGKILLs still waiting out their grace period, sent at once by stop().
+  const pendingKills = new Map<NodeJS.Timeout, () => void>();
+
+  /** This job's detached process groups, as recorded with its lease. */
+  function processGroupsOf(jobId: string) {
+    return registry.list(jobId).flatMap((handle) =>
+      handle.pid !== undefined && handle.startedAt !== undefined
+        ? [{ pgid: handle.pid, startedAt: new Date(handle.startedAt).toISOString() }]
+        : []);
+  }
+
+  function reapProcessGroups(entry: ReclaimedProcessGroups): void {
+    for (const group of entry.processGroups) {
+      // A recycled pid belongs to some other process: leave it alone.
+      const leaderStartedAt = reaper.leaderStartTime(group.pgid);
+      const outcome = leaderStartedAt === null
+        ? 'leader-gone'
+        : Math.abs(leaderStartedAt - Date.parse(group.startedAt)) > PROCESS_START_TIME_TOLERANCE_MS
+          ? 'start-time-mismatch'
+          : 'signalled';
+      if (outcome === 'signalled') {
+        reaper.signal(group.pgid, 'SIGTERM');
+        const kill = () => reaper.signal(group.pgid, 'SIGKILL');
+        const timer = setTimeout(() => {
+          pendingKills.delete(timer);
+          kill();
+        }, killGraceMs);
+        timer.unref?.();
+        pendingKills.set(timer, kill);
+      }
+      void Promise.resolve()
+        .then(() => deps.onProcessGroupReap?.({
+          jobId: entry.jobId, runId: entry.runId, pgid: group.pgid, startedAt: group.startedAt, outcome,
+        }))
+        .catch(() => {});
+    }
+  }
   const now = deps.now ?? Date.now;
   // A gap this long between polls, or inside one, means this process was
   // suspended (sleep, SIGSTOP, debugger). Every lease, its own included, may
@@ -338,7 +391,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       }
       const at = nowIso();
       void jobs
-        .renewOwnedLeaseIfOlder(job.id, workerId, at, at)
+        .renewOwnedLeaseIfOlder(job.id, workerId, at, at, processGroupsOf(job.id))
         .then((outcome) => {
           // The durable row is no longer ours (or is already terminal). Fence
           // this exact local generation immediately.
@@ -479,7 +532,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       if (!token) continue;
       try {
         const outcome = await jobs.renewOwnedLeaseIfOlder(
-          jobId, workerId, toIso(at - heartbeatMs), toIso(at),
+          jobId, workerId, toIso(at - heartbeatMs), toIso(at), processGroupsOf(jobId),
         );
         if (outcome === 'lost' && executionTokens.get(jobId) === token) {
           fenceLostExecution(jobId);
@@ -495,6 +548,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     for (const event of result.events) {
       try { bus.publish(event); } catch { /* committed; SSE can catch up */ }
     }
+    for (const entry of result.reclaimedProcessGroups) reapProcessGroups(entry);
     return result.processed;
   }
 
@@ -724,6 +778,11 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       controllers.clear();
       executionTokens.clear();
       pauseFlags.clear();
+      for (const [timer, kill] of pendingKills) {
+        clearTimeout(timer);
+        kill();
+      }
+      pendingKills.clear();
     },
 
     async recoverStale() {

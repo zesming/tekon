@@ -402,6 +402,7 @@ async function runProcess(input: {
     input.registry && input.registryKey
       ? {
           pid: child.pid,
+          startedAt: Date.now(),
           kill: (signal: NodeJS.Signals) => killChildProcess(child, signal),
         }
       : null;
@@ -628,6 +629,8 @@ interface OutputDirActivityStats {
   latestMtimeMs: number | null;
 }
 
+const PROGRESS_OUTPUT_WRITE_INTERVAL_MS = 1000;
+
 function createProgressTracker(input: {
   command: CommandInvocation;
   progressPath: string;
@@ -646,6 +649,7 @@ function createProgressTracker(input: {
   let outputDirFileCount = 0;
   let outputDirBytes = 0;
   let outputDirLatestMtimeMs: number | null = null;
+  let lastWrittenAt = 0;
 
   const snapshot = (status: ProgressStatus) => ({
     status,
@@ -671,6 +675,7 @@ function createProgressTracker(input: {
     if (reason) {
       timeoutReason = reason;
     }
+    lastWrittenAt = Date.now();
     try {
       writeFileSync(
         input.progressPath,
@@ -691,7 +696,11 @@ function createProgressTracker(input: {
       }
       lastOutputAt = new Date().toISOString();
       lastActivityAt = Date.now();
-      write(lastStatus);
+      // Output can arrive in many small chunks; heartbeats and finish() write
+      // the latest counts regardless.
+      if (lastActivityAt - lastWrittenAt >= PROGRESS_OUTPUT_WRITE_INTERVAL_MS) {
+        write(lastStatus);
+      }
     },
     recordOutputDirActivity(stats: OutputDirActivityStats, changed: boolean) {
       outputDirFileCount = stats.fileCount;

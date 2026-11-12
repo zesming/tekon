@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { Transform, type TransformCallback } from 'node:stream';
 
 export interface SecretFinding {
@@ -13,9 +14,8 @@ interface SecretRule {
   id: string;
   severity: 'high' | 'critical';
   pattern: RegExp;
-  /** Either a pattern to replace, or a custom pass over the whole text. */
+  /** What to replace; private keys are handled by the key block stage instead. */
   redactPattern?: RegExp;
-  redact?: (content: string) => string;
   message: string;
   /** Replacement for one match; defaults to a `[REDACTED_<ID>]` marker. */
   replace?: (match: string, ...groups: Array<string | undefined>) => string;
@@ -45,17 +45,332 @@ export function scanTextForSecrets(
   return findings;
 }
 
+/**
+ * Masks secrets in text. Whole text and streamed output go through the same
+ * line processor, so a log written chunk by chunk ends up identical to
+ * redacting it in one piece.
+ */
 export function redactSecrets(content: string): {
   content: string;
   findings: SecretFinding[];
 } {
-  let redacted = content;
-  const findings = scanTextForSecrets(content);
-  for (const rule of [...BLOCKING_RULES, ...REDACTION_ONLY_RULES]) {
-    if (rule.redact) {
-      redacted = rule.redact(redacted);
-      continue;
+  const processor = createRedactionProcessor();
+  const redacted = processor.write(content) + processor.end();
+  return { content: redacted, findings: scanTextForSecrets(content) };
+}
+
+/** Redacts a byte stream line by line, writing each line once it is complete. */
+export function createSecretRedactionTransform(): Transform {
+  const decoder = new StringDecoder('utf8');
+  const processor = createRedactionProcessor();
+  return new Transform({
+    transform(chunk: Buffer | string, _encoding, callback: TransformCallback) {
+      const text = typeof chunk === 'string' ? chunk : decoder.write(chunk);
+      const output = processor.write(text);
+      callback(null, output.length > 0 ? output : undefined);
+    },
+    flush(callback: TransformCallback) {
+      const output = processor.write(decoder.end()) + processor.end();
+      callback(null, output.length > 0 ? output : undefined);
+    },
+  });
+}
+
+/** Longest line kept whole; longer lines are cut, preferably at a space. */
+export const MAX_REDACTION_LINE_LENGTH = 1_048_576;
+const LINE_CUT_BACKTRACK = 4096;
+/** How far after a BEGIN line its END line is looked for. */
+const KEY_BLOCK_MAX_LINES = 200;
+const KEY_BLOCK_MAX_CHARS = 16_384;
+
+interface TextLine {
+  content: string;
+  /** '\n', '\r\n', '\r', or '' for the end of input or a cut long line. */
+  term: string;
+  /** First END position of each key type in this line, computed once. */
+  ends?: Map<string, [number, number]>;
+}
+
+interface RedactionProcessor {
+  write(text: string): string;
+  end(): string;
+}
+
+function createRedactionProcessor(): RedactionProcessor {
+  let output = '';
+  const rules = createRuleStage((text) => {
+    output += text;
+  });
+  const keys = createKeyBlockStage((line) => rules.push(line));
+  let buffer = '';
+
+  const emitLine = (content: string, term: string) => {
+    let rest = content;
+    while (rest.length > MAX_REDACTION_LINE_LENGTH) {
+      const cut = lineCutPoint(rest);
+      keys.push({ content: rest.slice(0, cut), term: '' });
+      rest = rest.slice(cut);
     }
+    keys.push({ content: rest, term });
+  };
+
+  const drain = (final: boolean) => {
+    let start = 0;
+    const terminator = /[\r\n]/gu;
+    for (;;) {
+      terminator.lastIndex = start;
+      const found = terminator.exec(buffer);
+      if (!found) break;
+      const index = found.index;
+      let term = '\n';
+      if (buffer[index] === '\r') {
+        // A trailing \r may still be the first half of \r\n.
+        if (index + 1 === buffer.length && !final) break;
+        term = buffer[index + 1] === '\n' ? '\r\n' : '\r';
+      }
+      emitLine(buffer.slice(start, index), term);
+      start = index + term.length;
+    }
+    let pending = buffer.slice(start);
+    if (final) {
+      if (pending.length > 0) emitLine(pending, '');
+      pending = '';
+    } else {
+      // Only a line known to be longer than the limit is cut while streaming,
+      // the same cut whole text gets.
+      while (pending.length > MAX_REDACTION_LINE_LENGTH && !pending.endsWith('\r')) {
+        const cut = lineCutPoint(pending);
+        keys.push({ content: pending.slice(0, cut), term: '' });
+        pending = pending.slice(cut);
+      }
+    }
+    buffer = pending;
+  };
+
+  const take = () => {
+    const text = output;
+    output = '';
+    return text;
+  };
+
+  return {
+    write(text) {
+      if (text.length === 0) return '';
+      buffer += text;
+      drain(false);
+      return take();
+    },
+    end() {
+      drain(true);
+      keys.end();
+      rules.end();
+      return take();
+    },
+  };
+}
+
+function lineCutPoint(content: string): number {
+  const window = content.slice(MAX_REDACTION_LINE_LENGTH - LINE_CUT_BACKTRACK, MAX_REDACTION_LINE_LENGTH);
+  const space = Math.max(window.lastIndexOf(' '), window.lastIndexOf('\t'));
+  let cut = space >= 0
+    ? MAX_REDACTION_LINE_LENGTH - LINE_CUT_BACKTRACK + space + 1
+    : MAX_REDACTION_LINE_LENGTH;
+  // Never split a surrogate pair.
+  const code = content.charCodeAt(cut - 1);
+  if (code >= 0xd800 && code <= 0xdbff) cut -= 1;
+  return cut;
+}
+
+function endsOf(line: TextLine): Map<string, [number, number]> {
+  if (!line.ends) {
+    line.ends = new Map();
+    if (line.content.includes('PRIVATE KEY-----')) {
+      for (const match of line.content.matchAll(PRIVATE_KEY_END)) {
+        const type = match[1] ?? '';
+        if (!line.ends.has(type)) line.ends.set(type, [match.index, match.index + match[0].length]);
+      }
+    }
+  }
+  return line.ends;
+}
+
+function findEndAfter(content: string, type: string, from: number): [number, number] | undefined {
+  const end = new RegExp(PRIVATE_KEY_END.source, 'gu');
+  end.lastIndex = from;
+  for (let match = end.exec(content); match; match = end.exec(content)) {
+    if ((match[1] ?? '') === type) return [match.index, match.index + match[0].length];
+  }
+  return undefined;
+}
+
+/**
+ * Chars of a line, after its own newline, that look like key material: PEM
+ * headers, base64, blank, or JSON-escaped or space-collapsed pieces; -1 when
+ * the line does not start like key material.
+ */
+function keyMaterialLength(content: string): number {
+  TRUNCATED_KEY_TAIL.lastIndex = 0;
+  const consumed = TRUNCATED_KEY_TAIL.exec(`\n${content}\n`)?.[0].length ?? 0;
+  return consumed === 0 ? -1 : Math.min(consumed - 1, content.length);
+}
+
+/**
+ * Replaces private key blocks. A BEGIN line waits for its END line of the same
+ * type for up to KEY_BLOCK_MAX_LINES lines and KEY_BLOCK_MAX_CHARS characters;
+ * found, everything from BEGIN to END becomes one marker, so prefixed lines
+ * (`cat -n`, `grep -A`, timestamps) are covered. Not found, only the key
+ * material right after BEGIN is dropped and the rest of the log stays.
+ */
+function createKeyBlockStage(emit: (line: TextLine) => void) {
+  let mode: 'normal' | 'block' | 'tail' = 'normal';
+  let block: { prefix: string; type: string; rest: string; term: string; held: TextLine[]; chars: number } | undefined;
+  let tail: { content: string; term: string } | undefined;
+  const keyMarker = marker('private-key');
+
+  function scan(line: TextLine): void {
+    const { content } = line;
+    if (!content.includes('PRIVATE KEY-----')) {
+      emit(line);
+      return;
+    }
+    const begin = new RegExp(PRIVATE_KEY_BEGIN.source, 'gu');
+    let out = '';
+    let pos = 0;
+    for (;;) {
+      begin.lastIndex = pos;
+      const match = begin.exec(content);
+      if (!match) {
+        emit({ content: out + content.slice(pos), term: line.term });
+        return;
+      }
+      out += content.slice(pos, match.index);
+      const headerEnd = match.index + match[0].length;
+      const type = match[1] ?? '';
+      const end = findEndAfter(content, type, headerEnd);
+      if (end) {
+        out += keyMarker;
+        pos = end[1];
+        continue;
+      }
+      mode = 'block';
+      const rest = content.slice(headerEnd);
+      block = { prefix: out, type, rest, term: line.term, held: [], chars: rest.length + line.term.length };
+      return;
+    }
+  }
+
+  function resolveTruncated(queue: TextLine[]): void {
+    const current = block!;
+    block = undefined;
+    TRUNCATED_KEY_TAIL.lastIndex = 0;
+    const consumed = TRUNCATED_KEY_TAIL.exec(current.rest)?.[0].length ?? 0;
+    const head = current.prefix + keyMarker;
+    if (consumed < current.rest.length) {
+      mode = 'normal';
+      queue.unshift({ content: head + current.rest.slice(consumed), term: current.term }, ...current.held);
+    } else {
+      mode = 'tail';
+      tail = { content: head, term: current.term };
+      queue.unshift(...current.held);
+    }
+  }
+
+  function step(line: TextLine, queue: TextLine[]): void {
+    if (mode === 'normal') {
+      scan(line);
+      return;
+    }
+    if (mode === 'block') {
+      const current = block!;
+      current.held.push(line);
+      const end = endsOf(line).get(current.type);
+      if (end && current.held.length <= KEY_BLOCK_MAX_LINES && current.chars + end[0] <= KEY_BLOCK_MAX_CHARS) {
+        mode = 'normal';
+        block = undefined;
+        queue.unshift({ content: current.prefix + keyMarker + line.content.slice(end[1]), term: line.term });
+        return;
+      }
+      current.chars += line.content.length + line.term.length;
+      if (current.held.length >= KEY_BLOCK_MAX_LINES || current.chars > KEY_BLOCK_MAX_CHARS) {
+        resolveTruncated(queue);
+      }
+      return;
+    }
+    const pending = tail!;
+    const length = keyMaterialLength(line.content);
+    if (length === line.content.length) {
+      // The whole line is key material: drop it with the newline before it.
+      pending.term = line.term;
+      return;
+    }
+    mode = 'normal';
+    tail = undefined;
+    if (length > 0) {
+      queue.unshift({ content: pending.content + line.content.slice(length), term: line.term });
+    } else {
+      emit({ content: pending.content, term: pending.term });
+      queue.unshift(line);
+    }
+  }
+
+  function run(queue: TextLine[]): void {
+    while (queue.length > 0) step(queue.shift()!, queue);
+  }
+
+  return {
+    push(line: TextLine) {
+      run([line]);
+    },
+    end() {
+      for (;;) {
+        if (mode === 'block') {
+          const queue: TextLine[] = [];
+          resolveTruncated(queue);
+          run(queue);
+          continue;
+        }
+        if (mode === 'tail') {
+          emit({ content: tail!.content, term: tail!.term });
+          tail = undefined;
+          mode = 'normal';
+        }
+        return;
+      }
+    },
+  };
+}
+
+/**
+ * Applies the token and assignment rules. A line ending in a key whose value
+ * may start on the next line waits for that line, so a value at most one
+ * newline after its key is masked.
+ */
+function createRuleStage(emit: (text: string) => void) {
+  let segment = '';
+  const flush = () => {
+    if (segment.length === 0) return;
+    emit(applyRedactionRules(segment));
+    segment = '';
+  };
+  return {
+    push(line: TextLine) {
+      segment += line.content + line.term;
+      if (
+        (line.term === '\n' || line.term === '\r\n') &&
+        segment.length <= MAX_REDACTION_LINE_LENGTH &&
+        DANGLING_KEY_PATTERNS.some((pattern) => pattern.test(line.content))
+      ) {
+        return;
+      }
+      flush();
+    },
+    end: flush,
+  };
+}
+
+function applyRedactionRules(text: string): string {
+  let redacted = text;
+  for (const rule of [...BLOCKING_RULES, ...REDACTION_ONLY_RULES]) {
     if (!rule.redactPattern) continue;
     redacted = redacted.replace(rule.redactPattern, (match: string, ...rest: unknown[]) => {
       if (!rule.replace) return marker(rule.id);
@@ -64,20 +379,7 @@ export function redactSecrets(content: string): {
       return rule.replace(match, ...(groups as Array<string | undefined>));
     });
   }
-  return { content: redacted, findings };
-}
-
-export function createSecretRedactionTransform(): Transform {
-  const chunks: string[] = [];
-  return new Transform({
-    transform(chunk: Buffer | string, _encoding, callback: TransformCallback) {
-      chunks.push(chunk.toString());
-      callback();
-    },
-    flush(callback: TransformCallback) {
-      callback(null, redactSecrets(chunks.join('')).content);
-    },
-  });
+  return redacted;
 }
 
 export function scanFilesForSecrets(root: string): SecretFinding[] {
@@ -126,41 +428,6 @@ const PRIVATE_KEY_END = /-----END ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
 const TRUNCATED_KEY_TAIL =
   /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+[ \t]*(?=\r?\n|\\(?:r\\)?n|["']|$)|(?=\r?\n|\\(?:r\\)?n))|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
 
-/**
- * Replaces each private key block, BEGIN through its matching END, with one
- * marker. A block cut off before END loses only the key lines after BEGIN, so
- * the rest of a log stays readable. END positions are indexed once per key type,
- * so text full of BEGIN lines is still handled in linear time.
- */
-function redactPrivateKeyBlocks(content: string): string {
-  if (!content.includes('PRIVATE KEY-----')) return content;
-  const endsByType = new Map<string, { positions: Array<[number, number]>; next: number }>();
-  for (const match of content.matchAll(PRIVATE_KEY_END)) {
-    const type = match[1] ?? '';
-    const entry = endsByType.get(type) ?? { positions: [], next: 0 };
-    entry.positions.push([match.index, match.index + match[0].length]);
-    endsByType.set(type, entry);
-  }
-  let output = '';
-  let cursor = 0;
-  for (const match of content.matchAll(PRIVATE_KEY_BEGIN)) {
-    if (match.index < cursor) continue;
-    const headerEnd = match.index + match[0].length;
-    const ends = endsByType.get(match[1] ?? '');
-    while (ends && ends.next < ends.positions.length && ends.positions[ends.next]![0] < headerEnd) ends.next++;
-    let stop: number;
-    if (ends && ends.next < ends.positions.length) {
-      stop = ends.positions[ends.next]![1];
-    } else {
-      TRUNCATED_KEY_TAIL.lastIndex = headerEnd;
-      stop = headerEnd + (TRUNCATED_KEY_TAIL.exec(content)?.[0].length ?? 0);
-    }
-    output += `${content.slice(cursor, match.index)}${marker('private-key')}`;
-    cursor = stop;
-  }
-  return output + content.slice(cursor);
-}
-
 const MAX_SCAN_DEPTH = 10;
 const MAX_SCAN_FILES = 10_000;
 
@@ -207,12 +474,35 @@ const IGNORED_DIRS = new Set([
   'coverage',
 ]);
 
+// Between a key and its value: spaces, and at most one newline.
+const OPTIONAL_SEPARATOR = String.raw`[ \t]*(?:\r?\n[ \t]*)?`;
+const REQUIRED_SEPARATOR = String.raw`(?:[ \t]+(?:\r?\n[ \t]*)?|\r?\n[ \t]*)`;
+
+interface KeyedPattern {
+  /** Everything up to the separator, including `:` or `=`. */
+  key: string;
+  separator: 'optional' | 'required';
+  /** Kept with the key, e.g. an opening quote. */
+  prefixTail?: string;
+  value: string;
+}
+
+const KEYED_PATTERNS: KeyedPattern[] = [];
+
+/** Builds a redact pattern whose group 1 is the kept prefix. */
+function keyed(pattern: KeyedPattern): { redactPattern: RegExp } {
+  KEYED_PATTERNS.push(pattern);
+  const separator = pattern.separator === 'optional' ? OPTIONAL_SEPARATOR : REQUIRED_SEPARATOR;
+  return {
+    redactPattern: new RegExp(`(${pattern.key}${separator}${pattern.prefixTail ?? ''})${pattern.value}`, 'giu'),
+  };
+}
+
 const BLOCKING_RULES: SecretRule[] = [
   {
     id: 'private-key',
     severity: 'critical',
     pattern: /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/u,
-    redact: redactPrivateKeyBlocks,
     message: 'Private key material is present.',
   },
   {
@@ -247,7 +537,12 @@ const BLOCKING_RULES: SecretRule[] = [
     id: 'aws-secret-access-key',
     severity: 'critical',
     pattern: /\baws_secret_access_key\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/iu,
-    redactPattern: /(\baws_secret_access_key\s*[:=]\s*['"]?)[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])/giu,
+    ...keyed({
+      key: String.raw`\baws_secret_access_key[ \t]*[:=]`,
+      separator: 'optional',
+      prefixTail: `['"]?`,
+      value: String.raw`[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])`,
+    }),
     replace: keepPrefix,
     message: 'AWS secret access key is present.',
   },
@@ -256,8 +551,12 @@ const BLOCKING_RULES: SecretRule[] = [
     severity: 'high',
     pattern:
       /\b(?:api[_-]?key|token|secret)\s*[:=]\s*['"][A-Za-z0-9_\-]{24,}['"]/iu,
-    redactPattern:
-      /(\b(?:api[_-]?key|token|secret)\s*[:=]\s*['"])[A-Za-z0-9_\-]{24,}(['"])/giu,
+    ...keyed({
+      key: String.raw`\b(?:api[_-]?key|token|secret)[ \t]*[:=]`,
+      separator: 'optional',
+      prefixTail: `['"]`,
+      value: String.raw`[A-Za-z0-9_\-]{24,}(['"])`,
+    }),
     replace: (_match, prefix, quote) => `${prefix}[REDACTED_SECRET]${quote}`,
     message: 'A likely token or secret assignment is present.',
   },
@@ -278,7 +577,11 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
     id: 'auth-header',
     severity: 'high',
     pattern: /(?<![A-Za-z])(?:Bearer|Basic|Token|ApiKey|Digest)\s+[A-Za-z0-9._~+/=-]{16,}/iu,
-    redactPattern: /((?<![A-Za-z])(?:Bearer|Basic|Token|ApiKey|Digest)\s+)[A-Za-z0-9._~+/=-]{16,}/giu,
+    ...keyed({
+      key: String.raw`(?<![A-Za-z])(?:Bearer|Basic|Token|ApiKey|Digest)`,
+      separator: 'required',
+      value: String.raw`[A-Za-z0-9._~+/=-]{16,}`,
+    }),
     replace: keepPrefix,
     message: 'An authorization header value is present.',
   },
@@ -286,7 +589,12 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
     id: 'authorization-value',
     severity: 'high',
     pattern: /(?<![A-Za-z0-9_-])authorization["']?\s*[:=]\s*(?:(?:Bearer|Basic|Token|ApiKey|Digest)\s+)?(?![[<$])(?!(?:Bearer|Basic|Token|ApiKey|Digest)\b)[^\s'",;]+/iu,
-    redactPattern: /((?<![A-Za-z0-9_-])authorization["']?\s*[:=]\s*(?:(?:Bearer|Basic|Token|ApiKey|Digest)\s+)?)(?![[<$])(?!(?:Bearer|Basic|Token|ApiKey|Digest)\b)[^\s'",;]+/giu,
+    ...keyed({
+      key: String.raw`(?<![A-Za-z0-9_-])authorization["']?[ \t]*[:=]`,
+      separator: 'optional',
+      prefixTail: String.raw`(?:(?:Bearer|Basic|Token|ApiKey|Digest)[ \t]+)?`,
+      value: String.raw`(?![[<$])(?!(?:Bearer|Basic|Token|ApiKey|Digest)\b)[^\s'",;]+`,
+    }),
     replace: keepPrefix,
     message: 'An authorization value is present.',
   },
@@ -313,10 +621,11 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
       `(?<![A-Za-z0-9_-])(?:\\\\?["'])?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}(?:\\\\?["'])?\\s*[:=]\\s*(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
       'iu',
     ),
-    redactPattern: new RegExp(
-      `((?<![A-Za-z0-9_-])(?:\\\\?["'])?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}(?:\\\\?["'])?\\s*[:=]\\s*)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
-      'giu',
-    ),
+    ...keyed({
+      key: String.raw`(?<![A-Za-z0-9_-])(?:\\?["'])?[A-Za-z0-9_-]*?${CREDENTIAL_KEY}(?:\\?["'])?[ \t]*[:=]`,
+      separator: 'optional',
+      value: `(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
+    }),
     replace: maskCredentialValue,
     message: 'A credential assignment is present.',
   },
@@ -324,8 +633,17 @@ const REDACTION_ONLY_RULES: SecretRule[] = [
     id: 'credential-flag',
     severity: 'high',
     pattern: new RegExp(`(?<![A-Za-z0-9-])--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+(?!-)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`, 'iu'),
-    redactPattern: new RegExp(`((?<![A-Za-z0-9-])--[A-Za-z0-9-]*?${CREDENTIAL_KEY}\\s+)(?!-)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`, 'giu'),
+    ...keyed({
+      key: String.raw`(?<![A-Za-z0-9-])--[A-Za-z0-9-]*?${CREDENTIAL_KEY}`,
+      separator: 'required',
+      value: `(?!-)(?:${QUOTED_VALUE}|${UNQUOTED_VALUE})`,
+    }),
     replace: maskCredentialValue,
     message: 'A credential passed as a command-line flag is present.',
   },
 ];
+
+/** Lines that end in a key whose value may still come on the next line. */
+const DANGLING_KEY_PATTERNS = KEYED_PATTERNS.map(
+  (pattern) => new RegExp(`${pattern.key}[ \\t]*$`, 'iu'),
+);

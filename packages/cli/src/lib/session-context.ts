@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
 
 import {
+  auditProcessGroupReaps,
   createAuditLogger,
   createAutomationJobExecutor,
   createCommandGateway,
@@ -219,6 +220,7 @@ export async function withCliSessionContext<T>(
       }),
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
       origin: 'cli',
+      onProcessGroupReap: auditProcessGroupReaps(audit),
     });
 
     const providerPreflight = createProviderPreflight();
