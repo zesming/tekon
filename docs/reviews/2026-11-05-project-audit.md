@@ -557,7 +557,7 @@
   4. 把现有 RPC 文档化并定义版本合同，不新建 API；向运行中 agent 发消息依赖 PD-16。
 
 ### [CD-18] 运行资源没有清理路径：分支、worktree 累积，`tekon clean` 永远失败
-- 维度：代码、产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认（合并 PD-28）
+- 维度：代码、产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：部分修复（PR #37，提交 e526a39、b33b1b4、88bd8ab，v0.29.0；合并 PD-28；运行结束后自动清理另排）
 - 位置：packages/core/src/runtime/worktree-manager.ts:219-242，packages/web/src/server/api/routers/project.ts:472-528，packages/core/src/workflow/dynamic.ts:145-146，:430，packages/cli/src/index.ts:92，:164，docs/manual/tekon-user-manual.md:654-664
 - 现象：
   - 一次 standard-delivery mock 后 git 分支 18 个（main、tekon-delivery、16 个 `tekon/<run>/…`）。`.tekon` 有 433 个文件、43 个目录、2.0M，其中 `commands/` 339 个文件。
@@ -568,6 +568,7 @@
 - 依据：`releaseLease` 只移除 worktree、不删分支；`pruneStaleLeases` 无生产调用；Web 的 clean 写审计后永远抛错。
 - 影响：用得越久，用户的 `git branch` 越乱，磁盘只增不减。
 - 修复建议：run 进入终态后自动清理节点分支和 worktree；`tekon-delivery/<run>` 是交付物，不能删；paused run 的 worktree 要保留。对终态 run 恢复一个安全的 `tekon clean`。
+- 修复记录：恢复 `tekon clean`（`--run-id`、`--dry-run`、`--yes`）和 Web `project.clean`，只处理已结束且没有未结束任务的运行：移除租约记录的 worktree，删除租约记录的节点分支，保留交付分支、运行证据和审计；结果写入 `run.cleanup` 审计。预览只读，worktree 没能移除时保留它的分支，批量清理时单个运行出错不影响其他运行。动态工作流预览不再留下临时目录。运行结束后自动清理需要先和用户对齐策略，另排。
 
 ### [CD-20] 工作流定义的引用语法反直觉，报错不指路，查看命令过简
 - 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
@@ -583,7 +584,7 @@
 - 修复建议：这条是 S 级，先做，只改报错和提示，不改格式：报错说明同 phase 规则并列出可用的节点 id 和输出 id。`show` 已会解析校验，加强它展示完整结构，就能替代新增 validate 命令。格式本身的简化（`steps`、`agent`、`needs`）在重构第 5 阶段做。
 
 ### [CD-29] Runner 可认领其他进程的 job，退出时会杀掉
-- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，提交 260cc7f、37822a5、c21445a，v0.29.0）
 - 位置：packages/core/src/session/session-store.ts:726-765，packages/core/src/session/job-runner.ts:400-432，:574-586，:588-666，packages/cli/src/lib/session-context.ts:187-199，:283-286，packages/cli/src/commands/run.ts:287，packages/cli/src/commands/approval.ts:347，packages/web/src/server/api/root.ts:224，docs/technical/tekon-runtime-contract.md:70
 - 现象：
   - `claimNext` 没有按发起进程过滤，CLI 和 Web 都启动 runner。`stop()` 5 秒后对自己持有的全部 job 执行 abort 和 SIGKILL。
@@ -593,13 +594,14 @@
 - 依据：`session-context.ts:187-199` 的注释只承认 automation job 的情况，运行时合同只说各自运行。
 - 影响：Web 发起的 run 会被一个无关的 `tekon run` 退出时杀掉，且没有提示。环境变量也可能来自错误的进程。
 - 修复建议：CLI 按 jobId 只认领自己的 job，Web 只认领非 CLI 发起的，stop 不杀他人的 job。
+- 修复记录：job 记录发起方；CLI 只认领本进程发起或恢复的 job，Web 不认领 CLI 发起的 job，认领时再检查一次发起方。CLI 受理后退出、还没执行的 job，可以再用 `tekon resume` 或在 Web 上恢复后执行。用真实进程和双 runner 的测试锁定。升级后需重启已在运行的 `tekon ui`。
 
 ### [CD-40] 安全类，详情见私下渠道
 - 维度：代码 | 严重度：S1 | 状态：已修复（#42，合并提交 3b8fc24，v0.27.0）
 - 说明：细节未公开，走单独小 PR，提交信息不描述弱点。修复者向维护者索取细节；拿不到时不要处理并注明。
 
 ### [CD-45] 存活进程的 job 被自己的 poll 判为 stale，暂停或时钟跳变超过 30 秒后运行被杀
-- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高（暂停已复现，时钟前跳已模拟，真实休眠未测） | 状态：已确认
+- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高（暂停已复现，时钟前跳已模拟，真实休眠未测） | 状态：已修复（PR #37，提交 260cc7f、37822a5、c21445a，v0.29.0）
 - 位置：packages/core/src/session/session-store.ts:882-903，:914-938，packages/core/src/session/job-runner.ts:355-374，:400-442，packages/core/__tests__/session/job-runner.test.ts:598，:678，docs/manual/tekon-user-manual.md:500
 - 现象（真实 CLI 加长任务假 claude）：
   - SIGSTOP 40 秒、SIGCONT 后 3 秒内 job 变 `interrupted|NULL|NULL`，workflow interrupted，agent 被杀，CLI exit=1，stderr 有 `JOB_FENCING`。
@@ -617,6 +619,7 @@
   3. interrupt 时写明原因事件，并把 SIGSTOP 和时钟前跳的复现写成仓库内回归测试。
 
   不用 pid 探活：`kill -0` 分不清卡死、暂停和 pid 复用，用它否决回收会让真卡死的 job 一直 running，唯一出路只剩不可恢复的 cancel。第 1 项（无条件续租版）打补丁实测，SIGSTOP 40 秒和时钟前跳都变成 passed、exit=0；第 2、3 项和 Web 加 CLI 双进程场景未实测。
+- 修复记录：心跳和每轮 poll 都按过期条件续租本进程的 job，失去所有权时停止本地执行；两轮 poll 之间或单轮内出现超过阈值的间隔时，之后一个心跳内按没有发生挂起来判定其他进程的租约。中断事件记录原因、原 owner、租约时间和判定所用的截止时间。SIGSTOP 超过租约时间的真实进程测试和时钟注入的单测锁定。限制：同一仓库有两个进程时，一个被挂起与已退出无法区分；真实系统休眠未测。
 
 ### [CD-04] Codex 非零退出或超时在 artifact 齐全时被改写成成功，和 Claude 语义相反
 - 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
@@ -952,13 +955,13 @@
 - 修复记录：根 `test` 脚本先执行 `pnpm -r build` 再跑 vitest，`__manual__` 排除不变；AGENTS.md 同步。删掉全部 dist 后 `pnpm test --run` 仍全部通过。
 
 ### [TS-12] 治理子系统测试占比高，合同测试和单点 fixture 与其耦合
-- 维度：测试 | 严重度：S2 | 工作量：M | 置信度：中 | 状态：部分修复（PR #37，提交 cbdbe6b、30f4f09、884fc52、1b26d1a、1bad9b8、2c94825，v0.27.1；余下两项另排）
+- 维度：测试 | 严重度：S2 | 工作量：M | 置信度：中 | 状态：部分修复（PR #37，提交 cbdbe6b、30f4f09、884fc52、1b26d1a、1bad9b8、2c94825，v0.27.1；无 gate 注入点 ef9864f，v0.29.0；分批处理受影响测试另排）
 - 位置：packages/core/__tests__/gate/，packages/core/__tests__/delivery/，packages/core/__tests__/eval/，packages/core/__tests__/constraint/，packages/core/__tests__/draft/，packages/web/__tests__/fixtures/project.ts:311、323，packages/core/__tests__/workflow/engine-worktree.e2e.test.ts，packages/core/__tests__/phase1/session-job-e2e.test.ts
 - 现象：gate、delivery、eval、constraint、draft 五个子系统共 7,793 行源码。直接失效的测试有 30 文件、13,145 行（真实换行数 13,115）、247 tests，占行 19.2%、占 tests 11.0%，其中子系统目录内 19 文件/8,405 行/156 tests，目录外直接 import 的 11 文件/4,740 行/91 tests。合同候选 `engine-worktree.e2e`、`session-job-e2e`、`kernel.e2e`、`repo-command-binding.e2e` 直接 import `createGateEngine`。`fixtures/project.ts`（517 行）同时种 run、gate 结果、delivery 目录和人工决策，被约 60 个文件依赖。
 - 依据：直接失效部分由 import 关系算出，较可靠。关键词上界是 89 文件、37,868 行、1,082 tests（占行 55.3%、占 tests 48.1%），只是文件级粗估：偏高来自假阳性（`\bdelivery\b` 命中 `standard-delivery`，`createPr` 命中 `createProviderHealthService`），偏低来自 helper 和 fixture 未计（10 文件/1,627 行）、38 个依赖 fixture 的文件（8,527 行）未计、Playwright tests 计 0。校准估算：块级 25,399/68,507 = 37.1%，严格 API 命中 20,165/68,507 = 29.4%。实际删除校准未执行，未验证。
 - 影响：删除治理子系统时估算约 30%-37% 的测试行要动，其中相当部分只是 setup 引用。不先解耦的话，安全网会和被删代码一起失效。
 - 修复建议：重构前先做三件事。拆 fixture：最小 run 种子，加可选的 gate、delivery 种子。给 engine 提供无 gate 的注入点，让合同测试不 import `createGateEngine`。分三批处理：子系统目录内的直接删，目录外直接 import 的逐个改，只命中关键词的 59 个文件在临时副本实际删除校准后再定。
-- 修复记录：fixture 拆出 `seedMinimalRun`，默认只写 run 骨架，gate、delivery、审计数据按需开启，`createWebFixtureProject` 保持全量；`GateEngine` 接口只保留 `runGate`，自动修复节点的创建移到 workflow；测试共用一份假 Codex，并新增假 Claude 和隔离环境的 CLI 运行助手。余下两项：无 gate 注入点随重构第 1 阶段批次 2 的合同测试加入；分三批处理受影响测试随治理子系统删减进行。
+- 修复记录：fixture 拆出 `seedMinimalRun`，默认只写 run 骨架，gate、delivery、审计数据按需开启，`createWebFixtureProject` 保持全量；`GateEngine` 接口只保留 `runGate`，自动修复节点的创建移到 workflow；测试共用一份假 Codex，并新增假 Claude 和隔离环境的 CLI 运行助手。无 gate 注入点：测试 helper `passthroughGateEngine` 不经过治理门禁，engine 的模板、恢复和角色提示词测试改用它，依赖真实门禁的测试保持原样，合同测试不再 import `createGateEngine`。余下一项：分三批处理受影响测试，随治理子系统删减进行。
 
 ### [TS-14] `tekon ui`、`tekon update` 没有真实进程测试
 - 维度：测试 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
