@@ -1,38 +1,54 @@
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readSync } from 'node:fs';
 
 import { redactSecrets } from '../security/secrets.js';
+import { isJobCancellationAbort } from '../session/job-runner.js';
 import type { AgentRunDiagnostic } from './agent-adapter.js';
 import type { CommandGatewayResult } from './command-gateway.js';
 
 /** Bytes read from the end of each provider log, for classification only. */
-const TAIL_BYTES = 4096;
+const TAIL_BYTES = 16 * 1024;
 const MAX_DETAIL_CHARS = 300;
 
 type ProviderName = 'claude-code' | 'codex' | 'dsh-headless' | 'custom';
 
-const AUTH_FAILURE =
-  /not logged in|\/login|invalid api key|api key.*(invalid|missing)|unauthori[sz]ed|\b401\b|authentication|oauth token|codex login|OPENAI_API_KEY/iu;
+// Each provider's own login errors. Bare words such as "authentication" or
+// "401" also appear in unrelated failures, so they are not enough alone.
+const AUTH_FAILURE: Record<string, RegExp> = {
+  'claude-code':
+    /not logged in|please run \/login|invalid api key|oauth token has expired|authentication_error|invalid x-api-key/iu,
+  codex:
+    /not logged in|run `?codex login|401 unauthorized|invalid api key|incorrect api key|missing (an )?api key/iu,
+};
 
 const LOGIN_HINT: Record<string, string> = {
-  'claude-code': '执行 claude /login，或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY，然后执行 tekon resume',
+  'claude-code':
+    '执行 claude auth login（或在 claude 里输入 /login），或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY，然后执行 tekon resume',
   codex: '执行 codex login，或在启动 Tekon 的环境里配置 OPENAI_API_KEY，然后执行 tekon resume',
 };
 
 /**
  * Turns a provider process outcome into a stable, bounded diagnostic. Log
- * tails are read only to classify; they never leave this function except as
- * a single redacted, truncated detail line in `message`.
+ * tails are read only to classify; only a non-zero exit keeps one redacted,
+ * truncated line of provider output in `message`.
  */
 export function classifyProviderFailure(input: {
   provider: ProviderName;
   command: string;
   result: CommandGatewayResult;
-  /** The run's abort signal fired (user cancel, run stop). */
-  aborted?: boolean;
+  /** The job's abort signal; its reason tells a user cancel from a shutdown. */
+  signal?: AbortSignal;
+  /** Working directory the provider was started in. */
+  cwd?: string;
 }): AgentRunDiagnostic {
   const { provider, command, result } = input;
-  if (input.aborted) {
-    return diagnostic('cancelled', `${command} 已取消`, undefined);
+  if (input.signal?.aborted) {
+    return isJobCancellationAbort(input.signal)
+      ? diagnostic('cancelled', `${command} 已取消`, undefined)
+      : diagnostic(
+          'interrupted',
+          `Tekon 停止时 ${command} 被中断`,
+          '执行 tekon resume 继续这次运行',
+        );
   }
   if (result.status === 'blocked-for-approval') {
     return diagnostic(
@@ -45,7 +61,14 @@ export function classifyProviderFailure(input: {
     if (result.cancelled) {
       return diagnostic('cancelled', `${command} 已取消`, undefined);
     }
-    if (result.errorCode === 'ENOENT' || /\bENOENT\b/u.test(result.reason)) {
+    if (result.errorCode === 'ENOENT') {
+      if (input.cwd && !existsSync(input.cwd)) {
+        return diagnostic(
+          'invalid-config',
+          `${command} 的工作目录不存在：${input.cwd}`,
+          '确认运行的工作目录（worktree）还在，必要时用 tekon run 新建运行',
+        );
+      }
       return diagnostic(
         'not-installed',
         `找不到 ${command} 命令（Tekon 进程的 PATH 里没有）`,
@@ -59,26 +82,38 @@ export function classifyProviderFailure(input: {
     );
   }
   if (result.timedOut) {
-    return diagnostic(
-      'timeout',
-      `${command} 运行超时`,
-      '确认任务规模后用更大的 --timeout-ms 执行 tekon resume',
-    );
+    return result.timeoutReason === 'no-progress'
+      ? diagnostic(
+          'timeout',
+          `${command} 长时间没有进展，已停止`,
+          '执行 tekon resume 重试；任务确实需要更久没有输出时，用更大的 --no-progress-timeout-ms 重新执行 tekon run',
+        )
+      : diagnostic(
+          'timeout',
+          `${command} 运行超时`,
+          '执行 tekon resume 重试；任务确实需要更久时，用更大的 --timeout-ms 重新执行 tekon run',
+        );
   }
   const stdoutTail = readTail(result.stdoutPath);
   const stderrTail = readTail(result.stderrPath);
   const claudeError = provider === 'claude-code' ? lastClaudeError(stdoutTail) : undefined;
   const reason = claudeError ?? lastLine(stderrTail) ?? lastLine(stdoutTail);
-  if (reason && AUTH_FAILURE.test(reason)) {
+  if (reason && AUTH_FAILURE[provider]?.test(reason)) {
+    // Login errors can carry account details; keep a fixed message.
     return diagnostic(
       'not-authenticated',
-      `${command} 未登录或凭据无效：${detail(reason)}`,
+      `${command} 未登录或凭据无效`,
       LOGIN_HINT[provider] ?? '完成 provider 登录或配置凭据，然后执行 tekon resume',
     );
   }
+  const how = claudeError && result.exitCode === 0
+    ? '报告错误'
+    : result.exitCode === null
+      ? `被信号 ${result.signal ?? '未知'} 终止`
+      : `退出码 ${result.exitCode}`;
   return diagnostic(
     'exit-nonzero',
-    `${command} 退出码 ${String(result.exitCode)}${reason ? `：${detail(reason)}` : ''}`,
+    `${command} ${how}${reason ? `：${detail(reason)}` : ''}`,
     '查看节点日志找到原因，修复后执行 tekon resume',
   );
 }

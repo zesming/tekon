@@ -262,6 +262,25 @@ describe('SessionService provider preflight', () => {
     });
   });
 
+  it('names the passed-through variables in the opening session event', async () => {
+    const env = setup();
+    const engine = createWorkflowEngine({
+      repoPath: env.projectRoot, dataDir: '.tekon', repositories: env.repositories, audit: env.audit,
+      adapter: createMockAgentAdapter(), agentProvider: 'mock',
+      agentConfigSummary: { passthroughEnv: ['AWS_PROFILE'] },
+    });
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => engine,
+    });
+    const result = await service.startRun({ demandText: 'Passthrough', engine: null });
+    const events = await env.sessions.listEventsSince(result.sessionId, 0);
+    expect(events.find((event) => event.type === 'workflow/started')?.payload).toMatchObject({
+      passthroughEnv: ['AWS_PROFILE'],
+    });
+  });
+
   it('checks the frozen provider on resume and refuses before queuing', async () => {
     const env = setup();
     await seedRun(env, 'run_check', 'paused');

@@ -47,4 +47,13 @@ describe('run outcome output', () => {
     ).toBe('Provider: codex，认证方式: API key\n透传环境变量: AZURE_OPENAI_API_KEY\n');
     expect(formatPreflightNotice(undefined)).toBe('');
   });
+
+  it('tells a paused run waiting for a person how to continue', () => {
+    expect(runOutcomeDetails({ status: 'paused', runId: 'run_1', pendingHuman: true })).toEqual([
+      '  下一步: tekon review 查看后，执行 tekon resume --run-id run_1 --approve-human 批准并继续',
+    ]);
+    expect(runOutcomeDetails({ status: 'paused', runId: 'run_1' })).toEqual([
+      '  下一步: 执行 tekon resume --run-id run_1 继续',
+    ]);
+  });
 });

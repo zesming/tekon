@@ -111,7 +111,10 @@ describe('provider diagnostics through a real CLI process', () => {
     expect(run.stderr).toContain('注意: claude 未检测到登录或凭据');
     expect(run.stdout).toContain('⚠ 运行中断');
     expect(run.stdout).toContain('原因: claude 未登录或凭据无效');
-    expect(run.stdout).toMatch(/下一步: 执行 claude \/login/u);
+    expect(run.stdout).toMatch(/下一步: 执行 claude auth login/u);
+    // Retrying cannot fix a login problem, so resume is not suggested anywhere.
+    expect(run.stderr).not.toContain('tekon resume');
+    expect(run.stderr).toContain('tekon log --run-id');
     // Identity fields from `auth status` never reach the output.
     expect(`${run.stdout}${run.stderr}`).not.toContain('fake-user@example.invalid');
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(run.stdout)?.[1];
@@ -125,7 +128,9 @@ describe('provider diagnostics through a real CLI process', () => {
     const resume = cli(repo, binDir, home, ['resume', '--run-id', runId!]);
     expect(resume.stderr).toContain('认证方式: 订阅登录');
     const after = cli(repo, binDir, home, ['status', '--run-id', runId!]);
-    expect(after.stdout).not.toContain('status=interrupted');
+    // The login problem is gone: the run moved on to later nodes.
+    expect(after.stdout).toMatch(/status=(blocked|paused|passed)/u);
+    expect(resume.stderr).not.toContain('找不到 claude');
     expect(after.stdout).not.toContain('未登录或凭据无效');
   }, 240_000);
 });

@@ -301,6 +301,17 @@ export function assertSuccessfulAgentRun(result: AgentRunResult): void {
  * Audit payload fragment for a failed node: the classified reason and next
  * step, when the failure came from an agent run.
  */
+const NON_RETRYABLE_AGENT_FAILURES = new Set(['not-installed', 'not-authenticated', 'invalid-config']);
+
+/** A failure that needs a fix (install, login, config) before any retry. */
+export function isNonRetryableAgentFailure(error: unknown): boolean {
+  return (
+    error instanceof AgentRunFailedError &&
+    error.diagnostic !== undefined &&
+    NON_RETRYABLE_AGENT_FAILURES.has(error.diagnostic.code)
+  );
+}
+
 export function agentFailureAuditPayload(
   error: unknown,
 ): { diagnostic?: Pick<AgentRunDiagnostic, 'code' | 'message' | 'hint'> } {

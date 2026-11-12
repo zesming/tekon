@@ -453,6 +453,7 @@ export function createAdmissionStore(options: {
               templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
               mode: data.demandSource ?? "template",
               kind: data.workflowKind,
+              ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),
             },
             visibility: "ui-only",
             modelVisible: false,

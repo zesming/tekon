@@ -14,6 +14,7 @@ import {
   type AgentRunInput,
   type ArtifactType,
   type GateEngine,
+  findLatestRunFailure,
 } from '../../src/index.js';
 
 describe('workflow engine role prompt integration', () => {
@@ -1342,6 +1343,61 @@ describe('workflow engine role prompt integration', () => {
     );
     db.close();
   });
+
+  it('stops repairing after a login failure and keeps the reason', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-'));
+    const rolesDir = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-roles-'));
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    let repairRuns = 0;
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          const repair = input.runContext.nodeId.startsWith('repair_');
+          if (repair) repairRuns += 1;
+          return {
+            provider: 'custom',
+            exitCode: repair ? 1 : 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+            ...(repair
+              ? { diagnostic: { code: 'not-authenticated' as const, message: 'claude 未登录或凭据无效', hint: '执行 claude auth login' } }
+              : {}),
+          };
+        },
+      },
+      gateEngine: createFailingBuildGateEngine(repositories),
+    });
+
+    const result = await engine.startRun({
+      demandText: '修复节点未登录',
+      mode: 'template',
+      workflowSpec: repairWorkflowSpec(3),
+    });
+
+    expect(result.workflow.status).toBe('blocked');
+    expect(repairRuns).toBe(1);
+    const events = await repositories.listAuditEvents(result.runId);
+    const failures = events.filter((event) => event.type === 'gate.repair.failed');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.payload.diagnostic).toMatchObject({ code: 'not-authenticated' });
+    expect(findLatestRunFailure(events)).toMatchObject({
+      kind: 'not-authenticated',
+      hint: '执行 claude auth login',
+    });
+    db.close();
+  });
 });
 
 function writeRoleFixture(rolesDir: string) {
@@ -1511,17 +1567,17 @@ function minimalWorkflowSpec(name: string) {
   };
 }
 
-function repairWorkflowSpec() {
+function repairWorkflowSpec(maxRetries = 1) {
   const workflow = minimalWorkflowSpec('repair-failure');
   workflow.phases[0]!.nodes[0]!.gates = [
     {
       type: 'build' as const,
       requiresHumanApproval: false,
-      maxRetries: 1,
+      maxRetries,
       autoFix: true,
       retryPolicy: {
-        maxAttempts: 2,
-        maxRetries: 1,
+        maxAttempts: maxRetries + 1,
+        maxRetries,
         backoffMs: 0,
         strategy: 'fixed' as const,
         onExhausted: 'block' as const,

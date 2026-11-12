@@ -1458,7 +1458,6 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     }
   }, 30_000);
 
-  // 4c: --goal and --template are mutually exclusive (goal ignores templates).
   it('refuses to run when the repo config has a misspelled field', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
@@ -1483,6 +1482,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     expect(io.takeStderr()).toMatch(/config\.yaml is invalid.*defaultagent/u);
   });
 
+  // 4c: --goal and --template are mutually exclusive (goal ignores templates).
   it('rejects --goal combined with --template', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

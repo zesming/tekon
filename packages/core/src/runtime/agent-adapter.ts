@@ -71,6 +71,7 @@ export type AgentRunDiagnosticCode =
   | 'exit-nonzero'
   | 'timeout'
   | 'cancelled'
+  | 'interrupted'
   | 'approval-blocked'
   /** A custom adapter reported a code Tekon does not know. */
   | 'unclassified';
@@ -107,6 +108,7 @@ const AGENT_RUN_DIAGNOSTIC_CODES = new Set<AgentRunDiagnosticCode>([
   'exit-nonzero',
   'timeout',
   'cancelled',
+  'interrupted',
   'approval-blocked',
   'unclassified',
 ]);

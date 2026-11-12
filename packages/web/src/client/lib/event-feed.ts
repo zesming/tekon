@@ -228,12 +228,19 @@ export function describeEvent(event: StreamEvent): FeedRow {
         title: `节点结束${nodeId ? ` · ${nodeId}` : ''}${status ? ` · ${status}` : ''}`,
       };
     }
-    case 'workflow/started':
+    case 'workflow/started': {
+      const passthrough = Array.isArray(p.passthroughEnv)
+        ? p.passthroughEnv.filter((name): name is string => typeof name === 'string')
+        : [];
       return {
         ...base,
         kind: 'governance',
         title: p.resumed === true ? '受控交付已恢复' : '受控交付已开始',
+        ...(passthrough.length > 0
+          ? { body: `透传给 Provider 的环境变量：${passthrough.join(', ')}` }
+          : {}),
       };
+    }
     case 'session/created':
       return { ...base, kind: 'governance', title: '会话已创建' };
     default:

@@ -10,9 +10,7 @@ import {
   buildCodexProviderEnv,
   createAgentAdapterFromSnapshot,
   createAgentRuntime,
-  createCommandGateway,
   type CommandGateway,
-  type SpawnImpl,
 } from '../../src/index.js';
 import { buildClaudeProviderEnv } from '../../src/runtime/claude-code-support.js';
 

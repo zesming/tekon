@@ -163,7 +163,8 @@ export function createCodexAdapter(
             provider: 'codex',
             command: command.tool,
             result,
-            aborted: input.signal?.aborted,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
           }),
         };
       }
@@ -176,7 +177,8 @@ export function createCodexAdapter(
               provider: 'codex',
               command: command.tool,
               result,
-              aborted: input.signal?.aborted,
+              signal: input.signal,
+              cwd: input.worktreeLease.worktreePath,
             })
           : undefined;
 

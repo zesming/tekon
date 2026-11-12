@@ -172,7 +172,7 @@ describe('审计授权的 rework / repair 派生图', () => {
     expect(current.id).toMatch(new RegExp(`^${f.source.id}_rework_2_`));
     expect((await f.verify()).phases[0].nodes.map(n => n.id)).toEqual([f.source.id, legacy.id, current.id]);
   });
-  it('新格式 ID 不允许重复授权', async () => {
+  it('另一个评审结果不能沿用已有的新格式返工 ID', async () => {
     const f = await fixture(); const first = await f.rework(f.source, 1);
     const result = await f.addResult('forged-dup-result');
     const payload = { reviewNodeId: f.review.id, targetNodeId: f.source.id, gateResultId: result.id, attempt: 1, reworkNodeId: first.id };

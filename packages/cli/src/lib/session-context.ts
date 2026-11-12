@@ -37,6 +37,7 @@ import {
   type TekonRepositories,
   type RunPlan,
   type WorkflowEngine,
+  type RunFailureReason,
 } from '@tekon/core';
 
 import {
@@ -47,6 +48,7 @@ import type { CliIO } from './context.js';
 import { ensureInitialized, openProjectDb } from './context.js';
 import { selectLatestRunId } from './db-helpers.js';
 import { resolveProjectRepoPath } from './path-utils.js';
+import { isRetryableFailure } from './run-outcome.js';
 import { runDshPreflight } from '../commands/provider.js';
 import { getBuiltInRolesDir } from './utils.js';
 
@@ -360,6 +362,8 @@ export function exitCodeForJobOutcome(input: {
   jobId: string;
   jobStatus: JobStatus;
   workflowStatus: string;
+  /** Classified provider failure, when the run recorded one. */
+  failure?: RunFailureReason;
 }): number {
   if (
     input.jobStatus === 'failed' ||
@@ -372,8 +376,11 @@ export function exitCodeForJobOutcome(input: {
         : input.jobStatus === 'interrupted'
           ? '任务已中断'
           : '任务已取消';
+    // Resume helps only when retrying can: an unclassified interruption
+    // (for example a shutdown), a non-zero exit or a timeout.
+    const retryable = isRetryableFailure(input.failure);
     const resumeHint =
-      input.jobStatus === 'interrupted'
+      input.jobStatus === 'interrupted' && retryable
         ? `检查旧执行退出情况后，使用 tekon resume --run-id ${input.runId} 显式恢复。`
         : '';
     input.io.stderr.write(

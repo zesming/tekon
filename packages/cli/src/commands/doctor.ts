@@ -28,7 +28,7 @@ const INSTALL_HINT: Record<ProbedProvider, string> = {
 };
 
 const LOGIN_HINT: Record<ProbedProvider, string> = {
-  'claude-code': '执行 claude /login，或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY',
+  'claude-code': '执行 claude auth login（或在 claude 里输入 /login），或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY',
   codex: '执行 codex login，或在启动 Tekon 的环境里配置 OPENAI_API_KEY',
 };
 

@@ -27,7 +27,7 @@ import {
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import { agentFailureAuditPayload, assertSuccessfulAgentRun, isNonRetryableAgentFailure } from './helpers.js';
 import { reworkNodeIdFor } from './execution-plan.js';
 import { createAutoFixRepairNode } from './repair-node.js';
 import type { PromptBuilder } from './prompt-builder.js';
@@ -405,9 +405,12 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               gateResultId: result.id,
               attempt: retryAttempt,
               error: error instanceof Error ? error.message : String(error),
+              ...agentFailureAuditPayload(error),
             },
           });
-          if (retryAttempt >= gate.maxRetries) {
+          // Another attempt cannot fix a missing provider, a login or a bad
+          // config; stop and let the run report it.
+          if (retryAttempt >= gate.maxRetries || isNonRetryableAgentFailure(error)) {
             break;
           }
           if (await interrupted()) return false;

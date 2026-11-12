@@ -277,9 +277,10 @@ export function projectRunPlanV2(
   }
 
   // Not part of re-verification: stored v2/v3 plans always carry their agent
-  // and v1 uses the legacy digest. Only the Web preview and admission paths
-  // still omit agent; they move to the configured default together, and this
-  // fallback goes with them. CLI and buildPreparedRun pass an explicit agent.
+  // and v1 uses the legacy digest. Only the Web preview omits agent and relies
+  // on this fallback, while Web admission hard-codes the same 'codex'; the two
+  // digests must match, so both move to the configured default together. CLI
+  // and buildPreparedRun pass an explicit agent.
   const agent = context.agent ?? "codex";
   const mode = context.mode ?? "workflow";
   const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(agent);

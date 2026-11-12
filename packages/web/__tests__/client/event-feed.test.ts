@@ -151,6 +151,15 @@ function renderInteractiveFeed(props: Parameters<typeof EventFeed>[0]) {
 }
 
 describe('describeEvent', () => {
+  it('names the variables passed through to the provider when a run starts or resumes', () => {
+    const started = describeEvent(ev('workflow/started', { runId: 'r', passthroughEnv: ['AWS_PROFILE', 'AWS_REGION'] }));
+    expect(started.title).toBe('受控交付已开始');
+    expect(started.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE, AWS_REGION');
+    const resumed = describeEvent(ev('workflow/started', { runId: 'r', resumed: true, passthroughEnv: ['AWS_PROFILE'] }));
+    expect(resumed.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE');
+    expect(describeEvent(ev('workflow/started', { runId: 'r' })).body).toBeUndefined();
+  });
+
   it('renders a user message as user-authored prose', () => {
     const row = describeEvent(ev('user/message', { text: 'fix the bug' }));
     expect(row.kind).toBe('message');

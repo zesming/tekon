@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { accessSync, constants, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
 
 import { buildClaudeProviderEnv } from './claude-code-support.js';
@@ -151,7 +151,8 @@ function runProbeCommand(
     };
     let child;
     try {
-      child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'ignore'] });
+      // A neutral cwd keeps repository-level provider settings out of the probe.
+      child = spawn(command, args, { cwd: tmpdir(), env, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch {
       resolve(undefined);
       return;
@@ -210,7 +211,7 @@ export class ProviderPreflightError extends Error {
 }
 
 const AUTH_NONE_HINT: Record<ProbedProvider, string> = {
-  'claude-code': '执行 claude /login，或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY',
+  'claude-code': '执行 claude auth login（或在 claude 里输入 /login），或在启动 Tekon 的环境里配置 ANTHROPIC_API_KEY',
   codex: '执行 codex login，或在启动 Tekon 的环境里配置 OPENAI_API_KEY',
 };
 

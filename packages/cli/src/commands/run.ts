@@ -331,7 +331,12 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         `  状态: ${status}`,
         `  模板: ${templateName}`,
         pendingHuman.length > 0 ? '  人工确认: pending' : '',
-        ...runOutcomeDetails({ status, runId: result.runId, failure }),
+        ...runOutcomeDetails({
+          status,
+          runId: result.runId,
+          failure,
+          pendingHuman: pendingHuman.length > 0,
+        }),
         '后续操作:',
         '  tekon status          查看运行状态',
         '  tekon review          查看审阅面板',
@@ -345,6 +350,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       jobId: result.jobId,
       jobStatus,
       workflowStatus: status,
+      failure,
     });
   });
 }

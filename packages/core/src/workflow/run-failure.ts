@@ -8,7 +8,12 @@ export interface RunFailureReason {
   hint?: string;
 }
 
-const FAILURE_EVENT_TYPES = new Set(['node.interrupted', 'gate.execution.error']);
+const FAILURE_EVENT_TYPES = new Set([
+  'node.interrupted',
+  'gate.execution.error',
+  'gate.repair.failed',
+  'gate.rework.review.re-execute.failed',
+]);
 
 /**
  * The newest recorded failure since the run last resumed, so a reason that a

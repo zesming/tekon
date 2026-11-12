@@ -306,7 +306,7 @@ tekon eval readiness
 <tbody>
 <tr>
 <td><code>claude-code</code></td>
-<td>CLI 在未配置 <code>defaultAgent</code> 时的默认后端（Web 暂时仍默认 <code>codex</code>）；本机安装并登录 Claude Code</td>
+<td>CLI 在未配置 <code>defaultAgent</code> 时的默认后端（Web 暂时不读 <code>defaultAgent</code>，仍默认 <code>codex</code>）；本机安装并登录 Claude Code</td>
 </tr>
 <tr>
 <td><code>codex</code></td>
@@ -326,7 +326,7 @@ tekon eval readiness
 <p><strong>Claude Code 的登录与环境</strong>：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 <code>PATH</code>、<code>HOME</code> 等基础变量外，还会收到登录用户（<code>USER</code>、<code>LOGNAME</code>）、代理变量、<code>NODE_EXTRA_CA_CERTS</code> 以及全部 <code>ANTHROPIC_*</code>、<code>CLAUDE_*</code> 变量；<code>GITHUB_TOKEN</code>、<code>OPENAI_API_KEY</code>、<code>AWS_*</code> 等其他变量默认不会传给 Claude，需要时写进下面的 <code>passthroughEnv</code>。</p>
 <ul>
 <li><strong>认证方式跟着变量走</strong>：shell 里有 <code>ANTHROPIC_API_KEY</code>、<code>ANTHROPIC_AUTH_TOKEN</code> 或 <code>CLAUDE_CODE_OAUTH_TOKEN</code> 时，Claude 优先用它们，不用订阅登录（见 <a href="https://code.claude.com/docs/en/authentication">Claude 认证</a>）。工作和个人场景在同一台机器上时，请在各自的 shell 里分开设置。</li>
-<li><strong>哪些命令能读到 key</strong>：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 <code>npm test</code>、<code>npm run build</code>）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key，并先看一下仓库里 <code>.tekon/config.yaml</code> 的 <code>passthroughEnv</code>：列在那里的变量都会传给 Provider。</li>
+<li><strong>哪些命令能读到 key</strong>：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 <code>npm test</code>、<code>npm run build</code>）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key，并先看一下仓库里 <code>.tekon/config.yaml</code> 的 <code>passthroughEnv</code>：列在那里的变量都会传给 Provider；<code>codex.profile</code> 会让 Codex 使用你本机上同名的 profile。</li>
 <li><strong>Bedrock、Vertex</strong>：它们需要的 <code>AWS_*</code>、<code>CLOUD_ML_REGION</code> 等变量默认不会传过去。可以把变量名写进 <code>passthroughEnv</code>，也可以写进 Claude 设置文件的 <code>env</code> 字段（见 <a href="https://code.claude.com/docs/en/settings">Claude 设置</a>）。</li>
 </ul>
 <p><strong>Codex 的登录与环境</strong>：Codex 节点只收到固定的一组变量：<code>PATH</code>、<code>HOME</code>、临时目录、语言、<code>SHELL</code>、<code>USER</code>、<code>LOGNAME</code>、<code>OPENAI_API_KEY</code>、<code>OPENAI_BASE_URL</code>、<code>CODEX_HOME</code>、代理变量和 <code>NODE_EXTRA_CA_CERTS</code>，其他变量要写进 <code>passthroughEnv</code>。shell 里的 <code>OPENAI_API_KEY</code>、<code>OPENAI_BASE_URL</code>、<code>CODEX_HOME</code> 会原样传给 Codex，它们决定 Codex 用哪个账号或登录、请求发到哪里；<code>tekon doctor</code> 会显示 Codex 的认证方式。</p>
@@ -342,7 +342,7 @@ providers:
 <ul>
 <li><code>passthroughEnv</code> 是额外传给 Provider 的环境变量名，只写名字，值从启动 Tekon 的环境里读。名字必须是大写变量名；<code>PATH</code>、<code>SHELL</code>、<code>NODE_*</code>、<code>LD_*</code>、<code>DYLD_*</code>、<code>GIT_*</code>、<code>TEKON_*</code>、<code>PYTHON*</code> 等会改变程序加载方式或由 Tekon 控制的变量不能透传。值为空的变量会跳过。</li>
 <li>这些变量只给 Provider 进程，Tekon 自己运行的 build、test 等检查命令拿不到。Provider 在节点里执行的命令和 Provider 本身一样能读到。</li>
-<li><code>codex.profile</code> 只在配置后才以 <code>--profile</code> 传给 Codex。之前的版本默认使用 <code>internal</code>；升级后需要它时，请写 <code>providers.codex.profile: internal</code>。升级前启动的运行恢复时仍按原来的 <code>internal</code> 执行。升级 Tekon 后请重启已经在运行的 <code>tekon ui</code>。</li>
+<li><code>codex.profile</code> 只在配置后才以 <code>--profile</code> 传给 Codex。之前的版本默认使用 <code>internal</code>；升级后需要它时，请写 <code>providers.codex.profile: internal</code>。升级前启动的运行恢复时仍按原来的 <code>internal</code> 执行。升级 Tekon 后请重启已经在运行的 <code>tekon ui</code>。退回旧版本后，新版本创建的运行不能恢复，需要重新发起。</li>
 <li>运行启动时记录这些配置，恢复沿用记录，之后改配置不影响已有运行。启动和每次恢复都会在审计里写下透传的变量名和认证方式，不记录值。</li>
 <li>配置文件不是合法 YAML、字段名拼错或字段值不对时，<code>run</code>、<code>doctor</code> 会直接报错，不再按默认值运行。</li>
 </ul>
@@ -443,15 +443,19 @@ tekon run --dynamic --dry-run "需求文本" --agent mock
 </tr>
 <tr>
 <td>未登录或凭据无效</td>
-<td>执行 <code>claude /login</code>、<code>codex login</code>，或配置 API key，然后 <code>tekon resume</code></td>
+<td>执行 <code>claude auth login</code>（或在 Claude 里输入 <code>/login</code>）、<code>codex login</code>，或配置 API key，然后 <code>tekon resume</code></td>
 </tr>
 <tr>
 <td>配置无效或命令被策略拒绝</td>
 <td>修改 <code>.tekon/config.yaml</code> 或 Provider 配置，然后用 <code>tekon run</code> 新建运行（<code>tekon resume</code> 沿用启动时的 Provider 配置）</td>
 </tr>
 <tr>
-<td>非零退出、超时</td>
+<td>非零退出、Tekon 停止时中断</td>
 <td>先 <code>tekon resume</code> 重试；仍失败时查看节点日志</td>
+</tr>
+<tr>
+<td>超时、长时间没有进展</td>
+<td>先 <code>tekon resume</code> 重试；任务确实需要更久时，用更大的 <code>--timeout-ms</code> 或 <code>--no-progress-timeout-ms</code> 重新 <code>tekon run</code>（恢复沿用启动时的超时设置）</td>
 </tr>
 <tr>
 <td>产物缺失或不合 schema</td>
@@ -726,7 +730,7 @@ tekon --version
 <p>Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant 文本，均不提供模型原文逐块流。后续事件可能因 best-effort 投影缺失，不能仅凭 feed 重建运行或推断进程退出。新 Session 的三个开场事件与 Run、必需审计和初始 Job 原子受理，重试不重复创建。</p>
 <p>证据链接定位产物、Gate 日志、审计或交付章节；不存在、读取失败或被筛选隐藏时按页面说明核对原运行。链接打开不等于证据通过。失败会话可“确认/归档”移至历史区，此操作不改变失败结果。</p>
 <p><strong>Profile 与交付</strong>：默认 <code>human-web</code> 由人推进人工点。<code>autonomous-delivery</code> 仅在常驻 Web/服务模式下于运行 passed 后自动准备证据和 PR 包，仍停在人工批准前；CLI 需显式 <code>delivery prepare</code>。任何 Profile 都不会自动批准 human gate、push、创建 PR、合入或上线。Goal 不支持 <code>autonomous-delivery</code>。</p>
-<p>发起、恢复和批准前都会检查 Provider：命令不在服务进程的 PATH 里时返回 <code>PROVIDER_NOT_INSTALLED</code> 和下一步，不创建运行；批准时先检查再记录，检查不通过时决定保持待处理。服务进程的 PATH 来自启动 <code>tekon ui</code> 的终端或服务，可能与你的 shell 不同。中断的会话在事件流里显示“运行中断”、原因和下一步。</p>
+<p>发起、恢复和批准前都会检查 Provider：命令不在服务进程的 PATH 里时返回 <code>PROVIDER_NOT_INSTALLED</code> 和下一步，不创建运行；批准时先检查再记录，检查不通过时决定保持待处理。服务进程的 PATH 来自启动 <code>tekon ui</code> 的终端或服务，可能与你的 shell 不同。中断的会话在事件流里显示“运行中断”、原因和下一步。仓库配置了 <code>passthroughEnv</code> 时，事件流在“受控交付已开始”和“受控交付已恢复”这一行列出透传给 Provider 的变量名。</p>
 <p>发起、恢复和批准返回受理结果后由后台推进，只有目录 ready 的 Job 才能执行。同一 Run 同时只允许一个运行执行 Job；重复恢复或批准提示已有活跃任务时，继续观察原任务。独立 readiness/delivery Job 不参与此限制。</p>
 <p>高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 <code>x-session-token</code> 的 <code>GET /api/sessions/:sessionId/events</code> 订阅 SSE，并通过 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放；该事件流不是完整权威运行日志。</p>
 <h3 id="71-暂停取消与恢复" tabindex="-1">7.1 暂停、取消与恢复</h3>

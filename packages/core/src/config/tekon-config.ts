@@ -51,8 +51,9 @@ const BLOCKED_ENV_PREFIXES = [
 
 export function passthroughEnvNameIssue(name: string): string | undefined {
   if (!ENV_NAME.test(name)) {
-    // A name written as NAME=value must not echo the value back.
-    return `${name.split('=')[0]!.slice(0, 64)} is not an upper-case environment variable name`;
+    // A name written as NAME=value (or NAME: value) must not echo the value.
+    const shown = (/^[A-Za-z0-9_]*/u.exec(name)?.[0] ?? '').slice(0, 64);
+    return `${shown || '(name)'} is not an upper-case environment variable name`;
   }
   if (BLOCKED_ENV_NAMES.has(name)) {
     return `${name} cannot be passed through`;

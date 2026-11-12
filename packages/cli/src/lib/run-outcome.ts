@@ -31,6 +31,19 @@ export function formatPreflightNotice(
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * Failures a plain retry can fix: a non-zero exit, a timeout, or Tekon
+ * stopping mid-run. Login, install and config problems need a fix first.
+ */
+export function isRetryableFailure(failure: RunFailureReason | undefined): boolean {
+  return (
+    !failure ||
+    failure.kind === 'exit-nonzero' ||
+    failure.kind === 'timeout' ||
+    failure.kind === 'interrupted'
+  );
+}
+
 /** Header line for a run that reached this status. */
 export function runOutcomeHeader(status: string, pendingHuman: boolean): string {
   switch (status) {
@@ -60,6 +73,8 @@ export function runOutcomeDetails(input: {
   status: string;
   runId: string;
   failure?: RunFailureReason;
+  /** A human decision is waiting (paused runs). */
+  pendingHuman?: boolean;
 }): string[] {
   const { status, runId, failure } = input;
   const resume = `tekon resume --run-id ${runId}`;
@@ -67,7 +82,7 @@ export function runOutcomeDetails(input: {
     if (!failure) {
       return [`  下一步: tekon log --run-id ${runId} 查看原因，修复后执行 ${resume}`];
     }
-    const retryFirst = failure.kind === 'exit-nonzero' || failure.kind === 'timeout';
+    const retryFirst = isRetryableFailure(failure);
     return [
       `  原因: ${failure.message}`,
       retryFirst
@@ -80,6 +95,11 @@ export function runOutcomeDetails(input: {
       ...(failure ? [`  原因: ${failure.message}`] : []),
       `  运行已失败且不能恢复；用 tekon log --run-id ${runId} 查看详情`,
     ];
+  }
+  if (status === 'paused') {
+    return input.pendingHuman
+      ? [`  下一步: tekon review 查看后，执行 ${resume} --approve-human 批准并继续`]
+      : [`  下一步: 执行 ${resume} 继续`];
   }
   if (status === 'blocked') {
     return [

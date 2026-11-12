@@ -62,6 +62,12 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+/** Names (never values) of variables passed through to the provider. */
+function passthroughNames(p: Record<string, unknown>): { passthroughEnv?: string[] } {
+  const names = asStringArray(p.passthroughEnv);
+  return names.length > 0 ? { passthroughEnv: names } : {};
+}
+
 /**
  * 纯函数映射:audit 事件 → session_event(type + payload)。
  * 返回 null 表示不映射(S9 清单 / 未知类型)。
@@ -89,12 +95,18 @@ export function mapAuditEventToSessionEvent(input: {
           mode: asString(p.mode),
           // 4b: run kind ('workflow' | 'goal'); default keeps legacy behavior.
           kind: asString(p.kind) || 'workflow',
+          ...passthroughNames(p),
         },
       };
     case 'run.resumed':
       return {
         type: 'workflow/started',
-        payload: { runId, resumed: true, kind: asString(p.kind) || 'workflow' },
+        payload: {
+          runId,
+          resumed: true,
+          kind: asString(p.kind) || 'workflow',
+          ...passthroughNames(p),
+        },
       };
     case 'run.passed':
       // D4:run 级完成统一用 agent/status(payload 加 kind)。

@@ -175,6 +175,23 @@ describe('assertSuccessfulAgentRun', () => {
     expect(JSON.stringify(payload)).not.toContain(secret);
     expect(agentFailureAuditPayload(new Error('lease failed'))).toEqual({});
   });
+
+  it('maps a diagnostic code Tekon does not know to unclassified', () => {
+    let thrown: unknown;
+    try {
+      assertSuccessfulAgentRun({
+        provider: 'custom',
+        exitCode: 1,
+        durationMs: 1,
+        outputFiles: [],
+        timedOut: false,
+        diagnostic: { code: 'made-up-code' as never, message: 'custom adapter failure' },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(agentFailureAuditPayload(thrown).diagnostic?.code).toBe('unclassified');
+  });
 });
 
 // ---------------------------------------------------------------------------

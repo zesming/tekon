@@ -121,7 +121,8 @@ export function createClaudeCodeAdapter(
             provider: 'claude-code',
             command: command.tool,
             result,
-            aborted: input.signal?.aborted,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
           }),
         };
       }
@@ -137,7 +138,8 @@ export function createClaudeCodeAdapter(
             provider: 'claude-code',
             command: command.tool,
             result,
-            aborted: input.signal?.aborted,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
           }),
         };
       }

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -59,6 +59,10 @@ describe('provider preflight from Web', () => {
   it('returns the auth warning and passthrough names with an admitted run', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
+    appendFileSync(
+      join(fixture.projectRoot, '.tekon', 'config.yaml'),
+      'providers:\n  codex:\n    passthroughEnv: [AWS_PROFILE]\n',
+    );
     const restorePath = installFakeProviderCommands('codex');
     cleanupTasks.push(restorePath);
     const api = await createApiCaller({
@@ -75,8 +79,26 @@ describe('provider preflight from Web', () => {
       agent: 'codex',
       mode: 'goal',
     });
-    expect(result.preflight).toMatchObject({ provider: 'codex', auth: 'none' });
+    expect(result.preflight).toMatchObject({
+      provider: 'codex',
+      auth: 'none',
+      passthroughEnv: ['AWS_PROFILE'],
+    });
     expect(result.preflight?.warnings[0]).toContain('codex login');
+    const db = openTekonDatabase({ filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite') });
+    try {
+      const audit = db
+        .prepare("select payload from audit_events where run_id = ? and type = 'provider.preflight'")
+        .get(result.run.id) as { payload: string };
+      expect(JSON.parse(audit.payload)).toMatchObject({ passthroughEnv: ['AWS_PROFILE'] });
+      // The Web event feed shows the names from the opening session event.
+      const opening = db
+        .prepare("select payload from session_events where session_id = ? and type = 'workflow/started'")
+        .get(result.sessionId!) as { payload: string };
+      expect(JSON.parse(opening.payload)).toMatchObject({ passthroughEnv: ['AWS_PROFILE'] });
+    } finally {
+      db.close();
+    }
   });
 
   it('checks the provider before recording an approval', async () => {

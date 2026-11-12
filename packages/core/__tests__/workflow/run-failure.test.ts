@@ -38,4 +38,13 @@ describe('findLatestRunFailure', () => {
     expect(reason?.message).not.toContain(secret);
     expect(reason?.kind).toBeUndefined();
   });
+
+  it.each(['gate.repair.failed', 'gate.rework.review.re-execute.failed'])(
+    'reads the reason of a failed %s',
+    (type) => {
+      expect(findLatestRunFailure([{ type, payload: { error: 'x', diagnostic } }])).toMatchObject({
+        kind: 'not-authenticated',
+      });
+    },
+  );
 });

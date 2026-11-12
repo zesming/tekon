@@ -28,14 +28,20 @@ export const test = base.extend<SharedFixtures>({
     // dev-only on-demand transform timing. Placeholder provider commands let
     // runs pass the start check without ever starting a real provider.
     const restorePath = installFakeProviderCommands('claude', 'codex');
-    const server = await createWebServer({
-      projectRoot: fixture.projectRoot,
-      port: 0,
-    });
-    await server.listen();
-    await use(server);
-    await server.close();
-    restorePath();
+    try {
+      const server = await createWebServer({
+        projectRoot: fixture.projectRoot,
+        port: 0,
+      });
+      await server.listen();
+      try {
+        await use(server);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      restorePath();
+    }
   },
 
   // Business journeys use page.goto() to launch many deep routes as fresh

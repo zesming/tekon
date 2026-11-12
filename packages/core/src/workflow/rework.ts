@@ -38,7 +38,7 @@ import {
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import { agentFailureAuditPayload, assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 
 export interface ReworkHandlerDeps {
@@ -566,6 +566,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
           targetNodeId,
           reworkNodeId,
           error: error instanceof Error ? error.message : String(error),
+          ...agentFailureAuditPayload(error),
         },
       });
       return;

@@ -273,10 +273,6 @@ export async function commandResume(
       }
     }
 
-    // Check the provider before recording an approval, so a run that cannot
-    // start does not leave a decision approved but not resumed.
-    await sessionService.preflightResume(runId).catch(rethrowPreflight);
-
     if (args.values['approve-human']) {
       if (!decisionContext?.decisionId) {
         throw new Error(
@@ -294,6 +290,10 @@ export async function commandResume(
           `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
         );
       }
+      // Check the provider before recording the approval, so a run that
+      // cannot start does not leave a decision approved but not resumed. A
+      // bare resume is checked inside resumeRun, after its state checks.
+      await sessionService.preflightResume(runId).catch(rethrowPreflight);
       const humanGate = createHumanGate({
         repositories,
       });
@@ -371,11 +371,11 @@ export async function commandResume(
     const latest = await repositories.getWorkflowInstance(runId);
     const status = latest?.status ?? 'unknown';
     io.stdout.write(`runId=${runId} status=${status}\n`);
-    const details = runOutcomeDetails({
-      status,
-      runId,
-      failure: findLatestRunFailure(await repositories.listAuditEvents(runId)),
-    });
+    const failure = findLatestRunFailure(await repositories.listAuditEvents(runId));
+    const pendingHuman = (await repositories.listHumanDecisions(runId)).some(
+      (decision) => decision.status === 'pending',
+    );
+    const details = runOutcomeDetails({ status, runId, failure, pendingHuman });
     if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
     return exitCodeForJobOutcome({
       io,
@@ -383,6 +383,7 @@ export async function commandResume(
       jobId: result.jobId,
       jobStatus,
       workflowStatus: status,
+      failure,
     });
   });
 }

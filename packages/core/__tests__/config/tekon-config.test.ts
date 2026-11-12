@@ -69,18 +69,21 @@ describe('readTekonConfig', () => {
     },
   );
 
-  it('does not echo a value written into a passthrough name', () => {
-    let message = '';
-    try {
-      readTekonConfig(
-        repoWithConfig('providers:\n  claude-code:\n    passthroughEnv: ["API_TOKEN=s3cr3t-value"]\n'),
-      );
-    } catch (error) {
-      message = (error as Error).message;
-    }
-    expect(message).toMatch(/API_TOKEN/);
-    expect(message).not.toContain('s3cr3t-value');
-  });
+  it.each(['API_TOKEN=s3cr3t-value', 'API_TOKEN: s3cr3t-value', 'API_TOKEN s3cr3t-value'])(
+    'does not echo a value written into a passthrough name (%s)',
+    (entry) => {
+      let message = '';
+      try {
+        readTekonConfig(
+          repoWithConfig(`providers:\n  claude-code:\n    passthroughEnv: ["${entry}"]\n`),
+        );
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).toMatch(/API_TOKEN/);
+      expect(message).not.toContain('s3cr3t-value');
+    },
+  );
 
   it('rejects an unknown defaultAgent', () => {
     expect(() => readTekonConfig(repoWithConfig('defaultAgent: gpt\n'))).toThrow(/defaultAgent/);
