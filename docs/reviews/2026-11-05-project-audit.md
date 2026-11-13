@@ -179,7 +179,7 @@
 - 修复建议：每节点落盘 prompt 和输入，节点面板展示 prompt、输入、输出。所有适配器解析最终文本，脱敏后写入一个默认产物和事件（Claude JSON 已有 `result`，`draft-agent.ts:247` 已按此解析）。Claude 改用流式输出（`--output-format` 由 adapter 控制）。本地工具默认可看原始输出，敏感内容脱敏。
 
 ### [PD-13] Progress 页的“命令进度”恒为空
-- 维度：产品 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：产品 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.30.0：删除恒空的命令进度卡片，保留工作流进度、门禁时间线与 progress.list 接口）
 - 位置：packages/web/src/server/api/routers/progress.ts:89-122，packages/core/src/runtime/command-gateway.ts:348，packages/core/src/workflow/helpers.ts:171-177，packages/web/__tests__/api/progress.test.ts:31-33
 - 现象：已通过的 run 显示 “No progress files found”，并说明文件会在命令运行时出现。运行中也一样：mock（`build: sleep 25`）和假 claude（sleep 20）运行时，进度文件分别在 `gates/` 和 `<nodeId>/`，status=running，进程内调用真实 router 都返回 `n=0`。
 - 依据：router 只扫 `runs/<id>/` 根目录。8 个 run 共 295 个进度文件，根目录 0 个；抽查的 run 中 `commands/` 36 个、`gates/` 3 个。`progress.test.ts:31-33` 的 fixture 放在根目录，形状也是真实写入方不会产生的，所以测试没有发现。
@@ -211,7 +211,7 @@
 - 修复建议：拆两步。1）先改 interrupted、blocked 的映射和文案（与 UI-02 同一处修复）。2）再实现消息入口，驱动 harness 续会话（依赖 CD-11）。
 
 ### [PD-17] blocked、interrupted 后不能改指令或换 provider，Web 也不能取消
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：部分修复（PR #37，v0.30.0：第 1 步 Web 非终态运行均可取消已完成；恢复时换 provider、改指令的第 2、3 步另排在重构第 2 阶段）
 - 位置：packages/web/src/client/components/runs/RunControls.tsx:38、55-56，packages/core/src/workflow/gate-runner.ts:533-538，docs/manual/tekon-user-manual.md:287
 - 现象：Web 只有 paused、blocked、interrupted 可恢复，恢复沿用 provider 快照和原指令。interrupted 和 blocked 在 Web 上不能取消，CLI 实测能取消 blocked 的 run。Codex 缺失的 run 只有“恢复”一个动作，点了再次中断。
 - 依据：沿用快照是产品方向偏差：文档已声明，与目标基准冲突（手册:287）。Web 不能取消是实现缺陷：`RunControls.tsx:56` 只放 running、paused，而 `project.cancel` 和 `requestCancel` 没有状态限制。workflow 进入 failed 只有 `gate-runner.ts:533-538` 的 `onExhausted: fail` 一条路，默认是 block，7 个内置模板都没声明，所以真正的死路是 blocked 和 interrupted。
@@ -246,7 +246,7 @@
 - 修复建议：模板声明出 PR 所需证据，readiness 按声明校验。结束页明确“结果在哪”，提供 diff 和应用到分支的动作。按钮按准备度提前禁用并说明原因。
 
 ### [PD-22] 全局审批队列和交付页只看最新一个 run
-- 维度：产品 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：产品 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：部分修复（PR #37，v0.30.0：第 1 步新增 gate.pendingAll，审批队列覆盖所有运行的待审批决定并按各自 runId 操作；交付页下沉到运行详情另排在重构第 4 阶段）
 - 位置：packages/web/src/client/pages/ApprovalsPage.tsx:26、40，packages/web/src/client/pages/DeliveryPage.tsx:36，packages/web/src/client/pages/run-detail/DeliveryTab.tsx
 - 现象：Approvals 只指向最新 run，显示“没有待处理审批”，同时另外 3 个 run 各有 1 条 pending，首页显示 3 个待审批。Delivery 页没有 run 选择器。run 详情的 Delivery tab 没有操作按钮（`<button` 计数 0）。
 - 依据：Approvals 页与首页对照，实现缺陷。缓解：Session 详情页可以按会话审批。
@@ -254,7 +254,7 @@
 - 修复建议：审批队列查全部 pending（本 PR）。交付动作下沉到 run 详情，全局页删除，另排（重构第 4 阶段）。
 
 ### [PD-24] defaultAgent 只对 CLI 生效，重跑 init 还会覆盖配置
-- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：部分修复（PR #37，提交 279d366、2720ba3，v0.28.0：配置统一读取、CLI 默认值、init 不再覆盖；Web 读取 defaultAgent 另排；合并 CD-22）
+- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.28.0 配置统一读取、CLI 默认值、init 不再覆盖；v0.30.0 Web 发起/预览/受理统一读取仓库 defaultAgent，去掉五处 codex 硬编码，StartRunForm 用服务端默认代理初始化；合并 CD-22）
 - 位置：packages/cli/src/lib/context.ts:128-137，packages/cli/src/commands/init.ts:37，packages/cli/src/commands/run.ts:190，packages/web/src/server/api/routers/project-with-run-mode-policy.ts:26，packages/web/src/client/components/runs/StartRunForm.tsx:69，packages/core/src/session/workflow-job-executor.ts:128，packages/core/src/workflow/engine.ts:399-400，packages/core/src/types/config.ts:166-177
 - 现象：CLI 读取 `defaultAgent`，手改 `mock` 后 run 生效。Web 两个入口都默认 codex。重跑 `tekon init` 把 `mock` 重置回 `codex`，repo-profile 和 web-session 不受影响。`storage.dataDir` 写入配置但路径写死。projectName 写死 'tekon'，每个 run 新建 project（5 个 run 对应 5 个同名 project）。
 - 依据：Web 固定 Codex 是产品方向偏差：文档已声明，与目标基准冲突（README:25、手册:684）。`init` 覆盖是实现缺陷：同函数对 web-session.json 和 repo-profile 有 existsSync 保护，对 config.yaml 没有。
@@ -311,7 +311,7 @@
 ### 4.2 UI 与交互
 
 ### [UI-02] 同一状态多套标签，interrupted 还显示成“待输入”
-- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.30.0：状态标签收敛到唯一映射，会话列表与运行表各只显示一个徽章，interrupted 显示“已中断，需恢复”）
 - 位置：packages/web/src/client/pages/SessionsPage.tsx:32，packages/web/src/client/components/ui/StatusBadge.tsx:44-45、57，packages/web/src/client/components/runs/RunTable.tsx:37，packages/core/src/session/session-store.ts:926
 - 现象：等审批时，列表显示“待审批”加“等待审批”，详情显示“已暂停”，Runs 表显示 `paused`。中断时，列表显示“待输入”加“等待输入”，详情显示“已中断”，Runs 表显示 `interrupted`。通过时，三处分别是“已完成”“已通过”、`passed`。blocked 也映射到“待输入”。
 - 依据：实现缺陷。页面实测三处标签不一致；状态徽章有两套实现。
@@ -319,7 +319,7 @@
 - 修复建议：改成单一的状态到标签映射，列表只保留一个徽章。“待输入”的修正和 PD-16 第 1 步是同一处修复。
 
 ### [UI-03] Advanced Dashboard 数字自相矛盾，列内容错误
-- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.30.0：删除 DashboardPage，/advanced 重定向到 /advanced/runs，侧栏入口保留待后续控制台阶段）
 - 位置：packages/web/src/client/pages/DashboardPage.tsx:59、166、202、247、369、391
 - 现象：同屏出现 “8 runs · 3 pending”“no active runs · 3 pending”、待审批卡 0、Active Run “Pending approvals 1”、面板 “No pending approvals”。TEMPLATE 列显示 `demand_<uuid>`，PHASES 列实际是门禁计数。
 - 依据：实现缺陷，根因是错误数据和只看最新 run 的口径，和双入口无关。`templateFromDemandId` 直接返回 demandId，`pendingCount` 把 paused 算入。页面实测，数据来自 mock 合成仓库，真实 provider 未测。
@@ -335,7 +335,7 @@
 - 修复建议：顶部写清“要你决定什么”，内嵌产物和 diff，操作按钮固定在视口内；“就绪度”改名“摘要完整性”或删除；证据链接用人话命名。
 
 ### [UI-05] Run Overview 把“还没创建 PR”显示成失败
-- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：UI | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.30.0：顶部徽章反映工作流任务结果，交付包/PR 准备/PR 创建/远程 CI 无证据时显示“未开始”不计失败，QA 签收与安全扫描按任务结果计失败）
 - 位置：packages/web/src/client/pages/run-detail/OverviewTab.tsx，packages/web/src/client/lib/check-labels.ts:155，README.md:53
 - 现象：已通过的 run 顶部是绿色 0.73 加红色“失败”，并显示粉色进度条。3 个失败项是 PR 准备、PR 创建、远程 CI。建议写“远程 CI 未通过，查看 CI 日志修复”，实际事实是 `remote CI status not checked`。已通过的行也挂红色 REQUIRED。4 个 passed run 全部 ready=false（0.36、0.73、0.64、0.73），Goal 的 7 项失败含不适用项。
 - 依据：实现缺陷。README.md:53 只声明了“passed 不等于 ready”，没有解释这种显示。页面实测，数据来自 mock 合成仓库，真实 provider 未测。
