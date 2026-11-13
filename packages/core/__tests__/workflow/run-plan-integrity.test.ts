@@ -11,7 +11,10 @@ function emptyRepoFacts(template: WorkflowTemplate): BoundRepoCommand[] {
   return refs.map(commandRef => ({ commandRef, status: 'missing', source: { kind: 'empty-default', resolverVersion: 1 } }));
 }
 function projectRunPlan(template: WorkflowTemplate, context: RunPlanContext = {}) {
-  return projectRunPlanV3(template, context, emptyRepoFacts(template));
+  // Pin the agent explicitly: these cases verify digest/snapshot binding, not
+  // the configured-default policy (covered in run-plan.test.ts and the Web
+  // PD-24 tests). It must match buildPreparedRun's agentProvider below.
+  return projectRunPlanV3(template, { agent: 'codex', ...context }, emptyRepoFacts(template));
 }
 function buildPreparedRun(input: Parameters<typeof prepareWithCapturedFacts>[0], options: Parameters<typeof prepareWithCapturedFacts>[1] = {}) {
   return prepareWithCapturedFacts(input, { agentProvider: 'codex', repoCommands: emptyRepoFacts(input.workflowSpec), ...options });

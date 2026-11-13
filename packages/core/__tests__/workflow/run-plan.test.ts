@@ -12,6 +12,7 @@ import {
   projectRunPlanPreview,
   projectRunPlan,
 } from "../../src/workflow/run-plan.js";
+import { FALLBACK_DEFAULT_AGENT } from "../../src/config/tekon-config.js";
 
 describe("agentRequiresUnrestrictedNetwork", () => {
   it("returns true only for dsh-headless and false for others", () => {
@@ -136,11 +137,14 @@ phases:
     expect(plan.templateVersion).toBe(1);
   });
 
-  it("normalizes agent to 'codex' by default inside projectRunPlan", () => {
+  it("normalizes an omitted agent to the core fallback default inside projectRunPlan", () => {
     const template = loadBuiltInWorkflowTemplate("bugfix");
 
+    // PD-24: the hard-coded 'codex' fallback was removed; direct callers that
+    // omit agent get the core fallback (claude-code). Repo-configured defaults
+    // are applied one layer up in captureRunPlan.
     const defaultPlan = projectRunPlan(template);
-    expect(defaultPlan.agent).toBe("codex");
+    expect(defaultPlan.agent).toBe(FALLBACK_DEFAULT_AGENT);
     expect(defaultPlan.requiresUnrestrictedNetwork).toBe(false);
 
     const explicitPlan = projectRunPlan(template, { agent: "claude-code" });

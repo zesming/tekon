@@ -6,7 +6,7 @@ import type { TekonDatabase } from "./connection.js";
 import type { WriteQueue } from "./write-queue.js";
 import { canonicalJson } from "../workflow/run-plan.js";
 import { appendAuditEventTxn } from "../audit/logger.js";
-import { passthroughEnvAuditPayload } from "../config/tekon-config.js";
+import { FALLBACK_DEFAULT_AGENT, passthroughEnvAuditPayload } from "../config/tekon-config.js";
 import { sessionEventSchema, type SessionEvent } from "../types/session-contract.js";
 import { workflowInstanceSchema, type WorkflowInstance } from "../types/domain.js";
 
@@ -59,7 +59,7 @@ export function buildRunAdmissionEnvelope(input: {
     mode,
     templateName: mode === "goal" ? "goal" : (input.templateName?.trim() || "standard-delivery"),
     profile: input.profile ?? "human-web",
-    agent: input.agent ?? "codex",
+    agent: input.agent ?? FALLBACK_DEFAULT_AGENT,
     allowDirtyBase: Boolean(input.allowDirtyBase),
     acknowledgeUnrestrictedNetwork: Boolean(input.acknowledgeUnrestrictedNetwork),
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),

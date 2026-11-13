@@ -107,7 +107,9 @@ describe('v3纯投影与确认校验', () => {
   });
   it('纯准备逐份校验bindings/plan/snapshot/digest且深拷贝事实', () => {
     const spec = template(); const entries = structuredClone([resolved]);
-    const plan = projectRunPlanV3(spec, {}, entries);
+    // Pin codex to match buildPreparedRun's agentProvider; default-agent policy
+    // is covered elsewhere (PD-24).
+    const plan = projectRunPlanV3(spec, { agent: 'codex' }, entries);
     const prepared = buildPreparedRun({ workflowSpec: spec, canonicalPlan: plan, planSnapshot: canonicalJson(plan), planDigest: plan.digest, repoCommands: entries }, { agentProvider: 'codex', repoCommands: entries });
     entries[0].source.profileVersion = 9;
     expect(validateRunPlanV3(JSON.parse(prepared.planSnapshot))).toEqual(plan);

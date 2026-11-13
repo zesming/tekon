@@ -11,6 +11,7 @@ import {
   type BoundRepoCommand, type CommandBindingBehavior,
 } from './repo-command-binding.js';
 import { gatesWithStableKeys } from './workflow-runtime.js';
+import { readTekonConfig, resolveDefaultAgent, FALLBACK_DEFAULT_AGENT } from '../config/tekon-config.js';
 
 export interface RunPlanGate {
   nodeId: string;
@@ -276,12 +277,9 @@ export function projectRunPlanV2(
     });
   }
 
-  // Not part of re-verification: stored v2/v3 plans always carry their agent
-  // and v1 uses the legacy digest. Only the Web preview omits agent and relies
-  // on this fallback, while Web admission hard-codes the same 'codex'; the two
-  // digests must match, so both move to the configured default together. CLI
-  // and buildPreparedRun pass an explicit agent.
-  const agent = context.agent ?? "codex";
+  // captureRunPlan resolves the repo-configured default before reaching this
+  // point; the fallback only guards direct callers and no longer assumes codex.
+  const agent = context.agent ?? FALLBACK_DEFAULT_AGENT;
   const mode = context.mode ?? "workflow";
   const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(agent);
   const templateId = context.templateId ?? normalizedTemplate.id;
@@ -343,7 +341,13 @@ export function captureRunPlan(
   template: WorkflowTemplate,
   context: RunPlanContext = {},
 ): RunPlanV3 {
-  return projectRunPlanV3(template, context, captureRepoCommands(repoPath, template));
+  // Resolve the configured default here (where repoPath is known) so a Web
+  // preview that omits agent hashes the same agent as the Web admission path
+  // (PD-24); both must produce one digest.
+  const contextWithAgent = context.agent
+    ? context
+    : { ...context, agent: resolveDefaultAgent(readTekonConfig(repoPath)) };
+  return projectRunPlanV3(template, contextWithAgent, captureRepoCommands(repoPath, template));
 }
 
 export function computeLegacyV1RunPlanDigest(plan: unknown): string {
