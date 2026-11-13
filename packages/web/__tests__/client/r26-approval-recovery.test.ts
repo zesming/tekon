@@ -53,5 +53,8 @@ for (const entry of ['page', 'session']) {
     expect(ports.flash).toHaveBeenCalledWith('warning', expect.stringContaining('审批已记录，运行尚未恢复'));
     expect(ports.flash.mock.calls[0][1]).toContain('新一代执行已变化');
     expect(ports.invalidate).toHaveBeenCalledWith('session.detail.');
+    // Both approval entries must invalidate the global pending queue, or a
+    // cached /advanced/approvals view keeps showing the decided entry.
+    expect(ports.invalidate).toHaveBeenCalledWith('gate.pendingAll');
   });
 }

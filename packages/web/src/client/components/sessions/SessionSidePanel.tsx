@@ -52,8 +52,13 @@ export function SessionSidePanel({ state, recovery, runStatus }: { state: SidePa
   // Session snapshot decides when to fetch; gate.list remains the authority for
   // which decisions are currently pending, so a missing best-effort projection
   // cannot hide an approval and a stale event cannot keep a decided card alive.
+  // Keep every approval read surface fresh after a side-panel decision.
+  // gate.pendingAll powers the global /advanced/approvals queue: without it
+  // a cached, still-fresh queue keeps showing the decided entry until the
+  // next manual refresh (the server still fails closed on a stale decision).
   const invalidateKeys = [
     'gate.results.',
+    'gate.pendingAll',
     'session.detail.',
     'session.list.',
     'project.overview',
