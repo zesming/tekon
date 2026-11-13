@@ -15,6 +15,7 @@ import {
   createProcessGroupReaper,
   PROCESS_START_TIME_TOLERANCE_MS,
   type ProcessGroupReaper,
+  type ProcessGroupReapOutcome,
   type ProcessGroupReapRecord,
 } from './process-group-reaper.js';
 
@@ -212,31 +213,58 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
 
   function reapProcessGroups(entry: ReclaimedProcessGroups): void {
     for (const group of entry.processGroups) {
-      // A recycled pid belongs to some other process: leave it alone.
+      // A recycled pid belongs to some other process: leave it alone. A
+      // corrupted startedAt record (NaN) is treated as a mismatch rather than
+      // failing open into signaling.
       const leaderStartedAt = reaper.leaderStartTime(group.pgid);
-      const outcome = leaderStartedAt === null
+      const recordedStartedAt = Date.parse(group.startedAt);
+      const outcome: ProcessGroupReapOutcome = leaderStartedAt === null
         ? 'leader-gone'
-        : Math.abs(leaderStartedAt - Date.parse(group.startedAt)) > PROCESS_START_TIME_TOLERANCE_MS
+        : !Number.isFinite(recordedStartedAt) ||
+            Math.abs(leaderStartedAt - recordedStartedAt) > PROCESS_START_TIME_TOLERANCE_MS
           ? 'start-time-mismatch'
           : 'signalled';
       if (outcome === 'signalled') {
         reaper.signal(group.pgid, 'SIGTERM');
-        const kill = () => reaper.signal(group.pgid, 'SIGKILL');
+        const escalate = () => {
+          // Re-check identity before SIGKILL: the leader can exit during the
+          // grace window and its pgid be recycled by an unrelated process.
+          const escalatedLeader = reaper.leaderStartTime(group.pgid);
+          const escalateOutcome: ProcessGroupReapOutcome = escalatedLeader === null
+            ? 'escalation-skipped'
+            : Math.abs(escalatedLeader - recordedStartedAt) > PROCESS_START_TIME_TOLERANCE_MS
+              ? 'escalation-skipped'
+              : 'killed';
+          if (escalateOutcome === 'killed') {
+            reaper.signal(group.pgid, 'SIGKILL');
+          }
+          recordReap(entry.jobId, entry.runId, group.pgid, group.startedAt, escalateOutcome);
+        };
         const timer = setTimeout(() => {
           pendingKills.delete(timer);
-          kill();
+          escalate();
         }, killGraceMs);
         timer.unref?.();
-        pendingKills.set(timer, kill);
+        pendingKills.set(timer, escalate);
       }
-      void Promise.resolve()
-        .then(() => deps.onProcessGroupReap?.({
-          jobId: entry.jobId, runId: entry.runId, pgid: group.pgid, startedAt: group.startedAt, outcome,
-        }))
-        .catch(() => {});
+      recordReap(entry.jobId, entry.runId, group.pgid, group.startedAt, outcome);
     }
   }
-  const now = deps.now ?? Date.now;
+  // Audit writes go through the FIFO write queue backed by synchronous
+  // better-sqlite3; the runner awaits queue drain in stop(), so fire-and-forget
+  // here still lands before the process exits on a clean shutdown.
+  function recordReap(
+    jobId: string,
+    runId: string | null,
+    pgid: number,
+    startedAt: string,
+    outcome: ProcessGroupReapOutcome,
+  ): void {
+    void Promise.resolve()
+      .then(() => deps.onProcessGroupReap?.({ jobId, runId, pgid, startedAt, outcome }))
+      .catch(() => {});
+  }
+  const now = deps.now ?? (() => Date.now());  // Look up the global each call so fake timers take effect.
   // A gap this long between polls, or inside one, means this process was
   // suspended (sleep, SIGSTOP, debugger). Every lease, its own included, may
   // look expired; it renews its own first, and for one heartbeat judges other
@@ -786,6 +814,10 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
     },
 
     async recoverStale() {
+      // Public on-demand entry point that also works before start() (tests and
+      // one-shot reclaim rely on this). After stop() it would arm unref'd kill
+      // timers nobody flushes; no production path calls it post-stop, so keep
+      // the behavior unchanged rather than gating the public contract.
       return recoverStaleJobs();
     },
   };

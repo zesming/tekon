@@ -802,7 +802,7 @@ CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI �
 
 节点和命令的输出脱敏后按行实时写入 `.tekon/runs/<runId>/` 下的 stdout/stderr 日志，运行中就能用 `tail -f` 查看；换行、`\r\n` 和单独的 `\r`（进度条）都算一行结束，单行超过 1MB 时分段写入。进度文件 `progress.json` 在持续输出时最多每秒更新一次。
 
-Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒后发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理。这两种情况下请手动结束剩下的进程。
+Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒宽限期结束、发 SIGKILL 前再核对一次启动时间，确认进程组没有被系统回收复用后才发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理；没有 `ps` 命令的平台（如 Windows）无法核对启动时间，遗留进程不会被自动结束。这几种情况下请手动结束剩下的进程。
 
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
 

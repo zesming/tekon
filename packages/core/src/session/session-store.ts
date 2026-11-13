@@ -1016,7 +1016,8 @@ function parseProcessGroups(value: string | null): ProcessGroupRecord[] {
     return parsed.filter((item): item is ProcessGroupRecord =>
       typeof item === 'object' && item !== null &&
       Number.isInteger((item as ProcessGroupRecord).pgid) && (item as ProcessGroupRecord).pgid > 1 &&
-      typeof (item as ProcessGroupRecord).startedAt === 'string');
+      typeof (item as ProcessGroupRecord).startedAt === 'string' &&
+      Number.isFinite(Date.parse((item as ProcessGroupRecord).startedAt)));
   } catch {
     return [];
   }

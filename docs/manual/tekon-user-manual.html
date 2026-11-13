@@ -739,7 +739,7 @@ tekon --version
 <p>CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI 发起的任务。CLI 受理后就退出、还没执行的运行，可以再用 <code>tekon resume</code> 或在 Web 上恢复，由恢复的一方执行。升级到 0.29.0 后请重启已在运行的 <code>tekon ui</code>：旧版本的服务仍会接手 CLI 的任务。</p>
 <p>执行中的进程被挂起（电脑休眠、调试器暂停）后恢复，会先续租自己的任务，不会把它判为中断。同一仓库还有另一个 Tekon 进程在运行时，它分不清挂起和退出，会在租约过期（默认 30 秒）后把任务标为中断，这时按 §7.1 恢复。系统时钟往回调会推迟这类回收。</p>
 <p>节点和命令的输出脱敏后按行实时写入 <code>.tekon/runs/&lt;runId&gt;/</code> 下的 stdout/stderr 日志，运行中就能用 <code>tail -f</code> 查看；换行、<code>\r\n</code> 和单独的 <code>\r</code>（进度条）都算一行结束，单行超过 1MB 时分段写入。进度文件 <code>progress.json</code> 在持续输出时最多每秒更新一次。</p>
-<p>Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒后发 SIGKILL；结果写入运行审计 <code>job.process-group</code>（<code>signalled</code>、<code>start-time-mismatch</code> 或 <code>leader-gone</code>）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理。这两种情况下请手动结束剩下的进程。</p>
+<p>Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒宽限期结束、发 SIGKILL 前再核对一次启动时间，确认进程组没有被系统回收复用后才发 SIGKILL；结果写入运行审计 <code>job.process-group</code>（<code>signalled</code>、<code>killed</code>、<code>escalation-skipped</code>、<code>start-time-mismatch</code> 或 <code>leader-gone</code>）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理；没有 <code>ps</code> 命令的平台（如 Windows）无法核对启动时间，遗留进程不会被自动结束。这几种情况下请手动结束剩下的进程。</p>
 <p>高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 <code>x-session-token</code> 的 <code>GET /api/sessions/:sessionId/events</code> 订阅 SSE，并通过 <code>sinceSeq</code>/<code>Last-Event-ID</code> 回放；该事件流不是完整权威运行日志。</p>
 <h3 id="71-暂停取消与恢复" tabindex="-1">7.1 暂停、取消与恢复</h3>
 <p>先核对原 Run 和当前状态。按钮反馈说明请求处理结果，后续仍需观察状态与退出证据。</p>

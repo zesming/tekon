@@ -1192,15 +1192,32 @@ describe('durable job runner', () => {
   });
 });
 
+describe('runner clock', () => {
+  it('reads the current global clock when no clock is injected', async () => {
+    const f = setup({ executor: immediateExecutor() });
+    const session = await seedSession(f.sessions);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.parse('2030-01-02T03:04:05.006Z'));
+      const job = await f.runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+      expect(job.createdAt).toBe('2030-01-02T03:04:05.006Z');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('process groups of reclaimed jobs', () => {
   const startedAt = '2026-11-13T00:00:01.000Z';
 
-  function fakeReaper(startTime: number | null) {
+  function fakeReaper(startTimes: number | null | Array<number | null>) {
+    const sequence = Array.isArray(startTimes) ? startTimes : [startTimes];
     const signals: Array<[number, string]> = [];
+    let call = 0;
     return {
       signals,
       reaper: {
-        leaderStartTime: () => startTime,
+        leaderStartTime: () => sequence[Math.min(call++, sequence.length - 1)] ?? null,
         signal: (pgid: number, signal: NodeJS.Signals) => { signals.push([pgid, signal]); },
       },
     };
@@ -1233,7 +1250,8 @@ describe('process groups of reclaimed jobs', () => {
   });
 
   it('stops the process groups of a job it reclaimed: SIGTERM, then SIGKILL', async () => {
-    const { signals, reaper } = fakeReaper(Date.parse(startedAt) + 900);
+    const matching = Date.parse(startedAt) + 900;
+    const { signals, reaper } = fakeReaper([matching, matching]);
     const reaps: unknown[] = [];
     const f = setup({
       executor: immediateExecutor(),
@@ -1250,7 +1268,32 @@ describe('process groups of reclaimed jobs', () => {
     expect(signals).toEqual([[5555, 'SIGTERM'], [5555, 'SIGKILL']]);
     expect(reaps).toEqual([
       { jobId: 'job_orphaned', runId: 'run_1', pgid: 5555, startedAt, outcome: 'signalled' },
+      { jobId: 'job_orphaned', runId: 'run_1', pgid: 5555, startedAt, outcome: 'killed' },
     ]);
+  });
+
+  it.each([
+    ['the leader exited during the grace window', null],
+    ['the pgid was recycled by another process', Date.parse(startedAt) + 60_000],
+  ] as const)('skips SIGKILL and audits escalation-skipped when %s', async (_label, escalatedStart) => {
+    const { signals, reaper } = fakeReaper([Date.parse(startedAt) + 900, escalatedStart]);
+    const reaps: Array<{ outcome: string }> = [];
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: {
+        processGroupReaper: reaper,
+        processGroupKillGraceMs: 20,
+        onProcessGroupReap: (entry) => { reaps.push(entry); },
+      },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+
+    await waitFor(() => reaps.length === 2);
+    expect(signals).toEqual([[5555, 'SIGTERM']]);
+    expect(reaps.map((entry) => entry.outcome)).toEqual(['signalled', 'escalation-skipped']);
+    await f.runner.stop();
+    expect(signals).toEqual([[5555, 'SIGTERM']]);
   });
 
   it('leaves a process group alone when its leader is another process or gone', async () => {

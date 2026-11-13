@@ -12,7 +12,12 @@ export interface ProcessGroupReaper {
 /** `ps` reports start times to the second. */
 export const PROCESS_START_TIME_TOLERANCE_MS = 2_000;
 
-export type ProcessGroupReapOutcome = 'signalled' | 'start-time-mismatch' | 'leader-gone';
+export type ProcessGroupReapOutcome =
+  | 'signalled'
+  | 'killed'
+  | 'escalation-skipped'
+  | 'start-time-mismatch'
+  | 'leader-gone';
 
 export interface ProcessGroupReapRecord {
   jobId: string;
@@ -37,6 +42,8 @@ export function createProcessGroupReaper(): ProcessGroupReaper {
     leaderStartTime(pgid) {
       if (!Number.isInteger(pgid) || pgid <= 1) return null;
       try {
+        // execFileSync blocks the event loop (up to the 5s timeout); ps is
+        // normally sub-millisecond, and reclaim is a cold path by design.
         const output = execFileSync('ps', ['-o', 'lstart=', '-p', String(pgid)], {
           encoding: 'utf8',
           env: { ...process.env, LC_ALL: 'C' },

@@ -77,7 +77,7 @@ Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行，origin �
 
 命令输出：网关把子进程的 stdout/stderr 经脱敏流按行写入日志（`\n`、`\r\n`、单独的 `\r` 都是行尾），单行上限 1MB，超出时在上限内最近的空白处切开；流式脱敏与 `redactSecrets` 共用一个行处理器，结果逐字相同，阻断用的检测规则不变。输出过程中 progress.json 最多每秒写一次，心跳和结束时照常写。
 
-进程组回收：registry 的句柄带启动时间。心跳与 poll 续租时把本 Job 的进程组（pgid 即 detached 子进程的 pid，加启动时间）写入 `jobs.process_groups`。`interruptStale` 在 CAS 成功的同一事务里读出并清空它，只返回给完成回收的一方；事务外用 `LC_ALL=C ps -o lstart=` 核对首进程启动时间（误差 2 秒内），一致才对整个进程组发 SIGTERM，宽限 5 秒后 SIGKILL，`stop()` 时立即补发未到期的 SIGKILL。每个进程组的结果写 `job.process-group` 审计：`signalled`、`start-time-mismatch`（pid 已被复用）或 `leader-gone`。限制：spawn 后到下一次续租之间被强杀的进程没有记录；首进程已退出的组不处理。
+进程组回收：registry 的句柄带启动时间。心跳与 poll 续租时把本 Job 的进程组（pgid 即 detached 子进程的 pid，加启动时间）写入 `jobs.process_groups`。`interruptStale` 在 CAS 成功的同一事务里读出并清空它，只返回给完成回收的一方；事务外用 `LC_ALL=C ps -o lstart=` 核对首进程启动时间（误差 2 秒内），一致才对整个进程组发 SIGTERM，宽限 5 秒后 SIGKILL，SIGKILL 前用同一口径再核对一次启动时间，首进程已退出或启动时间不符则放弃升级并记 `escalation-skipped`，`stop()` 时立即补发未到期的 SIGKILL（同样先核对）。损坏的 startedAt 记录按 `start-time-mismatch` 处理，不发信号。每个进程组的结果写 `job.process-group` 审计：`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch`（pid 已被复用）或 `leader-gone`。限制：spawn 后到下一次续租之间被强杀的进程没有记录；首进程已退出的组不处理；平台没有 `ps`（如 Windows）时无法核对，全部按 leader-gone 跳过，遗留进程需人工清理。
 
 关闭顺序为停止新轮询/claim、等待在途工作、超时 abort 与终止受管理进程，再进行有硬上限的 drain。JobRunner.stop 在硬截止时间后中断未结算执行、清理本地执行 token 并返回；单独调用 stop 不关闭写队列。CLI/Web 组合根在 runner.stop 返回后、关闭 SQLite 前调用 db.markClosed() 设置 closed 栅栏，再调用 db.close()；WriteQueue 通过 isClosed 检查拒绝迟到写入。硬超时和 closed 栅栏都不是物理退出证明。
 

@@ -463,6 +463,28 @@ describe('job repository', () => {
       .resolves.toMatchObject({ reclaimedProcessGroups: [] });
   });
 
+  it('drops malformed process groups instead of handing them to the reaper', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    await jobs.enqueue(makeJob(session.id, { id: 'job_bad_groups', status: 'running', owner: 'w_dead', lease: '2026-11-13T00:00:00.000Z' }));
+    const malformed = [
+      { pgid: 0, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 1, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: -5, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 1.5, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 4242, startedAt: 'not-a-date' },
+      { pgid: 4243 },
+    ];
+    db.prepare('update jobs set process_groups = ? where id = ?').run(JSON.stringify(malformed), 'job_bad_groups');
+
+    const result = await jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10);
+
+    // The job is still reclaimed, but no unusable group reaches the reaper.
+    expect(db.prepare('select status from jobs where id = ?').get('job_bad_groups'))
+      .toEqual({ status: 'interrupted' });
+    expect(result.reclaimedProcessGroups).toEqual([]);
+  });
+
   it('records why and from whom a stale job was taken', async () => {
     const { sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);
