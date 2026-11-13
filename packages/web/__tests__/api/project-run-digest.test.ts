@@ -345,5 +345,28 @@ describe('malformed repo config is a BAD_REQUEST on every entry path', () => {
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     });
+
+    it(`maps ${name} to BAD_REQUEST in project.admissionIntent`, async () => {
+      const fixture = await createWebFixtureProject();
+      cleanupTasks.push(fixture.cleanup);
+      writeFileSync(join(fixture.projectRoot, '.tekon', 'config.yaml'), contents);
+      const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+      cleanupTasks.push(() => api.close());
+
+      await expect(
+        api.project.admissionIntent({
+          token: fixture.sessionToken,
+          run: {
+            demandText: 'Admission fingerprint against a malformed repo config',
+            template: 'project-feature',
+            mode: 'workflow',
+            allowDirtyBase: true,
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: expect.stringContaining('TEKON_CONFIG_INVALID'),
+      });
+    });
   }
 });

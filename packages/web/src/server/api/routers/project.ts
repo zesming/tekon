@@ -193,7 +193,18 @@ export function createProjectRouter(
         return { scope };
       }
 
-      const fingerprint = hashWebRunEnvelope(context.projectContext.projectRoot, input.run);
+      // Same malformed-config contract as project.run and workflow.plan:
+      // envelope hashing resolves the default agent, so answer 400 with the
+      // TEKON_CONFIG_INVALID prefix instead of a generic server fault.
+      let fingerprint: string;
+      try {
+        fingerprint = hashWebRunEnvelope(context.projectContext.projectRoot, input.run);
+      } catch (error) {
+        if (error instanceof TekonConfigError) {
+          throw new ApiError('BAD_REQUEST', `TEKON_CONFIG_INVALID: ${error.message}`);
+        }
+        throw error;
+      }
       const suggestedRequestId = `req_${randomUUID()}`;
 
       return {
