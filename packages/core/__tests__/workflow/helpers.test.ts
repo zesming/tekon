@@ -5,6 +5,8 @@ import { migrateDatabase } from '../../src/db/migrations.js';
 import { createRepositories } from '../../src/db/repositories.js';
 import { createAuditLogger } from '../../src/audit/logger.js';
 import {
+  AgentRunFailedError,
+  agentFailureAuditPayload,
   createWorkflowHelpers,
   assertSuccessfulAgentRun,
   isQaValidationNode,
@@ -143,6 +145,52 @@ describe('assertSuccessfulAgentRun', () => {
     expect(() => assertSuccessfulAgentRun(result)).toThrow(
       /artifact schema invalid.*acceptanceCriteria/u,
     );
+  });
+
+  it('carries the redacted provider diagnostic and hint to the audit payload', () => {
+    const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
+    let thrown: unknown;
+    try {
+      assertSuccessfulAgentRun({
+        provider: 'claude-code',
+        exitCode: 1,
+        durationMs: 1,
+        outputFiles: [],
+        timedOut: false,
+        diagnostic: {
+          code: 'not-authenticated',
+          message: `claude 未登录或凭据无效：Invalid API key ${secret}`,
+          hint: '执行 claude /login',
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AgentRunFailedError);
+    const payload = agentFailureAuditPayload(thrown);
+    expect(payload.diagnostic).toMatchObject({
+      code: 'not-authenticated',
+      hint: '执行 claude /login',
+    });
+    expect(JSON.stringify(payload)).not.toContain(secret);
+    expect(agentFailureAuditPayload(new Error('lease failed'))).toEqual({});
+  });
+
+  it('maps a diagnostic code Tekon does not know to unclassified', () => {
+    let thrown: unknown;
+    try {
+      assertSuccessfulAgentRun({
+        provider: 'custom',
+        exitCode: 1,
+        durationMs: 1,
+        outputFiles: [],
+        timedOut: false,
+        diagnostic: { code: 'made-up-code' as never, message: 'custom adapter failure' },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(agentFailureAuditPayload(thrown).diagnostic?.code).toBe('unclassified');
   });
 });
 

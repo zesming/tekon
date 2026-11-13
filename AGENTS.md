@@ -20,7 +20,7 @@ Tekon 是本地 Agent workflow 框架。描述性文字默认中文，代码、�
 
 - 新增或修复行为，先补能验证需求或复现缺陷的测试，再改实现。复用已有覆盖，检查受影响的正常/错误路径、边界和状态转换；不要重复测试、测试死路径或只验证 mock 自身。
 - 新增 CLI 命令在 `packages/cli/__tests__/e2e/` 补真实进程测试，文件用 `*.e2e.test.ts`；core/CLI 按此命名分离 unit/e2e，Web 按目录分离 Vitest/Playwright。
-- 开发先跑受影响测试；提交代码、依赖或运行/构建/测试配置前，`pnpm test --run` 必须全部通过，按影响补 `pnpm typecheck`、`pnpm build`。涉及 CLI 产物时用 `pnpm --filter @tekon/cli test:e2e` 构建并验证。
+- 开发先跑受影响测试；提交代码、依赖或运行/构建/测试配置前，`pnpm test --run` 必须全部通过（它会先构建全部包，CLI e2e 用的就是新产物），按影响补 `pnpm typecheck`。
 - 同一测试或构建只有一个 owner 和活动执行。已有证据覆盖当前修改后，不重复全量检查，除非新增改动、失败或未覆盖风险需要；用户明确要求的全量回归仍须执行。
 - 仅改文档/指令时检查差异、文件/链接、章节、占位内容和 Markdown/HTML 一致性，无需应用测试或文字断言，也不得宣称运行行为通过验收。
 - 修改 `scripts/install.sh` 或 `scripts/update.sh` 后，在干净环境跑完整 smoketest，覆盖克隆、安装、构建和版本显示。

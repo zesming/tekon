@@ -2,19 +2,18 @@ import { expect, test } from './shared-fixture.js';
 import { credentialStatus } from './helpers/locators.js';
 
 test.describe('Tekon main flow', () => {
-  test('dashboard, run list, run detail tabs, approvals, and authenticated operations', async ({
+  test('advanced redirect, run list, run detail tabs, approvals, and authenticated operations', async ({
     page,
     server,
     fixture,
   }) => {
-    // ── 1. Dashboard page loads with sidebar ──────────────────────────────
-    // Phase 3 3d: the legacy Cockpit dashboard moved to /advanced (the default
-    // route `/` is now the human-first Session UI).
+    // ── 1. /advanced redirects to the run list (UI-03: dashboard removed) ──
     await page.goto(`${server.url}/advanced`);
+    await page.waitForURL('**/advanced/runs');
 
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-    await expect(page.getByText('Tekon', { exact: true })).toBeVisible();
-    await expect(page.getByText('Cockpit', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '运行管理 Runs' }),
+    ).toBeVisible();
 
     // Shared business journeys use the production sessionStorage bootstrap,
     // so the visible UI credential and the RPC/SSE credential are the same.
@@ -22,20 +21,7 @@ test.describe('Tekon main flow', () => {
 
     // Sidebar navigation items are present
     await expect(page.getByRole('link', { name: '高级 Advanced' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '运行列表' })).toBeVisible();
     await expect(page.getByRole('link', { name: '审批队列' })).toBeVisible();
-
-    // Dashboard stat cards render
-    await expect(page.getByText('运行 Runs')).toBeVisible();
-    await expect(page.getByText('通过率 Pass Rate')).toBeVisible();
-
-    // ── 2. Navigate to /advanced/runs → run list renders ──────────────────
-    await page.getByRole('link', { name: '运行列表' }).click();
-    await page.waitForURL('**/advanced/runs');
-
-    await expect(
-      page.getByRole('heading', { name: '运行管理 Runs' }),
-    ).toBeVisible();
 
     // Both fixture runs appear in the table
     await expect(page.getByText('run_1', { exact: true })).toBeVisible();

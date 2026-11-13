@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
@@ -128,6 +128,35 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     ).resolves.toBe(1);
     expect(io.takeStderr()).toContain('终态');
     expect(io.takeStdout()).toBe('');
+  });
+
+  it.each([false, true])('reports the terminal state before checking the provider (approve=%s)', async (approve) => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
+    db.prepare("update run_provider_configs set provider = 'claude-code' where run_id = ?").run(runId);
+    db.close();
+    // No provider commands on PATH: a provider check would fail first.
+    const emptyBin = mkdtempSync(join(tmpdir(), 'tekon-empty-bin-'));
+    tempDirs.push(emptyBin);
+    vi.stubEnv('PATH', emptyBin);
+    const io = createMemoryIo();
+    try {
+      await expect(
+        runCli(
+          [
+            'resume', '--run-id', runId,
+            ...(approve ? ['--decision-id', decisionId, '--approve-human'] : []),
+            '--repo', repoPath,
+          ],
+          io,
+        ),
+      ).resolves.toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const stderr = io.takeStderr();
+    expect(stderr).toContain('终态');
+    expect(stderr).not.toContain('找不到 claude');
   });
 
   it('M8: tekon resume --approve-human on a cancelled run exits 1 and leaves the decision pending', async () => {

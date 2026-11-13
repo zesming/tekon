@@ -21,10 +21,7 @@ import { resolveRepoReadableFile } from '../repo/safe-path.js';
 import { runCommandGate, runSecurityScanGate } from './runners.js';
 import { createHumanGate } from './human-gate.js';
 import type { GateRegistry } from './registry.js';
-import {
-  deriveRepairNode,
-  DYNAMIC_NODE_ORDER_OFFSET,
-} from '../workflow/execution-plan.js';
+import { DYNAMIC_NODE_ORDER_OFFSET } from '../workflow/execution-plan.js';
 
 export interface GateEngineRunInput {
   runId: string;
@@ -38,10 +35,6 @@ export interface GateEngineRunInput {
 
 export interface GateEngine {
   runGate(input: GateEngineRunInput): Promise<GateResult>;
-  createAutoFixRepairNode(input: {
-    failedGateResult: GateResult;
-    fixerRole: Role;
-  }): Promise<Node>;
 }
 
 export function createGateEngine(options: {
@@ -145,24 +138,6 @@ export function createGateEngine(options: {
       }
 
       return options.repositories.recordGateResult(result);
-    },
-
-    async createAutoFixRepairNode(input) {
-      const now = new Date().toISOString();
-      const derived = deriveRepairNode(input.failedGateResult.nodeId, input.failedGateResult.id, input.fixerRole);
-      return options.repositories.createNode({
-        id: derived.id,
-        runId: input.failedGateResult.runId,
-        role: derived.role,
-        status: 'pending',
-        inputs: derived.inputs,
-        outputs: derived.outputs,
-        gates: derived.gates,
-        dependencies: derived.dependsOn,
-        order: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
     },
   };
 }

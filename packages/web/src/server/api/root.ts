@@ -1,4 +1,5 @@
 import {
+  auditProcessGroupReaps,
   createAuditLogger,
   createCommandGateway,
   createDualWriteAuditLogger,
@@ -9,6 +10,7 @@ import {
   createSessionDualWriteBridge,
   createSessionEventBus,
   createSessionEventStore,
+  createProviderPreflight,
   createSessionService,
   createSubprocessRegistry,
   createWorkflowEngine,
@@ -26,6 +28,7 @@ import {
   isHostNodeVersionCompatible,
   TESTED_DSH_VERSION,
   type AuditLogger,
+  type ProviderPreflight,
   type RunPlan,
   type SubprocessRegistry,
   type TekonRepositories,
@@ -147,6 +150,8 @@ function createWebRunEngineFactory(deps: {
 export async function createApiCaller(
   input: ResolveProjectRootInput & {
     providerProbe?: () => Promise<'available' | 'unavailable'>;
+    /** Start/resume provider check; defaults to probing the real PATH. */
+    providerPreflight?: ProviderPreflight;
   },
 ): Promise<ApiCaller> {
   const projectContext = createProjectContext(input);
@@ -219,6 +224,11 @@ export async function createApiCaller(
       workflow: executor,
       automation: automationExecutor,
     }),
+    origin: 'web',
+    // A CLI process runs the jobs it queued. Resuming a run here whose CLI
+    // job is still queued hands that job over to this server.
+    claimFilter: { excludeOrigin: 'cli' },
+    onProcessGroupReap: auditProcessGroupReaps(audit),
   });
   await repositories.admissionStore.scanAndRecoverAdmissions();
   jobRunner.start();
@@ -308,12 +318,15 @@ export async function createApiCaller(
     repositories: dualRepositories,
     audit: dualAudit,
     projectRoot: projectContext.projectRoot,
+    jobOrigin: 'web',
     createEngine: createWebRunEngineFactory({
       projectContext,
       repositories: dualRepositories,
       audit: dualAudit,
       registry,
     }),
+    // DSH keeps its request-scoped check in the engine factory above.
+    preflight: input.providerPreflight ?? createProviderPreflight(),
   });
 
   const context: ServerContext = {

@@ -5,6 +5,8 @@
  */
 export interface SubprocessHandle {
   readonly pid: number | undefined;
+  /** Spawn time (epoch ms) of a detached child, whose pid is its process group. */
+  readonly startedAt?: number;
   kill(signal: NodeJS.Signals): void;
 }
 

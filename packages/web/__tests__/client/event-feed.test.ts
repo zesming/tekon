@@ -151,6 +151,15 @@ function renderInteractiveFeed(props: Parameters<typeof EventFeed>[0]) {
 }
 
 describe('describeEvent', () => {
+  it('names the variables passed through to the provider when a run starts or resumes', () => {
+    const started = describeEvent(ev('workflow/started', { runId: 'r', passthroughEnv: ['AWS_PROFILE', 'AWS_REGION'] }));
+    expect(started.title).toBe('受控交付已开始');
+    expect(started.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE, AWS_REGION');
+    const resumed = describeEvent(ev('workflow/started', { runId: 'r', resumed: true, passthroughEnv: ['AWS_PROFILE'] }));
+    expect(resumed.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE');
+    expect(describeEvent(ev('workflow/started', { runId: 'r' })).body).toBeUndefined();
+  });
+
   it('renders a user message as user-authored prose', () => {
     const row = describeEvent(ev('user/message', { text: 'fix the bug' }));
     expect(row.kind).toBe('message');
@@ -256,6 +265,20 @@ describe('describeEvent', () => {
         ev('workflow/node-ended', { nodeId: 'rd', status: 'passed' }),
       ).kind,
     ).toBe('governance');
+  });
+
+  it('shows why a run stopped and what to do next', () => {
+    const row = describeEvent(
+      ev('agent/error', {
+        status: 'interrupted',
+        kind: 'not-authenticated',
+        message: 'claude 未登录或凭据无效',
+        hint: '执行 claude /login',
+      }),
+    );
+    expect(row.kind).toBe('error');
+    expect(row.title).toBe('运行中断');
+    expect(row.body).toBe('claude 未登录或凭据无效\n下一步：执行 claude /login');
   });
 
   it('flags agent/error as an error row', () => {

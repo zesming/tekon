@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+
 import {
   createAuditLogger,
   createMockAgentAdapter,
@@ -11,7 +13,6 @@ import {
   createWorkflowEngine,
   migrateDatabase,
   openTekonDatabase,
-  type GateEngine,
 } from '../../src/index.js';
 
 describe('workflow engine template e2e', () => {
@@ -38,6 +39,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           observedNodesAtFirstAgentCall.push(
@@ -46,7 +48,7 @@ describe('workflow engine template e2e', () => {
           return adapter.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const result = await engine.startRun({
@@ -116,6 +118,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
     });
 
@@ -178,6 +181,7 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           await input.artifactStore?.writeArtifact({
@@ -286,12 +290,13 @@ describe('workflow engine template e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('duplicate gate key spec must not run an agent');
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await expect(
@@ -336,37 +341,3 @@ describe('workflow engine template e2e', () => {
     db.close();
   });
 });
-
-export function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  let gateCounter = 0;
-  return {
-    async runGate(input) {
-      gateCounter += 1;
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}_${gateCounter}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        gateKey: input.gate.gateKey,
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
-  };
-}

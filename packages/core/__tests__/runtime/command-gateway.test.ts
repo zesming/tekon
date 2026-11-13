@@ -863,6 +863,45 @@ describe('command gateway', () => {
     });
   });
 
+  it('keeps the exit result when a child exits non-zero before reading stdin', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-stdin-early-exit-'));
+    tempDirs.push(cwd);
+    const gateway = createCommandGateway({
+      spawnImpl: () => {
+        const child = new EventEmitter() as ChildProcessWithoutNullStreams;
+        child.stdout = new PassThrough();
+        child.stderr = new PassThrough();
+        child.stdin = new Writable({
+          write(_chunk, _encoding, callback) {
+            callback(new Error('write EPIPE'));
+          },
+        });
+        child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
+        child.stdin.once('error', () => {
+          child.stderr.write('Not logged in\n');
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 1, null);
+        });
+        return child;
+      },
+    });
+
+    await expect(
+      gateway.run({
+        command: { tool: 'node', args: ['script.js'] },
+        cwd,
+        stdin: 'required prompt',
+        policy: {
+          allow: [{ tool: 'node', args: [] }],
+          deny: [],
+          cwdScope: [cwd],
+          network: 'disabled',
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'executed', exitCode: 1 });
+  });
+
   it('keeps no-stdin child pipe errors from overriding the child exit result', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-no-stdin-epipe-'));
     tempDirs.push(cwd);
@@ -917,7 +956,10 @@ describe('command gateway', () => {
         child.kill = (() => true) as ChildProcessWithoutNullStreams['kill'];
         setImmediate(() => {
           if (child.listenerCount('error') > 0) {
-            child.emit('error', new Error('spawn ENOENT'));
+            child.emit(
+              'error',
+              Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }),
+            );
           }
           child.stdout.end();
           child.stderr.end();
@@ -945,6 +987,7 @@ describe('command gateway', () => {
     expect(result).toMatchObject({
       status: 'rejected',
       reason: expect.stringContaining('spawn ENOENT'),
+      errorCode: 'ENOENT',
     });
   });
 

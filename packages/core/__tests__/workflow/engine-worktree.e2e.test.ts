@@ -45,7 +45,6 @@ describe('workflow engine worktree execution e2e', () => {
     const observed: Array<{ id: string; path: string; active: number; previous: string }> = [];
     let gateCalls = 0;
     const gateEngine: GateEngine = {
-      ...createGateEngine({ repositories }),
       async runGate(input) {
         return repositories.recordGateResult({
           id: `retry_gate_${gateCalls}`,
@@ -59,6 +58,7 @@ describe('workflow engine worktree execution e2e', () => {
     const engine = () => createWorkflowEngine({
       repoPath, dataDir: '.tekon', repositories, audit, gateEngine,
       worktreeManager: createWorktreeManager({ repositories, gateway }),
+      agentProvider: 'mock',
       adapter: { async runAgent(input) {
         const path = join(input.worktreeLease.worktreePath, 'carry.txt');
         observed.push({
@@ -115,6 +115,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           observedAgentCwds.push(input.runContext.repoPath);
@@ -240,6 +241,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('rd-node')) {
@@ -368,6 +370,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('rd-node')) {
@@ -494,6 +497,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           agentRuns += 1;
@@ -533,6 +537,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('resume must not rerun the approved node agent');
@@ -575,6 +580,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
       gateEngine: createGateEngine({ repositories, gateway }),
       worktreeManager: createWorktreeManager({ repositories, gateway }),
@@ -606,6 +612,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('legacy resume must not rerun the node agent');
@@ -633,6 +640,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
       gateEngine: createGateEngine({ repositories, gateway }),
       worktreeManager: createWorktreeManager({ repositories, gateway }),
@@ -667,6 +675,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('legacy resume must not rerun the node agent');
@@ -699,6 +708,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
       gateEngine: createGateEngine({ repositories, gateway }),
       worktreeManager: createWorktreeManager({ repositories, gateway }),
@@ -733,6 +743,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent() {
           throw new Error('manual resume must not rerun the node agent');
@@ -767,6 +778,7 @@ describe('workflow engine worktree execution e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.includes('repair_')) {
@@ -894,18 +906,6 @@ function createObservedGateEngine(
         createdAt: new Date().toISOString(),
       });
     },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
   };
 }
 
@@ -926,18 +926,6 @@ function createRepairGateEngine(
         durationMs: 0,
         retries: repaired ? 1 : 0,
         createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
     },
   };

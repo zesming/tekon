@@ -6,6 +6,7 @@ import type { TekonDatabase } from "./connection.js";
 import type { WriteQueue } from "./write-queue.js";
 import { canonicalJson } from "../workflow/run-plan.js";
 import { appendAuditEventTxn } from "../audit/logger.js";
+import { FALLBACK_DEFAULT_AGENT, passthroughEnvAuditPayload } from "../config/tekon-config.js";
 import { sessionEventSchema, type SessionEvent } from "../types/session-contract.js";
 import { workflowInstanceSchema, type WorkflowInstance } from "../types/domain.js";
 
@@ -58,7 +59,7 @@ export function buildRunAdmissionEnvelope(input: {
     mode,
     templateName: mode === "goal" ? "goal" : (input.templateName?.trim() || "standard-delivery"),
     profile: input.profile ?? "human-web",
-    agent: input.agent ?? "codex",
+    agent: input.agent ?? FALLBACK_DEFAULT_AGENT,
     allowDirtyBase: Boolean(input.allowDirtyBase),
     acknowledgeUnrestrictedNetwork: Boolean(input.acknowledgeUnrestrictedNetwork),
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
@@ -170,6 +171,8 @@ export interface PreparedAdmissionData {
     profile: string;
     jobId: string;
     jobKind: "workflow-run" | "goal-run";
+    /** Surface that admitted the run; decides which worker claims the job. */
+    jobOrigin?: "cli" | "web";
   };
   templateId?: string;
 }
@@ -384,6 +387,7 @@ export function createAdmissionStore(options: {
             templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
             mode: data.demandSource ?? "template",
             kind: data.workflowKind,
+            ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),
           },
           createdAt,
         });
@@ -451,6 +455,7 @@ export function createAdmissionStore(options: {
               templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
               mode: data.demandSource ?? "template",
               kind: data.workflowKind,
+              ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),
             },
             visibility: "ui-only",
             modelVisible: false,
@@ -486,9 +491,10 @@ export function createAdmissionStore(options: {
           openingEvents.push(ev1, ev2, ev3);
 
           db.prepare(
-            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at, exit_evidence) values (?, ?, ?, 'queued', 'none', '{}', ?, ?, ?)"
+            "insert into jobs (id, session_id, kind, status, abort_state, payload, created_at, updated_at, exit_evidence, origin) values (?, ?, ?, 'queued', 'none', '{}', ?, ?, ?, ?)"
           ).run(jobId, sessionId, data.sessionData.jobKind, createdAt, createdAt,
-            JSON.stringify({ version: 1, kind: 'never-started', observedAt: createdAt }));
+            JSON.stringify({ version: 1, kind: 'never-started', observedAt: createdAt }),
+            data.sessionData.jobOrigin ?? null);
         }
 
         db.prepare(

@@ -11,10 +11,11 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join, relative } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
+import { createIsolatedBinDir, writeFakeCodex } from './helpers/fake-provider.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
@@ -51,7 +52,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     });
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
-    ).toContain('defaultAgent: codex');
+    ).toMatch(/^defaultAgent: (claude-code|codex)\n$/u);
     expect(existsSync(join(repoPath, '.tekon', 'eval'))).toBe(true);
 
     await expect(
@@ -205,6 +206,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
     expect(gatedOutput).toContain('人工确认: pending');
+    expect(gatedOutput).toContain('⏸ 运行已暂停，等待人工确认');
 
     await expect(
       runCli(['status', '--run-id', gatedRunId!, '--repo', repoPath], io),
@@ -215,6 +217,8 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       runCli(['review', '--run-id', gatedRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
     const gatedReviewOutput = io.takeStdout();
+    expect(gatedReviewOutput).toContain('运行未完成（状态 paused）');
+    expect(gatedReviewOutput).toMatch(/## Nodes\n(- .+\n)*- .+: 未执行/u);
     expect(gatedReviewOutput).toContain('## Gate Failure Triage');
     expect(gatedReviewOutput).toContain(
       'classification=human-approval retry=after-approval',
@@ -1287,7 +1291,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const repoPath = createFixtureRepo(tempDirs);
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-cli-codex-bin-'));
     tempDirs.push(binDir);
-    writeFakeCodex(binDir);
+    writeFakeCodex(binDir, { expectProfile: 'internal' });
     const originalPath = process.env.PATH;
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
     const io = createMemoryIo();
@@ -1295,6 +1299,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     try {
       await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
       io.takeStdout();
+      // Codex no longer defaults to the internal profile; the repo opts in.
+      const configPath = join(repoPath, '.tekon', 'config.yaml');
+      writeFileSync(
+        configPath,
+        `${readFileSync(configPath, 'utf8')}providers:\n  codex:\n    profile: internal\n`,
+      );
 
       await expect(
         runCli(
@@ -1448,6 +1458,30 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     }
   }, 30_000);
 
+  it('refuses to run when the repo config has a misspelled field', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    writeFileSync(join(repoPath, '.tekon', 'config.yaml'), 'defaultagent: codex\n');
+    // Only placeholder providers on PATH: even if the config were ignored,
+    // no real provider could start.
+    const binDir = createIsolatedBinDir();
+    tempDirs.push(binDir);
+    for (const name of ['claude', 'codex']) {
+      writeFileSync(join(binDir, name), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    }
+    vi.stubEnv('PATH', binDir);
+    try {
+      await expect(
+        runCli(['run', '拼错配置', '--template', 'bugfix', '--repo', repoPath], io),
+      ).resolves.toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(io.takeStderr()).toMatch(/config\.yaml is invalid.*defaultagent/u);
+  });
+
   // 4c: --goal and --template are mutually exclusive (goal ignores templates).
   it('rejects --goal combined with --template', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -1521,107 +1555,6 @@ exit 1
     'utf8',
   );
   chmodSync(ghPath, 0o755);
-}
-
-function writeFakeCodex(binDir: string): void {
-  const codexPath = join(binDir, 'codex');
-  writeFileSync(
-    codexPath,
-    `#!/usr/bin/env node
-const { writeFileSync, mkdirSync } = require('node:fs');
-const { join } = require('node:path');
-const args = process.argv.slice(2);
-const execIndex = args.indexOf('exec');
-if (execIndex === -1) {
-  console.error('expected codex exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== 'internal') {
-  console.error('expected internal profile before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--ask-for-approval') === -1 || args.indexOf('--ask-for-approval') > execIndex) {
-  console.error('expected approval before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--sandbox') === -1 || args.indexOf('--sandbox') > execIndex) {
-  console.error('expected sandbox before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex || args[args.indexOf('--add-dir') + 1] !== process.env.TEKON_OUTPUT_DIR) {
-  console.error('expected controlled artifact output add-dir before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
-  console.error('unsafe codex args');
-  process.exit(3);
-}
-let prompt = '';
-process.stdin.on('data', (chunk) => {
-  prompt += chunk;
-});
-process.stdin.on('end', () => {
-  const outputDir = process.env.TEKON_OUTPUT_DIR;
-  const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;
-  if (!outputDir || !manifestPath) {
-    console.error('missing Tekon artifact environment');
-    process.exit(4);
-  }
-  mkdirSync(outputDir, { recursive: true });
-  const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
-  const deliveryRef = (prompt.match(/exact tested delivery ref: ([^\\.\\n]+)/) || ['', 'codex-fixture-ref'])[1];
-  const artifacts = types.map((type) => {
-    const filename = type + '.json';
-    const base = {
-      title: type + ' artifact',
-      body: 'Codex fixture artifact for ' + type + '.',
-      summary: 'Codex fixture artifact for ' + type + '.'
-    };
-    let payload = base;
-    if (type === 'demand-card' || type === 'prd') {
-      payload = {
-        ...base,
-        acceptanceCriteria: [{
-          id: 'AC-1',
-          description: 'The Codex provider run stores a resumable provider snapshot.',
-          verification: 'Inspect run_provider_configs for provider=codex.'
-        }]
-      };
-    } else if (type === 'test-report' || type === 'review-report' || type === 'delivery-package') {
-      payload = {
-        ...base,
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
-        }]
-      };
-    } else if (type === 'qa-release-signoff') {
-      payload = {
-        ...base,
-        targetRef: deliveryRef,
-        validatedRef: deliveryRef,
-        overallStatus: 'passed',
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture QA signoff validates ' + deliveryRef + '.',
-          outputPaths: [join(outputDir, filename)]
-        }]
-      };
-    } else if (type === 'security-report') {
-      payload = { ...base, securityFindings: [] };
-    }
-    writeFileSync(join(outputDir, filename), JSON.stringify(payload));
-    return { type, path: filename, summary: 'Codex fixture artifact for ' + type + '.' };
-  });
-  writeFileSync(manifestPath, JSON.stringify({ artifacts }));
-  console.log('fake codex completed');
-});
-`,
-    'utf8',
-  );
-  chmodSync(codexPath, 0o755);
 }
 
 function createFixtureRepo(tempDirs: string[]) {

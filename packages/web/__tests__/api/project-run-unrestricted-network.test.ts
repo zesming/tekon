@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
+import { installFakeProviderCommands } from '../fixtures/fake-provider-bin.js';
 import { createApiCaller } from '../../src/server/api/root.js';
 import {
   REQUIRED_DSH_PLUGIN_IDS,
@@ -118,6 +119,7 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
   it('admits codex run without unrestricted network acknowledgment', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(installFakeProviderCommands('codex'));
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     cleanupTasks.push(() => api.close());
@@ -136,6 +138,7 @@ describe('project.run unrestricted network verification (P1-SEC-01)', () => {
   it('does not record run.network-acknowledged audit for codex even if acknowledgedNetwork flag is passed', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(installFakeProviderCommands('codex'));
 
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
     cleanupTasks.push(() => api.close());

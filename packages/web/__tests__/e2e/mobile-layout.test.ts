@@ -96,9 +96,12 @@ test.describe('mobile layout (390px)', () => {
     ).toBeVisible({ timeout: 15_000 });
     expect(await hasNoHorizontalOverflow(page)).toBe(true);
 
-    // Advanced dashboard (heatmap / stat cards).
+    // /advanced redirects to the run list (UI-03: dashboard removed).
     await page.goto(`${server.url}/advanced`);
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
+    await page.waitForURL('**/advanced/runs');
+    await expect(
+      page.getByRole('heading', { name: '运行管理 Runs' }),
+    ).toBeVisible({
       timeout: 15_000,
     });
     expect(await hasNoHorizontalOverflow(page)).toBe(true);
@@ -155,7 +158,7 @@ test.describe('mobile layout (390px)', () => {
     await toggle.click();
     await expect(sidebar).toBeVisible();
     await page.getByRole('link', { name: '高级 Advanced' }).click();
-    await expect(page).toHaveURL(/\/advanced$/);
+    await expect(page).toHaveURL(/\/advanced\/runs/);
     await expect(sidebar).toBeHidden();
   });
 });

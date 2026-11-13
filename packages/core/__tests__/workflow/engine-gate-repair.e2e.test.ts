@@ -19,7 +19,6 @@ import {
   type GateEngine,
 } from '../../src/index.js';
 import { validateAndBuildExecutionPlan } from '../../src/workflow/execution-plan.js';
-import { createGateEngine } from '../../src/gate/engine.js';
 
 describe('workflow engine gate repair e2e', () => {
   const tempDirs: string[] = [];
@@ -65,8 +64,7 @@ describe('workflow engine gate repair e2e', () => {
             return promote(input);
           });
         }
-        const realGate = createGateEngine({ repositories });
-        const gateEngine: GateEngine = { ...realGate, async runGate(input) {
+        const gateEngine: GateEngine = { async runGate(input) {
           const active = (await repositories.listWorktreeLeases(input.runId)).filter(lease => !lease.releasedAt);
           expect(active).toHaveLength(1); expect(input.cwd).toBe(active[0].worktreePath); expect(input.cwd).not.toBe(repoPath);
           gateLeases.push(active[0].id); gateCalls++;
@@ -77,7 +75,7 @@ describe('workflow engine gate repair e2e', () => {
             durationMs: 0, retries: 0, createdAt: new Date().toISOString() });
         } };
         const makeEngine = (signal?: AbortSignal) => createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories,
-          audit, adapter, gateEngine, worktreeManager: manager, signal });
+          audit, adapter, agentProvider: 'mock', gateEngine, worktreeManager: manager, signal });
         const spec = buildGateWorkflowSpec(); spec.phases[0].nodes[0].gates[0].maxRetries = scenario === 'exhausted' ? 1 : 2;
         let result = await makeEngine(controller.signal).startRun({ demandText: 'repair retry', mode: 'template', workflowSpec: spec });
         const sourceId = `${result.runId}_rd-code`;
@@ -152,6 +150,7 @@ describe('workflow engine gate repair e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: createMockAgentAdapter(),
       gateEngine: createFailOnceGateEngine(repositories),
       agentEventSink,
@@ -335,18 +334,6 @@ describe('workflow engine gate repair e2e', () => {
           createdAt: new Date().toISOString(),
         });
       },
-      async createAutoFixRepairNode(input) {
-        return repositories.createNode({
-          id: `repair_${input.failedGateResult.id}`,
-          runId: input.failedGateResult.runId,
-          role: input.fixerRole,
-          status: 'pending',
-          gates: [],
-          dependencies: [input.failedGateResult.nodeId],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      },
     };
 
     const run = await engineWithBuildGate(
@@ -468,6 +455,7 @@ function engineWithBuildGate(
     dataDir: '.tekon',
     repositories,
     audit,
+    agentProvider: 'mock',
     adapter: createMockAgentAdapter(),
     gateEngine,
     signal,
@@ -479,7 +467,6 @@ function createFailOnceGateEngine(
   repositories: ReturnType<typeof createRepositories>,
 ): GateEngine {
   let failed = false;
-  const realGateEngine = createGateEngine({ repositories });
 
   return {
     async runGate(input) {
@@ -496,9 +483,6 @@ function createFailOnceGateEngine(
         retries: shouldFail ? 0 : 1,
         createdAt: new Date().toISOString(),
       });
-    },
-    async createAutoFixRepairNode(input) {
-      return realGateEngine.createAutoFixRepairNode(input);
     },
   };
 }

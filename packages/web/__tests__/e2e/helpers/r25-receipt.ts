@@ -5,6 +5,7 @@ import { openTekonDatabase } from '@tekon/core';
 import type { APIResponse, Locator, Page, Route, TestInfo } from '@playwright/test';
 
 import type { RpcProcedureMap } from '../../../src/shared/rpc-contract.js';
+import { sessionBadgeStatus, statusLabel } from '../../../src/client/lib/status-labels.js';
 import { test as sharedTest, expect } from '../shared-fixture.js';
 
 export type Entry = 'simple' | 'advanced';
@@ -399,7 +400,15 @@ export class ReceiptHarness {
       await expect(item).toHaveAttribute('title', `关联运行 ${receipt.run.id}`);
       if (receipt.admissionState === 'recovery-required')
         await expect(item.locator('.badge')).toHaveText('已受理，等待目录恢复');
-      else await expect(item.locator('.badge')).toHaveAttribute('title', snapshot.sessionStatus!);
+      else
+        await expect(item.locator('.badge')).toHaveAttribute(
+          'title',
+          // UI-02: one badge, resolved through the same helper as production.
+          sessionBadgeStatus({
+            status: snapshot.sessionStatus!,
+            runStatus: snapshot.runStatus,
+          }),
+        );
       listItem = item;
     } else {
       const run = (body.result.runs as Array<{ id: string; status: string }>).find((value) => value.id === receipt.run.id);
@@ -409,7 +418,9 @@ export class ReceiptHarness {
       const row = this.page.locator('.table-wrap tbody tr').filter({ has: this.page.getByText(displayedId, { exact: true }) });
       await expect(row).toBeVisible();
       await expect(row.locator('.badge').first()).toHaveText(
-        receipt.admissionState === 'recovery-required' ? '已受理，等待目录恢复' : snapshot.runStatus!,
+        receipt.admissionState === 'recovery-required'
+          ? '已受理，等待目录恢复'
+          : statusLabel(snapshot.runStatus!),
       );
       listItem = row;
     }

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -142,9 +142,22 @@ export async function generateDynamicWorkflow(
   const runId = options.runId ?? 'dynamic-preview';
   const repoPath = options.repoPath ?? process.cwd();
   const dataDir = options.dataDir ?? join(repoPath, '.tekon');
+  // A directory created here holds only this draft; remove it either way.
+  const ownsOutputDir = !options.outputDir;
   const outputDir =
     options.outputDir ?? mkDynamicOutputDir(`${runId}-pm-workflow-`);
+  try {
+    return await draftDynamicWorkflow(options, { runId, repoPath, dataDir, outputDir });
+  } finally {
+    if (ownsOutputDir) rmSync(outputDir, { recursive: true, force: true });
+  }
+}
 
+async function draftDynamicWorkflow(
+  options: GenerateDynamicWorkflowOptions,
+  paths: { runId: string; repoPath: string; dataDir: string; outputDir: string },
+): Promise<DynamicWorkflowPreview> {
+  const { runId, repoPath, dataDir, outputDir } = paths;
   mkdirSync(outputDir, { recursive: true });
 
   const result = await options.adapter.runAgent(

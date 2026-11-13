@@ -19,10 +19,10 @@ it('alias.yaml 内 id 不同的模板可预览、准备、持久化并在磁盘�
   const path = join(repoPath, 'alias.yaml');
   writeFileSync(path, 'id: inner\nname: Alias Template\nphases:\n  - id: review\n    nodes:\n      - id: review-node\n        role: reviewer\n', 'utf8');
   const template = loadWorkflowTemplateFile(path);
-  const canonicalPlan = captureRunPlan(repoPath, template, { templateId: 'alias' });
+  const canonicalPlan = captureRunPlan(repoPath, template, { templateId: 'alias', agent: 'mock' });
   const preview = projectRunPlanPreview(canonicalPlan);
   let paused = true;
-  const engine = createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories, audit, adapter: { runAgent }, isPauseRequested: () => paused });
+  const engine = createWorkflowEngine({ repoPath, dataDir: '.tekon', repositories, audit, adapter: { runAgent }, agentProvider: 'mock', isPauseRequested: () => paused });
   try {
     expect(preview.templateId).toBe('alias');
     expect(template.id).toBe('inner');

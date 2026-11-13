@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 
 import type { Role } from '../types/domain.js';
@@ -42,6 +43,26 @@ export interface WorktreeManager {
   releaseLease(leaseId: string): Promise<void>;
   pruneStaleLeases(repoPath: string): Promise<void>;
   listLeases(runId: string): Promise<WorktreeLease[]>;
+  /**
+   * Node branches (`tekon/<runId>/…`) of this run that still exist. A read
+   * only query: it leaves no command output in the run's directory.
+   */
+  listRunBranches(runId: string, repoPath: string): Promise<string[]>;
+  /**
+   * Removes a finished run's leftover worktrees and node branches. Each step
+   * is idempotent and a failure never stops the next one. Never touches the
+   * delivery branch, evidence, or directories without a lease.
+   */
+  cleanupRun(runId: string, repoPath: string): Promise<RunCleanupResult>;
+}
+
+export interface RunCleanupResult {
+  removedWorktrees: string[];
+  /** Lease directories that were already gone; the lease is released anyway. */
+  missingWorktrees: string[];
+  deletedBranches: string[];
+  missingBranches: string[];
+  failures: Array<{ step: 'worktree' | 'prune' | 'branch-list' | 'branch'; target: string; message: string }>;
 }
 
 export function createWorktreeManager(options: {
@@ -244,7 +265,98 @@ export function createWorktreeManager(options: {
     async listLeases(runId) {
       return options.repositories.listWorktreeLeases(runId);
     },
+
+    listRunBranches,
+
+    async cleanupRun(runId, repoPath) {
+      const runSegment = assertSafePathSegment(runId);
+      const root = resolve(repoPath);
+      const result: RunCleanupResult = {
+        removedWorktrees: [], missingWorktrees: [], deletedBranches: [],
+        missingBranches: [], failures: [],
+      };
+      const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+      // Leases recorded for another repository path are left alone.
+      const leases = (await options.repositories.listWorktreeLeases(runId))
+        .filter((lease) => isLeaseOfRepo(lease, root));
+      // A branch stays while a worktree that checks it out could not be removed.
+      const keptBranches = new Set<string>();
+
+      for (const lease of leases.filter((item) => !item.releasedAt)) {
+        try {
+          assertManagedWorktreePath(lease.repoPath, lease.worktreePath);
+          if (existsSync(lease.worktreePath)) {
+            await runGit(options.gateway, {
+              repoPath: root,
+              runId: runSegment,
+              args: ['worktree', 'remove', '--force', lease.worktreePath],
+            });
+            result.removedWorktrees.push(lease.worktreePath);
+          } else {
+            result.missingWorktrees.push(lease.worktreePath);
+          }
+          await options.repositories.releaseWorktreeLease(lease.id, new Date().toISOString());
+        } catch (error) {
+          keptBranches.add(lease.branchName);
+          result.failures.push({ step: 'worktree', target: lease.worktreePath, message: message(error) });
+        }
+      }
+
+      // Drops records of removed directories so their branches can be deleted.
+      try {
+        await runGit(options.gateway, { repoPath: root, runId: runSegment, args: ['worktree', 'prune'] });
+      } catch (error) {
+        result.failures.push({ step: 'prune', target: root, message: message(error) });
+      }
+
+      let existing: Set<string>;
+      try {
+        existing = new Set(await listRunBranches(runId, root));
+      } catch (error) {
+        result.failures.push({ step: 'branch-list', target: root, message: message(error) });
+        return result;
+      }
+      const prefix = `tekon/${runSegment}/`;
+      for (const branchName of [...new Set(leases.map((lease) => lease.branchName))]) {
+        if (keptBranches.has(branchName)) continue;
+        try {
+          if (!branchName.startsWith(prefix)) {
+            throw new Error(`not a node branch of ${runId}`);
+          }
+          assertSafeBranchRef(branchName);
+          if (!existing.has(branchName)) {
+            result.missingBranches.push(branchName);
+            continue;
+          }
+          await runGit(options.gateway, {
+            repoPath: root,
+            runId: runSegment,
+            args: ['branch', '-D', branchName],
+          });
+          result.deletedBranches.push(branchName);
+        } catch (error) {
+          result.failures.push({ step: 'branch', target: branchName, message: message(error) });
+        }
+      }
+      return result;
+    },
   };
+
+  async function listRunBranches(runId: string, repoPath: string): Promise<string[]> {
+    const runSegment = assertSafePathSegment(runId);
+    const outputDir = mkdtempSync(join(tmpdir(), 'tekon-git-read-'));
+    try {
+      const output = await runGit(options.gateway, {
+        repoPath: resolve(repoPath),
+        runId: runSegment,
+        outputDir,
+        args: ['for-each-ref', '--format=%(refname:short)', `refs/heads/tekon/${runSegment}/`],
+      });
+      return output.split('\n').map((line) => line.trim()).filter(Boolean);
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true });
+    }
+  }
 
   async function meaningfulLeaseDirtyLines(
     lease: WorktreeLease,
@@ -395,12 +507,14 @@ async function runGit(
     runId: string;
     args: string[];
     allowFailure?: boolean;
+    /** Defaults to the run's command log directory. */
+    outputDir?: string;
   },
 ): Promise<string> {
   const result = await gateway.run({
     command: { tool: 'git', args: input.args },
     cwd: input.repoPath,
-    outputDir: join(input.repoPath, '.tekon', 'runs', input.runId, 'commands'),
+    outputDir: input.outputDir ?? join(input.repoPath, '.tekon', 'runs', input.runId, 'commands'),
     policy: {
       allow: [{ tool: 'git', args: [] }],
       deny: [
@@ -423,6 +537,23 @@ async function runGit(
     throw new Error(`git command failed: ${stderr || stdout}`);
   }
   return stdout;
+}
+
+/** Whether a lease was recorded for this repository, after resolving links. */
+export function isLeaseOfRepo(lease: Pick<WorktreeLease, 'repoPath'>, repoPath: string): boolean {
+  return canonicalPath(lease.repoPath) === canonicalPath(repoPath);
+}
+
+/**
+ * The same directory reached through a symlink (e.g. /var on macOS) or with
+ * different letter case on a case-insensitive file system compares equal.
+ */
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
 }
 
 function assertSafePathSegment(value: string): string {

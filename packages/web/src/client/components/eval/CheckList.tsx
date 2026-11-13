@@ -12,11 +12,14 @@ import {
   getCheckLabel,
   getCheckSuggestion,
   getCheckDescription,
+  checkState,
+  checkStateLabel,
 } from '../../lib/check-labels.js';
 
 interface CheckItem {
   id: string;
   passed: boolean;
+  state?: 'passed' | 'failed' | 'not-started' | null;
   evidence: string;
   severity?: 'required' | 'recommended' | 'context';
 }
@@ -31,17 +34,18 @@ export function CheckList({ items }: CheckListProps) {
       {items.map((check) => {
         const labelText = getCheckLabel(check.id);
         const desc = getCheckDescription(check.id);
-        const failedSuggestion = !check.passed
+        const state = checkState(check);
+        const failedSuggestion = state === 'failed'
           ? getCheckSuggestion(check.id)
           : null;
+        const iconClass =
+          state === 'passed' ? 'pass' : state === 'not-started' ? 'idle' : 'fail';
 
         return (
           <Fragment key={check.id}>
             <div className="check-item">
-              <span
-                className={`check-icon ${check.passed ? 'pass' : 'fail'}`}
-              >
-                {check.passed ? '✓' : '✕'}
+              <span className={`check-icon ${iconClass}`} title={checkStateLabel(state)}>
+                {state === 'passed' ? '✓' : state === 'not-started' ? '—' : '✕'}
               </span>
               <span
                 className="check-label"
@@ -61,7 +65,7 @@ export function CheckList({ items }: CheckListProps) {
               </span>
               <span
                 className="check-evidence"
-                style={check.passed ? undefined : { color: 'var(--fail)' }}
+                style={state === 'failed' ? { color: 'var(--fail)' } : undefined}
                 title={check.evidence}
               >
                 {check.evidence}

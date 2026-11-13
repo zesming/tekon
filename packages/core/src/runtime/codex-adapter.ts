@@ -8,9 +8,11 @@ import {
   resolve,
 } from 'node:path';
 
+import { CODEX_PROFILE_NAME } from '../config/tekon-config.js';
 import type { AgentAdapterConfig } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
+import { classifyProviderFailure } from './provider-diagnostics.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
@@ -30,8 +32,47 @@ const CONTROLLED_CODEX_GLOBAL_ARGS = [
   '--ask-for-approval',
   'on-request',
 ] as const;
-const DEFAULT_CODEX_PROFILE = 'internal';
 const CODEX_EXEC_SUBCOMMAND = 'exec';
+
+// Codex runs with an exact environment, merged in a fixed order: this allow
+// list, then the configured passthrough names, then Tekon's own variables
+// (written last by the adapter, so passthrough can never replace them).
+const CODEX_PROVIDER_SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'CODEX_HOME',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'all_proxy',
+  'NODE_EXTRA_CA_CERTS',
+] as const;
+
+export function buildCodexProviderEnv(
+  source: NodeJS.ProcessEnv = process.env,
+  passthroughEnv: readonly string[] = [],
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of [...CODEX_PROVIDER_SAFE_ENV_KEYS, ...passthroughEnv]) {
+    const value = source[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
 
 export function buildCodexCommand(
   config: AgentAdapterConfig,
@@ -97,7 +138,9 @@ export function createCodexAdapter(
         timeoutMs: config.timeoutMs,
         progressIntervalMs: config.progressHeartbeatMs,
         noProgressTimeoutMs: config.noProgressTimeoutMs,
+        envMode: 'exact',
         env: {
+          ...buildCodexProviderEnv(process.env, config.passthroughEnv),
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
           TEKON_RUN_ID: input.runContext.runId,
@@ -116,8 +159,28 @@ export function createCodexAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          diagnostic: classifyProviderFailure({
+            provider: 'codex',
+            command: command.tool,
+            result,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
+          }),
         };
       }
+
+      // When the process itself failed, that is the reason to report; a
+      // missing or incomplete manifest is only its consequence.
+      const processFailure =
+        result.exitCode !== 0 || result.timedOut
+          ? classifyProviderFailure({
+              provider: 'codex',
+              command: command.tool,
+              result,
+              signal: input.signal,
+              cwd: input.worktreeLease.worktreePath,
+            })
+          : undefined;
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
@@ -135,7 +198,8 @@ export function createCodexAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch (error) {
-          const diagnostic = artifactDiagnosticFromError(error);
+          const diagnostic =
+            processFailure ?? artifactDiagnosticFromError(error);
           artifactIngestionFailed = true;
           if (result.timedOut) {
             return {
@@ -217,8 +281,8 @@ export function createCodexAdapter(
         ],
         artifacts,
         timedOut: result.timedOut,
-        ...(missingRequiredDiagnostic
-          ? { diagnostic: missingRequiredDiagnostic }
+        ...(processFailure || missingRequiredDiagnostic
+          ? { diagnostic: processFailure ?? missingRequiredDiagnostic }
           : {}),
       };
     },
@@ -236,10 +300,9 @@ function controlledCodexGlobalArgs(
     runContext?: { nodeId: string; runId: string };
   },
 ): string[] {
-  const profileArgs = [
-    '--profile',
-    assertSafeCodexProfile(config.profile ?? DEFAULT_CODEX_PROFILE),
-  ];
+  const profileArgs = config.profile
+    ? ['--profile', assertSafeCodexProfile(config.profile)]
+    : [];
   const outputDir = assertSafeCodexArtifactOutputDir(
     config,
     input.artifactOutputDir,
@@ -254,7 +317,7 @@ function controlledCodexGlobalArgs(
 }
 
 function assertSafeCodexProfile(profile: string): string {
-  if (!/^[A-Za-z0-9._-]+$/u.test(profile)) {
+  if (!CODEX_PROFILE_NAME.test(profile)) {
     throw new Error('codex profile must be a safe profile name');
   }
   return profile;

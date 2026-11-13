@@ -487,6 +487,7 @@ describe('createWorkflowEngine', () => {
       dataDir: '.tekon',
       repositories: {} as never,
       audit: {} as never,
+      agentProvider: 'mock',
       adapter: {} as never,
     });
     expect(engine).toBeDefined();
@@ -527,6 +528,7 @@ describe('createWorkflowEngine', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {} as never,
     });
 
@@ -689,6 +691,7 @@ describe('S5 engine prepareRun / signal / pause', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: { runAgent: (input) => runAgentSpy(input) },
       ...overrides,
     });
@@ -774,7 +777,7 @@ describe('S5 engine prepareRun / signal / pause', () => {
   it('prepareRun accepts matching input.planDigest and persists it to SQLite', async () => {
     const { engine, repositories } = setupHarness();
     const canonical = projectRunPlanV3(minimalTemplate, {
-      agent: 'codex',
+      agent: 'mock',
       mode: 'workflow',
     }, []);
 

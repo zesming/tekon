@@ -18,7 +18,7 @@ vi.mock('../../src/server/api/root.js', async (importOriginal) => {
           );
           throw new ApiError(
             'INTERNAL_ERROR',
-            'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
+            'CLEAN_AUDIT_FAILED: unable to record the clean result',
           );
         },
       },
@@ -69,7 +69,7 @@ describe('project.clean HTTP audit failure mapping', () => {
         input: {
           runId: 'run_1',
           token: 'fixture-session-token',
-          confirm: 'delete-run-dir',
+          confirm: 'clean-terminal-runs',
         },
       }),
     });
@@ -81,7 +81,7 @@ describe('project.clean HTTP audit failure mapping', () => {
     expect(body.error).toEqual({
       code: 'INTERNAL_ERROR',
       message:
-        'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
+        'CLEAN_AUDIT_FAILED: unable to record the clean result',
     });
     expect(JSON.stringify(body)).not.toMatch(
       /Disk write failure|database is locked|SQLITE/u,

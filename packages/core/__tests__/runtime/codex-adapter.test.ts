@@ -102,7 +102,7 @@ describe('codex adapter', () => {
     ]);
   });
 
-  it('defaults real Codex commands to the internal profile when a replayed config omits profile', () => {
+  it('passes no --profile when the config sets none', () => {
     const artifactOutputDir = '/tmp/repo/.tekon/runs/run_1/node_1';
     const command = buildCodexCommand(
       {
@@ -122,8 +122,6 @@ describe('codex adapter', () => {
     );
 
     expect(command.args).toEqual([
-      '--profile',
-      'internal',
       '--sandbox',
       'workspace-write',
       '--ask-for-approval',
@@ -528,16 +526,28 @@ describe('codex adapter', () => {
     );
   });
 
-  it('does not inherit the full parent environment for Codex runs', async () => {
+  it('runs Codex with an exact environment: login, proxy, passthrough, then Tekon variables', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-env-'));
     tempDirs.push(repoPath);
     let envMode: unknown = 'unset';
+    let env: NodeJS.ProcessEnv | undefined;
     const gateway: CommandGateway = {
       async run(input) {
         envMode = input.envMode;
+        env = input.env;
         return { status: 'rejected', reason: 'stop after capture' };
       },
     };
+    const saved = { ...process.env };
+    Object.assign(process.env, {
+      USER: 'alice',
+      OPENAI_API_KEY: 'k',
+      CODEX_HOME: '/tmp/codex-home',
+      HTTPS_PROXY: 'http://proxy.example:8080',
+      AZURE_OPENAI_API_KEY: 'azure',
+      ANTHROPIC_API_KEY: 'other-provider',
+      NODE_OPTIONS: '--require /tmp/x.js',
+    });
     const adapter = createCodexAdapter(
       {
         provider: 'codex',
@@ -547,13 +557,36 @@ describe('codex adapter', () => {
         outputFormat: 'text',
         timeoutMs: 500,
         permissionProfile: safePermissionProfile(repoPath),
+        passthroughEnv: ['AZURE_OPENAI_API_KEY'],
       },
       gateway,
     );
 
-    await adapter.runAgent(baseRunInput(repoPath));
+    try {
+      await adapter.runAgent(baseRunInput(repoPath));
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in saved)) delete process.env[key];
+      }
+      Object.assign(process.env, saved);
+    }
 
-    expect(envMode).toBeUndefined();
+    expect(envMode).toBe('exact');
+    expect(env).toMatchObject({
+      USER: 'alice',
+      OPENAI_API_KEY: 'k',
+      CODEX_HOME: '/tmp/codex-home',
+      HTTPS_PROXY: 'http://proxy.example:8080',
+      AZURE_OPENAI_API_KEY: 'azure',
+    });
+    expect(env).not.toHaveProperty('ANTHROPIC_API_KEY');
+    expect(env).not.toHaveProperty('NODE_OPTIONS');
+    expect(Object.keys(env!).filter((key) => key.startsWith('TEKON_')).sort()).toEqual([
+      'TEKON_ARTIFACT_MANIFEST',
+      'TEKON_NODE_ID',
+      'TEKON_OUTPUT_DIR',
+      'TEKON_RUN_ID',
+    ]);
   });
 
   it('ingests provider artifact manifests into the artifact store', async () => {
@@ -800,6 +833,51 @@ describe('codex adapter', () => {
     db.close();
   });
 
+  it('explains Codex login and missing-command failures', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-codex-diagnostic-'));
+    tempDirs.push(repoPath);
+    const authScript = join(repoPath, 'auth-fail.mjs');
+    writeFileSync(
+      authScript,
+      "process.stderr.write('Not logged in. Run codex login.\\n');\nprocess.exit(1);\n",
+      'utf8',
+    );
+    const run = (command: string, args: string[]) =>
+      createCodexAdapter(
+        {
+          provider: 'codex',
+          command,
+          args,
+          promptMode: 'stdin',
+          outputFormat: 'text',
+          timeoutMs: 2_000,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        createCommandGateway(),
+      ).runAgent({
+        ...baseRunInput(repoPath),
+        commandPolicy: {
+          ...baseRunInput(repoPath).commandPolicy,
+          allow: [{ tool: command, args: [] }],
+        },
+      });
+
+    const auth = await run(process.execPath, [authScript]);
+    expect(auth).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-authenticated' },
+    });
+    expect(auth.diagnostic?.hint).toContain('codex login');
+    const missing = await run(join(repoPath, 'no-such-codex'), []);
+    // The gateway rejects a missing command before execution: the adapter must
+    // still report a non-zero exit alongside the classified diagnostic, so a
+    // failed start is never mistaken for a successful run.
+    expect(missing).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-installed' },
+    });
+  });
+
   it('rejects non-zero Codex exits when required artifact manifests are missing', async () => {
     const repoPath = mkdtempSync(
       join(tmpdir(), 'tekon-codex-nonzero-missing-'),
@@ -834,7 +912,7 @@ describe('codex adapter', () => {
     expect(result).toMatchObject({
       provider: 'codex',
       exitCode: 1,
-      diagnostic: { code: 'artifact-manifest-missing' },
+      diagnostic: { code: 'exit-nonzero' },
     });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),
@@ -888,7 +966,7 @@ describe('codex adapter', () => {
     expect(result).toMatchObject({
       provider: 'codex',
       exitCode: 1,
-      diagnostic: { code: 'required-artifacts-missing' },
+      diagnostic: { code: 'exit-nonzero' },
     });
     expect(
       await repositories.listArtifacts('run_1', 'node_1', 'demand-card'),

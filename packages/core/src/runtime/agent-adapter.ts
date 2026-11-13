@@ -63,11 +63,24 @@ export type AgentRunDiagnosticCode =
   | 'artifact-file-schema-invalid'
   | 'artifact-file-invalid-path'
   | 'artifact-file-unreadable'
-  | 'required-artifacts-missing';
+  | 'required-artifacts-missing'
+  // Provider process outcomes (classified in provider-diagnostics.ts).
+  | 'not-installed'
+  | 'not-authenticated'
+  | 'invalid-config'
+  | 'exit-nonzero'
+  | 'timeout'
+  | 'cancelled'
+  | 'interrupted'
+  | 'approval-blocked'
+  /** A custom adapter reported a code Tekon does not know. */
+  | 'unclassified';
 
 export interface AgentRunDiagnostic {
   code: AgentRunDiagnosticCode;
   message: string;
+  /** One next step for the user, e.g. how to log in or what to fix. */
+  hint?: string;
   artifactType?: ArtifactType;
   /** Display-safe relative artifact or manifest path. */
   path?: string;
@@ -89,6 +102,15 @@ const AGENT_RUN_DIAGNOSTIC_CODES = new Set<AgentRunDiagnosticCode>([
   'artifact-file-invalid-path',
   'artifact-file-unreadable',
   'required-artifacts-missing',
+  'not-installed',
+  'not-authenticated',
+  'invalid-config',
+  'exit-nonzero',
+  'timeout',
+  'cancelled',
+  'interrupted',
+  'approval-blocked',
+  'unclassified',
 ]);
 
 /** Keep custom adapter diagnostics safe before they enter durable events. */
@@ -98,7 +120,7 @@ export function sanitizeAgentRunDiagnostic(
   if (!diagnostic) return undefined;
   const code = AGENT_RUN_DIAGNOSTIC_CODES.has(diagnostic.code)
     ? diagnostic.code
-    : 'artifact-file-unreadable';
+    : 'unclassified';
   const artifactType = artifactTypeSchema.safeParse(diagnostic.artifactType);
   return {
     code,
@@ -106,6 +128,9 @@ export function sanitizeAgentRunDiagnostic(
       diagnostic.message,
       MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS,
     ),
+    ...(diagnostic.hint
+      ? { hint: boundRedactedText(diagnostic.hint, MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS) }
+      : {}),
     ...(artifactType.success ? { artifactType: artifactType.data } : {}),
     ...(diagnostic.path
       ? { path: boundRedactedText(diagnostic.path) }
@@ -114,12 +139,6 @@ export function sanitizeAgentRunDiagnostic(
       ? { field: boundRedactedText(diagnostic.field) }
       : {}),
   };
-}
-
-export function formatAgentRunDiagnostic(
-  diagnostic: AgentRunDiagnostic | undefined,
-): string | undefined {
-  return sanitizeAgentRunDiagnostic(diagnostic)?.message;
 }
 
 function boundRedactedText(

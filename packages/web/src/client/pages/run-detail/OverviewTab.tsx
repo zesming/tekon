@@ -13,7 +13,7 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner.js';
 import { EmptyState } from '../../components/ui/EmptyState.js';
 import { StatusBadge } from '../../components/ui/StatusBadge.js';
 import { CheckList } from '../../components/eval/CheckList.js';
-import { buildFailedChecksSummary } from '../../lib/check-labels.js';
+import { buildFailedChecksSummary, checkState } from '../../lib/check-labels.js';
 import { evidenceHref } from '../../lib/route-paths.js';
 
 // ---------------------------------------------------------------------------
@@ -49,8 +49,18 @@ export function OverviewTab() {
   const surface = query.data;
   const readiness = surface.readiness;
   const scorePercent = Math.round(readiness.score * 100);
-  const failedChecks = readiness.checks.filter((c) => !c.passed);
+  // UI-05: only real failures enter the failure summary. Delivery-stage checks
+  // that never started (no PR/CI evidence on a local task run) render neutrally.
+  const failedChecks = readiness.checks.filter((c) => checkState(c) === 'failed');
   const passedChecks = readiness.checks.filter((c) => c.passed);
+  const notStartedChecks = readiness.checks.filter(
+    (c) => checkState(c) === 'not-started',
+  );
+  // The headline badge reflects the task result (did the workflow pass), not
+  // the delivery readiness score, so a passed local run no longer shows 失败.
+  const workflowPassed = readiness.checks.find(
+    (c) => c.id === 'workflow-passed',
+  )?.passed === true;
 
   return (
     <>
@@ -75,8 +85,9 @@ export function OverviewTab() {
               {readiness.score.toFixed(2)}
             </span>
             <StatusBadge
-              status={readiness.ready ? 'passed' : 'failed'}
+              status={workflowPassed ? 'passed' : 'failed'}
               size="sm"
+              label={workflowPassed ? '任务已通过' : '任务未通过'}
             />
           </div>
         }
@@ -139,12 +150,16 @@ export function OverviewTab() {
         </div>
       </Card>
 
-      {/* Show each check once, with actionable failures before passed evidence. */}
+      {/* Show each check once, with actionable failures before passed evidence.
+          Not-started delivery checks are listed last and never counted as failures. */}
       <Card
         title="检查结果"
         headerRight={
           <span className="text-sm text-muted">
             {passedChecks.length}/{readiness.checks.length} 通过
+            {notStartedChecks.length > 0
+              ? ` · ${notStartedChecks.length} 项未开始`
+              : ''}
           </span>
         }
         compact
@@ -155,7 +170,7 @@ export function OverviewTab() {
             {buildFailedChecksSummary(failedChecks)}
           </div>
         )}
-        <CheckList items={[...failedChecks, ...passedChecks]} />
+        <CheckList items={[...failedChecks, ...notStartedChecks, ...passedChecks]} />
       </Card>
 
       {/* ── Evidence Groups ── */}

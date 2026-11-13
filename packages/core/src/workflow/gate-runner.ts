@@ -27,7 +27,9 @@ import {
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import { agentFailureAuditPayload, assertSuccessfulAgentRun, isNonRetryableAgentFailure } from './helpers.js';
+import { reworkNodeIdFor } from './execution-plan.js';
+import { createAutoFixRepairNode } from './repair-node.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
 import { isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
@@ -316,7 +318,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         if (await interrupted()) return false;
         await leaseService.finalizeExecutionLease(runId, node.id);
         if (await interrupted()) return false;
-        const repairNode = await gateEngine.createAutoFixRepairNode({
+        const repairNode = await createAutoFixRepairNode(repositories, {
           failedGateResult: result,
           fixerRole: node.role,
         });
@@ -403,9 +405,12 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               gateResultId: result.id,
               attempt: retryAttempt,
               error: error instanceof Error ? error.message : String(error),
+              ...agentFailureAuditPayload(error),
             },
           });
-          if (retryAttempt >= gate.maxRetries) {
+          // Another attempt cannot fix a missing provider, a login or a bad
+          // config; stop and let the run report it.
+          if (retryAttempt >= gate.maxRetries || isNonRetryableAgentFailure(error)) {
             break;
           }
           if (await interrupted()) return false;
@@ -487,7 +492,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               nodeId: node.id,
               reviewNodeId: node.id,
               targetNodeId,
-              reworkNodeId: `${targetNodeId}_rework_${reworkAttempt}`,
+              reworkNodeId: reworkNodeIdFor(targetNodeId, reworkAttempt, result.id),
               attempt: reworkAttempt,
               maxAttempts: maxReworkAttempts,
               gateResultId: result.id,

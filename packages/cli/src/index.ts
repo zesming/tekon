@@ -7,11 +7,13 @@ import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
 import { commandEval } from './commands/eval.js';
 import { commandHelp } from './commands/help.js';
+import { commandDoctor } from './commands/doctor.js';
 import { commandInit } from './commands/init.js';
 import { commandReview } from './commands/review.js';
 import { commandRole } from './commands/role.js';
 import { commandRun } from './commands/run.js';
-import { commandClean, commandLog, commandStatus } from './commands/status.js';
+import { commandClean } from './commands/clean.js';
+import { commandLog, commandStatus } from './commands/status.js';
 import { commandProvider } from './commands/provider.js';
 import { commandUi, commandUpdate } from './commands/ui.js';
 import { commandConstraints, commandWorkflow } from './commands/workflow.js';
@@ -86,10 +88,11 @@ const COMMANDS: CommandMeta[] = [
   ] },
   { name: 'log', description: '查看运行审计日志', group: '审阅与评估' },
   // 工具
+  { name: 'doctor', description: '检查配置、Provider 安装与登录、工作流命令', group: '工具' },
   { name: 'provider', description: '管理与检查 Agent Provider', group: '工具', subcommands: [
     { name: 'preflight', description: '检查指定 Provider 的环境兼容性与合同' },
   ] },
-  { name: 'clean', description: '清理暂不可用（等待生命周期安全清理）', group: '工具' },
+  { name: 'clean', description: '清理已结束运行留下的 worktree 和节点分支', group: '工具' },
   { name: 'ui', description: '启动 Web 管理界面', group: '工具' },
   { name: 'update', description: '更新 Tekon CLI', group: '工具' },
 ];
@@ -162,11 +165,12 @@ export async function runCli(
         await commandLog(rest, io);
         return 0;
       case 'clean':
-        await commandClean(rest, io);
-        return 0;
+        return await commandClean(rest, io);
       case 'ui':
         await commandUi(rest, io);
         return 0;
+      case 'doctor':
+        return await commandDoctor(rest, io);
       case 'provider':
         return await commandProvider(rest, io);
       case 'update':

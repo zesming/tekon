@@ -182,3 +182,48 @@ describe('workflow catalog & digest (P1-PRODUCT-03 / P1-PRODUCT-02)', () => {
     expect(plan1.digest).toBe(plan2.digest);
   });
 });
+
+// The in-process ApiCaller bypasses the HTTP dispatch layer, so the zod input
+// contract (agent must be a non-empty string when present) can only be locked
+// through a real HTTP request. Empty strings must be rejected at the boundary
+// with 400 before any router code runs.
+describe('RPC input contract over HTTP (dispatch zod validation)', () => {
+  async function startServer() {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const server = await createWebServer({
+      projectRoot: fixture.projectRoot,
+      port: 0,
+      vite: false,
+    });
+    await server.listen();
+    cleanupTasks.push(() => server.close());
+    return { fixture, server };
+  }
+
+  it('rejects an empty-string agent on workflow.plan with 400', async () => {
+    const { server } = await startServer();
+    const res = await postRpc(server, 'workflow.plan', {
+      template: 'bugfix',
+      agent: '',
+    });
+    expect(res.status).toBe(400);
+    const body = res.body as { error?: { code: string; message: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toContain('agent');
+  });
+
+  it('rejects an empty-string agent on project.run with 400', async () => {
+    const { fixture, server } = await startServer();
+    const res = await postRpc(server, 'project.run', {
+      demandText: 'Empty agent must be rejected at the HTTP boundary',
+      mode: 'goal',
+      agent: '',
+      token: fixture.sessionToken,
+    });
+    expect(res.status).toBe(400);
+    const body = res.body as { error?: { code: string; message: string } };
+    expect(body.error?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toContain('agent');
+  });
+});

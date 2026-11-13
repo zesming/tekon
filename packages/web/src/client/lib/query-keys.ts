@@ -55,6 +55,7 @@ export const queryKeys = {
     `session.detail.${sessionId}.${scope}`,
   gateResults: (runId: string, scope: string) =>
     `gate.results.${runId}.${scope}`,
+  gatePendingAll: (scope: string) => `gate.pendingAll.${scope}`,
   reviewDetail: (runId: string, scope: string) =>
     `review.${runId}.${scope}`,
   deliveryCiStatus: (runId: string, scope: string) =>

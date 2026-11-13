@@ -7,6 +7,8 @@ import {
   createRepositories,
   evaluateHumanApprovalSummary,
   migrateDatabase,
+  findLatestRunFailure,
+  ProviderPreflightError,
   readRunRecovery,
   WorkflowTerminalError,
 } from '@tekon/core';
@@ -29,6 +31,7 @@ import {
   withSessionCommandCtx,
 } from '../lib/session-context.js';
 import { formatApprovalSummary } from './review.js';
+import { formatPreflightNotice, runOutcomeDetails } from '../lib/run-outcome.js';
 
 export async function commandApproval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
@@ -287,6 +290,13 @@ export async function commandResume(
           `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
         );
       }
+      // Check the provider before recording the approval, so a run that
+      // cannot start does not leave a decision approved but not resumed. A
+      // bare resume is checked inside resumeRun, after its state checks; a
+      // finished run is reported as such by the approval below instead.
+      if (!['passed', 'failed', 'cancelled'].includes(workflow.status)) {
+        await sessionService.preflightResume(runId).catch(rethrowPreflight);
+      }
       const humanGate = createHumanGate({
         repositories,
       });
@@ -319,7 +329,7 @@ export async function commandResume(
       ...confirmation,
     }).catch((error: unknown) => {
       if (args.values['approve-human']) throw new Error(`审批已记录，运行尚未恢复：${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      return rethrowPreflight(error);
     });
     if (result.outcome !== 'enqueued' && args.values['approve-human']) {
       io.stderr.write(`审批已记录，运行尚未恢复（${result.outcome}）。请检查状态后重试。\n`);
@@ -344,7 +354,8 @@ export async function commandResume(
       throw new Error(`ADMISSION_RECOVERY_REQUIRED: runId=${runId}，修复目录准备问题后重试原请求。`);
     }
 
-    jobRunner.start();
+    io.stderr.write(formatPreflightNotice(result.preflight));
+    jobRunner.start({ jobIds: [result.jobId] });
     const onSigint = () => {
       void jobRunner.requestCancel(result.jobId, 'cli SIGINT').catch(() => {});
     };
@@ -363,12 +374,19 @@ export async function commandResume(
     const latest = await repositories.getWorkflowInstance(runId);
     const status = latest?.status ?? 'unknown';
     io.stdout.write(`runId=${runId} status=${status}\n`);
+    const failure = findLatestRunFailure(await repositories.listAuditEvents(runId));
+    const pendingHuman = (await repositories.listHumanDecisions(runId)).some(
+      (decision) => decision.status === 'pending',
+    );
+    const details = runOutcomeDetails({ status, runId, failure, pendingHuman });
+    if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
     return exitCodeForJobOutcome({
       io,
       runId,
       jobId: result.jobId,
       jobStatus,
       workflowStatus: status,
+      failure,
     });
   });
 }
@@ -399,4 +417,11 @@ export async function commandCancel(
     },
   );
   return 0;
+}
+
+function rethrowPreflight(error: unknown): never {
+  if (error instanceof ProviderPreflightError) {
+    throw new Error(`${error.message}\n下一步: ${error.hint}`);
+  }
+  throw error;
 }

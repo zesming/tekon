@@ -13,7 +13,7 @@ export function NotFoundPage() {
       </header>
       <div style={{ textAlign: 'center', padding: '32px 0' }}>
         <Link to={routes.home} className="btn btn-primary">
-          返回 Dashboard
+          返回会话列表
         </Link>
       </div>
     </>

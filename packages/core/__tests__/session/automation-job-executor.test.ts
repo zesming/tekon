@@ -281,6 +281,7 @@ async function waitForJob(
       job &&
       (job.status === 'done' ||
         job.status === 'failed' ||
+        job.status === 'interrupted' ||
         job.status === 'cancelled')
     ) {
       return job.status;
@@ -595,4 +596,89 @@ describe('automation job executor (4d/4e)', () => {
     const errorEvent = events.find((e) => e.type === 'agent/error');
     expect(JSON.stringify(errorEvent?.payload)).toContain('running');
   }, 15_000);
+
+  it.each(['interrupted', 'failed'] as const)(
+    'a %s run reports the classified failure reason in agent/error',
+    async (status) => {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-failure-reason-'));
+      tempDirs.push(repoPath);
+      const db = openTekonDatabase({ filename: ':memory:' });
+      migrateDatabase(db);
+      const writeQueue = createWriteQueue();
+      const repositories = createRepositories(db, writeQueue);
+      const audit = createAuditLogger({ repositories, db, writeQueue });
+      const sessions = createSessionEventStore(db, writeQueue);
+      const jobs = createJobRepository(db, writeQueue);
+      const bus = createSessionEventBus();
+      const registry = createSubprocessRegistry();
+      const runId = `run_reason_${status}`;
+
+      // The runner does not claim jobs of an already-terminal run, so the
+      // engine reports the terminal status as its result.
+      await seedRun(repositories, runId, 'running');
+      await audit.append({
+        runId,
+        type: 'node.interrupted',
+        payload: {
+          nodeId: 'node_1',
+          error: 'agent failed: provider=claude-code exitCode=1',
+          diagnostic: {
+            code: 'not-authenticated',
+            message: 'claude 未登录或凭据无效',
+            hint: '执行 claude /login',
+          },
+        },
+      });
+      const session = await seedSession(sessions, runId);
+      const executor = createWorkflowJobExecutor({
+        repositories,
+        audit,
+        projectContext: { projectRoot: repoPath },
+        sessions,
+        bus,
+        registry,
+        engineFactory: async () => {
+          const settled = async () => ({
+            ...(await repositories.getWorkflowInstance(runId))!,
+            status,
+          });
+          return {
+            executePreparedRun: settled,
+            async resumeRun() {
+              return { workflow: await settled() };
+            },
+          };
+        },
+      });
+      const runner = createJobRunner({
+        jobs,
+        sessions,
+        bus,
+        registry,
+        executor,
+        pollIntervalMs: 5,
+        heartbeatMs: 30,
+        leaseTtlMs: 30_000,
+        workerId: `worker_${status}`,
+      });
+      runners.push(runner);
+      const job = await runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+      runner.start();
+
+      expect(await waitForJob(jobs, job.id)).toBe(status === 'failed' ? 'done' : 'interrupted');
+      expect((await sessions.findSessionByRunId(runId))?.status).toBe(
+        status === 'failed' ? 'failed' : 'awaiting-input',
+      );
+      const events = await sessions.listEventsSince(session.id, 0);
+      expect(events.find((e) => e.type === 'agent/error')?.payload).toMatchObject({
+        runId,
+        status,
+        kind: 'not-authenticated',
+        message: 'claude 未登录或凭据无效',
+        hint: '执行 claude /login',
+      });
+      expect(events.find((e) => e.type === 'turn/end')?.payload).toMatchObject({ status });
+    },
+    15_000,
+  );
 });

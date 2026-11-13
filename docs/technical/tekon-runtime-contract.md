@@ -18,7 +18,7 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 
-Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/core/src/runtime/claude-code-support.ts)）：只保留 PATH、HOME、临时目录、语言、SHELL、登录用户（USER、LOGNAME）、代理变量、`NODE_EXTRA_CA_CERTS` 和 `ANTHROPIC_*`、`CLAUDE_*`，其他 Provider 的凭据、`AWS_*` 和 `NODE_OPTIONS` 不传。Gate 命令走 CommandGateway 默认环境，拿不到这些变量；Claude 在节点里执行的命令继承 Claude 的环境，能读到。资料事实：[Claude 认证优先级](https://code.claude.com/docs/en/authentication)中 API key 优先于订阅登录，所以 shell 设了 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时 Claude 节点会用它们；Tekon 不做认证配置。
+Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/core/src/runtime/claude-code-support.ts)）：只保留 PATH、HOME、临时目录、语言、SHELL、登录用户（USER、LOGNAME）、代理变量、`NODE_EXTRA_CA_CERTS` 和 `ANTHROPIC_*`、`CLAUDE_*`，其他 Provider 的凭据、`AWS_*` 和 `NODE_OPTIONS` 不传。Codex 子进程同样使用精确环境（[codex-adapter.ts](../../packages/core/src/runtime/codex-adapter.ts)），只保留基础变量、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`；`--profile` 只在仓库配置 `providers.codex.profile` 后传入，升级前的 v1 快照恢复时仍用 `internal`。两者都可通过 `providers.<provider>.passthroughEnv`（[tekon-config.ts](../../packages/core/src/config/tekon-config.ts)）追加变量名：名字须为大写，改变加载方式或由 Tekon 控制的名字（`PATH`、`SHELL`、`NODE_*`、`LD_*`、`DYLD_*`、`GIT_*`、`TEKON_*`、`PYTHON*` 等）被拒绝，Tekon 自己的变量最后写入，不能被覆盖。透传名单随 Provider 快照冻结，恢复不读当前配置；审计只记名字。Gate 命令走 CommandGateway 默认环境，拿不到这些变量；Provider 在节点里执行的命令继承 Provider 的环境，能读到。资料事实：[Claude 认证优先级](https://code.claude.com/docs/en/authentication)中 API key 优先于订阅登录，所以 shell 设了 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时 Claude 节点会用它们；Tekon 不做认证配置。
 
 ### 1.1 已归并的架构决策
 
@@ -33,6 +33,10 @@ Claude 子进程使用精确环境（[claude-code-support.ts](../../packages/cor
 PMO 的流程检查点提示将已通过或跳过的可见 Gate 结果以 JSON 提供，包含持久记录中的 nodeId、gateType、gateKey 和 status；模型必须逐字复制稳定 key，缺失时登记 missingInformation，不能重构或缩写。process-completeness 仍按真实节点、产物与 Gate 状态精确验证。评审返工生成的节点把产物和 Gate 结果记在原节点上，原节点 Gate 会重跑，所以只检查返工节点的状态，不单独要求它的产物和 Gate 证据。QA 的 AC 证据继续使用 gateResultId，不能与 gateKey 混用。
 
 Provider 子进程成功退出与产物导入成功分开判断。manifest 缺失、格式/schema 不合法和必需产物缺失必须保留可诊断的失败原因，沿既有 Agent 失败事件与节点审计传播；诊断采用受控摘要，不回显完整产物或解析器携带的输入值。严格导入、超时与取消判定保持原有语义，不自动修补 JSON 或绕过 Gate。格式提示只能减少生成错误，不能保证模型输出合法。
+
+Provider 进程失败按原因归类（[provider-diagnostics.ts](../../packages/core/src/runtime/provider-diagnostics.ts)）：未安装、未登录或凭据无效、配置无效、非零退出、超时（总时长或无进展）、用户取消、Tekon 停止时中断、等待审批。登录类错误按各 Provider 自己的报错原文匹配；只有派生进程返回的 ENOENT 且工作目录存在时才算未安装。分类只读日志末尾的有限字节；未登录使用固定说明，只有非零退出附一行经脱敏并截断的 Provider 输出，附一条下一步。进程失败时以进程原因为准，缺失的产物只是结果；Claude 退出 0 但结果标记错误且缺产物时按该错误归类。分类、说明和下一步写入 `node.interrupted`、`gate.execution.error`、`gate.repair.failed`、`gate.rework.review.re-execute.failed` 审计与会话 `agent/error`；修复节点遇到未安装、未登录或配置无效时不再继续重试；CLI `run`、`status` 和 Web 事件流只展示最近一次恢复之后的原因。状态机不变：节点执行的确定性失败仍是 `interrupted`，不自动重试；自动修复节点的确定性失败按修复耗尽处理，运行停在 `blocked`，CLI 直接给出对应的下一步。修复或评审重跑失败后又成功时，旧的失败不再作为原因显示。
+
+启动、恢复和批准恢复前检查 Provider（[provider-probe.ts](../../packages/core/src/runtime/provider-probe.ts)）：启动时在准备运行之前检查，准备时读取的仓库事实仍在检查之后读取；命令不在 PATH 中时拒绝，不受理运行、不入队，批准路径在记录决定之前拒绝。未检测到登录只返回警告。Claude 认证方式来自 `claude auth status --json` 的登录状态与认证方式字段，在内存中解析，不经网关落盘；Codex 只检查 `OPENAI_API_KEY` 与 `CODEX_HOME/auth.json` 是否存在。每次检查把认证类别与透传变量名写入 `provider.preflight` 审计。透传变量名同时写入运行开始和每次恢复的 `workflow/started` 会话事件，Web 事件流在这一行显示。探测在系统临时目录中执行，不读取仓库内的 Provider 设置。认证类别是推断，凭据可能来自探测看不到的位置，以实际运行结果为准。
 
 ## 2. RunPlan v3 与检查绑定
 
@@ -66,6 +70,14 @@ Run 领域记录、必需治理 Audit、Session、`session/created` / `workflow/
 [JobRunner](../../packages/core/src/session/job-runner.ts)原子 claim queued Job，续租并以 owner/status 条件更新 checkpoint/settle。生产执行链通过 AsyncLocalStorage 把 Job/owner 作用域带入 [WriteQueue](../../packages/core/src/db/write-queue.ts)，[withOwnedWrite](../../packages/core/src/session/session-store.ts)在同库写事务中复核所有权再执行同步持久化写。失去 owner 或离开允许状态的旧执行无法写入该作用域保护的领域表。进程内 token 额外隔离本地执行代次。
 
 事件订阅者启动独立 automation 操作，不继承发布者租约；否则原 Job 完成后，其租约不再允许写入，会错误阻断后续 readiness/delivery 投影。租约过期的已认领 Job 转 interrupted，不自动重放 Agent/Gate；queued 未认领路径独立处理。
+
+Job 记录发起方 origin（`cli` 或 `web`；升级前写入的行，origin 为 null）。CLI 的 runner 只认领本进程发起或恢复的 jobId；Web 认领时排除 origin 为 `cli` 的 Job，null 照常认领。恢复时，若该 Run 最新的 queued Job 是受理 Job，或由另一端（origin 不同）排队，或恢复方是 CLI（每个 CLI 进程只认领自己的 jobId），就在同一事务内把 origin 改为恢复方并复用它，因此 CLI 受理后退出、还没执行的 Job 可由 Web 恢复执行，反过来也一样，另一条 CLI 命令也能接手；Web 重复恢复返回已有的活跃 Job。认领的 UPDATE 会再检查一次 origin，交接和认领同时发生时，被排除的一方认领不到。升级前启动的 Web 进程在重启前不按 origin 过滤。
+
+续租：setInterval 心跳与每轮 poll 共用 `renewOwnedLeaseIfOlder`，按 owner 和 running/paused/cancelling 条件更新；租约未超过阈值时不写库，失去所有权时 fence 本地执行。每轮 poll 在开始时取时钟，先续租本进程持有的 Job，再回收租约早于 cutoff 的 Job，cutoff 为开始时间减 leaseTtl。两轮 poll 之间（上一轮结束到本轮开始）或单轮 poll 内的间隔超过 (leaseTtl − heartbeat) / 2 时，视为本进程曾被挂起并记下这段间隔；此后一个 heartbeat 内，cutoff 再减去这段间隔，即按没有发生挂起来判定其他 owner 的租约，不算这段间隔也已过期的 Job 照常回收。新的间隔替换旧的，持续变慢的 poll 最多推迟一个间隔的回收。回收事件带 `reason: lease-expired`、`previousOwner`、`lease` 与 `cutoff`（判定所用的截止时间）。限制：多进程时，一个进程被挂起与它已退出无法区分；时钟回拨会推迟回收；leaseTtl 不大于 heartbeat 时不做挂起检测。
+
+命令输出：网关把子进程的 stdout/stderr 经脱敏流按行写入日志（`\n`、`\r\n`、单独的 `\r` 都是行尾），单行上限 1MB，超出时在上限内最近的空白处切开；流式脱敏与 `redactSecrets` 共用一个行处理器，结果逐字相同，阻断用的检测规则不变。输出过程中 progress.json 最多每秒写一次，心跳和结束时照常写。
+
+进程组回收：registry 的句柄带启动时间。心跳与 poll 续租时把本 Job 的进程组（pgid 即 detached 子进程的 pid，加启动时间）写入 `jobs.process_groups`。`interruptStale` 在 CAS 成功的同一事务里读出并清空它，只返回给完成回收的一方；事务外用 `LC_ALL=C ps -o lstart=` 核对首进程启动时间（误差 2 秒内），一致才对整个进程组发 SIGTERM，宽限 5 秒后 SIGKILL，SIGKILL 前用同一口径再核对一次启动时间，首进程已退出或启动时间不符则放弃升级并记 `escalation-skipped`，`stop()` 时立即补发未到期的 SIGKILL（同样先核对）。损坏的 startedAt 记录按 `start-time-mismatch` 处理，不发信号。每个进程组的结果写 `job.process-group` 审计：`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch`（pid 已被复用）或 `leader-gone`。限制：spawn 后到下一次续租之间被强杀的进程没有记录；首进程已退出的组不处理；平台没有 `ps`（如 Windows）时无法核对，全部按 leader-gone 跳过，遗留进程需人工清理。
 
 关闭顺序为停止新轮询/claim、等待在途工作、超时 abort 与终止受管理进程，再进行有硬上限的 drain。JobRunner.stop 在硬截止时间后中断未结算执行、清理本地执行 token 并返回；单独调用 stop 不关闭写队列。CLI/Web 组合根在 runner.stop 返回后、关闭 SQLite 前调用 db.markClosed() 设置 closed 栅栏，再调用 db.close()；WriteQueue 通过 isClosed 检查拒绝迟到写入。硬超时和 closed 栅栏都不是物理退出证明。
 
@@ -108,6 +120,8 @@ Registry 按 Job scope 隔离，旧代 close/kill 不污染新代。退出证据
 原节点从 blocked/interrupted 重跑 Agent 时，复用同 Run、节点和角色的未释放直接租约，保持工作树、分支、baseHead 与未提交修改；repair alias 不作为原节点租约复用。直接租约的缓存与冷恢复均校验唯一性、角色及最新创建事件标识，冲突明确失败，不自动挑选或释放旧租约。CLI 以 Job 终态和 Run 状态共同决定退出码，failed/interrupted/cancelled Job 即使留下 running Run 也返回非零并给出日志入口。
 
 普通修复 Agent 异常与关停分别处理：原有提交释放流程成功且仍有重试预算时，从当前 Run 分支为原节点创建新工作树，再进入 awaiting-gate 执行复查。新工作树已创建、节点仍为 needs-revision 时，只有最新 Agent 已完成、租约属于原节点，且该租约创建事件晚于最后修复失败与最后修复意图，才恢复为 Gate checkpoint；后续修复意图会撤销该资格。复查通过即可正常收尾，失败则继续剩余修复预算；该复查被关停后，新引擎沿持久租约恢复 Gate。工作树提交或释放失败保留真实错误并中止，不吞掉异常后继续，也不开放主仓库回退路径。
+
+运行清理（`tekon clean`、Web `project.clean`）只处理 passed/failed/cancelled 且没有任何类型活跃 Job 的 Run，并且只看为当前仓库路径记录的租约（仓库被移动后，旧路径的租约不列出、不处理）：对未释放租约执行 `worktree remove --force` 并标记释放（目录已不存在时记为 missing），执行 `worktree prune`，再删除租约记录的 `tekon/<runId>/` 节点分支（须通过分支名校验，不存在时记为 missing）。worktree 没能移除时保留它检出的分支；列不出现有分支时记为失败，跳过删分支。每步幂等，单项失败不中断后续步骤，只写 `run.cleanup` 审计，不改 Run 状态；不触碰 `tekon-delivery/*`、`.tekon/runs/<run>/` 证据、审计和不在租约表里的目录。预览和列表只读，不往运行目录写命令输出。同一进程内同一 Run 的清理串行执行。
 
 Web/CLI 审批后恢复共用守卫：能预见退出风险时不写审批；审批写入后发生竞争时返回“审批已记录，运行尚未恢复”，不谎报审批回滚或执行已开始。Run 详情和 Session 用同快照 `getRunRecovery` 展示取消与恢复状态，不从缺失 SSE 或无活跃 Job 推导退出。
 

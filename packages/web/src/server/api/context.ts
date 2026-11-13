@@ -1,5 +1,6 @@
 import type {
   AuditLogger,
+  ProviderPreflightResult,
   RunRecovery,
   ResumeConfirmation,
   DraftShape,
@@ -163,7 +164,17 @@ export interface DeliveryCiStatusInput {
 }
 
 export interface ProjectCleanInput extends TokenRunInput {
-  confirm: 'delete-run-dir';
+  confirm: 'clean-terminal-runs';
+  dryRun?: boolean;
+}
+
+export interface ProjectCleanOutput {
+  runId: string;
+  dryRun: boolean;
+  worktrees: number;
+  branches: number;
+  missing: number;
+  failures: number;
 }
 
 export interface DecisionInput extends ResumeConfirmation {
@@ -295,6 +306,7 @@ export interface ApiCaller {
     list(): Promise<ProjectOutput[]>;
     overview(): Promise<{
       project: ProjectOutput;
+      defaultAgent: string;
       latestRun: WorkflowOutput | null;
       counts: {
         artifacts: number;
@@ -322,6 +334,7 @@ export interface ApiCaller {
       replayed: boolean;
       admissionState: 'accepted' | 'recovery-required';
       detail?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     admission(input: { token: string; requestId: string }): Promise<ProjectAdmissionOutput>;
     admissionIntent(input: { token: string; run?: ProjectRunIntent }): Promise<{
@@ -333,13 +346,14 @@ export interface ApiCaller {
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     cancel(input: TokenRunInput): Promise<{
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
     }>;
-    clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
+    clean(input: ProjectCleanInput): Promise<ProjectCleanOutput>;
     health(input?: { token?: string }): Promise<{
       credential: 'not-configured' | 'valid' | 'invalid';
       checkedAt: string;
@@ -409,10 +423,23 @@ export interface ApiCaller {
       gates: GateOutput[];
       pendingDecisions: HumanDecisionOutput[];
     }>;
+    pendingAll(): Promise<{
+      pending: Array<{
+        runId: string;
+        decision: HumanDecisionOutput;
+        recovery: RunRecovery;
+      }>;
+    }>;
     approve(input: DecisionInput): Promise<{
       resumeOutcome?: string;
       resumeMessage?: string;
       recovery?: RunRecovery;
+      preflight?: {
+        provider: string;
+        auth: string;
+        passthroughEnv: string[];
+        warnings: string[];
+      };
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;

@@ -22,10 +22,26 @@ async function recoveryFixture(page: Page) {
       state.requests.push(body);
       return body.path === 'project.cancel' ? state.cancel(route) : body.path === 'project.resume' ? state.resume(route) : state.approve(route);
     }
-    if (body.path === 'gate.list' && state.approved) {
+    // PD-22: the approval queue now reads gate.pendingAll. Its recovery comes
+    // from the server DB, but these cases drive recovery through `state` (the
+    // approve RPC itself is mocked and never mutates the DB), so mirror the
+    // state-driven recovery into each entry and empty the queue once approved.
+    if (body.path === 'gate.pendingAll') {
+      if (state.approved) {
+        return route.fulfill({ json: { result: { pending: [] } } });
+      }
       const response = await route.fetch();
       const json = await response.json();
-      json.result.pendingDecisions = [];
+      json.result.pending = (json.result.pending ?? []).map(
+        (entry: { runId: string; decision: unknown }) => ({
+          ...entry,
+          recovery: {
+            runStatus: state.status,
+            cancelRecovery: state.cancelRecovery,
+            resumeRecovery: state.resumeRecovery,
+          },
+        }),
+      );
       return route.fulfill({ response, json });
     }
     if ((body.path === 'review.get' && body.input?.runId === 'run_1') || body.path === 'project.overview' || body.path === 'session.get' || body.path === 'project.detail') {
@@ -260,4 +276,17 @@ test('R26 desktop Session approval metadata uses the rail width while the approv
   expect(pageGeometry.items).toHaveLength(3);
   expect(pageGeometry.items.every(item => item.width < pageGeometry.width / 2 && Math.abs(item.top - pageGeometry.items[0]!.top) < 1), JSON.stringify(pageGeometry)).toBe(true);
   await page.screenshot({ path: info.outputPath('r26-desktop-approval-page-layout.png'), animations: 'disabled' });
+});
+
+test('PD-17: an interrupted run offers cancel, not only resume', async ({ page, server }) => {
+  const state = await recoveryFixture(page);
+  state.status = 'interrupted';
+  await page.goto(`${server.url}/advanced/runs/run_1`);
+
+  const cancel = page.getByRole('button', { name: '请求取消运行' });
+  await expect(cancel).toBeVisible();
+  await expect(page.getByRole('button', { name: '恢复运行' })).toBeVisible();
+  await cancel.click();
+  await page.getByRole('button', { name: '确认取消运行' }).click();
+  await expect.poll(() => state.requests.some(request => request.path === 'project.cancel')).toBe(true);
 });

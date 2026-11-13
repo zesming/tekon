@@ -1,11 +1,8 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { parseArgs } from 'node:util';
-import { classifyExecutionBinding } from '@tekon/core';
+import { classifyExecutionBinding, findLatestRunFailure } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
 import { withCommandCtx } from '../lib/context.js';
-import { resolveProjectRepoPath } from '../lib/path-utils.js';
+import { runOutcomeDetails } from '../lib/run-outcome.js';
 
 export async function commandStatus(
   argv: string[],
@@ -55,6 +52,16 @@ export async function commandStatus(
           ] : []),
         ].join(' ') + '\n',
       );
+      // Why a stopped run stopped and what to do next; a reason from before
+      // the latest resume is not shown.
+      if (['interrupted', 'blocked', 'failed'].includes(workflow.status)) {
+        const details = runOutcomeDetails({
+          status: workflow.status,
+          runId,
+          failure: findLatestRunFailure(await repositories.listAuditEvents(runId)),
+        });
+        if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
+      }
     },
   );
 }
@@ -74,25 +81,5 @@ export async function commandLog(
         );
       }
     },
-  );
-}
-
-export async function commandClean(
-  argv: string[],
-  io: CliIO,
-) {
-  const args = parseArgs({
-    args: argv,
-    options: {
-      repo: { type: 'string' },
-    },
-    allowPositionals: true,
-  });
-  const repoPath = resolveProjectRepoPath(args.values.repo);
-  if (!existsSync(join(repoPath, '.tekon', 'config.yaml'))) {
-    throw new Error(`项目未初始化: ${repoPath}。请运行 "tekon init" 初始化项目。`);
-  }
-  throw new Error(
-    'CLEAN_SUSPENDED: tekon clean is suspended pending lifecycle-safe purge (see #33, #18)',
   );
 }

@@ -13,6 +13,7 @@ import {
   readDraftShapeFile,
   repoProfileCommandGuidance,
   selectWorkflowTemplateForDraft,
+  type WorkflowTemplate,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -126,36 +127,11 @@ export async function commandWorkflow(
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
         for (const gate of node.gates) {
-          const guidance = gate.commandRef
-            ? repoProfileCommandGuidance(
-                repoPath,
-                profile,
-                gate.commandRef,
-              )
-            : null;
-          const command =
-            gate.command ??
-            (guidance?.command ? guidance.command : null);
-          const isCommandBackedGate = Boolean(
-            gate.commandRef ||
-              gate.command ||
-              gate.type === 'security-scan',
+          const { guidance, commandText, status } = gateCommandStatus(
+            repoPath,
+            profile,
+            gate,
           );
-          const commandText = command
-            ? [command.tool, ...command.args].join(' ')
-            : gate.type === 'security-scan'
-              ? 'tekon-builtin security scan'
-              : '';
-          const repoCommandNotApplicable =
-            guidance?.status === 'not-applicable' &&
-            gate.type !== 'security-scan';
-          const status = !isCommandBackedGate
-            ? 'not-command-gate'
-            : repoCommandNotApplicable
-              ? 'not-applicable'
-              : commandText
-                ? 'resolved'
-                : 'missing';
           const fields = [
             `node=${node.id}`,
             `gate=${gate.type}`,
@@ -260,4 +236,46 @@ export async function commandConstraints(
   io.stdout.write(
     readFileSync(join(getRepoRoot(), 'constraints.yaml'), 'utf8'),
   );
+}
+
+/**
+ * Whether a gate's command can be resolved in this repository: shared by
+ * `tekon workflow preflight` and `tekon doctor`.
+ */
+export function gateCommandStatus(
+  repoPath: string,
+  profile: ReturnType<typeof loadRepoProfile>,
+  gate: WorkflowTemplate['phases'][number]['nodes'][number]['gates'][number],
+) {
+  const guidance = gate.commandRef
+    ? repoProfileCommandGuidance(
+        repoPath,
+        profile,
+        gate.commandRef,
+      )
+    : null;
+  const command =
+    gate.command ??
+    (guidance?.command ? guidance.command : null);
+  const isCommandBackedGate = Boolean(
+    gate.commandRef ||
+      gate.command ||
+      gate.type === 'security-scan',
+  );
+  const commandText = command
+    ? [command.tool, ...command.args].join(' ')
+    : gate.type === 'security-scan'
+      ? 'tekon-builtin security scan'
+      : '';
+  const repoCommandNotApplicable =
+    guidance?.status === 'not-applicable' &&
+    gate.type !== 'security-scan';
+  const status = !isCommandBackedGate
+    ? 'not-command-gate'
+    : repoCommandNotApplicable
+      ? 'not-applicable'
+      : commandText
+        ? 'resolved'
+        : 'missing';
+  return { guidance, commandText, status };
 }

@@ -162,7 +162,8 @@ describe('defaultProviderConfig', () => {
     const config = defaultProviderConfig('codex', '/tmp/repo');
     expect(config.provider).toBe('codex');
     expect(config.command).toBe('codex');
-    expect(config.profile).toBe('internal');
+    // No default profile: repo config `providers.codex.profile` sets one.
+    expect(config.profile).toBeUndefined();
     expect(config.outputFormat).toBe('text');
     expect(config.permissionProfile.approval).toBe('on-failure');
   });
@@ -252,11 +253,16 @@ describe('summarizeAgentConfig', () => {
     });
   });
 
-  it('serializes a codex config with profile field', () => {
-    const config = defaultProviderConfig('codex', '/tmp/repo');
+  it('serializes a codex config with profile and passthrough fields', () => {
+    const config = {
+      ...defaultProviderConfig('codex', '/tmp/repo'),
+      profile: 'team',
+      passthroughEnv: ['AZURE_OPENAI_API_KEY'],
+    };
     const summary = summarizeAgentConfig(config);
     expect(summary.provider).toBe('codex');
-    expect(summary.profile).toBe('internal');
+    expect(summary.profile).toBe('team');
+    expect(summary.passthroughEnv).toEqual(['AZURE_OPENAI_API_KEY']);
   });
 
   it('includes undefined optional fields as undefined', () => {

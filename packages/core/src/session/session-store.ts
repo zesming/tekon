@@ -26,12 +26,36 @@ const RUN_EXECUTION_JOB_KINDS = new Set<string>([
   'goal-run',
 ]);
 
+/** A detached child process group a job started; its leader's pid is the pgid. */
+export interface ProcessGroupRecord {
+  pgid: number;
+  startedAt: string;
+}
+
+export interface ReclaimedProcessGroups {
+  jobId: string;
+  runId: string | null;
+  processGroups: ProcessGroupRecord[];
+}
+
+/** The surface that queued a job: a CLI process or the Web server. */
+export type JobOrigin = 'cli' | 'web';
+
 /**
  * `jobs.payload` is a runner implementation detail and intentionally outside
  * the frozen `Job` contract (S14). It may be supplied at enqueue time for
  * debugging; every read path strips it via `jobSchema.parse`.
  */
-export type JobEnqueueInput = Job & { payload?: Record<string, unknown> };
+export type JobEnqueueInput = Job & { payload?: Record<string, unknown>; origin?: JobOrigin };
+
+/**
+ * Which queued jobs a worker may claim. A CLI process claims only the jobs it
+ * is waiting for; the Web server leaves CLI jobs to their process.
+ */
+export interface JobClaimFilter {
+  jobIds?: readonly string[];
+  excludeOrigin?: JobOrigin;
+}
 
 /** Optional compare-and-set predicate for an atomic job update. */
 export interface JobUpdateCondition {
@@ -172,7 +196,7 @@ export interface JobRepository {
     exceptJobId?: string,
     leaseCutoffIso?: string,
   ): Promise<number>;
-  claimNext(owner: string): Promise<Job | null>;
+  claimNext(owner: string, filter?: JobClaimFilter): Promise<Job | null>;
   /**
    * Patch a job, optionally as an atomic compare-and-set. A conditional miss
    * returns null and never mutates the row.
@@ -195,7 +219,29 @@ export interface JobRepository {
     exitEvidence?: JobExitEvidence | null,
   ): Promise<Job | null>;
   interruptOwnedJob(jobId: string, owner: string): Promise<void>;
-  interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{ processed: number; lastId: string | null; events: SessionEvent[] }>;
+  /**
+   * Heartbeat for a job this worker owns. Writes only when the stored lease is
+   * older than `olderThanIso`; 'lost' means another worker or a settle took it.
+   * A renewal also records the job's current process groups when given.
+   */
+  renewOwnedLeaseIfOlder(
+    jobId: string,
+    owner: string,
+    olderThanIso: string,
+    nowIso: string,
+    processGroups?: readonly ProcessGroupRecord[],
+  ): Promise<'renewed' | 'fresh' | 'lost'>;
+  /**
+   * Interrupts jobs whose lease is older than the cutoff. The process groups
+   * recorded for each reclaimed job are returned once and cleared in the same
+   * transaction, so whoever reclaimed a job is the only one to stop them.
+   */
+  interruptStale(leaseOlderThanIso: string, afterId: string, limit: number): Promise<{
+    processed: number;
+    lastId: string | null;
+    events: SessionEvent[];
+    reclaimedProcessGroups: ReclaimedProcessGroups[];
+  }>;
   requeueStale(
     leaseOlderThanIso: string,
   ): Promise<{ requeued: number; cancelled: number }>;
@@ -249,6 +295,8 @@ type JobRow = {
   lease: string | null;
   abort_state: string;
   exit_evidence: string | null;
+  origin: JobOrigin | null;
+  process_groups: string | null;
   checkpoint: string | null;
   payload: string;
   created_at: string;
@@ -582,16 +630,17 @@ export function createJobRepository(
         db.prepare(
           `insert into jobs (
              id, session_id, kind, status, owner, lease, abort_state,
-             checkpoint, payload, created_at, updated_at, exit_evidence
+             checkpoint, payload, created_at, updated_at, exit_evidence, origin
            ) values (
              @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
+             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
            )`,
         ).run({
           ...parsed,
           owner: parsed.owner ?? null,
           lease: parsed.lease ?? null,
           checkpoint: parsed.checkpoint ?? null,
+          origin: job.origin ?? null,
           payload: JSON.stringify(job.payload ?? {}),
           exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
         });
@@ -651,10 +700,21 @@ export function createJobRepository(
             // and releasing its durable pause. A consumed Job instead falls
             // through to the normal guarded resume insertion below.
             if (existing.status === 'queued' && existing.id === latest?.id) {
+              // Nobody has claimed the latest run Job. Reuse it when it is the
+              // admission Job, when the other surface queued it, or when a CLI
+              // command resumes: each CLI process claims only its own job ids,
+              // so a queued Job seen from another command may have no runner
+              // left. Claiming succeeds once, so reuse never runs it twice. A
+              // repeated resume from the Web server still sees active-job.
               const admission = db.prepare(
                 'select job_id from run_admissions where run_id = ? and session_id = ?',
               ).get(runId, existing.session_id) as { job_id: string | null } | undefined;
-              if (admission?.job_id === existing.id) {
+              const handOver = job.origin !== undefined &&
+                (existing.origin !== job.origin || job.origin === 'cli');
+              if (admission?.job_id === existing.id || handOver) {
+                if (job.origin) {
+                  db.prepare('update jobs set origin = ? where id = ?').run(job.origin, existing.id);
+                }
                 db.prepare(
                   "update workflow_instances set status = 'running', updated_at = ? where id = ? and status = 'paused'",
                 ).run(now(), runId);
@@ -676,16 +736,17 @@ export function createJobRepository(
           db.prepare(
             `insert into jobs (
                id, session_id, kind, status, owner, lease, abort_state,
-               checkpoint, payload, created_at, updated_at, exit_evidence
+               checkpoint, payload, created_at, updated_at, exit_evidence, origin
              ) values (
                @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence
+               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
              )`,
           ).run({
             ...parsed,
             owner: parsed.owner ?? null,
             lease: parsed.lease ?? null,
             checkpoint: parsed.checkpoint ?? null,
+            origin: job.origin ?? null,
             payload,
             exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
           });
@@ -723,9 +784,22 @@ export function createJobRepository(
       return 0;
     },
 
-    async claimNext(owner) {
+    async claimNext(owner, filter = {}) {
+      if (filter.jobIds && filter.jobIds.length === 0) return null;
       return writeQueue.enqueue(() => {
         const claimedAt = now();
+        const params: Record<string, unknown> = {};
+        const scope: string[] = [];
+        if (filter.jobIds) {
+          scope.push(`j.id in (${filter.jobIds.map((id, index) => {
+            params[`job${index}`] = id;
+            return `@job${index}`;
+          }).join(', ')})`);
+        }
+        if (filter.excludeOrigin) {
+          scope.push('(j.origin is null or j.origin <> @excludeOrigin)');
+          params.excludeOrigin = filter.excludeOrigin;
+        }
         // 选出最旧 queued job 的 id,再按该 id 条件写。better-sqlite3 同步执行,
         // 整个 enqueue 任务串行,select→update 之间无并发写者。以 id 回读被本次
         // 认领的确切行——不能用 "owner + updated_at desc" 回读:同 worker 认领多个
@@ -740,10 +814,11 @@ export function createJobRepository(
              where j.status = 'queued'
                and (a.files_state is null or a.files_state = 'ready')
                and (j.kind not in ('workflow-run','workflow-resume','goal-run') or w.status is null or w.status not in ('passed','failed','cancelled'))
+               ${scope.map((clause) => `and ${clause}`).join(' ')}
              order by j.created_at asc, j.id asc
              limit 1`,
           )
-          .get() as { id: string } | undefined;
+          .get(params) as { id: string } | undefined;
         if (!target) {
           return null;
         }
@@ -751,9 +826,11 @@ export function createJobRepository(
           .prepare(
             `update jobs
              set status = 'running', owner = @owner, lease = @now, updated_at = @now, exit_evidence = null
-             where id = @id and status = 'queued'`,
+             where id = @id and status = 'queued'
+               and (@excludeOrigin is null or origin is null or origin <> @excludeOrigin)`,
           )
-          .run({ owner, now: claimedAt, id: target.id });
+          // Re-checked here: another process may hand the job over in between.
+          .run({ owner, now: claimedAt, id: target.id, excludeOrigin: filter.excludeOrigin ?? null });
         if (result.changes !== 1) {
           return null;
         }
@@ -879,6 +956,22 @@ export function createJobRepository(
       }).immediate());
     },
 
+    async renewOwnedLeaseIfOlder(jobId, owner, olderThanIso, nowIso, processGroups) {
+      const active = `owner=@owner and status in ('running','paused','cancelling')`;
+      const current = db
+        .prepare(`select lease from jobs where id=@jobId and ${active}`)
+        .get({ jobId, owner }) as { lease: string | null } | undefined;
+      if (!current) return 'lost';
+      if (current.lease !== null && current.lease >= olderThanIso) return 'fresh';
+      return writeQueue.enqueue(() => {
+        const changed = db
+          .prepare(`update jobs set lease=@nowIso, updated_at=@nowIso,
+            process_groups=coalesce(@groups, process_groups) where id=@jobId and ${active}`)
+          .run({ jobId, owner, nowIso, groups: processGroups ? JSON.stringify(processGroups) : null });
+        return changed.changes ? 'renewed' : 'lost';
+      });
+    },
+
     async interruptStale(leaseOlderThanIso, afterId, limit) {
       return writeQueue.enqueue(() => db.transaction(() => {
         const rows = db.prepare(`select j.*,s.run_id from jobs j left join sessions s on s.id=j.session_id
@@ -886,6 +979,7 @@ export function createJobRepository(
           order by j.id limit ?`).all(afterId,leaseOlderThanIso,Math.max(1,Math.min(100,limit))) as Array<JobRow & { run_id: string | null }>;
         let processed = 0;
         const events: SessionEvent[] = [];
+        const reclaimedProcessGroups: ReclaimedProcessGroups[] = [];
         for (const row of rows) {
           try {
             // A failing row rolls back only itself, and its cursor still advances.
@@ -896,9 +990,13 @@ export function createJobRepository(
             }).immediate();
             processed += committed.count;
             events.push(...committed.rowEvents);
+            const processGroups = committed.count ? parseProcessGroups(row.process_groups) : [];
+            if (processGroups.length > 0) {
+              reclaimedProcessGroups.push({ jobId: row.id, runId: row.run_id, processGroups });
+            }
           } catch { /* next page progresses; retry after wrap */ }
         }
-        return { processed, lastId: rows.at(-1)?.id ?? null, events };
+        return { processed, lastId: rows.at(-1)?.id ?? null, events, reclaimedProcessGroups };
       }).immediate());
     },
 
@@ -910,13 +1008,28 @@ export function createJobRepository(
   };
 }
 
+function parseProcessGroups(value: string | null): ProcessGroupRecord[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ProcessGroupRecord =>
+      typeof item === 'object' && item !== null &&
+      Number.isInteger((item as ProcessGroupRecord).pgid) && (item as ProcessGroupRecord).pgid > 1 &&
+      typeof (item as ProcessGroupRecord).startedAt === 'string' &&
+      Number.isFinite(Date.parse((item as ProcessGroupRecord).startedAt)));
+  } catch {
+    return [];
+  }
+}
+
 /** The caller holds the writer lock. Never turns an expired lease into exit proof. */
 function interruptJobTxn(db: TekonDatabase, row: JobRow & { run_id: string | null }, cutoff: string | null, events?: SessionEvent[]): number {
   const now = new Date().toISOString();
   const run = row.run_id ? db.prepare('select status from workflow_instances where id=?').get(row.run_id) as { status: string } | undefined : undefined;
   const execution = RUN_EXECUTION_JOB_KINDS.has(row.kind);
   const cancelled = row.status === 'cancelling' || ['requested','propagated'].includes(row.abort_state) || (execution && run?.status === 'cancelled');
-  const changed = db.prepare(`update jobs set status=?,owner=null,lease=null,exit_evidence=null,updated_at=?
+  const changed = db.prepare(`update jobs set status=?,owner=null,lease=null,exit_evidence=null,process_groups=null,updated_at=?
     where id=? and owner is ? and status=? and (? is null or lease<?)`)
     .run(cancelled ? 'cancelled':'interrupted',now,row.id,row.owner,row.status,cutoff,cutoff);
   if (!changed.changes) return 0;
@@ -930,7 +1043,13 @@ function interruptJobTxn(db: TekonDatabase, row: JobRow & { run_id: string | nul
   const { seq } = db.prepare('select coalesce(max(seq),0)+1 as seq from session_events where session_id=?')
     .get(row.session_id) as { seq: number };
   const event = sessionEventSchema.parse({ sessionId: row.session_id, seq, type: 'job/status', version: 1,
-    timestamp: now, payload: { jobId: row.id, kind: row.kind, status: cancelled ? 'cancelled' : 'interrupted' } });
+    timestamp: now, payload: {
+      jobId: row.id, kind: row.kind, status: cancelled ? 'cancelled' : 'interrupted',
+      // Stale reclaim records whose lease expired and against which cutoff.
+      ...(cutoff !== null
+        ? { reason: 'lease-expired', previousOwner: row.owner, lease: row.lease, cutoff }
+        : {}),
+    } });
   db.prepare('insert into session_events(session_id,seq,type,version,timestamp,payload) values(?,?,?,?,?,?)')
     .run(row.session_id, seq, event.type, event.version, event.timestamp, JSON.stringify(event.payload));
   events?.push(event);

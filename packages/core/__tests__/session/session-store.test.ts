@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createJobRepository,
@@ -326,6 +326,182 @@ describe('session event store', () => {
 });
 
 describe('job repository', () => {
+  it('renews an owned lease only when it is older than the threshold', async () => {
+    const { writeQueue, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2026-11-12T00:00:10.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_lease', status: 'running', owner: 'w1', lease }));
+    const enqueue = vi.spyOn(writeQueue, 'enqueue');
+
+    // Fresh: no write at all.
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:05.000Z', '2026-11-12T00:00:20.000Z'),
+    ).resolves.toBe('fresh');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect((await jobs.get('job_lease'))?.lease).toBe(lease);
+
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:15.000Z', '2026-11-12T00:00:20.000Z'),
+    ).resolves.toBe('renewed');
+    expect((await jobs.get('job_lease'))?.lease).toBe('2026-11-12T00:00:20.000Z');
+
+    // Paused and cancelling jobs are still held, so they renew too.
+    for (const [status, at] of [['paused', '00:00:25'], ['cancelling', '00:00:26']] as const) {
+      await jobs.updateJob('job_lease', { status });
+      const iso = `2026-11-12T${at}.000Z`;
+      await expect(jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', iso, iso)).resolves.toBe('renewed');
+    }
+
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w2', '2026-11-12T00:00:30.000Z', '2026-11-12T00:00:40.000Z'),
+    ).resolves.toBe('lost');
+    await jobs.updateJob('job_lease', { status: 'done' });
+    await expect(
+      jobs.renewOwnedLeaseIfOlder('job_lease', 'w1', '2026-11-12T00:00:30.000Z', '2026-11-12T00:00:40.000Z'),
+    ).resolves.toBe('lost');
+  });
+
+  it('claims only the listed jobs, or skips another origin', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const at = (second: number) => `2026-11-12T00:00:0${second}.000Z`;
+    await jobs.enqueue(makeJob(session.id, { id: 'job_cli', origin: 'cli', createdAt: at(1) }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_legacy', createdAt: at(2) }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_web', origin: 'web', createdAt: at(3) }));
+    expect(db.prepare('select id, origin from jobs order by id').all()).toEqual([
+      { id: 'job_cli', origin: 'cli' },
+      { id: 'job_legacy', origin: null },
+      { id: 'job_web', origin: 'web' },
+    ]);
+
+    await expect(jobs.claimNext('w', { jobIds: ['job_web'] })).resolves.toMatchObject({ id: 'job_web' });
+    await expect(jobs.claimNext('w', { jobIds: ['job_missing'] })).resolves.toBeNull();
+    await expect(jobs.claimNext('w', { jobIds: [] })).resolves.toBeNull();
+    // Rows written before origin existed stay claimable.
+    await expect(jobs.claimNext('w', { excludeOrigin: 'cli' })).resolves.toMatchObject({ id: 'job_legacy' });
+    await expect(jobs.claimNext('w', { excludeOrigin: 'cli' })).resolves.toBeNull();
+    await expect(jobs.claimNext('w')).resolves.toMatchObject({ id: 'job_cli' });
+  });
+
+  it('hands a queued, unclaimed run job to whoever resumes it', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    // A CLI queued a resume and exited before claiming it.
+    const queued = await jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      id: 'job_orphan', kind: 'workflow-resume', origin: 'cli',
+    }));
+    expect(queued).toMatchObject({ outcome: 'enqueued', job: { id: 'job_orphan' } });
+
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'web',
+    }))).resolves.toMatchObject({ outcome: 'enqueued', job: { id: 'job_orphan' } });
+    expect(db.prepare('select count(*) as n from jobs').get()).toEqual({ n: 1 });
+    expect(db.prepare('select origin from jobs where id = ?').get('job_orphan')).toEqual({ origin: 'web' });
+    // A repeated resume from the same surface still sees the active Job.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'web',
+    }))).resolves.toMatchObject({ outcome: 'active-job', job: { id: 'job_orphan' } });
+    await expect(jobs.claimNext('web', { excludeOrigin: 'cli' })).resolves.toMatchObject({ id: 'job_orphan' });
+    // Once claimed it is active, not reusable.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'cli',
+    }))).resolves.toMatchObject({ outcome: 'active-job', job: { id: 'job_orphan' } });
+  });
+
+  it('lets another CLI command take over a queued job a CLI left behind', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    await jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      id: 'job_cli_orphan', kind: 'workflow-resume', origin: 'cli',
+    }));
+
+    // Each CLI command claims only its own job ids, so a second command reuses it.
+    await expect(jobs.enqueueIfNoActiveByRunId('run_1', makeJob(session.id, {
+      kind: 'workflow-resume', origin: 'cli',
+    }))).resolves.toMatchObject({ outcome: 'enqueued', job: { id: 'job_cli_orphan' } });
+    expect(db.prepare('select count(*) as n from jobs').get()).toEqual({ n: 1 });
+  });
+
+  it('records the process groups of a running job when its lease is renewed', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2026-11-13T00:00:00.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_groups', status: 'running', owner: 'w1', lease }));
+    const groups = [{ pgid: 4242, startedAt: '2026-11-13T00:00:01.000Z' }];
+
+    await expect(jobs.renewOwnedLeaseIfOlder('job_groups', 'w1', '2026-11-13T00:00:05.000Z',
+      '2026-11-13T00:00:05.000Z', groups)).resolves.toBe('renewed');
+    expect(JSON.parse((db.prepare('select process_groups from jobs where id = ?').get('job_groups') as {
+      process_groups: string;
+    }).process_groups)).toEqual(groups);
+    // Renewing without a list keeps the recorded one.
+    await jobs.renewOwnedLeaseIfOlder('job_groups', 'w1', '2026-11-13T00:00:10.000Z', '2026-11-13T00:00:10.000Z');
+    expect(db.prepare('select process_groups from jobs where id = ?').get('job_groups'))
+      .toEqual({ process_groups: JSON.stringify(groups) });
+  });
+
+  it('hands over the process groups of a reclaimed job once, and only after the reclaim', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const groups = [{ pgid: 4242, startedAt: '2026-11-13T00:00:01.000Z' }];
+    await jobs.enqueue(makeJob(session.id, { id: 'job_dead', status: 'running', owner: 'w_dead', lease: '2026-11-13T00:00:00.000Z' }));
+    await jobs.enqueue(makeJob(session.id, { id: 'job_alive', status: 'running', owner: 'w_alive', lease: '2026-11-13T00:00:00.000Z' }));
+    for (const id of ['job_dead', 'job_alive']) {
+      db.prepare('update jobs set process_groups = ? where id = ?').run(JSON.stringify(groups), id);
+    }
+    // The live owner renews before the reclaim runs.
+    await jobs.renewOwnedLeaseIfOlder('job_alive', 'w_alive', '2026-11-13T00:01:00.000Z', '2026-11-13T00:01:00.000Z');
+
+    const result = await jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10);
+
+    expect(result.reclaimedProcessGroups).toEqual([
+      { jobId: 'job_dead', runId: 'run_1', processGroups: groups },
+    ]);
+    expect(db.prepare('select process_groups from jobs where id = ?').get('job_dead')).toEqual({ process_groups: null });
+    expect(db.prepare('select status from jobs where id = ?').get('job_alive')).toEqual({ status: 'running' });
+    await expect(jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10))
+      .resolves.toMatchObject({ reclaimedProcessGroups: [] });
+  });
+
+  it('drops malformed process groups instead of handing them to the reaper', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    await jobs.enqueue(makeJob(session.id, { id: 'job_bad_groups', status: 'running', owner: 'w_dead', lease: '2026-11-13T00:00:00.000Z' }));
+    const malformed = [
+      { pgid: 0, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 1, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: -5, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 1.5, startedAt: '2026-11-13T00:00:01.000Z' },
+      { pgid: 4242, startedAt: 'not-a-date' },
+      { pgid: 4243 },
+    ];
+    db.prepare('update jobs set process_groups = ? where id = ?').run(JSON.stringify(malformed), 'job_bad_groups');
+
+    const result = await jobs.interruptStale('2026-11-13T00:00:30.000Z', '', 10);
+
+    // The job is still reclaimed, but no unusable group reaches the reaper.
+    expect(db.prepare('select status from jobs where id = ?').get('job_bad_groups'))
+      .toEqual({ status: 'interrupted' });
+    expect(result.reclaimedProcessGroups).toEqual([]);
+  });
+
+  it('records why and from whom a stale job was taken', async () => {
+    const { sessions, jobs } = setupStore();
+    const { session } = await seedSession(sessions);
+    const lease = '2020-01-01T00:00:00.000Z';
+    await jobs.enqueue(makeJob(session.id, { id: 'job_stale_reason', status: 'running', owner: 'w_old', lease }));
+    const cutoff = '2026-11-12T00:00:00.000Z';
+    const result = await jobs.interruptStale(cutoff, '', 10);
+    expect(result.events[0]?.payload).toMatchObject({
+      jobId: 'job_stale_reason',
+      status: 'interrupted',
+      reason: 'lease-expired',
+      previousOwner: 'w_old',
+      lease,
+      cutoff,
+    });
+  });
+
   it('strips the contract-extra payload column from every job read (S14)', async () => {
     const { db, sessions, jobs } = setupStore();
     const { session } = await seedSession(sessions);

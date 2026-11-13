@@ -90,13 +90,14 @@ test('inline approval: approve a pending human decision from the session UI', as
     'blocked',
   ]);
 
-  // Phase 4 P1-04: SessionsPage lists the session with a "待审批" action badge.
+  // UI-02: the session row carries one badge, labeled from the single status
+  // map. A run paused at a human gate renders the actionable 等待审批 label.
   await page.goto(`${server.url}/?approvalList=${Date.now()}`);
   const sessionItem = page.locator(`a[href="/sessions/${sessionId}"]`);
   await expect(sessionItem).toBeVisible({ timeout: 15_000 });
   await expect(
-    sessionItem.locator('.session-list-action-approval'),
-  ).toHaveText('待审批');
+    sessionItem.locator('.badge'),
+  ).toHaveText('等待审批');
 
   await page.goto(`${server.url}/sessions/${sessionId}`);
 

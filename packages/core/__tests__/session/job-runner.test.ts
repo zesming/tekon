@@ -8,6 +8,7 @@ import {
   createSubprocessRegistry,
   createWriteQueue,
   JobFencingError,
+  JOB_ABORT_REASON_OWNERSHIP_LOST,
   migrateDatabase,
   openTekonDatabase,
   type DurableJobRunner,
@@ -118,6 +119,8 @@ interface SetupOptions {
   leaseTtlMs?: number;
   workerId?: string;
   stopSettleTimeoutMs?: number;
+  now?: () => number;
+  extra?: Partial<Parameters<typeof createJobRunner>[0]>;
 }
 
 function setup(options: SetupOptions) {
@@ -139,12 +142,26 @@ function setup(options: SetupOptions) {
     leaseTtlMs: options.leaseTtlMs ?? 30_000,
     workerId: options.workerId ?? 'worker_test',
     stopSettleTimeoutMs: options.stopSettleTimeoutMs,
+    ...(options.now ? { now: options.now } : {}),
+    ...options.extra,
   });
   runners.push(runner);
   return { db, sessions, jobs, bus, registry, runner };
 }
 
 const runners: DurableJobRunner[] = [];
+
+async function seedForeignRunning(
+  jobs: ReturnType<typeof createJobRepository>,
+  sessionId: string,
+  id: string,
+  lease: string,
+) {
+  return jobs.enqueue({
+    id, sessionId, kind: 'workflow-run', status: 'running', owner: 'worker_other',
+    lease, abortState: 'none', checkpoint: null, createdAt: lease, updatedAt: lease,
+  });
+}
 
 afterEach(async () => {
   // Release hung executions first so stop() settles immediately instead of
@@ -174,6 +191,187 @@ async function seedSession(
 }
 
 describe('durable job runner', () => {
+  // These tests move the runner's clock instead of suspending the process:
+  // they rely on this runner being the only one polling the database.
+  it('renews its own lease before reclaiming after the process was suspended', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({
+      executor,
+      heartbeatMs: 200,
+      leaseTtlMs: 1_000,
+      now: () => Date.now() + offset,
+    });
+    const own = await seedSession(sessions, 'run_own');
+    const foreignSession = await seedSession(sessions, 'run_foreign');
+    await runner.enqueue({ sessionId: own.id, kind: 'workflow-run' });
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const ownJobId = executor.started[0]!.job.id;
+    const foreign = await jobs.enqueue({
+      id: 'job_foreign_suspended',
+      sessionId: foreignSession.id,
+      kind: 'workflow-run',
+      status: 'running',
+      owner: 'worker_other',
+      lease: new Date().toISOString(),
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // The process "wakes up" 5s later: every lease looks expired.
+    offset = 5_000;
+    await sleep(100);
+    expect(await jobs.get(ownJobId)).toMatchObject({ status: 'running', owner: 'worker_test' });
+    // Others get a heartbeat to renew before they are reclaimed.
+    expect((await jobs.get(foreign.id))?.status).toBe('running');
+
+    // Reclaimed on the moved clock, well before its real lease could expire.
+    offset = 5_000 + 400;
+    await waitFor(async () => (await jobs.get(foreign.id))?.status === 'interrupted', 500);
+    expect(await jobs.get(ownJobId)).toMatchObject({ status: 'running', owner: 'worker_test' });
+  });
+
+  it('stamps its origin and, when started for given jobs, claims only those', async () => {
+    const executor = new ControllableExecutor();
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+    const sessions = createSessionEventStore(db, writeQueue);
+    const jobs = createJobRepository(db, writeQueue);
+    const runner = createJobRunner({
+      jobs, sessions, bus: createSessionEventBus(), registry: createSubprocessRegistry(),
+      executor, pollIntervalMs: 5, workerId: 'worker_cli', origin: 'cli',
+    });
+    runners.push(runner);
+    const other = await seedSession(sessions, 'run_other');
+    const mine = await seedSession(sessions, 'run_mine');
+    const foreign = await jobs.enqueue({
+      id: 'job_0_foreign', sessionId: other.id, kind: 'workflow-run', status: 'queued',
+      owner: null, lease: null, abortState: 'none', checkpoint: null,
+      createdAt: OLD_ISO, updatedAt: OLD_ISO,
+    });
+    const own = await runner.enqueue({ sessionId: mine.id, kind: 'workflow-run' });
+    expect(db.prepare('select origin from jobs where id=?').get(own.id)).toEqual({ origin: 'cli' });
+
+    const webRunning = await seedForeignRunning(jobs, other.id, 'job_0_web_running', new Date().toISOString());
+
+    runner.start({ jobIds: [own.id] });
+    await waitFor(() => executor.started.length === 1);
+    expect(executor.started[0]!.job.id).toBe(own.id);
+    await sleep(50);
+    expect((await jobs.get(foreign.id))?.status).toBe('queued');
+    ControllableExecutor.releaseAll();
+    await runner.stop();
+    // Stopping leaves jobs it never claimed exactly as they were.
+    expect(await jobs.get(foreign.id)).toMatchObject({ status: 'queued', owner: null });
+    expect(await jobs.get(webRunning.id)).toMatchObject({ status: 'running', owner: 'worker_other' });
+  });
+
+  it('gives other workers a heartbeat again after a second suspension', async () => {
+    let offset = 0;
+    const clock = () => Date.now() + offset;
+    const { sessions, jobs, runner } = setup({
+      executor: immediateExecutor(), heartbeatMs: 200, leaseTtlMs: 1_000, now: clock,
+    });
+    const session = await seedSession(sessions, 'run_twice');
+    const foreign = await seedForeignRunning(jobs, session.id, 'job_twice', new Date().toISOString());
+    runner.start();
+    await sleep(30);
+
+    offset = 5_000;
+    await sleep(30);
+    // The other worker renews right after waking, then both sleep again.
+    await jobs.updateJob(foreign.id, { lease: new Date(clock()).toISOString() });
+    await sleep(30);
+    offset = 10_000;
+    await sleep(40);
+    expect((await jobs.get(foreign.id))?.status).toBe('running');
+    // Without further renewals it is reclaimed once its lease really expires.
+    await waitFor(async () => (await jobs.get(foreign.id))?.status === 'interrupted', 2_000);
+  });
+
+  it('treats a suspension in the middle of a poll as a gap', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, runner } = setup({
+      executor, heartbeatMs: 200, leaseTtlMs: 1_000, now: () => Date.now() + offset,
+    });
+    const own = await seedSession(sessions, 'run_mid_own');
+    const other = await seedSession(sessions, 'run_mid_other');
+    await runner.enqueue({ sessionId: own.id, kind: 'workflow-run' });
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const foreign = await seedForeignRunning(jobs, other.id, 'job_mid', new Date().toISOString());
+    const get = jobs.get.bind(jobs);
+    let jumped = false;
+    vi.spyOn(jobs, 'get').mockImplementation(async (id) => {
+      // The poll reads its own job first; the clock jumps while it waits.
+      if (!jumped && id === executor.started[0]!.job.id) { jumped = true; offset = 5_000; }
+      return get(id);
+    });
+    await waitFor(() => jumped);
+    await sleep(40);
+    expect((await get(foreign.id))?.status).toBe('running');
+  });
+
+  it('reads the clock once at the start and once at the end of each poll', async () => {
+    let calls = 0;
+    const { runner } = setup({
+      executor: immediateExecutor(), pollIntervalMs: 1_000, now: () => { calls += 1; return Date.now(); },
+    });
+    runner.start();
+    await sleep(50);
+    expect(calls).toBe(2);
+  });
+
+  it('fences its execution when renewal reports the job lost', async () => {
+    let offset = 0;
+    const executor = new ControllableExecutor();
+    const { sessions, jobs, registry, runner } = setup({
+      executor, heartbeatMs: 10_000, leaseTtlMs: 30_000, now: () => Date.now() + offset,
+    });
+    const session = await seedSession(sessions, 'run_lost');
+    await runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+    const killAll = vi.spyOn(registry, 'killAll');
+    runner.start();
+    await waitFor(() => executor.started.length === 1);
+    // The row still looks owned, so only the renewal result can fence.
+    vi.spyOn(jobs, 'renewOwnedLeaseIfOlder').mockResolvedValue('lost');
+    offset = 20_000;
+    await waitFor(() => executor.started[0]!.signal.aborted);
+    expect(executor.started[0]!.signal.reason).toBe(JOB_ABORT_REASON_OWNERSHIP_LOST);
+    expect(killAll).toHaveBeenCalledWith(executor.started[0]!.job.id, 'SIGKILL');
+  });
+
+  it('still reclaims stale jobs when every poll is slow', async () => {
+    let calls = 0;
+    const { sessions, jobs, runner } = setup({
+      executor: immediateExecutor(),
+      heartbeatMs: 200,
+      leaseTtlMs: 1_000,
+      // Each poll appears to start 600ms after the previous one ended.
+      now: () => Date.now() + 600 * calls++,
+    });
+    const session = await seedSession(sessions, 'run_slow');
+    const stale = await jobs.enqueue({
+      id: 'job_stale_slow',
+      sessionId: session.id,
+      kind: 'workflow-run',
+      status: 'running',
+      owner: 'worker_other',
+      lease: OLD_ISO,
+      abortState: 'none',
+      checkpoint: null,
+      createdAt: OLD_ISO,
+      updatedAt: OLD_ISO,
+    });
+    runner.start();
+    await waitFor(async () => (await jobs.get(stale.id))?.status === 'interrupted');
+  });
+
   it('enqueues a queued job and exposes it via get', async () => {
     const { sessions, runner } = setup({ executor: immediateExecutor() });
     const session = await seedSession(sessions);
@@ -991,5 +1189,146 @@ describe('durable job runner', () => {
       abortState: 'propagated',
       exitEvidence: null,
     });
+  });
+});
+
+describe('runner clock', () => {
+  it('reads the current global clock when no clock is injected', async () => {
+    const f = setup({ executor: immediateExecutor() });
+    const session = await seedSession(f.sessions);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(Date.parse('2030-01-02T03:04:05.006Z'));
+      const job = await f.runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+      expect(job.createdAt).toBe('2030-01-02T03:04:05.006Z');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('process groups of reclaimed jobs', () => {
+  const startedAt = '2026-11-13T00:00:01.000Z';
+
+  function fakeReaper(startTimes: number | null | Array<number | null>) {
+    const sequence = Array.isArray(startTimes) ? startTimes : [startTimes];
+    const signals: Array<[number, string]> = [];
+    let call = 0;
+    return {
+      signals,
+      reaper: {
+        leaderStartTime: () => sequence[Math.min(call++, sequence.length - 1)] ?? null,
+        signal: (pgid: number, signal: NodeJS.Signals) => { signals.push([pgid, signal]); },
+      },
+    };
+  }
+
+  async function seedReclaimable(f: ReturnType<typeof setup>) {
+    const session = await seedSession(f.sessions);
+    await seedForeignRunning(f.jobs, session.id, 'job_orphaned', OLD_ISO);
+    f.db.prepare('update jobs set process_groups = ? where id = ?')
+      .run(JSON.stringify([{ pgid: 5555, startedAt }]), 'job_orphaned');
+  }
+
+  it('keeps the recorded process groups in step with its own running processes', async () => {
+    const executor = new ControllableExecutor();
+    const f = setup({ executor, heartbeatMs: 20 });
+    const session = await seedSession(f.sessions);
+    const job = await f.runner.enqueue({ sessionId: session.id, kind: 'workflow-run' });
+    f.runner.start();
+    await waitFor(() => executor.started.length === 1);
+    const handle = { pid: 4242, startedAt: Date.parse(startedAt), kill: () => {} };
+    f.registry.register(job.id, handle);
+    const recorded = () => (f.db.prepare('select process_groups from jobs where id = ?').get(job.id) as {
+      process_groups: string | null;
+    }).process_groups;
+
+    await waitFor(() => recorded() === JSON.stringify([{ pgid: 4242, startedAt }]));
+    f.registry.unregister(job.id, handle);
+    await waitFor(() => recorded() === '[]');
+    executor.release(job.id);
+  });
+
+  it('stops the process groups of a job it reclaimed: SIGTERM, then SIGKILL', async () => {
+    const matching = Date.parse(startedAt) + 900;
+    const { signals, reaper } = fakeReaper([matching, matching]);
+    const reaps: unknown[] = [];
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: {
+        processGroupReaper: reaper,
+        processGroupKillGraceMs: 20,
+        onProcessGroupReap: (entry) => { reaps.push(entry); },
+      },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+
+    await waitFor(() => signals.length === 2);
+    expect(signals).toEqual([[5555, 'SIGTERM'], [5555, 'SIGKILL']]);
+    expect(reaps).toEqual([
+      { jobId: 'job_orphaned', runId: 'run_1', pgid: 5555, startedAt, outcome: 'signalled' },
+      { jobId: 'job_orphaned', runId: 'run_1', pgid: 5555, startedAt, outcome: 'killed' },
+    ]);
+  });
+
+  it.each([
+    ['the leader exited during the grace window', null],
+    ['the pgid was recycled by another process', Date.parse(startedAt) + 60_000],
+  ] as const)('skips SIGKILL and audits escalation-skipped when %s', async (_label, escalatedStart) => {
+    const { signals, reaper } = fakeReaper([Date.parse(startedAt) + 900, escalatedStart]);
+    const reaps: Array<{ outcome: string }> = [];
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: {
+        processGroupReaper: reaper,
+        processGroupKillGraceMs: 20,
+        onProcessGroupReap: (entry) => { reaps.push(entry); },
+      },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+
+    await waitFor(() => reaps.length === 2);
+    expect(signals).toEqual([[5555, 'SIGTERM']]);
+    expect(reaps.map((entry) => entry.outcome)).toEqual(['signalled', 'escalation-skipped']);
+    await f.runner.stop();
+    expect(signals).toEqual([[5555, 'SIGTERM']]);
+  });
+
+  it('leaves a process group alone when its leader is another process or gone', async () => {
+    for (const [startTime, outcome] of [
+      [Date.parse(startedAt) + 60_000, 'start-time-mismatch'],
+      [null, 'leader-gone'],
+    ] as const) {
+      const { signals, reaper } = fakeReaper(startTime);
+      const reaps: Array<{ outcome: string }> = [];
+      const f = setup({
+        executor: immediateExecutor(),
+        extra: { processGroupReaper: reaper, onProcessGroupReap: (entry) => { reaps.push(entry); } },
+      });
+      await seedReclaimable(f);
+      f.runner.start();
+      await waitFor(() => reaps.length === 1);
+      expect(reaps[0]?.outcome).toBe(outcome);
+      await sleep(30);
+      expect(signals).toEqual([]);
+      await f.runner.stop();
+    }
+  });
+
+  it('sends the pending SIGKILL before stop() returns', async () => {
+    const { signals, reaper } = fakeReaper(Date.parse(startedAt));
+    const f = setup({
+      executor: immediateExecutor(),
+      extra: { processGroupReaper: reaper, processGroupKillGraceMs: 60_000 },
+    });
+    await seedReclaimable(f);
+    f.runner.start();
+    await waitFor(() => signals.length === 1);
+
+    await f.runner.stop();
+
+    expect(signals).toEqual([[5555, 'SIGTERM'], [5555, 'SIGKILL']]);
   });
 });

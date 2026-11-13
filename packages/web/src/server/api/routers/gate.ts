@@ -1,5 +1,6 @@
 import {
   createHumanApprovalSummary,
+  ProviderPreflightError,
   readRunRecovery,
   type RunRecovery,
 } from '@tekon/core';
@@ -8,10 +9,11 @@ import type { ServerContext, DecisionInput } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
 import { assertRunCanResume } from '../agents.js';
-import { assertRunInScope, listGates, listHumanDecisions } from '../queries.js';
+import { assertRunInScope, listGates, listHumanDecisions, listRunsForScopedProjects } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';
 import { mapGate, mapHumanDecision, mapHumanDecisionRow } from '../mappers.js';
 import { redactObject } from '../redaction.js';
+import { providerPreflightApiError } from './project.js';
 
 export function createGateRouter(context: ServerContext) {
   return {
@@ -43,6 +45,45 @@ export function createGateRouter(context: ServerContext) {
         gates: ReturnType<typeof mapGate>[];
         pendingDecisions: ReturnType<typeof mapHumanDecision>[];
       };
+    },
+
+    // PD-22: every pending decision across all scoped runs, not just the latest.
+    async pendingAll() {
+      const pending = (
+        await Promise.all(
+          listRunsForScopedProjects(context.db, context.projectContext).map(
+            async (run) => {
+              const decisions = listHumanDecisions(context.db, run.id).filter(
+                (decision) => decision.status === 'pending',
+              );
+              if (decisions.length === 0) return [];
+              const summaries = await Promise.all(
+                decisions.map((decision) =>
+                  createHumanApprovalSummary({
+                    repoPath: context.projectContext.projectRoot,
+                    repositories: context.repositories,
+                    audit: context.audit,
+                    runId: run.id,
+                    decisionId: decision.id,
+                    maxContentChars: 1_200,
+                    commandDisplay: 'explicit',
+                  }),
+                ),
+              );
+              return decisions.map((decision, index) => ({
+                runId: run.id,
+                decision: mapHumanDecision(
+                  context.db,
+                  decision,
+                  summaries[index] ?? null,
+                ),
+                recovery: readRunRecovery(context.db, run.id),
+              }));
+            },
+          ),
+        )
+      ).flat();
+      return redactObject({ pending }) as { pending: typeof pending };
     },
 
     async approve(decisionInput: DecisionInput) {
@@ -130,6 +171,15 @@ async function updateDecision(input: {
     }
   }
 
+  // Check the provider before recording an approval, so a run that cannot
+  // start does not leave a decision approved but not resumed.
+  if (input.status === 'approved') {
+    await context.sessionService.preflightResume(existing.run_id).catch((error: unknown) => {
+      if (error instanceof ProviderPreflightError) throw providerPreflightApiError(error);
+      throw error;
+    });
+  }
+
   const active = await context.jobs.findActiveByRunId(existing.run_id);
   if (active) {
     throw new ApiError(
@@ -191,17 +241,20 @@ async function updateDecision(input: {
         confirmStopped: input.input.confirmStopped,
         previousJobId: input.input.previousJobId,
       });
+      const preflight = 'preflight' in result ? result.preflight : undefined;
       if (result.outcome === 'enqueued') return {
         ...mappedDecision,
         resumeOutcome: result.outcome,
         sessionId: result.sessionId,
         jobId: result.jobId,
+        ...(preflight ? { preflight } : {}),
       };
       return {
         ...mappedDecision,
         resumeOutcome: result.outcome,
         resumeMessage: `审批已记录，运行尚未恢复（${result.outcome}）。请刷新后检查运行状态及旧执行退出情况。`,
         recovery: readRunRecovery(db, existing.run_id),
+        ...(preflight ? { preflight } : {}),
       };
     } catch (error) {
       // A recorded decision is durable even if recovery admission fails.

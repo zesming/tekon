@@ -17,7 +17,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { createWebFixtureProject } from '../fixtures/project.js';
+import { installFakeProviderCommands } from '../fixtures/fake-provider-bin.js';
 import { createApiCaller, dispatchApiCall } from '../../src/server/api/root.js';
+import { writeFakeCodex } from '../../../cli/__tests__/helpers/fake-provider.js';
 
 const cleanupTasks: Array<() => void> = [];
 
@@ -246,6 +248,7 @@ describe('web write authorization', () => {
   it('approves a human gate when the run has a Codex provider snapshot', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
+    cleanupTasks.push(installFakeProviderCommands('codex'));
     const db = openTekonDatabase({
       filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
     });
@@ -321,7 +324,7 @@ describe('web write authorization', () => {
       api.project.clean({
         runId: 'run_escaped',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(
@@ -411,7 +414,13 @@ describe('web write authorization', () => {
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-web-codex-bin-'));
     cleanupTasks.push(fixture.cleanup);
     cleanupTasks.push(() => rmSync(binDir, { recursive: true, force: true }));
-    writeFakeCodex(binDir);
+    writeFakeCodex(binDir, { expectProfile: 'internal' });
+    // Codex no longer defaults to the internal profile; the repo opts in.
+    const configPath = join(fixture.projectRoot, '.tekon', 'config.yaml');
+    writeFileSync(
+      configPath,
+      `${readFileSync(configPath, 'utf8')}providers:\n  codex:\n    profile: internal\n`,
+    );
     const originalPath = process.env.PATH;
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -456,7 +465,7 @@ describe('web write authorization', () => {
       process.env.PATH = originalPath;
       await api.close();
     }
-  });
+  }, 30_000);
 
   it('shapes and approves a draft before starting a Web run', { timeout: 15000 }, async () => {
     const fixture = await createWebFixtureProject();
@@ -851,7 +860,7 @@ describe('web write authorization', () => {
 });
 
 describe('project.clean', () => {
-  it('rejects with CONFLICT (CLEAN_SUSPENDED) and preserves the run directory on disk', async () => {
+  it('rejects a paused run with CONFLICT and preserves the run directory on disk', async () => {
     const fixture = await createWebFixtureProject();
     cleanupTasks.push(fixture.cleanup);
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
@@ -863,11 +872,11 @@ describe('project.clean', () => {
       dispatchApiCall(api, 'project.clean', {
         runId: 'run_1',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
-      message: expect.stringMatching(/CLEAN_SUSPENDED.*lifecycle-safe purge/),
+      message: expect.stringContaining('运行 run_1 的状态是 paused'),
     });
     expect(existsSync(runDir)).toBe(true);
 
@@ -880,7 +889,7 @@ describe('project.clean', () => {
     const api = await createApiCaller({ projectRoot: fixture.projectRoot });
 
     await expect(
-      api.project.clean({ runId: 'run_1', token: 'wrong-token', confirm: 'delete-run-dir' }),
+      api.project.clean({ runId: 'run_1', token: 'wrong-token', confirm: 'clean-terminal-runs' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
 
     expect(
@@ -901,7 +910,7 @@ describe('project.clean', () => {
       dispatchApiCall(api, 'project.clean', {
         runId: 'run_escaped',
         token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
+        confirm: 'clean-terminal-runs',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
@@ -1523,106 +1532,6 @@ describe('security characterization (documents current behavior, some will chang
     });
   });
 });
-
-function writeFakeCodex(binDir: string): void {
-  const codexPath = join(binDir, 'codex');
-  writeFileSync(
-    codexPath,
-    `#!/usr/bin/env node
-const { writeFileSync, mkdirSync } = require('node:fs');
-const { join } = require('node:path');
-const args = process.argv.slice(2);
-const execIndex = args.indexOf('exec');
-if (execIndex === -1) {
-  console.error('expected codex exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== 'internal') {
-  console.error('expected internal profile before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--ask-for-approval') === -1 || args.indexOf('--ask-for-approval') > execIndex) {
-  console.error('expected approval before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--sandbox') === -1 || args.indexOf('--sandbox') > execIndex) {
-  console.error('expected sandbox before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex || args[args.indexOf('--add-dir') + 1] !== process.env.TEKON_OUTPUT_DIR) {
-  console.error('expected controlled artifact output add-dir before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
-  console.error('unsafe codex args');
-  process.exit(3);
-}
-let prompt = '';
-process.stdin.on('data', (chunk) => {
-  prompt += chunk;
-});
-process.stdin.on('end', () => {
-  const outputDir = process.env.TEKON_OUTPUT_DIR;
-  const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;
-  if (!outputDir || !manifestPath) {
-    console.error('missing Tekon artifact environment');
-    process.exit(4);
-  }
-  mkdirSync(outputDir, { recursive: true });
-  const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
-  const deliveryRef = (prompt.match(/exact tested delivery ref: ([^\\.\\n]+)/) || ['', 'codex-fixture-ref'])[1];
-  const artifacts = types.map((type) => {
-    const filename = type + '.json';
-    const base = {
-      title: type + ' artifact',
-      body: 'Codex fixture artifact for ' + type + '.',
-      summary: 'Codex fixture artifact for ' + type + '.'
-    };
-    let payload = base;
-    if (type === 'demand-card' || type === 'prd') {
-      payload = {
-        ...base,
-        acceptanceCriteria: [{
-          id: 'AC-1',
-          description: 'The Codex provider run stores a resumable provider snapshot.',
-          verification: 'Inspect run_provider_configs for provider=codex.'
-        }]
-      };
-    } else if (type === 'test-report' || type === 'review-report' || type === 'delivery-package') {
-      payload = {
-        ...base,
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
-        }]
-      };
-    } else if (type === 'qa-release-signoff') {
-      payload = {
-        ...base,
-        targetRef: deliveryRef,
-        validatedRef: deliveryRef,
-        overallStatus: 'passed',
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture QA signoff validates ' + deliveryRef + '.'
-        }]
-      };
-    } else if (type === 'security-report') {
-      payload = { ...base, securityFindings: [] };
-    }
-    writeFileSync(join(outputDir, filename), JSON.stringify(payload));
-    return { type, path: filename, summary: 'Codex fixture artifact for ' + type + '.' };
-  });
-  writeFileSync(manifestPath, JSON.stringify({ artifacts }));
-  console.log('fake codex completed');
-});
-`,
-    'utf8',
-  );
-  chmodSync(codexPath, 0o755);
-}
 
 function writeFakeGh(binDir: string): void {
   const ghPath = join(binDir, 'gh');

@@ -3,8 +3,21 @@ import { randomUUID } from 'node:crypto';
 
 import type { Job, JobRunner, JobStatus } from '../types/session-contract.js';
 import type { SessionEventBus } from './event-bus.js';
-import type { JobRepository, SessionEventStore } from './session-store.js';
+import type {
+  JobClaimFilter,
+  JobOrigin,
+  JobRepository,
+  ReclaimedProcessGroups,
+  SessionEventStore,
+} from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
+import {
+  createProcessGroupReaper,
+  PROCESS_START_TIME_TOLERANCE_MS,
+  type ProcessGroupReaper,
+  type ProcessGroupReapOutcome,
+  type ProcessGroupReapRecord,
+} from './process-group-reaper.js';
 
 /** Abort reason used only when a runner loses the durable job lease/owner. */
 export const JOB_ABORT_REASON_OWNERSHIP_LOST =
@@ -87,8 +100,11 @@ export interface JobExecutor {
  * cannot mutate a job after its execution scope loses ownership.
  */
 export interface DurableJobRunner extends JobRunner {
-  /** Serialize controls, bounded recovery, and queued claims on each poll. */
-  start(): void;
+  /**
+   * Starts polling: each poll syncs controls, renews owned leases, recovers
+   * stale jobs and claims one queued job. With jobIds, claims only those.
+   */
+  start(options?: { jobIds?: readonly string[] }): void;
   /** Stop polling and wait for in-flight jobs to settle (5s cap). */
   stop(): Promise<void>;
   /**
@@ -124,6 +140,18 @@ export interface CreateJobRunnerDeps {
    * barrier. Test override only; production keeps the 10s default.
    */
   stopHardTimeoutMs?: number;
+  /** Clock for leases and stale detection. Test override only. */
+  now?: () => number;
+  /** Written on every job this runner queues. */
+  origin?: JobOrigin;
+  /** Applied to every claim, e.g. the Web server skipping CLI jobs. */
+  claimFilter?: JobClaimFilter;
+  /** Stops process groups left by jobs this runner reclaims. */
+  processGroupReaper?: ProcessGroupReaper;
+  /** Wait between SIGTERM and SIGKILL for a reclaimed job's processes. */
+  processGroupKillGraceMs?: number;
+  /** Told what happened to each process group of a reclaimed job. */
+  onProcessGroupReap?: (record: ProcessGroupReapRecord) => void | Promise<void>;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
@@ -131,6 +159,7 @@ const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const STOP_SETTLE_TIMEOUT_MS = 5_000;
 const DEFAULT_STOP_HARD_TIMEOUT_MS = 10_000;
+const DEFAULT_PROCESS_GROUP_KILL_GRACE_MS = 5_000;
 
 /** Statuses an executor may legitimately settle a job to. */
 const SETTLEABLE_STATUSES: readonly JobStatus[] = [
@@ -166,9 +195,114 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
   let pollTask: Promise<void> | null = null;
   let cancelCursor = '';
   let staleCursor = '';
+  // Set by start({ jobIds }): a CLI process claims only the jobs it awaits.
+  let claimJobIds: readonly string[] | undefined;
   const managedExecutions = new Set<string>();
+  const reaper = deps.processGroupReaper ?? createProcessGroupReaper();
+  const killGraceMs = deps.processGroupKillGraceMs ?? DEFAULT_PROCESS_GROUP_KILL_GRACE_MS;
+  // SIGKILLs still waiting out their grace period, sent at once by stop().
+  const pendingKills = new Map<NodeJS.Timeout, () => void>();
 
-  const nowIso = (): string => new Date().toISOString();
+  /** This job's detached process groups, as recorded with its lease. */
+  function processGroupsOf(jobId: string) {
+    return registry.list(jobId).flatMap((handle) =>
+      handle.pid !== undefined && handle.startedAt !== undefined
+        ? [{ pgid: handle.pid, startedAt: new Date(handle.startedAt).toISOString() }]
+        : []);
+  }
+
+  function reapProcessGroups(entry: ReclaimedProcessGroups): void {
+    for (const group of entry.processGroups) {
+      // A recycled pid belongs to some other process: leave it alone. A
+      // corrupted startedAt record (NaN) is treated as a mismatch rather than
+      // failing open into signaling.
+      const leaderStartedAt = reaper.leaderStartTime(group.pgid);
+      const recordedStartedAt = Date.parse(group.startedAt);
+      const outcome: ProcessGroupReapOutcome = leaderStartedAt === null
+        ? 'leader-gone'
+        : !Number.isFinite(recordedStartedAt) ||
+            Math.abs(leaderStartedAt - recordedStartedAt) > PROCESS_START_TIME_TOLERANCE_MS
+          ? 'start-time-mismatch'
+          : 'signalled';
+      if (outcome === 'signalled') {
+        reaper.signal(group.pgid, 'SIGTERM');
+        const escalate = () => {
+          // Re-check identity before SIGKILL: the leader can exit during the
+          // grace window and its pgid be recycled by an unrelated process.
+          const escalatedLeader = reaper.leaderStartTime(group.pgid);
+          const escalateOutcome: ProcessGroupReapOutcome = escalatedLeader === null
+            ? 'escalation-skipped'
+            : Math.abs(escalatedLeader - recordedStartedAt) > PROCESS_START_TIME_TOLERANCE_MS
+              ? 'escalation-skipped'
+              : 'killed';
+          if (escalateOutcome === 'killed') {
+            reaper.signal(group.pgid, 'SIGKILL');
+          }
+          recordReap(entry.jobId, entry.runId, group.pgid, group.startedAt, escalateOutcome);
+        };
+        const timer = setTimeout(() => {
+          pendingKills.delete(timer);
+          escalate();
+        }, killGraceMs);
+        timer.unref?.();
+        pendingKills.set(timer, escalate);
+      }
+      recordReap(entry.jobId, entry.runId, group.pgid, group.startedAt, outcome);
+    }
+  }
+  // Audit writes go through the FIFO write queue backed by synchronous
+  // better-sqlite3; the runner awaits queue drain in stop(), so fire-and-forget
+  // here still lands before the process exits on a clean shutdown.
+  function recordReap(
+    jobId: string,
+    runId: string | null,
+    pgid: number,
+    startedAt: string,
+    outcome: ProcessGroupReapOutcome,
+  ): void {
+    void Promise.resolve()
+      .then(() => deps.onProcessGroupReap?.({ jobId, runId, pgid, startedAt, outcome }))
+      .catch(() => {});
+  }
+  const now = deps.now ?? (() => Date.now());  // Look up the global each call so fake timers take effect.
+  // A gap this long between polls, or inside one, means this process was
+  // suspended (sleep, SIGSTOP, debugger). Every lease, its own included, may
+  // look expired; it renews its own first, and for one heartbeat judges other
+  // owners' leases as if the gap had not happened, so only leases that were
+  // already stale are reclaimed. Without room between the heartbeat and the
+  // lease TTL there is no gap to detect.
+  const suspensionGapMs = leaseTtlMs > heartbeatMs
+    ? (leaseTtlMs - heartbeatMs) / 2
+    : Number.POSITIVE_INFINITY;
+  let lastPollEndedAt: number | null = null;
+  // After a gap, other owners' leases are judged as if the gap had not
+  // happened, for one heartbeat. A later gap replaces the credit, so slow
+  // polls delay reclaim by at most one gap.
+  let gapCreditMs = 0;
+  let gapEndedAt = 0;
+  function noteGap(gapMs: number, endedAt: number): void {
+    if (gapMs > suspensionGapMs) {
+      gapCreditMs = gapMs;
+      gapEndedAt = endedAt;
+    }
+  }
+
+  const toIso = (ms: number): string => new Date(ms).toISOString();
+  const nowIso = (): string => toIso(now());
+
+  /** Stops one local execution generation after its durable row was lost. */
+  function fenceLostExecution(jobId: string): void {
+    const activeController = controllers.get(jobId);
+    if (activeController && !activeController.signal.aborted) {
+      activeController.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
+      registry.killAll(jobId, 'SIGKILL');
+    }
+    executionTokens.delete(jobId);
+    managedExecutions.delete(jobId);
+    clearHeartbeat(jobId);
+    controllers.delete(jobId);
+    pauseFlags.delete(jobId);
+  }
 
   async function notifySettled(
     sessionId: string,
@@ -283,30 +417,15 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         clearInterval(heartbeat);
         return;
       }
+      const at = nowIso();
       void jobs
-        .updateJob(
-          job.id,
-          { lease: nowIso() },
-          {
-            owner: workerId,
-            statuses: ['running', 'paused', 'cancelling'],
-          },
-        )
-        .then(async (updated) => {
-          // A conditional miss means the durable row is no longer ours (or is
-          // already terminal). Fence this exact local generation immediately.
-          if (updated || executionTokens.get(job.id) !== executionToken) {
-            return;
+        .renewOwnedLeaseIfOlder(job.id, workerId, at, at, processGroupsOf(job.id))
+        .then((outcome) => {
+          // The durable row is no longer ours (or is already terminal). Fence
+          // this exact local generation immediately.
+          if (outcome === 'lost' && executionTokens.get(job.id) === executionToken) {
+            fenceLostExecution(job.id);
           }
-          const activeController = controllers.get(job.id);
-          if (activeController && !activeController.signal.aborted) {
-            activeController.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
-            registry.killAll(job.id, 'SIGKILL');
-          }
-          executionTokens.delete(job.id);
-          clearHeartbeat(job.id);
-          controllers.delete(job.id);
-          pauseFlags.delete(job.id);
         })
         .catch(() => {});
     }, heartbeatMs);
@@ -358,18 +477,9 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       if (!current || current.owner !== workerId || !['running','paused','cancelling'].includes(current.status)) {
         // Ownership changed: fence the local execution and kill only processes
         // registered in this process. The new owner will continue from durable
-        // state; the zombie must stop touching the workspace.
-        if (!controller.signal.aborted) {
-          controller.abort(JOB_ABORT_REASON_OWNERSHIP_LOST);
-          registry.killAll(jobId, 'SIGKILL');
-        }
-        // Invalidate this local generation immediately. A same-worker reclaim
-        // may install a new controller/token for the same durable job id.
-        executionTokens.delete(jobId);
-        managedExecutions.delete(jobId);
-        clearHeartbeat(jobId);
-        controllers.delete(jobId);
-        pauseFlags.delete(jobId);
+        // state; the zombie must stop touching the workspace. A same-worker
+        // reclaim may install a new controller/token for the same job id.
+        fenceLostExecution(jobId);
         continue;
       }
 
@@ -405,39 +515,68 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       return pollTask;
     }
 
+    const startedAt = now();
     const task = (async () => {
       // Process-local AbortControllers and registries cannot be mutated by a
       // second CLI/Web process. Observe the durable job row on every owner poll
       // and relay foreign pause/cancel requests into this process first.
+      if (lastPollEndedAt !== null) noteGap(startedAt - lastPollEndedAt, startedAt);
+      const creditMs = startedAt - gapEndedAt < heartbeatMs ? gapCreditMs : 0;
       await syncOwnedControls();
       if (stopped) return;
-      await recoverStaleJobs();
+      await renewOwnedLeases(startedAt);
+      if (stopped) return;
+      await recoverStaleJobs(startedAt - creditMs);
       if (stopped) return;
       await reconcileCancelledRuns();
       // stop() may begin while syncOwnedControls() is awaiting SQLite. Do not
       // enter a fresh claim after the runner crossed into draining.
       if (stopped) return;
 
-      const job = await jobs.claimNext(workerId);
+      const job = await jobs.claimNext(workerId, {
+        ...deps.claimFilter,
+        ...(claimJobIds ? { jobIds: claimJobIds } : {}),
+      });
       if (job) {
         spawnJob(job);
       }
     })();
     pollTask = task;
     const clearPollTask = () => {
+      const endedAt = now();
+      // A suspension in the middle of this poll counts as a gap too.
+      noteGap(endedAt - startedAt, endedAt);
+      lastPollEndedAt = endedAt;
       if (pollTask === task) pollTask = null;
     };
     void task.then(clearPollTask, clearPollTask);
     return task;
   }
 
-  async function recoverStaleJobs(): Promise<number> {
-    const cutoff = new Date(Date.now() - leaseTtlMs).toISOString();
+  /** Renews leases this worker holds that are at least one heartbeat old. */
+  async function renewOwnedLeases(at: number): Promise<void> {
+    for (const jobId of [...controllers.keys()]) {
+      const token = executionTokens.get(jobId);
+      if (!token) continue;
+      try {
+        const outcome = await jobs.renewOwnedLeaseIfOlder(
+          jobId, workerId, toIso(at - heartbeatMs), toIso(at), processGroupsOf(jobId),
+        );
+        if (outcome === 'lost' && executionTokens.get(jobId) === token) {
+          fenceLostExecution(jobId);
+        }
+      } catch { /* the heartbeat retries */ }
+    }
+  }
+
+  async function recoverStaleJobs(at: number = now()): Promise<number> {
+    const cutoff = toIso(at - leaseTtlMs);
     const result = await jobs.interruptStale(cutoff, staleCursor, 100);
     staleCursor = result.lastId ?? '';
     for (const event of result.events) {
       try { bus.publish(event); } catch { /* committed; SSE can catch up */ }
     }
+    for (const entry of result.reclaimedProcessGroups) reapProcessGroups(entry);
     return result.processed;
   }
 
@@ -472,6 +611,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         checkpoint: null,
         createdAt: now,
         updatedAt: now,
+        ...(deps.origin ? { origin: deps.origin } : {}),
       });
     },
 
@@ -489,6 +629,7 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         checkpoint: null,
         createdAt: now,
         updatedAt: now,
+        ...(deps.origin ? { origin: deps.origin } : {}),
       }, input);
     },
 
@@ -571,10 +712,12 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       return writeCheckpoint(jobId, value);
     },
 
-    start() {
+    start(options) {
       if (pollTimer) {
         return;
       }
+      claimJobIds = options?.jobIds;
+      // lastPollEndedAt is kept: time spent stopped counts as a gap.
       stopped = false;
       void poll().catch(() => {});
       pollTimer = setInterval(() => {
@@ -663,9 +806,18 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
       controllers.clear();
       executionTokens.clear();
       pauseFlags.clear();
+      for (const [timer, kill] of pendingKills) {
+        clearTimeout(timer);
+        kill();
+      }
+      pendingKills.clear();
     },
 
     async recoverStale() {
+      // Public on-demand entry point that also works before start() (tests and
+      // one-shot reclaim rely on this). After stop() it would arm unref'd kill
+      // timers nobody flushes; no production path calls it post-stop, so keep
+      // the behavior unchanged rather than gating the public contract.
       return recoverStaleJobs();
     },
   };

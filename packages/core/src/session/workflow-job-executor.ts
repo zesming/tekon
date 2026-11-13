@@ -5,6 +5,7 @@ import { createWorktreeManager } from '../runtime/worktree-manager.js';
 import { redactSecrets } from '../security/secrets.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import { findLatestRunFailure } from '../workflow/run-failure.js';
 import { createGateEngine } from '../gate/engine.js';
 import {
   isJobCancellationAbort,
@@ -233,6 +234,11 @@ export function createWorkflowJobExecutor(deps: {
     },
   };
 
+  /** Why the run stopped, so the session feed can say more than that it did. */
+  async function latestFailureReason(runId: string) {
+    return findLatestRunFailure(await repositories.listAuditEvents(runId)) ?? {};
+  }
+
   async function settleByWorkflowStatus(
     sessionId: string,
     runId: string,
@@ -284,9 +290,24 @@ export function createWorkflowJobExecutor(deps: {
       }
       case 'interrupted': {
         await sessions.updateSessionStatus(sessionId, 'awaiting-input');
-        await emit(sessionId, 'agent/error', { runId, status: 'interrupted' });
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'interrupted',
+          ...(await latestFailureReason(runId)),
+        });
         await emit(sessionId, 'turn/end', { runId, status: 'interrupted' });
         return { status: 'interrupted' };
+      }
+      case 'failed': {
+        await sessions.updateSessionStatus(sessionId, 'failed');
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'failed',
+          ...(await latestFailureReason(runId)),
+        });
+        await emit(sessionId, 'turn/end', { runId, status: 'failed' });
+        // The job ran to completion; it is the run that failed (as with passed).
+        return { status: 'done' };
       }
       default: {
         // A background executor returning running/pending is a contract breach.

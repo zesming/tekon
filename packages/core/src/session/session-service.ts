@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import type { AuditLogger } from '../audit/logger.js';
+import {
+  providerPreflightAuditPayload,
+  type ProviderPreflight,
+  type ProviderPreflightResult,
+} from '../runtime/provider-probe.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import {
   type AdmissionStore,
@@ -11,7 +16,7 @@ import {
 import type { SessionEventBus } from './event-bus.js';
 import type { DurableJobRunner } from './job-runner.js';
 import type { ResumeConfirmation } from '../types/session-contract.js';
-import type { JobRepository, SessionEventStore } from './session-store.js';
+import type { JobOrigin, JobRepository, SessionEventStore } from './session-store.js';
 import { isWorkflowTerminalError } from '../workflow/errors.js';
 import { RunAdmissionError } from '../workflow/admission-error.js';
 import { writeWorkflowTerminal } from '../workflow/state-machine.js';
@@ -89,6 +94,8 @@ export interface SessionServiceStartRunResult {
   replayed: boolean;
   admissionState: 'pending' | 'ready' | 'recovery_required';
   detail?: string;
+  /** What the provider check found for this start (absent on replay). */
+  preflight?: ProviderPreflightResult;
 }
 
 export type SessionServiceResumeResult =
@@ -104,6 +111,7 @@ export type SessionServiceResumeResult =
       sessionId: string;
       jobId: string;
       previousJobId?: string | null;
+      preflight?: ProviderPreflightResult;
     };
 
 export type SessionServicePauseResult =
@@ -143,6 +151,11 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
     runId: string;
     afterApproval?: boolean;
   } & ResumeConfirmation): Promise<SessionServiceResumeResult>;
+  /**
+   * Checks the run's frozen provider before a resume is recorded (e.g. before
+   * an approval). Throws ProviderPreflightError when it cannot start.
+   */
+  preflightResume(runId: string): Promise<ProviderPreflightResult | undefined>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -180,7 +193,13 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
    * 'cli' (design §8 decision 2).
    */
   sessionProfile?: string;
-  preflight?: () => Promise<void>;
+  /** Origin written on admitted jobs; resume takes the runner's origin. */
+  jobOrigin?: JobOrigin;
+  /**
+   * Provider check for every start and resume, before work is queued. It
+   * throws to refuse the run and returns warnings to show otherwise.
+   */
+  preflight?: ProviderPreflight;
 }
 
 export function createSessionService<TEngineInput = SessionServiceEngineInput>(
@@ -270,8 +289,15 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       const existing = await lookupRun(lookupInput);
       if (existing) return existing;
       const engine = await deps.createEngine(input.engine);
-      // The legacy CLI preflight consumes the provider selected by its factory.
-      await deps.preflight?.();
+      // Check the provider before preparing: preparation reads repository
+      // facts, which must be read after this await, not before it.
+      const preflight = engine.providerSnapshot
+        ? await deps.preflight?.({
+            provider: engine.providerSnapshot.provider,
+            phase: 'start',
+            configSummary: engine.providerSnapshot.configSummary,
+          })
+        : undefined;
       const prepareInput: WorkflowEngineStartInput = {
         requestId,
         demandText: input.demandText,
@@ -292,13 +318,19 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         requestId,
         envelopeVersion: requestEnvelope.version,
         envelopeHash: hashAdmissionEnvelope(requestEnvelope),
-        admissionAudits: input.admissionAudits ?? [],
+        admissionAudits: [
+          ...(input.admissionAudits ?? []),
+          ...(preflight
+            ? [{ type: 'provider.preflight', payload: providerPreflightAuditPayload('start', preflight) }]
+            : []),
+        ],
         sessionData: {
           workspaceRoot: realpathSync(projectRoot),
           profile,
           sessionId: `sess_${randomUUID()}`,
           jobId: `job_${randomUUID()}`,
           jobKind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
+          ...(deps.jobOrigin ? { jobOrigin: deps.jobOrigin } : {}),
         },
       });
       if (!outcome.sessionId || !outcome.jobId) throw new Error('ADMISSION_SESSION_MISSING');
@@ -316,6 +348,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         replayed: outcome.outcome === 'already_admitted',
         admissionState: outcome.filesState,
         ...(outcome.admission.lastError ? { detail: outcome.admission.lastError } : {}),
+        ...(preflight && outcome.outcome !== 'already_admitted' ? { preflight } : {}),
       };
     } catch (error) {
       // Another process may have won after our initial read while our own
@@ -387,6 +420,17 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
 
     }
 
+    // Refuse before queuing when the provider cannot start; record what the
+    // check found for this attempt.
+    const preflight = await preflightResume(input.runId);
+    if (preflight) {
+      await deps.audit.append({
+        runId: input.runId,
+        type: 'provider.preflight',
+        payload: providerPreflightAuditPayload('resume', preflight),
+      });
+    }
+
     // Reuse the original queued admission or enqueue a resume in one transaction.
 
     // Resolve (or create) the run's session before the atomic enqueue. For a
@@ -423,7 +467,21 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       sessionId: session.id,
       jobId: result.job.id,
       ...(result.previousJobId !== undefined ? { previousJobId: result.previousJobId } : {}),
+      ...(preflight ? { preflight } : {}),
     };
+  }
+
+  async function preflightResume(
+    runId: string,
+  ): Promise<ProviderPreflightResult | undefined> {
+    if (!deps.preflight) return undefined;
+    const snapshot = await repositories.getRunProviderConfig(runId);
+    if (!snapshot) return undefined;
+    return deps.preflight({
+      provider: snapshot.provider,
+      phase: 'resume',
+      configSummary: snapshot.configSummary,
+    });
   }
 
   async function requestPause(input: {
@@ -487,5 +545,5 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     };
   }
 
-  return { lookupRun, startRun, resumeRun, requestPause, requestCancel };
+  return { lookupRun, startRun, resumeRun, preflightResume, requestPause, requestCancel };
 }

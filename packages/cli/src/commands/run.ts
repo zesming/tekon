@@ -15,7 +15,11 @@ import {
   saveDynamicTemplate,
   isValidRequestId,
   RunAdmissionError,
+  ProviderPreflightError,
+  findLatestRunFailure,
   type RunAdmissionEnvelope,
+  readTekonConfig,
+  resolveDefaultAgent,
 } from '@tekon/core';
 
 import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
@@ -27,6 +31,11 @@ import {
   withCliSessionContext,
 } from '../lib/session-context.js';
 import {
+  formatPreflightNotice,
+  runOutcomeDetails,
+  runOutcomeHeader,
+} from '../lib/run-outcome.js';
+import {
   explicitPathReference,
   resolveDemandShapePath,
   resolveProjectRepoPath,
@@ -34,7 +43,6 @@ import {
 import {
   assertCleanBase,
   loadWorkflowByName,
-  readConfigDefaultAgent,
 } from '../lib/utils.js';
 
 export async function commandRun(argv: string[], io: CliIO): Promise<number> {
@@ -187,7 +195,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       if (!result) {
         const { demandText } = resolveDemand();
         const agent =
-          args.values.agent ?? readConfigDefaultAgent(repoPath) ?? 'codex';
+          args.values.agent ?? resolveDefaultAgent(readTekonConfig(repoPath));
         const runModeIssue = getRunModePolicyIssue({
           agent,
           kind: isGoal ? 'goal' : 'workflow',
@@ -269,6 +277,10 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         }
       }
       if (!result) {
+        const cause = error instanceof RunAdmissionError ? error.cause : error;
+        if (cause instanceof ProviderPreflightError) {
+          throw new Error(`${cause.message}\n下一步: ${cause.hint}`);
+        }
         throw new Error(
           `${error instanceof Error ? error.message : '受理状态待确认'} (requestId=${requestId})`,
         );
@@ -284,7 +296,8 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       );
       return 1;
     }
-    ctx.jobRunner.start();
+    io.stderr.write(formatPreflightNotice(result.preflight));
+    ctx.jobRunner.start({ jobIds: [result.jobId] });
     const onSigint = () => {
       void ctx.jobRunner
         .requestCancel(result.jobId, 'cli SIGINT')
@@ -307,13 +320,23 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
     const pendingHuman = (
       await ctx.repositories.listHumanDecisions(result.runId)
     ).filter((decision) => decision.status === 'pending');
+    const failure = findLatestRunFailure(
+      await ctx.repositories.listAuditEvents(result.runId),
+    );
     io.stdout.write(
       [
-        result.replayed ? '↩ 已受理请求，继续观察原运行' : '🚀 运行已启动',
+        result.replayed ? '↩ 已受理请求，继续观察原运行' : '',
+        runOutcomeHeader(status, pendingHuman.length > 0),
         `  Run ID: ${result.runId}`,
         `  状态: ${status}`,
         `  模板: ${templateName}`,
         pendingHuman.length > 0 ? '  人工确认: pending' : '',
+        ...runOutcomeDetails({
+          status,
+          runId: result.runId,
+          failure,
+          pendingHuman: pendingHuman.length > 0,
+        }),
         '后续操作:',
         '  tekon status          查看运行状态',
         '  tekon review          查看审阅面板',
@@ -327,6 +350,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
       jobId: result.jobId,
       jobStatus,
       workflowStatus: status,
+      failure,
     });
   });
 }

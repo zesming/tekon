@@ -41,12 +41,14 @@ const SMOKE_ENABLEMENT_NOTE =
 
 export function buildClaudeProviderEnv(
   source: NodeJS.ProcessEnv = process.env,
+  passthroughEnv: readonly string[] = [],
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
     const allowed =
       (CLAUDE_PROVIDER_SAFE_ENV_KEYS as readonly string[]).includes(key) ||
-      CLAUDE_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix));
+      CLAUDE_PROVIDER_ENV_PREFIXES.some((prefix) => key.startsWith(prefix)) ||
+      passthroughEnv.includes(key);
     if (allowed && value) {
       env[key] = value;
     }

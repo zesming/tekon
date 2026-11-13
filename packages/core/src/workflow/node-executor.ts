@@ -16,6 +16,7 @@ import {
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
 import {
+  agentFailureAuditPayload,
   assertSuccessfulAgentRun,
   requiredArtifactTypesForNode,
 } from './helpers.js';
@@ -389,6 +390,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           payload: {
             nodeId: node.id,
             error: error instanceof Error ? error.message : String(error),
+            ...agentFailureAuditPayload(error),
           },
         });
         return false;
@@ -453,6 +455,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         payload: {
           nodeId: node.id,
           error: error instanceof Error ? error.message : String(error),
+          ...agentFailureAuditPayload(error),
         },
       });
       return false;

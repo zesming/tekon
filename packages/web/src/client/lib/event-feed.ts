@@ -122,13 +122,24 @@ export function describeEvent(event: StreamEvent): FeedRow {
       return { ...base, kind: 'turn', title: '回合开始' };
     case 'turn/end':
       return { ...base, kind: 'turn', title: '回合结束' };
-    case 'agent/error':
+    case 'agent/error': {
+      const status = asText(p, 'status');
+      const message = asText(p, 'message', 'error');
+      const hint = asText(p, 'hint');
       return {
         ...base,
         kind: 'error',
-        title: 'Agent 错误',
-        body: asText(p, 'message', 'error') ?? '',
+        title:
+          status === 'interrupted'
+            ? '运行中断'
+            : status === 'failed'
+              ? '运行失败'
+              : 'Agent 错误',
+        body: [message, hint ? `下一步：${hint}` : undefined]
+          .filter(Boolean)
+          .join('\n'),
       };
+    }
     // Agent lifecycle (S2). Without these, terminal/cancel signals fall through
     // to the raw-type 'generic' row, which reads like debug noise in the feed.
     case 'agent/status': {
@@ -217,12 +228,19 @@ export function describeEvent(event: StreamEvent): FeedRow {
         title: `节点结束${nodeId ? ` · ${nodeId}` : ''}${status ? ` · ${status}` : ''}`,
       };
     }
-    case 'workflow/started':
+    case 'workflow/started': {
+      const passthrough = Array.isArray(p.passthroughEnv)
+        ? p.passthroughEnv.filter((name): name is string => typeof name === 'string')
+        : [];
       return {
         ...base,
         kind: 'governance',
         title: p.resumed === true ? '受控交付已恢复' : '受控交付已开始',
+        ...(passthrough.length > 0
+          ? { body: `透传给 Provider 的环境变量：${passthrough.join(', ')}` }
+          : {}),
       };
+    }
     case 'session/created':
       return { ...base, kind: 'governance', title: '会话已创建' };
     default:

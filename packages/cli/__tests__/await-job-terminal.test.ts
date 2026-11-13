@@ -181,4 +181,29 @@ describe('exitCodeForJobOutcome', () => {
       expect(stderr).toBe('');
     }
   });
+
+  it.each([
+    [undefined, true],
+    ['exit-nonzero', true],
+    ['timeout', true],
+    ['not-authenticated', false],
+    ['not-installed', false],
+    ['invalid-config', false],
+  ] as const)('suggests resume for an interruption with failure %s: %s', (kind, suggests) => {
+    let stderr = '';
+    const io = {
+      stdout: { write: (_chunk: string) => {} },
+      stderr: { write: (chunk: string) => { stderr += chunk; } },
+    };
+    exitCodeForJobOutcome({
+      io,
+      runId: 'run_outcome',
+      jobId: 'job_outcome',
+      jobStatus: 'interrupted',
+      workflowStatus: 'interrupted',
+      ...(kind ? { failure: { kind, message: 'm' } } : {}),
+    });
+    expect(stderr.includes('tekon resume')).toBe(suggests);
+    expect(stderr).toContain('tekon log --run-id run_outcome');
+  });
 });

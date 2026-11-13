@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.27.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.30.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -138,6 +138,14 @@ tekon init
 
 生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。在 git 仓库里，`init` 会把 `.tekon/` 写入本仓库的 `.git/info/exclude`（已被忽略时不写），不改你的 `.gitignore`，避免误提交令牌和数据库。
 
+`init` 把 PATH 里第一个找到的 Provider 写成默认值，按 `claude`、`codex` 的顺序；两个都没有时写 `claude-code`，并提示运行 `tekon doctor`。随后检查运行前提：
+
+```bash
+tekon doctor
+```
+
+它列出每个 Provider 是否安装、以什么方式认证，以及默认 workflow 的检查命令是否齐全，只报告不修改，详见 §6.1.1。
+
 ### 4.3 检查目标仓库命令画像
 
 ```bash
@@ -174,9 +182,9 @@ tekon eval demand-shape
 tekon run
 ```
 
-没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 `standard-delivery`；Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `codex`。
+没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 `standard-delivery`；Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `claude-code`。
 
-真实 Codex 运行需要本机 CLI 和可用的 `internal` profile。只检查流程时可显式使用 mock：
+启动前会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行，并说明下一步；没检测到登录只在 stderr 提示，运行照常开始。stderr 还会写出认证方式和透传的环境变量名。只检查流程时可显式使用 mock：
 
 ```bash
 tekon run --template standard-delivery --agent mock
@@ -279,18 +287,38 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 
 | Provider | 适用范围与前提 |
 | --- | --- |
-| `codex` | 默认后端；本机安装 Codex CLI，配置并认证 `internal` profile |
-| `claude-code` | 本机 Claude Code adapter；需安装、认证和当前环境的真实验证 |
+| `claude-code` | CLI 与 Web 在未配置 `defaultAgent` 时的默认后端（两者读取同一份 `.tekon/config.yaml`）；本机安装并登录 Claude Code |
+| `codex` | 本机安装并登录 Codex CLI；需要 profile 时在仓库配置里写明 |
 | `mock` | 确定性流程演示与回归；不能证明真实 Agent 能力 |
 | `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
 
 真实 workflow 节点通过 artifact manifest 交回声明的产物。Run 保存 Provider 配置快照，恢复沿用原快照，避免意外切换后端。
 
-**Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量不会传给 Claude。
+**Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量默认不会传给 Claude，需要时写进下面的 `passthroughEnv`。
 
 - **认证方式跟着变量走**：shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 优先用它们，不用订阅登录（见 [Claude 认证](https://code.claude.com/docs/en/authentication)）。工作和个人场景在同一台机器上时，请在各自的 shell 里分开设置。
-- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key。
-- **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量不会传过去，请写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
+- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key，并先看一下仓库里 `.tekon/config.yaml` 的 `passthroughEnv`：列在那里的变量都会传给 Provider；`codex.profile` 会让 Codex 使用你本机上同名的 profile。
+- **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量默认不会传过去。可以把变量名写进 `passthroughEnv`，也可以写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
+
+**Codex 的登录与环境**：Codex 节点只收到固定的一组变量：`PATH`、`HOME`、临时目录、语言、`SHELL`、`USER`、`LOGNAME`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`，其他变量要写进 `passthroughEnv`。shell 里的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME` 会原样传给 Codex，它们决定 Codex 用哪个账号或登录、请求发到哪里；`tekon doctor` 会显示 Codex 的认证方式。
+
+**Provider 配置**：写在 `.tekon/config.yaml` 的 `providers` 下，字段都可选：
+
+```yaml
+defaultAgent: claude-code
+providers:
+  claude-code:
+    passthroughEnv: [AWS_PROFILE, AWS_REGION]
+  codex:
+    profile: internal
+    passthroughEnv: [AZURE_OPENAI_API_KEY]
+```
+
+- `passthroughEnv` 是额外传给 Provider 的环境变量名，只写名字，值从启动 Tekon 的环境里读。名字必须是大写变量名；`PATH`、`SHELL`、`NODE_*`、`LD_*`、`DYLD_*`、`GIT_*`、`TEKON_*`、`PYTHON*` 等会改变程序加载方式或由 Tekon 控制的变量不能透传。值为空的变量会跳过。
+- 这些变量只给 Provider 进程，Tekon 自己运行的 build、test 等检查命令拿不到。Provider 在节点里执行的命令和 Provider 本身一样能读到。
+- `codex.profile` 只在配置后才以 `--profile` 传给 Codex。之前的版本默认使用 `internal`；升级后需要它时，请写 `providers.codex.profile: internal`。升级前启动的运行恢复时仍按原来的 `internal` 执行。升级 Tekon 后请重启已经在运行的 `tekon ui`。退回旧版本后，新版本创建的运行不能恢复，需要重新发起。
+- 运行启动时记录这些配置，恢复沿用记录，之后改配置不影响已有运行。启动和每次恢复都会在审计里写下透传的变量名和认证方式，不记录值。
+- 配置文件不是合法 YAML、字段名拼错或字段值不对时，`run`、`doctor` 会直接报错，不再按默认值运行。
 
 **DSH 使用条件**：自行安装 `@deepseek-ai/dsh` 并配置 `DEEPSEEK_API_KEY`；当前 tested pin 为 `0.1.2-alpha.3`，宿主 Node 要求 `^22.19.0 || >=24.0.0`。先运行：
 
@@ -345,9 +373,26 @@ tekon init --repo /path/to/project
 
 创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
 
-在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上；重新执行 `init` 也可以，但会重写 `config.yaml`。
+在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上，也可以重新执行 `init`。
+
+`config.yaml` 只在不存在时生成，内容是 `defaultAgent`：PATH 里先找 `claude`，再找 `codex`，都没有时写 `claude-code`。这里只看是否安装，不检查登录。已有的 `config.yaml` 保持不变，旧版本写入的 `project`、`storage` 字段会被忽略。
 
 Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。
+
+### 6.1.1 `doctor`
+
+```bash
+tekon doctor
+tekon doctor --workflow bugfix
+```
+
+运行前检查，只报告不修改：
+
+- 配置：`.tekon/config.yaml` 能否读取，默认 agent 是哪个。
+- Provider：`claude-code`、`codex` 是否安装、版本，以及认证方式（API key、auth token、OAuth token、订阅登录、已保存的登录、未检测到、无法确定）。Claude 通过 `claude auth status --json` 判断，只读取是否登录和认证方式，不显示账号信息；Codex 只看 `OPENAI_API_KEY` 和 `CODEX_HOME/auth.json` 是否存在，不读取文件内容。也会列出配置的透传变量名。
+- 工作流：默认 `standard-delivery`（可用 `--workflow` 指定）的检查命令是否都能解析；缺少时提示运行 `workflow preflight`。
+
+最后一行给出结论。默认 Provider 未安装或未登录、检查命令缺失或配置有误时退出码为 1。旧版本 `init` 写入的 `defaultAgent: codex` 在 Codex 未安装时会被指出，按提示修改配置或运行时加 `--agent`。DSH 的检查仍用 `tekon provider preflight dsh-headless`。
 
 ### 6.2 `workflow preflight`
 
@@ -417,6 +462,19 @@ tekon run --dynamic --dry-run "需求文本" --agent mock
 
 Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明确接受基于未提交改动运行，不是安全证明。
 
+**结果输出**：CLI 等运行停下后，第一行写明结果：已完成、已暂停（等待人工确认）、等待处理、中断、失败或已取消。中断和失败会接着写原因和下一步，原因按类别给出：
+
+| 原因 | 下一步 |
+| --- | --- |
+| 找不到 Provider 命令 | 安装命令，或从能执行它的终端重新启动 Tekon，然后 `tekon resume` |
+| 未登录或凭据无效 | 执行 `claude auth login`（或在 Claude 里输入 `/login`）、`codex login`，或配置 API key，然后 `tekon resume` |
+| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml` 或 Provider 配置，然后用 `tekon run` 新建运行（`tekon resume` 沿用启动时的 Provider 配置） |
+| 非零退出、Tekon 停止时中断 | 先 `tekon resume` 重试；仍失败时查看节点日志 |
+| 超时、长时间没有进展 | 先 `tekon resume` 重试；任务确实需要更久时，用更大的 `--timeout-ms` 或 `--no-progress-timeout-ms` 重新 `tekon run`（恢复沿用启动时的超时设置） |
+| 产物缺失或不合 schema | 查看节点目录里的产物与 manifest，修复后 `tekon resume` |
+
+`failed` 是终态，不提示恢复。Claude 退出码为 0 但结果标记为错误（例如未登录）时，按这个错误归类，不只报产物缺失。原因只取自本次恢复之后的记录，已经恢复过的旧原因不再显示。
+
 **同一次请求重试**：保存启动时打印的 Request ID，保持原需求、文件引用和执行参数，追加原 ID：
 
 ```bash
@@ -448,7 +506,7 @@ tekon status
 tekon status --run-id <runId>
 ```
 
-查看整体 `status`、当前节点、产物与 Gate 数量、待人工决策，以及新运行的 `requestId`、`admission`、`filesState`。已有 Run ID 不代表任务已经执行。
+查看整体 `status`、当前节点、产物与 Gate 数量、待人工决策，以及新运行的 `requestId`、`admission`、`filesState`。已有 Run ID 不代表任务已经执行。运行处于 `interrupted`、`blocked` 或 `failed` 时，下面再写原因和下一步，规则同 §6.6。
 
 | `executionBinding` | 含义 |
 | --- | --- |
@@ -528,6 +586,8 @@ tekon approval reject --note "证据不足，需要补充风险说明"
 ```bash
 tekon review
 ```
+
+运行未完成时，开头会先写明“运行未完成”：这时大多数未通过的检查只是因为后面的节点还没执行。`Nodes` 列出每个节点的状态，没执行到的显示“未执行”。
 
 建议按以下顺序阅读：
 
@@ -662,15 +722,20 @@ Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相�
 
 需求卡仍需人工批准；可选计划审批见 §6.5.1。
 
-### 6.23 `clean`（当前暂停）
+### 6.23 `clean`
 
 ```bash
-tekon clean
+tekon clean                              # 列出可以清理的运行，不做改动
+tekon clean --yes                        # 清理列出的全部运行
+tekon clean --run-id <runId>             # 清理指定的运行
+tekon clean --run-id <runId> --dry-run   # 只预览
 ```
 
-当前固定非零退出（exit code 1），stderr 返回 `CLEAN_SUSPENDED`。不会扫描、删除或重建 `.tekon/worktrees/`；Web `project.clean` 也不会删除 Run 目录。
+只处理已结束（passed、failed、cancelled）且没有未结束任务的运行：移除仍被占用的 worktree，删除运行租约记录的节点分支 `tekon/<runId>/…`；worktree 没能移除时，保留它检出的分支。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/<runId>/` 下的证据、审计记录，以及不属于任何运行租约的目录。运行结束时不会自动清理。
 
-生命周期安全清理尚未开放，此限制不代表已具备导出、保留期管理或可审计清除能力。
+指定的运行未结束（包括 paused、interrupted）或还有未结束的任务时，报错退出且不做改动：暂停或中断的运行恢复时还要用这些 worktree。已经不存在的目录或分支记为“已不存在”，继续下一步。个别项目没清理掉时退出码为 1，运行状态不变，原因见 `tekon log --run-id <runId>` 里的 `run.cleanup`。只处理在当前仓库路径下创建的 worktree：仓库移动过的话，旧路径下的不会列出。
+
+Web 的 `project.clean` 规则相同：传 `confirm: 'clean-terminal-runs'`，加 `dryRun: true` 只预览，返回移除的 worktree、删除的分支、已不存在和没清理掉的数量。
 
 ### 6.24 `help`
 
@@ -683,15 +748,15 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.27.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.30.0`。
 
 ## 7. Web Dashboard
 
 `tekon ui` 启动本地界面，打开带 `#token=` 的完整 URL。令牌丢失时可从 `.tekon/web-session.json` 读取并填入顶栏连接面板；不要提交或共享令牌。
 
-默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。旧 Run Dashboard 保留在侧栏 **高级 Advanced**（`/advanced`），用于查看 overview、历史 Run、diff、日志、PR 包和交付操作。
+默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。运行列表与历史 Run、diff、日志、PR 包和交付操作收在侧栏 **高级 Advanced**（`/advanced/runs`，旧仪表盘入口已重定向到这里）。
 
-**发起任务**：默认“启动受控交付”使用 Codex 与 `standard-delivery` 完整角色链路；使用 Claude Code 时，到「高级 Advanced → 新建运行」选择 `claude-code`。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
+**发起任务**：默认“启动受控交付”使用 `.tekon/config.yaml` 的 `defaultAgent`（未配置时为 `claude-code`）与 `standard-delivery` 完整角色链路；要换其他 Agent 时，到「高级 Advanced → 新建运行」的 Agent 下拉框选择。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
 
 **核对执行计划**：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。
 
@@ -727,7 +792,17 @@ Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant �
 
 **Profile 与交付**：默认 `human-web` 由人推进人工点。`autonomous-delivery` 仅在常驻 Web/服务模式下于运行 passed 后自动准备证据和 PR 包，仍停在人工批准前；CLI 需显式 `delivery prepare`。任何 Profile 都不会自动批准 human gate、push、创建 PR、合入或上线。Goal 不支持 `autonomous-delivery`。
 
+发起、恢复和批准前都会检查 Provider：命令不在服务进程的 PATH 里时返回 `PROVIDER_NOT_INSTALLED` 和下一步，不创建运行；批准时先检查再记录，检查不通过时决定保持待处理。服务进程的 PATH 来自启动 `tekon ui` 的终端或服务，可能与你的 shell 不同。中断的会话在事件流里显示“运行中断”、原因和下一步。仓库配置了 `passthroughEnv` 时，事件流在“受控交付已开始”和“受控交付已恢复”这一行列出透传给 Provider 的变量名。
+
 发起、恢复和批准返回受理结果后由后台推进，只有目录 ready 的 Job 才能执行。同一 Run 同时只允许一个运行执行 Job；重复恢复或批准提示已有活跃任务时，继续观察原任务。独立 readiness/delivery Job 不参与此限制。
+
+CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI 发起的任务。CLI 受理后就退出、还没执行的运行，可以再用 `tekon resume` 或在 Web 上恢复，由恢复的一方执行。升级到 0.29.0 后请重启已在运行的 `tekon ui`：旧版本的服务仍会接手 CLI 的任务。
+
+执行中的进程被挂起（电脑休眠、调试器暂停）后恢复，会先续租自己的任务，不会把它判为中断。同一仓库还有另一个 Tekon 进程在运行时，它分不清挂起和退出，会在租约过期（默认 30 秒）后把任务标为中断，这时按 §7.1 恢复。系统时钟往回调会推迟这类回收。
+
+节点和命令的输出脱敏后按行实时写入 `.tekon/runs/<runId>/` 下的 stdout/stderr 日志，运行中就能用 `tail -f` 查看；换行、`\r\n` 和单独的 `\r`（进度条）都算一行结束，单行超过 1MB 时分段写入。进度文件 `progress.json` 在持续输出时最多每秒更新一次。
+
+Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒宽限期结束、发 SIGKILL 前再核对一次启动时间，确认进程组没有被系统回收复用后才发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理；没有 `ps` 命令的平台（如 Windows）无法核对启动时间，遗留进程不会被自动结束。这几种情况下请手动结束剩下的进程。
 
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
 
@@ -822,16 +897,16 @@ When normal service shutdown interrupts build/test checks, completed Agent or re
 
 核对会话令牌、`.tekon/web-session.json` 和目标项目范围。令牌文件缺失可重新 `init`，再用 `tekon ui --repo /path/to/project` 启动并打开完整 URL。手动启动 Web 时检查 `TEKON_PROJECT_ROOT`。
 
-### 9.9 Codex provider 运行失败
+### 9.9 Provider 运行失败
 
-先确认本机 `codex` 在 PATH、认证与 `internal` profile 可用：
+先看 `run`、`status` 输出的原因和下一步（§6.6），再运行 `tekon doctor` 核对安装和认证方式。Codex 配置了 profile 时，可核对 profile 是否存在：
 
 ```bash
 codex --version
-codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help
+codex --profile <profile> --sandbox workspace-write --ask-for-approval on-request exec --help
 ```
 
-这些命令仅核对 CLI 参数入口，不验证真实模型调用或认证成功。真实 workflow 节点会受控追加 `--add-dir <TEKON_OUTPUT_DIR>` 开放本节点产物目录。
+这些命令仅核对 CLI 参数入口，不验证真实模型调用或认证成功。认证方式“未检测到”只是提示，凭据也可能来自 Tekon 看不到的位置；以实际运行结果为准。真实 workflow 节点会受控追加 `--add-dir <TEKON_OUTPUT_DIR>` 开放本节点产物目录。
 
 查看 `.tekon/runs/<runId>/<nodeId>/` 的 stdout/stderr、manifest 和产物；确认声明的文件存在且符合 schema，结构化 JSON 的 `title`、`body` 非空。不要通过参数覆盖 sandbox、approval 或危险 bypass，也不要把真实失败换成 mock 通过作为验收。
 
@@ -860,7 +935,7 @@ codex --profile internal --sandbox workspace-write --ask-for-approval on-request
 | --- | --- |
 | `--template <name>` | 指定模板，默认 `standard-delivery` |
 | `--goal` | 一次性轻量目标；与 `--template` 互斥，默认不接受源码修改 |
-| `--agent <name>` | `codex`、`claude-code`、`mock` 或仅 Goal 可用的 `dsh-headless` |
+| `--agent <name>` | `claude-code`、`codex`、`mock` 或仅 Goal 可用的 `dsh-headless`；默认取 `defaultAgent`，未配置时为 `claude-code` |
 | `--demand-file <path>` | 指定已批准需求卡；`--draft-file` 也受支持 |
 | `--acknowledge-unrestricted-network` | 显式确认 DSH 等所用后端的联网不受限边界 |
 | `--dynamic --dry-run` | 动态预览；普通 workflow/Goal 不支持 `--dry-run` |

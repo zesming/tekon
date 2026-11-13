@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+
 import {
   createAuditLogger,
   createRepositories,
@@ -14,6 +16,7 @@ import {
   type AgentRunInput,
   type ArtifactType,
   type GateEngine,
+  findLatestRunFailure,
 } from '../../src/index.js';
 
 describe('workflow engine role prompt integration', () => {
@@ -47,6 +50,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -59,7 +63,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -132,6 +136,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -144,7 +149,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -231,6 +236,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -258,7 +264,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -370,6 +376,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -382,7 +389,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -456,6 +463,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -494,7 +502,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -611,6 +619,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -623,7 +632,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -719,6 +728,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -734,7 +744,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -867,6 +877,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -894,7 +905,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -995,6 +1006,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -1078,18 +1090,6 @@ describe('workflow engine role prompt integration', () => {
             durationMs: 0,
             retries: 0,
             createdAt: new Date().toISOString(),
-          });
-        },
-        async createAutoFixRepairNode(input) {
-          return repositories.createNode({
-            id: `repair_${input.failedGateResult.id}`,
-            runId: input.failedGateResult.runId,
-            role: input.fixerRole,
-            status: 'pending',
-            gates: [],
-            dependencies: [input.failedGateResult.nodeId],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
           });
         },
       },
@@ -1237,6 +1237,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(): Promise<AgentRunResult> {
           return {
@@ -1255,7 +1256,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const result = await engine.startRun({
@@ -1307,6 +1308,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           return {
@@ -1341,6 +1343,61 @@ describe('workflow engine role prompt integration', () => {
         expect.objectContaining({ type: 'gate.repair.failed' }),
       ]),
     );
+    db.close();
+  });
+
+  it('stops repairing after a login failure and keeps the reason', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-'));
+    const rolesDir = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-roles-'));
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    let repairRuns = 0;
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          const repair = input.runContext.nodeId.startsWith('repair_');
+          if (repair) repairRuns += 1;
+          return {
+            provider: 'custom',
+            exitCode: repair ? 1 : 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+            ...(repair
+              ? { diagnostic: { code: 'not-authenticated' as const, message: 'claude 未登录或凭据无效', hint: '执行 claude auth login' } }
+              : {}),
+          };
+        },
+      },
+      gateEngine: createFailingBuildGateEngine(repositories),
+    });
+
+    const result = await engine.startRun({
+      demandText: '修复节点未登录',
+      mode: 'template',
+      workflowSpec: repairWorkflowSpec(3),
+    });
+
+    expect(result.workflow.status).toBe('blocked');
+    expect(repairRuns).toBe(1);
+    const events = await repositories.listAuditEvents(result.runId);
+    const failures = events.filter((event) => event.type === 'gate.repair.failed');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.payload.diagnostic).toMatchObject({ code: 'not-authenticated' });
+    expect(findLatestRunFailure(events)).toMatchObject({
+      kind: 'not-authenticated',
+      hint: '执行 claude auth login',
+    });
     db.close();
   });
 });
@@ -1512,17 +1569,17 @@ function minimalWorkflowSpec(name: string) {
   };
 }
 
-function repairWorkflowSpec() {
+function repairWorkflowSpec(maxRetries = 1) {
   const workflow = minimalWorkflowSpec('repair-failure');
   workflow.phases[0]!.nodes[0]!.gates = [
     {
       type: 'build' as const,
       requiresHumanApproval: false,
-      maxRetries: 1,
+      maxRetries,
       autoFix: true,
       retryPolicy: {
-        maxAttempts: 2,
-        maxRetries: 1,
+        maxAttempts: maxRetries + 1,
+        maxRetries,
         backoffMs: 0,
         strategy: 'fixed' as const,
         onExhausted: 'block' as const,
@@ -1546,49 +1603,6 @@ function createFailingBuildGateEngine(
         durationMs: 0,
         retries: 0,
         createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
-  };
-}
-
-function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  return {
-    async runGate(input) {
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
     },
   };

@@ -19,7 +19,6 @@ function fixture() {
   cleanups.push(() => db.close());
   const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
   const controller = new AbortController(); const adapter = createMockAgentAdapter();
-  const realGate = createGateEngine({ repositories });
   // Tests wrap this directly: vi.spyOn on an existing vi.fn() returns that same mock (Vitest 4),
   // so calling gateEngine.runGate from inside its own mockImplementation would recurse.
   const baseRunGate: GateEngine['runGate'] = async input => repositories.recordGateResult({
@@ -27,12 +26,13 @@ function fixture() {
     runId: input.runId, nodeId: input.nodeId, gateType: input.gate.type, gateKey: input.gate.gateKey,
     status: 'failed', durationMs: 0, retries: 0, createdAt: new Date().toISOString(),
   });
-  const gateEngine: GateEngine = { ...realGate, runGate: vi.fn(baseRunGate) };
+  const gateEngine: GateEngine = { runGate: vi.fn(baseRunGate) };
   const spec: WorkflowTemplate = { id: 'gate-stop', name: 'Gate stop', version: 1,
     retryPolicy: { maxAttempts: 1, backoffMs: 0, strategy: 'fixed', onExhausted: 'fail' },
     phases: [{ id: 'phase', name: 'Phase', dependsOn: [], parallel: false, nodes: [{ id: 'node', role: 'rd',
       inputs: [], outputs: [], dependsOn: [], gates: [{ type: 'build', autoFix: true, maxRetries: 2, onExhausted: 'fail' }] }] }] };
   const start = () => createWorkflowEngine({ repoPath: root, dataDir: '.tekon', repositories, audit,
+    agentProvider: 'mock',
     adapter, gateEngine, signal: controller.signal }).startRun({ demandText: 'Gate stop', mode: 'template', workflowSpec: spec });
   return { repositories, audit, controller, adapter, gateEngine, baseRunGate, spec, start };
 }
