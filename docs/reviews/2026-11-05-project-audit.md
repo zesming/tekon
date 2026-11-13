@@ -519,7 +519,7 @@
   - `session-contract.ts` 被 12 个源文件引用（Job、事件 schema 在用），只删 `AgentDriver/AgentHandle` 和 legacy driver，不整文件删。
 
 ### [CD-12] Provider 输出全量缓存到进程结束，运行中日志为 0 字节，内存无上界
-- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，提交 15b68b6、fd90bb9、5b5a297，v0.30.0）
 - 位置：packages/core/src/security/secrets.ts:52-63，packages/core/src/runtime/command-gateway.ts:351-352，:411-412，:674-683
 - 现象（实测）：
   - 假 Claude 输出一行后睡眠：1.5、3、4.5 秒时 stdout.log 都是 0 字节，progress 的 stdoutBytes=31，结束后 82 字节。
@@ -528,6 +528,7 @@
 - 依据：`createSecretRedactionTransform` 只在 `transform` 里 `chunks.push`，只在 `flush` 里输出。每个 chunk 还同步 `writeFileSync` 一次 progress.json。超时路径的 hard settle 会结束 transform，正常和超时退出不丢日志。
 - 影响：`tail -f` 和任何实时展示都不可能，长任务只能看字节数；内存占用等于 agent 总输出；Tekon 被杀时日志全丢，agent 成为孤儿。
 - 修复建议：按行流式脱敏，保留跨 chunk 的短尾窗口，边脱敏边落盘，跨行内容单独做状态处理。
+- 修复记录：脱敏改为按行流式落盘，流式输出与整段 `redactSecrets` 逐字等价（性质测试与随机 fuzz 锁定），单行 1MB 上限、内存有界，运行中即可 `tail -f`；progress.json 写入节流到每秒一次并在退出时补写。子进程以 detached 进程组登记到 job 租约，任务被回收时核对首进程启动时间后发 SIGTERM、宽限后 SIGKILL（SIGKILL 前二次核对防 pid 复用），Tekon 被强杀后的遗留进程可由另一个进程在租约过期后结束；无 `ps` 的平台跳过自动回收，需人工清理（手册已说明）。
 
 ### [CD-14] Rework 反馈大多丢失，目标节点靠启发式选择，可能选错
 - 维度：代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
