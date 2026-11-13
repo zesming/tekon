@@ -23,13 +23,16 @@ test('default route is the Session UI with a run plan; legacy Cockpit lives at /
     page.getByRole('button', { name: '启动受控交付' }),
   ).toBeDisabled();
 
-  // The legacy Cockpit dashboard is preserved under /advanced.
+  // UI-03: /advanced now redirects to the run list; the Cockpit dashboard was removed.
   await page.goto(`${server.url}/advanced`);
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
+  await page.waitForURL('**/advanced/runs');
+  await expect(
+    page.getByRole('heading', { name: '运行管理 Runs' }),
+  ).toBeVisible({
     timeout: 15_000,
   });
 
-  // Old run list still reachable under /advanced (nothing deleted, C2).
+  // Old run list still reachable under /advanced/runs.
   await page.goto(`${server.url}/advanced/runs`);
   await expect(
     page.getByRole('heading', { name: '运行管理 Runs' }),

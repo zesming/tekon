@@ -9,7 +9,7 @@ import type { ServerContext, DecisionInput } from '../context.js';
 import { ApiError } from '../errors.js';
 import { assertSessionToken } from '../common.js';
 import { assertRunCanResume } from '../agents.js';
-import { assertRunInScope, listGates, listHumanDecisions } from '../queries.js';
+import { assertRunInScope, listGates, listHumanDecisions, listRunsForScopedProjects } from '../queries.js';
 import type { HumanDecisionRow } from '../rows.js';
 import { mapGate, mapHumanDecision, mapHumanDecisionRow } from '../mappers.js';
 import { redactObject } from '../redaction.js';
@@ -45,6 +45,45 @@ export function createGateRouter(context: ServerContext) {
         gates: ReturnType<typeof mapGate>[];
         pendingDecisions: ReturnType<typeof mapHumanDecision>[];
       };
+    },
+
+    // PD-22: every pending decision across all scoped runs, not just the latest.
+    async pendingAll() {
+      const pending = (
+        await Promise.all(
+          listRunsForScopedProjects(context.db, context.projectContext).map(
+            async (run) => {
+              const decisions = listHumanDecisions(context.db, run.id).filter(
+                (decision) => decision.status === 'pending',
+              );
+              if (decisions.length === 0) return [];
+              const summaries = await Promise.all(
+                decisions.map((decision) =>
+                  createHumanApprovalSummary({
+                    repoPath: context.projectContext.projectRoot,
+                    repositories: context.repositories,
+                    audit: context.audit,
+                    runId: run.id,
+                    decisionId: decision.id,
+                    maxContentChars: 1_200,
+                    commandDisplay: 'explicit',
+                  }),
+                ),
+              );
+              return decisions.map((decision, index) => ({
+                runId: run.id,
+                decision: mapHumanDecision(
+                  context.db,
+                  decision,
+                  summaries[index] ?? null,
+                ),
+                recovery: readRunRecovery(context.db, run.id),
+              }));
+            },
+          ),
+        )
+      ).flat();
+      return redactObject({ pending }) as { pending: typeof pending };
     },
 
     async approve(decisionInput: DecisionInput) {

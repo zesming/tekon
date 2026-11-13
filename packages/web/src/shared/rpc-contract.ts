@@ -316,6 +316,9 @@ export const workReadinessCheckSchema = z.object({
   id: z.string(),
   severity: workReadinessSeveritySchema,
   passed: z.boolean(),
+  // Optional for tolerance of older/hand-built payloads; the client falls back
+  // to passed ? 'passed' : 'failed' when absent.
+  state: z.enum(['passed', 'failed', 'not-started']).optional(),
   evidence: z.string(),
 });
 
@@ -569,6 +572,7 @@ export const projectOverviewCountsSchema = z.object({
 
 export const projectOverviewOutputSchema = z.object({
   project: apiProjectSchema,
+  defaultAgent: z.string(),
   latestRun: apiWorkflowSchema.nullable(),
   counts: projectOverviewCountsSchema,
 });
@@ -713,6 +717,19 @@ export const artifactListOutputSchema = z.object({
 export const gateListOutputSchema = z.object({
   gates: z.array(apiGateSchema),
   pendingDecisions: z.array(apiHumanDecisionSchema),
+});
+
+// PD-22: pending decisions across every run in scope, each carrying its own
+// runId and recovery so the global approval queue is no longer limited to the
+// latest run.
+export const gatePendingAllOutputSchema = z.object({
+  pending: z.array(
+    z.object({
+      runId: z.string(),
+      decision: apiHumanDecisionSchema,
+      recovery: runRecoverySchema,
+    }),
+  ),
 });
 
 export const decisionOutputSchema = z.object({
@@ -1042,6 +1059,11 @@ export const procedureSpecs = {
     auth: 'session' as const,
     input: runIdInputSchema,
     output: gateListOutputSchema,
+  },
+  'gate.pendingAll': {
+    auth: 'session' as const,
+    input: z.undefined(),
+    output: gatePendingAllOutputSchema,
   },
   'gate.approve': {
     auth: 'token' as const,

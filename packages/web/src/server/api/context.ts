@@ -422,6 +422,13 @@ export interface ApiCaller {
       gates: GateOutput[];
       pendingDecisions: HumanDecisionOutput[];
     }>;
+    pendingAll(): Promise<{
+      pending: Array<{
+        runId: string;
+        decision: HumanDecisionOutput;
+        recovery: RunRecovery;
+      }>;
+    }>;
     approve(input: DecisionInput): Promise<{
       resumeOutcome?: string;
       resumeMessage?: string;

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 
-import { useQuery, useMutation, useAuthScope } from '../hooks/index.js';
+import { useQuery, useAuthScope } from '../hooks/index.js';
 import { rpc } from '../lib/rpc-client.js';
 import { useAuth } from '../context/auth-context.js';
 import { useFlash } from '../context/flash-context.js';
@@ -11,105 +11,74 @@ import { queryCache } from '../lib/query-cache.js';
 import { routes } from '../lib/route-paths.js';
 import { queryKeys } from '../lib/query-keys.js';
 import type {
-  ProjectOverviewOutput,
-  GateListOutput,
   DecisionInput,
-  DecisionOutput,
 } from '../../shared/api-types.js';
+import type { RpcProcedureMap } from '../../shared/rpc-contract.js';
 
 import { DecisionCard } from '../components/approvals/DecisionCard.js';
 import { LoadingState } from '../components/ui/LoadingState.js';
 import { ErrorBanner } from '../components/ui/ErrorBanner.js';
 import { EmptyState } from '../components/ui/EmptyState.js';
 
+type PendingEntry =
+  RpcProcedureMap['gate.pendingAll']['output']['pending'][number];
+
 // ---------------------------------------------------------------------------
-// ApprovalsPage — shows pending human-decision approvals for the latest run
+// PendingApprovalEntry — one decision with the runId and recovery it belongs
+// to, so approvals from older runs are operable (PD-22). The resume
+// confirmation is per run, hence a dedicated component owning that state.
 // ---------------------------------------------------------------------------
 
-export function ApprovalsPage() {
-  const { token } = useAuth();
+export function PendingApprovalEntry({
+  entry,
+  token,
+  isMutating,
+  onBegin,
+  onSettled,
+}: {
+  entry: PendingEntry;
+  token: string | null;
+  isMutating: boolean;
+  onBegin: () => void;
+  onSettled: () => void;
+}) {
+  const { runId, decision, recovery } = entry;
   const flash = useFlash();
-  const scope = useAuthScope();
+  const confirmation = useResumeConfirmation(runId, recovery);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // ── 1. Project overview → latest run ───────────────────────────────────────
-  const overviewQuery = useQuery<ProjectOverviewOutput>(
-    queryKeys.projectOverview(scope),
-    () => rpc.call('project.overview'),
-  );
-
-  const latestRunId = overviewQuery.data?.latestRun?.id ?? null;
-
-  const confirmation = useResumeConfirmation(latestRunId, overviewQuery.data?.latestRun?.recovery);
-  const [approvalNotice, setApprovalNotice] = useState<string | null>(null);
-
-  // ── 2. Gate list → pending decisions ───────────────────────────────────────
-  const gateListKey = latestRunId ? queryKeys.gateResults(latestRunId, scope) : null;
-  const gatesQuery = useQuery<GateListOutput>(
-    gateListKey,
-    () => rpc.call('gate.list', { runId: latestRunId! }),
-  );
-
-  const pendingDecisions = useMemo(
-    () => gatesQuery.data?.pendingDecisions ?? [],
-    [gatesQuery.data?.pendingDecisions],
-  );
-
-  // ── 3. Mutations: approve / reject ─────────────────────────────────────────
-  const invalidateKeys = useMemo(
-    () => [
-      'project.overview',
-      'gate.results',
-      'session.detail.',
-      'session.list.',
-      'review.',
-    ],
-    [],
-  );
-
-  const approveMutation = useMutation<DecisionInput, DecisionOutput>(
-    (input) => rpc.call('gate.approve', input),
-  );
-
-  const rejectMutation = useMutation<DecisionInput, DecisionOutput>(
-    (input) => rpc.call('gate.reject', input),
-    { invalidateKeys },
-  );
-
-  const isMutating = approveMutation.isPending || rejectMutation.isPending;
-
-  // ── 4. Handlers ────────────────────────────────────────────────────────────
   const handleApprove = useCallback(
     async (decisionId: string, note: string) => {
       if (!token) {
         flash.addFlash('error', '请先登录并提供 token');
         return;
       }
-      if (!latestRunId || (confirmation.required && !confirmation.confirmed)) return;
-
+      if (confirmation.required && !confirmation.confirmed) return;
+      onBegin();
       try {
-        const result = await approveMutation.mutate({
-          runId: latestRunId,
+        const result = await rpc.call('gate.approve', {
+          runId,
           decisionId,
           actor: 'web-user',
           note: note || undefined,
           token,
           ...confirmation.input,
-        });
+        } satisfies DecisionInput);
         const feedback = approvalFeedback(result);
-        setApprovalNotice(feedback.message);
+        setNotice(feedback.message);
         flash.addFlash(feedback.variant, feedback.message);
       } catch (err) {
         flash.addFlash(
           'error',
           `批准失败：${err instanceof Error ? err.message : String(err)}`,
         );
-        setApprovalNotice(err instanceof Error ? err.message : String(err));
+        setNotice(err instanceof Error ? err.message : String(err));
       } finally {
         confirmation.setConfirmed(false);
-        for (const key of invalidateKeys) queryCache.invalidate(key);
+        onSettled();
       }
     },
-    [token, latestRunId, approveMutation, flash, confirmation, invalidateKeys],
+    [token, confirmation, runId, flash, onSettled],
   );
 
   const handleReject = useCallback(
@@ -118,34 +87,95 @@ export function ApprovalsPage() {
         flash.addFlash('error', '请先登录并提供 token');
         return;
       }
-      if (!latestRunId) return;
-
+      onBegin();
       try {
-        await rejectMutation.mutate({
-          runId: latestRunId,
+        await rpc.call('gate.reject', {
+          runId,
           decisionId,
           actor: 'web-user',
           note: note || undefined,
           token,
-        });
+        } satisfies DecisionInput);
         flash.addFlash('success', `Decision ${decisionId} rejected`);
       } catch (err) {
         flash.addFlash(
           'error',
           `Reject failed: ${err instanceof Error ? err.message : String(err)}`,
         );
+      } finally {
+        onSettled();
       }
     },
-    [token, latestRunId, rejectMutation, flash],
+    [token, runId, flash, onSettled],
   );
 
-  // ── 5. Refresh handler ─────────────────────────────────────────────────────
-  const handleRefresh = useCallback(() => {
-    overviewQuery.refetch();
-    gatesQuery.refetch();
-  }, [overviewQuery, gatesQuery]);
+  return (
+    <div className="approval-entry" data-run-id={runId}>
+      <p className="text-mono text-muted approval-entry-run">
+        <a href={routes.run(runId)}>run {runId}</a>
+      </p>
+      {notice && (
+        <p className="run-recovery-notice">
+          {notice} <a href={routes.run(runId)}>查看运行并恢复</a>
+        </p>
+      )}
+      <ResumeConfirmation
+        recovery={recovery}
+        checked={confirmation.confirmed}
+        disabled={isMutating}
+        onChange={confirmation.setConfirmed}
+      />
+      <DecisionCard
+        decision={decision}
+        isPending={isMutating}
+        approveDisabled={confirmation.required && !confirmation.confirmed}
+        onApprove={handleApprove}
+        onReject={handleReject}
+      />
+    </div>
+  );
+}
 
-  // ── 6. Render ──────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// ApprovalsPage — pending human decisions across every run in scope (PD-22).
+// ---------------------------------------------------------------------------
+
+export function ApprovalsPage() {
+  const { token } = useAuth();
+  const flash = useFlash();
+  const scope = useAuthScope();
+
+  const pendingQuery = useQuery<RpcProcedureMap['gate.pendingAll']['output']>(
+    queryKeys.gatePendingAll(scope),
+    () => rpc.call('gate.pendingAll'),
+  );
+
+  const invalidateKeys = useMemo(
+    () => [
+      'project.overview',
+      'gate.results',
+      'gate.pendingAll',
+      'session.detail.',
+      'session.list.',
+      'review.',
+    ],
+    [],
+  );
+
+  // gate.approve/reject share one in-flight flag; the query refetch drives
+  // the list update when a decision leaves the pending set.
+  const [isMutating, setIsMutating] = useState(false);
+  const settle = useCallback(() => {
+    setIsMutating(false);
+    for (const key of invalidateKeys) queryCache.invalidate(key);
+  }, [invalidateKeys]);
+
+  const handleRefresh = useCallback(() => {
+    pendingQuery.refetch();
+  }, [pendingQuery]);
+
+  const pending = pendingQuery.data?.pending ?? [];
+
   return (
     <>
       <header className="page-header">
@@ -153,12 +183,9 @@ export function ApprovalsPage() {
           <h1 className="page-title">Approvals</h1>
           <p className="page-subtitle">
             审批队列
-            {latestRunId ? (
-              <span
-                className="text-mono text-muted"
-                style={{ marginLeft: '8px' }}
-              >
-                · run {latestRunId}
+            {pending.length > 0 ? (
+              <span className="text-mono text-muted" style={{ marginLeft: '8px' }}>
+                · {pending.length} 项待处理，跨 {new Set(pending.map((entry) => entry.runId)).size} 个运行
               </span>
             ) : null}
           </p>
@@ -174,7 +201,6 @@ export function ApprovalsPage() {
         </div>
       </header>
 
-      {/* Token warning */}
       {!token ? (
         <div
           style={{
@@ -195,61 +221,31 @@ export function ApprovalsPage() {
         </div>
       ) : null}
 
-      {/* Loading state */}
-      {overviewQuery.isLoading || gatesQuery.isLoading ? (
-        <LoadingState message="加载审批队列..." />
+      {pendingQuery.isLoading ? <LoadingState message="加载审批队列..." /> : null}
+
+      {pendingQuery.error ? (
+        <ErrorBanner error={pendingQuery.error} onRetry={pendingQuery.refetch} />
       ) : null}
 
-      {/* Error state */}
-      {overviewQuery.error ? (
-        <ErrorBanner error={overviewQuery.error} onRetry={overviewQuery.refetch} />
-      ) : gatesQuery.error ? (
-        <ErrorBanner error={gatesQuery.error} onRetry={gatesQuery.refetch} />
-      ) : null}
-
-      {/* Empty state */}
-      {!overviewQuery.isLoading &&
-      !gatesQuery.isLoading &&
-      !overviewQuery.error &&
-      !gatesQuery.error &&
-      pendingDecisions.length === 0 ? (
+      {!pendingQuery.isLoading && !pendingQuery.error && pending.length === 0 ? (
         <EmptyState
           message="没有待处理审批"
-          hint={
-            latestRunId
-              ? 'All human gates for the latest run have been decided.'
-              : 'No active run found. Start a run to see approvals here.'
-          }
+          hint="当前项目下所有运行的人工门禁都已处理。"
         />
       ) : null}
 
-      {approvalNotice && <p className="run-recovery-notice">{approvalNotice} {latestRunId && <a href={routes.run(latestRunId)}>查看运行并恢复</a>}</p>}
-      {pendingDecisions.length > 0 && <ResumeConfirmation recovery={overviewQuery.data?.latestRun?.recovery} checked={confirmation.confirmed} disabled={isMutating} onChange={confirmation.setConfirmed} />}
-
-      {/* Pending decisions list */}
-      {pendingDecisions.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-          {pendingDecisions.map((decision) => (
-            <DecisionCard
-              key={decision.id}
-              decision={decision}
-              isPending={isMutating}
-              approveDisabled={confirmation.required && !confirmation.confirmed}
-              onApprove={handleApprove}
-              onReject={handleReject}
+      {pending.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {pending.map((entry) => (
+            <PendingApprovalEntry
+              key={`${entry.runId}:${entry.decision.id}`}
+              entry={entry}
+              token={token}
+              isMutating={isMutating}
+              onBegin={() => setIsMutating(true)}
+              onSettled={settle}
             />
           ))}
-        </div>
-      ) : null}
-
-      {/* Mutation error */}
-      {approveMutation.error ? (
-        <div style={{ marginTop: '16px' }}>
-          <ErrorBanner error={approveMutation.error} />
-        </div>
-      ) : rejectMutation.error ? (
-        <div style={{ marginTop: '16px' }}>
-          <ErrorBanner error={rejectMutation.error} />
         </div>
       ) : null}
     </>

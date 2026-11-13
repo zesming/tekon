@@ -1507,6 +1507,10 @@ tbody tr:last-child td {
   color: var(--pass);
 }
 
+.check-icon.idle {
+  color: var(--text-t);
+}
+
 .check-icon.fail {
   color: var(--fail);
 }

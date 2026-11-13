@@ -3,6 +3,7 @@ import { getRunModePolicyIssue } from '@tekon/core';
 import type { ProjectRunInput, ServerContext } from '../context.js';
 import { assertSessionToken } from '../common.js';
 import { ApiError } from '../errors.js';
+import { resolveWebDefaultAgent } from '../default-agent.js';
 import { createProjectRouter as createBaseProjectRouter } from './project.js';
 
 /**
@@ -23,7 +24,7 @@ export function createProjectRouter(
       // details to an unauthenticated caller.
       assertSessionToken(context.projectContext, input.token);
       const issue = getRunModePolicyIssue({
-        agent: input.agent ?? 'codex',
+        agent: input.agent ?? resolveWebDefaultAgent(context.projectContext.projectRoot),
         kind: input.mode === 'goal' ? 'goal' : 'workflow',
         template: input.template,
         profile: input.profile,

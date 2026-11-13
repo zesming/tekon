@@ -7,6 +7,7 @@ import { useFlash } from '../../context/flash-context.js';
 import { queryCache } from '../../lib/query-cache.js';
 import type { ApiWorkflow } from '../../../shared/api-types.js';
 import { rpc } from '../../lib/rpc-client.js';
+import { preflightWarning } from '../../lib/preflight-warning.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,14 @@ export interface RunControlsProps {
  */
 const RESUMABLE_STATUSES = new Set(['paused', 'blocked', 'interrupted']);
 const TERMINAL_STATUSES = new Set(['passed', 'failed', 'cancelled']);
+/**
+ * Statuses the workflow engine can actually report. An unknown value gets no
+ * controls rather than being treated as a live, cancellable run.
+ */
+const KNOWN_STATUSES = new Set([
+  'pending', 'running', 'paused', 'blocked', 'interrupted',
+  'passed', 'failed', 'cancelled',
+]);
 
 /**
  * Which run-control affordances are valid for a given status. Pure so it can be
@@ -53,7 +62,9 @@ export function runControlAffordances(status: string): RunControlAffordances {
   return {
     canPause: status === 'running',
     canResume: RESUMABLE_STATUSES.has(status),
-    canCancel: status === 'running' || status === 'paused',
+    // PD-17: any known non-terminal run can be cancelled from the Web,
+    // including blocked/interrupted runs that previously had no way out.
+    canCancel: KNOWN_STATUSES.has(status) && !TERMINAL_STATUSES.has(status),
     canView: TERMINAL_STATUSES.has(status),
   };
 }
@@ -171,6 +182,8 @@ export function RunControls({
         addFlash('success', message);
         setActionReceipt(message);
       }
+      const warning = preflightWarning(result.preflight);
+      if (warning) addFlash('warning', warning);
     } catch (err) {
       addFlash(
         'error',

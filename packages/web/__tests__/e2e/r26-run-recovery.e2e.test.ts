@@ -261,3 +261,16 @@ test('R26 desktop Session approval metadata uses the rail width while the approv
   expect(pageGeometry.items.every(item => item.width < pageGeometry.width / 2 && Math.abs(item.top - pageGeometry.items[0]!.top) < 1), JSON.stringify(pageGeometry)).toBe(true);
   await page.screenshot({ path: info.outputPath('r26-desktop-approval-page-layout.png'), animations: 'disabled' });
 });
+
+test('PD-17: an interrupted run offers cancel, not only resume', async ({ page, server }) => {
+  const state = await recoveryFixture(page);
+  state.status = 'interrupted';
+  await page.goto(`${server.url}/advanced/runs/run_1`);
+
+  const cancel = page.getByRole('button', { name: '请求取消运行' });
+  await expect(cancel).toBeVisible();
+  await expect(page.getByRole('button', { name: '恢复运行' })).toBeVisible();
+  await cancel.click();
+  await page.getByRole('button', { name: '确认取消运行' }).click();
+  await expect.poll(() => state.requests.some(request => request.path === 'project.cancel')).toBe(true);
+});

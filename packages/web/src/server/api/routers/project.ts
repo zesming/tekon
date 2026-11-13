@@ -1,4 +1,5 @@
 import { hashWebRunEnvelope, webRunEnvelope } from '../admission-envelope.js';
+import { resolveWebDefaultAgent } from '../default-agent.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
@@ -220,6 +221,7 @@ export function createProjectRouter(
       const latestRun = latest?.run ?? null;
       return {
         project: mapProject(project),
+        defaultAgent: resolveWebDefaultAgent(context.projectContext.projectRoot),
         latestRun: latestRun ? mapWorkflow(latestRun, { db: context.db }) : null,
         counts: {
           artifacts: latestRun
@@ -361,7 +363,9 @@ export function createProjectRouter(
         const isGoal = runInput.mode === 'goal';
         const allowDirtyBase = Boolean(runInput.allowDirtyBase);
         const resolvedProfile = runInput.profile ?? 'human-web';
-        const resolvedAgent = runInput.agent ?? 'codex';
+        const resolvedAgent = runInput.agent ?? resolveWebDefaultAgent(
+          context.projectContext.projectRoot,
+        );
         assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
         const templateName = isGoal ? 'goal' : runInput.template?.trim() || 'standard-delivery';
         assertSafeName(templateName, 'template');

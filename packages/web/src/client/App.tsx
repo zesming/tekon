@@ -1,8 +1,7 @@
-import { createBrowserRouter, useRouteError, useNavigate } from 'react-router';
+import { createBrowserRouter, useRouteError, useNavigate, Navigate } from 'react-router';
 
 import { AppLayout } from './layouts/AppLayout.js';
 
-import { DashboardPage } from './pages/DashboardPage.js';
 import { SessionsPage } from './pages/SessionsPage.js';
 import { SessionDetailPage } from './pages/SessionDetailPage.js';
 import { RunsPage } from './pages/RunsPage.js';
@@ -51,8 +50,10 @@ export const router = createBrowserRouter([
         element: <SessionDetailPage />,
         errorElement: <RouteError scope="session-detail" />,
       },
-      // Legacy run-centric Cockpit, preserved under /advanced (report C2).
-      { path: 'advanced', element: <DashboardPage /> },
+      // UI-03: the legacy Cockpit dashboard was removed; /advanced now enters
+      // the run list directly. Sidebar entry paths are revisited in a later
+      // console phase.
+      { path: 'advanced', element: <Navigate to="runs" replace /> },
       { path: 'advanced/runs', element: <RunsPage /> },
       {
         path: 'advanced/runs/:runId',
