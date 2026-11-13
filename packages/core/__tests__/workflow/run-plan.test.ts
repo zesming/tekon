@@ -16,7 +16,6 @@ import {
   projectRunPlanPreview,
   projectRunPlan,
 } from "../../src/workflow/run-plan.js";
-import { FALLBACK_DEFAULT_AGENT } from "../../src/config/tekon-config.js";
 
 describe("agentRequiresUnrestrictedNetwork", () => {
   it("returns true only for dsh-headless and false for others", () => {
@@ -148,7 +147,10 @@ phases:
     // omit agent get the core fallback (claude-code). Repo-configured defaults
     // are applied one layer up in captureRunPlan.
     const defaultPlan = projectRunPlan(template);
-    expect(defaultPlan.agent).toBe(FALLBACK_DEFAULT_AGENT);
+    // Assert the literal contract value, not the imported constant: an
+    // assertion against FALLBACK_DEFAULT_AGENT would stay green even if the
+    // constant itself were mutated to another agent.
+    expect(defaultPlan.agent).toBe("claude-code");
     expect(defaultPlan.requiresUnrestrictedNetwork).toBe(false);
 
     const explicitPlan = projectRunPlan(template, { agent: "claude-code" });
@@ -382,7 +384,9 @@ describe("captureRunPlan default-agent resolution (PD-24)", () => {
   it("falls back to the core default when the repo has no config", () => {
     const repoPath = makeRepo();
     const plan = captureRunPlan(repoPath, loadBuiltInWorkflowTemplate("goal"), {});
-    expect(plan.agent).toBe(FALLBACK_DEFAULT_AGENT);
+    // Literal value, not the imported constant, so a fallback-constant
+    // mutation cannot pass silently.
+    expect(plan.agent).toBe("claude-code");
   });
 
   it("uses the repo-configured defaultAgent when agent is omitted", () => {
