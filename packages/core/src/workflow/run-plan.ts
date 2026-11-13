@@ -240,7 +240,9 @@ export function agentRequiresUnrestrictedNetwork(
  * - Deeply normalizes the template to freeze execution facts before any async operations.
  * - Sets digestVersion: 2 and mode.
  * - Extracts roleChain, gates, and phases summaries.
- * - Defaults agent to 'codex' when omitted (Web preview and admission still rely on it).
+ * - An omitted agent is resolved from the repo-configured default by
+ *   captureRunPlan (Web preview/admission); the inner fallback here only
+ *   guards direct callers and uses the core FALLBACK_DEFAULT_AGENT.
  * - Includes execution configuration.
  * - Computes and attaches a deterministic digest over the full template and context.
  */

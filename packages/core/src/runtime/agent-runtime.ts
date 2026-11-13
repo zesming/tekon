@@ -90,7 +90,9 @@ export function createAgentAdapterFromSnapshot(
 /**
  * Build a default AgentAdapterConfig for a given agent type.
  * The `approvalDefault` option controls the permission profile's approval
- * policy — CLI uses 'on-failure', Web uses 'on-request'.
+ * policy. Both CLI and the Web write path now use 'on-failure' (acceptEdits
+ * plus the role's disallowedTools); the read-only draft agent keeps its own
+ * default-permission construction and never passes through this option.
  */
 export function defaultProviderConfig(
   agent: SupportedAgent,

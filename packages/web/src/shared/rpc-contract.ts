@@ -87,7 +87,7 @@ export const projectRunInputSchema = z
     // deferred until a dedicated review-only entry point exists (design §1.2.3).
     profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
     template: z.string().optional(),
-    agent: z.string().optional(),
+    agent: z.string().min(1).optional(),
     allowDirtyBase: z.boolean().optional(),
     demandShapePath: z.string().optional(),
     timeoutMs: z.number().optional(),
@@ -209,7 +209,7 @@ export const deliveryCiStatusInputSchema = z.object({
 export const workflowPlanInputSchema = z.object({
   template: z.string().optional(),
   mode: z.enum(['workflow', 'goal']).optional(),
-  agent: z.string().optional(),
+  agent: z.string().min(1).optional(),
   profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
   allowDirtyBase: z.boolean().optional(),
   timeoutMs: z.number().optional(),
@@ -736,6 +736,9 @@ export const decisionOutputSchema = z.object({
   resumeOutcome: z.string().optional(),
   resumeMessage: z.string().optional(),
   recovery: runRecoverySchema.optional(),
+  // Soft preflight warnings (login state, passthrough env) for the resume an
+  // approval triggers; hard failures are rejected before the decision records.
+  preflight: providerPreflightOutputSchema.optional(),
   decision: apiHumanDecisionSchema,
   // S7d/M9: gate.approve resumes the run asynchronously via the job runner and
   // returns the bound session + enqueued job so the client can follow it. reject

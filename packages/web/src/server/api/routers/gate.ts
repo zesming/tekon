@@ -241,17 +241,20 @@ async function updateDecision(input: {
         confirmStopped: input.input.confirmStopped,
         previousJobId: input.input.previousJobId,
       });
+      const preflight = 'preflight' in result ? result.preflight : undefined;
       if (result.outcome === 'enqueued') return {
         ...mappedDecision,
         resumeOutcome: result.outcome,
         sessionId: result.sessionId,
         jobId: result.jobId,
+        ...(preflight ? { preflight } : {}),
       };
       return {
         ...mappedDecision,
         resumeOutcome: result.outcome,
         resumeMessage: `审批已记录，运行尚未恢复（${result.outcome}）。请刷新后检查运行状态及旧执行退出情况。`,
         recovery: readRunRecovery(db, existing.run_id),
+        ...(preflight ? { preflight } : {}),
       };
     } catch (error) {
       // A recorded decision is durable even if recovery admission fails.

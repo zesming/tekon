@@ -7,6 +7,7 @@ import { useFlash } from '../context/flash-context.js';
 import { useResumeConfirmation } from '../hooks/use-resume-confirmation.js';
 import { ResumeConfirmation } from '../components/runs/ResumeConfirmation.js';
 import { approvalFeedback } from '../lib/approval-feedback.js';
+import { preflightWarning } from '../lib/preflight-warning.js';
 import { queryCache } from '../lib/query-cache.js';
 import { routes } from '../lib/route-paths.js';
 import { queryKeys } from '../lib/query-keys.js';
@@ -35,17 +36,21 @@ export function PendingApprovalEntry({
   isMutating,
   onBegin,
   onSettled,
+  onNotice,
 }: {
   entry: PendingEntry;
   token: string | null;
   isMutating: boolean;
   onBegin: () => void;
   onSettled: () => void;
+  // Partial-success notices must outlive the entry itself: the approved
+  // decision leaves the pending queue on refetch, so a notice kept inside the
+  // entry would unmount before the user can read the recovery guidance.
+  onNotice: (runId: string, message: string) => void;
 }) {
   const { runId, decision, recovery } = entry;
   const flash = useFlash();
   const confirmation = useResumeConfirmation(runId, recovery);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const handleApprove = useCallback(
     async (decisionId: string, note: string) => {
@@ -65,20 +70,21 @@ export function PendingApprovalEntry({
           ...confirmation.input,
         } satisfies DecisionInput);
         const feedback = approvalFeedback(result);
-        setNotice(feedback.message);
+        onNotice(runId, feedback.message);
         flash.addFlash(feedback.variant, feedback.message);
+        const warning = preflightWarning(result.preflight);
+        if (warning) flash.addFlash('warning', warning);
       } catch (err) {
         flash.addFlash(
           'error',
           `批准失败：${err instanceof Error ? err.message : String(err)}`,
         );
-        setNotice(err instanceof Error ? err.message : String(err));
       } finally {
         confirmation.setConfirmed(false);
         onSettled();
       }
     },
-    [token, confirmation, runId, flash, onSettled],
+    [token, confirmation, runId, flash, onBegin, onSettled, onNotice],
   );
 
   const handleReject = useCallback(
@@ -106,7 +112,7 @@ export function PendingApprovalEntry({
         onSettled();
       }
     },
-    [token, runId, flash, onSettled],
+    [token, runId, flash, onBegin, onSettled],
   );
 
   return (
@@ -114,11 +120,6 @@ export function PendingApprovalEntry({
       <p className="text-mono text-muted approval-entry-run">
         <a href={routes.run(runId)}>run {runId}</a>
       </p>
-      {notice && (
-        <p className="run-recovery-notice">
-          {notice} <a href={routes.run(runId)}>查看运行并恢复</a>
-        </p>
-      )}
       <ResumeConfirmation
         recovery={recovery}
         checked={confirmation.confirmed}
@@ -142,7 +143,6 @@ export function PendingApprovalEntry({
 
 export function ApprovalsPage() {
   const { token } = useAuth();
-  const flash = useFlash();
   const scope = useAuthScope();
 
   const pendingQuery = useQuery<RpcProcedureMap['gate.pendingAll']['output']>(
@@ -165,6 +165,15 @@ export function ApprovalsPage() {
   // gate.approve/reject share one in-flight flag; the query refetch drives
   // the list update when a decision leaves the pending set.
   const [isMutating, setIsMutating] = useState(false);
+  // Page-level recovery notices: the entry that raised them unmounts on the
+  // post-approval refetch, so the guidance (and its run link) must live here.
+  const [notices, setNotices] = useState<Array<{ runId: string; message: string }>>([]);
+  const handleNotice = useCallback((runId: string, message: string) => {
+    setNotices((current) => [
+      ...current.filter((item) => item.runId !== runId),
+      { runId, message },
+    ]);
+  }, []);
   const settle = useCallback(() => {
     setIsMutating(false);
     for (const key of invalidateKeys) queryCache.invalidate(key);
@@ -234,6 +243,13 @@ export function ApprovalsPage() {
         />
       ) : null}
 
+      {notices.map((item) => (
+        <p className="run-recovery-notice" key={item.runId}>
+          {item.message}{' '}
+          <a href={routes.run(item.runId)}>查看运行并恢复</a>
+        </p>
+      ))}
+
       {pending.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {pending.map((entry) => (
@@ -244,6 +260,7 @@ export function ApprovalsPage() {
               isMutating={isMutating}
               onBegin={() => setIsMutating(true)}
               onSettled={settle}
+              onNotice={handleNotice}
             />
           ))}
         </div>

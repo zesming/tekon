@@ -130,7 +130,8 @@ for (const action of ['none', 'edit-cycle', 'new-intent', 'token-cycle', 'unmoun
           await expect(credentialStatus(page, 'valid')).toBeVisible();
         } else if (action === 'unmount') {
           await page.evaluate(async () => { await window.__r25DeferredNavigation!.leave(); });
-          await expect(page).toHaveURL(/\/advanced$/);
+          // UI-03: /advanced now redirects to the run list.
+          await expect(page).toHaveURL(/\/advanced\/runs/);
           await expect(input).toHaveCount(0);
         }
 

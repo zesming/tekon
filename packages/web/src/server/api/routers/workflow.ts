@@ -7,6 +7,7 @@ import {
   loadWorkflowTemplateFile,
   captureRunPlan,
   toRunPlanPreview,
+  TekonConfigError,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -47,6 +48,13 @@ export function createWorkflowRouter(context: ServerContext) {
         templateId: templateName,
         }), context.planPreviewSigner);
       } catch (error) {
+        // A malformed .tekon/config.yaml is user-fixable input, not a server fault.
+        if (error instanceof TekonConfigError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${error.message}`,
+          );
+        }
         if (error instanceof Error && error.message.startsWith('PLAN_CONFIG_INVALID:')) {
           throw new ApiError('BAD_REQUEST', 'PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览');
         }

@@ -19,6 +19,7 @@ import type { ApiWorkflow, DecisionInput, DecisionOutput } from '../../../shared
 import { useResumeConfirmation } from '../../hooks/use-resume-confirmation.js';
 import { ResumeConfirmation } from '../runs/ResumeConfirmation.js';
 import { approvalFeedback } from '../../lib/approval-feedback.js';
+import { preflightWarning } from '../../lib/preflight-warning.js';
 import { queryCache } from '../../lib/query-cache.js';
 import { RunControls } from '../runs/RunControls.js';
 import { DecisionCard } from '../approvals/DecisionCard.js';
@@ -100,6 +101,8 @@ export function SessionSidePanel({ state, recovery, runStatus }: { state: SidePa
           const feedback = approvalFeedback(result);
           setApprovalNotice(feedback.message);
           flash.addFlash(feedback.variant, feedback.message);
+          const warning = preflightWarning(result.preflight);
+          if (warning) flash.addFlash('warning', warning);
         } else flash.addFlash('success', `Decision ${decisionId} ${verb}`);
       } catch (err) {
         flash.addFlash(

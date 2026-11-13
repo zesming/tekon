@@ -27,6 +27,7 @@ import {
   RunCleanupAuditError,
   RunCleanupError,
   ProviderPreflightError,
+  TekonConfigError,
   createCommandGateway,
   createRunCleanup,
   createWorktreeManager,
@@ -295,7 +296,20 @@ export function createProjectRouter(
       const runInput = structuredClone(rawInput);
       const requestId = runInput.requestId ?? randomUUID();
       if (!isValidRequestId(requestId)) throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
-      const requestEnvelope = webRunEnvelope(context.projectContext.projectRoot, runInput);
+      // Envelope hashing resolves the omitted default agent before the admission
+      // try/catch below, so map a malformed repo config to 400 at the boundary.
+      let requestEnvelope: ReturnType<typeof webRunEnvelope>;
+      try {
+        requestEnvelope = webRunEnvelope(context.projectContext.projectRoot, runInput);
+      } catch (error) {
+        if (error instanceof TekonConfigError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${error.message} (requestId=${requestId})`,
+          );
+        }
+        throw error;
+      }
       const lookupInput = { requestId, requestEnvelope };
 
       function resultFor(result: SessionServiceStartRunResult) {
@@ -324,6 +338,11 @@ export function createProjectRouter(
           return new ApiError('CONFLICT', `REQUEST_ID_CONFLICT: requestId=${requestId}`);
         }
         const planError = error instanceof RunAdmissionError && !error.runId ? error.cause : error;
+        // A malformed .tekon/config.yaml is user-fixable input: answer 400,
+        // symmetric with workflow.plan, instead of a generic server fault.
+        if (planError instanceof TekonConfigError) {
+          return new ApiError('BAD_REQUEST', `TEKON_CONFIG_INVALID: ${planError.message} (requestId=${requestId})`);
+        }
         if (planError instanceof Error && planError.message.startsWith('PLAN_CONFIG_INVALID:')) {
           return new ApiError('BAD_REQUEST', `PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览 (requestId=${requestId})`);
         }

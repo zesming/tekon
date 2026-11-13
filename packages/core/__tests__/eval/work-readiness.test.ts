@@ -486,4 +486,98 @@ describe('work readiness evaluation', () => {
     expect(evaluation.ready).toBe(false);
     db.close();
   });
+
+  it('marks delivery checks failed (not not-started) once failing evidence exists', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-work-failed-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await repositories.createDemand({
+      id: 'demand_3',
+      title: 'Delivery that failed late',
+      body: 'PR creation and CI ran but failed.',
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createProject({
+      id: 'project_3',
+      name: 'fixture',
+      repoPath,
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+    await repositories.createWorkflowInstance({
+      id: 'run_3',
+      projectId: 'project_3',
+      demandId: 'demand_3',
+      status: 'passed',
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:01.000Z',
+    });
+    await repositories.createNode({
+      id: 'node_3',
+      runId: 'run_3',
+      role: 'rd',
+      status: 'passed',
+      gates: [],
+      dependencies: [],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:01.000Z',
+    });
+    // A delivery PR record exists but creation failed.
+    await repositories.upsertDeliveryPullRequest({
+      id: 'delivery_pr_3',
+      runId: 'run_3',
+      branch: 'tekon-delivery/run_3',
+      baseBranch: 'main',
+      title: 'Failed delivery',
+      status: 'failed',
+      prUrl: null,
+      approvedBy: null,
+      approvedAt: null,
+      branchPushedAt: '2026-06-05T00:00:03.000Z',
+      prCreatedAt: null,
+      attemptCount: 1,
+      createdAt: '2026-06-05T00:00:03.000Z',
+      updatedAt: '2026-06-05T00:00:04.000Z',
+    });
+    // A CI check ran and failed; the audited artifact is what evidence collects.
+    const store = createArtifactStore({ repoPath, repositories });
+    const ciArtifact = await store.writeArtifact({
+      runId: 'run_3',
+      nodeId: 'node_3',
+      type: 'ci-status',
+      content: JSON.stringify({
+        title: 'CI status',
+        body: 'CI failed.',
+        ciStatus: 'failed',
+        prUrl: 'https://github.example/tekon/pull/3',
+        checkedAt: '2026-06-05T00:00:06.000Z',
+        checks: [{ name: 'build', bucket: 'fail' }],
+      }),
+    });
+    await audit.append({
+      runId: 'run_3',
+      type: 'delivery.ci.checked',
+      payload: { artifactId: ciArtifact.id },
+    });
+
+    const evaluation = await evaluateWorkReadiness({
+      repositories,
+      audit,
+      runId: 'run_3',
+    });
+    const byId = new Map(evaluation.checks.map((check) => [check.id, check]));
+
+    // Evidence exists but the outcome is bad: failed, never not-started.
+    expect(byId.get('pr-created')).toMatchObject({
+      passed: false,
+      state: 'failed',
+    });
+    expect(byId.get('remote-ci-passed')).toMatchObject({
+      passed: false,
+      state: 'failed',
+    });
+    db.close();
+  });
 });

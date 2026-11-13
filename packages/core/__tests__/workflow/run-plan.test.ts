@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   loadBuiltInWorkflowTemplate,
@@ -7,6 +10,7 @@ import {
 } from "../../src/workflow/template.js";
 import {
   agentRequiresUnrestrictedNetwork,
+  captureRunPlan,
   computeRunPlanDigest,
   computeRunPlanDigestV1,
   projectRunPlanPreview,
@@ -357,5 +361,58 @@ describe("projectRunPlanPreview", () => {
     expect(preview.gates).toEqual(plan.gates);
     expect(preview.phases).toEqual(plan.phases);
     expect((preview as any).template).toBeUndefined();
+  });
+});
+
+describe("captureRunPlan default-agent resolution (PD-24)", () => {
+  const tempDirs: string[] = [];
+  function makeRepo(configYaml?: string): string {
+    const repoPath = mkdtempSync(join(tmpdir(), "tekon-plan-agent-"));
+    tempDirs.push(repoPath);
+    mkdirSync(join(repoPath, ".tekon"), { recursive: true });
+    if (configYaml !== undefined) {
+      writeFileSync(join(repoPath, ".tekon", "config.yaml"), configYaml);
+    }
+    return repoPath;
+  }
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+  it("falls back to the core default when the repo has no config", () => {
+    const repoPath = makeRepo();
+    const plan = captureRunPlan(repoPath, loadBuiltInWorkflowTemplate("goal"), {});
+    expect(plan.agent).toBe(FALLBACK_DEFAULT_AGENT);
+  });
+
+  it("uses the repo-configured defaultAgent when agent is omitted", () => {
+    const repoPath = makeRepo("defaultAgent: codex\n");
+    const plan = captureRunPlan(repoPath, loadBuiltInWorkflowTemplate("goal"), {});
+    expect(plan.agent).toBe("codex");
+  });
+
+  it("lets an explicit agent override the repo default", () => {
+    const repoPath = makeRepo("defaultAgent: codex\n");
+    const plan = captureRunPlan(repoPath, loadBuiltInWorkflowTemplate("goal"), {
+      agent: "mock",
+    });
+    expect(plan.agent).toBe("mock");
+  });
+
+  it("throws on a malformed config instead of silently defaulting", () => {
+    const repoPath = makeRepo("defaultAgent: [unclosed\n");
+    expect(() =>
+      captureRunPlan(repoPath, loadBuiltInWorkflowTemplate("goal"), {}),
+    ).toThrow(/config\.yaml/);
+  });
+
+  it("gives preview and admission the same digest when both omit agent", () => {
+    const repoPath = makeRepo("defaultAgent: codex\n");
+    const template = loadBuiltInWorkflowTemplate("goal");
+    const preview = captureRunPlan(repoPath, template, {});
+    // The admission path resolves the default first and passes it explicitly.
+    const admission = captureRunPlan(repoPath, template, { agent: "codex" });
+    expect(preview.agent).toBe("codex");
+    expect(preview.digest).toBe(admission.digest);
   });
 });

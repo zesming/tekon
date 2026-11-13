@@ -87,7 +87,7 @@ test.describe('mobile navigation accessibility', () => {
 
     await toggle.click();
     await page.getByRole('link', { name: '高级 Advanced' }).click();
-    await expect(page).toHaveURL(/\/advanced$/);
+    await expect(page).toHaveURL(/\/advanced\/runs/);
     await expect(sidebar).toBeHidden();
     await expect(main).toBeFocused();
   });

@@ -1,4 +1,4 @@
-import { getRunModePolicyIssue } from '@tekon/core';
+import { getRunModePolicyIssue, TekonConfigError } from '@tekon/core';
 
 import type { ProjectRunInput, ServerContext } from '../context.js';
 import { assertSessionToken } from '../common.js';
@@ -23,8 +23,24 @@ export function createProjectRouter(
       // repeats this check; keeping the wrapper explicit avoids leaking policy
       // details to an unauthenticated caller.
       assertSessionToken(context.projectContext, input.token);
+      // The default-agent resolution is the first repo-config read on admission;
+      // surface a malformed .tekon/config.yaml as a user-fixable 400, not a 500.
+      let resolvedAgent: string;
+      try {
+        resolvedAgent =
+          input.agent ??
+          resolveWebDefaultAgent(context.projectContext.projectRoot);
+      } catch (error) {
+        if (error instanceof TekonConfigError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${error.message}`,
+          );
+        }
+        throw error;
+      }
       const issue = getRunModePolicyIssue({
-        agent: input.agent ?? resolveWebDefaultAgent(context.projectContext.projectRoot),
+        agent: resolvedAgent,
         kind: input.mode === 'goal' ? 'goal' : 'workflow',
         template: input.template,
         profile: input.profile,

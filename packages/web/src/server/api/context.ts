@@ -306,6 +306,7 @@ export interface ApiCaller {
     list(): Promise<ProjectOutput[]>;
     overview(): Promise<{
       project: ProjectOutput;
+      defaultAgent: string;
       latestRun: WorkflowOutput | null;
       counts: {
         artifacts: number;
@@ -433,6 +434,12 @@ export interface ApiCaller {
       resumeOutcome?: string;
       resumeMessage?: string;
       recovery?: RunRecovery;
+      preflight?: {
+        provider: string;
+        auth: string;
+        passthroughEnv: string[];
+        warnings: string[];
+      };
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;

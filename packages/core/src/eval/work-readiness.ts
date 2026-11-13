@@ -87,8 +87,9 @@ export async function evaluateWorkReadiness(input: {
   const hasPrPreparedEvent = events.some(
     (event) => event.type === 'delivery.pr-prepared',
   );
+  const hasPrRecord = deliveryPr !== null && deliveryPr !== undefined;
   const hasCreatedPr =
-    deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl);
+    hasPrRecord && deliveryPr.status === 'created' && Boolean(deliveryPr.prUrl);
   const hasCiCheck = deliveryEvidence.ciStatuses.length > 0;
 
   // Whether a delivery-stage check has ever produced evidence. False means the
@@ -97,7 +98,7 @@ export async function evaluateWorkReadiness(input: {
   const deliveryEvidenceExists: Record<string, boolean> = {
     'delivery-package-present': hasDeliveryPackage,
     'pr-prepared': hasPrPreparedEvent,
-    'pr-created': deliveryPr !== null && deliveryPr !== undefined,
+    'pr-created': hasPrRecord,
     'remote-ci-passed': hasCiCheck,
   };
 
@@ -197,7 +198,7 @@ export async function evaluateWorkReadiness(input: {
     {
       id: 'pr-created',
       severity: 'required',
-      passed: deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl),
+      passed: hasCreatedPr,
       evidence:
         deliveryPr?.status === 'created' && deliveryPr.prUrl
           ? `PR created: ${deliveryPr.prUrl}`

@@ -22,10 +22,26 @@ async function recoveryFixture(page: Page) {
       state.requests.push(body);
       return body.path === 'project.cancel' ? state.cancel(route) : body.path === 'project.resume' ? state.resume(route) : state.approve(route);
     }
-    if (body.path === 'gate.list' && state.approved) {
+    // PD-22: the approval queue now reads gate.pendingAll. Its recovery comes
+    // from the server DB, but these cases drive recovery through `state` (the
+    // approve RPC itself is mocked and never mutates the DB), so mirror the
+    // state-driven recovery into each entry and empty the queue once approved.
+    if (body.path === 'gate.pendingAll') {
+      if (state.approved) {
+        return route.fulfill({ json: { result: { pending: [] } } });
+      }
       const response = await route.fetch();
       const json = await response.json();
-      json.result.pendingDecisions = [];
+      json.result.pending = (json.result.pending ?? []).map(
+        (entry: { runId: string; decision: unknown }) => ({
+          ...entry,
+          recovery: {
+            runStatus: state.status,
+            cancelRecovery: state.cancelRecovery,
+            resumeRecovery: state.resumeRecovery,
+          },
+        }),
+      );
       return route.fulfill({ response, json });
     }
     if ((body.path === 'review.get' && body.input?.runId === 'run_1') || body.path === 'project.overview' || body.path === 'session.get' || body.path === 'project.detail') {
