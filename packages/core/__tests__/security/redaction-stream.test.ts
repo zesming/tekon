@@ -201,4 +201,154 @@ describe('streaming secret redaction', () => {
     expect(output).not.toContain(openAi);
     expect(output).toBe(redactSecrets(longLine).content);
   });
+
+  it('never splits a surrogate pair when cutting an over-long line', async () => {
+    // The high surrogate lands exactly on the 1MB cut point; lineCutPoint must
+    // step back so the emoji survives both whole-text and streamed output.
+    const emoji = '😀';
+    const longLine = `${'x'.repeat(1_048_575)}${emoji}${'y'.repeat(200)}`;
+    const whole = redactSecrets(longLine).content;
+    expect(whole).toContain(emoji);
+    const output = await stream([Buffer.from(longLine)]);
+    expect(output).toBe(whole);
+    expect(output).toContain(emoji);
+  });
+
+  it('masks a near-1MB value joined to its dangling key line', async () => {
+    const hugeValue = `wJalr${'A'.repeat(1_048_576 - 40)}`;
+    const text = `aws_secret_access_key =\n${hugeValue}\nafter\n`;
+    const whole = redactSecrets(text).content;
+    expect(whole).not.toContain(hugeValue);
+    expect(await stream([Buffer.from(text)])).toBe(whole);
+  });
+});
+
+describe('private key block look-ahead bounds', () => {
+  const BEGIN = '-----BEGIN PRIVATE KEY-----';
+  const END = '-----END PRIVATE KEY-----';
+  const body = 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC';
+  const result = '{"type":"result","is_error":true}';
+
+  async function streamedWhole(text: string) {
+    const whole = redactSecrets(text).content;
+    expect(await stream([Buffer.from(text)])).toBe(whole);
+    return whole;
+  }
+
+  it('masks the whole block at the 200-line limit and truncates past it', async () => {
+    // The END line is the 200th held line at 199 body lines (in bounds), and
+    // the 201st at 200 body lines (out of bounds).
+    const inBounds = [BEGIN, ...Array.from({ length: 199 }, () => body), END, 'after'].join('\n');
+    const inOut = await streamedWhole(inBounds);
+    expect(inOut).not.toContain(body);
+    expect(inOut).not.toContain(END);
+
+    const outOfBounds = [BEGIN, ...Array.from({ length: 200 }, () => body), END, result].join('\n');
+    const outOut = await streamedWhole(outOfBounds);
+    expect(outOut).not.toContain(body);
+    // Past the bound only the key material is dropped; END and later log lines stay.
+    expect(outOut).toContain(END);
+    expect(outOut).toContain(result);
+  });
+
+  it('masks the whole block at the 16KB char limit and truncates past it', async () => {
+    // Single body line of 16382 chars leaves block.chars at exactly 16384 when
+    // the END line is checked; 16383 chars pushes it to 16385.
+    const inBoundsBody = 'M'.repeat(16_382);
+    const inBounds = [BEGIN, inBoundsBody, END].join('\n');
+    const inOut = await streamedWhole(inBounds);
+    expect(inOut).not.toContain(END);
+    expect(inOut).not.toContain(inBoundsBody);
+
+    const outOfBounds = [BEGIN, 'M'.repeat(16_383), END, result].join('\n');
+    const outOut = await streamedWhole(outOfBounds);
+    expect(outOut).toContain(END);
+    expect(outOut).toContain(result);
+  });
+
+  it('drops prefixed key-material lines after a truncated block, not just bare ones', async () => {
+    // cat -n style prefixes defeat the bare key-material matcher; without the
+    // prefixed-line tail rule these 200 out-of-bounds body lines leak in full.
+    const prefixed = Array.from({ length: 200 }, (_, index) =>
+      `${String(index + 1).padStart(6)}\t${body}`);
+    const text = [BEGIN, ...prefixed, END, result].join('\n');
+    const out = await streamedWhole(text);
+    expect(out).not.toContain(body);
+    expect(out).toContain(END);
+    expect(out).toContain(result);
+  });
+
+  it('pins the tail-mode trade-off: hash-style lines are dropped, ordinary prose ends the tail', async () => {
+    // PREFIXED_KEY_MATERIAL also matches digest/checksum lines (separator plus
+    // 20+ base64-alphabet chars to end of line), so they are dropped while tail
+    // mode is open. An ordinary prose line does not match, ends tail mode, and
+    // stays visible. This is accepted: only reachable after an out-of-bounds
+    // PEM block, and the cost is log fidelity, not a leak.
+    const truncated = [BEGIN, ...Array.from({ length: 200 }, () => body)];
+    const shaLine = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const gitLine = 'commit 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f90a1';
+    const proseLine = 'the build finished after 42 seconds';
+    const text = [...truncated, shaLine, gitLine, proseLine, 'done'].join('\n') + '\n';
+    const out = await streamedWhole(text);
+    expect(out).not.toContain(shaLine);
+    expect(out).not.toContain(gitLine);
+    expect(out).toContain(proseLine);
+    expect(out).toContain('done');
+  });
+
+  it('treats invalid UTF-8 bytes the same in streamed and whole-text paths', async () => {
+    // 0xFF is never valid UTF-8; ED A0 80 decodes to a lone high surrogate.
+    // StringDecoder replaces both with U+FFFD, so the two paths must agree.
+    const bytes = Buffer.from([0x41, 0xff, 0xed, 0xa0, 0x80, 0x42, 0x0a]);
+    const expected = redactSecrets(bytes.toString('utf8')).content;
+    expect(await stream([bytes])).toBe(expected);
+    expect(expected).toContain('A');
+    expect(expected).toContain('B');
+  });
+});
+
+describe('streaming redaction randomized content fuzz', () => {
+  const fuzzAtoms: Array<() => string> = [
+    () => 'aws_secret_access_key = "wJalrXUtnFEMI/K7MDENGbPxRfiCYEXAMPLEKEY"\n',
+    () => 'ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8\n',
+    () => 'token:',
+    () => 'password =\n  hunter2-correct-horse\n',
+    () => 'ordinary log line\n',
+    () => '-----BEGIN PRIVATE KEY-----\n',
+    () => 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\n',
+    () => '-----END PRIVATE KEY-----\n',
+    () => '\r',
+    () => '\r\n',
+    () => '进度 ✓ 🚀\n',
+    () => '  ',
+    () => '"quoted tail"\n',
+    () => '\n',
+  ];
+
+  function randomText(seed: number, rounds: number): string {
+    const next = random(seed);
+    let text = '';
+    for (let i = 0; i < rounds; i++) {
+      text += fuzzAtoms[Math.floor(next() * fuzzAtoms.length)]!();
+    }
+    return text;
+  }
+
+  it.each([7, 42, 99, 1234, 5555])(
+    'seed %s: streamed output equals whole-text redaction under random chunks',
+    async (seed) => {
+      const text = randomText(seed, 300);
+      const expected = redactSecrets(text).content;
+      const next = random(seed * 3 + 1);
+      const bytes = Buffer.from(text);
+      const cuts: number[] = [];
+      let cursor = 1;
+      while (cursor < bytes.length - 1) {
+        cursor += 1 + Math.floor(next() * 40);
+        cuts.push(cursor);
+      }
+      expect(await stream(splitAt(bytes, cuts))).toBe(expected);
+      expect(await stream([...bytes].map((byte) => Buffer.from([byte])))).toBe(expected);
+    },
+  );
 });

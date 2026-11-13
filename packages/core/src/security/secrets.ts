@@ -303,6 +303,13 @@ function createKeyBlockStage(emit: (line: TextLine) => void) {
       pending.term = line.term;
       return;
     }
+    if (length < 0 && PREFIXED_KEY_MATERIAL.test(line.content)) {
+      // Key material behind an output prefix (cat -n/grep/timestamp). Drop
+      // the whole line: the prefix alone is meaningless, and an in-bounds block
+      // would have swallowed it as part of the single marker anyway.
+      pending.term = line.term;
+      return;
+    }
     mode = 'normal';
     tail = undefined;
     if (length > 0) {
@@ -355,6 +362,9 @@ function createRuleStage(emit: (text: string) => void) {
   return {
     push(line: TextLine) {
       segment += line.content + line.term;
+      // A dangling key line is held only while the segment itself is within
+      // the 1MB line limit. The next joined line may itself be up to 1MB, so
+      // the transient peak is about 2MB: two bounded pieces, never unbounded.
       if (
         (line.term === '\n' || line.term === '\r\n') &&
         segment.length <= MAX_REDACTION_LINE_LENGTH &&
@@ -427,6 +437,11 @@ const PRIVATE_KEY_END = /-----END ((?:[A-Z]+ )*)PRIVATE KEY-----/gu;
 // whitespace was collapsed. Always matches, possibly empty.
 const TRUNCATED_KEY_TAIL =
   /(?:(?:\r?\n|\\(?:r\\)?n)[ \t]*(?:Proc-Type:[^\n\\]*|DEK-Info:[^\n\\]*|[A-Za-z0-9+/=]+[ \t]*(?=\r?\n|\\(?:r\\)?n|["']|$)|(?=\r?\n|\\(?:r\\)?n))|[ \t]+[A-Za-z0-9+/=]{20,})*/uy;
+// A truncated block's body line printed with an output prefix (`cat -n` line
+// numbers, grep file names, timestamps): an arbitrary prefix ending in a
+// separator, followed by one base64 run to end of line. The suffix requirement
+// keeps ordinary log lines out of tail mode.
+const PREFIXED_KEY_MATERIAL = /^[^\r\n]*?[ \t:-][A-Za-z0-9+/=]{20,}[ \t]*$/u;
 
 const MAX_SCAN_DEPTH = 10;
 const MAX_SCAN_FILES = 10_000;
