@@ -141,12 +141,6 @@ export function sanitizeAgentRunDiagnostic(
   };
 }
 
-export function formatAgentRunDiagnostic(
-  diagnostic: AgentRunDiagnostic | undefined,
-): string | undefined {
-  return sanitizeAgentRunDiagnostic(diagnostic)?.message;
-}
-
 function boundRedactedText(
   value: string,
   max = MAX_AGENT_DIAGNOSTIC_FIELD_CHARS,
