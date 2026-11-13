@@ -45,6 +45,17 @@ describe('provider environment passthrough', () => {
     ).toEqual({ PATH: '/usr/bin', AWS_PROFILE: 'dev' });
   });
 
+  it('keeps the Claude safe-list identity variables (USER/LOGNAME) for keychain login', () => {
+    // USER/LOGNAME are required for the macOS Keychain-backed login; dropping
+    // them from the safe list silently breaks authenticated Claude runs.
+    const env = buildClaudeProviderEnv(
+      { USER: 'alice', LOGNAME: 'alice', GITHUB_TOKEN: 'must-not-pass' },
+      [],
+    );
+    expect(env).toMatchObject({ USER: 'alice', LOGNAME: 'alice' });
+    expect(env).not.toHaveProperty('GITHUB_TOKEN');
+  });
+
   it('builds the Codex environment from its own allow list plus passthrough', () => {
     expect(
       buildCodexProviderEnv(

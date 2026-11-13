@@ -869,7 +869,13 @@ describe('codex adapter', () => {
     });
     expect(auth.diagnostic?.hint).toContain('codex login');
     const missing = await run(join(repoPath, 'no-such-codex'), []);
-    expect(missing.diagnostic).toMatchObject({ code: 'not-installed' });
+    // The gateway rejects a missing command before execution: the adapter must
+    // still report a non-zero exit alongside the classified diagnostic, so a
+    // failed start is never mistaken for a successful run.
+    expect(missing).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-installed' },
+    });
   });
 
   it('rejects non-zero Codex exits when required artifact manifests are missing', async () => {
