@@ -287,7 +287,7 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 
 | Provider | 适用范围与前提 |
 | --- | --- |
-| `claude-code` | CLI 在未配置 `defaultAgent` 时的默认后端（Web 暂时不读 `defaultAgent`，仍默认 `codex`）；本机安装并登录 Claude Code |
+| `claude-code` | CLI 与 Web 在未配置 `defaultAgent` 时的默认后端（两者读取同一份 `.tekon/config.yaml`）；本机安装并登录 Claude Code |
 | `codex` | 本机安装并登录 Codex CLI；需要 profile 时在仓库配置里写明 |
 | `mock` | 确定性流程演示与回归；不能证明真实 Agent 能力 |
 | `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
@@ -754,9 +754,9 @@ tekon --version
 
 `tekon ui` 启动本地界面，打开带 `#token=` 的完整 URL。令牌丢失时可从 `.tekon/web-session.json` 读取并填入顶栏连接面板；不要提交或共享令牌。
 
-默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。旧 Run Dashboard 保留在侧栏 **高级 Advanced**（`/advanced`），用于查看 overview、历史 Run、diff、日志、PR 包和交付操作。
+默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。运行列表与历史 Run、diff、日志、PR 包和交付操作收在侧栏 **高级 Advanced**（`/advanced/runs`，旧仪表盘入口已重定向到这里）。
 
-**发起任务**：默认“启动受控交付”使用 Codex 与 `standard-delivery` 完整角色链路；使用 Claude Code 时，到「高级 Advanced → 新建运行」选择 `claude-code`。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
+**发起任务**：默认“启动受控交付”使用 `.tekon/config.yaml` 的 `defaultAgent`（未配置时为 `claude-code`）与 `standard-delivery` 完整角色链路；要换其他 Agent 时，到「高级 Advanced → 新建运行」的 Agent 下拉框选择。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
 
 **核对执行计划**：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。
 
