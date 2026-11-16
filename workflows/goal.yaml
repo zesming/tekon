@@ -13,3 +13,6 @@ phases:
     nodes:
       - id: goal-execute
         role: goal
+        # CD-09：Goal 历史上即只读节点（finalize 拒绝源码改动），现以显式
+        # workspace 声明保留该语义；需要直接产出文件时用 in-place 自定义模板。
+        workspace: none

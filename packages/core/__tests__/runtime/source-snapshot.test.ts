@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -108,5 +109,17 @@ describe('CD-09 source snapshot for non-git workspace enforcement', () => {
 
     const diff = diffSourceSnapshot(repoPath, baseline);
     expect(diff.changedPaths).toEqual([]);
+  });
+
+  it('detects a permission-bit (chmod) change even when content is identical', () => {
+    const repoPath = makeRepo();
+    const target = join(repoPath, 'src', 'a.txt');
+    const baseline = captureSourceSnapshot(repoPath);
+
+    chmodSync(target, 0o755);
+
+    const diff = diffSourceSnapshot(repoPath, baseline);
+    expect(diff.modified).toEqual(['src/a.txt']);
+    chmodSync(target, 0o644);
   });
 });

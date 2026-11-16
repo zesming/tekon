@@ -756,6 +756,32 @@ describe('CD-09 workspace-driven lease modes', () => {
     }
   });
 
+  it('throws a friendly WorkspaceGitRequiredError for a worktree node in a non-git directory', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      await seedRun(repositories);
+      const worktreeManager = makeStubWorktreeManager();
+      const ensureSpy = vi.spyOn(worktreeManager, 'ensureRunBranch');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath: '/tmp/repo',
+        repositories,
+        audit,
+        worktreeManager,
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+
+      await expect(
+        service.createExecutionLease('run_1', makeNode({ workspace: 'worktree' })),
+      ).rejects.toMatchObject({ code: 'WORKSPACE_GIT_REQUIRED' });
+      // 不应触达底层 git，避免泄漏原始 fatal。
+      expect(ensureSpy).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
   it('none node in a git directory still gets an isolated real worktree', async () => {
     const { db, repositories, audit } = createTestDb();
     try {
@@ -876,6 +902,59 @@ describe('CD-09 workspace-driven lease modes', () => {
       await service.finalizeExecutionLease('run_1', node.id);
       const persisted = await repositories.listWorktreeLeases('run_1');
       expect(persisted[0].releasedAt).toBeTruthy();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('cold engine recreates and re-finalizes a released synthetic lease without PK conflict or evidence errors', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-cold-resume-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'in-place');
+
+      // 第一个引擎：建合成租约并 finalize（释放）。
+      const firstLeases = new Map<string, WorktreeLease>();
+      const first = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases: firstLeases,
+      });
+      const node = makeNode({ workspace: 'in-place' });
+      const lease = await first.createExecutionLease('run_1', node);
+      await first.finalizeExecutionLease('run_1', node.id);
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].releasedAt).toBeTruthy();
+
+      // 冷启动：全新引擎、空内存 map，模拟关停后的 resume。
+      const coldLeases = new Map<string, WorktreeLease>();
+      const cold = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases: coldLeases,
+      });
+      // 症状 1：确定性 id 盲插会触发 UNIQUE 冲突；应幂等复用既有租约。
+      const recreated = await cold.createExecutionLease('run_1', node);
+      expect(recreated.id).toBe(lease.id);
+      const stillOne = await repositories.listWorktreeLeases('run_1');
+      expect(stillOne).toHaveLength(1);
+
+      // 节点仍是 awaiting-gate（关停落在 release 与 node.passed 之间）。
+      await repositories.transitionNode(node.id, 'awaiting-gate');
+      // 症状 2：再次 finalize 应识别合成终态证据并 no-op，不报 evidence 缺失。
+      await expect(
+        cold.finalizeExecutionLease('run_1', node.id),
+      ).resolves.toBeUndefined();
     } finally {
       db.close();
     }

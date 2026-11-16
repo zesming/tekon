@@ -327,10 +327,11 @@ tekon eval readiness
 </tbody>
 </table></div>
 <ul>
-<li>默认 <code>worktree</code> 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。</li>
-<li><code>none</code> 节点若改了源码，finalize 会报可恢复错误并列出改动文件，运行进入 <code>interrupted</code> 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 <code>tekon resume</code>，系统直接重试 finalize，不会重跑 agent。</li>
-<li>非 Git 目录下 <code>none</code> 节点用文件快照（相对路径 + 内容哈希，忽略 <code>.git</code>、<code>.tekon</code>、<code>node_modules</code>）判定源码改动。</li>
-<li><code>in-place</code> 运行不产生 <code>tekon-delivery/&lt;runId&gt;</code> 交付分支，不能创建 PR；PR 交付会以 <code>DELIVERY_WORKSPACE_UNSUPPORTED</code> 前置拦截，请改用 <code>worktree</code> 模式。</li>
+<li>默认 <code>worktree</code> 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。内置 Goal 模板显式声明 <code>workspace: none</code>，保留其只读语义。</li>
+<li><code>none</code> 节点若改了源码，finalize 会报可恢复错误（<code>RECOVERABLE_LEASE_FAILURE</code>，审计事件 <code>worktree.lease.finalize.failed</code> 带改动路径与恢复指引），运行进入 <code>interrupted</code> 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 <code>tekon resume</code>，系统直接重试 finalize，不会重跑 agent。</li>
+<li>非 Git 目录下 <code>none</code> 节点用文件快照判定源码改动：递归记录相对路径、内容 sha256、文件大小与权限位（chmod 可检测），忽略 <code>.git</code>、<code>.tekon</code>、<code>node_modules</code>。检测边界：空目录的增删、文件时间戳（mtime）变化不计为修改；租约创建与 finalize 各做一次全量哈希，大仓库会有额外 IO 成本。</li>
+<li><code>in-place</code> 运行不产生 <code>tekon-delivery/&lt;runId&gt;</code> 交付分支，不能创建 PR；PR 交付会以 <code>DELIVERY_WORKSPACE_UNSUPPORTED</code> 前置拦截，请改用 <code>worktree</code> 模式。非 Git 目录下 autoFix repair、QA 交付 ref 同样不可用，需要这些能力请在 Git 仓库用 <code>worktree</code> 节点（误用会得到 <code>WORKSPACE_GIT_REQUIRED</code> 可读错误而非原始 git 报错）。</li>
+<li>并发限制：<code>in-place</code> 节点直接改主工作区，作业锁按 run 隔离而非按目录，不要对同一仓库并行运行多个含 <code>in-place</code> 节点的 run，否则会相互覆盖文件。</li>
 </ul>
 <h3 id="55-role" tabindex="-1">5.5 Role</h3>
 <p>节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。</p>

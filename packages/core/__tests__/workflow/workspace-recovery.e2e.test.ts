@@ -6,6 +6,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 
 import {
   assertDeliveryWorkspaceSupported,
+  assertDeliveryBranchAvailable,
   createAuditLogger,
   createCommandGateway,
   createMockAgentAdapter,
@@ -76,6 +77,28 @@ describe('CD-09 8b-3 recoverable finalize and delivery workspace boundary', () =
         assertDeliveryWorkspaceSupported([
           { id: 'run_b_rd', workspace: 'worktree' },
           { id: 'run_b_qa', workspace: 'none' },
+        ]),
+      ).not.toThrow();
+    });
+  });
+
+  describe('assertDeliveryBranchAvailable', () => {
+    it('rejects a run whose leases are all synthetic (no git delivery branch)', () => {
+      expect(() =>
+        assertDeliveryBranchAvailable([
+          { worktreePath: '/repo', repoPath: '/repo' },
+        ]),
+      ).toThrow(/DELIVERY_WORKSPACE_UNSUPPORTED/);
+    });
+
+    it('accepts a run that produced at least one real worktree lease', () => {
+      expect(() =>
+        assertDeliveryBranchAvailable([
+          { worktreePath: '/repo', repoPath: '/repo' },
+          {
+            worktreePath: '/repo/.tekon/worktrees/run_x/lease_1',
+            repoPath: '/repo',
+          },
         ]),
       ).not.toThrow();
     });
@@ -175,6 +198,93 @@ describe('CD-09 8b-3 recoverable finalize and delivery workspace boundary', () =
         (e) => e.type === 'node.resumed-finalize',
       ),
     ).toBe(true);
+
+    db.close();
+  });
+
+  it('cold resume after the lease was released but before node.passed reuses the lease and passes (MF-1)', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cold-release-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const gateway = createCommandGateway({ repositories });
+    let agentRuns = 0;
+
+    const buildEngine = (throwOnAgent: boolean) =>
+      createWorkflowEngine({
+        repoPath,
+        dataDir: '.tekon',
+        repositories,
+        audit,
+        agentProvider: 'mock',
+        adapter: {
+          async runAgent(input) {
+            agentRuns += 1;
+            if (throwOnAgent) throw new Error('resume must not rerun the agent');
+            writeFileSync(join(repoPath, 'notes.md'), 'done\n', 'utf8');
+            return createMockAgentAdapter().runAgent(input);
+          },
+        },
+        worktreeManager: createWorktreeManager({ repositories, gateway }),
+      });
+
+    const first = await buildEngine(false).startRun({
+      demandText: 'in-place 节点关停窗口恢复',
+      mode: 'template',
+      workflowSpec: {
+        id: 'cold-release',
+        name: 'Cold Release',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'P1',
+            dependsOn: [],
+            nodes: [
+              {
+                id: 'writer',
+                role: 'goal',
+                workspace: 'in-place',
+                inputs: [],
+                outputs: [],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(first.workflow.status).toBe('passed');
+    const nodeId = (await repositories.listNodes(first.runId))[0].id;
+
+    // 重放“租约已释放、node.passed 未写”的关停窗口：把节点拨回
+    // awaiting-gate，租约保持 released，然后用全新引擎冷启动 resume。
+    await repositories.transitionNode(nodeId, 'awaiting-gate');
+    // 直接（非 guarded）把实例拨回 interrupted，模拟关停时未落终态。
+    await repositories.updateWorkflowInstanceStatus(
+      first.runId,
+      'interrupted',
+      nodeId,
+    );
+
+    const resumed = await buildEngine(true).resumeRun(first.runId);
+
+    expect(resumed.workflow.status).toBe('passed');
+    expect(agentRuns).toBe(1);
+    // 没有产生第二条租约记录（确定性 id 被幂等复用）。
+    const leases = await repositories.listWorktreeLeases(first.runId);
+    expect(leases).toHaveLength(1);
+    expect(leases[0].releasedAt).toBeTruthy();
 
     db.close();
   });

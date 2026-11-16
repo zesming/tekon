@@ -156,6 +156,7 @@ describe('work usability evaluation', () => {
       repositories,
       audit,
       runId: 'run_mock',
+      requireDeliveryBranch: false,
     });
 
     const evaluation = await evaluateWorkUsability({

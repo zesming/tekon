@@ -214,6 +214,7 @@ describe('work readiness evaluation', () => {
         repositories,
         audit,
         runId: 'run_1',
+        requireDeliveryBranch: false,
       }),
     ).rejects.toThrow('qa-release-signoff-passed');
 
@@ -327,6 +328,7 @@ describe('work readiness evaluation', () => {
       repositories,
       audit,
       runId: 'run_1',
+      requireDeliveryBranch: false,
     });
     const afterPrepare = await evaluateWorkReadiness({
       repositories,

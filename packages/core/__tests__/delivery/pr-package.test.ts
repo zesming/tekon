@@ -159,6 +159,8 @@ describe('pull request preparation package', () => {
         repositories,
         audit,
         runId: 'run_1',
+        // 隔离单测聚焦包内容/QA 校验；交付分支守卫由专属测试覆盖。
+        requireDeliveryBranch: false,
       }),
     ).rejects.toThrow('qa-release-signoff-passed');
 
@@ -204,6 +206,7 @@ describe('pull request preparation package', () => {
       repositories,
       audit,
       runId: 'run_1',
+      requireDeliveryBranch: false,
       profile: {
         version: 1,
         commands: {

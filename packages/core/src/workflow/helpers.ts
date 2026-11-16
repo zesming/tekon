@@ -85,6 +85,11 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
     if (!lease) {
       return;
     }
+    // CD-09 SF-4：合成租约（in-place/非 git none，worktreePath 直指 repoPath）
+    // 没有 git HEAD，QA 校验 ref 是 worktree 交付概念，非 git 运行直接跳过。
+    if (lease.worktreePath === lease.repoPath) {
+      return;
+    }
     const head = await worktreeManager.getLeaseHead(lease.id);
     const ref = `sha:${head}`;
     if ((await latestQaValidationRef(runId)) === ref) {
@@ -150,6 +155,10 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
       worktreeManager &&
       node.outputs?.some((output) => output.type === 'qa-release-signoff')
     ) {
+      // CD-09 SF-4：合成租约无 git HEAD，非 git 运行不产生交付 ref。
+      if (lease.worktreePath === lease.repoPath) {
+        return undefined;
+      }
       return `sha:${await worktreeManager.getLeaseHead(lease.id)}`;
     }
     return undefined;
@@ -158,6 +167,7 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
+      workspace?: ExecutableNode['workspace'];
       inputs?: WorkflowArtifactInputRef[];
       outputs?: WorkflowArtifactOutputRef[];
       gates?: WorkflowGateConfig[];
@@ -204,6 +214,7 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
         nodeId: node.id,
         outputDir,
         role: node.role,
+        workspace: node.workspace,
         nodeInputs: node.inputs ?? [],
         priorNodes: priorNodeContext,
         requiredArtifactTypes,

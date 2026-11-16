@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type {
   ArtifactType,
   Node,
+  NodeWorkspace,
   Role,
   WorkflowInstance,
 } from '../types/domain.js';
@@ -46,6 +47,7 @@ export interface PromptBuilder {
       nodeId: string;
       outputDir: string;
       role: Role;
+      workspace?: NodeWorkspace;
       nodeInputs: WorkflowArtifactInputRef[];
       priorNodes: Array<Pick<Node, 'id' | 'role'>>;
       requiredArtifactTypes: ArtifactType[];
@@ -256,6 +258,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       nodeId: string;
       outputDir: string;
       role: Role;
+      workspace?: NodeWorkspace;
       nodeInputs: WorkflowArtifactInputRef[];
       priorNodes: Array<Pick<Node, 'id' | 'role'>>;
       requiredArtifactTypes: ArtifactType[];
@@ -264,6 +267,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
     if (input.requiredArtifactTypes.length === 0) {
       return prompt;
     }
+    const workspace: NodeWorkspace = input.workspace ?? 'worktree';
     const isCodeChangesRdNode =
       input.role === 'rd' &&
       input.requiredArtifactTypes.includes('code-changes');
@@ -291,11 +295,23 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
             '- For RD code-changes nodes, this artifact protocol overrides role skills or local instructions that would otherwise require tests, nested or delegated reviews, dependency installation, or extra diagnostics before manifest creation.',
           ]
         : []),
-      !input.requiredArtifactTypes.includes('code-changes')
-        ? '- Required artifact types do not include code-changes; do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.'
-        : '- Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+      // CD-09：文件写权限由节点 workspace 声明驱动，不再从 code-changes
+      // 产物推断。none=禁止改源码；in-place=直改主工作区且无 worktree/提升；
+      // worktree（默认）=隔离工作树，通过后由引擎 promote/commit。
+      ...(workspace === 'none'
+        ? [
+            '- This node runs with workspace=none; do not modify, create, or delete any repository source files. Write only node artifacts under TEKON_OUTPUT_DIR.',
+          ]
+        : workspace === 'in-place'
+          ? [
+              '- This node runs with workspace=in-place; you may edit repository files directly in the working directory. There is no worktree and Tekon does not commit or promote these changes — leave them in place in the repository.',
+              '- Keep repository edits scoped to this workflow node.',
+            ]
+          : [
+              '- Keep repository edits scoped to this workflow node.',
+              '- Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+            ]),
       '- Do not run git add, git commit, git push, or create PRs inside this node.',
-      '- Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
       `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
       '- Each artifact may be JSON, YAML front matter, or Markdown accepted by the Tekon artifact schema.',

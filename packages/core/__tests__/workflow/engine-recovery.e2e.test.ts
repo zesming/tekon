@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,9 +30,21 @@ describe('workflow engine recovery e2e', () => {
     }
   });
 
+  // CD-09：worktree 租约创建前会真实探测 git，worktree 语义的恢复测试
+  // 即便用 stub worktreeManager 也需要一个真实 git 仓库让探测通过。
+  function makeGitRepo(prefix: string): string {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    tempDirs.push(dir);
+    execFileSync('git', ['init', '-b', 'main'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
+      cwd: dir,
+    });
+    execFileSync('git', ['config', 'user.name', 'Tekon Test'], { cwd: dir });
+    return dir;
+  }
+
   it('resumes an interrupted run from the interrupted node while preserving previous artifacts and audit chain', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-recovery-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-recovery-');
     writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
@@ -112,8 +125,7 @@ describe('workflow engine recovery e2e', () => {
     // must NOT write node/workflow state. If it does, a zombie worker whose
     // job was recovered by a new owner (which already settled `passed`) reverts
     // the run to `interrupted`, breaking terminal-state monotonicity.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-');
     writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
@@ -176,8 +188,7 @@ describe('workflow engine recovery e2e', () => {
     // ownership-lost fence is NOT a user cancel; writing `cancelled` at the
     // plan boundary would let a stale worker terminate a run the recovering
     // owner is still executing (and later flip it, discarding real work).
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-plan-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-plan-');
     writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
@@ -242,8 +253,7 @@ describe('workflow engine recovery e2e', () => {
     // (promoteLeaseToRunBranch = `git branch -f`, no expected-old-SHA CAS),
     // silently overwriting the new owner's delivery. The success path must
     // pre-check the fence and stand down BEFORE any commit/promote side effect.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-succ-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-succ-');
     writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
@@ -375,8 +385,7 @@ describe('workflow engine recovery e2e', () => {
     // exhausted). Here the agent SUCCEEDS, then the fence lands while a gate
     // runs — the fenced executor's gate/finalize catch and the gate-runner's
     // repair/exhausted writes must NOT revert the recovering owner's `passed`.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-gate-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-gate-');
     writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);

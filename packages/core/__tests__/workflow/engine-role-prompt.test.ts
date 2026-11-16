@@ -189,8 +189,9 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       "Complete only this workflow node's responsibilities.",
     );
+    // CD-09：默认 worktree 节点的写权限由 workspace 声明驱动（非产物推断）。
     expect(prompts[0]).toContain(
-      'do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.',
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
     );
     expect(prompts[0]).toContain(
       'After the manifest file is written, stop work and exit immediately.',
@@ -664,7 +665,7 @@ describe('workflow engine role prompt integration', () => {
 
     expect(prompts[0]).toContain('Tekon artifact protocol');
     expect(prompts[0]).toContain(
-      'Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+      'Keep repository edits scoped to this workflow node.',
     );
     expect(prompts[0]).toContain(
       'Do not run git add, git commit, git push, or create PRs inside this node.',
@@ -672,8 +673,12 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
     );
+    // CD-09：该节点是默认 worktree，不应出现 none/in-place 的专属文案。
     expect(prompts[0]).not.toContain(
-      'Required artifact types do not include code-changes; do not modify the repository working tree;',
+      'This node runs with workspace=none;',
+    );
+    expect(prompts[0]).not.toContain(
+      'This node runs with workspace=in-place;',
     );
     expect(prompts[0]).toContain(
       'After the manifest file is written, stop work and exit immediately.',
@@ -1383,6 +1388,90 @@ describe('workflow engine role prompt integration', () => {
       kind: 'not-authenticated',
       hint: '执行 claude auth login',
     });
+    db.close();
+  });
+
+  it('CD-09 drives source-edit permission wording from node workspace, not artifact types', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-ws-prompt-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: passthroughGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '三态写权限提示词',
+      mode: 'template',
+      workflowSpec: {
+        id: 'ws-prompt',
+        name: 'Workspace Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'P1',
+            dependsOn: [],
+            nodes: [
+              {
+                id: 'none-node', role: 'goal', workspace: 'none',
+                inputs: [], outputs: [{ id: 'r1', type: 'report' }],
+                gates: [], dependsOn: [],
+              },
+              {
+                id: 'inplace-node', role: 'goal', workspace: 'in-place',
+                inputs: [], outputs: [{ id: 'r2', type: 'report' }],
+                gates: [], dependsOn: [],
+              },
+              {
+                id: 'worktree-node', role: 'rd',
+                inputs: [], outputs: [{ id: 'code', type: 'code-changes' }],
+                gates: [], dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    // 无 gate/rework，节点按模板顺序执行：none → in-place → worktree。
+    const [nonePrompt, inPlacePrompt, worktreePrompt] = prompts;
+    expect(prompts).toHaveLength(3);
+
+    expect(nonePrompt).toContain('workspace=none; do not modify, create, or delete');
+    expect(inPlacePrompt).toContain('workspace=in-place; you may edit repository files directly');
+    expect(inPlacePrompt).not.toContain('Tekon Engine promotes and commits');
+    expect(worktreePrompt).toContain(
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+    );
     db.close();
   });
 });

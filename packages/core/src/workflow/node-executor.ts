@@ -14,6 +14,7 @@ import {
   gatesWithStableKeys,
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
+import { RecoverableLeaseError } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
 import {
   agentFailureAuditPayload,
@@ -40,6 +41,29 @@ export function isRecoverableFinalizeInterrupt(
     .reverse()
     .find((event) => event.payload?.nodeId === nodeId);
   return lastNodeEvent?.type === 'worktree.lease.finalize.failed';
+}
+
+/**
+ * CD-09 SF-1：finalize 失败审计事件除 error 文案外，展开
+ * RecoverableLeaseError.details（改动路径、工作树/快照位置、恢复指引），
+ * 让 CLI/Web 的 interrupted 呈现能把“怎么取回/恢复”送到用户面前。
+ */
+function finalizeFailurePayload(
+  nodeId: string,
+  error: unknown,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    nodeId,
+    error: error instanceof Error ? error.message : String(error),
+  };
+  if (error instanceof RecoverableLeaseError) {
+    payload.recoverable = true;
+    payload.changedPaths = error.details.changedPaths;
+    payload.recoveryHint = error.details.recoveryHint;
+    if (error.details.worktreePath) payload.worktreePath = error.details.worktreePath;
+    if (error.details.snapshotPath) payload.snapshotPath = error.details.snapshotPath;
+  }
+  return payload;
 }
 
 export interface NodeExecutorDeps {
@@ -167,6 +191,9 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       try {
         await leaseService.finalizeExecutionLease(runId, node.id);
       } catch (error) {
+        // N-1：cancel/关停与 finalize 失败竞态时，优先尊重 abort 语义，
+        // 不把已被其他 owner 终态化的运行盲写回 interrupted。
+        if (await stopAbortedGateExecution()) return false;
         // 用户尚未回滚改动：回到 interrupted 并再记一次失败，等待再次 resume。
         await repositories.transitionNode(node.id, 'interrupted');
         await repositories.updateWorkflowInstanceStatusIfActive(
@@ -177,10 +204,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         await audit.append({
           runId,
           type: 'worktree.lease.finalize.failed',
-          payload: {
-            nodeId: node.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
+          payload: finalizeFailurePayload(node.id, error),
         });
         return false;
       }
@@ -552,10 +576,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       await audit.append({
         runId,
         type: 'worktree.lease.finalize.failed',
-        payload: {
-          nodeId: node.id,
-          error: error instanceof Error ? error.message : String(error),
-        },
+        payload: finalizeFailurePayload(node.id, error),
       });
       return false;
     }

@@ -161,6 +161,7 @@ describe('work review surface', () => {
       repositories,
       audit,
       runId: 'run_1',
+      requireDeliveryBranch: false,
     });
     await repositories.upsertDeliveryPullRequest({
       id: 'delivery_pr_1',

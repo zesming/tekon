@@ -284,10 +284,11 @@ tekon eval readiness
 | `in-place` | 直接在仓库主工作区 | 可以，改动直接留在工作区 | 支持非 Git 目录 |
 | `none` | worktree（Git）或主工作区（非 Git） | 禁止 | 两种目录均可 |
 
-- 默认 `worktree` 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。
-- `none` 节点若改了源码，finalize 会报可恢复错误并列出改动文件，运行进入 `interrupted` 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 `tekon resume`，系统直接重试 finalize，不会重跑 agent。
-- 非 Git 目录下 `none` 节点用文件快照（相对路径 + 内容哈希，忽略 `.git`、`.tekon`、`node_modules`）判定源码改动。
-- `in-place` 运行不产生 `tekon-delivery/<runId>` 交付分支，不能创建 PR；PR 交付会以 `DELIVERY_WORKSPACE_UNSUPPORTED` 前置拦截，请改用 `worktree` 模式。
+- 默认 `worktree` 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。内置 Goal 模板显式声明 `workspace: none`，保留其只读语义。
+- `none` 节点若改了源码，finalize 会报可恢复错误（`RECOVERABLE_LEASE_FAILURE`，审计事件 `worktree.lease.finalize.failed` 带改动路径与恢复指引），运行进入 `interrupted` 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 `tekon resume`，系统直接重试 finalize，不会重跑 agent。
+- 非 Git 目录下 `none` 节点用文件快照判定源码改动：递归记录相对路径、内容 sha256、文件大小与权限位（chmod 可检测），忽略 `.git`、`.tekon`、`node_modules`。检测边界：空目录的增删、文件时间戳（mtime）变化不计为修改；租约创建与 finalize 各做一次全量哈希，大仓库会有额外 IO 成本。
+- `in-place` 运行不产生 `tekon-delivery/<runId>` 交付分支，不能创建 PR；PR 交付会以 `DELIVERY_WORKSPACE_UNSUPPORTED` 前置拦截，请改用 `worktree` 模式。非 Git 目录下 autoFix repair、QA 交付 ref 同样不可用，需要这些能力请在 Git 仓库用 `worktree` 节点（误用会得到 `WORKSPACE_GIT_REQUIRED` 可读错误而非原始 git 报错）。
+- 并发限制：`in-place` 节点直接改主工作区，作业锁按 run 隔离而非按目录，不要对同一仓库并行运行多个含 `in-place` 节点的 run，否则会相互覆盖文件。
 
 ### 5.5 Role
 

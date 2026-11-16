@@ -40,6 +40,23 @@ export class RecoverableLeaseError extends Error {
   }
 }
 
+/**
+ * CD-09 SF-4：节点声明 worktree 隔离（含 autoFix repair）但目录不是 git
+ * 仓库时抛出。把底层 `fatal: not a git repository` 换成可读、可被 CLI/Web
+ * 映射的稳定错误，提示改用 in-place/none 或在 git 仓库运行。
+ */
+export class WorkspaceGitRequiredError extends Error {
+  readonly code = 'WORKSPACE_GIT_REQUIRED' as const;
+
+  constructor(nodeId: string, workspace: NodeWorkspace) {
+    super(
+      `node ${nodeId} 声明 workspace=${workspace}，需要 git 工作树，但当前目录不是 git 仓库；` +
+        '请在 git 仓库运行，或把该节点改为 workspace: in-place / none（非 git 模式不支持 worktree 隔离、autoFix repair 与 PR 交付）。',
+    );
+    this.name = 'WorkspaceGitRequiredError';
+  }
+}
+
 export interface LeaseServiceDeps {
   repoPath: string;
   repositories: TekonRepositories;
@@ -102,6 +119,18 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId' | 'workspace'>,
     options: { captureSnapshot: boolean },
   ): Promise<WorktreeLease> {
+    // 幂等：合成租约 id 对节点是确定性的，冷启动 resume 会再次进入这里。
+    // 复用既有行（无论 active 还是已释放），不盲插避免主键冲突，不重拍快照
+    // （none 的基线必须保持首次执行时的状态，否则违规改动会被纳入基线），
+    // 也不重复 created 事件（会打乱 durableExecutionIdentity 的身份排序）。
+    const existing = (await repositories.listWorktreeLeases(runId)).find(
+      (candidate) => candidate.nodeId === node.id,
+    );
+    if (existing) {
+      executionLeases.set(node.id, existing);
+      return existing;
+    }
+
     const lease = makeSyntheticLease(repoPath, runId, node);
     await repositories.recordWorktreeLease(lease);
     let snapshotPath: string | undefined;
@@ -154,6 +183,14 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
           captureSnapshot: true,
         });
       }
+    }
+
+    // worktree（默认，含 autoFix repair）必须有 git。显式探测并抛可读错误，
+    // 不让 ensureRunBranch 的原始 git fatal 泄漏给用户（SF-4）。无 gateway
+    // （standalone/测试上下文）保持历史行为，视为 git 仓库。
+    const gitRepo = gateway ? await isGitRepository(gateway, repoPath) : true;
+    if (!gitRepo) {
+      throw new WorkspaceGitRequiredError(node.id, node.workspace);
     }
 
     const runBranch = await worktreeManager.ensureRunBranch({
@@ -299,12 +336,23 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
           candidate.role === identity.source!.role && candidate.releasedAt &&
           (!identity.leaseId || candidate.id === identity.leaseId));
         const completed = released.length === 1 && (() => {
+          const releasedEvent = identity.events.filter(event =>
+            event.type === 'worktree.lease.released' && event.payload.nodeId === nodeId &&
+            event.payload.leaseId === released[0].id).at(-1);
+          if (!releasedEvent) return false;
+          // CD-09：合成租约（in-place/非 git none）没有 promote 步骤，
+          // 其 released 事件带 workspace 标记即构成终态证据。
+          if (
+            releasedEvent.payload.workspace === 'in-place' ||
+            releasedEvent.payload.workspace === 'none'
+          ) {
+            return true;
+          }
+          // 真实 worktree：必须 promoted 后接 released。
           const promotedIndex = identity.events.map(event =>
             event.type === 'worktree.lease.promoted' && event.payload.nodeId === nodeId &&
             event.payload.leaseId === released[0].id).lastIndexOf(true);
-          const releasedIndex = identity.events.map(event =>
-            event.type === 'worktree.lease.released' && event.payload.nodeId === nodeId &&
-            event.payload.leaseId === released[0].id).lastIndexOf(true);
+          const releasedIndex = identity.events.lastIndexOf(releasedEvent);
           return promotedIndex >= 0 && releasedIndex > promotedIndex;
         })();
         if (!completed) throw new Error(`missing finalized execution lease evidence for node ${nodeId}`);
@@ -393,6 +441,8 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
       payload: {
         nodeId,
         leaseId: lease.id,
+        // 与合成租约 released 事件对齐，下游无需按租约类型特判。
+        workspace,
       },
     });
   }

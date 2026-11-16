@@ -152,6 +152,18 @@ async function seedDeliveryReadyRun(
     createdAt: now,
     updatedAt: now,
   });
+  // CD-09：可交付运行必须有真实 worktree 租约（交付分支），否则
+  // createPullRequestPreparation 的 DELIVERY_WORKSPACE_UNSUPPORTED 守卫拦截。
+  await repositories.recordWorktreeLease({
+    id: `lease_${runId}`,
+    runId,
+    nodeId: 'node_delivery',
+    role: 'pmo',
+    repoPath,
+    worktreePath: join(repoPath, '.tekon', 'worktrees', runId, 'node-delivery'),
+    branchName: `tekon/${runId}/node-delivery`,
+    createdAt: now,
+  });
   const store = createArtifactStore({ repoPath, repositories });
   await audit.append({
     runId,

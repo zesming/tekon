@@ -19,6 +19,11 @@ export interface SourceSnapshotEntry {
   path: string;
   sha256: string;
   size: number;
+  /**
+   * POSIX 权限位（lstat.mode）。内容不变但 chmod 改权限也能被识别，
+   * 对齐 git worktree 路径对 100644/100755 的检测能力。
+   */
+  mode: number;
   /** symlink 记录其目标字符串而非跟随内容，替换目标即被识别为修改。 */
   symlink?: boolean;
 }
@@ -57,6 +62,7 @@ function walk(rootDir: string, currentDir: string): SourceSnapshotEntry[] {
         path: relativePath,
         sha256: createHash('sha256').update(target).digest('hex'),
         size: target.length,
+        mode: lstatSync(absolutePath).mode,
         symlink: true,
       });
       continue;
@@ -67,6 +73,7 @@ function walk(rootDir: string, currentDir: string): SourceSnapshotEntry[] {
       path: relativePath,
       sha256: createHash('sha256').update(contents).digest('hex'),
       size: contents.length,
+      mode: lstatSync(absolutePath).mode,
     });
   }
   return entries;
@@ -107,6 +114,7 @@ export function diffSourceSnapshot(
       added.push(entry.path);
     } else if (
       before.sha256 !== entry.sha256 ||
+      before.mode !== entry.mode ||
       Boolean(before.symlink) !== Boolean(entry.symlink)
     ) {
       modified.push(entry.path);

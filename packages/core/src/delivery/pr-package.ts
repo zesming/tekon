@@ -6,6 +6,7 @@ import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import { loadRepoProfile, type RepoProfile } from '../repo/profile.js';
 import type { Artifact, Node } from '../types/domain.js';
+import type { WorktreeLease } from '../types/config.js';
 import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,
@@ -45,13 +46,38 @@ export function assertDeliveryWorkspaceSupported(
   }
 }
 
+/**
+ * CD-09 SF-4：非 git 目录下即使全是 none 节点，也只会产生合成租约
+ * （worktreePath 直指 repoPath），从不创建 tekon-delivery 交付分支。
+ * 至少存在一个真实 worktree 租约（worktreePath ≠ repoPath）才允许交付。
+ */
+export function assertDeliveryBranchAvailable(
+  leases: ReadonlyArray<Pick<WorktreeLease, 'worktreePath' | 'repoPath'>>,
+): void {
+  const hasRealWorktree = leases.some(
+    (lease) => lease.worktreePath !== lease.repoPath,
+  );
+  if (!hasRealWorktree) {
+    throw new Error(
+      'DELIVERY_WORKSPACE_UNSUPPORTED: 该运行没有产生 git 交付分支（非 git 目录或全部为合成租约），无法创建 PR；请在 git 仓库用 worktree 模式运行。',
+    );
+  }
+}
+
 export async function createPullRequestPreparation(input: {
   repoPath: string;
   repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   profile?: RepoProfile;
+  /**
+   * 是否要求存在真实 git 交付分支（真实 worktree 租约）。生产交付默认 true，
+   * 对合成租约（非 git/in-place）友好拦截；评估/指标流水线需要为不完整运行
+   * 构造证据包时显式传 false 绕过该前置（CLI/Web/automation 都用默认值）。
+   */
+  requireDeliveryBranch?: boolean;
 }): Promise<PullRequestPreparation> {
+  const requireDeliveryBranch = input.requireDeliveryBranch ?? true;
   const profile = input.profile ?? loadRepoProfile(input.repoPath);
   const evidence = await createDeliveryEvidencePackage({
     repositories: input.repositories,
@@ -66,6 +92,11 @@ export async function createPullRequestPreparation(input: {
     throw new Error(`run has no nodes: ${input.runId}`);
   }
   assertDeliveryWorkspaceSupported(nodes);
+  if (requireDeliveryBranch) {
+    assertDeliveryBranchAvailable(
+      await input.repositories.listWorktreeLeases(input.runId),
+    );
+  }
   await assertPrePullRequestReady({
     repositories: input.repositories,
     audit: input.audit,
