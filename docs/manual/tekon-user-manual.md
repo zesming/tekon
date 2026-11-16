@@ -274,6 +274,21 @@ tekon eval readiness
 
 有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。
 
+#### 节点工作区模式（workspace）
+
+每个节点可声明 `workspace`，决定它在哪里执行、能否改源码：
+
+| 模式 | 执行位置 | 能否改源码 | Git 要求 |
+| --- | --- | --- | --- |
+| `worktree`（默认） | 独立 git worktree | 可以，改动经 commit/promote 进入交付分支 | 必须 Git 仓库 |
+| `in-place` | 直接在仓库主工作区 | 可以，改动直接留在工作区 | 支持非 Git 目录 |
+| `none` | worktree（Git）或主工作区（非 Git） | 禁止 | 两种目录均可 |
+
+- 默认 `worktree` 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。
+- `none` 节点若改了源码，finalize 会报可恢复错误并列出改动文件，运行进入 `interrupted` 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 `tekon resume`，系统直接重试 finalize，不会重跑 agent。
+- 非 Git 目录下 `none` 节点用文件快照（相对路径 + 内容哈希，忽略 `.git`、`.tekon`、`node_modules`）判定源码改动。
+- `in-place` 运行不产生 `tekon-delivery/<runId>` 交付分支，不能创建 PR；PR 交付会以 `DELIVERY_WORKSPACE_UNSUPPORTED` 前置拦截，请改用 `worktree` 模式。
+
 ### 5.5 Role
 
 节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。
@@ -338,7 +353,7 @@ tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headle
 使用前理解以下限制：
 
 - **仅支持 Goal**：CLI/Web 会在受理前拒绝 DSH workflow，包括无 outputs 的自定义 workflow。DSH 只有单一可写工作区，无法写入 worktree 外的交付产物目录。
-- **Goal 默认不接受源码改动**：内置 Goal 不声明 `code-changes`；节点完成时若发现仓库文件或 HEAD 改变，会拒绝提升结果。它不等于操作系统只读沙箱，不适合交付代码修改。
+- **Goal 默认不接受源码改动**：内置 Goal 不声明 `code-changes`；节点完成时若发现仓库文件或 HEAD 改变，会拒绝提升结果。它不等于操作系统只读沙箱，不适合交付代码修改。需要在非隔离工作区直接产出文件时，可在自定义模板节点声明 `workspace: in-place`（见 §5.4 工作区模式）。
 - **网络出口不受限**：DSH 文件沙箱无法关闭联网；确认参数只记录知情，不会提供网络隔离。需要禁网时由 OS、容器或网络策略实现。
 - **一次性执行**：当前 adapter 收集日志，不向 Session UI 投影执行期流，也不支持后续追问；取消依靠受管理子进程终止。
 - **预检隔离有限**：metadata probe 使用临时工作区、隔离 DSH home 和最小环境，并关闭内置 session telemetry；这不是 OS 沙箱，不能阻止同 UID 恶意二进制主动读取宿主文件。正式 Run 的 worktree `.env`、代理及凭据回退仍需自行核查。
@@ -372,7 +387,7 @@ tekon init
 tekon init --repo /path/to/project
 ```
 
-创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
+创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。默认 `worktree` 模式要求目标是 Git 仓库；非 Git 目录可运行只含 `workspace: in-place` 或 `workspace: none` 节点的工作流（不建工作树，见 §5.4），但 worktree 隔离、diff 与 PR 交付功能不可用。
 
 在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上，也可以重新执行 `init`。
 

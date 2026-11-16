@@ -14,7 +14,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-按安装输出配置 PATH，并进入**目标 Git 仓库**。`tekon init` 把已安装的 Claude Code 或 Codex 写成默认 Provider（都没有时为 Claude Code），运行前用 `tekon doctor` 检查安装、登录与检查命令（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
+按安装输出配置 PATH，并进入**目标 Git 仓库**（默认 worktree 隔离与 PR 交付需要 Git；非 Git 目录也可运行只含 `workspace: in-place`/`none` 节点的工作流，见[手册 §5.4](docs/manual/tekon-user-manual.md#54-workflow)）。`tekon init` 把已安装的 Claude Code 或 Codex 写成默认 Provider（都没有时为 Claude Code），运行前用 `tekon doctor` 检查安装、登录与检查命令（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
 
 ```bash
 tekon ui                         # 启动本地 Web，按终端链接进入

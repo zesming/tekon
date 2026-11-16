@@ -489,7 +489,7 @@
   - 给所有 provider 做 preflight，在 `init` 和 `run` 前执行。
 
 ### [CD-09] 强依赖 git 和 worktree，只有 code-changes 节点能改文件，Goal 改文件后 resume 走不出
-- 维度：代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
+- 维度：代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已修复（PR #37，v0.31.0：节点 `workspace: worktree|in-place|none` 三态，文件权限改由声明驱动而非产物推断；in-place 与非 git 的 none 走持久化合成租约 + 文件快照，非 git 目录可运行；none 违规 finalize 抛可恢复错误，resume 直接重试 finalize 不重跑 agent；in-place 无交付分支，PR 前置拦截 DELIVERY_WORKSPACE_UNSUPPORTED）
 - 位置：packages/core/src/workflow/lease-service.ts:209-225，:270-276，packages/core/src/runtime/worktree-manager.ts:71-128，packages/cli/src/lib/session-context.ts:346-348，README.md:72-75
 - 现象（三种路径均复现）：
   - 非 git 目录：`init` 成功，`run --goal` 输出原始 `fatal: not a git repository`，exit=1。
