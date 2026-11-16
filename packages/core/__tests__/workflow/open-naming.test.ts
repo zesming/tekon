@@ -217,7 +217,8 @@ describe('open role/artifact naming and node prompt (PD-06)', () => {
     ).toThrow(/reserved|delivery/u);
   });
 
-  it('still accepts every built-in role and artifact type', () => {    const template = parseWorkflowTemplate({
+  it('still accepts every built-in role and artifact type', () => {
+    const template = parseWorkflowTemplate({
       id: 'built-ins',
       version: 1,
       phases: [

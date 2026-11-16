@@ -1,5 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,11 +16,16 @@ const cliPath = fileURLToPath(new URL('../../dist/index.js', import.meta.url));
 const roots: string[] = [];
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function git(repo: string, ...args: string[]): string {
-  return execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: 'pipe' });
+  return execFileSync('git', args, {
+    cwd: repo,
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
 }
 
 function fixtureRepo(): string {
@@ -49,7 +60,9 @@ describe('tekon role open naming through a real CLI process', () => {
 
     // PD-06：角色名放开，新名字走最小脚手架而不是枚举报错。
     const createWriter = cli(repo, ['role', 'create', 'writer']);
-    expect(createWriter.status, createWriter.stdout + createWriter.stderr).toBe(0);
+    expect(createWriter.status, createWriter.stdout + createWriter.stderr).toBe(
+      0,
+    );
     const writerDir = join(repo, '.tekon', 'roles', 'writer');
     const agentPath = join(writerDir, 'agent.yaml');
     const systemPath = join(writerDir, 'system.md');

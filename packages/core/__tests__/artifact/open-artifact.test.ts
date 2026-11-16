@@ -57,9 +57,7 @@ describe('open artifact types (PD-06)', () => {
     const direct = agentArtifactTypeSchema.safeParse('ci-status');
     expect(direct.success).toBe(false);
     if (!direct.success) {
-      expect(direct.error.issues[0]!.message).toMatch(
-        /reserved|delivery/u,
-      );
+      expect(direct.error.issues[0]!.message).toMatch(/reserved|delivery/u);
     }
   });
 

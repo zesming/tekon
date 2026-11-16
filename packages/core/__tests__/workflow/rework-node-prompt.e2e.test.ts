@@ -51,7 +51,10 @@ describe('rework node prompt consistency e2e', () => {
       agentProvider: 'mock',
       adapter: {
         async runAgent(input: AgentRunInput): Promise<AgentRunResult> {
-          prompts.push({ nodeId: input.runContext.nodeId, prompt: input.prompt });
+          prompts.push({
+            nodeId: input.runContext.nodeId,
+            prompt: input.prompt,
+          });
           if (input.runContext.nodeId.endsWith('rd-node')) {
             writeFileSync(
               join(input.runContext.repoPath, 'feature.txt'),
