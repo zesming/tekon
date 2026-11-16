@@ -491,9 +491,7 @@ async function runProcess(input: {
             }
 
             const observedActivityAt = progress.lastActivityAt();
-            if (
-              Date.now() - observedActivityAt < input.noProgressTimeoutMs
-            ) {
+            if (Date.now() - observedActivityAt < input.noProgressTimeoutMs) {
               noProgressCandidateActivityAt = null;
               return;
             }

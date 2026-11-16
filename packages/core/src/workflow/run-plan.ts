@@ -1,17 +1,25 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
-import type { GateType, Role } from "../types/domain.js";
+import type { GateType, Role } from '../types/domain.js';
 import {
   normalizeExecutableTemplate,
   type WorkflowTemplate,
-} from "./template.js";
+} from './template.js';
 import {
-  captureRepoCommands, commandBindingBehavior, materializeBoundGate, normalizeRepoCommands,
-  type BoundRepoCommand, type CommandBindingBehavior,
+  captureRepoCommands,
+  commandBindingBehavior,
+  materializeBoundGate,
+  normalizeRepoCommands,
+  type BoundRepoCommand,
+  type CommandBindingBehavior,
 } from './repo-command-binding.js';
 import { gatesWithStableKeys } from './workflow-runtime.js';
-import { readTekonConfig, resolveDefaultAgent, FALLBACK_DEFAULT_AGENT } from '../config/tekon-config.js';
+import {
+  readTekonConfig,
+  resolveDefaultAgent,
+  FALLBACK_DEFAULT_AGENT,
+} from '../config/tekon-config.js';
 
 export interface RunPlanGate {
   nodeId: string;
@@ -47,7 +55,7 @@ export interface RunPlanPhaseSummary {
 export interface RunPlanV2 {
   digest: string;
   digestVersion: 2;
-  mode: "workflow" | "goal";
+  mode: 'workflow' | 'goal';
   template: WorkflowTemplate;
   roleChain: Role[];
   gates: RunPlanGate[];
@@ -73,7 +81,7 @@ export type RunPlan = RunPlanV2 | RunPlanV3;
 export interface RunPlanPreview {
   digest: string;
   digestVersion: 2 | 3;
-  mode: "workflow" | "goal";
+  mode: 'workflow' | 'goal';
   roleChain: Role[];
   gates: RunPlanGatePreview[];
   comparisonScope?: string;
@@ -91,7 +99,7 @@ export interface RunPlanPreview {
 
 export interface RunPlanContext {
   agent?: string;
-  mode?: "workflow" | "goal";
+  mode?: 'workflow' | 'goal';
   profile?: string;
   allowDirtyBase?: boolean;
   timeoutMs?: number;
@@ -106,11 +114,11 @@ export interface RunPlanContext {
  * but PRESERVES nested keys named "digest" (e.g. command.env.digest).
  */
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
+  if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+    return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
   }
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj)
@@ -119,7 +127,7 @@ export function canonicalJson(value: unknown): string {
   const entries = keys.map(
     (key) => `${JSON.stringify(key)}:${canonicalJson(obj[key])}`,
   );
-  return `{${entries.join(",")}}`;
+  return `{${entries.join(',')}}`;
 }
 
 /**
@@ -127,25 +135,25 @@ export function canonicalJson(value: unknown): string {
  * Frozen for backward-compatibility verification.
  */
 export function canonicalJsonV1(value: unknown): string {
-  if (value === null || typeof value !== "object") {
+  if (value === null || typeof value !== 'object') {
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalJsonV1(item)).join(",")}]`;
+    return `[${value.map((item) => canonicalJsonV1(item)).join(',')}]`;
   }
   const obj = value as Record<string, unknown>;
   const keys = Object.keys(obj)
-    .filter((key) => key !== "digest" && obj[key] !== undefined)
+    .filter((key) => key !== 'digest' && obj[key] !== undefined)
     .sort();
   const entries = keys.map(
     (key) => `${JSON.stringify(key)}:${canonicalJsonV1(obj[key])}`,
   );
-  return `{${entries.join(",")}}`;
+  return `{${entries.join(',')}}`;
 }
 
 export function computeRunPlanDigestV1(plan: unknown): string {
   const canonical = canonicalJsonV1(plan);
-  return createHash("sha256").update(canonical).digest("hex");
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 /**
@@ -153,11 +161,11 @@ export function computeRunPlanDigestV1(plan: unknown): string {
  * digest key, while preserving inner nested "digest" keys.
  */
 export function computeRunPlanDigest(
-  plan: Omit<RunPlan, "digest"> | RunPlan | Record<string, unknown>,
+  plan: Omit<RunPlan, 'digest'> | RunPlan | Record<string, unknown>,
 ): string {
   const { digest: _ignored, ...rest } = plan as Record<string, unknown>;
   const canonical = canonicalJson(rest);
-  return createHash("sha256").update(canonical).digest("hex");
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 /**
@@ -165,45 +173,71 @@ export function computeRunPlanDigest(
  * Excludes template definition and potential secret commands/args/env.
  */
 export const toRunPlanPreview = projectRunPlanPreview;
-export function projectRunPlanPreview(plan: RunPlan, signer?: RunPlanPreviewSigner): RunPlanPreview {
-  const gates: RunPlanGatePreview[] = plan.digestVersion === 3
-    ? plan.template.phases.flatMap(phase => phase.nodes.flatMap(node =>
-      gatesWithStableKeys(node.gates, node.id).map((gate, gateIndex) => {
-        const binding = !gate.command && gate.commandRef
-          ? plan.repoCommands.find(entry => entry.commandRef === gate.commandRef) : undefined;
-        const effective = materializeBoundGate(gate, plan.repoCommands);
-        const privateFacts = canonicalJson({
-          purpose: 'tekon.run-plan-gate.v1', nodeId: node.id, gateIndex,
-          gate: effective, binding,
-        });
-        return {
-          nodeId: node.id, role: node.role, type: gate.type,
+export function projectRunPlanPreview(
+  plan: RunPlan,
+  signer?: RunPlanPreviewSigner,
+): RunPlanPreview {
+  const gates: RunPlanGatePreview[] =
+    plan.digestVersion === 3
+      ? plan.template.phases.flatMap((phase) =>
+          phase.nodes.flatMap((node) =>
+            gatesWithStableKeys(node.gates, node.id).map((gate, gateIndex) => {
+              const binding =
+                !gate.command && gate.commandRef
+                  ? plan.repoCommands.find(
+                      (entry) => entry.commandRef === gate.commandRef,
+                    )
+                  : undefined;
+              const effective = materializeBoundGate(gate, plan.repoCommands);
+              const privateFacts = canonicalJson({
+                purpose: 'tekon.run-plan-gate.v1',
+                nodeId: node.id,
+                gateIndex,
+                gate: effective,
+                binding,
+              });
+              return {
+                nodeId: node.id,
+                role: node.role,
+                type: gate.type,
+                requiresHumanApproval: gate.requiresHumanApproval,
+                ...(gate.timeoutMs !== undefined
+                  ? { timeoutMs: gate.timeoutMs }
+                  : {}),
+                gateIndex,
+                commandBinding: {
+                  status: gate.command
+                    ? ('inline' as const)
+                    : (binding?.status ?? ('missing' as const)),
+                  source: binding?.source.kind ?? ('template' as const),
+                  ...(binding ? { commandRef: binding.commandRef } : {}),
+                  behavior: commandBindingBehavior(effective),
+                  ...(signer ? { fingerprint: signer.sign(privateFacts) } : {}),
+                },
+              };
+            }),
+          ),
+        )
+      : plan.gates.map((gate) => ({
+          nodeId: gate.nodeId,
+          role: gate.role,
+          type: gate.type,
           requiresHumanApproval: gate.requiresHumanApproval,
-          ...(gate.timeoutMs !== undefined ? { timeoutMs: gate.timeoutMs } : {}),
-          gateIndex,
-          commandBinding: {
-            status: gate.command ? 'inline' as const : binding?.status ?? 'missing' as const,
-            source: binding?.source.kind ?? 'template' as const,
-            ...(binding ? { commandRef: binding.commandRef } : {}),
-            behavior: commandBindingBehavior(effective),
-            ...(signer ? { fingerprint: signer.sign(privateFacts) } : {}),
-          },
-        };
-      })))
-    : plan.gates.map(gate => ({
-      nodeId: gate.nodeId, role: gate.role, type: gate.type,
-      requiresHumanApproval: gate.requiresHumanApproval,
-      ...(gate.timeoutMs !== undefined ? { timeoutMs: gate.timeoutMs } : {}),
-    }));
+          ...(gate.timeoutMs !== undefined
+            ? { timeoutMs: gate.timeoutMs }
+            : {}),
+        }));
   return {
     digest: plan.digest,
     digestVersion: plan.digestVersion,
     mode: plan.mode,
     roleChain: [...plan.roleChain],
     gates,
-    ...(plan.digestVersion === 3 && signer ? { comparisonScope: signer.comparisonScope } : {}),
+    ...(plan.digestVersion === 3 && signer
+      ? { comparisonScope: signer.comparisonScope }
+      : {}),
     requiresUnrestrictedNetwork: plan.requiresUnrestrictedNetwork,
-    phases: plan.phases.map(phase => ({
+    phases: plan.phases.map((phase) => ({
       id: phase.id,
       name: phase.name,
       nodeIds: [...phase.nodeIds],
@@ -230,7 +264,7 @@ export function projectRunPlanPreview(plan: RunPlan, signer?: RunPlanPreviewSign
 export function agentRequiresUnrestrictedNetwork(
   agent: string | undefined,
 ): boolean {
-  return agent === "dsh-headless";
+  return agent === 'dsh-headless';
 }
 
 /**
@@ -265,7 +299,9 @@ export function projectRunPlanV2(
           role: node.role,
           type: gate.type,
           requiresHumanApproval: gate.requiresHumanApproval,
-          ...(gate.timeoutMs !== undefined ? { timeoutMs: gate.timeoutMs } : {}),
+          ...(gate.timeoutMs !== undefined
+            ? { timeoutMs: gate.timeoutMs }
+            : {}),
         });
       }
     }
@@ -279,12 +315,12 @@ export function projectRunPlanV2(
   // captureRunPlan resolves the repo-configured default before reaching this
   // point; the fallback only guards direct callers and no longer assumes codex.
   const agent = context.agent ?? FALLBACK_DEFAULT_AGENT;
-  const mode = context.mode ?? "workflow";
+  const mode = context.mode ?? 'workflow';
   const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(agent);
   const templateId = context.templateId ?? normalizedTemplate.id;
   const templateVersion = context.templateVersion ?? normalizedTemplate.version;
 
-  const planWithoutDigest: Omit<RunPlanV2, "digest"> = {
+  const planWithoutDigest: Omit<RunPlanV2, 'digest'> = {
     digestVersion: 2,
     mode,
     template: normalizedTemplate,
@@ -328,7 +364,8 @@ export function projectRunPlanV3(
 ): RunPlanV3 {
   const base = projectRunPlanV2(template, context);
   const plan: RunPlanV3 = {
-    ...base, digestVersion: 3,
+    ...base,
+    digestVersion: 3,
     repoCommands: normalizeRepoCommands(base.template, repoCommands),
   };
   plan.digest = computeRunPlanDigest(plan);
@@ -346,7 +383,11 @@ export function captureRunPlan(
   const contextWithAgent = context.agent
     ? context
     : { ...context, agent: resolveDefaultAgent(readTekonConfig(repoPath)) };
-  return projectRunPlanV3(template, contextWithAgent, captureRepoCommands(repoPath, template));
+  return projectRunPlanV3(
+    template,
+    contextWithAgent,
+    captureRepoCommands(repoPath, template),
+  );
 }
 
 export function computeLegacyV1RunPlanDigest(plan: unknown): string {
@@ -362,47 +403,102 @@ const planContextSchema = z.object({
   noProgressTimeoutMs: z.number().int().positive().optional(),
   progressHeartbeatMs: z.number().int().positive().optional(),
   templateId: z.string().min(1).optional(),
-  templateVersion: z.union([z.number().int().positive(), z.string().min(1)]).optional(),
+  templateVersion: z
+    .union([z.number().int().positive(), z.string().min(1)])
+    .optional(),
 });
 
+/**
+ * CD-24 兼容：`parallel` 是已删除的假能力字段，只曾出现在计划的 phase
+ * 对象（template.phases 与顶层 phases 摘要）上。旧版本冻结的 v2/v3 快照
+ * 仍携带该键。
+ *
+ * 投影对比前在两侧对称剔除 `parallel` 与 `digest`：parallel 是格式演进的
+ * 遗留键；digest 不参与投影对比（它的真实性已由上一行
+ * computeRunPlanDigest(candidate) 按冻结原字节独立认证，含 parallel 的旧
+ * 快照其 digest 本就与新投影不同）。剔除只影响投影相等性，不降级完整性。
+ */
+function stripLegacyProjectionFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripLegacyProjectionFields);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => key !== 'parallel' && key !== 'digest')
+        .map(([key, entry]) => [key, stripLegacyProjectionFields(entry)]),
+    );
+  }
+  return value;
+}
+
 /** 从已确认内容重新投影，验证版本、完整模板及所有派生展示字段。 */
-export function validateRunPlanV2(value: unknown, errorCode = 'PLAN_DIGEST_MISMATCH'): RunPlanV2 {
-  const reject = (path: string): never => { throw new Error(`${errorCode}: ${path}`); };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) reject('plan');
+export function validateRunPlanV2(
+  value: unknown,
+  errorCode = 'PLAN_DIGEST_MISMATCH',
+): RunPlanV2 {
+  const reject = (path: string): never => {
+    throw new Error(`${errorCode}: ${path}`);
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    reject('plan');
   const candidate = value as Record<string, unknown>;
   if (candidate.digestVersion !== 2) reject('digestVersion');
   const context = planContextSchema.safeParse(candidate);
   if (!context.success) reject('context');
   let projected: RunPlanV2;
   try {
-    projected = projectRunPlanV2(candidate.template as WorkflowTemplate, context.data);
+    projected = projectRunPlanV2(
+      candidate.template as WorkflowTemplate,
+      context.data,
+    );
   } catch {
     return reject('template');
   }
   if (candidate.digest !== computeRunPlanDigest(candidate)) reject('digest');
-  if (canonicalJson(candidate) !== canonicalJson(projected)) reject('projection');
+  if (
+    canonicalJson(stripLegacyProjectionFields(candidate)) !==
+    canonicalJson(stripLegacyProjectionFields(projected))
+  )
+    reject('projection');
   return projected;
 }
 
-export function validateRunPlanV3(value: unknown, errorCode = 'PLAN_DIGEST_MISMATCH'): RunPlanV3 {
-  const reject = (path: string): never => { throw new Error(`${errorCode}: ${path}`); };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) reject('plan');
+export function validateRunPlanV3(
+  value: unknown,
+  errorCode = 'PLAN_DIGEST_MISMATCH',
+): RunPlanV3 {
+  const reject = (path: string): never => {
+    throw new Error(`${errorCode}: ${path}`);
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    reject('plan');
   const candidate = value as Record<string, unknown>;
   if (candidate.digestVersion !== 3) reject('digestVersion');
   const context = planContextSchema.safeParse(candidate);
   if (!context.success) return reject('context');
   let projected: RunPlanV3;
   try {
-    projected = projectRunPlanV3(candidate.template as WorkflowTemplate, context.data, candidate.repoCommands as BoundRepoCommand[]);
+    projected = projectRunPlanV3(
+      candidate.template as WorkflowTemplate,
+      context.data,
+      candidate.repoCommands as BoundRepoCommand[],
+    );
   } catch {
     return reject('repoCommands');
   }
   if (candidate.digest !== computeRunPlanDigest(candidate)) reject('digest');
-  if (canonicalJson(candidate) !== canonicalJson(projected)) reject('projection');
+  if (
+    canonicalJson(stripLegacyProjectionFields(candidate)) !==
+    canonicalJson(stripLegacyProjectionFields(projected))
+  )
+    reject('projection');
   return projected;
 }
 
-export type ExecutionBinding = 'frozen' | 'legacy-unbound' | 'unknown' | 'invalid';
+export type ExecutionBinding =
+  | 'frozen'
+  | 'legacy-unbound'
+  | 'unknown'
+  | 'invalid';
 
 /** 观察快照自洽性，不替代执行前的节点和审计链校验，也不读取当前仓库。 */
 export function classifyExecutionBinding(input: {
@@ -412,22 +508,33 @@ export function classifyExecutionBinding(input: {
   hasAdmission: boolean;
 }): ExecutionBinding {
   const { planSnapshot, planDigest, hasAdmission } = input;
-  if (planSnapshot == null && planDigest == null) return hasAdmission ? 'invalid' : 'legacy-unbound';
+  if (planSnapshot == null && planDigest == null)
+    return hasAdmission ? 'invalid' : 'legacy-unbound';
   if (!planSnapshot || !planDigest) return 'invalid';
   try {
     const parsed: unknown = JSON.parse(planSnapshot);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return 'invalid';
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return 'invalid';
     const raw = parsed as Record<string, unknown>;
     if (!Object.hasOwn(raw, 'digestVersion')) {
       if (hasAdmission) return 'invalid';
       const digest = computeLegacyV1RunPlanDigest(raw);
-      return planDigest === digest && (!Object.hasOwn(raw, 'digest') || raw.digest === digest) ? 'legacy-unbound' : 'invalid';
+      return planDigest === digest &&
+        (!Object.hasOwn(raw, 'digest') || raw.digest === digest)
+        ? 'legacy-unbound'
+        : 'invalid';
     }
     if (raw.digestVersion !== 2 && raw.digestVersion !== 3) {
-      return typeof raw.digestVersion === 'number' && Number.isInteger(raw.digestVersion) && raw.digestVersion > 0 ? 'unknown' : 'invalid';
+      return typeof raw.digestVersion === 'number' &&
+        Number.isInteger(raw.digestVersion) &&
+        raw.digestVersion > 0
+        ? 'unknown'
+        : 'invalid';
     }
-    const plan = raw.digestVersion === 3 ? validateRunPlanV3(raw) : validateRunPlanV2(raw);
-    if (planDigest !== plan.digest || (input.kind ?? 'workflow') !== plan.mode) return 'invalid';
+    const plan =
+      raw.digestVersion === 3 ? validateRunPlanV3(raw) : validateRunPlanV2(raw);
+    if (planDigest !== plan.digest || (input.kind ?? 'workflow') !== plan.mode)
+      return 'invalid';
     return plan.digestVersion === 3 ? 'frozen' : 'legacy-unbound';
   } catch {
     return 'invalid';

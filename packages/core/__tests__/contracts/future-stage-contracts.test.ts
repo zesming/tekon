@@ -23,12 +23,14 @@ import {
 // ---------------------------------------------------------------------------
 // Refactor acceptance-line contracts that belong to later stages.
 //
-// Every case here is an `it.fails` placeholder: the setup steps run against
-// the current code and succeed; only the final contract assertion fails,
-// documenting the capability stage 2 must deliver. When the capability lands,
-// the placeholder goes green by itself and must be converted into a normal
-// regression test (and strengthened into the real-process e2e named in the
-// refactor plan). Do not delete these to make a run green.
+// Each remaining case is an `it.fails` placeholder: the setup steps run
+// against the current code and succeed; only the final contract assertion
+// fails, documenting the capability a later batch must deliver. When the
+// capability lands, the placeholder goes green by itself and must be
+// converted into a normal regression test (and strengthened into the
+// real-process e2e named in the refactor plan). Do not delete these to make
+// a run green. Contract 4 (reviewer/gate optional) was delivered in PD-06
+// subitem 4 and converted to a normal test; contracts 5 and 6 remain.
 // ---------------------------------------------------------------------------
 
 const tempDirs: string[] = [];

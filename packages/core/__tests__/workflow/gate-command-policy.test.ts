@@ -129,4 +129,43 @@ describe('PD-04 user-authorized gate commands', () => {
     const policy = gateCommandPolicy(cwd, gate);
     expect(policy.allow).toHaveLength(defaultCommandPolicy(cwd).allow.length);
   });
+
+  it('keeps authorization per-gate: one gate command does not leak into another gate policy', () => {
+    const firstGate: WorkflowGateConfig = {
+      type: 'build',
+      command: { tool: 'python3', args: ['build.py'] },
+      requiresHumanApproval: false,
+      maxRetries: 0,
+      retryPolicy: {
+        maxAttempts: 1,
+        maxRetries: 0,
+        backoffMs: 0,
+        strategy: 'fixed',
+        onExhausted: 'block',
+      },
+    };
+    const secondGate: WorkflowGateConfig = {
+      type: 'test',
+      requiresHumanApproval: false,
+      maxRetries: 0,
+      retryPolicy: {
+        maxAttempts: 1,
+        maxRetries: 0,
+        backoffMs: 0,
+        strategy: 'fixed',
+        onExhausted: 'block',
+      },
+    };
+
+    // 第一个门禁授权 python3，第二个独立构造的门禁不继承该授权。
+    gateCommandPolicy(cwd, firstGate);
+    const secondPolicy = gateCommandPolicy(cwd, secondGate);
+    expect(
+      evaluateCommandPolicy(
+        { tool: 'python3', args: ['build.py'] },
+        secondPolicy,
+        cwd,
+      ),
+    ).toMatch(/allow policy/u);
+  });
 });

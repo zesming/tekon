@@ -1,12 +1,9 @@
-import {
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
+  effectiveGateForCommand,
   evaluateCommandPolicy,
   evaluateWorkflowSelection,
   gateCommandPolicy,
@@ -31,10 +28,7 @@ import {
   loadWorkflowByName,
 } from '../lib/utils.js';
 
-export async function commandWorkflow(
-  argv: string[],
-  io: CliIO,
-) {
+export async function commandWorkflow(argv: string[], io: CliIO) {
   const [subcommand, name, ...rest] = argv;
   if (subcommand === 'select') {
     const selectArgs = parseArgs({
@@ -47,26 +41,15 @@ export async function commandWorkflow(
       },
       allowPositionals: true,
     });
-    const repoPath = resolveProjectRepoPath(
-      selectArgs.values.repo,
-    );
-    const positionalDemandText = selectArgs.positionals
-      .join(' ')
-      .trim();
+    const repoPath = resolveProjectRepoPath(selectArgs.values.repo);
+    const positionalDemandText = selectArgs.positionals.join(' ').trim();
     const shapePath = selectArgs.values.shape
-      ? resolveDemandShapePath(
-          repoPath,
-          selectArgs.values.shape,
-        )
+      ? resolveDemandShapePath(repoPath, selectArgs.values.shape)
       : positionalDemandText
         ? null
         : resolveDemandShapePath(repoPath);
-    const shape = shapePath
-      ? readDraftShapeFile(shapePath)
-      : null;
-    const demandText = shape
-      ? shape.rawText
-      : positionalDemandText;
+    const shape = shapePath ? readDraftShapeFile(shapePath) : null;
+    const demandText = shape ? shape.rawText : positionalDemandText;
     const selection = selectWorkflowTemplateForDraft({
       text: demandText,
       ...(shape ? { category: shape.category } : {}),
@@ -74,8 +57,7 @@ export async function commandWorkflow(
     const evaluation = evaluateWorkflowSelection({
       text: demandText,
       selectedTemplate:
-        selectArgs.values.template ??
-        shape?.recommendedTemplate,
+        selectArgs.values.template ?? shape?.recommendedTemplate,
       ...(shape ? { category: shape.category } : {}),
     });
     if (selectArgs.values.json) {
@@ -106,11 +88,7 @@ export async function commandWorkflow(
     allowPositionals: true,
   });
   const repoPath = resolveProjectRepoPath(args.values.repo);
-  const projectWorkflowsDir = join(
-    repoPath,
-    '.tekon',
-    'workflows',
-  );
+  const projectWorkflowsDir = join(repoPath, '.tekon', 'workflows');
 
   if (subcommand === 'list') {
     const catalog = listWorkflowCatalog({ projectWorkflowsDir });
@@ -121,10 +99,7 @@ export async function commandWorkflow(
 
   if (subcommand === 'preflight') {
     const templateName = name ?? 'standard-delivery';
-    const template = loadWorkflowByName(
-      templateName,
-      projectWorkflowsDir,
-    );
+    const template = loadWorkflowByName(templateName, projectWorkflowsDir);
     const profile = loadRepoProfile(repoPath);
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
@@ -138,39 +113,25 @@ export async function commandWorkflow(
               ? `commandRef=${gate.commandRef}`
               : 'commandRef=none',
             `status=${status}`,
-            commandText
-              ? `command=${commandText}`
-              : 'command=',
+            commandText ? `command=${commandText}` : 'command=',
           ];
           if (rejection) {
             fields.push(`rejection=${rejection}`);
           }
           if (guidance?.status === 'not-applicable') {
             fields.push(`hint=${guidance.hint}`);
-            fields.push(
-              `profilePath=${guidance.profilePath}`,
-            );
-            fields.push(
-              `notApplicableReason=${guidance.reason ?? ''}`,
-            );
+            fields.push(`profilePath=${guidance.profilePath}`);
+            fields.push(`notApplicableReason=${guidance.reason ?? ''}`);
             if (gate.type === 'security-scan') {
-              fields.push(
-                'notApplicableIgnoredFor=security-scan',
-              );
+              fields.push('notApplicableIgnoredFor=security-scan');
             }
           } else if (!commandText && guidance) {
             fields.push(`hint=${guidance.hint}`);
-            fields.push(
-              `profilePath=${guidance.profilePath}`,
-            );
+            fields.push(`profilePath=${guidance.profilePath}`);
             const suggestion = guidance.suggestions[0];
             if (suggestion) {
-              fields.push(
-                `suggestedScript=${suggestion.scriptName}`,
-              );
-              fields.push(
-                `suggestedCommand=${suggestion.commandText}`,
-              );
+              fields.push(`suggestedScript=${suggestion.scriptName}`);
+              fields.push(`suggestedCommand=${suggestion.commandText}`);
             }
           }
           io.stdout.write(fields.join(' ') + '\n');
@@ -187,10 +148,7 @@ export async function commandWorkflow(
   }
 
   if (subcommand === 'show') {
-    const template = loadWorkflowByName(
-      name,
-      projectWorkflowsDir,
-    );
+    const template = loadWorkflowByName(name, projectWorkflowsDir);
     io.stdout.write(
       `id=${template.id}\nname=${template.name}\nphases=${template.phases.length}\n`,
     );
@@ -202,14 +160,8 @@ export async function commandWorkflow(
     await ensureInitialized(repoPath, io);
     const fromName = args.values.from ?? 'standard-delivery';
     ensureSafeName(fromName);
-    const source = getWorkflowFilePath(
-      fromName,
-      projectWorkflowsDir,
-    );
-    const target = join(
-      projectWorkflowsDir,
-      `${name}.yaml`,
-    );
+    const source = getWorkflowFilePath(fromName, projectWorkflowsDir);
+    const target = join(projectWorkflowsDir, `${name}.yaml`);
     mkdirSync(projectWorkflowsDir, { recursive: true });
     const content = readFileSync(source, 'utf8').replace(
       /^id:\s*.+$/mu,
@@ -225,10 +177,7 @@ export async function commandWorkflow(
   );
 }
 
-export async function commandConstraints(
-  argv: string[],
-  io: CliIO,
-) {
+export async function commandConstraints(argv: string[], io: CliIO) {
   const [subcommand] = argv;
   if (subcommand !== 'show') {
     throw new Error(
@@ -250,19 +199,11 @@ export function gateCommandStatus(
   gate: WorkflowTemplate['phases'][number]['nodes'][number]['gates'][number],
 ) {
   const guidance = gate.commandRef
-    ? repoProfileCommandGuidance(
-        repoPath,
-        profile,
-        gate.commandRef,
-      )
+    ? repoProfileCommandGuidance(repoPath, profile, gate.commandRef)
     : null;
-  const command =
-    gate.command ??
-    (guidance?.command ? guidance.command : null);
+  const command = gate.command ?? (guidance?.command ? guidance.command : null);
   const isCommandBackedGate = Boolean(
-    gate.commandRef ||
-      gate.command ||
-      gate.type === 'security-scan',
+    gate.commandRef || gate.command || gate.type === 'security-scan',
   );
   const commandText = command
     ? [command.tool, ...command.args].join(' ')
@@ -270,8 +211,7 @@ export function gateCommandStatus(
       ? 'tekon-builtin security scan'
       : '';
   const repoCommandNotApplicable =
-    guidance?.status === 'not-applicable' &&
-    gate.type !== 'security-scan';
+    guidance?.status === 'not-applicable' && gate.type !== 'security-scan';
   let status: string;
   let rejection: string | null = null;
   if (!isCommandBackedGate) {
@@ -281,11 +221,12 @@ export function gateCommandStatus(
   } else if (!commandText) {
     status = 'missing';
   } else if (command) {
-    // PD-04：preflight 与 Gateway 共用同一裁决函数，预检结果必须能预测
-    // 运行期是否放行，不再出现"预检 resolved、运行被 allow 策略拒绝"。
+    // PD-04：preflight 与运行期共用有效门禁解析（commandRef 物化后的命令
+    // 挂回门禁）与同一裁决函数，预检结果必须能预测运行期是否放行。
+    const effectiveGate = effectiveGateForCommand(gate, command);
     rejection = evaluateCommandPolicy(
       command,
-      gateCommandPolicy(repoPath, gate),
+      gateCommandPolicy(repoPath, effectiveGate),
       repoPath,
     );
     status = rejection ? 'rejected' : 'resolved';

@@ -2,7 +2,12 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { ArtifactType, GateConfig, Node, Role } from '../types/domain.js';
+import type {
+  CommandInvocation,
+  GateConfig,
+  Node,
+  Role,
+} from '../types/domain.js';
 import type { CommandPolicy, WorktreeLease } from '../types/config.js';
 import type {
   WorkflowArtifactInputRef,
@@ -96,9 +101,7 @@ export function scopedId(runId: string, id: string): string {
   return `${runId}_${id}`;
 }
 
-export function gatesWithStableKeys<
-  T extends GateConfig | WorkflowGateConfig,
->(
+export function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
   gates: T[],
   nodeId = 'workflow node',
 ): Array<T & { gateKey: string }> {
@@ -187,6 +190,19 @@ export function gateCommandPolicy(
     ...baseline,
     allow: [...baseline.allow, ...authorized],
   };
+}
+
+/**
+ * PD-04：preflight 与运行期共用的有效门禁解析。运行期 gate-runner 先经
+ * resolveGateCommand 把 commandRef 物化为 command；CLI preflight 没有
+ * commandRef 物化步骤，必须用同一规则把已解析命令挂回门禁，再评估策略，
+ * 否则会出现"预检 rejected、运行放行"的双标。
+ */
+export function effectiveGateForCommand(
+  gate: WorkflowGateConfig,
+  command: CommandInvocation | null | undefined,
+): WorkflowGateConfig {
+  return command ? { ...gate, command } : gate;
 }
 
 export function defaultBuiltInRolesDir(): string {

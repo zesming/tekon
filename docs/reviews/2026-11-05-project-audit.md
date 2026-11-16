@@ -668,7 +668,7 @@
 - 修复建议：先放宽 schema（重构第 2 阶段，见 PD-06）或加上 agent 重试（把校验错误喂回去），再分批删除归一化。
 
 ### [CD-23] blocked 和 paused 的 CLI 退出码是 0，job 记为 done
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：parallel 字段与 UI 文案删除，旧键兼容忽略，dependsOn 保留）
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认（随批次 9 处理）
 - 位置：packages/cli/src/lib/session-context.ts:341-348，packages/core/src/session/workflow-job-executor.ts:270-284
 - 现象：blocked 和 paused 的 CLI 都是 exit=0（实测）。
 - 依据：`exitCodeForWorkflowStatus` 只把 failed、cancelled、interrupted 映射为 1，session-context.ts:341-345 的注释表明这是有意的。
@@ -684,7 +684,7 @@
 - 修复建议：删除 `parallel` 字段和 UI 文案，真需要时再实现。保留节点级 dependsOn，否则连通性校验会失效。
 
 ### [CD-25] 死代码：101 个导出没有外部生产使用方，其中 19 个完全无生产使用
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：parallel 字段与 UI 文案删除，旧键兼容忽略，dependsOn 保留）
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认（随批次 14 治理删除处理）
 - 位置：均在 packages/core/src 下，清单见现象
 - 现象：101 个导出中，80 个在本文件内有使用，不算死代码。19 个只有测试或 index 引用：
   - constraint/dsl：loadConstraintRules

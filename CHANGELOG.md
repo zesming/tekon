@@ -12,6 +12,8 @@
 - 产品合同同步（PD-06 子项 5、CD-39）：AGENTS.md 把"角色/产物/Gate 是产品合同"改写为"内置模板的默认约束"，补全 core 模块描述；README 与产品范围文档去掉"固定流程/固定模板"表述，反映可自由定义的工作流模板。
 - 手写仓库命令视为授权（PD-04）：门禁要执行的用户手写命令（模板内联或 repo-profile 绑定）自动进入该门禁的命令授权，`python3`、`make` 等非 Node 仓库的工具不再被固定 allow-list 拒绝；shell 元字符、网络命令、递归强制删除、force push 等固定拒绝规则仍然先生效。新增共享裁决函数，CLI `workflow preflight` 与运行期 Gateway 使用同一判定，预检的 `rejected` 状态能准确预测运行期结果，不再"预检 resolved、运行被拒"。
 - 受理期阻断缺失命令（PD-04）：新运行所需的必填 `commandRef` 在 repo-profile 中缺失时，受理直接失败并给出补全或标记 `notApplicable` 的修改示例，不创建运行、不调用 agent（CLI 与 Web 均生效，Web 返回 400）；`security-scan` 缺失有内置扫描兜底，不阻断；历史冻结计划的执行语义不变。
+- 旧计划兼容（CD-24 修复补强）：在 `parallel` 字段删除前冻结的 v2/v3 计划快照（含真实 R27 归档证据）仍可正常校验和恢复——投影对比前对称剔除遗留的 `parallel` 与 `digest` 键，计划摘要（digest）仍按冻结原字节做哈希认证，防篡改能力不降级。
+- 预检/运行裁决一致性补强（PD-04）：CLI `workflow preflight` 对 `commandRef` 解析出的非基线工具（如 `python3`、`make`）现在与运行期同判为已授权（resolved），不再出现"预检 rejected、运行放行"；语义门禁（human/schema 等）携带的缺失命令引用不再误阻断受理。
 
 ## 0.30.0 — 2026-11-13
 

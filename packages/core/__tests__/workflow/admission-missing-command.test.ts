@@ -118,4 +118,105 @@ describe('PD-04 admission blocks missing repo commands', () => {
     });
     expect(prepared.runId).toBeTruthy();
   });
+
+  it('does not block on a missing commandRef attached to a non-command semantic gate', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-missing-semantic-'));
+    cleanup.push(() => rmSync(repoPath, { recursive: true, force: true }));
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      JSON.stringify({ name: 'fixture', version: '1.0.0' }),
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    cleanup.push(() => db.close());
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: createMockAgentAdapter(),
+      agentProvider: 'mock',
+    });
+    // human 语义门禁携带缺失的 commandRef，但运行期从不执行该命令。
+    const semanticTemplate = parseWorkflowTemplate({
+      id: 'semantic-ref',
+      version: 1,
+      phases: [
+        {
+          id: 'dev',
+          name: 'Dev',
+          nodes: [
+            {
+              id: 'n1',
+              role: 'goal',
+              gates: [
+                {
+                  type: 'human',
+                  commandRef: 'build',
+                  requiresHumanApproval: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const prepared = await engine.prepareRun({
+      demandText: '语义门禁的命令引用不阻断受理',
+      mode: 'template',
+      workflowSpec: semanticTemplate,
+    });
+    expect(prepared.runId).toBeTruthy();
+  });
+
+  it('does not block when only the security-scan commandRef is missing (builtin fallback)', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-missing-security-'));
+    cleanup.push(() => rmSync(repoPath, { recursive: true, force: true }));
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      JSON.stringify({ name: 'fixture', version: '1.0.0' }),
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    cleanup.push(() => db.close());
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      adapter: createMockAgentAdapter(),
+      agentProvider: 'mock',
+    });
+    const securityTemplate = parseWorkflowTemplate({
+      id: 'security-only',
+      version: 1,
+      phases: [
+        {
+          id: 'dev',
+          name: 'Dev',
+          nodes: [
+            {
+              id: 'n1',
+              role: 'goal',
+              gates: [{ type: 'security-scan', commandRef: 'security' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const prepared = await engine.prepareRun({
+      demandText: '安全扫描内置兜底',
+      mode: 'template',
+      workflowSpec: securityTemplate,
+    });
+    expect(prepared.runId).toBeTruthy();
+  });
 });

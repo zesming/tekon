@@ -61,6 +61,7 @@ export {
   makeSyntheticLease,
   defaultCommandPolicy,
   gateCommandPolicy,
+  effectiveGateForCommand,
   defaultBuiltInRolesDir,
   resolveReviewTargetNodeByHeuristic,
   isChangesRequested,
