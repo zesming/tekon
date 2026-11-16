@@ -200,6 +200,18 @@ export interface TekonRepositories {
     config: RunProviderConfig,
   ): Promise<RunProviderConfig>;
   getRunProviderConfig(runId: string): Promise<RunProviderConfig | null>;
+  /**
+   * PD-05：--rebind 在一个事务内替换冻结绑定（plan_snapshot/plan_digest、
+   * run_provider_configs）并重写非终态节点的物化门禁。终态运行拒绝写入，
+   * 返回 null；运行不存在时抛错。
+   */
+  applyRunRebind(input: {
+    runId: string;
+    planSnapshot: string;
+    planDigest: string;
+    provider: RunProviderConfig;
+    nodeGates: Array<{ nodeId: string; gates: Node['gates'] }>;
+  }): Promise<{ applied: boolean }>;
   updateWorkflowInstanceStatus(
     runId: string,
     status: WorkflowStatus,
@@ -427,6 +439,58 @@ export function createRepositories(
         .prepare('select * from run_provider_configs where run_id = ?')
         .get(runId) as RunProviderConfigRow | undefined;
       return row ? mapRunProviderConfig(row) : null;
+    },
+
+    async applyRunRebind(input) {
+      return writeQueue.enqueue(() => {
+        const txn = db.transaction(() => {
+          const current = db
+            .prepare(
+              'select status from workflow_instances where id = ?',
+            )
+            .get(input.runId) as { status: WorkflowStatus } | undefined;
+          if (!current) {
+            throw new Error(
+              `workflow instance not found: ${input.runId}`,
+            );
+          }
+          if (
+            current.status === 'passed' ||
+            current.status === 'failed' ||
+            current.status === 'cancelled'
+          ) {
+            return { applied: false as const };
+          }
+          db.prepare(
+            `update workflow_instances
+               set plan_snapshot = ?, plan_digest = ?, updated_at = ?
+             where id = ?`,
+          ).run(input.planSnapshot, input.planDigest, now(), input.runId);
+          db.prepare(
+            `insert into run_provider_configs (
+               run_id, provider, config_summary, created_at
+             ) values (@runId, @provider, @configSummary, @createdAt)
+             on conflict(run_id) do update set
+               provider = excluded.provider,
+               config_summary = excluded.config_summary,
+               created_at = excluded.created_at`,
+          ).run(toRunProviderConfigParams(input.provider));
+          const updateNodeGates = db.prepare(
+            'update nodes set gates = ?, updated_at = ? where id = ? and run_id = ?',
+          );
+          const timestamp = now();
+          for (const entry of input.nodeGates) {
+            updateNodeGates.run(
+              JSON.stringify(entry.gates),
+              timestamp,
+              entry.nodeId,
+              input.runId,
+            );
+          }
+          return { applied: true as const };
+        });
+        return txn();
+      });
     },
 
     async updateWorkflowInstanceStatus(runId, status, currentNodeId) {

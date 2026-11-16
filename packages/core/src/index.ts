@@ -72,6 +72,8 @@ export * from './workflow/run-plan.js';
 export * from './workflow/repo-command-binding.js';
 export * from './workflow/resume-policy.js';
 export * from './workflow/human-rework.js';
+export * from './workflow/rebind.js';
+export * from './workflow/rebind-run.js';
 export * from './workflow/execution-plan.js';
 export * from './constraint/validator.js';
 export * from './constraint/runtime-policy.js';
