@@ -154,4 +154,102 @@ describe('PD-18 resolveHumanReworkTrigger', () => {
     });
     expect(trigger?.feedbackNote).toContain('without a note');
   });
+
+  // 复审 Should-1：同一节点多个 human gate 时，被驳回的 gateResult 必须与
+  // 声明返工目标的 gate 按 gateKey 关联；不能拿 A 门的声明去配 B 门的驳回。
+  it('does not rework when the rejected gate is a different human gate without a target', () => {
+    const twoGates = reviewNode();
+    twoGates.gates = [
+      {
+        type: 'human',
+        gateKey: '00.human',
+        requiresHumanApproval: true,
+        reworkTargetNodeId: 'rd-node',
+        maxRetries: 0,
+        retryPolicy: {
+          maxRetries: 0,
+          maxAttempts: 1,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+      },
+      {
+        type: 'human',
+        gateKey: '01.human',
+        requiresHumanApproval: true,
+        maxRetries: 0,
+        retryPolicy: {
+          maxRetries: 0,
+          maxAttempts: 1,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+      },
+    ];
+    // 驳回的是第二个 gate（无返工目标声明）。
+    const rejectedSecond = humanRejectedGate();
+    rejectedSecond.id = 'gate_2';
+    rejectedSecond.gateKey = '01.human';
+    const decision = rejectedDecision();
+    decision.gateResultId = 'gate_2';
+    expect(
+      resolveHumanReworkTrigger({
+        ...base,
+        node: twoGates,
+        gateResults: [rejectedSecond],
+        decisions: [decision],
+      }),
+    ).toBeNull();
+  });
+
+  it('matches the rejected gate by gateKey when both human gates declare targets', () => {
+    const twoGates = reviewNode();
+    twoGates.gates = [
+      {
+        type: 'human',
+        gateKey: '00.human',
+        requiresHumanApproval: true,
+        reworkTargetNodeId: 'rd-node',
+        maxRetries: 0,
+        retryPolicy: {
+          maxRetries: 0,
+          maxAttempts: 1,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+      },
+      {
+        type: 'human',
+        gateKey: '01.human',
+        requiresHumanApproval: true,
+        reworkTargetNodeId: 'rd-node',
+        maxRetries: 0,
+        retryPolicy: {
+          maxRetries: 0,
+          maxAttempts: 1,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+      },
+    ];
+    const rejectedSecond = humanRejectedGate();
+    rejectedSecond.id = 'gate_2';
+    rejectedSecond.gateKey = '01.human';
+    const decision = rejectedDecision();
+    decision.gateResultId = 'gate_2';
+    const trigger = resolveHumanReworkTrigger({
+      ...base,
+      node: twoGates,
+      gateResults: [rejectedSecond],
+      decisions: [decision],
+    });
+    expect(trigger).toMatchObject({
+      gate: expect.objectContaining({ gateKey: '01.human' }),
+      gateResult: expect.objectContaining({ id: 'gate_2' }),
+    });
+  });
 });

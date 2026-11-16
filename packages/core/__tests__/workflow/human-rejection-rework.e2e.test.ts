@@ -580,4 +580,87 @@ describe('PD-18 human rejection rework e2e', () => {
       db.close();
     }
   }, 120_000);
+
+  // 复审 Should-1：同节点两个人类 gate——A 声明返工目标、B 不声明。驳回 B
+  // 时不得借用 A 的 reworkTargetNodeId 发起错误返工；应走常规 blocked 恢复。
+  it('does not rework when the rejected human gate is a second gate without its own target', async () => {
+    const repoPath = createRepo();
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const gateway = createCommandGateway({ repositories });
+    const mock = createMockAgentAdapter();
+    const adapter: AgentAdapter = {
+      ...mock,
+      async runAgent(input: AgentRunInput) {
+        if (input.runContext.nodeId.endsWith('rd-node')) {
+          writeFileSync(
+            join(input.runContext.repoPath, 'feature.txt'),
+            'implemented\n',
+            'utf8',
+          );
+        }
+        return mock.runAgent(input);
+      },
+    };
+    const engine = await buildEngine(
+      repoPath,
+      repositories,
+      audit,
+      gateway,
+      adapter,
+    );
+
+    const twoGateSpec = spec();
+    twoGateSpec.phases[1]!.nodes[0]!.gates = [
+      {
+        type: 'human',
+        requiresHumanApproval: true,
+        reworkTargetNodeId: 'rd-node',
+      },
+      { type: 'human', requiresHumanApproval: true },
+    ];
+
+    const first = await engine.startRun({
+      demandText: '双 human gate 驳回无目标门',
+      mode: 'template',
+      workflowSpec: twoGateSpec,
+    });
+    // 第一个 human gate（00.human，带目标）暂停 → 批准。
+    let decisions = await repositories.listHumanDecisions(first.runId);
+    expect(decisions).toHaveLength(1);
+    await createHumanGate({ repositories }).approveHumanGate(
+      decisions[0]!.id,
+      'contract-reviewer',
+    );
+    await repositories.transitionNode(decisions[0]!.nodeId, 'awaiting-gate');
+    const afterApprove = await engine.resumeRun(first.runId);
+    expect(afterApprove.workflow.status).toBe('paused');
+
+    // 第二个 human gate（01.human，无目标）暂停 → 驳回 → blocked。
+    decisions = await repositories.listHumanDecisions(first.runId);
+    const second = decisions.find((d) => d.status === 'pending')!;
+    await createHumanGate({ repositories }).rejectHumanGate(
+      second.id,
+      'contract-reviewer',
+      '第二个门驳回',
+    );
+    const blocked = await repositories.getWorkflowInstance(first.runId);
+    expect(blocked?.status).toBe('blocked');
+
+    // resume：gateKey 不匹配，走常规恢复（重跑 reviewer），不产生返工节点。
+    const resumed = await engine.resumeRun(first.runId);
+    try {
+      expect(resumed.workflow.status).toBe('paused');
+      const nodes = await repositories.listNodes(first.runId);
+      expect(nodes.some((n) => n.id.includes('_rework_'))).toBe(false);
+      const events = await repositories.listAuditEvents(first.runId);
+      expect(
+        events.some((e) => e.type === 'gate.rework.attempt'),
+      ).toBe(false);
+    } finally {
+      db.close();
+    }
+  }, 120_000);
 });

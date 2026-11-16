@@ -256,6 +256,8 @@ export interface HumanDecisionOutput {
   status: string;
   actor: string | null;
   note: string | null;
+  /** PD-18：门禁请求上下文；旧行无 request_note 时 mapper 回落 note。 */
+  requestNote: string | null;
   createdAt: string;
   decidedAt: string | null;
   context: {

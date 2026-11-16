@@ -37,11 +37,6 @@ export function resolveHumanReworkTrigger(input: {
     payload: { gateResultId?: unknown };
   }>;
 }): HumanReworkTrigger | null {
-  const humanGate = gatesWithStableKeys(input.node.gates, input.node.id).find(
-    (gate) => gate.type === 'human' && gate.reworkTargetNodeId,
-  );
-  if (!humanGate?.reworkTargetNodeId) return null;
-
   // 同节点最新的 rejected 决策。
   const decision = [...input.decisions]
     .reverse()
@@ -61,6 +56,18 @@ export function resolveHumanReworkTrigger(input: {
         result.failureClassification === 'human-rejected',
     );
   if (!gateResult) return null;
+
+  // 复审 Should-1：一个节点可挂多个 human gate，被驳回的 gateResult 必须与
+  // 声明返工目标的 gate 按稳定 gateKey 关联。不能拿 A 门的 reworkTargetNodeId
+  // 去配 B 门的驳回，否则会按错误目标返工并在完整性校验卡死。
+  const keyedGates = gatesWithStableKeys(input.node.gates, input.node.id);
+  const humanGate = keyedGates.find(
+    (gate) =>
+      gate.type === 'human' &&
+      gate.reworkTargetNodeId &&
+      gate.gateKey === gateResult.gateKey,
+  );
+  if (!humanGate?.reworkTargetNodeId) return null;
 
   // 防重复：同一门禁结果已经触发过返工就不再触发（resume 幂等）。
   const alreadyReworked = input.reworkAttemptEvents.some(
