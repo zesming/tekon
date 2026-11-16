@@ -540,6 +540,46 @@ describe('database migrations', () => {
     db.close();
   });
 
+  it('PD-18: adds human_decisions.request_note idempotently', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'request_note')).toBe(true);
+
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table human_decisions_old (
+        id text primary key,
+        run_id text not null,
+        node_id text not null,
+        gate_result_id text,
+        status text not null,
+        actor text,
+        note text,
+        created_at text not null,
+        decided_at text
+      );
+    `);
+    db.exec('drop table human_decisions;');
+    db.exec('alter table human_decisions_old rename to human_decisions;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'request_note')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'request_note')).toHaveLength(1);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'request_note')).toHaveLength(1);
+
+    db.close();
+  });
+
   it('P1-UX-02: adds sessions.acknowledged_at idempotently and defaults legacy rows to NULL (unacknowledged)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
     tempDirs.push(dir);

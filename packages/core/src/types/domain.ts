@@ -163,6 +163,8 @@ export const gateConfigSchema = z.object({
   skipReason: z.string().min(1).optional(),
   artifactType: artifactTypeSchema.optional(),
   requiresHumanApproval: z.boolean().default(false),
+  // PD-18：人工驳回返工目标，随节点 gates JSON 持久化，缺省视为不支持驳回返工。
+  reworkTargetNodeId: z.string().min(1).optional(),
   maxRetries: z.number().int().min(0).default(0),
   timeoutMs: z.number().int().positive().optional(),
   // Persisted so planFromRepository faithfully reconstructs the gate: the
@@ -308,7 +310,13 @@ export const humanDecisionSchema = z.object({
   gateResultId: z.string().nullable().optional(),
   status: z.enum(['pending', 'approved', 'rejected']),
   actor: z.string().nullable().optional(),
+  /** 人工决策备注（approve/reject 时写入），作为驳回返工的反馈来源。 */
   note: z.string().nullable().optional(),
+  /**
+   * PD-18：门禁发起时的请求上下文（命令/风险等），与决策备注分离，决策
+   * 覆盖 note 不再破坏审批摘要的请求信息。旧行该列为 null。
+   */
+  requestNote: z.string().nullable().optional(),
   createdAt: isoDateStringSchema,
   decidedAt: isoDateStringSchema.nullable().optional(),
 });

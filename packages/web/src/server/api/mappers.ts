@@ -183,6 +183,8 @@ export function mapHumanDecision(
 ): HumanDecisionOutput {
   const gate = getGate(db, decision.gate_result_id);
   const node = getNode(db, decision.node_id);
+  // PD-18：请求上下文与决策备注分离；旧行无 request_note 时回落 note。
+  const requestNote = decision.request_note ?? decision.note;
   return redactObject({
     id: decision.id,
     runId: decision.run_id,
@@ -191,12 +193,13 @@ export function mapHumanDecision(
     status: decision.status,
     actor: decision.actor,
     note: decision.note,
+    requestNote: decision.request_note ?? null,
     createdAt: decision.created_at,
     decidedAt: decision.decided_at,
     context: {
-      request: decision.note ?? 'No request context recorded.',
-      exactCommand: extractExactCommand(decision.note),
-      riskLabel: deriveRiskLabel(decision.note, gate),
+      request: requestNote ?? 'No request context recorded.',
+      exactCommand: extractExactCommand(requestNote),
+      riskLabel: deriveRiskLabel(requestNote, gate),
       nodeRole: node?.role ?? null,
       approvalSummary,
       approvalEvaluation: approvalSummary

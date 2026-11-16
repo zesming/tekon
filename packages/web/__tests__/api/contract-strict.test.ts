@@ -123,6 +123,7 @@ describe('strict output schemas — field drift detection', () => {
       status: 'pending',
       actor: null,
       note: null,
+      requestNote: null,
       createdAt: '2026-01-01T00:00:00Z',
       decidedAt: null,
       context,

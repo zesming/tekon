@@ -403,6 +403,8 @@ export const apiHumanDecisionSchema = z
     status: z.string(),
     actor: z.string().nullable(),
     note: z.string().nullable(),
+    // PD-18：门禁请求上下文，与决策备注 note 分离（旧行为下二者共用一列）。
+    requestNote: z.string().nullable(),
     createdAt: z.string(),
     decidedAt: z.string().nullable(),
     context: apiHumanDecisionContextSchema,

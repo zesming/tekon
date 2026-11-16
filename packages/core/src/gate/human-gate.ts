@@ -63,7 +63,9 @@ export function createHumanGate(options: {
         nodeId: input.nodeId,
         gateResultId: input.gateResultId ?? null,
         status: 'pending',
-        note: input.note ?? null,
+        // PD-18：请求上下文单独存放，决策备注写 note 时不再覆盖它。
+        requestNote: input.note ?? null,
+        note: null,
         createdAt: new Date().toISOString(),
       });
       await options.repositories.transitionNode(input.nodeId, 'paused');

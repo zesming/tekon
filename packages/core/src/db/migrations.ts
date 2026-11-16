@@ -327,6 +327,9 @@ export function migrateDatabase(db: TekonDatabase): void {
     // PD-31：resume 作业的执行选项（如 gatesOnly=true 只重跑门禁）。
     // 独立于冻结的 Job 合同，经专用访问器读取，不进 mapJob。
     addColumnIfMissing(db, 'jobs', 'resume_options', 'text');
+    // PD-18：人工决策的请求上下文与决策备注分离，决策覆盖 note 不再丢失
+    // 门禁发起时的命令/风险信息。
+    addColumnIfMissing(db, 'human_decisions', 'request_note', 'text');
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

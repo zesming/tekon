@@ -54,6 +54,11 @@ export interface WorkflowGateConfig {
   skipReason?: string;
   artifactType?: ArtifactType;
   requiresHumanApproval: boolean;
+  /**
+   * PD-18：人工驳回后的返工目标节点（模板节点 id）。仅 human gate 携带；
+   * 驳回恢复时据此对目标节点发起返工，决策备注作为返工反馈。
+   */
+  reworkTargetNodeId?: string;
   maxRetries: number;
   timeoutMs?: number;
   retryPolicy: WorkflowRetryPolicy;
@@ -132,6 +137,9 @@ const rawGateSchema = z
     commandRef: commandRefSchema.optional(),
     artifactType: artifactTypeSchema.optional(),
     requiresHumanApproval: z.boolean().optional(),
+    // PD-18：人工驳回后要返工的目标节点（模板节点 id）。仅 human gate 有效；
+    // 节点存在性与上游连通性在整模板校验期裁决。
+    reworkTargetNodeId: z.string().min(1).optional(),
     maxRetries: z.number().int().min(0).optional(),
     timeoutMs: z.number().int().positive().optional(),
     autoFix: z.boolean().optional(),
@@ -154,6 +162,14 @@ const rawGateSchema = z
         code: z.ZodIssueCode.custom,
         path: ['requiresHumanApproval'],
         message: 'human gate requires human approval',
+      });
+    }
+
+    if (gate.reworkTargetNodeId && gate.type !== 'human') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reworkTargetNodeId'],
+        message: 'reworkTargetNodeId is only valid on human gates',
       });
     }
   });
@@ -345,6 +361,7 @@ const normalizedGateSchema = z.object({
   skipReason: z.string().min(1).optional(),
   artifactType: artifactTypeSchema.optional(),
   requiresHumanApproval: z.boolean().default(false),
+  reworkTargetNodeId: z.string().min(1).optional(),
   maxRetries: z.number().int().nonnegative().default(0),
   timeoutMs: z.number().int().positive().optional(),
   retryPolicy: workflowRetryPolicySchema.strict().default(defaultRetryPolicy),
@@ -477,6 +494,16 @@ function normalizeWorkflowTemplate(
         normalizeGate(gate, retryPolicy),
       );
       assertUniqueEffectiveGateKeys(gates, rawNode.id);
+      // inputs 已 resolve 为带 fromNodeId 的形态，字符串简写的来源也在此刻
+      // 确定，连通性校验基于解析结果而非原始 YAML 写法。
+      assertHumanReworkTargets(
+        gates,
+        rawNode.id,
+        new Set([
+          ...rawNode.dependsOn,
+          ...inputs.map((input) => input.fromNodeId),
+        ]),
+      );
 
       phaseNodes.push({
         id: rawNode.id,
@@ -544,6 +571,9 @@ function normalizeGate(
     ...(rawGate.artifactType ? { artifactType: rawGate.artifactType } : {}),
     requiresHumanApproval:
       rawGate.requiresHumanApproval ?? rawGate.type === 'human',
+    ...(rawGate.reworkTargetNodeId
+      ? { reworkTargetNodeId: rawGate.reworkTargetNodeId }
+      : {}),
     maxRetries:
       rawGate.maxRetries ??
       retryPolicy.maxRetries ??
@@ -566,6 +596,38 @@ function assertUniqueEffectiveGateKeys(
       throw new Error(`duplicate gateKey "${gateKey}" in node "${nodeId}"`);
     }
     seen.add(gateKey);
+  }
+}
+
+/**
+ * PD-18：human gate 的 reworkTargetNodeId 必须是本节点声明的直接上游
+ * （dependsOn 或 inputs.from），与 independent-review 门禁的
+ * isReviewTargetConnected 连通规则一致——防止驳回后返工一个与评审无关的
+ * 节点。上游引用的存在性由本节点既有的 unknown dependency 校验保证。
+ */
+function assertHumanReworkTargets(
+  gates: WorkflowGateConfig[],
+  nodeId: string,
+  upstreamNodeIds: Set<string>,
+): void {
+  for (const gate of gates) {
+    const target = gate.reworkTargetNodeId;
+    if (!target) continue;
+    if (gate.type !== 'human') {
+      throw new Error(
+        `reworkTargetNodeId is only valid on human gates (node "${nodeId}", gate "${gate.type}")`,
+      );
+    }
+    if (target === nodeId) {
+      throw new Error(
+        `human gate reworkTargetNodeId cannot target its own node "${nodeId}"`,
+      );
+    }
+    if (!upstreamNodeIds.has(target)) {
+      throw new Error(
+        `human gate reworkTargetNodeId "${target}" in node "${nodeId}" must reference a direct upstream node declared in the node's dependsOn or inputs`,
+      );
+    }
   }
 }
 

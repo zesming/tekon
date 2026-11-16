@@ -232,6 +232,86 @@ phases:
     });
   });
 
+  // PD-18：human gate 可声明返工目标节点；驳回恢复时据此触发返工，不靠启发式。
+  it('parses reworkTargetNodeId on a human gate and rejects unknown or disconnected targets', () => {
+    const valid = parseWorkflowTemplate(`
+id: human-rework
+name: Human Rework
+phases:
+  - id: impl
+    nodes:
+      - id: rd-code
+        role: rd
+        outputs: [code-changes]
+  - id: review
+    dependsOn: [impl]
+    nodes:
+      - id: reviewer-check
+        role: reviewer
+        inputs:
+          - from: rd-code
+            type: code-changes
+        outputs: [review-report]
+        gates:
+          - type: human
+            requiresHumanApproval: true
+            reworkTargetNodeId: rd-code
+`);
+    const humanGate = valid.phases[1]!.nodes[0]!.gates[0]!;
+    expect(humanGate).toMatchObject({
+      type: 'human',
+      reworkTargetNodeId: 'rd-code',
+    });
+
+    // 目标节点不存在。
+    expect(() =>
+      parseWorkflowTemplate(`
+id: human-rework-missing
+name: Human Rework
+phases:
+  - id: review
+    nodes:
+      - id: reviewer-check
+        role: reviewer
+        outputs: [review-report]
+        gates:
+          - type: human
+            requiresHumanApproval: true
+            reworkTargetNodeId: rd-ghost
+`),
+    ).toThrow(/reworkTargetNodeId/u);
+
+    // 目标节点不是该评审节点的上游（无 input/dependency 连通）。
+    expect(() =>
+      parseWorkflowTemplate(`
+id: human-rework-disconnected
+name: Human Rework
+phases:
+  - id: impl
+    nodes:
+      - id: rd-a
+        role: rd
+        outputs: [code-changes]
+      - id: rd-b
+        role: pm
+        outputs: [prd]
+  - id: review
+    dependsOn: [impl]
+    nodes:
+      - id: reviewer-check
+        role: reviewer
+        inputs:
+          - from: rd-a
+            type: code-changes
+        outputs: [review-report]
+        gates:
+          - type: human
+            requiresHumanApproval: true
+            reworkTargetNodeId: rd-b
+`),
+    ).toThrow(/reworkTargetNodeId|upstream|连通/u);
+  });
+
   it('rejects invalid artifact dependencies and conflicting outputs', () => {
     expect(() =>
       parseWorkflowTemplate(`

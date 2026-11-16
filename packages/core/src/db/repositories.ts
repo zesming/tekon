@@ -133,6 +133,7 @@ type HumanDecisionRow = {
   status: HumanDecision['status'];
   actor: string | null;
   note: string | null;
+  request_note?: string | null;
   created_at: string;
   decided_at: string | null;
 };
@@ -697,15 +698,18 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into human_decisions (
-             id, run_id, node_id, gate_result_id, status, actor, note, created_at, decided_at
+             id, run_id, node_id, gate_result_id, status, actor, note, request_note,
+             created_at, decided_at
            ) values (
-             @id, @runId, @nodeId, @gateResultId, @status, @actor, @note, @createdAt, @decidedAt
+             @id, @runId, @nodeId, @gateResultId, @status, @actor, @note, @requestNote,
+             @createdAt, @decidedAt
            )`,
         ).run({
           ...decision,
           gateResultId: decision.gateResultId ?? null,
           actor: decision.actor ?? null,
           note: decision.note ?? null,
+          requestNote: decision.requestNote ?? null,
           decidedAt: decision.decidedAt ?? null,
         });
         return decision;
@@ -1130,6 +1134,7 @@ function mapHumanDecision(row: HumanDecisionRow): HumanDecision {
     status: row.status,
     actor: row.actor,
     note: row.note,
+    requestNote: row.request_note ?? null,
     createdAt: row.created_at,
     decidedAt: row.decided_at,
   });

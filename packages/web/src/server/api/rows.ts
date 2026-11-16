@@ -62,6 +62,7 @@ export interface HumanDecisionRow {
   status: string;
   actor: string | null;
   note: string | null;
+  request_note?: string | null;
   created_at: string;
   decided_at: string | null;
 }
