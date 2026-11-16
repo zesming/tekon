@@ -7,6 +7,7 @@
 - 返工失败路径不再产生孤儿记录或掩盖真实原因（CD-33）：返工 agent 或评审节点重跑失败时，对应 role_run 立即标记 interrupted（旧实现留在 running）；评审重跑失败改为向上抛错由节点执行器统一收敛，消除 `illegal workflow transition` 二次异常；目标门禁抛错时清理租约别名，避免后续被 `active execution lease required` 掩盖真实门禁错误。三种失败注入均有 e2e 覆盖并验证 resume 可恢复。
 - 恢复 blocked 运行不再盲目重跑 agent（PD-31）：新增确定性失败白名单——最近一次门禁失败为 `missing-command`、`rejected` 或 `unsupported-gate` 且失败条件在当前配置下仍成立时，resume 不创建 role_run、不调用 agent，节点保持 blocked 并输出原因与下一步（审计事件 `node.resume-skipped-deterministic`）；条件已消失或分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`、`human-rejected`）时照常重跑，且重跑提示词注入最近一次门禁失败的类型与分类。新增 `tekon resume --gates-only`（Web `project.resume` 同步支持 `gatesOnly`）：只重跑门禁不重跑 agent，选项经新增的 `jobs.resume_options` 列持久化跨进程传递；节点无完成 agent 记录时以 `GATES_ONLY_NO_AGENT_RUN` 拒绝。
 - 人工驳回接入返工链路（PD-18）：human gate 支持模板字段 `reworkTargetNodeId` 声明返工目标（解析期校验为节点直接上游，内置 bugfix/plan-only 已声明）；驳回后 resume 按声明对目标节点返工，决策备注作为反馈注入返工提示词，返工后重跑评审并产生新的 pending 决策（同一驳回只返工一次），不再盲目重跑被驳回的评审节点。人工决策新增 `request_note` 列与 `requestNote` 字段，把门禁请求上下文与决策备注分离，approve/reject 覆盖备注不再破坏审批摘要的命令/风险解析（旧行自动回落 note）。执行计划完整性校验接受 human-rejected 作为合法返工授权来源；合同 6 由 `it.fails` 占位转为真实 e2e 回归。
+- 独立审查加固（同次发布）：人工返工补发 `gate.rework.attempt` 审计事件，动态返工节点由此通过二次 resume 的计划完整性校验（此前返工后再次恢复必然 `nodes.unproven` 卡死）；人工返工失败与 `--gates-only` 守卫拒绝都把工作流/节点收敛回 interrupted/blocked，不再谎报 running；完整性校验新增 human 返工目标与模板 `reworkTargetNodeId` 一致性断言；spawn 前取消的门禁归类为 `cancelled` 而非 `rejected`，不再被 resume fail-fast 误判为确定性策略拒绝；已物化冻结门禁的 missing-command 提示改指 `--rebind`/新运行而非死路；Web 决策投影顶层 `requestNote` 旧行回落与 core 对齐。
 
 ## 0.31.0 — 2026-11-16
 

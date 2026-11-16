@@ -354,10 +354,14 @@ describe('PD-31 blocked resume policy e2e', () => {
       await expect(
         engine.resumeRun(first.runId, { gatesOnly: true }),
       ).rejects.toThrow(/GATES_ONLY_NO_AGENT_RUN/u);
-      // 被拒绝时不产生任何 agent 调用，节点维持 blocked。
+      // 被拒绝时不产生任何 agent 调用，节点与工作流都维持 blocked（SF3：
+      // 不能留下 workflow=running 的假象）。
       expect(counted.agentCalls).toBe(1);
       const refreshed = await repositories.getNode(node.id);
       expect(refreshed?.status).toBe('blocked');
+      const refreshedWorkflow =
+        await repositories.getWorkflowInstance(first.runId);
+      expect(refreshedWorkflow?.status).toBe('blocked');
     } finally {
       db.close();
     }

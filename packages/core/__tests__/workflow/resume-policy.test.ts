@@ -113,6 +113,22 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     expect(decision?.classification).toBe('missing-command');
   });
 
+  it('points a materialized frozen gate (no commandRef) at --rebind instead of a dead profile hint', () => {
+    const repoPath = repoWithProfile(
+      'commands:\n  build:\n    tool: git\n    args: ["--version"]\n',
+    );
+    // v3 受理后门禁已物化、commandRef 被删除；即使 profile 现在补全了命令，
+    // 冻结绑定也不会重读，提示必须指向 --rebind 而不是“补全 profile”。
+    const decision = evaluateDeterministicBlock({
+      profileRepoPath: repoPath,
+      policyCwd: repoPath,
+      gate: gate(),
+      classification: 'missing-command',
+    });
+    expect(decision?.classification).toBe('missing-command');
+    expect(decision?.hint).toContain('--rebind');
+  });
+
   it('does not fail-fast an explicitly not-applicable command gate', () => {
     const repoPath = repoWithProfile(
       'commands:\n  build:\n    notApplicable: true\n    reason: no build step\n',

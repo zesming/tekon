@@ -75,6 +75,80 @@ describe('human approval summary', () => {
     );
   });
 
+  it('falls back to note for request context on legacy rows without requestNote, and prefers requestNote when present', () => {
+    const base = {
+      repoPath: '/repo/tekon',
+      node: {
+        id: 'node_1',
+        runId: 'run_1',
+        role: 'reviewer',
+        status: 'paused' as const,
+        inputs: [],
+        outputs: [],
+        gates: [],
+        dependencies: [],
+        createdAt: '2026-06-08T00:00:00.000Z',
+        updatedAt: '2026-06-08T00:00:00.000Z',
+      },
+      gate: {
+        id: 'gate_1',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateType: 'human' as const,
+        status: 'blocked' as const,
+        durationMs: 0,
+        retries: 0,
+        failureClassification: 'human-approval',
+        createdAt: '2026-06-08T00:00:00.000Z',
+      },
+      surface: createSurfaceFixture(),
+    };
+    const legacyNote = [
+      'request: legacy row review.',
+      'exactCommand: tekon delivery create-pr --run-id run_legacy',
+      'risk: high',
+    ].join('\n');
+
+    // 旧行：requestNote 为 null/缺省，请求上下文回落 note。
+    const legacy = buildHumanApprovalSummary({
+      ...base,
+      decision: {
+        id: 'decision_legacy',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateResultId: 'gate_1',
+        status: 'pending',
+        note: legacyNote,
+        requestNote: null,
+        createdAt: '2026-06-08T00:00:00.000Z',
+      },
+    });
+    expect(legacy.exactCommand).toBe(
+      'tekon delivery create-pr --run-id run_legacy',
+    );
+    expect(legacy.riskLabel).toBe('high');
+
+    // 新行：requestNote 与 note 分离时，请求上下文只认 requestNote。
+    const split = buildHumanApprovalSummary({
+      ...base,
+      decision: {
+        id: 'decision_split',
+        runId: 'run_1',
+        nodeId: 'node_1',
+        gateResultId: 'gate_1',
+        status: 'pending',
+        note: '决策备注：需要补充边界测试',
+        requestNote:
+          'request: fresh context\nexactCommand: tekon delivery create-pr --run-id run_split\nrisk: low',
+        createdAt: '2026-06-08T00:00:00.000Z',
+      },
+    });
+    expect(split.exactCommand).toBe(
+      'tekon delivery create-pr --run-id run_split',
+    );
+    expect(split.riskLabel).toBe('low');
+  });
+
   it('uses explicit command entries when the caller is reviewing a non-default context', () => {
     const summary = buildHumanApprovalSummary({
       repoPath: '/repo/tekon',

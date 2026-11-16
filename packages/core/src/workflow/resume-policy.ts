@@ -88,12 +88,22 @@ export function evaluateDeterministicBlock(input: {
   if (classification === 'missing-command') {
     if (gate.skipReason) return null;
     if (gate.command) return null;
+    if (!gate.commandRef) {
+      // v3 受理时门禁已物化并删除 commandRef：当前 profile 的变化触达不到
+      // 冻结绑定，继续指引“补全 profile”是死路，只能显式 --rebind 或新运行。
+      return {
+        classification,
+        reason:
+          '门禁命令在受理时已冻结进执行计划且当时缺失（missing-command），修改 repo-profile 不会改变本运行的冻结绑定，重跑 agent 必然再次失败。',
+        hint: '使用 tekon resume --rebind 采用当前仓库配置后恢复，或重新发起运行。',
+      };
+    }
     return {
       classification,
       reason:
         '门禁绑定的检查命令仍缺失（missing-command），在配置修复前重跑 agent 必然再次失败。',
       hint: gate.commandRef
-        ? `在 .tekon/repo-profile.yaml 的 commands.${gate.commandRef} 下补全工具命令，或标记为 notApplicable，然后恢复运行。`
+        ? `在 .tekon/repo-profile.yaml 的 commands.${gate.commandRef} 下补全工具命令，或标记为 notApplicable，然后恢复运行；要让本运行直接采用新配置，使用 tekon resume --rebind。`
         : '在工作流模板或 repo-profile 中为该门禁补全命令，然后恢复运行。',
     };
   }

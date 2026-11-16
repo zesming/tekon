@@ -602,6 +602,8 @@ tekon approval reject --note "证据不足，需要补充风险说明"
 
 驳回备注与门禁发起时的请求上下文分别存放在决策的 `note` 与 `requestNote`，决策备注不再覆盖审批摘要所需的命令/风险信息。当该 human gate 在模板里声明了 `reworkTargetNodeId`（内置 bugfix、plan-only 模板已声明）时，随后执行 `tekon resume` 不会盲目重跑被驳回的评审节点，而是按声明对上游目标节点发起返工：驳回备注作为反馈注入返工 Agent 的提示词，返工完成后自动重跑评审节点并产生一条新的 pending 决策等待再次确认；同一驳回决策只触发一次返工。未声明返工目标的 human gate 驳回后仍按常规 blocked 恢复处理。
 
+每一次驳回都是一轮新的决策循环：再次驳回会生成新的门禁结果并再触发一次针对同一目标节点的返工，返工次数不受 human gate 的 `maxRetries` 限制（该参数只约束自动门禁重试）；是否继续返工由人工审批决定，批准或取消运行即可结束循环。返工过程中 Agent 或评审重跑失败会把运行收敛为 interrupted 并保留真实错误，修复后 `tekon resume` 可从断点恢复，不会留下 running 状态的孤儿记录。
+
 终态 Run 拒绝此操作，不会被改回 blocked。
 
 ### 6.12 `review`

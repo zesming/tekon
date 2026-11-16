@@ -28,6 +28,10 @@ describe('gate.pendingAll', () => {
     expect(entry.decision.id).toBe('decision_1');
     expect(entry.decision.status).toBe('pending');
     expect(entry.recovery.runStatus).toBeTruthy();
+    // 旧行没有 request_note：顶层 requestNote 与 context.request 同一回落，
+    // 都取 note，不能一处回落一处给 null。
+    expect(entry.decision.requestNote).toContain('request:');
+    expect(entry.decision.context.request).toContain('request:');
   });
 
   it('drops a decision from the queue once it is decided', async () => {

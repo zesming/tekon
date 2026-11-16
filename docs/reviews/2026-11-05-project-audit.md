@@ -219,7 +219,7 @@
 - 修复建议：按优先级：1）放开任何非终态的 Web 取消，只改一行（本 PR）。2）恢复时可换 provider、改指令，“重试此节点”。3）failed 重试放最后。第 2、3 步另排（重构第 2 阶段，和 PD-05 一起）。
 
 ### [PD-18] 驳回没有返工路径，备注到不了 agent
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（用 mock 和假 claude 验证，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：human gate 新增模板字段 reworkTargetNodeId 并在解析期校验直接上游连通，内置 bugfix/plan-only 已声明；blocked resume 经 human-rework 判定触发 attemptHumanRejectionRework，备注注入返工提示词、返工后重跑评审并产生新 pending 决策，同一驳回只返工一次；human_decisions 新增 request_note 拆分请求上下文与决策备注，core/Web 摘要改读 requestNote；完整性校验接受 human-rejected 返工授权；合同 6 转真实 e2e，纯判定 7 条 + 返工 e2e + 备注/迁移测试覆盖）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（用 mock 和假 claude 验证，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：human gate 新增模板字段 reworkTargetNodeId 并在解析期校验直接上游连通，内置 bugfix/plan-only 已声明；blocked resume 经 human-rework 判定触发 attemptHumanRejectionRework，备注注入返工提示词、返工后重跑评审并产生新 pending 决策，同一驳回只返工一次；human_decisions 新增 request_note 拆分请求上下文与决策备注，core/Web 摘要改读 requestNote；完整性校验接受 human-rejected 返工授权；合同 6 转真实 e2e，纯判定 7 条 + 返工 e2e + 备注/迁移测试覆盖。独立审查加固：补发 gate.rework.attempt 事件使返工节点通过二次 resume 完整性校验、失败路径统一收敛 interrupted 并可 resume 恢复、human 返工目标与模板声明一致性断言、二次驳回/二次返工与旧模板无声明场景 e2e 覆盖）
 - 位置：packages/core/src/gate/human-gate.ts:66、133-170，packages/core/src/workflow/prompt-builder.ts:123-128，packages/core/src/workflow/node-executor.ts:216-220，packages/core/src/workflow/rework.ts，packages/web/src/client/components/approvals/DecisionForm.tsx:71-80
 - 现象：驳回后 run 进入 blocked，只剩“恢复”。每次恢复都调用一次 reviewer：假 claude 进程调用计数 1 → 驳回并恢复后 2 → 再驳回并恢复后 3，生成 `review-report.v2` 和新的 pending decision。RD 不重跑，改动不变，复用原 lease（`worktree_leases` 仍是 1 条）。两次 prompt `diff` 为空，备注标记出现 0 次。
 - 依据：`prompt-builder.ts:123-128` 不读 note，全仓读取 `decision.note` 的只有 repositories、approval/summary、web mappers。驳回备注还会覆盖请求上下文的 `note`（`human-gate.ts:66、145`）。返工框架已支持目标节点和 reviewFeedback，只是只由 independent-review 的 changes-requested 触发。
@@ -270,7 +270,7 @@
 - 修复建议：分阶段：1）统一为一个任务列表和一个任务详情，任务一对多 run。2）只留一个发起入口，高级选项折叠。3）删除 Dashboard 和重复路由。
 
 ### [PD-31] blocked 恢复一律盲目重跑 agent（prompt 不含失败原因），门禁确定性失败时每次白花一个节点
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（调用计数实测，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：新增 resume-policy 纯策略模块与 fail-fast 白名单 missing-command/rejected/unsupported-gate，条件仍成立时 resume 不建 role_run、不调 agent 并审计 node.resume-skipped-deterministic；其他分类重跑时提示词注入门禁失败原因；新增 `tekon resume --gates-only` 与 Web `gatesOnly`，经 jobs.resume_options 新列持久化，无完成 agent 记录时 GATES_ONLY_NO_AGENT_RUN 拒绝；纯函数 10 条 + 引擎 e2e 4 条 + 迁移/session/CLI 测试覆盖）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（调用计数实测，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：新增 resume-policy 纯策略模块与 fail-fast 白名单 missing-command/rejected/unsupported-gate，条件仍成立时 resume 不建 role_run、不调 agent 并审计 node.resume-skipped-deterministic；其他分类重跑时提示词注入门禁失败原因；新增 `tekon resume --gates-only` 与 Web `gatesOnly`，经 jobs.resume_options 新列持久化，无完成 agent 记录时 GATES_ONLY_NO_AGENT_RUN 拒绝；纯函数 10 条 + 引擎 e2e 4 条 + 迁移/session/CLI 测试覆盖。独立审查加固：守卫拒绝与 fail-fast 同样回写 blocked 不留 running 假象；spawn 前取消归类 cancelled 不进白名单；物化冻结门禁的 missing-command 提示改指 `--rebind`/新运行）
 - 位置：packages/core/src/workflow/node-executor.ts:155-159、205、288，packages/core/src/workflow/prompt-builder.ts:123-127，docs/manual/tekon-user-manual.md:502
 - 现象：`resumeFromGate` 不包含 blocked，恢复时新建 role_run 并调用 agent。bugfix 模板实测每次 resume 都多一次 agent 调用，prompt 都不含失败原因：
   - `missing-command`：3 次 resume 后 rd-fix=4（另有 pm-triage=1，共 5 条），仍 blocked，`lease.created` 不增加，prompt 长度完全相同（5292）。

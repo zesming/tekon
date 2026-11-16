@@ -193,7 +193,9 @@ export function mapHumanDecision(
     status: decision.status,
     actor: decision.actor,
     note: decision.note,
-    requestNote: decision.request_note ?? null,
+    // 与 context.request 及 core 审批摘要同一回落：旧行无 request_note 时
+    // 顶层 requestNote 也回落到 note，避免同一记录两处投影不一致。
+    requestNote: requestNote ?? null,
     createdAt: decision.created_at,
     decidedAt: decision.decided_at,
     context: {

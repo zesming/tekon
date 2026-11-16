@@ -407,6 +407,11 @@ describe('CD-33 rework error paths e2e', () => {
       expect(errorTexts).toContain('TARGET-GATE-MARKER');
       expect(errorTexts).not.toContain('active execution lease');
       expect(errorTexts).not.toContain('illegal workflow transition');
+
+      // SF6：第三条失败路径同样可 resume 恢复——注入只在第二次调用抛错，
+      // 恢复后目标门禁第三次调用放行，整条 run 跑到 passed。
+      const resumed = await engine.resumeRun(first.runId);
+      expect(resumed.workflow.status).toBe('passed');
     } finally {
       db.close();
     }

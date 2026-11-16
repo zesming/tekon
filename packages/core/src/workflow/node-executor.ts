@@ -13,7 +13,9 @@ import {
   type CheckedTransitionFn,
   type ResumeExecutionOptions,
   gatesWithStableKeys,
+  resolveMaxReworkAttempts,
 } from './workflow-runtime.js';
+import { reworkNodeIdFor } from './execution-plan.js';
 import type { LeaseService } from './lease-service.js';
 import { RecoverableLeaseError } from './lease-service.js';
 import {
@@ -216,6 +218,13 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       //    执行，否则产物不存在，跳过 agent 没有意义，直接拒绝入参。
       if (resumeOptions?.gatesOnly) {
         if (!completedAgentRun) {
+          // resumeRun 入口已把 run 置 running；拒绝时必须回写 blocked，
+          // 否则工作流行谎报 running（与 fail-fast 分支同一守护）。
+          await repositories.updateWorkflowInstanceStatusIfActive(
+            runId,
+            'blocked',
+            node.id,
+          );
           throw new Error(
             `GATES_ONLY_NO_AGENT_RUN: 节点 ${node.id} 没有已完成的 agent 执行，不能只重跑门禁；请去掉 --gates-only 后恢复。`,
           );
@@ -280,14 +289,80 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
                 attempt: trigger.attempt,
               },
             });
-            await reworkHandler.attemptHumanRejectionRework(runId, {
-              reviewNode: node,
-              gate: trigger.gate,
-              gateResult: trigger.gateResult,
-              targetNodeId: trigger.targetNodeId,
-              attempt: trigger.attempt,
-              feedbackNote: trigger.feedbackNote,
+            // 与 gate-runner 的 changes-requested 路径同形状发返工意图事件：
+            // 完整性校验靠 gate.rework.attempt 与 attemptRework 第一步的
+            // gate.rework.needs-revision 配对，才会授权动态返工节点；缺了它，
+            // 下一次 resume 必然 nodes.unproven。reworkNodeId 用同一推导函数
+            // 保证与校验器算出的 id 一致。
+            await audit.append({
+              runId,
+              type: 'gate.rework.attempt',
+              payload: {
+                nodeId: node.id,
+                reviewNodeId: node.id,
+                targetNodeId: trigger.targetNodeId,
+                reworkNodeId: reworkNodeIdFor(
+                  trigger.targetNodeId,
+                  trigger.attempt,
+                  trigger.gateResult.id,
+                ),
+                attempt: trigger.attempt,
+                maxAttempts: resolveMaxReworkAttempts(trigger.gate.maxRetries),
+                gateResultId: trigger.gateResult.id,
+              },
             });
+            try {
+              await reworkHandler.attemptHumanRejectionRework(runId, {
+                reviewNode: node,
+                gate: trigger.gate,
+                gateResult: trigger.gateResult,
+                targetNodeId: trigger.targetNodeId,
+                attempt: trigger.attempt,
+                feedbackNote: trigger.feedbackNote,
+              });
+            } catch (error) {
+              // 与门禁 catch 对称的失败收敛：作业取消/关停走终止路径；真实
+              // 错误把节点与工作流收敛为 interrupted（attemptRework 内部可
+              // 能已把本节点置 interrupted，先重读避免非法二次转换），不留
+              // running 假象，resume 可从 interrupted 状态恢复。
+              if (await stopAbortedGateExecution()) {
+                await audit.append({
+                  runId,
+                  type: 'node.human-rework.interrupted',
+                  payload: {
+                    nodeId: node.id,
+                    reason: isJobOwnershipLostAbort(deps.signal)
+                      ? 'ownership-lost'
+                      : isJobShutdownAbort(deps.signal)
+                        ? 'shutdown'
+                        : 'cancelled',
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  },
+                });
+                return false;
+              }
+              const latestNode = await repositories.getNode(node.id);
+              if (latestNode && latestNode.status !== 'interrupted') {
+                await repositories.transitionNode(node.id, 'interrupted');
+              }
+              await repositories.updateWorkflowInstanceStatusIfActive(
+                runId,
+                'interrupted',
+                node.id,
+              );
+              await audit.append({
+                runId,
+                type: 'node.human-rework.failed',
+                payload: {
+                  nodeId: node.id,
+                  error:
+                    error instanceof Error ? error.message : String(error),
+                  ...agentFailureAuditPayload(error),
+                },
+              });
+              return false;
+            }
             // 返工已把节点置为 awaiting-gate，直接进入门禁恢复路径，
             // 跳过整个 agent 执行段。
             current.status = 'awaiting-gate';

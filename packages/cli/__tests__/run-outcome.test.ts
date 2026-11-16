@@ -79,4 +79,21 @@ describe('run outcome output', () => {
     expect(lines[1]).toBe('  下一步: 执行 tekon resume --run-id run_1 重试；任务确实需要更久时，用更大的 --timeout-ms 重新执行 tekon run');
     expect(lines[1]!.match(/tekon resume/gu)).toHaveLength(1);
   });
+
+  it('renders the deterministic-block reason and its next step for a fail-fast blocked run', () => {
+    expect(
+      runOutcomeDetails({
+        status: 'blocked',
+        runId: 'run_1',
+        failure: {
+          kind: 'deterministic-block',
+          message: '门禁绑定的检查命令仍缺失（missing-command），在配置修复前重跑 agent 必然再次失败。',
+          hint: '在 .tekon/repo-profile.yaml 的 commands.build 下补全工具命令，然后恢复运行；要让本运行直接采用新配置，使用 tekon resume --rebind。',
+        },
+      }),
+    ).toEqual([
+      '  原因: 门禁绑定的检查命令仍缺失（missing-command），在配置修复前重跑 agent 必然再次失败。',
+      '  下一步: 在 .tekon/repo-profile.yaml 的 commands.build 下补全工具命令，然后恢复运行；要让本运行直接采用新配置，使用 tekon resume --rebind。',
+    ]);
+  });
 });

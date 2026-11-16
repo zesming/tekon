@@ -253,6 +253,59 @@ describe('审计授权的 rework / repair 派生图', () => {
   });
 });
 
+describe('human 返工的模板声明授权', () => {
+  async function humanFixture() {
+    const db = openTekonDatabase({ filename: ':memory:' }); openDbs.push(db); migrateDatabase(db);
+    const repositories = createRepositories(db); const audit = createAuditLogger({ repositories });
+    const now = new Date().toISOString(); const runId = 'human-integrity-run';
+    const template = parseWorkflowTemplate({ id: 'human-integrity', phases: [
+      { id: 'dev', nodes: [
+        { id: 'source', role: 'rd', gates: [] },
+        { id: 'other', role: 'rd', gates: [] },
+      ] },
+      { id: 'review', dependsOn: ['dev'], nodes: [
+        { id: 'reviewer', role: 'reviewer', gates: [{ type: 'human', requiresHumanApproval: true, reworkTargetNodeId: 'source' }], dependsOn: ['source'] },
+      ] },
+    ] });
+    const canonical = projectRunPlan(template);
+    await repositories.createProject({ id: 'p', name: 'p', repoPath: '/tmp/integrity', createdAt: now });
+    await repositories.createDemand({ id: 'd', title: 'd', body: 'd', createdAt: now });
+    await repositories.createWorkflowInstance({ id: runId, projectId: 'p', demandId: 'd', status: 'blocked', planSnapshot: canonicalJson(canonical), planDigest: canonical.digest, createdAt: now, updatedAt: now });
+    const plan = templateToPlan(template, runId); await persistPlan(runId, plan, repositories);
+    await audit.append({ runId, type: 'run.started', payload: {} });
+    const review = plan.phases[1].nodes[0];
+    const source = plan.phases[0].nodes[0];
+    const other = plan.phases[0].nodes[1];
+    const result = await repositories.recordGateResult({
+      id: 'human-result-1', runId, nodeId: review.id, gateType: 'human',
+      gateKey: review.gates[0].gateKey, status: 'failed',
+      failureClassification: 'human-rejected', durationMs: 0, retries: 0, createdAt: now,
+    });
+    async function emitPair(targetNodeId: string) {
+      const nodeId = reworkNodeIdFor(targetNodeId, 1, result.id);
+      const payload = { reviewNodeId: review.id, targetNodeId, gateResultId: result.id, attempt: 1, reworkNodeId: nodeId };
+      await audit.append({ runId, type: 'gate.rework.needs-revision', payload });
+      await audit.append({ runId, type: 'gate.rework.attempt', payload });
+      return nodeId;
+    }
+    return { repositories, audit, runId, review, source, other, verify: () => validateAndBuildExecutionPlan(runId, repositories, audit), emitPair };
+  }
+
+  it('拒绝目标与模板 reworkTargetNodeId 不一致的 human 返工', async () => {
+    const f = await humanFixture();
+    await f.emitPair(f.other.id);
+    await expect(f.verify()).rejects.toThrow(
+      'PLAN_VERIFICATION_FAILED: rework.humanTarget',
+    );
+  });
+
+  it('接受目标等于模板声明的 human 返工', async () => {
+    const f = await humanFixture();
+    await f.emitPair(f.source.id);
+    await expect(f.verify()).resolves.toBeTruthy();
+  });
+});
+
 describe('历史计划严格兼容边界', () => {
   // 基线 canonicalJson 会递归删除 digest；真实持久快照本身不含 digest。
   const legacySnapshot = '{"agent":"codex","gates":[],"phases":[{"id":"dev","name":"Development","nodeIds":["source"],"parallel":false}],"requiresUnrestrictedNetwork":false,"roleChain":["rd"],"templateId":"legacy","templateVersion":1}';

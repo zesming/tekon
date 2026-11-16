@@ -80,7 +80,13 @@ export async function runCommandGate(
         : `command blocked for approval: ${result.decisionId}`;
     writeFileSync(outputPath, output, 'utf8');
     status = result.status === 'blocked-for-approval' ? 'blocked' : 'failed';
-    failureClassification = result.status;
+    // spawn 前取消也走 rejected 状态，但它是生命周期事件而非策略裁决：
+    // 归类为 cancelled（resume fail-fast 白名单外），避免把取消误判为
+    // “策略仍拒绝”的确定性失败。
+    failureClassification =
+      result.status === 'rejected' && result.cancelled
+        ? 'cancelled'
+        : result.status;
   }
 
   return {

@@ -492,6 +492,15 @@ async function validateExecutionPlan(
     if (!authorizedRework) {
       verificationFailed('rework.gateResult');
     }
+    // 纵深防御：human 返工的目标必须等于模板在该 human gate 上声明的
+    // reworkTargetNodeId（run-scoped 后比较），防止破坏审计链后伪造目标。
+    if (
+      gate.type === 'human' &&
+      (!gate.reworkTargetNodeId ||
+        payload.targetNodeId !== scopedId(runId, gate.reworkTargetNodeId))
+    ) {
+      verificationFailed('rework.humanTarget');
+    }
     const count = attempt(payload.attempt, resolveMaxReworkAttempts(gate.maxRetries));
     const derived = deriveReworkNode(target, review.id, count, result.id);
     const key = canonicalJson([review.id, target.id, result.id, count]);
