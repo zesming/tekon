@@ -162,8 +162,62 @@ describe('open role/artifact naming and node prompt (PD-06)', () => {
     ).toThrow(/artifact|identifier|type/u);
   });
 
-  it('still accepts every built-in role and artifact type', () => {
-    const template = parseWorkflowTemplate({
+  it('rejects delivery-reserved artifact types as node outputs at parse time', () => {
+    expect(() =>
+      parseWorkflowTemplate({
+        id: 'reserved-output',
+        version: 1,
+        governance: 'none',
+        phases: [
+          {
+            id: 'p1',
+            nodes: [
+              {
+                id: 'n1',
+                role: 'pmo',
+                outputs: [{ id: 'ci', type: 'ci-status' }],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/reserved|delivery/u);
+
+    expect(() =>
+      normalizeExecutableTemplate({
+        id: 'reserved-output-exec',
+        name: 'reserved-output-exec',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'p1',
+            dependsOn: [],
+            parallel: false,
+            nodes: [
+              {
+                id: 'n1',
+                role: 'pmo',
+                inputs: [],
+                outputs: [{ id: 'ci', type: 'ci-status' }],
+                gates: [],
+                dependsOn: [],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/reserved|delivery/u);
+  });
+
+  it('still accepts every built-in role and artifact type', () => {    const template = parseWorkflowTemplate({
       id: 'built-ins',
       version: 1,
       phases: [

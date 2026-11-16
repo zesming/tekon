@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  createArtifactStore,
   createCommandGateway,
   createGateEngine,
   createRepositories,
@@ -320,6 +321,84 @@ describe('gate registry', () => {
       expect(def.metadata.commandLike).toBe(false);
       expect(def.metadata.humanBlocking).toBe(false);
     }
+    db.close();
+  });
+
+  // PD-06：legacy registry runner 对自定义角色同样 fail-closed，
+  // 与现役 gate engine 的角色作用域语义保持一致（CD-16 删除前的守护）。
+  it('fails role-scope for custom roles through the registry runner', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-registry-custom-role-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    await repositories.createNode({
+      id: 'writer_review',
+      runId: 'run_1',
+      role: 'writer',
+      status: 'running',
+      gates: [],
+      dependencies: ['node_1'],
+      createdAt: '2026-06-15T00:00:00.000Z',
+      updatedAt: '2026-06-15T00:00:00.000Z',
+    });
+    // legacy runner 先要求节点存在已完成的同角色 role run。
+    await repositories.createRoleRun({
+      id: 'role_run_writer',
+      runId: 'run_1',
+      nodeId: 'writer_review',
+      role: 'writer',
+      status: 'passed',
+      startedAt: '2026-06-15T00:00:00.100Z',
+      completedAt: '2026-06-15T00:00:00.200Z',
+    });
+    const store = createArtifactStore({ repoPath, repositories });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'writer_review',
+      type: 'technical-review',
+      content: JSON.stringify({
+        title: 'Custom role review',
+        body: 'A custom role cannot hold built-in review scopes.',
+        reviewScope: 'technical-design',
+        reviewProcess: {
+          mode: 'independent-agent',
+          reviewerId: 'rd-agent-1',
+          // 枚举只接受内置角色；与节点角色 writer 不一致，runner 在作用域
+          // 检查前后均须拒绝（role-mismatch 或 role-scope-violation）。
+          reviewerRole: 'rd',
+          targetNodeId: 'node_1',
+          targetRole: 'rd',
+        },
+        decision: 'approved',
+      }),
+    });
+
+    const registry = createBuiltInGateRegistry({ repositories });
+    const engine = createGateEngine({ repositories, registry });
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'writer_review',
+      gate: { type: 'role-scope', artifactType: 'technical-review' },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'role-scope',
+      status: 'failed',
+    });
+    expect(result.failureClassification).toMatch(
+      /role-scope-violation|role-mismatch/u,
+    );
     db.close();
   });
 });

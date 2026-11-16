@@ -95,13 +95,15 @@ export async function commandRole(
     }
 
     // PD-06：自定义角色名，生成最小脚手架，用户在 system.md 里写职责。
+    // 先解析并校验目标路径，再创建角色目录（与内置复制路径同序）。
     const repoRolesDir = join(repoPath, '.tekon', 'roles');
-    mkdirSync(target, { recursive: true });
+    mkdirSync(repoRolesDir, { recursive: true });
     const resolvedRolesDir = realpathSync(repoRolesDir);
     const resolvedTarget = resolve(resolvedRolesDir, roleId);
     if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
       throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
     }
+    mkdirSync(resolvedTarget, { recursive: true });
     writeFileSync(
       join(resolvedTarget, 'agent.yaml'),
       [`role: ${role}`, `name: ${role}`, ''].join('\n'),

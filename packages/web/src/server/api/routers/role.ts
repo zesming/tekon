@@ -1,5 +1,7 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { listRoleIds } from '@tekon/core';
 
 import type { ServerContext } from '../context.js';
 
@@ -19,13 +21,14 @@ function listRoles(
     return [];
   }
 
-  return readdirSync(rolesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const systemPath = join(rolesDir, entry.name, 'system.md');
+  // 与 CLI/core 入口一致：只列 kebab-case 标识符角色，忽略 .DS_Store 等
+  // 非标识符目录（PD-06 开放命名的入口一致性）。
+  return listRoleIds(rolesDir)
+    .map((id) => {
+      const systemPath = join(rolesDir, id, 'system.md');
       return {
-        id: entry.name,
-        name: entry.name.toUpperCase(),
+        id,
+        name: id.toUpperCase(),
         hasSystemPrompt: existsSync(systemPath),
       };
     })

@@ -15,6 +15,7 @@ import {
   type AgentRunInput,
   type AgentRunResult,
 } from '../../src/index.js';
+import { planFromRepository } from '../../src/workflow/execution-plan.js';
 
 // PD-06 子项 2：节点级 prompt 从模板经执行计划落库，并进入 agent 提示词。
 describe('node-level prompt propagation (PD-06)', () => {
@@ -120,6 +121,14 @@ describe('node-level prompt propagation (PD-06)', () => {
       expect(persisted).toBeDefined();
       expect(persisted!.prompt).toBe(nodeInstruction);
       expect(persisted!.role).toBe('writer');
+
+      // 跨进程 resume 的重建路径（无快照时从仓库行还原）必须保留 prompt，
+      // 否则新引擎实例重跑会拿到与首跑不同的提示词。
+      const rebuiltPlan = await planFromRepository(result.runId, repositories);
+      const rebuiltNode = rebuiltPlan.phases
+        .flatMap((phase) => phase.nodes)
+        .find((node) => node.id.endsWith('summary-node'));
+      expect(rebuiltNode?.prompt).toBe(nodeInstruction);
     } finally {
       db.close();
     }

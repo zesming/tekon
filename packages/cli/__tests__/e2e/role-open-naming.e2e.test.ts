@@ -67,6 +67,11 @@ describe('tekon role open naming through a real CLI process', () => {
     expect(showWriter.status, showWriter.stdout + showWriter.stderr).toBe(0);
     expect(showWriter.stdout).toContain('role=writer');
 
+    // 同名重复创建必须被拒绝，不能覆盖已有角色目录。
+    const duplicate = cli(repo, ['role', 'create', 'writer']);
+    expect(duplicate.status).not.toBe(0);
+    expect(duplicate.stderr + duplicate.stdout).toMatch(/已存在|exists/u);
+
     // 非 kebab-case 标识符必须被拒绝并给出格式指引。
     // 含空格：先命中通用名称护栏；大写：通过名称护栏后命中角色标识符护栏。
     const spacedId = cli(repo, ['role', 'create', 'Senior Writer']);

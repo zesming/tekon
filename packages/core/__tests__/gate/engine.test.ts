@@ -449,6 +449,70 @@ describe('gate engine', () => {
     db.close();
   });
 
+  // PD-06：自定义角色没有内置评审作用域，现役 role-scope 门禁必须 fail-closed。
+  it('fails role-scope gates for custom roles that have no built-in review scopes', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-custom-role-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories, repoPath);
+    await repositories.createNode({
+      id: 'writer_review',
+      runId: 'run_1',
+      role: 'writer',
+      status: 'running',
+      gates: [],
+      dependencies: ['node_1'],
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+    });
+    const store = createArtifactStore({ repoPath, repositories });
+    await store.writeArtifact({
+      runId: 'run_1',
+      nodeId: 'writer_review',
+      type: 'technical-review',
+      content: JSON.stringify({
+        title: 'Custom role review',
+        body: 'A custom role cannot hold built-in review scopes.',
+        reviewScope: 'technical-design',
+        reviewProcess: {
+          mode: 'independent-agent',
+          reviewerId: 'writer-agent-1',
+          // 内置枚举仍合法；role-scope 的作用域检查先于 reviewerRole 匹配，
+          // 自定义节点角色 writer 没有任何内置作用域，应在此处被拒。
+          reviewerRole: 'rd',
+          targetNodeId: 'node_1',
+          targetRole: 'rd',
+        },
+        decision: 'approved',
+      }),
+    });
+
+    const engine = createGateEngine({ repositories });
+    const result = await engine.runGate({
+      runId: 'run_1',
+      nodeId: 'writer_review',
+      gate: { type: 'role-scope', artifactType: 'technical-review' },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.tekon', 'runs', 'run_1', 'gates'),
+      policy: {
+        allow: [],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+
+    expect(result).toMatchObject({
+      gateType: 'role-scope',
+      status: 'failed',
+      failureClassification: 'role-scope-violation',
+    });
+    db.close();
+  });
+
   it('rejects independent review artifacts without a completed reviewer role run', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-gate-review-run-'));
     tempDirs.push(repoPath);

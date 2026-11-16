@@ -9,6 +9,7 @@ import {
   artifactTypeSchema,
   commandInvocationSchema,
   gateTypeSchema,
+  RESERVED_ARTIFACT_TYPES,
   roleSchema,
   type ArtifactType,
   type CommandInvocation,
@@ -391,6 +392,7 @@ export function normalizeExecutableTemplate(input: unknown): WorkflowTemplate {
       if (node.inputs.some(input => !outputs.get(input.fromNodeId)?.some(output => output.type === input.type))) {
         throw new Error(`INVALID_WORKFLOW_TEMPLATE: ${path}.inputs`);
       }
+      assertNoReservedOutputs(node.id, node.outputs);
       const effectiveKeys = node.gates.map((gate, index) => gate.gateKey ?? stableGateKey(gate, index));
       if (new Set(effectiveKeys).size !== effectiveKeys.length) {
         throw new Error(`INVALID_WORKFLOW_TEMPLATE: ${path}.gates`);
@@ -452,6 +454,7 @@ function normalizeWorkflowTemplate(
       );
       const outputs = rawNode.outputs.map((output) => parseArtifactRef(output));
       assertNoDuplicateNodeOutputIds(outputs, rawNode.id);
+      assertNoReservedOutputs(rawNode.id, outputs);
 
       for (const output of outputs) {
         const owner = phaseOutputIds.get(output.id);
@@ -699,6 +702,23 @@ function assertNoDuplicateNodeOutputIds(
       );
     }
     seen.add(output.id);
+  }
+}
+
+// 交付保留类型（如 ci-status）由 Tekon 交付机制自产，模板节点不得声明为产物，
+// 在解析期直接拒绝，避免运行期才出现晦涩的 manifest 错误。
+function assertNoReservedOutputs(
+  nodeId: string,
+  outputs: WorkflowArtifactOutputRef[],
+): void {
+  for (const output of outputs) {
+    if (
+      (RESERVED_ARTIFACT_TYPES as readonly string[]).includes(output.type)
+    ) {
+      throw new Error(
+        `Node "${nodeId}" cannot declare reserved artifact type "${output.type}": it is produced by Tekon delivery, not by workflow nodes`,
+      );
+    }
   }
 }
 

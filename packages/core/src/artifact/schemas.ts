@@ -772,7 +772,7 @@ function normalizeReviewFinding(entry: unknown): unknown {
 }
 
 function isRole(value: string): value is z.infer<typeof roleSchema> {
-  return ['pm', 'rd', 'qa', 'reviewer', 'pmo'].includes(value);
+  return (BUILT_IN_ROLE_IDS as readonly string[]).includes(value);
 }
 
 function normalizeCodeChangesPayload(payload: unknown): unknown {

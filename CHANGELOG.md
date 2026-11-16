@@ -5,6 +5,8 @@
 - 工作流角色和产物类型开放命名（PD-06 子项 1–3）：模板里的 `role` 和产物 `type` 不再限制在内置枚举，任何 kebab-case 标识符（如 `writer`、`essay`、`weekly-report`）都能声明并在节点间传递；内置研发角色和 21 种内置产物保留专用校验，自定义产物类型回落通用 Markdown payload 校验（仍要求非空 title/body）。`ci-status` 改为显式的交付保留类型，agent 产物清单继续拒绝声明，安全边界从“枚举漏配的意外保护”变为明确规则。
 - 节点支持自带 `prompt` 字段：模板节点可声明提示词，经执行计划落库到 nodes 表（新增可空 `prompt` 列，旧库自动加列），运行时注入该节点的 agent 提示词，resume 后保持一致。
 - 角色管理放开自定义名字（PD-10 角色名部分）：`tekon role create <name>` 对非内置名字生成最小角色脚手架（agent.yaml + system.md），内置角色仍走整目录复制；`tekon role show goal` 不再被 CLI 的枚举副本拒绝；`role list` 能列出项目目录下的自定义角色，非标识符目录忽略。角色 ID 必须是小写字母开头的 kebab-case 标识符。
+- 返工一致性：声明了节点 `prompt` 的节点被 changes-requested 返工时，节点指令在同进程返工提示词、落库返工节点和 resume 重建计划三条路径保持一致，评审反馈在节点指令之上叠加；自定义角色在 role-scope 门禁上 fail-closed（现役引擎与 legacy registry 两套实现均有测试守护）。
+- 模板解析期直接拒绝把交付保留类型 `ci-status` 声明为节点产物，报错说明该类型由 Tekon 交付机制自产；Web 角色列表与 CLI 复用同一 kebab-case 标识符过滤，不再显示 `.DS_Store` 类非角色目录。
 
 ## 0.30.0 — 2026-11-13
 

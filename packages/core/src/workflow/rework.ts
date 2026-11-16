@@ -187,6 +187,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: targetNode.id,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
       inputs: targetInputs,
       outputs: (targetNode.outputs ?? []) as WorkflowArtifactOutputRef[],
       gates: (targetNode.gates ?? []) as WorkflowGateConfig[],
@@ -218,6 +219,11 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         demand.body,
         '',
         `Rework node ${targetNode.id} after independent review found changes-requested.`,
+        // 与 resume 路径的 buildNodePrompt 对齐：节点指令在返工中仍然生效，
+        // 评审反馈在其基础上叠加，避免同进程/跨进程提示词分叉。
+        targetNode.prompt
+          ? ['Node instruction (template-authored, still applies):', targetNode.prompt].join('\n')
+          : '',
         priorNodeLines.length > 0
           ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
           : 'Prior workflow nodes: none.',
@@ -323,6 +329,8 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: targetNode.id,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      // 保留模板声明的节点指令，使同进程返工与 resume 重建的提示词一致。
+      ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
       inputs: targetInputs,
       outputs: targetOutputs,
       gates: targetGates,
@@ -332,6 +340,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: derived.id,
       runId,
       role: derived.role,
+      ...(derived.prompt ? { prompt: derived.prompt } : {}),
       status: 'pending',
       inputs: derived.inputs,
       outputs: derived.outputs,
@@ -381,6 +390,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
             id: reworkNodeId,
             role: targetNode.role,
             phaseId: targetNode.phaseId,
+            ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
             inputs: targetInputs,
             outputs: targetOutputs,
             gates: targetGates,
