@@ -26,6 +26,22 @@ import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
 import { isJobCancellationAbort, isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
 
+/**
+ * CD-09 8b-3：识别“finalize 失败的可恢复中断”。该状态下 agent 与所有 Gate
+ * 都已完成、租约仍 active，节点最后一个自身事件是 worktree.lease.finalize.failed。
+ * resume 时应直接重试 finalize，而不是重跑 agent（旧实现每次 resume 都重跑，
+ * 用户无法走出去）。只认节点自身的最后事件，避免被后续其他节点事件污染。
+ */
+export function isRecoverableFinalizeInterrupt(
+  events: AuditEvent[],
+  nodeId: string,
+): boolean {
+  const lastNodeEvent = [...events]
+    .reverse()
+    .find((event) => event.payload?.nodeId === nodeId);
+  return lastNodeEvent?.type === 'worktree.lease.finalize.failed';
+}
+
 export interface NodeExecutorDeps {
   repositories: TekonRepositories;
   audit: AuditLogger;
@@ -116,6 +132,64 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       runId,
       node.id,
     );
+
+    // CD-09 8b-3：finalize 失败的可恢复中断。此时 agent 与全部 Gate 都已
+    // 完成、租约仍 active，节点最后自身事件是 worktree.lease.finalize.failed。
+    // resume 直接重试 finalize，绝不重跑 agent——修复旧实现“每次 resume 都
+    // 重跑 agent、用户走不出去”的缺陷。
+    if (
+      current.status === 'interrupted' &&
+      resumableLease &&
+      !resumableLease.releasedAt &&
+      isRecoverableFinalizeInterrupt(
+        await repositories.listAuditEvents(runId),
+        node.id,
+      )
+    ) {
+      if (deps.signal?.aborted) return false;
+      await checkedTransitionNode(
+        runId,
+        node.id,
+        'running',
+        'node.transition.checked',
+        { fromStatus: 'interrupted' },
+      );
+      await repositories.updateWorkflowInstanceStatusIfActive(
+        runId,
+        'running',
+        node.id,
+      );
+      await audit.append({
+        runId,
+        type: 'node.resumed-finalize',
+        payload: { nodeId: node.id, role: node.role },
+      });
+      try {
+        await leaseService.finalizeExecutionLease(runId, node.id);
+      } catch (error) {
+        // 用户尚未回滚改动：回到 interrupted 并再记一次失败，等待再次 resume。
+        await repositories.transitionNode(node.id, 'interrupted');
+        await repositories.updateWorkflowInstanceStatusIfActive(
+          runId,
+          'interrupted',
+          node.id,
+        );
+        await audit.append({
+          runId,
+          type: 'worktree.lease.finalize.failed',
+          payload: {
+            nodeId: node.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return false;
+      }
+      if (await stopAbortedGateExecution()) return false;
+      await checkedTransitionNode(runId, node.id, 'passed', 'node.passed');
+      await appendPmoNodeCheckpoint(runId, node);
+      return true;
+    }
+
     if (
       Boolean(resumableLease) &&
       current.status === 'running' &&
