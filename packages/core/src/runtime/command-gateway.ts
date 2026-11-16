@@ -91,7 +91,11 @@ export function createCommandGateway(
 
   return {
     async run(input) {
-      const rejection = validateCommand(input.command, input.cwd, input.policy);
+      const rejection = evaluateCommandPolicy(
+        input.command,
+        input.policy,
+        input.cwd,
+      );
       if (rejection) {
         return { status: 'rejected', reason: rejection };
       }
@@ -132,6 +136,18 @@ export function createCommandGateway(
       });
     },
   };
+}
+
+/**
+ * PD-04：单一命令裁决函数，Gateway 执行与 CLI preflight 共用同一判定，
+ * 避免"预检 resolved、运行时被拒"的双标。返回 null 表示放行，否则为拒绝原因。
+ */
+export function evaluateCommandPolicy(
+  command: CommandInvocation,
+  policy: CommandPolicy,
+  cwd: string,
+): string | null {
+  return validateCommand(command, cwd, policy);
 }
 
 function validateCommand(

@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
 import { createIsolatedBinDir, writeFakeCodex } from './helpers/fake-provider.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
@@ -1586,5 +1587,6 @@ function createFixtureRepo(tempDirs: string[]) {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

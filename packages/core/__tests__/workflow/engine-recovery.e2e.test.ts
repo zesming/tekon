@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+import { writePermissiveRepoProfile } from '../helpers/repo-profile.js';
 
 import {
   createAuditLogger,
@@ -31,6 +32,7 @@ describe('workflow engine recovery e2e', () => {
   it('resumes an interrupted run from the interrupted node while preserving previous artifacts and audit chain', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-recovery-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -112,6 +114,7 @@ describe('workflow engine recovery e2e', () => {
     // the run to `interrupted`, breaking terminal-state monotonicity.
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -175,6 +178,7 @@ describe('workflow engine recovery e2e', () => {
     // owner is still executing (and later flip it, discarding real work).
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-plan-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -240,6 +244,7 @@ describe('workflow engine recovery e2e', () => {
     // pre-check the fence and stand down BEFORE any commit/promote side effect.
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-succ-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -372,6 +377,7 @@ describe('workflow engine recovery e2e', () => {
     // repair/exhausted writes must NOT revert the recovering owner's `passed`.
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-gate-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);

@@ -64,16 +64,28 @@ describe('已受理仓库检查的真实执行绑定', () => {
     expect((await f.repositories.listGateResults(prepared.runId)).map(result => result.status)).toEqual(['passed']);
   });
 
-  it.each(['missing', 'not-applicable'] as const)('已捕获%s后补入命令，不改变原执行决定', async status => {
+  it('已捕获 not-applicable 后补入命令，不改变原执行决定', async () => {
     const f = fixture();
-    f.writeProfile(status === 'missing' ? undefined : { notApplicable: true, reason: 'confirmed unavailable' });
+    f.writeProfile({ notApplicable: true, reason: 'confirmed unavailable' });
     const engine = createWorkflowEngine(f.options);
-    const prepared = await engine.prepareRun({ demandText: '绑定缺失和不适用', mode: 'template', workflowSpec: f.template });
+    const prepared = await engine.prepareRun({ demandText: '绑定不适用', mode: 'template', workflowSpec: f.template });
     f.writeProfile({ tool: 'npm', args: ['run', 'confirmed'] });
     await engine.executePreparedRun(prepared.runId);
     expect((await f.repositories.listGateResults(prepared.runId)).map(result => [result.status, result.failureClassification])).toEqual([
-      status === 'missing' ? ['failed', 'missing-command'] : ['skipped', 'not-applicable'],
+      ['skipped', 'not-applicable'],
     ]);
+  });
+
+  it('PD-04：新受理时 missing 的 commandRef 直接拒绝，不创建运行也不调用 agent', async () => {
+    const f = fixture();
+    f.writeProfile(undefined);
+    const engine = createWorkflowEngine(f.options);
+    const runAgent = vi.spyOn(f.options.adapter, 'runAgent');
+    await expect(
+      engine.prepareRun({ demandText: '绑定缺失被受理拦截', mode: 'template', workflowSpec: f.template }),
+    ).rejects.toThrow(/MISSING_REPO_COMMAND/u);
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(f.db.prepare('select count(*) as count from run_admissions').get()).toEqual({ count: 0 });
   });
 
   it('profile删除后，原requestId重放及真实执行仍使用受理事实', async () => {

@@ -7,7 +7,9 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
+  evaluateCommandPolicy,
   evaluateWorkflowSelection,
+  gateCommandPolicy,
   listWorkflowCatalog,
   loadRepoProfile,
   readDraftShapeFile,
@@ -127,11 +129,8 @@ export async function commandWorkflow(
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
         for (const gate of node.gates) {
-          const { guidance, commandText, status } = gateCommandStatus(
-            repoPath,
-            profile,
-            gate,
-          );
+          const { guidance, commandText, status, rejection } =
+            gateCommandStatus(repoPath, profile, gate);
           const fields = [
             `node=${node.id}`,
             `gate=${gate.type}`,
@@ -143,6 +142,9 @@ export async function commandWorkflow(
               ? `command=${commandText}`
               : 'command=',
           ];
+          if (rejection) {
+            fields.push(`rejection=${rejection}`);
+          }
           if (guidance?.status === 'not-applicable') {
             fields.push(`hint=${guidance.hint}`);
             fields.push(
@@ -270,12 +272,25 @@ export function gateCommandStatus(
   const repoCommandNotApplicable =
     guidance?.status === 'not-applicable' &&
     gate.type !== 'security-scan';
-  const status = !isCommandBackedGate
-    ? 'not-command-gate'
-    : repoCommandNotApplicable
-      ? 'not-applicable'
-      : commandText
-        ? 'resolved'
-        : 'missing';
-  return { guidance, commandText, status };
+  let status: string;
+  let rejection: string | null = null;
+  if (!isCommandBackedGate) {
+    status = 'not-command-gate';
+  } else if (repoCommandNotApplicable) {
+    status = 'not-applicable';
+  } else if (!commandText) {
+    status = 'missing';
+  } else if (command) {
+    // PD-04：preflight 与 Gateway 共用同一裁决函数，预检结果必须能预测
+    // 运行期是否放行，不再出现"预检 resolved、运行被 allow 策略拒绝"。
+    rejection = evaluateCommandPolicy(
+      command,
+      gateCommandPolicy(repoPath, gate),
+      repoPath,
+    );
+    status = rejection ? 'rejected' : 'resolved';
+  } else {
+    status = 'resolved';
+  }
+  return { guidance, commandText, status, rejection };
 }

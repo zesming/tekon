@@ -171,6 +171,24 @@ export function defaultCommandPolicy(repoPath: string): CommandPolicy {
   };
 }
 
+/**
+ * PD-04：门禁命令策略。基线 allow 之外，把该门禁将要执行的用户手写命令
+ * （模板内联 command 或 repo-profile 绑定后物化的 command）加入授权。
+ * 危险删除、force push、网络、shell 元字符等固定拒绝规则仍在 Gateway
+ * 裁决层先行生效，授权不会绕过这些规则。
+ */
+export function gateCommandPolicy(
+  repoPath: string,
+  gate: Pick<WorkflowGateConfig, 'command'>,
+): CommandPolicy {
+  const baseline = defaultCommandPolicy(repoPath);
+  const authorized = gate.command ? [gate.command] : [];
+  return {
+    ...baseline,
+    allow: [...baseline.allow, ...authorized],
+  };
+}
+
 export function defaultBuiltInRolesDir(): string {
   const fromModule = resolve(
     dirname(fileURLToPath(import.meta.url)),

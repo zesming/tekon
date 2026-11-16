@@ -154,8 +154,9 @@ tekon workflow preflight
 
 | 状态 | 含义 |
 | --- | --- |
-| `resolved` | 已解析检查命令，尚不代表命令执行成功 |
-| `missing` | 缺少命令，需补充仓库配置 |
+| `resolved` | 已解析检查命令且通过命令策略裁决，预检与运行期使用同一判定 |
+| `rejected` | 命令已解析但被命令策略拒绝（如 shell 元字符、网络命令、危险删除），原因见 `rejection=` 字段 |
+| `missing` | 缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例 |
 | `not-applicable` | 已显式声明不适用 |
 | `not-command-gate` | 语义 Gate，不需要外部命令 |
 

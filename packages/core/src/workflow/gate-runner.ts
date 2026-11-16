@@ -20,7 +20,7 @@ import {
 import {
   type CheckedTransitionFn,
   type ExecutableNode,
-  defaultCommandPolicy,
+  gateCommandPolicy,
   gatesWithStableKeys,
   isChangesRequested,
   resolveMaxReworkAttempts,
@@ -118,7 +118,8 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
       cwd,
       artifactRoot: repoPath,
       outputDir: join(repoPath, dataDir, 'runs', runId, 'gates'),
-      policy: defaultCommandPolicy(cwd),
+      // PD-04：用户手写/绑定到该门禁的命令加入授权，其余仍走固定基线。
+      policy: gateCommandPolicy(cwd, resolvedGate),
     });
   }
 

@@ -25,6 +25,7 @@ import {
   type WorkflowInstance,
   type WorkflowTemplate,
 } from '../../src/index.js';
+import { writePermissiveRepoProfile } from '../helpers/repo-profile.js';
 
 // Start uses a real Engine and SQLite admission; lifecycle tests isolate only
 // execution so they can verify pause/resume/cancel without invoking a Provider.
@@ -47,6 +48,7 @@ interface TestEnv {
 function setup(): TestEnv {
   const projectRoot = mkdtempSync(join(tmpdir(), 'tekon-session-service-'));
   cleanup.push(() => rmSync(projectRoot, { recursive: true, force: true }));
+  writePermissiveRepoProfile(projectRoot);
   const db = openTekonDatabase({ filename: ':memory:' });
   cleanup.push(() => { db.close(); });
   migrateDatabase(db);

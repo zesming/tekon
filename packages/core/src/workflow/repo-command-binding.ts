@@ -68,8 +68,7 @@ export function normalizeRepoCommands(template: WorkflowTemplate, value: unknown
 }
 
 /** gateKey 必须在调用前按原模板确定；物化后没有动态 profile 回退入口。 */
-export function materializeBoundGate(gate: WorkflowGateConfig, entries: readonly BoundRepoCommand[]): WorkflowGateConfig {
-  const result = structuredClone(gate);
+export function materializeBoundGate(gate: WorkflowGateConfig, entries: readonly BoundRepoCommand[]): WorkflowGateConfig {  const result = structuredClone(gate);
   delete result.commandRef;
   if (gate.command || !gate.commandRef) return result;
   const entry = entries.find(item => item.commandRef === gate.commandRef);
@@ -90,4 +89,42 @@ export function commandBindingBehavior(gate: WorkflowGateConfig): CommandBinding
   if (!['build', 'test', 'lint', 'e2e-pass'].includes(gate.type)) return 'not-command-gate';
   if (gate.skipReason) return 'skip';
   return gate.command ? 'execute-command' : 'missing-command';
+}
+
+/**
+ * PD-04：新受理时必填 commandRef 缺失直接拒绝，不创建运行。
+ * not-applicable 是用户显式声明的合法跳过；security-scan 缺失命令时有
+ * 内置安全扫描兜底（commandBindingBehavior 归 builtin-security），不阻断；
+ * 历史冻结计划的执行不走受理路径，仍由 Gate 期分类兜底。
+ */
+export function assertNoMissingRepoCommands(
+  template: WorkflowTemplate,
+  entries: readonly BoundRepoCommand[],
+): void {
+  const fatalRefs = new Set(
+    template.phases.flatMap((phase) =>
+      phase.nodes.flatMap((node) =>
+        node.gates
+          .filter(
+            (gate) =>
+              gate.commandRef &&
+              !gate.command &&
+              gate.type !== 'security-scan',
+          )
+          .map((gate) => gate.commandRef as RepoProfileCommandName),
+      ),
+    ),
+  );
+  const missing = entries.filter(
+    (entry) => entry.status === 'missing' && fatalRefs.has(entry.commandRef),
+  );
+  if (missing.length === 0) return;
+  const refs = missing.map((entry) => entry.commandRef).join(', ');
+  throw new Error(
+    [
+      `MISSING_REPO_COMMAND: 工作流引用的仓库检查命令未配置: ${refs}。`,
+      `请在 .tekon/repo-profile.yaml 的 commands 下补全对应工具命令，或把该命令标记为 notApplicable。`,
+      `示例: commands: { ${missing[0]!.commandRef}: { tool: 'pnpm', args: ['run', '${missing[0]!.commandRef}'] } }`,
+    ].join(' '),
+  );
 }

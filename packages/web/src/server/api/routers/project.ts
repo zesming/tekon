@@ -360,6 +360,11 @@ export function createProjectRouter(
         if (planError instanceof Error && planError.message.startsWith('PLAN_')) {
           return new ApiError('BAD_REQUEST', `PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试 (requestId=${requestId})`);
         }
+        // PD-04：必填检查命令缺失是用户可修复的配置问题，返回 400 并带
+        // core 给出的修改指引，而不是泛化的 500 服务故障。
+        if (planError instanceof Error && planError.message.startsWith('MISSING_REPO_COMMAND:')) {
+          return new ApiError('BAD_REQUEST', `${planError.message} (requestId=${requestId})`);
+        }
         if (error instanceof RunAdmissionError && error.runId) {
           const identity = [
             `requestId=${requestId}`, `runId=${error.runId}`,

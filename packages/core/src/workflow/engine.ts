@@ -44,7 +44,10 @@ import {
   validateAndBuildExecutionPlan,
 } from './execution-plan.js';
 import type { RunPlan } from './run-plan.js';
-import { captureRepoCommands } from './repo-command-binding.js';
+import {
+  assertNoMissingRepoCommands,
+  captureRepoCommands,
+} from './repo-command-binding.js';
 import { passthroughEnvAuditPayload } from '../config/tekon-config.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
@@ -57,6 +60,7 @@ export {
   stableGateKey,
   makeSyntheticLease,
   defaultCommandPolicy,
+  gateCommandPolicy,
   defaultBuiltInRolesDir,
   resolveReviewTargetNodeByHeuristic,
   isChangesRequested,
@@ -400,6 +404,7 @@ export function createWorkflowEngine(
       name: input.templateName ?? (input.kind === 'goal' ? 'goal' : 'standard-delivery'),
     });
     const repoCommands = captureRepoCommands(settings.repoPath, workflowSpec);
+    assertNoMissingRepoCommands(workflowSpec, repoCommands);
     const prepared = buildRunPlan({ ...input, workflowSpec }, { ...settings, profile: input.profile ?? settings.profile, repoCommands });
     const runId = `run_${randomUUID()}`;
     const execution = runPlanToExecutionPlan(prepared.canonicalPlan, runId);

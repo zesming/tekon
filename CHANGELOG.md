@@ -10,6 +10,8 @@
 - 删除从未实现的 `parallel` 阶段字段（CD-24）：旧模板里残留的 `parallel` 键会被接受但忽略，解析结果、运行计划和发起页不再出现"并行阶段"标识，阶段始终按依赖顺序串行执行；节点级 `dependsOn` 不受影响。
 - reviewer 节点与 Gate 变为可选（PD-06 子项 4）：不再要求模板必须包含 reviewer，产出 `code-changes` 的节点也不再强制带 build/lint 门禁，治理约束完全由模板自身内容表达；旧的 `governance` 字段保留解析兼容但不再生效。内置交付模板的角色、产物和门禁不变。
 - 产品合同同步（PD-06 子项 5、CD-39）：AGENTS.md 把"角色/产物/Gate 是产品合同"改写为"内置模板的默认约束"，补全 core 模块描述；README 与产品范围文档去掉"固定流程/固定模板"表述，反映可自由定义的工作流模板。
+- 手写仓库命令视为授权（PD-04）：门禁要执行的用户手写命令（模板内联或 repo-profile 绑定）自动进入该门禁的命令授权，`python3`、`make` 等非 Node 仓库的工具不再被固定 allow-list 拒绝；shell 元字符、网络命令、递归强制删除、force push 等固定拒绝规则仍然先生效。新增共享裁决函数，CLI `workflow preflight` 与运行期 Gateway 使用同一判定，预检的 `rejected` 状态能准确预测运行期结果，不再"预检 resolved、运行被拒"。
+- 受理期阻断缺失命令（PD-04）：新运行所需的必填 `commandRef` 在 repo-profile 中缺失时，受理直接失败并给出补全或标记 `notApplicable` 的修改示例，不创建运行、不调用 agent（CLI 与 Web 均生效，Web 返回 400）；`security-scan` 缺失有内置扫描兜底，不阻断；历史冻结计划的执行语义不变。
 
 ## 0.30.0 — 2026-11-13
 

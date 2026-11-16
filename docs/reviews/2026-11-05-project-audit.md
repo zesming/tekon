@@ -107,7 +107,7 @@
 - 修复建议：`init` 探测 claude、codex，写入可用项。新增 `tekon doctor`，合并 provider 预检和 workflow preflight，覆盖全部 provider。经用户确认（2026-11-06）：API key 和订阅登录都要能用，并由各 agent 自己管理，所以预检两种情况都要覆盖，只检测和提示，不增加认证配置。run 前 fail-fast。默认不传 profile，由用户在配置里显式指定；适配器现在拒绝 `--profile`、`-c/--config` 这类用户参数（`codex-adapter.ts:360-431`），要由适配器翻译配置字段，并放开相应校验。Codex 的认证变量同样要透传（见 CD-01 现象）。
 
 ### [PD-04] 校验命令被硬编码白名单拒绝，preflight 却报 resolved
-- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已确认（合并 CD-07），另排（重构第 2 阶段）
+- 维度：产品、代码 | 严重度：S1 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：共享裁决函数统一 preflight/Gateway；用户手写命令推导授权，python3/make 等不再被拒；受理期 missing 直接 400 阻断并给修改示例；security 内置兜底不阻断；模型生成计划禁带命令字段留给 PD-09 批次 15）
 - 位置：packages/core/src/workflow/workflow-runtime.ts:156-171，packages/core/src/workflow/gate-runner.ts:119，packages/core/src/runtime/command-gateway.ts:177-183，packages/core/src/repo/profile.ts:18-25、327-347，docs/manual/tekon-user-manual.md:154、353
 - 现象：Python 仓库的 `repo-profile` 初始为 `commands: {}`，按提示写入 `tool: python3` 后 preflight 显示 `resolved`，运行却 blocked。配 `make` 同样 blocked，CLI exit 0。门禁日志只有 `command does not match allow policy`，提示 “Change the command or policy intentionally”，但没有 policy 入口。allow 固定为 git、pnpm、npm、claude、codex、dsh，手册未提。runner 只有 npm 或 pnpm（yarn、bun 也按 npm 处理）。无 package.json 时报 missing-command、blocked。
 - 依据：allow 列表不覆盖非 Node 工具，手册没有给出替代路径。`notApplicable` 手册有说明（§4.3、:353），它只跳过命令门禁，不跳过安全扫描和 schema 校验。7 个内置模板里 5 个带 build gate，只有 goal 和 plan-only 不带。standard-delivery 要跑完前 10 个节点和 rd-code-change 共 11 次 agent 调用才触发这个门禁，而 preflight 在开跑前就能知道。

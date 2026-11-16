@@ -11,6 +11,7 @@ import {
 } from '@tekon/core';
 
 import { runCli, type CliIO } from '../src/index.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 // A standard-delivery mock run creates the full role/gate chain and performs
 // real filesystem/Git setup. Five seconds is below observed CI variance; use a
@@ -191,5 +192,6 @@ function createFixtureRepo(tempDirs: string[]): string {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

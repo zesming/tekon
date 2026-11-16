@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 // M5/M8: terminal runs must fail loudly (exit 1 + Chinese message) instead of
 // the legacy behavior of printing the terminal status and exiting 0.
@@ -294,5 +295,6 @@ function createFixtureRepo(tempDirs: string[]): string {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

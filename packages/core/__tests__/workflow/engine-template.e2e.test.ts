@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+import { writePermissiveRepoProfile } from '../helpers/repo-profile.js';
 
 import {
   createAuditLogger,
@@ -27,6 +28,7 @@ describe('workflow engine template e2e', () => {
   it('creates durable run state before agent execution and completes the standard-feature template with mock agent', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-template-'));
     tempDirs.push(repoPath);
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
