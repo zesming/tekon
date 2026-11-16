@@ -4,7 +4,7 @@ Tekon 是本地 Agent workflow 框架。描述性文字默认中文，代码、�
 
 ## 目录与文档
 
-- `packages/core/`：workflow、provider、gate；`packages/cli/`：命令行；`packages/web/`：Dashboard。
+- `packages/core/`：workflow、provider、gate、session、delivery、db；`packages/cli/`：命令行；`packages/web/`：Dashboard。
 - [docs/README.md](docs/README.md) 是文档索引。现行事实维护在产品范围、交互设计、运行时合同和用户手册中；过程结论归并到这些固定文档，历史过程从 Git 查阅。
 - `docs/reviews/` 只保存正式验收、发布证据及用户要求归档的记录；`docs/research/` 保留有独立引用价值的外部调研。
 - 产品文档讲用户、价值、场景与边界；设计讲界面与交互；技术讲架构、选型、权衡和验证；手册讲操作、结果判断和限制。
@@ -13,7 +13,7 @@ Tekon 是本地 Agent workflow 框架。描述性文字默认中文，代码、�
 ## 授权与运行边界
 
 - 区分代码及验收证据支持的现有能力与长期方向。Tekon 的 push、创建 PR、合入、上线及高危动作保留人工控制；开发本仓库时，在用户已授权范围内完成工作，不重复索取同一授权。
-- 角色职责、artifact schema、Gate 和权限是产品合同。精简指令不可去掉这些边界；节点内执行按 artifact protocol，独立评审由外层工作流节点承担。
+- 角色、产物类型和节点提示词可在工作流模板与 `.tekon/roles/` 中自由命名和定义，reviewer 节点与 Gate 均为可选；角色职责、artifact schema、Gate 和权限边界是**内置模板的默认约束**，不是全局枚举合同。精简指令不可去掉这些内置约束；节点内执行按 artifact protocol，独立评审由外层工作流节点承担。
 - 不提交密钥、token、生产凭证或内部高权限 URL。外部能力与安全判断附资料链接，区分来源事实、基于代码/证据的推断和建议。
 
 ## 实现与验证

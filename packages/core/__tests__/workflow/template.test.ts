@@ -232,46 +232,7 @@ phases:
     });
   });
 
-  it('rejects missing reviewer, code nodes without build/lint, invalid artifact dependencies, and conflicting outputs', () => {
-    expect(() =>
-      parseWorkflowTemplate(`
-id: no-reviewer
-phases:
-  - id: code
-    nodes:
-      - id: rd-code
-        role: rd
-        outputs: [code-changes]
-        gates:
-          - type: build
-          - type: lint
-  - id: validation
-    nodes:
-      - id: qa-test
-        role: qa
-`),
-    ).toThrow(/reviewer/u);
-
-    expect(() =>
-      parseWorkflowTemplate(`
-id: missing-gates
-phases:
-  - id: code
-    nodes:
-      - id: rd-code
-        role: rd
-        outputs: [code-changes]
-  - id: validation
-    nodes:
-      - id: qa-test
-        role: qa
-  - id: review
-    nodes:
-      - id: reviewer-check
-        role: reviewer
-`),
-    ).toThrow(/build.*lint/u);
-
+  it('rejects invalid artifact dependencies and conflicting outputs', () => {
     expect(() =>
       parseWorkflowTemplate(`
 id: invalid-artifact-ref
@@ -329,10 +290,25 @@ phases:
     ).toThrow(/conflicting output/u);
   });
 
-  // 4b: `governance: none` is a WHITELIST exemption for lightweight goal runs.
-  // It must exempt ONLY the required-reviewer invariant, and must not leak to
-  // templates that omit the field (default 'standard').
-  it('allows a reviewer-less single-node template only when governance is none', () => {
+  // PD-06 子项 4：reviewer 和 Gate 是可选产品行为，治理由模板自身内容表达。
+  // governance 字段保留解析兼容但不再影响校验。
+  it('accepts a reviewer-less template without any governance override', () => {
+    const minimal = parseWorkflowTemplate(`
+id: minimal-task
+name: Minimal Task
+phases:
+  - id: goal
+    name: Goal
+    nodes:
+      - id: goal-execute
+        role: goal
+`);
+    expect(minimal.id).toBe('minimal-task');
+    expect(minimal.phases).toHaveLength(1);
+    expect(minimal.phases[0].nodes[0]).toMatchObject({ role: 'goal', gates: [] });
+  });
+
+  it('keeps accepting the legacy governance field as a no-op for old templates', () => {
     const goal = parseWorkflowTemplate(`
 id: goal
 name: Goal
@@ -345,26 +321,8 @@ phases:
         role: goal
 `);
     expect(goal.id).toBe('goal');
-    expect(goal.phases).toHaveLength(1);
-    expect(goal.phases[0].nodes[0]).toMatchObject({ role: 'goal', gates: [] });
-  });
 
-  it('still requires a reviewer node when governance is standard/omitted (exemption does not leak)', () => {
-    // Same shape as the goal template but WITHOUT the governance marker.
-    expect(() =>
-      parseWorkflowTemplate(`
-id: goal-without-marker
-phases:
-  - id: goal
-    nodes:
-      - id: goal-execute
-        role: goal
-`),
-    ).toThrow(/reviewer/u);
-
-    // An explicit governance: standard must also still enforce it.
-    expect(() =>
-      parseWorkflowTemplate(`
+    const standard = parseWorkflowTemplate(`
 id: standard-no-reviewer
 governance: standard
 phases:
@@ -372,8 +330,24 @@ phases:
     nodes:
       - id: rd-code
         role: rd
-`),
-    ).toThrow(/reviewer/u);
+`);
+    expect(standard.phases[0].nodes[0].role).toBe('rd');
+  });
+
+  it('allows code-producing nodes without build and lint gates', () => {
+    const template = parseWorkflowTemplate(`
+id: light-code
+phases:
+  - id: code
+    nodes:
+      - id: rd-code
+        role: rd
+        outputs: [code-changes]
+`);
+    expect(template.phases[0].nodes[0].outputs).toEqual([
+      { id: 'code-changes', type: 'code-changes' },
+    ]);
+    expect(template.phases[0].nodes[0].gates).toEqual([]);
   });
 
   it('loads the built-in goal template from disk', () => {

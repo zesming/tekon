@@ -123,7 +123,7 @@
 - 修复建议：默认维持冻结。resume 时检测配置差异并提示，`--rebind` 显式采用新配置。`status`、`resume` 输出阻塞原因和下一步，blocked 退出码为 2。修正 Triage 文案。绑定横幅改为只在配置有差异时显示（与 UI-15 同一处修复）。
 
 ### [PD-06] 非研发工作流只能借研发槽位表达，缺节点级 prompt 和自由产物类型
-- 维度：产品、代码 | 严重度：S1 | 工作量：L（拆子项） | 置信度：高（用 mock 或 stub 验证，真实 provider 未测） | 状态：部分修复（PR #37，v0.31.0：子项 1–3 已完成——枚举副本消除、角色/产物开放命名、节点 prompt、自定义角色脚手架；子项 4 reviewer/Gate 可选与子项 5 AGENTS.md/文档合同随批次 8 完成）
+- 维度：产品、代码 | 严重度：S1 | 工作量：L（拆子项） | 置信度：高（用 mock 或 stub 验证，真实 provider 未测） | 状态：已修复（PR #37，v0.31.0：五子项全部完成——枚举副本消除、节点 prompt、角色/产物开放命名、reviewer/Gate 可选、AGENTS.md/文档合同同步）
 - 位置：packages/core/src/types/domain.ts:5、34-56、59-72，packages/core/src/workflow/template.ts:155-186、468-470、502-504、700-715，packages/core/src/artifact/schemas.ts:21、158-180、218-239，packages/core/src/workflow/prompt-builder.ts:167、195、284、301-349、419-426，packages/core/src/role/loader.ts:24-37，packages/cli/src/commands/role.ts:42，AGENTS.md:16，README.md:5
 - 现象：`role: writer` 报枚举错误。`prompt:` 报 `Unrecognized key`。artifact 只能选 21 个研发枚举值，`essay` 报枚举错误。不带 reviewer 报 `Workflow template must include a reviewer node`。`listRoleIds` 按枚举过滤，自定义目录不可见。能跑的写法有两种：pm + reviewer 借用 `prd`、`review-report`，实际 prompt 是“Tekon PM 把需求整理为目标、非目标…”；或 `governance: none` + goal 节点。后者声明 inputs、outputs 后（如两 phase、`essay:prd`）能跑通，下游 prompt 含上游产物内容；不声明 outputs 时下游收不到内容。`role create pm` 后改 system.md，提示词生效。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（README:5 写“按固定流程分工”，AGENTS.md:16 把角色、artifact schema、Gate 明示为产品合同）。枚举散布：`roleSchema` 22 处 6 个文件，`artifactTypeSchema` 20 处 4 个文件，`gateTypeSchema` 9 处 3 个文件，artifact 字面量散落二十余个文件。真实缺陷：`role.ts:43` 缺 goal，`schemas.ts:218-239` 的枚举副本缺 ci-status，`governance: none` 只在 workflows/goal.yaml:4、9 出现，手册、README、产品和技术文档都没写。经用户确认（2026-11-06）：角色和产物自由命名，reviewer 和 Gate 可选，治理放进模板，同步改 AGENTS.md。
@@ -668,7 +668,7 @@
 - 修复建议：先放宽 schema（重构第 2 阶段，见 PD-06）或加上 agent 重试（把校验错误喂回去），再分批删除归一化。
 
 ### [CD-23] blocked 和 paused 的 CLI 退出码是 0，job 记为 done
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：parallel 字段与 UI 文案删除，旧键兼容忽略，dependsOn 保留）
 - 位置：packages/cli/src/lib/session-context.ts:341-348，packages/core/src/session/workflow-job-executor.ts:270-284
 - 现象：blocked 和 paused 的 CLI 都是 exit=0（实测）。
 - 依据：`exitCodeForWorkflowStatus` 只把 failed、cancelled、interrupted 映射为 1，session-context.ts:341-345 的注释表明这是有意的。
@@ -676,7 +676,7 @@
 - 修复建议：经用户确认（2026-11-06）：blocked=2，paused=3，同步更新手册和测试。
 
 ### [CD-24] `parallel` 是假能力：解析后仍串行执行，UI 却显示“并行阶段”
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：parallel 字段与 UI 文案删除，旧键兼容忽略，dependsOn 保留）
 - 位置：packages/core/src/workflow/engine.ts:528-529，packages/core/src/workflow/template.ts:170，:497，packages/core/src/workflow/run-plan.ts:43，:209，:274，packages/core/src/workflow/workflow-runtime.ts:30-36，packages/core/src/workflow/scheduler.ts，packages/web/src/client/lib/plan-format.ts:34-35，packages/web/src/client/components/runs/StartRunForm.tsx:580
 - 现象：执行是串行 for 循环。`parallel` 解析后进入计划，ExecutionPlan 丢弃，UI 显示“并行阶段”。`scheduler.ts` 只有测试和 index 引用。
 - 依据：`dependsOn` 不属于此问题：它只能引用已声明的节点或 phase，串行执行天然满足。节点级 dependsOn 还被 `gate/engine.ts:481-486` 用于评审连通性校验，被 `lease-service.ts:131-132` 用于 repair 校验。
@@ -684,7 +684,7 @@
 - 修复建议：删除 `parallel` 字段和 UI 文案，真需要时再实现。保留节点级 dependsOn，否则连通性校验会失效。
 
 ### [CD-25] 死代码：101 个导出没有外部生产使用方，其中 19 个完全无生产使用
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：parallel 字段与 UI 文案删除，旧键兼容忽略，dependsOn 保留）
 - 位置：均在 packages/core/src 下，清单见现象
 - 现象：101 个导出中，80 个在本文件内有使用，不算死代码。19 个只有测试或 index 引用：
   - constraint/dsl：loadConstraintRules
@@ -857,7 +857,7 @@
 - 修复建议：逐项小改；tsbuildinfo 加入 `.gitignore` 并移出跟踪；docs/reviews 证据是否迁出随 PD-27 决定。
 
 ### [CD-39] AGENTS.md 的“产品合同”和实际情况、目标基准都冲突
-- 维度：代码 | 严重度：S3 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S3 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.31.0：合同句改为内置模板的默认约束，core 描述补全，README/产品范围同步）
 - 位置：AGENTS.md:7，:16，docs/README.md:21
 - 现象：AGENTS.md:16 写“角色职责、artifact schema、Gate 和权限是产品合同”，而 docs/README.md:21 承认 tools.yaml 只是提示。AGENTS.md:7 对 core 的描述偏窄，没提 session、delivery 等。
 - 依据：见 PD-06、PD-10。

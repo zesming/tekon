@@ -2,7 +2,7 @@
 
 **把研发需求推进到可审阅的交付。**
 
-本地 Agent workflow 框架：按固定流程分工，在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
+本地 Agent workflow 框架：工作流模板可自由定义角色、产物和门禁（内置研发交付模板提供默认的分工与评审约束），在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
 
 [用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) · [文档索引](docs/README.md) · [产品范围](docs/product/tekon-current-product-scope.md) · [验收证据](docs/reviews/current.md) · [更新记录](CHANGELOG.md)
 

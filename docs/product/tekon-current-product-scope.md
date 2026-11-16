@@ -12,7 +12,7 @@ Tekon 面向需要把研发需求推进到可审阅交付材料的仓库维护�
 
 | 场景 | 用户操作与得到的结果 | 判断结果 |
 | --- | --- | --- |
-| 受控交付 Deliver | 默认 Web 入口或 `tekon run` 进入 `standard-delivery`；可选其他固定模板 | 审阅角色产物、Gate 和 diff；Run 通过不等于 PR/CI 已就绪 |
+| 受控交付 Deliver | 默认 Web 入口或 `tekon run` 进入 `standard-delivery`；可选其他内置或自定义模板 | 审阅角色产物、Gate 和 diff；Run 通过不等于 PR/CI 已就绪 |
 | 可靠发起 | 审阅执行计划、仓库检查和风险后提交；保存 Request ID | 同意图重试找回原 Run/Session/Job；已受理与已执行分别展示 |
 | 中断与恢复 | 暂停请求在活动步骤边界生效；取消记录意图并停止受管理执行；显式恢复原 Run | 查看持久状态、旧 Job 退出证据和当前恢复结果；未知退出需人工检查确认 |
 | 审批与交付 | 查看证据后批准 human gate；准备 PR 包；显式批准 push/创建 PR | 审批记录、实际运行状态、PR URL 和 CI 证据分别核对 |

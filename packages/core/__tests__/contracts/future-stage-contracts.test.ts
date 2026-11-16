@@ -55,14 +55,11 @@ function createGitRepo(): string {
 }
 
 describe('future-stage workflow contracts (placeholders)', () => {
-  // Contract 4 (refactor plan, stage 2): a minimal custom YAML workflow is
-  // created and runs to completion with queryable node status, and reviewer
-  // nodes/gates become optional product behavior instead of requiring the
-  // `governance: none` escape hatch (PD-06).
-  it.fails('contract 4 (stage 2): accepts a minimal template without reviewer or governance override', () => {
-    // Setup: the YAML itself parses as a raw template object today. The node
-    // carries build/lint gates so structural gate validation passes and the
-    // only blocker is the reviewer requirement.
+  // Contract 4 (refactor plan, stage 2 — delivered in PD-06 subitem 4):
+  // reviewer nodes and gates are optional product behavior. A minimal
+  // reviewer-less template validates without the `governance: none` escape
+  // hatch, and a code-producing node may omit build/lint gates.
+  it('contract 4 (stage 2): accepts a minimal template without reviewer or governance override', () => {
     const raw = {
       id: 'minimal-contract',
       version: 1,
@@ -86,13 +83,29 @@ describe('future-stage workflow contracts (placeholders)', () => {
         },
       ],
     };
-    expect(raw.phases).toHaveLength(1);
 
-    // Contract assertion (fails today): reviewer-less templates must validate
-    // without setting governance: 'none'. Current code throws
-    // "Workflow template must include a reviewer node".
     const template = parseWorkflowTemplate(raw);
     expect(template.phases[0]!.nodes[0]!.id).toBe('only-node');
+
+    // Gates are optional too: a code-producing node without build/lint parses.
+    const gateLess = parseWorkflowTemplate({
+      id: 'gates-optional-contract',
+      version: 1,
+      phases: [
+        {
+          id: 'dev',
+          name: 'Dev',
+          nodes: [
+            {
+              id: 'bare-node',
+              role: 'writer',
+              outputs: [{ id: 'essay', type: 'essay' }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(gateLess.phases[0]!.nodes[0]!.gates).toEqual([]);
   });
 
   // Contract 5 (refactor plan, stage 2): custom-role prompt, model and tool

@@ -183,12 +183,9 @@ const rawWorkflowTemplateSchema = z
     id: z.string().min(1),
     name: z.string().min(1).optional(),
     version: z.number().int().positive().default(1),
-    // 4b: governance mode. 'standard' (default) keeps every governance
-    // invariant (notably the required reviewer node). 'none' is a WHITELIST
-    // opt-out for lightweight `goal` runs (single agent node, optional gates);
-    // it exempts ONLY the reviewer-node requirement and nothing else. Existing
-    // delivery templates omit the field → 'standard' → unchanged.
-    governance: z.enum(['standard', 'none']).default('standard'),
+    // PD-06 子项 4：reviewer/Gate 已全部可选，治理只由模板自身的节点和门禁
+    // 表达。该字段保留仅为兼容旧模板（goal.yaml 等），解析后不产生任何效果。
+    governance: z.enum(['standard', 'none']).optional(),
     retry: workflowRetryPolicySchema.optional(),
     retryPolicy: workflowRetryPolicySchema.optional(),
     phases: z.array(rawPhaseSchema).min(1),
@@ -423,7 +420,6 @@ function normalizeWorkflowTemplate(
     }
   >();
 
-  let hasReviewer = false;
   const phases: WorkflowTemplatePhase[] = [];
 
   for (const rawPhase of rawTemplate.phases) {
@@ -472,11 +468,6 @@ function normalizeWorkflowTemplate(
         normalizeGate(gate, retryPolicy),
       );
       assertUniqueEffectiveGateKeys(gates, rawNode.id);
-      assertCodeProducerHasBuildAndLint(rawNode.id, outputs, gates);
-
-      if (rawNode.role === 'reviewer') {
-        hasReviewer = true;
-      }
 
       phaseNodes.push({
         id: rawNode.id,
@@ -506,10 +497,6 @@ function normalizeWorkflowTemplate(
       dependsOn: rawPhase.dependsOn,
       nodes: phaseNodes,
     });
-  }
-
-  if (!hasReviewer && rawTemplate.governance !== 'none') {
-    throw new Error('Workflow template must include a reviewer node');
   }
 
   return {
@@ -720,22 +707,5 @@ function assertNoReservedOutputs(
         `Node "${nodeId}" cannot declare reserved artifact type "${output.type}": it is produced by Tekon delivery, not by workflow nodes`,
       );
     }
-  }
-}
-
-function assertCodeProducerHasBuildAndLint(
-  nodeId: string,
-  outputs: WorkflowArtifactOutputRef[],
-  gates: WorkflowGateConfig[],
-) {
-  if (!outputs.some((output) => output.type === 'code-changes')) {
-    return;
-  }
-
-  const gateTypes = new Set(gates.map((gate) => gate.type));
-  if (!gateTypes.has('build') || !gateTypes.has('lint')) {
-    throw new Error(
-      `Code-producing node "${nodeId}" must include build and lint gates`,
-    );
   }
 }
