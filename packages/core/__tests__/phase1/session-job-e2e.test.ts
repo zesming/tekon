@@ -105,7 +105,6 @@ function singleNodeWorkflow() {
         id: 'rd',
         name: 'RD',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'rd-node',

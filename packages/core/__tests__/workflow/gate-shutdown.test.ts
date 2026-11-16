@@ -29,7 +29,7 @@ function fixture() {
   const gateEngine: GateEngine = { runGate: vi.fn(baseRunGate) };
   const spec: WorkflowTemplate = { id: 'gate-stop', name: 'Gate stop', version: 1,
     retryPolicy: { maxAttempts: 1, backoffMs: 0, strategy: 'fixed', onExhausted: 'fail' },
-    phases: [{ id: 'phase', name: 'Phase', dependsOn: [], parallel: false, nodes: [{ id: 'node', role: 'rd',
+    phases: [{ id: 'phase', name: 'Phase', dependsOn: [], nodes: [{ id: 'node', role: 'rd',
       inputs: [], outputs: [], dependsOn: [], gates: [{ type: 'build', autoFix: true, maxRetries: 2, onExhausted: 'fail' }] }] }] };
   const start = () => createWorkflowEngine({ repoPath: root, dataDir: '.tekon', repositories, audit,
     agentProvider: 'mock',

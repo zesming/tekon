@@ -93,7 +93,6 @@ describe('node-level prompt propagation (PD-06)', () => {
             id: 'writing',
             name: 'Writing',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'summary-node',

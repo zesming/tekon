@@ -43,7 +43,6 @@ describe('RunPlan v3 的完整确认绑定', () => {
     ['name', t => { t.name += '-v2'; }],
     ['version', t => { t.version++; }],
     ['retryPolicy', t => { t.retryPolicy.backoffMs++; }],
-    ['phase.parallel', t => { t.phases[0].parallel = !t.phases[0].parallel; }],
     ['phase.dependsOn', t => { t.phases[1].dependsOn = []; }],
     ['node.role', t => { t.phases[0].nodes[0].role = 'qa'; }],
     ['node.dependsOn', t => { t.phases[1].nodes[0].dependsOn = [t.phases[0].nodes[0].id]; }],

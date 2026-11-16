@@ -6,14 +6,13 @@ import {
   type RunPayload,
 } from '../../hooks/use-run-admission.js';
 import { AdmissionNotice } from './AdmissionNotice.js';
-import { PlanCommandBindings } from './PlanCommandBindings.js';
 import { usePlanCommandComparison } from '../../hooks/use-plan-command-comparison.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { authScope, queryKeys } from '../../lib/query-keys.js';
 import { preflightWarning } from '../../lib/preflight-warning.js';
-import { formatPhaseParallel } from '../../lib/plan-format.js';
+import { PlanCommandBindings } from './PlanCommandBindings.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 import { startRunSubmitState } from './start-run-submit-state.js';
 
@@ -601,8 +600,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                           className="text-muted"
                           style={{ fontSize: '11px' }}
                         >
-                          {formatPhaseParallel(phase.parallel)} · 节点:{' '}
-                          {phase.nodeIds.join(', ')}
+                          节点: {phase.nodeIds.join(', ')}
                         </div>
                       </div>
                     ))}

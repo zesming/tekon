@@ -177,7 +177,6 @@ describe('workflow engine gate repair e2e', () => {
             id: 'implementation',
             name: 'Implementation',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-code',
@@ -219,7 +218,6 @@ describe('workflow engine gate repair e2e', () => {
             id: 'validation',
             name: 'Validation',
             dependsOn: ['implementation'],
-            parallel: false,
             nodes: [
               {
                 id: 'qa',
@@ -235,7 +233,6 @@ describe('workflow engine gate repair e2e', () => {
             id: 'review',
             name: 'Review',
             dependsOn: ['validation'],
-            parallel: false,
             nodes: [
               {
                 id: 'reviewer',
@@ -413,7 +410,6 @@ function buildGateWorkflowSpec() {
         id: 'implementation',
         name: 'Implementation',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'rd-code',

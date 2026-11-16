@@ -775,7 +775,6 @@ export const runPlanGateSchema = z.object({
 export const runPlanPhaseSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  parallel: z.boolean(),
   nodeIds: z.array(z.string()),
 });
 

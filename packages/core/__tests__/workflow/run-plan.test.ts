@@ -36,7 +36,6 @@ name: Sample Flow
 phases:
   - id: plan
     name: Planning Phase
-    parallel: false
     nodes:
       - id: plan-node
         role: pm
@@ -50,7 +49,6 @@ phases:
             timeoutMs: 60000
   - id: dev
     name: Development Phase
-    parallel: false
     dependsOn: [plan]
     nodes:
       - id: dev-node
@@ -65,7 +63,6 @@ phases:
           - type: lint
   - id: review
     name: Review Phase
-    parallel: false
     dependsOn: [dev]
     nodes:
       - id: rev-node
@@ -85,19 +82,16 @@ phases:
       {
         id: "plan",
         name: "Planning Phase",
-        parallel: false,
         nodeIds: ["plan-node"],
       },
       {
         id: "dev",
         name: "Development Phase",
-        parallel: false,
         nodeIds: ["dev-node"],
       },
       {
         id: "review",
         name: "Review Phase",
-        parallel: false,
         nodeIds: ["rev-node"],
       },
     ]);
@@ -210,7 +204,6 @@ phases:
       {
         id: "goal",
         name: "Goal",
-        parallel: false,
         nodeIds: ["goal-execute"],
       },
     ]);

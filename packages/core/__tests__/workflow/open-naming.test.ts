@@ -200,7 +200,6 @@ describe('open role/artifact naming and node prompt (PD-06)', () => {
             id: 'p1',
             name: 'p1',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'n1',

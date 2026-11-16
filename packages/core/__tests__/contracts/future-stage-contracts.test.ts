@@ -164,7 +164,6 @@ describe('future-stage workflow contracts (placeholders)', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',

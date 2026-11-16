@@ -232,7 +232,7 @@ phases:
     });
   });
 
-  it('rejects missing reviewer, code nodes without build/lint, invalid artifact dependencies, and conflicting parallel outputs', () => {
+  it('rejects missing reviewer, code nodes without build/lint, invalid artifact dependencies, and conflicting outputs', () => {
     expect(() =>
       parseWorkflowTemplate(`
 id: no-reviewer
@@ -303,8 +303,7 @@ phases:
       parseWorkflowTemplate(`
 id: conflict
 phases:
-  - id: parallel
-    parallel: true
+  - id: impl
     nodes:
       - id: rd-a
         role: rd

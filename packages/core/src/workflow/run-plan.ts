@@ -41,7 +41,6 @@ export interface RunPlanPreviewSigner {
 export interface RunPlanPhaseSummary {
   id: string;
   name: string;
-  parallel: boolean;
   nodeIds: string[];
 }
 
@@ -207,7 +206,6 @@ export function projectRunPlanPreview(plan: RunPlan, signer?: RunPlanPreviewSign
     phases: plan.phases.map(phase => ({
       id: phase.id,
       name: phase.name,
-      parallel: phase.parallel,
       nodeIds: [...phase.nodeIds],
     })),
     agent: plan.agent,
@@ -274,7 +272,6 @@ export function projectRunPlanV2(
     phases.push({
       id: phase.id,
       name: phase.name,
-      parallel: phase.parallel,
       nodeIds,
     });
   }

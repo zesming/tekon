@@ -88,7 +88,6 @@ describe('rework node prompt consistency e2e', () => {
             id: 'implementation',
             name: 'Implementation',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -118,7 +117,6 @@ describe('rework node prompt consistency e2e', () => {
             id: 'review',
             name: 'Review',
             dependsOn: ['implementation'],
-            parallel: false,
             nodes: [
               {
                 id: 'reviewer-node',

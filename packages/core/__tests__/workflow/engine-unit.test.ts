@@ -650,7 +650,6 @@ describe('S5 engine prepareRun / signal / pause', () => {
         id: 'phase_1',
         name: 'Phase 1',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'node_a',

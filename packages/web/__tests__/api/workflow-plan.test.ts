@@ -102,7 +102,6 @@ describe('workflow.plan RPC', () => {
       {
         id: 'goal',
         name: 'Goal',
-        parallel: false,
         nodeIds: ['goal-execute'],
       },
     ]);

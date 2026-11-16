@@ -99,7 +99,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'implementation',
               name: 'Implementation',
               dependsOn: [],
-              parallel: false,
               nodes: [
                 {
                   id: 'rd-node',
@@ -128,7 +127,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'review',
               name: 'Review',
               dependsOn: ['implementation'],
-              parallel: false,
               nodes: [
                 {
                   id: 'reviewer-node',
@@ -157,7 +155,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'delivery',
               name: 'Delivery',
               dependsOn: ['review'],
-              parallel: false,
               nodes: [
                 {
                   id: 'pmo-node',

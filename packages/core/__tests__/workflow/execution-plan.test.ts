@@ -66,7 +66,6 @@ function makeTemplate(overrides?: Partial<WorkflowTemplate>): WorkflowTemplate {
     id: 'phase-dev',
     name: 'Development',
     dependsOn: [],
-    parallel: false,
     nodes: [rdNode],
   };
 
@@ -74,7 +73,6 @@ function makeTemplate(overrides?: Partial<WorkflowTemplate>): WorkflowTemplate {
     id: 'phase-review',
     name: 'Review',
     dependsOn: ['phase-dev'],
-    parallel: false,
     nodes: [reviewerNode],
   };
 

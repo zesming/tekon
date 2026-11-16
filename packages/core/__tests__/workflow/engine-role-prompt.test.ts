@@ -85,7 +85,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -171,7 +170,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-scope',
@@ -286,7 +284,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm-scope',
             name: 'PM Scope',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-card',
@@ -305,7 +302,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm-review',
             name: 'PM Review',
             dependsOn: ['pm-scope'],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-review',
@@ -411,7 +407,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-test-plan',
@@ -524,7 +519,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-review',
@@ -540,7 +534,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pmo',
             name: 'PMO',
             dependsOn: ['pm'],
-            parallel: false,
             nodes: [
               {
                 id: 'pmo-checkpoint',
@@ -654,7 +647,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-change',
@@ -766,7 +758,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-test',
@@ -785,7 +776,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'review',
             name: 'Review',
             dependsOn: ['qa'],
-            parallel: false,
             nodes: [
               {
                 id: 'reviewer-check',
@@ -927,7 +917,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-card',
@@ -943,7 +932,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: ['pm'],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-signoff',
@@ -1114,7 +1102,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-code-change',
@@ -1139,7 +1126,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: ['rd'],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-validation',
@@ -1158,7 +1144,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'delivery',
             name: 'Delivery',
             dependsOn: ['qa'],
-            parallel: false,
             nodes: [
               {
                 id: 'future-delivery',
@@ -1553,7 +1538,6 @@ function minimalWorkflowSpec(name: string) {
         id: 'rd',
         name: 'RD',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'rd-node',

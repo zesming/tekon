@@ -67,7 +67,6 @@ export const workflowSpecDraftPhaseSchema = z
     id: z.string().min(1),
     name: z.string().min(1),
     dependsOn: z.array(z.string().min(1)).default([]),
-    parallel: z.boolean().default(false),
     nodes: z.array(workflowSpecDraftNodeSchema).min(1),
   })
   .strict();
@@ -119,7 +118,6 @@ interface DynamicConstraintPhase {
   name: string;
   nodes: DynamicConstraintNode[];
   dependsOn?: string[];
-  parallel?: boolean;
   source?: string;
   explanation?: string;
 }
@@ -333,7 +331,7 @@ function buildPmPrompt(demandText: string): string {
   return [
     'You are the Tekon PM Agent. Produce only one WorkflowSpecDraft JSON object.',
     'Required top-level fields: demandSummary, phases, riskTags, assumptions, openQuestions.',
-    'Each phase must include id, name, nodes, and optional dependsOn/parallel.',
+    'Each phase must include id, name, nodes, and optional dependsOn.',
     'Each node must include id, role, artifactOutputs, and optional dependsOn/gates.',
     'Allowed roles: pm, rd, qa, reviewer, pmo.',
     'Allowed artifactOutputs: demand-card, prd, tech-design, code-changes, test-report, review-report, security-report, rollback-plan, delivery-package.',
@@ -352,7 +350,6 @@ function workflowFromDraft(
       id: phase.id,
       name: phase.name,
       dependsOn: phase.dependsOn,
-      parallel: phase.parallel,
       source: 'dynamic',
       nodes: phase.nodes.map((node) => ({
         id: node.id,
@@ -392,7 +389,6 @@ function toWorkflowTemplateObject(
     phases: workflow.phases.map((phase) => ({
       id: phase.id,
       name: phase.name,
-      ...(phase.parallel ? { parallel: phase.parallel } : {}),
       ...(phase.dependsOn?.length ? { dependsOn: phase.dependsOn } : {}),
       nodes: phase.nodes.map((node) => ({
         id: node.id,

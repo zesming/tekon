@@ -78,7 +78,7 @@ describe('workflow engine worktree execution e2e', () => {
       const first = await engine().startRun({ demandText: 'preserve retry edits', mode: 'template', workflowSpec: {
         id: 'blocked-retry', name: 'Blocked retry', version: 1,
         retryPolicy: { maxAttempts: 1, maxRetries: 0, backoffMs: 0, strategy: 'fixed', onExhausted: 'block' },
-        phases: [{ id: 'rd', name: 'RD', dependsOn: [], parallel: false, nodes: [{
+        phases: [{ id: 'rd', name: 'RD', dependsOn: [], nodes: [{
           id: 'rd-node', role: 'rd', inputs: [], outputs: [{ id: 'code', type: 'code-changes' }],
           gates: [{ type: 'test', autoFix: false, onExhausted: 'block', command: { tool: 'npm', args: ['test'] } }], dependsOn: [],
         }] }],
@@ -164,7 +164,6 @@ describe('workflow engine worktree execution e2e', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -289,7 +288,6 @@ describe('workflow engine worktree execution e2e', () => {
             id: 'delivery',
             name: 'Delivery',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -424,7 +422,6 @@ describe('workflow engine worktree execution e2e', () => {
             id: 'delivery',
             name: 'Delivery',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -870,7 +867,6 @@ function singleNodeWorkflow(input: {
         id: 'rd',
         name: 'RD',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'rd-node',

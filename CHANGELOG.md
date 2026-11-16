@@ -7,6 +7,7 @@
 - 角色管理放开自定义名字（PD-10 角色名部分）：`tekon role create <name>` 对非内置名字生成最小角色脚手架（agent.yaml + system.md），内置角色仍走整目录复制；`tekon role show goal` 不再被 CLI 的枚举副本拒绝；`role list` 能列出项目目录下的自定义角色，非标识符目录忽略。角色 ID 必须是小写字母开头的 kebab-case 标识符。
 - 返工一致性：声明了节点 `prompt` 的节点被 changes-requested 返工时，节点指令在同进程返工提示词、落库返工节点和 resume 重建计划三条路径保持一致，评审反馈在节点指令之上叠加；自定义角色在 role-scope 门禁上 fail-closed（现役引擎与 legacy registry 两套实现均有测试守护）。
 - 模板解析期直接拒绝把交付保留类型 `ci-status` 声明为节点产物，报错说明该类型由 Tekon 交付机制自产；Web 角色列表与 CLI 复用同一 kebab-case 标识符过滤，不再显示 `.DS_Store` 类非角色目录。
+- 删除从未实现的 `parallel` 阶段字段（CD-24）：旧模板里残留的 `parallel` 键会被接受但忽略，解析结果、运行计划和发起页不再出现"并行阶段"标识，阶段始终按依赖顺序串行执行；节点级 `dependsOn` 不受影响。
 
 ## 0.30.0 — 2026-11-13
 

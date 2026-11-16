@@ -141,7 +141,6 @@ describe('workflow engine template e2e', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -234,7 +233,6 @@ describe('workflow engine template e2e', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-node',
@@ -319,7 +317,6 @@ describe('workflow engine template e2e', () => {
               id: 'implementation',
               name: 'Implementation',
               dependsOn: [],
-              parallel: false,
               nodes: [
                 {
                   id: 'rd-node',

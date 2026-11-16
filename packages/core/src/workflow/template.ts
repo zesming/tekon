@@ -74,7 +74,6 @@ export interface WorkflowTemplatePhase {
   id: string;
   name: string;
   dependsOn: string[];
-  parallel: boolean;
   nodes: WorkflowTemplateNode[];
 }
 
@@ -171,7 +170,9 @@ const rawPhaseSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1).optional(),
-    parallel: z.boolean().default(false),
+    // CD-24：parallel 从未实现（实际始终串行），字段已删除。保留为可选输入
+    // 仅为兼容旧模板/YAML，解析时忽略，不会出现在 WorkflowTemplate 上。
+    parallel: z.boolean().optional(),
     dependsOn: z.array(z.string().min(1)).default([]),
     nodes: z.array(rawNodeSchema).min(1),
   })
@@ -356,7 +357,8 @@ const normalizedTemplateSchema = z.object({
     id: z.string().min(1),
     name: z.string().min(1),
     dependsOn: z.array(z.string().min(1)),
-    parallel: z.boolean(),
+    // CD-24：旧快照里可能残留 parallel，接受但不读（输出类型不含该字段）。
+    parallel: z.boolean().optional(),
     nodes: z.array(z.object({
       id: z.string().min(1),
       role: roleSchema,
@@ -502,7 +504,6 @@ function normalizeWorkflowTemplate(
       id: rawPhase.id,
       name: rawPhase.name ?? rawPhase.id,
       dependsOn: rawPhase.dependsOn,
-      parallel: rawPhase.parallel,
       nodes: phaseNodes,
     });
   }
