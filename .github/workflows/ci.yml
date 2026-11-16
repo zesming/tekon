@@ -69,7 +69,11 @@ jobs:
         run: pnpm test --run
 
       - name: CLI binary smoke
-        run: bash scripts/ci/cli-smoke.sh
+        run: |
+          set -euo pipefail
+          expected="v$(node -p "require('./package.json').version")"
+          test "$(node packages/cli/dist/index.js --version)" = "$expected"
+          node packages/cli/dist/index.js --help >/dev/null
 
   # Re-check each declared engine floor. Node 24 is covered by verify.
   node-compat:
@@ -123,7 +127,11 @@ jobs:
         run: pnpm --filter @tekon/cli test:unit
 
       - name: CLI binary smoke
-        run: bash scripts/ci/cli-smoke.sh
+        run: |
+          set -euo pipefail
+          expected="v$(node -p "require('./package.json').version")"
+          test "$(node packages/cli/dist/index.js --version)" = "$expected"
+          node packages/cli/dist/index.js --help >/dev/null
 
   web-e2e:
     name: Web Playwright e2e
