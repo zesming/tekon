@@ -26,6 +26,9 @@ import type {
 } from '../workflow/engine.js';
 import type { WorkflowTemplate } from '../workflow/template.js';
 import type { WorkflowInstance, WorkflowStatus } from '../types/domain.js';
+import { runProviderConfigSchema } from '../types/domain.js';
+import type { BindingDiff } from '../workflow/rebind-run.js';
+import { rebindRunBinding } from '../workflow/rebind-run.js';
 
 /**
  * SessionService (phase 4a, design §2.1): the orchestration extracted
@@ -114,6 +117,11 @@ export type SessionServiceResumeResult =
       preflight?: ProviderPreflightResult;
     };
 
+export type SessionServiceRebindResult =
+  | { outcome: 'terminal'; runId: string; status: WorkflowStatus }
+  | { outcome: 'active-job'; runId: string }
+  | { outcome: 'rebound'; runId: string; diff: BindingDiff };
+
 export type SessionServicePauseResult =
   | {
       outcome: 'illegal-transition';
@@ -156,6 +164,16 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
    * an approval). Throws ProviderPreflightError when it cannot start.
    */
   preflightResume(runId: string): Promise<ProviderPreflightResult | undefined>;
+  /**
+   * PD-05：显式重绑定（--rebind）。用当前配置构建引擎快照，把冻结的计划/
+   * provider 绑定替换为自洽的新绑定后返回分项差异；不自动入队恢复，由
+   * 调用方接着走 resumeRun。终态运行与活跃作业期间拒绝写入。
+   */
+  rebindRun(input: {
+    runId: string;
+    engine: TEngineInput;
+    agent?: string;
+  }): Promise<SessionServiceRebindResult>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -487,6 +505,56 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     });
   }
 
+  async function rebindRun(input: {
+    runId: string;
+    engine: TEngineInput;
+    agent?: string;
+  }): Promise<SessionServiceRebindResult> {
+    const workflow = await repositories.getWorkflowInstance(input.runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${input.runId}`);
+    }
+    if (['passed', 'failed', 'cancelled'].includes(workflow.status)) {
+      return {
+        outcome: 'terminal',
+        runId: input.runId,
+        status: workflow.status,
+      };
+    }
+    // 与 resume 的入队临界区同一守护：作业持有运行期间不得换绑定，否则两个
+    // 执行方会按不同的计划/提供者身份操作同一运行。
+    const active = await jobs.findActiveByRunId(input.runId);
+    if (active) {
+      return { outcome: 'active-job', runId: input.runId };
+    }
+
+    const engine = await deps.createEngine(input.engine);
+    if (!engine.providerSnapshot) {
+      throw new Error('ADMISSION_PROVIDER_REQUIRED');
+    }
+    // 经枚举 schema 校验：引擎快照的 provider 是宽 string，rebind 落库只
+    // 接受已知 provider，未知值在此明确拒绝而不是靠数据库层隐式失败。
+    const currentProvider = runProviderConfigSchema.parse({
+      runId: input.runId,
+      provider: engine.providerSnapshot.provider,
+      configSummary: engine.providerSnapshot.configSummary,
+      createdAt: new Date().toISOString(),
+    });
+    const result = await rebindRunBinding({
+      repoPath: projectRoot,
+      runId: input.runId,
+      repositories,
+      audit: deps.audit,
+      currentProvider,
+      ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    });
+    return {
+      outcome: 'rebound',
+      runId: input.runId,
+      diff: result.diff,
+    };
+  }
+
   async function requestPause(input: {
     runId: string;
   }): Promise<SessionServicePauseResult> {
@@ -548,5 +616,13 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     };
   }
 
-  return { lookupRun, startRun, resumeRun, preflightResume, requestPause, requestCancel };
+  return {
+    lookupRun,
+    startRun,
+    resumeRun,
+    preflightResume,
+    rebindRun,
+    requestPause,
+    requestCancel,
+  };
 }

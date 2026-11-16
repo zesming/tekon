@@ -115,7 +115,7 @@
 - 修复建议：用户手写在 repo-profile 或模板里的命令视为已授权，allow 由它们推导，保留现有拒绝规则和网络检查。模型生成的计划（PD-09）不得带命令字段；存成模板时要人工确认并标记来源，否则模型写的命令会被当成用户授权。删掉 runner 判断，命令按原样执行。preflight 与 gateway 共用同一判定。run 前发现 missing 直接阻止并给修改示例。
 
 ### [PD-05] 改好配置后 resume 同一个 run 仍按旧绑定失败
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已修复（PR #37，v0.33.0：默认维持冻结，新增 rebind 纯函数（recaptureRunPlan/diffRunBindings/inspectCurrentBinding）与 rebindRunBinding 事务编排——单事务替换 plan_snapshot/plan_digest、upsert provider 快照并按 gateKey 重写非终态节点（含返工节点）物化门禁，已通过节点历史证据不动，run.rebound 审计记录脱敏分项差异；SessionService.rebindRun 守终态/活跃作业；CLI `tekon resume --rebind [--agent]`、裸 resume 与 `tekon status` 只读差异提示（坏配置容错不阻断）；review Triage missing-command 改指 --rebind；纯函数 10 条 + 落库 e2e 4 条 + session 4 条 + CLI 助手/真实进程 e2e 覆盖。Web 横幅 UI-15 随批次 12 交付）
 - 位置：docs/manual/tekon-user-manual.md:430-432，packages/core/src/workflow/run-plan.ts:423，packages/cli/src/commands/status.ts
 - 现象：Python 仓库 bugfix 首跑 blocked（missing-command），改 profile 后 preflight 为 resolved，`resume` 仍 blocked，第二条结果仍是 `missing-command`，退出码 0。每次 resume 都新建一条 rd-fix role_run。`tekon review` 的 Triage 写 `retry=after-fix`，建议先修 commandRef 再重试。Web 有绑定横幅，`status` 有 `executionBinding=frozen`，但都不说这次失败和绑定有关。
 - 依据：冻结本身是产品方向偏差：文档已声明，与目标基准冲突（手册写“执行、恢复、修复重试和返工沿用原记录”“希望采用新配置时，应明确发起新任务”）。实现缺陷：Triage 建议与手册矛盾，明知必败仍调 agent（PD-31）。经用户确认（2026-11-06）：默认冻结，提示差异，`--rebind` 显式采用。
@@ -211,7 +211,7 @@
 - 修复建议：拆两步。1）先改 interrupted、blocked 的映射和文案（与 UI-02 同一处修复）。2）再实现消息入口，驱动 harness 续会话（依赖 CD-11）。
 
 ### [PD-17] blocked、interrupted 后不能改指令或换 provider，Web 也不能取消
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：部分修复（PR #37，v0.30.0：第 1 步 Web 非终态运行均可取消已完成；恢复时换 provider、改指令的第 2、3 步另排在重构第 2 阶段）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：部分修复（PR #37，v0.30.0 第 1 步 Web 非终态运行均可取消；v0.33.0 第 2 步完成——换 provider 走 `tekon resume --rebind --agent`（PD-05 同链路，事务替换 provider 快照与计划 digest），改指令经角色文件运行时读盘天然支持、普通 resume 即生效并有 role-instruction-hot-reload e2e 证明无需 rebind；第 3 步 failed 重试另排子批次 9f）
 - 位置：packages/web/src/client/components/runs/RunControls.tsx:38、55-56，packages/core/src/workflow/gate-runner.ts:533-538，docs/manual/tekon-user-manual.md:287
 - 现象：Web 只有 paused、blocked、interrupted 可恢复，恢复沿用 provider 快照和原指令。interrupted 和 blocked 在 Web 上不能取消，CLI 实测能取消 blocked 的 run。Codex 缺失的 run 只有“恢复”一个动作，点了再次中断。
 - 依据：沿用快照是产品方向偏差：文档已声明，与目标基准冲突（手册:287）。Web 不能取消是实现缺陷：`RunControls.tsx:56` 只放 running、paused，而 `project.cancel` 和 `requestCancel` 没有状态限制。workflow 进入 failed 只有 `gate-runner.ts:533-538` 的 `onExhausted: fail` 一条路，默认是 block，7 个内置模板都没声明，所以真正的死路是 blocked 和 interrupted。

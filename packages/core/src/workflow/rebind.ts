@@ -137,3 +137,26 @@ export function diffRunBindings(input: {
     repoCommands,
   };
 }
+
+/**
+ * 只读绑定探测：用当前仓库配置重捕获计划并与冻结绑定比较，供 `status` 与裸
+ * `resume` 输出差异提示。该路径不构建新引擎，无法得知当前 provider 快照，
+ * 因此 provider 段恒为 null（计划层的 agent 与 repoCommands 差异仍完整）；
+ * 要采用差异必须走显式 --rebind。
+ */
+export function inspectCurrentBinding(input: {
+  repoPath: string;
+  frozenPlan: RunPlanV3;
+  frozenProvider: RunProviderConfig;
+}): BindingDiff {
+  const currentPlan = recaptureRunPlan({
+    repoPath: input.repoPath,
+    frozenPlan: input.frozenPlan,
+  });
+  return diffRunBindings({
+    frozenPlan: input.frozenPlan,
+    currentPlan,
+    frozenProvider: input.frozenProvider,
+    currentProvider: input.frozenProvider,
+  });
+}

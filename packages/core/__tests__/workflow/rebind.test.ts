@@ -9,6 +9,7 @@ import { parseWorkflowTemplate } from '../../src/workflow/template.js';
 import type { RunProviderConfig } from '../../src/types/domain.js';
 import {
   diffRunBindings,
+  inspectCurrentBinding,
   recaptureRunPlan,
 } from '../../src/workflow/rebind.js';
 
@@ -304,5 +305,89 @@ describe('PD-05 diffRunBindings', () => {
     });
     expect(diff.agent).toEqual({ from: 'mock', to: 'codex' });
     expect(diff.hasDifferences).toBe(true);
+  });
+});
+
+describe('PD-05 inspectCurrentBinding', () => {
+  const tempDirs: string[] = [];
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0))
+      rmSync(dir, { recursive: true, force: true });
+  });
+
+  function repoWithProfile(profile: unknown): string {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-rebind-inspect-'));
+    tempDirs.push(repoPath);
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
+      JSON.stringify(profile),
+    );
+    return repoPath;
+  }
+
+  function spec() {
+    return parseWorkflowTemplate({
+      id: 'inspect-fixture',
+      governance: 'none',
+      phases: [
+        {
+          id: 'dev',
+          nodes: [
+            {
+              id: 'rd',
+              role: 'rd',
+              gates: [{ type: 'build', commandRef: 'build' }],
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  const snapshot: RunProviderConfig = {
+    runId: 'run_1',
+    provider: 'mock',
+    configSummary: { provider: 'mock' },
+    createdAt: '2026-11-17T00:00:00.000Z',
+  };
+
+  it('只读探测到 profile 修复产生的 repoCommands 差异，provider 段保持 null', () => {
+    const missingRepo = repoWithProfile({ commands: {} });
+    const frozen = captureRunPlan(missingRepo, spec(), {
+      agent: 'mock',
+      mode: 'workflow',
+    });
+    const fixedRepo = repoWithProfile({
+      commands: { build: { tool: 'npm', args: ['run', 'build'] } },
+    });
+    const diff = inspectCurrentBinding({
+      repoPath: fixedRepo,
+      frozenPlan: frozen,
+      frozenProvider: snapshot,
+    });
+    expect(diff.hasDifferences).toBe(true);
+    expect(diff.repoCommands).toHaveLength(1);
+    expect(diff.repoCommands[0]?.frozen.status).toBe('missing');
+    expect(diff.repoCommands[0]?.current.status).toBe('resolved');
+    // 只读路径不构建新引擎，provider 身份无从比较。
+    expect(diff.provider).toBeNull();
+    expect(diff.agent).toBeNull();
+  });
+
+  it('配置未变时报告无差异', () => {
+    const repoPath = repoWithProfile({
+      commands: { build: { tool: 'npm', args: ['run', 'build'] } },
+    });
+    const frozen = captureRunPlan(repoPath, spec(), {
+      agent: 'mock',
+      mode: 'workflow',
+    });
+    const diff = inspectCurrentBinding({
+      repoPath,
+      frozenPlan: frozen,
+      frozenProvider: snapshot,
+    });
+    expect(diff.hasDifferences).toBe(false);
   });
 });

@@ -736,6 +736,87 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     }
   });
 
+  it('PD-05: resume --rebind adopts the repaired profile command and unblocks the run', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    // bugfix 用到 build/lint/security/test；build 初始必失败（exit 7），
+    // 其余放行，使首跑在 build 门禁 blocked。
+    const profilePath = join(repoPath, '.tekon', 'repo-profile.yaml');
+    const writeProfile = (buildArgs: string[]) =>
+      writeFileSync(
+        profilePath,
+        JSON.stringify({
+          version: 1,
+          commands: {
+            build: { tool: process.execPath, args: buildArgs },
+            lint: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+            security: {
+              tool: process.execPath,
+              args: ['-e', 'process.exit(0)'],
+            },
+            test: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+          },
+        }),
+      );
+    writeProfile(['-e', 'process.exit(7)']);
+
+    await expect(
+      runCli(
+        ['run', 'rebind 恢复链路', '--template', 'bugfix', '--agent', 'mock', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(2);
+    const firstOutput = io.takeStdout();
+    const runId =
+      /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(firstOutput)?.[1] ??
+      /runId=(run_[a-zA-Z0-9-]+)/u.exec(firstOutput)?.[1];
+    expect(runId).toBeTruthy();
+
+    // 修复 profile 后裸 resume：冻结绑定不变，仍 blocked，且 stderr 输出差异提示。
+    writeProfile(['-e', 'process.exit(0)']);
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--repo', repoPath], io),
+    ).resolves.toBe(2);
+    const frozenOutput = io.takeStdout();
+    expect(frozenOutput).toContain('status=blocked');
+    expect(io.takeStderr()).toContain('commands.build');
+
+    // --rebind 采用当前配置后恢复，build 门禁用新命令放行，run 推进到末尾
+    // 人工审批 gate 暂停（paused=3），不再卡在 blocked。
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--rebind', '--repo', repoPath], io),
+    ).resolves.toBe(3);
+    const reboundOutput = io.takeStdout();
+    expect(reboundOutput).toContain('status=paused');
+
+    // 批准末尾人工决策后 run 走到 passed。
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--approve-human', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('status=passed');
+
+    // 新计划摘要已落库且与旧 digest 不同，审计留下 rebind 轨迹。
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const events = db
+        .prepare(
+          "select type from audit_events where run_id=? and type='run.rebound'",
+        )
+        .all(runId!) as Array<{ type: string }>;
+      expect(events).toHaveLength(1);
+    } finally {
+      db.close();
+    }
+  });
+
   it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

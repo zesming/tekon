@@ -485,7 +485,7 @@ Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明�
 | --- | --- |
 | 找不到 Provider 命令 | 安装命令，或从能执行它的终端重新启动 Tekon，然后 `tekon resume` |
 | 未登录或凭据无效 | 执行 `claude auth login`（或在 Claude 里输入 `/login`）、`codex login`，或配置 API key，然后 `tekon resume` |
-| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml` 或 Provider 配置，然后用 `tekon run` 新建运行（`tekon resume` 沿用启动时的 Provider 配置） |
+| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml`、repo-profile 或 Provider 配置，然后 `tekon resume --rebind` 让本运行采用新绑定（`tekon resume` 默认沿用启动时的 Provider 配置）；要改模板结构才需 `tekon run` 新建运行 |
 | 非零退出、Tekon 停止时中断 | 先 `tekon resume` 重试；仍失败时查看节点日志 |
 | 超时、长时间没有进展 | 先 `tekon resume` 重试；任务确实需要更久时，用更大的 `--timeout-ms` 或 `--no-progress-timeout-ms` 重新 `tekon run`（恢复沿用启动时的超时设置） |
 | 产物缺失或不合 schema | 查看节点目录里的产物与 manifest，修复后 `tekon resume` |
@@ -512,7 +512,7 @@ tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 
 **执行检查绑定**：新受理计划为 v3，记录模板实际使用的命令、来源、缺失与不适用决定；执行、恢复、修复重试和返工沿用原记录。内联命令优先，无命令引用的模板不依赖仓库命令配置。
 
-绑定不冻结 `package.json` 脚本正文、测试代码、PATH 二进制、依赖或宿主环境。希望采用新配置时，应明确发起新任务。历史绑定含义见 §6.7。
+绑定不冻结 `package.json` 脚本正文、测试代码、PATH 二进制、依赖或宿主环境。希望让本运行采用新的 repo-profile 命令或 Provider 配置时，用 `tekon resume --rebind` 显式重绑定（见 §6.10）；要改变模板结构（节点、门禁、角色定义）则必须发起新任务。历史绑定含义见 §6.7。
 
 **动态预览**：`--dynamic` 必须配 `--dry-run`，不受理 Run，也不支持 `--request-id`；可能初始化本地目录，`--save-as <name>` 会保存预览。普通 workflow/Goal 的 `--dry-run` 会在初始化前报 `DRY_RUN_UNSUPPORTED`。
 
@@ -587,6 +587,17 @@ CLI 的 `run` / `resume` 按工作流终态返回退出码：`0` 为 passed；`1
 恢复 blocked 节点时，Tekon 先做确定性失败判定：最近一次门禁失败属于 `missing-command`（检查命令仍未配置）、`rejected`（命令仍被授权策略拒绝）或 `unsupported-gate`（门禁类型仍不受支持），且失败条件在当前配置下仍然成立时，不会重跑 Agent，直接保持 blocked 并在审计事件 `node.resume-skipped-deterministic` 与输出里给出原因和下一步——这类失败在配置修复前重跑结果不会改变。条件已经消失（例如补全了 repo-profile 命令）或失败分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`）时照常重跑 Agent，且重跑提示词会注入最近一次门禁失败的类型与分类，便于 Agent 针对性修复。
 
 如果已经手工修好工作树或环境、只想让门禁重新判定而不重跑 Agent，使用 `tekon resume --run-id <runId> --gates-only`。该选项只对已有完成 Agent 执行的节点生效；节点从未完成 Agent 时会被拒绝（`GATES_ONLY_NO_AGENT_RUN`），避免在没有产物的情况下空跑门禁。该选项同样适用于 Web 的 `project.resume` 入参 `gatesOnly`。
+
+**配置变更与 `--rebind`（PD-05）**：运行默认按受理时冻结的绑定恢复——即使你修改了 `.tekon/repo-profile.yaml`、`package.json` 检测或 Provider 配置，裸 `tekon resume` 与 `tekon status` 仍按冻结计划执行，但会在 stderr 只读提示当前配置与冻结绑定的分项差异（agent、provider、repo-profile 命令），不改变任何绑定。确认要让本运行采用当前配置时，显式执行：
+
+```bash
+# 采用当前 repo-profile / package.json 命令绑定（agent 不变）
+tekon resume --run-id <runId> --rebind
+# 同时切换 Provider/agent
+tekon resume --run-id <runId> --rebind --agent codex
+```
+
+`--rebind` 用冻结模板原字节与当前仓库事实重新捕获一份自洽的执行计划（新 digest），在一个事务内替换 `plan_snapshot`/`plan_digest` 与 Provider 快照，并重写尚未终态节点（含历史返工节点）的物化门禁；已通过节点的历史门禁结果与审计链保持不变。重绑定记录在审计事件 `run.rebound`（含新旧 digest 与脱敏分项差异）。它只重绑定 agent、Provider 与门禁命令，不改变模板结构（节点/门禁/角色定义）；结构变更仍需发起新运行。终态运行（`passed`/`failed`/`cancelled`）与存在活跃 Job 的运行拒绝重绑定。角色指令（`.tekon/roles/<role>/system.md` 等）不在冻结范围内，修改后普通 resume 即生效，无需 `--rebind`。
 
 历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
 

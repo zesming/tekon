@@ -14,6 +14,8 @@ import {
   type BindingDiff,
 } from './rebind.js';
 
+export type { BindingDiff } from './rebind.js';
+
 /**
  * PD-05：显式 --rebind 的落库编排。默认恢复永远使用受理时冻结的绑定；只有
  * 本函数会把当前仓库配置“转正”为新的冻结身份：

@@ -30,6 +30,11 @@ import {
   withCliSessionContext,
   withSessionCommandCtx,
 } from '../lib/session-context.js';
+import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
+import {
+  formatBindingDiff,
+  inspectRunBinding,
+} from '../lib/binding-diff.js';
 import { formatApprovalSummary } from './review.js';
 import { formatPreflightNotice, runOutcomeDetails } from '../lib/run-outcome.js';
 
@@ -214,6 +219,10 @@ export async function commandResume(
       'previous-job-id': { type: 'string' },
       // PD-31：显式只重跑门禁，不重跑 agent（节点须已有完成的 agent 执行）。
       'gates-only': { type: 'boolean', default: false },
+      // PD-05：显式采用当前仓库配置（repo-profile 命令、可选 --agent），
+      // 替换运行的冻结绑定后再恢复；缺省维持冻结。
+      rebind: { type: 'boolean', default: false },
+      agent: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -273,6 +282,53 @@ export async function commandResume(
       if (!confirmation.confirmStopped || confirmation.previousJobId !== recovery.previousJobId) {
         throw new Error(`旧进程退出未确认或确认已过期。检查并停止旧执行后，使用 --confirm-stopped --previous-job-id ${recovery.previousJobId ?? 'none'} 重试同一运行。`);
       }
+    }
+
+    // PD-05：默认冻结。裸 resume 先做只读差异探测，当前仓库配置与冻结绑定
+    // 不一致时给出提示但不阻断；--rebind 才显式采用新配置。
+    if (!args.values.rebind) {
+      const bindingDiff = inspectRunBinding({
+        repoPath,
+        workflow,
+        frozenProvider: runProvider,
+      });
+      if (bindingDiff?.hasDifferences) {
+        io.stderr.write(
+          [
+            '当前仓库配置与本运行的冻结绑定存在差异（默认仍按冻结绑定恢复）：',
+            ...formatBindingDiff(bindingDiff),
+            `要采用当前配置恢复，使用 tekon resume --run-id ${runId} --rebind。`,
+          ].join('\n') + '\n',
+        );
+      }
+    } else {
+      // 缺省沿用冻结 provider（provider 名即受理时的 agent 名）；显式
+      // --agent 才切换。引擎输入与 `tekon run` 同形，由组合根工厂构建快照。
+      const rebindResult = await sessionService.rebindRun({
+        runId,
+        engine: {
+          agent: args.values.agent ?? runProvider.provider,
+          allowDirtyBase: workflow.allowDirtyBase ?? false,
+          runtime: providerRuntimeFromCliOptions(args.values),
+        },
+        ...(args.values.agent !== undefined
+          ? { agent: args.values.agent }
+          : {}),
+      });
+      if (rebindResult.outcome === 'terminal') {
+        throw new WorkflowTerminalError(runId, rebindResult.status);
+      }
+      if (rebindResult.outcome === 'active-job') {
+        throw new Error(
+          '运行已有活跃任务，请先使用 tekon cancel 取消或等待其完成。',
+        );
+      }
+      io.stderr.write(
+        [
+          '已按当前仓库配置重绑定（新冻结身份自洽，历史节点证据保留）：',
+          ...formatBindingDiff(rebindResult.diff),
+        ].join('\n') + '\n',
+      );
     }
 
     if (args.values['approve-human']) {

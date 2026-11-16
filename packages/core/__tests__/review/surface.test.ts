@@ -465,7 +465,7 @@ describe('work review surface', () => {
           gateId: 'gate_lint',
           classification: 'missing-command',
           retry: 'after-fix',
-          suggestedCommand: 'tekon workflow preflight <template>',
+          suggestedCommand: 'tekon resume --rebind',
         }),
         expect.objectContaining({
           gateId: 'gate_command_approval',
@@ -518,7 +518,7 @@ describe('work review surface', () => {
         }),
         expect.objectContaining({
           gateId: 'gate_lint',
-          suggestedCommand: `tekon workflow preflight <template> --repo ${repoPath}`,
+          suggestedCommand: `tekon resume --run-id run_1 --rebind --repo ${repoPath}`,
         }),
         expect.objectContaining({
           gateId: 'gate_human',
