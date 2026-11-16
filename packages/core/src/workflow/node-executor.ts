@@ -11,10 +11,15 @@ import {
 import {
   type ExecutableNode,
   type CheckedTransitionFn,
+  type ResumeExecutionOptions,
   gatesWithStableKeys,
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import { RecoverableLeaseError } from './lease-service.js';
+import {
+  evaluateDeterministicBlock,
+  type DeterministicBlock,
+} from './resume-policy.js';
 import type { WorkflowHelpers } from './helpers.js';
 import {
   agentFailureAuditPayload,
@@ -22,10 +27,12 @@ import {
   requiredArtifactTypesForNode,
 } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
+import { appendGateFailureReason } from './prompt-builder.js';
 import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
 import { isJobCancellationAbort, isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
+import type { WorktreeLease } from '../types/config.js';
 
 /**
  * CD-09 8b-3：识别“finalize 失败的可恢复中断”。该状态下 agent 与所有 Gate
@@ -67,6 +74,7 @@ function finalizeFailurePayload(
 }
 
 export interface NodeExecutorDeps {
+  repoPath: string;
   repositories: TekonRepositories;
   audit: AuditLogger;
   adapter: AgentAdapter;
@@ -91,7 +99,11 @@ export interface NodeExecutorDeps {
 }
 
 export interface NodeExecutor {
-  executeNode(runId: string, node: ExecutableNode): Promise<boolean>;
+  executeNode(
+    runId: string,
+    node: ExecutableNode,
+    resumeOptions?: ResumeExecutionOptions,
+  ): Promise<boolean>;
   appendPmoNodeCheckpoint(runId: string, node: ExecutableNode): Promise<void>;
   hasMissingArtifactDependency(
     runId: string,
@@ -101,6 +113,7 @@ export interface NodeExecutor {
 
 export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
   const {
+    repoPath,
     repositories,
     audit,
     adapter,
@@ -140,6 +153,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
   async function executeNode(
     runId: string,
     node: ExecutableNode,
+    resumeOptions?: ResumeExecutionOptions,
   ): Promise<boolean> {
     const checkedTransitionNode = getCheckedTransition();
 
@@ -156,6 +170,69 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       runId,
       node.id,
     );
+
+    // PD-31：blocked 节点的恢复入口。两种特殊处理都只在 resume 时生效，
+    // 首次执行不会是 blocked。
+    if (current.status === 'blocked') {
+      // 1) 确定性失败 fail-fast：白名单分类且条件仍成立时，不建 role_run、
+      //    不调 agent，节点与 run 保持 blocked，把原因/下一步写入审计。
+      if (!resumeOptions?.gatesOnly) {
+        const deterministicBlock =
+          await evaluateBlockedDeterministicFailure({
+            repositories,
+            repoPath,
+            runId,
+            node,
+            lease: resumableLease ?? undefined,
+          });
+        if (deterministicBlock) {
+          await audit.append({
+            runId,
+            type: 'node.resume-skipped-deterministic',
+            payload: {
+              nodeId: node.id,
+              ...deterministicBlock,
+            },
+          });
+          // resumeRun 入口已把 run 置为 running；fail-fast 没有推进节点，
+          // 必须回写 blocked，否则工作流行会谎报 running。
+          await repositories.updateWorkflowInstanceStatusIfActive(
+            runId,
+            'blocked',
+            node.id,
+          );
+          return false;
+        }
+      }
+
+      // 3) --gates-only：显式只重跑门禁。前置条件是该节点已有完成的 agent
+      //    执行，否则产物不存在，跳过 agent 没有意义，直接拒绝入参。
+      if (resumeOptions?.gatesOnly) {
+        if (!completedAgentRun) {
+          throw new Error(
+            `GATES_ONLY_NO_AGENT_RUN: 节点 ${node.id} 没有已完成的 agent 执行，不能只重跑门禁；请去掉 --gates-only 后恢复。`,
+          );
+        }
+        await checkedTransitionNode(
+          runId,
+          node.id,
+          'running',
+          'node.transition.checked',
+          { fromStatus: 'blocked' },
+        );
+        await repositories.transitionNode(node.id, 'awaiting-gate');
+        await repositories.updateWorkflowInstanceStatusIfActive(
+          runId,
+          'running',
+          node.id,
+        );
+        await audit.append({
+          runId,
+          type: 'node.resumed-gates-only',
+          payload: { nodeId: node.id, role: node.role },
+        });
+      }
+    }
 
     // CD-09 8b-3：finalize 失败的可恢复中断。此时 agent 与全部 Gate 都已
     // 完成、租约仍 active，节点最后自身事件是 worktree.lease.finalize.failed。
@@ -251,8 +328,14 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       resumableLease?.nodeId === node.id && hasPendingFallbackGate(
         await repositories.listAuditEvents(runId), node.id, resumableLease.id,
       );
+    // PD-31：--gates-only 在上方已把 blocked 节点推进到 awaiting-gate，
+    // 这里直接识别该状态，跳过整个 agent 执行段。
+    const gatesOnlyResume =
+      current.status === 'blocked' && resumeOptions?.gatesOnly === true;
     const resumeFromGate =
-      fallbackGateCheckpoint || current.status === 'awaiting-gate' ||
+      fallbackGateCheckpoint ||
+      gatesOnlyResume ||
+      current.status === 'awaiting-gate' ||
       (Boolean(resumableLease) &&
         ['paused', 'running'].includes(current.status) &&
         completedAgentRun);
@@ -373,11 +456,28 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
         }
         let agentSucceeded = false;
         try {
+          // PD-31：blocked 恢复重跑时把最近一次门禁失败原因注入提示词，
+          // 让 agent 知道要修复什么；白名单确定性失败已在入口 fail-fast，
+          // 能走到这里的都是重跑可能修复的分类。
+          let nodePrompt = await promptBuilder.buildNodePrompt(runId, node);
+          if (current.status === 'blocked') {
+            const latestFailedGate = (
+              await repositories.listGateResults(runId)
+            )
+              .filter(
+                (result) =>
+                  result.nodeId === node.id && result.status === 'failed',
+              )
+              .at(-1);
+            if (latestFailedGate) {
+              nodePrompt = appendGateFailureReason(nodePrompt, latestFailedGate);
+            }
+          }
           const agentInput = await helpers.agentInputForLease(
             runId,
             node,
             lease,
-            await promptBuilder.buildNodePrompt(runId, node),
+            nodePrompt,
           );
           if (deps.signal) {
             // S5: propagate the job-level signal into the agent run so the
@@ -629,6 +729,38 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
     appendPmoNodeCheckpoint,
     hasMissingArtifactDependency,
   };
+}
+
+/**
+ * PD-31：blocked 节点 resume 前的确定性失败判定。取节点最新一个 failed
+ * 门禁结果，匹配其在节点配置中的 gate（type+gateKey），再用当前仓库配置
+ * 复核失败条件是否仍成立。条件已消失、分类不在白名单或匹配不到配置时
+ * 返回 null，调用方走常规 agent 重跑。
+ */
+export async function evaluateBlockedDeterministicFailure(input: {
+  repositories: TekonRepositories;
+  repoPath: string;
+  runId: string;
+  node: ExecutableNode;
+  lease: WorktreeLease | undefined;
+}): Promise<DeterministicBlock | null> {
+  const failedResults = (await input.repositories.listGateResults(input.runId))
+    .filter(
+      (result) => result.nodeId === input.node.id && result.status === 'failed',
+    );
+  const latest = failedResults.at(-1);
+  if (!latest?.failureClassification) return null;
+  const configuredGate = gatesWithStableKeys(
+    input.node.gates,
+    input.node.id,
+  ).find((gate) => gate.type === latest.gateType && gate.gateKey === latest.gateKey);
+  if (!configuredGate) return null;
+  return evaluateDeterministicBlock({
+    profileRepoPath: input.repoPath,
+    policyCwd: input.lease?.worktreePath ?? input.repoPath,
+    gate: configuredGate,
+    classification: latest.failureClassification,
+  });
 }
 
 // An ordinary failed repair can persist its replacement source lease before

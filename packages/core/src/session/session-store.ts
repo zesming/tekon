@@ -46,7 +46,20 @@ export type JobOrigin = 'cli' | 'web';
  * the frozen `Job` contract (S14). It may be supplied at enqueue time for
  * debugging; every read path strips it via `jobSchema.parse`.
  */
-export type JobEnqueueInput = Job & { payload?: Record<string, unknown>; origin?: JobOrigin };
+/**
+ * PD-31：resume 作业的执行选项，持久化在 jobs.resume_options，由作业执行器
+ * 在调 engine.resumeRun 前读回。与调试用 payload 不同，这是有消费者的合同
+ * 字段，但仍不进冻结的 Job 类型。
+ */
+export interface JobResumeOptions {
+  gatesOnly?: boolean;
+}
+
+export type JobEnqueueInput = Job & {
+  payload?: Record<string, unknown>;
+  origin?: JobOrigin;
+  resumeOptions?: JobResumeOptions;
+};
 
 /**
  * Which queued jobs a worker may claim. A CLI process claims only the jobs it
@@ -190,6 +203,11 @@ export interface JobRepository {
     job: JobEnqueueInput,
     confirmation?: ResumeConfirmation,
   ): Promise<JobEnqueueResult>;
+  /**
+   * PD-31：读回入队时持久化的 resume 执行选项（如 gatesOnly）。不走
+   * mapJob，保持 Job 冻结合同不变；无列值/解析失败时返回 null。
+   */
+  getResumeOptions(jobId: string): Promise<JobResumeOptions | null>;
   /** Compatibility no-op: lease age never authorizes cancellation or requeue. */
   cancelStaleActiveJobs(
     runId: string,
@@ -630,10 +648,12 @@ export function createJobRepository(
         db.prepare(
           `insert into jobs (
              id, session_id, kind, status, owner, lease, abort_state,
-             checkpoint, payload, created_at, updated_at, exit_evidence, origin
+             checkpoint, payload, created_at, updated_at, exit_evidence, origin,
+             resume_options
            ) values (
              @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
+             @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin,
+             @resumeOptions
            )`,
         ).run({
           ...parsed,
@@ -642,6 +662,9 @@ export function createJobRepository(
           checkpoint: parsed.checkpoint ?? null,
           origin: job.origin ?? null,
           payload: JSON.stringify(job.payload ?? {}),
+          resumeOptions: job.resumeOptions
+            ? JSON.stringify(job.resumeOptions)
+            : null,
           exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
         });
         return parsed;
@@ -736,10 +759,12 @@ export function createJobRepository(
           db.prepare(
             `insert into jobs (
                id, session_id, kind, status, owner, lease, abort_state,
-               checkpoint, payload, created_at, updated_at, exit_evidence, origin
+               checkpoint, payload, created_at, updated_at, exit_evidence, origin,
+               resume_options
              ) values (
                @id, @sessionId, @kind, @status, @owner, @lease, @abortState,
-               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin
+               @checkpoint, @payload, @createdAt, @updatedAt, @exitEvidence, @origin,
+               @resumeOptions
              )`,
           ).run({
             ...parsed,
@@ -748,6 +773,9 @@ export function createJobRepository(
             checkpoint: parsed.checkpoint ?? null,
             origin: job.origin ?? null,
             payload,
+            resumeOptions: job.resumeOptions
+              ? JSON.stringify(job.resumeOptions)
+              : null,
             exitEvidence: parsed.exitEvidence ? JSON.stringify(parsed.exitEvidence) : null,
           });
           return { outcome: 'enqueued' as const, job: parsed, ...(confirmation.confirmStopped ? { previousJobId } : {}) };
@@ -761,6 +789,19 @@ export function createJobRepository(
         | JobRow
         | undefined;
       return row ? mapJob(row) : null;
+    },
+
+    async getResumeOptions(jobId) {
+      const row = db
+        .prepare('select resume_options from jobs where id = ?')
+        .get(jobId) as { resume_options?: string | null } | undefined;
+      if (!row?.resume_options) return null;
+      try {
+        const parsed = JSON.parse(row.resume_options) as JobResumeOptions;
+        return typeof parsed === 'object' && parsed ? parsed : null;
+      } catch {
+        return null;
+      }
     },
 
     async findActiveByRunId(runId) {

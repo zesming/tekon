@@ -97,6 +97,11 @@ export type JobExitEvidence = z.infer<typeof jobExitEvidenceSchema>;
 export interface ResumeConfirmation {
   confirmStopped?: boolean;
   previousJobId?: string | null;
+  /**
+   * PD-31：只重跑门禁、不重跑 agent。仅对已有完成 agent 执行的节点合法，
+   * 持久化到 resume 作业，由工作流引擎在节点恢复时裁决。
+   */
+  gatesOnly?: boolean;
 }
 
 export type JobEnqueueResult =

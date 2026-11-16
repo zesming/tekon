@@ -609,6 +609,7 @@ export function createProjectRouter(
           runId: runInput.runId,
           confirmStopped: runInput.confirmStopped,
           previousJobId: runInput.previousJobId,
+          ...(runInput.gatesOnly ? { gatesOnly: true } : {}),
         })
         .catch((error: unknown) => {
           if (error instanceof ProviderPreflightError)

@@ -67,4 +67,25 @@ describe('findLatestRunFailure', () => {
       ]),
     ).toBeUndefined();
   });
+
+  it('PD-31: surfaces a deterministic fail-fast skip as the blocked reason with its hint', () => {
+    expect(
+      findLatestRunFailure([
+        { type: 'run.resumed', payload: {} },
+        {
+          type: 'node.resume-skipped-deterministic',
+          payload: {
+            nodeId: 'rd',
+            classification: 'missing-command',
+            reason: '门禁绑定的检查命令仍缺失（missing-command）',
+            hint: '在 .tekon/repo-profile.yaml 补全 commands.build',
+          },
+        },
+      ]),
+    ).toEqual({
+      kind: 'deterministic-block',
+      message: '门禁绑定的检查命令仍缺失（missing-command）',
+      hint: '在 .tekon/repo-profile.yaml 补全 commands.build',
+    });
+  });
 });

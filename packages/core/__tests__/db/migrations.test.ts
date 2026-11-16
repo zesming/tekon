@@ -496,6 +496,50 @@ describe('database migrations', () => {
     db.close();
   });
 
+  it('PD-31: adds jobs.resume_options idempotently and keeps legacy job rows readable', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'resume_options')).toBe(true);
+
+    // 模拟 PD-31 之前的 jobs 表。
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table jobs_old (
+        id text primary key,
+        session_id text not null,
+        kind text not null,
+        status text not null,
+        owner text,
+        lease text,
+        abort_state text not null default 'none',
+        checkpoint text,
+        payload text not null default '{}',
+        created_at text not null,
+        updated_at text not null
+      );
+    `);
+    db.exec('drop table jobs;');
+    db.exec('alter table jobs_old rename to jobs;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'resume_options')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'resume_options')).toHaveLength(1);
+
+    // 幂等：再次迁移不报错、不重复加列。
+    migrateDatabase(db);
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'resume_options')).toHaveLength(1);
+
+    db.close();
+  });
+
   it('P1-UX-02: adds sessions.acknowledged_at idempotently and defaults legacy rows to NULL (unacknowledged)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
     tempDirs.push(dir);

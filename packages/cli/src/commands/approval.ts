@@ -212,6 +212,8 @@ export async function commandResume(
       'approve-human': { type: 'boolean', default: false },
       'confirm-stopped': { type: 'boolean', default: false },
       'previous-job-id': { type: 'string' },
+      // PD-31：显式只重跑门禁，不重跑 agent（节点须已有完成的 agent 执行）。
+      'gates-only': { type: 'boolean', default: false },
     },
     allowPositionals: true,
   });
@@ -326,6 +328,7 @@ export async function commandResume(
     const result = await sessionService.resumeRun({
       runId,
       afterApproval: args.values['approve-human'],
+      ...(args.values['gates-only'] ? { gatesOnly: true } : {}),
       ...confirmation,
     }).catch((error: unknown) => {
       if (args.values['approve-human']) throw new Error(`审批已记录，运行尚未恢复：${error instanceof Error ? error.message : String(error)}`);

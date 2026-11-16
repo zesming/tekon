@@ -56,6 +56,8 @@ export const tokenRunInputSchema = z.object({
 export const resumeInputSchema = tokenRunInputSchema.extend({
   confirmStopped: z.boolean().optional(),
   previousJobId: z.string().min(1).nullable().optional(),
+  // PD-31：只重跑门禁、不重跑 agent。
+  gatesOnly: z.boolean().optional(),
 });
 
 export const runRecoverySchema = z.object({

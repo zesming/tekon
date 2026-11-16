@@ -651,6 +651,91 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     expect(workflowListOutput).toContain('plan-only');
   });
 
+  it('PD-31: resume --gates-only reruns gates without an agent run and re-pauses at the human gate', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          'gates-only 恢复链路',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(3);
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    // 驳回人工门禁：节点 blocked，但 agent 已完成（满足 gates-only 前置）。
+    await expect(
+      runCli(
+        ['approval', 'summary', '--run-id', runId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const summary = io.takeStdout();
+    const decisionId = /decisionId=(decision_[a-zA-Z0-9-]+)/u.exec(
+      summary,
+    )?.[1];
+    expect(decisionId).toBeTruthy();
+    await expect(
+      runCli(
+        [
+          'approval',
+          'reject',
+          '--run-id',
+          runId!,
+          '--decision-id',
+          decisionId!,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    io.takeStdout();
+
+    // gates-only 恢复：只重跑门禁，human 门禁再次请求审批 → paused(3)。
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--gates-only', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(3);
+    const resumeOutput = io.takeStdout();
+    expect(resumeOutput).toContain('status=paused');
+
+    // 选项确实持久化到了 resume 作业行。
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const row = db
+        .prepare(
+          "select resume_options from jobs where kind='workflow-resume' order by created_at desc limit 1",
+        )
+        .get() as { resume_options: string | null };
+      expect(row.resume_options).toBe('{"gatesOnly":true}');
+      const pending = db
+        .prepare(
+          "select count(*) as count from human_decisions where run_id=? and status='pending'",
+        )
+        .get(runId!) as { count: number };
+      expect(pending.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
   it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

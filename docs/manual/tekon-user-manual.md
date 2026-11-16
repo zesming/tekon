@@ -584,6 +584,10 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 CLI 的 `run` / `resume` 按工作流终态返回退出码：`0` 为 passed；`1` 为 failed、interrupted 或 cancelled；`2` 为 blocked（节点被确定性问题卡住，需先修复配置或环境再恢复）；`3` 为 paused（等待人工确认）。后台 Job 失败、中断或取消时还会显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。脚本或 IM 集成必须把 `2`/`3` 当作“未完成”处理，不能再按成功上报。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
 
+恢复 blocked 节点时，Tekon 先做确定性失败判定：最近一次门禁失败属于 `missing-command`（检查命令仍未配置）、`rejected`（命令仍被授权策略拒绝）或 `unsupported-gate`（门禁类型仍不受支持），且失败条件在当前配置下仍然成立时，不会重跑 Agent，直接保持 blocked 并在审计事件 `node.resume-skipped-deterministic` 与输出里给出原因和下一步——这类失败在配置修复前重跑结果不会改变。条件已经消失（例如补全了 repo-profile 命令）或失败分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`）时照常重跑 Agent，且重跑提示词会注入最近一次门禁失败的类型与分类，便于 Agent 针对性修复。
+
+如果已经手工修好工作树或环境、只想让门禁重新判定而不重跑 Agent，使用 `tekon resume --run-id <runId> --gates-only`。该选项只对已有完成 Agent 执行的节点生效；节点从未完成 Agent 时会被拒绝（`GATES_ONLY_NO_AGENT_RUN`），避免在没有产物的情况下空跑门禁。该选项同样适用于 Web 的 `project.resume` 入参 `gatesOnly`。
+
 历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
 
 审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。

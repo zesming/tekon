@@ -400,6 +400,33 @@ describe('SessionService.resumeRun', () => {
     });
   });
 
+  it('persists gatesOnly resume options on the enqueued job (PD-31)', async () => {
+    const env = setup();
+    await seedRun(env, 'run_gates', 'blocked');
+    const plain = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_gates')!),
+    );
+
+    const withFlag = await plain.resumeRun({
+      runId: 'run_gates',
+      gatesOnly: true,
+    });
+    expect(withFlag.outcome).toBe('enqueued');
+    if (withFlag.outcome !== 'enqueued') throw new Error('unreachable');
+    expect(await env.jobs.getResumeOptions(withFlag.jobId)).toEqual({
+      gatesOnly: true,
+    });
+
+    // 普通 resume 的作业不带选项，读取侧回落 null。
+    await env.jobs.updateJob(withFlag.jobId, { status: 'cancelled' });
+    const withoutFlag = await plain.resumeRun({ runId: 'run_gates' });
+    if (withoutFlag.outcome !== 'enqueued') throw new Error('unreachable');
+    expect(
+      await env.jobs.getResumeOptions(withoutFlag.jobId),
+    ).toBeNull();
+  });
+
   it('reuses the existing session when one is already bound to the run', async () => {
     const env = setup();
     await seedRun(env, 'run_resume2', 'paused');

@@ -418,6 +418,33 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
 // ---------------------------------------------------------------------------
 
 /**
+ * PD-31：blocked 节点恢复重跑 agent 时，把最近一次门禁失败的原因注入提示词。
+ * 旧实现的恢复提示词与首次执行完全相同，agent 不知道自己为什么失败。只注入
+ * 门禁 id、类型与分类（不含可能含敏感细节的日志原文）；确定性白名单分类
+ * （missing-command/rejected/unsupported-gate）不会走到这里——它们在
+ * node-executor 入口被 fail-fast 拦截。
+ */
+export function appendGateFailureReason(
+  prompt: string,
+  failedGate: {
+    id: string;
+    gateType: string;
+    failureClassification?: string | null;
+  },
+): string {
+  return [
+    prompt,
+    '',
+    '## Prior gate failure (this node is resuming after being blocked)',
+    `The previous execution stopped at failed gate ${failedGate.id} (type: ${failedGate.gateType}).`,
+    failedGate.failureClassification
+      ? `Failure classification: ${failedGate.failureClassification}.`
+      : 'Failure classification: unavailable.',
+    'Address the underlying cause before producing the artifacts again.',
+  ].join('\n');
+}
+
+/**
  * CD-09：按节点 workspace 声明显式生成源码编辑权限指引。独立成纯函数，使无
  * outputs 的节点（如内置 Goal，artifact protocol 会提前返回）也能在主提示词
  * 收到约束，而不是只靠 finalize 事后拦截。

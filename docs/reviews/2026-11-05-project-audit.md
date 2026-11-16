@@ -270,7 +270,7 @@
 - 修复建议：分阶段：1）统一为一个任务列表和一个任务详情，任务一对多 run。2）只留一个发起入口，高级选项折叠。3）删除 Dashboard 和重复路由。
 
 ### [PD-31] blocked 恢复一律盲目重跑 agent（prompt 不含失败原因），门禁确定性失败时每次白花一个节点
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（调用计数实测，真实 provider 未测） | 状态：已确认，另排（重构第 2 阶段）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（调用计数实测，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：新增 resume-policy 纯策略模块与 fail-fast 白名单 missing-command/rejected/unsupported-gate，条件仍成立时 resume 不建 role_run、不调 agent 并审计 node.resume-skipped-deterministic；其他分类重跑时提示词注入门禁失败原因；新增 `tekon resume --gates-only` 与 Web `gatesOnly`，经 jobs.resume_options 新列持久化，无完成 agent 记录时 GATES_ONLY_NO_AGENT_RUN 拒绝；纯函数 10 条 + 引擎 e2e 4 条 + 迁移/session/CLI 测试覆盖）
 - 位置：packages/core/src/workflow/node-executor.ts:155-159、205、288，packages/core/src/workflow/prompt-builder.ts:123-127，docs/manual/tekon-user-manual.md:502
 - 现象：`resumeFromGate` 不包含 blocked，恢复时新建 role_run 并调用 agent。bugfix 模板实测每次 resume 都多一次 agent 调用，prompt 都不含失败原因：
   - `missing-command`：3 次 resume 后 rd-fix=4（另有 pm-triage=1，共 5 条），仍 blocked，`lease.created` 不增加，prompt 长度完全相同（5292）。

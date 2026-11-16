@@ -200,6 +200,7 @@ export async function withCliSessionContext<T>(
       sessions,
       bus,
       registry,
+      jobs,
       agentEventSink: bridge,
     });
     const automationExecutor = createAutomationJobExecutor({

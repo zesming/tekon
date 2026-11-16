@@ -66,6 +66,7 @@ export {
   isChangesRequested,
   resolveMaxReworkAttempts,
 } from './workflow-runtime.js';
+import type { ResumeExecutionOptions } from './workflow-runtime.js';
 
 // Re-export assertSuccessfulAgentRun from helpers
 export { assertSuccessfulAgentRun } from './helpers.js';
@@ -104,9 +105,11 @@ export interface WorkflowEngine {
   ): Promise<WorkflowEnginePreparedResult>;
   executePreparedRun(runId: string): Promise<WorkflowInstance>;
   startRun(input: WorkflowEngineStartInput): Promise<WorkflowEnginePreparedResult>;
-  resumeRun(runId: string): Promise<WorkflowEngineResult>;
+  resumeRun(
+    runId: string,
+    options?: ResumeExecutionOptions,
+  ): Promise<WorkflowEngineResult>;
 }
-
 export interface WorkflowEnginePreparedResult extends WorkflowEngineResult {
   requestId: string;
   replayed: boolean;
@@ -268,6 +271,7 @@ export function createWorkflowEngine(
   gateRunnerRef = gateRunner;
 
   const nodeExecutor = createNodeExecutor({
+    repoPath: options.repoPath,
     repositories: options.repositories,
     audit: options.audit,
     adapter: options.adapter,
@@ -303,7 +307,7 @@ export function createWorkflowEngine(
       }
     },
 
-    async resumeRun(runId) {
+    async resumeRun(runId, resumeOptions) {
       const existing = await options.repositories.getWorkflowInstance(runId);
       if (!existing) {
         throw new Error(`run not found: ${runId}`);
@@ -346,11 +350,12 @@ export function createWorkflowEngine(
         type: 'run.resumed',
         payload: {
           kind: existing.kind,
+          ...(resumeOptions?.gatesOnly ? { gatesOnly: true } : {}),
           ...passthroughEnvAuditPayload(options.agentConfigSummary),
         },
       });
 
-      const workflow = await executePlan(runId, plan);
+      const workflow = await executePlan(runId, plan, resumeOptions);
       return { runId, workflow };
     },
   };
@@ -549,6 +554,7 @@ export function createWorkflowEngine(
   async function executePlan(
     runId: string,
     plan: import('./workflow-runtime.js').ExecutionPlan,
+    resumeOptions?: ResumeExecutionOptions,
   ): Promise<WorkflowInstance> {
     for (const phase of plan.phases) {
       for (const node of phase.nodes) {
@@ -596,7 +602,11 @@ export function createWorkflowEngine(
           return helpers.mustGetWorkflow(runId);
         }
 
-        const completed = await nodeExecutor.executeNode(runId, node);
+        const completed = await nodeExecutor.executeNode(
+          runId,
+          node,
+          resumeOptions,
+        );
         if (!completed) {
           return helpers.mustGetWorkflow(runId);
         }

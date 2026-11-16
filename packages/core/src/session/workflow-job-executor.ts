@@ -15,7 +15,7 @@ import {
   type JobExecutor,
 } from './job-runner.js';
 import type { SessionEventBus } from './event-bus.js';
-import type { SessionEventStore } from './session-store.js';
+import type { JobRepository, SessionEventStore } from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
 import type { JobStatus } from '../types/session-contract.js';
 import type { WorkflowInstance } from '../types/domain.js';
@@ -38,7 +38,10 @@ export interface RunProjectContext {
  */
 export interface WorkflowJobEngine {
   executePreparedRun(runId: string): Promise<WorkflowInstance>;
-  resumeRun(runId: string): Promise<{ workflow: WorkflowInstance }>;
+  resumeRun(
+    runId: string,
+    options?: { gatesOnly?: boolean },
+  ): Promise<{ workflow: WorkflowInstance }>;
 }
 
 /**
@@ -61,6 +64,11 @@ export function createWorkflowJobExecutor(deps: {
   sessions: SessionEventStore;
   bus: SessionEventBus;
   registry: SubprocessRegistry;
+  /**
+   * PD-31：读回 resume 作业持久化的执行选项（gatesOnly）。可选依赖，缺省
+   * 时按普通 resume 处理（旧装配与单测无缝兼容）。
+   */
+  jobs?: Pick<JobRepository, 'getResumeOptions'>;
   /** Phase 2 S3: best-effort agent-loop event sink (the dual-write bridge). */
   agentEventSink?: AgentEventSink;
   /**
@@ -178,7 +186,12 @@ export function createWorkflowJobExecutor(deps: {
             break;
           }
           case 'workflow-resume':
-            workflow = (await engine.resumeRun(runId)).workflow;
+            workflow = (
+              await engine.resumeRun(
+                runId,
+                (await deps.jobs?.getResumeOptions(ctx.job.id)) ?? undefined,
+              )
+            ).workflow;
             break;
           default:
             throw new Error(`Unknown job kind: ${job.kind}`);

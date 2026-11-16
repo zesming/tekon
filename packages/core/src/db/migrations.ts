@@ -324,6 +324,9 @@ export function migrateDatabase(db: TekonDatabase): void {
     addColumnIfMissing(db, 'jobs', 'origin', 'text');
     // Process groups of a running job, refreshed with its lease.
     addColumnIfMissing(db, 'jobs', 'process_groups', 'text');
+    // PD-31：resume 作业的执行选项（如 gatesOnly=true 只重跑门禁）。
+    // 独立于冻结的 Job 合同，经专用访问器读取，不进 mapJob。
+    addColumnIfMissing(db, 'jobs', 'resume_options', 'text');
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

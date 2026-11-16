@@ -458,6 +458,9 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       kind: 'workflow-resume',
       ...(input.confirmStopped !== undefined ? { confirmStopped: input.confirmStopped } : {}),
       ...(input.previousJobId !== undefined ? { previousJobId: input.previousJobId } : {}),
+      // PD-31：gates-only 经 ResumeConfirmation 字段传入，由 runner 翻译为
+      // 作业行的 resume_options 持久化。
+      ...(input.gatesOnly ? { gatesOnly: true } : {}),
     });
     if (result.outcome === 'active-job') return { outcome: 'active-job', runId: input.runId };
     if (result.outcome !== 'enqueued') return { ...result, runId: input.runId };

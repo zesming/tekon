@@ -17,6 +17,15 @@ import type {
 } from './template.js';
 
 /**
+ * PD-31：resume 的执行选项，由 engine.resumeRun 透传到 node-executor。
+ * gatesOnly 表示显式只重跑门禁、不重跑 agent，仅对已有完成 agent 记录的
+ * 节点合法。
+ */
+export interface ResumeExecutionOptions {
+  gatesOnly?: boolean;
+}
+
+/**
  * An executable node is the runtime representation of a workflow template node,
  * with all IDs scoped to a specific run and all gate keys resolved.
  */

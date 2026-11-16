@@ -5,6 +5,7 @@
 - CLI 退出码区分“卡住”的运行（CD-23）：`tekon run` / `tekon resume` 结束时按工作流终态返回退出码——`0` passed；`1` failed/interrupted/cancelled；`2` blocked（节点被确定性问题卡住，需先修复配置或环境）；`3` paused（等待人工确认）。此前 blocked 和 paused 都返回 `0`，脚本或 IM 集成会把“等待处理”误判为成功。`tekon status` 等只读命令退出码不变。
 - 返工目标改为声明驱动（CD-14）：changes-requested 返工只读取评审产物 `reviewProcess.targetNodeId`（independent-review 门禁已校验其连通性、角色与产物类型），删除“取最后一个 passed 节点”的启发式回退——评审产物缺少合法目标时直接按门禁耗尽处理（blocked），不再可能重跑错误节点；六种评审产物类型一视同仁，不再只认三类白名单。返工反馈现在携带评审标题、正文、摘要、决定和完整 findings 列表，而不是固定英文句或被截断的 JSON 头部。
 - 返工失败路径不再产生孤儿记录或掩盖真实原因（CD-33）：返工 agent 或评审节点重跑失败时，对应 role_run 立即标记 interrupted（旧实现留在 running）；评审重跑失败改为向上抛错由节点执行器统一收敛，消除 `illegal workflow transition` 二次异常；目标门禁抛错时清理租约别名，避免后续被 `active execution lease required` 掩盖真实门禁错误。三种失败注入均有 e2e 覆盖并验证 resume 可恢复。
+- 恢复 blocked 运行不再盲目重跑 agent（PD-31）：新增确定性失败白名单——最近一次门禁失败为 `missing-command`、`rejected` 或 `unsupported-gate` 且失败条件在当前配置下仍成立时，resume 不创建 role_run、不调用 agent，节点保持 blocked 并输出原因与下一步（审计事件 `node.resume-skipped-deterministic`）；条件已消失或分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`、`human-rejected`）时照常重跑，且重跑提示词注入最近一次门禁失败的类型与分类。新增 `tekon resume --gates-only`（Web `project.resume` 同步支持 `gatesOnly`）：只重跑门禁不重跑 agent，选项经新增的 `jobs.resume_options` 列持久化跨进程传递；节点无完成 agent 记录时以 `GATES_ONLY_NO_AGENT_RUN` 拒绝。
 
 ## 0.31.0 — 2026-11-16
 
