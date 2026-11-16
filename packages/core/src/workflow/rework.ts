@@ -64,6 +64,20 @@ export interface ReworkHandlerDeps {
   agentEventSink?: AgentEventSink;
 }
 
+export interface HumanRejectionReworkInput {
+  /** 挂 human gate 的评审节点。 */
+  reviewNode: ExecutableNode;
+  /** 节点配置中的 human gate（携带 reworkTargetNodeId）。 */
+  gate: WorkflowGateConfig;
+  /** reject 时被置为 failed/human-rejected 的门禁结果。 */
+  gateResult: GateResult;
+  /** 返工目标的 run-scoped 节点 id（由模板 reworkTargetNodeId 解析）。 */
+  targetNodeId: string;
+  attempt: number;
+  /** 人工驳回备注，作为返工反馈注入提示词。 */
+  feedbackNote: string;
+}
+
 export interface ReworkHandler {
   attemptChangesRequestedRework(
     runId: string,
@@ -72,6 +86,15 @@ export interface ReworkHandler {
     gateResult: GateResult,
     targetNodeId: string,
     attempt: number,
+  ): Promise<void>;
+  /**
+   * PD-18：人工驳回后的返工。反馈来自决策备注而非评审产物，目标来自
+   * human gate 声明的 reworkTargetNodeId；主体七步与 changes-requested
+   * 返工共用同一实现。
+   */
+  attemptHumanRejectionRework(
+    runId: string,
+    input: HumanRejectionReworkInput,
   ): Promise<void>;
   resolveReviewTargetNode(
     runId: string,
@@ -318,6 +341,62 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     targetNodeId: string,
     attempt: number,
   ): Promise<void> {
+    const reviewFeedback = await loadReviewArtifactContent(
+      runId,
+      reviewNode.id,
+    );
+    return attemptRework({
+      runId,
+      reviewNode,
+      gate,
+      gateResult,
+      targetNodeId,
+      attempt,
+      reviewFeedback,
+      reason: 'Independent review found changes-requested',
+    });
+  }
+
+  async function attemptHumanRejectionRework(
+    runId: string,
+    input: HumanRejectionReworkInput,
+  ): Promise<void> {
+    return attemptRework({
+      runId,
+      reviewNode: input.reviewNode,
+      gate: input.gate,
+      gateResult: input.gateResult,
+      targetNodeId: input.targetNodeId,
+      attempt: input.attempt,
+      reviewFeedback: input.feedbackNote,
+      reason: 'Human reviewer rejected the gate',
+    });
+  }
+
+  /**
+   * 返工七步的共享实现。changes-requested 与 human-rejected 仅反馈来源和
+   * 原因文案不同，节点/租约/门禁/评审重跑的机制完全一致。
+   */
+  async function attemptRework(input: {
+    runId: string;
+    reviewNode: ExecutableNode;
+    gate: WorkflowGateConfig;
+    gateResult: GateResult;
+    targetNodeId: string;
+    attempt: number;
+    reviewFeedback: string;
+    reason: string;
+  }): Promise<void> {
+    const {
+      runId,
+      reviewNode,
+      gate,
+      gateResult,
+      targetNodeId,
+      attempt,
+      reviewFeedback,
+      reason,
+    } = input;
     const checkedTransitionNode = getCheckedTransition();
     const runGateWithRepair = getRunGateWithRepair();
 
@@ -337,14 +416,10 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         targetNodeId,
         gateResultId: gateResult.id,
         attempt,
-        reason: 'Independent review found changes-requested',
+        reason,
       },
     );
 
-    const reviewFeedback = await loadReviewArtifactContent(
-      runId,
-      reviewNode.id,
-    );
     const targetInputs = targetNode.inputs as WorkflowArtifactInputRef[];
     const targetOutputs = targetNode.outputs as WorkflowArtifactOutputRef[];
     const targetGates = targetNode.gates as WorkflowGateConfig[];
@@ -662,6 +737,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
 
   return {
     attemptChangesRequestedRework,
+    attemptHumanRejectionRework,
     resolveReviewTargetNode,
   };
 }

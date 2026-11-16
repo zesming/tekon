@@ -280,6 +280,7 @@ export function createWorkflowEngine(
     promptBuilder,
     gateRunner,
     getCheckedTransition: () => checkedTransitionNode,
+    getReworkHandler: () => reworkHandlerRef,
     signal: options.signal,
     agentEventSink: options.agentEventSink,
   });

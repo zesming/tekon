@@ -482,7 +482,14 @@ async function validateExecutionPlan(
     const review = sourceNode(payload.reviewNodeId);
     const target = sourceNode(payload.targetNodeId);
     const { result, gate } = failedGate(payload.gateResultId, review);
-    if (gate.type !== 'independent-review' || result.failureClassification !== 'changes-requested') {
+    // PD-18：返工有两个合法来源——independent-review 的 changes-requested，
+    // 或 human gate 的人工驳回（human-rejected）。其余组合一律拒绝。
+    const authorizedRework =
+      (gate.type === 'independent-review' &&
+        result.failureClassification === 'changes-requested') ||
+      (gate.type === 'human' &&
+        result.failureClassification === 'human-rejected');
+    if (!authorizedRework) {
       verificationFailed('rework.gateResult');
     }
     const count = attempt(payload.attempt, resolveMaxReworkAttempts(gate.maxRetries));

@@ -219,7 +219,7 @@
 - 修复建议：按优先级：1）放开任何非终态的 Web 取消，只改一行（本 PR）。2）恢复时可换 provider、改指令，“重试此节点”。3）failed 重试放最后。第 2、3 步另排（重构第 2 阶段，和 PD-05 一起）。
 
 ### [PD-18] 驳回没有返工路径，备注到不了 agent
-- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（用 mock 和假 claude 验证，真实 provider 未测） | 状态：已确认，另排（重构第 2 阶段）
+- 维度：产品 | 严重度：S1 | 工作量：M | 置信度：高（用 mock 和假 claude 验证，真实 provider 未测） | 状态：已修复（PR #37，v0.32.0：human gate 新增模板字段 reworkTargetNodeId 并在解析期校验直接上游连通，内置 bugfix/plan-only 已声明；blocked resume 经 human-rework 判定触发 attemptHumanRejectionRework，备注注入返工提示词、返工后重跑评审并产生新 pending 决策，同一驳回只返工一次；human_decisions 新增 request_note 拆分请求上下文与决策备注，core/Web 摘要改读 requestNote；完整性校验接受 human-rejected 返工授权；合同 6 转真实 e2e，纯判定 7 条 + 返工 e2e + 备注/迁移测试覆盖）
 - 位置：packages/core/src/gate/human-gate.ts:66、133-170，packages/core/src/workflow/prompt-builder.ts:123-128，packages/core/src/workflow/node-executor.ts:216-220，packages/core/src/workflow/rework.ts，packages/web/src/client/components/approvals/DecisionForm.tsx:71-80
 - 现象：驳回后 run 进入 blocked，只剩“恢复”。每次恢复都调用一次 reviewer：假 claude 进程调用计数 1 → 驳回并恢复后 2 → 再驳回并恢复后 3，生成 `review-report.v2` 和新的 pending decision。RD 不重跑，改动不变，复用原 lease（`worktree_leases` 仍是 1 条）。两次 prompt `diff` 为空，备注标记出现 0 次。
 - 依据：`prompt-builder.ts:123-128` 不读 note，全仓读取 `decision.note` 的只有 repositories、approval/summary、web mappers。驳回备注还会覆盖请求上下文的 `note`（`human-gate.ts:66、145`）。返工框架已支持目标节点和 reviewFeedback，只是只由 independent-review 的 changes-requested 触发。

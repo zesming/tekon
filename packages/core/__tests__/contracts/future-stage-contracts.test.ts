@@ -9,7 +9,6 @@ import {
   createAuditLogger,
   createCommandGateway,
   createGateEngine,
-  createHumanGate,
   createMockAgentAdapter,
   createRepositories,
   createWorkflowEngine,
@@ -30,7 +29,10 @@ import {
 // converted into a normal regression test (and strengthened into the
 // real-process e2e named in the refactor plan). Do not delete these to make
 // a run green. Contract 4 (reviewer/gate optional) was delivered in PD-06
-// subitem 4 and converted to a normal test; contracts 5 and 6 remain.
+// subitem 4 and converted to a normal test; contract 6 (human rejection
+// rework) was delivered in PD-18 and now lives as the strengthened e2e
+// __tests__/workflow/human-rejection-rework.e2e.test.ts. Contract 5
+// (role model selection) remains for batch 10.
 // ---------------------------------------------------------------------------
 
 const tempDirs: string[] = [];
@@ -139,76 +141,4 @@ describe('future-stage workflow contracts (placeholders)', () => {
     expect((loaded.agent as { model?: string }).model).toBe('claude-opts-5-5');
   });
 
-  // Contract 6 (refactor plan, stage 2): a human rejection carries the note
-  // back to the agent, re-runs the target node, and opens a fresh approval.
-  it.fails('contract 6 (stage 2): rejection re-runs the target node and opens a new approval', async () => {
-    const repoPath = createGitRepo();
-    const db = openTekonDatabase({ filename: ':memory:' });
-    migrateDatabase(db);
-    const repositories = createRepositories(db);
-    const audit = createAuditLogger({ repositories });
-    const gateway = createCommandGateway({ repositories });
-    const engine = createWorkflowEngine({
-      repoPath,
-      dataDir: '.tekon',
-      repositories,
-      audit,
-      agentProvider: 'mock',
-      adapter: createMockAgentAdapter(),
-      gateEngine: createGateEngine({ repositories, gateway }),
-      worktreeManager: createWorktreeManager({ repositories, gateway }),
-    });
-
-    // Setup: run to a human gate and reject with a note — both work today.
-    const result = await engine.startRun({
-      demandText: 'rejection rework contract',
-      mode: 'template',
-      workflowSpec: {
-        id: 'reject-contract',
-        name: 'reject-contract',
-        version: 1,
-        retryPolicy: {
-          maxAttempts: 1,
-          maxRetries: 0,
-          backoffMs: 0,
-          strategy: 'fixed' as const,
-          onExhausted: 'block' as const,
-        },
-        phases: [
-          {
-            id: 'rd',
-            name: 'RD',
-            dependsOn: [],
-            nodes: [
-              {
-                id: 'rd-node',
-                role: 'rd' as const,
-                inputs: [],
-                outputs: [{ id: 'code', type: 'code-changes' as const }],
-                gates: [{ type: 'human', requiresHumanApproval: true }],
-                dependsOn: [],
-              },
-            ],
-          },
-        ],
-      },
-    });
-    expect(result.workflow.status).toBe('paused');
-    const [decision] = await repositories.listHumanDecisions(result.runId);
-    expect(decision).toBeTruthy();
-    await createHumanGate({ repositories }).rejectHumanGate(
-      decision!.id,
-      'contract-reviewer',
-      '请按备注返工',
-    );
-
-    // Contract assertion (fails today): rejection starts a rework loop — the
-    // target node re-runs and a fresh pending decision becomes available.
-    // Current behavior blocks the node without any new decision.
-    const pendingAfterReject = (
-      await repositories.listHumanDecisions(result.runId)
-    ).filter((entry) => entry.status === 'pending');
-    expect(pendingAfterReject).toHaveLength(1);
-    db.close();
-  });
 });

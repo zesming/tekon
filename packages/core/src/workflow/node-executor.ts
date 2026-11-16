@@ -20,6 +20,8 @@ import {
   evaluateDeterministicBlock,
   type DeterministicBlock,
 } from './resume-policy.js';
+import { resolveHumanReworkTrigger } from './human-rework.js';
+import type { ReworkHandler } from './rework.js';
 import type { WorkflowHelpers } from './helpers.js';
 import {
   agentFailureAuditPayload,
@@ -83,6 +85,11 @@ export interface NodeExecutorDeps {
   promptBuilder: PromptBuilder;
   gateRunner: GateRunner;
   getCheckedTransition(): CheckedTransitionFn;
+  /**
+   * PD-18：人工驳回返工处理器。可选注入；缺省时 blocked 人工节点走常规
+   * 重跑路径（旧行为）。
+   */
+  getReworkHandler?(): ReworkHandler;
   /**
    * Job-level abort signal: user cancellation settles cancelled, shutdown
    * preserves an interrupted checkpoint, and ownership loss fences writes.
@@ -231,6 +238,61 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
           type: 'node.resumed-gates-only',
           payload: { nodeId: node.id, role: node.role },
         });
+      }
+
+      // 2) PD-18：人工驳回且 human gate 声明了返工目标时，对目标节点发起
+      //    返工（备注作为反馈），而不是盲目重跑本节点 agent。返工七步结束
+      //    后本节点回到 awaiting-gate，下方门禁循环重新请求人工审批。
+      if (!resumeOptions?.gatesOnly) {
+        const reworkHandler = deps.getReworkHandler?.();
+        if (reworkHandler) {
+          const [nodes, gateResults, decisions, events] = await Promise.all([
+            repositories.listNodes(runId),
+            repositories.listGateResults(runId),
+            repositories.listHumanDecisions(runId),
+            repositories.listAuditEvents(runId),
+          ]);
+          const trigger = resolveHumanReworkTrigger({
+            runId,
+            node,
+            nodes,
+            gateResults,
+            decisions,
+            reworkAttemptEvents: events.filter(
+              (event) => event.type === 'gate.rework.attempt',
+            ),
+          });
+          if (trigger) {
+            await checkedTransitionNode(
+              runId,
+              node.id,
+              'running',
+              'node.transition.checked',
+              { fromStatus: 'blocked' },
+            );
+            await audit.append({
+              runId,
+              type: 'node.human-rework.started',
+              payload: {
+                nodeId: node.id,
+                decisionId: trigger.decision.id,
+                targetNodeId: trigger.targetNodeId,
+                attempt: trigger.attempt,
+              },
+            });
+            await reworkHandler.attemptHumanRejectionRework(runId, {
+              reviewNode: node,
+              gate: trigger.gate,
+              gateResult: trigger.gateResult,
+              targetNodeId: trigger.targetNodeId,
+              attempt: trigger.attempt,
+              feedbackNote: trigger.feedbackNote,
+            });
+            // 返工已把节点置为 awaiting-gate，直接进入门禁恢复路径，
+            // 跳过整个 agent 执行段。
+            current.status = 'awaiting-gate';
+          }
+        }
       }
     }
 
