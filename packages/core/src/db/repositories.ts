@@ -202,8 +202,8 @@ export interface TekonRepositories {
   getRunProviderConfig(runId: string): Promise<RunProviderConfig | null>;
   /**
    * PD-05：--rebind 在一个事务内替换冻结绑定（plan_snapshot/plan_digest、
-   * run_provider_configs）并重写非终态节点的物化门禁。终态运行拒绝写入，
-   * 返回 null；运行不存在时抛错。
+   * run_provider_configs）并重写非终态节点的物化门禁。终态运行或存在活跃
+   * 作业时拒绝写入（applied=false 并带 reason）；运行不存在时抛错。
    */
   applyRunRebind(input: {
     runId: string;
@@ -211,7 +211,9 @@ export interface TekonRepositories {
     planDigest: string;
     provider: RunProviderConfig;
     nodeGates: Array<{ nodeId: string; gates: Node['gates'] }>;
-  }): Promise<{ applied: boolean }>;
+    /** 零差异重绑定：仍跑终态/活跃作业守卫，但跳过实际写入。 */
+    unchanged: boolean;
+  }): Promise<{ applied: boolean; reason?: 'terminal' | 'active-job' }>;
   updateWorkflowInstanceStatus(
     runId: string,
     status: WorkflowStatus,
@@ -459,7 +461,29 @@ export function createRepositories(
             current.status === 'failed' ||
             current.status === 'cancelled'
           ) {
-            return { applied: false as const };
+            return { applied: false as const, reason: 'terminal' as const };
+          }
+          // 事务内复查活跃作业，消除 service 前置检查与本事务之间的
+          // TOCTOU 窗口：resume 作业可能在间隙被认领并按旧计划载入内存，
+          // 此时换绑定会让两个执行方按不同身份操作同一运行。与
+          // session-store 的活跃判定同形（同 kind/状态集合，同库连接可见
+          // 已提交的 jobs 行）。
+          const activeJob = db
+            .prepare(
+              `select 1 from jobs j
+                 join sessions s on s.id = j.session_id
+                where s.run_id = ?
+                  and j.kind in ('workflow-run', 'workflow-resume', 'goal-run')
+                  and j.status in ('queued', 'running', 'paused', 'cancelling')
+                limit 1`,
+            )
+            .get(input.runId);
+          if (activeJob) {
+            return { applied: false as const, reason: 'active-job' as const };
+          }
+          // 零差异：安全守卫已跑完，绑定身份未变，跳过全部写入。
+          if (input.unchanged) {
+            return { applied: true as const };
           }
           db.prepare(
             `update workflow_instances

@@ -130,13 +130,29 @@ export async function rebindRunBinding(
     planDigest: plan.digest,
     provider,
     nodeGates,
+    // 零差异时事务只跑安全守卫、跳过实际 UPDATE。
+    unchanged: !diff.hasDifferences,
   });
   if (!outcome.applied) {
-    // 并发终态写入赢了竞争：事务守卫拒绝，保持终态权威。
+    // 并发终态/活跃作业写入赢了竞争：事务守卫拒绝，保持既有状态权威。
+    if (outcome.reason === 'active-job') {
+      throw new Error(
+        `REBIND_ACTIVE_JOB: 运行 ${runId} 有活跃作业，不能在执行期间重绑定；请等待作业完成或先 tekon cancel。`,
+      );
+    }
     const latest = await repositories.getWorkflowInstance(runId);
     throw new Error(
       `REBIND_TERMINAL: 运行 ${runId} 已进入终态 ${latest?.status ?? 'unknown'}，重绑定被拒绝。`,
     );
+  }
+
+  // 零差异：绑定身份未变，不写审计噪声（安全守卫已在事务内执行）。
+  if (!diff.hasDifferences) {
+    return {
+      plan,
+      previousDigest: workflow.planDigest ?? '',
+      diff,
+    };
   }
 
   await input.audit.append({

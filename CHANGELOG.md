@@ -4,6 +4,7 @@
 
 - 修复配置后可在同一运行内采用新绑定（PD-05）：运行默认仍按受理时冻结的绑定恢复，但 `tekon resume` 与 `tekon status` 现在会只读探测并提示当前仓库配置与冻结绑定的分项差异（agent、provider、repo-profile 命令），不改变绑定；新增 `tekon resume --rebind [--agent <name>]` 显式采用当前配置——用冻结模板原字节与当前仓库事实重新捕获自洽的执行计划（新 digest），在一个事务内替换 `plan_snapshot`/`plan_digest` 与 Provider 快照，并重写尚未终态节点（含历史返工节点）的物化门禁，已通过节点的历史门禁结果与审计链保持不变，重绑定记录在审计事件 `run.rebound`（含新旧 digest 与脱敏分项差异）。终态运行与有活跃 Job 的运行拒绝重绑定；只重绑定 agent/Provider/门禁命令，模板结构变更仍需新运行。`tekon review` 的 missing-command Triage 改指 `--rebind`，不再建议与手册矛盾的旧路径。角色指令（`.tekon/roles/<role>/`）本就运行时读盘，修改后普通 resume 即生效，无需重绑定。
 - 多人工门禁按 gateKey 精确关联返工（独立审查加固）：同一节点挂多个 human gate 时，被驳回的门禁结果必须与声明 `reworkTargetNodeId` 的门禁按稳定 gateKey 匹配，不再可能借用另一个门禁的返工目标发起错误返工并卡死运行；补纯判定与引擎级 e2e 及变异证据。
+- `--rebind` 独立审查加固：重绑定事务内复查活跃作业，消除前置检查与事务之间的 TOCTOU 窗口（`REBIND_ACTIVE_JOB`）；零差异重绑定只跑安全守卫、跳过写入与审计噪声；补含人工返工节点的重绑定回归与审计脱敏（`[REDACTED_*]`）专门 e2e。
 - Web 决策输出接口补齐 `requestNote` 字段声明，修复静态类型门禁（运行时 mapper 已输出该字段）。
 
 ## 0.32.0 — 2026-11-17
