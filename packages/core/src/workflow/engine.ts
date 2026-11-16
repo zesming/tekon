@@ -63,7 +63,6 @@ export {
   gateCommandPolicy,
   effectiveGateForCommand,
   defaultBuiltInRolesDir,
-  resolveReviewTargetNodeByHeuristic,
   isChangesRequested,
   resolveMaxReworkAttempts,
 } from './workflow-runtime.js';

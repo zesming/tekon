@@ -224,28 +224,6 @@ export function defaultBuiltInRolesDir(): string {
 }
 
 /**
- * Heuristic for finding the review target when no explicit targetNodeId is
- * available: pick the last (most recent) upstream node whose status is
- * 'passed'. Returns null when no such node exists or when the review node
- * itself is not found in the list.
- */
-export function resolveReviewTargetNodeByHeuristic(
-  nodes: ReadonlyArray<{ id: string; status: string }>,
-  reviewNodeId: string,
-): string | null {
-  const reviewNode = nodes.find((n) => n.id === reviewNodeId);
-  if (!reviewNode) return null;
-
-  const upstreamNodes = nodes.filter(
-    (n) => n.id !== reviewNodeId && n.status === 'passed',
-  );
-  if (upstreamNodes.length > 0) {
-    return upstreamNodes[upstreamNodes.length - 1].id;
-  }
-  return null;
-}
-
-/**
  * Returns true when a gate failure should trigger the changes-requested
  * rework flow: only independent-review gates with a changes-requested
  * classification qualify.

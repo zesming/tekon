@@ -531,7 +531,7 @@
 - 修复记录：脱敏改为按行流式落盘，流式输出与整段 `redactSecrets` 逐字等价（性质测试与随机 fuzz 锁定），单行 1MB 上限、内存有界，运行中即可 `tail -f`；progress.json 写入节流到每秒一次并在退出时补写。子进程以 detached 进程组登记到 job 租约，任务被回收时核对首进程启动时间后发 SIGTERM、宽限后 SIGKILL（SIGKILL 前二次核对防 pid 复用），Tekon 被强杀后的遗留进程可由另一个进程在租约过期后结束；无 `ps` 的平台跳过自动回收，需人工清理（手册已说明）。
 
 ### [CD-14] Rework 反馈大多丢失，目标节点靠启发式选择，可能选错
-- 维度：代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认，另排（重构第 2 阶段）
+- 维度：代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已修复（PR #37，v0.32.0：`resolveReviewTargetNode` 直读评审产物 `reviewProcess.targetNodeId`，删除 `resolveReviewTargetNodeByHeuristic` 及全部白名单类型过滤，缺合法目标 fail-closed 走门禁耗尽；反馈加载改为 title/body/summary/decision/findings 完整结构，新增 code-review 显式目标与无目标两条 e2e）
 - 位置：packages/core/src/workflow/rework.ts:100-140，:146-166，packages/core/src/db/repositories.ts:564-575，packages/core/src/workflow/workflow-runtime.ts:194-208，:215-223，:229-231
 - 现象：
   - 翻转 pm-test-plan-intent-review 后调用序列是 `… qa-test-plan → qa-test-plan-review → pm-test-plan-intent-review → qa-test-plan-review → pm-test-plan-intent-review → rd-code-change …`，审计 `targetNodeId: qa-test-plan-review`。artifact 里正确的 `reviewProcess.targetNodeId` 被忽略，`qa-test-plan` 没有重跑。
@@ -794,7 +794,7 @@
 - 修复建议：合并为 core 一个事务函数，CLI 和 Web 都调用。
 
 ### [CD-33] Rework 错误路径会引发二次异常，role_run 留下孤儿记录
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.32.0：返工 agent 与评审重跑失败时 role_run 立即 markRoleRunInterrupted；评审重跑失败改 throw 由 node-executor 统一收敛，消除非法状态转换二次异常；目标门禁抛错清理租约别名；三条失败注入 e2e 覆盖并验证 resume 恢复）
 - 位置：packages/core/src/workflow/rework.ts:314，:388，:405-411，:438-455，:539，:555-567，packages/core/src/workflow/gate-runner.ts:508，packages/core/src/workflow/lease-service.ts:174-175
 - 现象（三种注入）：
   - rework 后目标 gate 失败：首次 interrupted，真实原因被 `active execution lease required…` 盖住，无孤儿，resume 后 blocked，再 resume 后 passed。
