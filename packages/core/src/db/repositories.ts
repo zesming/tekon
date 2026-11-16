@@ -261,6 +261,8 @@ export interface TekonRepositories {
     leaseId: string,
     releasedAt: string,
   ): Promise<WorktreeLease | null>;
+  /** CD-09 MF-R1：同节点再执行时重新激活已释放的合成租约（清 releasedAt）。 */
+  reactivateWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   getWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   listWorktreeLeases(runId: string): Promise<WorktreeLease[]>;
   upsertDeliveryPullRequest(
@@ -779,6 +781,18 @@ export function createRepositories(
         db.prepare(
           'update worktree_leases set released_at = ? where id = ?',
         ).run(releasedAt, leaseId);
+        const row = db
+          .prepare('select * from worktree_leases where id = ?')
+          .get(leaseId) as WorktreeLeaseRow | undefined;
+        return row ? mapWorktreeLease(row) : null;
+      });
+    },
+
+    async reactivateWorktreeLease(leaseId) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          'update worktree_leases set released_at = null where id = ?',
+        ).run(leaseId);
         const row = db
           .prepare('select * from worktree_leases where id = ?')
           .get(leaseId) as WorktreeLeaseRow | undefined;

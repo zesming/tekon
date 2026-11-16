@@ -1474,6 +1474,75 @@ describe('workflow engine role prompt integration', () => {
     );
     db.close();
   });
+
+  it('CD-09 N-R2: a none node with no outputs still receives the source-edit restriction in its main prompt', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-goal-noprompt-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: passthroughGateEngine(repositories),
+    });
+
+    // 无 outputs：appendArtifactProtocol 会提前返回，约束只能靠主提示词送达。
+    await engine.startRun({
+      demandText: '只读 goal 也应收到写权限提示',
+      mode: 'template',
+      workflowSpec: {
+        id: 'goal-no-outputs',
+        name: 'Goal No Outputs',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'P1',
+            dependsOn: [],
+            nodes: [
+              {
+                id: 'goal-node', role: 'goal', workspace: 'none',
+                inputs: [], outputs: [], gates: [], dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Workspace source-edit policy:');
+    expect(prompts[0]).toContain(
+      'workspace=none; do not modify, create, or delete',
+    );
+    db.close();
+  });
 });
 
 function writeRoleFixture(rolesDir: string) {

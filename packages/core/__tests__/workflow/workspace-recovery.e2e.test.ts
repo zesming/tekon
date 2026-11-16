@@ -288,4 +288,102 @@ describe('CD-09 8b-3 recoverable finalize and delivery workspace boundary', () =
 
     db.close();
   });
+
+  it('MF-R1: a re-executed none node after its synthetic lease was released still blocks source edits on resume', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-reactivate-none-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const gateway = createCommandGateway({ repositories });
+    const forbiddenPath = join(repoPath, 'forbidden.txt');
+    let agentRuns = 0;
+
+    const buildEngine = (writeViolation: boolean) =>
+      createWorkflowEngine({
+        repoPath,
+        dataDir: '.tekon',
+        repositories,
+        audit,
+        agentProvider: 'mock',
+        adapter: {
+          async runAgent(input) {
+            agentRuns += 1;
+            if (writeViolation) {
+              writeFileSync(forbiddenPath, 'second generation edit\n', 'utf8');
+            }
+            return createMockAgentAdapter().runAgent(input);
+          },
+        },
+        worktreeManager: createWorktreeManager({ repositories, gateway }),
+      });
+
+    const spec = {
+      id: 'reactivate-none',
+      name: 'Reactivate None',
+      version: 1,
+      retryPolicy: {
+        maxAttempts: 1,
+        maxRetries: 0,
+        backoffMs: 0,
+        strategy: 'fixed' as const,
+        onExhausted: 'block' as const,
+      },
+      phases: [
+        {
+          id: 'p1',
+          name: 'P1',
+          dependsOn: [],
+          nodes: [
+            {
+              id: 'goal-node',
+              role: 'goal',
+              workspace: 'none' as const,
+              inputs: [],
+              outputs: [],
+              gates: [],
+              dependsOn: [],
+            },
+          ],
+        },
+      ],
+    };
+
+    // 第一代干净执行通过，合成租约被释放。
+    const first = await buildEngine(false).startRun({
+      demandText: 'none 节点再执行仍受约束',
+      mode: 'template',
+      workflowSpec: spec,
+    });
+    expect(first.workflow.status).toBe('passed');
+    const nodeId = (await repositories.listNodes(first.runId))[0].id;
+
+    // 重放“首次 agent 失败/中断后清理已释放租约、节点回到 interrupted”。
+    await repositories.transitionNode(nodeId, 'interrupted');
+    await repositories.updateWorkflowInstanceStatus(
+      first.runId,
+      'interrupted',
+      nodeId,
+    );
+
+    // 第二代 resume：租约必须被重新激活并建立新基线，违规写入仍要被拦。
+    const resumed = await buildEngine(true).resumeRun(first.runId);
+
+    expect(resumed.workflow.status).toBe('interrupted');
+    expect(agentRuns).toBe(2);
+    const events = await repositories.listAuditEvents(first.runId);
+    expect(
+      events.some((e) => e.type === 'worktree.lease.reactivated'),
+    ).toBe(true);
+    const failures = events.filter(
+      (e) => e.type === 'worktree.lease.finalize.failed',
+    );
+    expect(failures.at(-1)?.payload).toMatchObject({
+      recoverable: true,
+      changedPaths: expect.arrayContaining(['forbidden.txt']),
+    });
+
+    db.close();
+  });
 });

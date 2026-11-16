@@ -197,6 +197,9 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
         expectedDeliveryRef
           ? `For qa-release-signoff.targetRef and validatedRef, use this exact tested delivery ref: ${expectedDeliveryRef}.`
           : '',
+        // CD-09 N-R2：写权限约束放在主提示词而非仅 artifact protocol，
+        // 确保无 outputs 的节点（如内置 Goal）也能收到 workspace 指引。
+        ['Workspace source-edit policy:', ...workspaceSourceEditInstructions(node.workspace)].join('\n'),
         `Produce the requested artifacts and preserve evidence for gates.`,
       ]
         .filter((line) => line.length > 0)
@@ -298,19 +301,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       // CD-09：文件写权限由节点 workspace 声明驱动，不再从 code-changes
       // 产物推断。none=禁止改源码；in-place=直改主工作区且无 worktree/提升；
       // worktree（默认）=隔离工作树，通过后由引擎 promote/commit。
-      ...(workspace === 'none'
-        ? [
-            '- This node runs with workspace=none; do not modify, create, or delete any repository source files. Write only node artifacts under TEKON_OUTPUT_DIR.',
-          ]
-        : workspace === 'in-place'
-          ? [
-              '- This node runs with workspace=in-place; you may edit repository files directly in the working directory. There is no worktree and Tekon does not commit or promote these changes — leave them in place in the repository.',
-              '- Keep repository edits scoped to this workflow node.',
-            ]
-          : [
-              '- Keep repository edits scoped to this workflow node.',
-              '- Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
-            ]),
+      ...workspaceSourceEditInstructions(workspace),
       '- Do not run git add, git commit, git push, or create PRs inside this node.',
       `- Write all node artifacts under TEKON_OUTPUT_DIR (${input.outputDir}).`,
       `- Required artifact types: ${input.requiredArtifactTypes.join(', ')}.`,
@@ -425,6 +416,31 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
 // ---------------------------------------------------------------------------
 // Pure helper functions (no closure state)
 // ---------------------------------------------------------------------------
+
+/**
+ * CD-09：按节点 workspace 声明显式生成源码编辑权限指引。独立成纯函数，使无
+ * outputs 的节点（如内置 Goal，artifact protocol 会提前返回）也能在主提示词
+ * 收到约束，而不是只靠 finalize 事后拦截。
+ */
+export function workspaceSourceEditInstructions(
+  workspace: NodeWorkspace,
+): string[] {
+  if (workspace === 'none') {
+    return [
+      '- This node runs with workspace=none; do not modify, create, or delete any repository source files. Write only node artifacts under TEKON_OUTPUT_DIR.',
+    ];
+  }
+  if (workspace === 'in-place') {
+    return [
+      '- This node runs with workspace=in-place; you may edit repository files directly in the working directory. There is no worktree and Tekon does not commit or promote these changes — leave them in place in the repository.',
+      '- Keep repository edits scoped to this workflow node.',
+    ];
+  }
+  return [
+    '- Keep repository edits scoped to this workflow node.',
+    '- Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+  ];
+}
 
 function formatGateResultForPrompt(gate: {
   id: string;

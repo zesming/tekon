@@ -114,7 +114,9 @@ export function diffSourceSnapshot(
       added.push(entry.path);
     } else if (
       before.sha256 !== entry.sha256 ||
-      before.mode !== entry.mode ||
+      // N-R1：mode 是后加字段，升级前的旧快照条目无 mode，跳过该项比较，
+      // 避免 resume 旧 interrupted 运行时把全部文件误报为权限修改。
+      (before.mode !== undefined && before.mode !== entry.mode) ||
       Boolean(before.symlink) !== Boolean(entry.symlink)
     ) {
       modified.push(entry.path);

@@ -122,4 +122,17 @@ describe('CD-09 source snapshot for non-git workspace enforcement', () => {
     expect(diff.modified).toEqual(['src/a.txt']);
     chmodSync(target, 0o644);
   });
+
+  it('tolerates legacy snapshot entries without a mode field across upgrades', () => {
+    const repoPath = makeRepo();
+    const baseline = captureSourceSnapshot(repoPath);
+    // 模拟 mode 字段引入前冻结的旧快照：删掉所有条目的 mode。
+    const legacy = {
+      ...baseline,
+      entries: baseline.entries.map(({ mode: _mode, ...rest }) => rest),
+    } as unknown as Parameters<typeof diffSourceSnapshot>[1];
+
+    const diff = diffSourceSnapshot(repoPath, legacy);
+    expect(diff.changedPaths).toEqual([]);
+  });
 });

@@ -119,16 +119,45 @@ export function createLeaseService(deps: LeaseServiceDeps): LeaseService {
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId' | 'workspace'>,
     options: { captureSnapshot: boolean },
   ): Promise<WorktreeLease> {
-    // 幂等：合成租约 id 对节点是确定性的，冷启动 resume 会再次进入这里。
-    // 复用既有行（无论 active 还是已释放），不盲插避免主键冲突，不重拍快照
-    // （none 的基线必须保持首次执行时的状态，否则违规改动会被纳入基线），
-    // 也不重复 created 事件（会打乱 durableExecutionIdentity 的身份排序）。
+    // 合成租约 id 对节点是确定性的，冷启动 resume / 同节点再执行都会进入这里，
+    // 不能盲插否则主键冲突。按既有行状态分两种语义：
     const existing = (await repositories.listWorktreeLeases(runId)).find(
       (candidate) => candidate.nodeId === node.id,
     );
     if (existing) {
-      executionLeases.set(node.id, existing);
-      return existing;
+      if (!existing.releasedAt) {
+        // active：节点仍在同一代执行（recoverable finalize 失败、关停恢复）。
+        // 原样复用，不重拍快照——none 基线必须保持这一代开始时的状态，
+        // 否则违规改动会被纳入基线；也不重复 created 事件打乱身份排序。
+        executionLeases.set(node.id, existing);
+        return existing;
+      }
+      // 已释放：上一代已结束（agent 失败/中断清理或干净 finalize 后的再执行）。
+      // 必须重新激活（清 releasedAt），否则 activeExecutionLease 的
+      // !releasedAt 过滤解析不到，gate 会永久卡死、finalize 误走 no-op 跳过
+      // none 快照 diff（MF-R1）。none 节点重拍快照建立新一代基线。
+      const reactivated =
+        (await repositories.reactivateWorktreeLease(existing.id)) ?? existing;
+      let snapshotPath: string | undefined;
+      if (options.captureSnapshot) {
+        snapshotPath = snapshotPathFor(runId, node.id);
+        mkdirSync(dirname(snapshotPath), { recursive: true });
+        const snapshot = captureSourceSnapshot(repoPath);
+        writeFileSync(snapshotPath, JSON.stringify(snapshot), 'utf8');
+      }
+      executionLeases.set(node.id, reactivated);
+      await audit.append({
+        runId,
+        type: 'worktree.lease.reactivated',
+        payload: {
+          nodeId: node.id,
+          leaseId: reactivated.id,
+          worktreePath: reactivated.worktreePath,
+          workspace: node.workspace,
+          ...(snapshotPath ? { snapshotPath } : {}),
+        },
+      });
+      return reactivated;
     }
 
     const lease = makeSyntheticLease(repoPath, runId, node);

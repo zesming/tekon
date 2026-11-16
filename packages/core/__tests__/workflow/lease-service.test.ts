@@ -959,6 +959,54 @@ describe('CD-09 workspace-driven lease modes', () => {
       db.close();
     }
   });
+
+  it('MF-R1: re-executing a node reactivates its released synthetic lease and re-enforces none on the new baseline', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-reactivate-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'none');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+      const node = makeNode({ workspace: 'none' });
+
+      // 第一代：建租约（含快照）并干净 finalize，租约被释放。
+      await service.createExecutionLease('run_1', node);
+      await service.finalizeExecutionLease('run_1', node.id);
+      let leases = await repositories.listWorktreeLeases('run_1');
+      expect(leases).toHaveLength(1);
+      expect(leases[0].releasedAt).toBeTruthy();
+
+      // 模拟首次 agent 失败后 resume 的同节点再执行：必须重新激活而非沿用
+      // 已释放行，否则 activeExecutionLease 解析不到、none 快照 diff 被跳过。
+      const recreated = await service.createExecutionLease('run_1', node);
+      leases = await repositories.listWorktreeLeases('run_1');
+      expect(leases).toHaveLength(1);
+      expect(leases[0].id).toBe(recreated.id);
+      expect(leases[0].releasedAt).toBeNull();
+      // 再激活后 activeExecutionLease 必须能解析（带 gate 节点否则永久卡死）。
+      await expect(
+        service.activeExecutionLease('run_1', node.id, { required: true }),
+      ).resolves.toBeTruthy();
+
+      // 第二代 agent 违规写源码：新基线下 finalize 必须再次拦截，不能 no-op。
+      writeFileSync(join(repoPath, 'forbidden.txt'), 'second attempt\n');
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).rejects.toMatchObject({ code: 'RECOVERABLE_LEASE_FAILURE' });
+    } finally {
+      db.close();
+    }
+  });
 });
 
 async function repairRecoveryFixture() {
