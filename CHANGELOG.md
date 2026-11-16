@@ -1,5 +1,9 @@
 # 变更日志
 
+## 0.32.0 — 2026-11-17
+
+- CLI 退出码区分“卡住”的运行（CD-23）：`tekon run` / `tekon resume` 结束时按工作流终态返回退出码——`0` passed；`1` failed/interrupted/cancelled；`2` blocked（节点被确定性问题卡住，需先修复配置或环境）；`3` paused（等待人工确认）。此前 blocked 和 paused 都返回 `0`，脚本或 IM 集成会把“等待处理”误判为成功。`tekon status` 等只读命令退出码不变。
+
 ## 0.31.0 — 2026-11-16
 
 - 工作流角色和产物类型开放命名（PD-06 子项 1–3）：模板里的 `role` 和产物 `type` 不再限制在内置枚举，任何 kebab-case 标识符（如 `writer`、`essay`、`weekly-report`）都能声明并在节点间传递；内置研发角色和 21 种内置产物保留专用校验，自定义产物类型回落通用 Markdown payload 校验（仍要求非空 title/body）。`ci-status` 改为显式的交付保留类型，agent 产物清单继续拒绝声明，安全边界从“枚举漏配的意外保护”变为明确规则。

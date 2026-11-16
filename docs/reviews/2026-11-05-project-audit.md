@@ -668,7 +668,7 @@
 - 修复建议：先放宽 schema（重构第 2 阶段，见 PD-06）或加上 agent 重试（把校验错误喂回去），再分批删除归一化。
 
 ### [CD-23] blocked 和 paused 的 CLI 退出码是 0，job 记为 done
-- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已确认（随批次 9 处理）
+- 维度：代码 | 严重度：S2 | 工作量：S | 置信度：高 | 状态：已修复（PR #37，v0.32.0：`exitCodeForWorkflowStatus` 映射 blocked=2、paused=3，failed/interrupted/cancelled=1、passed=0；`run`/`resume` 经 `exitCodeForJobOutcome` 继承，只读命令退出码不变；手册 md+html 同步，CLI 单测与真实进程 e2e 全覆盖）
 - 位置：packages/cli/src/lib/session-context.ts:341-348，packages/core/src/session/workflow-job-executor.ts:270-284
 - 现象：blocked 和 paused 的 CLI 都是 exit=0（实测）。
 - 依据：`exitCodeForWorkflowStatus` 只把 failed、cancelled、interrupted 映射为 1，session-context.ts:341-345 的注释表明这是有意的。

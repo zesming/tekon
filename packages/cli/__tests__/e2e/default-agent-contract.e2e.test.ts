@@ -215,7 +215,8 @@ describe('default-agent contract through a real CLI process (TS-02)', () => {
     const first = cli([
       'run', '返工阶段才出现登录失效', '--template', 'rework-auth', '--agent', 'claude-code',
     ]);
-    expect(first.status, first.stdout + first.stderr).toBe(0);
+    // CD-23：人工门禁暂停以退出码 3 区别于成功。
+    expect(first.status, first.stdout + first.stderr).toBe(3);
     expect(first.stdout).toContain('运行已暂停，等待人工确认');
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(first.stdout)?.[1];
     expect(runId).toBeTruthy();

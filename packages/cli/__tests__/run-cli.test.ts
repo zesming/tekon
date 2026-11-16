@@ -205,7 +205,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const gatedOutput = io.takeStdout();
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
@@ -289,7 +289,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const rejectableOutput = io.takeStdout();
     const rejectableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       rejectableOutput,
@@ -721,7 +721,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
           ],
           io,
         ),
-      ).resolves.toBe(0);
+      ).resolves.toBe(3);
       const gatedOutput = io.takeStdout();
       const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         gatedOutput,
@@ -770,7 +770,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
           ],
           io,
         ),
-      ).resolves.toBe(0);
+      ).resolves.toBe(3);
       const resumableOutput = io.takeStdout();
       const resumableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         resumableOutput,
@@ -942,7 +942,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       io.takeStdout(),
     )?.[1];
@@ -1202,7 +1202,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
@@ -1320,7 +1320,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 

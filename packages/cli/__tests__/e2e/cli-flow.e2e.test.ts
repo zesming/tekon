@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -81,7 +81,7 @@ describe('tekon cli e2e', () => {
     expect(dynamicOutput).toContain('conditional-high-risk-human-gate');
     expect(dynamicOutput).toContain('conditional-rollback-plan');
 
-    const runOutput = runCli(
+    const runResult = runCliResult(
       cliPath,
       [
         'run',
@@ -95,6 +95,9 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
+    // CD-23：paused（等待人工确认）以退出码 3 区别于成功。
+    expect(runResult.status, runResult.stdout + runResult.stderr).toBe(3);
+    const runOutput = runResult.stdout;
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
     expect(runId).toBeTruthy();
     expect(runOutput).toContain('状态: paused');
@@ -431,11 +434,21 @@ describe('tekon cli e2e', () => {
   }, 15_000);
 });
 
-function runCli(cliPath: string, args: string[], cwd: string): string {
-  return execFileSync(process.execPath, [cliPath, ...args], {
+function runCliResult(cliPath: string, args: string[], cwd: string) {
+  return spawnSync(process.execPath, [cliPath, ...args], {
     cwd,
     encoding: 'utf8',
   });
+}
+
+function runCli(cliPath: string, args: string[], cwd: string): string {
+  const result = runCliResult(cliPath, args, cwd);
+  if (result.status !== 0) {
+    throw new Error(
+      `tekon ${args.join(' ')} exited with ${result.status}:\n${result.stdout}${result.stderr}`,
+    );
+  }
+  return result.stdout;
 }
 
 function createFixtureRepo(tempDirs: string[]) {

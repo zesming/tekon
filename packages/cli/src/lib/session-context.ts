@@ -336,12 +336,18 @@ export async function awaitJobTerminal(input: {
 }
 
 /**
- * Exit code for a workflow terminal status: failures and cancellation are
- * non-zero; passed/paused/blocked complete successfully (a paused run awaits
- * human approval, it is not a failure).
+ * Exit code for a workflow terminal status:
+ * - 0: passed (and skipped-only runs);
+ * - 1: failure, interruption or cancellation;
+ * - 2: blocked — the run needs a human/config fix before it can continue, so
+ *   scripts and IM integrations must not treat it as success (CD-23);
+ * - 3: paused — waiting on human approval, also distinct from success.
  */
 export function exitCodeForWorkflowStatus(status: string): number {
-  return ['failed', 'cancelled', 'interrupted'].includes(status) ? 1 : 0;
+  if (['failed', 'cancelled', 'interrupted'].includes(status)) return 1;
+  if (status === 'blocked') return 2;
+  if (status === 'paused') return 3;
+  return 0;
 }
 
 /**

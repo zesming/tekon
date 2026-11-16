@@ -31,6 +31,7 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
     io.takeStdout();
 
+    // CD-23：bugfix 在人工门禁暂停，退出码 3。
     await expect(
       runCli(
         [
@@ -45,7 +46,7 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 

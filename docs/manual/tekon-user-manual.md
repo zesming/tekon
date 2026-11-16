@@ -582,7 +582,7 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`failed`、`cancelled` 终态不可恢复。
 
-CLI 的 `run` / `resume` 在后台 Job 失败、中断或取消时返回非零退出码，并显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
+CLI 的 `run` / `resume` 按工作流终态返回退出码：`0` 为 passed；`1` 为 failed、interrupted 或 cancelled；`2` 为 blocked（节点被确定性问题卡住，需先修复配置或环境再恢复）；`3` 为 paused（等待人工确认）。后台 Job 失败、中断或取消时还会显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。脚本或 IM 集成必须把 `2`/`3` 当作“未完成”处理，不能再按成功上报。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
 
 历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
 
