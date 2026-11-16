@@ -513,7 +513,9 @@ export function createRepositories(
           }
           return { applied: true as const };
         });
-        return txn();
+        // immediate：先获取写锁再读，跨进程并发下把 BUSY_SNAPSHOT 硬失败
+        // 变为写锁排队（与 admission-store 的事务模式对齐）。
+        return txn.immediate();
       });
     },
 

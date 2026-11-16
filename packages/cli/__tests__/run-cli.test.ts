@@ -817,6 +817,59 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     }
   });
 
+  it('PD-05: --rebind with no binding change reports no-op instead of a misleading rebind header', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    // build 命令固定失败，且 rebind 前后 profile 完全不变。
+    writeFileSync(
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
+      JSON.stringify({
+        version: 1,
+        commands: {
+          build: { tool: process.execPath, args: ['-e', 'process.exit(7)'] },
+          lint: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+          security: {
+            tool: process.execPath,
+            args: ['-e', 'process.exit(0)'],
+          },
+          test: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+        },
+      }),
+    );
+
+    await expect(
+      runCli(
+        ['run', 'rebind 无差异', '--template', 'bugfix', '--agent', 'mock', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(2);
+    const runId =
+      /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    // 配置未变就 --rebind：抬头明确无差异，不产生 run.rebound 事件，运行仍 blocked。
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--rebind', '--repo', repoPath], io),
+    ).resolves.toBe(2);
+    expect(io.takeStderr()).toContain('无差异');
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const events = db
+        .prepare(
+          "select count(*) as count from audit_events where run_id=? and type='run.rebound'",
+        )
+        .get(runId!) as { count: number };
+      expect(events.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();

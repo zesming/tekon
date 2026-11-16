@@ -323,12 +323,18 @@ export async function commandResume(
           '运行已有活跃任务，请先使用 tekon cancel 取消或等待其完成。',
         );
       }
-      io.stderr.write(
-        [
-          '已按当前仓库配置重绑定（新冻结身份自洽，历史节点证据保留）：',
-          ...formatBindingDiff(rebindResult.diff),
-        ].join('\n') + '\n',
-      );
+      if (rebindResult.diff.hasDifferences) {
+        io.stderr.write(
+          [
+            '已按当前仓库配置重绑定（新冻结身份自洽，历史节点证据保留）：',
+            ...formatBindingDiff(rebindResult.diff),
+          ].join('\n') + '\n',
+        );
+      } else {
+        io.stderr.write(
+          '当前配置与冻结绑定无差异，绑定身份未改变，按原绑定恢复。\n',
+        );
+      }
     }
 
     if (args.values['approve-human']) {
