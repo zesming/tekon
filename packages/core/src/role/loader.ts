@@ -212,6 +212,8 @@ export function listRoleIds(rolesRoot: string): Role[] {
   return readdirSync(rolesRoot)
     .filter((entry) => isDirectory(join(rolesRoot, entry)))
     .flatMap((entry) => {
+      // PD-06：角色名开放，任何 kebab-case 标识符目录都是候选角色，
+      // 不再按内置枚举过滤；非标识符目录（如 .DS_Store）忽略。
       const parsed = roleSchema.safeParse(entry);
       return parsed.success ? [parsed.data] : [];
     })

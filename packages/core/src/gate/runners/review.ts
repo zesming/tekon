@@ -1,6 +1,10 @@
 import { writeFileSync } from 'node:fs';
 
-import type { ArtifactType, Node, Role } from '../../types/domain.js';
+import type {
+  BuiltInArtifactType,
+  BuiltInRoleId,
+  Node,
+} from '../../types/domain.js';
 import type { TekonRepositories } from '../../db/repositories.js';
 import type { CommandGateway } from '../../runtime/command-gateway.js';
 import {
@@ -15,7 +19,7 @@ import type { GateDefinition } from '../registry.js';
 // Role-scope permission tables
 // ---------------------------------------------------------------------------
 
-const allowedReviewScopesByRole: Record<Role, string[]> = {
+const allowedReviewScopesByRole: Record<BuiltInRoleId, string[]> = {
   pm: ['demand-quality', 'test-plan-intent'],
   rd: ['requirement-interface', 'technical-design', 'implementation-risk'],
   qa: ['requirement-interface', 'test-plan', 'validation', 'release-signoff'],
@@ -25,18 +29,19 @@ const allowedReviewScopesByRole: Record<Role, string[]> = {
   goal: [],
 };
 
-const allowedReviewScopesByArtifact: Partial<Record<ArtifactType, string[]>> =
-  {
-    'code-review': ['code-change'],
-    'demand-review': ['demand-quality'],
-    'qa-release-signoff-review': ['release-signoff'],
-    'requirement-interface-review': ['requirement-interface'],
-    'technical-review': ['technical-design', 'implementation-risk'],
-    'test-plan-review': ['test-plan', 'test-plan-intent'],
-  };
+const allowedReviewScopesByArtifact: Partial<
+  Record<BuiltInArtifactType, string[]>
+> = {
+  'code-review': ['code-change'],
+  'demand-review': ['demand-quality'],
+  'qa-release-signoff-review': ['release-signoff'],
+  'requirement-interface-review': ['requirement-interface'],
+  'technical-review': ['technical-design', 'implementation-risk'],
+  'test-plan-review': ['test-plan', 'test-plan-intent'],
+};
 
 const expectedReviewTargetTypesByArtifact: Partial<
-  Record<ArtifactType, ArtifactType[]>
+  Record<BuiltInArtifactType, BuiltInArtifactType[]>
 > = {
   'code-review': ['code-changes'],
   'demand-review': ['demand-card', 'prd', 'demand-review'],
@@ -186,11 +191,13 @@ async function runIndependentReviewGate(
     );
   }
   const expectedTargetTypes =
-    expectedReviewTargetTypesByArtifact[loaded.artifact.type as ArtifactType];
+    expectedReviewTargetTypesByArtifact[
+      loaded.artifact.type as BuiltInArtifactType
+    ];
   if (
     expectedTargetTypes &&
     !targetNode.outputs.some((output) =>
-      expectedTargetTypes.includes(output.type),
+      expectedTargetTypes.includes(output.type as BuiltInArtifactType),
     )
   ) {
     writeFileSync(
@@ -249,7 +256,9 @@ async function runRoleScopeGate(
     writeFileSync(outputPath, 'missing reviewScope', 'utf8');
     return makeGateResult(input, 'failed', 'missing-review-scope', outputPath);
   }
-  const allowed = allowedReviewScopesByRole[node.role];
+  // 自定义角色（PD-06 开放命名）没有内置评审作用域，fail-closed。
+  const allowed =
+    allowedReviewScopesByRole[node.role as BuiltInRoleId] ?? [];
   if (!allowed.includes(reviewScope)) {
     writeFileSync(
       outputPath,
@@ -259,7 +268,9 @@ async function runRoleScopeGate(
     return makeGateResult(input, 'failed', 'role-scope-violation', outputPath);
   }
   const allowedForArtifact =
-    allowedReviewScopesByArtifact[loaded.artifact.type as ArtifactType];
+    allowedReviewScopesByArtifact[
+      loaded.artifact.type as BuiltInArtifactType
+    ];
   if (allowedForArtifact && !allowedForArtifact.includes(reviewScope)) {
     writeFileSync(
       outputPath,

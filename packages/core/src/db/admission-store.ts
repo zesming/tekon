@@ -154,6 +154,7 @@ export interface PreparedAdmissionData {
     nodes: Array<{
       id: string;
       role: string;
+      prompt?: string;
       order: number;
       inputs: unknown[];
       outputs: unknown[];
@@ -362,12 +363,13 @@ export function createAdmissionStore(options: {
 
           for (const node of phase.nodes) {
             db.prepare(
-              "insert into nodes (id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at) values (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)"
+              "insert into nodes (id, run_id, phase_id, role, prompt, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at) values (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)"
             ).run(
               node.id,
               data.runId,
               phase.id,
               node.role,
+              node.prompt ?? null,
               JSON.stringify(node.inputs),
               JSON.stringify(node.outputs),
               JSON.stringify(node.gates),

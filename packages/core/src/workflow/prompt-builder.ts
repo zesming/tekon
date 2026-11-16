@@ -165,6 +165,9 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
         demand.body,
         '',
         `Execute workflow node ${node.id}.`,
+        node.prompt
+          ? ['Node instruction (template-authored, follow it precisely):', node.prompt].join('\n')
+          : '',
         node.inputs.length > 0
           ? `Declared input artifact aliases: ${node.inputs
               .map((input) => `${input.id}:${input.type}`)

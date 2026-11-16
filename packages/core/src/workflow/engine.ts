@@ -430,6 +430,7 @@ export function createWorkflowEngine(
         nodes: phase.nodes.map((node, nodeIndex) => ({
           id: node.id,
           role: node.role,
+          ...(node.prompt ? { prompt: node.prompt } : {}),
           order: nodeIndex,
           inputs: node.inputs,
           outputs: node.outputs,

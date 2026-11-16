@@ -18,6 +18,7 @@ export interface ExecutableNode {
   id: string;
   role: Role;
   phaseId?: string;
+  prompt?: string;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];

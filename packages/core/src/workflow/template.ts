@@ -61,6 +61,8 @@ export interface WorkflowGateConfig {
 export interface WorkflowTemplateNode {
   id: string;
   role: Role;
+  // PD-06：节点级提示词，可选；存在时随计划落库并注入 agent 提示词。
+  prompt?: string;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];
@@ -156,6 +158,7 @@ const rawNodeSchema = z
   .object({
     id: z.string().min(1),
     role: roleSchema,
+    prompt: z.string().min(1).optional(),
     inputs: z.array(rawArtifactRefSchema).default([]),
     outputs: z.array(rawArtifactRefSchema).default([]),
     gates: z.array(rawGateSchema).default([]),
@@ -356,6 +359,7 @@ const normalizedTemplateSchema = z.object({
     nodes: z.array(z.object({
       id: z.string().min(1),
       role: roleSchema,
+      prompt: z.string().min(1).optional(),
       inputs: z.array(normalizedOutputSchema.extend({ fromNodeId: z.string().min(1) })),
       outputs: z.array(normalizedOutputSchema),
       gates: z.array(normalizedGateSchema),
@@ -472,6 +476,7 @@ function normalizeWorkflowTemplate(
       phaseNodes.push({
         id: rawNode.id,
         role: rawNode.role,
+        ...(rawNode.prompt ? { prompt: rawNode.prompt } : {}),
         inputs,
         outputs,
         gates,

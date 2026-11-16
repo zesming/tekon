@@ -2,7 +2,28 @@ import { z } from 'zod';
 
 export const isoDateStringSchema = z.string().datetime();
 
-export const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo', 'goal']);
+// PD-06：角色与产物类型开放命名（kebab-case 标识符）。内置枚举保留为常量，
+// 供内置 payload/评审映射维持穷尽性检查；schema 本身不再拒绝自定义名字。
+export const IDENTIFIER_PATTERN = /^[a-z][a-z0-9-]*$/u;
+export const identifierSchema = z
+  .string()
+  .min(1)
+  .regex(
+    IDENTIFIER_PATTERN,
+    'identifier must be a kebab-case token: lowercase letters, digits and hyphens, starting with a letter',
+  );
+
+export const BUILT_IN_ROLE_IDS = [
+  'pm',
+  'rd',
+  'qa',
+  'reviewer',
+  'pmo',
+  'goal',
+] as const;
+export type BuiltInRoleId = (typeof BUILT_IN_ROLE_IDS)[number];
+
+export const roleSchema = identifierSchema;
 export type Role = z.infer<typeof roleSchema>;
 
 export const workflowStatusSchema = z.enum([
@@ -31,7 +52,7 @@ export const nodeStatusSchema = z.enum([
 ]);
 export type NodeStatus = z.infer<typeof nodeStatusSchema>;
 
-export const artifactTypeSchema = z.enum([
+export const BUILT_IN_ARTIFACT_TYPES = [
   'ac-evidence',
   'demand-card',
   'demand-review',
@@ -53,8 +74,28 @@ export const artifactTypeSchema = z.enum([
   'process-checkpoint',
   'delivery-package',
   'ci-status',
-]);
+] as const;
+export type BuiltInArtifactType = (typeof BUILT_IN_ARTIFACT_TYPES)[number];
+
+// 交付侧自产、agent 不得在产物清单里声明的保留类型。开放命名后用显式拒绝
+// 取代旧封闭枚举的意外保护，防止 provider 伪造交付事实。
+export const RESERVED_ARTIFACT_TYPES = ['ci-status'] as const;
+export type ReservedArtifactType = (typeof RESERVED_ARTIFACT_TYPES)[number];
+
+// 开放字符串：自定义产物类型（如 essay、weekly-report）与内置类型同等可声明，
+// 专用 payload 校验只对已注册的内置类型生效，其余回落通用 Markdown 校验。
+export const artifactTypeSchema = identifierSchema;
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
+
+// agent 产物清单专用：开放命名但拒绝交付保留类型。
+export const agentArtifactTypeSchema = identifierSchema.refine(
+  (type) =>
+    !(RESERVED_ARTIFACT_TYPES as readonly string[]).includes(type),
+  {
+    message:
+      'this artifact type is reserved for Tekon delivery and cannot be produced by agents',
+  },
+);
 
 export const gateTypeSchema = z.enum([
   'ac-evidence',
@@ -165,6 +206,8 @@ export const nodeSchema = z.object({
   phaseId: z.string().min(1).optional(),
   role: roleSchema,
   status: nodeStatusSchema,
+  // PD-06：节点级提示词，模板声明后随计划落库并注入 agent 提示词。
+  prompt: z.string().min(1).optional(),
   inputs: z.array(nodeArtifactInputRefSchema).default([]),
   outputs: z.array(nodeArtifactOutputRefSchema).default([]),
   gates: z.array(gateConfigSchema).default([]),

@@ -305,6 +305,9 @@ export function migrateDatabase(db: TekonDatabase): void {
     addColumnIfMissing(db, 'sessions', 'run_id', 'text');
     addColumnIfMissing(db, 'sessions', 'acknowledged_at', 'text');
 
+    // PD-06：节点级提示词随执行计划落库，resume 后仍能重建同一提示词。
+    addColumnIfMissing(db, 'nodes', 'prompt', 'text');
+
     rebuildSessionChildTablesIfMissingFk(db);
     // No backfill: legacy stopped/queued rows do not prove physical exit.
     addColumnIfMissing(db, 'jobs', 'exit_evidence', 'text');

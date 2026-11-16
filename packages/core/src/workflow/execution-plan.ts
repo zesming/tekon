@@ -77,6 +77,7 @@ function templateNodeToExecutable(
     id: scopedId(runId, node.id),
     role: node.role,
     phaseId: scopedId(runId, phase.id),
+    ...(node.prompt ? { prompt: node.prompt } : {}),
     inputs: node.inputs.map((input) => ({
       ...input,
       fromNodeId: nodeIdByTemplateId.get(input.fromNodeId) ?? input.fromNodeId,
@@ -114,6 +115,7 @@ export async function persistPlan(
         runId,
         phaseId: phase.id,
         role: node.role,
+        ...(node.prompt ? { prompt: node.prompt } : {}),
         status: 'pending',
         inputs: node.inputs,
         outputs: node.outputs,
@@ -152,6 +154,7 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
     id: node.id,
     role: node.role,
     phaseId: node.phaseId,
+    ...(node.prompt ? { prompt: node.prompt } : {}),
     inputs: node.inputs,
     outputs: node.outputs,
     gates: gatesWithStableKeys(node.gates as WorkflowGateConfig[], node.id),

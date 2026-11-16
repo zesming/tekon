@@ -1,5 +1,11 @@
 # 变更日志
 
+## 0.31.0 — 2026-11-16
+
+- 工作流角色和产物类型开放命名（PD-06 子项 1–3）：模板里的 `role` 和产物 `type` 不再限制在内置枚举，任何 kebab-case 标识符（如 `writer`、`essay`、`weekly-report`）都能声明并在节点间传递；内置研发角色和 21 种内置产物保留专用校验，自定义产物类型回落通用 Markdown payload 校验（仍要求非空 title/body）。`ci-status` 改为显式的交付保留类型，agent 产物清单继续拒绝声明，安全边界从“枚举漏配的意外保护”变为明确规则。
+- 节点支持自带 `prompt` 字段：模板节点可声明提示词，经执行计划落库到 nodes 表（新增可空 `prompt` 列，旧库自动加列），运行时注入该节点的 agent 提示词，resume 后保持一致。
+- 角色管理放开自定义名字（PD-10 角色名部分）：`tekon role create <name>` 对非内置名字生成最小角色脚手架（agent.yaml + system.md），内置角色仍走整目录复制；`tekon role show goal` 不再被 CLI 的枚举副本拒绝；`role list` 能列出项目目录下的自定义角色，非标识符目录忽略。角色 ID 必须是小写字母开头的 kebab-case 标识符。
+
 ## 0.30.0 — 2026-11-13
 
 - Web 运行控制：blocked、interrupted、pending 等任何非终态运行都能在 Web 上直接取消（以前只有 running、paused 可以），interrupted 状态统一显示“已中断，需恢复”，不再出现“待输入/等待输入”这类与详情页不一致的标签；会话列表和运行表共用同一套状态标签，每个运行只显示一个徽章。

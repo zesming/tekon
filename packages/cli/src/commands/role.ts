@@ -1,8 +1,8 @@
-import { cpSync, mkdirSync, realpathSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { listRoleIds, loadRole } from '@tekon/core';
+import { listRoleIds, loadRole, roleSchema } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
 import { ensureInitialized } from '../lib/context.js';
@@ -40,13 +40,13 @@ export async function commandRole(
     );
   }
   ensureSafeName(roleId);
-  const validRoles = ['pm', 'rd', 'qa', 'reviewer', 'pmo'] as const;
-  if (!validRoles.includes(roleId as (typeof validRoles)[number])) {
+  const roleParse = roleSchema.safeParse(roleId);
+  if (!roleParse.success) {
     throw new Error(
-      `无效的角色 ID: ${roleId}。可选值为: ${validRoles.join(', ')}`,
+      `无效的角色 ID: ${roleId}。角色 ID 必须是 kebab-case 标识符（小写字母开头，仅含小写字母、数字和短横线），例如 writer、code-reviewer。`,
     );
   }
-  const role = roleId as (typeof validRoles)[number];
+  const role = roleParse.data;
 
   if (subcommand === 'show') {
     const loadedRole = loadRole({ role, repoPath, builtInRolesDir });
@@ -71,19 +71,47 @@ export async function commandRole(
     await ensureInitialized(repoPath, io);
     const source = join(builtInRolesDir, roleId);
     const target = join(repoPath, '.tekon', 'roles', roleId);
-    const resolvedBuiltInDir = realpathSync(builtInRolesDir);
-    const resolvedSource = realpathSync(source);
-    if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
-      throw new Error(`角色 ID 试图逃逸内置角色目录: ${roleId}`);
+    if (existsSync(target)) {
+      throw new Error(`角色已存在: ${roleId}（${target}）。`);
     }
+
+    // 内置角色：整目录复制，保留 skills/knowledge/tools 等资产。
+    if (existsSync(source)) {
+      const resolvedBuiltInDir = realpathSync(builtInRolesDir);
+      const resolvedSource = realpathSync(source);
+      if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
+        throw new Error(`角色 ID 试图逃逸内置角色目录: ${roleId}`);
+      }
+      const repoRolesDir = join(repoPath, '.tekon', 'roles');
+      mkdirSync(repoRolesDir, { recursive: true });
+      const resolvedRolesDir = realpathSync(repoRolesDir);
+      const resolvedTarget = resolve(resolvedRolesDir, roleId);
+      if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
+        throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
+      }
+      cpSync(resolvedSource, resolvedTarget, { recursive: true });
+      io.stdout.write(`${resolvedTarget}\n`);
+      return;
+    }
+
+    // PD-06：自定义角色名，生成最小脚手架，用户在 system.md 里写职责。
     const repoRolesDir = join(repoPath, '.tekon', 'roles');
-    mkdirSync(repoRolesDir, { recursive: true });
+    mkdirSync(target, { recursive: true });
     const resolvedRolesDir = realpathSync(repoRolesDir);
     const resolvedTarget = resolve(resolvedRolesDir, roleId);
     if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
       throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
     }
-    cpSync(resolvedSource, resolvedTarget, { recursive: true });
+    writeFileSync(
+      join(resolvedTarget, 'agent.yaml'),
+      [`role: ${role}`, `name: ${role}`, ''].join('\n'),
+      'utf8',
+    );
+    writeFileSync(
+      join(resolvedTarget, 'system.md'),
+      `# ${role}\n\n在此编写该角色的职责、边界和输出要求。Tekon 运行节点时会把本文件作为系统提示词。\n`,
+      'utf8',
+    );
     io.stdout.write(`${resolvedTarget}\n`);
     return;
   }

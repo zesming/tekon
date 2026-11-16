@@ -9,7 +9,7 @@
 
 ## 修复约定
 
-本 PR/MR（分支 `audit/2026-11-05`）只承载本报告和重构第 1 阶段的修复。第 2 阶段起的条目已标“另排（重构第 N 阶段）”，各阶段另开 PR；阶段划分见第三节。
+本 PR/MR（分支 `audit/2026-11-05`）原只承载本报告和重构第 1 阶段的修复；**2026-11-16 经用户决定，重构第 2–7 阶段不再另开 PR，全部条目在本 PR 完成**，阶段划分见第三节，批次执行规划见 `.devflow/refactor-stage1/all-stages-plan.md`。
 - 每个修复提交在 message 中引用问题编号，如 `fix(CD-03): …`。
 - 修完一条：把本报告中该条状态改为"已修复"，并在 PR/MR 描述中勾选对应条目。
 - 条目只修完一部分时，状态写“部分修复”并写明余下去向，不勾选。
@@ -123,7 +123,7 @@
 - 修复建议：默认维持冻结。resume 时检测配置差异并提示，`--rebind` 显式采用新配置。`status`、`resume` 输出阻塞原因和下一步，blocked 退出码为 2。修正 Triage 文案。绑定横幅改为只在配置有差异时显示（与 UI-15 同一处修复）。
 
 ### [PD-06] 非研发工作流只能借研发槽位表达，缺节点级 prompt 和自由产物类型
-- 维度：产品、代码 | 严重度：S1 | 工作量：L（拆子项） | 置信度：高（用 mock 或 stub 验证，真实 provider 未测） | 状态：已确认（合并 CD-08），另排（重构第 2 阶段）
+- 维度：产品、代码 | 严重度：S1 | 工作量：L（拆子项） | 置信度：高（用 mock 或 stub 验证，真实 provider 未测） | 状态：部分修复（PR #37，v0.31.0：子项 1–3 已完成——枚举副本消除、角色/产物开放命名、节点 prompt、自定义角色脚手架；子项 4 reviewer/Gate 可选与子项 5 AGENTS.md/文档合同随批次 8 完成）
 - 位置：packages/core/src/types/domain.ts:5、34-56、59-72，packages/core/src/workflow/template.ts:155-186、468-470、502-504、700-715，packages/core/src/artifact/schemas.ts:21、158-180、218-239，packages/core/src/workflow/prompt-builder.ts:167、195、284、301-349、419-426，packages/core/src/role/loader.ts:24-37，packages/cli/src/commands/role.ts:42，AGENTS.md:16，README.md:5
 - 现象：`role: writer` 报枚举错误。`prompt:` 报 `Unrecognized key`。artifact 只能选 21 个研发枚举值，`essay` 报枚举错误。不带 reviewer 报 `Workflow template must include a reviewer node`。`listRoleIds` 按枚举过滤，自定义目录不可见。能跑的写法有两种：pm + reviewer 借用 `prd`、`review-report`，实际 prompt 是“Tekon PM 把需求整理为目标、非目标…”；或 `governance: none` + goal 节点。后者声明 inputs、outputs 后（如两 phase、`essay:prd`）能跑通，下游 prompt 含上游产物内容；不声明 outputs 时下游收不到内容。`role create pm` 后改 system.md，提示词生效。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（README:5 写“按固定流程分工”，AGENTS.md:16 把角色、artifact schema、Gate 明示为产品合同）。枚举散布：`roleSchema` 22 处 6 个文件，`artifactTypeSchema` 20 处 4 个文件，`gateTypeSchema` 9 处 3 个文件，artifact 字面量散落二十余个文件。真实缺陷：`role.ts:43` 缺 goal，`schemas.ts:218-239` 的枚举副本缺 ci-status，`governance: none` 只在 workflows/goal.yaml:4、9 出现，手册、README、产品和技术文档都没写。经用户确认（2026-11-06）：角色和产物自由命名，reviewer 和 Gate 可选，治理放进模板，同步改 AGENTS.md。
@@ -155,7 +155,7 @@
 - 修复建议：重做为 plan 节点产出受校验的 steps，走同一条执行路径，结果可存 YAML。去掉写死的 mock adapter 和关键词自评，删除时保留可复用的 `generateDynamicWorkflow`（`dynamic.ts:139`）。
 
 ### [PD-10] 角色不能配模型和 effort，工具只是提示，也不能新建角色名
-- 维度：产品、代码 | 严重度：S1 | 工作量：M | 置信度：高 | 状态：已确认（合并 CD-05、CD-06、CD-41），另排（重构第 2 阶段）
+- 维度：产品、代码 | 严重度：S1 | 工作量：M | 置信度：高（合并 CD-05、CD-06、CD-41） | 状态：部分修复（PR #37，v0.31.0：角色名放开与 `role show goal` 已完成；agent.yaml 的 driver/model/effort/tools/permission 字段随批次 10 完成）
 - 位置：packages/core/src/role/loader.ts:24-37，packages/core/src/role/prompt-builder.ts:23-27，packages/core/src/role/tool-policy.ts，packages/core/src/constraint/runtime-policy.ts，packages/core/src/runtime/agent-adapter.ts:18-21，packages/core/src/runtime/agent-runtime.ts:19-27、95-147，packages/core/src/runtime/claude-code-permissions.ts:31-48、67-134，packages/core/src/workflow/helpers.ts:201，packages/core/src/workflow/engine.ts:114，packages/cli/src/commands/run.ts:44-63，packages/cli/src/commands/role.ts:42-43，docs/product/tekon-current-product-scope.md:36，docs/README.md:21，docs/manual/tekon-user-manual.md:649，AGENTS.md:16
 - 现象：role schema、适配器 config、runtime overrides、CLI run 选项、rpc-contract 都没有 model、effort 字段。`--model` 只出现在适配器测试里，经 `config.args` 传入，用户入口没有暴露。一次 run 只有一个 adapter，`run_provider_configs` 以 run_id 为主键，provider 按 run 固定。提示词能通过 `.tekon/roles/<role>/` 覆盖。tools 只进 prompt：`compileRoleToolPolicy` 在生产代码里只被 prompt-builder 调用且只取 `.promptSummary`，`runtime-policy.ts` 只有测试使用，`agent.yaml` 的 injectMode 从未被读取。Claude 的工具许可固定，没有扩展入口，make、python、cargo 这类命令要靠宿主权限配置批准，未获准时可能失败或等待超时。`role create` 只接受 5 个内置 ID，不能取新名字。`role list` 有 goal，`role show goal` 却报无效。
 - 依据：产品方向偏差：文档已声明，与目标基准冲突（范围文档:36、docs/README.md:21、手册:649 写明工具只是提示；model、effort 文档未提）。工具配置只是提示，不是隔离边界，文档已披露。帮助文案称“从内置角色复制创建自定义角色”，与实际不符。
