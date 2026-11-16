@@ -201,7 +201,7 @@ tekon review
 </tr>
 <tr>
 <td><code>missing</code></td>
-<td>缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例</td>
+<td>命令执行型 Gate（build/test/lint/e2e-pass）缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例</td>
 </tr>
 <tr>
 <td><code>not-applicable</code></td>
@@ -209,7 +209,7 @@ tekon review
 </tr>
 <tr>
 <td><code>not-command-gate</code></td>
-<td>语义 Gate，不需要外部命令</td>
+<td>语义 Gate（human/schema/independent-review 等），运行期不执行外部命令；即使携带 <code>commandRef</code> 或内联命令也按此状态显示，引用是惰性的，不会报 missing 或被命令策略拒绝</td>
 </tr>
 </tbody>
 </table></div>

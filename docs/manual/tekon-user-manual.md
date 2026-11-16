@@ -156,9 +156,9 @@ tekon workflow preflight
 | --- | --- |
 | `resolved` | 已解析检查命令且通过命令策略裁决，预检与运行期使用同一判定 |
 | `rejected` | 命令已解析但被命令策略拒绝（如 shell 元字符、网络命令、危险删除），原因见 `rejection=` 字段 |
-| `missing` | 缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例 |
+| `missing` | 命令执行型 Gate（build/test/lint/e2e-pass）缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例 |
 | `not-applicable` | 已显式声明不适用 |
-| `not-command-gate` | 语义 Gate，不需要外部命令 |
+| `not-command-gate` | 语义 Gate（human/schema/independent-review 等），运行期不执行外部命令；即使携带 `commandRef` 或内联命令也按此状态显示，引用是惰性的，不会报 missing 或被命令策略拒绝 |
 
 检查 `suggestedCommand`，确认后写入 `.tekon/repo-profile.yaml`，再运行预检。
 

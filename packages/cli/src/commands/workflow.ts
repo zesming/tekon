@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
+  commandBindingBehavior,
   effectiveGateForCommand,
   evaluateCommandPolicy,
   evaluateWorkflowSelection,
@@ -202,9 +203,6 @@ export function gateCommandStatus(
     ? repoProfileCommandGuidance(repoPath, profile, gate.commandRef)
     : null;
   const command = gate.command ?? (guidance?.command ? guidance.command : null);
-  const isCommandBackedGate = Boolean(
-    gate.commandRef || gate.command || gate.type === 'security-scan',
-  );
   const commandText = command
     ? [command.tool, ...command.args].join(' ')
     : gate.type === 'security-scan'
@@ -214,24 +212,36 @@ export function gateCommandStatus(
     guidance?.status === 'not-applicable' && gate.type !== 'security-scan';
   let status: string;
   let rejection: string | null = null;
-  if (!isCommandBackedGate) {
-    status = 'not-command-gate';
-  } else if (repoCommandNotApplicable) {
+  if (repoCommandNotApplicable) {
     status = 'not-applicable';
-  } else if (!commandText) {
-    status = 'missing';
-  } else if (command) {
-    // PD-04：preflight 与运行期共用有效门禁解析（commandRef 物化后的命令
-    // 挂回门禁）与同一裁决函数，预检结果必须能预测运行期是否放行。
-    const effectiveGate = effectiveGateForCommand(gate, command);
-    rejection = evaluateCommandPolicy(
-      command,
-      gateCommandPolicy(repoPath, effectiveGate),
-      repoPath,
-    );
-    status = rejection ? 'rejected' : 'resolved';
   } else {
-    status = 'resolved';
+    // SF-1：分类与运行期 GateEngine、受理期 assertNoMissingRepoCommands 共用
+    // 同一规则（commandBindingBehavior）。human/schema/independent-review 等
+    // 语义门禁即使携带 commandRef 或内联命令也不会执行外部命令：缺失不报
+    // missing、解析出的命令不做网关裁决，preflight/doctor 不得与受理结论分叉。
+    const effectiveGate = command
+      ? effectiveGateForCommand(gate, command)
+      : gate;
+    const behavior = commandBindingBehavior(effectiveGate);
+    if (behavior === 'not-command-gate') {
+      status = 'not-command-gate';
+    } else if (behavior === 'missing-command') {
+      status = 'missing';
+    } else if (behavior === 'skip') {
+      status = 'not-applicable';
+    } else if (command) {
+      // PD-04：preflight 与运行期共用有效门禁解析（commandRef 物化后的命令
+      // 挂回门禁）与同一裁决函数，预检结果必须能预测运行期是否放行。
+      rejection = evaluateCommandPolicy(
+        command,
+        gateCommandPolicy(repoPath, effectiveGate),
+        repoPath,
+      );
+      status = rejection ? 'rejected' : 'resolved';
+    } else {
+      // builtin-security：security-scan 缺命令时有内置安全扫描兜底。
+      status = 'resolved';
+    }
   }
   return { guidance, commandText, status, rejection };
 }

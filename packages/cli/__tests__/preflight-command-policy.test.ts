@@ -90,4 +90,55 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     const result = gateCommandStatus(repoPath, profile, gate());
     expect(result.status).toBe('missing');
   });
+
+  // SF-1：语义门禁运行期不执行外部命令，携带的 commandRef 是惰性引用——
+  // 缺失不得报 missing（与受理期 assertNoMissingRepoCommands 同规则），
+  // doctor 也不得把它计入阻断问题。
+  it('does not flag a missing commandRef on a semantic human gate as missing', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-preflight-semantic-'));
+    tempDirs.push(repoPath);
+    const profile = loadRepoProfile(repoPath);
+
+    const result = gateCommandStatus(
+      repoPath,
+      profile,
+      gate({ type: 'human', requiresHumanApproval: true }),
+    );
+    expect(result.status).toBe('not-command-gate');
+    expect(result.rejection).toBeNull();
+    expect(result.commandText).toBe('');
+  });
+
+  it('never adjudicates a command resolved for a semantic gate because the runtime never runs it', () => {
+    const repoPath = repoWithProfile({
+      build: { tool: 'rm', args: ['-rf', '/tmp/x'] },
+    });
+    const profile = loadRepoProfile(repoPath);
+
+    const result = gateCommandStatus(
+      repoPath,
+      profile,
+      gate({ type: 'independent-review' }),
+    );
+    expect(result.status).toBe('not-command-gate');
+    expect(result.rejection).toBeNull();
+  });
+
+  it('treats an inline command on a schema gate as inert rather than resolved', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-preflight-inline-'));
+    tempDirs.push(repoPath);
+    const profile = loadRepoProfile(repoPath);
+
+    const result = gateCommandStatus(
+      repoPath,
+      profile,
+      gate({
+        type: 'schema',
+        commandRef: undefined,
+        command: { tool: 'npm', args: ['run', 'validate'] },
+      }),
+    );
+    expect(result.status).toBe('not-command-gate');
+    expect(result.rejection).toBeNull();
+  });
 });

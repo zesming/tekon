@@ -459,7 +459,11 @@ export function validateRunPlanV2(
     canonicalJson(stripLegacyProjectionFields(projected))
   )
     reject('projection');
-  return projected;
+  // 返回经冻结原字节认证的 digest（candidate.digest 已在上一行通过哈希
+  // 认证），而不是重投影产生的新 digest。这样下游对 workflow.planDigest 的
+  // 复核与 classifyExecutionBinding 才能匹配升级前冻结的计划身份；投影的
+  // 结构正确性已由上面的 projection 对比保证。
+  return { ...projected, digest: candidate.digest as string };
 }
 
 export function validateRunPlanV3(
@@ -491,7 +495,8 @@ export function validateRunPlanV3(
     canonicalJson(stripLegacyProjectionFields(projected))
   )
     reject('projection');
-  return projected;
+  // 同 validateRunPlanV2：回传经冻结原字节认证的 digest，保持计划身份。
+  return { ...projected, digest: candidate.digest as string };
 }
 
 export type ExecutionBinding =
