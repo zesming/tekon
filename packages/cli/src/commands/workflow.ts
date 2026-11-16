@@ -126,7 +126,10 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
             if (gate.type === 'security-scan') {
               fields.push('notApplicableIgnoredFor=security-scan');
             }
-          } else if (!commandText && guidance) {
+          } else if (status === 'missing' && guidance) {
+            // 修复提示只对真正缺命令的命令执行型 Gate 输出；语义门禁
+            // （not-command-gate）的 commandRef 是惰性引用，附带补全提示会
+            // 与状态自相矛盾。
             fields.push(`hint=${guidance.hint}`);
             fields.push(`profilePath=${guidance.profilePath}`);
             const suggestion = guidance.suggestions[0];

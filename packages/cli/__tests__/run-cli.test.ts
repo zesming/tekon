@@ -15,7 +15,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
-import { createIsolatedBinDir, writeFakeCodex } from './helpers/fake-provider.js';
+import {
+  createIsolatedBinDir,
+  writeFakeCodex,
+} from './helpers/fake-provider.js';
 import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
@@ -1080,6 +1083,58 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     expect(output).toContain('suggestedCommand=npm run compile');
   });
 
+  it('does not print missing-command fix hints for inert commandRefs on semantic gates', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-inert-'));
+    tempDirs.push(repoPath);
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      JSON.stringify({ scripts: { compile: 'tsc -p tsconfig.json' } }),
+      'utf8',
+    );
+    mkdirSync(join(repoPath, '.tekon', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.tekon', 'workflows', 'inert-ref.yaml'),
+      JSON.stringify({
+        id: 'inert-ref',
+        governance: 'none',
+        phases: [
+          {
+            id: 'dev',
+            nodes: [
+              {
+                id: 'n1',
+                role: 'goal',
+                gates: [
+                  {
+                    type: 'human',
+                    commandRef: 'build',
+                    requiresHumanApproval: true,
+                  },
+                  { type: 'build', commandRef: 'build' },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['workflow', 'preflight', 'inert-ref', '--repo', repoPath], io),
+    ).resolves.toBe(0);
+
+    const lines = io.takeStdout().split('\n').filter(Boolean);
+    const humanLine = lines.find((line) => line.includes('gate=human '));
+    const buildLine = lines.find((line) => line.includes('gate=build '));
+    expect(humanLine).toContain('status=not-command-gate');
+    expect(humanLine).not.toContain('hint=');
+    expect(humanLine).not.toContain('suggestedCommand=');
+    expect(buildLine).toContain('status=missing');
+    expect(buildLine).toContain('hint=add commands.build');
+  });
+
   it('prints explicit notApplicable repo profile commands in workflow preflight', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-na-'));
     tempDirs.push(repoPath);
@@ -1464,7 +1519,10 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const io = createMemoryIo();
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
     io.takeStdout();
-    writeFileSync(join(repoPath, '.tekon', 'config.yaml'), 'defaultagent: codex\n');
+    writeFileSync(
+      join(repoPath, '.tekon', 'config.yaml'),
+      'defaultagent: codex\n',
+    );
     // Only placeholder providers on PATH: even if the config were ignored,
     // no real provider could start.
     const binDir = createIsolatedBinDir();
@@ -1475,7 +1533,10 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     vi.stubEnv('PATH', binDir);
     try {
       await expect(
-        runCli(['run', '拼错配置', '--template', 'bugfix', '--repo', repoPath], io),
+        runCli(
+          ['run', '拼错配置', '--template', 'bugfix', '--repo', repoPath],
+          io,
+        ),
       ).resolves.toBe(1);
     } finally {
       vi.unstubAllEnvs();
