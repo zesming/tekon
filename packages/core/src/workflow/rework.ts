@@ -188,6 +188,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       role: targetNode.role,
       phaseId: targetNode.phaseId,
       ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
+      workspace: targetNode.workspace,
       inputs: targetInputs,
       outputs: (targetNode.outputs ?? []) as WorkflowArtifactOutputRef[],
       gates: (targetNode.gates ?? []) as WorkflowGateConfig[],
@@ -331,6 +332,8 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       phaseId: targetNode.phaseId,
       // 保留模板声明的节点指令，使同进程返工与 resume 重建的提示词一致。
       ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
+      // CD-09：返工节点继承源节点工作区模式。
+      workspace: targetNode.workspace,
       inputs: targetInputs,
       outputs: targetOutputs,
       gates: targetGates,
@@ -341,6 +344,8 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       runId,
       role: derived.role,
       ...(derived.prompt ? { prompt: derived.prompt } : {}),
+      // CD-09：返工节点继承源节点工作区模式，不能落回默认 worktree。
+      workspace: derived.workspace,
       status: 'pending',
       inputs: derived.inputs,
       outputs: derived.outputs,
@@ -379,6 +384,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: reworkNodeId,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      workspace: targetNode.workspace,
     });
 
     try {
@@ -455,6 +461,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
           id: targetNodeId,
           role: targetNode.role,
           phaseId: targetNode.phaseId,
+          workspace: targetNode.workspace,
           inputs: targetInputs,
           outputs: targetOutputs,
           gates: targetGates,
@@ -541,6 +548,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: reviewNode.id,
       role: reviewNode.role,
       phaseId: reviewNode.phaseId,
+      workspace: reviewNode.workspace,
     });
 
     try {

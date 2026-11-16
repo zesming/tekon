@@ -26,6 +26,11 @@ export type BuiltInRoleId = (typeof BUILT_IN_ROLE_IDS)[number];
 export const roleSchema = identifierSchema;
 export type Role = z.infer<typeof roleSchema>;
 
+// CD-09：节点工作区三态。worktree=隔离工作树（历史默认）；in-place=直接在
+// 仓库工作区执行（支持非 git 目录）；none=禁止改源码。
+export const nodeWorkspaceSchema = z.enum(['worktree', 'in-place', 'none']);
+export type NodeWorkspace = z.infer<typeof nodeWorkspaceSchema>;
+
 export const workflowStatusSchema = z.enum([
   'pending',
   'running',
@@ -208,6 +213,8 @@ export const nodeSchema = z.object({
   status: nodeStatusSchema,
   // PD-06：节点级提示词，模板声明后随计划落库并注入 agent 提示词。
   prompt: z.string().min(1).optional(),
+  // CD-09：工作区隔离模式，旧调用方/旧行默认 worktree，行为零变化。
+  workspace: nodeWorkspaceSchema.default('worktree'),
   inputs: z.array(nodeArtifactInputRefSchema).default([]),
   outputs: z.array(nodeArtifactOutputRefSchema).default([]),
   gates: z.array(gateConfigSchema).default([]),

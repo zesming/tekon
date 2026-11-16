@@ -430,6 +430,41 @@ function stripLegacyProjectionFields(value: unknown): unknown {
   return value;
 }
 
+/**
+ * CD-09 兼容：节点 `workspace` 字段引入前冻结的 v2/v3 快照，其
+ * template.phases[].nodes[] 上没有该键。历史执行始终是 worktree 隔离，
+ * 因此只对“缺失”补 'worktree' 默认值；显式声明的值原样保留——篡改
+ * workspace 仍会在投影对比中失败，防篡改不降级。digest 认证仍在冻结原
+ * 字节上进行，本函数只作用于投影相等性比较。
+ */
+function withLegacyNodeWorkspaceDefaults(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const root = value as Record<string, unknown>;
+  const template = root.template;
+  if (!template || typeof template !== 'object' || Array.isArray(template)) {
+    return value;
+  }
+  const phases = (template as Record<string, unknown>).phases;
+  if (!Array.isArray(phases)) return value;
+  const cloned = structuredClone(root) as Record<string, unknown>;
+  const clonedPhases = (cloned.template as Record<string, unknown>)
+    .phases as unknown[];
+  for (const phase of clonedPhases) {
+    if (!phase || typeof phase !== 'object' || Array.isArray(phase)) continue;
+    const nodes = (phase as Record<string, unknown>).nodes;
+    if (!Array.isArray(nodes)) continue;
+    for (const node of nodes) {
+      if (node && typeof node === 'object' && !Array.isArray(node)) {
+        const record = node as Record<string, unknown>;
+        if (!Object.hasOwn(record, 'workspace')) {
+          record.workspace = 'worktree';
+        }
+      }
+    }
+  }
+  return cloned;
+}
+
 /** 从已确认内容重新投影，验证版本、完整模板及所有派生展示字段。 */
 export function validateRunPlanV2(
   value: unknown,
@@ -455,8 +490,9 @@ export function validateRunPlanV2(
   }
   if (candidate.digest !== computeRunPlanDigest(candidate)) reject('digest');
   if (
-    canonicalJson(stripLegacyProjectionFields(candidate)) !==
-    canonicalJson(stripLegacyProjectionFields(projected))
+    canonicalJson(
+      stripLegacyProjectionFields(withLegacyNodeWorkspaceDefaults(candidate)),
+    ) !== canonicalJson(stripLegacyProjectionFields(projected))
   )
     reject('projection');
   // 返回经冻结原字节认证的 digest（candidate.digest 已在上一行通过哈希
@@ -491,8 +527,9 @@ export function validateRunPlanV3(
   }
   if (candidate.digest !== computeRunPlanDigest(candidate)) reject('digest');
   if (
-    canonicalJson(stripLegacyProjectionFields(candidate)) !==
-    canonicalJson(stripLegacyProjectionFields(projected))
+    canonicalJson(
+      stripLegacyProjectionFields(withLegacyNodeWorkspaceDefaults(candidate)),
+    ) !== canonicalJson(stripLegacyProjectionFields(projected))
   )
     reject('projection');
   // 同 validateRunPlanV2：回传经冻结原字节认证的 digest，保持计划身份。

@@ -308,6 +308,8 @@ describe('workflow engine worktree execution e2e', () => {
               {
                 id: 'qa-mutator',
                 role: 'qa',
+                // CD-09：源修改拒绝改由 workspace:none 显式声明驱动。
+                workspace: 'none',
                 inputs: [],
                 outputs: [{ id: 'signoff', type: 'qa-release-signoff' }],
                 gates: [],
@@ -434,6 +436,8 @@ describe('workflow engine worktree execution e2e', () => {
               {
                 id: 'qa-committer',
                 role: 'qa',
+                // CD-09：源修改拒绝改由 workspace:none 显式声明驱动。
+                workspace: 'none',
                 inputs: [],
                 outputs: [{ id: 'test-report', type: 'test-report' }],
                 gates: [],

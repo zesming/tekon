@@ -6,6 +6,7 @@ import type {
   CommandInvocation,
   GateConfig,
   Node,
+  NodeWorkspace,
   Role,
 } from '../types/domain.js';
 import type { CommandPolicy, WorktreeLease } from '../types/config.js';
@@ -24,6 +25,8 @@ export interface ExecutableNode {
   role: Role;
   phaseId?: string;
   prompt?: string;
+  // CD-09：决定租约形态（worktree/in-place/none），随执行计划落库。
+  workspace: NodeWorkspace;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];

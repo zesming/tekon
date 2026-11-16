@@ -539,6 +539,34 @@ async function runGit(
   return stdout;
 }
 
+/**
+ * CD-09：探测目录是否位于 git 工作树内。非 git 目录、git 未安装或命令被
+ * 策略拒绝都归为 false——调用方据此回落到 synthetic 租约 + 文件快照路径，
+ * 绝不把探测失败误判为 git 仓库。
+ */
+export async function isGitRepository(
+  gateway: CommandGateway,
+  repoPath: string,
+): Promise<boolean> {
+  try {
+    const result = await gateway.run({
+      command: { tool: 'git', args: ['rev-parse', '--show-toplevel'] },
+      cwd: repoPath,
+      outputDir: join(repoPath, '.tekon', 'tmp', 'git-probe'),
+      policy: {
+        allow: [{ tool: 'git', args: [] }],
+        deny: [],
+        requiresHumanApproval: [],
+        cwdScope: [repoPath],
+        network: 'disabled',
+      },
+    });
+    return result.status === 'executed' && result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether a lease was recorded for this repository, after resolving links. */
 export function isLeaseOfRepo(lease: Pick<WorktreeLease, 'repoPath'>, repoPath: string): boolean {
   return canonicalPath(lease.repoPath) === canonicalPath(repoPath);

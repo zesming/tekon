@@ -41,6 +41,7 @@ type NodeRow = {
   phase_id: string | null;
   role: Node['role'];
   prompt: string | null;
+  workspace: Node['workspace'];
   status: Node['status'];
   inputs: string;
   outputs: string;
@@ -538,9 +539,9 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into nodes (
-             id, run_id, phase_id, role, prompt, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
+             id, run_id, phase_id, role, prompt, workspace, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
            ) values (
-             @id, @runId, @phaseId, @role, @prompt, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
+             @id, @runId, @phaseId, @role, @prompt, @workspace, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
            )`,
         ).run({
           ...node,
@@ -1022,6 +1023,7 @@ function mapNode(row: NodeRow): Node {
     phaseId: row.phase_id ?? undefined,
     role: row.role,
     ...(row.prompt ? { prompt: row.prompt } : {}),
+    workspace: row.workspace,
     status: row.status,
     inputs: JSON.parse(row.inputs) as unknown,
     outputs: JSON.parse(row.outputs) as unknown,

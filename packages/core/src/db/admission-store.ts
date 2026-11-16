@@ -155,6 +155,8 @@ export interface PreparedAdmissionData {
       id: string;
       role: string;
       prompt?: string;
+      /** CD-09：节点工作区模式，旧受理数据缺省回落 worktree。 */
+      workspace?: "worktree" | "in-place" | "none";
       order: number;
       inputs: unknown[];
       outputs: unknown[];
@@ -363,13 +365,14 @@ export function createAdmissionStore(options: {
 
           for (const node of phase.nodes) {
             db.prepare(
-              "insert into nodes (id, run_id, phase_id, role, prompt, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at) values (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)"
+              "insert into nodes (id, run_id, phase_id, role, prompt, workspace, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at) values (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)"
             ).run(
               node.id,
               data.runId,
               phase.id,
               node.role,
               node.prompt ?? null,
+              node.workspace ?? 'worktree',
               JSON.stringify(node.inputs),
               JSON.stringify(node.outputs),
               JSON.stringify(node.gates),

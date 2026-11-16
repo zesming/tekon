@@ -444,6 +444,58 @@ describe('database migrations', () => {
     db.close();
   });
 
+  it('CD-09: adds nodes.workspace idempotently and defaults legacy rows to worktree isolation', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'workspace')).toBe(true);
+
+    // 模拟 CD-09 之前的 nodes 表（无 workspace 列）并写一行旧数据。
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table nodes_old (
+        id text primary key,
+        run_id text not null,
+        phase_id text,
+        role text not null,
+        status text not null,
+        inputs text not null default '[]',
+        outputs text not null default '[]',
+        gates text not null default '[]',
+        dependencies text not null default '[]',
+        node_order integer not null default 0,
+        created_at text not null,
+        updated_at text not null
+      );
+      insert into nodes_old (id, run_id, role, status, gates, dependencies, created_at, updated_at)
+        values ('legacy_node', 'run_legacy', 'goal', 'passed', '[]', '[]', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z');
+    `);
+    db.exec('drop table nodes;');
+    db.exec('alter table nodes_old rename to nodes;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'workspace')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'workspace')).toHaveLength(1);
+
+    const row = db
+      .prepare('select workspace from nodes where id = ?')
+      .get('legacy_node') as { workspace: string };
+    expect(row.workspace).toBe('worktree');
+
+    // 幂等：再次迁移不报错、不重复加列。
+    migrateDatabase(db);
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'workspace')).toHaveLength(1);
+
+    db.close();
+  });
+
   it('P1-UX-02: adds sessions.acknowledged_at idempotently and defaults legacy rows to NULL (unacknowledged)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
     tempDirs.push(dir);

@@ -78,6 +78,7 @@ function templateNodeToExecutable(
     role: node.role,
     phaseId: scopedId(runId, phase.id),
     ...(node.prompt ? { prompt: node.prompt } : {}),
+    workspace: node.workspace,
     inputs: node.inputs.map((input) => ({
       ...input,
       fromNodeId: nodeIdByTemplateId.get(input.fromNodeId) ?? input.fromNodeId,
@@ -116,6 +117,7 @@ export async function persistPlan(
         phaseId: phase.id,
         role: node.role,
         ...(node.prompt ? { prompt: node.prompt } : {}),
+        workspace: node.workspace,
         status: 'pending',
         inputs: node.inputs,
         outputs: node.outputs,
@@ -155,6 +157,7 @@ function persistedNodeToExecutable(node: Node): ExecutableNode {
     role: node.role,
     phaseId: node.phaseId,
     ...(node.prompt ? { prompt: node.prompt } : {}),
+    workspace: node.workspace,
     inputs: node.inputs,
     outputs: node.outputs,
     gates: gatesWithStableKeys(node.gates as WorkflowGateConfig[], node.id),
@@ -205,6 +208,8 @@ export function deriveRepairNode(
   return {
     id: `repair_${gateResultId}`,
     role: fixerRole,
+    // CD-09：autoFix repair 历史上始终走隔离工作树，保持该默认。
+    workspace: 'worktree',
     inputs: [],
     outputs: [],
     gates: [],

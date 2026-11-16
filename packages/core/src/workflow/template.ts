@@ -9,11 +9,13 @@ import {
   artifactTypeSchema,
   commandInvocationSchema,
   gateTypeSchema,
+  nodeWorkspaceSchema,
   RESERVED_ARTIFACT_TYPES,
   roleSchema,
   type ArtifactType,
   type CommandInvocation,
   type GateType,
+  type NodeWorkspace,
   type Role,
 } from '../types/domain.js';
 
@@ -64,6 +66,8 @@ export interface WorkflowTemplateNode {
   role: Role;
   // PD-06：节点级提示词，可选；存在时随计划落库并注入 agent 提示词。
   prompt?: string;
+  // CD-09：工作区隔离模式，缺省 worktree（历史行为）。
+  workspace: NodeWorkspace;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];
@@ -159,6 +163,8 @@ const rawNodeSchema = z
     id: z.string().min(1),
     role: roleSchema,
     prompt: z.string().min(1).optional(),
+    // CD-09：缺省 worktree，旧模板不带该字段时归一化为隔离工作树。
+    workspace: nodeWorkspaceSchema.optional(),
     inputs: z.array(rawArtifactRefSchema).default([]),
     outputs: z.array(rawArtifactRefSchema).default([]),
     gates: z.array(rawGateSchema).default([]),
@@ -360,6 +366,9 @@ const normalizedTemplateSchema = z.object({
       id: z.string().min(1),
       role: roleSchema,
       prompt: z.string().min(1).optional(),
+      // 归一化入口同样补 worktree 默认：程序化构造的模板（测试/内部调用）
+      // 省略该字段时与 YAML 解析路径得到完全一致的输出形状。
+      workspace: nodeWorkspaceSchema.default('worktree'),
       inputs: z.array(normalizedOutputSchema.extend({ fromNodeId: z.string().min(1) })),
       outputs: z.array(normalizedOutputSchema),
       gates: z.array(normalizedGateSchema),
@@ -473,6 +482,7 @@ function normalizeWorkflowTemplate(
         id: rawNode.id,
         role: rawNode.role,
         ...(rawNode.prompt ? { prompt: rawNode.prompt } : {}),
+        workspace: rawNode.workspace ?? 'worktree',
         inputs,
         outputs,
         gates,

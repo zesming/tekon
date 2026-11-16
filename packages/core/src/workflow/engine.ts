@@ -173,6 +173,9 @@ export interface CreateWorkflowEngineOptions {
 export function createWorkflowEngine(
   options: CreateWorkflowEngineOptions,
 ): WorkflowEngine {
+  // CD-09：gateway 同时供 Gate 引擎与 lease 服务的 git 探测使用，保证
+  // worktree/in-place/none 三态与门禁命令走同一套命令裁决。
+  const gateway = createCommandGateway({ repositories: options.repositories });
   const gateEngine =
     options.gateEngine ??
     createGateEngine({
@@ -183,7 +186,7 @@ export function createWorkflowEngine(
       // gateway.run() call at the gate-command spawn site (runCommandGate),
       // which the web executor wires in S7 (D6). The engine accepts `registry`
       // so that seam exists; createCommandGateway itself takes no registry.
-      gateway: createCommandGateway({ repositories: options.repositories }),
+      gateway,
     });
   const artifactStore = createArtifactStore({
     repoPath: options.repoPath,
@@ -197,6 +200,8 @@ export function createWorkflowEngine(
     repositories: options.repositories,
     audit: options.audit,
     worktreeManager: options.worktreeManager,
+    gateway,
+    dataDir: options.dataDir,
     baseRef: options.baseRef,
     allowDirtyBase: options.allowDirtyBase,
     executionLeases,
@@ -437,6 +442,9 @@ export function createWorkflowEngine(
           id: node.id,
           role: node.role,
           ...(node.prompt ? { prompt: node.prompt } : {}),
+          // CD-09：工作区模式必须随受理数据落库，否则回落 worktree 默认，
+          // none/in-place 节点会丢失隔离声明。
+          workspace: node.workspace,
           order: nodeIndex,
           inputs: node.inputs,
           outputs: node.outputs,

@@ -75,6 +75,7 @@ export function migrateDatabase(db: TekonDatabase): void {
         phase_id text references phases(id) on delete set null,
         role text not null,
         status text not null,
+        workspace text not null default 'worktree',
         inputs text not null default '[]',
         outputs text not null default '[]',
         gates text not null,
@@ -307,6 +308,14 @@ export function migrateDatabase(db: TekonDatabase): void {
 
     // PD-06：节点级提示词随执行计划落库，resume 后仍能重建同一提示词。
     addColumnIfMissing(db, 'nodes', 'prompt', 'text');
+
+    // CD-09：节点工作区模式；旧行默认 worktree，与历史隔离行为一致。
+    addColumnIfMissing(
+      db,
+      'nodes',
+      'workspace',
+      "text not null default 'worktree'",
+    );
 
     rebuildSessionChildTablesIfMissingFk(db);
     // No backfill: legacy stopped/queued rows do not prove physical exit.

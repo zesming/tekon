@@ -345,6 +345,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             id: repairNode.id,
             role: repairNode.role,
             phaseId: repairNode.phaseId,
+            workspace: repairNode.workspace,
           });
           try {
             if (await interrupted()) return false;
