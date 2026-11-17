@@ -66,7 +66,9 @@ jobs:
         run: pnpm -r typecheck
 
       - name: Unit and e2e tests (core, CLI, Web)
-        run: pnpm test --run
+        # 真实 git-worktree/子进程 e2e 在 vitest 文件并行下会因资源竞争触发
+        # 5000ms 超时与 worker 意外退出；串行执行与本地权威回归命令一致。
+        run: pnpm test --run --no-file-parallelism
 
       - name: CLI binary smoke
         run: |
