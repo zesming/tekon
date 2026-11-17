@@ -51,9 +51,10 @@ const COMMANDS: CommandMeta[] = [
   { name: 'cancel', description: '取消运行', group: '运行控制' },
   // 工作流与角色
   { name: 'workflow', description: '管理工作流模板', group: '工作流与角色', subcommands: [
-    { name: 'list', description: '列出所有工作流模板' },
-    { name: 'show', description: '查看工作流模板详情' },
-    { name: 'create', description: '从模板创建新工作流' },
+    { name: 'list', description: '列出所有工作流模板并标记无效项' },
+    { name: 'show', description: '查看模板的阶段、节点、角色与门禁结构' },
+    { name: 'validate', description: '校验模板语法与结构' },
+    { name: 'create', description: '从模板复制或用 --minimal 脚手架创建工作流' },
     { name: 'select', description: '为需求选择合适的工作流' },
     { name: 'preflight', description: '检查工作流门的命令可用性' },
   ] },

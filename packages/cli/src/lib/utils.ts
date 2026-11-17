@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 
 import {
+  inspectTemplateSymlink,
   listWorkflowCatalog,
-  loadWorkflowTemplate,
   loadWorkflowTemplateFile,
+  readableWorkflowTemplateError,
   readTekonConfig,
   resolveDefaultAgent,
 } from '@tekon/core';
@@ -100,10 +101,28 @@ export function loadWorkflowByName(
   ensureSafeName(name);
   const catalog = listWorkflowCatalog({ projectWorkflowsDir });
   const entry = catalog.find((item) => item.id === name);
-  if (entry?.path) {
-    return loadWorkflowTemplateFile(entry.path);
+  // catalog 与旧 fallback 扫描同样的内置/项目目录与 .yaml/.yml 后缀，
+  // 未命中即模板不存在：直接给中文指路，不再让 ENOENT 暴露 CLI 安装目录。
+  if (!entry?.path) {
+    throw new Error(
+      `模板 ${name} 不存在。用 tekon workflow list 查看可用模板名称。`,
+    );
   }
-  return loadWorkflowTemplate({ name, workflowsDir: projectWorkflowsDir });
+  // 统一软链信任边界：catalog 条目位于其来源根目录的第一层，dirname 即
+  // 该内置/项目根；越界/断链软链在读取前拒绝（与 list 探针、core 按名加载同规则）。
+  const linkCheck = inspectTemplateSymlink(entry.path, dirname(entry.path));
+  if (!linkCheck.ok) {
+    throw new Error(`模板 ${name} 无法解析：${linkCheck.reason}`);
+  }
+  try {
+    // CD-20：show/preflight/run/doctor 共用此入口，统一把校验器/语法
+    // 异常翻译为可读中文，裸 ZodError 不再能到达顶层错误打印。
+    return loadWorkflowTemplateFile(entry.path);
+  } catch (error) {
+    throw new Error(
+      `模板 ${name} 无法解析：${readableWorkflowTemplateError(error)}`,
+    );
+  }
 }
 
 export function getWorkflowFilePath(

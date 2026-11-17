@@ -56,6 +56,7 @@ flowchart LR
 
 | 操作 | CLI |
 | --- | --- |
+| 浏览 / 查看 / 校验工作流模板 | `tekon workflow list` / `show <name>` / `validate <name>` |
 | 检查仓库命令 | `tekon workflow preflight` |
 | 看运行 / 审阅代码与证据 | `tekon status` / `tekon review` |
 | 批准等待中的人工 Gate | `tekon resume --approve-human` |

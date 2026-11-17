@@ -1,5 +1,11 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
@@ -8,11 +14,13 @@ import {
   evaluateCommandPolicy,
   evaluateWorkflowSelection,
   gateCommandPolicy,
+  inspectTemplateSymlink,
   listWorkflowCatalog,
   loadRepoProfile,
   readDraftShapeFile,
   repoProfileCommandGuidance,
   selectWorkflowTemplateForDraft,
+  validateWorkflowTemplateFile,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -30,7 +38,7 @@ import {
 } from '../lib/utils.js';
 
 export async function commandWorkflow(argv: string[], io: CliIO) {
-  const [subcommand, name, ...rest] = argv;
+  const [subcommand] = argv;
   if (subcommand === 'select') {
     const selectArgs = parseArgs({
       args: argv.slice(1),
@@ -80,27 +88,46 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
     return;
   }
 
+  // 从 subcommand 之后的完整 tail 解析选项；否则像 `list --repo R` 这种
+  // 标志紧跟子命令的写法，--repo 会被位置解构吞掉，导致 repo 回落
+  // 到 cwd（PD-07 排查发现的既有隐患）。
   const args = parseArgs({
-    args: rest,
+    args: argv.slice(1),
     options: {
       repo: { type: 'string' },
       from: { type: 'string' },
+      // PD-07：脚手架写最小单节点模板，而非复制重量级 standard-delivery。
+      minimal: { type: 'boolean', default: false },
     },
     allowPositionals: true,
   });
+  // 模板名只认位置参数：标志位（如 `show --repo R name`）在位置参数之前时，
+  // 原始 argv 解构会把 '--repo' 误当名称。
+  const templateName = args.positionals[0];
   const repoPath = resolveProjectRepoPath(args.values.repo);
   const projectWorkflowsDir = join(repoPath, '.tekon', 'workflows');
 
   if (subcommand === 'list') {
-    const catalog = listWorkflowCatalog({ projectWorkflowsDir });
-    const ids = catalog.map((entry) => entry.id);
-    io.stdout.write(`${ids.join('\n')}\n`);
+    // PD-07：附加非抛出的有效性探针，让用户在 list 阶段就能发现坏模板，
+    // 而不必等到 run/show 才报错。
+    const catalog = listWorkflowCatalog({
+      projectWorkflowsDir,
+      validate: true,
+    });
+    const lines = catalog.map((entry) => {
+      const source = entry.builtin ? 'builtin' : 'project';
+      if (entry.valid === false) {
+        return `${entry.id} [${source}, invalid: ${singleLineError(entry.validationError ?? 'parse failed')}]`;
+      }
+      return `${entry.id} [${source}]`;
+    });
+    io.stdout.write(`${lines.join('\n')}\n`);
     return;
   }
 
   if (subcommand === 'preflight') {
-    const templateName = name ?? 'standard-delivery';
-    const template = loadWorkflowByName(templateName, projectWorkflowsDir);
+    const preflightName = templateName ?? 'standard-delivery';
+    const template = loadWorkflowByName(preflightName, projectWorkflowsDir);
     const profile = loadRepoProfile(repoPath);
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
@@ -145,32 +172,129 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
     return;
   }
 
-  if (!name) {
+  if (!templateName) {
     throw new Error(
       '工作流名称不能为空。请使用 tekon help workflow 查看用法。',
     );
   }
 
   if (subcommand === 'show') {
-    const template = loadWorkflowByName(name, projectWorkflowsDir);
-    io.stdout.write(
-      `id=${template.id}\nname=${template.name}\nphases=${template.phases.length}\n`,
-    );
+    // PD-07：展示完整结构（阶段→节点→角色/产物/门禁），不再只给
+    // id/name/阶段数三行，让用户不必读模板源码就能学写法。
+    const template = loadWorkflowByName(templateName, projectWorkflowsDir);
+    const lines: string[] = [
+      `id=${template.id}`,
+      `name=${template.name}`,
+      `phases=${template.phases.length}`,
+    ];
+    for (const phase of template.phases) {
+      lines.push(`phase ${phase.id} (${phase.name})`);
+      for (const node of phase.nodes) {
+        lines.push(`  node ${node.id} role=${node.role}`);
+        if (node.workspace !== undefined) {
+          lines.push(`    workspace=${node.workspace}`);
+        }
+        if (node.prompt) lines.push(`    prompt=${node.prompt}`);
+        const outputs = node.outputs.map((output) => output.type);
+        if (outputs.length > 0) lines.push(`    outputs=${outputs.join(',')}`);
+        if (node.gates.length > 0) {
+          lines.push(
+            `    gates=${node.gates
+              .map((gate) =>
+                gate.commandRef
+                  ? `${gate.type}(${gate.commandRef})`
+                  : gate.type,
+              )
+              .join(',')}`,
+          );
+        }
+      }
+    }
+    io.stdout.write(`${lines.join('\n')}\n`);
     return;
   }
 
+  if (subcommand === 'validate') {
+    // PD-07/CD-20：独立校验入口。错误给可读指路而非裸 zod JSON，退出码
+    // 表达成败以便脚本使用。
+    const filePath = getWorkflowFilePath(templateName, projectWorkflowsDir);
+    // 用 lstat 而非 existsSync 判断条目存在：断链软链经 existsSync（跟随
+    // 链接）会被判为不存在，从而漏掉精确的「符号链接已断开」诊断。
+    let entryPresent = true;
+    try {
+      lstatSync(filePath);
+    } catch {
+      entryPresent = false;
+    }
+    if (!entryPresent) {
+      // 不回显拼接路径：未命中时它指向 CLI 内置目录，会泄漏安装位置。
+      throw new Error(
+        `模板 ${templateName} 不存在。用 tekon workflow list 查看可用模板名称。`,
+      );
+    }
+    // 统一软链信任边界：显式 validate 与 list/show 同规则，断链/越界软链
+    // 在读取前拒绝并给精确原因，外部文件内容不会经错误片段回显。
+    const linkCheck = inspectTemplateSymlink(filePath, dirname(filePath));
+    if (!linkCheck.ok) {
+      throw new Error(
+        `模板 ${templateName} 校验失败：${linkCheck.reason}。用 tekon workflow list 查看可用模板。`,
+      );
+    }
+    const result = validateWorkflowTemplateFile(filePath);
+    if (result.valid) {
+      io.stdout.write(
+        `template ${templateName}: valid (phases=${result.template.phases.length}, nodes=${result.template.phases.reduce(
+          (sum, phase) => sum + phase.nodes.length,
+          0,
+        )})\n`,
+      );
+      return;
+    }
+    throw new Error(
+      `模板 ${templateName} 校验失败：${result.error}。用 tekon workflow show <name> 对照结构，或编辑 ${filePath} 修复后重新 validate。`,
+    );
+  }
+
   if (subcommand === 'create') {
-    ensureSafeName(name);
+    ensureSafeName(templateName);
     await ensureInitialized(repoPath, io);
+    const target = join(projectWorkflowsDir, `${templateName}.yaml`);
+    // 显式拒绝覆盖：模板是运行合同的一部分，静默替换可能让已存在的
+    // 自定义工作流在用户无察觉下丢失；需要重建请先手动删除或换名。
+    if (existsSync(target)) {
+      throw new Error(
+        `模板文件已存在：${target}。如需重建，请先手动删除或换一个名称。`,
+      );
+    }
+    if (args.values.minimal && args.values.from) {
+      // 两个选项语义冲突：--minimal 生成脚手架，没有复制来源。
+      io.stderr.write(
+        '提示：同时指定 --minimal 与 --from，--from 将被忽略，仍生成最小脚手架。\n',
+      );
+    }
+    if (args.values.minimal) {
+      mkdirSync(projectWorkflowsDir, { recursive: true });
+      // PD-07：最小脚手架——单阶段、单节点、人工门禁，用户按需扩展，
+      // 避免一上来复制 326 行的完整交付模板。
+      writeFileSync(target, minimalTemplateScaffold(templateName), 'utf8');
+      io.stdout.write(`${target}\n`);
+      return;
+    }
     const fromName = args.values.from ?? 'standard-delivery';
     ensureSafeName(fromName);
     const source = getWorkflowFilePath(fromName, projectWorkflowsDir);
-    const target = join(projectWorkflowsDir, `${name}.yaml`);
-    mkdirSync(projectWorkflowsDir, { recursive: true });
+    // 先读源再建目录：源模板缺失时给中文指路、不留空目录副作用，
+    // 也不回显指向 CLI 安装目录的拼接路径。
+    if (!existsSync(source)) {
+      throw new Error(
+        `来源模板 ${fromName} 不存在。用 tekon workflow list 查看可用模板名称。`,
+      );
+    }
     const content = readFileSync(source, 'utf8').replace(
       /^id:\s*.+$/mu,
-      `id: ${name}`,
+      `id: ${templateName}`,
     );
+    mkdirSync(projectWorkflowsDir, { recursive: true });
     writeFileSync(target, content, 'utf8');
     io.stdout.write(`${target}\n`);
     return;
@@ -191,6 +315,43 @@ export async function commandConstraints(argv: string[], io: CliIO) {
   io.stdout.write(
     readFileSync(join(getRepoRoot(), 'constraints.yaml'), 'utf8'),
   );
+}
+
+/**
+ * PD-07：list 的每行一个模板是可脚本解析的输出合同。校验错误（尤其
+ * YAML 语法错误自带代码片段与换行）必须折叠为单行并截断，完整诊断
+ * 交给不受单行约束的 `workflow validate`（stderr）。
+ */
+function singleLineError(text: string, maxLength = 160): string {
+  const collapsed = text.replace(/\s+/gu, ' ').trim();
+  return collapsed.length > maxLength
+    ? `${collapsed.slice(0, maxLength)}…`
+    : collapsed;
+}
+
+/**
+ * PD-07：最小工作流脚手架（单阶段、单实现节点 + 人工确认）。结构满足
+ * 模板 schema，用户可在此基础上加节点/门禁，而不必从重量级交付模板裁剪。
+ */
+function minimalTemplateScaffold(name: string): string {
+  return `id: ${name}
+name: ${name}
+version: 1
+phases:
+  - id: dev
+    name: Development
+    dependsOn: []
+    nodes:
+      - id: impl
+        role: rd
+        inputs: []
+        outputs:
+          - id: code
+            type: code-changes
+        gates:
+          - type: human
+        dependsOn: []
+`;
 }
 
 /**

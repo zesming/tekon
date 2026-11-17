@@ -16,6 +16,7 @@ import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
   isValidRequestId,
+  inspectTemplateSymlink,
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
@@ -767,12 +768,13 @@ function loadProjectWorkflowIfPresent(
   context: ServerContext,
   name: string,
 ): WorkflowTemplate | null {
+  const workflowsDir = context.projectContext.workflowsDir;
   for (const extension of ['.yaml', '.yml']) {
-    const workflowPath = join(
-      context.projectContext.workflowsDir,
-      `${name}${extension}`,
-    );
+    const workflowPath = join(workflowsDir, `${name}${extension}`);
     if (existsSync(workflowPath)) {
+      // 统一软链信任边界：项目模板越界/断链软链在读取前拒绝。
+      const linkCheck = inspectTemplateSymlink(workflowPath, workflowsDir);
+      if (!linkCheck.ok) throw new Error(linkCheck.reason);
       return loadWorkflowTemplateFile(workflowPath);
     }
   }

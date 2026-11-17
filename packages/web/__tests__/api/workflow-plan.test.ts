@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { request as httpRequest } from 'node:http';
+import { symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { createWebFixtureProject } from '../fixtures/project.js';
 import { createApiCaller } from '../../src/server/api/root.js';
@@ -115,6 +117,30 @@ describe('workflow.plan RPC', () => {
     await expect(
       api.workflow.plan({ template: 'does-not-exist' }),
     ).rejects.toThrow(/not found/i);
+  });
+
+  it('rejects an escaping template symlink without leaking outside file contents', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const workflowsDir = join(fixture.projectRoot, '.tekon', 'workflows');
+
+    // 仓库外的「凭据」文件，软链进模板目录（供应链向量）。
+    const outside = join(fixture.projectRoot, 'secret.ini');
+    writeFileSync(outside, 'SECRET_TOKEN: [unclosed\nweb_pw: hunter2-web\n');
+    symlinkSync(outside, join(workflowsDir, 'escape.yaml'));
+
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    cleanupTasks.push(() => api.close());
+    const error = await api.workflow
+      .plan({ template: 'escape' })
+      .then(() => null)
+      .catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = error instanceof Error ? error.message : String(error);
+    expect(message).toMatch(/超出模板目录|符号链接/u);
+    expect(message).not.toContain('SECRET_TOKEN');
+    expect(message).not.toContain('hunter2-web');
   });
 
   it('works over HTTP without authentication (auth: none)', async () => {

@@ -222,24 +222,28 @@ describe('tekon help', () => {
     expect(stdout).toContain(`Tekon CLI v${readRootVersion()}`);
   });
 
-  it('tekon workflow list lists built-in workflow template ids sorted one per line', async () => {
+  it('tekon workflow list lists built-in template ids with source markers (PD-07 format)', async () => {
     const io = createMemoryIo();
     const exitCode = await runCli(['workflow', 'list'], io);
     const stdout = io.takeStdout();
 
     expect(exitCode).toBe(0);
     const lines = stdout.trim().split('\n');
+    // PD-07：每行 `id [source]`（无效项再附 invalid 原因），id 仍是行首前缀，
+    // 排序保持稳定。
     expect(lines).toEqual(
       expect.arrayContaining([
-        'bugfix',
-        'docs-update',
-        'goal',
-        'plan-only',
-        'standard-delivery',
-        'standard-feature',
-        'test-improvement',
+        'bugfix [builtin]',
+        'docs-update [builtin]',
+        'goal [builtin]',
+        'plan-only [builtin]',
+        'standard-delivery [builtin]',
+        'standard-feature [builtin]',
+        'test-improvement [builtin]',
       ]),
     );
+    const ids = lines.map((line) => line.split(' ')[0]);
+    expect([...ids]).toEqual([...ids].sort());
   });
 
 });

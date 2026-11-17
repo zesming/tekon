@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.30.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.36.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -442,6 +442,20 @@ tekon workflow select "补齐 CLI 单元测试"
 
 推荐不会保存 workflow，也不会改变 `run` 的默认模板。
 
+### 6.3.1 模板查看、校验与脚手架（PD-07）
+
+```bash
+tekon workflow list
+tekon workflow show <name>
+tekon workflow validate <name>
+tekon workflow create <name> --minimal
+```
+
+- `list` 逐行输出 `id [builtin|project]`，每个模板严格占一行；解析失败的模板不被丢弃，而是附 `invalid: <原因>`（错误里的换行已折叠，完整诊断用 `validate` 查看），让写错的模板在浏览阶段就暴露，不必等到 `run`。`.tekon/workflows/` 下的符号链接模板同样被扫描，可用于共享同一份模板。**软链信任边界对所有命令一致**：链接目标必须位于该模板目录内，指向目录外或断开的链接会被拒绝读取（`list` 标记无效，`show`/`validate`/`run` 等显式命令直接报错），避免仓库外文件内容经错误信息外泄；目录内的合法软链正常可用。
+- `show <name>` 展示完整结构：每个阶段下的节点、角色、工作区模式、内联提示词、产物类型与门禁（命令型门禁带 `commandRef`），无需读模板 YAML 源码就能学写法；模板结构非法时给中文原因（含字段路径），不输出裸校验器 JSON。
+- `validate <name>` 独立校验模板，成功退出 0 并给阶段/节点数，失败退出 1 并给中文可读原因与修复指路（不输出裸校验器 JSON）；名称不存在时提示用 `workflow list` 查看可用名称，不回显工具安装路径。
+- `create <name> --minimal` 生成单阶段、单实现节点加人工门禁的最小脚手架（默认不带 `--minimal` 仍按 `--from` 复制既有模板；同传 `--minimal` 与 `--from` 时后者被忽略并给出提示）。目标文件已存在时拒绝创建，需先手动删除或换名；`--from` 来源模板不存在时同样给 `workflow list` 指路且不产生空目录。结构非法时 `validate`/`show`/`run` 都会明确报错。
+
 ### 6.4 `draft shape`
 
 ```bash
@@ -812,7 +826,7 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.30.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.36.0`。
 
 ## 7. Web Dashboard
 

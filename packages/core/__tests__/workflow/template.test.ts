@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,6 +14,7 @@ import {
   listWorkflowCatalog,
   loadWorkflowTemplate,
   parseWorkflowTemplate,
+  validateWorkflowTemplateFile,
 } from '../../src/workflow/template.js';
 
 describe('workflow template parser', () => {
@@ -572,5 +579,345 @@ phases:
     const stdEntry = catalog.find((entry) => entry.id === 'standard-delivery');
     expect(stdEntry).toBeDefined();
     expect(stdEntry?.builtin).toBe(true);
+  });
+});
+
+describe('PD-07 workflow template validation probe', () => {
+  const tempDirs: string[] = [];
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  const validYaml = `
+id: minimal
+name: Minimal
+version: 1
+phases:
+  - id: dev
+    name: Dev
+    dependsOn: []
+    nodes:
+      - id: n1
+        role: rd
+        inputs: []
+        outputs: []
+        gates: []
+        dependsOn: []
+`;
+
+  it('returns a valid result for a parseable template file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-valid-'));
+    tempDirs.push(dir);
+    const file = join(dir, 'minimal.yaml');
+    writeFileSync(file, validYaml);
+    const result = validateWorkflowTemplateFile(file);
+    expect(result.valid).toBe(true);
+    if (result.valid) expect(result.template.id).toBe('minimal');
+  });
+
+  it('returns an invalid result with a readable error instead of throwing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-invalid-'));
+    tempDirs.push(dir);
+    const file = join(dir, 'broken.yaml');
+    writeFileSync(file, 'id: broken\nphases: not-a-list\n');
+    const result = validateWorkflowTemplateFile(file);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      // CD-20：必须是「字段路径: 原因」的可读单行，而不是裸 zod JSON。
+      expect(result.error).toContain('phases');
+      expect(result.error).not.toContain('"code"');
+      expect(result.error).not.toContain('"expected"');
+      expect(result.error).not.toContain('ZodError');
+      expect(result.error.split('\n')).toHaveLength(1);
+    }
+  });
+
+  it('reports a missing file as a readable validation failure rather than throwing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-missing-'));
+    tempDirs.push(dir);
+    const result = validateWorkflowTemplateFile(join(dir, 'absent.yaml'));
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toContain('absent.yaml');
+      expect(result.error).not.toContain('ZodError');
+    }
+  });
+
+  it('translates common zod issues into single-line Chinese reasons (CD-20)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-zh-'));
+    tempDirs.push(dir);
+    const probe = (name: string, content: string): string => {
+      const file = join(dir, name);
+      writeFileSync(file, content);
+      const result = validateWorkflowTemplateFile(file);
+      expect(result.valid).toBe(false);
+      if (result.valid) throw new Error('expected invalid template');
+      return result.error;
+    };
+
+    const typeError = probe('type.yaml', 'id: t\nphases: nope\n');
+    expect(typeError).toContain('phases');
+    expect(typeError).toMatch(/类型错误/u);
+    expect(typeError).not.toMatch(/Invalid input|expected array/u);
+    // 两阶段解析可能不携带 received，兜底也必须是中文完整句而非 undefined。
+    expect(typeError).not.toContain('undefined');
+    expect(typeError).toMatch(/当前值缺失或类型不符/u);
+    expect(typeError.split('\n')).toHaveLength(1);
+
+    const missingError = probe('missing.yaml', 'id: t\nname: T\nversion: 1\n');
+    expect(missingError).toContain('phases');
+    expect(missingError).toMatch(/类型错误|必填/u);
+
+    const unknownKeyError = probe(
+      'unknown.yaml',
+      'id: t\nname: T\nversion: 1\nphases: []\nbogus: 1\n',
+    );
+    expect(unknownKeyError).toMatch(/未知字段/u);
+    expect(unknownKeyError).toContain('bogus');
+  });
+
+  it('collapses multi-line YAML syntax errors into one readable line', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-yaml-'));
+    tempDirs.push(dir);
+    const file = join(dir, 'syntax.yaml');
+    writeFileSync(file, 'id: syntax\nphases:\n  - id: dev\n   nodes: []\n');
+    const result = validateWorkflowTemplateFile(file);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.error).toMatch(/YAML/u);
+      expect(result.error.split('\n')).toHaveLength(1);
+      expect(result.error).not.toContain('YAMLParseError');
+    }
+  });
+
+  it('translates enum and union zod issues plus semantic errors into Chinese (CD-20)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-semantic-'));
+    tempDirs.push(dir);
+    const probe = (name: string, content: string): string => {
+      const file = join(dir, name);
+      writeFileSync(file, content);
+      const result = validateWorkflowTemplateFile(file);
+      expect(result.valid).toBe(false);
+      if (result.valid) throw new Error('expected invalid template');
+      return result.error;
+    };
+
+    const nodeBlock = (inner: string): string =>
+      `id: t\nname: T\nversion: 1\nphases:\n  - id: p\n    name: P\n    dependsOn: []\n    nodes:\n      - id: n1\n        role: rd\n        inputs: []\n${inner}\n        dependsOn: []\n`;
+
+    // 枚举值错误（zod v4 code=invalid_value，只携带允许 values 列表，
+    // 不含错误输入值；断言落在字段路径与可选值提示上）。
+    const enumError = probe(
+      'enum.yaml',
+      nodeBlock(
+        '        outputs: []\n        gates:\n          - type: magic-gate',
+      ),
+    );
+    expect(enumError).toMatch(/取值非法|可选值/u);
+    expect(enumError).toContain('gates.0.type');
+    expect(enumError).toContain('build');
+    expect(enumError).not.toMatch(/Invalid option/u);
+    expect(enumError.split('\n')).toHaveLength(1);
+
+    // 联合类型错误（zod v4 code=invalid_union）。
+    const unionError = probe(
+      'union.yaml',
+      nodeBlock('        outputs: [123]\n        gates: []'),
+    );
+    expect(unionError).toMatch(/类型|结构/u);
+    expect(unionError).not.toMatch(/Invalid input/u);
+
+    // zod 通过后的语义校验错误（normalize 层英文 throw）。
+    const phaseNode =
+      '    nodes:\n      - id: n1\n        role: rd\n        inputs: []\n        outputs: []\n        gates: []\n        dependsOn: []\n';
+    const duplicatePhase = `id: t\nname: T\nversion: 1\nphases:\n  - id: same\n    name: A\n    dependsOn: []\n${phaseNode}  - id: same\n    name: B\n    dependsOn: []\n${phaseNode}`;
+    const dupError = probe('dup.yaml', duplicatePhase);
+    expect(dupError).toMatch(/重复/u);
+    expect(dupError).toContain('same');
+    expect(dupError).not.toMatch(/Duplicate/u);
+
+    const unknownDep = `id: t\nname: T\nversion: 1\nphases:\n  - id: p\n    name: P\n    dependsOn: []\n    nodes:\n      - id: n1\n        role: rd\n        inputs: []\n        outputs: []\n        gates: []\n        dependsOn: [ghost]\n`;
+    const depError = probe('dep.yaml', unknownDep);
+    expect(depError).toMatch(/未知依赖/u);
+    expect(depError).toContain('ghost');
+    expect(depError).not.toMatch(/unknown dependency/u);
+  });
+
+  it('translates custom superRefine and identifier format issues into Chinese', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-custom-'));
+    tempDirs.push(dir);
+    const probe = (name: string, content: string): string => {
+      const file = join(dir, name);
+      writeFileSync(file, content);
+      const result = validateWorkflowTemplateFile(file);
+      expect(result.valid).toBe(false);
+      if (result.valid) throw new Error('expected invalid template');
+      return result.error;
+    };
+    const nodeWith = (role: string, gate: string): string =>
+      `id: t\nname: T\nversion: 1\nphases:\n  - id: p\n    name: P\n    dependsOn: []\n    nodes:\n      - id: n\n        role: ${role}\n        inputs: []\n        outputs: []\n        gates:\n${gate}\n        dependsOn: []\n`;
+
+    // invalid_format：identifier kebab-case 校验。
+    const identifierError = probe(
+      'identifier.yaml',
+      nodeWith('Bad Role', '          []'),
+    );
+    expect(identifierError).toMatch(/标识符|kebab/u);
+    expect(identifierError).not.toMatch(/identifier must be/u);
+
+    // custom：schema 门禁缺 artifactType。
+    const schemaError = probe(
+      'schema.yaml',
+      nodeWith('rd', '          - type: schema'),
+    );
+    expect(schemaError).toMatch(/schema|artifactType|产物/u);
+    expect(schemaError).not.toMatch(/requires artifactType/u);
+
+    // custom：human 门禁显式关闭人工审批。
+    const humanError = probe(
+      'human.yaml',
+      nodeWith(
+        'rd',
+        '          - type: human\n            requiresHumanApproval: false',
+      ),
+    );
+    expect(humanError).toMatch(/human|人工审批/u);
+    expect(humanError).not.toMatch(/requires human approval/u);
+
+    // custom：非 human 门禁挂 reworkTargetNodeId。
+    const reworkError = probe(
+      'rework.yaml',
+      nodeWith(
+        'rd',
+        '          - type: build\n            reworkTargetNodeId: n',
+      ),
+    );
+    expect(reworkError).toMatch(/reworkTargetNodeId|human/u);
+    expect(reworkError).not.toMatch(/is only valid on human gates/u);
+  });
+
+  it('accepts symlinked template files so shared templates stay loadable', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-symlink-'));
+    tempDirs.push(dir);
+    const target = join(dir, 'target.yaml');
+    const link = join(dir, 'linked.yaml');
+    writeFileSync(target, validYaml);
+    symlinkSync(target, link);
+
+    const catalog = listWorkflowCatalog({ projectWorkflowsDir: dir });
+    const ids = catalog.map((entry) => entry.id);
+    expect(ids).toContain('linked');
+
+    const result = validateWorkflowTemplateFile(link);
+    expect(result.valid).toBe(true);
+  });
+
+  it('refuses symlinks escaping the template directory without reading target contents', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tekon-tpl-escape-'));
+    tempDirs.push(root);
+    const workflowsDir = join(root, '.tekon', 'workflows');
+    mkdirSync(workflowsDir, { recursive: true });
+
+    // 仓库外的「凭据」文件：格式故意非法，若被读取解析，片段会进入错误输出。
+    const outside = join(root, 'secret.ini');
+    writeFileSync(
+      outside,
+      'SECRET_TOKEN: [unclosed\nsecond_line_pw: hunter2\n',
+    );
+    const escapeLink = join(workflowsDir, 'escape.yaml');
+    symlinkSync(outside, escapeLink);
+
+    const catalog = listWorkflowCatalog({
+      projectWorkflowsDir: workflowsDir,
+      validate: true,
+    });
+    const entry = catalog.find((item) => item.id === 'escape');
+    expect(entry).toBeDefined();
+    expect(entry?.valid).toBe(false);
+    const reason = entry?.validationError ?? '';
+    expect(reason).toMatch(/超出模板目录|符号链接/u);
+    // 关键安全断言：外部文件内容不得经解析错误片段回显。
+    expect(reason).not.toContain('SECRET_TOKEN');
+    expect(reason).not.toContain('hunter2');
+  });
+
+  it('rejects escaping symlinks on by-name loading (validate/show/run/web share the rule)', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tekon-tpl-byname-'));
+    tempDirs.push(root);
+    const workflowsDir = join(root, '.tekon', 'workflows');
+    mkdirSync(workflowsDir, { recursive: true });
+    const outside = join(root, 'secret.ini');
+    writeFileSync(outside, 'SECRET_TOKEN: [unclosed\npw: hunter2\n');
+    symlinkSync(outside, join(workflowsDir, 'byescape.yaml'));
+
+    // core 按名加载器（内置回落、goal、engine 路径共用）必须在读取前拒绝。
+    // 注意：Web 的项目自定义模板分支走各自的 loadProjectWorkflowIfPresent，
+    // 在 Web 包内用同一 inspectTemplateSymlink 闸门并配 RPC 回归，不在此测。
+    expect(() =>
+      loadWorkflowTemplate({ name: 'byescape', workflowsDir }),
+    ).toThrow(/超出模板目录|符号链接/u);
+
+    // 目录内合法软链仍可按名加载，证明规则不误伤共享用法。
+    writeFileSync(join(workflowsDir, 'inside-target.yaml'), validYaml);
+    symlinkSync(
+      join(workflowsDir, 'inside-target.yaml'),
+      join(workflowsDir, 'inside-link.yaml'),
+    );
+    const loaded = loadWorkflowTemplate({
+      name: 'inside-link',
+      workflowsDir,
+    });
+    expect(loaded.id).toBe('minimal');
+  });
+
+  it('reports broken and directory symlinks as readable invalid entries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-badlink-'));
+    tempDirs.push(dir);
+    symlinkSync(join(dir, 'does-not-exist.yaml'), join(dir, 'broken.yaml'));
+    mkdirSync(join(dir, 'a-directory'));
+    symlinkSync(join(dir, 'a-directory'), join(dir, 'dirlink.yaml'));
+
+    const catalog = listWorkflowCatalog({
+      projectWorkflowsDir: dir,
+      validate: true,
+    });
+    const byId = new Map(catalog.map((entry) => [entry.id, entry]));
+    const broken = byId.get('broken');
+    const dirLink = byId.get('dirlink');
+    expect(broken?.valid).toBe(false);
+    expect(broken?.validationError ?? '').toMatch(/符号链接|无法解析/u);
+    expect(dirLink?.valid).toBe(false);
+    // EISDIR 不得裸抛英文 errno。
+    expect(dirLink?.validationError ?? '').not.toContain('EISDIR');
+  });
+
+  it('catalog probe marks malformed project templates as invalid while valid ones stay valid', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-tpl-catalog-'));
+    tempDirs.push(dir);
+    const projectWorkflowsDir = join(dir, '.tekon', 'workflows');
+    mkdirSync(projectWorkflowsDir, { recursive: true });
+    writeFileSync(join(projectWorkflowsDir, 'good.yaml'), validYaml);
+    writeFileSync(
+      join(projectWorkflowsDir, 'bad.yaml'),
+      'id: bad\nphases: nope\n',
+    );
+
+    const catalog = listWorkflowCatalog({
+      projectWorkflowsDir,
+      validate: true,
+    });
+    const validity = new Map(
+      catalog
+        .filter((entry) => entry.builtin === false)
+        .map((entry) => [entry.id, entry.valid ?? null]),
+    );
+    expect(validity.get('good')).toBe(true);
+    expect(validity.get('bad')).toBe(false);
+
+    // 默认不探测：保持既有目录扫描的零副作用形状（valid 缺省）。
+    const plain = listWorkflowCatalog({ projectWorkflowsDir });
+    expect(plain.every((entry) => entry.valid === undefined)).toBe(true);
   });
 });

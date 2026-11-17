@@ -21,7 +21,7 @@ import {
   roleSchema,
   type ArtifactType,
 } from '../types/domain.js';
-import { parseWorkflowTemplate } from './template.js';
+import { formatZodIssues, parseWorkflowTemplate } from './template.js';
 
 export const workflowSpecDraftGateSchema = z
   .object({
@@ -437,10 +437,4 @@ function assertInsideWorkflowsDir(workflowsDir: string, targetPath: string) {
 
 function mkDynamicOutputDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), `tekon-${prefix}`));
-}
-
-function formatZodIssues(issues: z.ZodIssue[]) {
-  return issues
-    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
-    .join('; ');
 }
