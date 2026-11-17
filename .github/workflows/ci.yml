@@ -65,10 +65,17 @@ jobs:
       - name: Typecheck all packages
         run: pnpm -r typecheck
 
-      - name: Unit and e2e tests (core, CLI, Web)
-        # 真实 git-worktree/子进程 e2e 在 vitest 文件并行下会因资源竞争触发
-        # 5000ms 超时与 worker 意外退出；串行执行与本地权威回归命令一致。
-        run: pnpm test --run --no-file-parallelism
+      - name: Core tests (unit + e2e, serial worktree e2e)
+        # 按包独立 vitest 进程：根 projects 单实例跨三包复用 worker 会累积
+        # 内存，在 runner 上后期被 SIGKILL（Worker exited unexpectedly）。
+        # --no-file-parallelism 规避真实 git-worktree e2e 的 5000ms 竞争超时。
+        run: pnpm --filter @tekon/core exec vitest --run --no-file-parallelism --exclude "**/__manual__/**"
+
+      - name: CLI unit and real-process e2e tests
+        run: pnpm --filter @tekon/cli test:unit && pnpm --filter @tekon/cli test:e2e
+
+      - name: Web tests
+        run: pnpm --filter @tekon/web test
 
       - name: CLI binary smoke
         run: |

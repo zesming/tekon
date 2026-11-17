@@ -109,14 +109,30 @@ describe('CI workflow', () => {
     const install = stepIndex(list, runs('pnpm install --frozen-lockfile'));
     const build = stepIndex(list, (step) => step.run === 'pnpm -r build');
     const typecheck = stepIndex(list, (step) => step.run === 'pnpm -r typecheck');
-    // --no-file-parallelism：真实 git-worktree/子进程 e2e 在文件并行下会因
-    // 资源竞争触发 5000ms 超时与 worker 意外退出，CI 必须串行跑全量。
-    const test = stepIndex(
+    // 按包独立 vitest 进程，避免根 projects 单实例跨三包复用 worker 累积
+    // 内存被 runner SIGKILL；core 的 worktree e2e 串行规避 5000ms 竞争超时。
+    const coreTest = stepIndex(
       list,
-      (step) => step.run === 'pnpm test --run --no-file-parallelism',
+      runs('pnpm --filter @tekon/core exec vitest'),
     );
+    expect(list[coreTest]?.run).toContain('--no-file-parallelism');
+    const cliTest = stepIndex(list, runs('pnpm --filter @tekon/cli test:unit'));
+    expect(list[cliTest]?.run).toContain('test:e2e');
+    const webTest = stepIndex(list, runs('pnpm --filter @tekon/web test'));
     const smoke = stepIndex(list, runs('node packages/cli/dist/index.js --version'));
-    expect([install, build, typecheck, test, smoke]).toEqual([install, build, typecheck, test, smoke].sort((a, b) => a - b));
+    expect([
+      install,
+      build,
+      typecheck,
+      coreTest,
+      cliTest,
+      webTest,
+      smoke,
+    ]).toEqual(
+      [install, build, typecheck, coreTest, cliTest, webTest, smoke].sort(
+        (a, b) => a - b,
+      ),
+    );
   });
 
   it('tests every declared Node floor, and only those, in a fail-complete matrix', () => {
