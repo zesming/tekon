@@ -109,30 +109,37 @@ describe('CI workflow', () => {
     const install = stepIndex(list, runs('pnpm install --frozen-lockfile'));
     const build = stepIndex(list, (step) => step.run === 'pnpm -r build');
     const typecheck = stepIndex(list, (step) => step.run === 'pnpm -r typecheck');
-    // 按包独立 vitest 进程，避免根 projects 单实例跨三包复用 worker 累积
-    // 内存被 runner SIGKILL；core 的 worktree e2e 串行规避 5000ms 竞争超时。
-    const coreTest = stepIndex(
+    // core/cli 各拆 unit/e2e 独立 vitest 进程：单 worker 承载全部文件会在
+    // runner 寿命末期被系统回收；e2e 用 exec 直传串行 flag 规避 worktree 超时。
+    const coreUnit = stepIndex(
       list,
-      runs('pnpm --filter @tekon/core exec vitest'),
+      runs('pnpm --filter @tekon/core test:unit'),
     );
-    expect(list[coreTest]?.run).toContain('--no-file-parallelism');
-    const cliTest = stepIndex(list, runs('pnpm --filter @tekon/cli test:unit'));
-    expect(list[cliTest]?.run).toContain('test:e2e');
+    const coreE2e = stepIndex(
+      list,
+      runs('pnpm --filter @tekon/core exec vitest --run .e2e.test'),
+    );
+    expect(list[coreE2e]?.run).toContain('--no-file-parallelism');
+    const cliUnit = stepIndex(list, runs('pnpm --filter @tekon/cli test:unit'));
+    const cliE2e = stepIndex(
+      list,
+      runs('pnpm --filter @tekon/cli exec vitest --run .e2e.test'),
+    );
+    expect(list[cliE2e]?.run).toContain('--no-file-parallelism');
     const webTest = stepIndex(list, runs('pnpm --filter @tekon/web test'));
     const smoke = stepIndex(list, runs('node packages/cli/dist/index.js --version'));
-    expect([
+    const ordered = [
       install,
       build,
       typecheck,
-      coreTest,
-      cliTest,
+      coreUnit,
+      coreE2e,
+      cliUnit,
+      cliE2e,
       webTest,
       smoke,
-    ]).toEqual(
-      [install, build, typecheck, coreTest, cliTest, webTest, smoke].sort(
-        (a, b) => a - b,
-      ),
-    );
+    ];
+    expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
   });
 
   it('tests every declared Node floor, and only those, in a fail-complete matrix', () => {
