@@ -29,6 +29,12 @@ jobs:
     name: Verify (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Node 24 的 V8 默认 heap 随 worker 寿命持续增长，长跑收尾时 RSS 触碰
+      # runner 上限被 OOM killer 以信号杀死（vitest 表现为无 JS 错误的
+      # Worker exited unexpectedly）。限定 old-space 让 V8 在 cap 内积极 GC，
+      # 把 RSS 压在系统信号阈值之下；2048MB 远大于测试实际需要（256MB 可过）。
+      NODE_OPTIONS: --max-old-space-size=2048
     steps:
       - name: Checkout
         uses: actions/checkout@v6
