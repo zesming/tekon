@@ -467,8 +467,26 @@ export interface ApiCaller {
   };
   role: {
     list(): Promise<{
-      roles: Array<{ id: string; name: string; hasSystemPrompt: boolean }>;
+      roles: Array<{
+        id: string;
+        name: string;
+        source: 'built-in' | 'project';
+        hasSystemPrompt: boolean;
+      }>;
     }>;
+    get(input: { id: string }): Promise<{
+      id: string;
+      name: string;
+      source: 'built-in' | 'project' | 'user';
+      systemPrompt: string;
+      hasProjectOverride: boolean;
+      projectPath: string;
+    }>;
+    updatePrompt(input: {
+      id: string;
+      systemPrompt: string;
+      token: string;
+    }): Promise<{ id: string; source: 'project'; roleDir: string }>;
   };
   workflow: {
     list(): Promise<{

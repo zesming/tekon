@@ -18,7 +18,6 @@ import { DraftPage } from './pages/DraftPage.js';
 import { ConfigPage } from './pages/ConfigPage.js';
 import { RolesTab } from './pages/config/RolesTab.js';
 import { WorkflowsTab } from './pages/config/WorkflowsTab.js';
-import { ConstraintsTab } from './pages/config/ConstraintsTab.js';
 import { EvaluationsPage } from './pages/EvaluationsPage.js';
 import { ReadinessTab } from './pages/evaluations/ReadinessTab.js';
 import { DemandShapeTab } from './pages/evaluations/DemandShapeTab.js';
@@ -79,7 +78,6 @@ export const router = createBrowserRouter([
           { index: true, element: <RolesTab /> },
           { path: 'roles', element: <RolesTab /> },
           { path: 'workflows', element: <WorkflowsTab /> },
-          { path: 'constraints', element: <ConstraintsTab /> },
         ],
       },
       {

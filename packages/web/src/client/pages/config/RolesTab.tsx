@@ -22,6 +22,7 @@ const roleDescriptions: Record<string, string> = {
   qa: 'Quality Assurance — test planning, validation, signoff',
   reviewer: 'Independent code and design review',
   pmo: 'Project Management Office — delivery checkpoint',
+  goal: 'Goal — one-off lightweight task without the delivery chain',
 };
 
 export function RolesTab() {
@@ -59,7 +60,7 @@ export function RolesTab() {
         {roles.length === 0 ? (
           <EmptyState
             message="No roles configured"
-            hint="Create role directories under .tekon/roles/ to define agent roles."
+            hint="内置角色未找到时，检查 Tekon 安装完整性；项目角色放在 .tekon/roles/ 下。"
           />
         ) : (
           <div className="table-wrap">
@@ -68,6 +69,7 @@ export function RolesTab() {
                 <tr>
                   <th>ID</th>
                   <th>Name</th>
+                  <th>Source</th>
                   <th>Description</th>
                   <th>Prompt</th>
                   <th />
@@ -78,6 +80,13 @@ export function RolesTab() {
                   <tr key={role.id}>
                     <td className="cell-mono">{role.id}</td>
                     <td className="cell-primary">{role.name}</td>
+                    <td>
+                      <span className="source-badge">
+                        {role.source === 'project'
+                          ? '项目 project'
+                          : '内置 built-in'}
+                      </span>
+                    </td>
                     <td className="cell-secondary">
                       {roleDescriptions[role.id] ?? '—'}
                     </td>
@@ -94,7 +103,7 @@ export function RolesTab() {
                         className="btn btn-ghost btn-sm"
                         onClick={() => setSelectedRole(role)}
                       >
-                        查看 →
+                        查看 / 编辑
                       </button>
                     </td>
                   </tr>

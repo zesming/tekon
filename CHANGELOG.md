@@ -1,5 +1,13 @@
 # 变更日志
 
+## 0.38.0 — 2026-11-18
+
+- Web Config 页整改（PD-11）：删除与真实 `constraints.yaml` 结构不符的静态 Constraints tab（页面、路由、导航与死样式一并清理，旧 URL 落到 404 页）；Roles 页从「只读项目目录、新项目误显示 No roles configured」改为列出内置+项目角色并集（6 个内置角色不再隐形），每行标注来源（内置 built-in/项目 project），overview 角色计数同口径修复。
+- 角色 prompt 可在 Web 查看与编辑：列表 DTO 仍保持 strict 不携带 prompt（既有防泄漏回归不变），新增显式 `role.get`（返回生效候选的 systemPrompt 与来源）和 `role.updatePrompt`（会话 token 鉴权）两个 RPC。编辑内置角色不会修改安装目录，而是在 `.tekon/roles/<id>/` 物化整目录项目级覆盖（复制 agent.yaml/tools.yaml/skills/knowledge，保证 `loadRole` 三级解析合同不被半成品破坏），运行时项目覆盖优先；项目角色直接改写其 system.md。
+- 角色写原语下沉 core（新 `role/project-overrides.ts`）：`listAvailableRoles`/`readRolePrompt`/`materializeProjectRole`/`writeProjectRolePrompt`，CLI `tekon role create` 重构为薄封装共用同一实现，输出、错误文案与重复创建拒绝行为保持不变（真实进程 e2e 锁定）。物化走临时目录 + 原子 rename，失败清理不留残留，重复调用幂等。
+- 写路径安全闸门对齐 demand.ts 范式：`.tekon` 父目录与 roles 目录 lstat 拒软链、realpath 严格锚定 `<repo>/.tekon/roles` 防父目录软链逃逸、角色目录 containment、system.md 文件本体写前 lstat 拒软链；角色 id 经 kebab-case schema 校验，prompt 限非空且 ≤64 KiB（按 UTF-8 字节计）。RPC 语义校验在 handler 内完成，非法/未知 id 与解析失败均给中文 4xx/404 而非英文模板；仅存在于 user 级的角色不经 Web RPC 直读。
+- 测试：core 新原语 18 测（含五类软链/逃逸对抗夹具、原子性与重试、字节边界）、Web RPC 8 测（并集、token 鉴权、落盘且内置零改动、中文错误、user 级隔离、非法 prompt 零副作用）、Playwright 编辑旅程与 Constraints 移除断言；旧 role.list/overview/contract-strict 断言升级为并集口径，安全断言保留。
+
 ## 0.37.0 — 2026-11-18
 
 - 角色 `tools.yaml` 工具策略从「仅 prompt 提示」升级为运行时 fail-closed 强制（PD-10 10a-2）。角色声明的 `deny`/`requiresHumanApproval`/`network`/工作目录约束现在真正参与命令裁决，不再依赖 agent 自觉。

@@ -27,6 +27,7 @@ describe('strict output schemas — field drift detection', () => {
     const valid = {
       id: 'role_1',
       name: 'coder',
+      source: 'project',
       hasSystemPrompt: true,
     };
     expect(() => roleItemSchema.parse(valid)).not.toThrow();
@@ -44,6 +45,7 @@ describe('strict output schemas — field drift detection', () => {
         {
           id: 'role_1',
           name: 'coder',
+          source: 'built-in',
           hasSystemPrompt: true,
           systemPrompt: 'leaked!',
         },

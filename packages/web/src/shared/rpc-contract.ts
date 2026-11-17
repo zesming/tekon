@@ -550,6 +550,7 @@ export const roleItemSchema = z
   .object({
     id: z.string(),
     name: z.string(),
+    source: z.enum(['built-in', 'project']),
     hasSystemPrompt: z.boolean(),
   })
   .strict(); // strict: must not leak systemPrompt or other internal fields
@@ -758,6 +759,32 @@ export const auditListOutputSchema = z.object({
 
 export const roleListOutputSchema = z.object({
   roles: z.array(roleItemSchema),
+});
+
+// PD-11：角色详情显式携带 prompt（列表 DTO 仍 strict 不泄密）。
+export const roleGetInputSchema = z.object({
+  id: z.string(),
+});
+
+export const roleGetOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  source: z.enum(['built-in', 'project', 'user']),
+  systemPrompt: z.string(),
+  hasProjectOverride: z.boolean(),
+  projectPath: z.string(),
+});
+
+export const roleUpdatePromptInputSchema = z.object({
+  id: z.string(),
+  systemPrompt: z.string(),
+  token: z.string(),
+});
+
+export const roleUpdatePromptOutputSchema = z.object({
+  id: z.string(),
+  source: z.literal('project'),
+  roleDir: z.string(),
 });
 
 export const runPlanGateSchema = z.object({
@@ -1098,6 +1125,16 @@ export const procedureSpecs = {
     auth: 'none' as const,
     input: z.undefined(),
     output: roleListOutputSchema,
+  },
+  'role.get': {
+    auth: 'none' as const,
+    input: roleGetInputSchema,
+    output: roleGetOutputSchema,
+  },
+  'role.updatePrompt': {
+    auth: 'token' as const,
+    input: roleUpdatePromptInputSchema,
+    output: roleUpdatePromptOutputSchema,
   },
 
   'workflow.list': {

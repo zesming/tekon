@@ -1,8 +1,13 @@
-import { cpSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { listRoleIds, loadRole, roleSchema } from '@tekon/core';
+import {
+  listRoleIds,
+  loadRole,
+  materializeProjectRole,
+  roleSchema,
+} from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
 import { ensureInitialized } from '../lib/context.js';
@@ -69,52 +74,19 @@ export async function commandRole(
 
   if (subcommand === 'create') {
     await ensureInitialized(repoPath, io);
-    const source = join(builtInRolesDir, roleId);
     const target = join(repoPath, '.tekon', 'roles', roleId);
     if (existsSync(target)) {
       throw new Error(`角色已存在: ${roleId}（${target}）。`);
     }
 
-    // 内置角色：整目录复制，保留 skills/knowledge/tools 等资产。
-    if (existsSync(source)) {
-      const resolvedBuiltInDir = realpathSync(builtInRolesDir);
-      const resolvedSource = realpathSync(source);
-      if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
-        throw new Error(`角色 ID 试图逃逸内置角色目录: ${roleId}`);
-      }
-      const repoRolesDir = join(repoPath, '.tekon', 'roles');
-      mkdirSync(repoRolesDir, { recursive: true });
-      const resolvedRolesDir = realpathSync(repoRolesDir);
-      const resolvedTarget = resolve(resolvedRolesDir, roleId);
-      if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
-        throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
-      }
-      cpSync(resolvedSource, resolvedTarget, { recursive: true });
-      io.stdout.write(`${resolvedTarget}\n`);
-      return;
-    }
-
-    // PD-06：自定义角色名，生成最小脚手架，用户在 system.md 里写职责。
-    // 先解析并校验目标路径，再创建角色目录（与内置复制路径同序）。
-    const repoRolesDir = join(repoPath, '.tekon', 'roles');
-    mkdirSync(repoRolesDir, { recursive: true });
-    const resolvedRolesDir = realpathSync(repoRolesDir);
-    const resolvedTarget = resolve(resolvedRolesDir, roleId);
-    if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
-      throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
-    }
-    mkdirSync(resolvedTarget, { recursive: true });
-    writeFileSync(
-      join(resolvedTarget, 'agent.yaml'),
-      [`role: ${role}`, `name: ${role}`, ''].join('\n'),
-      'utf8',
-    );
-    writeFileSync(
-      join(resolvedTarget, 'system.md'),
-      `# ${role}\n\n在此编写该角色的职责、边界和输出要求。Tekon 运行节点时会把本文件作为系统提示词。\n`,
-      'utf8',
-    );
-    io.stdout.write(`${resolvedTarget}\n`);
+    // 物化逻辑（内置整目录复制/自定义脚手架、realpath 锚定与软链闸门、
+    // 临时目录原子替换）下沉 core，CLI 与 Web 共用同一实现。
+    const result = materializeProjectRole({
+      role,
+      repoPath,
+      builtInRolesDir,
+    });
+    io.stdout.write(`${result.roleDir}\n`);
     return;
   }
 

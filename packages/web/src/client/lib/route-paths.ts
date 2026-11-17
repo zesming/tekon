@@ -46,7 +46,6 @@ export const routes = {
   config: `${ADV}/config`,
   configRoles: `${ADV}/config/roles`,
   configWorkflows: `${ADV}/config/workflows`,
-  configConstraints: `${ADV}/config/constraints`,
   eval: `${ADV}/eval`,
   evalReadiness: `${ADV}/eval/readiness`,
   evalDemandShape: `${ADV}/eval/demand-shape`,

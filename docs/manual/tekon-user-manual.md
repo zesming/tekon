@@ -312,6 +312,8 @@ tekon eval readiness
 - `tools.yaml` 缺失时回落到安全默认（`network: disabled`、允许/拒绝/审批列表均空）；文件损坏或无法解析时节点 fail-closed，不会静默回退继续执行。每次生效写审计事件 `role.tool-policy.applied`（含角色来源与约束规模）。
 - 边界：codex/dsh 没有会话内工具域/审批的原生强制（claude-code 经 ask 设置落地），但网关层的 deny、网络与人工审批拦截对三者一致；角色文件运行时读盘、不进冻结计划，恢复运行时的策略一致性依赖文件未被修改。
 
+角色按 **内置 → 用户（`~/.tekon/roles`）→ 项目（`.tekon/roles`）** 三级解析，取最后一个存在的整目录生效（仅 skills 跨级合并），因此项目覆盖必须是含 `agent.yaml` 的完整角色目录，不能只放一个 `system.md`。两种物化方式：CLI 用 `tekon role create <id>`（内置角色整目录复制、自定义 id 生成最小脚手架）；Web 在「高级 → Config → Roles」打开角色面板编辑 prompt 并保存——内置角色会自动物化整目录覆盖，安装目录保持只读不被修改，项目角色则直接改写其 `system.md`。Web 角色列表展示内置与项目角色并集及来源，新项目不再误显示「No roles configured」；写入需会话令牌，路径经软链与 realpath 锚定闸门校验，非法角色 ID 与超长 prompt（>64 KiB）会被拒绝并给中文提示。新建/删除角色仍只走 CLI，Web 不承担角色创建。
+
 ### 5.6 Gate
 
 验证关卡，包括 build、lint、test、schema、security-scan、human，以及独立评审、角色范围、验收证据、QA 签署和流程完整性检查。
@@ -891,6 +893,8 @@ CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI �
 Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒宽限期结束、发 SIGKILL 前再核对一次启动时间，确认进程组没有被系统回收复用后才发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理；没有 `ps` 命令的平台（如 Windows）无法核对启动时间，遗留进程不会被自动结束。这几种情况下请手动结束剩下的进程。
 
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
+
+**角色与模板配置（Config）**：侧栏「高级 Advanced → Config」分 Roles 与 Workflows 两个页签。Roles 列出内置与项目角色并集并标注来源；点开角色可查看当前生效的系统提示词，点「编辑 prompt」保存即写入项目级覆盖（内置角色先整目录物化到 `.tekon/roles/<id>/`，不改安装文件），保存需要会话令牌，无令牌时按钮提示先设置令牌。Workflows 页签浏览内置与项目工作流模板。旧版的 Constraints 页签已移除——它展示的是与真实配置不一致的静态参考内容。
 
 ### 7.1 暂停、取消与恢复
 

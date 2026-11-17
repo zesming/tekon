@@ -6,7 +6,6 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
 } from 'node:fs';
@@ -15,8 +14,10 @@ import { join, relative, resolve } from 'node:path';
 import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
+  defaultBuiltInRolesDir,
   isValidRequestId,
   inspectTemplateSymlink,
+  listAvailableRoles,
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
@@ -730,18 +731,12 @@ export function createProjectRouter(
 function listRoles(
   context: ServerContext,
 ): Array<{ id: string; name: string }> {
-  const rolesDir = context.projectContext.rolesDir;
-  if (!existsSync(rolesDir)) {
-    return [];
-  }
-
-  return readdirSync(rolesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => ({
-      id: entry.name,
-      name: entry.name.toUpperCase(),
-    }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+  // PD-11：与 role.list 同口径（内置+项目并集），修复新项目 counts.roles=0
+  // 的失真；项目覆盖去重后按 id 计数。
+  return listAvailableRoles({
+    repoPath: context.projectContext.projectRoot,
+    builtInRolesDir: defaultBuiltInRolesDir(),
+  }).map((role) => ({ id: role.id, name: role.id.toUpperCase() }));
 }
 
 function listWorkflows(

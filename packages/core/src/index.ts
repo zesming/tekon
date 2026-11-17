@@ -58,6 +58,7 @@ export * from './gate/runners.js';
 export * from './gate/registry.js';
 export * from './gate/helpers.js';
 export * from './role/loader.js';
+export * from './role/project-overrides.js';
 export * from './role/skill-loader.js';
 export * from './role/tool-policy.js';
 export * from './role/policy-merge.js';

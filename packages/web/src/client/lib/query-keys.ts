@@ -72,6 +72,7 @@ export const queryKeys = {
   draftShapeDetail: (shapePath: string) =>
     `draftShape.detail.${shapePath}`,
   roles: () => 'roles',
+  roleDetail: (id: string) => `role.detail.${id}`,
   workflows: () => 'workflows',
   workflowPlan: (
     mode?: string,
