@@ -256,6 +256,31 @@ describe('dsh-headless adapter', () => {
     expect(captured).toContain('final assistant answer');
   });
 
+  // ── PD-10 role overrides ─────────────────────────────────────────────
+
+  it('rejects role model/effort overrides explicitly instead of silently ignoring them', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-dsh-override-'));
+    tempDirs.push(repoPath);
+    const fakeDsh = writeFakeDsh(repoPath, "echo 'should never run'; exit 0");
+    const adapter = createDshHeadlessAdapter(
+      { ...ackConfig(repoPath), command: fakeDsh, args: [] },
+      createCommandGateway(),
+    );
+
+    for (const providerOverrides of [
+      { model: 'some-model' },
+      { effort: 'high' },
+      { model: 'some-model', effort: 'high' },
+    ]) {
+      await expect(
+        adapter.runAgent({
+          ...runInputAllowing(repoPath, fakeDsh),
+          providerOverrides,
+        }),
+      ).rejects.toThrow(/ROLE_OVERRIDE_UNSUPPORTED/);
+    }
+  });
+
   it('reports timeouts (SIGKILL by gateway) as timedOut', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-dsh-timeout-'));
     tempDirs.push(repoPath);

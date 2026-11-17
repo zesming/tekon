@@ -12,7 +12,7 @@ import {
   buildRolePrompt,
   type RolePromptArtifactSummary,
 } from '../role/prompt-builder.js';
-import { loadRole } from '../role/loader.js';
+import { loadRole, type LoadedRole } from '../role/loader.js';
 import {
   type WorkflowArtifactInputRef,
   type WorkflowArtifactOutputRef,
@@ -35,6 +35,11 @@ export interface PromptBuilderDeps {
 }
 
 export interface PromptBuilder {
+  /**
+   * PD-10：加载节点角色（含 agent.yaml 的 driver/model/effort 覆盖）。
+   * 角色目录解析规则集中在此，helpers 等其他消费方复用同一入口。
+   */
+  loadNodeRole(node: Pick<Node, 'role'>): LoadedRole;
   buildNodePrompt(runId: string, node: ExecutableNode): Promise<string>;
   buildRepairPrompt(
     runId: string,
@@ -98,16 +103,20 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       .at(-1);
   }
 
-  async function buildNodePrompt(
-    runId: string,
-    node: ExecutableNode,
-  ): Promise<string> {
-    const role = loadRole({
+  function loadNodeRole(node: Pick<Node, 'role'>): LoadedRole {
+    return loadRole({
       role: node.role,
       repoPath,
       builtInRolesDir: builtInRolesDir ?? defaultBuiltInRolesDir(),
       userHome,
     });
+  }
+
+  async function buildNodePrompt(
+    runId: string,
+    node: ExecutableNode,
+  ): Promise<string> {
+    const role = loadNodeRole(node);
     const workflow = await mustGetWorkflow(runId);
     const demand = await mustGetDemand(workflow.demandId);
     const artifacts = await artifactSummariesForNode(runId, node);
@@ -224,12 +233,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
       failureClassification?: string | null;
     },
   ): Promise<string> {
-    const role = loadRole({
-      role: node.role,
-      repoPath,
-      builtInRolesDir: builtInRolesDir ?? defaultBuiltInRolesDir(),
-      userHome,
-    });
+    const role = loadNodeRole(node);
     const workflow = await mustGetWorkflow(runId);
     const demand = await mustGetDemand(workflow.demandId);
     return buildRolePrompt({
@@ -406,6 +410,7 @@ export function createPromptBuilder(deps: PromptBuilderDeps): PromptBuilder {
   }
 
   return {
+    loadNodeRole,
     buildNodePrompt,
     buildRepairPrompt,
     appendArtifactProtocol,

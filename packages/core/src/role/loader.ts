@@ -25,6 +25,12 @@ const roleAgentConfigSchema = z.object({
   role: roleSchema,
   name: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
+  // PD-10：角色级 provider 覆盖。均为可选、厂商中立的开放字符串——不绑定
+  // Claude/Codex 的枚举，由各适配器在执行期翻译或在无法 honor 时显式拒绝。
+  // 不写时缺省，adapter 沿用 run 级 provider 配置，零行为变化。
+  driver: z.string().min(1).max(64).optional(),
+  model: z.string().min(1).max(128).optional(),
+  effort: z.string().min(1).max(32).optional(),
   injectMode: z.enum(['prepend', 'append', 'replace']).default('append'),
   priority: z.number().int().default(0),
   maxSkills: z.number().int().positive().optional(),

@@ -23,6 +23,7 @@ import {
 } from './workflow-runtime.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { LeaseService } from './lease-service.js';
+import { resolveRoleProviderOverrides } from '../role/provider-overrides.js';
 
 export interface HelpersDeps {
   repoPath: string;
@@ -208,6 +209,40 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
           ].join('\n')
         : prompt;
 
+    // PD-10：角色 agent.yaml 的 model/effort 逐节点注入适配器；driver 声明
+    // 与 run 级 provider 不符时在节点启动前显式失败（mock 为测试适配器，
+    // 不参与 driver 裁决，也忽略覆盖）。
+    const loadedRole = promptBuilder.loadNodeRole(node);
+    const providerOverrides = resolveRoleProviderOverrides(
+      runId,
+      node.role,
+      loadedRole,
+      await repositories.getRunProviderConfig(runId),
+    );
+    if (providerOverrides) {
+      // 记录经解析与安全校验、交付给适配器的角色覆盖（角色文件运行时读盘，
+      // 不进冻结计划）。适配器若无法 honor（如 claude 的 effort）会在构建
+      // 命令时拒绝并落 node.interrupted，该事件只证明"声明已解析并送达"，
+      // 是否真正生效以适配器执行结果为准。
+      await audit.append({
+        runId,
+        type: 'role.provider-overrides',
+        payload: {
+          nodeId: node.id,
+          role: node.role,
+          ...(loadedRole.agent.driver !== undefined
+            ? { driver: loadedRole.agent.driver }
+            : {}),
+          ...(providerOverrides.model !== undefined
+            ? { model: providerOverrides.model }
+            : {}),
+          ...(providerOverrides.effort !== undefined
+            ? { effort: providerOverrides.effort }
+            : {}),
+        },
+      });
+    }
+
     return {
       roleConfig: { role: node.role },
       prompt: promptBuilder.appendArtifactProtocol(promptWithDeliveryRef, {
@@ -222,6 +257,7 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
       worktreeLease: lease,
       outputDir,
       commandPolicy: defaultCommandPolicy(lease.worktreePath),
+      ...(providerOverrides ? { providerOverrides } : {}),
       runContext: {
         runId,
         nodeId: effectiveNodeId,

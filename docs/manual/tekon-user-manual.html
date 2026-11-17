@@ -335,6 +335,18 @@ tekon eval readiness
 </ul>
 <h3 id="55-role" tabindex="-1">5.5 Role</h3>
 <p>节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。</p>
+<p>角色目录 <code>.tekon/roles/&lt;role&gt;/</code> 的 <code>agent.yaml</code> 支持可选的 Provider 覆盖字段（PD-10），均为厂商中立的开放字符串，不写时沿用运行级 Provider 默认值、行为零变化：</p>
+<div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table>
+<thead>
+<tr><th>字段</th><th>含义</th><th>生效方式</th></tr>
+</thead>
+<tbody>
+<tr><td><code>model</code></td><td>该角色节点使用的模型名</td><td>claude-code 翻译为 <code>--model</code>；codex 翻译为受控 <code>--model</code></td></tr>
+<tr><td><code>effort</code></td><td>推理投入档位</td><td>codex 翻译为受控 <code>model_reasoning_effort</code>；claude-code 无稳定对应边界，声明即报 <code>ROLE_OVERRIDE_UNSUPPORTED</code></td></tr>
+<tr><td><code>driver</code></td><td>角色期望的 Provider</td><td>与运行级 Provider 不符时节点启动前报 <code>ROLE_DRIVER_MISMATCH</code>；同一运行不能按节点切换 harness</td></tr>
+</tbody>
+</table></div>
+<p>覆盖按节点在执行期读取角色文件（与 <code>system.md</code> 热更同语义，不进冻结计划），实际生效值写入审计事件 <code>role.provider-overrides</code> 可追溯。三个字段在进入任何子进程 argv 前都经同一字符白名单校验：只允许字母（含大小写）、数字、连字符、点和下划线且须以字母或数字开头，长度 ≤64，拒绝选项前缀、空白、路径分隔与 Shell 元字符，杜绝选项注入；校验不通过报 <code>ROLE_OVERRIDE_INVALID</code>。<code>mock</code> 适配器忽略所有覆盖。</p>
 <h3 id="56-gate" tabindex="-1">5.6 Gate</h3>
 <p>验证关卡，包括 build、lint、test、schema、security-scan、human，以及独立评审、角色范围、验收证据、QA 签署和流程完整性检查。</p>
 <p>Gate 通过说明该项检查满足规则；是否可交付还需结合其他证据。human gate 必须由人处理。</p>

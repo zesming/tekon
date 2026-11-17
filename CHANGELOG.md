@@ -1,5 +1,9 @@
 # 变更日志
 
+## 0.35.0 — 2026-11-17
+
+- 角色支持声明 Provider 覆盖（PD-10 第一批）：项目/内置角色 `agent.yaml` 新增可选 `model`、`effort`、`driver` 三个厂商中立的开放字符串字段，不写时沿用运行级 Provider 默认值，行为零变化。覆盖按节点在执行期读取角色文件（与 `system.md` 热更同语义，不进冻结计划），经适配器翻译成 harness 参数——claude-code 的 `model` 翻译为受控 `--model`；codex 的 `model` 翻译为 `--model`、`effort` 翻译为受控 `model_reasoning_effort`。三个字段在进入任何子进程 argv 前经统一字符白名单校验（字母/数字开头，仅含字母数字、连字符、点、下划线，长度 ≤64），在解析层与两个适配器构建层双点拦截，杜绝选项与 Shell 元字符注入。适配器无法 honor 的字段在节点启动前显式报错而非静默丢弃：claude-code/dsh-headless 不支持 `effort` 报 `ROLE_OVERRIDE_UNSUPPORTED`；角色 `driver` 与运行级 Provider 不符报 `ROLE_DRIVER_MISMATCH`（同一运行不能按节点切换 harness）；非法值报 `ROLE_OVERRIDE_INVALID`。每次解析送达适配器的覆盖写入审计事件 `role.provider-overrides` 可追溯（是否真正生效以适配器执行结果为准）；`mock` 适配器忽略所有覆盖。合同 5 由 `it.fails` 占位转为真实回归（核心 expected fail 归零）。角色工具策略 `tools.yaml` 的运行时强制执行仍为后续批次。
+
 ## 0.34.0 — 2026-11-17
 
 - 终态 failed 运行支持显式重试（PD-17 步 3）：新增 `tekon retry [--run-id <runId>]`——运行因门禁重试耗尽（模板声明 `onExhausted: fail`）等原因收敛为终态 `failed` 后，裸 `tekon resume` 仍按终态拒绝，确认失败原因排除后可用 retry 只重跑失败节点：CAS 把运行与失败节点从 `failed` 置回 `running`（状态机仅开放 `failed→running` 一条开口，`failed` 仍属终态），审计事件 `run.retried` 记录 `fromStatus`/`toStatus`；已 `passed`/`skipped` 节点由执行计划自然跳过、不重复调用 Agent，只有失败节点及其后继重新执行（新建角色执行记录，仍活动的工作树租约复用以保留现场）。重试沿用受理时冻结的计划与 Provider 快照，不改变模板结构；退出码与 `run`/`resume` 同一合同。

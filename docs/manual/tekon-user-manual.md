@@ -294,6 +294,16 @@ tekon eval readiness
 
 节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。
 
+角色目录 `.tekon/roles/<role>/` 的 `agent.yaml` 支持可选的 Provider 覆盖字段（PD-10），均为厂商中立的开放字符串，不写时沿用运行级 Provider 默认值、行为零变化：
+
+| 字段 | 含义 | 生效方式 |
+| --- | --- | --- |
+| `model` | 该角色节点使用的模型名 | claude-code 翻译为 `--model`；codex 翻译为受控 `--model` |
+| `effort` | 推理投入档位 | codex 翻译为受控 `model_reasoning_effort`；claude-code 无稳定对应边界，声明即报 `ROLE_OVERRIDE_UNSUPPORTED` |
+| `driver` | 角色期望的 Provider | 与运行级 Provider 不符时节点启动前报 `ROLE_DRIVER_MISMATCH`；同一运行不能按节点切换 harness |
+
+覆盖按节点在执行期读取角色文件（与 `system.md` 热更同语义，不进冻结计划），实际生效值写入审计事件 `role.provider-overrides` 可追溯。三个字段在进入任何子进程 argv 前都经同一字符白名单校验：只允许字母（含大小写）、数字、连字符、点和下划线且须以字母或数字开头，长度 ≤64，拒绝选项前缀、空白、路径分隔与 Shell 元字符，杜绝选项注入；校验不通过报 `ROLE_OVERRIDE_INVALID`。`mock` 适配器忽略所有覆盖。
+
 ### 5.6 Gate
 
 验证关卡，包括 build、lint、test、schema、security-scan、human，以及独立评审、角色范围、验收证据、QA 签署和流程完整性检查。

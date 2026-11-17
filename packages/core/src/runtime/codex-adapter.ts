@@ -14,6 +14,8 @@ import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
 import { classifyProviderFailure } from './provider-diagnostics.js';
 import type { AgentAdapter } from './agent-adapter.js';
+import type { RoleProviderOverrides } from './agent-adapter.js';
+import { assertSafeProviderOverrideValue } from '../role/override-safety.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
   artifactDiagnosticFromError,
@@ -81,6 +83,7 @@ export function buildCodexCommand(
     prompt: string;
     runContext?: { nodeId: string; runId: string };
   },
+  providerOverrides?: RoleProviderOverrides,
 ): BuiltCodexCommand {
   const userArgs = config.args ?? [];
   const command = config.command ?? 'codex';
@@ -88,6 +91,9 @@ export function buildCodexCommand(
   if (isRealCodexCommand) {
     assertSafeCodexArgs(userArgs);
   }
+  // PD-10：角色级覆盖是 Tekon 翻译的内部控制位，不经 userArgs 安全校验，
+  // 但取值先过白名单字符约束，杜绝选项注入（如 "high; rm -rf /"）。
+  const overrideArgs = buildCodexOverrideArgs(providerOverrides);
   const args = isRealCodexCommand
     ? [
         ...controlledCodexGlobalArgs(config, {
@@ -95,9 +101,17 @@ export function buildCodexCommand(
           runContext: input.runContext,
         }),
         CODEX_EXEC_SUBCOMMAND,
+        ...overrideArgs,
         ...userArgs,
       ]
-    : [...userArgs, CODEX_EXEC_SUBCOMMAND, ...CONTROLLED_CODEX_GLOBAL_ARGS];
+    : [
+        ...userArgs,
+        CODEX_EXEC_SUBCOMMAND,
+        ...CONTROLLED_CODEX_GLOBAL_ARGS,
+        // 对称展开覆盖（该分支生产不可达，保持两条路径行为一致，避免
+        // 未来启用自定义 command 时静默丢失角色覆盖）。
+        ...overrideArgs,
+      ];
 
   if (config.promptMode === 'arg-append') {
     args.push(input.prompt);
@@ -121,14 +135,18 @@ export function createCodexAdapter(
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      const command = buildCodexCommand(config, {
-        artifactOutputDir: input.outputDir,
-        prompt: input.prompt,
-        runContext: {
-          nodeId: input.runContext.nodeId,
-          runId: input.runContext.runId,
+      const command = buildCodexCommand(
+        config,
+        {
+          artifactOutputDir: input.outputDir,
+          prompt: input.prompt,
+          runContext: {
+            nodeId: input.runContext.nodeId,
+            runId: input.runContext.runId,
+          },
         },
-      });
+        input.providerOverrides,
+      );
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({
         command,
@@ -291,6 +309,24 @@ export function createCodexAdapter(
 
 function isCodexCommand(command: string): boolean {
   return basename(command) === 'codex';
+}
+
+function buildCodexOverrideArgs(
+  overrides: RoleProviderOverrides | undefined,
+): string[] {
+  if (!overrides) return [];
+  const args: string[] = [];
+  if (overrides.model !== undefined) {
+    // 字符白名单已在 resolveRoleProviderOverrides 统一校验，这里再断言一次
+    // 保证纯函数 buildCodexCommand 被直接调用时同样 fail-closed。
+    assertSafeProviderOverrideValue('model', overrides.model);
+    args.push('--model', overrides.model);
+  }
+  if (overrides.effort !== undefined) {
+    assertSafeProviderOverrideValue('effort', overrides.effort);
+    args.push('-c', `model_reasoning_effort=${overrides.effort}`);
+  }
+  return args;
 }
 
 function controlledCodexGlobalArgs(

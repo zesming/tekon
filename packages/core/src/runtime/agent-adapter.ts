@@ -20,6 +20,16 @@ export interface RoleConfig {
   name?: string;
 }
 
+/**
+ * PD-10：角色级 provider 覆盖，来自角色 agent.yaml 的 driver/model/effort。
+ * 经 AgentRunInput 逐节点传入，由具体适配器翻译成 harness 参数；适配器
+ * 无法 honor 某个字段时必须显式报错，不得静默丢弃。
+ */
+export interface RoleProviderOverrides {
+  model?: string;
+  effort?: string;
+}
+
 export interface AgentRunInput {
   roleConfig: RoleConfig;
   prompt: string;
@@ -44,6 +54,11 @@ export interface AgentRunInput {
    * 尽快中断子进程并返回 `cancelled: true` 的结果。
    */
   signal?: AbortSignal;
+  /**
+   * PD-10：本节点角色声明的 provider 覆盖（model/effort）。run 级 adapter
+   * 在构建子进程命令时按自身能力翻译；无法 honor 时显式拒绝。
+   */
+  providerOverrides?: RoleProviderOverrides;
 }
 
 /**

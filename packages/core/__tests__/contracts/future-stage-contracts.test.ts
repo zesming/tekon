@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  buildClaudeCodeCommand,
   createAuditLogger,
   createCommandGateway,
   createGateEngine,
@@ -18,21 +19,18 @@ import {
   openTekonDatabase,
   parseWorkflowTemplate,
 } from '../../src/index.js';
+import { resolveRoleProviderOverrides } from '../../src/role/provider-overrides.js';
 
 // ---------------------------------------------------------------------------
-// Refactor acceptance-line contracts that belong to later stages.
+// Refactor acceptance-line contracts.
 //
-// Each remaining case is an `it.fails` placeholder: the setup steps run
-// against the current code and succeed; only the final contract assertion
-// fails, documenting the capability a later batch must deliver. When the
-// capability lands, the placeholder goes green by itself and must be
-// converted into a normal regression test (and strengthened into the
-// real-process e2e named in the refactor plan). Do not delete these to make
-// a run green. Contract 4 (reviewer/gate optional) was delivered in PD-06
-// subitem 4 and converted to a normal test; contract 6 (human rejection
-// rework) was delivered in PD-18 and now lives as the strengthened e2e
+// Contract 4 (reviewer/gate optional) was delivered in PD-06 subitem 4 and
+// converted to a normal test; contract 6 (human rejection rework) was
+// delivered in PD-18 and now lives as the strengthened e2e
 // __tests__/workflow/human-rejection-rework.e2e.test.ts. Contract 5
-// (role model selection) remains for batch 10.
+// (role model selection) was delivered in PD-10 (batch 10a) and converted
+// below into a normal regression test covering schema parsing, adapter
+// argv translation, and the explicit driver-mismatch failure.
 // ---------------------------------------------------------------------------
 
 const tempDirs: string[] = [];
@@ -112,16 +110,14 @@ describe('future-stage workflow contracts (placeholders)', () => {
     expect(gateLess.phases[0]!.nodes[0]!.gates).toEqual([]);
   });
 
-  // Contract 5 (refactor plan, stage 2): custom-role prompt, model and tool
-  // configuration reach the provider; when a driver cannot honor the model
-  // selection, startup fails explicitly (PD-10).
-  it.fails('contract 5 (stage 2): a role-selected model is loaded for the provider', () => {
+  // Contract 5 (PD-10, batch 10a): custom-role model/effort/driver config
+  // survives parsing, reaches the adapter, and is translated into provider
+  // argv; a driver the run cannot honor fails explicitly.
+  it('contract 5 (stage 2): a role-selected model is loaded and translated for the provider', () => {
     const repoPath = createGitRepo();
     const rolesRoot = mkdtempSync(join(tmpdir(), 'tekon-contract-roles-'));
     tempDirs.push(rolesRoot);
     const roleDir = join(rolesRoot, 'rd');
-    // Setup: write a role whose agent.yaml carries a model selection. The
-    // current schema is non-strict, so loading succeeds and strips the key.
     mkdirSync(roleDir, { recursive: true });
     writeFileSync(
       join(roleDir, 'agent.yaml'),
@@ -135,10 +131,100 @@ describe('future-stage workflow contracts (placeholders)', () => {
       builtInRolesDir: rolesRoot,
     });
     expect(loaded.role).toBe('rd');
-
-    // Contract assertion (fails today): the model selection survives parsing
-    // and is available to hand to the provider adapter.
-    expect((loaded.agent as { model?: string }).model).toBe('claude-opts-5-5');
+    // Schema no longer strips the model selection.
+    expect(loaded.agent.model).toBe('claude-opts-5-5');
   });
 
+  it('contract 5: a role effort that the claude adapter cannot honor fails explicitly', () => {
+    const repoPath = createGitRepo();
+    const rolesRoot = mkdtempSync(join(tmpdir(), 'tekon-contract-roles-'));
+    tempDirs.push(rolesRoot);
+    const roleDir = join(rolesRoot, 'qa');
+    mkdirSync(roleDir, { recursive: true });
+    writeFileSync(
+      join(roleDir, 'agent.yaml'),
+      ['role: qa', 'name: QA', 'effort: high', ''].join('\n'),
+    );
+    writeFileSync(join(roleDir, 'system.md'), 'You validate quality.\n');
+
+    const loaded = loadRole({
+      role: 'qa',
+      repoPath,
+      builtInRolesDir: rolesRoot,
+    });
+    const overrides = resolveRoleProviderOverrides(
+      'run_c5',
+      'qa',
+      loaded,
+      {
+        runId: 'run_c5',
+        provider: 'claude-code',
+        configSummary: {},
+        createdAt: '2026-11-17T00:00:00.000Z',
+      },
+    );
+    // The pure resolution still surfaces the effort; the adapter rejects it
+    // at command-build time with a readable, class-specific error.
+    expect(overrides).toEqual({ effort: 'high' });
+    expect(() =>
+      buildClaudeCodeCommand(
+        {
+          provider: 'claude-code',
+          command: 'claude',
+          args: [],
+          promptMode: 'stdin',
+          outputFormat: 'json',
+          timeoutMs: 1000,
+          permissionProfile: {
+            sandbox: 'workspace-write',
+            approval: 'acceptEdits',
+            filesystemScope: [repoPath],
+            network: 'restricted',
+            tools: { allow: [], deny: [] },
+          },
+        },
+        { prompt: 'hi' },
+        undefined,
+        overrides,
+      ),
+    ).toThrow(/ROLE_OVERRIDE_UNSUPPORTED/);
+  });
+
+  it('contract 5: a role driver mismatching the run provider fails before node start', () => {
+    const repoPath = createGitRepo();
+    const rolesRoot = mkdtempSync(join(tmpdir(), 'tekon-contract-roles-'));
+    tempDirs.push(rolesRoot);
+    const roleDir = join(rolesRoot, 'rd');
+    mkdirSync(roleDir, { recursive: true });
+    writeFileSync(
+      join(roleDir, 'agent.yaml'),
+      [
+        'role: rd',
+        'name: RD',
+        'driver: codex',
+        'model: gpt-x',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(join(roleDir, 'system.md'), 'You own the implementation.\n');
+
+    const loaded = loadRole({
+      role: 'rd',
+      repoPath,
+      builtInRolesDir: rolesRoot,
+    });
+    expect(() =>
+      resolveRoleProviderOverrides(
+        'run_c5',
+        'rd',
+        loaded,
+        {
+          runId: 'run_c5',
+          provider: 'claude-code',
+          configSummary: {},
+          createdAt: '2026-11-17T00:00:00.000Z',
+        },
+      ),
+    ).toThrow(/ROLE_DRIVER_MISMATCH/);
+  });
 });
