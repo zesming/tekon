@@ -24,6 +24,8 @@ import {
 import type { PromptBuilder } from './prompt-builder.js';
 import type { LeaseService } from './lease-service.js';
 import { resolveRoleProviderOverrides } from '../role/provider-overrides.js';
+import { compileRoleCommandPolicy } from '../role/tool-policy.js';
+import { mergeRoleAndGatePolicy } from '../role/policy-merge.js';
 
 export interface HelpersDeps {
   repoPath: string;
@@ -213,6 +215,30 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
     // 与 run 级 provider 不符时在节点启动前显式失败（mock 为测试适配器，
     // 不参与 driver 裁决，也忽略覆盖）。
     const loadedRole = promptBuilder.loadNodeRole(node);
+
+    // 10a-2：编译节点角色命令策略（角色 tools.yaml 运行时读盘、不进冻结
+    // 计划，与 system.md/provider-overrides 同语义）。供适配器合并与审计复用。
+    const roleCommandPolicy = compileRoleCommandPolicy({
+      repoPath,
+      role: node.role,
+      tools: loadedRole.tools,
+    });
+    // 持久化角色工具策略的生效证据（本特性唯一可追溯记录，参照
+    // role.provider-overrides）。只记摘要/计数，不回显完整命令参数。
+    await audit.append({
+      runId,
+      type: 'role.tool-policy.applied',
+      payload: {
+        nodeId: node.id,
+        role: node.role,
+        source: loadedRole.source,
+        network: roleCommandPolicy.network,
+        allowCount: roleCommandPolicy.allow.length,
+        denyCount: roleCommandPolicy.deny.length,
+        approvalCount: roleCommandPolicy.requiresHumanApproval.length,
+      },
+    });
+
     const providerOverrides = resolveRoleProviderOverrides(
       runId,
       node.role,
@@ -256,7 +282,14 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
       }),
       worktreeLease: lease,
       outputDir,
-      commandPolicy: defaultCommandPolicy(lease.worktreePath),
+      // 10a-2：适配器通道在现有必填 commandPolicy 上合并节点角色策略（不可变，
+      // 不 mutate run 级 config 单例）。基线 defaultCommandPolicy 与角色
+      // deny/审批/network/cwd 按候选 A 合并；角色空 allow 与基线并集不塌缩。
+      commandPolicy: mergeRoleAndGatePolicy(
+        roleCommandPolicy,
+        defaultCommandPolicy(lease.worktreePath),
+        lease.worktreePath,
+      ),
       ...(providerOverrides ? { providerOverrides } : {}),
       runContext: {
         runId,

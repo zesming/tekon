@@ -304,6 +304,14 @@ tekon eval readiness
 
 覆盖按节点在执行期读取角色文件（与 `system.md` 热更同语义，不进冻结计划），实际生效值写入审计事件 `role.provider-overrides` 可追溯。三个字段在进入任何子进程 argv 前都经同一字符白名单校验：只允许字母（含大小写）、数字、连字符、点和下划线且须以字母或数字开头，长度 ≤64，拒绝选项前缀、空白、路径分隔与 Shell 元字符，杜绝选项注入；校验不通过报 `ROLE_OVERRIDE_INVALID`。`mock` 适配器忽略所有覆盖。
 
+角色目录的 `tools.yaml` 声明 `network`、`allow`、`deny`、`requiresHumanApproval` 工具策略（10a-2 起为运行时强制，不再只是提示文本）：
+
+- 节点执行门禁命令时，角色策略与门禁授权合并裁决——`deny` 与 `requiresHumanApproval` 取并集且角色 `deny` 不可被门禁手写授权覆盖，`network` 取最严（`disabled`>`restricted`>`enabled`），工作目录约束取语义交集；危险删除、force push、Shell 元字符等固定拒绝规则始终最先生效。
+- 适配器侧把合并后的策略逐节点送入 Provider 命令权限；`requiresHumanApproval` 在 claude-code 转原生 ask，网关层的人工审批拦截对三个 Provider 一致。
+- 返工的门禁恒在「拥有该 gate 的节点」角色下裁决（即返工目标节点，不是评审节点）。
+- `tools.yaml` 缺失时回落到安全默认（`network: disabled`、允许/拒绝/审批列表均空）；文件损坏或无法解析时节点 fail-closed，不会静默回退继续执行。每次生效写审计事件 `role.tool-policy.applied`（含角色来源与约束规模）。
+- 边界：codex/dsh 没有会话内工具域/审批的原生强制（claude-code 经 ask 设置落地），但网关层的 deny、网络与人工审批拦截对三者一致；角色文件运行时读盘、不进冻结计划，恢复运行时的策略一致性依赖文件未被修改。
+
 ### 5.6 Gate
 
 验证关卡，包括 build、lint、test、schema、security-scan、human，以及独立评审、角色范围、验收证据、QA 签署和流程完整性检查。
@@ -794,7 +802,7 @@ tekon draft approve
 
 该澄清调用是独立 CLI 路径，使用 Claude 的 `default` 权限模式，显式关闭模型的内置工具和 MCP 工具，并禁止自动加载 MCP 配置；只向模型提供草稿与回答文本。失败时回退为静态澄清，不申请扩大权限。宿主 CLI 的启动 hook 和配置仍由本机管理，这不是 OS 沙箱。只需本地塑形时使用 `draft shape` 或 `draft new "需求文本" --no-interactive`。
 
-Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 仍只作为节点提示，不等于这些运行时规则。
+Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 的 deny/审批/网络/工作目录约束自 10a-2 起为运行时强制（见 §5.5），与此处 Provider 免审批规则叠加生效：角色 deny 优先，免审批不覆盖角色拒绝。
 
 资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 

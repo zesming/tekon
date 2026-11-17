@@ -150,6 +150,18 @@ export function evaluateCommandPolicy(
   return validateCommand(command, cwd, policy);
 }
 
+/**
+ * 10a-2：审批维度判定（evaluateCommandPolicy 不评估 requiresHumanApproval，
+ * 审批检查在 gateway.run 内）。导出供 preflight 复用，禁止另写一份导致
+ * 预检与运行期的审批结论漂移。返回 true 表示该命令需人工审批。
+ */
+export function requiresApproval(
+  command: CommandInvocation,
+  policy: CommandPolicy,
+): boolean {
+  return matchesAny(command, policy.requiresHumanApproval ?? []);
+}
+
 function validateCommand(
   command: CommandInvocation,
   cwd: string,
@@ -219,7 +231,7 @@ function isShellControlToken(value: string): boolean {
   return /^(?:;|&|&&|\||\|\||<|>|>>|2>|2>>)$/u.test(value);
 }
 
-function matchesAny(
+export function matchesAny(
   command: CommandInvocation,
   patterns: CommandInvocation[],
 ): boolean {
@@ -298,7 +310,7 @@ function isKnownNetworkCommand(command: CommandInvocation): boolean {
   return false;
 }
 
-function isCwdAllowed(cwd: string, scopes: string[]): boolean {
+export function isCwdAllowed(cwd: string, scopes: string[]): boolean {
   const resolvedCwd = resolve(cwd);
   return scopes.some((scope) => {
     const resolvedScope = resolve(scope);

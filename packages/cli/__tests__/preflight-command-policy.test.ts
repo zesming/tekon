@@ -3,9 +3,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadRepoProfile, type WorkflowTemplate } from '@tekon/core';
+import {
+  defaultCommandPolicy,
+  loadRepoProfile,
+  type WorkflowTemplate,
+} from '@tekon/core';
 
 import { gateCommandStatus } from '../src/commands/workflow.js';
+import { nodeRoleCommandPolicy } from '../src/lib/utils.js';
+
+// 10a-2：gateCommandStatus 现要求节点角色策略。这些 PD-04 parity 用例关注
+// 预检与 Gateway 同判，传入与门禁基线同源的中性角色策略以隔离角色变量；
+// 角色强制另有专门用例覆盖。
+type GateInput = Parameters<typeof gateCommandStatus>[2];
+
+function preflightStatus(
+  repoPath: string,
+  profile: ReturnType<typeof loadRepoProfile>,
+  gate: GateInput,
+) {
+  return gateCommandStatus(
+    repoPath,
+    profile,
+    gate,
+    defaultCommandPolicy(repoPath),
+  );
+}
 
 // PD-04 M2 回归：commandRef 解析出的非基线工具（python3/make）在 preflight
 // 必须与运行期 Gateway 同判——视为用户已授权，status=resolved，不得 rejected。
@@ -54,7 +77,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     });
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(repoPath, profile, gate());
+    const result = preflightStatus(repoPath, profile, gate());
     expect(result.status).toBe('resolved');
     expect(result.rejection).toBeNull();
     expect(result.commandText).toBe('python3 build.py');
@@ -66,7 +89,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     });
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(repoPath, profile, gate());
+    const result = preflightStatus(repoPath, profile, gate());
     expect(result.status).toBe('resolved');
     expect(result.rejection).toBeNull();
   });
@@ -77,7 +100,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     });
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(repoPath, profile, gate());
+    const result = preflightStatus(repoPath, profile, gate());
     expect(result.status).toBe('rejected');
     expect(result.rejection).toMatch(/recursive forced remove/u);
   });
@@ -87,7 +110,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     tempDirs.push(repoPath);
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(repoPath, profile, gate());
+    const result = preflightStatus(repoPath, profile, gate());
     expect(result.status).toBe('missing');
   });
 
@@ -99,7 +122,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     tempDirs.push(repoPath);
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(
+    const result = preflightStatus(
       repoPath,
       profile,
       gate({ type: 'human', requiresHumanApproval: true }),
@@ -115,7 +138,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     });
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(
+    const result = preflightStatus(
       repoPath,
       profile,
       gate({ type: 'independent-review' }),
@@ -129,7 +152,7 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     tempDirs.push(repoPath);
     const profile = loadRepoProfile(repoPath);
 
-    const result = gateCommandStatus(
+    const result = preflightStatus(
       repoPath,
       profile,
       gate({
@@ -140,5 +163,45 @@ describe('PD-04 preflight/runtime command policy parity', () => {
     );
     expect(result.status).toBe('not-command-gate');
     expect(result.rejection).toBeNull();
+  });
+
+  it('10a-2: surfaces role-driven human approval as a distinct preflight status', () => {
+    const repoPath = repoWithProfile({});
+    // 项目 rd 角色要求 make check 人工审批。
+    const roleDir = join(repoPath, '.tekon', 'roles', 'rd');
+    mkdirSync(roleDir, { recursive: true });
+    writeFileSync(join(roleDir, 'agent.yaml'), 'role: rd\nname: RD\n', 'utf8');
+    writeFileSync(join(roleDir, 'system.md'), 'RD\n', 'utf8');
+    writeFileSync(
+      join(roleDir, 'tools.yaml'),
+      [
+        'requiresHumanApproval:',
+        '  - tool: make',
+        '    args: [check]',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const profile = loadRepoProfile(repoPath);
+    const approvedGate = gate({
+      commandRef: undefined,
+      command: { tool: 'make', args: ['check'] },
+    });
+
+    // 中性策略：命令放行、无审批要求。
+    expect(preflightStatus(repoPath, profile, approvedGate).status).toBe(
+      'resolved',
+    );
+
+    // rd 角色策略：同一命令因角色要求审批而产出独立状态。
+    const rdDecision = gateCommandStatus(
+      repoPath,
+      profile,
+      approvedGate,
+      nodeRoleCommandPolicy(repoPath, 'rd'),
+    );
+    expect(rdDecision.status).toBe('resolved-approval-required');
+    expect(rdDecision.rejection).toBeNull();
   });
 });

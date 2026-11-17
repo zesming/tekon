@@ -4,6 +4,8 @@ import {
   loadRepoProfile,
   repoProfileCommandResolution,
 } from '../repo/profile.js';
+import { mergeRoleAndGatePolicy } from '../role/policy-merge.js';
+import type { CommandPolicy } from '../types/config.js';
 import { gateCommandPolicy } from './workflow-runtime.js';
 import type { WorkflowGateConfig } from './template.js';
 
@@ -63,6 +65,12 @@ export function evaluateDeterministicBlock(input: {
   policyCwd: string;
   gate: WorkflowGateConfig;
   classification: string | null | undefined;
+  /**
+   * 10a-2：拥有该 gate 的节点角色命令策略，由 node-executor 编译后传入，
+   * 保持本函数纯函数、不引入 loadRole 磁盘 IO。与运行期 gate-runner 同一
+   * 合并语义，避免 resume 裁决与运行期分叉。
+   */
+  rolePolicy: CommandPolicy;
 }): DeterministicBlock | null {
   const { classification } = input;
   if (
@@ -115,7 +123,11 @@ export function evaluateDeterministicBlock(input: {
   }
   const rejection = evaluateCommandPolicy(
     gate.command,
-    gateCommandPolicy(input.policyCwd, gate),
+    mergeRoleAndGatePolicy(
+      input.rolePolicy,
+      gateCommandPolicy(input.policyCwd, gate),
+      input.policyCwd,
+    ),
     input.policyCwd,
   );
   if (!rejection) return null;

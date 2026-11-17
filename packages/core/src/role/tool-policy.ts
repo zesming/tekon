@@ -2,6 +2,7 @@ import type { z } from 'zod';
 
 import {
   commandPolicySchema,
+  type CommandPolicy,
   type PermissionProfile,
 } from '../types/config.js';
 import type { CommandInvocation, Role } from '../types/domain.js';
@@ -75,4 +76,21 @@ export function compileRoleToolPolicy(
 
 export function formatCommand(command: CommandInvocation): string {
   return [command.tool, ...(command.args ?? [])].join(' ').trim();
+}
+
+/**
+ * 10a-2：只取角色 tools.yaml 编译出的命令策略（供运行期与 gate 策略合并）。
+ * 纯函数、无 IO；repoPath 统一传主仓 projectRoot（设计 §9，保证 cwdScope/
+ * 审计摘要稳定可追溯）。
+ */
+export function compileRoleCommandPolicy(input: {
+  repoPath: string;
+  role: Role;
+  tools?: RoleToolsConfig;
+}): CommandPolicy {
+  return compileRoleToolPolicy({
+    repoPath: input.repoPath,
+    role: input.role,
+    tools: input.tools,
+  }).commandPolicy;
 }

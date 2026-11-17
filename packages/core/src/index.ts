@@ -60,6 +60,7 @@ export * from './gate/helpers.js';
 export * from './role/loader.js';
 export * from './role/skill-loader.js';
 export * from './role/tool-policy.js';
+export * from './role/policy-merge.js';
 export * from './role/prompt-builder.js';
 export * from './workflow/template.js';
 export * from './workflow/errors.js';

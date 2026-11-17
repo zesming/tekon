@@ -17,7 +17,7 @@ import {
 import type { CliIO } from '../lib/context.js';
 import { resolveProjectRepoPath } from '../lib/path-utils.js';
 import { formatAuthKind } from '../lib/run-outcome.js';
-import { loadWorkflowByName } from '../lib/utils.js';
+import { loadWorkflowByName, nodeRoleCommandPolicy } from '../lib/utils.js';
 import { gateCommandStatus } from './workflow.js';
 
 const PROVIDERS: ProbedProvider[] = ['claude-code', 'codex'];
@@ -105,8 +105,12 @@ export async function commandDoctor(argv: string[], io: CliIO): Promise<number> 
       const missing: string[] = [];
       for (const phase of template.phases) {
         for (const node of phase.nodes) {
+          const rolePolicy = nodeRoleCommandPolicy(repoPath, node.role);
           for (const gate of node.gates) {
-            if (gateCommandStatus(repoPath, profile, gate).status === 'missing') {
+            if (
+              gateCommandStatus(repoPath, profile, gate, rolePolicy).status ===
+              'missing'
+            ) {
               missing.push(`${node.id}/${gate.type}`);
             }
           }

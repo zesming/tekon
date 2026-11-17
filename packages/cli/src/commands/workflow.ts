@@ -17,10 +17,13 @@ import {
   inspectTemplateSymlink,
   listWorkflowCatalog,
   loadRepoProfile,
+  mergeRoleAndGatePolicy,
   readDraftShapeFile,
   repoProfileCommandGuidance,
+  requiresApproval,
   selectWorkflowTemplateForDraft,
   validateWorkflowTemplateFile,
+  type CommandPolicy,
   type WorkflowTemplate,
 } from '@tekon/core';
 
@@ -35,6 +38,7 @@ import {
   getRepoRoot,
   getWorkflowFilePath,
   loadWorkflowByName,
+  nodeRoleCommandPolicy,
 } from '../lib/utils.js';
 
 export async function commandWorkflow(argv: string[], io: CliIO) {
@@ -131,9 +135,10 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
     const profile = loadRepoProfile(repoPath);
     for (const phase of template.phases) {
       for (const node of phase.nodes) {
+        const rolePolicy = nodeRoleCommandPolicy(repoPath, node.role);
         for (const gate of node.gates) {
           const { guidance, commandText, status, rejection } =
-            gateCommandStatus(repoPath, profile, gate);
+            gateCommandStatus(repoPath, profile, gate, rolePolicy);
           const fields = [
             `node=${node.id}`,
             `gate=${gate.type}`,
@@ -362,6 +367,7 @@ export function gateCommandStatus(
   repoPath: string,
   profile: ReturnType<typeof loadRepoProfile>,
   gate: WorkflowTemplate['phases'][number]['nodes'][number]['gates'][number],
+  rolePolicy: CommandPolicy,
 ) {
   const guidance = gate.commandRef
     ? repoProfileCommandGuidance(repoPath, profile, gate.commandRef)
@@ -394,14 +400,24 @@ export function gateCommandStatus(
     } else if (behavior === 'skip') {
       status = 'not-applicable';
     } else if (command) {
-      // PD-04：preflight 与运行期共用有效门禁解析（commandRef 物化后的命令
-      // 挂回门禁）与同一裁决函数，预检结果必须能预测运行期是否放行。
-      rejection = evaluateCommandPolicy(
-        command,
+      // PD-04 + 10a-2：preflight 与运行期共用有效门禁解析、同一裁决函数，
+      // 并合并节点角色策略（deny/审批/network/cwd 硬约束），预检须能预测
+      // 运行期是否放行 / 是否需要人工审批。
+      const effectivePolicy = mergeRoleAndGatePolicy(
+        rolePolicy,
         gateCommandPolicy(repoPath, effectiveGate),
         repoPath,
       );
-      status = rejection ? 'rejected' : 'resolved';
+      rejection = evaluateCommandPolicy(command, effectivePolicy, repoPath);
+      if (rejection) {
+        status = 'rejected';
+      } else if (requiresApproval(command, effectivePolicy)) {
+        // evaluateCommandPolicy 不评估审批，单独产出审批待决状态，
+        // 对齐运行期 gateway.run 的 blocked-for-approval。
+        status = 'resolved-approval-required';
+      } else {
+        status = 'resolved';
+      }
     } else {
       // builtin-security：security-scan 缺命令时有内置安全扫描兜底。
       status = 'resolved';

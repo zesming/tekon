@@ -1,5 +1,15 @@
 # 变更日志
 
+## 0.37.0 — 2026-11-18
+
+- 角色 `tools.yaml` 工具策略从「仅 prompt 提示」升级为运行时 fail-closed 强制（PD-10 10a-2）。角色声明的 `deny`/`requiresHumanApproval`/`network`/工作目录约束现在真正参与命令裁决，不再依赖 agent 自觉。
+- 新增纯函数 `mergeRoleAndGatePolicy`/`mergeCwdScope`（core 导出）：角色策略与门禁策略按候选 A 合并——`deny`/`requiresHumanApproval`/`allow` 取并集、`network` 取最严（disabled>restricted>enabled）、工作目录走语义 containment 交集（取能容纳执行 cwd 的唯一最窄 scope，无 scope 容纳时 fail-closed，杜绝朴素数组交集在 worktree 场景误杀）。角色 `deny` 不可被门禁手写授权（PD-04）覆盖；固定拒绝规则（危险 rm/force push/shell 元字符/网络）仍在裁决最前端先生效。
+- 两条执行通道统一收口：命令网关（gate-runner 门禁命令、resume 确定性失败判定）按「拥有该 gate 的节点」角色合并策略（返工取 targetNode 角色，不串用评审节点）；适配器通道在现有 `AgentRunInput.commandPolicy` 上逐节点不可变合并（node/rework/repair 四调用点经 `agentInputForLease` 单点覆盖，不 mutate run 级单例）。
+- preflight/doctor 接入同一角色策略：新增 `resolved-approval-required` 预检状态（复用网关同一 `matchesAny` 判定），消除「预检 resolved、运行 blocked-for-approval」的审批双标；角色在预检与运行期经同一 `loadRole` 层级解析。
+- 安全：角色 `tools.yaml` 损坏/加载失败时节点 fail-closed，不回落基线继续跑；角色策略生效写 `role.tool-policy.applied` 审计（含 source 与约束规模），可追溯。
+- 已知边界（设计登记）：codex/dsh 的会话内工具域与审批无原生强制（claude 经 `--settings` 落地），但网关层 blocked-for-approval 与网络/deny 约束对三 provider 一致；角色文件运行时读盘不进冻结计划，跨 resume 一致性依赖文件未被修改。
+- 测试：新增合并函数 14 测（含归因判别，证明拒绝来自角色而非固定规则）、真实命令网关 e2e（角色 deny 端到端 rejected）、适配器注入/空 allow 不塌缩/双节点不可变/fail-closed e2e、resume 角色 parity、preflight 审批 parity。
+
 ## 0.36.0 — 2026-11-17
 
 - 工作流模板可浏览、可校验、可轻量脚手架（PD-07 CLI 部分、CD-20）：`tekon workflow list` 每行输出 `id [builtin|project]` 来源标记，并在浏览阶段对每个模板跑非抛出的解析探针——解析失败的模板不再被静默丢弃，而是附 `invalid: <可读原因>`，写错的模板不必等到 `run`/`show` 才暴露；错误消息折叠为严格单行（YAML 语法错误自带的多行代码片段也不例外），保住一行一模板的脚本解析合同，完整多行诊断交给 `validate`。探针为显式 opt-in（`listWorkflowCatalog({ validate: true })`），既有调用方（含 Web 模板列表与 CLI 其他路径）不传该选项，目录扫描的零副作用形状不变。

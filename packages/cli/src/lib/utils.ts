@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 
 import {
+  compileRoleCommandPolicy,
   inspectTemplateSymlink,
   listWorkflowCatalog,
+  loadRole,
   loadWorkflowTemplateFile,
   readableWorkflowTemplateError,
   readTekonConfig,
   resolveDefaultAgent,
+  type CommandPolicy,
 } from '@tekon/core';
 
 export function getVersion(): string {
@@ -77,6 +80,27 @@ export function getRepoRoot() {
 
 export function getBuiltInRolesDir() {
   return join(getRepoRoot(), 'roles');
+}
+
+/**
+ * 10a-2：编译节点角色的命令策略（preflight/doctor 与运行期共用同一
+ * loadRole 层级解析，保证项目/用户层角色覆盖在预检与运行期裁决到同一份）。
+ * repoPath 取主仓；角色文件加载失败时抛错，由调用方 fail-closed。
+ */
+export function nodeRoleCommandPolicy(
+  repoPath: string,
+  role: string,
+): CommandPolicy {
+  const loadedRole = loadRole({
+    role,
+    repoPath,
+    builtInRolesDir: getBuiltInRolesDir(),
+  });
+  return compileRoleCommandPolicy({
+    repoPath,
+    role,
+    tools: loadedRole.tools,
+  });
 }
 
 export function getBuiltInWorkflowsDir() {

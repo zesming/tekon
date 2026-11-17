@@ -9,6 +9,13 @@ import {
   FAIL_FAST_CLASSIFICATIONS,
   evaluateDeterministicBlock,
 } from '../../src/workflow/resume-policy.js';
+import { defaultCommandPolicy } from '../../src/workflow/workflow-runtime.js';
+
+// 10a-2：resume 裁决要求传入节点角色策略。测试用与门禁基线同源的中性策略，
+// 不额外收紧也不放松，以隔离 resume 自身的白名单逻辑；角色强制另有专门用例。
+function rolePolicyFor(repoPath: string) {
+  return defaultCommandPolicy(repoPath);
+}
 
 // PD-31：确定性失败白名单。只有 missing-command / rejected / unsupported-gate
 // 且“当前条件仍成立”时才 fail-fast；条件已消失或分类不在白名单内一律返回
@@ -69,6 +76,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
         evaluateDeterministicBlock({
           profileRepoPath: repoPath,
           policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
           gate: gate(),
           classification: classification as string | null | undefined,
         }),
@@ -81,6 +89,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate(),
       classification: 'missing-command',
     });
@@ -96,6 +105,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ commandRef: 'build' }),
       classification: 'missing-command',
     });
@@ -107,6 +117,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ commandRef: 'build' }),
       classification: 'missing-command',
     });
@@ -122,6 +133,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate(),
       classification: 'missing-command',
     });
@@ -136,6 +148,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ commandRef: 'build' }),
       classification: 'missing-command',
     });
@@ -147,6 +160,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({
         command: { tool: 'rm', args: ['-rf', '/tmp/danger'] },
       }),
@@ -162,6 +176,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ command: { tool: 'git', args: ['--version'] } }),
       classification: 'rejected',
     });
@@ -169,11 +184,31 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     expect(decision).toBeNull();
   });
 
+  it('10a-2: keeps fail-fast when a role deny rejects a command the gate would allow', () => {
+    const repoPath = repoWithProfile('commands: {}\n');
+    const gitVersion = { tool: 'git', args: ['--version'] };
+    // 同一命令：中性策略放行（对照见上一用例），角色 deny 后 resume 仍判 rejected。
+    const denyingRolePolicy = {
+      ...rolePolicyFor(repoPath),
+      deny: [gitVersion],
+    };
+    const decision = evaluateDeterministicBlock({
+      profileRepoPath: repoPath,
+      policyCwd: repoPath,
+      rolePolicy: denyingRolePolicy,
+      gate: gate({ command: gitVersion }),
+      classification: 'rejected',
+    });
+    expect(decision?.classification).toBe('rejected');
+    expect(decision?.reason).toMatch(/deny/u);
+  });
+
   it('fail-fasts unsupported-gate for an unknown gate type', () => {
     const repoPath = repoWithProfile('commands: {}\n');
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ type: 'made-up-gate' as WorkflowGateConfig['type'] }),
       classification: 'unsupported-gate',
     });
@@ -186,6 +221,7 @@ describe('PD-31 evaluateDeterministicBlock', () => {
     const decision = evaluateDeterministicBlock({
       profileRepoPath: repoPath,
       policyCwd: repoPath,
+      rolePolicy: rolePolicyFor(repoPath),
       gate: gate({ type: 'schema', artifactType: 'prd' }),
       classification: 'unsupported-gate',
     });

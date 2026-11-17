@@ -36,7 +36,8 @@ import type { GateRunner } from './gate-runner.js';
 import { isWorkflowTerminalError } from './errors.js';
 import { writeWorkflowTerminal } from './state-machine.js';
 import { isJobCancellationAbort, isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
-import type { WorktreeLease } from '../types/config.js';
+import type { WorktreeLease, CommandPolicy } from '../types/config.js';
+import { compileRoleCommandPolicy } from '../role/tool-policy.js';
 
 /**
  * CD-09 8b-3：识别“finalize 失败的可恢复中断”。该状态下 agent 与所有 Gate
@@ -186,6 +187,7 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       // 1) 确定性失败 fail-fast：白名单分类且条件仍成立时，不建 role_run、
       //    不调 agent，节点与 run 保持 blocked，把原因/下一步写入审计。
       if (!resumeOptions?.gatesOnly) {
+        const resumeRole = promptBuilder.loadNodeRole(node);
         const deterministicBlock =
           await evaluateBlockedDeterministicFailure({
             repositories,
@@ -193,6 +195,11 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
             runId,
             node,
             lease: resumableLease ?? undefined,
+            rolePolicy: compileRoleCommandPolicy({
+              repoPath,
+              role: node.role,
+              tools: resumeRole.tools,
+            }),
           });
         if (deterministicBlock) {
           await audit.append({
@@ -885,6 +892,8 @@ export async function evaluateBlockedDeterministicFailure(input: {
   runId: string;
   node: ExecutableNode;
   lease: WorktreeLease | undefined;
+  /** 10a-2：节点角色命令策略，由闭包内 promptBuilder 编译后透传。 */
+  rolePolicy: CommandPolicy;
 }): Promise<DeterministicBlock | null> {
   const failedResults = (await input.repositories.listGateResults(input.runId))
     .filter(
@@ -902,6 +911,7 @@ export async function evaluateBlockedDeterministicFailure(input: {
     policyCwd: input.lease?.worktreePath ?? input.repoPath,
     gate: configuredGate,
     classification: latest.failureClassification,
+    rolePolicy: input.rolePolicy,
   });
 }
 
