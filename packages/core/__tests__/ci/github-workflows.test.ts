@@ -109,7 +109,12 @@ describe('CI workflow', () => {
     const install = stepIndex(list, runs('pnpm install --frozen-lockfile'));
     const build = stepIndex(list, (step) => step.run === 'pnpm -r build');
     const typecheck = stepIndex(list, (step) => step.run === 'pnpm -r typecheck');
-    const test = stepIndex(list, (step) => step.run === 'pnpm test --run');
+    // --no-file-parallelism：真实 git-worktree/子进程 e2e 在文件并行下会因
+    // 资源竞争触发 5000ms 超时与 worker 意外退出，CI 必须串行跑全量。
+    const test = stepIndex(
+      list,
+      (step) => step.run === 'pnpm test --run --no-file-parallelism',
+    );
     const smoke = stepIndex(list, runs('node packages/cli/dist/index.js --version'));
     expect([install, build, typecheck, test, smoke]).toEqual([install, build, typecheck, test, smoke].sort((a, b) => a - b));
   });
