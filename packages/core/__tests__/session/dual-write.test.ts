@@ -110,6 +110,17 @@ const AUDIT_MAPPING_CASES = [
     expectedType: 'workflow/started',
     expectedPayload: { runId: RUN_ID, resumed: true, kind: 'workflow' },
   },
+  {
+    // PD-17 步 3：显式重试与 resume 对等投影为代际重启标记。
+    auditType: 'run.retried',
+    auditPayload: { fromStatus: 'failed', toStatus: 'running' },
+    expectedType: 'workflow/started',
+    expectedPayload: {
+      runId: RUN_ID,
+      retried: true,
+      kind: 'workflow',
+    },
+  },
 
   {
     auditType: 'run.passed',
@@ -569,7 +580,7 @@ describe('S9 显式不映射清单', () => {
 // ---------------------------------------------------------------------------
 
 describe('dual-write best-effort 与降级', () => {
-  it.each(['run.started', 'run.resumed'])('carries passthrough names of %s into workflow/started', (auditType) => {
+  it.each(['run.started', 'run.resumed', 'run.retried'])('carries passthrough names of %s into workflow/started', (auditType) => {
     expect(
       mapAuditEventToSessionEvent({
         runId: RUN_ID,

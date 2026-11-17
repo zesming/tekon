@@ -108,6 +108,7 @@ function fakeEngine(workflow: WorkflowInstance): WorkflowEngine {
     executePreparedRun: vi.fn(async () => workflow),
     startRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
     resumeRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
+    retryRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
   };
 }
 
@@ -441,6 +442,119 @@ describe('SessionService.resumeRun', () => {
     const workspace = await env.sessions.getOrCreateDefaultWorkspace(env.projectRoot);
     const sessions = await env.sessions.listSessions(workspace.id);
     expect(sessions).toHaveLength(1);
+  });
+});
+
+describe('SessionService.retryRun', () => {
+  it('enqueues a workflow-resume job with the retry option for a failed run', async () => {
+    const env = setup();
+    await seedRun(env, 'run_failed', 'failed');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_failed')!),
+    );
+
+    const result = await service.retryRun({ runId: 'run_failed' });
+
+    expect(result.outcome).toBe('enqueued');
+    if (result.outcome !== 'enqueued') throw new Error('unreachable');
+    const job = await env.jobs.get(result.jobId);
+    expect(job).toMatchObject({ kind: 'workflow-resume', status: 'queued' });
+    expect(await env.jobs.getResumeOptions(result.jobId)).toEqual({
+      retry: true,
+    });
+  });
+
+  it('reports terminal for a passed run without enqueuing', async () => {
+    const env = setup();
+    await seedRun(env, 'run_passed', 'passed');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_passed')!),
+    );
+    const enqueueSpy = vi.spyOn(env.jobRunner, 'enqueue');
+
+    const result = await service.retryRun({ runId: 'run_passed' });
+
+    expect(result).toEqual({
+      outcome: 'terminal',
+      runId: 'run_passed',
+      status: 'passed',
+    });
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws RETRY_NOT_FAILED for a non-terminal blocked run', async () => {
+    const env = setup();
+    await seedRun(env, 'run_blocked', 'blocked');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_blocked')!),
+    );
+
+    await expect(
+      service.retryRun({ runId: 'run_blocked' }),
+    ).rejects.toThrow(/RETRY_NOT_FAILED/);
+  });
+
+  it('rejects (active-job) when the run already has an active job', async () => {
+    const env = setup();
+    await seedRun(env, 'run_retry_active', 'failed');
+    const sessionId = await seedSession(env, 'run_retry_active');
+    await env.jobRunner.enqueue({ sessionId, kind: 'workflow-resume' });
+    const service = makeService(
+      env,
+      fakeEngine(
+        await env.repositories.getWorkflowInstance('run_retry_active')!,
+      ),
+    );
+
+    const result = await service.retryRun({ runId: 'run_retry_active' });
+    expect(result).toEqual({
+      outcome: 'active-job',
+      runId: 'run_retry_active',
+    });
+  });
+
+  it('hands over an orphaned queued CLI retry job instead of dead-locking on active-job', async () => {
+    // 场景：第一个 CLI 进程入队 retry 作业后、claim 前崩溃（SIGKILL/断电），
+    // 留下 queued 孤儿。第二个 CLI 进程的 retry 必须复用该作业（事务内
+    // handover），而不是被服务层预检永久挡在 active-job 死结里——failed 运行
+    // 无法 cancel，queued 作业也没有其他回收器。
+    const env = setup();
+    await seedRun(env, 'run_orphan_retry', 'failed');
+    const sessionId = await seedSession(env, 'run_orphan_retry');
+    env.jobRunner = createJobRunner({
+      jobs: env.jobs,
+      sessions: env.sessions,
+      bus: env.bus,
+      registry: createSubprocessRegistry(),
+      executor: { execute: async () => ({ status: 'done' }) },
+      origin: 'cli',
+    });
+    const first = await env.jobRunner.enqueueIfNoActiveByRunId({
+      runId: 'run_orphan_retry',
+      sessionId,
+      kind: 'workflow-resume',
+      retry: true,
+    });
+    expect(first.outcome).toBe('enqueued');
+    if (first.outcome !== 'enqueued') throw new Error('unreachable');
+
+    const service = makeService(
+      env,
+      fakeEngine(
+        await env.repositories.getWorkflowInstance('run_orphan_retry')!,
+      ),
+    );
+    const second = await service.retryRun({ runId: 'run_orphan_retry' });
+
+    expect(second.outcome).toBe('enqueued');
+    if (second.outcome !== 'enqueued') throw new Error('unreachable');
+    // 复用同一个 queued 作业，不产生第二条活动作业。
+    expect(second.jobId).toBe(first.job.id);
+    const active = await env.jobs.findActiveByRunId('run_orphan_retry');
+    expect(active?.id).toBe(first.job.id);
   });
 });
 

@@ -29,6 +29,27 @@ describe('findLatestRunFailure', () => {
     ).toBeUndefined();
   });
 
+  it('PD-17 步 3：run.retried 也是失败边界，重试前的旧失败不再显示，重试后的新失败照常上报', () => {
+    expect(
+      findLatestRunFailure([
+        { type: 'gate.execution.error', payload: { error: 'old', diagnostic } },
+        { type: 'run.retried', payload: { fromStatus: 'failed', toStatus: 'running' } },
+        { type: 'node.started', payload: {} },
+      ]),
+    ).toBeUndefined();
+
+    expect(
+      findLatestRunFailure([
+        { type: 'gate.execution.error', payload: { error: 'old', diagnostic } },
+        { type: 'run.retried', payload: { fromStatus: 'failed', toStatus: 'running' } },
+        {
+          type: 'node.interrupted',
+          payload: { error: 'new', diagnostic: { code: 'timeout', message: 'new timeout' } },
+        },
+      ]),
+    ).toMatchObject({ kind: 'timeout', message: 'new timeout' });
+  });
+
   it('falls back to the redacted error text for unclassified failures', () => {
     const secret = 'sk-abcdefghijklmnopqrstuvwxyz0123456789';
     const reason = findLatestRunFailure([

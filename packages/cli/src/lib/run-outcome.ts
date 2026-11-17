@@ -96,7 +96,7 @@ export function runOutcomeDetails(input: {
   if (status === 'failed') {
     return [
       ...(failure ? [`  原因: ${failure.message}`] : []),
-      `  运行已失败且不能恢复；用 tekon log --run-id ${runId} 查看详情`,
+      `  运行已处于终态 failed；排除失败原因后用 tekon retry --run-id ${runId} 只重跑失败节点，或用 tekon log --run-id ${runId} 查看详情`,
     ];
   }
   if (status === 'paused') {

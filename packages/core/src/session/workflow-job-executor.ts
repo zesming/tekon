@@ -42,6 +42,8 @@ export interface WorkflowJobEngine {
     runId: string,
     options?: { gatesOnly?: boolean },
   ): Promise<{ workflow: WorkflowInstance }>;
+  /** PD-17 步 3：failed 运行的显式重试入口。 */
+  retryRun(runId: string): Promise<{ workflow: WorkflowInstance }>;
 }
 
 /**
@@ -185,14 +187,18 @@ export function createWorkflowJobExecutor(deps: {
               : await engine.executePreparedRun(runId);
             break;
           }
-          case 'workflow-resume':
+          case 'workflow-resume': {
+            const resumeOptions =
+              (await deps.jobs?.getResumeOptions(ctx.job.id)) ?? undefined;
+            // PD-17 步 3：retry 选项把 failed 运行改走独立的 retryRun 入口，
+            // 裸 resume 仍由 engine 按终态拒绝 failed。
             workflow = (
-              await engine.resumeRun(
-                runId,
-                (await deps.jobs?.getResumeOptions(ctx.job.id)) ?? undefined,
-              )
+              resumeOptions?.retry
+                ? await engine.retryRun(runId)
+                : await engine.resumeRun(runId, resumeOptions)
             ).workflow;
             break;
+          }
           default:
             throw new Error(`Unknown job kind: ${job.kind}`);
         }

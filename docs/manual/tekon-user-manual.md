@@ -489,8 +489,9 @@ Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明�
 | 非零退出、Tekon 停止时中断 | 先 `tekon resume` 重试；仍失败时查看节点日志 |
 | 超时、长时间没有进展 | 先 `tekon resume` 重试；任务确实需要更久时，用更大的 `--timeout-ms` 或 `--no-progress-timeout-ms` 重新 `tekon run`（恢复沿用启动时的超时设置） |
 | 产物缺失或不合 schema | 查看节点目录里的产物与 manifest，修复后 `tekon resume` |
+| 运行已收敛为终态 `failed`（门禁重试耗尽等） | 排除失败原因后 `tekon retry --run-id <runId>` 只重跑失败节点（见 §6.10.1）；需要改配置或模板结构时发起新运行 |
 
-`failed` 是终态，不提示恢复。Claude 退出码为 0 但结果标记为错误（例如未登录）时，按这个错误归类，不只报产物缺失。原因只取自本次恢复之后的记录，已经恢复过的旧原因不再显示。
+`failed` 是终态，裸 `tekon resume` 不恢复终态运行；排除失败原因后可用 §6.10.1 的 `tekon retry` 显式重试失败节点，配置或模板本身需要变更时则发起新运行。Claude 退出码为 0 但结果标记为错误（例如未登录）时，按这个错误归类，不只报产物缺失。原因只取自本次恢复之后的记录，已经恢复过的旧原因不再显示。
 
 **同一次请求重试**：保存启动时打印的 Request ID，保持原需求、文件引用和执行参数，追加原 ID：
 
@@ -580,7 +581,7 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 历史无 Job 记录时用字面 `none`。缺失或过期身份会被拒绝，须刷新后重新核对。人工确认不是 OS 退出检测，受管理退出证据也不覆盖逃逸进程。
 
-租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`failed`、`cancelled` 终态不可恢复。
+租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`cancelled` 终态不可恢复，`failed` 的裸 `resume` 同样按终态拒绝，只能经 §6.10.1 的显式 `tekon retry` 重试。
 
 CLI 的 `run` / `resume` 按工作流终态返回退出码：`0` 为 passed；`1` 为 failed、interrupted 或 cancelled；`2` 为 blocked（节点被确定性问题卡住，需先修复配置或环境再恢复）；`3` 为 paused（等待人工确认）。后台 Job 失败、中断或取消时还会显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。脚本或 IM 集成必须把 `2`/`3` 当作“未完成”处理，不能再按成功上报。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
 
@@ -602,6 +603,23 @@ tekon resume --run-id <runId> --rebind --agent codex
 历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
 
 审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。
+
+### 6.10.1 `retry`：重试终态 failed 运行
+
+运行收敛为终态 `failed`（典型场景：门禁重试耗尽且模板声明 `onExhausted: fail`）后，裸 `tekon resume` 仍按终态拒绝。确认失败原因已经排除时，用显式重试只重跑失败节点：
+
+```bash
+tekon retry --run-id <runId>
+```
+
+省略 `--run-id` 时作用于最近一次运行。重试在一个 CAS 事务里把运行与失败节点从 `failed` 置回 `running`，审计事件 `run.retried` 记录 `fromStatus`/`toStatus`；随后按受理时冻结的执行计划继续调度：已 `passed`/`skipped` 的节点直接复用、不重复调用 Agent，只有失败节点及其后继重新执行（新建角色执行记录；节点仍活动的工作树租约会被复用以保留现场，租约已不存在时才新建）。退出码与 `run`/`resume` 同一合同：重试后 `passed` 为 `0`，仍 `failed` 为 `1`。
+
+边界与限制：
+
+- 只接受 `failed` 运行。`passed`/`cancelled` 按终态拒绝；`blocked`/`interrupted`/`paused` 报错 `RETRY_NOT_FAILED`——这些状态各有恢复语义，应使用 `tekon resume`，不能用 retry 绕过。
+- 运行存在执行中的 Job（running/paused/cancelling）时拒绝入队，等待其结束后再重试；CLI 入队后、认领前崩溃留下的 queued 作业会在下一次 retry 时自动交接复用，不形成死结。
+- 重试沿用冻结计划与 Provider 快照，不重新读取 repo-profile 或 Provider 配置（重绑定 `--rebind` 同样拒绝终态运行）。若失败根因是命令或 Provider 配置本身，修正后需发起新的 `tekon run`；角色指令不在冻结范围内，但其变更只影响重新执行的失败节点。
+- 重试不改变模板结构（节点、门禁、角色定义）；需要结构调整时发起新运行。
 
 ### 6.11 `approval reject`
 
@@ -857,7 +875,7 @@ Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运�
 
 恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。身份过期须刷新重查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是 OS 退出检测，受管理退出证据不覆盖逃逸进程。
 
-`passed`、`failed`、`cancelled` 终态不可恢复。取消回执不代表所有进程已退出；先通过或失败的 Run 保留原终态。CLI 可用 `tekon cancel --run-id <runId>` 结束指定运行。
+`passed`、`cancelled` 终态不可恢复；`failed` 仅可经 §6.10.1 的 `tekon retry` 显式重试，裸恢复仍拒绝。取消回执不代表所有进程已退出；先通过或失败的 Run 保留原终态。CLI 可用 `tekon cancel --run-id <runId>` 结束指定运行。
 
 审批已记录但尚未恢复时，处理原 Run 的恢复，不再次批准。不要凭通知消失、按钮变化或 feed 缺新事件判断进程状态。
 

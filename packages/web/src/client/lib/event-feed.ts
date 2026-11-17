@@ -235,7 +235,14 @@ export function describeEvent(event: StreamEvent): FeedRow {
       return {
         ...base,
         kind: 'governance',
-        title: p.resumed === true ? '受控交付已恢复' : '受控交付已开始',
+        // PD-17 步 3：retried 与 resumed 互斥；显式失败重试单独成标题，
+        // 避免在叙事流里与全新运行的"已开始"无法区分。
+        title:
+          p.retried === true
+            ? '受控交付已重试'
+            : p.resumed === true
+              ? '受控交付已恢复'
+              : '受控交付已开始',
         ...(passthrough.length > 0
           ? { body: `透传给 Provider 的环境变量：${passthrough.join(', ')}` }
           : {}),

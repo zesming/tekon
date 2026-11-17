@@ -2,7 +2,7 @@
 
 import { isWorkflowTerminalError } from '@tekon/core';
 
-import { commandApproval, commandCancel, commandPause, commandResume } from './commands/approval.js';
+import { commandApproval, commandCancel, commandPause, commandResume, commandRetry } from './commands/approval.js';
 import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
 import { commandEval } from './commands/eval.js';
@@ -47,6 +47,7 @@ const COMMANDS: CommandMeta[] = [
   { name: 'status', description: '查看运行状态', group: '运行控制' },
   { name: 'pause', description: '暂停运行', group: '运行控制' },
   { name: 'resume', description: '恢复暂停的运行', group: '运行控制' },
+  { name: 'retry', description: '重试失败（failed）的运行', group: '运行控制' },
   { name: 'cancel', description: '取消运行', group: '运行控制' },
   // 工作流与角色
   { name: 'workflow', description: '管理工作流模板', group: '工作流与角色', subcommands: [
@@ -137,6 +138,8 @@ export async function runCli(
         return 0;
       case 'resume':
         return await commandResume(rest, io);
+      case 'retry':
+        return await commandRetry(rest, io);
       case 'cancel':
         await commandCancel(rest, io);
         return 0;

@@ -53,6 +53,8 @@ export type JobOrigin = 'cli' | 'web';
  */
 export interface JobResumeOptions {
   gatesOnly?: boolean;
+  /** PD-17 步 3：失败运行的显式重试，作业执行时改走 engine.retryRun。 */
+  retry?: boolean;
 }
 
 export type JobEnqueueInput = Job & {
@@ -700,7 +702,14 @@ export function createJobRepository(
 
           const run = db.prepare('select status from workflow_instances where id=?').get(runId) as { status: string } | undefined;
           if (run && ['passed','failed','cancelled'].includes(run.status)) {
-            return { outcome: 'terminal' as const, status: run.status as 'passed'|'failed'|'cancelled' };
+            // PD-17 步 3：显式 retry 作业允许 failed 运行重新入队；passed/
+            // cancelled 仍不可复活，纵深防御与 service 层的 RETRY_NOT_FAILED 对齐。
+            // 注意：resumeOptions 不在 jobSchema 内（parse 会剥离），读原始入参。
+            const isFailedRetry =
+              job.resumeOptions?.retry === true && run.status === 'failed';
+            if (!isFailedRetry) {
+              return { outcome: 'terminal' as const, status: run.status as 'passed'|'failed'|'cancelled' };
+            }
           }
           const latest = latestExecutionJob(db, runId);
           const previousJobId = latest?.id ?? null;
@@ -854,7 +863,13 @@ export function createJobRepository(
              left join workflow_instances w on w.id = s.run_id
              where j.status = 'queued'
                and (a.files_state is null or a.files_state = 'ready')
-               and (j.kind not in ('workflow-run','workflow-resume','goal-run') or w.status is null or w.status not in ('passed','failed','cancelled'))
+               and (j.kind not in ('workflow-run','workflow-resume','goal-run') or w.status is null or w.status not in ('passed','failed','cancelled')
+                    -- PD-17 步 3：failed run 的显式 retry 作业例外，与
+                    -- enqueueIfNoActiveByRunId 的旁路同形；普通终态作业仍拦截。
+                    -- 前提：resume_options 唯一写入方是 jobRunner/本仓储的
+                    -- JSON.stringify，NULL 与缺键均不匹配；malformed JSON 只能
+                    -- 来自库外篡改，不在产品自身的故障模型内。
+                    or (w.status = 'failed' and json_extract(j.resume_options, '$.retry') = 1))
                ${scope.map((clause) => `and ${clause}`).join(' ')}
              order by j.created_at asc, j.id asc
              limit 1`,

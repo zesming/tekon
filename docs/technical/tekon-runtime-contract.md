@@ -99,13 +99,13 @@ Registry 按 Job scope 隔离，旧代 close/kill 不污染新代。退出证据
 
 ## 6. 显式恢复与代次确认
 
-`enqueueIfNoActiveByRunId` 在 `BEGIN IMMEDIATE` 内复核 Session→Run、Run 终态、最新执行 Job、确认身份和活动 Job，再完成恢复状态交接与入队。queued 复用是同一事务中的特例。执行 Job 按 createdAt/id 稳定排序，新代创建时间严格晚于前代，automation 不参与代次。
+`enqueueIfNoActiveByRunId` 在 `BEGIN IMMEDIATE` 内复核 Session→Run、Run 终态、最新执行 Job、确认身份和活动 Job，再完成恢复状态交接与入队。queued 复用是同一事务中的特例。执行 Job 按 createdAt/id 稳定排序，新代创建时间严格晚于前代，automation 不参与代次。唯一的终态旁路是显式失败重试：入队作业携带 `resume_options.retry=true` 且 Run 为 `failed` 时放行入队与认领（`claimNext` SQL 同形校验 `json_extract(resume_options,'$.retry')=1`），`passed`/`cancelled` 即使带 retry 标记仍拒绝，普通作业的终态守卫不变。
 
 | 返回结果 | 行为 |
 | --- | --- |
 | enqueued | 已受理新 Job，或复用符合条件的初始 queued Job；不证明模型已开始 |
 | active-job | 已有 queued/running/paused/cancelling 执行 Job，不重复入队 |
-| terminal | passed/failed/cancelled 不可复活 |
+| terminal | passed/cancelled 不可复活；failed 的裸恢复同样拒绝，仅显式 `retry` 入口可重新驱动 |
 | exit-unconfirmed | 旧执行退出未知，需检查并显式确认 |
 | stale-confirmation | previousJobId 已过期，刷新后重新确认 |
 
@@ -124,6 +124,8 @@ Registry 按 Job scope 隔离，旧代 close/kill 不污染新代。退出证据
 运行清理（`tekon clean`、Web `project.clean`）只处理 passed/failed/cancelled 且没有任何类型活跃 Job 的 Run，并且只看为当前仓库路径记录的租约（仓库被移动后，旧路径的租约不列出、不处理）：对未释放租约执行 `worktree remove --force` 并标记释放（目录已不存在时记为 missing），执行 `worktree prune`，再删除租约记录的 `tekon/<runId>/` 节点分支（须通过分支名校验，不存在时记为 missing）。worktree 没能移除时保留它检出的分支；列不出现有分支时记为失败，跳过删分支。每步幂等，单项失败不中断后续步骤，只写 `run.cleanup` 审计，不改 Run 状态；不触碰 `tekon-delivery/*`、`.tekon/runs/<run>/` 证据、审计和不在租约表里的目录。预览和列表只读，不往运行目录写命令输出。同一进程内同一 Run 的清理串行执行。
 
 Web/CLI 审批后恢复共用守卫：能预见退出风险时不写审批；审批写入后发生竞争时返回“审批已记录，运行尚未恢复”，不谎报审批回滚或执行已开始。Run 详情和 Session 用同快照 `getRunRecovery` 展示取消与恢复状态，不从缺失 SSE 或无活跃 Job 推导退出。
+
+**显式失败重试（`retry`）**：`failed` 仍是终态——`isTerminalWorkflowStatus` 不变，裸 resume 继续抛 `WorkflowTerminalError`；离开终态只有一条状态机开口 `failed→running`（Run 级与 Node 级同形），且只能由独立入口 `engine.retryRun` 经 CAS 驱动。retryRun 先校验 Run 为 failed（否则 `RETRY_NOT_FAILED`；passed/cancelled 由 SessionService 判为 terminal），再做受理就绪检查与执行计划完整性校验，CAS 失败时让步于并发终态写入，成功后写审计 `run.retried`（`fromStatus`/`toStatus`）并无 resumeOptions 执行计划：已 passed/skipped 节点自然跳过、不重复调用 Agent，failed 节点及其后继重新执行——新建 RoleRun，工作树租约按节点执行器既有规则处理（同节点仍活动的未释放租约复用以保留工作树现场，已释放或不存在时新建）。重试沿用冻结计划与 Provider 快照，不重读 repo-profile/Provider 配置，也不改模板结构；配置类根因须发起新运行。`run.retried` 与 `run.resumed` 同为失败原因的代际边界，重试之前的失败不再作为当前原因展示。重试次数无硬上限；running/paused/cancelling 作业存在时事务返回 active-job 拒绝入队，而 CLI 入队后认领前崩溃留下的 queued 作业由事务 handover 复用（与 resume 同一机制），不产生无恢复手段的孤儿死结。该入口目前为 CLI（`tekon retry`）与 core 合同，Web 入口另行交付。
 
 ## 7. Session 观察合同
 

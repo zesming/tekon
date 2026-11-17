@@ -1,5 +1,11 @@
 # 变更日志
 
+## 0.34.0 — 2026-11-17
+
+- 终态 failed 运行支持显式重试（PD-17 步 3）：新增 `tekon retry [--run-id <runId>]`——运行因门禁重试耗尽（模板声明 `onExhausted: fail`）等原因收敛为终态 `failed` 后，裸 `tekon resume` 仍按终态拒绝，确认失败原因排除后可用 retry 只重跑失败节点：CAS 把运行与失败节点从 `failed` 置回 `running`（状态机仅开放 `failed→running` 一条开口，`failed` 仍属终态），审计事件 `run.retried` 记录 `fromStatus`/`toStatus`；已 `passed`/`skipped` 节点由执行计划自然跳过、不重复调用 Agent，只有失败节点及其后继重新执行（新建角色执行记录，仍活动的工作树租约复用以保留现场）。重试沿用受理时冻结的计划与 Provider 快照，不改变模板结构；退出码与 `run`/`resume` 同一合同。
+- 重试入口的状态守卫：只接受 `failed` 运行——`passed`/`cancelled` 按终态拒绝，`blocked`/`interrupted`/`paused` 报 `RETRY_NOT_FAILED` 并提示改用 resume，存在执行中作业时拒绝入队。重试选项经 `jobs.resume_options.retry` 持久化跨进程传递，入队与 claim 两道终态守卫同步开放 failed-retry 旁路（普通终态作业仍被拦截，retry 标记不能复活 passed/cancelled），作业执行器据此改走独立的 `engine.retryRun` 而非 resume 路径；CLI 入队后认领前崩溃留下的 queued 作业在下一次 retry 时由事务自动交接复用，不形成孤儿死结。`run.retried` 同步接入会话事件投影（Web 会话流以“受控交付已重试”标题区分重试代际）。
+- 手册 §6.10.1 文档化 `tekon retry` 的用法、边界与与 `--rebind`/新运行的选择，并同步故障处理表与 HTML 人审版。
+
 ## 0.33.0 — 2026-11-17
 
 - 修复配置后可在同一运行内采用新绑定（PD-05）：运行默认仍按受理时冻结的绑定恢复，但 `tekon resume` 与 `tekon status` 现在会只读探测并提示当前仓库配置与冻结绑定的分项差异（agent、provider、repo-profile 命令），不改变绑定；新增 `tekon resume --rebind [--agent <name>]` 显式采用当前配置——用冻结模板原字节与当前仓库事实重新捕获自洽的执行计划（新 digest），在一个事务内替换 `plan_snapshot`/`plan_digest` 与 Provider 快照，并重写尚未终态节点（含历史返工节点）的物化门禁，已通过节点的历史门禁结果与审计链保持不变，重绑定记录在审计事件 `run.rebound`（含新旧 digest 与脱敏分项差异）。终态运行与有活跃 Job 的运行拒绝重绑定；只重绑定 agent/Provider/门禁命令，模板结构变更仍需新运行。`tekon review` 的 missing-command Triage 改指 `--rebind`，不再建议与手册矛盾的旧路径。角色指令（`.tekon/roles/<role>/`）本就运行时读盘，修改后普通 resume 即生效，无需重绑定。

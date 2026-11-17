@@ -59,6 +59,7 @@ flowchart LR
 | 检查仓库命令 | `tekon workflow preflight` |
 | 看运行 / 审阅代码与证据 | `tekon status` / `tekon review` |
 | 批准等待中的人工 Gate | `tekon resume --approve-human` |
+| 重试终态 failed 的运行（只重跑失败节点） | `tekon retry` |
 | 生成本地 PR 材料 | `tekon delivery prepare` |
 | 批准 push 并创建 PR | `tekon delivery create-pr --approve-human` |
 | 等待 CI / 评估交付完整性 | `tekon delivery ci-watch` / `tekon eval readiness` |

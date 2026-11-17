@@ -67,7 +67,7 @@ export async function commandStatus(argv: string[], io: CliIO) {
         ].join(' ') + '\n',
       );
       // Why a stopped run stopped and what to do next; a reason from before
-      // the latest resume is not shown.
+      // the latest resume or explicit retry is not shown.
       if (['interrupted', 'blocked', 'failed'].includes(workflow.status)) {
         const details = runOutcomeDetails({
           status: workflow.status,

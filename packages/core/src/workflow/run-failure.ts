@@ -37,8 +37,8 @@ function eventNodeId(payload: Record<string, unknown>): string | undefined {
 }
 
 /**
- * The newest recorded failure since the run last resumed, so a reason that a
- * resume already addressed is not shown again.
+ * The newest recorded failure since the run last resumed or retried, so a
+ * reason that a resume or explicit retry already addressed is not shown again.
  */
 export function findLatestRunFailure(
   events: readonly Pick<AuditEvent, 'type' | 'payload'>[],
@@ -46,7 +46,11 @@ export function findLatestRunFailure(
   const recovered = new Set<string>();
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (event.type === 'run.resumed') return undefined;
+    // PD-17 步 3：显式 retry 与 resume 同为代际边界——重试之前的失败属于
+    // 上一次执行，不再作为当前运行的原因展示；重试后的新失败照常上报。
+    if (event.type === 'run.resumed' || event.type === 'run.retried') {
+      return undefined;
+    }
     if (RECOVERED_EVENT_TYPES.has(event.type)) {
       const nodeId = eventNodeId(event.payload);
       if (nodeId) recovered.add(nodeId);

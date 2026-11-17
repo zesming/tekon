@@ -239,6 +239,68 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     });
     db.close();
   });
+
+  it('PD-17 步 3：tekon retry on a cancelled run exits 1 and enqueues no job', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['retry', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('终态');
+    expect(io.takeStdout()).toBe('');
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      expect(
+        await createRepositories(db).getWorkflowInstance(runId),
+      ).toMatchObject({ status: 'cancelled' });
+      expect(
+        db
+          .prepare(
+            "select count(*) as n from jobs where kind='workflow-resume'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('PD-17 步 3：tekon retry on a paused run is rejected with RETRY_NOT_FAILED', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    db.prepare('update workflow_instances set status=? where id=?').run(
+      'paused',
+      runId,
+    );
+    db.close();
+
+    const io = createMemoryIo();
+    await expect(
+      runCli(['retry', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('RETRY_NOT_FAILED');
+
+    const verifyDb = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      expect(
+        verifyDb
+          .prepare(
+            "select count(*) as n from jobs where kind='workflow-resume'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      verifyDb.close();
+    }
+  });
 });
 
 function createMemoryIo(): CliIO & {

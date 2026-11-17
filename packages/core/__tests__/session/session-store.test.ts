@@ -1045,6 +1045,92 @@ describe('job repository', () => {
     db1.close();
     db2.close();
   });
+
+  it('PD-17 步 3：claimNext 放行 failed run 的 retry 作业，仍拦截普通终态作业', async () => {
+    const { db, sessions, jobs } = setupStore();
+    const now = new Date().toISOString();
+    db.prepare(
+      `insert into projects (id, name, repo_path, created_at)
+       values ('proj_retry', 'retry', '/tmp/retry', @now)`,
+    ).run({ now });
+    db.prepare(
+      `insert into demands (id, title, body, created_at)
+       values ('demand_retry', 't', 'b', @now)`,
+    ).run({ now });
+    const seedRun = (runId: string, status: string) => {
+      db.prepare(
+        `insert into workflow_instances
+           (id, project_id, demand_id, status, created_at, updated_at)
+         values (@runId, 'proj_retry', 'demand_retry', @status, @now, @now)`,
+      ).run({ runId, status, now });
+    };
+    seedRun('run_failed', 'failed');
+    seedRun('run_passed', 'passed');
+    const { session: failedSession } = await seedSession(
+      sessions,
+      '/tmp/retry',
+      'run_failed',
+    );
+    const { session: passedSession } = await seedSession(
+      sessions,
+      '/tmp/retry',
+      'run_passed',
+    );
+
+    // 带 retry 标记的 resume 作业：failed run 必须可被 claim，否则
+    // tekon retry 的作业永远停在 queued，CLI 持有者挂死。
+    await jobs.enqueue(
+      makeJob(failedSession.id, {
+        id: 'job_retry',
+        kind: 'workflow-resume',
+        resumeOptions: { retry: true },
+      }),
+    );
+    await expect(
+      jobs.claimNext('worker', { jobIds: ['job_retry'] }),
+    ).resolves.toMatchObject({ id: 'job_retry' });
+
+    // 无 retry 标记的普通作业在 failed run 上仍不可 claim：终态守卫不松。
+    await jobs.enqueue(
+      makeJob(failedSession.id, {
+        id: 'job_plain',
+        kind: 'workflow-resume',
+      }),
+    );
+    await expect(
+      jobs.claimNext('worker', { jobIds: ['job_plain'] }),
+    ).resolves.toBeNull();
+
+    // retry 标记也不能复活 passed 运行：旁路只对 failed 开口。
+    await jobs.enqueue(
+      makeJob(passedSession.id, {
+        id: 'job_passed_retry',
+        kind: 'workflow-resume',
+        resumeOptions: { retry: true },
+      }),
+    );
+    await expect(
+      jobs.claimNext('worker', { jobIds: ['job_passed_retry'] }),
+    ).resolves.toBeNull();
+
+    // 入队事务层同样拒绝：retry 标记不能复活 passed 运行（与 claimNext 层
+    // 纵深对称），且不写入新作业行。
+    const blocked = await jobs.enqueueIfNoActiveByRunId(
+      'run_passed',
+      makeJob(passedSession.id, {
+        id: 'job_passed_retry_txn',
+        kind: 'workflow-resume',
+        resumeOptions: { retry: true },
+      }),
+    );
+    expect(blocked).toEqual({
+      outcome: 'terminal',
+      status: 'passed',
+    });
+    expect(await jobs.get('job_passed_retry_txn')).toBeNull();
+    // failed run 的事务放行由 SessionService.retryRun 用例（含孤儿 handover）
+    // 与本用例第一条 job_retry 的成功入队共同覆盖，此处不再重复造活动作业。
+  });
 });
 
 describe('session run id lookup', () => {

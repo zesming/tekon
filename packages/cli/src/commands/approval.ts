@@ -408,6 +408,13 @@ export async function commandResume(
       );
     }
     if (result.outcome === 'terminal') {
+      // PD-17 步 3：failed 的裸 resume 给出显式下一步，避免用户在终态死路前
+      // 不知道 retry 入口；审批路径不提示（语义是人工决策而非失败重试）。
+      if (result.status === 'failed' && !args.values['approve-human']) {
+        io.stderr.write(
+          'failed 是终态，resume 不恢复终态运行；排除失败原因后可用 tekon retry 只重跑失败节点。\n',
+        );
+      }
       throw new WorkflowTerminalError(runId, result.status);
     }
     if (result.outcome === 'active-job') {
@@ -444,6 +451,105 @@ export async function commandResume(
       (decision) => decision.status === 'pending',
     );
     const details = runOutcomeDetails({ status, runId, failure, pendingHuman });
+    if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
+    return exitCodeForJobOutcome({
+      io,
+      runId,
+      jobId: result.jobId,
+      jobStatus,
+      workflowStatus: status,
+      failure,
+    });
+  });
+}
+
+/**
+ * PD-17 步 3：`tekon retry` 显式重试一个 failed 运行。只接受 failed 状态，
+ * 经 SessionService 入队带 retry 标记的 resume 作业，由引擎重跑失败节点、
+ * 复用已通过节点。非终态中断应使用 resume，passed/cancelled 不可重试。
+ */
+export async function commandRetry(
+  argv: string[],
+  io: CliIO,
+): Promise<number> {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      'run-id': { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolveProjectRepoPath(args.values.repo);
+  await ensureInitialized(repoPath, io);
+  return withCliSessionContext(repoPath, io, async (ctx) => {
+    const { repositories, sessionService, jobs, jobRunner } = ctx;
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(ctx.db);
+    if (!runId) {
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
+    }
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`未找到运行: ${runId}`);
+    }
+
+    const result = await sessionService.retryRun({ runId });
+    if (result.outcome === 'terminal') {
+      throw new WorkflowTerminalError(runId, result.status);
+    }
+    if (result.outcome === 'active-job') {
+      // queued 孤儿已由入队事务 handover 复用；走到这里说明作业正被执行
+      // （running/paused/cancelling）。failed 运行无法 cancel（终态转换非法），
+      // 故引导等待收敛与 status 核查，而不是给出必然失败的 cancel 建议。
+      throw new Error(
+        '运行已有执行中的任务，请等待其结束后再重试；长时间无变化时用 tekon status 核查作业状态。',
+      );
+    }
+    if (result.outcome !== 'enqueued') {
+      // failed 重试不经过审批/停止确认，正常只会 enqueued；其余 outcome
+      // 属于不应到达此入口的恢复态，明确报错而不是静默丢弃。
+      throw new Error(
+        `失败重试入队被拒绝（${result.outcome}）；请用 tekon status 核查运行状态。`,
+      );
+    }
+    io.stderr.write(
+      `已入队失败重试：只重跑 failed 节点，已通过节点复用。\n`,
+    );
+
+    jobRunner.start({ jobIds: [result.jobId] });
+    const onSigint = () => {
+      void jobRunner
+        .requestCancel(result.jobId, 'cli SIGINT')
+        .catch(() => {});
+    };
+    process.on('SIGINT', onSigint);
+    let jobStatus: Awaited<ReturnType<typeof awaitJobTerminal>>;
+    try {
+      jobStatus = await awaitJobTerminal({
+        jobs,
+        jobRunner,
+        jobId: result.jobId,
+      });
+    } finally {
+      process.removeListener('SIGINT', onSigint);
+    }
+
+    const latest = await repositories.getWorkflowInstance(runId);
+    const status = latest?.status ?? 'unknown';
+    io.stdout.write(`runId=${runId} status=${status}\n`);
+    const failure = findLatestRunFailure(
+      await repositories.listAuditEvents(runId),
+    );
+    const pendingHuman = (
+      await repositories.listHumanDecisions(runId)
+    ).some((decision) => decision.status === 'pending');
+    const details = runOutcomeDetails({
+      status,
+      runId,
+      failure,
+      pendingHuman,
+    });
     if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
     return exitCodeForJobOutcome({
       io,

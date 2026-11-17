@@ -102,6 +102,11 @@ export interface ResumeConfirmation {
    * 持久化到 resume 作业，由工作流引擎在节点恢复时裁决。
    */
   gatesOnly?: boolean;
+  /**
+   * PD-17 步 3：显式重试一个 failed 运行。持久化到 resume 作业，作业执行时
+   * 改走 engine.retryRun（裸 resume 仍拒绝终态 failed）。
+   */
+  retry?: boolean;
 }
 
 export type JobEnqueueResult =

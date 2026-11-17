@@ -499,7 +499,12 @@ export function createNodeExecutor(deps: NodeExecutorDeps): NodeExecutor {
       const fromStatus =
         current.status === 'interrupted' ||
         current.status === 'needs-revision' ||
-        current.status === 'blocked'
+        current.status === 'blocked' ||
+        // PD-17 步 3：retryRun 把 failed 运行重新驱动到这里，failed 节点经
+        // 状态机开口 failed→running 走全新 agent 执行（新建 role_run）；
+        // 工作树租约与 blocked/interrupted 恢复同规则——同节点仍活动的未释放
+        // 租约复用（保留工作树现场），不存在时才新建。
+        current.status === 'failed'
           ? current.status
           : 'pending';
       await checkedTransitionNode(

@@ -156,8 +156,18 @@ describe('describeEvent', () => {
     expect(started.title).toBe('受控交付已开始');
     expect(started.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE, AWS_REGION');
     const resumed = describeEvent(ev('workflow/started', { runId: 'r', resumed: true, passthroughEnv: ['AWS_PROFILE'] }));
+    expect(resumed.title).toBe('受控交付已恢复');
     expect(resumed.body).toBe('透传给 Provider 的环境变量：AWS_PROFILE');
     expect(describeEvent(ev('workflow/started', { runId: 'r' })).body).toBeUndefined();
+  });
+
+  it('titles a retried run distinctly from a fresh start or resume (PD-17)', () => {
+    const retried = describeEvent(
+      ev('workflow/started', { runId: 'r', retried: true }),
+    );
+    expect(retried.title).toBe('受控交付已重试');
+    // retried 与 resumed 互斥出现；只带 retried 时不显示恢复文案。
+    expect(retried.title).not.toBe('受控交付已恢复');
   });
 
   it('renders a user message as user-authored prose', () => {

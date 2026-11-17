@@ -48,7 +48,9 @@ export const LEGAL_WORKFLOW_NODE_TRANSITIONS: Record<
   interrupted: ['running', 'failed'],
   passed: ['needs-revision'],
   skipped: [],
-  failed: [],
+  // PD-17 步 3：failed 节点的唯一出口是显式 retry 回到 running；不放开
+  // 其他转换，裸 resume 仍走终态拒绝，避免误复活。
+  failed: ['running'],
 };
 
 export interface WorkflowNodeTransitionEntry {
@@ -147,7 +149,9 @@ export const LEGAL_WORKFLOW_TRANSITIONS: Record<
   blocked: ['running', 'failed', 'cancelled'],
   interrupted: ['running', 'failed', 'cancelled'],
   passed: [],
-  failed: [],
+  // PD-17 步 3：failed 运行只能经显式 retry 回到 running；isTerminalWorkflowStatus
+  // 仍把它列为终态，所以裸 resume 继续拒绝，只有 retryRun 走这条开口。
+  failed: ['running'],
   cancelled: [],
 };
 

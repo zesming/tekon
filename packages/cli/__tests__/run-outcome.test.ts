@@ -30,9 +30,11 @@ describe('run outcome output', () => {
     expect(retryFirst[1]).toMatch(/^ {2}下一步: 执行 tekon resume --run-id run_1 重试/u);
   });
 
-  it('does not offer resume for a failed run', () => {
+  it('does not offer resume for a failed run, pointing to explicit retry instead', () => {
     const lines = runOutcomeDetails({ status: 'failed', runId: 'run_1' });
     expect(lines.join('\n')).not.toContain('tekon resume');
+    // PD-17 步 3：failed 终态的下一步是显式 retry，不是裸 resume。
+    expect(lines.join('\n')).toContain('tekon retry --run-id run_1');
     expect(runOutcomeDetails({ status: 'passed', runId: 'run_1' })).toEqual([]);
   });
 

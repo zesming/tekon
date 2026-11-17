@@ -174,6 +174,12 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
     engine: TEngineInput;
     agent?: string;
   }): Promise<SessionServiceRebindResult>;
+  /**
+   * PD-17 步 3：入队一个 failed 运行的显式重试作业（resume_options.retry）。
+   * 非 failed 运行（含 passed/cancelled 与非终态中断）走 terminal 判别或应
+   * 使用 resumeRun，不在此入口处理。
+   */
+  retryRun(input: { runId: string }): Promise<SessionServiceResumeResult>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -492,6 +498,63 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     };
   }
 
+  async function retryRun(input: {
+    runId: string;
+  }): Promise<SessionServiceResumeResult> {
+    const workflow = await repositories.getWorkflowInstance(input.runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${input.runId}`);
+    }
+    // retry 是 failed 专属出口：passed/cancelled 报终态；非终态中断应走 resume。
+    if (
+      workflow.status === 'passed' ||
+      workflow.status === 'cancelled'
+    ) {
+      return { outcome: 'terminal', runId: input.runId, status: workflow.status };
+    }
+    if (workflow.status !== 'failed') {
+      throw new Error(
+        `RETRY_NOT_FAILED: 运行 ${input.runId} 当前状态为 ${workflow.status}，只有 failed 运行可以 retry；非终态中断请用 tekon resume。`,
+      );
+    }
+    // 不在事务外做活跃作业预检：那会让"CLI 入队后、claim 前死亡"留下的
+    // queued 孤儿永远拿到 active-job，而 failed 运行无法 cancel、queued 作业
+    // 又无其他回收器，形成无产品内恢复手段的死结。活跃裁决与 queued 交接
+    // （CLI 作业 handover 复用）统一由 enqueueIfNoActiveByRunId 事务完成，
+    // 与 resumeRun 同形；running/paused/cancelling 仍返回 active-job。
+    let session = await sessions.findSessionByRunId(input.runId);
+    if (!session) {
+      const workspace = await sessions.getOrCreateDefaultWorkspace(projectRoot);
+      session = await sessions.createSession({
+        workspaceId: workspace.id,
+        profile: SESSION_PROFILE,
+        title: null,
+        runId: input.runId,
+      });
+    }
+    const result = await jobRunner.enqueueIfNoActiveByRunId({
+      runId: input.runId,
+      sessionId: session.id,
+      kind: 'workflow-resume',
+      retry: true,
+    });
+    if (result.outcome === 'active-job') {
+      return { outcome: 'active-job', runId: input.runId };
+    }
+    if (result.outcome !== 'enqueued') {
+      return { ...result, runId: input.runId };
+    }
+    return {
+      outcome: 'enqueued',
+      runId: input.runId,
+      sessionId: session.id,
+      jobId: result.job.id,
+      ...(result.previousJobId !== undefined
+        ? { previousJobId: result.previousJobId }
+        : {}),
+    };
+  }
+
   async function preflightResume(
     runId: string,
   ): Promise<ProviderPreflightResult | undefined> {
@@ -622,6 +685,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     resumeRun,
     preflightResume,
     rebindRun,
+    retryRun,
     requestPause,
     requestCancel,
   };

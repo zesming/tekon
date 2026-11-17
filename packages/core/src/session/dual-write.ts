@@ -34,6 +34,7 @@ import type { EventVisibility } from '../types/session-contract.js';
 export const MAPPED_AUDIT_EVENT_TYPES = [
   'run.started',
   'run.resumed',
+  'run.retried',
   'run.passed',
   'node.started',
   'node.passed',
@@ -104,6 +105,18 @@ export function mapAuditEventToSessionEvent(input: {
         payload: {
           runId,
           resumed: true,
+          kind: asString(p.kind) || 'workflow',
+          ...passthroughNames(p),
+        },
+      };
+    case 'run.retried':
+      // PD-17 步 3：失败重试与 resume 对等投影为代际重启，Web 会话流
+      // 用 retried 标记区分这是 failed→running 的显式重试。
+      return {
+        type: 'workflow/started',
+        payload: {
+          runId,
+          retried: true,
           kind: asString(p.kind) || 'workflow',
           ...passthroughNames(p),
         },

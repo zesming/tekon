@@ -630,8 +630,15 @@ export function createJobRunner(deps: CreateJobRunnerDeps): DurableJobRunner {
         createdAt: now,
         updatedAt: now,
         ...(deps.origin ? { origin: deps.origin } : {}),
-        // PD-31：gates-only 随作业持久化，执行器读回后透传给引擎。
-        ...(input.gatesOnly ? { resumeOptions: { gatesOnly: true } } : {}),
+        // PD-31/PD-17：恢复选项随作业持久化，执行器读回后透传给引擎。
+        ...(input.gatesOnly || input.retry
+          ? {
+              resumeOptions: {
+                ...(input.gatesOnly ? { gatesOnly: true } : {}),
+                ...(input.retry ? { retry: true } : {}),
+              },
+            }
+          : {}),
       }, input);
     },
 
