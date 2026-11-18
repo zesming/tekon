@@ -317,9 +317,12 @@ for (const entry of ['simple', 'advanced'] as const) {
       '计划已变化，请刷新预览后重试',
     );
     await expect(submit).toBeDisabled();
+    // 初始计划请求数在 PD-08 后因 agent 两阶段初始化（空串→默认代理）而不固定，
+    // 这里只断言「刷新」动作本身新增恰好一次请求，故先记录刷新前基线。
+    const plansBeforeRefresh = plans;
     await page.getByRole('button', { name: '刷新执行计划' }).click();
     await expect(submit).toBeEnabled();
-    expect(plans).toBe(1);
+    expect(plans).toBe(plansBeforeRefresh + 1);
     expect(runs).toBe(1);
     await submit.click();
     await expect.poll(() => runs).toBe(2);

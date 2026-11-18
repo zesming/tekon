@@ -136,6 +136,7 @@ test.describe('Session Composer Admission & Single Submit', () => {
     server,
   }) => {
     let planRequestCount = 0;
+    let retryClicked = false;
     await page.route('**/api/rpc', async (route) => {
       let isWorkflowPlan = false;
       try {
@@ -147,8 +148,10 @@ test.describe('Session Composer Admission & Single Submit', () => {
 
       if (isWorkflowPlan) {
         planRequestCount += 1;
-        if (planRequestCount === 1) {
-          // First response returns a plan without digest
+        // 重试前的所有计划请求都返回缺摘要计划。PD-08 后 agent 从空串初始化为
+        // 默认代理会以不同 planKey 再发一次请求，必须让每个 key 都命中阻断态，
+        // 否则后到的有效计划会掩盖缺摘要错误；点击重试后才放行真实计划。
+        if (!retryClicked) {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -193,6 +196,8 @@ test.describe('Session Composer Admission & Single Submit', () => {
     const retryButton = planRegion.getByRole('button', { name: '重试' });
     await expect(retryButton).toBeVisible();
 
+    // 阻断态已渲染，初始阶段（含 agent 解析引发的多 key 请求）计数已稳定。
+    const countBeforeRetry = planRequestCount;
     const planResponsePromise = page.waitForResponse(
       (res) =>
         res.url().includes('/api/rpc') &&
@@ -201,6 +206,7 @@ test.describe('Session Composer Admission & Single Submit', () => {
       { timeout: 15_000 },
     );
 
+    retryClicked = true;
     await retryButton.click();
     const secondPlanRes = await planResponsePromise;
     const planBody = (await secondPlanRes.json()) as {
@@ -208,8 +214,8 @@ test.describe('Session Composer Admission & Single Submit', () => {
     };
     expect(planBody.result?.digest).toBeTruthy();
 
-    // The retry issues exactly one additional plan request.
-    expect(planRequestCount).toBe(2);
+    // 不论初始阶段因 agent 解析发了几次，重试本身只额外发起一次计划请求。
+    expect(planRequestCount).toBe(countBeforeRetry + 1);
 
     // Warning disappeared and normal plan summary rendered
     await expect(
