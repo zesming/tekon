@@ -10,6 +10,7 @@ import {
   toRunPlanPreview,
   TekonConfigError,
   type WorkflowTemplate,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import type { ServerContext, WorkflowPlanInput } from '../context.js';
@@ -30,7 +31,7 @@ export function createWorkflowRouter(context: ServerContext) {
       const isGoal = input.mode === 'goal';
       const templateName = isGoal
         ? 'goal'
-        : input.template?.trim() || 'standard-delivery';
+        : input.template?.trim() || DEFAULT_WORKFLOW_TEMPLATE_ID;
 
       assertSafeName(templateName, 'template');
 

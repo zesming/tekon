@@ -1,5 +1,16 @@
 # 变更日志
 
+## 0.39.0 — 2026-11-18
+
+- 新增轻量默认工作流 `lightweight-delivery`（PD-08）：plan→implement→confirm 三阶段、pm-plan/rd-implement/human-confirm 三节点，只保留两个 `schema` 门禁与一个人工 `human` 门禁，产出 demand-card、code-changes 两个产物。human-confirm 是无产物输出的纯人工确认节点，跨阶段 `dependsOn` 实现节点，驳回经 PD-18 `reworkTargetNodeId: rd-implement` 回到 RD 返工；节点重试 maxAttempts 2、固定退避 250ms。小改动不再承担 `standard-delivery` 的 16 节点/44 门禁成本。
+- 新增 `DEFAULT_WORKFLOW_TEMPLATE_ID = 'lightweight-delivery'` 常量并加入内置模板联合类型，作为运行缺省唯一事实源：core 的 admission-store（3 处回落）、workflow engine 回落，CLI 的 `run`/`doctor`/`workflow preflight`，以及 Web 的 workflow/project 路由与受理信封统一改用该常量。`standard-delivery` 不再是隐式默认，需在模板列表显式选择；`workflow init --from` 脚手架刻意保留 `standard-delivery` 作复制源（生成完整可裁剪模板），与运行缺省默认分离。draft shape 的受控模板联合同步收录新 id。
+- CLI `run` 模板生效优先级明确为「显式 `--template` > 已塑形需求卡 `recommendedTemplate` > 缺省默认」。生效模板只在新受理分支内惰性解析、经 `startRun` 通道绑定；**受理信封（requestId + 需求哈希双键）保持常量、绝不因模板回落重建**——同一 Request ID 重放时即使需求卡已删除/修改也不会触发 `REQUEST_ID_CONFLICT`，沿用首次执行绑定的模板，修复了分支内重建信封导致重放永久哈希冲突的缺陷。
+- Web 首页 SessionComposer 新增运行模式/工作流模板/执行代理三选：抽 `use-run-plan-selection` 共享 hook（agent 常量、默认代理解析、Goal/DSH 互斥、全量入参 planKey），StartRunForm 高级表单改为复用同一套常量与约束，两个入口行为对齐。切换任一选择都以全量入参重查 `workflow.plan`，查询缓存按入参区分不串用；Goal 模式禁用模板且请求不带 template/profile，选 `dsh-headless` 自动切 Goal 并清空模板；提交时默认留空不带 template（服务端回落轻量默认），显式选择则随受理载荷上报。
+- 产品边界登记：轻量模板只有 schema+human 门禁，无命令型门禁、五类治理门禁、安全扫描与验收证据，Pre-PR readiness 9 项中 6 项结构性恒红（模板、命令门禁、验收证据、QA 签署、治理门禁、安全扫描），`ready` 恒 false，`delivery prepare`/`create-pr` 前置拦截——默认模板不会也无法自动产出 PR，需要可审 PR 必须显式 `standard-delivery`。
+- 测试：core 新增轻量模板结构/目录/常量单测 6 项与真实内置模板引擎 e2e 2 项（暂停→驳回触发 rd-implement 返工、驳回标记进 prompt、返工审计事件→再暂停→批准 passed 的完整人工环，以及一次通过路径）；CLI 新增真实进程 e2e 6 项（默认轻量、显式模板、Draft 采用、覆盖、Goal、删 Draft 同 runId 重放）；Web 新增 Playwright 三选 e2e 4 项（默认渲染、全量入参刷新与缓存命中、Goal/DSH 互斥、受理载荷 template 取舍）；既有 run-cli/write-auth/workflow-inspect 断言升级为显式 `standard-delivery` 口径。另新增轻量模板 readiness 6 项恒红边界回归（精确钉住 6 红/3 绿 id 集合，防默认模板悄悄变得可交付）。
+- 修复 Node 24 下角色物化的进程级硬崩（CI Verify 红灯根因）：`materializeProjectRole` 原直接 `fs.cpSync(..., {recursive:true})` 复制内置角色目录，当目录权限被撤（如 `chmod 0o000`，根目录或嵌套 `skills`/`knowledge` 子目录）时，Node 24 的 native `directory_iterator` 抛出的 C++ `filesystem_error` 会逃逸 N-API 绑定边界，JS try/catch 无法捕获而 `SIGABRT`（vitest 表现为无 JS 错误的 `Worker exited unexpectedly`，全部测试仍过但步骤失败）；Node 20/22/26 同路径正常抛 JS `EACCES`。现 cpSync 前用纯 libuv JS 系 API（`readdirSync` + `accessSync`，不走 native 迭代器）对整棵角色树递归预检，任一不可读项即在创建临时目录前 fail-closed 抛可读 `ROLE_DIR_INVALID`、无残留；覆盖根目录与嵌套子目录两类撤权，最小复现脚本与 Node 24/26 双版本验证通过，并经负向用例证实撤掉递归预检会在 Node 24 复现 SIGABRT。
+- 修复 CLI `run` 结果行模板错报：采纳 Draft `recommendedTemplate` 回落时，执行与落库用的是生效模板，但 stdout「模板:」行原来打印受理信封里的静态缺省（误报 `lightweight-delivery`）。改为从持久化计划快照 `planSnapshot.template.id` 回读实际生效模板（fresh 受理与重放路径一致），快照异常时安全回落到信封模板；展示与执行、审计、plan_snapshot 重新对齐。
+
 ## 0.38.0 — 2026-11-18
 
 - Web Config 页整改（PD-11）：删除与真实 `constraints.yaml` 结构不符的静态 Constraints tab（页面、路由、导航与死样式一并清理，旧 URL 落到 404 页）；Roles 页从「只读项目目录、新项目误显示 No roles configured」改为列出内置+项目角色并集（6 个内置角色不再隐形），每行标注来源（内置 built-in/项目 project），overview 角色计数同口径修复。

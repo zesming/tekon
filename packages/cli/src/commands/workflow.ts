@@ -25,6 +25,7 @@ import {
   validateWorkflowTemplateFile,
   type CommandPolicy,
   type WorkflowTemplate,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -130,7 +131,7 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
   }
 
   if (subcommand === 'preflight') {
-    const preflightName = templateName ?? 'standard-delivery';
+    const preflightName = templateName ?? DEFAULT_WORKFLOW_TEMPLATE_ID;
     const template = loadWorkflowByName(preflightName, projectWorkflowsDir);
     const profile = loadRepoProfile(repoPath);
     for (const phase of template.phases) {
@@ -285,6 +286,8 @@ export async function commandWorkflow(argv: string[], io: CliIO) {
       io.stdout.write(`${target}\n`);
       return;
     }
+    // PD-08：init 脚手架刻意保留 standard-delivery 作默认复制源——生成完整可裁剪的
+    // 交付模板比复制轻量模板更合理；运行缺省默认已改为 lightweight-delivery。
     const fromName = args.values.from ?? 'standard-delivery';
     ensureSafeName(fromName);
     const source = getWorkflowFilePath(fromName, projectWorkflowsDir);

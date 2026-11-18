@@ -15,6 +15,11 @@ import { preflightWarning } from '../../lib/preflight-warning.js';
 import { PlanCommandBindings } from './PlanCommandBindings.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 import { startRunSubmitState } from './start-run-submit-state.js';
+import {
+  AGENT_LABELS,
+  AGENT_OPTIONS,
+  type RunMode,
+} from '../../hooks/use-run-plan-selection.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,21 +30,9 @@ export interface StartRunFormProps {
   defaultOpen?: boolean;
 }
 
-type RunMode = 'workflow' | 'goal';
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-
-const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
-
-/** Human-facing labels; synthetic caveats stay inline, while dsh maturity is in adjacent help. */
-const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
-  codex: 'codex',
-  'claude-code': 'claude-code',
-  mock: 'mock（仅测试/演示）',
-  'dsh-headless': 'dsh-headless（仅 Goal）',
-};
 
 /**
  * Collapsible "New Run" form with demand, mode, template, agent, execution plan preview,

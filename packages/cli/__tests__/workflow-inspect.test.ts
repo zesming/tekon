@@ -183,7 +183,7 @@ phases:
       ),
     ).resolves.toBe(0);
 
-    // 无位置参数时 preflight 回落 standard-delivery，而不是把标志位当名称。
+    // 无位置参数时 preflight 回落 PD-08 缺省轻量模板（而非把标志位当名称）。
     const preflightIo = memoryIo();
     const preflightCode = await runCli(
       ['workflow', 'preflight', '--repo', repoPath],
@@ -193,6 +193,26 @@ phases:
     const preflightOut = preflightIo.takeStdout();
     expect(preflightOut).toContain('gate=');
     expect(preflightOut).not.toContain('--repo.yaml');
+    // 缺省模板是 lightweight-delivery：含其专属的人工确认节点。
+    expect(preflightOut).toContain('node=human-confirm');
+  });
+
+  it('PD-08: doctor without --workflow inspects the lightweight default template', async () => {
+    const repoPath = repo();
+    // doctor 的工作流检查段要求仓库已 Tekon 初始化。
+    await runCli(['init', '--repo', repoPath], memoryIo());
+    const io = memoryIo();
+    const code = await runCli(['doctor', '--repo', repoPath], io);
+    // doctor 是只读诊断，缺命令也不致非零阻断工作流名断言。
+    expect([0, 1]).toContain(code);
+    expect(io.takeStdout()).toContain('工作流检查（lightweight-delivery）:');
+
+    const explicit = memoryIo();
+    await runCli(
+      ['doctor', '--workflow', 'bugfix', '--repo', repoPath],
+      explicit,
+    );
+    expect(explicit.takeStdout()).toContain('工作流检查（bugfix）:');
   });
 
   it('create --minimal scaffolds a small valid template that validate accepts', async () => {
@@ -219,6 +239,31 @@ phases:
     const nodeCount = (scaffolded.match(/^      - id: /gm) ?? []).length;
     expect(nodeCount).toBe(1);
     expect(existsSync(createdPath)).toBe(true);
+  });
+
+  it('PD-08: create without --minimal defaults --from to standard-delivery', async () => {
+    // 运行缺省默认已改为 lightweight-delivery，但脚手架刻意保留
+    // standard-delivery 作默认复制源（生成完整可裁剪模板）。钉住该刻意合同。
+    const repoPath = repo();
+    const initIo = memoryIo();
+    await runCli(['init', '--repo', repoPath], initIo);
+    const io = memoryIo();
+    const code = await runCli(
+      ['workflow', 'create', 'full-tpl', '--repo', repoPath],
+      io,
+    );
+    expect(code).toBe(0);
+    const createdPath = io.takeStdout().trim();
+    const scaffolded = readFileSync(createdPath, 'utf8');
+    // id 改写为新模板名，但 standard-delivery 的阶段结构被完整保留。
+    expect(scaffolded).toContain('id: full-tpl');
+    expect(scaffolded).toContain('pm-scope');
+    expect((scaffolded.match(/^      - id: /gm) ?? []).length).toBeGreaterThan(1);
+
+    const check = memoryIo();
+    await expect(
+      runCli(['workflow', 'validate', 'full-tpl', '--repo', repoPath], check),
+    ).resolves.toBe(0);
   });
 
   it('CD-20: show and preflight report a broken template in readable Chinese instead of raw validator JSON', async () => {

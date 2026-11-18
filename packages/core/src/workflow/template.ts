@@ -121,7 +121,15 @@ export type BuiltInWorkflowTemplateId =
   | 'test-improvement'
   | 'docs-update'
   | 'plan-only'
-  | 'standard-delivery';
+  | 'standard-delivery'
+  | 'lightweight-delivery';
+
+/**
+ * PD-08：缺省工作流模板的单一事实源。未显式指定模板（且非 goal、无 Draft
+ * 推荐）时，各入口统一回落到此轻量模板；standard-delivery 改为显式选择。
+ * 注意这是「缺省回落」常量，不要用于显式模板比对。
+ */
+export const DEFAULT_WORKFLOW_TEMPLATE_ID = 'lightweight-delivery';
 
 const rawArtifactRefSchema = z.union([
   z.string().min(1),

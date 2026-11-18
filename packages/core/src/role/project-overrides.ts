@@ -1,13 +1,17 @@
 import {
+  accessSync,
+  constants,
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 import { roleSchema, type Role } from '../types/domain.js';
@@ -114,6 +118,48 @@ export function readRolePrompt(options: {
 }
 
 /**
+ * 递归预检源角色树的可读性（含 skills/knowledge 等嵌套子目录）。
+ *
+ * Node 24 的 fs.cpSync 走 native directory_iterator，遇到无读/执行权限的目录时
+ * 底层 C++ filesystem_error 会逃逸 N-API 边界直接 SIGABRT，JS try/catch 无法
+ * 捕获（Node 26 已修复为正常 EACCES）。本函数只用 libuv JS 系 API
+ * （accessSync/readdirSync），它们在各 Node 版本都只抛可捕获的 JS 错误，
+ * 因此能在进入 cpSync 前把坏目录收敛为 ROLE_DIR_INVALID。必须在创建临时目录
+ * 之前调用，fail-closed 且不留残留。
+ */
+function assertSourceTreeReadable(dir: string): void {
+  try {
+    accessSync(dir, constants.R_OK | constants.X_OK);
+  } catch {
+    throw new Error(
+      `ROLE_DIR_INVALID: 内置角色目录 ${dir} 不可读（权限被撤销），无法物化项目覆盖；请恢复目录读/执行权限后重试。`,
+    );
+  }
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(
+      `ROLE_DIR_INVALID: 内置角色目录 ${dir} 无法遍历（${(error as Error).message}），无法物化项目覆盖；请恢复目录权限后重试。`,
+    );
+  }
+  for (const entry of entries) {
+    const child = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      assertSourceTreeReadable(child);
+    } else {
+      try {
+        accessSync(child, constants.R_OK);
+      } catch {
+        throw new Error(
+          `ROLE_DIR_INVALID: 内置角色文件 ${child} 不可读（权限被撤销），无法物化项目覆盖；请恢复文件读权限后重试。`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * 把角色物化为项目级目录：内置角色整目录复制（保留 agent.yaml/tools.yaml/
  * skills/knowledge），自定义 id 生成最小脚手架。已物化且完整时幂等返回
  * existed。临时目录复制 + 原子 rename，失败不留半成品。
@@ -142,6 +188,9 @@ export function materializeProjectRole(options: {
   const copyFromBuiltIn = existsSync(source);
   if (copyFromBuiltIn) {
     assertWithin(realpathSync(source), realpathSync(builtInRolesDir));
+    // 整树递归预检（含嵌套 skills/knowledge），在 tempDir 创建之前拦截任何
+    // 不可读项，规避 Node 24 cpSync 的 native SIGABRT（见函数注释）。
+    assertSourceTreeReadable(source);
   }
 
   // 临时目录以点号开头：listRoleIds 的 kebab-case 标识符过滤会自动忽略它，

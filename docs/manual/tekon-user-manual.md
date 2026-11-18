@@ -22,14 +22,15 @@
 
 | 模板 | 用途 |
 | --- | --- |
+| `lightweight-delivery` | **运行缺省默认**。轻量 plan→实现→人工确认三步：PM 出需求卡、RD 实现、Reviewer 人工把关，驳回回到 RD 返工。适合大多数小改动，不内置 QA/PMO 全链路 |
 | `standard-feature` | 标准功能 |
 | `bugfix` | 缺陷修复 |
 | `test-improvement` | 补充测试 |
 | `docs-update` | 更新文档 |
 | `plan-only` | 只做方案 |
-| `standard-delivery` | 完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署 |
+| `standard-delivery` | 完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署。需要完整评审/QA 全链路时显式选择 |
 
-不传 `--template` 时，`run` 使用 `standard-delivery`；不会自动采用需求卡的推荐模板。
+不传 `--template` 时，`run` 使用轻量默认 `lightweight-delivery`；`standard-delivery` 改为在模板列表中显式选择。模板生效优先级为：显式 `--template` > 已塑形需求卡的 `recommendedTemplate` > 缺省默认 `lightweight-delivery`。注意 `workflow select` 只给出推荐与理由，本身不改变运行默认值。
 
 ### 2.3 Agent 输出不可审阅
 
@@ -183,7 +184,7 @@ tekon eval demand-shape
 tekon run
 ```
 
-没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 `standard-delivery`；Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `claude-code`。
+没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为轻量 `lightweight-delivery`（plan→实现→人工确认）；若需求卡带 `recommendedTemplate` 则采用它，显式 `--template` 优先级最高，需要完整 QA/PMO 治理时显式 `--template standard-delivery`。Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `claude-code`。
 
 启动前会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行，并说明下一步；没检测到登录只在 stderr 提示，运行照常开始。stderr 还会写出认证方式和透传的环境变量名。只检查流程时可显式使用 mock：
 
@@ -215,6 +216,8 @@ tekon delivery prepare
 ```
 
 仅支持 `standard-delivery`，生成本地 PR 包。要求 workflow 通过、无待审批 Gate、验证与安全扫描满足、验收证据完整，且 QA release signoff 通过并绑定 QA validation 的 tested ref。
+
+默认的 `lightweight-delivery` 缺少这些门禁与证据，readiness 恒不满足（见 §5.10），在此命令会被前置拦截；需要 PR 交付请在发起运行时显式 `--template standard-delivery`。
 
 不满足前置检查时不会生成 PR 包。
 
@@ -272,7 +275,7 @@ tekon eval readiness
 
 ### 5.4 Workflow
 
-有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。
+有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。运行缺省默认是 `lightweight-delivery`（plan→实现→人工确认三阶段，人工门禁驳回经 `reworkTargetNodeId` 回到 RD 节点返工）；`standard-delivery` 等重治理模板需显式选择。
 
 #### 节点工作区模式（workspace）
 
@@ -395,6 +398,19 @@ tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headle
 
 单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。
 
+**轻量默认模板与 PR 就绪边界**：`lightweight-delivery` 只含 `schema` 与人工 `human` 门禁，没有命令型门禁（build/test/lint/e2e）、治理门禁（独立评审、角色范围、验收证据、QA 签署、过程完整性）、安全扫描与验收准则产物。Pre-PR readiness 共 9 项检查，轻量运行即使完全跑通，其中 6 项也会结构性恒红：
+
+| 恒红检查 | 原因 |
+| --- | --- |
+| `standard-delivery-template` | 硬性要求模板为 `standard-delivery`，轻量模板直接不满足 |
+| `validation-gates-passed` | 轻量模板无任何命令型门禁，检查要求至少 1 个 |
+| `acceptance-criteria-evidenced` | 无验收准则产物 |
+| `qa-release-signoff-passed` | 无 qa-signoff 门禁与 QA release 签署 |
+| `standard-governance-gates-passed` | 5 类治理门禁全部缺失 |
+| `security-scans-passed` | 无安全扫描证据，检查要求至少 1 项 |
+
+因此轻量运行的 `ready` 恒为 `false`，`delivery prepare`/`create-pr` 会以前置检查拦截，**默认模板不会、也无法自动产出 PR 交付**。需要走到可审 PR 时，发起运行显式选择 `standard-delivery`（或含上述门禁与产物的自定义模板）。这是产品边界而非缺陷：轻量模板定位是「快速实现 + 人工把关」，把是否升级为重治理交付留给人决定。
+
 ### 5.11 Work Usability
 
 样本集评估，用真实任务、Provider 和交付结果判断是否达到受控试用门槛。
@@ -427,7 +443,7 @@ tekon doctor --workflow bugfix
 
 - 配置：`.tekon/config.yaml` 能否读取，默认 agent 是哪个。
 - Provider：`claude-code`、`codex` 是否安装、版本，以及认证方式（API key、auth token、OAuth token、订阅登录、已保存的登录、未检测到、无法确定）。Claude 通过 `claude auth status --json` 判断，只读取是否登录和认证方式，不显示账号信息；Codex 只看 `OPENAI_API_KEY` 和 `CODEX_HOME/auth.json` 是否存在，不读取文件内容。也会列出配置的透传变量名。
-- 工作流：默认 `standard-delivery`（可用 `--workflow` 指定）的检查命令是否都能解析；缺少时提示运行 `workflow preflight`。
+- 工作流：默认 `lightweight-delivery`（可用 `--workflow` 指定）的检查命令是否都能解析；缺少时提示运行 `workflow preflight`。
 
 最后一行给出结论。默认 Provider 未安装或未登录、检查命令缺失或配置有误时退出码为 1。旧版本 `init` 写入的 `defaultAgent: codex` 在 Codex 未安装时会被指出，按提示修改配置或运行时加 `--agent`。DSH 的检查仍用 `tekon provider preflight dsh-headless`。
 
@@ -438,7 +454,7 @@ tekon workflow preflight
 tekon workflow preflight bugfix
 ```
 
-模板名是位置参数，默认 `standard-delivery`。输出状态含义见 §4.3。`resolved` 仅说明命令已解析，仍需实际运行验证。
+模板名是位置参数，默认 `lightweight-delivery`。输出状态含义见 §4.3。`resolved` 仅说明命令已解析，仍需实际运行验证。
 
 缺命令时确认候选并更新 `.tekon/repo-profile.yaml`。`notApplicable` 必须有实际理由；不能用它绕过 `security-scan`，无外部安全命令时仍可能执行内置扫描。
 
@@ -509,7 +525,7 @@ tekon run "梳理模块职责，不修改文件" --goal
 tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
-普通运行默认 `standard-delivery`；无文本时读取最近需求卡，并要求它已批准。`--goal` 使用内置单节点模板，不进入交付链路，与 `--template` 互斥，也不支持 `autonomous-delivery`。内置 Goal 默认不允许仓库源码改动，见 §5.7。
+普通运行默认轻量 `lightweight-delivery`；无文本时读取最近需求卡，并要求它已批准。已塑形需求卡的 `recommendedTemplate` 会被采用（显式 `--template` 优先）。`--goal` 使用内置单节点模板，不进入交付链路，与 `--template` 互斥，也不支持 `autonomous-delivery`。内置 Goal 默认不允许仓库源码改动，见 §5.7。
 
 Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明确接受基于未提交改动运行，不是安全证明。
 
@@ -534,6 +550,8 @@ tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 ```
 
 相同 ID 与意图返回原 Run/Session/Job。`REQUEST_ID_CONFLICT` 表示 ID 已绑定其他意图；先核对参数，只有确定新建任务时才换 ID。受理后配置或 Provider 环境变化不会使原请求另建运行。
+
+**受理身份与执行分层**：受理身份由 Request ID 加请求信封（需求文本/文件引用等）的哈希双键确定，信封在首次意图后保持不变；而生效模板（含需求卡的 `recommendedTemplate` 回落）是在执行启动时单独解析、经独立通道绑定，不写进受理信封、也不重建信封。因此同一 Request ID 重放时，即使需求卡已被删除或修改，也不会因哈希不一致报 `REQUEST_ID_CONFLICT`，而是沿用首次执行绑定的模板继续。判定冲突只看信封本身，模板选择不参与身份指纹。
 
 | 返回状态 | 下一步 |
 | --- | --- |
@@ -844,7 +862,7 @@ tekon --version
 
 默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。运行列表与历史 Run、diff、日志、PR 包和交付操作收在侧栏 **高级 Advanced**（`/advanced/runs`，旧仪表盘入口已重定向到这里）。
 
-**发起任务**：默认“启动受控交付”使用 `.tekon/config.yaml` 的 `defaultAgent`（未配置时为 `claude-code`）与 `standard-delivery` 完整角色链路；要换其他 Agent 时，到「高级 Advanced → 新建运行」的 Agent 下拉框选择。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
+**发起任务**：首页 Composer 提供运行模式、工作流模板、执行代理三个下拉框。运行模式在「受控交付（Workflow）」与「一次性任务（Goal）」间切换；模板留空时由服务端回落轻量默认 `lightweight-delivery`，需要完整评审/QA 全链路时在下拉中显式选 `standard-delivery`；执行代理默认取 `.tekon/config.yaml` 的 `defaultAgent`（未配置时为 `claude-code`）。三个选择都参与执行计划查询，切换任一项都会按全量入参刷新「执行前计划」预览，缓存按入参区分、不会串用旧选择的计划。Goal 模式下模板下拉禁用且请求不带模板；`dsh-headless` 仅能在 Goal 下运行，选中后自动切到 Goal 并清空模板。高级 Advanced → 新建运行表单共用同一套代理常量与 Goal/DSH 互斥规则。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 要求勾选联网不受限确认。
 
 **核对执行计划**：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。
 
@@ -1023,7 +1041,7 @@ codex --profile <profile> --sandbox workspace-write --ask-for-approval on-reques
 
 | 参数 | 用途 |
 | --- | --- |
-| `--template <name>` | 指定模板，默认 `standard-delivery` |
+| `--template <name>` | 指定模板，默认 `lightweight-delivery`（已塑形需求卡的推荐模板优先于缺省默认） |
 | `--goal` | 一次性轻量目标；与 `--template` 互斥，默认不接受源码修改 |
 | `--agent <name>` | `claude-code`、`codex`、`mock` 或仅 Goal 可用的 `dsh-headless`；默认取 `defaultAgent`，未配置时为 `claude-code` |
 | `--demand-file <path>` | 指定已批准需求卡；`--draft-file` 也受支持 |

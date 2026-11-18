@@ -29,7 +29,11 @@ import {
   isTerminalWorkflowStatus,
   writeWorkflowTerminal,
 } from './state-machine.js';
-import { loadWorkflowTemplate, type WorkflowTemplate } from './template.js';
+import {
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
+  loadWorkflowTemplate,
+  type WorkflowTemplate,
+} from './template.js';
 
 // Sub-modules
 import { createLeaseService } from './lease-service.js';
@@ -473,7 +477,7 @@ export function createWorkflowEngine(
     const input = structuredClone(rawInput);
     const identity = requestIdentity(input, settings);
     const workflowSpec = input.workflowSpec ?? loadWorkflowTemplate({
-      name: input.templateName ?? (input.kind === 'goal' ? 'goal' : 'standard-delivery'),
+      name: input.templateName ?? (input.kind === 'goal' ? 'goal' : DEFAULT_WORKFLOW_TEMPLATE_ID),
     });
     const repoCommands = captureRepoCommands(settings.repoPath, workflowSpec);
     assertNoMissingRepoCommands(workflowSpec, repoCommands);

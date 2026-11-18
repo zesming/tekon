@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Tekon 用户手册：从发起需求到检查、审批、交付与恢复。">
-<meta name="source-sha256" content="41f6c5502bc686f4cb39d7cbdf662afed1ac23ae9db43fb6d0fdf3974e0f2549">
+<meta name="source-sha256" content="6f2c732d9c4cce3511db843251e2e93b36889efa5af551e87d329a3bd1e3ee80">
 <title>天工 Tekon · 用户手册</title>
 <style>:root{color-scheme:light;--ink:#192b35;--muted:#566971;--line:#e1e8e7;--accent:#116b59;--soft:#eef6f3;--paper:#fff;--page:#f8faf9;--sidebar:246px;--header:68px;--mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;--sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 *{box-sizing:border-box}html{scroll-padding-top:94px}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.8 var(--sans);-webkit-font-smoothing:antialiased}a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:4px}a:hover{color:#064c3d}button{font:inherit;cursor:pointer}button,a{-webkit-tap-highlight-color:transparent}button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex="0"]:focus-visible{outline:3px solid #358cba;outline-offset:4px}h1:focus,h2:focus,h3:focus,main:focus{outline:none}[hidden]{display:none!important}::selection{background:#cae9df}strong{font-weight:650}.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.skip-link{position:fixed;left:18px;top:-80px;z-index:30;background:var(--ink);color:#fff;padding:10px 18px;border-radius:6px}.skip-link:focus{top:10px;color:#fff}
@@ -25,7 +25,7 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 <a class="skip-link" href="#main">跳到正文</a>
 <header class="site-header">
 <a class="brand" href="#1-天工是什么" aria-label="Tekon 手册首页"><span class="brand-mark" aria-hidden="true">T</span><strong>Tekon</strong><span class="brand-divider">/</span><span class="brand-label">用户手册</span></a>
-<div class="header-actions"><span class="version">v0.36.0</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
+<div class="header-actions"><span class="version">v0.39.0</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
 </header>
 <nav id="sidebar" class="sidebar" aria-label="手册章节">
 <p class="nav-heading">使用指南 <span>12 章</span></p>
@@ -65,6 +65,10 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 </thead>
 <tbody>
 <tr>
+<td><code>lightweight-delivery</code></td>
+<td><strong>运行缺省默认</strong>。轻量 plan→实现→人工确认三步：PM 出需求卡、RD 实现、Reviewer 人工把关，驳回回到 RD 返工。适合大多数小改动，不内置 QA/PMO 全链路</td>
+</tr>
+<tr>
 <td><code>standard-feature</code></td>
 <td>标准功能</td>
 </tr>
@@ -86,11 +90,11 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 </tr>
 <tr>
 <td><code>standard-delivery</code></td>
-<td>完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署</td>
+<td>完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署。需要完整评审/QA 全链路时显式选择</td>
 </tr>
 </tbody>
 </table></div>
-<p>不传 <code>--template</code> 时，<code>run</code> 使用 <code>standard-delivery</code>；不会自动采用需求卡的推荐模板。</p>
+<p>不传 <code>--template</code> 时，<code>run</code> 使用轻量默认 <code>lightweight-delivery</code>；<code>standard-delivery</code> 改为在模板列表中显式选择。模板生效优先级为：显式 <code>--template</code> &gt; 已塑形需求卡的 <code>recommendedTemplate</code> &gt; 缺省默认 <code>lightweight-delivery</code>。注意 <code>workflow select</code> 只给出推荐与理由，本身不改变运行默认值。</p>
 <h3 id="23-agent-输出不可审阅" tabindex="-1">2.3 Agent 输出不可审阅</h3>
 <p><code>review</code> 和 Web 把失败检查、影响文件、diff、产物正文、Gate 日志、审批及 PR 包集中展示。先看失败原因，再沿证据入口核对实际结果。</p>
 <h3 id="24-远端副作用需要人控制" tabindex="-1">2.4 远端副作用需要人控制</h3>
@@ -225,7 +229,7 @@ tekon eval demand-shape
 <h3 id="45-发起运行" tabindex="-1">4.5 发起运行</h3>
 <pre><code class="language-bash">tekon run
 </code></pre>
-<p>没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 <code>standard-delivery</code>；Provider 优先取 <code>--agent</code>，其次是项目 <code>defaultAgent</code>，未配置时为 <code>claude-code</code>。</p>
+<p>没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为轻量 <code>lightweight-delivery</code>（plan→实现→人工确认）；若需求卡带 <code>recommendedTemplate</code> 则采用它，显式 <code>--template</code> 优先级最高，需要完整 QA/PMO 治理时显式 <code>--template standard-delivery</code>。Provider 优先取 <code>--agent</code>，其次是项目 <code>defaultAgent</code>，未配置时为 <code>claude-code</code>。</p>
 <p>启动前会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行，并说明下一步；没检测到登录只在 stderr 提示，运行照常开始。stderr 还会写出认证方式和透传的环境变量名。只检查流程时可显式使用 mock：</p>
 <pre><code class="language-bash">tekon run --template standard-delivery --agent mock
 </code></pre>
@@ -242,6 +246,7 @@ tekon review
 <pre><code class="language-bash">tekon delivery prepare
 </code></pre>
 <p>仅支持 <code>standard-delivery</code>，生成本地 PR 包。要求 workflow 通过、无待审批 Gate、验证与安全扫描满足、验收证据完整，且 QA release signoff 通过并绑定 QA validation 的 tested ref。</p>
+<p>默认的 <code>lightweight-delivery</code> 缺少这些门禁与证据，readiness 恒不满足（见 §5.10），在此命令会被前置拦截；需要 PR 交付请在发起运行时显式 <code>--template standard-delivery</code>。</p>
 <p>不满足前置检查时不会生成 PR 包。</p>
 <h3 id="48-创建远端-pr" tabindex="-1">4.8 创建远端 PR</h3>
 <p>审阅 PR 包、diff 和验证证据后，由人明确批准：</p>
@@ -293,7 +298,7 @@ tekon eval readiness
 <h3 id="53-run" tabindex="-1">5.3 Run</h3>
 <p>一次 workflow 或 Goal 执行，以唯一 <code>runId</code> 标识。查看、审批、恢复和交付均围绕原 Run 进行。</p>
 <h3 id="54-workflow" tabindex="-1">5.4 Workflow</h3>
-<p>有顺序和依赖关系的角色节点集合。常用模板见 §2.2；<code>tekon workflow list</code> 查看目录，<code>tekon workflow show &lt;name&gt;</code> 查看模板。</p>
+<p>有顺序和依赖关系的角色节点集合。常用模板见 §2.2；<code>tekon workflow list</code> 查看目录，<code>tekon workflow show &lt;name&gt;</code> 查看模板。运行缺省默认是 <code>lightweight-delivery</code>（plan→实现→人工确认三阶段，人工门禁驳回经 <code>reworkTargetNodeId</code> 回到 RD 节点返工）；<code>standard-delivery</code> 等重治理模板需显式选择。</p>
 <h4>节点工作区模式（workspace）</h4>
 <p>每个节点可声明 <code>workspace</code>，决定它在哪里执行、能否改源码：</p>
 <div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table>
@@ -426,6 +431,42 @@ providers:
 <p>聚合审阅面，供 CLI <code>review</code> 与 Web 共用，集中显示检查结果、证据和后续操作。</p>
 <h3 id="510-readiness" tabindex="-1">5.10 Readiness</h3>
 <p>单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。</p>
+<p><strong>轻量默认模板与 PR 就绪边界</strong>：<code>lightweight-delivery</code> 只含 <code>schema</code> 与人工 <code>human</code> 门禁，没有命令型门禁（build/test/lint/e2e）、治理门禁（独立评审、角色范围、验收证据、QA 签署、过程完整性）、安全扫描与验收准则产物。Pre-PR readiness 共 9 项检查，轻量运行即使完全跑通，其中 6 项也会结构性恒红：</p>
+<div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table>
+<thead>
+<tr>
+<th>恒红检查</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>standard-delivery-template</code></td>
+<td>硬性要求模板为 <code>standard-delivery</code>，轻量模板直接不满足</td>
+</tr>
+<tr>
+<td><code>validation-gates-passed</code></td>
+<td>轻量模板无任何命令型门禁，检查要求至少 1 个</td>
+</tr>
+<tr>
+<td><code>acceptance-criteria-evidenced</code></td>
+<td>无验收准则产物</td>
+</tr>
+<tr>
+<td><code>qa-release-signoff-passed</code></td>
+<td>无 qa-signoff 门禁与 QA release 签署</td>
+</tr>
+<tr>
+<td><code>standard-governance-gates-passed</code></td>
+<td>5 类治理门禁全部缺失</td>
+</tr>
+<tr>
+<td><code>security-scans-passed</code></td>
+<td>无安全扫描证据，检查要求至少 1 项</td>
+</tr>
+</tbody>
+</table></div>
+<p>因此轻量运行的 <code>ready</code> 恒为 <code>false</code>，<code>delivery prepare</code>/<code>create-pr</code> 会以前置检查拦截，<strong>默认模板不会、也无法自动产出 PR 交付</strong>。需要走到可审 PR 时，发起运行显式选择 <code>standard-delivery</code>（或含上述门禁与产物的自定义模板）。这是产品边界而非缺陷：轻量模板定位是「快速实现 + 人工把关」，把是否升级为重治理交付留给人决定。</p>
 <h3 id="511-work-usability" tabindex="-1">5.11 Work Usability</h3>
 <p>样本集评估，用真实任务、Provider 和交付结果判断是否达到受控试用门槛。</p>
 <nav class="page-turn" aria-label="章节翻页"><a href="#4-quick-start"><small>上一章</small>Quick Start <span aria-hidden="true">←</span></a><a href="#6-命令详解"><small>下一章</small>命令详解 <span aria-hidden="true">→</span></a></nav></article><aside class="section-toc" aria-label="本章目录"><details open><summary>本章内容</summary><nav><a href="#51-repo">5.1 Repo</a><a href="#52-tekon">5.2 <code>.tekon/</code></a><a href="#53-run">5.3 Run</a><a href="#54-workflow">5.4 Workflow</a><a href="#55-role">5.5 Role</a><a href="#56-gate">5.6 Gate</a><a href="#57-provider">5.7 Provider</a><a href="#58-artifact">5.8 Artifact</a><a href="#59-review-surface">5.9 Review Surface</a><a href="#510-readiness">5.10 Readiness</a><a href="#511-work-usability">5.11 Work Usability</a></nav></details></aside></div></section><section class="chapter" id="p5" aria-labelledby="6-命令详解"><div class="chapter-layout"><article class="prose"><h2 id="6-命令详解" tabindex="-1">6. 命令详解</h2>
@@ -445,14 +486,14 @@ tekon doctor --workflow bugfix
 <ul>
 <li>配置：<code>.tekon/config.yaml</code> 能否读取，默认 agent 是哪个。</li>
 <li>Provider：<code>claude-code</code>、<code>codex</code> 是否安装、版本，以及认证方式（API key、auth token、OAuth token、订阅登录、已保存的登录、未检测到、无法确定）。Claude 通过 <code>claude auth status --json</code> 判断，只读取是否登录和认证方式，不显示账号信息；Codex 只看 <code>OPENAI_API_KEY</code> 和 <code>CODEX_HOME/auth.json</code> 是否存在，不读取文件内容。也会列出配置的透传变量名。</li>
-<li>工作流：默认 <code>standard-delivery</code>（可用 <code>--workflow</code> 指定）的检查命令是否都能解析；缺少时提示运行 <code>workflow preflight</code>。</li>
+<li>工作流：默认 <code>lightweight-delivery</code>（可用 <code>--workflow</code> 指定）的检查命令是否都能解析；缺少时提示运行 <code>workflow preflight</code>。</li>
 </ul>
 <p>最后一行给出结论。默认 Provider 未安装或未登录、检查命令缺失或配置有误时退出码为 1。旧版本 <code>init</code> 写入的 <code>defaultAgent: codex</code> 在 Codex 未安装时会被指出，按提示修改配置或运行时加 <code>--agent</code>。DSH 的检查仍用 <code>tekon provider preflight dsh-headless</code>。</p>
 <h3 id="62-workflow-preflight" tabindex="-1">6.2 <code>workflow preflight</code></h3>
 <pre><code class="language-bash">tekon workflow preflight
 tekon workflow preflight bugfix
 </code></pre>
-<p>模板名是位置参数，默认 <code>standard-delivery</code>。输出状态含义见 §4.3。<code>resolved</code> 仅说明命令已解析，仍需实际运行验证。</p>
+<p>模板名是位置参数，默认 <code>lightweight-delivery</code>。输出状态含义见 §4.3。<code>resolved</code> 仅说明命令已解析，仍需实际运行验证。</p>
 <p>缺命令时确认候选并更新 <code>.tekon/repo-profile.yaml</code>。<code>notApplicable</code> 必须有实际理由；不能用它绕过 <code>security-scan</code>，无外部安全命令时仍可能执行内置扫描。</p>
 <h3 id="63-workflow-select" tabindex="-1">6.3 <code>workflow select</code></h3>
 <pre><code class="language-bash">tekon workflow select "补齐 CLI 单元测试"
@@ -495,7 +536,7 @@ tekon run --demand-file /path/to/approved-demand.json
 tekon run "梳理模块职责，不修改文件" --goal
 tekon run --dynamic --dry-run "需求文本" --agent mock
 </code></pre>
-<p>普通运行默认 <code>standard-delivery</code>；无文本时读取最近需求卡，并要求它已批准。<code>--goal</code> 使用内置单节点模板，不进入交付链路，与 <code>--template</code> 互斥，也不支持 <code>autonomous-delivery</code>。内置 Goal 默认不允许仓库源码改动，见 §5.7。</p>
+<p>普通运行默认轻量 <code>lightweight-delivery</code>；无文本时读取最近需求卡，并要求它已批准。已塑形需求卡的 <code>recommendedTemplate</code> 会被采用（显式 <code>--template</code> 优先）。<code>--goal</code> 使用内置单节点模板，不进入交付链路，与 <code>--template</code> 互斥，也不支持 <code>autonomous-delivery</code>。内置 Goal 默认不允许仓库源码改动，见 §5.7。</p>
 <p>Provider、超时和其他常用参数见 §10。<code>--allow-dirty-base</code> 表示明确接受基于未提交改动运行，不是安全证明。</p>
 <p><strong>结果输出</strong>：CLI 等运行停下后，第一行写明结果：已完成、已暂停（等待人工确认）、等待处理、中断、失败或已取消。中断和失败会接着写原因和下一步，原因按类别给出：</p>
 <table>
@@ -541,6 +582,7 @@ tekon run --dynamic --dry-run "需求文本" --agent mock
 <pre><code class="language-bash">tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 </code></pre>
 <p>相同 ID 与意图返回原 Run/Session/Job。<code>REQUEST_ID_CONFLICT</code> 表示 ID 已绑定其他意图；先核对参数，只有确定新建任务时才换 ID。受理后配置或 Provider 环境变化不会使原请求另建运行。</p>
+<p><strong>受理身份与执行分层</strong>：受理身份由 Request ID 加请求信封（需求文本/文件引用等）的哈希双键确定，信封在首次意图后保持不变；而生效模板（含需求卡的 <code>recommendedTemplate</code> 回落）是在执行启动时单独解析、经独立通道绑定，不写进受理信封、也不重建信封。因此同一 Request ID 重放时，即使需求卡已被删除或修改，也不会因哈希不一致报 <code>REQUEST_ID_CONFLICT</code>，而是沿用首次执行绑定的模板继续。判定冲突只看信封本身，模板选择不参与身份指纹。</p>
 <div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table>
 <thead>
 <tr>
@@ -785,7 +827,7 @@ tekon --version
 <nav class="page-turn" aria-label="章节翻页"><a href="#5-核心概念"><small>上一章</small>核心概念 <span aria-hidden="true">←</span></a><a href="#7-web-dashboard"><small>下一章</small>Web Dashboard <span aria-hidden="true">→</span></a></nav></article><aside class="section-toc" aria-label="本章目录"><details open><summary>本章内容</summary><nav><a href="#61-init">6.1 <code>init</code></a><a href="#611-doctor">6.1.1 <code>doctor</code></a><a href="#62-workflow-preflight">6.2 <code>workflow preflight</code></a><a href="#63-workflow-select">6.3 <code>workflow select</code></a><a href="#631-template-inspection">6.3.1 模板查看、校验与脚手架（PD-07）</a><a href="#64-draft-shape">6.4 <code>draft shape</code></a><a href="#65-draft-approve">6.5 <code>draft approve</code></a><a href="#651-draft-plan--draft-plan-approve可选计划审批">6.5.1 <code>draft plan</code> / <code>draft plan-approve</code>（可选计划审批）</a><a href="#66-run">6.6 <code>run</code></a><a href="#67-status">6.7 <code>status</code></a><a href="#68-approval-summary">6.8 <code>approval summary</code></a><a href="#69-eval-approval-summary">6.9 <code>eval approval-summary</code></a><a href="#610-resume---approve-human">6.10 <code>resume --approve-human</code></a><a href="#6101-retry重试终态-failed-运行">6.10.1 <code>retry</code>：重试终态 failed 运行</a><a href="#611-approval-reject">6.11 <code>approval reject</code></a><a href="#612-review">6.12 <code>review</code></a><a href="#613-delivery-dry-run">6.13 <code>delivery dry-run</code></a><a href="#614-delivery-prepare">6.14 <code>delivery prepare</code></a><a href="#615-delivery-create-pr">6.15 <code>delivery create-pr</code></a><a href="#616-delivery-ci-status">6.16 <code>delivery ci-status</code></a><a href="#617-delivery-ci-watch">6.17 <code>delivery ci-watch</code></a><a href="#618-eval-readiness">6.18 <code>eval readiness</code></a><a href="#619-eval-work-usability">6.19 <code>eval work-usability</code></a><a href="#620-ui">6.20 <code>ui</code></a><a href="#621-update">6.21 <code>update</code></a><a href="#622-draft">6.22 <code>draft</code></a><a href="#623-clean">6.23 <code>clean</code></a><a href="#624-help">6.24 <code>help</code></a></nav></details></aside></div></section><section class="chapter" id="p6" aria-labelledby="7-web-dashboard"><div class="chapter-layout"><article class="prose"><h2 id="7-web-dashboard" tabindex="-1">7. Web Dashboard</h2>
 <p><code>tekon ui</code> 启动本地界面，打开带 <code>#token=</code> 的完整 URL。令牌丢失时可从 <code>.tekon/web-session.json</code> 读取并填入顶栏连接面板；不要提交或共享令牌。</p>
 <p>默认 <strong>Session UI</strong> 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。运行列表与历史 Run、diff、日志、PR 包和交付操作收在侧栏 <strong>高级 Advanced</strong>（<code>/advanced/runs</code>，旧仪表盘入口已重定向到这里）。</p>
-<p><strong>发起任务</strong>：默认“启动受控交付”使用 <code>.tekon/config.yaml</code> 的 <code>defaultAgent</code>（未配置时为 <code>claude-code</code>）与 <code>standard-delivery</code> 完整角色链路；要换其他 Agent 时，到「高级 Advanced → 新建运行」的 Agent 下拉框选择。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。</p>
+<p><strong>发起任务</strong>：首页 Composer 提供运行模式、工作流模板、执行代理三个下拉框。运行模式在「受控交付（Workflow）」与「一次性任务（Goal）」间切换；模板留空时由服务端回落轻量默认 <code>lightweight-delivery</code>，需要完整评审/QA 全链路时在下拉中显式选 <code>standard-delivery</code>；执行代理默认取 <code>.tekon/config.yaml</code> 的 <code>defaultAgent</code>（未配置时为 <code>claude-code</code>）。三个选择都参与执行计划查询，切换任一项都会按全量入参刷新「执行前计划」预览，缓存按入参区分、不会串用旧选择的计划。Goal 模式下模板下拉禁用且请求不带模板；<code>dsh-headless</code> 仅能在 Goal 下运行，选中后自动切到 Goal 并清空模板。高级 Advanced → 新建运行表单共用同一套代理常量与 Goal/DSH 互斥规则。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 要求勾选联网不受限确认。</p>
 <p><strong>核对执行计划</strong>：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。</p>
 <p>预览不展示原始工具、参数、环境变量或不适用理由。需要看命令正文时检查本地模板、<code>.tekon/repo-profile.yaml</code> 和 <code>package.json</code>。</p>
 <div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table>
@@ -996,7 +1038,7 @@ codex --profile &lt;profile&gt; --sandbox workspace-write --ask-for-approval on-
 <tbody>
 <tr>
 <td><code>--template &lt;name&gt;</code></td>
-<td>指定模板，默认 <code>standard-delivery</code></td>
+<td>指定模板，默认 <code>lightweight-delivery</code>（已塑形需求卡的推荐模板优先于缺省默认）</td>
 </tr>
 <tr>
 <td><code>--goal</code></td>

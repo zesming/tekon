@@ -287,13 +287,16 @@ describe('role project overrides', () => {
     const rolesDir = join(layout.repoPath, '.tekon', 'roles');
 
     chmodSync(sourceDir, 0o000);
+    // 必须抛可捕获的 JS 可读错误而非让进程崩溃：Node 24 上 cpSync 递归遇到
+    // 无权限目录会因 native directory_iterator C++ 异常逃逸而 SIGABRT，
+    // 产品代码在 cpSync 前用 access 预检把它收敛为 ROLE_DIR_INVALID。
     expect(() =>
       materializeProjectRole({
         role: 'pm',
         repoPath: layout.repoPath,
         builtInRolesDir: layout.builtInRolesDir,
       }),
-    ).toThrow();
+    ).toThrow(/ROLE_DIR_INVALID/);
     chmodSync(sourceDir, 0o700);
 
     // 无目标、无临时目录残留。
@@ -301,6 +304,46 @@ describe('role project overrides', () => {
     const residue = readdirSync(rolesDir);
     expect(residue.filter((entry) => entry.startsWith('.pm.tmp-'))).toEqual([]);
 
+    const retry = materializeProjectRole({
+      role: 'pm',
+      repoPath: layout.repoPath,
+      builtInRolesDir: layout.builtInRolesDir,
+    });
+    expect(retry.outcome).toBe('copied');
+  });
+
+  it('fails closed on an unreadable nested subdirectory without crashing or residue', () => {
+    const layout = createLayout();
+    tempDirs.push(layout.root);
+    seedBuiltInRole(layout.builtInRolesDir, 'pm');
+    const roleRoot = join(layout.builtInRolesDir, 'pm');
+    const nestedSkills = join(roleRoot, 'skills');
+    const rolesDir = join(layout.repoPath, '.tekon', 'roles');
+
+    // 角色根保持可读，仅撤销嵌套 skills 目录权限——根级 access 预检会放行，
+    // 只有递归预扫描能拦住。Node 24 上若漏拦，cpSync 的 native 迭代器会
+    // SIGABRT；这里必须收敛为可捕获的 ROLE_DIR_INVALID。
+    chmodSync(nestedSkills, 0o000);
+    try {
+      expect(() =>
+        materializeProjectRole({
+          role: 'pm',
+          repoPath: layout.repoPath,
+          builtInRolesDir: layout.builtInRolesDir,
+        }),
+      ).toThrow(/ROLE_DIR_INVALID/);
+
+      // 不产生目标目录，也不留下 .pm.tmp- 临时残留。
+      expect(existsSync(join(rolesDir, 'pm'))).toBe(false);
+      expect(
+        readdirSync(rolesDir).some((entry) => entry.startsWith('.pm.tmp-')),
+      ).toBe(false);
+    } finally {
+      // 必须先恢复嵌套目录权限，afterEach 的顶层 chmod 无法穿透 0o000 清理。
+      chmodSync(nestedSkills, 0o700);
+    }
+
+    // 权限恢复后可正常物化，证明预检未造成一次性损坏。
     const retry = materializeProjectRole({
       role: 'pm',
       repoPath: layout.repoPath,

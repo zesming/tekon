@@ -26,7 +26,7 @@ CLI 和 Web 都不加 `--agent`/不选 Agent 时使用 `.tekon/config.yaml` 的 
 
 v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
 
-首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行 `standard-delivery` 完整流程。更新用 `tekon update`。
+首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行轻量 `lightweight-delivery`（plan→实现→人工确认），需要完整评审/QA 全链路时显式选择 `standard-delivery`。更新用 `tekon update`。
 
 ![Tekon Web：输入需求，查看执行前计划与检查配置](docs/reviews/evidence/2026-09-06-r27/pages/1440-sessions.png)
 
@@ -45,12 +45,13 @@ flowchart LR
 
 | 你要做什么 | 选择的模板 |
 | --- | --- |
-| 完整研发交付（默认） | `standard-delivery` |
+| 小改动快速实现 + 人工把关（默认） | `lightweight-delivery` |
+| 完整研发交付、需要可审 PR 与 QA 签署 | `standard-delivery`（显式选择） |
 | 开发功能 / 修复缺陷 | `standard-feature` / `bugfix` |
 | 补测试 / 改文档 | `test-improvement` / `docs-update` |
 | 只做方案 | `plan-only` |
 
-运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。
+运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。默认的 `lightweight-delivery` 缺少 QA/治理门禁与验收证据，readiness 结构性恒不满足、不会自动产出 PR；要走到可审 PR 请显式使用 `standard-delivery`。
 
 ## 日常操作
 

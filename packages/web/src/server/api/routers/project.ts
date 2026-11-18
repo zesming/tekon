@@ -35,6 +35,7 @@ import {
   createWorktreeManager,
   type WorkflowTemplate,
   type SessionServiceStartRunResult,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import type {
@@ -495,7 +496,7 @@ export function createProjectRouter(
         assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
         const templateName = isGoal
           ? 'goal'
-          : runInput.template?.trim() || 'standard-delivery';
+          : runInput.template?.trim() || DEFAULT_WORKFLOW_TEMPLATE_ID;
         assertSafeName(templateName, 'template');
         if (!isGoal && !runInput.planDigest?.trim()) {
           throw new ApiError(

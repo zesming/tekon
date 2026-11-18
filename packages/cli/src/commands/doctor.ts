@@ -12,6 +12,7 @@ import {
   type ProbedProvider,
   type ProviderProbe,
   type TekonRepoConfig,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
@@ -94,7 +95,7 @@ export async function commandDoctor(argv: string[], io: CliIO): Promise<number> 
   }
 
   if (initialized) {
-    const workflowName = args.values.workflow ?? 'standard-delivery';
+    const workflowName = args.values.workflow ?? DEFAULT_WORKFLOW_TEMPLATE_ID;
     lines.push('', `工作流检查（${workflowName}）:`);
     try {
       const template = loadWorkflowByName(

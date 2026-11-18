@@ -514,6 +514,10 @@ describe('web write authorization', () => {
     const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
+      // PD-08：默认模板已改为 lightweight-delivery（带人工确认暂停）；
+      // 这些用例验证 draft→run 授权链路并期望自动跑到 passed，显式指定
+      // 可在 mock 下自动完成的 standard-delivery。
+      template: 'standard-delivery',
       agent: 'mock',
       token: fixture.sessionToken,
     });
@@ -630,6 +634,10 @@ describe('web write authorization', () => {
     const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
+      // PD-08：默认模板已改为 lightweight-delivery（带人工确认暂停）；
+      // 这些用例验证 draft→run 授权链路并期望自动跑到 passed，显式指定
+      // 可在 mock 下自动完成的 standard-delivery。
+      template: 'standard-delivery',
       agent: 'mock',
       token: fixture.sessionToken,
     });
@@ -662,6 +670,10 @@ describe('web write authorization', () => {
     const started = await startRun(api, {
       demandText: '',
       demandShapePath: shaped.shapePath,
+      // PD-08：默认模板已改为 lightweight-delivery（带人工确认暂停）；
+      // 这些用例验证 draft→run 授权链路并期望自动跑到 passed，显式指定
+      // 可在 mock 下自动完成的 standard-delivery。
+      template: 'standard-delivery',
       agent: 'mock',
       token: fixture.sessionToken,
     });

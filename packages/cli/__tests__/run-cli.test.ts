@@ -140,6 +140,8 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       runCli(
         [
           'run',
+          '--template',
+          'standard-delivery',
           '--demand-file',
           shapePath!,
           '--agent',
@@ -908,7 +910,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       await expect(runCli(['eval', 'demand-shape'], io)).resolves.toBe(0);
       expect(io.takeStdout()).toContain('ready=true');
 
-      await expect(runCli(['run', '--agent', 'mock'], io)).resolves.toBe(0);
+      await expect(
+        runCli(
+          ['run', '--template', 'standard-delivery', '--agent', 'mock'],
+          io,
+        ),
+      ).resolves.toBe(0);
       const standardOutput = io.takeStdout();
       const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         standardOutput,
@@ -1211,7 +1218,15 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
 
       await expect(
         runCli(
-          ['run', '--demand-file', cwdRelativeShapePath, '--agent', 'mock'],
+          [
+            'run',
+            '--template',
+            'standard-delivery',
+            '--demand-file',
+            cwdRelativeShapePath,
+            '--agent',
+            'mock',
+          ],
           io,
         ),
       ).resolves.toBe(0);

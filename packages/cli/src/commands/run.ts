@@ -20,6 +20,7 @@ import {
   type RunAdmissionEnvelope,
   readTekonConfig,
   resolveDefaultAgent,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
@@ -159,7 +160,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
   const isGoal = Boolean(args.values.goal);
   const templateName = isGoal
     ? 'goal'
-    : (args.values.template ?? 'standard-delivery');
+    : (args.values.template ?? DEFAULT_WORKFLOW_TEMPLATE_ID);
   const runtime = providerRuntimeFromCliOptions(args.values);
   const demandIntent = suppliedDemandFile
     ? {
@@ -193,9 +194,17 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
     try {
       result = await ctx.sessionService.lookupRun(lookupInput);
       if (!result) {
-        const { demandText } = resolveDemand();
+        const { demandText, shapedDemand } = resolveDemand();
         const agent =
           args.values.agent ?? resolveDefaultAgent(readTekonConfig(repoPath));
+        // PD-08：生效模板只在新受理分支内惰性解析，绝不改动 requestEnvelope
+        // （受理身份是 requestId+envelope hash，重放时 Draft 可能已删/改）。
+        // 优先级：显式 --template > 已批准 Draft 的 recommendedTemplate > 缺省默认。
+        const effectiveTemplateName = isGoal
+          ? 'goal'
+          : (args.values.template ??
+            shapedDemand?.recommendedTemplate ??
+            templateName);
         const runModeIssue = getRunModePolicyIssue({
           agent,
           kind: isGoal ? 'goal' : 'workflow',
@@ -216,7 +225,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         const template = isGoal
           ? loadWorkflowTemplate({ name: 'goal' })
           : loadWorkflowByName(
-              templateName,
+              effectiveTemplateName,
               join(repoPath, '.tekon', 'workflows'),
             );
         const runPlan = captureRunPlan(repoPath, template, {
@@ -226,7 +235,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
           timeoutMs: runtime?.timeoutMs,
           noProgressTimeoutMs: runtime?.noProgressTimeoutMs,
           progressHeartbeatMs: runtime?.progressHeartbeatMs,
-          templateId: templateName,
+          templateId: effectiveTemplateName,
           templateVersion: template.version,
           mode: isGoal ? 'goal' : 'workflow',
         });
@@ -235,7 +244,7 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
           requestEnvelope,
           demandText,
           mode: isGoal ? 'goal' : 'workflow',
-          templateName,
+          templateName: effectiveTemplateName,
           ...(isGoal ? {} : { workflowSpec: template }),
           planDigest: runPlan.digest,
           engine: {
@@ -323,13 +332,29 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
     const failure = findLatestRunFailure(
       await ctx.repositories.listAuditEvents(result.runId),
     );
+    // 实际生效模板以持久化计划快照为准：fresh 受理与重放都已把生效模板落库，
+    // 而信封里的 templateName 是静态缺省，Draft recommendedTemplate 回落时
+    // 二者会不一致（执行用的是生效模板，展示也必须用同一个）。
+    let displayTemplate = templateName;
+    if (workflow?.planSnapshot) {
+      try {
+        const frozen = JSON.parse(workflow.planSnapshot) as {
+          template?: { id?: unknown };
+        };
+        if (typeof frozen.template?.id === 'string') {
+          displayTemplate = frozen.template.id;
+        }
+      } catch {
+        // 快照异常时回落到信封模板，展示问题不影响运行结果主流程。
+      }
+    }
     io.stdout.write(
       [
         result.replayed ? '↩ 已受理请求，继续观察原运行' : '',
         runOutcomeHeader(status, pendingHuman.length > 0),
         `  Run ID: ${result.runId}`,
         `  状态: ${status}`,
-        `  模板: ${templateName}`,
+        `  模板: ${displayTemplate}`,
         pendingHuman.length > 0 ? '  人工确认: pending' : '',
         ...runOutcomeDetails({
           status,

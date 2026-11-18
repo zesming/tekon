@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import type { TekonDatabase } from "./connection.js";
 import type { WriteQueue } from "./write-queue.js";
 import { canonicalJson } from "../workflow/run-plan.js";
+import { DEFAULT_WORKFLOW_TEMPLATE_ID } from "../workflow/template.js";
 import { appendAuditEventTxn } from "../audit/logger.js";
 import { FALLBACK_DEFAULT_AGENT, passthroughEnvAuditPayload } from "../config/tekon-config.js";
 import { sessionEventSchema, type SessionEvent } from "../types/session-contract.js";
@@ -57,7 +58,7 @@ export function buildRunAdmissionEnvelope(input: {
     scope: input.scope,
     demandTextOrRef: input.demandTextOrRef.trim(),
     mode,
-    templateName: mode === "goal" ? "goal" : (input.templateName?.trim() || "standard-delivery"),
+    templateName: mode === "goal" ? "goal" : (input.templateName?.trim() || DEFAULT_WORKFLOW_TEMPLATE_ID),
     profile: input.profile ?? "human-web",
     agent: input.agent ?? FALLBACK_DEFAULT_AGENT,
     allowDirtyBase: Boolean(input.allowDirtyBase),
@@ -389,7 +390,7 @@ export function createAdmissionStore(options: {
           runId: data.runId,
           type: "run.started",
           payload: {
-            templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
+            templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : DEFAULT_WORKFLOW_TEMPLATE_ID),
             mode: data.demandSource ?? "template",
             kind: data.workflowKind,
             ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),
@@ -457,7 +458,7 @@ export function createAdmissionStore(options: {
             timestamp: createdAt,
             payload: {
               runId: data.runId,
-              templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : "standard-delivery"),
+              templateId: data.templateId ?? (data.workflowKind === "goal" ? "goal" : DEFAULT_WORKFLOW_TEMPLATE_ID),
               mode: data.demandSource ?? "template",
               kind: data.workflowKind,
               ...passthroughEnvAuditPayload(data.providerSnapshot?.configSummary),

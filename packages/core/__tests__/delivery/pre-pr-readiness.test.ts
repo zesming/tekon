@@ -321,6 +321,40 @@ describe('evaluatePrePullRequestReadiness', () => {
     expect(templateCheck!.evidence).toContain('custom-template');
   });
 
+  it('lightweight-delivery run stays structurally not PR-ready with exactly six red checks', async () => {
+    // 等价于一个完全跑通的 lightweight-delivery：workflow passed、审计链有效、
+    // 无待审批人工，但只有 schema/human 门禁——没有命令型/治理/安全门禁，也没有
+    // 验收/QA 证据。钉住「默认模板不得自动产出 PR」的产品边界（手册 §5.10）。
+    await createBaseFixtures({ templateId: 'lightweight-delivery' });
+
+    const result = await evaluatePrePullRequestReadiness({
+      repositories: repos, audit, runId: 'run_1', repoPath,
+    });
+
+    expect(result.ready).toBe(false);
+    const red = result.checks
+      .filter((c) => !c.passed)
+      .map((c) => c.id)
+      .sort();
+    const green = result.checks
+      .filter((c) => c.passed)
+      .map((c) => c.id)
+      .sort();
+    expect(red).toEqual(
+      [
+        'acceptance-criteria-evidenced',
+        'qa-release-signoff-passed',
+        'security-scans-passed',
+        'standard-delivery-template',
+        'standard-governance-gates-passed',
+        'validation-gates-passed',
+      ].sort(),
+    );
+    expect(green).toEqual(
+      ['audit-valid', 'no-pending-human-gates', 'workflow-passed'].sort(),
+    );
+  });
+
   it('fails workflow-passed check when workflow status is not passed', async () => {
     await createBaseFixtures({ workflowStatus: 'failed' });
     for (const gateType of ['build', 'test', 'lint', 'e2e-pass']) {

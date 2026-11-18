@@ -3,21 +3,25 @@ import { useNavigate } from 'react-router';
 
 import { useQuery, useSessionToken } from '../../hooks/index.js';
 import { useRunAdmission } from '../../hooks/use-run-admission.js';
+import {
+  AGENT_LABELS,
+  AGENT_OPTIONS,
+  useRunPlanSelection,
+} from '../../hooks/use-run-plan-selection.js';
 import { AdmissionNotice } from '../runs/AdmissionNotice.js';
 import { PlanCommandBindings } from '../runs/PlanCommandBindings.js';
 import { usePlanCommandComparison } from '../../hooks/use-plan-command-comparison.js';
 import { rpc } from '../../lib/rpc-client.js';
-import { authScope, queryKeys } from '../../lib/query-keys.js';
+import { authScope } from '../../lib/query-keys.js';
 import { routes } from '../../lib/route-paths.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 
 // Phase 3 3b: composer for starting a new session-backed run.
 //
-// D5: this does NOT inject run-time messages (follow-up/steer) — that needs
-// AgentHandle.followUp/steer, deferred to phase 2b (throws NotSupportedYet).
-// The composer starts a new run; run-time control (pause/cancel/resume) lives
-// in the right rail. The human-first path now loads the same server-derived
-// workflow plan as the advanced form before enabling the launch action.
+// PD-08：首页现在可选择运行模式（受控交付/Goal）、工作流模板与执行代理，
+// 计划预览随选择刷新；不再固定 standard-delivery。模板留空时由服务端回落
+// 轻量默认 lightweight-delivery，standard-delivery 改为在下拉中显式选择。
+// 本组件不注入 run-time 消息（follow-up/steer 仍不支持）。
 
 export function SessionComposer() {
   const { token } = useSessionToken();
@@ -25,26 +29,48 @@ export function SessionComposer() {
   const [text, setText] = useState('');
 
   const {
+    mode,
+    setMode,
+    template,
+    setTemplate,
+    agent,
+    setAgent,
+    workflows,
+    effectiveTemplate,
+    planKey,
+  } = useRunPlanSelection(token);
+
+  const {
     data: plan,
     isLoading: planLoading,
     error: planError,
     refetch: refetchPlan,
-  } = useQuery<RpcProcedureMap['workflow.plan']['output']>(
-    queryKeys.workflowPlan('workflow'),
-    () => rpc.call('workflow.plan', { mode: 'workflow' }),
+  } = useQuery<RpcProcedureMap['workflow.plan']['output']>(planKey, () =>
+    rpc.call('workflow.plan', {
+      mode,
+      template: effectiveTemplate,
+      // 留空时服务端解析同一配置默认（PD-24）。
+      ...(agent ? { agent } : {}),
+      ...(mode === 'workflow' ? { profile: 'human-web' as const } : {}),
+    }),
   );
   const planComparison = usePlanCommandComparison(
-    JSON.stringify([authScope(token), queryKeys.workflowPlan('workflow')]),
+    JSON.stringify([authScope(token), planKey]),
     plan,
     !planLoading && !planError,
   );
 
   const admission = useRunAdmission({
     token,
-    payload: { demandText: text.trim(), planDigest: plan?.digest },
+    payload: {
+      demandText: text.trim(),
+      planDigest: plan?.digest,
+      ...(mode === 'goal' ? { mode: 'goal' as const } : {}),
+      ...(mode === 'workflow' && template ? { template } : {}),
+      ...(agent ? { agent } : {}),
+    },
     onAccepted: async (result) => {
       if (result.sessionId) {
-        // 成功离开首页会卸载表单；不让旧导航的 continuation 清空后来输入。
         await navigate(routes.session(result.sessionId));
       }
     },
@@ -71,6 +97,66 @@ export function SessionComposer() {
 
   return (
     <div className="session-composer" aria-busy={admission.isPending}>
+      <div className="session-composer-controls form-row start-run-options">
+        <div className="form-group">
+          <label className="form-label" htmlFor="composer-mode">
+            运行模式
+          </label>
+          <select
+            id="composer-mode"
+            className="select"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as 'workflow' | 'goal')}
+          >
+            <option value="workflow">受控交付（Workflow）</option>
+            <option value="goal">一次性任务（Goal）</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor="composer-template">
+            工作流模板
+          </label>
+          <select
+            id="composer-template"
+            className="select"
+            value={template}
+            disabled={mode === 'goal'}
+            onChange={(e) => setTemplate(e.target.value)}
+          >
+            <option value="">
+              {mode === 'goal' ? '— Goal 不使用模板 —' : '— 默认（轻量）—'}
+            </option>
+            {workflows.map((wf) => (
+              <option key={wf.id} value={wf.id}>
+                {wf.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor="composer-agent">
+            执行代理
+          </label>
+          <select
+            id="composer-agent"
+            className="select"
+            value={agent}
+            onChange={(e) => setAgent(e.target.value)}
+          >
+            {agent === '' && (
+              <option value="" disabled>
+                加载默认代理…
+              </option>
+            )}
+            {AGENT_OPTIONS.map((a) => (
+              <option key={a} value={a}>
+                {AGENT_LABELS[a]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <textarea
         className="input session-composer-input"
         aria-label="新建受控交付任务"
@@ -82,7 +168,7 @@ export function SessionComposer() {
         aria-invalid={Boolean(admission.error)}
         placeholder={
           token
-            ? '描述需要受控交付的需求（将运行 PM / RD / QA / Reviewer 全链路）…'
+            ? '描述你的需求…默认走轻量 plan→实现→人工确认，可在上方切换模板/代理'
             : '请先在顶栏设置连接凭据'
         }
         value={text}
@@ -156,8 +242,7 @@ export function SessionComposer() {
           id="session-composer-hint"
           className="text-muted session-composer-hint"
         >
-          当前入口会启动 standard-delivery
-          受控交付全链路；轻量协作、会话内追问与转向尚未开放
+          默认轻量模板；需要完整评审/QA 全链路请在上方显式选择 standard-delivery
         </span>
         <button
           type="button"
