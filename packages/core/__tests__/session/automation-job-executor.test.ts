@@ -25,6 +25,10 @@ import {
   type SessionEventStore,
   type TekonRepositories,
 } from '../../src/index.js';
+import {
+  fixtureDeliveryTemplate,
+  frozenPlanFields,
+} from '../helpers/frozen-plan.js';
 
 // 4d/4e: the automation executor drives non-workflow, side-effect-light job
 // kinds (delivery-auto-prepare, readiness-evaluate). Its contract (design M1):
@@ -133,12 +137,28 @@ async function seedDeliveryReadyRun(
     repoPath,
     createdAt: now,
   });
+  // PD-21：冻结快照声明与本函数 seed 的门禁（test/e2e + 五类治理门）对齐。
+  const frozen = frozenPlanFields(
+    repoPath,
+    fixtureDeliveryTemplate({
+      id: 'automation-delivery-fixture',
+      commandGates: ['test', 'e2e-pass'],
+      governanceGates: [
+        'independent-review',
+        'role-scope',
+        'ac-evidence',
+        'qa-signoff',
+        'process-completeness',
+      ],
+    }),
+  );
   await repositories.createWorkflowInstance({
     id: runId,
     projectId: `project_${runId}`,
     demandId: `demand_${runId}`,
     status: 'passed',
     kind: 'workflow',
+    ...frozen,
     createdAt: now,
     updatedAt: now,
   });

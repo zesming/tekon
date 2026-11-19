@@ -20,6 +20,7 @@ import { EmptyState } from '../components/ui/EmptyState.js';
 import { CodeBlock } from '../components/ui/CodeBlock.js';
 import { DeliveryPipeline } from '../components/delivery/DeliveryPipeline.js';
 import { DiffViewer } from '../components/delivery/DiffViewer.js';
+import { checkLabel, getCheckSuggestion } from '../lib/check-labels.js';
 
 export function DeliveryPage() {
   const { token } = useSessionToken();
@@ -77,11 +78,25 @@ export function DeliveryPage() {
   );
 
   // ── Derived state ──────────────────────────────────────────────────────
+  // PD-21：Prepare 可用性与 core readiness 同源（review  surface 已携带
+  // 冻结快照声明的裁决结果），不再只看 workflow 状态。
+  const prePrReadiness = review?.prePullRequestReadiness ?? null;
   const canPrepare = useMemo(() => {
     if (!latestRunId || !token) return false;
-    const wfStatus = review?.workflowStatus;
-    return wfStatus === 'passed' || wfStatus === 'completed';
-  }, [latestRunId, token, review?.workflowStatus]);
+    return prePrReadiness?.ready === true;
+  }, [latestRunId, token, prePrReadiness?.ready]);
+
+  // 禁用时取首个未通过检查的中文标签与建议作为原因。
+  const prepareBlockedReason = useMemo(() => {
+    if (canPrepare || !prePrReadiness) return null;
+    const firstFailed = prePrReadiness.checks.find((check) => !check.passed);
+    if (!firstFailed) return null;
+    return {
+      title: checkLabel(firstFailed.id),
+      suggestion: getCheckSuggestion(firstFailed.id),
+      evidence: firstFailed.evidence,
+    };
+  }, [canPrepare, prePrReadiness]);
 
   const canCreatePr = useMemo(() => {
     if (!latestRunId || !token) return false;
@@ -505,6 +520,35 @@ export function DeliveryPage() {
                 </span>
               )}
             </div>
+            {/* PD-21：声明驱动的逐项准备度裁决，失败项附中文原因 */}
+            {dryRunMutation.data.readinessChecks.length > 0 ? (
+              <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-l)', paddingTop: '8px' }}>
+                <div style={{ fontWeight: 600, marginBottom: '6px' }}>
+                  交付准备度检查
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px' }}>
+                  {dryRunMutation.data.readinessChecks.map((check) => {
+                    const label = checkLabel(check.id);
+                    const suggestion = getCheckSuggestion(check.id);
+                    return (
+                      <li
+                        key={check.id}
+                        style={{
+                          color: check.passed ? 'var(--text-s)' : 'var(--fail)',
+                          marginBottom: '2px',
+                        }}
+                        title={check.evidence}
+                      >
+                        {check.passed ? '✓' : '✕'} {label}
+                        {!check.passed && suggestion
+                          ? ` — ${suggestion}`
+                          : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </Card>
       ) : null}
@@ -599,14 +643,29 @@ export function DeliveryPage() {
             </button>
 
             {/* Prepare PR */}
+            {/* UI-03：title 承载内联文案放不下的 evidence 详情，避免与内联原因重复 */}
             <button
               type="button"
               className="btn btn-secondary"
               disabled={!canPrepare || prepareMutation.isPending}
+              title={prepareBlockedReason?.evidence}
               onClick={handlePrepare}
             >
               {prepareMutation.isPending ? 'Preparing…' : 'Prepare PR'}
             </button>
+
+            {/* PD-21：不可准备时展示首个失败项的中文原因 */}
+            {prepareBlockedReason ? (
+              <span
+                className="text-sm text-muted"
+                style={{ fontSize: '12px', maxWidth: '520px' }}
+              >
+                {prepareBlockedReason.title}
+                {prepareBlockedReason.suggestion
+                  ? `：${prepareBlockedReason.suggestion}`
+                  : null}
+              </span>
+            ) : null}
 
             {/* Create PR */}
             {!hasPrUrl ? (

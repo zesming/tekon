@@ -21,6 +21,10 @@ import {
   openTekonDatabase,
   writeDefaultRepoProfile,
 } from '../../src/index.js';
+import {
+  fixtureDeliveryTemplate,
+  frozenPlanFields,
+} from '../helpers/frozen-plan.js';
 
 describe('work review surface', () => {
   const tempDirs: string[] = [];
@@ -42,7 +46,7 @@ describe('work review surface', () => {
     migrateDatabase(db);
     const repositories = createRepositories(db);
     const audit = createAuditLogger({ repositories });
-    await seedPassedRun({ repoPath, repositories, audit });
+    await seedPassedRun({ repoPath, repositories, audit, deliverableSnapshot: true });
 
     const gatesDir = join(repoPath, '.tekon', 'runs', 'run_1', 'gates');
     mkdirSync(gatesDir, { recursive: true });
@@ -308,6 +312,94 @@ describe('work review surface', () => {
     expect(surface.nextCommands).not.toContain(
       'tekon delivery create-pr --approve-human',
     );
+    db.close();
+  });
+
+  it('maps worktree leases onto the delivery surface without leaking internal fields', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-review-worktrees-'));
+    tempDirs.push(repoPath);
+    seedGitRepo(repoPath);
+    mkdirSync(join(repoPath, '.tekon'), { recursive: true });
+    writeDefaultRepoProfile(repoPath);
+
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    await seedPassedRun({
+      repoPath,
+      repositories,
+      audit,
+      templateId: 'standard-feature',
+    });
+
+    const worktreePath = join(
+      repoPath,
+      '.tekon',
+      'worktrees',
+      'run_1',
+      'lease-active',
+    );
+    await repositories.recordWorktreeLease({
+      id: 'lease_active',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      role: 'rd',
+      repoPath,
+      worktreePath,
+      branchName: 'tekon/run_1/node_1-lease-active',
+      baseHead: 'abc123',
+      createdAt: '2026-06-08T00:00:00.000Z',
+    });
+    await repositories.recordWorktreeLease({
+      id: 'lease_released',
+      runId: 'run_1',
+      nodeId: 'node_2',
+      role: 'qa',
+      repoPath,
+      worktreePath: join(repoPath, '.tekon', 'worktrees', 'run_1', 'lease-released'),
+      branchName: 'tekon/run_1/node_2-lease-released',
+      createdAt: '2026-06-08T00:00:01.000Z',
+      releasedAt: '2026-06-08T00:05:00.000Z',
+    });
+
+    const surface = await createWorkReviewSurface({
+      repoPath,
+      repositories,
+      audit,
+      runId: 'run_1',
+    });
+
+    expect(surface.delivery.worktrees).toEqual([
+      {
+        id: 'lease_active',
+        nodeId: 'node_1',
+        role: 'rd',
+        worktreePath,
+        branchName: 'tekon/run_1/node_1-lease-active',
+        createdAt: '2026-06-08T00:00:00.000Z',
+        releasedAt: null,
+      },
+      {
+        id: 'lease_released',
+        nodeId: 'node_2',
+        role: 'qa',
+        worktreePath: join(
+          repoPath,
+          '.tekon',
+          'worktrees',
+          'run_1',
+          'lease-released',
+        ),
+        branchName: 'tekon/run_1/node_2-lease-released',
+        createdAt: '2026-06-08T00:00:01.000Z',
+        releasedAt: '2026-06-08T00:05:00.000Z',
+      },
+    ]);
+    // 内部字段（baseHead/repoPath/runId）不得出现在 review 形状中。
+    expect(surface.delivery.worktrees[0]).not.toHaveProperty('baseHead');
+    expect(surface.delivery.worktrees[0]).not.toHaveProperty('repoPath');
+    expect(surface.delivery.worktrees[0]).not.toHaveProperty('runId');
     db.close();
   });
 
@@ -878,6 +970,8 @@ async function seedPassedRun(input: {
   repositories: ReturnType<typeof createRepositories>;
   audit: ReturnType<typeof createAuditLogger>;
   templateId?: string;
+  /** PD-21：true 时写入与本文件门禁（test + 五类治理门）对齐的冻结可交付快照。 */
+  deliverableSnapshot?: boolean;
 }) {
   await input.repositories.createDemand({
     id: 'demand_1',
@@ -891,11 +985,28 @@ async function seedPassedRun(input: {
     repoPath: input.repoPath,
     createdAt: '2026-06-08T00:00:00.000Z',
   });
+  const frozen = input.deliverableSnapshot
+    ? frozenPlanFields(
+        input.repoPath,
+        fixtureDeliveryTemplate({
+          id: 'review-surface-fixture',
+          commandGates: ['test'],
+          governanceGates: [
+            'independent-review',
+            'role-scope',
+            'ac-evidence',
+            'qa-signoff',
+            'process-completeness',
+          ],
+        }),
+      )
+    : {};
   await input.repositories.createWorkflowInstance({
     id: 'run_1',
     projectId: 'project_1',
     demandId: 'demand_1',
     status: 'passed',
+    ...frozen,
     createdAt: '2026-06-08T00:00:00.000Z',
     updatedAt: '2026-06-08T00:00:01.000Z',
   });

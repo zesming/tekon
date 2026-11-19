@@ -111,6 +111,10 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     )?.[1];
     expect(deliveryRunId).toBeTruthy();
     expect(standardOutput).toContain('状态: passed');
+    // PD-21：运行结束即输出与 review surface 同源的交付指引，可交付运行
+    // 直接给出 prepare 下一步。
+    expect(standardOutput).toContain('交付指引:');
+    expect(standardOutput).toContain('tekon delivery prepare');
 
     // CD-23：bugfix 模板在人工门禁暂停，退出码为 3 而非 0。
     const gatedResult = runCliResult(
@@ -132,6 +136,9 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
     expect(gatedOutput).toContain('人工确认: pending');
+    // PD-21：暂停中的运行同样输出指引块，并明示当前不可进入 PR 准备。
+    expect(gatedOutput).toContain('交付指引:');
+    expect(gatedOutput).toContain('当前不可进入 PR 准备');
 
     const approveOutput = runCli(
       cliPath,
@@ -147,6 +154,18 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     );
     expect(approveOutput).toContain(`runId=${gatedRunId}`);
     expect(approveOutput).toContain('status=passed');
+
+    // PD-21/T1：bugfix 是自带 delivery 声明的可交付模板，审批通过后
+    // 按自身声明裁决即可 prepare，不再被 standard-delivery 专属项挡红。
+    const bugfixPrepareOutput = runCli(
+      cliPath,
+      ['delivery', 'prepare', '--run-id', gatedRunId!, '--repo', repoPath],
+      repoPath,
+    );
+    expect(bugfixPrepareOutput).toContain(`runId=${gatedRunId}`);
+    expect(bugfixPrepareOutput).toContain('branch=tekon-delivery/');
+    expect(bugfixPrepareOutput).toContain('交付指引:');
+    expect(bugfixPrepareOutput).toContain('下一步:');
 
     const deliveryOutput = runCli(
       cliPath,
@@ -166,6 +185,15 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     expect(prepareOutput).toContain(`runId=${deliveryRunId}`);
     expect(prepareOutput).toContain('branch=tekon-delivery/');
     expect(prepareOutput).toContain('requiresHumanApproval=true');
+    // PD-21：prepare 后指引块含分支/落点/下一步与本地合入提示。
+    expect(prepareOutput).toContain('交付指引:');
+    expect(prepareOutput).toContain('交付分支: tekon-delivery/');
+    expect(prepareOutput).toContain('PR 包:');
+    expect(prepareOutput).toContain('PR Body:');
+    expect(prepareOutput).toContain('下一步:');
+    expect(prepareOutput).toContain(
+      `git merge tekon-delivery/${deliveryRunId}`,
+    );
     expect(
       existsSync(join(repoPath, '.tekon', 'runs', deliveryRunId!, 'delivery')),
     ).toBe(true);
@@ -349,7 +377,10 @@ function runCli(
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-release-e2e-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  // 显式 -b main：runner 无 init.defaultBranch 全局配置时裸 init 会落到
+  // master，导致 baseBranchForRepo 回退的 main ref 解析失败（PD-21 的
+  // git merge 门控断言在 CI 上拦截了该环境依赖）。
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });

@@ -57,12 +57,25 @@ export interface ReviewDiffSummary {
   reason?: string;
 }
 
+export interface ReviewWorktreeLease {
+  id: string;
+  nodeId: string;
+  role: string;
+  worktreePath: string;
+  branchName: string;
+  createdAt: string;
+  /** null 表示租约仍有效（worktree 仍在使用）。 */
+  releasedAt: string | null;
+}
+
 export interface ReviewDeliverySurface {
   status: string;
   prUrl: string | null;
   package: TextPreview | null;
   prBody: TextPreview | null;
   diff: ReviewDiffSummary;
+  /** PD-21：本 run 各节点占用过的 worktree，供 Web/CLI 展示交付落点。 */
+  worktrees: ReviewWorktreeLease[];
 }
 
 export type ReviewEvidenceLinkKind =
@@ -134,6 +147,7 @@ export async function createWorkReviewSurface(input: {
     gates,
     deliveryPr,
     auditEvents,
+    worktreeLeases,
   ] = await Promise.all([
     evaluateWorkReadiness({
       repositories: input.repositories,
@@ -151,6 +165,7 @@ export async function createWorkReviewSurface(input: {
     input.repositories.listGateResults(input.runId),
     input.repositories.getDeliveryPullRequest(input.runId),
     input.repositories.listAuditEvents(input.runId),
+    input.repositories.listWorktreeLeases(input.runId),
   ]);
 
   const deliveryPaths = deliveryPathsForRun(input.repoPath, input.runId);
@@ -173,6 +188,15 @@ export async function createWorkReviewSurface(input: {
       branch: deliveryPr?.branch,
       baseBranch: deliveryPr?.baseBranch,
     }),
+    worktrees: worktreeLeases.map((lease) => ({
+      id: lease.id,
+      nodeId: lease.nodeId,
+      role: lease.role,
+      worktreePath: lease.worktreePath,
+      branchName: lease.branchName,
+      createdAt: lease.createdAt,
+      releasedAt: lease.releasedAt ?? null,
+    })),
   } satisfies ReviewDeliverySurface;
 
   return {

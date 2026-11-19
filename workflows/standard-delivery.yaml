@@ -5,6 +5,20 @@ retry:
   maxAttempts: 2
   backoffMs: 500
   strategy: fixed
+# PD-21：模板自声明出 PR 所需证据，readiness 按此声明校验（全集）。
+delivery:
+  deliverable: true
+  requirements:
+    commandGates: [build, lint, test]
+    governanceGates:
+      - independent-review
+      - role-scope
+      - ac-evidence
+      - qa-signoff
+      - process-completeness
+    qaReleaseSignoff: true
+    securityScan: true
+    acceptanceEvidence: true
 phases:
   - id: pm-scope
     name: PM Scope

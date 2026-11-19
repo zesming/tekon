@@ -1070,6 +1070,13 @@ describe('delivery.dryRun', () => {
     expect(result.readyForPrepare).toBe(false);
     expect(result.pendingHumanDecisions).toBeGreaterThan(0);
 
+    // PD-21：手工播种的旧 run 无冻结快照，fail-closed 为不可交付，
+    // 而不是抛出导致整个 Delivery 页面不可用。
+    const notDeclared = result.readinessChecks.find(
+      (check) => check.id === 'delivery-not-declared',
+    );
+    expect(notDeclared).toMatchObject({ passed: false });
+
     await api.close();
   });
 
@@ -1115,6 +1122,43 @@ describe('delivery.dryRun', () => {
       dryRun: true,
       pendingHumanDecisions: 0,
     });
+
+    await api.close();
+  }, 30_000);
+
+  it('adjudicates runs on a template without delivery declaration as not deliverable', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+
+    // plan-only 模板没有 delivery 声明块：即便运行正常推进，也结构性不可交付（PD-21）。
+    // 其含人工门禁，mock run 会停在 paused；暂停不影响冻结快照中的声明裁决。
+    const started = await startRun(api, {
+      demandText: 'Planning-only runs must not be deliverable.',
+      template: 'plan-only',
+      agent: 'mock',
+      token: fixture.sessionToken,
+    });
+
+    await waitForRunStatus(fixture.projectRoot, started.run.id, [
+      'paused',
+      'passed',
+    ]);
+
+    const result = await api.delivery.dryRun({
+      runId: started.run.id,
+      token: fixture.sessionToken,
+    });
+
+    expect(result.readyForPrepare).toBe(false);
+    const notDeclared = result.readinessChecks.find(
+      (check) => check.id === 'delivery-not-declared',
+    );
+    expect(notDeclared).toBeDefined();
+    expect(notDeclared?.passed).toBe(false);
+    // 声明缺失时短路为单一检查，不产出会误导用户的逐项绿灯。
+    expect(result.readinessChecks).toHaveLength(1);
+    expect(result.readinessChecks[0]?.id).toBe('delivery-not-declared');
 
     await api.close();
   }, 30_000);

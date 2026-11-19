@@ -51,7 +51,7 @@ flowchart LR
 | 补测试 / 改文档 | `test-improvement` / `docs-update` |
 | 只做方案 | `plan-only` |
 
-运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。默认的 `lightweight-delivery` 缺少 QA/治理门禁与验收证据，readiness 结构性恒不满足、不会自动产出 PR；要走到可审 PR 请显式使用 `standard-delivery`。
+运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。能否交付由冻结计划中的模板 `delivery:` 声明裁决：五个产代码模板（`standard-delivery`、`standard-feature`、`bugfix`、`test-improvement`、`docs-update`）按各自声明评审证据并可走向 PR；默认的 `lightweight-delivery`、`plan-only` 与 goal 模式没有交付声明，结构性不可交付、不会自动产出 PR，Web Prepare 按钮同步禁用并说明原因。升级到 v0.40.0 前的旧运行需重新发起才能交付。
 
 ## 日常操作
 

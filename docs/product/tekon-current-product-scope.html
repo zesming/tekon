@@ -18,7 +18,7 @@
 <tr>
 <td>受控交付 Deliver</td>
 <td>Web 入口或 <code>tekon run</code> 默认进入轻量 <code>lightweight-delivery</code>（plan→实现→人工确认）；<code>standard-delivery</code> 等其他内置或自定义模板显式选择</td>
-<td>审阅角色产物、Gate 和 diff；Run 通过不等于 PR/CI 已就绪，轻量模板 readiness 恒不满足、不自动产出 PR</td>
+<td>审阅角色产物、Gate 和 diff；Run 通过不等于 PR/CI 已就绪。能否交付由冻结计划中的模板 <code>delivery:</code> 声明裁决：五个产代码模板可按自身声明走向 PR，轻量/plan-only/goal 无声明、结构性不可交付且不自动产出 PR，Web Prepare 按钮禁用并显示原因</td>
 </tr>
 <tr>
 <td>可靠发起</td>

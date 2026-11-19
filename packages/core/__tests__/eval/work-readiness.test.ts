@@ -13,6 +13,10 @@ import {
   migrateDatabase,
   openTekonDatabase,
 } from '../../src/index.js';
+import {
+  fixtureDeliveryTemplate,
+  frozenPlanFields,
+} from '../helpers/frozen-plan.js';
 
 describe('work readiness evaluation', () => {
   const tempDirs: string[] = [];
@@ -42,11 +46,27 @@ describe('work readiness evaluation', () => {
       repoPath,
       createdAt: '2026-06-05T00:00:00.000Z',
     });
+    // PD-21：冻结快照声明与本夹具门禁（test/build + 五类治理门）对齐。
+    const frozen = frozenPlanFields(
+      repoPath,
+      fixtureDeliveryTemplate({
+        id: 'work-readiness-fixture',
+        commandGates: ['test', 'build'],
+        governanceGates: [
+          'independent-review',
+          'role-scope',
+          'ac-evidence',
+          'qa-signoff',
+          'process-completeness',
+        ],
+      }),
+    );
     await repositories.createWorkflowInstance({
       id: 'run_1',
       projectId: 'project_1',
       demandId: 'demand_1',
       status: 'passed',
+      ...frozen,
       createdAt: '2026-06-05T00:00:00.000Z',
       updatedAt: '2026-06-05T00:00:01.000Z',
     });

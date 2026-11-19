@@ -498,12 +498,23 @@ export const reviewDiffSummarySchema = z.object({
   reason: z.string().optional(),
 });
 
+export const reviewWorktreeLeaseSchema = z.object({
+  id: z.string(),
+  nodeId: z.string(),
+  role: z.string(),
+  worktreePath: z.string(),
+  branchName: z.string(),
+  createdAt: z.string(),
+  releasedAt: z.string().nullable(),
+});
+
 export const reviewDeliverySurfaceSchema = z.object({
   status: z.string(),
   prUrl: z.string().nullable(),
   package: textPreviewSchema.nullable(),
   prBody: textPreviewSchema.nullable(),
   diff: reviewDiffSummarySchema,
+  worktrees: z.array(reviewWorktreeLeaseSchema),
 });
 
 export const reviewEvidenceGroupSchema = z.object({
@@ -837,6 +848,15 @@ export const deliveryDryRunOutputSchema = z.object({
   pendingHumanDecisions: z.number(),
   deliveryStatus: z.string(),
   readyForPrepare: z.boolean(),
+  // PD-21：与 core evaluatePrePullRequestReadiness 同源的逐项裁决结果，
+  // 供 Web 在禁用 Prepare 时展示具体原因（check-labels 负责中文文案）。
+  readinessChecks: z.array(
+    z.object({
+      id: z.string(),
+      passed: z.boolean(),
+      evidence: z.string(),
+    }),
+  ),
   dryRun: z.literal(true),
 });
 

@@ -5,6 +5,15 @@ retry:
   maxAttempts: 2
   backoffMs: 250
   strategy: fixed
+# PD-21：可交付模板，含 e2e 命令门；无治理门、暂不要求验收证据。
+delivery:
+  deliverable: true
+  requirements:
+    commandGates: [build, lint, test, e2e-pass]
+    governanceGates: []
+    qaReleaseSignoff: true
+    securityScan: true
+    acceptanceEvidence: false
 phases:
   - id: pm
     name: PM

@@ -68,7 +68,8 @@ describe('RunPlan v3 的完整确认绑定', () => {
     const template = loadBuiltInWorkflowTemplate('bugfix');
     template.phases[1].nodes[0].gates[0].skipReason = 'explicit';
     const plan = projectRunPlan(template);
-    const reordered = { ...plan, template: { phases: template.phases, retryPolicy: template.retryPolicy, version: template.version, name: template.name, id: template.id } };
+    // PD-21：手工重建模板时必须带上 delivery 声明，否则投影缺少该键。
+    const reordered = { ...plan, template: { phases: template.phases, retryPolicy: template.retryPolicy, version: template.version, name: template.name, id: template.id, ...(template.delivery ? { delivery: template.delivery } : {}) } };
     Object.assign(reordered, { ignored: undefined });
     const result = buildPreparedRun({ workflowSpec: template, canonicalPlan: reordered });
     expect(result.planDigest).toBe(plan.digest);

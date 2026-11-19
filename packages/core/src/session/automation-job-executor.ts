@@ -54,8 +54,9 @@ export function createAutomationJobExecutor(deps: {
     runId: string,
     sessionId: string,
   ): Promise<{ status: JobStatus }> {
-    // goal runs never get delivery (standard-delivery readiness is恒red for
-    // them); short-circuit before touching the evidence package.
+    // goal runs never get delivery; PD-21 后能否 prepare 由冻结快照中的
+    // delivery 声明裁决（无声明即 delivery-not-declared），goal 在此短路，
+    // 其余不可交付模板由 createPullRequestPreparation 的 readiness 前置拦截。
     const workflow = await repositories.getWorkflowInstance(runId);
     if (!workflow || workflow.kind === 'goal') {
       return { status: 'done' as JobStatus };

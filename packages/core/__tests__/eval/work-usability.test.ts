@@ -16,6 +16,10 @@ import {
   type TekonRepositories,
   upsertWorkUsabilitySample,
 } from '../../src/index.js';
+import {
+  fixtureDeliveryTemplate,
+  frozenPlanFields,
+} from '../helpers/frozen-plan.js';
 
 describe('work usability evaluation', () => {
   const tempDirs: string[] = [];
@@ -372,11 +376,27 @@ async function seedReadyRun(input: {
     repoPath: input.repoPath,
     createdAt: '2026-06-08T00:00:00.000Z',
   });
+  // PD-21：冻结快照声明与 seedReadyRun 的门禁（test + 五类治理门）对齐。
+  const frozen = frozenPlanFields(
+    input.repoPath,
+    fixtureDeliveryTemplate({
+      id: `work-usability-${input.runId}`,
+      commandGates: ['test'],
+      governanceGates: [
+        'independent-review',
+        'role-scope',
+        'ac-evidence',
+        'qa-signoff',
+        'process-completeness',
+      ],
+    }),
+  );
   await input.repositories.createWorkflowInstance({
     id: input.runId,
     projectId: `project_${input.runId}`,
     demandId: `demand_${input.runId}`,
     status: 'passed',
+    ...frozen,
     createdAt: '2026-06-08T00:00:00.000Z',
     updatedAt: '2026-06-08T00:00:01.000Z',
   });
