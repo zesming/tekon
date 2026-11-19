@@ -1,8 +1,9 @@
 # 变更日志
 
-## 0.39.1 — 2026-11-19
+## 0.39.2 — 2026-11-19
 
-- 修正 web 包依赖归类，消除生产依赖审计的 picomatch ReDoS 误报（GHSA-fc5q-39xc-vjpf，高危，npm 上 `<=4.0.7` 全部受影响、当时无补丁）。`vite` 与 `@vitejs/plugin-react` 是纯构建工具（`src/` 零运行时 import，仅 `vite build`/dev server 使用），原被误置于 `dependencies`，使其传递依赖 `vite → fdir/tinyglobby → picomatch` 被 `pnpm audit --prod` 计入生产图。现移至 `devDependencies`，lockfile 仅依赖归类变化、解析版本零漂移；web 为 private 包且所有 CI 安装均为全量（含 devDeps），构建链不受影响——`vite build` 产物内容哈希与移动前完全一致，frozen-lockfile 安装、web 662 项测试均通过。修复后 `pnpm audit --prod` 与 `audit-production.mjs` 报 0 公告、退出 0，非必需的 Dependency audit 检查转绿。无产品运行时行为变化。
+- 回退未合入的 0.39.1 依赖归类尝试，恢复 `vite`/`@vitejs/plugin-react` 在 web `dependencies` 的生产依赖定位。0.39.1 曾把二者移到 `devDependencies` 以让 `pnpm audit --prod` 排除其传递依赖 picomatch（GHSA-fc5q-39xc-vjpf），但该判断不成立：`packages/web/src/server/http.ts` 在 `tekon ui` dev 模式经 `await import('vite')` 动态加载 Vite 中间件并启用 React 插件，二者是真实运行时依赖；`runtime-audit-scope.test.ts` 也以合同测试钉住「manifest 与 lock importer 均属生产依赖」。回退后产品行为与 0.39.0 完全一致（构建产物哈希不变），仅版本号前向递增以保持历史单调。
+- picomatch ReDoS 公告仍在，但它只经构建/开发链进入、非浏览器运行时面，且 Dependency audit 是不阻塞合并的非必需检查；在 npm 发布含修复的 picomatch 版本前维持现状，待上游补丁后升级，不在审计中静音高危项。
 
 ## 0.39.0 — 2026-11-18
 
