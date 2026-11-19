@@ -17,7 +17,7 @@ export const GATE_TYPE_LABELS: Record<string, string> = {
   schema: '模式校验',
   'independent-review': '独立评审',
   'role-scope': '角色范围',
-  'qa-signoff': 'QA 签收',
+  'qa-signoff': 'QA 签署',
   'process-completeness': '流程完整性',
   'security-scan': '安全扫描',
   human: '人工审批',
@@ -135,9 +135,9 @@ export const CHECK_LABELS: Record<string, CheckLabelEntry> = {
     suggestion: '验收标准缺少证据，补充截图、日志或测试报告后重新评估',
   },
   'qa-release-signoff-passed': {
-    label: 'QA 签收',
-    description: 'QA 签收门禁通过且覆盖所有验收标准',
-    suggestion: 'QA 尚未签收，联系 QA 团队完成发布签收流程',
+    label: 'QA 签署',
+    description: 'QA 签署门禁通过且覆盖所有验收标准',
+    suggestion: 'QA 尚未签署，联系 QA 团队完成发布签署流程',
   },
   'security-scans-passed': {
     label: '安全扫描',
@@ -168,7 +168,7 @@ export const CHECK_LABELS: Record<string, CheckLabelEntry> = {
   },
   'governance-gates-satisfied': {
     label: '治理门禁',
-    description: '模板声明的独立评审、角色范围、验收证据、QA 签收、流程完整性门禁均已通过',
+    description: '模板声明的独立评审、角色范围、验收证据、QA 签署、流程完整性门禁均已通过',
     suggestion: '查看失败的治理门禁，根据报告修复对应问题',
   },
   // PD-21：旧 check id 保留为别名，历史 session_events 仍含这些 id。

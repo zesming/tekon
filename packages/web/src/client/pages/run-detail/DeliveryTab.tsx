@@ -51,6 +51,16 @@ function GuidanceRow({
   );
 }
 
+/**
+ * UI-01：ready 但尚未 prepare（或交付分支 ref 缺失）时给出的提示。
+ * 抽成纯函数以便在无 React 渲染设施下单元测试两种状态。
+ */
+export function branchPendingNote(diff: {
+  available: boolean;
+}): string | null {
+  return diff.available ? null : '分支将在执行 prepare 后创建';
+}
+
 function DeliveryGuidanceCard({ surface }: { surface: ApiWorkReviewSurface }) {
   const { delivery, nextCommands, prePullRequestReadiness } = surface;
   const packagePath = delivery.package?.exists ? delivery.package.path : null;
@@ -91,6 +101,13 @@ function DeliveryGuidanceCard({ surface }: { surface: ApiWorkReviewSurface }) {
         <GuidanceRow label="交付分支">
           <span style={monoRowStyle}>{delivery.diff.branch}</span>
           <span className="text-sm text-muted">（基线 {delivery.diff.baseBranch}）</span>
+          {/* UI-01：ready 但尚未 prepare 时该 ref 还不存在，明示避免幻影分支误导 */}
+          {branchPendingNote(delivery.diff) ? (
+            <span className="text-sm text-muted">
+              {' '}
+              — {branchPendingNote(delivery.diff)}
+            </span>
+          ) : null}
         </GuidanceRow>
 
         {delivery.worktrees.length > 0 ? (

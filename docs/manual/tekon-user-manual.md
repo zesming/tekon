@@ -217,13 +217,13 @@ tekon delivery prepare
 
 能否 prepare 由**冻结计划快照里的模板交付声明**（`delivery:` 块）裁决，与模板名称解耦：
 
-- 可交付模板（内置 5 个产代码模板）：`standard-delivery`、`standard-feature`、`bugfix`、`test-improvement`、`docs-update`。各模板按自身声明要求证据，例如 `bugfix` 只要求 build/lint/test、安全扫描与 QA 签署，`test-improvement` 额外要求 e2e，`docs-update` 只要求 build/lint。
+- 可交付模板（内置 5 个产代码模板）：`standard-delivery`、`standard-feature`、`bugfix`、`test-improvement`、`docs-update`。各模板按自身声明要求证据，例如 `bugfix` 只要求 build/lint/test 三道命令门禁（另有安全扫描与 QA 签署要求），`test-improvement` 的命令门禁额外包含 e2e，`docs-update` 的命令门禁只有 build/lint（同样另有安全扫描与 QA 签署要求）。
 - 不可交付模板：`goal`、`plan-only`、`lightweight-delivery` 没有交付声明，即使运行完全通过也结构性不可交付，prepare 会被 `delivery-not-declared` 检查拦截；Web 的 Prepare 按钮同步禁用并显示原因。需要 PR 交付请换用可交付模板重新发起运行。
 - 升级到声明式交付（v0.40.0）之前创建的旧运行没有带声明的冻结快照，同样按不可交付处理，需重新发起运行才能交付。
 
-prepare 要求 workflow 通过、无待审批 Gate，且模板声明的命令门禁、治理门禁、安全扫描、验收证据与 QA 签署全部满足。不满足前置检查时不会生成 PR 包；CLI 与 Web Dry-Run 会逐项列出失败检查和中文原因。
+prepare 要求 workflow 通过、无待审批 Gate，且模板声明的命令门禁、治理门禁、安全扫描、验收证据与 QA 签署全部满足。不满足前置检查时不会生成 PR 包：Web Dry-Run 会逐项列出失败检查和中文原因，Prepare 按钮同步禁用；CLI 直接执行 prepare 被拦截时输出中文阻断原因与补救路径，也可在 `tekon run` 结束的交付指引中查看。
 
-prepare 完成后，CLI 输出与 Web Run 详情的「交付落点与下一步」卡片会给出交付分支、基线、worktree、diff 概览、PR 包/body 文件路径，以及 `create-pr` 和本地 `git merge tekon-delivery/<runId>` 两种下一步。
+prepare 完成后，CLI 输出与 Web Run 详情的「交付落点与下一步」卡片都会给出交付分支、基线、worktree、diff 概览、PR 包/body 文件路径与下一步命令；其中本地 `git merge tekon-delivery/<runId>` 合入提示仅在 CLI 输出（且交付分支真实存在时给出），Web 卡片只展示 tekon 命令与落点路径。
 
 ### 4.8 创建远端 PR
 
@@ -314,7 +314,7 @@ delivery:
     acceptanceEvidence: true    # 可选
 ```
 
-约束：声明的门禁类型必须在模板节点中实际配置，`tekon workflow validate` 与运行时归一化两条路径都会拒绝不存在的门；数组内类型不可重复；`deliverable: false` 不允许携带 `requirements`。裁决只读取运行受理时冻结的快照，改 YAML 不影响在途运行。内置模板的声明示例可参考 `workflows/` 下五个产代码模板。
+约束：声明的门禁类型必须在模板节点中实际配置，`tekon workflow validate` 与运行时归一化两条路径都会拒绝不存在的门；数组内类型不可重复；`deliverable: false` 不允许携带 `requirements`。三个布尔标志同样做静态交叉校验：`qaReleaseSignoff: true` 要求节点存在 `qa-signoff` 门、`securityScan: true` 要求存在 `security-scan` 门、`acceptanceEvidence: true` 要求存在 `ac-evidence` 门，否则 validate 期即以 `INVALID_WORKFLOW_TEMPLATE` 拒绝（避免写出校验通过但 readiness 永红的不可满足声明）。裁决只读取运行受理时冻结的快照，改 YAML 不影响在途运行。内置模板的声明示例可参考 `workflows/` 下五个产代码模板。
 
 **未来条目**：自动化的 git 回送命令（把交付分支改动送回主工作区，需覆盖脏工作区、in-place、非 Git 目录等场景）尚在 backlog，当前本地合入仅支持手动 `git merge tekon-delivery/<runId>`；任何指引都不会承诺尚不存在的命令。
 

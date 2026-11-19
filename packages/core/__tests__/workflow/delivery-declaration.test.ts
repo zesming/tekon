@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { describe, expect, it, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -42,6 +42,14 @@ ${delivery}
 `;
 
 describe('PD-21 delivery declaration validation', () => {
+  // TS-05：本 describe 内 mkdtemp 的临时目录统一登记清理，不向系统 tmp 泄漏。
+  const tempDirs: string[] = [];
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('保留合法声明并透传到归一化模板（不丢字段、不注入默认）', () => {
     const tpl = parseWorkflowTemplate(
       baseYaml(`
@@ -51,7 +59,11 @@ delivery:
     commandGates: [build]
     governanceGates: []
     qaReleaseSignoff: true
-`),
+`).replace(
+        '          - type: schema\n            artifactType: code-changes',
+        '          - type: schema\n            artifactType: code-changes\n' +
+          '          - type: qa-signoff',
+      ),
     );
     expect(tpl.delivery).toEqual({
       deliverable: true,
@@ -109,6 +121,7 @@ delivery:
 
   it('收口一：validate 文件探针把枚举越界翻译为带「模板结构不合法」的单行中文错误', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tekon-delivery-enum-'));
+    tempDirs.push(dir);
     const file = join(dir, 'bad-enum.yaml');
     writeFileSync(
       file,
@@ -128,6 +141,90 @@ delivery:
       expect(result.error).not.toContain('ZodError');
       expect(result.error.split('\n')).toHaveLength(1);
     }
+  });
+
+  it('CD-01：delivery 与非 delivery 字段同时非法时，两类错误都保留在同一条消息中', () => {
+    // 顶层未知键（strict 拒绝）+ delivery 枚举越界同时存在。
+    const broken = `
+id: tpl-mixed-errors
+name: Mixed
+version: 1
+unknownTopLevel: x
+phases:
+  - id: impl
+    nodes:
+      - id: rd-1
+        role: rd
+        outputs:
+          - code-changes
+        gates:
+          - type: build
+          - type: schema
+            artifactType: code-changes
+delivery:
+  deliverable: true
+  requirements:
+    commandGates: [human]
+`;
+    expect(() => parseWorkflowTemplate(broken)).toThrow(
+      /INVALID_WORKFLOW_TEMPLATE/,
+    );
+    try {
+      parseWorkflowTemplate(broken);
+      throw new Error('expected throw');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // delivery 问题与非 delivery 的未知键问题都在，作者无需多轮修复。
+      expect(message).toContain('delivery');
+      expect(message).toContain('unknownTopLevel');
+    }
+  });
+
+  it('CD-02：布尔要求为 true 但模板无对应门禁时，validate 期即拒绝', () => {
+    // baseYaml 模板只有 build/schema 门，没有 qa-signoff/security-scan/ac-evidence。
+    expect(() =>
+      parseWorkflowTemplate(
+        baseYaml(`
+delivery:
+  deliverable: true
+  requirements:
+    qaReleaseSignoff: true
+`),
+      ),
+    ).toThrow(/INVALID_WORKFLOW_TEMPLATE/);
+    expect(() =>
+      parseWorkflowTemplate(
+        baseYaml(`
+delivery:
+  deliverable: true
+  requirements:
+    securityScan: true
+`),
+      ),
+    ).toThrow(/INVALID_WORKFLOW_TEMPLATE/);
+    expect(() =>
+      parseWorkflowTemplate(
+        baseYaml(`
+delivery:
+  deliverable: true
+  requirements:
+    acceptanceEvidence: true
+`),
+      ),
+    ).toThrow(/INVALID_WORKFLOW_TEMPLATE/);
+  });
+
+  it('CD-02：布尔要求为 false/缺省时不要求对应门禁存在', () => {
+    const tpl = parseWorkflowTemplate(
+      baseYaml(`
+delivery:
+  deliverable: true
+  requirements:
+    commandGates: [build]
+    qaReleaseSignoff: false
+`),
+    );
+    expect(tpl.delivery?.requirements?.qaReleaseSignoff).toBe(false);
   });
 
   it('收口一：声明模板中不存在的门禁类型报 INVALID_WORKFLOW_TEMPLATE', () => {

@@ -16,6 +16,7 @@ import {
   canonicalJson,
   captureRunPlan,
   computeRunPlanDigest,
+  projectRunPlanV2,
 } from '../../src/workflow/run-plan.js';
 import {
   loadBuiltInWorkflowTemplate,
@@ -694,6 +695,345 @@ describe('evaluatePrePullRequestReadiness（PD-21 声明驱动）', () => {
     ).toBe(false);
   });
 
+  // TS-01：qaSignoffCheck 工件侧负向分支（门 passed 之后的复合谓词）。
+  it('TS-01：qa-signoff 门 passed 但无签署工件时发红并给 missing 证据', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    // 故意不调用 seedEvidenceArtifacts：没有任何 qa-release-signoff 工件。
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'qa-release-signoff-passed',
+    );
+    expect(check?.passed).toBe(false);
+    expect(check?.evidence).toContain('QA release signoff missing');
+  });
+
+  it('TS-01：签署工件的 ref 与 qa.validation.ref 不符时发红', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    // demand-card 带验收准则，但签署单指向与审计期望 ref 不同的分支。
+    await addArtifact({
+      type: 'demand-card',
+      path: 'artifacts/demand-card/v1/demand.json',
+    });
+    writeRepoFile(
+      'artifacts/demand-card/v1/demand.json',
+      JSON.stringify({
+        title: 'Test Demand',
+        body: 'Demand body.',
+        acceptanceCriteria: [{ id: 'ac_1', description: 'criterion 1' }],
+      }),
+    );
+    await addArtifact({
+      type: 'qa-release-signoff',
+      path: 'artifacts/qa-release-signoff/v1/signoff.json',
+    });
+    writeRepoFile(
+      'artifacts/qa-release-signoff/v1/signoff.json',
+      JSON.stringify({
+        title: 'QA Signoff',
+        body: 'Signoff body.',
+        criteriaEvidence: [
+          { criterionId: 'ac_1', status: 'passed', evidence: 'ok' },
+        ],
+        targetRef: 'feature/wrong',
+        validatedRef: 'feature/wrong',
+        overallStatus: 'passed',
+      }),
+    );
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: { ref: 'main' },
+      createdAt: '2026-06-13T00:00:30.000Z',
+    });
+
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'qa-release-signoff-passed',
+    );
+    expect(check?.passed).toBe(false);
+    expect(check?.evidence).toContain('matchedRef=false');
+  });
+
+  it('TS-01：签署单只覆盖部分验收准则时发红', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    await addArtifact({
+      type: 'demand-card',
+      path: 'artifacts/demand-card/v1/demand.json',
+    });
+    writeRepoFile(
+      'artifacts/demand-card/v1/demand.json',
+      JSON.stringify({
+        title: 'Test Demand',
+        body: 'Demand body.',
+        acceptanceCriteria: [
+          { id: 'ac_1', description: 'criterion 1' },
+          { id: 'ac_2', description: 'criterion 2' },
+        ],
+      }),
+    );
+    await addArtifact({
+      type: 'qa-release-signoff',
+      path: 'artifacts/qa-release-signoff/v1/signoff.json',
+    });
+    writeRepoFile(
+      'artifacts/qa-release-signoff/v1/signoff.json',
+      JSON.stringify({
+        title: 'QA Signoff',
+        body: 'Signoff body.',
+        // 只覆盖 ac_1，ac_2 缺失。
+        criteriaEvidence: [
+          { criterionId: 'ac_1', status: 'passed', evidence: 'ok' },
+        ],
+        targetRef: 'main',
+        validatedRef: 'main',
+        overallStatus: 'passed',
+      }),
+    );
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: { ref: 'main' },
+      createdAt: '2026-06-13T00:00:30.000Z',
+    });
+
+    const result = await readiness();
+    expect(
+      result.checks.find((item) => item.id === 'qa-release-signoff-passed')
+        ?.passed,
+    ).toBe(false);
+  });
+
+  // TS-02：acceptanceEvidenceCheck 红色分支。
+  it('TS-02：声明要求验收证据但零证据时 acceptance 检查发红', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    // 不写任何产物：acceptanceEvidence 为空数组。
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'acceptance-criteria-evidenced',
+    );
+    expect(check?.passed).toBe(false);
+    expect(check?.evidence).toContain('0/0 acceptance criteria evidenced');
+  });
+
+  it('TS-02：存在 failed 验收项时 acceptance 检查发红', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    await addArtifact({
+      type: 'demand-card',
+      path: 'artifacts/demand-card/v1/demand.json',
+    });
+    writeRepoFile(
+      'artifacts/demand-card/v1/demand.json',
+      JSON.stringify({
+        title: 'Test Demand',
+        body: 'Demand body.',
+        acceptanceCriteria: [{ id: 'ac_1', description: 'criterion 1' }],
+      }),
+    );
+    await addArtifact({
+      type: 'test-report',
+      path: 'artifacts/test-report/v1/report.json',
+    });
+    writeRepoFile(
+      'artifacts/test-report/v1/report.json',
+      JSON.stringify({
+        title: 'Test Report',
+        body: 'All tests executed.',
+        criteriaEvidence: [
+          {
+            criterionId: 'ac_1',
+            status: 'failed',
+            evidence: 'criterion not met',
+            gateResultIds: [gateIds[0] ?? 'gate_build'],
+          },
+        ],
+      }),
+    );
+
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'acceptance-criteria-evidenced',
+    );
+    expect(check?.passed).toBe(false);
+    expect(check?.evidence).toContain('0/1 acceptance criteria evidenced');
+  });
+
+  // TS-04：gateKey 去重与治理门 latest-wins。
+  it('TS-04：同节点不同 gateKey 的同门结果分别保留（2/2），不被按类型合并', async () => {
+    await createBaseFixtures({ template: 'bugfix' });
+    await addGate({
+      nodeId: 'node_1',
+      gateType: 'build',
+      gateKey: '00:build',
+      status: 'passed',
+      createdAt: '2026-06-13T00:00:10.000Z',
+    });
+    await addGate({
+      nodeId: 'node_1',
+      gateType: 'build',
+      gateKey: '01:build',
+      status: 'passed',
+      createdAt: '2026-06-13T00:00:11.000Z',
+    });
+    await addGate({ gateType: 'test', status: 'passed' });
+    await addGate({ gateType: 'lint', status: 'passed' });
+    await addGate({ gateType: 'security-scan', status: 'passed' });
+    await addGate({ gateType: 'qa-signoff', status: 'passed' });
+    await seedEvidenceArtifacts();
+
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'validation-gates-passed',
+    );
+    expect(check?.passed).toBe(true);
+    // 两个 gateKey 是两条独立结果（2 build + test + lint = 4 条）；若错误地
+    // 按 gateType 合并只会剩 3 条。
+    expect(check?.evidence).toContain('4/4');
+  });
+
+  it('TS-04：治理门同类型双记录以后一条失败为准（latest-wins），检查发红', async () => {
+    await createBaseFixtures();
+    for (const gateType of ['build', 'test', 'lint']) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    for (const gateType of ['role-scope', 'ac-evidence', 'qa-signoff', 'process-completeness']) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    await addGate({
+      gateType: 'independent-review',
+      status: 'passed',
+      createdAt: '2026-06-13T00:00:20.000Z',
+    });
+    await addGate({
+      gateType: 'independent-review',
+      status: 'failed',
+      createdAt: '2026-06-13T00:00:21.000Z',
+    });
+    await addGate({ gateType: 'security-scan', status: 'passed' });
+    await seedEvidenceArtifacts();
+
+    const result = await readiness();
+    const check = result.checks.find(
+      (item) => item.id === 'governance-gates-satisfied',
+    );
+    expect(check?.passed).toBe(false);
+    expect(check?.evidence).toContain('independent-review');
+  });
+
+  // PD-05：钉住「零 acceptanceCriteria 时签署检查不能通过」的当前契约。
+  it('PD-05：无 demand-card 准则时 qa 签署检查发红（结构性契约特征测试）', async () => {
+    await createBaseFixtures();
+    for (const gateType of [
+      'build',
+      'test',
+      'lint',
+      'independent-review',
+      'role-scope',
+      'ac-evidence',
+      'qa-signoff',
+      'process-completeness',
+      'security-scan',
+    ]) {
+      await addGate({ gateType, status: 'passed' });
+    }
+    // 只有签署工件、没有 demand-card，故 acceptanceCriteria 为空。
+    await addArtifact({
+      type: 'qa-release-signoff',
+      path: 'artifacts/qa-release-signoff/v1/signoff.json',
+    });
+    writeRepoFile(
+      'artifacts/qa-release-signoff/v1/signoff.json',
+      JSON.stringify({
+        title: 'QA Signoff',
+        body: 'Signoff body.',
+        // 工件本身合法，但没有 demand-card 提供 acceptanceCriteria，
+        // matchingSignoff 的「准则全覆盖」条件无法满足。
+        criteriaEvidence: [
+          { criterionId: 'ac_orphan', status: 'passed', evidence: 'ok' },
+        ],
+        targetRef: 'main',
+        validatedRef: 'main',
+        overallStatus: 'passed',
+      }),
+    );
+    await audit.append({
+      runId: 'run_1',
+      type: 'qa.validation.ref',
+      payload: { ref: 'main' },
+      createdAt: '2026-06-13T00:00:30.000Z',
+    });
+
+    const result = await readiness();
+    expect(
+      result.checks.find((item) => item.id === 'qa-release-signoff-passed')
+        ?.passed,
+    ).toBe(false);
+  });
+
   it('安全扫描无 passed 证据时 security-scans-passed 发红', async () => {
     await createBaseFixtures();
     for (const gateType of ['build', 'test', 'lint']) {
@@ -820,6 +1160,24 @@ describe('M4 快照 fail-closed：一律 delivery-not-declared 且绝不抛错',
     expect(result.checks).toHaveLength(1);
     expect(result.checks[0].id).toBe('delivery-not-declared');
     expect(result.checks[0].evidence).toContain('absent');
+  });
+
+  it('TS-06：V2 快照（无 delivery 声明）经 readiness 裁决为 delivery-not-declared', async () => {
+    const legacy = loadBuiltInWorkflowTemplate('bugfix');
+    delete legacy.delivery;
+    const v2Plan = projectRunPlanV2(legacy, { agent: 'codex' });
+    await createBaseFixtures({
+      snapshotOverride: canonicalJson(v2Plan),
+      digestOverride: v2Plan.digest,
+    });
+
+    const result = await readiness();
+    expect(result.ready).toBe(false);
+    expect(result.checks).toHaveLength(1);
+    expect(result.checks[0].id).toBe('delivery-not-declared');
+    // 钉住 V2 分支真实走到 not-declared 语义，而非仅 id 巧合一致。
+    expect(result.checks[0].evidence).toContain('does not declare');
+    expect(result.checks[0].evidence).toContain('bugfix');
   });
 
   it('V1 旧快照（无 digestVersion）', async () => {

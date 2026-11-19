@@ -10,6 +10,7 @@ import {
   createRepositories,
   createScmDelivery,
   createWorkReviewSurface,
+  evaluatePrePullRequestReadiness,
   migrateDatabase,
   queryPullRequestCiStatus,
   watchPullRequestCiStatus,
@@ -26,7 +27,34 @@ import {
   resolveProjectRepoPath,
 } from '../lib/path-utils.js';
 import { selectLatestRunId } from '../lib/db-helpers.js';
-import { formatDeliveryGuidance } from '../lib/delivery-guidance.js';
+import {
+  formatDeliveryGuidance,
+  formatReadinessBlockMessage,
+  isReadinessBlockError,
+} from '../lib/delivery-guidance.js';
+
+/**
+ * PD-02：把 readiness 阻断错误翻译为中文错误对象；非 readiness 错误返回 null，
+ * 由调用方重新抛出原错误。重新评估是只读操作，与 prepare 内部前置检查同源。
+ */
+async function buildReadinessBlockError(input: {
+  error: unknown;
+  repoPath: string;
+  repositories: ReturnType<typeof createRepositories>;
+  audit: ReturnType<typeof createAuditLogger>;
+  runId: string;
+}): Promise<Error | null> {
+  if (!isReadinessBlockError(input.error)) {
+    return null;
+  }
+  const readiness = await evaluatePrePullRequestReadiness({
+    repoPath: input.repoPath,
+    repositories: input.repositories,
+    audit: input.audit,
+    runId: input.runId,
+  });
+  return new Error(formatReadinessBlockMessage(readiness.checks));
+}
 
 export async function commandDelivery(
   argv: string[],
@@ -43,13 +71,27 @@ export async function commandDelivery(
         runId,
       }) => {
         const audit = createAuditLogger({ repositories });
-        const preparation =
-          await createPullRequestPreparation({
+        let preparation: Awaited<
+          ReturnType<typeof createPullRequestPreparation>
+        >;
+        try {
+          preparation = await createPullRequestPreparation({
             repoPath,
             repositories,
             audit,
             runId,
           });
+        } catch (error) {
+          throw (
+            (await buildReadinessBlockError({
+              error,
+              repoPath,
+              repositories,
+              audit,
+              runId,
+            })) ?? error
+          );
+        }
         io.stdout.write(
           [
             `runId=${runId}`,
@@ -116,13 +158,27 @@ export async function commandDelivery(
           );
         }
         const audit = createAuditLogger({ repositories });
-        const preparation =
-          await createPullRequestPreparation({
+        let preparation: Awaited<
+          ReturnType<typeof createPullRequestPreparation>
+        >;
+        try {
+          preparation = await createPullRequestPreparation({
             repoPath,
             repositories,
             audit,
             runId,
           });
+        } catch (error) {
+          throw (
+            (await buildReadinessBlockError({
+              error,
+              repoPath,
+              repositories,
+              audit,
+              runId,
+            })) ?? error
+          );
+        }
         const body = readFileSync(
           preparation.prBodyPath,
           'utf8',

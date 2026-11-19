@@ -137,23 +137,101 @@ test.describe('PD-21 delivery declaration', () => {
       ['passed'],
     );
 
-    await rpcCall(server.url, 'delivery.prepare', {
-      runId,
-      token: fixture.sessionToken,
-    });
-
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`${server.url}/advanced/runs/${runId}/delivery`);
 
-    // 指引卡：分支、PR 包落点、下一步命令。
+    // prepare 前指引卡已可渲染（mock 运行 finalize 已提升交付分支）；
+    // 「分支未创建」caveat 的两态由 delivery-tab 纯函数单测守护。
     await expect(page.getByText('交付落点与下一步')).toBeVisible();
     await expect(
       page.getByText(`tekon-delivery/${runId}`).first(),
     ).toBeVisible();
+    // PR 包尚未生成。
+    await expect(page.getByText('No package').first()).toBeVisible();
+
+    // 经 RPC prepare 后，同一卡片出现真实 PR 包落点。
+    await rpcCall(server.url, 'delivery.prepare', {
+      runId,
+      token: fixture.sessionToken,
+    });
+    await page.reload();
+
     await expect(
       page.getByText(join('.tekon', 'runs', runId, 'delivery', 'pr-package.md')).first(),
     ).toBeVisible();
     await expect(page.getByText('下一步', { exact: true })).toBeVisible();
     await expect(page.getByText(/^\$\s+tekon\s+status/).first()).toBeVisible();
+  });
+
+  test('deliverable run enables Prepare PR and a real click completes prepare (TS-03)', async ({
+    page,
+    fixture,
+    server,
+  }) => {
+    const runId = await startRunAndWait(
+      server.url,
+      fixture.sessionToken,
+      'standard-delivery',
+      ['passed'],
+    );
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`${server.url}/advanced/delivery`);
+    await expect(
+      page.getByRole('heading', { name: 'Delivery' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: /连接/ }).click();
+    await page.getByLabel('Session token').fill(fixture.sessionToken);
+    await page.getByRole('button', { name: '应用连接' }).click();
+
+    // 可交付 run 的 Prepare PR 必须可点击（canPrepare 同源 readiness.ready）。
+    const prepareButton = page.getByRole('button', { name: 'Prepare PR' });
+    await expect(prepareButton).toBeEnabled();
+
+    // 真实点击走完 prepare，而不是绕过按钮直接 RPC。
+    await prepareButton.click();
+    await expect(
+      page.getByText('Prepared branch').first(),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(`tekon-delivery/${runId}`).first(),
+    ).toBeVisible();
+
+    // 后端确有 prepared 记录（dryRun 只读不产生副作用）。
+    const dryRun = await rpcCall<Record<string, unknown>>(
+      server.url,
+      'delivery.dryRun',
+      { runId, token: fixture.sessionToken },
+    );
+    expect(dryRun.runId).toBe(runId);
+  });
+
+  test('guidance card stays readable at 390px narrow viewport without horizontal overflow (UI-02)', async ({
+    page,
+    fixture,
+    server,
+  }) => {
+    const runId = await startRunAndWait(
+      server.url,
+      fixture.sessionToken,
+      'standard-delivery',
+      ['passed'],
+    );
+    await rpcCall(server.url, 'delivery.prepare', {
+      runId,
+      token: fixture.sessionToken,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${server.url}/advanced/runs/${runId}/delivery`);
+
+    await expect(page.getByText('交付落点与下一步')).toBeVisible();
+    await expect(
+      page.getByText(join('.tekon', 'runs', runId, 'delivery', 'pr-package.md')).first(),
+    ).toBeVisible();
+    // 长 mono 路径只能在容器内换行，不得撑出横向滚动。
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
   });
 });

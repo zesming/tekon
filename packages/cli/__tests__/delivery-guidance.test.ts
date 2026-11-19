@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDeliveryGuidance } from '../src/lib/delivery-guidance.js';
+import {
+  checkLabel,
+  formatDeliveryGuidance,
+  formatReadinessBlockMessage,
+  isReadinessBlockError,
+} from '../src/lib/delivery-guidance.js';
 
 // PD-21：交付指引是纯渲染函数，最小 surface 夹具只构造它实际读取的字段。
 type GuidanceInput = Parameters<typeof formatDeliveryGuidance>[0];
@@ -180,5 +185,77 @@ describe('formatDeliveryGuidance（PD-21 CLI 指引）', () => {
     );
 
     expect(output).toContain('（已释放）');
+  });
+});
+
+describe('PD-02 readiness 阻断错误中文化', () => {
+  it('isReadinessBlockError 只识别 core 的稳定前缀错误', () => {
+    expect(
+      isReadinessBlockError(
+        new Error(
+          'run is not ready for PR creation: delivery-not-declared: legacy v1',
+        ),
+      ),
+    ).toBe(true);
+    expect(isReadinessBlockError(new Error('ENOENT: no such file'))).toBe(false);
+    expect(isReadinessBlockError(new Error('run is not ready'))).toBe(false);
+    expect(isReadinessBlockError('not an error')).toBe(false);
+    expect(isReadinessBlockError(undefined)).toBe(false);
+  });
+
+  it('delivery-not-declared 阻断消息含中文补救路径，不含裸英文前缀', () => {
+    const message = formatReadinessBlockMessage([
+      {
+        id: 'delivery-not-declared',
+        passed: false,
+        evidence: 'legacy v1 plan snapshot carries no frozen delivery declaration',
+      },
+    ]);
+
+    expect(message).toContain('当前运行不满足 PR 准备条件');
+    expect(message).toContain('需换用可交付模板重新发起');
+    expect(message).not.toContain('run is not ready for PR creation');
+  });
+
+  it('其他检查失败给中文标签与建议，英文 evidence 仅作括注', () => {
+    const message = formatReadinessBlockMessage([
+      {
+        id: 'validation-gates-passed',
+        passed: false,
+        evidence: '3/4 declared command gates passed or explicitly skipped',
+      },
+    ]);
+
+    expect(message).toContain('校验门禁');
+    expect(message).toContain('查看失败门禁的详细报告');
+    expect(message).toContain('3/4 declared command gates');
+  });
+});
+
+describe('TS-07 check id 中文标签漂移防护', () => {
+  // core pre-pr-readiness 实际发射的全部 check id（9 项检查 + 短路 id）。
+  const coreCheckIds = [
+    'delivery-declared',
+    'delivery-not-declared',
+    'workflow-passed',
+    'audit-valid',
+    'no-pending-human-gates',
+    'validation-gates-passed',
+    'governance-gates-satisfied',
+    'acceptance-criteria-evidenced',
+    'qa-release-signoff-passed',
+    'security-scans-passed',
+  ];
+
+  it('每个 core check id 都有非技术 id 的中文标签', () => {
+    for (const id of coreCheckIds) {
+      const label = checkLabel(id);
+      expect(label).not.toBe(id);
+      expect(/[一-鿿]/.test(label)).toBe(true);
+    }
+  });
+
+  it('未知 id 安全回落为技术 id 而非抛错', () => {
+    expect(checkLabel('future-check-id')).toBe('future-check-id');
   });
 });

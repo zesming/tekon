@@ -643,11 +643,12 @@ export function DeliveryPage() {
             </button>
 
             {/* Prepare PR */}
+            {/* UI-03：title 承载内联文案放不下的 evidence 详情，避免与内联原因重复 */}
             <button
               type="button"
               className="btn btn-secondary"
               disabled={!canPrepare || prepareMutation.isPending}
-              title={prepareBlockedReason?.title}
+              title={prepareBlockedReason?.evidence}
               onClick={handlePrepare}
             >
               {prepareMutation.isPending ? 'Preparing…' : 'Prepare PR'}

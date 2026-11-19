@@ -301,11 +301,14 @@ export function parseWorkflowTemplate(
       error instanceof z.ZodError &&
       error.issues.some((issue) => issue.path[0] === 'delivery')
     ) {
-      const deliveryIssues = error.issues.filter(
-        (issue) => issue.path[0] === 'delivery',
-      );
+      // 保留同一 ZodError 的全部 issues（含非 delivery 字段），避免作者修完
+      // delivery 问题后才看到下一个错误（CD-01）；delivery issue 排在前面。
+      const ordered = [
+        ...error.issues.filter((issue) => issue.path[0] === 'delivery'),
+        ...error.issues.filter((issue) => issue.path[0] !== 'delivery'),
+      ];
       throw new Error(
-        `INVALID_WORKFLOW_TEMPLATE: delivery ${formatZodIssues(deliveryIssues)}`,
+        `INVALID_WORKFLOW_TEMPLATE: ${formatZodIssues(ordered)}`,
       );
     }
     throw error;
@@ -1049,6 +1052,38 @@ function assertDeliveryDeclaration(template: {
     if (!availableGateTypes.has(gateType)) {
       throw new Error(
         `INVALID_WORKFLOW_TEMPLATE: delivery 声明了模板中不存在的门禁类型 "${gateType}"`,
+      );
+    }
+  }
+
+  // CD-02：布尔类证据要求与静态可判定的门禁做交叉校验，让「validate 通过
+  // 但 readiness 永红」的不可满足声明在模板编写期即失败。三个布尔位都有
+  // 一一对应的门禁类型；acceptanceEvidence 对应治理门 ac-evidence。
+  const booleanGateRequirements: Array<{
+    flag: boolean | undefined;
+    gateType: GateType;
+    flagName: string;
+  }> = [
+    {
+      flag: requirements?.qaReleaseSignoff,
+      gateType: 'qa-signoff',
+      flagName: 'qaReleaseSignoff',
+    },
+    {
+      flag: requirements?.securityScan,
+      gateType: 'security-scan',
+      flagName: 'securityScan',
+    },
+    {
+      flag: requirements?.acceptanceEvidence,
+      gateType: 'ac-evidence',
+      flagName: 'acceptanceEvidence',
+    },
+  ];
+  for (const requirement of booleanGateRequirements) {
+    if (requirement.flag === true && !availableGateTypes.has(requirement.gateType)) {
+      throw new Error(
+        `INVALID_WORKFLOW_TEMPLATE: delivery.requirements.${requirement.flagName} 为 true，但模板中不存在 ${requirement.gateType} 门禁，该声明永远无法满足`,
       );
     }
   }

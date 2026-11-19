@@ -41,10 +41,15 @@ export function fixtureDeliveryTemplate(input: {
   const commandGates = input.commandGates ?? [];
   const governanceGates = input.governanceGates ?? [];
   const securityScan = input.securityScan ?? true;
+  const qaReleaseSignoff = input.qaReleaseSignoff ?? true;
+  const acceptanceEvidence = input.acceptanceEvidence ?? true;
+  // CD-02：布尔证据要求必须有对应静态门禁，否则模板 validate 期即被拒。
   const gates = [
     ...commandGates.map((type) => ({ type })),
     ...governanceGates.map((type) => ({ type })),
     ...(securityScan ? [{ type: 'security-scan' as const }] : []),
+    ...(qaReleaseSignoff ? [{ type: 'qa-signoff' as const }] : []),
+    ...(acceptanceEvidence ? [{ type: 'ac-evidence' as const }] : []),
     { type: 'schema' as const, artifactType: 'delivery-package' },
   ];
   return parseWorkflowTemplate({
@@ -54,9 +59,9 @@ export function fixtureDeliveryTemplate(input: {
       requirements: {
         commandGates: [...commandGates],
         governanceGates: [...governanceGates],
-        qaReleaseSignoff: input.qaReleaseSignoff ?? true,
+        qaReleaseSignoff,
         securityScan,
-        acceptanceEvidence: input.acceptanceEvidence ?? true,
+        acceptanceEvidence,
       },
     },
     phases: [
