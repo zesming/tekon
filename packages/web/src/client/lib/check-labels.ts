@@ -155,15 +155,31 @@ export const CHECK_LABELS: Record<string, CheckLabelEntry> = {
     suggestion: '远程 CI 未通过，查看 CI 日志修复构建或测试失败',
   },
 
-  // Pre-PR readiness additional checks (pre-pr-readiness.ts)
+  // Pre-PR readiness checks (pre-pr-readiness.ts，PD-21 声明驱动）
+  'delivery-declared': {
+    label: '交付声明',
+    description: '冻结计划中的模板已声明本运行的交付证据要求',
+    suggestion: '该运行的模板未声明交付要求，无法进入 PR 准备；请换用可交付模板重新发起',
+  },
+  'delivery-not-declared': {
+    label: '不可交付',
+    description: '计划快照缺少交付声明或快照不可用，运行结构性不可交付',
+    suggestion: '使用带 delivery 声明的可交付模板重新发起运行；升级前的旧运行需重新发起才能交付',
+  },
+  'governance-gates-satisfied': {
+    label: '治理门禁',
+    description: '模板声明的独立评审、角色范围、验收证据、QA 签收、流程完整性门禁均已通过',
+    suggestion: '查看失败的治理门禁，根据报告修复对应问题',
+  },
+  // PD-21：旧 check id 保留为别名，历史 session_events 仍含这些 id。
   'standard-delivery-template': {
-    label: '标准交付模板',
-    description: '工作流使用了标准交付模板',
-    suggestion: '切换到标准交付模板以确保流程规范',
+    label: '交付声明',
+    description: '工作流模板声明了交付要求（历史字段：标准交付模板）',
+    suggestion: '该运行的模板未声明交付要求，无法进入 PR 准备；请换用可交付模板重新发起',
   },
   'standard-governance-gates-passed': {
-    label: '标准治理门禁',
-    description: '独立评审、角色范围、验收证据、QA 签收、流程完整性门禁均已通过',
+    label: '治理门禁',
+    description: '声明的治理门禁均已通过（历史字段：标准治理门禁）',
     suggestion: '查看失败的治理门禁，根据报告修复对应问题',
   },
 

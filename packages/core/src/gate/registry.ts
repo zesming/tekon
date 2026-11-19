@@ -1,4 +1,11 @@
 import type { GateResult, GateType } from '../types/domain.js';
+// PD-21：门禁类别元组的定义已下沉到叶子模块 types/domain.ts，此处 re-export
+// 保持既有 `from '../gate/registry.js'` 消费者零改动，并切断 template 的循环依赖。
+export { COMMAND_GATE_TYPES, GOVERNANCE_GATE_TYPES } from '../types/domain.js';
+import {
+  COMMAND_GATE_TYPES,
+  GOVERNANCE_GATE_TYPES,
+} from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
 import type { GateRunnerInput } from './helpers.js';
@@ -53,23 +60,8 @@ export interface GateRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// Well-known gate type sets (used by eval / readiness modules)
+// Well-known gate type sets：定义见 types/domain.ts，本模块顶部 re-export。
 // ---------------------------------------------------------------------------
-
-export const COMMAND_GATE_TYPES: readonly GateType[] = [
-  'build',
-  'test',
-  'lint',
-  'e2e-pass',
-] as const;
-
-export const GOVERNANCE_GATE_TYPES: readonly GateType[] = [
-  'independent-review',
-  'role-scope',
-  'ac-evidence',
-  'qa-signoff',
-  'process-completeness',
-] as const;
 
 // ---------------------------------------------------------------------------
 // Built-in registry factory

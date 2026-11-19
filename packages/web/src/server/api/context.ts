@@ -400,6 +400,11 @@ export interface ApiCaller {
       pendingHumanDecisions: number;
       deliveryStatus: string;
       readyForPrepare: boolean;
+      readinessChecks: Array<{
+        id: string;
+        passed: boolean;
+        evidence: string;
+      }>;
       dryRun: true;
     }>;
     ciStatus(input: DeliveryCiStatusInput): Promise<{

@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
+  createWorkReviewSurface,
   loadWorkflowTemplate,
   captureRunPlan,
   generateDynamicWorkflow,
@@ -45,6 +46,7 @@ import {
   assertCleanBase,
   loadWorkflowByName,
 } from '../lib/utils.js';
+import { formatDeliveryGuidance } from '../lib/delivery-guidance.js';
 
 export async function commandRun(argv: string[], io: CliIO): Promise<number> {
   const args = parseArgs({
@@ -369,6 +371,27 @@ export async function commandRun(argv: string[], io: CliIO): Promise<number> {
         .filter(Boolean)
         .join('\n') + '\n',
     );
+    // PD-21：追加与 core review surface 同源的交付指引；不可交付运行
+    // （goal/plan-only/lightweight/旧运行）在此明示原因与重新发起路径。
+    // 指引是展示性功能：构造失败只给 best-effort 提示，不得改变 run 本身
+    // 的退出码（passed=0 / 待人工=3 等既有契约）。
+    try {
+      const guidanceSurface = await createWorkReviewSurface({
+        repoPath,
+        repositories: ctx.repositories,
+        audit: ctx.audit,
+        runId: result.runId,
+      });
+      io.stdout.write(formatDeliveryGuidance(guidanceSurface));
+    } catch (guidanceError) {
+      io.stderr.write(
+        `交付指引生成失败，不影响本次运行结果：${
+          guidanceError instanceof Error
+            ? guidanceError.message
+            : String(guidanceError)
+        }\n`,
+      );
+    }
     return exitCodeForJobOutcome({
       io,
       runId: result.runId,

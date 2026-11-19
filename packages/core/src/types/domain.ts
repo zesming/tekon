@@ -118,6 +118,24 @@ export const gateTypeSchema = z.enum([
 ]);
 export type GateType = z.infer<typeof gateTypeSchema>;
 
+// PD-21：门禁类型的类别元组下沉到本叶子模块（仅依赖 zod），供 delivery 声明
+// schema 与 readiness 共用；gate/registry.ts 从此 re-export，避免 template 经
+// registry→runners→execution-plan 形成 ESM 循环依赖。顺序即命令/治理门禁集合。
+export const COMMAND_GATE_TYPES = [
+  'build',
+  'test',
+  'lint',
+  'e2e-pass',
+] as const satisfies readonly GateType[];
+
+export const GOVERNANCE_GATE_TYPES = [
+  'independent-review',
+  'role-scope',
+  'ac-evidence',
+  'qa-signoff',
+  'process-completeness',
+] as const satisfies readonly GateType[];
+
 export const gateStatusSchema = z.enum([
   'pending',
   'running',

@@ -14,6 +14,8 @@ import { z } from 'zod';
 import {
   artifactTypeSchema,
   commandInvocationSchema,
+  COMMAND_GATE_TYPES,
+  GOVERNANCE_GATE_TYPES,
   gateTypeSchema,
   nodeWorkspaceSchema,
   RESERVED_ARTIFACT_TYPES,
@@ -113,6 +115,8 @@ export interface WorkflowTemplate {
   version: number;
   retryPolicy: WorkflowRetryPolicy;
   phases: WorkflowTemplatePhase[];
+  // PD-21：缺省表示该模板不进入 PR 交付自动化（见 delivery 模块）。
+  delivery?: WorkflowDeliveryDeclaration;
 }
 
 export type BuiltInWorkflowTemplateId =
@@ -221,6 +225,47 @@ const rawPhaseSchema = z
   })
   .strict();
 
+// PD-21：模板自声明的交付证据要求。readiness 只从 run 的冻结计划快照读它。
+// zod v3 的 z.enum 需要可变 tuple，而 GATE 元组是 as const 只读，故展开后断言。
+const commandGateEnum = z.enum([
+  ...COMMAND_GATE_TYPES,
+] as [GateType, ...GateType[]]);
+const governanceGateEnum = z.enum([
+  ...GOVERNANCE_GATE_TYPES,
+] as [GateType, ...GateType[]]);
+
+const deliveryRequirementsSchema = z
+  .object({
+    commandGates: z.array(commandGateEnum).optional(),
+    governanceGates: z.array(governanceGateEnum).optional(),
+    qaReleaseSignoff: z.boolean().optional(),
+    securityScan: z.boolean().optional(),
+    acceptanceEvidence: z.boolean().optional(),
+  })
+  .strict();
+
+// raw 与 normalized 共用同一严格形状：纯 optional、无 .default()，确保旧快照
+// 重投影 canonical 比对时不会因注入默认键而 PLAN_DIGEST_MISMATCH（M3）。
+const deliveryDeclarationSchema = z
+  .object({
+    deliverable: z.boolean(),
+    requirements: deliveryRequirementsSchema.optional(),
+  })
+  .strict();
+
+export interface WorkflowDeliveryRequirements {
+  commandGates?: GateType[];
+  governanceGates?: GateType[];
+  qaReleaseSignoff?: boolean;
+  securityScan?: boolean;
+  acceptanceEvidence?: boolean;
+}
+
+export interface WorkflowDeliveryDeclaration {
+  deliverable: boolean;
+  requirements?: WorkflowDeliveryRequirements;
+}
+
 const rawWorkflowTemplateSchema = z
   .object({
     id: z.string().min(1),
@@ -232,6 +277,7 @@ const rawWorkflowTemplateSchema = z
     retry: workflowRetryPolicySchema.optional(),
     retryPolicy: workflowRetryPolicySchema.optional(),
     phases: z.array(rawPhaseSchema).min(1),
+    delivery: deliveryDeclarationSchema.optional(),
   })
   .strict();
 
@@ -243,7 +289,27 @@ export function parseWorkflowTemplate(
   input: string | unknown,
 ): WorkflowTemplate {
   const rawInput = typeof input === 'string' ? parseYaml(input) : input;
-  const rawTemplate = rawWorkflowTemplateSchema.parse(rawInput);
+  let rawTemplate: RawWorkflowTemplate;
+  try {
+    rawTemplate = rawWorkflowTemplateSchema.parse(rawInput);
+  } catch (error) {
+    // PD-21：delivery 声明在 schema 层的拒绝（枚举越界等）在 validate/探针
+    // 收口同样统一为 INVALID_WORKFLOW_TEMPLATE 前缀，与 normalizeExecutableTemplate
+    // 运行时收口对齐（设计 §7 M2）；其他字段的裸 ZodError 维持原行为，由
+    // readableWorkflowTemplateError 翻译为中文。
+    if (
+      error instanceof z.ZodError &&
+      error.issues.some((issue) => issue.path[0] === 'delivery')
+    ) {
+      const deliveryIssues = error.issues.filter(
+        (issue) => issue.path[0] === 'delivery',
+      );
+      throw new Error(
+        `INVALID_WORKFLOW_TEMPLATE: delivery ${formatZodIssues(deliveryIssues)}`,
+      );
+    }
+    throw error;
+  }
   return normalizeWorkflowTemplate(rawTemplate);
 }
 
@@ -706,6 +772,7 @@ const normalizedTemplateSchema = z.object({
   name: z.string().min(1),
   version: z.number().int().positive(),
   retryPolicy: workflowRetryPolicySchema.strict(),
+  delivery: deliveryDeclarationSchema.optional(),
   phases: z.array(z.object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -760,6 +827,8 @@ export function normalizeExecutableTemplate(input: unknown): WorkflowTemplate {
     }
     phaseIds.add(phase.id);
   }
+  // 收口二：运行受理/rebind/快照校验路径的纵深防御（程序化构造模板）。
+  assertDeliveryDeclaration(template);
   return template;
 }
 
@@ -869,13 +938,18 @@ function normalizeWorkflowTemplate(
     });
   }
 
-  return {
+  const normalized: WorkflowTemplate = {
     id: rawTemplate.id,
     name: rawTemplate.name ?? rawTemplate.id,
     version: rawTemplate.version,
     retryPolicy: normalizeRetryPolicy(retryPolicy),
     phases,
+    // 纯透传：undefined 保留，不造默认空对象（M3，避免旧快照重投影失配）。
+    ...(rawTemplate.delivery ? { delivery: rawTemplate.delivery } : {}),
   };
+  // 收口一：validate/探针/加载路径的交付声明一致性校验。
+  assertDeliveryDeclaration(normalized);
+  return normalized;
 }
 
 function defaultRetryPolicy(): WorkflowRetryPolicy {
@@ -929,6 +1003,54 @@ function assertUniqueEffectiveGateKeys(
       throw new Error(`duplicate gateKey "${gateKey}" in node "${nodeId}"`);
     }
     seen.add(gateKey);
+  }
+}
+
+/**
+ * PD-21：校验模板的 delivery 声明与真实门禁结构一致。两个归一化收口都调用：
+ * normalizeWorkflowTemplate（workflow validate/list 探针/加载）与
+ * normalizeExecutableTemplate（运行受理/rebind/快照校验）。统一抛
+ * INVALID_WORKFLOW_TEMPLATE 前缀以复用展示层翻译表。
+ */
+function assertDeliveryDeclaration(template: {
+  delivery?: WorkflowDeliveryDeclaration;
+  phases: WorkflowTemplatePhase[];
+}): void {
+  const declaration = template.delivery;
+  if (!declaration) return;
+
+  const requirements = declaration.requirements;
+  // 矛盾声明：不可交付却又提要求，语义自相矛盾。
+  if (declaration.deliverable === false && requirements) {
+    throw new Error(
+      'INVALID_WORKFLOW_TEMPLATE: delivery.deliverable 为 false 时不得声明 requirements',
+    );
+  }
+
+  const declared: GateType[] = [
+    ...(requirements?.commandGates ?? []),
+    ...(requirements?.governanceGates ?? []),
+  ];
+  // 数组内重复类型没有意义且会让裁决口径模糊，模板编写期即拒绝。
+  if (new Set(declared).size !== declared.length) {
+    throw new Error(
+      'INVALID_WORKFLOW_TEMPLATE: delivery 声明的门禁类型存在重复项',
+    );
+  }
+
+  // 模板实际存在的全部门禁类型集合。
+  const availableGateTypes = new Set<GateType>();
+  for (const phase of template.phases) {
+    for (const node of phase.nodes) {
+      for (const gate of node.gates) availableGateTypes.add(gate.type);
+    }
+  }
+  for (const gateType of declared) {
+    if (!availableGateTypes.has(gateType)) {
+      throw new Error(
+        `INVALID_WORKFLOW_TEMPLATE: delivery 声明了模板中不存在的门禁类型 "${gateType}"`,
+      );
+    }
   }
 }
 

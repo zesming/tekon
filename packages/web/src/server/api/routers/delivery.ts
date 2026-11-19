@@ -1,4 +1,4 @@
-import { createPullRequestPreparation, createScmDelivery, queryPullRequestCiStatus } from '@tekon/core';
+import { createPullRequestPreparation, createScmDelivery, evaluatePrePullRequestReadiness, queryPullRequestCiStatus } from '@tekon/core';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -91,12 +91,14 @@ export function createDeliveryRouter(context: ServerContext) {
         deliveryInput.runId,
       );
 
-      // Check pre-conditions WITHOUT writing anything
-      const workflowPassed = run.status === 'passed';
-      const noPendingGates = pendingDecisions.length === 0;
-      const allGatesPassed = gates.every(
-        (g) => g.status === 'passed' || g.status === 'skipped',
-      );
+      // PD-21：准备度与 core 引擎同源（只读冻结快照声明 + 证据裁决），
+      // Web 不再维护一套宽松的自研判定，避免按钮可点但 prepare 才报错。
+      const readiness = await evaluatePrePullRequestReadiness({
+        repoPath: context.projectContext.projectRoot,
+        repositories: context.repositories,
+        audit: context.audit,
+        runId: deliveryInput.runId,
+      });
 
       return {
         runId: deliveryInput.runId,
@@ -108,7 +110,8 @@ export function createDeliveryRouter(context: ServerContext) {
         },
         pendingHumanDecisions: pendingDecisions.length,
         deliveryStatus: delivery?.status ?? 'not-prepared',
-        readyForPrepare: workflowPassed && noPendingGates && allGatesPassed,
+        readyForPrepare: readiness.ready,
+        readinessChecks: readiness.checks,
         dryRun: true as const,
       };
     },

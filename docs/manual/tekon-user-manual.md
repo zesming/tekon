@@ -77,7 +77,7 @@
 2. `tekon eval approval-summary` 检查摘要完整性。
 3. 人工决定后执行 `tekon resume --approve-human` 或 `tekon approval reject`。
 
-`bugfix` 不等于完整交付治理；当前 `delivery prepare` 只支持 `standard-delivery`。
+`bugfix` 不等于完整交付治理：它在模板里声明的交付要求只含 build/lint/test、安全扫描与 QA 签署，不含独立评审等治理门禁。运行通过、证据满足自身声明后即可 `delivery prepare`；裁决依据是冻结计划中的模板声明，而不是模板名称。
 
 ### 场景 C：我只想补测试
 
@@ -215,11 +215,15 @@ tekon review
 tekon delivery prepare
 ```
 
-仅支持 `standard-delivery`，生成本地 PR 包。要求 workflow 通过、无待审批 Gate、验证与安全扫描满足、验收证据完整，且 QA release signoff 通过并绑定 QA validation 的 tested ref。
+能否 prepare 由**冻结计划快照里的模板交付声明**（`delivery:` 块）裁决，与模板名称解耦：
 
-默认的 `lightweight-delivery` 缺少这些门禁与证据，readiness 恒不满足（见 §5.10），在此命令会被前置拦截；需要 PR 交付请在发起运行时显式 `--template standard-delivery`。
+- 可交付模板（内置 5 个产代码模板）：`standard-delivery`、`standard-feature`、`bugfix`、`test-improvement`、`docs-update`。各模板按自身声明要求证据，例如 `bugfix` 只要求 build/lint/test、安全扫描与 QA 签署，`test-improvement` 额外要求 e2e，`docs-update` 只要求 build/lint。
+- 不可交付模板：`goal`、`plan-only`、`lightweight-delivery` 没有交付声明，即使运行完全通过也结构性不可交付，prepare 会被 `delivery-not-declared` 检查拦截；Web 的 Prepare 按钮同步禁用并显示原因。需要 PR 交付请换用可交付模板重新发起运行。
+- 升级到声明式交付（v0.40.0）之前创建的旧运行没有带声明的冻结快照，同样按不可交付处理，需重新发起运行才能交付。
 
-不满足前置检查时不会生成 PR 包。
+prepare 要求 workflow 通过、无待审批 Gate，且模板声明的命令门禁、治理门禁、安全扫描、验收证据与 QA 签署全部满足。不满足前置检查时不会生成 PR 包；CLI 与 Web Dry-Run 会逐项列出失败检查和中文原因。
+
+prepare 完成后，CLI 输出与 Web Run 详情的「交付落点与下一步」卡片会给出交付分支、基线、worktree、diff 概览、PR 包/body 文件路径，以及 `create-pr` 和本地 `git merge tekon-delivery/<runId>` 两种下一步。
 
 ### 4.8 创建远端 PR
 
@@ -292,6 +296,27 @@ tekon eval readiness
 - 非 Git 目录下 `none` 节点用文件快照判定源码改动：递归记录相对路径、内容 sha256、文件大小与权限位（chmod 可检测），忽略 `.git`、`.tekon`、`node_modules`。检测边界：空目录的增删、文件时间戳（mtime）变化不计为修改；租约创建与 finalize 各做一次全量哈希，大仓库会有额外 IO 成本。
 - `in-place` 运行不产生 `tekon-delivery/<runId>` 交付分支，不能创建 PR；PR 交付会以 `DELIVERY_WORKSPACE_UNSUPPORTED` 前置拦截，请改用 `worktree` 模式。非 Git 目录下 autoFix repair、QA 交付 ref 同样不可用，需要这些能力请在 Git 仓库用 `worktree` 节点（误用会得到 `WORKSPACE_GIT_REQUIRED` 可读错误而非原始 git 报错）。
 - 并发限制：`in-place` 节点直接改主工作区，作业锁按 run 隔离而非按目录，不要对同一仓库并行运行多个含 `in-place` 节点的 run，否则会相互覆盖文件。
+
+#### 交付声明（delivery 块）
+
+模板作者通过顶层 `delivery:` 块声明该模板能否走向 PR 交付及所需证据；没有该块、或 `deliverable` 不为 `true` 的模板（含全部旧版自定义模板）结构性不可交付，需显式补声明后重新发起运行：
+
+```yaml
+delivery:
+  deliverable: true
+  requirements:
+    # 可选子集：build / test / lint / e2e-pass，且每个门必须在节点 gates 中真实存在
+    commandGates: [build, lint, test]
+    # 可选子集：independent-review / role-scope / ac-evidence / qa-signoff / process-completeness
+    governanceGates: [independent-review, role-scope]
+    qaReleaseSignoff: true      # 可选
+    securityScan: true          # 可选
+    acceptanceEvidence: true    # 可选
+```
+
+约束：声明的门禁类型必须在模板节点中实际配置，`tekon workflow validate` 与运行时归一化两条路径都会拒绝不存在的门；数组内类型不可重复；`deliverable: false` 不允许携带 `requirements`。裁决只读取运行受理时冻结的快照，改 YAML 不影响在途运行。内置模板的声明示例可参考 `workflows/` 下五个产代码模板。
+
+**未来条目**：自动化的 git 回送命令（把交付分支改动送回主工作区，需覆盖脏工作区、in-place、非 Git 目录等场景）尚在 backlog，当前本地合入仅支持手动 `git merge tekon-delivery/<runId>`；任何指引都不会承诺尚不存在的命令。
 
 ### 5.5 Role
 
@@ -396,20 +421,25 @@ tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headle
 
 ### 5.10 Readiness
 
-单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。
+单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。Pre-PR readiness 的裁决依据是运行受理时冻结的计划快照（`plan_snapshot`，带 sha256 摘要）中的模板交付声明，运行途中修改模板 YAML 不影响在途运行的裁决。
 
-**轻量默认模板与 PR 就绪边界**：`lightweight-delivery` 只含 `schema` 与人工 `human` 门禁，没有命令型门禁（build/test/lint/e2e）、治理门禁（独立评审、角色范围、验收证据、QA 签署、过程完整性）、安全扫描与验收准则产物。Pre-PR readiness 共 9 项检查，轻量运行即使完全跑通，其中 6 项也会结构性恒红：
+**声明式交付边界（v0.40.0 起）**：模板通过 `delivery:` 块声明是否可交付及证据要求。`goal`、`plan-only`、`lightweight-delivery` 没有该声明，readiness 直接短路为单一失败检查 `delivery-not-declared`、`ready=false`，不再逐项亮灯；快照缺失、旧版格式或摘要校验失败同样 fail-closed 归入该检查，不会让运行详情页报错或误判可交付。
 
-| 恒红检查 | 原因 |
+可交付模板按声明逐项裁决（共 9 项检查），模板未要求的维度以「模板未要求」通过而非标红：
+
+| 检查 id | 含义 |
 | --- | --- |
-| `standard-delivery-template` | 硬性要求模板为 `standard-delivery`，轻量模板直接不满足 |
-| `validation-gates-passed` | 轻量模板无任何命令型门禁，检查要求至少 1 个 |
-| `acceptance-criteria-evidenced` | 无验收准则产物 |
-| `qa-release-signoff-passed` | 无 qa-signoff 门禁与 QA release 签署 |
-| `standard-governance-gates-passed` | 5 类治理门禁全部缺失 |
-| `security-scans-passed` | 无安全扫描证据，检查要求至少 1 项 |
+| `delivery-declared` | 冻结计划中的模板已声明交付要求（历史 id `standard-delivery-template`，旧事件中仍可能出现） |
+| `workflow-passed` | 工作流已成功完成 |
+| `audit-valid` | 审计哈希链完整未被篡改 |
+| `no-pending-human-gates` | 无待处理人工审批 |
+| `validation-gates-passed` | 声明的 build/test/lint/e2e 命令门禁均通过（skipped 且分类为 not-applicable 视为满足） |
+| `governance-gates-satisfied` | 声明的独立评审、角色范围、验收证据、QA 签署、流程完整性门禁满足（历史 id `standard-governance-gates-passed`） |
+| `acceptance-criteria-evidenced` | 验收准则证据齐全（仅声明 `acceptanceEvidence` 的模板要求） |
+| `qa-release-signoff-passed` | QA release signoff 通过且覆盖全部验收准则 |
+| `security-scans-passed` | 安全扫描证据满足（仅声明 `securityScan` 的模板要求） |
 
-因此轻量运行的 `ready` 恒为 `false`，`delivery prepare`/`create-pr` 会以前置检查拦截，**默认模板不会、也无法自动产出 PR 交付**。需要走到可审 PR 时，发起运行显式选择 `standard-delivery`（或含上述门禁与产物的自定义模板）。这是产品边界而非缺陷：轻量模板定位是「快速实现 + 人工把关」，把是否升级为重治理交付留给人决定。
+因此 `lightweight-delivery` 等不可交付运行的 `ready` 恒为 `false`，`delivery prepare`/`create-pr` 会以前置检查拦截，**默认模板不会、也无法自动产出 PR 交付**。需要走到可审 PR 时，发起运行显式选择五个可交付模板之一（或在自定义模板中显式编写 `delivery:` 声明，见 §5.4）。升级前创建的旧运行需重新发起才能交付。这是产品边界而非缺陷：轻量模板定位是「快速实现 + 人工把关」，把是否升级为可交付运行留给人决定。
 
 ### 5.11 Work Usability
 
@@ -717,7 +747,7 @@ tekon delivery dry-run
 tekon delivery prepare
 ```
 
-仅支持 `standard-delivery`；满足 §4.7 前置检查后生成：
+支持所有带 `delivery:` 声明的可交付模板（五个内置产代码模板，及显式声明的自定义模板）；满足 §4.7 前置检查后生成：
 
 - `.tekon/runs/<runId>/delivery/pr-package.md`
 - `.tekon/runs/<runId>/delivery/pr-body.md`

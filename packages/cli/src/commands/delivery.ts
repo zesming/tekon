@@ -9,6 +9,7 @@ import {
   createPullRequestPreparation,
   createRepositories,
   createScmDelivery,
+  createWorkReviewSurface,
   migrateDatabase,
   queryPullRequestCiStatus,
   watchPullRequestCiStatus,
@@ -25,6 +26,7 @@ import {
   resolveProjectRepoPath,
 } from '../lib/path-utils.js';
 import { selectLatestRunId } from '../lib/db-helpers.js';
+import { formatDeliveryGuidance } from '../lib/delivery-guidance.js';
 
 export async function commandDelivery(
   argv: string[],
@@ -58,6 +60,27 @@ export async function commandDelivery(
             `requiresHumanApproval=${preparation.requiresHumanApproval}`,
           ].join(' ') + '\n',
         );
+        // PD-21：追加人读交付指引（分支/worktree/diff/落点/下一步），
+        // 与 core review surface 同源，不改变上面的机器可读行。
+        // 展示性输出做错误隔离：prepare 产物与审计已落盘，指引构造失败
+        // 不能把已成功的 prepare 翻成命令失败。
+        try {
+          const surface = await createWorkReviewSurface({
+            repoPath,
+            repositories,
+            audit,
+            runId,
+          });
+          io.stdout.write(formatDeliveryGuidance(surface));
+        } catch (guidanceError) {
+          io.stderr.write(
+            `交付指引生成失败，PR 材料已生成且不受影响：${
+              guidanceError instanceof Error
+                ? guidanceError.message
+                : String(guidanceError)
+            }\n`,
+          );
+        }
       },
     );
     return;
