@@ -377,7 +377,10 @@ function runCli(
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-release-e2e-'));
   tempDirs.push(repoPath);
-  execFileSync('git', ['init'], { cwd: repoPath });
+  // 显式 -b main：runner 无 init.defaultBranch 全局配置时裸 init 会落到
+  // master，导致 baseBranchForRepo 回退的 main ref 解析失败（PD-21 的
+  // git merge 门控断言在 CI 上拦截了该环境依赖）。
+  execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
   execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
     cwd: repoPath,
   });
