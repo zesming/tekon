@@ -1,5 +1,9 @@
 # 变更日志
 
+## 0.39.1 — 2026-11-19
+
+- 修正 web 包依赖归类，消除生产依赖审计的 picomatch ReDoS 误报（GHSA-fc5q-39xc-vjpf，高危，npm 上 `<=4.0.7` 全部受影响、当时无补丁）。`vite` 与 `@vitejs/plugin-react` 是纯构建工具（`src/` 零运行时 import，仅 `vite build`/dev server 使用），原被误置于 `dependencies`，使其传递依赖 `vite → fdir/tinyglobby → picomatch` 被 `pnpm audit --prod` 计入生产图。现移至 `devDependencies`，lockfile 仅依赖归类变化、解析版本零漂移；web 为 private 包且所有 CI 安装均为全量（含 devDeps），构建链不受影响——`vite build` 产物内容哈希与移动前完全一致，frozen-lockfile 安装、web 662 项测试均通过。修复后 `pnpm audit --prod` 与 `audit-production.mjs` 报 0 公告、退出 0，非必需的 Dependency audit 检查转绿。无产品运行时行为变化。
+
 ## 0.39.0 — 2026-11-18
 
 - 新增轻量默认工作流 `lightweight-delivery`（PD-08）：plan→implement→confirm 三阶段、pm-plan/rd-implement/human-confirm 三节点，只保留两个 `schema` 门禁与一个人工 `human` 门禁，产出 demand-card、code-changes 两个产物。human-confirm 是无产物输出的纯人工确认节点，跨阶段 `dependsOn` 实现节点，驳回经 PD-18 `reworkTargetNodeId: rd-implement` 回到 RD 返工；节点重试 maxAttempts 2、固定退避 250ms。小改动不再承担 `standard-delivery` 的 16 节点/44 门禁成本。
