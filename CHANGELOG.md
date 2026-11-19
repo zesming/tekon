@@ -1,5 +1,129 @@
 # 变更日志
 
+## 0.39.2 — 2026-11-19
+
+- 回退未合入的 0.39.1 依赖归类尝试，恢复 `vite`/`@vitejs/plugin-react` 在 web `dependencies` 的生产依赖定位。0.39.1 曾把二者移到 `devDependencies` 以让 `pnpm audit --prod` 排除其传递依赖 picomatch（GHSA-fc5q-39xc-vjpf），但该判断不成立：`packages/web/src/server/http.ts` 在 `tekon ui` dev 模式经 `await import('vite')` 动态加载 Vite 中间件并启用 React 插件，二者是真实运行时依赖；`runtime-audit-scope.test.ts` 也以合同测试钉住「manifest 与 lock importer 均属生产依赖」。回退后产品行为与 0.39.0 完全一致（构建产物哈希不变），仅版本号前向递增以保持历史单调。
+- picomatch ReDoS 公告仍在，但它只经构建/开发链进入、非浏览器运行时面，且 Dependency audit 是不阻塞合并的非必需检查；在 npm 发布含修复的 picomatch 版本前维持现状，待上游补丁后升级，不在审计中静音高危项。
+
+## 0.39.0 — 2026-11-18
+
+- 新增轻量默认工作流 `lightweight-delivery`（PD-08）：plan→implement→confirm 三阶段、pm-plan/rd-implement/human-confirm 三节点，只保留两个 `schema` 门禁与一个人工 `human` 门禁，产出 demand-card、code-changes 两个产物。human-confirm 是无产物输出的纯人工确认节点，跨阶段 `dependsOn` 实现节点，驳回经 PD-18 `reworkTargetNodeId: rd-implement` 回到 RD 返工；节点重试 maxAttempts 2、固定退避 250ms。小改动不再承担 `standard-delivery` 的 16 节点/44 门禁成本。
+- 新增 `DEFAULT_WORKFLOW_TEMPLATE_ID = 'lightweight-delivery'` 常量并加入内置模板联合类型，作为运行缺省唯一事实源：core 的 admission-store（3 处回落）、workflow engine 回落，CLI 的 `run`/`doctor`/`workflow preflight`，以及 Web 的 workflow/project 路由与受理信封统一改用该常量。`standard-delivery` 不再是隐式默认，需在模板列表显式选择；`workflow init --from` 脚手架刻意保留 `standard-delivery` 作复制源（生成完整可裁剪模板），与运行缺省默认分离。draft shape 的受控模板联合同步收录新 id。
+- CLI `run` 模板生效优先级明确为「显式 `--template` > 已塑形需求卡 `recommendedTemplate` > 缺省默认」。生效模板只在新受理分支内惰性解析、经 `startRun` 通道绑定；**受理信封（requestId + 需求哈希双键）保持常量、绝不因模板回落重建**——同一 Request ID 重放时即使需求卡已删除/修改也不会触发 `REQUEST_ID_CONFLICT`，沿用首次执行绑定的模板，修复了分支内重建信封导致重放永久哈希冲突的缺陷。
+- Web 首页 SessionComposer 新增运行模式/工作流模板/执行代理三选：抽 `use-run-plan-selection` 共享 hook（agent 常量、默认代理解析、Goal/DSH 互斥、全量入参 planKey），StartRunForm 高级表单改为复用同一套常量与约束，两个入口行为对齐。切换任一选择都以全量入参重查 `workflow.plan`，查询缓存按入参区分不串用；Goal 模式禁用模板且请求不带 template/profile，选 `dsh-headless` 自动切 Goal 并清空模板；提交时默认留空不带 template（服务端回落轻量默认），显式选择则随受理载荷上报。
+- 产品边界登记：轻量模板只有 schema+human 门禁，无命令型门禁、五类治理门禁、安全扫描与验收证据，Pre-PR readiness 9 项中 6 项结构性恒红（模板、命令门禁、验收证据、QA 签署、治理门禁、安全扫描），`ready` 恒 false，`delivery prepare`/`create-pr` 前置拦截——默认模板不会也无法自动产出 PR，需要可审 PR 必须显式 `standard-delivery`。
+- 测试：core 新增轻量模板结构/目录/常量单测 6 项与真实内置模板引擎 e2e 2 项（暂停→驳回触发 rd-implement 返工、驳回标记进 prompt、返工审计事件→再暂停→批准 passed 的完整人工环，以及一次通过路径）；CLI 新增真实进程 e2e 6 项（默认轻量、显式模板、Draft 采用、覆盖、Goal、删 Draft 同 runId 重放）；Web 新增 Playwright 三选 e2e 4 项（默认渲染、全量入参刷新与缓存命中、Goal/DSH 互斥、受理载荷 template 取舍）；既有 run-cli/write-auth/workflow-inspect 断言升级为显式 `standard-delivery` 口径。另新增轻量模板 readiness 6 项恒红边界回归（精确钉住 6 红/3 绿 id 集合，防默认模板悄悄变得可交付）。
+- 修复 Node 24 下角色物化的进程级硬崩（CI Verify 红灯根因）：`materializeProjectRole` 原直接 `fs.cpSync(..., {recursive:true})` 复制内置角色目录，当目录权限被撤（如 `chmod 0o000`，根目录或嵌套 `skills`/`knowledge` 子目录）时，Node 24 的 native `directory_iterator` 抛出的 C++ `filesystem_error` 会逃逸 N-API 绑定边界，JS try/catch 无法捕获而 `SIGABRT`（vitest 表现为无 JS 错误的 `Worker exited unexpectedly`，全部测试仍过但步骤失败）；Node 20/22/26 同路径正常抛 JS `EACCES`。现 cpSync 前用纯 libuv JS 系 API（`readdirSync` + `accessSync`，不走 native 迭代器）对整棵角色树递归预检，任一不可读项即在创建临时目录前 fail-closed 抛可读 `ROLE_DIR_INVALID`、无残留；覆盖根目录与嵌套子目录两类撤权，最小复现脚本与 Node 24/26 双版本验证通过，并经负向用例证实撤掉递归预检会在 Node 24 复现 SIGABRT。
+- 修复 CLI `run` 结果行模板错报：采纳 Draft `recommendedTemplate` 回落时，执行与落库用的是生效模板，但 stdout「模板:」行原来打印受理信封里的静态缺省（误报 `lightweight-delivery`）。改为从持久化计划快照 `planSnapshot.template.id` 回读实际生效模板（fresh 受理与重放路径一致），快照异常时安全回落到信封模板；展示与执行、审计、plan_snapshot 重新对齐。
+
+## 0.38.0 — 2026-11-18
+
+- Web Config 页整改（PD-11）：删除与真实 `constraints.yaml` 结构不符的静态 Constraints tab（页面、路由、导航与死样式一并清理，旧 URL 落到 404 页）；Roles 页从「只读项目目录、新项目误显示 No roles configured」改为列出内置+项目角色并集（6 个内置角色不再隐形），每行标注来源（内置 built-in/项目 project），overview 角色计数同口径修复。
+- 角色 prompt 可在 Web 查看与编辑：列表 DTO 仍保持 strict 不携带 prompt（既有防泄漏回归不变），新增显式 `role.get`（返回生效候选的 systemPrompt 与来源）和 `role.updatePrompt`（会话 token 鉴权）两个 RPC。编辑内置角色不会修改安装目录，而是在 `.tekon/roles/<id>/` 物化整目录项目级覆盖（复制 agent.yaml/tools.yaml/skills/knowledge，保证 `loadRole` 三级解析合同不被半成品破坏），运行时项目覆盖优先；项目角色直接改写其 system.md。
+- 角色写原语下沉 core（新 `role/project-overrides.ts`）：`listAvailableRoles`/`readRolePrompt`/`materializeProjectRole`/`writeProjectRolePrompt`，CLI `tekon role create` 重构为薄封装共用同一实现，输出、错误文案与重复创建拒绝行为保持不变（真实进程 e2e 锁定）。物化走临时目录 + 原子 rename，失败清理不留残留，重复调用幂等。
+- 写路径安全闸门对齐 demand.ts 范式：`.tekon` 父目录与 roles 目录 lstat 拒软链、realpath 严格锚定 `<repo>/.tekon/roles` 防父目录软链逃逸、角色目录 containment、system.md 文件本体写前 lstat 拒软链；角色 id 经 kebab-case schema 校验，prompt 限非空且 ≤64 KiB（按 UTF-8 字节计）。RPC 语义校验在 handler 内完成，非法/未知 id 与解析失败均给中文 4xx/404 而非英文模板；仅存在于 user 级的角色不经 Web RPC 直读。
+- 测试：core 新原语 18 测（含五类软链/逃逸对抗夹具、原子性与重试、字节边界）、Web RPC 8 测（并集、token 鉴权、落盘且内置零改动、中文错误、user 级隔离、非法 prompt 零副作用）、Playwright 编辑旅程与 Constraints 移除断言；旧 role.list/overview/contract-strict 断言升级为并集口径，安全断言保留。
+
+## 0.37.0 — 2026-11-18
+
+- 角色 `tools.yaml` 工具策略从「仅 prompt 提示」升级为运行时 fail-closed 强制（PD-10 10a-2）。角色声明的 `deny`/`requiresHumanApproval`/`network`/工作目录约束现在真正参与命令裁决，不再依赖 agent 自觉。
+- 新增纯函数 `mergeRoleAndGatePolicy`/`mergeCwdScope`（core 导出）：角色策略与门禁策略按候选 A 合并——`deny`/`requiresHumanApproval`/`allow` 取并集、`network` 取最严（disabled>restricted>enabled）、工作目录走语义 containment 交集（取能容纳执行 cwd 的唯一最窄 scope，无 scope 容纳时 fail-closed，杜绝朴素数组交集在 worktree 场景误杀）。角色 `deny` 不可被门禁手写授权（PD-04）覆盖；固定拒绝规则（危险 rm/force push/shell 元字符/网络）仍在裁决最前端先生效。
+- 两条执行通道统一收口：命令网关（gate-runner 门禁命令、resume 确定性失败判定）按「拥有该 gate 的节点」角色合并策略（返工取 targetNode 角色，不串用评审节点）；适配器通道在现有 `AgentRunInput.commandPolicy` 上逐节点不可变合并（node/rework/repair 四调用点经 `agentInputForLease` 单点覆盖，不 mutate run 级单例）。
+- preflight/doctor 接入同一角色策略：新增 `resolved-approval-required` 预检状态（复用网关同一 `matchesAny` 判定），消除「预检 resolved、运行 blocked-for-approval」的审批双标；角色在预检与运行期经同一 `loadRole` 层级解析。
+- 安全：角色 `tools.yaml` 损坏/加载失败时节点 fail-closed，不回落基线继续跑；角色策略生效写 `role.tool-policy.applied` 审计（含 source 与约束规模），可追溯。
+- 已知边界（设计登记）：codex/dsh 的会话内工具域与审批无原生强制（claude 经 `--settings` 落地），但网关层 blocked-for-approval 与网络/deny 约束对三 provider 一致；角色文件运行时读盘不进冻结计划，跨 resume 一致性依赖文件未被修改。
+- 测试：新增合并函数 14 测（含归因判别，证明拒绝来自角色而非固定规则）、真实命令网关 e2e（角色 deny 端到端 rejected）、适配器注入/空 allow 不塌缩/双节点不可变/fail-closed e2e、resume 角色 parity、preflight 审批 parity。
+
+## 0.36.0 — 2026-11-17
+
+- 工作流模板可浏览、可校验、可轻量脚手架（PD-07 CLI 部分、CD-20）：`tekon workflow list` 每行输出 `id [builtin|project]` 来源标记，并在浏览阶段对每个模板跑非抛出的解析探针——解析失败的模板不再被静默丢弃，而是附 `invalid: <可读原因>`，写错的模板不必等到 `run`/`show` 才暴露；错误消息折叠为严格单行（YAML 语法错误自带的多行代码片段也不例外），保住一行一模板的脚本解析合同，完整多行诊断交给 `validate`。探针为显式 opt-in（`listWorkflowCatalog({ validate: true })`），既有调用方（含 Web 模板列表与 CLI 其他路径）不传该选项，目录扫描的零副作用形状不变。
+- `tekon workflow show <name>` 由只给 id/name/阶段数三行改为节点化完整结构：逐阶段列出节点角色、工作区模式、内联提示词、产物类型与门禁（命令型门禁带 `commandRef`），不读模板 YAML 源码就能学写法。
+- 新增 `tekon workflow validate <name>`：独立校验模板文件，成功退出 0 并输出阶段/节点数，失败退出 1 并给中文可读原因与修复指路，可直接用于脚本。core 同步导出非抛出的 `validateWorkflowTemplateFile`、判别联合 `WorkflowTemplateValidation` 与统一错误翻译 `readableWorkflowTemplateError`/`formatZodIssues`。
+- CD-20 全链路消除裸校验器输出：`show`/`preflight`/`run`/`doctor` 共用的 `loadWorkflowByName` 现在把 zod 校验错误翻译为「字段路径: 中文原因」单行（invalid_type/too_small/too_big/unrecognized_keys/invalid_value 枚举/invalid_union 联合/invalid_format 标识符/superRefine custom 门禁均有中文映射，枚举错误附允许值列表），YAML 语法错误折叠为单行中文；zod 通过后的语义校验错误（重复阶段/节点 ID、重复 gateKey、未知 dependsOn 依赖、产物引用非法、保留产物类型误用等十余族）经展示层翻译表统一中文化，内部 throw 的英文稳定标识保持不变以免影响既有机器断言。模板名不存在时统一提示用 `workflow list` 查看可用名称——不再抛英文 ENOENT/EISDIR/EACCES，也不回显 CLI 安装目录这类仓库外路径。
+- `tekon workflow create <name> --minimal` 生成单阶段、单实现节点加人工门禁的最小合法脚手架，不必再从重量级 `standard-delivery` 复制裁剪；不带 `--minimal` 时仍按 `--from`（默认 standard-delivery）复制既有模板，同传两个冲突选项时提示 `--from` 被忽略。create 现拒绝覆盖已存在的模板文件（需先手动删除或换名）；`--from` 来源模板不存在时给中文指路而非英文 ENOENT，且失败不留目标文件或空目录副作用。
+- 模板目录扫描接受符号链接（`.yaml`/`.yml`）：项目可用软链共享同一份工作流模板，链接模板与普通模板一样出现在 `list`/`show`/`validate` 中并参与有效性探针。**统一软链信任边界（对所有命令一致）**：core 导出 `inspectTemplateSymlink`，在任何 `readFileSync` 之前做 lstat+realpath containment 校验，链接目标必须位于该模板目录内——目录扫描的取名读取与解析探针、按名加载器 `loadWorkflowTemplate`（Web/goal 路径）、CLI `loadWorkflowByName`（show/preflight/run/doctor 汇聚点）与显式 `validate` 全部共用同一闸门。指向目录外（含随 git 提交进入仓库的恶意软链）或断开的链接一律拒绝读取：list 标记为无效条目，显式命令直接报中文错误，杜绝仓库外文件内容经 YAML 解析错误片段或条目字段回显（覆盖自动枚举与用户点名两条路径）。Web 两个 `loadProjectWorkflowIfPresent` 直读助手（workflow/project 路由的 plan/run 模板加载）此前绕过按名加载器，本批同样接入闸门并有 RPC 级回归（越界软链经 `workflow.plan` 被拒且不回显外部内容）。目录内合法软链（含嵌套）正常放行，共享用法不受影响；EISDIR/EACCES/ELOOP 等异常均给中文错误而非裸 errno。断链、越界、目录链接、按名/显式加载/Web RPC 拦截均有回归用例并断言不泄漏外部内容。已知残留：lstat/realpath 与读取之间存在本地单用户模型下可接受的 TOCTOU 窗口，注释中登记。
+- 修复 argv 解析隐患：统一从子命令后的完整 tail 解析选项，模板名只取 parseArgs 规范化后的位置参数。旧实现的原始 argv 解构有两类错位——`workflow list --repo <path>` 这类标志紧跟子命令的写法，`--repo` 被吞进名称位导致 parseArgs 见不到 repo、静默回落当前工作目录（项目模板不可见）；`workflow show --repo <path> <name>` 这类标志位在位置参数之前的写法，`--repo` 会被误当模板名去找 `--repo.yaml`。现在 `select` 之外的五个子命令对两种参数顺序行为一致，无位置参数的 `preflight` 正确回落 `standard-delivery`。手册新增 §6.3.1（Markdown 与 HTML 人审版同步），并顺手修正手册封面历史版本号。
+
+## 0.35.0 — 2026-11-17
+
+- 角色支持声明 Provider 覆盖（PD-10 第一批）：项目/内置角色 `agent.yaml` 新增可选 `model`、`effort`、`driver` 三个厂商中立的开放字符串字段，不写时沿用运行级 Provider 默认值，行为零变化。覆盖按节点在执行期读取角色文件（与 `system.md` 热更同语义，不进冻结计划），经适配器翻译成 harness 参数——claude-code 的 `model` 翻译为受控 `--model`；codex 的 `model` 翻译为 `--model`、`effort` 翻译为受控 `model_reasoning_effort`。三个字段在进入任何子进程 argv 前经统一字符白名单校验（字母/数字开头，仅含字母数字、连字符、点、下划线，长度 ≤64），在解析层与两个适配器构建层双点拦截，杜绝选项与 Shell 元字符注入。适配器无法 honor 的字段在节点启动前显式报错而非静默丢弃：claude-code/dsh-headless 不支持 `effort` 报 `ROLE_OVERRIDE_UNSUPPORTED`；角色 `driver` 与运行级 Provider 不符报 `ROLE_DRIVER_MISMATCH`（同一运行不能按节点切换 harness）；非法值报 `ROLE_OVERRIDE_INVALID`。每次解析送达适配器的覆盖写入审计事件 `role.provider-overrides` 可追溯（是否真正生效以适配器执行结果为准）；`mock` 适配器忽略所有覆盖。合同 5 由 `it.fails` 占位转为真实回归（核心 expected fail 归零）。角色工具策略 `tools.yaml` 的运行时强制执行仍为后续批次。
+
+## 0.34.0 — 2026-11-17
+
+- 终态 failed 运行支持显式重试（PD-17 步 3）：新增 `tekon retry [--run-id <runId>]`——运行因门禁重试耗尽（模板声明 `onExhausted: fail`）等原因收敛为终态 `failed` 后，裸 `tekon resume` 仍按终态拒绝，确认失败原因排除后可用 retry 只重跑失败节点：CAS 把运行与失败节点从 `failed` 置回 `running`（状态机仅开放 `failed→running` 一条开口，`failed` 仍属终态），审计事件 `run.retried` 记录 `fromStatus`/`toStatus`；已 `passed`/`skipped` 节点由执行计划自然跳过、不重复调用 Agent，只有失败节点及其后继重新执行（新建角色执行记录，仍活动的工作树租约复用以保留现场）。重试沿用受理时冻结的计划与 Provider 快照，不改变模板结构；退出码与 `run`/`resume` 同一合同。
+- 重试入口的状态守卫：只接受 `failed` 运行——`passed`/`cancelled` 按终态拒绝，`blocked`/`interrupted`/`paused` 报 `RETRY_NOT_FAILED` 并提示改用 resume，存在执行中作业时拒绝入队。重试选项经 `jobs.resume_options.retry` 持久化跨进程传递，入队与 claim 两道终态守卫同步开放 failed-retry 旁路（普通终态作业仍被拦截，retry 标记不能复活 passed/cancelled），作业执行器据此改走独立的 `engine.retryRun` 而非 resume 路径；CLI 入队后认领前崩溃留下的 queued 作业在下一次 retry 时由事务自动交接复用，不形成孤儿死结。`run.retried` 同步接入会话事件投影（Web 会话流以“受控交付已重试”标题区分重试代际）。
+- 手册 §6.10.1 文档化 `tekon retry` 的用法、边界与与 `--rebind`/新运行的选择，并同步故障处理表与 HTML 人审版。
+
+## 0.33.0 — 2026-11-17
+
+- 修复配置后可在同一运行内采用新绑定（PD-05）：运行默认仍按受理时冻结的绑定恢复，但 `tekon resume` 与 `tekon status` 现在会只读探测并提示当前仓库配置与冻结绑定的分项差异（agent、provider、repo-profile 命令），不改变绑定；新增 `tekon resume --rebind [--agent <name>]` 显式采用当前配置——用冻结模板原字节与当前仓库事实重新捕获自洽的执行计划（新 digest），在一个事务内替换 `plan_snapshot`/`plan_digest` 与 Provider 快照，并重写尚未终态节点（含历史返工节点）的物化门禁，已通过节点的历史门禁结果与审计链保持不变，重绑定记录在审计事件 `run.rebound`（含新旧 digest 与脱敏分项差异）。终态运行与有活跃 Job 的运行拒绝重绑定；只重绑定 agent/Provider/门禁命令，模板结构变更仍需新运行。`tekon review` 的 missing-command Triage 改指 `--rebind`，不再建议与手册矛盾的旧路径。角色指令（`.tekon/roles/<role>/`）本就运行时读盘，修改后普通 resume 即生效，无需重绑定。
+- 多人工门禁按 gateKey 精确关联返工（独立审查加固）：同一节点挂多个 human gate 时，被驳回的门禁结果必须与声明 `reworkTargetNodeId` 的门禁按稳定 gateKey 匹配，不再可能借用另一个门禁的返工目标发起错误返工并卡死运行；补纯判定与引擎级 e2e 及变异证据。
+- `--rebind` 独立审查加固：重绑定事务内复查活跃作业，消除前置检查与事务之间的 TOCTOU 窗口（`REBIND_ACTIVE_JOB`）；零差异重绑定只跑安全守卫、跳过写入与审计噪声；补含人工返工节点的重绑定回归与审计脱敏（`[REDACTED_*]`）专门 e2e。
+- Web 决策输出接口补齐 `requestNote` 字段声明，修复静态类型门禁（运行时 mapper 已输出该字段）。
+
+## 0.32.0 — 2026-11-17
+
+- CLI 退出码区分“卡住”的运行（CD-23）：`tekon run` / `tekon resume` 结束时按工作流终态返回退出码——`0` passed；`1` failed/interrupted/cancelled；`2` blocked（节点被确定性问题卡住，需先修复配置或环境）；`3` paused（等待人工确认）。此前 blocked 和 paused 都返回 `0`，脚本或 IM 集成会把“等待处理”误判为成功。`tekon status` 等只读命令退出码不变。
+- 返工目标改为声明驱动（CD-14）：changes-requested 返工只读取评审产物 `reviewProcess.targetNodeId`（independent-review 门禁已校验其连通性、角色与产物类型），删除“取最后一个 passed 节点”的启发式回退——评审产物缺少合法目标时直接按门禁耗尽处理（blocked），不再可能重跑错误节点；六种评审产物类型一视同仁，不再只认三类白名单。返工反馈现在携带评审标题、正文、摘要、决定和完整 findings 列表，而不是固定英文句或被截断的 JSON 头部。
+- 返工失败路径不再产生孤儿记录或掩盖真实原因（CD-33）：返工 agent 或评审节点重跑失败时，对应 role_run 立即标记 interrupted（旧实现留在 running）；评审重跑失败改为向上抛错由节点执行器统一收敛，消除 `illegal workflow transition` 二次异常；目标门禁抛错时清理租约别名，避免后续被 `active execution lease required` 掩盖真实门禁错误。三种失败注入均有 e2e 覆盖并验证 resume 可恢复。
+- 恢复 blocked 运行不再盲目重跑 agent（PD-31）：新增确定性失败白名单——最近一次门禁失败为 `missing-command`、`rejected` 或 `unsupported-gate` 且失败条件在当前配置下仍成立时，resume 不创建 role_run、不调用 agent，节点保持 blocked 并输出原因与下一步（审计事件 `node.resume-skipped-deterministic`）；条件已消失或分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`、`human-rejected`）时照常重跑，且重跑提示词注入最近一次门禁失败的类型与分类。新增 `tekon resume --gates-only`（Web `project.resume` 同步支持 `gatesOnly`）：只重跑门禁不重跑 agent，选项经新增的 `jobs.resume_options` 列持久化跨进程传递；节点无完成 agent 记录时以 `GATES_ONLY_NO_AGENT_RUN` 拒绝。
+- 人工驳回接入返工链路（PD-18）：human gate 支持模板字段 `reworkTargetNodeId` 声明返工目标（解析期校验为节点直接上游，内置 bugfix/plan-only 已声明）；驳回后 resume 按声明对目标节点返工，决策备注作为反馈注入返工提示词，返工后重跑评审并产生新的 pending 决策（同一驳回只返工一次），不再盲目重跑被驳回的评审节点。人工决策新增 `request_note` 列与 `requestNote` 字段，把门禁请求上下文与决策备注分离，approve/reject 覆盖备注不再破坏审批摘要的命令/风险解析（旧行自动回落 note）。执行计划完整性校验接受 human-rejected 作为合法返工授权来源；合同 6 由 `it.fails` 占位转为真实 e2e 回归。
+- 独立审查加固（同次发布）：人工返工补发 `gate.rework.attempt` 审计事件，动态返工节点由此通过二次 resume 的计划完整性校验（此前返工后再次恢复必然 `nodes.unproven` 卡死）；人工返工失败与 `--gates-only` 守卫拒绝都把工作流/节点收敛回 interrupted/blocked，不再谎报 running；完整性校验新增 human 返工目标与模板 `reworkTargetNodeId` 一致性断言；spawn 前取消的门禁归类为 `cancelled` 而非 `rejected`，不再被 resume fail-fast 误判为确定性策略拒绝；已物化冻结门禁的 missing-command 提示改指 `--rebind`/新运行而非死路；Web 决策投影顶层 `requestNote` 旧行回落与 core 对齐。
+
+## 0.31.0 — 2026-11-16
+
+- 工作流角色和产物类型开放命名（PD-06 子项 1–3）：模板里的 `role` 和产物 `type` 不再限制在内置枚举，任何 kebab-case 标识符（如 `writer`、`essay`、`weekly-report`）都能声明并在节点间传递；内置研发角色和 21 种内置产物保留专用校验，自定义产物类型回落通用 Markdown payload 校验（仍要求非空 title/body）。`ci-status` 改为显式的交付保留类型，agent 产物清单继续拒绝声明，安全边界从“枚举漏配的意外保护”变为明确规则。
+- 节点支持自带 `prompt` 字段：模板节点可声明提示词，经执行计划落库到 nodes 表（新增可空 `prompt` 列，旧库自动加列），运行时注入该节点的 agent 提示词，resume 后保持一致。
+- 角色管理放开自定义名字（PD-10 角色名部分）：`tekon role create <name>` 对非内置名字生成最小角色脚手架（agent.yaml + system.md），内置角色仍走整目录复制；`tekon role show goal` 不再被 CLI 的枚举副本拒绝；`role list` 能列出项目目录下的自定义角色，非标识符目录忽略。角色 ID 必须是小写字母开头的 kebab-case 标识符。
+- 返工一致性：声明了节点 `prompt` 的节点被 changes-requested 返工时，节点指令在同进程返工提示词、落库返工节点和 resume 重建计划三条路径保持一致，评审反馈在节点指令之上叠加；自定义角色在 role-scope 门禁上 fail-closed（现役引擎与 legacy registry 两套实现均有测试守护）。
+- 模板解析期直接拒绝把交付保留类型 `ci-status` 声明为节点产物，报错说明该类型由 Tekon 交付机制自产；Web 角色列表与 CLI 复用同一 kebab-case 标识符过滤，不再显示 `.DS_Store` 类非角色目录。
+- 删除从未实现的 `parallel` 阶段字段（CD-24）：旧模板里残留的 `parallel` 键会被接受但忽略，解析结果、运行计划和发起页不再出现"并行阶段"标识，阶段始终按依赖顺序串行执行；节点级 `dependsOn` 不受影响。
+- reviewer 节点与 Gate 变为可选（PD-06 子项 4）：不再要求模板必须包含 reviewer，产出 `code-changes` 的节点也不再强制带 build/lint 门禁，治理约束完全由模板自身内容表达；旧的 `governance` 字段保留解析兼容但不再生效。内置交付模板的角色、产物和门禁不变。
+- 产品合同同步（PD-06 子项 5、CD-39）：AGENTS.md 把"角色/产物/Gate 是产品合同"改写为"内置模板的默认约束"，补全 core 模块描述；README 与产品范围文档去掉"固定流程/固定模板"表述，反映可自由定义的工作流模板。
+- 手写仓库命令视为授权（PD-04）：门禁要执行的用户手写命令（模板内联或 repo-profile 绑定）自动进入该门禁的命令授权，`python3`、`make` 等非 Node 仓库的工具不再被固定 allow-list 拒绝；shell 元字符、网络命令、递归强制删除、force push 等固定拒绝规则仍然先生效。新增共享裁决函数，CLI `workflow preflight` 与运行期 Gateway 使用同一判定，预检的 `rejected` 状态能准确预测运行期结果，不再"预检 resolved、运行被拒"。
+- 受理期阻断缺失命令（PD-04）：新运行所需的必填 `commandRef` 在 repo-profile 中缺失时，受理直接失败并给出补全或标记 `notApplicable` 的修改示例，不创建运行、不调用 agent（CLI 与 Web 均生效，Web 返回 400）；`security-scan` 缺失有内置扫描兜底，不阻断；历史冻结计划的执行语义不变。
+- 旧计划兼容（CD-24 修复补强）：在 `parallel` 字段删除前冻结的 v2/v3 计划快照（含真实 R27 归档证据）仍可正常校验和恢复——投影对比前对称剔除遗留的 `parallel` 与 `digest` 键，计划摘要（digest）仍按冻结原字节做哈希认证，防篡改能力不降级；校验通过后回传的是经认证的冻结 digest 而非重投影的新 digest，因此 DB 级恢复链（`validateAndBuildExecutionPlan` 的 plan.digest 复核）与 `classifyExecutionBinding` 仍识别原计划身份（v3=frozen、v2=legacy-unbound），不会误判 invalid，历史冻结计划的执行语义保持不变。
+- 预检/运行裁决一致性补强（PD-04）：CLI `workflow preflight` 对 `commandRef` 解析出的非基线工具（如 `python3`、`make`）现在与运行期同判为已授权（resolved），不再出现"预检 rejected、运行放行"；`preflight` 与 `doctor` 的门禁分类改为直接复用运行期 `commandBindingBehavior` 规则，human/schema/independent-review 等语义门禁携带的命令引用（缺失或已解析）统一显示 `not-command-gate`，不再误报 missing 或对永不执行的命令做网关拒绝，与受理期阻断规则严格对齐。
+- 节点工作区三态（CD-09）：模板节点可声明 `workspace: worktree`（默认，隔离工作树，历史行为）| `in-place`（直接在仓库工作区执行，不建 worktree，支持非 git 目录）| `none`（禁止改源码）。文件权限不再从 `code-changes` 产物推断，而由该声明驱动：agent 提示词的源码编辑指引、finalize 裁决都按 workspace 生成；内置 Goal 模板显式声明 `none`，保留其历史只读语义。`none` 节点违规改源码时 finalize 抛可恢复错误（不进终态、不释放租约，审计事件带改动路径、工作树/快照位置与恢复指引），用户回滚后 resume 直接重试 finalize 而**不再重跑 agent**；同一节点首次 agent 失败/中断后再执行时，已释放的合成租约会被重新激活并为 none 节点重拍源快照基线，none 强制力在新一代执行中依然生效、带 gate 节点也不会因租约失活而卡死；合成租约（in-place/非 git none）在 release 后冷启动 resume 幂等复用、不报主键冲突，终态证据被正确识别。非 git 目录用文件快照（相对路径 + sha256 + 权限位，排除 `.git`/`.tekon`/`node_modules`）做源修改比对；worktree/repair 在非 git 目录抛可读的 `WORKSPACE_GIT_REQUIRED` 而非原始 git fatal。旧库自动加 `nodes.workspace` 列并默认 `worktree`，旧冻结计划快照缺省补 `workspace` 且 digest 防篡改不降级。`in-place` 与无交付分支的非 git 运行，PR 交付前置拦截（`DELIVERY_WORKSPACE_UNSUPPORTED`）。
+
+## 0.30.0 — 2026-11-13
+
+- Web 运行控制：blocked、interrupted、pending 等任何非终态运行都能在 Web 上直接取消（以前只有 running、paused 可以），interrupted 状态统一显示“已中断，需恢复”，不再出现“待输入/等待输入”这类与详情页不一致的标签；会话列表和运行表共用同一套状态标签，每个运行只显示一个徽章。
+- Web 默认代理：发起运行不再写死 `codex`，改为读取仓库 `.tekon/config.yaml` 的 `defaultAgent`（与 CLI 一致，未配置时默认 `claude-code`），发起表单用服务端返回的默认代理初始化；预览和受理按同一代理计算，计划摘要一致。
+- Web 写权限：Web 发起的写节点与 CLI 使用同一基线（`acceptEdits` 加角色的 `--disallowedTools`），headless 下普通文件编辑不再被只读默认拒绝；只读的 draft 路径不变。旧版本 Web 运行的快照仍是只读 `on-request`，恢复到写节点时会提示新建运行。
+- Web 审批队列：`/advanced/approvals` 列出当前项目下所有运行的待审批决定，不再只看最新一个运行；每条决定带所属运行和恢复信息，按各自的 runId 批准或拒绝。在会话侧栏批准或拒绝后，全局审批队列现在同步刷新，不再显示已决定的陈旧条目。
+- Web 运行前检查：发起和恢复运行后，若未检测到登录或有其他非阻断预警，会在页面提示，并列出透传的环境变量名；Provider 未安装等硬性失败仍在发起前直接拒绝。
+- Web 受理预检：`.tekon/config.yaml` 写错时，计划预览、运行受理和受理指纹三个入口统一返回 400 并带 `TEKON_CONFIG_INVALID` 前缀（以前受理指纹入口只给泛化服务错误），空的代理名在 HTTP 入口即被拒绝。
+- Web 就绪度：运行详情顶部徽章反映任务本身是否通过（工作流结果），交付包、PR 准备、PR 创建、远程 CI 等交付阶段在没有证据时显示“未开始”，不再计入失败；QA 签收和安全扫描属于任务结果，未通过仍计为失败。
+- Web 进度页：移除恒为空的“命令进度”卡片（其只扫描运行根目录，而进度文件实际写在 commands/gates/节点目录），保留工作流进度和门禁时间线；`progress.list` 接口保留给其他调用方。
+- `/advanced` 旧仪表盘移除，访问时直接重定向到 `/advanced/runs` 运行列表。
+- 节点和命令的输出脱敏后按行实时写入日志，运行中可以用 `tail -f` 查看，内存占用不再随输出总量增长；单行上限 1MB，超出时分段写入。跨数据块的中文等多字节字符不再乱码。
+- `progress.json` 在持续输出时最多每秒更新一次，心跳和结束时照常写入。
+- Tekon 进程被强制结束后留下的 agent 等子进程，会在另一个 Tekon 进程回收该任务时结束：核对启动时间一致后先 SIGTERM，5 秒后 SIGKILL，结果写入运行审计 `job.process-group`。进程启动后不到一个心跳就被结束的、以及首进程已退出的进程组不处理，见手册 §7。
+- 脱敏：值写在键的下一行时（如 `password:` 换行后的值）也会脱敏；私钥块每行带前缀（`cat -n`、`grep -A`、时间戳）时整块替换。
+
+## 0.29.0 — 2026-11-12
+
+- 新增 `tekon clean [--run-id <id>] [--dry-run] [--yes]`：清理已结束（passed、failed、cancelled）且没有未结束任务的运行留下的 worktree，以及运行租约记录的节点分支 `tekon/<runId>/…`。不带 `--run-id` 时先列出，加 `--yes` 才执行；`--dry-run` 只预览。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/` 下的证据、审计记录和不属于任何运行租约的目录；运行结束时不会自动清理。未结束的运行不能清理，报错且不改动。结果写入运行审计 `run.cleanup`，个别项目没清理掉时退出码为 1，运行状态不变。
+- Web `project.clean` 按同样规则清理，确认字面量改为 `'clean-terminal-runs'`，支持 `dryRun`，返回各项数量（以前固定拒绝）。
+- 动态工作流预览不再在系统临时目录留下目录。
+- 任务认领：CLI 只执行自己发起或恢复的任务，不再自动接手 Web 或其他 CLI 进程排队的任务（包括 Web 的自动交付准备）；Web 不接手 CLI 发起的任务。CLI 受理后退出、还没执行的运行，可以再用 `tekon resume` 或在 Web 上恢复后执行；Web 排队的任务在 CLI 恢复时也一样。升级前排队的任务照常可由 Web 执行。升级后请重启已在运行的 `tekon ui`：旧版本的服务仍会接手 CLI 的任务。
+- 租约：进程被挂起（休眠、调试器暂停）超过租约时间再恢复时，先续租自己的任务，并给其他进程一个心跳的时间续租，再回收过期任务，不再把自己仍在执行的任务判为中断。中断事件记录原因、原 owner、租约时间和判定所用的截止时间。限制：同一仓库同时有两个 Tekon 进程时，一个被挂起与它已经退出无法区分，另一个仍会在租约过期后把任务标为中断，可按手册 §7.1 恢复；系统时钟往回调会推迟回收。
+
+## 0.28.0 — 2026-11-11
+
+- 运行前检查：新增 `tekon doctor`，列出配置、每个 Provider 是否安装和认证方式（不显示账号信息）、默认 workflow 的检查命令，只报告不修改。CLI 和 Web 发起、恢复运行前都会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行；批准人工 Gate 时先检查再记录决定。CLI 在没检测到登录时提示，并写出认证方式和透传的变量名；Web 事件流在运行开始和恢复时列出透传的变量名。
+- 失败原因：Provider 失败按原因归类（未安装、未登录或凭据无效、配置无效、非零退出、超时、取消、Tekon 停止时中断、等待审批），`run`、`status` 和 Web 事件流写明原因和下一步，只有非零退出、超时和 Tekon 停止时中断先建议 `tekon resume`。自动修复节点遇到未安装、未登录或配置无效时不再重复尝试，原因同样显示。Claude 退出 0 但结果标记错误时按该错误归类。`run` 的第一行按结果写已完成、已暂停、中断、失败或已取消；`review` 在运行未完成时先说明，并列出各节点状态，没执行到的显示“未执行”。
+- 仓库配置：`.tekon/config.yaml` 统一读取，YAML 写错、字段名拼错或值不对时直接报错，不再静默回退。CLI 在未配置 `defaultAgent` 时默认用 `claude-code`（以前是 `codex`；Web 发起的运行暂时不读 `defaultAgent`，仍默认 `codex`）。`init` 写入 PATH 里第一个找到的 Provider（先 `claude` 后 `codex`），已有的 `config.yaml` 不再覆盖。
+- Provider 环境：新增 `providers.<provider>.passthroughEnv`，把指定的环境变量名额外传给 Provider；会改变程序加载方式或由 Tekon 控制的变量不能透传。Codex 改为只收到固定的一组变量加透传变量。
+- 行为变化：Codex 不再默认带 `--profile internal`，需要时在配置里写 `providers.codex.profile: internal`；升级前启动的运行恢复时仍用 `internal`。`codex.profile` 必须以字母或数字开头。升级后请重启已在运行的 `tekon ui`。退回旧版本后，0.28.0 创建的运行不能恢复，需要重新发起。
+- 修复两个评审要求返工同一节点时返工节点 ID 冲突的问题；升级前因此中断的运行可以直接恢复。
+
+## 0.27.1 — 2026-11-11
+
+- 开发命令：`pnpm test --run` 先构建全部包再跑测试，命令行的真实进程测试总用最新产物，不用再另跑 `pnpm --filter @tekon/cli test:e2e`（Web 的 Playwright 测试仍单独运行）；`__manual__` 目录仍不进默认入口。
+- 内部清理（不改变运行行为）：Gate 引擎接口只保留执行检查，自动修复节点的创建移到工作流内部；测试共用一份假 Codex，并新增假 Claude 和隔离 PATH 与环境变量的命令行运行助手，供后续测试使用；Web 测试数据可以按需关掉检查、交付和审计数据。
+
 ## 0.27.0 — 2026-11-09
 
 - 安全加固：

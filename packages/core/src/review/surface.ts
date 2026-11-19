@@ -363,14 +363,15 @@ function gateTriageAdvice(input: {
     };
   }
   if (input.classification === 'missing-command') {
+    const resumeCommand =
+      input.commandDisplay === 'explicit'
+        ? `tekon resume --run-id ${quoteCliArg(input.runId)} --rebind --repo ${quoteCliArg(input.repoPath)}`
+        : 'tekon resume --rebind';
     return {
       retry: 'after-fix',
       summary:
-        'Gate command is missing from repo profile. Resolve the commandRef before retrying this run.',
-      suggestedCommand:
-        input.commandDisplay === 'explicit'
-          ? `tekon workflow preflight <template> --repo ${quoteCliArg(input.repoPath)}`
-          : 'tekon workflow preflight <template>',
+        'Gate command is missing from repo profile. Fix the commandRef, then resume with --rebind so this run adopts the current binding; a plain resume keeps the frozen (missing) binding.',
+      suggestedCommand: resumeCommand,
     };
   }
   if (input.classification === 'security-findings') {

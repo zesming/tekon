@@ -1,4 +1,8 @@
-import { deriveReworkNode, DYNAMIC_NODE_ORDER_OFFSET } from './execution-plan.js';
+import {
+  deriveReworkNode,
+  DYNAMIC_NODE_ORDER_OFFSET,
+  reworkNodeIdFor,
+} from './execution-plan.js';
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -30,11 +34,10 @@ import {
   type RunGateWithRepairFn,
   defaultBuiltInRolesDir,
   gatesWithStableKeys,
-  resolveReviewTargetNodeByHeuristic,
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import { agentFailureAuditPayload, assertSuccessfulAgentRun } from './helpers.js';
 import type { PromptBuilder } from './prompt-builder.js';
 
 export interface ReworkHandlerDeps {
@@ -61,6 +64,20 @@ export interface ReworkHandlerDeps {
   agentEventSink?: AgentEventSink;
 }
 
+export interface HumanRejectionReworkInput {
+  /** 挂 human gate 的评审节点。 */
+  reviewNode: ExecutableNode;
+  /** 节点配置中的 human gate（携带 reworkTargetNodeId）。 */
+  gate: WorkflowGateConfig;
+  /** reject 时被置为 failed/human-rejected 的门禁结果。 */
+  gateResult: GateResult;
+  /** 返工目标的 run-scoped 节点 id（由模板 reworkTargetNodeId 解析）。 */
+  targetNodeId: string;
+  attempt: number;
+  /** 人工驳回备注，作为返工反馈注入提示词。 */
+  feedbackNote: string;
+}
+
 export interface ReworkHandler {
   attemptChangesRequestedRework(
     runId: string,
@@ -69,6 +86,15 @@ export interface ReworkHandler {
     gateResult: GateResult,
     targetNodeId: string,
     attempt: number,
+  ): Promise<void>;
+  /**
+   * PD-18：人工驳回后的返工。反馈来自决策备注而非评审产物，目标来自
+   * human gate 声明的 reworkTargetNodeId；主体七步与 changes-requested
+   * 返工共用同一实现。
+   */
+  attemptHumanRejectionRework(
+    runId: string,
+    input: HumanRejectionReworkInput,
   ): Promise<void>;
   resolveReviewTargetNode(
     runId: string,
@@ -94,75 +120,109 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     getRunGateWithRepair,
   } = deps;
 
+  /**
+   * CD-14：返工目标只认真实评审产物里的 reviewProcess.targetNodeId。
+   * independent-review gate 在放行/驳回前已校验该字段的连通性、角色与产物
+   * 类型（gate/engine.ts runIndependentReviewGate），因此这里不再做启发式
+   * 猜测：读不到合法目标就返回 null，由调用方按门禁耗尽处理（blocked），
+   * 避免重跑错误节点。六种评审产物共用 reviewProcess schema，不按类型白
+   * 名单过滤，取最新一个携带合法 targetNodeId 的产物。
+   */
   async function resolveReviewTargetNode(
     runId: string,
     reviewNodeId: string,
   ): Promise<string | null> {
+    const payload = await loadReviewArtifactPayload(runId, reviewNodeId);
+    if (!payload) return null;
+    const reviewProcess = payload.reviewProcess as
+      | { targetNodeId?: unknown }
+      | undefined;
+    const targetNodeId = reviewProcess?.targetNodeId;
+    if (typeof targetNodeId !== 'string' || targetNodeId.length === 0) {
+      return null;
+    }
+    const targetNode = await repositories.getNode(targetNodeId);
+    if (!targetNode || targetNode.runId !== runId) {
+      return null;
+    }
+    return targetNodeId;
+  }
+
+  /**
+   * 读取评审节点最新一个含 reviewProcess 的 JSON 产物。非 JSON / 缺字段的
+   * 产物跳过；全部不可读时返回 null（调用方 fail-closed，不回退启发式）。
+   */
+  async function loadReviewArtifactPayload(
+    runId: string,
+    reviewNodeId: string,
+  ): Promise<Record<string, unknown> | null> {
     try {
-      const reviewArtifacts = await repositories.listArtifacts(
+      const artifacts = await repositories.listArtifacts(
         runId,
         reviewNodeId,
       );
-      const reviewTypes = [
-        'technical-review',
-        'demand-review',
-        'requirement-interface-review',
-      ];
-      const reviewArtifact = reviewArtifacts.find((a) =>
-        reviewTypes.includes(a.type),
-      );
-      if (reviewArtifact) {
-        const artifactPath = resolve(repoPath, reviewArtifact.path);
-        if (existsSync(artifactPath)) {
-          try {
-            const raw = readFileSync(artifactPath, 'utf8');
-            const payload = JSON.parse(raw);
-            const targetNodeId =
-              payload?.reviewProcess?.targetNodeId as string | undefined;
-            if (targetNodeId) {
-              const targetNode = await repositories.getNode(targetNodeId);
-              if (targetNode && targetNode.runId === runId) {
-                return targetNodeId;
-              }
-            }
-          } catch {
-            // JSON parse failed — fall through to heuristic
+      for (const artifact of [...artifacts].reverse()) {
+        const artifactPath = resolve(repoPath, artifact.path);
+        if (!existsSync(artifactPath)) continue;
+        try {
+          const payload = JSON.parse(
+            readFileSync(artifactPath, 'utf8'),
+          ) as Record<string, unknown>;
+          const process = payload.reviewProcess as
+            | { targetNodeId?: unknown }
+            | undefined;
+          if (process && typeof process.targetNodeId === 'string') {
+            return payload;
           }
+        } catch {
+          // 非 JSON 或解析失败：忽略，继续看更早的产物。
         }
       }
     } catch {
-      // Fall through to heuristic
-    }
-
-    try {
-      const nodes = await repositories.listNodes(runId);
-      return resolveReviewTargetNodeByHeuristic(nodes, reviewNodeId);
-    } catch {
-      // Ignore
+      // 仓储读取失败：fail-closed。
     }
     return null;
   }
 
+  /**
+   * CD-14：返工反馈携带评审正文与具体 findings，而不是固定英文句或被截断
+   * 的 JSON 头部。读不到产物时才回退到通用提示句。
+   */
   async function loadReviewArtifactContent(
     runId: string,
     reviewNodeId: string,
   ): Promise<string> {
-    try {
-      const artifacts = await repositories.listArtifacts(runId, reviewNodeId);
-      const reviewArtifact = artifacts.find((a) =>
-        [
-          'technical-review',
-          'demand-review',
-          'requirement-interface-review',
-        ].includes(a.type),
-      );
-      if (reviewArtifact?.summary) {
-        return reviewArtifact.summary;
-      }
-    } catch {
-      // Fall through to default message
+    const payload = await loadReviewArtifactPayload(runId, reviewNodeId);
+    if (!payload) {
+      return 'Review found changes that need to be addressed.';
     }
-    return 'Review found changes that need to be addressed.';
+    const sections: string[] = [];
+    if (typeof payload.title === 'string' && payload.title.length > 0) {
+      sections.push(`Title: ${payload.title}`);
+    }
+    if (typeof payload.body === 'string' && payload.body.length > 0) {
+      sections.push(`Body:\n${payload.body}`);
+    }
+    if (typeof payload.summary === 'string' && payload.summary.length > 0) {
+      sections.push(`Summary: ${payload.summary}`);
+    }
+    if (typeof payload.decision === 'string') {
+      sections.push(`Decision: ${payload.decision}`);
+    }
+    if (Array.isArray(payload.findings) && payload.findings.length > 0) {
+      const lines = payload.findings.map((entry) => {
+        const finding = (entry ?? {}) as Record<string, unknown>;
+        const severity =
+          typeof finding.severity === 'string' ? finding.severity : 'minor';
+        const message =
+          typeof finding.message === 'string' ? finding.message : '';
+        return `- [${severity}] ${message}`.trim();
+      });
+      sections.push(['Findings:', ...lines].join('\n'));
+    }
+    return sections.length > 0
+      ? sections.join('\n\n')
+      : 'Review found changes that need to be addressed.';
   }
 
   async function buildReworkNodePrompt(
@@ -183,6 +243,8 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: targetNode.id,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
+      workspace: targetNode.workspace,
       inputs: targetInputs,
       outputs: (targetNode.outputs ?? []) as WorkflowArtifactOutputRef[],
       gates: (targetNode.gates ?? []) as WorkflowGateConfig[],
@@ -214,6 +276,11 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         demand.body,
         '',
         `Rework node ${targetNode.id} after independent review found changes-requested.`,
+        // 与 resume 路径的 buildNodePrompt 对齐：节点指令在返工中仍然生效，
+        // 评审反馈在其基础上叠加，避免同进程/跨进程提示词分叉。
+        targetNode.prompt
+          ? ['Node instruction (template-authored, still applies):', targetNode.prompt].join('\n')
+          : '',
         priorNodeLines.length > 0
           ? ['Prior workflow nodes:', ...priorNodeLines].join('\n')
           : 'Prior workflow nodes: none.',
@@ -274,13 +341,69 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
     targetNodeId: string,
     attempt: number,
   ): Promise<void> {
+    const reviewFeedback = await loadReviewArtifactContent(
+      runId,
+      reviewNode.id,
+    );
+    return attemptRework({
+      runId,
+      reviewNode,
+      gate,
+      gateResult,
+      targetNodeId,
+      attempt,
+      reviewFeedback,
+      reason: 'Independent review found changes-requested',
+    });
+  }
+
+  async function attemptHumanRejectionRework(
+    runId: string,
+    input: HumanRejectionReworkInput,
+  ): Promise<void> {
+    return attemptRework({
+      runId,
+      reviewNode: input.reviewNode,
+      gate: input.gate,
+      gateResult: input.gateResult,
+      targetNodeId: input.targetNodeId,
+      attempt: input.attempt,
+      reviewFeedback: input.feedbackNote,
+      reason: 'Human reviewer rejected the gate',
+    });
+  }
+
+  /**
+   * 返工七步的共享实现。changes-requested 与 human-rejected 仅反馈来源和
+   * 原因文案不同，节点/租约/门禁/评审重跑的机制完全一致。
+   */
+  async function attemptRework(input: {
+    runId: string;
+    reviewNode: ExecutableNode;
+    gate: WorkflowGateConfig;
+    gateResult: GateResult;
+    targetNodeId: string;
+    attempt: number;
+    reviewFeedback: string;
+    reason: string;
+  }): Promise<void> {
+    const {
+      runId,
+      reviewNode,
+      gate,
+      gateResult,
+      targetNodeId,
+      attempt,
+      reviewFeedback,
+      reason,
+    } = input;
     const checkedTransitionNode = getCheckedTransition();
     const runGateWithRepair = getRunGateWithRepair();
 
     const targetNode = await repositories.getNode(targetNodeId);
     if (!targetNode) return;
 
-    const reworkNodeId = `${targetNodeId}_rework_${attempt}`;
+    const reworkNodeId = reworkNodeIdFor(targetNodeId, attempt, gateResult.id);
 
     // --- Step 1: Transition target to needs-revision ---
     await checkedTransitionNode(
@@ -293,14 +416,10 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         targetNodeId,
         gateResultId: gateResult.id,
         attempt,
-        reason: 'Independent review found changes-requested',
+        reason,
       },
     );
 
-    const reviewFeedback = await loadReviewArtifactContent(
-      runId,
-      reviewNode.id,
-    );
     const targetInputs = targetNode.inputs as WorkflowArtifactInputRef[];
     const targetOutputs = targetNode.outputs as WorkflowArtifactOutputRef[];
     const targetGates = targetNode.gates as WorkflowGateConfig[];
@@ -319,15 +438,22 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: targetNode.id,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      // 保留模板声明的节点指令，使同进程返工与 resume 重建的提示词一致。
+      ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
+      // CD-09：返工节点继承源节点工作区模式。
+      workspace: targetNode.workspace,
       inputs: targetInputs,
       outputs: targetOutputs,
       gates: targetGates,
       dependsOn: targetNode.dependencies,
-    }, reviewNode.id, attempt);
+    }, reviewNode.id, attempt, gateResult.id);
     await repositories.createNode({
       id: derived.id,
       runId,
       role: derived.role,
+      ...(derived.prompt ? { prompt: derived.prompt } : {}),
+      // CD-09：返工节点继承源节点工作区模式，不能落回默认 worktree。
+      workspace: derived.workspace,
       status: 'pending',
       inputs: derived.inputs,
       outputs: derived.outputs,
@@ -366,6 +492,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: reworkNodeId,
       role: targetNode.role,
       phaseId: targetNode.phaseId,
+      workspace: targetNode.workspace,
     });
 
     try {
@@ -377,6 +504,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
             id: reworkNodeId,
             role: targetNode.role,
             phaseId: targetNode.phaseId,
+            ...(targetNode.prompt ? { prompt: targetNode.prompt } : {}),
             inputs: targetInputs,
             outputs: targetOutputs,
             gates: targetGates,
@@ -410,6 +538,11 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         }
       }
     } catch (error) {
+      // CD-33：agent 失败必须同步终结 role_run，旧实现留下 running 孤儿记录。
+      await repositories.markRoleRunInterrupted({
+        roleRunId: reworkRoleRunId,
+        interruptedAt: new Date().toISOString(),
+      });
       await repositories.transitionNode(reworkNodeId, 'interrupted');
       await audit.append({
         runId,
@@ -434,25 +567,33 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       executionLeases.set(targetNodeId, targetLease);
     }
     const configuredTargetGates = gatesWithStableKeys(targetGates, targetNodeId);
-    for (const targetGate of configuredTargetGates) {
-      const gatePassed = await runGateWithRepair(
-        runId,
-        {
-          id: targetNodeId,
-          role: targetNode.role,
-          phaseId: targetNode.phaseId,
-          inputs: targetInputs,
-          outputs: targetOutputs,
-          gates: targetGates,
-          dependsOn: [reviewNode.id],
-        },
-        targetGate,
-        { forceRerun: true },
-      );
-      if (!gatePassed) {
-        executionLeases.delete(targetNodeId);
-        return;
+    try {
+      for (const targetGate of configuredTargetGates) {
+        const gatePassed = await runGateWithRepair(
+          runId,
+          {
+            id: targetNodeId,
+            role: targetNode.role,
+            phaseId: targetNode.phaseId,
+            workspace: targetNode.workspace,
+            inputs: targetInputs,
+            outputs: targetOutputs,
+            gates: targetGates,
+            dependsOn: [reviewNode.id],
+          },
+          targetGate,
+          { forceRerun: true },
+        );
+        if (!gatePassed) {
+          return;
+        }
       }
+    } catch (error) {
+      // CD-33：门禁抛错时别名必须随异常一起清掉，否则残留的 targetNodeId
+      // 租约别名会让后续门禁/恢复拿到错误租约，用“active execution lease
+      // required”二次异常掩盖真实门禁错误。
+      executionLeases.delete(targetNodeId);
+      throw error;
     }
     executionLeases.delete(targetNodeId);
 
@@ -527,6 +668,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
       id: reviewNode.id,
       role: reviewNode.role,
       phaseId: reviewNode.phaseId,
+      workspace: reviewNode.workspace,
     });
 
     try {
@@ -553,6 +695,14 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
         completedAt: new Date().toISOString(),
       });
     } catch (error) {
+      // CD-33：标记 role_run 中断并向上抛错。旧实现吞掉错误 return，调用方
+      // 继续在 interrupted 节点上跑门禁，触发“illegal workflow transition”
+      // 二次异常并掩盖真实原因。抛出后由 node-executor 的门禁 catch 统一
+      // 收敛为 interrupted，resume 可恢复。
+      await repositories.markRoleRunInterrupted({
+        roleRunId: reviewReRunRoleRunId,
+        interruptedAt: new Date().toISOString(),
+      });
       await repositories.transitionNode(reviewNode.id, 'interrupted');
       await audit.append({
         runId,
@@ -562,9 +712,10 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
           targetNodeId,
           reworkNodeId,
           error: error instanceof Error ? error.message : String(error),
+          ...agentFailureAuditPayload(error),
         },
       });
-      return;
+      throw error;
     }
 
     // --- Step 7: Put review node back to awaiting-gate ---
@@ -586,6 +737,7 @@ export function createReworkHandler(deps: ReworkHandlerDeps): ReworkHandler {
 
   return {
     attemptChangesRequestedRework,
+    attemptHumanRejectionRework,
     resolveReviewTargetNode,
   };
 }

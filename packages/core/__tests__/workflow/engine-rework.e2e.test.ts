@@ -58,6 +58,7 @@ describe('workflow engine changes-requested rework e2e', () => {
         dataDir: '.tekon',
         repositories,
         audit,
+        agentProvider: 'mock',
         adapter: {
           async runAgent(input) {
             if (input.runContext.nodeId.endsWith('rd-node')) {
@@ -98,7 +99,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'implementation',
               name: 'Implementation',
               dependsOn: [],
-              parallel: false,
               nodes: [
                 {
                   id: 'rd-node',
@@ -127,7 +127,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'review',
               name: 'Review',
               dependsOn: ['implementation'],
-              parallel: false,
               nodes: [
                 {
                   id: 'reviewer-node',
@@ -156,7 +155,6 @@ describe('workflow engine changes-requested rework e2e', () => {
               id: 'delivery',
               name: 'Delivery',
               dependsOn: ['review'],
-              parallel: false,
               nodes: [
                 {
                   id: 'pmo-node',
@@ -175,7 +173,8 @@ describe('workflow engine changes-requested rework e2e', () => {
       expect(result.workflow.status, JSON.stringify((await repositories.listAuditEvents(result.runId)).filter(event => event.type.endsWith('.error') || event.type.endsWith('.failed')).map(event => event.payload))).toBe('paused');
       const verified = await validateAndBuildExecutionPlan(result.runId, repositories, audit);
       expect(verified.phases[0].nodes.map(node => node.id)).toEqual([
-        `${result.runId}_rd-node`, `${result.runId}_rd-node_rework_1`,
+        `${result.runId}_rd-node`,
+        expect.stringMatching(new RegExp(`^${result.runId}_rd-node_rework_1_[0-9a-z]{8}$`, 'u')),
       ]);
       pauseRequested = false;
       result = await engine.resumeRun(result.runId);
@@ -185,7 +184,7 @@ describe('workflow engine changes-requested rework e2e', () => {
       // ── Rework node was created ──
       const nodes = await repositories.listNodes(result.runId);
       const reworkNodes = nodes.filter((node) =>
-        /_rework_\d+$/u.test(node.id),
+        /_rework_\d+_[0-9a-z]{8}$/u.test(node.id),
       );
       expect(reworkNodes).toHaveLength(1);
 
@@ -305,18 +304,6 @@ function createChangesRequestedGateEngine(
       });
     },
 
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
   };
 }
 

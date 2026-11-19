@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { parse as parseYaml } from 'yaml';
 
-import type { ArtifactType } from '../types/domain.js';
+import {
+  agentArtifactTypeSchema,
+  BUILT_IN_ROLE_IDS,
+  type ArtifactType,
+  type BuiltInArtifactType,
+} from '../types/domain.js';
 
 const acceptanceCriterionSchema = z.object({
   id: z.string().min(1),
@@ -18,7 +23,8 @@ const criteriaEvidenceSchema = z.object({
   outputPaths: z.array(z.string().min(1)).default([]),
 });
 
-const roleSchema = z.enum(['pm', 'rd', 'qa', 'reviewer', 'pmo']);
+// 评审产物里的角色引用只可能来自内置研发角色；共享常量，不再维护枚举副本。
+const roleSchema = z.enum(BUILT_IN_ROLE_IDS);
 
 const reviewScopeSchema = z.enum([
   'demand-quality',
@@ -177,7 +183,7 @@ export const artifactPayloadSchemas = {
   'process-checkpoint': processCheckpointPayloadSchema,
   'delivery-package': evidenceArtifactPayloadSchema,
   'ci-status': ciStatusPayloadSchema,
-} satisfies Record<ArtifactType, z.ZodTypeAny>;
+} satisfies Record<BuiltInArtifactType, z.ZodTypeAny>;
 
 export type ArtifactPayload = z.infer<typeof markdownArtifactPayloadSchema> & {
   acceptanceCriteria?: z.infer<typeof acceptanceCriterionSchema>[];
@@ -215,28 +221,9 @@ export const agentArtifactManifestSchema = z
       .array(
         z
           .object({
-            type: z.enum([
-              'ac-evidence',
-              'demand-card',
-              'demand-review',
-              'prd',
-              'tech-design',
-              'implementation-plan',
-              'requirement-interface-review',
-              'technical-review',
-              'code-changes',
-              'code-review',
-              'test-plan',
-              'test-plan-review',
-              'test-report',
-              'qa-release-signoff',
-              'qa-release-signoff-review',
-              'review-report',
-              'security-report',
-              'rollback-plan',
-              'process-checkpoint',
-              'delivery-package',
-            ]),
+            // PD-06：产物类型开放，自定义类型与内置类型走同一标识符规则，
+            // 但交付保留类型（ci-status）仍禁止 agent 声明。
+            type: agentArtifactTypeSchema,
             path: z.string().min(1),
             summary: z.string().min(1).optional(),
           })
@@ -251,7 +238,12 @@ export function validateArtifactPayload(
   type: ArtifactType,
   payload: unknown,
 ): ArtifactPayload {
-  return artifactPayloadSchemas[type].parse(payload);
+  // 已注册的内置类型走专用 schema；自定义类型（PD-06 开放命名）回落通用
+  // Markdown payload，保证 title/body 底线但不强制研发治理字段。
+  const schema =
+    artifactPayloadSchemas[type as BuiltInArtifactType] ??
+    markdownArtifactPayloadSchema;
+  return schema.parse(payload);
 }
 
 export function validateArtifactContent(
@@ -780,7 +772,7 @@ function normalizeReviewFinding(entry: unknown): unknown {
 }
 
 function isRole(value: string): value is z.infer<typeof roleSchema> {
-  return ['pm', 'rd', 'qa', 'reviewer', 'pmo'].includes(value);
+  return (BUILT_IN_ROLE_IDS as readonly string[]).includes(value);
 }
 
 function normalizeCodeChangesPayload(payload: unknown): unknown {

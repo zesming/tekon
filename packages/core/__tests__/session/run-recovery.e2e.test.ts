@@ -71,7 +71,7 @@ setInterval(()=>{appendFileSync(log,'beat\\n');if(existsSync(log+'.release'))pro
     const log = join(root, '.tekon', name);
     const workflowSpec: WorkflowTemplate = { id: name, name, version: 1,
       retryPolicy: { maxAttempts: 1, backoffMs: 0, strategy: 'fixed', onExhausted: 'block' },
-      phases: [{ id: 'phase', name: 'Phase', dependsOn: [], parallel: false, nodes: [{ id: 'node', role: 'rd',
+      phases: [{ id: 'phase', name: 'Phase', dependsOn: [], nodes: [{ id: 'node', role: 'rd',
         inputs: [], outputs: [], dependsOn: [], gates: agent ? [] : [{ type: 'test', ...gateOpts, command: { tool: 'npm', args: ['run', 'heartbeat', '--', log] } }] }] }] };
     const run = await service.startRun({ demandText: name, workflowSpec, engine: {agent} });
     return { ...run, log: agent?join(root,'.tekon',run.runId):log };

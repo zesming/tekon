@@ -27,10 +27,3 @@ export function formatTimeout(timeoutMs?: number | null): string {
   const minutes = Math.round(seconds / 60);
   return `${minutes} 分钟`;
 }
-
-/**
- * Format phase execution mode into readable text.
- */
-export function formatPhaseParallel(parallel: boolean): string {
-  return parallel ? '并行阶段' : '顺序阶段';
-}

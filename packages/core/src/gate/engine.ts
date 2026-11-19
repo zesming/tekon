@@ -6,10 +6,11 @@ import type { CommandPolicy } from '../types/config.js';
 import type {
   Artifact,
   ArtifactType,
+  BuiltInArtifactType,
+  BuiltInRoleId,
   GateConfig,
   GateResult,
   Node,
-  Role,
 } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { CommandGateway } from '../runtime/command-gateway.js';
@@ -21,10 +22,7 @@ import { resolveRepoReadableFile } from '../repo/safe-path.js';
 import { runCommandGate, runSecurityScanGate } from './runners.js';
 import { createHumanGate } from './human-gate.js';
 import type { GateRegistry } from './registry.js';
-import {
-  deriveRepairNode,
-  DYNAMIC_NODE_ORDER_OFFSET,
-} from '../workflow/execution-plan.js';
+import { DYNAMIC_NODE_ORDER_OFFSET } from '../workflow/execution-plan.js';
 
 export interface GateEngineRunInput {
   runId: string;
@@ -38,10 +36,6 @@ export interface GateEngineRunInput {
 
 export interface GateEngine {
   runGate(input: GateEngineRunInput): Promise<GateResult>;
-  createAutoFixRepairNode(input: {
-    failedGateResult: GateResult;
-    fixerRole: Role;
-  }): Promise<Node>;
 }
 
 export function createGateEngine(options: {
@@ -145,24 +139,6 @@ export function createGateEngine(options: {
       }
 
       return options.repositories.recordGateResult(result);
-    },
-
-    async createAutoFixRepairNode(input) {
-      const now = new Date().toISOString();
-      const derived = deriveRepairNode(input.failedGateResult.nodeId, input.failedGateResult.id, input.fixerRole);
-      return options.repositories.createNode({
-        id: derived.id,
-        runId: input.failedGateResult.runId,
-        role: derived.role,
-        status: 'pending',
-        inputs: derived.inputs,
-        outputs: derived.outputs,
-        gates: derived.gates,
-        dependencies: derived.dependsOn,
-        order: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
     },
   };
 }
@@ -346,11 +322,13 @@ async function runIndependentReviewGate(
     );
   }
   const expectedTargetTypes =
-    expectedReviewTargetTypesByArtifact[loaded.artifact.type as ArtifactType];
+    expectedReviewTargetTypesByArtifact[
+      loaded.artifact.type as BuiltInArtifactType
+    ];
   if (
     expectedTargetTypes &&
     !targetNode.outputs.some((output) =>
-      expectedTargetTypes.includes(output.type),
+      expectedTargetTypes.includes(output.type as BuiltInArtifactType),
     )
   ) {
     writeFileSync(
@@ -407,7 +385,10 @@ async function runRoleScopeGate(
     writeFileSync(outputPath, 'missing reviewScope', 'utf8');
     return makeGateResult(input, 'failed', 'missing-review-scope', outputPath);
   }
-  const allowed = allowedReviewScopesByRole[node.role];
+  // 自定义角色（PD-06 开放命名）没有内置评审作用域，fail-closed：
+  // 角色作用域门禁对自定义角色不放行任何 reviewScope。
+  const allowed =
+    allowedReviewScopesByRole[node.role as BuiltInRoleId] ?? [];
   if (!allowed.includes(reviewScope)) {
     writeFileSync(
       outputPath,
@@ -417,7 +398,9 @@ async function runRoleScopeGate(
     return makeGateResult(input, 'failed', 'role-scope-violation', outputPath);
   }
   const allowedForArtifact =
-    allowedReviewScopesByArtifact[loaded.artifact.type as ArtifactType];
+    allowedReviewScopesByArtifact[
+      loaded.artifact.type as BuiltInArtifactType
+    ];
   if (allowedForArtifact && !allowedForArtifact.includes(reviewScope)) {
     writeFileSync(
       outputPath,
@@ -451,7 +434,7 @@ async function runRoleScopeGate(
   return makeGateResult(input, 'passed', null, outputPath);
 }
 
-const allowedReviewScopesByRole: Record<Role, string[]> = {
+const allowedReviewScopesByRole: Record<BuiltInRoleId, string[]> = {
   pm: ['demand-quality', 'test-plan-intent'],
   rd: ['requirement-interface', 'technical-design', 'implementation-risk'],
   qa: ['requirement-interface', 'test-plan', 'validation', 'release-signoff'],
@@ -461,7 +444,9 @@ const allowedReviewScopesByRole: Record<Role, string[]> = {
   goal: [],
 };
 
-const allowedReviewScopesByArtifact: Partial<Record<ArtifactType, string[]>> = {
+const allowedReviewScopesByArtifact: Partial<
+  Record<BuiltInArtifactType, string[]>
+> = {
   'code-review': ['code-change'],
   'demand-review': ['demand-quality'],
   'qa-release-signoff-review': ['release-signoff'],
@@ -471,7 +456,7 @@ const allowedReviewScopesByArtifact: Partial<Record<ArtifactType, string[]>> = {
 };
 
 const expectedReviewTargetTypesByArtifact: Partial<
-  Record<ArtifactType, ArtifactType[]>
+  Record<BuiltInArtifactType, BuiltInArtifactType[]>
 > = {
   'code-review': ['code-changes'],
   'demand-review': ['demand-card', 'prd', 'demand-review'],

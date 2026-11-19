@@ -317,6 +317,7 @@ describe('claude code adapter', () => {
     expect(sleepResult).toMatchObject({
       provider: 'claude-code',
       timedOut: true,
+      diagnostic: { code: 'timeout' },
     });
   });
 
@@ -432,6 +433,7 @@ describe('claude code adapter', () => {
       provider: 'claude-code',
       exitCode: null,
       timedOut: false,
+      diagnostic: { code: 'cancelled' },
     });
     const heartbeatAfterClose = readFileSync(heartbeatPath, 'utf8').length;
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -440,7 +442,7 @@ describe('claude code adapter', () => {
     );
   });
 
-  it('starts Claude with the signed-in user and Claude settings but without unrelated secrets', async () => {
+  it('starts Claude with the signed-in user, Claude settings and listed passthrough names but without unrelated secrets', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-env-'));
     tempDirs.push(repoPath);
     const envDump = join(repoPath, 'env.json');
@@ -458,12 +460,15 @@ describe('claude code adapter', () => {
     vi.stubEnv('CLAUDE_CONFIG_DIR', join(repoPath, 'claude-config'));
     vi.stubEnv('GITHUB_TOKEN', 'github-secret');
     vi.stubEnv('OPENAI_API_KEY', 'openai-secret');
+    vi.stubEnv('AWS_PROFILE', 'bedrock-dev');
+    vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'aws-secret');
     try {
       const adapter = createClaudeCodeAdapter(
         {
           provider: 'claude-code',
           command: process.execPath,
           args: [envScript],
+          passthroughEnv: ['AWS_PROFILE'],
           promptMode: 'arg-append',
           outputFormat: 'text',
           timeoutMs: 5_000,
@@ -479,7 +484,9 @@ describe('claude code adapter', () => {
         USER: 'tekon-user',
         ANTHROPIC_API_KEY: 'anthropic-key',
         CLAUDE_CONFIG_DIR: join(repoPath, 'claude-config'),
+        AWS_PROFILE: 'bedrock-dev',
       });
+      expect(childEnv.AWS_SECRET_ACCESS_KEY).toBeUndefined();
       expect(childEnv.GITHUB_TOKEN).toBeUndefined();
       expect(childEnv.OPENAI_API_KEY).toBeUndefined();
     } finally {
@@ -645,6 +652,87 @@ describe('claude code adapter', () => {
       await repositories.listArtifacts('run_1', 'node_1', 'code-changes'),
     ).toHaveLength(0);
     db.close();
+  });
+
+  it('explains provider failures with a classified diagnostic', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-diagnostic-'));
+    tempDirs.push(repoPath);
+    const authScript = join(repoPath, 'auth-fail.mjs');
+    writeFileSync(
+      authScript,
+      "process.stderr.write('Invalid API key · Please run /login\\n');\nprocess.exit(1);\n",
+      'utf8',
+    );
+    const run = (command: string, args: string[]) =>
+      createClaudeCodeAdapter(
+        {
+          provider: 'claude-code',
+          command,
+          args,
+          promptMode: 'arg-append',
+          outputFormat: 'text',
+          timeoutMs: 2_000,
+          permissionProfile: safePermissionProfile(repoPath),
+        },
+        createCommandGateway(),
+      ).runAgent({
+        ...baseRunInput(repoPath),
+        commandPolicy: {
+          ...baseRunInput(repoPath).commandPolicy,
+          allow: [{ tool: command, args: [] }],
+        },
+      });
+
+    const auth = await run(process.execPath, [authScript]);
+    expect(auth).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-authenticated' },
+    });
+    expect(auth.diagnostic?.hint).toContain('/login');
+
+    const missing = await run(join(repoPath, 'no-such-claude'), []);
+    expect(missing).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-installed' },
+    });
+  });
+
+  it('reports a Claude error result instead of missing artifacts when Claude exits 0', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-is-error-'));
+    tempDirs.push(repoPath);
+    const script = join(repoPath, 'is-error.mjs');
+    writeFileSync(
+      script,
+      `process.stdout.write(${JSON.stringify(
+        `${JSON.stringify({ type: 'result', is_error: true, result: 'Not logged in · Please run /login' })}\n`,
+      )});\n`,
+      'utf8',
+    );
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await seedRun(repositories);
+    const result = await createClaudeCodeAdapter(
+      {
+        provider: 'claude-code',
+        command: process.execPath,
+        args: [script],
+        promptMode: 'arg-append',
+        outputFormat: 'json',
+        timeoutMs: 2_000,
+        permissionProfile: safePermissionProfile(repoPath),
+      },
+      createCommandGateway(),
+    ).runAgent({
+      ...baseRunInput(repoPath),
+      artifactStore: createArtifactStore({ repoPath, repositories }),
+      requiredArtifactTypes: ['code-changes'],
+    });
+    db.close();
+    expect(result).toMatchObject({
+      exitCode: 1,
+      diagnostic: { code: 'not-authenticated' },
+    });
   });
 
   it('surfaces invalid artifact JSON from a real subprocess without model content', async () => {

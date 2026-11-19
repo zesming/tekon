@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -81,7 +81,7 @@ describe('tekon cli e2e', () => {
     expect(dynamicOutput).toContain('conditional-high-risk-human-gate');
     expect(dynamicOutput).toContain('conditional-rollback-plan');
 
-    const runOutput = runCli(
+    const runResult = runCliResult(
       cliPath,
       [
         'run',
@@ -95,6 +95,9 @@ describe('tekon cli e2e', () => {
       ],
       repoPath,
     );
+    // CD-23：paused（等待人工确认）以退出码 3 区别于成功。
+    expect(runResult.status, runResult.stdout + runResult.stderr).toBe(3);
+    const runOutput = runResult.stdout;
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(runOutput)?.[1];
     expect(runId).toBeTruthy();
     expect(runOutput).toContain('状态: paused');
@@ -222,19 +225,13 @@ describe('tekon cli e2e', () => {
       'preserved',
     );
 
-    let cleanError: any;
-    try {
-      runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
-    } catch (err) {
-      cleanError = err;
-    }
-    expect(cleanError).toBeDefined();
-    expect(cleanError.status).toBe(1);
-    expect(cleanError.stderr.toString()).toContain('CLEAN_SUSPENDED');
-    expect(cleanError.stderr.toString()).toMatch(/#33.*#18|#18.*#33/);
-    expect(cleanError.stdout.toString()).toBe('');
+    // Without --yes clean only lists the finished run.
+    const cleanOutput = runCli(cliPath, ['clean', '--repo', repoPath], repoPath);
+    expect(cleanOutput).toContain(`${runId}（passed）`);
+    expect(cleanOutput).toContain('确认后执行: tekon clean --yes');
+    runCli(cliPath, ['clean', '--yes', '--repo', repoPath], repoPath);
 
-    // Worktree content is preserved
+    // A directory without a lease is never touched
     expect(
       existsSync(join(worktreesDir, 'sample-worktree', 'preserved.txt')),
     ).toBe(true);
@@ -261,7 +258,7 @@ describe('tekon cli e2e', () => {
 
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
-    ).toContain('repoPath');
+    ).toMatch(/^defaultAgent: (claude-code|codex)\n$/u);
     // Real subprocess init→run→clean flow; 30s was too tight under parallel
     // test-suite load (observed 31s). Give headroom to avoid flaky timeouts.
   }, 90_000);
@@ -383,7 +380,7 @@ describe('tekon cli e2e', () => {
       repoPath,
     );
     expect(oldRunOutput).toContain('状态: passed');
-  }, 30_000);
+  }, 90_000);
 
   it('help command works without initialized repo and with initialized repo', () => {
     const cliPath = join(cliPackageRoot, 'dist', 'index.js');
@@ -437,11 +434,21 @@ describe('tekon cli e2e', () => {
   }, 15_000);
 });
 
-function runCli(cliPath: string, args: string[], cwd: string): string {
-  return execFileSync(process.execPath, [cliPath, ...args], {
+function runCliResult(cliPath: string, args: string[], cwd: string) {
+  return spawnSync(process.execPath, [cliPath, ...args], {
     cwd,
     encoding: 'utf8',
   });
+}
+
+function runCli(cliPath: string, args: string[], cwd: string): string {
+  const result = runCliResult(cliPath, args, cwd);
+  if (result.status !== 0) {
+    throw new Error(
+      `tekon ${args.join(' ')} exited with ${result.status}:\n${result.stdout}${result.stderr}`,
+    );
+  }
+  return result.stdout;
 }
 
 function createFixtureRepo(tempDirs: string[]) {

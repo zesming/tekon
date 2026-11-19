@@ -67,6 +67,8 @@ phases:
         gates:
           - type: human
             requiresHumanApproval: true
+            # PD-18：人工驳回后对实现节点 rd-fix 发起返工，备注作为反馈。
+            reworkTargetNodeId: rd-fix
   - id: pmo
     name: PMO
     dependsOn:

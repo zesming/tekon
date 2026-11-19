@@ -109,10 +109,14 @@ export function buildHumanApprovalSummary(input: {
   surface: WorkReviewSurface;
   commandDisplay?: ReviewCommandDisplay;
 }): HumanApprovalSummary {
-  const riskLabel = deriveRiskLabel(input.decision.note, input.gate);
-  const exactCommand = extractExactCommand(input.decision.note);
+  // PD-18：请求上下文从独立的 requestNote 读取；决策备注（note）不再污染
+  // 风险标签与命令解析。旧行没有 requestNote 时回落 note 保持兼容。
+  const requestNote =
+    input.decision.requestNote ?? input.decision.note ?? null;
+  const riskLabel = deriveRiskLabel(requestNote, input.gate);
+  const exactCommand = extractExactCommand(requestNote);
   const requestContext =
-    input.decision.note?.trim() || 'No request context recorded.';
+    requestNote?.trim() || 'No request context recorded.';
   const impact = deriveImpact(input.surface);
   const readinessFailed = input.surface.readiness.checks.filter(
     (check) => !check.passed,

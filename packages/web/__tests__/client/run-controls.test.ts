@@ -29,16 +29,25 @@ describe('runControlAffordances', () => {
   // The core P1-08 fix: blocked/interrupted were previously not resumable in
   // the UI (Resume only showed for `paused`).
   it.each(['blocked', 'interrupted'])(
-    '%s: is resumable (P1-08 recovery entry point)',
+    '%s: is resumable and cancellable (PD-17 recovery entry point)',
     (status) => {
       const a = runControlAffordances(status);
       expect(a.canResume).toBe(true);
       // Not a live run, so no pause; not terminal, so no view.
       expect(a.canPause).toBe(false);
-      expect(a.canCancel).toBe(false);
+      expect(a.canCancel).toBe(true);
       expect(a.canView).toBe(false);
     },
   );
+
+  it('pending: cannot pause or resume, but can be cancelled before it starts', () => {
+    expect(runControlAffordances('pending')).toEqual({
+      canPause: false,
+      canResume: false,
+      canCancel: true,
+      canView: false,
+    });
+  });
 
   it.each(['passed', 'failed', 'cancelled'])(
     '%s: terminal — only View is offered',

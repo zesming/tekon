@@ -25,6 +25,12 @@ const roleAgentConfigSchema = z.object({
   role: roleSchema,
   name: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
+  // PD-10：角色级 provider 覆盖。均为可选、厂商中立的开放字符串——不绑定
+  // Claude/Codex 的枚举，由各适配器在执行期翻译或在无法 honor 时显式拒绝。
+  // 不写时缺省，adapter 沿用 run 级 provider 配置，零行为变化。
+  driver: z.string().min(1).max(64).optional(),
+  model: z.string().min(1).max(128).optional(),
+  effort: z.string().min(1).max(32).optional(),
   injectMode: z.enum(['prepend', 'append', 'replace']).default('append'),
   priority: z.number().int().default(0),
   maxSkills: z.number().int().positive().optional(),
@@ -212,6 +218,8 @@ export function listRoleIds(rolesRoot: string): Role[] {
   return readdirSync(rolesRoot)
     .filter((entry) => isDirectory(join(rolesRoot, entry)))
     .flatMap((entry) => {
+      // PD-06：角色名开放，任何 kebab-case 标识符目录都是候选角色，
+      // 不再按内置枚举过滤；非标识符目录（如 .DS_Store）忽略。
       const parsed = roleSchema.safeParse(entry);
       return parsed.success ? [parsed.data] : [];
     })

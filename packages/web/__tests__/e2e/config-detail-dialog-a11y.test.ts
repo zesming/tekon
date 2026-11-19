@@ -10,7 +10,9 @@ test.describe("Config detail dialog accessibility (P1-A11Y-01 / P2-UX-01)", () =
       timeout: 15_000,
     });
 
-    const viewRoleBtn = page.getByRole("button", { name: "查看 →" }).first();
+    const viewRoleBtn = page
+      .getByRole("button", { name: "查看 / 编辑" })
+      .first();
     await expect(viewRoleBtn).toBeVisible();
     await viewRoleBtn.click();
 

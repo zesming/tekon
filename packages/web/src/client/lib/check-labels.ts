@@ -265,6 +265,30 @@ export function getRiskLabel(riskLabel: string): string {
 
 // ── Readiness helpers ─────────────────────────────────────────────────────
 
+/** Tri-state outcome of a readiness check (UI-05). */
+export type ReadinessCheckState = 'passed' | 'failed' | 'not-started';
+
+export interface ReadinessCheckLike {
+  passed: boolean;
+  state?: ReadinessCheckState | null;
+}
+
+/**
+ * Resolve the tri-state outcome. Core emits `state` explicitly; hand-built or
+ * older payloads only have `passed`, which maps onto passed/failed.
+ */
+export function checkState(check: ReadinessCheckLike): ReadinessCheckState {
+  if (check.state === 'not-started') return 'not-started';
+  return check.passed ? 'passed' : 'failed';
+}
+
+/** Short Chinese label for a check's tri-state outcome. */
+export function checkStateLabel(state: ReadinessCheckState): string {
+  if (state === 'passed') return '已通过';
+  if (state === 'not-started') return '未开始';
+  return '失败';
+}
+
 /**
  * Get a Chinese label for readiness state.
  */

@@ -6,15 +6,20 @@ import {
   type RunPayload,
 } from '../../hooks/use-run-admission.js';
 import { AdmissionNotice } from './AdmissionNotice.js';
-import { PlanCommandBindings } from './PlanCommandBindings.js';
 import { usePlanCommandComparison } from '../../hooks/use-plan-command-comparison.js';
 import { useSessionToken } from '../../hooks/use-session-token.js';
 import { useFlash } from '../../context/flash-context.js';
 import { rpc } from '../../lib/rpc-client.js';
 import { authScope, queryKeys } from '../../lib/query-keys.js';
-import { formatPhaseParallel } from '../../lib/plan-format.js';
+import { preflightWarning } from '../../lib/preflight-warning.js';
+import { PlanCommandBindings } from './PlanCommandBindings.js';
 import type { RpcProcedureMap } from '../../../shared/rpc-contract.js';
 import { startRunSubmitState } from './start-run-submit-state.js';
+import {
+  AGENT_LABELS,
+  AGENT_OPTIONS,
+  type RunMode,
+} from '../../hooks/use-run-plan-selection.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,21 +30,9 @@ export interface StartRunFormProps {
   defaultOpen?: boolean;
 }
 
-type RunMode = 'workflow' | 'goal';
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-
-const AGENT_OPTIONS = ['codex', 'claude-code', 'mock', 'dsh-headless'] as const;
-
-/** Human-facing labels; synthetic caveats stay inline, while dsh maturity is in adjacent help. */
-const AGENT_LABELS: Record<(typeof AGENT_OPTIONS)[number], string> = {
-  codex: 'codex',
-  'claude-code': 'claude-code',
-  mock: 'mock（仅测试/演示）',
-  'dsh-headless': 'dsh-headless（仅 Goal）',
-};
 
 /**
  * Collapsible "New Run" form with demand, mode, template, agent, execution plan preview,
@@ -66,7 +59,10 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const [demandText, setDemandText] = useState('');
   const [mode, setMode] = useState<RunMode>('workflow');
   const [template, setTemplate] = useState('');
-  const [agent, setAgent] = useState<string>(AGENT_OPTIONS[0]);
+  // Empty until the server-provided default arrives; the payload omits agent
+  // while empty so the server resolves the same configured default (PD-24).
+  const [agent, setAgent] = useState<string>('');
+  const [agentInitialized, setAgentInitialized] = useState(false);
   const [profile, setProfile] = useState<'human-web' | 'autonomous-delivery'>(
     'human-web',
   );
@@ -88,6 +84,19 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
   const { data: workflowData } = useQuery<
     RpcProcedureMap['workflow.list']['output']
   >(queryKeys.workflows(), () => rpc.call('workflow.list'));
+
+  // ── Resolve the server-configured default agent once (PD-24) ──
+  const { data: overviewData } = useQuery<
+    RpcProcedureMap['project.overview']['output']
+  >(
+    queryKeys.projectOverview(authScope(token)),
+    () => rpc.call('project.overview'),
+  );
+  useEffect(() => {
+    if (agentInitialized || !overviewData?.defaultAgent) return;
+    setAgent(overviewData.defaultAgent);
+    setAgentInitialized(true);
+  }, [agentInitialized, overviewData?.defaultAgent]);
 
   const workflows = workflowData?.workflows ?? [];
 
@@ -175,6 +184,8 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
     payload,
     onAccepted: (result) => {
       addFlash('success', `运行已受理: ${result.run.id.slice(0, 12)}`);
+      const warning = preflightWarning(result.preflight);
+      if (warning) addFlash('warning', warning);
       setDemandText('');
       setAcknowledgedNetwork(false);
       setIsOpen(false);
@@ -187,7 +198,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
       setTemplate('');
       setProfile('human-web');
     } else if (agent === 'dsh-headless') {
-      setAgent('codex');
+      setAgent(overviewData?.defaultAgent ?? '');
     }
   };
 
@@ -361,6 +372,11 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                 aria-describedby="run-mode-help"
                 onChange={(e) => handleAgentChange(e.target.value)}
               >
+                {agent === '' && (
+                  <option value="" disabled>
+                    加载默认代理…
+                  </option>
+                )}
                 {AGENT_OPTIONS.map((a) => (
                   <option key={a} value={a}>
                     {AGENT_LABELS[a]}
@@ -577,8 +593,7 @@ export function StartRunForm({ defaultOpen = false }: StartRunFormProps) {
                           className="text-muted"
                           style={{ fontSize: '11px' }}
                         >
-                          {formatPhaseParallel(phase.parallel)} · 节点:{' '}
-                          {phase.nodeIds.join(', ')}
+                          节点: {phase.nodeIds.join(', ')}
                         </div>
                       </div>
                     ))}

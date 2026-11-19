@@ -119,7 +119,9 @@ describe('R24 真实 HTTP 的有效检查绑定', () => {
     const intent = { token: fixture.sessionToken, requestId: 'r24-http-binding-01', template: 'project-feature',
       agent: 'mock', allowDirtyBase: true, demandText: '绑定后才执行' };
     const old = await rpc('workflow.plan', intent);
-    writeFileSync(profilePath, 'version: 1\ncommands:\n  build:\n    notApplicable: true\n    reason: changed before admission\n');
+    // build 改为 N/A、lint 保持已解析：制造 digest 变化但不触发 PD-04 的
+    // missing-command 受理阻断（该用例验证的是冻结/重放，不是缺失阻断）。
+    writeFileSync(profilePath, 'version: 1\ncommands:\n  build:\n    notApplicable: true\n    reason: changed before admission\n  lint:\n    tool: npm\n    args: [run, lint]\n');
     const rejected = await rpc('project.run', { ...intent, planDigest: old.body.result.digest });
     expect(rejected.status).toBe(400);
     expect(rejected.body.error.message).toContain('PLAN_DIGEST_MISMATCH');
@@ -158,6 +160,35 @@ describe('R24 真实 HTTP 的有效检查绑定', () => {
     const goal = await rpc('workflow.plan', { mode: 'goal', agent: 'mock' });
     expect(goal.status).toBe(200);
     expect(goal.body.result.digestVersion).toBe(3);
+  });
+
+  it('PD-04：受理时缺少必填检查命令返回 400 和修改指引，且零受理', async () => {
+    const { fixture, db, profilePath, rpc } = await setup();
+    // project-feature 需要 build/lint；只给 build，lint 缺失。
+    writeFileSync(
+      profilePath,
+      'version: 1\ncommands:\n  build:\n    tool: npm\n    args: [run, build]\n',
+    );
+    const preview = await rpc('workflow.plan', {
+      template: 'project-feature',
+      agent: 'mock',
+      allowDirtyBase: true,
+    });
+    expect(preview.status).toBe(200);
+
+    const rejected = await rpc('project.run', {
+      token: fixture.sessionToken,
+      requestId: 'r24-missing-command-01',
+      template: 'project-feature',
+      agent: 'mock',
+      allowDirtyBase: true,
+      demandText: '缺失命令不受理',
+      planDigest: preview.body.result.digest,
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.message).toContain('MISSING_REPO_COMMAND');
+    expect(rejected.body.error.message).toContain('repo-profile.yaml');
+    expect(db.prepare('select count(*) as count from run_admissions').get()).toEqual({ count: 0 });
   });
 
   it('历史与坏快照观察分类一致，不把缺损 admission 降级为历史', async () => {

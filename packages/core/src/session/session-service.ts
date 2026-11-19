@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import type { AuditLogger } from '../audit/logger.js';
+import {
+  providerPreflightAuditPayload,
+  type ProviderPreflight,
+  type ProviderPreflightResult,
+} from '../runtime/provider-probe.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import {
   type AdmissionStore,
@@ -11,7 +16,7 @@ import {
 import type { SessionEventBus } from './event-bus.js';
 import type { DurableJobRunner } from './job-runner.js';
 import type { ResumeConfirmation } from '../types/session-contract.js';
-import type { JobRepository, SessionEventStore } from './session-store.js';
+import type { JobOrigin, JobRepository, SessionEventStore } from './session-store.js';
 import { isWorkflowTerminalError } from '../workflow/errors.js';
 import { RunAdmissionError } from '../workflow/admission-error.js';
 import { writeWorkflowTerminal } from '../workflow/state-machine.js';
@@ -21,6 +26,9 @@ import type {
 } from '../workflow/engine.js';
 import type { WorkflowTemplate } from '../workflow/template.js';
 import type { WorkflowInstance, WorkflowStatus } from '../types/domain.js';
+import { runProviderConfigSchema } from '../types/domain.js';
+import type { BindingDiff } from '../workflow/rebind-run.js';
+import { rebindRunBinding } from '../workflow/rebind-run.js';
 
 /**
  * SessionService (phase 4a, design §2.1): the orchestration extracted
@@ -89,6 +97,8 @@ export interface SessionServiceStartRunResult {
   replayed: boolean;
   admissionState: 'pending' | 'ready' | 'recovery_required';
   detail?: string;
+  /** What the provider check found for this start (absent on replay). */
+  preflight?: ProviderPreflightResult;
 }
 
 export type SessionServiceResumeResult =
@@ -104,7 +114,13 @@ export type SessionServiceResumeResult =
       sessionId: string;
       jobId: string;
       previousJobId?: string | null;
+      preflight?: ProviderPreflightResult;
     };
+
+export type SessionServiceRebindResult =
+  | { outcome: 'terminal'; runId: string; status: WorkflowStatus }
+  | { outcome: 'active-job'; runId: string }
+  | { outcome: 'rebound'; runId: string; diff: BindingDiff };
 
 export type SessionServicePauseResult =
   | {
@@ -143,6 +159,27 @@ export interface SessionService<TEngineInput = SessionServiceEngineInput> {
     runId: string;
     afterApproval?: boolean;
   } & ResumeConfirmation): Promise<SessionServiceResumeResult>;
+  /**
+   * Checks the run's frozen provider before a resume is recorded (e.g. before
+   * an approval). Throws ProviderPreflightError when it cannot start.
+   */
+  preflightResume(runId: string): Promise<ProviderPreflightResult | undefined>;
+  /**
+   * PD-05：显式重绑定（--rebind）。用当前配置构建引擎快照，把冻结的计划/
+   * provider 绑定替换为自洽的新绑定后返回分项差异；不自动入队恢复，由
+   * 调用方接着走 resumeRun。终态运行与活跃作业期间拒绝写入。
+   */
+  rebindRun(input: {
+    runId: string;
+    engine: TEngineInput;
+    agent?: string;
+  }): Promise<SessionServiceRebindResult>;
+  /**
+   * PD-17 步 3：入队一个 failed 运行的显式重试作业（resume_options.retry）。
+   * 非 failed 运行（含 passed/cancelled 与非终态中断）走 terminal 判别或应
+   * 使用 resumeRun，不在此入口处理。
+   */
+  retryRun(input: { runId: string }): Promise<SessionServiceResumeResult>;
   requestPause(input: { runId: string }): Promise<SessionServicePauseResult>;
   requestCancel(input: { runId: string }): Promise<SessionServiceCancelResult>;
 }
@@ -180,7 +217,13 @@ export interface SessionServiceDeps<TEngineInput = SessionServiceEngineInput> {
    * 'cli' (design §8 decision 2).
    */
   sessionProfile?: string;
-  preflight?: () => Promise<void>;
+  /** Origin written on admitted jobs; resume takes the runner's origin. */
+  jobOrigin?: JobOrigin;
+  /**
+   * Provider check for every start and resume, before work is queued. It
+   * throws to refuse the run and returns warnings to show otherwise.
+   */
+  preflight?: ProviderPreflight;
 }
 
 export function createSessionService<TEngineInput = SessionServiceEngineInput>(
@@ -270,8 +313,15 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       const existing = await lookupRun(lookupInput);
       if (existing) return existing;
       const engine = await deps.createEngine(input.engine);
-      // The legacy CLI preflight consumes the provider selected by its factory.
-      await deps.preflight?.();
+      // Check the provider before preparing: preparation reads repository
+      // facts, which must be read after this await, not before it.
+      const preflight = engine.providerSnapshot
+        ? await deps.preflight?.({
+            provider: engine.providerSnapshot.provider,
+            phase: 'start',
+            configSummary: engine.providerSnapshot.configSummary,
+          })
+        : undefined;
       const prepareInput: WorkflowEngineStartInput = {
         requestId,
         demandText: input.demandText,
@@ -292,13 +342,19 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         requestId,
         envelopeVersion: requestEnvelope.version,
         envelopeHash: hashAdmissionEnvelope(requestEnvelope),
-        admissionAudits: input.admissionAudits ?? [],
+        admissionAudits: [
+          ...(input.admissionAudits ?? []),
+          ...(preflight
+            ? [{ type: 'provider.preflight', payload: providerPreflightAuditPayload('start', preflight) }]
+            : []),
+        ],
         sessionData: {
           workspaceRoot: realpathSync(projectRoot),
           profile,
           sessionId: `sess_${randomUUID()}`,
           jobId: `job_${randomUUID()}`,
           jobKind: runKind === 'goal' ? 'goal-run' : 'workflow-run',
+          ...(deps.jobOrigin ? { jobOrigin: deps.jobOrigin } : {}),
         },
       });
       if (!outcome.sessionId || !outcome.jobId) throw new Error('ADMISSION_SESSION_MISSING');
@@ -316,6 +372,7 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
         replayed: outcome.outcome === 'already_admitted',
         admissionState: outcome.filesState,
         ...(outcome.admission.lastError ? { detail: outcome.admission.lastError } : {}),
+        ...(preflight && outcome.outcome !== 'already_admitted' ? { preflight } : {}),
       };
     } catch (error) {
       // Another process may have won after our initial read while our own
@@ -387,6 +444,17 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
 
     }
 
+    // Refuse before queuing when the provider cannot start; record what the
+    // check found for this attempt.
+    const preflight = await preflightResume(input.runId);
+    if (preflight) {
+      await deps.audit.append({
+        runId: input.runId,
+        type: 'provider.preflight',
+        payload: providerPreflightAuditPayload('resume', preflight),
+      });
+    }
+
     // Reuse the original queued admission or enqueue a resume in one transaction.
 
     // Resolve (or create) the run's session before the atomic enqueue. For a
@@ -414,6 +482,9 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       kind: 'workflow-resume',
       ...(input.confirmStopped !== undefined ? { confirmStopped: input.confirmStopped } : {}),
       ...(input.previousJobId !== undefined ? { previousJobId: input.previousJobId } : {}),
+      // PD-31：gates-only 经 ResumeConfirmation 字段传入，由 runner 翻译为
+      // 作业行的 resume_options 持久化。
+      ...(input.gatesOnly ? { gatesOnly: true } : {}),
     });
     if (result.outcome === 'active-job') return { outcome: 'active-job', runId: input.runId };
     if (result.outcome !== 'enqueued') return { ...result, runId: input.runId };
@@ -423,6 +494,127 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
       sessionId: session.id,
       jobId: result.job.id,
       ...(result.previousJobId !== undefined ? { previousJobId: result.previousJobId } : {}),
+      ...(preflight ? { preflight } : {}),
+    };
+  }
+
+  async function retryRun(input: {
+    runId: string;
+  }): Promise<SessionServiceResumeResult> {
+    const workflow = await repositories.getWorkflowInstance(input.runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${input.runId}`);
+    }
+    // retry 是 failed 专属出口：passed/cancelled 报终态；非终态中断应走 resume。
+    if (
+      workflow.status === 'passed' ||
+      workflow.status === 'cancelled'
+    ) {
+      return { outcome: 'terminal', runId: input.runId, status: workflow.status };
+    }
+    if (workflow.status !== 'failed') {
+      throw new Error(
+        `RETRY_NOT_FAILED: 运行 ${input.runId} 当前状态为 ${workflow.status}，只有 failed 运行可以 retry；非终态中断请用 tekon resume。`,
+      );
+    }
+    // 不在事务外做活跃作业预检：那会让"CLI 入队后、claim 前死亡"留下的
+    // queued 孤儿永远拿到 active-job，而 failed 运行无法 cancel、queued 作业
+    // 又无其他回收器，形成无产品内恢复手段的死结。活跃裁决与 queued 交接
+    // （CLI 作业 handover 复用）统一由 enqueueIfNoActiveByRunId 事务完成，
+    // 与 resumeRun 同形；running/paused/cancelling 仍返回 active-job。
+    let session = await sessions.findSessionByRunId(input.runId);
+    if (!session) {
+      const workspace = await sessions.getOrCreateDefaultWorkspace(projectRoot);
+      session = await sessions.createSession({
+        workspaceId: workspace.id,
+        profile: SESSION_PROFILE,
+        title: null,
+        runId: input.runId,
+      });
+    }
+    const result = await jobRunner.enqueueIfNoActiveByRunId({
+      runId: input.runId,
+      sessionId: session.id,
+      kind: 'workflow-resume',
+      retry: true,
+    });
+    if (result.outcome === 'active-job') {
+      return { outcome: 'active-job', runId: input.runId };
+    }
+    if (result.outcome !== 'enqueued') {
+      return { ...result, runId: input.runId };
+    }
+    return {
+      outcome: 'enqueued',
+      runId: input.runId,
+      sessionId: session.id,
+      jobId: result.job.id,
+      ...(result.previousJobId !== undefined
+        ? { previousJobId: result.previousJobId }
+        : {}),
+    };
+  }
+
+  async function preflightResume(
+    runId: string,
+  ): Promise<ProviderPreflightResult | undefined> {
+    if (!deps.preflight) return undefined;
+    const snapshot = await repositories.getRunProviderConfig(runId);
+    if (!snapshot) return undefined;
+    return deps.preflight({
+      provider: snapshot.provider,
+      phase: 'resume',
+      configSummary: snapshot.configSummary,
+    });
+  }
+
+  async function rebindRun(input: {
+    runId: string;
+    engine: TEngineInput;
+    agent?: string;
+  }): Promise<SessionServiceRebindResult> {
+    const workflow = await repositories.getWorkflowInstance(input.runId);
+    if (!workflow) {
+      throw new Error(`run not found: ${input.runId}`);
+    }
+    if (['passed', 'failed', 'cancelled'].includes(workflow.status)) {
+      return {
+        outcome: 'terminal',
+        runId: input.runId,
+        status: workflow.status,
+      };
+    }
+    // 与 resume 的入队临界区同一守护：作业持有运行期间不得换绑定，否则两个
+    // 执行方会按不同的计划/提供者身份操作同一运行。
+    const active = await jobs.findActiveByRunId(input.runId);
+    if (active) {
+      return { outcome: 'active-job', runId: input.runId };
+    }
+
+    const engine = await deps.createEngine(input.engine);
+    if (!engine.providerSnapshot) {
+      throw new Error('ADMISSION_PROVIDER_REQUIRED');
+    }
+    // 经枚举 schema 校验：引擎快照的 provider 是宽 string，rebind 落库只
+    // 接受已知 provider，未知值在此明确拒绝而不是靠数据库层隐式失败。
+    const currentProvider = runProviderConfigSchema.parse({
+      runId: input.runId,
+      provider: engine.providerSnapshot.provider,
+      configSummary: engine.providerSnapshot.configSummary,
+      createdAt: new Date().toISOString(),
+    });
+    const result = await rebindRunBinding({
+      repoPath: projectRoot,
+      runId: input.runId,
+      repositories,
+      audit: deps.audit,
+      currentProvider,
+      ...(input.agent !== undefined ? { agent: input.agent } : {}),
+    });
+    return {
+      outcome: 'rebound',
+      runId: input.runId,
+      diff: result.diff,
     };
   }
 
@@ -487,5 +679,14 @@ export function createSessionService<TEngineInput = SessionServiceEngineInput>(
     };
   }
 
-  return { lookupRun, startRun, resumeRun, requestPause, requestCancel };
+  return {
+    lookupRun,
+    startRun,
+    resumeRun,
+    preflightResume,
+    rebindRun,
+    retryRun,
+    requestPause,
+    requestCancel,
+  };
 }

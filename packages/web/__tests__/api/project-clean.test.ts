@@ -1,11 +1,5 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +12,6 @@ import {
   createProjectContext,
 } from '../../src/server/project-context.js';
 import {
-  createAuditLogger,
   createJobRepository,
   createRepositories,
   createSessionEventStore,
@@ -71,14 +64,42 @@ function countCleanAudits(dbPath: string): number {
   const db = openTekonDatabase({ filename: dbPath });
   try {
     const row = db
-      .prepare(
-        "select count(*) as count from audit_events where type = 'project.clean.suspended'",
-      )
+      .prepare("select count(*) as count from audit_events where type = 'run.cleanup'")
       .get() as { count: number };
     return row.count;
   } finally {
     db.close();
   }
+}
+
+function setRunStatus(dbPath: string, runId: string, status: string): void {
+  const db = openTekonDatabase({ filename: dbPath });
+  try {
+    db.prepare('update workflow_instances set status = ? where id = ?').run(status, runId);
+  } finally {
+    db.close();
+  }
+}
+
+function nodeBranches(repo: string): string[] {
+  return execFileSync('git', ['for-each-ref', '--format=%(refname:short)', 'refs/heads/tekon/'], {
+    cwd: repo, encoding: 'utf8',
+  }).split('\n').filter(Boolean);
+}
+
+async function fixtureWithApi() {
+  const fixture = await createWebFixtureProject();
+  cleanupTasks.push(fixture.cleanup);
+  const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+  const dbPath = join(fixture.projectRoot, '.tekon', 'tekon.sqlite');
+  const clean = (input: Record<string, unknown> = {}) =>
+    dispatchApiCall(api, 'project.clean', {
+      runId: 'run_1',
+      token: fixture.sessionToken,
+      confirm: 'clean-terminal-runs',
+      ...input,
+    });
+  return { fixture, api, dbPath, clean };
 }
 
 afterEach(() => {
@@ -87,90 +108,142 @@ afterEach(() => {
   }
 });
 
-describe('project.clean suspended guard and audit', () => {
-  it('preserves files and domain state while auditing active job and lease evidence', async () => {
-    const fixture = await createWebFixtureProject();
-    cleanupTasks.push(fixture.cleanup);
-    const dbPath = join(fixture.projectRoot, '.tekon', 'tekon.sqlite');
-    const seedDb = openTekonDatabase({ filename: dbPath });
-    const seedQueue = createWriteQueue({ isClosed: () => seedDb.isClosed() });
-    const seedRepositories = createRepositories(seedDb, seedQueue);
-    const fixtureLeases = await seedRepositories.listWorktreeLeases('run_1');
-    expect(fixtureLeases).toHaveLength(1);
-    expect(fixtureLeases[0].releasedAt).toBeNull();
-    const seedSessions = createSessionEventStore(seedDb, seedQueue);
-    const seedJobs = createJobRepository(seedDb, seedQueue);
-    cleanupTasks.unshift(() => {
-      if (!seedDb.isClosed()) seedDb.close();
-    });
-    const workspace = await seedSessions.getOrCreateDefaultWorkspace(
-      fixture.projectRoot,
-    );
-    const session = await seedSessions.createSession({
-      workspaceId: workspace.id,
-      title: 'Clean guard session',
-      profile: 'human-web',
-      runId: 'run_1',
-    });
-    await seedJobs.enqueue({
-      id: 'job_clean_active',
-      sessionId: session.id,
-      kind: 'delivery-auto-prepare',
-      status: 'queued',
-      owner: null,
-      lease: null,
-      abortState: 'none',
-      checkpoint: null,
-      createdAt: '2026-09-04T00:00:00.000Z',
-      updatedAt: '2026-09-04T00:00:00.000Z',
-    });
-    const worktreePath = join(
-      fixture.projectRoot,
-      '.tekon',
-      'worktrees',
-      'clean-guard-lease',
-    );
-    mkdirSync(worktreePath, { recursive: true });
-    writeFileSync(join(worktreePath, 'preserved.txt'), 'keep this worktree');
-    await seedRepositories.recordWorktreeLease({
-      id: 'lease_clean_active',
-      runId: 'run_1',
-      nodeId: 'node_1',
-      role: 'reviewer',
-      repoPath: fixture.projectRoot,
-      worktreePath,
-      branchName: 'tekon/clean-guard',
-      baseHead: null,
-      createdAt: '2026-09-04T00:00:00.000Z',
-      releasedAt: null,
-    });
-    await seedRepositories.recordWorktreeLease({
-      id: 'lease_clean_released',
-      runId: 'run_1',
-      nodeId: 'node_0',
-      role: 'rd',
-      repoPath: fixture.projectRoot,
-      worktreePath: join(fixture.projectRoot, '.tekon', 'worktrees', 'released'),
-      branchName: 'tekon/clean-guard-released',
-      baseHead: null,
-      createdAt: '2026-09-03T00:00:00.000Z',
-      releasedAt: '2026-09-04T00:00:00.000Z',
-    });
+describe('project.clean', () => {
+  it('refuses a run that can still resume and changes nothing', async () => {
+    const { fixture, api, dbPath, clean } = await fixtureWithApi();
     const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
     const worktreesDir = join(fixture.projectRoot, '.tekon', 'worktrees');
-    const beforeRunFiles = snapshotFiles(runDir);
-    const beforeWorktreeFiles = snapshotFiles(worktreesDir);
-    const beforeDatabase = snapshotDatabase(dbPath);
+    const before = {
+      runFiles: snapshotFiles(runDir),
+      worktreeFiles: snapshotFiles(worktreesDir),
+      database: snapshotDatabase(dbPath),
+      branches: nodeBranches(fixture.projectRoot),
+    };
+    expect(before.branches).toHaveLength(1);
+
+    await expect(clean()).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining('运行 run_1 的状态是 paused'),
+    });
+    await expect(clean({ dryRun: true })).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    expect(snapshotFiles(runDir)).toEqual(before.runFiles);
+    expect(snapshotFiles(worktreesDir)).toEqual(before.worktreeFiles);
+    expect(snapshotDatabase(dbPath)).toEqual(before.database);
+    expect(nodeBranches(fixture.projectRoot)).toEqual(before.branches);
+    expect(countCleanAudits(dbPath)).toBe(0);
+    await api.close();
+  });
+
+  it('previews, then removes a finished run’s worktree and node branch', async () => {
+    const { fixture, api, dbPath, clean } = await fixtureWithApi();
+    setRunStatus(dbPath, 'run_1', 'cancelled');
+    const [lease] = await createRepositories(openTracked(dbPath)).listWorktreeLeases('run_1');
+    expect(existsSync(lease!.worktreePath)).toBe(true);
+
+    await expect(clean({ dryRun: true })).resolves.toEqual({
+      runId: 'run_1', dryRun: true, worktrees: 1, branches: 1, missing: 0, failures: 0,
+    });
+    expect(existsSync(lease!.worktreePath)).toBe(true);
+    expect(countCleanAudits(dbPath)).toBe(0);
+
+    await expect(clean()).resolves.toEqual({
+      runId: 'run_1', dryRun: false, worktrees: 1, branches: 1, missing: 0, failures: 0,
+    });
+    expect(existsSync(lease!.worktreePath)).toBe(false);
+    expect(nodeBranches(fixture.projectRoot)).toEqual([]);
+    expect(
+      execFileSync('git', ['branch', '--list', 'tekon-delivery/run_1'], {
+        cwd: fixture.projectRoot, encoding: 'utf8',
+      }).trim(),
+    ).not.toBe('');
+    expect(existsSync(join(fixture.projectRoot, '.tekon', 'runs', 'run_1'))).toBe(true);
+    expect(countCleanAudits(dbPath)).toBe(1);
+    expect((snapshotDatabase(dbPath).workflow_instances as Array<{ id: string; status: string }>)
+      .find((run) => run.id === 'run_1')?.status).toBe('cancelled');
+    await api.close();
+  });
+
+  it('serializes concurrent cleans of the same run', async () => {
+    const { api, dbPath, clean } = await fixtureWithApi();
+    setRunStatus(dbPath, 'run_1', 'failed');
+    const results = await Promise.all([clean(), clean()]) as Array<{ worktrees: number; failures: number }>;
+    expect(results.map((result) => result.worktrees).sort()).toEqual([0, 1]);
+    expect(results.every((result) => result.failures === 0)).toBe(true);
+    await api.close();
+  });
+
+  it('refuses a finished run that still has an active job', async () => {
+    const { fixture, api, dbPath, clean } = await fixtureWithApi();
+    setRunStatus(dbPath, 'run_1', 'passed');
+    const db = openTracked(dbPath);
+    const queue = createWriteQueue({ isClosed: () => db.isClosed() });
+    const sessions = createSessionEventStore(db, queue);
+    const workspace = await sessions.getOrCreateDefaultWorkspace(fixture.projectRoot);
+    const session = await sessions.createSession({
+      workspaceId: workspace.id, title: null, profile: 'human-web', runId: 'run_1',
+    });
+    await createJobRepository(db, queue).enqueue({
+      id: 'job_clean_active', sessionId: session.id, kind: 'delivery-auto-prepare',
+      status: 'queued', owner: null, lease: null, abortState: 'none', checkpoint: null,
+      createdAt: '2026-09-04T00:00:00.000Z', updatedAt: '2026-09-04T00:00:00.000Z',
+    });
+
+    await expect(clean()).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: expect.stringContaining('job_clean_active'),
+    });
+    expect(nodeBranches(fixture.projectRoot)).toHaveLength(1);
+    await api.close();
+  });
+
+  it('checks token, confirmation and run scope before doing anything', async () => {
+    const fixture = await createWebFixtureProject({ includeOutOfScopeProject: true });
+    cleanupTasks.push(fixture.cleanup);
+    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
+    const dbPath = join(fixture.projectRoot, '.tekon', 'tekon.sqlite');
+    setRunStatus(dbPath, 'run_1', 'cancelled');
+    const input = { runId: 'run_1', token: fixture.sessionToken, confirm: 'clean-terminal-runs' };
+
+    await expect(
+      dispatchApiCall(api, 'project.clean', { ...input, token: 'wrong-token' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    // The old confirmation literal no longer authorizes anything.
+    await expect(
+      dispatchApiCall(api, 'project.clean', { ...input, confirm: 'delete-run-dir' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      dispatchApiCall(api, 'project.clean', { ...input, runId: 'invalid/run/id' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      dispatchApiCall(api, 'project.clean', { ...input, runId: 'run_escaped' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    expect(nodeBranches(fixture.projectRoot)).toHaveLength(1);
+    expect(countCleanAudits(dbPath)).toBe(0);
+    await api.close();
+  });
+
+  it('returns a fixed INTERNAL_ERROR when the result cannot be audited', async () => {
+    const fixture = await createWebFixtureProject();
+    cleanupTasks.push(fixture.cleanup);
+    const projectContext = createProjectContext({ projectRoot: fixture.projectRoot });
+    assertProjectDatabaseExists(projectContext);
+    setRunStatus(projectContext.dbPath, 'run_1', 'cancelled');
+    const db = openTracked(projectContext.dbPath);
+    const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
+    const repositories = createRepositories(db, writeQueue);
     const router = createProjectRouter({
       planPreviewSigner: createPlanPreviewSigner(),
-      db: seedDb,
-      repositories: seedRepositories,
-      projectContext: createProjectContext({
-        projectRoot: fixture.projectRoot,
-      }),
-      jobs: seedJobs,
-      audit: createAuditLogger({ repositories: seedRepositories }),
-      sessions: seedSessions,
+      db,
+      repositories,
+      projectContext,
+      jobs: createJobRepository(db, writeQueue),
+      audit: {
+        append: vi.fn().mockRejectedValue(new Error('Disk write failure or db locked')),
+        verify: vi.fn(),
+      } as never,
+      sessions: {} as never,
       bus: {} as never,
       jobRunner: {} as never,
       registry: {} as never,
@@ -178,205 +251,18 @@ describe('project.clean suspended guard and audit', () => {
     });
 
     await expect(
-      router.clean({
-        runId: 'run_1',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
-    ).rejects.toMatchObject({
-      code: 'CONFLICT',
-      message: expect.stringMatching(/CLEAN_SUSPENDED.*lifecycle-safe purge/),
-    });
-
-    expect(snapshotFiles(runDir)).toEqual(beforeRunFiles);
-    expect(snapshotFiles(worktreesDir)).toEqual(beforeWorktreeFiles);
-    expect(snapshotDatabase(dbPath)).toEqual(beforeDatabase);
-
-    // Audit event must be appended
-    const auditEvents = await seedRepositories.listAuditEvents('run_1');
-    const suspendedEvent = auditEvents.find(
-      (event) => event.type === 'project.clean.suspended',
-    );
-    expect(suspendedEvent).toBeDefined();
-    expect({
-      ...suspendedEvent?.payload,
-      unreleasedLeaseIds: [...(suspendedEvent?.payload.unreleasedLeaseIds as string[])].sort(),
-    }).toEqual({
-      reason: 'CLEAN_SUSPENDED',
-      runStatus: 'paused',
-      activeJobId: 'job_clean_active',
-      unreleasedLeaseIds: ['lease_clean_active', fixtureLeases[0].id].sort(),
-    });
-    expect(Object.keys(suspendedEvent?.payload ?? {}).sort()).toEqual([
-      'activeJobId',
-      'reason',
-      'runStatus',
-      'unreleasedLeaseIds',
-    ]);
-    expect(JSON.stringify(suspendedEvent?.payload)).not.toContain(
-      fixture.sessionToken,
-    );
-    expect(JSON.stringify(suspendedEvent?.payload)).not.toContain(
-      fixture.projectRoot,
-    );
-  });
-
-  it('does not append audit when token is wrong', async () => {
-    const fixture = await createWebFixtureProject();
-    cleanupTasks.push(fixture.cleanup);
-    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
-
-    await expect(
-      api.project.clean({
-        runId: 'run_1',
-        token: 'wrong-token',
-        confirm: 'delete-run-dir',
-      }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-
-    const auditList = (await dispatchApiCall(api, 'audit.list', {
-      runId: 'run_1',
-    })) as { events: Array<any> };
-    const suspendedEvent = auditList.events.find(
-      (e: any) => e.type === 'project.clean.suspended',
-    );
-    expect(suspendedEvent).toBeUndefined();
-
-    await api.close();
-  });
-
-  it('does not append audit when confirm is wrong', async () => {
-    const fixture = await createWebFixtureProject();
-    cleanupTasks.push(fixture.cleanup);
-    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
-
-    await expect(
-      dispatchApiCall(api, 'project.clean', {
-        runId: 'run_1',
-        token: fixture.sessionToken,
-        confirm: 'wrong-confirm' as any,
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-
-    const auditList = (await dispatchApiCall(api, 'audit.list', {
-      runId: 'run_1',
-    })) as { events: Array<any> };
-    const suspendedEvent = auditList.events.find(
-      (e: any) => e.type === 'project.clean.suspended',
-    );
-    expect(suspendedEvent).toBeUndefined();
-
-    await api.close();
-  });
-
-  it('does not append audit when runId is invalid format or out-of-scope', async () => {
-    const fixture = await createWebFixtureProject({
-      includeOutOfScopeProject: true,
-    });
-    cleanupTasks.push(fixture.cleanup);
-    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
-
-    await expect(
-      dispatchApiCall(api, 'project.clean', {
-        runId: 'invalid/run/id',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-
-    await expect(
-      dispatchApiCall(api, 'project.clean', {
-        runId: 'run_escaped',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-
-    expect(
-      countCleanAudits(
-        join(fixture.projectRoot, '.tekon', 'tekon.sqlite'),
-      ),
-    ).toBe(0);
-
-    await api.close();
-  });
-
-  it('concurrent calls both fail with CONFLICT and neither deletes the directory', async () => {
-    const fixture = await createWebFixtureProject();
-    cleanupTasks.push(fixture.cleanup);
-    const api = await createApiCaller({ projectRoot: fixture.projectRoot });
-
-    const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
-    const [res1, res2] = await Promise.allSettled([
-      dispatchApiCall(api, 'project.clean', {
-        runId: 'run_1',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
-      dispatchApiCall(api, 'project.clean', {
-        runId: 'run_1',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
-    ]);
-
-    for (const result of [res1, res2]) {
-      expect(result.status).toBe('rejected');
-      if (result.status === 'rejected') {
-        expect(result.reason).toMatchObject({ code: 'CONFLICT' });
-      }
-    }
-    expect(existsSync(runDir)).toBe(true);
-
-    await api.close();
-  });
-
-  it('returns INTERNAL_ERROR with fixed sanitized message when audit append fails', async () => {
-    const fixture = await createWebFixtureProject();
-    cleanupTasks.push(fixture.cleanup);
-    const projectContext = createProjectContext({
-      projectRoot: fixture.projectRoot,
-    });
-    assertProjectDatabaseExists(projectContext);
-    const db = openTekonDatabase({ filename: projectContext.dbPath });
-    cleanupTasks.push(() => db.close());
-    const writeQueue = createWriteQueue({ isClosed: () => db.isClosed() });
-    const repositories = createRepositories(db, writeQueue);
-    const jobs = createJobRepository(db, writeQueue);
-
-    const failingAudit = {
-      append: vi
-        .fn()
-        .mockRejectedValue(new Error('Disk write failure or db locked')),
-      verify: vi.fn(),
-    };
-
-    const router = createProjectRouter({
-      planPreviewSigner: createPlanPreviewSigner(),
-      db,
-      repositories,
-      projectContext,
-      jobs,
-      audit: failingAudit as any,
-      sessions: {} as any,
-      bus: {} as any,
-      jobRunner: {} as any,
-      registry: {} as any,
-      sessionService: {} as any,
-    });
-
-    await expect(
-      router.clean({
-        runId: 'run_1',
-        token: fixture.sessionToken,
-        confirm: 'delete-run-dir',
-      }),
+      router.clean({ runId: 'run_1', token: fixture.sessionToken, confirm: 'clean-terminal-runs' }),
     ).rejects.toMatchObject({
       code: 'INTERNAL_ERROR',
-      message: 'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
+      message: 'CLEAN_AUDIT_FAILED: unable to record the clean result',
     });
-
-    const runDir = join(fixture.projectRoot, '.tekon', 'runs', 'run_1');
-    expect(existsSync(runDir)).toBe(true);
   });
 });
+
+function openTracked(dbPath: string) {
+  const db = openTekonDatabase({ filename: dbPath });
+  cleanupTasks.unshift(() => {
+    if (!db.isClosed()) db.close();
+  });
+  return db;
+}

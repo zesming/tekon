@@ -5,6 +5,7 @@ import type { DurableJobRunner, JobRepository, JobStatus } from '@tekon/core';
 import {
   awaitJobTerminal,
   exitCodeForJobOutcome,
+  exitCodeForWorkflowStatus,
 } from '../src/lib/session-context.js';
 
 // 4c M2 (design §4.3): awaitJobTerminal is the CLI holder's observation loop.
@@ -145,8 +146,9 @@ describe('exitCodeForJobOutcome', () => {
     expected: number;
     diagnostic: boolean;
   }> = [
-    { jobStatus: 'done', workflowStatus: 'paused', expected: 0, diagnostic: false },
-    { jobStatus: 'done', workflowStatus: 'blocked', expected: 0, diagnostic: false },
+    // CD-23：blocked=2、paused=3，脚本/IM 集成不再把“卡住”当成功。
+    { jobStatus: 'done', workflowStatus: 'paused', expected: 3, diagnostic: false },
+    { jobStatus: 'done', workflowStatus: 'blocked', expected: 2, diagnostic: false },
     { jobStatus: 'failed', workflowStatus: 'running', expected: 1, diagnostic: true },
     { jobStatus: 'interrupted', workflowStatus: 'running', expected: 1, diagnostic: true },
     { jobStatus: 'cancelled', workflowStatus: 'running', expected: 1, diagnostic: true },
@@ -180,5 +182,44 @@ describe('exitCodeForJobOutcome', () => {
     } else {
       expect(stderr).toBe('');
     }
+  });
+
+  it.each([
+    [undefined, true],
+    ['exit-nonzero', true],
+    ['timeout', true],
+    ['not-authenticated', false],
+    ['not-installed', false],
+    ['invalid-config', false],
+  ] as const)('suggests resume for an interruption with failure %s: %s', (kind, suggests) => {
+    let stderr = '';
+    const io = {
+      stdout: { write: (_chunk: string) => {} },
+      stderr: { write: (chunk: string) => { stderr += chunk; } },
+    };
+    exitCodeForJobOutcome({
+      io,
+      runId: 'run_outcome',
+      jobId: 'job_outcome',
+      jobStatus: 'interrupted',
+      workflowStatus: 'interrupted',
+      ...(kind ? { failure: { kind, message: 'm' } } : {}),
+    });
+    expect(stderr.includes('tekon resume')).toBe(suggests);
+    expect(stderr).toContain('tekon log --run-id run_outcome');
+  });
+});
+
+describe('exitCodeForWorkflowStatus', () => {
+  it.each([
+    ['passed', 0],
+    ['failed', 1],
+    ['cancelled', 1],
+    ['interrupted', 1],
+    // CD-23：卡住的运行必须以非零退出码告知脚本与 IM 集成。
+    ['blocked', 2],
+    ['paused', 3],
+  ] as const)('maps workflow status %s to exit code %s', (status, expected) => {
+    expect(exitCodeForWorkflowStatus(status)).toBe(expected);
   });
 });

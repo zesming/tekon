@@ -1,12 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,7 +40,8 @@ function createMemoryIO(): MemoryIO {
   };
 }
 
-describe('CLI clean command suspended guard', () => {
+// The clean behavior itself runs through a real process in e2e/clean.e2e.test.ts.
+describe('CLI clean command', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
@@ -57,46 +50,7 @@ describe('CLI clean command suspended guard', () => {
     }
   });
 
-  it('returns exit code 1 with CLEAN_SUSPENDED on stderr, empty stdout, and preserves worktrees', async () => {
-    const repoDir = mkdtempSync(join(tmpdir(), 'tekon-clean-unit-'));
-    tempDirs.push(repoDir);
-    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], {
-      cwd: repoDir,
-    });
-    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir });
-    writeFileSync(join(repoDir, 'package.json'), '{"name":"test"}\n');
-    execFileSync('git', ['add', 'package.json'], { cwd: repoDir });
-    execFileSync('git', ['commit', '-m', 'init'], { cwd: repoDir });
-
-    const io = createMemoryIO();
-    const initExit = await runCli(['init', '--repo', repoDir], io);
-    expect(initExit).toBe(0);
-    io.takeStdout();
-    io.takeStderr();
-
-    // Create dummy worktree entry
-    const worktreesDir = join(repoDir, '.tekon', 'worktrees');
-    const sampleWorktree = join(worktreesDir, 'sample-wt');
-    mkdirSync(sampleWorktree, { recursive: true });
-    writeFileSync(join(sampleWorktree, 'preserve.txt'), 'preserved content');
-
-    const cleanExit = await runCli(['clean', '--repo', repoDir], io);
-    expect(cleanExit).toBe(1);
-
-    expect(io.takeStdout()).toBe('');
-    const stderr = io.takeStderr();
-    expect(stderr).toContain('CLEAN_SUSPENDED');
-    expect(stderr).toMatch(/#33.*#18|#18.*#33/);
-
-    // Worktree and content preserved
-    expect(existsSync(join(sampleWorktree, 'preserve.txt'))).toBe(true);
-    expect(readFileSync(join(sampleWorktree, 'preserve.txt'), 'utf8')).toBe(
-      'preserved content',
-    );
-  });
-
-  it('still rejects an uninitialized repository before reporting the clean suspension', async () => {
+  it('rejects an uninitialized repository without touching it', async () => {
     const repoDir = mkdtempSync(join(tmpdir(), 'tekon-clean-uninitialized-'));
     tempDirs.push(repoDir);
     const io = createMemoryIO();
@@ -105,8 +59,18 @@ describe('CLI clean command suspended guard', () => {
 
     expect(exitCode).toBe(1);
     expect(io.takeStdout()).toBe('');
-    const stderr = io.takeStderr();
-    expect(stderr).toContain('项目未初始化');
-    expect(stderr).not.toContain('CLEAN_SUSPENDED');
+    expect(io.takeStderr()).toContain('项目未初始化');
+  });
+
+  it('rejects an empty --run-id instead of cleaning every run', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'tekon-clean-empty-run-id-'));
+    tempDirs.push(repoDir);
+    const io = createMemoryIO();
+
+    const exitCode = await runCli(['clean', '--run-id', '', '--yes', '--repo', repoDir], io);
+
+    expect(exitCode).toBe(1);
+    expect(io.takeStdout()).toBe('');
+    expect(io.takeStderr()).toContain('--run-id 不能为空');
   });
 });

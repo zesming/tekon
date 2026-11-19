@@ -4,7 +4,6 @@ import {
   scopedId,
   gatesWithStableKeys,
   stableGateKey,
-  resolveReviewTargetNodeByHeuristic,
   isChangesRequested,
   resolveMaxReworkAttempts,
 } from '../../src/workflow/workflow-runtime.js';
@@ -150,54 +149,6 @@ describe('gatesWithStableKeys', () => {
       artifactType: 'test-report',
     });
     expect(result.gateKey).toBeTruthy();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// resolveReviewTargetNodeByHeuristic
-// ---------------------------------------------------------------------------
-describe('resolveReviewTargetNodeByHeuristic', () => {
-  it('finds the last upstream passed node', () => {
-    const nodes = [
-      { id: 'run_1_pm', status: 'passed' },
-      { id: 'run_1_rd', status: 'passed' },
-      { id: 'run_1_qa', status: 'passed' },
-      { id: 'run_1_reviewer', status: 'running' },
-    ];
-    expect(resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer')).toBe('run_1_qa');
-  });
-
-  it('returns null when no upstream passed node exists', () => {
-    const nodes = [
-      { id: 'run_1_blocked', status: 'blocked' },
-      { id: 'run_1_reviewer', status: 'running' },
-    ];
-    expect(resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer')).toBeNull();
-  });
-
-  it('returns null when review node is the only node', () => {
-    const nodes = [{ id: 'run_1_reviewer', status: 'running' }];
-    expect(resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer')).toBeNull();
-  });
-
-  it('returns null when review node is not found in the list', () => {
-    const nodes = [{ id: 'run_1_rd', status: 'passed' }];
-    expect(resolveReviewTargetNodeByHeuristic(nodes, 'nonexistent')).toBeNull();
-  });
-
-  it('skips non-passed upstream nodes (blocked, needs-revision, running)', () => {
-    const nodes = [
-      { id: 'run_1_rd', status: 'blocked' },
-      { id: 'run_1_qa', status: 'needs-revision' },
-      { id: 'run_1_pm', status: 'passed' },
-      { id: 'run_1_another', status: 'running' },
-      { id: 'run_1_reviewer', status: 'running' },
-    ];
-    expect(resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer')).toBe('run_1_pm');
-  });
-
-  it('handles empty nodes array', () => {
-    expect(resolveReviewTargetNodeByHeuristic([], 'any')).toBeNull();
   });
 });
 

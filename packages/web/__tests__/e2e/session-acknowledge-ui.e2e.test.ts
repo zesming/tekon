@@ -73,10 +73,12 @@ test('acknowledging a failed session clears its action badge and sinks it down',
   await expect(itemsBefore.nth(0)).toContainText('失败待确认会话');
   await expect(itemsBefore.nth(1)).toContainText('正常运行会话');
 
-  // Unconditionally assert action badge and acknowledge button on the failed session
+  // Unconditionally assert the single status badge and the acknowledge button
+  // on the failed session. UI-02 removed the separate action badge; the run
+  // status itself renders as 失败 and stays factual after acknowledging.
   await expect(
-    failedItem.locator('.session-list-action-failed'),
-  ).toHaveText('需处理');
+    failedItem.locator('.badge.badge-failed'),
+  ).toHaveText('失败');
 
   const ackBtn = failedItem.getByRole('button', {
     name: '将失败会话标记为已处理',
@@ -86,11 +88,11 @@ test('acknowledging a failed session clears its action badge and sinks it down',
   // 4. Click the acknowledge button
   await ackBtn.click();
 
-  // 5. Unconditionally assert that acknowledge button disappears and action badge clears
+  // 5. The acknowledge button disappears; the factual failed badge remains.
   await expect(ackBtn).not.toBeVisible({ timeout: 10_000 });
   await expect(
-    failedItem.locator('.session-list-action-failed'),
-  ).not.toBeVisible();
+    failedItem.locator('.badge.badge-failed'),
+  ).toBeVisible();
 
   // 6. Unconditionally assert that the failed session sank below the active session
   const itemsAfter = page.locator('li.session-list-item');

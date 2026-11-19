@@ -24,7 +24,11 @@ export function createWebAgentRuntime(input: {
       repoPath: input.repoPath,
       gateway: input.gateway,
       runtime: input.runtime,
-      approvalDefault: 'on-request',
+      // Match the CLI write baseline (PD-10/PD-24): on-failure maps to
+      // acceptEdits plus the role's disallowedTools, so a headless Web write
+      // node no longer fails closed for ordinary file edits. The read-only
+      // draft agent uses its own default-permission path and is unaffected.
+      approvalDefault: 'on-failure',
     });
   } catch (error) {
     throw new ApiError(

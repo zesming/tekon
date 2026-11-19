@@ -133,6 +133,52 @@ describe('human gate', () => {
     db.close();
   });
 
+  it('PD-18: keeps the request context in requestNote when a decision note overwrites note', async () => {
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    await createRunFixture(repositories);
+    await repositories.recordGateResult({
+      id: 'gate_ctx',
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'human',
+      status: 'blocked',
+      durationMs: 0,
+      retries: 0,
+      createdAt: '2026-06-05T00:00:00.000Z',
+    });
+    const humanGate = createHumanGate({ repositories });
+
+    const requested = await humanGate.requestHumanGate({
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateResultId: 'gate_ctx',
+      note: 'request: review this change\ngate: human\nexactCommand: git --version',
+    });
+    // 待决策状态：请求上下文在 requestNote，note 保持空。
+    expect(await repositories.getHumanDecision(requested.id)).toMatchObject({
+      status: 'pending',
+      note: null,
+      requestNote: 'request: review this change\ngate: human\nexactCommand: git --version',
+    });
+
+    await humanGate.rejectHumanGate(
+      requested.id,
+      'reviewer',
+      '证据不足，补充风险说明',
+    );
+    const decided = await repositories.getHumanDecision(requested.id);
+    // 决策备注写 note；请求上下文原样保留在 requestNote。
+    expect(decided).toMatchObject({
+      status: 'rejected',
+      note: '证据不足，补充风险说明',
+      requestNote:
+        'request: review this change\ngate: human\nexactCommand: git --version',
+    });
+    db.close();
+  });
+
   it.each([
     ['cancelled', 'cancelled'],
     ['passed', 'passed'],

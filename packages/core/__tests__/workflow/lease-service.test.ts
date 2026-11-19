@@ -1,15 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openTekonDatabase } from '../../src/db/connection.js';
 import { migrateDatabase } from '../../src/db/migrations.js';
 import { createRepositories } from '../../src/db/repositories.js';
 import { createAuditLogger } from '../../src/audit/logger.js';
-import {
-  createLeaseService,
-  nodeAllowsSourceChanges,
-} from '../../src/workflow/lease-service.js';
+import { createLeaseService } from '../../src/workflow/lease-service.js';
 import type { WorktreeManager } from '../../src/runtime/worktree-manager.js';
 import type { WorktreeLease } from '../../src/types/config.js';
+
+const tempRepoPaths: string[] = [];
+afterEach(() => {
+  for (const path of tempRepoPaths.splice(0)) {
+    rmSync(path, { recursive: true, force: true });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -23,12 +31,81 @@ function createTestDb() {
   return { db, repositories, audit };
 }
 
-function makeNode(overrides?: Partial<{ id: string; role: 'rd' | 'pm' | 'qa' | 'reviewer' | 'pmo'; phaseId: string }>) {
+function makeNode(overrides?: Partial<{ id: string; role: 'rd' | 'pm' | 'qa' | 'reviewer' | 'pmo'; phaseId: string; workspace: 'worktree' | 'in-place' | 'none' }>) {
   return {
     id: overrides?.id ?? 'run_1_node_rd',
     role: overrides?.role ?? 'rd' as const,
     phaseId: overrides?.phaseId ?? 'run_1_phase_dev',
+    workspace: overrides?.workspace ?? ('worktree' as const),
   };
+}
+
+function makeGateway(isGit: boolean): import('../../src/runtime/command-gateway.js').CommandGateway {
+  return {
+    async run() {
+      return {
+        status: 'executed' as const,
+        exitCode: isGit ? 0 : 128,
+        signal: null,
+        timedOut: false,
+        stdoutPath: '/tmp/unused-stdout.log',
+        stderrPath: '/tmp/unused-stderr.log',
+        durationMs: 0,
+      };
+    },
+  };
+}
+
+/** 审计事件外键要求 run 存在；CD-09 三态测试统一先种一条运行。 */
+async function seedRun(
+  repositories: ReturnType<typeof createRepositories>,
+  runId = 'run_1',
+): Promise<void> {
+  const now = new Date().toISOString();
+  await repositories.createProject({
+    id: 'proj_1',
+    name: 'Test',
+    repoPath: '/tmp/repo',
+    createdAt: now,
+  });
+  await repositories.createDemand({
+    id: 'demand_1',
+    title: 'Test',
+    body: 'Body',
+    createdAt: now,
+  });
+  await repositories.createWorkflowInstance({
+    id: runId,
+    projectId: 'proj_1',
+    demandId: 'demand_1',
+    status: 'running',
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/** finalize 从 nodes 表读 workspace 裁决，三态测试需要与租约同 ID 的节点行。 */
+async function seedNode(
+  repositories: ReturnType<typeof createRepositories>,
+  workspace: 'worktree' | 'in-place' | 'none',
+  nodeId = 'run_1_node_rd',
+  runId = 'run_1',
+): Promise<void> {
+  const now = new Date().toISOString();
+  await repositories.createNode({
+    id: nodeId,
+    runId,
+    role: 'rd',
+    workspace,
+    status: 'running',
+    inputs: [],
+    outputs: [],
+    gates: [],
+    dependencies: [],
+    order: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 function makeStubWorktreeManager(overrides?: {
@@ -519,7 +596,7 @@ describe('createLeaseService — finalizeExecutionLease', () => {
     }
   });
 
-  it('throws when non-code node has source changes', async () => {
+  it('throws when a workspace:none node has source changes in its worktree', async () => {
     const { db, repositories, audit } = createTestDb();
     try {
       await repositories.createProject({
@@ -535,9 +612,10 @@ describe('createLeaseService — finalizeExecutionLease', () => {
         status: 'running',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
-      // Node with no code-changes output (e.g., reviewer)
+      // CD-09：源修改拒绝由 workspace:none 声明驱动，不再靠产物类型推断。
       await repositories.createNode({
         id: 'run_1_node_reviewer', runId: 'run_1', role: 'reviewer', status: 'running',
+        workspace: 'none',
         outputs: [{ id: 'review-report', type: 'review-report' }],
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       });
@@ -571,13 +649,22 @@ describe('createLeaseService — finalizeExecutionLease', () => {
         repositories,
         audit,
         worktreeManager,
+        // git 目录的 none 节点走真实 worktree，保留物理隔离拒绝语义。
+        gateway: makeGateway(true),
         executionLeases,
       });
 
-      const node = makeNode({ id: 'run_1_node_reviewer', role: 'reviewer' });
+      const node = makeNode({
+        id: 'run_1_node_reviewer',
+        role: 'reviewer',
+        workspace: 'none',
+      });
       // The real manager persists each lease; mirror that durable contract.
       await repositories.recordWorktreeLease(await service.createExecutionLease('run_1', node));
 
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).rejects.toMatchObject({ code: 'RECOVERABLE_LEASE_FAILURE' });
       await expect(
         service.finalizeExecutionLease('run_1', node.id),
       ).rejects.toThrow(/not allowed to modify repository source files/u);
@@ -588,31 +675,337 @@ describe('createLeaseService — finalizeExecutionLease', () => {
 });
 
 // ---------------------------------------------------------------------------
-// nodeAllowsSourceChanges
+// CD-09：workspace 三态租约
 // ---------------------------------------------------------------------------
-describe('nodeAllowsSourceChanges', () => {
-  it('returns true when node has code-changes output', () => {
-    expect(
-      nodeAllowsSourceChanges({
-        outputs: [{ id: 'code', type: 'code-changes' }],
-      }),
-    ).toBe(true);
+describe('CD-09 workspace-driven lease modes', () => {
+  it('in-place node gets a persisted synthetic lease and never touches the worktree manager', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      await seedRun(repositories);
+      let createLeaseCalled = false;
+      const worktreeManager = {
+        ...makeStubWorktreeManager(),
+        async createLease(...args: unknown[]) {
+          createLeaseCalled = true;
+          return makeStubWorktreeManager().createLease(...(args as []));
+        },
+      };
+      const executionLeases = new Map<string, WorktreeLease>();
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-inplace-'));
+      tempRepoPaths.push(repoPath);
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager,
+        gateway: makeGateway(true),
+        executionLeases,
+      });
+
+      const lease = await service.createExecutionLease(
+        'run_1',
+        makeNode({ workspace: 'in-place' }),
+      );
+
+      expect(lease.worktreePath).toBe(repoPath);
+      expect(createLeaseCalled).toBe(false);
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].worktreePath).toBe(repoPath);
+      const events = await repositories.listAuditEvents('run_1');
+      expect(events.at(-1)?.type).toBe('worktree.lease.created');
+      expect(events.at(-1)?.payload).toMatchObject({ workspace: 'in-place' });
+    } finally {
+      db.close();
+    }
   });
 
-  it('returns false when node has no code-changes output', () => {
-    expect(
-      nodeAllowsSourceChanges({
-        outputs: [{ id: 'review', type: 'review-report' }],
-      }),
-    ).toBe(false);
+  it('none node in a non-git directory gets a synthetic lease plus a source snapshot', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-nongit-'));
+      tempRepoPaths.push(repoPath);
+      mkdirSync(join(repoPath, 'src'), { recursive: true });
+      writeFileSync(join(repoPath, 'src', 'a.txt'), 'alpha\n');
+      await seedRun(repositories);
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+
+      const lease = await service.createExecutionLease(
+        'run_1',
+        makeNode({ workspace: 'none' }),
+      );
+
+      expect(lease.worktreePath).toBe(repoPath);
+      const events = await repositories.listAuditEvents('run_1');
+      const snapshotPath = events.at(-1)?.payload.snapshotPath as string;
+      expect(snapshotPath).toBeTruthy();
+      const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8')) as {
+        entries: Array<{ path: string }>;
+      };
+      expect(snapshot.entries.map((entry) => entry.path)).toContain('src/a.txt');
+    } finally {
+      db.close();
+    }
   });
 
-  it('returns false when node has empty outputs', () => {
-    expect(nodeAllowsSourceChanges({ outputs: [] })).toBe(false);
+  it('throws a friendly WorkspaceGitRequiredError for a worktree node in a non-git directory', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      await seedRun(repositories);
+      const worktreeManager = makeStubWorktreeManager();
+      const ensureSpy = vi.spyOn(worktreeManager, 'ensureRunBranch');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath: '/tmp/repo',
+        repositories,
+        audit,
+        worktreeManager,
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+
+      await expect(
+        service.createExecutionLease('run_1', makeNode({ workspace: 'worktree' })),
+      ).rejects.toMatchObject({ code: 'WORKSPACE_GIT_REQUIRED' });
+      // 不应触达底层 git，避免泄漏原始 fatal。
+      expect(ensureSpy).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
   });
 
-  it('returns false for null node', () => {
-    expect(nodeAllowsSourceChanges(null)).toBe(false);
+  it('none node in a git directory still gets an isolated real worktree', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      await seedRun(repositories);
+      const worktreeManager = makeStubWorktreeManager();
+      const ensureSpy = vi.spyOn(worktreeManager, 'ensureRunBranch');
+      const createSpy = vi.spyOn(worktreeManager, 'createLease');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath: '/tmp/repo',
+        repositories,
+        audit,
+        worktreeManager,
+        gateway: makeGateway(true),
+        executionLeases,
+      });
+
+      await service.createExecutionLease('run_1', makeNode({ workspace: 'none' }));
+
+      expect(ensureSpy).toHaveBeenCalledOnce();
+      expect(createSpy).toHaveBeenCalledOnce();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('finalizes an in-place lease without promotion even when files changed in the repo', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-finalize-inplace-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'notes.md'), 'first\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'in-place');
+      const worktreeManager = makeStubWorktreeManager();
+      const commitSpy = vi.spyOn(worktreeManager, 'commitLeaseChanges');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager,
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+      const node = makeNode({ workspace: 'in-place' });
+      await service.createExecutionLease('run_1', node);
+      // 节点直接在主工作区产出文件是 in-place 的显式语义，finalize 不得拒绝。
+      writeFileSync(join(repoPath, 'notes.md'), 'changed by agent\n');
+
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).resolves.toBeUndefined();
+      expect(commitSpy).not.toHaveBeenCalled();
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted[0].releasedAt).toBeTruthy();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects finalize of a none/non-git lease with a recoverable error naming changed files', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-finalize-none-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'none');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+      const node = makeNode({ workspace: 'none' });
+      await service.createExecutionLease('run_1', node);
+      writeFileSync(join(repoPath, 'forbidden.txt'), 'agent wrote source\n');
+
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).rejects.toMatchObject({ code: 'RECOVERABLE_LEASE_FAILURE' });
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).rejects.toThrow(/forbidden\.txt/u);
+
+      // 可恢复：租约仍处于 active，没有被释放，用户回滚后可再次 finalize。
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted[0].releasedAt).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('releases a none/non-git lease when the working tree matches the snapshot', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-finalize-clean-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'none');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+      const node = makeNode({ workspace: 'none' });
+      await service.createExecutionLease('run_1', node);
+
+      await service.finalizeExecutionLease('run_1', node.id);
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted[0].releasedAt).toBeTruthy();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('cold engine recreates and re-finalizes a released synthetic lease without PK conflict or evidence errors', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-cold-resume-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'in-place');
+
+      // 第一个引擎：建合成租约并 finalize（释放）。
+      const firstLeases = new Map<string, WorktreeLease>();
+      const first = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases: firstLeases,
+      });
+      const node = makeNode({ workspace: 'in-place' });
+      const lease = await first.createExecutionLease('run_1', node);
+      await first.finalizeExecutionLease('run_1', node.id);
+      const persisted = await repositories.listWorktreeLeases('run_1');
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].releasedAt).toBeTruthy();
+
+      // 冷启动：全新引擎、空内存 map，模拟关停后的 resume。
+      const coldLeases = new Map<string, WorktreeLease>();
+      const cold = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases: coldLeases,
+      });
+      // 症状 1：确定性 id 盲插会触发 UNIQUE 冲突；应幂等复用既有租约。
+      const recreated = await cold.createExecutionLease('run_1', node);
+      expect(recreated.id).toBe(lease.id);
+      const stillOne = await repositories.listWorktreeLeases('run_1');
+      expect(stillOne).toHaveLength(1);
+
+      // 节点仍是 awaiting-gate（关停落在 release 与 node.passed 之间）。
+      await repositories.transitionNode(node.id, 'awaiting-gate');
+      // 症状 2：再次 finalize 应识别合成终态证据并 no-op，不报 evidence 缺失。
+      await expect(
+        cold.finalizeExecutionLease('run_1', node.id),
+      ).resolves.toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('MF-R1: re-executing a node reactivates its released synthetic lease and re-enforces none on the new baseline', async () => {
+    const { db, repositories, audit } = createTestDb();
+    try {
+      const repoPath = mkdtempSync(join(tmpdir(), 'tekon-lease-reactivate-'));
+      tempRepoPaths.push(repoPath);
+      writeFileSync(join(repoPath, 'keep.txt'), 'baseline\n');
+      await seedRun(repositories);
+      await seedNode(repositories, 'none');
+      const executionLeases = new Map<string, WorktreeLease>();
+      const service = createLeaseService({
+        repoPath,
+        repositories,
+        audit,
+        worktreeManager: makeStubWorktreeManager(),
+        gateway: makeGateway(false),
+        executionLeases,
+      });
+      const node = makeNode({ workspace: 'none' });
+
+      // 第一代：建租约（含快照）并干净 finalize，租约被释放。
+      await service.createExecutionLease('run_1', node);
+      await service.finalizeExecutionLease('run_1', node.id);
+      let leases = await repositories.listWorktreeLeases('run_1');
+      expect(leases).toHaveLength(1);
+      expect(leases[0].releasedAt).toBeTruthy();
+
+      // 模拟首次 agent 失败后 resume 的同节点再执行：必须重新激活而非沿用
+      // 已释放行，否则 activeExecutionLease 解析不到、none 快照 diff 被跳过。
+      const recreated = await service.createExecutionLease('run_1', node);
+      leases = await repositories.listWorktreeLeases('run_1');
+      expect(leases).toHaveLength(1);
+      expect(leases[0].id).toBe(recreated.id);
+      expect(leases[0].releasedAt).toBeNull();
+      // 再激活后 activeExecutionLease 必须能解析（带 gate 节点否则永久卡死）。
+      await expect(
+        service.activeExecutionLease('run_1', node.id, { required: true }),
+      ).resolves.toBeTruthy();
+
+      // 第二代 agent 违规写源码：新基线下 finalize 必须再次拦截，不能 no-op。
+      writeFileSync(join(repoPath, 'forbidden.txt'), 'second attempt\n');
+      await expect(
+        service.finalizeExecutionLease('run_1', node.id),
+      ).rejects.toMatchObject({ code: 'RECOVERABLE_LEASE_FAILURE' });
+    } finally {
+      db.close();
+    }
   });
 });
 

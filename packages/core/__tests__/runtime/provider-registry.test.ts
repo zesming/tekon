@@ -144,7 +144,7 @@ describe('provider snapshot version contract (S2)', () => {
       repoPath: '/tmp/repo',
       gateway: stubGateway,
     });
-    expect(result.configSummary.schemaVersion).toBe(1);
+    expect(result.configSummary.schemaVersion).toBe(2);
   });
 
   it('restore() accepts a snapshot missing schemaVersion (treated as v1)', () => {
@@ -175,7 +175,8 @@ describe('provider snapshot version contract (S2)', () => {
       gateway: stubGateway,
     });
     expect(result.provider).toBe('claude-code');
-    expect(result.configSummary.schemaVersion).toBe(1);
+    // The restored summary carries the current version; the stored row is unchanged.
+    expect(result.configSummary.schemaVersion).toBe(2);
   });
 
   it('restore() rejects a snapshot with a higher schemaVersion', () => {

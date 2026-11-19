@@ -8,10 +8,14 @@ import {
   resolve,
 } from 'node:path';
 
+import { CODEX_PROFILE_NAME } from '../config/tekon-config.js';
 import type { AgentAdapterConfig } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
 import type { CommandGateway } from './command-gateway.js';
+import { classifyProviderFailure } from './provider-diagnostics.js';
 import type { AgentAdapter } from './agent-adapter.js';
+import type { RoleProviderOverrides } from './agent-adapter.js';
+import { assertSafeProviderOverrideValue } from '../role/override-safety.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import {
   artifactDiagnosticFromError,
@@ -30,8 +34,47 @@ const CONTROLLED_CODEX_GLOBAL_ARGS = [
   '--ask-for-approval',
   'on-request',
 ] as const;
-const DEFAULT_CODEX_PROFILE = 'internal';
 const CODEX_EXEC_SUBCOMMAND = 'exec';
+
+// Codex runs with an exact environment, merged in a fixed order: this allow
+// list, then the configured passthrough names, then Tekon's own variables
+// (written last by the adapter, so passthrough can never replace them).
+const CODEX_PROVIDER_SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'CODEX_HOME',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'all_proxy',
+  'NODE_EXTRA_CA_CERTS',
+] as const;
+
+export function buildCodexProviderEnv(
+  source: NodeJS.ProcessEnv = process.env,
+  passthroughEnv: readonly string[] = [],
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of [...CODEX_PROVIDER_SAFE_ENV_KEYS, ...passthroughEnv]) {
+    const value = source[key];
+    if (value) env[key] = value;
+  }
+  return env;
+}
 
 export function buildCodexCommand(
   config: AgentAdapterConfig,
@@ -40,6 +83,7 @@ export function buildCodexCommand(
     prompt: string;
     runContext?: { nodeId: string; runId: string };
   },
+  providerOverrides?: RoleProviderOverrides,
 ): BuiltCodexCommand {
   const userArgs = config.args ?? [];
   const command = config.command ?? 'codex';
@@ -47,6 +91,9 @@ export function buildCodexCommand(
   if (isRealCodexCommand) {
     assertSafeCodexArgs(userArgs);
   }
+  // PD-10：角色级覆盖是 Tekon 翻译的内部控制位，不经 userArgs 安全校验，
+  // 但取值先过白名单字符约束，杜绝选项注入（如 "high; rm -rf /"）。
+  const overrideArgs = buildCodexOverrideArgs(providerOverrides);
   const args = isRealCodexCommand
     ? [
         ...controlledCodexGlobalArgs(config, {
@@ -54,9 +101,17 @@ export function buildCodexCommand(
           runContext: input.runContext,
         }),
         CODEX_EXEC_SUBCOMMAND,
+        ...overrideArgs,
         ...userArgs,
       ]
-    : [...userArgs, CODEX_EXEC_SUBCOMMAND, ...CONTROLLED_CODEX_GLOBAL_ARGS];
+    : [
+        ...userArgs,
+        CODEX_EXEC_SUBCOMMAND,
+        ...CONTROLLED_CODEX_GLOBAL_ARGS,
+        // 对称展开覆盖（该分支生产不可达，保持两条路径行为一致，避免
+        // 未来启用自定义 command 时静默丢失角色覆盖）。
+        ...overrideArgs,
+      ];
 
   if (config.promptMode === 'arg-append') {
     args.push(input.prompt);
@@ -80,14 +135,18 @@ export function createCodexAdapter(
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      const command = buildCodexCommand(config, {
-        artifactOutputDir: input.outputDir,
-        prompt: input.prompt,
-        runContext: {
-          nodeId: input.runContext.nodeId,
-          runId: input.runContext.runId,
+      const command = buildCodexCommand(
+        config,
+        {
+          artifactOutputDir: input.outputDir,
+          prompt: input.prompt,
+          runContext: {
+            nodeId: input.runContext.nodeId,
+            runId: input.runContext.runId,
+          },
         },
-      });
+        input.providerOverrides,
+      );
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({
         command,
@@ -97,7 +156,9 @@ export function createCodexAdapter(
         timeoutMs: config.timeoutMs,
         progressIntervalMs: config.progressHeartbeatMs,
         noProgressTimeoutMs: config.noProgressTimeoutMs,
+        envMode: 'exact',
         env: {
+          ...buildCodexProviderEnv(process.env, config.passthroughEnv),
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
           TEKON_RUN_ID: input.runContext.runId,
@@ -116,8 +177,28 @@ export function createCodexAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          diagnostic: classifyProviderFailure({
+            provider: 'codex',
+            command: command.tool,
+            result,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
+          }),
         };
       }
+
+      // When the process itself failed, that is the reason to report; a
+      // missing or incomplete manifest is only its consequence.
+      const processFailure =
+        result.exitCode !== 0 || result.timedOut
+          ? classifyProviderFailure({
+              provider: 'codex',
+              command: command.tool,
+              result,
+              signal: input.signal,
+              cwd: input.worktreeLease.worktreePath,
+            })
+          : undefined;
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
@@ -135,7 +216,8 @@ export function createCodexAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch (error) {
-          const diagnostic = artifactDiagnosticFromError(error);
+          const diagnostic =
+            processFailure ?? artifactDiagnosticFromError(error);
           artifactIngestionFailed = true;
           if (result.timedOut) {
             return {
@@ -217,8 +299,8 @@ export function createCodexAdapter(
         ],
         artifacts,
         timedOut: result.timedOut,
-        ...(missingRequiredDiagnostic
-          ? { diagnostic: missingRequiredDiagnostic }
+        ...(processFailure || missingRequiredDiagnostic
+          ? { diagnostic: processFailure ?? missingRequiredDiagnostic }
           : {}),
       };
     },
@@ -229,6 +311,24 @@ function isCodexCommand(command: string): boolean {
   return basename(command) === 'codex';
 }
 
+function buildCodexOverrideArgs(
+  overrides: RoleProviderOverrides | undefined,
+): string[] {
+  if (!overrides) return [];
+  const args: string[] = [];
+  if (overrides.model !== undefined) {
+    // 字符白名单已在 resolveRoleProviderOverrides 统一校验，这里再断言一次
+    // 保证纯函数 buildCodexCommand 被直接调用时同样 fail-closed。
+    assertSafeProviderOverrideValue('model', overrides.model);
+    args.push('--model', overrides.model);
+  }
+  if (overrides.effort !== undefined) {
+    assertSafeProviderOverrideValue('effort', overrides.effort);
+    args.push('-c', `model_reasoning_effort=${overrides.effort}`);
+  }
+  return args;
+}
+
 function controlledCodexGlobalArgs(
   config: AgentAdapterConfig,
   input: {
@@ -236,10 +336,9 @@ function controlledCodexGlobalArgs(
     runContext?: { nodeId: string; runId: string };
   },
 ): string[] {
-  const profileArgs = [
-    '--profile',
-    assertSafeCodexProfile(config.profile ?? DEFAULT_CODEX_PROFILE),
-  ];
+  const profileArgs = config.profile
+    ? ['--profile', assertSafeCodexProfile(config.profile)]
+    : [];
   const outputDir = assertSafeCodexArtifactOutputDir(
     config,
     input.artifactOutputDir,
@@ -254,7 +353,7 @@ function controlledCodexGlobalArgs(
 }
 
 function assertSafeCodexProfile(profile: string): string {
-  if (!/^[A-Za-z0-9._-]+$/u.test(profile)) {
+  if (!CODEX_PROFILE_NAME.test(profile)) {
     throw new Error('codex profile must be a safe profile name');
   }
   return profile;

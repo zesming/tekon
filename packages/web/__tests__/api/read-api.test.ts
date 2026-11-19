@@ -25,7 +25,8 @@ describe('web read API', () => {
       gates: 1,
       audit: 3,
       pendingApprovals: 1,
-      roles: 1,
+      // PD-11：内置 6 角色与项目 rd 去重后的并集口径。
+      roles: 6,
     });
     expect(overview.counts.workflows).toBeGreaterThanOrEqual(2);
     await expect(
@@ -151,8 +152,12 @@ describe('web read API', () => {
     ).resolves.toMatchObject({
       events: [],
     });
+    // PD-11：内置+项目并集（6 个），rd 为项目覆盖，其余来自内置。
     await expect(api.role.list()).resolves.toMatchObject({
-      roles: [expect.objectContaining({ id: 'rd' })],
+      roles: expect.arrayContaining([
+        expect.objectContaining({ id: 'rd', source: 'project' }),
+        expect.objectContaining({ id: 'pm', source: 'built-in' }),
+      ]),
     });
     await expect(api.workflow.list()).resolves.toMatchObject({
       workflows: expect.arrayContaining([
@@ -171,15 +176,17 @@ describe('web read API', () => {
 
     const result = await api.role.list();
 
-    expect(result.roles).toHaveLength(1);
-    const rd = result.roles[0]!;
-    expect(rd).toMatchObject({ id: 'rd', name: 'RD' });
+    // PD-11：并集 6 个角色（内置 5 + 项目 rd 去重）。
+    expect(result.roles).toHaveLength(6);
+    const rd = result.roles.find((role) => role.id === 'rd');
+    expect(rd).toMatchObject({ id: 'rd', name: 'RD', source: 'project' });
 
-    // SECURITY: systemPrompt must never be leaked through the read API.
-    // The field is removed from the schema entirely, so the parsed output
-    // must not contain it at all.
-    expect(rd).not.toHaveProperty('systemPrompt');
-    expect(rd.hasSystemPrompt).toBe(true);
+    // SECURITY: systemPrompt must never be leaked through the list API.
+    // Prompt reads go through the explicit role.get procedure instead.
+    for (const role of result.roles) {
+      expect(role).not.toHaveProperty('systemPrompt');
+    }
+    expect(rd?.hasSystemPrompt).toBe(true);
 
     await api.close();
   });

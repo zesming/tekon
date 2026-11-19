@@ -1,11 +1,11 @@
 id: goal
 name: Goal
 version: 1
-# 4b: lightweight single-node goal run. `governance: none` opts out ONLY of the
-# required-reviewer-node invariant (whitelist exemption); every other template
-# invariant still applies. Gates are empty by default — the caller may inject
-# governance gates per run. A goal run is a plain agent goal, not a delivery
-# workflow (it does not produce code-changes and is not eligible for delivery).
+# Lightweight single-node goal run. Reviewer nodes and gates are optional
+# (PD-06); this template simply declares none. The `governance` field is kept
+# only for backward compatibility with older parsers and has no effect.
+# A goal run is a plain agent goal, not a delivery workflow (it does not
+# produce code-changes and is not eligible for delivery).
 governance: none
 phases:
   - id: goal
@@ -13,3 +13,6 @@ phases:
     nodes:
       - id: goal-execute
         role: goal
+        # CD-09：Goal 历史上即只读节点（finalize 拒绝源码改动），现以显式
+        # workspace 声明保留该语义；需要直接产出文件时用 in-place 自定义模板。
+        workspace: none

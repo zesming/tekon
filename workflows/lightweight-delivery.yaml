@@ -1,0 +1,54 @@
+id: lightweight-delivery
+name: Lightweight Delivery
+version: 1
+# PD-08：轻量默认模板。plan → 实现 → 人工确认三节点，仅保留必要的 schema
+# 门禁与一个人工确认门禁，不挂 build/lint/test/qa/pmo 全链路——小任务不必
+# 承担 standard-delivery 的 16 节点/44 门禁成本。人工确认是安全闸，驳回经
+# PD-18 返工回到实现节点。注意：本模板不进入 PR 交付自动化（readiness 多项
+# 恒红，见手册），适用于受控的小改动。
+retry:
+  maxAttempts: 2
+  backoffMs: 250
+  strategy: fixed
+phases:
+  - id: plan
+    name: Plan
+    nodes:
+      - id: pm-plan
+        role: pm
+        outputs:
+          - demand:demand-card
+        gates:
+          - type: schema
+            artifactType: demand-card
+  - id: implement
+    name: Implement
+    dependsOn:
+      - plan
+    nodes:
+      - id: rd-implement
+        role: rd
+        inputs:
+          - demand:demand-card
+        outputs:
+          - code:code-changes
+        gates:
+          - type: schema
+            artifactType: code-changes
+  - id: confirm
+    name: Confirm
+    dependsOn:
+      - implement
+    nodes:
+      - id: human-confirm
+        role: reviewer
+        # 纯人工确认节点：无产物输出，跨阶段依赖实现节点，驳回返工指回它。
+        inputs:
+          - code:code-changes
+        dependsOn:
+          - rd-implement
+        gates:
+          - type: human
+            requiresHumanApproval: true
+            # PD-18：人工驳回后对实现节点 rd-implement 发起返工。
+            reworkTargetNodeId: rd-implement

@@ -7,7 +7,9 @@ import { parseArgs } from 'node:util';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 import {
+  FALLBACK_DEFAULT_AGENT,
   createRepositories,
+  findExecutable,
   migrateDatabase,
   openTekonDatabase,
   writeDefaultRepoProfile,
@@ -17,7 +19,7 @@ import {
 
 import { selectLatestRunId } from './db-helpers.js';
 import { resolveProjectRepoPath } from './path-utils.js';
-import { basenameForProject, readStdinLine } from './utils.js';
+import { readStdinLine } from './utils.js';
 
 export interface CliIO {
   stdout: { write(chunk: string): void };
@@ -127,15 +129,18 @@ export function initializeProject(
       { encoding: 'utf8', mode: 0o600 },
     );
   }
-  writeFileSync(
-    join(tekonDir, 'config.yaml'),
-    stringifyYaml({
-      project: { name: basenameForProject(repoPath), repoPath },
-      storage: { dataDir: '.tekon' },
-      defaultAgent: 'codex',
-    }),
-    'utf8',
-  );
+  // An existing config is the user's; init only fills in a missing one. The
+  // default agent is the first provider installed on PATH (not its login).
+  const configPath = join(tekonDir, 'config.yaml');
+  const keptConfig = existsSync(configPath);
+  const installedAgent = keptConfig ? undefined : firstInstalledAgent();
+  if (!keptConfig) {
+    writeFileSync(
+      configPath,
+      stringifyYaml({ defaultAgent: installedAgent ?? FALLBACK_DEFAULT_AGENT }),
+      'utf8',
+    );
+  }
   const db = openProjectDb(repoPath);
   try {
     migrateDatabase(db);
@@ -151,6 +156,11 @@ export function initializeProject(
     [
       '项目初始化完成',
       `仓库路径: ${repoPath}`,
+      keptConfig
+        ? '配置: 保留已有的 .tekon/config.yaml'
+        : installedAgent
+          ? `默认 agent: ${installedAgent}`
+          : `默认 agent: ${FALLBACK_DEFAULT_AGENT}（未找到已安装的 claude 或 codex，运行 tekon doctor 查看怎么处理）`,
       '',
       '后续操作:',
       '  tekon draft new <需求描述>  创建需求草稿',
@@ -159,6 +169,12 @@ export function initializeProject(
       '',
     ].join('\n'),
   );
+}
+
+/** claude-code, then codex: the first whose command is on PATH. */
+function firstInstalledAgent(): 'claude-code' | 'codex' | undefined {
+  const candidates = [['claude-code', 'claude'], ['codex', 'codex']] as const;
+  return candidates.find(([, command]) => findExecutable(command, process.env))?.[0];
 }
 
 /**

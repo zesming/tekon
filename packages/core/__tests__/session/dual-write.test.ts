@@ -111,6 +111,18 @@ const AUDIT_MAPPING_CASES = [
     expectedPayload: { runId: RUN_ID, resumed: true, kind: 'workflow' },
   },
   {
+    // PD-17 步 3：显式重试与 resume 对等投影为代际重启标记。
+    auditType: 'run.retried',
+    auditPayload: { fromStatus: 'failed', toStatus: 'running' },
+    expectedType: 'workflow/started',
+    expectedPayload: {
+      runId: RUN_ID,
+      retried: true,
+      kind: 'workflow',
+    },
+  },
+
+  {
     auditType: 'run.passed',
     auditPayload: {},
     expectedType: 'agent/status',
@@ -568,6 +580,16 @@ describe('S9 显式不映射清单', () => {
 // ---------------------------------------------------------------------------
 
 describe('dual-write best-effort 与降级', () => {
+  it.each(['run.started', 'run.resumed', 'run.retried'])('carries passthrough names of %s into workflow/started', (auditType) => {
+    expect(
+      mapAuditEventToSessionEvent({
+        runId: RUN_ID,
+        auditType,
+        auditPayload: { passthroughEnv: ['AWS_PROFILE', 'AWS_REGION'] },
+      })?.payload.passthroughEnv,
+    ).toEqual(['AWS_PROFILE', 'AWS_REGION']);
+  });
+
   it('无 session 时静默跳过,不抛错(M1: prepareRun 内 run.started 场景)', async () => {
     const { repositories, dualAudit, sessions } = setup();
     await seedRun(repositories);

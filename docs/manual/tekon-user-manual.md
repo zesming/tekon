@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.27.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.36.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -22,14 +22,15 @@
 
 | 模板 | 用途 |
 | --- | --- |
+| `lightweight-delivery` | **运行缺省默认**。轻量 plan→实现→人工确认三步：PM 出需求卡、RD 实现、Reviewer 人工把关，驳回回到 RD 返工。适合大多数小改动，不内置 QA/PMO 全链路 |
 | `standard-feature` | 标准功能 |
 | `bugfix` | 缺陷修复 |
 | `test-improvement` | 补充测试 |
 | `docs-update` | 更新文档 |
 | `plan-only` | 只做方案 |
-| `standard-delivery` | 完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署 |
+| `standard-delivery` | 完整交付治理：PM、RD、QA、Reviewer、PMO，含独立评审、验收证据和 QA 签署。需要完整评审/QA 全链路时显式选择 |
 
-不传 `--template` 时，`run` 使用 `standard-delivery`；不会自动采用需求卡的推荐模板。
+不传 `--template` 时，`run` 使用轻量默认 `lightweight-delivery`；`standard-delivery` 改为在模板列表中显式选择。模板生效优先级为：显式 `--template` > 已塑形需求卡的 `recommendedTemplate` > 缺省默认 `lightweight-delivery`。注意 `workflow select` 只给出推荐与理由，本身不改变运行默认值。
 
 ### 2.3 Agent 输出不可审阅
 
@@ -138,6 +139,14 @@ tekon init
 
 生成 `.tekon/` 配置、仓库检查配置、运行目录和 Web 会话令牌。在 git 仓库里，`init` 会把 `.tekon/` 写入本仓库的 `.git/info/exclude`（已被忽略时不写），不改你的 `.gitignore`，避免误提交令牌和数据库。
 
+`init` 把 PATH 里第一个找到的 Provider 写成默认值，按 `claude`、`codex` 的顺序；两个都没有时写 `claude-code`，并提示运行 `tekon doctor`。随后检查运行前提：
+
+```bash
+tekon doctor
+```
+
+它列出每个 Provider 是否安装、以什么方式认证，以及默认 workflow 的检查命令是否齐全，只报告不修改，详见 §6.1.1。
+
 ### 4.3 检查目标仓库命令画像
 
 ```bash
@@ -146,10 +155,11 @@ tekon workflow preflight
 
 | 状态 | 含义 |
 | --- | --- |
-| `resolved` | 已解析检查命令，尚不代表命令执行成功 |
-| `missing` | 缺少命令，需补充仓库配置 |
+| `resolved` | 已解析检查命令且通过命令策略裁决，预检与运行期使用同一判定 |
+| `rejected` | 命令已解析但被命令策略拒绝（如 shell 元字符、网络命令、危险删除），原因见 `rejection=` 字段 |
+| `missing` | 命令执行型 Gate（build/test/lint/e2e-pass）缺少命令，需补充仓库配置；新运行受理时此状态会直接阻断并给出修改示例 |
 | `not-applicable` | 已显式声明不适用 |
-| `not-command-gate` | 语义 Gate，不需要外部命令 |
+| `not-command-gate` | 语义 Gate（human/schema/independent-review 等），运行期不执行外部命令；即使携带 `commandRef` 或内联命令也按此状态显示，引用是惰性的，不会报 missing 或被命令策略拒绝 |
 
 检查 `suggestedCommand`，确认后写入 `.tekon/repo-profile.yaml`，再运行预检。
 
@@ -174,9 +184,9 @@ tekon eval demand-shape
 tekon run
 ```
 
-没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为 `standard-delivery`；Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `codex`。
+没有需求文本时读取最近一张需求卡；该卡未批准会报错，不会自动改用更早的卡片。默认模板为轻量 `lightweight-delivery`（plan→实现→人工确认）；若需求卡带 `recommendedTemplate` 则采用它，显式 `--template` 优先级最高，需要完整 QA/PMO 治理时显式 `--template standard-delivery`。Provider 优先取 `--agent`，其次是项目 `defaultAgent`，未配置时为 `claude-code`。
 
-真实 Codex 运行需要本机 CLI 和可用的 `internal` profile。只检查流程时可显式使用 mock：
+启动前会检查 Provider：命令不在 PATH 里时直接拒绝，不创建运行，并说明下一步；没检测到登录只在 stderr 提示，运行照常开始。stderr 还会写出认证方式和透传的环境变量名。只检查流程时可显式使用 mock：
 
 ```bash
 tekon run --template standard-delivery --agent mock
@@ -206,6 +216,8 @@ tekon delivery prepare
 ```
 
 仅支持 `standard-delivery`，生成本地 PR 包。要求 workflow 通过、无待审批 Gate、验证与安全扫描满足、验收证据完整，且 QA release signoff 通过并绑定 QA validation 的 tested ref。
+
+默认的 `lightweight-delivery` 缺少这些门禁与证据，readiness 恒不满足（见 §5.10），在此命令会被前置拦截；需要 PR 交付请在发起运行时显式 `--template standard-delivery`。
 
 不满足前置检查时不会生成 PR 包。
 
@@ -263,11 +275,47 @@ tekon eval readiness
 
 ### 5.4 Workflow
 
-有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。
+有顺序和依赖关系的角色节点集合。常用模板见 §2.2；`tekon workflow list` 查看目录，`tekon workflow show <name>` 查看模板。运行缺省默认是 `lightweight-delivery`（plan→实现→人工确认三阶段，人工门禁驳回经 `reworkTargetNodeId` 回到 RD 节点返工）；`standard-delivery` 等重治理模板需显式选择。
+
+#### 节点工作区模式（workspace）
+
+每个节点可声明 `workspace`，决定它在哪里执行、能否改源码：
+
+| 模式 | 执行位置 | 能否改源码 | Git 要求 |
+| --- | --- | --- | --- |
+| `worktree`（默认） | 独立 git worktree | 可以，改动经 commit/promote 进入交付分支 | 必须 Git 仓库 |
+| `in-place` | 直接在仓库主工作区 | 可以，改动直接留在工作区 | 支持非 Git 目录 |
+| `none` | worktree（Git）或主工作区（非 Git） | 禁止 | 两种目录均可 |
+
+- 默认 `worktree` 与历史行为完全一致；旧模板和旧运行数据自动按此模式处理。内置 Goal 模板显式声明 `workspace: none`，保留其只读语义。
+- `none` 节点若改了源码，finalize 会报可恢复错误（`RECOVERABLE_LEASE_FAILURE`，审计事件 `worktree.lease.finalize.failed` 带改动路径与恢复指引），运行进入 `interrupted` 而非终态失败。回滚改动（或从提示的工作树路径取回后回滚）再 `tekon resume`，系统直接重试 finalize，不会重跑 agent。
+- 非 Git 目录下 `none` 节点用文件快照判定源码改动：递归记录相对路径、内容 sha256、文件大小与权限位（chmod 可检测），忽略 `.git`、`.tekon`、`node_modules`。检测边界：空目录的增删、文件时间戳（mtime）变化不计为修改；租约创建与 finalize 各做一次全量哈希，大仓库会有额外 IO 成本。
+- `in-place` 运行不产生 `tekon-delivery/<runId>` 交付分支，不能创建 PR；PR 交付会以 `DELIVERY_WORKSPACE_UNSUPPORTED` 前置拦截，请改用 `worktree` 模式。非 Git 目录下 autoFix repair、QA 交付 ref 同样不可用，需要这些能力请在 Git 仓库用 `worktree` 节点（误用会得到 `WORKSPACE_GIT_REQUIRED` 可读错误而非原始 git 报错）。
+- 并发限制：`in-place` 节点直接改主工作区，作业锁按 run 隔离而非按目录，不要对同一仓库并行运行多个含 `in-place` 节点的 run，否则会相互覆盖文件。
 
 ### 5.5 Role
 
 节点承担的角色，如 PM、RD、QA、Reviewer、PMO。角色规定任务提示、知识和工具策略。
+
+角色目录 `.tekon/roles/<role>/` 的 `agent.yaml` 支持可选的 Provider 覆盖字段（PD-10），均为厂商中立的开放字符串，不写时沿用运行级 Provider 默认值、行为零变化：
+
+| 字段 | 含义 | 生效方式 |
+| --- | --- | --- |
+| `model` | 该角色节点使用的模型名 | claude-code 翻译为 `--model`；codex 翻译为受控 `--model` |
+| `effort` | 推理投入档位 | codex 翻译为受控 `model_reasoning_effort`；claude-code 无稳定对应边界，声明即报 `ROLE_OVERRIDE_UNSUPPORTED` |
+| `driver` | 角色期望的 Provider | 与运行级 Provider 不符时节点启动前报 `ROLE_DRIVER_MISMATCH`；同一运行不能按节点切换 harness |
+
+覆盖按节点在执行期读取角色文件（与 `system.md` 热更同语义，不进冻结计划），实际生效值写入审计事件 `role.provider-overrides` 可追溯。三个字段在进入任何子进程 argv 前都经同一字符白名单校验：只允许字母（含大小写）、数字、连字符、点和下划线且须以字母或数字开头，长度 ≤64，拒绝选项前缀、空白、路径分隔与 Shell 元字符，杜绝选项注入；校验不通过报 `ROLE_OVERRIDE_INVALID`。`mock` 适配器忽略所有覆盖。
+
+角色目录的 `tools.yaml` 声明 `network`、`allow`、`deny`、`requiresHumanApproval` 工具策略（10a-2 起为运行时强制，不再只是提示文本）：
+
+- 节点执行门禁命令时，角色策略与门禁授权合并裁决——`deny` 与 `requiresHumanApproval` 取并集且角色 `deny` 不可被门禁手写授权覆盖，`network` 取最严（`disabled`>`restricted`>`enabled`），工作目录约束取语义交集；危险删除、force push、Shell 元字符等固定拒绝规则始终最先生效。
+- 适配器侧把合并后的策略逐节点送入 Provider 命令权限；`requiresHumanApproval` 在 claude-code 转原生 ask，网关层的人工审批拦截对三个 Provider 一致。
+- 返工的门禁恒在「拥有该 gate 的节点」角色下裁决（即返工目标节点，不是评审节点）。
+- `tools.yaml` 缺失时回落到安全默认（`network: disabled`、允许/拒绝/审批列表均空）；文件损坏或无法解析时节点 fail-closed，不会静默回退继续执行。每次生效写审计事件 `role.tool-policy.applied`（含角色来源与约束规模）。
+- 边界：codex/dsh 没有会话内工具域/审批的原生强制（claude-code 经 ask 设置落地），但网关层的 deny、网络与人工审批拦截对三者一致；角色文件运行时读盘、不进冻结计划，恢复运行时的策略一致性依赖文件未被修改。
+
+角色按 **内置 → 用户（`~/.tekon/roles`）→ 项目（`.tekon/roles`）** 三级解析，取最后一个存在的整目录生效（仅 skills 跨级合并），因此项目覆盖必须是含 `agent.yaml` 的完整角色目录，不能只放一个 `system.md`。两种物化方式：CLI 用 `tekon role create <id>`（内置角色整目录复制、自定义 id 生成最小脚手架）；Web 在「高级 → Config → Roles」打开角色面板编辑 prompt 并保存——内置角色会自动物化整目录覆盖，安装目录保持只读不被修改，项目角色则直接改写其 `system.md`。Web 角色列表展示内置与项目角色并集及来源，新项目不再误显示「No roles configured」；写入需会话令牌，路径经软链与 realpath 锚定闸门校验，非法角色 ID 与超长 prompt（>64 KiB）会被拒绝并给中文提示。新建/删除角色仍只走 CLI，Web 不承担角色创建。
 
 ### 5.6 Gate
 
@@ -279,18 +327,38 @@ Gate 通过说明该项检查满足规则；是否可交付还需结合其他证
 
 | Provider | 适用范围与前提 |
 | --- | --- |
-| `codex` | 默认后端；本机安装 Codex CLI，配置并认证 `internal` profile |
-| `claude-code` | 本机 Claude Code adapter；需安装、认证和当前环境的真实验证 |
+| `claude-code` | CLI 与 Web 在未配置 `defaultAgent` 时的默认后端（两者读取同一份 `.tekon/config.yaml`）；本机安装并登录 Claude Code |
+| `codex` | 本机安装并登录 Codex CLI；需要 profile 时在仓库配置里写明 |
 | `mock` | 确定性流程演示与回归；不能证明真实 Agent 能力 |
 | `dsh-headless` | experimental；显式选用，仅支持 Goal，网络出口不受限 |
 
 真实 workflow 节点通过 artifact manifest 交回声明的产物。Run 保存 Provider 配置快照，恢复沿用原快照，避免意外切换后端。
 
-**Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量不会传给 Claude。
+**Claude Code 的登录与环境**：Tekon 不做认证配置，Claude 节点沿用你在当前 shell 里的 Claude 登录。节点除 `PATH`、`HOME` 等基础变量外，还会收到登录用户（`USER`、`LOGNAME`）、代理变量、`NODE_EXTRA_CA_CERTS` 以及全部 `ANTHROPIC_*`、`CLAUDE_*` 变量；`GITHUB_TOKEN`、`OPENAI_API_KEY`、`AWS_*` 等其他变量默认不会传给 Claude，需要时写进下面的 `passthroughEnv`。
 
 - **认证方式跟着变量走**：shell 里有 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `CLAUDE_CODE_OAUTH_TOKEN` 时，Claude 优先用它们，不用订阅登录（见 [Claude 认证](https://code.claude.com/docs/en/authentication)）。工作和个人场景在同一台机器上时，请在各自的 shell 里分开设置。
-- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key。
-- **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量不会传过去，请写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
+- **哪些命令能读到 key**：Tekon 自己运行的 build、test 等检查命令拿不到这些变量。Claude 在节点里执行的命令（包括 Tekon 免审批放行的 `npm test`、`npm run build`）和 Claude 本身一样能读到。处理不信任的仓库时，不要在 shell 里放 key，并先看一下仓库里 `.tekon/config.yaml` 的 `passthroughEnv`：列在那里的变量都会传给 Provider；`codex.profile` 会让 Codex 使用你本机上同名的 profile。
+- **Bedrock、Vertex**：它们需要的 `AWS_*`、`CLOUD_ML_REGION` 等变量默认不会传过去。可以把变量名写进 `passthroughEnv`，也可以写进 Claude 设置文件的 `env` 字段（见 [Claude 设置](https://code.claude.com/docs/en/settings)）。
+
+**Codex 的登录与环境**：Codex 节点只收到固定的一组变量：`PATH`、`HOME`、临时目录、语言、`SHELL`、`USER`、`LOGNAME`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME`、代理变量和 `NODE_EXTRA_CA_CERTS`，其他变量要写进 `passthroughEnv`。shell 里的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`CODEX_HOME` 会原样传给 Codex，它们决定 Codex 用哪个账号或登录、请求发到哪里；`tekon doctor` 会显示 Codex 的认证方式。
+
+**Provider 配置**：写在 `.tekon/config.yaml` 的 `providers` 下，字段都可选：
+
+```yaml
+defaultAgent: claude-code
+providers:
+  claude-code:
+    passthroughEnv: [AWS_PROFILE, AWS_REGION]
+  codex:
+    profile: internal
+    passthroughEnv: [AZURE_OPENAI_API_KEY]
+```
+
+- `passthroughEnv` 是额外传给 Provider 的环境变量名，只写名字，值从启动 Tekon 的环境里读。名字必须是大写变量名；`PATH`、`SHELL`、`NODE_*`、`LD_*`、`DYLD_*`、`GIT_*`、`TEKON_*`、`PYTHON*` 等会改变程序加载方式或由 Tekon 控制的变量不能透传。值为空的变量会跳过。
+- 这些变量只给 Provider 进程，Tekon 自己运行的 build、test 等检查命令拿不到。Provider 在节点里执行的命令和 Provider 本身一样能读到。
+- `codex.profile` 只在配置后才以 `--profile` 传给 Codex。之前的版本默认使用 `internal`；升级后需要它时，请写 `providers.codex.profile: internal`。升级前启动的运行恢复时仍按原来的 `internal` 执行。升级 Tekon 后请重启已经在运行的 `tekon ui`。退回旧版本后，新版本创建的运行不能恢复，需要重新发起。
+- 运行启动时记录这些配置，恢复沿用记录，之后改配置不影响已有运行。启动和每次恢复都会在审计里写下透传的变量名和认证方式，不记录值。
+- 配置文件不是合法 YAML、字段名拼错或字段值不对时，`run`、`doctor` 会直接报错，不再按默认值运行。
 
 **DSH 使用条件**：自行安装 `@deepseek-ai/dsh` 并配置 `DEEPSEEK_API_KEY`；当前 tested pin 为 `0.1.2-alpha.3`，宿主 Node 要求 `^22.19.0 || >=24.0.0`。先运行：
 
@@ -309,7 +377,7 @@ tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headle
 使用前理解以下限制：
 
 - **仅支持 Goal**：CLI/Web 会在受理前拒绝 DSH workflow，包括无 outputs 的自定义 workflow。DSH 只有单一可写工作区，无法写入 worktree 外的交付产物目录。
-- **Goal 默认不接受源码改动**：内置 Goal 不声明 `code-changes`；节点完成时若发现仓库文件或 HEAD 改变，会拒绝提升结果。它不等于操作系统只读沙箱，不适合交付代码修改。
+- **Goal 默认不接受源码改动**：内置 Goal 不声明 `code-changes`；节点完成时若发现仓库文件或 HEAD 改变，会拒绝提升结果。它不等于操作系统只读沙箱，不适合交付代码修改。需要在非隔离工作区直接产出文件时，可在自定义模板节点声明 `workspace: in-place`（见 §5.4 工作区模式）。
 - **网络出口不受限**：DSH 文件沙箱无法关闭联网；确认参数只记录知情，不会提供网络隔离。需要禁网时由 OS、容器或网络策略实现。
 - **一次性执行**：当前 adapter 收集日志，不向 Session UI 投影执行期流，也不支持后续追问；取消依靠受管理子进程终止。
 - **预检隔离有限**：metadata probe 使用临时工作区、隔离 DSH home 和最小环境，并关闭内置 session telemetry；这不是 OS 沙箱，不能阻止同 UID 恶意二进制主动读取宿主文件。正式 Run 的 worktree `.env`、代理及凭据回退仍需自行核查。
@@ -330,6 +398,19 @@ tekon run "梳理当前项目结构，不修改文件" --goal --agent dsh-headle
 
 单次运行的交付证据完整性评估，覆盖 workflow、Gate、产物、本地 PR 包、真实 PR 与远端 CI。
 
+**轻量默认模板与 PR 就绪边界**：`lightweight-delivery` 只含 `schema` 与人工 `human` 门禁，没有命令型门禁（build/test/lint/e2e）、治理门禁（独立评审、角色范围、验收证据、QA 签署、过程完整性）、安全扫描与验收准则产物。Pre-PR readiness 共 9 项检查，轻量运行即使完全跑通，其中 6 项也会结构性恒红：
+
+| 恒红检查 | 原因 |
+| --- | --- |
+| `standard-delivery-template` | 硬性要求模板为 `standard-delivery`，轻量模板直接不满足 |
+| `validation-gates-passed` | 轻量模板无任何命令型门禁，检查要求至少 1 个 |
+| `acceptance-criteria-evidenced` | 无验收准则产物 |
+| `qa-release-signoff-passed` | 无 qa-signoff 门禁与 QA release 签署 |
+| `standard-governance-gates-passed` | 5 类治理门禁全部缺失 |
+| `security-scans-passed` | 无安全扫描证据，检查要求至少 1 项 |
+
+因此轻量运行的 `ready` 恒为 `false`，`delivery prepare`/`create-pr` 会以前置检查拦截，**默认模板不会、也无法自动产出 PR 交付**。需要走到可审 PR 时，发起运行显式选择 `standard-delivery`（或含上述门禁与产物的自定义模板）。这是产品边界而非缺陷：轻量模板定位是「快速实现 + 人工把关」，把是否升级为重治理交付留给人决定。
+
 ### 5.11 Work Usability
 
 样本集评估，用真实任务、Provider 和交付结果判断是否达到受控试用门槛。
@@ -343,11 +424,28 @@ tekon init
 tekon init --repo /path/to/project
 ```
 
-创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。目标应为 Git 仓库，否则 worktree、diff 或交付功能可能失败。
+创建 `.tekon/config.yaml`、`repo-profile.yaml`、`web-session.json` 和运行目录。默认 `worktree` 模式要求目标是 Git 仓库；非 Git 目录可运行只含 `workspace: in-place` 或 `workspace: none` 节点的工作流（不建工作树，见 §5.4），但 worktree 隔离、diff 与 PR 交付功能不可用。
 
-在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上；重新执行 `init` 也可以，但会重写 `config.yaml`。
+在 git 仓库里会把 `.tekon/` 写入 `.git/info/exclude`（已被忽略或已有这一行时不写；写不进去时只打印警告）。已初始化过的旧项目可在仓库根目录执行 `echo '.tekon/' >> "$(git rev-parse --git-path info/exclude)"` 补上，也可以重新执行 `init`。
+
+`config.yaml` 只在不存在时生成，内容是 `defaultAgent`：PATH 里先找 `claude`，再找 `codex`，都没有时写 `claude-code`。这里只看是否安装，不检查登录。已有的 `config.yaml` 保持不变，旧版本写入的 `project`、`storage` 字段会被忽略。
 
 Web 令牌文件丢失时可重新初始化；不要将令牌提交到仓库。
+
+### 6.1.1 `doctor`
+
+```bash
+tekon doctor
+tekon doctor --workflow bugfix
+```
+
+运行前检查，只报告不修改：
+
+- 配置：`.tekon/config.yaml` 能否读取，默认 agent 是哪个。
+- Provider：`claude-code`、`codex` 是否安装、版本，以及认证方式（API key、auth token、OAuth token、订阅登录、已保存的登录、未检测到、无法确定）。Claude 通过 `claude auth status --json` 判断，只读取是否登录和认证方式，不显示账号信息；Codex 只看 `OPENAI_API_KEY` 和 `CODEX_HOME/auth.json` 是否存在，不读取文件内容。也会列出配置的透传变量名。
+- 工作流：默认 `lightweight-delivery`（可用 `--workflow` 指定）的检查命令是否都能解析；缺少时提示运行 `workflow preflight`。
+
+最后一行给出结论。默认 Provider 未安装或未登录、检查命令缺失或配置有误时退出码为 1。旧版本 `init` 写入的 `defaultAgent: codex` 在 Codex 未安装时会被指出，按提示修改配置或运行时加 `--agent`。DSH 的检查仍用 `tekon provider preflight dsh-headless`。
 
 ### 6.2 `workflow preflight`
 
@@ -356,7 +454,7 @@ tekon workflow preflight
 tekon workflow preflight bugfix
 ```
 
-模板名是位置参数，默认 `standard-delivery`。输出状态含义见 §4.3。`resolved` 仅说明命令已解析，仍需实际运行验证。
+模板名是位置参数，默认 `lightweight-delivery`。输出状态含义见 §4.3。`resolved` 仅说明命令已解析，仍需实际运行验证。
 
 缺命令时确认候选并更新 `.tekon/repo-profile.yaml`。`notApplicable` 必须有实际理由；不能用它绕过 `security-scan`，无外部安全命令时仍可能执行内置扫描。
 
@@ -369,6 +467,20 @@ tekon workflow select "补齐 CLI 单元测试"
 返回推荐、候选和理由。可用 `--shape <path>` 指定需求卡、`--template <name>` 评估人工选择、`--json` 输出结构化结果。
 
 推荐不会保存 workflow，也不会改变 `run` 的默认模板。
+
+### 6.3.1 模板查看、校验与脚手架（PD-07）
+
+```bash
+tekon workflow list
+tekon workflow show <name>
+tekon workflow validate <name>
+tekon workflow create <name> --minimal
+```
+
+- `list` 逐行输出 `id [builtin|project]`，每个模板严格占一行；解析失败的模板不被丢弃，而是附 `invalid: <原因>`（错误里的换行已折叠，完整诊断用 `validate` 查看），让写错的模板在浏览阶段就暴露，不必等到 `run`。`.tekon/workflows/` 下的符号链接模板同样被扫描，可用于共享同一份模板。**软链信任边界对所有命令一致**：链接目标必须位于该模板目录内，指向目录外或断开的链接会被拒绝读取（`list` 标记无效，`show`/`validate`/`run` 等显式命令直接报错），避免仓库外文件内容经错误信息外泄；目录内的合法软链正常可用。
+- `show <name>` 展示完整结构：每个阶段下的节点、角色、工作区模式、内联提示词、产物类型与门禁（命令型门禁带 `commandRef`），无需读模板 YAML 源码就能学写法；模板结构非法时给中文原因（含字段路径），不输出裸校验器 JSON。
+- `validate <name>` 独立校验模板，成功退出 0 并给阶段/节点数，失败退出 1 并给中文可读原因与修复指路（不输出裸校验器 JSON）；名称不存在时提示用 `workflow list` 查看可用名称，不回显工具安装路径。
+- `create <name> --minimal` 生成单阶段、单实现节点加人工门禁的最小脚手架（默认不带 `--minimal` 仍按 `--from` 复制既有模板；同传 `--minimal` 与 `--from` 时后者被忽略并给出提示）。目标文件已存在时拒绝创建，需先手动删除或换名；`--from` 来源模板不存在时同样给 `workflow list` 指路且不产生空目录。结构非法时 `validate`/`show`/`run` 都会明确报错。
 
 ### 6.4 `draft shape`
 
@@ -413,9 +525,23 @@ tekon run "梳理模块职责，不修改文件" --goal
 tekon run --dynamic --dry-run "需求文本" --agent mock
 ```
 
-普通运行默认 `standard-delivery`；无文本时读取最近需求卡，并要求它已批准。`--goal` 使用内置单节点模板，不进入交付链路，与 `--template` 互斥，也不支持 `autonomous-delivery`。内置 Goal 默认不允许仓库源码改动，见 §5.7。
+普通运行默认轻量 `lightweight-delivery`；无文本时读取最近需求卡，并要求它已批准。已塑形需求卡的 `recommendedTemplate` 会被采用（显式 `--template` 优先）。`--goal` 使用内置单节点模板，不进入交付链路，与 `--template` 互斥，也不支持 `autonomous-delivery`。内置 Goal 默认不允许仓库源码改动，见 §5.7。
 
 Provider、超时和其他常用参数见 §10。`--allow-dirty-base` 表示明确接受基于未提交改动运行，不是安全证明。
+
+**结果输出**：CLI 等运行停下后，第一行写明结果：已完成、已暂停（等待人工确认）、等待处理、中断、失败或已取消。中断和失败会接着写原因和下一步，原因按类别给出：
+
+| 原因 | 下一步 |
+| --- | --- |
+| 找不到 Provider 命令 | 安装命令，或从能执行它的终端重新启动 Tekon，然后 `tekon resume` |
+| 未登录或凭据无效 | 执行 `claude auth login`（或在 Claude 里输入 `/login`）、`codex login`，或配置 API key，然后 `tekon resume` |
+| 配置无效或命令被策略拒绝 | 修改 `.tekon/config.yaml`、repo-profile 或 Provider 配置，然后 `tekon resume --rebind` 让本运行采用新绑定（`tekon resume` 默认沿用启动时的 Provider 配置）；要改模板结构才需 `tekon run` 新建运行 |
+| 非零退出、Tekon 停止时中断 | 先 `tekon resume` 重试；仍失败时查看节点日志 |
+| 超时、长时间没有进展 | 先 `tekon resume` 重试；任务确实需要更久时，用更大的 `--timeout-ms` 或 `--no-progress-timeout-ms` 重新 `tekon run`（恢复沿用启动时的超时设置） |
+| 产物缺失或不合 schema | 查看节点目录里的产物与 manifest，修复后 `tekon resume` |
+| 运行已收敛为终态 `failed`（门禁重试耗尽等） | 排除失败原因后 `tekon retry --run-id <runId>` 只重跑失败节点（见 §6.10.1）；需要改配置或模板结构时发起新运行 |
+
+`failed` 是终态，裸 `tekon resume` 不恢复终态运行；排除失败原因后可用 §6.10.1 的 `tekon retry` 显式重试失败节点，配置或模板本身需要变更时则发起新运行。Claude 退出码为 0 但结果标记为错误（例如未登录）时，按这个错误归类，不只报产物缺失。原因只取自本次恢复之后的记录，已经恢复过的旧原因不再显示。
 
 **同一次请求重试**：保存启动时打印的 Request ID，保持原需求、文件引用和执行参数，追加原 ID：
 
@@ -424,6 +550,8 @@ tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 ```
 
 相同 ID 与意图返回原 Run/Session/Job。`REQUEST_ID_CONFLICT` 表示 ID 已绑定其他意图；先核对参数，只有确定新建任务时才换 ID。受理后配置或 Provider 环境变化不会使原请求另建运行。
+
+**受理身份与执行分层**：受理身份由 Request ID 加请求信封（需求文本/文件引用等）的哈希双键确定，信封在首次意图后保持不变；而生效模板（含需求卡的 `recommendedTemplate` 回落）是在执行启动时单独解析、经独立通道绑定，不写进受理信封、也不重建信封。因此同一 Request ID 重放时，即使需求卡已被删除或修改，也不会因哈希不一致报 `REQUEST_ID_CONFLICT`，而是沿用首次执行绑定的模板继续。判定冲突只看信封本身，模板选择不参与身份指纹。
 
 | 返回状态 | 下一步 |
 | --- | --- |
@@ -437,7 +565,7 @@ tekon run "给列表增加筛选" --agent mock --request-id delivery-20260907-01
 
 **执行检查绑定**：新受理计划为 v3，记录模板实际使用的命令、来源、缺失与不适用决定；执行、恢复、修复重试和返工沿用原记录。内联命令优先，无命令引用的模板不依赖仓库命令配置。
 
-绑定不冻结 `package.json` 脚本正文、测试代码、PATH 二进制、依赖或宿主环境。希望采用新配置时，应明确发起新任务。历史绑定含义见 §6.7。
+绑定不冻结 `package.json` 脚本正文、测试代码、PATH 二进制、依赖或宿主环境。希望让本运行采用新的 repo-profile 命令或 Provider 配置时，用 `tekon resume --rebind` 显式重绑定（见 §6.10）；要改变模板结构（节点、门禁、角色定义）则必须发起新任务。历史绑定含义见 §6.7。
 
 **动态预览**：`--dynamic` 必须配 `--dry-run`，不受理 Run，也不支持 `--request-id`；可能初始化本地目录，`--save-as <name>` 会保存预览。普通 workflow/Goal 的 `--dry-run` 会在初始化前报 `DRY_RUN_UNSUPPORTED`。
 
@@ -448,7 +576,7 @@ tekon status
 tekon status --run-id <runId>
 ```
 
-查看整体 `status`、当前节点、产物与 Gate 数量、待人工决策，以及新运行的 `requestId`、`admission`、`filesState`。已有 Run ID 不代表任务已经执行。
+查看整体 `status`、当前节点、产物与 Gate 数量、待人工决策，以及新运行的 `requestId`、`admission`、`filesState`。已有 Run ID 不代表任务已经执行。运行处于 `interrupted`、`blocked` 或 `failed` 时，下面再写原因和下一步，规则同 §6.6。
 
 | `executionBinding` | 含义 |
 | --- | --- |
@@ -505,13 +633,45 @@ tekon resume --run-id <runId> --confirm-stopped --previous-job-id <previousJobId
 
 历史无 Job 记录时用字面 `none`。缺失或过期身份会被拒绝，须刷新后重新核对。人工确认不是 OS 退出检测，受管理退出证据也不覆盖逃逸进程。
 
-租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`failed`、`cancelled` 终态不可恢复。
+租约过期的已认领任务会转为 `interrupted`，不会自动重跑旧 Agent/Gate。已有活跃 Job 时等待原任务处理；`passed`、`cancelled` 终态不可恢复，`failed` 的裸 `resume` 同样按终态拒绝，只能经 §6.10.1 的显式 `tekon retry` 重试。
 
-CLI 的 `run` / `resume` 在后台 Job 失败、中断或取消时返回非零退出码，并显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
+CLI 的 `run` / `resume` 按工作流终态返回退出码：`0` 为 passed；`1` 为 failed、interrupted 或 cancelled；`2` 为 blocked（节点被确定性问题卡住，需先修复配置或环境再恢复）；`3` 为 paused（等待人工确认）。后台 Job 失败、中断或取消时还会显示 Job ID 和日志指引；即使 Run 仍显示 running，也不能将其视为执行成功。脚本或 IM 集成必须把 `2`/`3` 当作“未完成”处理，不能再按成功上报。阻塞节点重跑会复用仍有效的原工作树，保留修改；租约冲突或身份不符时明确报错，先核查工作树与日志。
+
+恢复 blocked 节点时，Tekon 先做确定性失败判定：最近一次门禁失败属于 `missing-command`（检查命令仍未配置）、`rejected`（命令仍被授权策略拒绝）或 `unsupported-gate`（门禁类型仍不受支持），且失败条件在当前配置下仍然成立时，不会重跑 Agent，直接保持 blocked 并在审计事件 `node.resume-skipped-deterministic` 与输出里给出原因和下一步——这类失败在配置修复前重跑结果不会改变。条件已经消失（例如补全了 repo-profile 命令）或失败分类不在白名单（如 `exit-code`、`invalid-artifact`、`timeout`）时照常重跑 Agent，且重跑提示词会注入最近一次门禁失败的类型与分类，便于 Agent 针对性修复。
+
+如果已经手工修好工作树或环境、只想让门禁重新判定而不重跑 Agent，使用 `tekon resume --run-id <runId> --gates-only`。该选项只对已有完成 Agent 执行的节点生效；节点从未完成 Agent 时会被拒绝（`GATES_ONLY_NO_AGENT_RUN`），避免在没有产物的情况下空跑门禁。该选项同样适用于 Web 的 `project.resume` 入参 `gatesOnly`。
+
+**配置变更与 `--rebind`（PD-05）**：运行默认按受理时冻结的绑定恢复——即使你修改了 `.tekon/repo-profile.yaml`、`package.json` 检测或 Provider 配置，裸 `tekon resume` 与 `tekon status` 仍按冻结计划执行，但会在 stderr 只读提示当前配置与冻结绑定的分项差异（agent、provider、repo-profile 命令），不改变任何绑定。确认要让本运行采用当前配置时，显式执行：
+
+```bash
+# 采用当前 repo-profile / package.json 命令绑定（agent 不变）
+tekon resume --run-id <runId> --rebind
+# 同时切换 Provider/agent
+tekon resume --run-id <runId> --rebind --agent codex
+```
+
+`--rebind` 用冻结模板原字节与当前仓库事实重新捕获一份自洽的执行计划（新 digest），在一个事务内替换 `plan_snapshot`/`plan_digest` 与 Provider 快照，并重写尚未终态节点（含历史返工节点）的物化门禁；已通过节点的历史门禁结果与审计链保持不变。重绑定记录在审计事件 `run.rebound`（含新旧 digest 与脱敏分项差异）。它只重绑定 agent、Provider 与门禁命令，不改变模板结构（节点/门禁/角色定义）；结构变更仍需发起新运行。终态运行（`passed`/`failed`/`cancelled`）与存在活跃 Job 的运行拒绝重绑定。角色指令（`.tekon/roles/<role>/system.md` 等）不在冻结范围内，修改后普通 resume 即生效，无需 `--rebind`。
 
 历史租约冲突不会因 `--confirm-stopped` 消失：该参数只确认旧执行退出，不裁决工作树身份。保留原 Run 的日志、工作树与未提交/未跟踪文件，核对租约创建事件、节点、角色和 baseHead；当前没有自动 reconcile 命令，不要直接改库或强制删除工作树。若决定放弃原 Run，先确认执行已退出并另行保全所需修改，再用 `tekon cancel --run-id <runId>` 终结；取消不会修复或清理租约，原 Run 随后不可恢复。
 
 审批后若竞争导致恢复失败，会显示“审批已记录，运行尚未恢复”。保留审批事实，处理原运行恢复，不重复批准。Web 操作与正常关闭后的检查恢复见 §7.1。
+
+### 6.10.1 `retry`：重试终态 failed 运行
+
+运行收敛为终态 `failed`（典型场景：门禁重试耗尽且模板声明 `onExhausted: fail`）后，裸 `tekon resume` 仍按终态拒绝。确认失败原因已经排除时，用显式重试只重跑失败节点：
+
+```bash
+tekon retry --run-id <runId>
+```
+
+省略 `--run-id` 时作用于最近一次运行。重试在一个 CAS 事务里把运行与失败节点从 `failed` 置回 `running`，审计事件 `run.retried` 记录 `fromStatus`/`toStatus`；随后按受理时冻结的执行计划继续调度：已 `passed`/`skipped` 的节点直接复用、不重复调用 Agent，只有失败节点及其后继重新执行（新建角色执行记录；节点仍活动的工作树租约会被复用以保留现场，租约已不存在时才新建）。退出码与 `run`/`resume` 同一合同：重试后 `passed` 为 `0`，仍 `failed` 为 `1`。
+
+边界与限制：
+
+- 只接受 `failed` 运行。`passed`/`cancelled` 按终态拒绝；`blocked`/`interrupted`/`paused` 报错 `RETRY_NOT_FAILED`——这些状态各有恢复语义，应使用 `tekon resume`，不能用 retry 绕过。
+- 运行存在执行中的 Job（running/paused/cancelling）时拒绝入队，等待其结束后再重试；CLI 入队后、认领前崩溃留下的 queued 作业会在下一次 retry 时自动交接复用，不形成死结。
+- 重试沿用冻结计划与 Provider 快照，不重新读取 repo-profile 或 Provider 配置（重绑定 `--rebind` 同样拒绝终态运行）。若失败根因是命令或 Provider 配置本身，修正后需发起新的 `tekon run`；角色指令不在冻结范围内，但其变更只影响重新执行的失败节点。
+- 重试不改变模板结构（节点、门禁、角色定义）；需要结构调整时发起新运行。
 
 ### 6.11 `approval reject`
 
@@ -521,6 +681,10 @@ tekon approval reject --note "证据不足，需要补充风险说明"
 
 可用 `--run-id`、`--decision-id`、`--actor` 精确记录。决策变为 rejected，workflow 阻断，Gate 分类为 `human-rejected`。
 
+驳回备注与门禁发起时的请求上下文分别存放在决策的 `note` 与 `requestNote`，决策备注不再覆盖审批摘要所需的命令/风险信息。当该 human gate 在模板里声明了 `reworkTargetNodeId`（内置 bugfix、plan-only 模板已声明）时，随后执行 `tekon resume` 不会盲目重跑被驳回的评审节点，而是按声明对上游目标节点发起返工：驳回备注作为反馈注入返工 Agent 的提示词，返工完成后自动重跑评审节点并产生一条新的 pending 决策等待再次确认；同一驳回决策只触发一次返工。未声明返工目标的 human gate 驳回后仍按常规 blocked 恢复处理。
+
+每一次驳回都是一轮新的决策循环：再次驳回会生成新的门禁结果并再触发一次针对同一目标节点的返工，返工次数不受 human gate 的 `maxRetries` 限制（该参数只约束自动门禁重试）；是否继续返工由人工审批决定，批准或取消运行即可结束循环。返工过程中 Agent 或评审重跑失败会把运行收敛为 interrupted 并保留真实错误，修复后 `tekon resume` 可从断点恢复，不会留下 running 状态的孤儿记录。
+
 终态 Run 拒绝此操作，不会被改回 blocked。
 
 ### 6.12 `review`
@@ -528,6 +692,8 @@ tekon approval reject --note "证据不足，需要补充风险说明"
 ```bash
 tekon review
 ```
+
+运行未完成时，开头会先写明“运行未完成”：这时大多数未通过的检查只是因为后面的节点还没执行。`Nodes` 列出每个节点的状态，没执行到的显示“未执行”。
 
 建议按以下顺序阅读：
 
@@ -656,21 +822,26 @@ tekon draft approve
 
 该澄清调用是独立 CLI 路径，使用 Claude 的 `default` 权限模式，显式关闭模型的内置工具和 MCP 工具，并禁止自动加载 MCP 配置；只向模型提供草稿与回答文本。失败时回退为静态澄清，不申请扩大权限。宿主 CLI 的启动 hook 和配置仍由本机管理，这不是 OS 沙箱。只需本地塑形时使用 `draft shape` 或 `draft new "需求文本" --no-interactive`。
 
-Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 仍只作为节点提示，不等于这些运行时规则。
+Claude workflow 将 `commandPolicy` 与 Provider `permissionProfile.tools` 相交，Tekon 仅为双方允许的以下精确命令新增免审批规则：`npm test`、`npm run test/build/lint/typecheck`，对应的 pnpm 直接命令与 run 形式，以及 `git status/diff/log`。这里斜线表示分别列出的命令，不是通配授权；这些规则不自动涵盖额外参数。Claude 内置只读规则与宿主权限配置仍可能独立批准其他命令。显式 deny 继续拒绝，`requiresHumanApproval` 转为 Claude 原生 ask；当前没有将原生 ask 接到 Web 人工决定的桥，遇到未获准命令可能失败或等待至超时。自定义 args 不得覆盖权限模式、工具规则或额外目录。获准脚本仍能执行仓库代码；该配置不提供 OS、网络或子进程隔离。角色 `tools.yaml` 的 deny/审批/网络/工作目录约束自 10a-2 起为运行时强制（见 §5.5），与此处 Provider 免审批规则叠加生效：角色 deny 优先，免审批不覆盖角色拒绝。
 
 资料事实：Claude 的 `acceptEdits` 不自动批准普通 shell 命令，headless 支持显式工具授权；内置工具与 MCP 分别配置。参见 [程序化执行](https://code.claude.com/docs/en/headless)、[权限规则](https://code.claude.com/docs/en/permissions)和 [CLI 参数](https://code.claude.com/docs/en/cli-reference)。上述有限候选交集是 Tekon 的实现选择，不是 Claude 提供的完整沙箱。
 
 需求卡仍需人工批准；可选计划审批见 §6.5.1。
 
-### 6.23 `clean`（当前暂停）
+### 6.23 `clean`
 
 ```bash
-tekon clean
+tekon clean                              # 列出可以清理的运行，不做改动
+tekon clean --yes                        # 清理列出的全部运行
+tekon clean --run-id <runId>             # 清理指定的运行
+tekon clean --run-id <runId> --dry-run   # 只预览
 ```
 
-当前固定非零退出（exit code 1），stderr 返回 `CLEAN_SUSPENDED`。不会扫描、删除或重建 `.tekon/worktrees/`；Web `project.clean` 也不会删除 Run 目录。
+只处理已结束（passed、failed、cancelled）且没有未结束任务的运行：移除仍被占用的 worktree，删除运行租约记录的节点分支 `tekon/<runId>/…`；worktree 没能移除时，保留它检出的分支。保留 `tekon-delivery/<runId>` 交付分支、`.tekon/runs/<runId>/` 下的证据、审计记录，以及不属于任何运行租约的目录。运行结束时不会自动清理。
 
-生命周期安全清理尚未开放，此限制不代表已具备导出、保留期管理或可审计清除能力。
+指定的运行未结束（包括 paused、interrupted）或还有未结束的任务时，报错退出且不做改动：暂停或中断的运行恢复时还要用这些 worktree。已经不存在的目录或分支记为“已不存在”，继续下一步。个别项目没清理掉时退出码为 1，运行状态不变，原因见 `tekon log --run-id <runId>` 里的 `run.cleanup`。只处理在当前仓库路径下创建的 worktree：仓库移动过的话，旧路径下的不会列出。
+
+Web 的 `project.clean` 规则相同：传 `confirm: 'clean-terminal-runs'`，加 `dryRun: true` 只预览，返回移除的 worktree、删除的分支、已不存在和没清理掉的数量。
 
 ### 6.24 `help`
 
@@ -683,15 +854,15 @@ tekon --version
 
 `tekon`、`tekon --help`、`tekon -h` 显示命令概览；`tekon help <command>` 显示该命令的摘要、用法或子命令列表，不保证列出全部参数。
 
-`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.27.0`。
+`tekon --version` 或 `tekon -v` 输出版本号，本版为 `v0.36.0`。
 
 ## 7. Web Dashboard
 
 `tekon ui` 启动本地界面，打开带 `#token=` 的完整 URL。令牌丢失时可从 `.tekon/web-session.json` 读取并填入顶栏连接面板；不要提交或共享令牌。
 
-默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。旧 Run Dashboard 保留在侧栏 **高级 Advanced**（`/advanced`），用于查看 overview、历史 Run、diff、日志、PR 包和交付操作。
+默认 **Session UI** 按会话展示用户消息、步骤、工具调用、产物、Gate 和审批。运行列表与历史 Run、diff、日志、PR 包和交付操作收在侧栏 **高级 Advanced**（`/advanced/runs`，旧仪表盘入口已重定向到这里）。
 
-**发起任务**：默认“启动受控交付”使用 Codex 与 `standard-delivery` 完整角色链路；使用 Claude Code 时，到「高级 Advanced → 新建运行」选择 `claude-code`。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 仅支持 Goal，并要求勾选联网不受限确认。
+**发起任务**：首页 Composer 提供运行模式、工作流模板、执行代理三个下拉框。运行模式在「受控交付（Workflow）」与「一次性任务（Goal）」间切换；模板留空时由服务端回落轻量默认 `lightweight-delivery`，需要完整评审/QA 全链路时在下拉中显式选 `standard-delivery`；执行代理默认取 `.tekon/config.yaml` 的 `defaultAgent`（未配置时为 `claude-code`）。三个选择都参与执行计划查询，切换任一项都会按全量入参刷新「执行前计划」预览，缓存按入参区分、不会串用旧选择的计划。Goal 模式下模板下拉禁用且请求不带模板；`dsh-headless` 仅能在 Goal 下运行，选中后自动切到 Goal 并清空模板。高级 Advanced → 新建运行表单共用同一套代理常量与 Goal/DSH 互斥规则。Composer 用于新建运行，当前不能在原会话继续追问或中途转向。Goal 是一次性轻量任务，不进入交付链路；DSH 要求勾选联网不受限确认。
 
 **核对执行计划**：默认入口与高级表单均展示“检查配置与适用性”。展开逐项配置，核对来源和实际执行方式：已绑定命令、跳过或缺命令。安全扫描以实际说明为准，不一定随“不适用”配置跳过。
 
@@ -727,9 +898,21 @@ Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant �
 
 **Profile 与交付**：默认 `human-web` 由人推进人工点。`autonomous-delivery` 仅在常驻 Web/服务模式下于运行 passed 后自动准备证据和 PR 包，仍停在人工批准前；CLI 需显式 `delivery prepare`。任何 Profile 都不会自动批准 human gate、push、创建 PR、合入或上线。Goal 不支持 `autonomous-delivery`。
 
+发起、恢复和批准前都会检查 Provider：命令不在服务进程的 PATH 里时返回 `PROVIDER_NOT_INSTALLED` 和下一步，不创建运行；批准时先检查再记录，检查不通过时决定保持待处理。服务进程的 PATH 来自启动 `tekon ui` 的终端或服务，可能与你的 shell 不同。中断的会话在事件流里显示“运行中断”、原因和下一步。仓库配置了 `passthroughEnv` 时，事件流在“受控交付已开始”和“受控交付已恢复”这一行列出透传给 Provider 的变量名。
+
 发起、恢复和批准返回受理结果后由后台推进，只有目录 ready 的 Job 才能执行。同一 Run 同时只允许一个运行执行 Job；重复恢复或批准提示已有活跃任务时，继续观察原任务。独立 readiness/delivery Job 不参与此限制。
 
+CLI 进程只执行它自己发起或恢复的任务，Web 服务不执行 CLI 发起的任务。CLI 受理后就退出、还没执行的运行，可以再用 `tekon resume` 或在 Web 上恢复，由恢复的一方执行。升级到 0.29.0 后请重启已在运行的 `tekon ui`：旧版本的服务仍会接手 CLI 的任务。
+
+执行中的进程被挂起（电脑休眠、调试器暂停）后恢复，会先续租自己的任务，不会把它判为中断。同一仓库还有另一个 Tekon 进程在运行时，它分不清挂起和退出，会在租约过期（默认 30 秒）后把任务标为中断，这时按 §7.1 恢复。系统时钟往回调会推迟这类回收。
+
+节点和命令的输出脱敏后按行实时写入 `.tekon/runs/<runId>/` 下的 stdout/stderr 日志，运行中就能用 `tail -f` 查看；换行、`\r\n` 和单独的 `\r`（进度条）都算一行结束，单行超过 1MB 时分段写入。进度文件 `progress.json` 在持续输出时最多每秒更新一次。
+
+Tekon 进程被强制结束后，它启动的 agent 等子进程可能还在运行。另一个 Tekon 进程在租约过期后把这个任务标为中断时，会核对这些进程组的首进程启动时间，一致才先发 SIGTERM，5 秒宽限期结束、发 SIGKILL 前再核对一次启动时间，确认进程组没有被系统回收复用后才发 SIGKILL；结果写入运行审计 `job.process-group`（`signalled`、`killed`、`escalation-skipped`、`start-time-mismatch` 或 `leader-gone`）。限制：进程启动后不到一个心跳（默认 10 秒）Tekon 就被结束的，来不及记录；首进程已经退出的进程组不处理；没有 `ps` 命令的平台（如 Windows）无法核对启动时间，遗留进程不会被自动结束。这几种情况下请手动结束剩下的进程。
+
 高级 Dashboard 在控制后读取一次状态，后续进展可能需要刷新。集成方可用带 `x-session-token` 的 `GET /api/sessions/:sessionId/events` 订阅 SSE，并通过 `sinceSeq`/`Last-Event-ID` 回放；该事件流不是完整权威运行日志。
+
+**角色与模板配置（Config）**：侧栏「高级 Advanced → Config」分 Roles 与 Workflows 两个页签。Roles 列出内置与项目角色并集并标注来源；点开角色可查看当前生效的系统提示词，点「编辑 prompt」保存即写入项目级覆盖（内置角色先整目录物化到 `.tekon/roles/<id>/`，不改安装文件），保存需要会话令牌，无令牌时按钮提示先设置令牌。Workflows 页签浏览内置与项目工作流模板。旧版的 Constraints 页签已移除——它展示的是与真实配置不一致的静态参考内容。
 
 ### 7.1 暂停、取消与恢复
 
@@ -746,7 +929,7 @@ Agent 消息通常是产物元数据合成摘要；DSH 展示最终 assistant �
 
 恢复提示旧执行退出未确认时，先检查并停止旧执行，再确认页面显示的旧 Job。身份过期须刷新重查；历史无 Job 的 CLI 用法见 §6.10。人工确认不是 OS 退出检测，受管理退出证据不覆盖逃逸进程。
 
-`passed`、`failed`、`cancelled` 终态不可恢复。取消回执不代表所有进程已退出；先通过或失败的 Run 保留原终态。CLI 可用 `tekon cancel --run-id <runId>` 结束指定运行。
+`passed`、`cancelled` 终态不可恢复；`failed` 仅可经 §6.10.1 的 `tekon retry` 显式重试，裸恢复仍拒绝。取消回执不代表所有进程已退出；先通过或失败的 Run 保留原终态。CLI 可用 `tekon cancel --run-id <runId>` 结束指定运行。
 
 审批已记录但尚未恢复时，处理原 Run 的恢复，不再次批准。不要凭通知消失、按钮变化或 feed 缺新事件判断进程状态。
 
@@ -822,16 +1005,16 @@ When normal service shutdown interrupts build/test checks, completed Agent or re
 
 核对会话令牌、`.tekon/web-session.json` 和目标项目范围。令牌文件缺失可重新 `init`，再用 `tekon ui --repo /path/to/project` 启动并打开完整 URL。手动启动 Web 时检查 `TEKON_PROJECT_ROOT`。
 
-### 9.9 Codex provider 运行失败
+### 9.9 Provider 运行失败
 
-先确认本机 `codex` 在 PATH、认证与 `internal` profile 可用：
+先看 `run`、`status` 输出的原因和下一步（§6.6），再运行 `tekon doctor` 核对安装和认证方式。Codex 配置了 profile 时，可核对 profile 是否存在：
 
 ```bash
 codex --version
-codex --profile internal --sandbox workspace-write --ask-for-approval on-request exec --help
+codex --profile <profile> --sandbox workspace-write --ask-for-approval on-request exec --help
 ```
 
-这些命令仅核对 CLI 参数入口，不验证真实模型调用或认证成功。真实 workflow 节点会受控追加 `--add-dir <TEKON_OUTPUT_DIR>` 开放本节点产物目录。
+这些命令仅核对 CLI 参数入口，不验证真实模型调用或认证成功。认证方式“未检测到”只是提示，凭据也可能来自 Tekon 看不到的位置；以实际运行结果为准。真实 workflow 节点会受控追加 `--add-dir <TEKON_OUTPUT_DIR>` 开放本节点产物目录。
 
 查看 `.tekon/runs/<runId>/<nodeId>/` 的 stdout/stderr、manifest 和产物；确认声明的文件存在且符合 schema，结构化 JSON 的 `title`、`body` 非空。不要通过参数覆盖 sandbox、approval 或危险 bypass，也不要把真实失败换成 mock 通过作为验收。
 
@@ -858,9 +1041,9 @@ codex --profile internal --sandbox workspace-write --ask-for-approval on-request
 
 | 参数 | 用途 |
 | --- | --- |
-| `--template <name>` | 指定模板，默认 `standard-delivery` |
+| `--template <name>` | 指定模板，默认 `lightweight-delivery`（已塑形需求卡的推荐模板优先于缺省默认） |
 | `--goal` | 一次性轻量目标；与 `--template` 互斥，默认不接受源码修改 |
-| `--agent <name>` | `codex`、`claude-code`、`mock` 或仅 Goal 可用的 `dsh-headless` |
+| `--agent <name>` | `claude-code`、`codex`、`mock` 或仅 Goal 可用的 `dsh-headless`；默认取 `defaultAgent`，未配置时为 `claude-code` |
 | `--demand-file <path>` | 指定已批准需求卡；`--draft-file` 也受支持 |
 | `--acknowledge-unrestricted-network` | 显式确认 DSH 等所用后端的联网不受限边界 |
 | `--dynamic --dry-run` | 动态预览；普通 workflow/Goal 不支持 `--dry-run` |

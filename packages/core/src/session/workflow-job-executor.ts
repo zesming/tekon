@@ -5,6 +5,7 @@ import { createWorktreeManager } from '../runtime/worktree-manager.js';
 import { redactSecrets } from '../security/secrets.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
+import { findLatestRunFailure } from '../workflow/run-failure.js';
 import { createGateEngine } from '../gate/engine.js';
 import {
   isJobCancellationAbort,
@@ -14,7 +15,7 @@ import {
   type JobExecutor,
 } from './job-runner.js';
 import type { SessionEventBus } from './event-bus.js';
-import type { SessionEventStore } from './session-store.js';
+import type { JobRepository, SessionEventStore } from './session-store.js';
 import type { SubprocessRegistry } from './subprocess-registry.js';
 import type { JobStatus } from '../types/session-contract.js';
 import type { WorkflowInstance } from '../types/domain.js';
@@ -37,7 +38,12 @@ export interface RunProjectContext {
  */
 export interface WorkflowJobEngine {
   executePreparedRun(runId: string): Promise<WorkflowInstance>;
-  resumeRun(runId: string): Promise<{ workflow: WorkflowInstance }>;
+  resumeRun(
+    runId: string,
+    options?: { gatesOnly?: boolean },
+  ): Promise<{ workflow: WorkflowInstance }>;
+  /** PD-17 步 3：failed 运行的显式重试入口。 */
+  retryRun(runId: string): Promise<{ workflow: WorkflowInstance }>;
 }
 
 /**
@@ -60,6 +66,11 @@ export function createWorkflowJobExecutor(deps: {
   sessions: SessionEventStore;
   bus: SessionEventBus;
   registry: SubprocessRegistry;
+  /**
+   * PD-31：读回 resume 作业持久化的执行选项（gatesOnly）。可选依赖，缺省
+   * 时按普通 resume 处理（旧装配与单测无缝兼容）。
+   */
+  jobs?: Pick<JobRepository, 'getResumeOptions'>;
   /** Phase 2 S3: best-effort agent-loop event sink (the dual-write bridge). */
   agentEventSink?: AgentEventSink;
   /**
@@ -176,9 +187,18 @@ export function createWorkflowJobExecutor(deps: {
               : await engine.executePreparedRun(runId);
             break;
           }
-          case 'workflow-resume':
-            workflow = (await engine.resumeRun(runId)).workflow;
+          case 'workflow-resume': {
+            const resumeOptions =
+              (await deps.jobs?.getResumeOptions(ctx.job.id)) ?? undefined;
+            // PD-17 步 3：retry 选项把 failed 运行改走独立的 retryRun 入口，
+            // 裸 resume 仍由 engine 按终态拒绝 failed。
+            workflow = (
+              resumeOptions?.retry
+                ? await engine.retryRun(runId)
+                : await engine.resumeRun(runId, resumeOptions)
+            ).workflow;
             break;
+          }
           default:
             throw new Error(`Unknown job kind: ${job.kind}`);
         }
@@ -233,6 +253,11 @@ export function createWorkflowJobExecutor(deps: {
     },
   };
 
+  /** Why the run stopped, so the session feed can say more than that it did. */
+  async function latestFailureReason(runId: string) {
+    return findLatestRunFailure(await repositories.listAuditEvents(runId)) ?? {};
+  }
+
   async function settleByWorkflowStatus(
     sessionId: string,
     runId: string,
@@ -284,9 +309,24 @@ export function createWorkflowJobExecutor(deps: {
       }
       case 'interrupted': {
         await sessions.updateSessionStatus(sessionId, 'awaiting-input');
-        await emit(sessionId, 'agent/error', { runId, status: 'interrupted' });
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'interrupted',
+          ...(await latestFailureReason(runId)),
+        });
         await emit(sessionId, 'turn/end', { runId, status: 'interrupted' });
         return { status: 'interrupted' };
+      }
+      case 'failed': {
+        await sessions.updateSessionStatus(sessionId, 'failed');
+        await emit(sessionId, 'agent/error', {
+          runId,
+          status: 'failed',
+          ...(await latestFailureReason(runId)),
+        });
+        await emit(sessionId, 'turn/end', { runId, status: 'failed' });
+        // The job ran to completion; it is the run that failed (as with passed).
+        return { status: 'done' };
       }
       default: {
         // A background executor returning running/pending is a contract breach.

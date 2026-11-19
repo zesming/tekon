@@ -444,6 +444,142 @@ describe('database migrations', () => {
     db.close();
   });
 
+  it('CD-09: adds nodes.workspace idempotently and defaults legacy rows to worktree isolation', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'workspace')).toBe(true);
+
+    // 模拟 CD-09 之前的 nodes 表（无 workspace 列）并写一行旧数据。
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table nodes_old (
+        id text primary key,
+        run_id text not null,
+        phase_id text,
+        role text not null,
+        status text not null,
+        inputs text not null default '[]',
+        outputs text not null default '[]',
+        gates text not null default '[]',
+        dependencies text not null default '[]',
+        node_order integer not null default 0,
+        created_at text not null,
+        updated_at text not null
+      );
+      insert into nodes_old (id, run_id, role, status, gates, dependencies, created_at, updated_at)
+        values ('legacy_node', 'run_legacy', 'goal', 'passed', '[]', '[]', '2026-11-01T00:00:00Z', '2026-11-01T00:00:00Z');
+    `);
+    db.exec('drop table nodes;');
+    db.exec('alter table nodes_old rename to nodes;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'workspace')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'workspace')).toHaveLength(1);
+
+    const row = db
+      .prepare('select workspace from nodes where id = ?')
+      .get('legacy_node') as { workspace: string };
+    expect(row.workspace).toBe('worktree');
+
+    // 幂等：再次迁移不报错、不重复加列。
+    migrateDatabase(db);
+    cols = db.pragma('table_info(nodes)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'workspace')).toHaveLength(1);
+
+    db.close();
+  });
+
+  it('PD-31: adds jobs.resume_options idempotently and keeps legacy job rows readable', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'resume_options')).toBe(true);
+
+    // 模拟 PD-31 之前的 jobs 表。
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table jobs_old (
+        id text primary key,
+        session_id text not null,
+        kind text not null,
+        status text not null,
+        owner text,
+        lease text,
+        abort_state text not null default 'none',
+        checkpoint text,
+        payload text not null default '{}',
+        created_at text not null,
+        updated_at text not null
+      );
+    `);
+    db.exec('drop table jobs;');
+    db.exec('alter table jobs_old rename to jobs;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'resume_options')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'resume_options')).toHaveLength(1);
+
+    // 幂等：再次迁移不报错、不重复加列。
+    migrateDatabase(db);
+    cols = db.pragma('table_info(jobs)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'resume_options')).toHaveLength(1);
+
+    db.close();
+  });
+
+  it('PD-18: adds human_decisions.request_note idempotently', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
+    tempDirs.push(dir);
+    const db = openTekonDatabase({ filename: join(dir, 'tekon.sqlite') });
+
+    migrateDatabase(db);
+    let cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'request_note')).toBe(true);
+
+    db.pragma('foreign_keys = OFF');
+    db.exec(`
+      create table human_decisions_old (
+        id text primary key,
+        run_id text not null,
+        node_id text not null,
+        gate_result_id text,
+        status text not null,
+        actor text,
+        note text,
+        created_at text not null,
+        decided_at text
+      );
+    `);
+    db.exec('drop table human_decisions;');
+    db.exec('alter table human_decisions_old rename to human_decisions;');
+    db.pragma('foreign_keys = ON');
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === 'request_note')).toBe(false);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'request_note')).toHaveLength(1);
+
+    migrateDatabase(db);
+    cols = db.pragma('table_info(human_decisions)') as Array<{ name: string }>;
+    expect(cols.filter((c) => c.name === 'request_note')).toHaveLength(1);
+
+    db.close();
+  });
+
   it('P1-UX-02: adds sessions.acknowledged_at idempotently and defaults legacy rows to NULL (unacknowledged)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tekon-db-'));
     tempDirs.push(dir);

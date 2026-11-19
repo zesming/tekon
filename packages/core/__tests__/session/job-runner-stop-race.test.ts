@@ -83,7 +83,6 @@ const minimalTemplate: WorkflowTemplate = {
       id: 'phase_1',
       name: 'Phase 1',
       dependsOn: [],
-      parallel: false,
       nodes: [
         {
           id: 'node_a',
@@ -122,6 +121,7 @@ function setupEngineHarness(
     dataDir: '.tekon',
     repositories,
     audit,
+    agentProvider: 'mock',
     adapter: { runAgent: (input) => runAgentSpy(input) },
     ...overrides,
   });

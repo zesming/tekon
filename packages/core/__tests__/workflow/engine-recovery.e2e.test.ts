@@ -1,8 +1,12 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+import { writePermissiveRepoProfile } from '../helpers/repo-profile.js';
 
 import {
   createAuditLogger,
@@ -26,9 +30,22 @@ describe('workflow engine recovery e2e', () => {
     }
   });
 
+  // CD-09：worktree 租约创建前会真实探测 git，worktree 语义的恢复测试
+  // 即便用 stub worktreeManager 也需要一个真实 git 仓库让探测通过。
+  function makeGitRepo(prefix: string): string {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    tempDirs.push(dir);
+    execFileSync('git', ['init', '-b', 'main'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 'tekon@example.com'], {
+      cwd: dir,
+    });
+    execFileSync('git', ['config', 'user.name', 'Tekon Test'], { cwd: dir });
+    return dir;
+  }
+
   it('resumes an interrupted run from the interrupted node while preserving previous artifacts and audit chain', async () => {
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-recovery-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-recovery-');
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -41,6 +58,7 @@ describe('workflow engine recovery e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (
@@ -53,7 +71,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const interruptedRun = await firstEngine.startRun({
@@ -72,6 +90,7 @@ describe('workflow engine recovery e2e', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('_rd-implementation')) {
@@ -83,7 +102,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const resumed = await secondEngine.resumeRun(interruptedRun.runId);
@@ -106,8 +125,8 @@ describe('workflow engine recovery e2e', () => {
     // must NOT write node/workflow state. If it does, a zombie worker whose
     // job was recovered by a new owner (which already settled `passed`) reverts
     // the run to `interrupted`, breaking terminal-state monotonicity.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-');
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -125,6 +144,7 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           if (input.runContext.nodeId.endsWith('_rd-implementation')) {
@@ -144,7 +164,7 @@ describe('workflow engine recovery e2e', () => {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const run = await engine.startRun({
@@ -168,8 +188,8 @@ describe('workflow engine recovery e2e', () => {
     // ownership-lost fence is NOT a user cancel; writing `cancelled` at the
     // plan boundary would let a stale worker terminate a run the recovering
     // owner is still executing (and later flip it, discarding real work).
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-plan-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-plan-');
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -190,12 +210,13 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
       onNodeCheckpoint: async () => {
         if (!fencedAtCheckpoint) {
           fencedAtCheckpoint = true;
@@ -232,8 +253,8 @@ describe('workflow engine recovery e2e', () => {
     // (promoteLeaseToRunBranch = `git branch -f`, no expected-old-SHA CAS),
     // silently overwriting the new owner's delivery. The success path must
     // pre-check the fence and stand down BEFORE any commit/promote side effect.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-succ-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-succ-');
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -322,18 +343,6 @@ describe('workflow engine recovery e2e', () => {
           createdAt: new Date().toISOString(),
         });
       },
-      async createAutoFixRepairNode(input) {
-        return repositories.createNode({
-          id: `repair_${input.failedGateResult.id}`,
-          runId: input.failedGateResult.runId,
-          role: input.fixerRole,
-          status: 'pending',
-          gates: [],
-          dependencies: [input.failedGateResult.nodeId],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      },
     };
 
     const engine = createWorkflowEngine({
@@ -343,6 +352,7 @@ describe('workflow engine recovery e2e', () => {
       audit,
       signal: fence.signal,
       worktreeManager,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);
@@ -375,8 +385,8 @@ describe('workflow engine recovery e2e', () => {
     // exhausted). Here the agent SUCCEEDS, then the fence lands while a gate
     // runs — the fenced executor's gate/finalize catch and the gate-runner's
     // repair/exhausted writes must NOT revert the recovering owner's `passed`.
-    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-fenced-gate-'));
-    tempDirs.push(repoPath);
+    const repoPath = makeGitRepo('tekon-engine-fenced-gate-');
+    writePermissiveRepoProfile(repoPath);
     const db = openTekonDatabase({ filename: ':memory:' });
     migrateDatabase(db);
     const repositories = createRepositories(db);
@@ -426,18 +436,6 @@ describe('workflow engine recovery e2e', () => {
           createdAt: new Date().toISOString(),
         });
       },
-      async createAutoFixRepairNode(input) {
-        return repositories.createNode({
-          id: `repair_${input.failedGateResult.id}`,
-          runId: input.failedGateResult.runId,
-          role: input.fixerRole,
-          status: 'pending',
-          gates: [],
-          dependencies: [input.failedGateResult.nodeId],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      },
     };
 
     const engine = createWorkflowEngine({
@@ -446,6 +444,7 @@ describe('workflow engine recovery e2e', () => {
       repositories,
       audit,
       signal: fence.signal,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input) {
           return mock.runAgent(input);
@@ -469,36 +468,3 @@ describe('workflow engine recovery e2e', () => {
     db.close();
   });
 });
-
-function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  let gateCounter = 0;
-  return {
-    async runGate(input) {
-      gateCounter += 1;
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}_${gateCounter}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
-  };
-}

@@ -18,7 +18,6 @@ import {
   makeSyntheticLease,
   migrateDatabase,
   openTekonDatabase,
-  resolveReviewTargetNodeByHeuristic,
   scopedId,
   stableGateKey,
   type AgentRunInput,
@@ -487,6 +486,7 @@ describe('createWorkflowEngine', () => {
       dataDir: '.tekon',
       repositories: {} as never,
       audit: {} as never,
+      agentProvider: 'mock',
       adapter: {} as never,
     });
     expect(engine).toBeDefined();
@@ -527,6 +527,7 @@ describe('createWorkflowEngine', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: {} as never,
     });
 
@@ -551,73 +552,6 @@ describe('createWorkflowEngine', () => {
     );
     db.close();
   });
-});
-
-// ---------------------------------------------------------------------------
-// review rework mechanism
-// ---------------------------------------------------------------------------
-describe('review rework mechanism', () => {
-  describe('resolveReviewTargetNodeByHeuristic', () => {
-    it('finds upstream passed node in different phase', () => {
-      const nodes = [
-        { id: 'run_1_rd-code', status: 'passed' },
-        { id: 'run_1_qa', status: 'passed' },
-        { id: 'run_1_reviewer', status: 'running' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
-      expect(result).toBe('run_1_qa');
-    });
-
-    it('returns null when no upstream passed node', () => {
-      const nodes = [
-        { id: 'run_1_blocked_rd', status: 'blocked' },
-        { id: 'run_1_reviewer', status: 'running' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
-      expect(result).toBeNull();
-    });
-
-    it('returns null when review node is the only node', () => {
-      const nodes = [
-        { id: 'run_1_reviewer', status: 'running' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
-      expect(result).toBeNull();
-    });
-
-    it('returns null when review node is not found in list', () => {
-      const nodes = [
-        { id: 'run_1_rd-code', status: 'passed' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'nonexistent');
-      expect(result).toBeNull();
-    });
-
-    it('picks the last passed node when multiple upstream nodes exist', () => {
-      const nodes = [
-        { id: 'run_1_pm', status: 'passed' },
-        { id: 'run_1_rd', status: 'passed' },
-        { id: 'run_1_qa', status: 'passed' },
-        { id: 'run_1_reviewer', status: 'running' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
-      expect(result).toBe('run_1_qa');
-    });
-
-    it('skips upstream nodes that are not passed (running, blocked, needs-revision)', () => {
-      const nodes = [
-        { id: 'run_1_rd', status: 'blocked' },
-        { id: 'run_1_qa', status: 'needs-revision' },
-        { id: 'run_1_pm', status: 'passed' },
-        { id: 'run_1_another', status: 'running' },
-        { id: 'run_1_reviewer', status: 'running' },
-      ];
-      const result = resolveReviewTargetNodeByHeuristic(nodes, 'run_1_reviewer');
-      // Only 'pm' is passed among upstream nodes
-      expect(result).toBe('run_1_pm');
-    });
-  });
-
 });
 
 // ---------------------------------------------------------------------------
@@ -648,7 +582,6 @@ describe('S5 engine prepareRun / signal / pause', () => {
         id: 'phase_1',
         name: 'Phase 1',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'node_a',
@@ -689,6 +622,7 @@ describe('S5 engine prepareRun / signal / pause', () => {
       dataDir: '.tekon',
       repositories,
       audit,
+      agentProvider: 'mock',
       adapter: { runAgent: (input) => runAgentSpy(input) },
       ...overrides,
     });
@@ -774,7 +708,7 @@ describe('S5 engine prepareRun / signal / pause', () => {
   it('prepareRun accepts matching input.planDigest and persists it to SQLite', async () => {
     const { engine, repositories } = setupHarness();
     const canonical = projectRunPlanV3(minimalTemplate, {
-      agent: 'codex',
+      agent: 'mock',
       mode: 'workflow',
     }, []);
 

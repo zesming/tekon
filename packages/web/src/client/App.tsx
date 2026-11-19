@@ -1,8 +1,7 @@
-import { createBrowserRouter, useRouteError, useNavigate } from 'react-router';
+import { createBrowserRouter, useRouteError, useNavigate, Navigate } from 'react-router';
 
 import { AppLayout } from './layouts/AppLayout.js';
 
-import { DashboardPage } from './pages/DashboardPage.js';
 import { SessionsPage } from './pages/SessionsPage.js';
 import { SessionDetailPage } from './pages/SessionDetailPage.js';
 import { RunsPage } from './pages/RunsPage.js';
@@ -19,7 +18,6 @@ import { DraftPage } from './pages/DraftPage.js';
 import { ConfigPage } from './pages/ConfigPage.js';
 import { RolesTab } from './pages/config/RolesTab.js';
 import { WorkflowsTab } from './pages/config/WorkflowsTab.js';
-import { ConstraintsTab } from './pages/config/ConstraintsTab.js';
 import { EvaluationsPage } from './pages/EvaluationsPage.js';
 import { ReadinessTab } from './pages/evaluations/ReadinessTab.js';
 import { DemandShapeTab } from './pages/evaluations/DemandShapeTab.js';
@@ -51,8 +49,10 @@ export const router = createBrowserRouter([
         element: <SessionDetailPage />,
         errorElement: <RouteError scope="session-detail" />,
       },
-      // Legacy run-centric Cockpit, preserved under /advanced (report C2).
-      { path: 'advanced', element: <DashboardPage /> },
+      // UI-03: the legacy Cockpit dashboard was removed; /advanced now enters
+      // the run list directly. Sidebar entry paths are revisited in a later
+      // console phase.
+      { path: 'advanced', element: <Navigate to="runs" replace /> },
       { path: 'advanced/runs', element: <RunsPage /> },
       {
         path: 'advanced/runs/:runId',
@@ -78,7 +78,6 @@ export const router = createBrowserRouter([
           { index: true, element: <RolesTab /> },
           { path: 'roles', element: <RolesTab /> },
           { path: 'workflows', element: <WorkflowsTab /> },
-          { path: 'constraints', element: <ConstraintsTab /> },
         ],
       },
       {

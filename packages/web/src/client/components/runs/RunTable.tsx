@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router';
 import { RunControls } from './RunControls.js';
+import { StatusBadge } from '../ui/StatusBadge.js';
 import {
   admissionNeedsRecovery,
   admissionReadinessLabel,
@@ -22,21 +23,6 @@ export interface RunTableProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const STATUS_BADGE: Record<string, string> = {
-  running: 'badge badge-running',
-  passed: 'badge badge-passed',
-  failed: 'badge badge-failed',
-  paused: 'badge badge-paused',
-  pending: 'badge badge-pending',
-  blocked: 'badge badge-blocked',
-  cancelled: 'badge badge-cancelled',
-  interrupted: 'badge badge-interrupted',
-};
-
-function statusBadge(status: string) {
-  return STATUS_BADGE[status] ?? 'badge badge-pending';
-}
 
 function shortId(id: string) {
   if (id.length <= 16) return id;
@@ -141,15 +127,11 @@ export function RunTable({ runs, isLoading }: RunTableProps) {
                 >
                   <td className="cell-id">{shortId(run.id)}</td>
                   <td>
-                    <span
-                      className={statusBadge(
-                        admissionNeedsRecovery(run) ? 'pending' : status,
-                      )}
-                    >
-                      {admissionNeedsRecovery(run)
-                        ? admissionReadinessLabel(run)
-                        : status}
-                    </span>
+                    {admissionNeedsRecovery(run) ? (
+                      <StatusBadge status="pending" size="sm" label={admissionReadinessLabel(run)} />
+                    ) : (
+                      <StatusBadge status={status} size="sm" />
+                    )}
                   </td>
                   <td className="cell-primary" style={{ maxWidth: 200 }}>
                     <span

@@ -1,11 +1,11 @@
 import { hashWebRunEnvelope, webRunEnvelope } from '../admission-envelope.js';
+import { resolveWebDefaultAgent } from '../default-agent.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
 } from 'node:fs';
@@ -14,7 +14,10 @@ import { join, relative, resolve } from 'node:path';
 import {
   agentRequiresUnrestrictedNetwork,
   canonicalJson,
+  defaultBuiltInRolesDir,
   isValidRequestId,
+  inspectTemplateSymlink,
+  listAvailableRoles,
   listWorkflowCatalog,
   loadWorkflowTemplate,
   loadWorkflowTemplateFile,
@@ -23,8 +26,16 @@ import {
   renderDraftShapeForRun,
   runDshPreflight,
   RunAdmissionError,
+  RunCleanupAuditError,
+  RunCleanupError,
+  ProviderPreflightError,
+  TekonConfigError,
+  createCommandGateway,
+  createRunCleanup,
+  createWorktreeManager,
   type WorkflowTemplate,
   type SessionServiceStartRunResult,
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
 } from '@tekon/core';
 
 import type {
@@ -48,10 +59,7 @@ import {
   pendingDecisionCount,
 } from '../queries.js';
 import { createProviderHealthService } from '../provider-health.js';
-import {
-  mapProject,
-  mapWorkflow,
-} from '../mappers.js';
+import { mapProject, mapWorkflow } from '../mappers.js';
 
 const DSH_HEALTH_PROBE_TIMEOUT_MS = 1_000;
 
@@ -81,6 +89,17 @@ export function createProjectRouter(
 ) {
   const providerHealthService = createProviderHealthService({
     probe: options?.probeProvider ?? probeProvider,
+  });
+  // One instance per router so concurrent cleans of a run take turns.
+  const runCleanup = createRunCleanup({
+    db: context.db,
+    repositories: context.repositories,
+    audit: context.audit,
+    worktreeManager: createWorktreeManager({
+      repositories: context.repositories,
+      gateway: createCommandGateway({ repositories: context.repositories }),
+    }),
+    repoPath: context.projectContext.projectRoot,
   });
 
   return {
@@ -141,14 +160,17 @@ export function createProjectRouter(
       if (!isValidRequestId(input.requestId)) {
         throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
       }
-      const admission = await context.repositories.admissionStore.getAdmission(input.requestId);
+      const admission = await context.repositories.admissionStore.getAdmission(
+        input.requestId,
+      );
       if (!admission) {
         return { state: 'not-found' as const, requestId: input.requestId };
       }
       assertRunInScope(context.db, context.projectContext, admission.runId);
-      const state = admission.filesState !== 'ready'
-        ? ('recovery-required' as const)
-        : ('accepted' as const);
+      const state =
+        admission.filesState !== 'ready'
+          ? ('recovery-required' as const)
+          : ('accepted' as const);
       return {
         state,
         requestId: admission.requestId,
@@ -160,21 +182,40 @@ export function createProjectRouter(
       };
     },
 
-    async admissionIntent(input: {
-      token: string;
-      run?: ProjectRunIntent;
-    }) {
+    async admissionIntent(input: { token: string; run?: ProjectRunIntent }) {
       assertSessionToken(context.projectContext, input.token);
       const tokenHash = hashToken(input.token);
       const scope = createHash('sha256')
-        .update(JSON.stringify([realpathSync(context.projectContext.projectRoot), tokenHash]))
+        .update(
+          JSON.stringify([
+            realpathSync(context.projectContext.projectRoot),
+            tokenHash,
+          ]),
+        )
         .digest('hex');
 
       if (!input.run) {
         return { scope };
       }
 
-      const fingerprint = hashWebRunEnvelope(context.projectContext.projectRoot, input.run);
+      // Same malformed-config contract as project.run and workflow.plan:
+      // envelope hashing resolves the default agent, so answer 400 with the
+      // TEKON_CONFIG_INVALID prefix instead of a generic server fault.
+      let fingerprint: string;
+      try {
+        fingerprint = hashWebRunEnvelope(
+          context.projectContext.projectRoot,
+          input.run,
+        );
+      } catch (error) {
+        if (error instanceof TekonConfigError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${error.message}`,
+          );
+        }
+        throw error;
+      }
       const suggestedRequestId = `req_${randomUUID()}`;
 
       return {
@@ -184,7 +225,11 @@ export function createProjectRouter(
       };
     },
 
-    async providerHealth(input: { token: string; provider: 'dsh-headless'; refresh?: boolean }) {
+    async providerHealth(input: {
+      token: string;
+      provider: 'dsh-headless';
+      refresh?: boolean;
+    }) {
       assertSessionToken(context.projectContext, input.token);
       const tokenHash = hashToken(input.token);
       return await providerHealthService.check({
@@ -203,7 +248,12 @@ export function createProjectRouter(
       const latestRun = latest?.run ?? null;
       return {
         project: mapProject(project),
-        latestRun: latestRun ? mapWorkflow(latestRun, { db: context.db }) : null,
+        defaultAgent: resolveWebDefaultAgent(
+          context.projectContext.projectRoot,
+        ),
+        latestRun: latestRun
+          ? mapWorkflow(latestRun, { db: context.db })
+          : null,
         counts: {
           artifacts: latestRun
             ? count(context.db, 'artifacts', latestRun.id)
@@ -243,10 +293,9 @@ export function createProjectRouter(
       }
       return {
         project: mapProject(project),
-        runs: listRunsForScopedProjects(
-          context.db,
-          context.projectContext,
-        ).map((row) => mapWorkflow(row, { db: context.db })),
+        runs: listRunsForScopedProjects(context.db, context.projectContext).map(
+          (row) => mapWorkflow(row, { db: context.db }),
+        ),
       };
     },
 
@@ -275,49 +324,135 @@ export function createProjectRouter(
       assertSessionToken(context.projectContext, rawInput.token);
       const runInput = structuredClone(rawInput);
       const requestId = runInput.requestId ?? randomUUID();
-      if (!isValidRequestId(requestId)) throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
-      const requestEnvelope = webRunEnvelope(context.projectContext.projectRoot, runInput);
+      if (!isValidRequestId(requestId))
+        throw new ApiError('BAD_REQUEST', 'REQUEST_ID_INVALID');
+      // Envelope hashing resolves the omitted default agent before the admission
+      // try/catch below, so map a malformed repo config to 400 at the boundary.
+      let requestEnvelope: ReturnType<typeof webRunEnvelope>;
+      try {
+        requestEnvelope = webRunEnvelope(
+          context.projectContext.projectRoot,
+          runInput,
+        );
+      } catch (error) {
+        if (error instanceof TekonConfigError) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${error.message} (requestId=${requestId})`,
+          );
+        }
+        throw error;
+      }
       const lookupInput = { requestId, requestEnvelope };
 
       function resultFor(result: SessionServiceStartRunResult) {
         return {
-          run: mapWorkflow(mustGetRun(context.db, result.runId), { db: context.db }),
+          run: mapWorkflow(mustGetRun(context.db, result.runId), {
+            db: context.db,
+          }),
           sessionId: result.sessionId,
           jobId: result.jobId,
           requestId: result.requestId,
           replayed: result.replayed,
-          admissionState: result.admissionState === 'ready'
-            ? 'accepted' as const : 'recovery-required' as const,
+          admissionState:
+            result.admissionState === 'ready'
+              ? ('accepted' as const)
+              : ('recovery-required' as const),
           ...(result.detail ? { detail: result.detail } : {}),
+          ...(result.preflight ? { preflight: result.preflight } : {}),
         };
       }
       function mappedError(error: unknown): ApiError {
         // Session keeps recovery identity around factory errors. Before any
         // known admission, preserve the router factory's deliberate API verdict.
-        if (error instanceof RunAdmissionError && !error.runId && error.cause instanceof ApiError) {
-          return new ApiError(error.cause.code, `${error.cause.message} (requestId=${requestId})`);
+        if (
+          error instanceof RunAdmissionError &&
+          !error.runId &&
+          error.cause instanceof ApiError
+        ) {
+          return new ApiError(
+            error.cause.code,
+            `${error.cause.message} (requestId=${requestId})`,
+          );
         }
-        if (error instanceof ApiError) return new ApiError(error.code, `${error.message} (requestId=${requestId})`);
-        if (error instanceof Error && error.message.startsWith('REQUEST_ID_CONFLICT')) {
-          return new ApiError('CONFLICT', `REQUEST_ID_CONFLICT: requestId=${requestId}`);
+        if (error instanceof ApiError)
+          return new ApiError(
+            error.code,
+            `${error.message} (requestId=${requestId})`,
+          );
+        const preflightError =
+          error instanceof RunAdmissionError && !error.runId
+            ? error.cause
+            : error;
+        if (preflightError instanceof ProviderPreflightError)
+          return providerPreflightApiError(preflightError);
+        if (
+          error instanceof Error &&
+          error.message.startsWith('REQUEST_ID_CONFLICT')
+        ) {
+          return new ApiError(
+            'CONFLICT',
+            `REQUEST_ID_CONFLICT: requestId=${requestId}`,
+          );
         }
-        const planError = error instanceof RunAdmissionError && !error.runId ? error.cause : error;
-        if (planError instanceof Error && planError.message.startsWith('PLAN_CONFIG_INVALID:')) {
-          return new ApiError('BAD_REQUEST', `PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览 (requestId=${requestId})`);
+        const planError =
+          error instanceof RunAdmissionError && !error.runId
+            ? error.cause
+            : error;
+        // A malformed .tekon/config.yaml is user-fixable input: answer 400,
+        // symmetric with workflow.plan, instead of a generic server fault.
+        if (planError instanceof TekonConfigError) {
+          return new ApiError(
+            'BAD_REQUEST',
+            `TEKON_CONFIG_INVALID: ${planError.message} (requestId=${requestId})`,
+          );
         }
-        if (planError instanceof Error && planError.message.startsWith('PLAN_')) {
-          return new ApiError('BAD_REQUEST', `PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试 (requestId=${requestId})`);
+        if (
+          planError instanceof Error &&
+          planError.message.startsWith('PLAN_CONFIG_INVALID:')
+        ) {
+          return new ApiError(
+            'BAD_REQUEST',
+            `PLAN_CONFIG_INVALID: 无法读取仓库检查配置；请修正 .tekon/repo-profile.yaml 或 package.json 后刷新预览 (requestId=${requestId})`,
+          );
+        }
+        if (
+          planError instanceof Error &&
+          planError.message.startsWith('PLAN_')
+        ) {
+          return new ApiError(
+            'BAD_REQUEST',
+            `PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试 (requestId=${requestId})`,
+          );
+        }
+        // PD-04：必填检查命令缺失是用户可修复的配置问题，返回 400 并带
+        // core 给出的修改指引，而不是泛化的 500 服务故障。
+        if (
+          planError instanceof Error &&
+          planError.message.startsWith('MISSING_REPO_COMMAND:')
+        ) {
+          return new ApiError(
+            'BAD_REQUEST',
+            `${planError.message} (requestId=${requestId})`,
+          );
         }
         if (error instanceof RunAdmissionError && error.runId) {
           const identity = [
-            `requestId=${requestId}`, `runId=${error.runId}`,
+            `requestId=${requestId}`,
+            `runId=${error.runId}`,
             ...(error.sessionId ? [`sessionId=${error.sessionId}`] : []),
             ...(error.jobId ? [`jobId=${error.jobId}`] : []),
             `admissionState=${error.admissionState}`,
           ].join(' ');
-          return new ApiError('INTERNAL_ERROR', `RUN_ADMISSION_FAILED: 已保留受理身份，请查询或重试原请求 (${identity})`);
+          return new ApiError(
+            'INTERNAL_ERROR',
+            `RUN_ADMISSION_FAILED: 已保留受理身份，请查询或重试原请求 (${identity})`,
+          );
         }
-        return new ApiError('INTERNAL_ERROR', `RUN_ADMISSION_FAILED: 受理状态待确认，请查询或重试原 requestId=${requestId}`);
+        return new ApiError(
+          'INTERNAL_ERROR',
+          `RUN_ADMISSION_FAILED: 受理状态待确认，请查询或重试原 requestId=${requestId}`,
+        );
       }
 
       try {
@@ -325,54 +460,105 @@ export function createProjectRouter(
         if (existing) return resultFor(existing);
 
         const shapedDraft = runInput.demandShapePath
-          ? readDraftShapeFile(assertDraftShapePathInScope(context, runInput.demandShapePath))
+          ? readDraftShapeFile(
+              assertDraftShapePathInScope(context, runInput.demandShapePath),
+            )
           : null;
         if (shapedDraft && !shapedDraft.approved) {
-          throw new ApiError('BAD_REQUEST', 'Draft shape must be approved before run.');
+          throw new ApiError(
+            'BAD_REQUEST',
+            'Draft shape must be approved before run.',
+          );
         }
         if (shapedDraft && !shapedDraft.readyForRun) {
-          throw new ApiError('BAD_REQUEST', 'Draft shape has open questions; resolve them (readyForRun) before run.');
+          throw new ApiError(
+            'BAD_REQUEST',
+            'Draft shape has open questions; resolve them (readyForRun) before run.',
+          );
         }
         if (shapedDraft?.hasPlan && shapedDraft.planApproved !== true) {
-          throw new ApiError('BAD_REQUEST', 'Draft has a generated plan that must be approved before run (tekon draft plan-approve).');
+          throw new ApiError(
+            'BAD_REQUEST',
+            'Draft has a generated plan that must be approved before run (tekon draft plan-approve).',
+          );
         }
-        const demandText = shapedDraft ? renderDraftShapeForRun(shapedDraft) : runInput.demandText.trim();
-        if (!demandText) throw new ApiError('BAD_REQUEST', 'Demand text is required.');
+        const demandText = shapedDraft
+          ? renderDraftShapeForRun(shapedDraft)
+          : runInput.demandText.trim();
+        if (!demandText)
+          throw new ApiError('BAD_REQUEST', 'Demand text is required.');
         const isGoal = runInput.mode === 'goal';
         const allowDirtyBase = Boolean(runInput.allowDirtyBase);
         const resolvedProfile = runInput.profile ?? 'human-web';
-        const resolvedAgent = runInput.agent ?? 'codex';
+        const resolvedAgent =
+          runInput.agent ??
+          resolveWebDefaultAgent(context.projectContext.projectRoot);
         assertCleanBase(context.projectContext.projectRoot, allowDirtyBase);
-        const templateName = isGoal ? 'goal' : runInput.template?.trim() || 'standard-delivery';
+        const templateName = isGoal
+          ? 'goal'
+          : runInput.template?.trim() || DEFAULT_WORKFLOW_TEMPLATE_ID;
         assertSafeName(templateName, 'template');
         if (!isGoal && !runInput.planDigest?.trim()) {
-          throw new ApiError('BAD_REQUEST', 'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs');
+          throw new ApiError(
+            'BAD_REQUEST',
+            'PLAN_DIGEST_REQUIRED: planDigest is required for workflow runs',
+          );
         }
-        const workflowSpec = isGoal ? loadWorkflowTemplate({ name: 'goal' }) : loadTemplate(context, templateName);
-        const canonicalPlan = captureRunPlan(context.projectContext.projectRoot, workflowSpec, {
-          agent: resolvedAgent,
-          mode: isGoal ? 'goal' : 'workflow',
-          profile: resolvedProfile,
-          allowDirtyBase,
-          timeoutMs: runInput.timeoutMs,
-          noProgressTimeoutMs: runInput.noProgressTimeoutMs,
-          progressHeartbeatMs: runInput.progressHeartbeatMs,
-          templateId: templateName,
-        });
-        if (runInput.planDigest !== undefined && runInput.planDigest !== canonicalPlan.digest) {
-          throw new ApiError('BAD_REQUEST', 'PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试');
+        const workflowSpec = isGoal
+          ? loadWorkflowTemplate({ name: 'goal' })
+          : loadTemplate(context, templateName);
+        const canonicalPlan = captureRunPlan(
+          context.projectContext.projectRoot,
+          workflowSpec,
+          {
+            agent: resolvedAgent,
+            mode: isGoal ? 'goal' : 'workflow',
+            profile: resolvedProfile,
+            allowDirtyBase,
+            timeoutMs: runInput.timeoutMs,
+            noProgressTimeoutMs: runInput.noProgressTimeoutMs,
+            progressHeartbeatMs: runInput.progressHeartbeatMs,
+            templateId: templateName,
+          },
+        );
+        if (
+          runInput.planDigest !== undefined &&
+          runInput.planDigest !== canonicalPlan.digest
+        ) {
+          throw new ApiError(
+            'BAD_REQUEST',
+            'PLAN_DIGEST_MISMATCH: 计划已变化，请刷新预览后重试',
+          );
         }
-        const requiresUnrestrictedNetwork = agentRequiresUnrestrictedNetwork(resolvedAgent);
-        if (requiresUnrestrictedNetwork && runInput.acknowledgeUnrestrictedNetwork !== true) {
+        const requiresUnrestrictedNetwork =
+          agentRequiresUnrestrictedNetwork(resolvedAgent);
+        if (
+          requiresUnrestrictedNetwork &&
+          runInput.acknowledgeUnrestrictedNetwork !== true
+        ) {
           throw new ApiError('BAD_REQUEST', '联网不受限需知情确认');
         }
-        const admissionAudits: Array<{ type: string; payload: Record<string, unknown> }> = [];
-        if (shapedDraft) admissionAudits.push({ type: 'run.demand-shaped', payload: {
-          shapePath: runInput.demandShapePath, approved: shapedDraft.approved, readyForRun: shapedDraft.readyForRun,
-        } });
-        if (requiresUnrestrictedNetwork) admissionAudits.push({ type: 'run.network-acknowledged', payload: {
-          agent: resolvedAgent, acknowledgeUnrestrictedNetwork: true,
-        } });
+        const admissionAudits: Array<{
+          type: string;
+          payload: Record<string, unknown>;
+        }> = [];
+        if (shapedDraft)
+          admissionAudits.push({
+            type: 'run.demand-shaped',
+            payload: {
+              shapePath: runInput.demandShapePath,
+              approved: shapedDraft.approved,
+              readyForRun: shapedDraft.readyForRun,
+            },
+          });
+        if (requiresUnrestrictedNetwork)
+          admissionAudits.push({
+            type: 'run.network-acknowledged',
+            payload: {
+              agent: resolvedAgent,
+              acknowledgeUnrestrictedNetwork: true,
+            },
+          });
         const result = await context.sessionService.startRun({
           requestId,
           requestEnvelope,
@@ -390,7 +576,8 @@ export function createProjectRouter(
             timeoutMs: runInput.timeoutMs,
             noProgressTimeoutMs: runInput.noProgressTimeoutMs,
             progressHeartbeatMs: runInput.progressHeartbeatMs,
-            acknowledgeUnrestrictedNetwork: runInput.acknowledgeUnrestrictedNetwork,
+            acknowledgeUnrestrictedNetwork:
+              runInput.acknowledgeUnrestrictedNetwork,
             canonicalPlan,
             planDigest: canonicalPlan.digest,
             planSnapshot: canonicalJson(canonicalPlan),
@@ -404,10 +591,14 @@ export function createProjectRouter(
           const winner = await context.sessionService.lookupRun(lookupInput);
           if (winner) return resultFor(winner);
         } catch (lookupError) {
-          if (lookupError instanceof Error && lookupError.message.startsWith('REQUEST_ID_CONFLICT')) {
+          if (
+            lookupError instanceof Error &&
+            lookupError.message.startsWith('REQUEST_ID_CONFLICT')
+          ) {
             throw mappedError(lookupError);
           }
-          if (lookupError instanceof RunAdmissionError && lookupError.runId) throw mappedError(lookupError);
+          if (lookupError instanceof RunAdmissionError && lookupError.runId)
+            throw mappedError(lookupError);
         }
         throw mappedError(error);
       }
@@ -416,13 +607,26 @@ export function createProjectRouter(
     async resume(runInput: ResumeInput) {
       assertSessionToken(context.projectContext, runInput.token);
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-      const result = await context.sessionService.resumeRun({
-        runId: runInput.runId,
-        confirmStopped: runInput.confirmStopped,
-        previousJobId: runInput.previousJobId,
-      });
-      if (result.outcome === 'exit-unconfirmed' || result.outcome === 'stale-confirmation') {
-        throw new ApiError('CONFLICT', `${result.outcome}: 旧进程退出未确认或确认已过期；刷新后确认已停止旧执行，previousJobId=${result.previousJobId ?? 'null'}`);
+      const result = await context.sessionService
+        .resumeRun({
+          runId: runInput.runId,
+          confirmStopped: runInput.confirmStopped,
+          previousJobId: runInput.previousJobId,
+          ...(runInput.gatesOnly ? { gatesOnly: true } : {}),
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ProviderPreflightError)
+            throw providerPreflightApiError(error);
+          throw error;
+        });
+      if (
+        result.outcome === 'exit-unconfirmed' ||
+        result.outcome === 'stale-confirmation'
+      ) {
+        throw new ApiError(
+          'CONFLICT',
+          `${result.outcome}: 旧进程退出未确认或确认已过期；刷新后确认已停止旧执行，previousJobId=${result.previousJobId ?? 'null'}`,
+        );
       }
       if (result.outcome === 'pending-decisions') {
         throw new ApiError(
@@ -443,7 +647,10 @@ export function createProjectRouter(
         );
       }
       if (result.outcome === 'recovery-required') {
-        throw new ApiError('CONFLICT', `ADMISSION_RECOVERY_REQUIRED: runId=${runInput.runId}`);
+        throw new ApiError(
+          'CONFLICT',
+          `ADMISSION_RECOVERY_REQUIRED: runId=${runInput.runId}`,
+        );
       }
       return {
         run: mapWorkflow(mustGetRun(context.db, runInput.runId), {
@@ -451,6 +658,7 @@ export function createProjectRouter(
         }),
         sessionId: result.sessionId,
         jobId: result.jobId,
+        ...(result.preflight ? { preflight: result.preflight } : {}),
       };
     },
 
@@ -471,60 +679,52 @@ export function createProjectRouter(
 
     async clean(runInput: ProjectCleanInput) {
       assertSessionToken(context.projectContext, runInput.token);
-      if (runInput.confirm !== 'delete-run-dir') {
+      if (runInput.confirm !== 'clean-terminal-runs') {
         throw new ApiError(
           'BAD_REQUEST',
-          "project.clean requires confirm: 'delete-run-dir'.",
+          "project.clean requires confirm: 'clean-terminal-runs'.",
         );
       }
       if (!/^[a-zA-Z0-9_-]+$/.test(runInput.runId)) {
         throw new ApiError('BAD_REQUEST', 'Invalid runId format');
       }
       assertRunInScope(context.db, context.projectContext, runInput.runId);
-
-      const run = mustGetRun(context.db, runInput.runId);
-      // Clean evidence covers every active job kind, including delayed
-      // readiness/delivery automation. JobRepository.findActiveByRunId is
-      // intentionally limited to workflow controls and would omit those.
-      const activeJob = context.db
-        .prepare(
-          `select j.id from jobs j
-           join sessions s on s.id = j.session_id
-           where s.run_id = ?
-             and j.status in ('queued', 'running', 'paused', 'cancelling')
-           order by j.created_at desc, j.id desc
-           limit 1`,
-        )
-        .get(runInput.runId) as { id: string } | undefined;
-      const leases = await context.repositories.listWorktreeLeases(
-        runInput.runId,
-      );
-      const unreleasedLeaseIds = leases
-        .filter((lease) => !lease.releasedAt)
-        .map((lease) => lease.id);
-
       try {
-        await context.audit.append({
+        if (runInput.dryRun) {
+          const [planned] = await runCleanup.plan(runInput.runId);
+          return {
+            runId: runInput.runId,
+            dryRun: true,
+            worktrees: planned?.worktrees.length ?? 0,
+            branches: planned?.branches.length ?? 0,
+            missing: 0,
+            failures: 0,
+          };
+        }
+        const report = await runCleanup.clean(runInput.runId);
+        return {
           runId: runInput.runId,
-          type: 'project.clean.suspended',
-          payload: {
-            reason: 'CLEAN_SUSPENDED',
-            runStatus: run.status,
-            ...(activeJob?.id ? { activeJobId: activeJob.id } : {}),
-            unreleasedLeaseIds,
-          },
-        });
-      } catch {
-        throw new ApiError(
-          'INTERNAL_ERROR',
-          'CLEAN_AUDIT_FAILED: unable to record suspended clean request',
-        );
+          dryRun: false,
+          worktrees: report.worktreesRemoved,
+          branches: report.branchesDeleted,
+          missing: report.worktreesMissing + report.branchesMissing,
+          failures: report.failures.length,
+        };
+      } catch (error) {
+        if (error instanceof RunCleanupError) {
+          throw new ApiError(
+            error.code === 'RUN_NOT_FOUND' ? 'NOT_FOUND' : 'CONFLICT',
+            error.message,
+          );
+        }
+        if (error instanceof RunCleanupAuditError) {
+          throw new ApiError(
+            'INTERNAL_ERROR',
+            'CLEAN_AUDIT_FAILED: unable to record the clean result',
+          );
+        }
+        throw error;
       }
-
-      throw new ApiError(
-        'CONFLICT',
-        'CLEAN_SUSPENDED: project.clean is suspended pending lifecycle-safe purge',
-      );
     },
   };
 }
@@ -532,18 +732,12 @@ export function createProjectRouter(
 function listRoles(
   context: ServerContext,
 ): Array<{ id: string; name: string }> {
-  const rolesDir = context.projectContext.rolesDir;
-  if (!existsSync(rolesDir)) {
-    return [];
-  }
-
-  return readdirSync(rolesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => ({
-      id: entry.name,
-      name: entry.name.toUpperCase(),
-    }))
-    .sort((left, right) => left.id.localeCompare(right.id));
+  // PD-11：与 role.list 同口径（内置+项目并集），修复新项目 counts.roles=0
+  // 的失真；项目覆盖去重后按 id 计数。
+  return listAvailableRoles({
+    repoPath: context.projectContext.projectRoot,
+    builtInRolesDir: defaultBuiltInRolesDir(),
+  }).map((role) => ({ id: role.id, name: role.id.toUpperCase() }));
 }
 
 function listWorkflows(
@@ -570,12 +764,13 @@ function loadProjectWorkflowIfPresent(
   context: ServerContext,
   name: string,
 ): WorkflowTemplate | null {
+  const workflowsDir = context.projectContext.workflowsDir;
   for (const extension of ['.yaml', '.yml']) {
-    const workflowPath = join(
-      context.projectContext.workflowsDir,
-      `${name}${extension}`,
-    );
+    const workflowPath = join(workflowsDir, `${name}${extension}`);
     if (existsSync(workflowPath)) {
+      // 统一软链信任边界：项目模板越界/断链软链在读取前拒绝。
+      const linkCheck = inspectTemplateSymlink(workflowPath, workflowsDir);
+      if (!linkCheck.ok) throw new Error(linkCheck.reason);
       return loadWorkflowTemplateFile(workflowPath);
     }
   }
@@ -680,4 +875,14 @@ function assertDraftShapeStorageInScope(
     throw new ApiError('BAD_REQUEST', 'Draft shape path is out of scope.');
   }
   return draftsDir;
+}
+
+/** A provider that cannot start: the reason and the one next step. */
+export function providerPreflightApiError(
+  error: ProviderPreflightError,
+): ApiError {
+  return new ApiError(
+    'BAD_REQUEST',
+    `${error.code}: ${error.message}。下一步：${error.hint}`,
+  );
 }

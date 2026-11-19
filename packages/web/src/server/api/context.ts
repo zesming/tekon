@@ -1,5 +1,6 @@
 import type {
   AuditLogger,
+  ProviderPreflightResult,
   RunRecovery,
   ResumeConfirmation,
   DraftShape,
@@ -163,7 +164,17 @@ export interface DeliveryCiStatusInput {
 }
 
 export interface ProjectCleanInput extends TokenRunInput {
-  confirm: 'delete-run-dir';
+  confirm: 'clean-terminal-runs';
+  dryRun?: boolean;
+}
+
+export interface ProjectCleanOutput {
+  runId: string;
+  dryRun: boolean;
+  worktrees: number;
+  branches: number;
+  missing: number;
+  failures: number;
 }
 
 export interface DecisionInput extends ResumeConfirmation {
@@ -245,6 +256,8 @@ export interface HumanDecisionOutput {
   status: string;
   actor: string | null;
   note: string | null;
+  /** PD-18：门禁请求上下文；旧行无 request_note 时 mapper 回落 note。 */
+  requestNote: string | null;
   createdAt: string;
   decidedAt: string | null;
   context: {
@@ -295,6 +308,7 @@ export interface ApiCaller {
     list(): Promise<ProjectOutput[]>;
     overview(): Promise<{
       project: ProjectOutput;
+      defaultAgent: string;
       latestRun: WorkflowOutput | null;
       counts: {
         artifacts: number;
@@ -322,6 +336,7 @@ export interface ApiCaller {
       replayed: boolean;
       admissionState: 'accepted' | 'recovery-required';
       detail?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     admission(input: { token: string; requestId: string }): Promise<ProjectAdmissionOutput>;
     admissionIntent(input: { token: string; run?: ProjectRunIntent }): Promise<{
@@ -333,13 +348,14 @@ export interface ApiCaller {
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
+      preflight?: ProviderPreflightResult;
     }>;
     cancel(input: TokenRunInput): Promise<{
       run: WorkflowOutput;
       sessionId?: string;
       jobId?: string;
     }>;
-    clean(input: ProjectCleanInput): Promise<{ removedRunDir: boolean }>;
+    clean(input: ProjectCleanInput): Promise<ProjectCleanOutput>;
     health(input?: { token?: string }): Promise<{
       credential: 'not-configured' | 'valid' | 'invalid';
       checkedAt: string;
@@ -409,10 +425,23 @@ export interface ApiCaller {
       gates: GateOutput[];
       pendingDecisions: HumanDecisionOutput[];
     }>;
+    pendingAll(): Promise<{
+      pending: Array<{
+        runId: string;
+        decision: HumanDecisionOutput;
+        recovery: RunRecovery;
+      }>;
+    }>;
     approve(input: DecisionInput): Promise<{
       resumeOutcome?: string;
       resumeMessage?: string;
       recovery?: RunRecovery;
+      preflight?: {
+        provider: string;
+        auth: string;
+        passthroughEnv: string[];
+        warnings: string[];
+      };
       decision: HumanDecisionOutput;
       sessionId?: string;
       jobId?: string;
@@ -438,8 +467,26 @@ export interface ApiCaller {
   };
   role: {
     list(): Promise<{
-      roles: Array<{ id: string; name: string; hasSystemPrompt: boolean }>;
+      roles: Array<{
+        id: string;
+        name: string;
+        source: 'built-in' | 'project';
+        hasSystemPrompt: boolean;
+      }>;
     }>;
+    get(input: { id: string }): Promise<{
+      id: string;
+      name: string;
+      source: 'built-in' | 'project' | 'user';
+      systemPrompt: string;
+      hasProjectOverride: boolean;
+      projectPath: string;
+    }>;
+    updatePrompt(input: {
+      id: string;
+      systemPrompt: string;
+      token: string;
+    }): Promise<{ id: string; source: 'project'; roleDir: string }>;
   };
   workflow: {
     list(): Promise<{

@@ -25,6 +25,7 @@ import {
   type WorkflowInstance,
   type WorkflowTemplate,
 } from '../../src/index.js';
+import { writePermissiveRepoProfile } from '../helpers/repo-profile.js';
 
 // Start uses a real Engine and SQLite admission; lifecycle tests isolate only
 // execution so they can verify pause/resume/cancel without invoking a Provider.
@@ -47,6 +48,7 @@ interface TestEnv {
 function setup(): TestEnv {
   const projectRoot = mkdtempSync(join(tmpdir(), 'tekon-session-service-'));
   cleanup.push(() => rmSync(projectRoot, { recursive: true, force: true }));
+  writePermissiveRepoProfile(projectRoot);
   const db = openTekonDatabase({ filename: ':memory:' });
   cleanup.push(() => { db.close(); });
   migrateDatabase(db);
@@ -106,6 +108,7 @@ function fakeEngine(workflow: WorkflowInstance): WorkflowEngine {
     executePreparedRun: vi.fn(async () => workflow),
     startRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
     resumeRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
+    retryRun: vi.fn(async () => ({ runId: workflow.id, workflow })),
   };
 }
 
@@ -215,19 +218,106 @@ describe('SessionService.startRun', () => {
     expect(env.repositories.getDatabase().prepare('select count(*) as count from workflow_instances').get()).toEqual({ count: 0 });
   });
 
-  it('preflight rejection prevents pure preparation and all admission side effects', async () => {
+  it('preflight rejection prevents preparation and all admission side effects', async () => {
     const env = setup();
     const prepare = vi.spyOn(env.engine, 'buildPreparedRun');
+    const preflight = vi.fn(async () => { throw new Error('preflight rejected'); });
     const service = createSessionService({
       sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
       repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
-      createEngine: () => env.engine, preflight: async () => { throw new Error('preflight rejected'); },
+      createEngine: () => env.engine, preflight,
     });
     await expect(service.startRun({ demandText: 'Blocked', engine: null })).rejects.toThrow('preflight rejected');
+    // Checked against the provider the engine would freeze, before preparing.
+    expect(preflight).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'mock', phase: 'start' }),
+    );
     expect(prepare).not.toHaveBeenCalled();
     for (const table of ['workflow_instances', 'sessions', 'session_events', 'jobs', 'run_admissions']) {
       expect(env.repositories.getDatabase().prepare(`select count(*) as count from ${table}`).get()).toEqual({ count: 0 });
     }
+  });
+});
+
+describe('SessionService provider preflight', () => {
+  const found = {
+    provider: 'claude-code' as const,
+    auth: 'none' as const,
+    passthroughEnv: ['AWS_PROFILE'],
+    warnings: ['claude 未检测到登录或凭据'],
+  };
+
+  it('returns the start check and audits the auth category with the admission', async () => {
+    const env = setup();
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => env.engine, preflight: async () => found,
+    });
+    const result = await service.startRun({ demandText: 'Check', engine: null });
+    expect(result.preflight).toEqual(found);
+    const audits = await env.repositories.listAuditEvents(result.runId);
+    expect(audits.find((event) => event.type === 'provider.preflight')?.payload).toEqual({
+      phase: 'start',
+      provider: 'claude-code',
+      auth: 'none',
+      passthroughEnv: ['AWS_PROFILE'],
+    });
+  });
+
+  it('names the passed-through variables in the opening session event', async () => {
+    const env = setup();
+    const engine = createWorkflowEngine({
+      repoPath: env.projectRoot, dataDir: '.tekon', repositories: env.repositories, audit: env.audit,
+      adapter: createMockAgentAdapter(), agentProvider: 'mock',
+      agentConfigSummary: { passthroughEnv: ['AWS_PROFILE'] },
+    });
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => engine,
+    });
+    const result = await service.startRun({ demandText: 'Passthrough', engine: null });
+    const events = await env.sessions.listEventsSince(result.sessionId, 0);
+    expect(events.find((event) => event.type === 'workflow/started')?.payload).toMatchObject({
+      passthroughEnv: ['AWS_PROFILE'],
+    });
+  });
+
+  it('checks the frozen provider on resume and refuses before queuing', async () => {
+    const env = setup();
+    await seedRun(env, 'run_check', 'paused');
+    await env.repositories.recordRunProviderConfig({
+      runId: 'run_check',
+      provider: 'claude-code',
+      configSummary: { command: 'claude' },
+      createdAt: new Date().toISOString(),
+    });
+    const enqueue = vi.spyOn(env.jobRunner, 'enqueueIfNoActiveByRunId');
+    let refuse = true;
+    const preflight = vi.fn(async () => {
+      if (refuse) throw new Error('找不到 claude 命令');
+      return found;
+    });
+    const service = createSessionService({
+      sessions: env.sessions, jobs: env.jobs, jobRunner: env.jobRunner, bus: env.bus,
+      repositories: env.repositories, audit: env.audit, projectRoot: env.projectRoot,
+      createEngine: () => env.engine, preflight,
+    });
+    await expect(service.resumeRun({ runId: 'run_check' })).rejects.toThrow('找不到 claude 命令');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(preflight).toHaveBeenCalledWith({
+      provider: 'claude-code',
+      phase: 'resume',
+      configSummary: { command: 'claude' },
+    });
+
+    refuse = false;
+    const result = await service.resumeRun({ runId: 'run_check' });
+    expect(result).toMatchObject({ outcome: 'enqueued', preflight: found });
+    const audits = await env.repositories.listAuditEvents('run_check');
+    expect(audits.filter((event) => event.type === 'provider.preflight')).toHaveLength(1);
+    await expect(service.preflightResume('run_check')).resolves.toEqual(found);
   });
 });
 
@@ -311,6 +401,33 @@ describe('SessionService.resumeRun', () => {
     });
   });
 
+  it('persists gatesOnly resume options on the enqueued job (PD-31)', async () => {
+    const env = setup();
+    await seedRun(env, 'run_gates', 'blocked');
+    const plain = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_gates')!),
+    );
+
+    const withFlag = await plain.resumeRun({
+      runId: 'run_gates',
+      gatesOnly: true,
+    });
+    expect(withFlag.outcome).toBe('enqueued');
+    if (withFlag.outcome !== 'enqueued') throw new Error('unreachable');
+    expect(await env.jobs.getResumeOptions(withFlag.jobId)).toEqual({
+      gatesOnly: true,
+    });
+
+    // 普通 resume 的作业不带选项，读取侧回落 null。
+    await env.jobs.updateJob(withFlag.jobId, { status: 'cancelled' });
+    const withoutFlag = await plain.resumeRun({ runId: 'run_gates' });
+    if (withoutFlag.outcome !== 'enqueued') throw new Error('unreachable');
+    expect(
+      await env.jobs.getResumeOptions(withoutFlag.jobId),
+    ).toBeNull();
+  });
+
   it('reuses the existing session when one is already bound to the run', async () => {
     const env = setup();
     await seedRun(env, 'run_resume2', 'paused');
@@ -325,6 +442,119 @@ describe('SessionService.resumeRun', () => {
     const workspace = await env.sessions.getOrCreateDefaultWorkspace(env.projectRoot);
     const sessions = await env.sessions.listSessions(workspace.id);
     expect(sessions).toHaveLength(1);
+  });
+});
+
+describe('SessionService.retryRun', () => {
+  it('enqueues a workflow-resume job with the retry option for a failed run', async () => {
+    const env = setup();
+    await seedRun(env, 'run_failed', 'failed');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_failed')!),
+    );
+
+    const result = await service.retryRun({ runId: 'run_failed' });
+
+    expect(result.outcome).toBe('enqueued');
+    if (result.outcome !== 'enqueued') throw new Error('unreachable');
+    const job = await env.jobs.get(result.jobId);
+    expect(job).toMatchObject({ kind: 'workflow-resume', status: 'queued' });
+    expect(await env.jobs.getResumeOptions(result.jobId)).toEqual({
+      retry: true,
+    });
+  });
+
+  it('reports terminal for a passed run without enqueuing', async () => {
+    const env = setup();
+    await seedRun(env, 'run_passed', 'passed');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_passed')!),
+    );
+    const enqueueSpy = vi.spyOn(env.jobRunner, 'enqueue');
+
+    const result = await service.retryRun({ runId: 'run_passed' });
+
+    expect(result).toEqual({
+      outcome: 'terminal',
+      runId: 'run_passed',
+      status: 'passed',
+    });
+    expect(enqueueSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws RETRY_NOT_FAILED for a non-terminal blocked run', async () => {
+    const env = setup();
+    await seedRun(env, 'run_blocked', 'blocked');
+    const service = makeService(
+      env,
+      fakeEngine(await env.repositories.getWorkflowInstance('run_blocked')!),
+    );
+
+    await expect(
+      service.retryRun({ runId: 'run_blocked' }),
+    ).rejects.toThrow(/RETRY_NOT_FAILED/);
+  });
+
+  it('rejects (active-job) when the run already has an active job', async () => {
+    const env = setup();
+    await seedRun(env, 'run_retry_active', 'failed');
+    const sessionId = await seedSession(env, 'run_retry_active');
+    await env.jobRunner.enqueue({ sessionId, kind: 'workflow-resume' });
+    const service = makeService(
+      env,
+      fakeEngine(
+        await env.repositories.getWorkflowInstance('run_retry_active')!,
+      ),
+    );
+
+    const result = await service.retryRun({ runId: 'run_retry_active' });
+    expect(result).toEqual({
+      outcome: 'active-job',
+      runId: 'run_retry_active',
+    });
+  });
+
+  it('hands over an orphaned queued CLI retry job instead of dead-locking on active-job', async () => {
+    // 场景：第一个 CLI 进程入队 retry 作业后、claim 前崩溃（SIGKILL/断电），
+    // 留下 queued 孤儿。第二个 CLI 进程的 retry 必须复用该作业（事务内
+    // handover），而不是被服务层预检永久挡在 active-job 死结里——failed 运行
+    // 无法 cancel，queued 作业也没有其他回收器。
+    const env = setup();
+    await seedRun(env, 'run_orphan_retry', 'failed');
+    const sessionId = await seedSession(env, 'run_orphan_retry');
+    env.jobRunner = createJobRunner({
+      jobs: env.jobs,
+      sessions: env.sessions,
+      bus: env.bus,
+      registry: createSubprocessRegistry(),
+      executor: { execute: async () => ({ status: 'done' }) },
+      origin: 'cli',
+    });
+    const first = await env.jobRunner.enqueueIfNoActiveByRunId({
+      runId: 'run_orphan_retry',
+      sessionId,
+      kind: 'workflow-resume',
+      retry: true,
+    });
+    expect(first.outcome).toBe('enqueued');
+    if (first.outcome !== 'enqueued') throw new Error('unreachable');
+
+    const service = makeService(
+      env,
+      fakeEngine(
+        await env.repositories.getWorkflowInstance('run_orphan_retry')!,
+      ),
+    );
+    const second = await service.retryRun({ runId: 'run_orphan_retry' });
+
+    expect(second.outcome).toBe('enqueued');
+    if (second.outcome !== 'enqueued') throw new Error('unreachable');
+    // 复用同一个 queued 作业，不产生第二条活动作业。
+    expect(second.jobId).toBe(first.job.id);
+    const active = await env.jobs.findActiveByRunId('run_orphan_retry');
+    expect(active?.id).toBe(first.job.id);
   });
 });
 

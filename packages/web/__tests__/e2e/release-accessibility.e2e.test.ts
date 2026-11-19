@@ -41,14 +41,27 @@ function pendingDecision(id: string) {
   };
 }
 
-async function routeApprovalQueue(page: Page, gateList: () => unknown) {
+function pendingEntry(id: string) {
+  // PD-22: gate.pendingAll groups each decision with its runId and recovery.
+  return {
+    runId: RUN_ID,
+    decision: pendingDecision(id),
+    recovery: {
+      runStatus: 'paused',
+      cancelRecovery: null,
+      resumeRecovery: null,
+    },
+  };
+}
+
+async function routeApprovalQueue(page: Page, pendingAll: () => unknown) {
   await page.route('**/api/rpc', async (route: Route) => {
     const body = route.request().postDataJSON() as { path: string };
     if (body.path === 'project.overview') {
       return route.fulfill({ json: { result: projectOverview() } });
     }
-    if (body.path === 'gate.list') {
-      return route.fulfill({ json: { result: gateList() } });
+    if (body.path === 'gate.pendingAll') {
+      return route.fulfill({ json: { result: pendingAll() } });
     }
     return route.continue();
   });
@@ -59,8 +72,7 @@ test('approval notes have unique explicit labels for accessible form queries', a
   server,
 }) => {
   await routeApprovalQueue(page, () => ({
-    gates: [],
-    pendingDecisions: [pendingDecision('decision-one'), pendingDecision('decision-two')],
+    pending: [pendingEntry('decision-one'), pendingEntry('decision-two')],
   }));
   await page.goto(`${server.url}/advanced/approvals`);
 
@@ -94,7 +106,7 @@ test('RPC failures are exposed as an alert and retry recovers the approval queue
     if (body.path === 'project.overview') {
       return route.fulfill({ json: { result: projectOverview() } });
     }
-    if (body.path === 'gate.list') {
+    if (body.path === 'gate.pendingAll') {
       gateAttempts += 1;
       if (gateAttempts === 1) {
         return route.fulfill({
@@ -107,7 +119,7 @@ test('RPC failures are exposed as an alert and retry recovers the approval queue
           },
         });
       }
-      return route.fulfill({ json: { result: { gates: [], pendingDecisions: [] } } });
+      return route.fulfill({ json: { result: { pending: [] } } });
     }
     return route.continue();
   });

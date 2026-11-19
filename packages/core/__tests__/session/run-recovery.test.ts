@@ -60,7 +60,7 @@ describe('R26 durable recovery contract', () => {
         run: f.db.prepare("select status from workflow_instances where id='run'").get() });
     });
     expect(await f.runner.recoverStale()).toBe(1);
-    expect(observed).toContainEqual({ payload: { jobId: job.id, kind: job.kind, status: 'interrupted' }, run: { status: 'interrupted' } });
+    expect(observed).toContainEqual({ payload: expect.objectContaining({ jobId: job.id, kind: job.kind, status: 'interrupted', reason: 'lease-expired', previousOwner: 'dead' }), run: { status: 'interrupted' } });
     expect((await f.sessions.listEventsSince(session.id, 0)).filter(e => e.type === 'job/status')).toHaveLength(1);
     expect(await f.runner.recoverStale()).toBe(0);
     expect(observed).toHaveLength(1);

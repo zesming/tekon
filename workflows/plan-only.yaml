@@ -51,6 +51,8 @@ phases:
             artifactType: review-report
           - type: human
             requiresHumanApproval: true
+            # PD-18：人工驳回后对技术方案节点 rd-technical-plan 发起返工。
+            reworkTargetNodeId: rd-technical-plan
   - id: pmo
     name: PMO
     dependsOn:

@@ -37,6 +37,34 @@ describe('R27 pause before an initial Job is claimed', () => {
     expect(f.roleCount()).toBe(1);
   }, 15000);
 
+  it('a Web resume takes over a queued Job that the CLI admitted', async () => {
+    const f = await setup('goal', false, {
+      admit: 'cli', runner: 'web', claimFilter: { excludeOrigin: 'cli' },
+    });
+    const { runId, jobId } = f.admitted;
+    const origin = () => f.db.prepare('select origin from jobs where id=?').get(jobId);
+    expect(origin()).toEqual({ origin: 'cli' });
+    f.runner.start();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // A Web runner leaves the CLI's queued Job alone.
+    expect((await f.jobs.get(jobId))?.status).toBe('queued');
+
+    await f.service.requestPause({ runId });
+    expect(await f.service.resumeRun({ runId })).toMatchObject({ outcome: 'enqueued', jobId });
+    expect(origin()).toEqual({ origin: 'web' });
+    await waitFor(async () => ['done', 'failed'].includes((await f.jobs.get(jobId))?.status ?? ''));
+    expect((await f.jobs.get(jobId))?.status).toBe('done');
+  }, 15000);
+
+  it('a CLI resume of a queued Web Job keeps the Web runner away from it', async () => {
+    const f = await setup('goal', false, { admit: 'web', runner: 'cli' });
+    const { runId, jobId } = f.admitted;
+    await f.service.requestPause({ runId });
+    expect(await f.service.resumeRun({ runId })).toMatchObject({ outcome: 'enqueued', jobId });
+    expect(f.db.prepare('select origin from jobs where id=?').get(jobId)).toEqual({ origin: 'cli' });
+    await expect(f.jobs.claimNext('web-worker', { excludeOrigin: 'cli' })).resolves.toBeNull();
+  });
+
   it.each(['cancelled', 'passed', 'failed'] as const)('queued resume cannot overwrite a racing %s winner', async status => {
     const f = await setup(); const { runId } = f.admitted;
     await f.service.requestPause({ runId });

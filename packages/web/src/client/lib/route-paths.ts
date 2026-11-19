@@ -2,8 +2,8 @@
 // Route path constants and helpers
 //
 // Phase 3 3d: the human-first Session UI is the default (`/` → sessions). The
-// legacy run-centric Cockpit is preserved under `/advanced/*` (report C2 —
-// dual-track, nothing deleted). Old routes keep working, just prefixed.
+// run-centric console lives under `/advanced/*`; `/advanced` itself redirects
+// to `/advanced/runs` after the legacy Cockpit dashboard was removed (UI-03).
 // ---------------------------------------------------------------------------
 
 const ADV = '/advanced';
@@ -46,7 +46,6 @@ export const routes = {
   config: `${ADV}/config`,
   configRoles: `${ADV}/config/roles`,
   configWorkflows: `${ADV}/config/workflows`,
-  configConstraints: `${ADV}/config/constraints`,
   eval: `${ADV}/eval`,
   evalReadiness: `${ADV}/eval/readiness`,
   evalDemandShape: `${ADV}/eval/demand-shape`,

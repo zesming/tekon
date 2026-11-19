@@ -3,12 +3,17 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parse as parseYaml } from 'yaml';
 
 import {
+  compileRoleCommandPolicy,
+  inspectTemplateSymlink,
   listWorkflowCatalog,
-  loadWorkflowTemplate,
+  loadRole,
   loadWorkflowTemplateFile,
+  readableWorkflowTemplateError,
+  readTekonConfig,
+  resolveDefaultAgent,
+  type CommandPolicy,
 } from '@tekon/core';
 
 export function getVersion(): string {
@@ -62,9 +67,6 @@ export function readStdinLine(): Promise<string> {
   });
 }
 
-export function basenameForProject(repoPath: string) {
-  return repoPath.split(/[\\/]/u).filter(Boolean).at(-1) ?? 'tekon';
-}
 
 export function getRepoRoot() {
   return resolve(
@@ -78,6 +80,27 @@ export function getRepoRoot() {
 
 export function getBuiltInRolesDir() {
   return join(getRepoRoot(), 'roles');
+}
+
+/**
+ * 10a-2：编译节点角色的命令策略（preflight/doctor 与运行期共用同一
+ * loadRole 层级解析，保证项目/用户层角色覆盖在预检与运行期裁决到同一份）。
+ * repoPath 取主仓；角色文件加载失败时抛错，由调用方 fail-closed。
+ */
+export function nodeRoleCommandPolicy(
+  repoPath: string,
+  role: string,
+): CommandPolicy {
+  const loadedRole = loadRole({
+    role,
+    repoPath,
+    builtInRolesDir: getBuiltInRolesDir(),
+  });
+  return compileRoleCommandPolicy({
+    repoPath,
+    role,
+    tools: loadedRole.tools,
+  });
 }
 
 export function getBuiltInWorkflowsDir() {
@@ -102,10 +125,28 @@ export function loadWorkflowByName(
   ensureSafeName(name);
   const catalog = listWorkflowCatalog({ projectWorkflowsDir });
   const entry = catalog.find((item) => item.id === name);
-  if (entry?.path) {
-    return loadWorkflowTemplateFile(entry.path);
+  // catalog 与旧 fallback 扫描同样的内置/项目目录与 .yaml/.yml 后缀，
+  // 未命中即模板不存在：直接给中文指路，不再让 ENOENT 暴露 CLI 安装目录。
+  if (!entry?.path) {
+    throw new Error(
+      `模板 ${name} 不存在。用 tekon workflow list 查看可用模板名称。`,
+    );
   }
-  return loadWorkflowTemplate({ name, workflowsDir: projectWorkflowsDir });
+  // 统一软链信任边界：catalog 条目位于其来源根目录的第一层，dirname 即
+  // 该内置/项目根；越界/断链软链在读取前拒绝（与 list 探针、core 按名加载同规则）。
+  const linkCheck = inspectTemplateSymlink(entry.path, dirname(entry.path));
+  if (!linkCheck.ok) {
+    throw new Error(`模板 ${name} 无法解析：${linkCheck.reason}`);
+  }
+  try {
+    // CD-20：show/preflight/run/doctor 共用此入口，统一把校验器/语法
+    // 异常翻译为可读中文，裸 ZodError 不再能到达顶层错误打印。
+    return loadWorkflowTemplateFile(entry.path);
+  } catch (error) {
+    throw new Error(
+      `模板 ${name} 无法解析：${readableWorkflowTemplateError(error)}`,
+    );
+  }
 }
 
 export function getWorkflowFilePath(
@@ -149,24 +190,10 @@ export function assertCleanBase(
   }
 }
 
-export function readConfigDefaultAgent(
-  repoPath: string,
-): string | undefined {
-  try {
-    const configPath = join(repoPath, '.tekon', 'config.yaml');
-    if (!existsSync(configPath)) return undefined;
-    const raw = readFileSync(configPath, 'utf8');
-    const config = parseYaml(raw) as { defaultAgent?: string } | null;
-    return config?.defaultAgent ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function resolveAgentCommand(
   repoPath: string,
 ): string | undefined {
-  const agent = readConfigDefaultAgent(repoPath) ?? 'codex';
+  const agent = resolveDefaultAgent(readTekonConfig(repoPath));
   // Currently only claude-code supports interactive AI clarification
   // (codex uses different CLI flags not compatible with draft-agent.ts)
   switch (agent) {

@@ -11,10 +11,15 @@ import {
 import { tmpdir } from 'node:os';
 import { delimiter, join, relative } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
+import {
+  createIsolatedBinDir,
+  writeFakeCodex,
+} from './helpers/fake-provider.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 describe('runCli in-process', { timeout: 60_000 }, () => {
   const tempDirs: string[] = [];
@@ -51,7 +56,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     });
     expect(
       readFileSync(join(repoPath, '.tekon', 'config.yaml'), 'utf8'),
-    ).toContain('defaultAgent: codex');
+    ).toMatch(/^defaultAgent: (claude-code|codex)\n$/u);
     expect(existsSync(join(repoPath, '.tekon', 'eval'))).toBe(true);
 
     await expect(
@@ -135,6 +140,8 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       runCli(
         [
           'run',
+          '--template',
+          'standard-delivery',
           '--demand-file',
           shapePath!,
           '--agent',
@@ -200,11 +207,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const gatedOutput = io.takeStdout();
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
     expect(gatedOutput).toContain('人工确认: pending');
+    expect(gatedOutput).toContain('⏸ 运行已暂停，等待人工确认');
 
     await expect(
       runCli(['status', '--run-id', gatedRunId!, '--repo', repoPath], io),
@@ -215,6 +223,8 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       runCli(['review', '--run-id', gatedRunId!, '--repo', repoPath], io),
     ).resolves.toBe(0);
     const gatedReviewOutput = io.takeStdout();
+    expect(gatedReviewOutput).toContain('运行未完成（状态 paused）');
+    expect(gatedReviewOutput).toMatch(/## Nodes\n(- .+\n)*- .+: 未执行/u);
     expect(gatedReviewOutput).toContain('## Gate Failure Triage');
     expect(gatedReviewOutput).toContain(
       'classification=human-approval retry=after-approval',
@@ -281,7 +291,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const rejectableOutput = io.takeStdout();
     const rejectableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       rejectableOutput,
@@ -643,6 +653,225 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     expect(workflowListOutput).toContain('plan-only');
   });
 
+  it('PD-31: resume --gates-only reruns gates without an agent run and re-pauses at the human gate', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    await expect(
+      runCli(
+        [
+          'run',
+          'gates-only 恢复链路',
+          '--template',
+          'bugfix',
+          '--agent',
+          'mock',
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(3);
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    // 驳回人工门禁：节点 blocked，但 agent 已完成（满足 gates-only 前置）。
+    await expect(
+      runCli(
+        ['approval', 'summary', '--run-id', runId!, '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    const summary = io.takeStdout();
+    const decisionId = /decisionId=(decision_[a-zA-Z0-9-]+)/u.exec(
+      summary,
+    )?.[1];
+    expect(decisionId).toBeTruthy();
+    await expect(
+      runCli(
+        [
+          'approval',
+          'reject',
+          '--run-id',
+          runId!,
+          '--decision-id',
+          decisionId!,
+          '--repo',
+          repoPath,
+        ],
+        io,
+      ),
+    ).resolves.toBe(0);
+    io.takeStdout();
+
+    // gates-only 恢复：只重跑门禁，human 门禁再次请求审批 → paused(3)。
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--gates-only', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(3);
+    const resumeOutput = io.takeStdout();
+    expect(resumeOutput).toContain('status=paused');
+
+    // 选项确实持久化到了 resume 作业行。
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const row = db
+        .prepare(
+          "select resume_options from jobs where kind='workflow-resume' order by created_at desc limit 1",
+        )
+        .get() as { resume_options: string | null };
+      expect(row.resume_options).toBe('{"gatesOnly":true}');
+      const pending = db
+        .prepare(
+          "select count(*) as count from human_decisions where run_id=? and status='pending'",
+        )
+        .get(runId!) as { count: number };
+      expect(pending.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('PD-05: resume --rebind adopts the repaired profile command and unblocks the run', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    // bugfix 用到 build/lint/security/test；build 初始必失败（exit 7），
+    // 其余放行，使首跑在 build 门禁 blocked。
+    const profilePath = join(repoPath, '.tekon', 'repo-profile.yaml');
+    const writeProfile = (buildArgs: string[]) =>
+      writeFileSync(
+        profilePath,
+        JSON.stringify({
+          version: 1,
+          commands: {
+            build: { tool: process.execPath, args: buildArgs },
+            lint: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+            security: {
+              tool: process.execPath,
+              args: ['-e', 'process.exit(0)'],
+            },
+            test: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+          },
+        }),
+      );
+    writeProfile(['-e', 'process.exit(7)']);
+
+    await expect(
+      runCli(
+        ['run', 'rebind 恢复链路', '--template', 'bugfix', '--agent', 'mock', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(2);
+    const firstOutput = io.takeStdout();
+    const runId =
+      /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(firstOutput)?.[1] ??
+      /runId=(run_[a-zA-Z0-9-]+)/u.exec(firstOutput)?.[1];
+    expect(runId).toBeTruthy();
+
+    // 修复 profile 后裸 resume：冻结绑定不变，仍 blocked，且 stderr 输出差异提示。
+    writeProfile(['-e', 'process.exit(0)']);
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--repo', repoPath], io),
+    ).resolves.toBe(2);
+    const frozenOutput = io.takeStdout();
+    expect(frozenOutput).toContain('status=blocked');
+    expect(io.takeStderr()).toContain('commands.build');
+
+    // --rebind 采用当前配置后恢复，build 门禁用新命令放行，run 推进到末尾
+    // 人工审批 gate 暂停（paused=3），不再卡在 blocked。
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--rebind', '--repo', repoPath], io),
+    ).resolves.toBe(3);
+    const reboundOutput = io.takeStdout();
+    expect(reboundOutput).toContain('status=paused');
+
+    // 批准末尾人工决策后 run 走到 passed。
+    await expect(
+      runCli(
+        ['resume', '--run-id', runId!, '--approve-human', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(0);
+    expect(io.takeStdout()).toContain('status=passed');
+
+    // 新计划摘要已落库且与旧 digest 不同，审计留下 rebind 轨迹。
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const events = db
+        .prepare(
+          "select type from audit_events where run_id=? and type='run.rebound'",
+        )
+        .all(runId!) as Array<{ type: string }>;
+      expect(events).toHaveLength(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('PD-05: --rebind with no binding change reports no-op instead of a misleading rebind header', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+
+    // build 命令固定失败，且 rebind 前后 profile 完全不变。
+    writeFileSync(
+      join(repoPath, '.tekon', 'repo-profile.yaml'),
+      JSON.stringify({
+        version: 1,
+        commands: {
+          build: { tool: process.execPath, args: ['-e', 'process.exit(7)'] },
+          lint: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+          security: {
+            tool: process.execPath,
+            args: ['-e', 'process.exit(0)'],
+          },
+          test: { tool: process.execPath, args: ['-e', 'process.exit(0)'] },
+        },
+      }),
+    );
+
+    await expect(
+      runCli(
+        ['run', 'rebind 无差异', '--template', 'bugfix', '--agent', 'mock', '--repo', repoPath],
+        io,
+      ),
+    ).resolves.toBe(2);
+    const runId =
+      /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
+    expect(runId).toBeTruthy();
+
+    // 配置未变就 --rebind：抬头明确无差异，不产生 run.rebound 事件，运行仍 blocked。
+    await expect(
+      runCli(['resume', '--run-id', runId!, '--rebind', '--repo', repoPath], io),
+    ).resolves.toBe(2);
+    expect(io.takeStderr()).toContain('无差异');
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      const events = db
+        .prepare(
+          "select count(*) as count from audit_events where run_id=? and type='run.rebound'",
+        )
+        .get(runId!) as { count: number };
+      expect(events.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('infers current repo, latest draft shape, latest run, and pending decision by default', async () => {
     const repoPath = createFixtureRepo(tempDirs);
     const io = createMemoryIo();
@@ -681,7 +910,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
       await expect(runCli(['eval', 'demand-shape'], io)).resolves.toBe(0);
       expect(io.takeStdout()).toContain('ready=true');
 
-      await expect(runCli(['run', '--agent', 'mock'], io)).resolves.toBe(0);
+      await expect(
+        runCli(
+          ['run', '--template', 'standard-delivery', '--agent', 'mock'],
+          io,
+        ),
+      ).resolves.toBe(0);
       const standardOutput = io.takeStdout();
       const standardRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         standardOutput,
@@ -713,7 +947,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
           ],
           io,
         ),
-      ).resolves.toBe(0);
+      ).resolves.toBe(3);
       const gatedOutput = io.takeStdout();
       const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         gatedOutput,
@@ -762,7 +996,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
           ],
           io,
         ),
-      ).resolves.toBe(0);
+      ).resolves.toBe(3);
       const resumableOutput = io.takeStdout();
       const resumableRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
         resumableOutput,
@@ -934,7 +1168,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(
       io.takeStdout(),
     )?.[1];
@@ -984,7 +1218,15 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
 
       await expect(
         runCli(
-          ['run', '--demand-file', cwdRelativeShapePath, '--agent', 'mock'],
+          [
+            'run',
+            '--template',
+            'standard-delivery',
+            '--demand-file',
+            cwdRelativeShapePath,
+            '--agent',
+            'mock',
+          ],
           io,
         ),
       ).resolves.toBe(0);
@@ -1075,6 +1317,58 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     expect(output).toContain('suggestedCommand=npm run compile');
   });
 
+  it('does not print missing-command fix hints for inert commandRefs on semantic gates', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-inert-'));
+    tempDirs.push(repoPath);
+    writeFileSync(
+      join(repoPath, 'package.json'),
+      JSON.stringify({ scripts: { compile: 'tsc -p tsconfig.json' } }),
+      'utf8',
+    );
+    mkdirSync(join(repoPath, '.tekon', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(repoPath, '.tekon', 'workflows', 'inert-ref.yaml'),
+      JSON.stringify({
+        id: 'inert-ref',
+        governance: 'none',
+        phases: [
+          {
+            id: 'dev',
+            nodes: [
+              {
+                id: 'n1',
+                role: 'goal',
+                gates: [
+                  {
+                    type: 'human',
+                    commandRef: 'build',
+                    requiresHumanApproval: true,
+                  },
+                  { type: 'build', commandRef: 'build' },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    );
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['workflow', 'preflight', 'inert-ref', '--repo', repoPath], io),
+    ).resolves.toBe(0);
+
+    const lines = io.takeStdout().split('\n').filter(Boolean);
+    const humanLine = lines.find((line) => line.includes('gate=human '));
+    const buildLine = lines.find((line) => line.includes('gate=build '));
+    expect(humanLine).toContain('status=not-command-gate');
+    expect(humanLine).not.toContain('hint=');
+    expect(humanLine).not.toContain('suggestedCommand=');
+    expect(buildLine).toContain('status=missing');
+    expect(buildLine).toContain('hint=add commands.build');
+  });
+
   it('prints explicit notApplicable repo profile commands in workflow preflight', async () => {
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-preflight-na-'));
     tempDirs.push(repoPath);
@@ -1142,7 +1436,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
@@ -1260,7 +1554,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
@@ -1287,7 +1581,7 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     const repoPath = createFixtureRepo(tempDirs);
     const binDir = mkdtempSync(join(tmpdir(), 'tekon-cli-codex-bin-'));
     tempDirs.push(binDir);
-    writeFakeCodex(binDir);
+    writeFakeCodex(binDir, { expectProfile: 'internal' });
     const originalPath = process.env.PATH;
     process.env.PATH = `${binDir}${delimiter}${originalPath ?? ''}`;
     const io = createMemoryIo();
@@ -1295,6 +1589,12 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     try {
       await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
       io.takeStdout();
+      // Codex no longer defaults to the internal profile; the repo opts in.
+      const configPath = join(repoPath, '.tekon', 'config.yaml');
+      writeFileSync(
+        configPath,
+        `${readFileSync(configPath, 'utf8')}providers:\n  codex:\n    profile: internal\n`,
+      );
 
       await expect(
         runCli(
@@ -1448,6 +1748,36 @@ describe('runCli in-process', { timeout: 60_000 }, () => {
     }
   }, 30_000);
 
+  it('refuses to run when the repo config has a misspelled field', async () => {
+    const repoPath = createFixtureRepo(tempDirs);
+    const io = createMemoryIo();
+    await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
+    io.takeStdout();
+    writeFileSync(
+      join(repoPath, '.tekon', 'config.yaml'),
+      'defaultagent: codex\n',
+    );
+    // Only placeholder providers on PATH: even if the config were ignored,
+    // no real provider could start.
+    const binDir = createIsolatedBinDir();
+    tempDirs.push(binDir);
+    for (const name of ['claude', 'codex']) {
+      writeFileSync(join(binDir, name), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    }
+    vi.stubEnv('PATH', binDir);
+    try {
+      await expect(
+        runCli(
+          ['run', '拼错配置', '--template', 'bugfix', '--repo', repoPath],
+          io,
+        ),
+      ).resolves.toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(io.takeStderr()).toMatch(/config\.yaml is invalid.*defaultagent/u);
+  });
+
   // 4c: --goal and --template are mutually exclusive (goal ignores templates).
   it('rejects --goal combined with --template', async () => {
     const repoPath = createFixtureRepo(tempDirs);
@@ -1523,107 +1853,6 @@ exit 1
   chmodSync(ghPath, 0o755);
 }
 
-function writeFakeCodex(binDir: string): void {
-  const codexPath = join(binDir, 'codex');
-  writeFileSync(
-    codexPath,
-    `#!/usr/bin/env node
-const { writeFileSync, mkdirSync } = require('node:fs');
-const { join } = require('node:path');
-const args = process.argv.slice(2);
-const execIndex = args.indexOf('exec');
-if (execIndex === -1) {
-  console.error('expected codex exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--profile') === -1 || args.indexOf('--profile') > execIndex || args[args.indexOf('--profile') + 1] !== 'internal') {
-  console.error('expected internal profile before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--ask-for-approval') === -1 || args.indexOf('--ask-for-approval') > execIndex) {
-  console.error('expected approval before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--sandbox') === -1 || args.indexOf('--sandbox') > execIndex) {
-  console.error('expected sandbox before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.indexOf('--add-dir') === -1 || args.indexOf('--add-dir') > execIndex || args[args.indexOf('--add-dir') + 1] !== process.env.TEKON_OUTPUT_DIR) {
-  console.error('expected controlled artifact output add-dir before exec, got: ' + args.join(' '));
-  process.exit(2);
-}
-if (args.includes('danger-full-access') || args.includes('--dangerously-bypass-approvals-and-sandbox')) {
-  console.error('unsafe codex args');
-  process.exit(3);
-}
-let prompt = '';
-process.stdin.on('data', (chunk) => {
-  prompt += chunk;
-});
-process.stdin.on('end', () => {
-  const outputDir = process.env.TEKON_OUTPUT_DIR;
-  const manifestPath = process.env.TEKON_ARTIFACT_MANIFEST;
-  if (!outputDir || !manifestPath) {
-    console.error('missing Tekon artifact environment');
-    process.exit(4);
-  }
-  mkdirSync(outputDir, { recursive: true });
-  const types = Array.from(new Set((prompt.match(/Required artifact types: ([^\\.]+)/) || ['', ''])[1].split(',').map((item) => item.trim()).filter(Boolean)));
-  const deliveryRef = (prompt.match(/exact tested delivery ref: ([^\\.\\n]+)/) || ['', 'codex-fixture-ref'])[1];
-  const artifacts = types.map((type) => {
-    const filename = type + '.json';
-    const base = {
-      title: type + ' artifact',
-      body: 'Codex fixture artifact for ' + type + '.',
-      summary: 'Codex fixture artifact for ' + type + '.'
-    };
-    let payload = base;
-    if (type === 'demand-card' || type === 'prd') {
-      payload = {
-        ...base,
-        acceptanceCriteria: [{
-          id: 'AC-1',
-          description: 'The Codex provider run stores a resumable provider snapshot.',
-          verification: 'Inspect run_provider_configs for provider=codex.'
-        }]
-      };
-    } else if (type === 'test-report' || type === 'review-report' || type === 'delivery-package') {
-      payload = {
-        ...base,
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture produced schema-valid evidence for ' + type + '.'
-        }]
-      };
-    } else if (type === 'qa-release-signoff') {
-      payload = {
-        ...base,
-        targetRef: deliveryRef,
-        validatedRef: deliveryRef,
-        overallStatus: 'passed',
-        criteriaEvidence: [{
-          criterionId: 'AC-1',
-          status: 'passed',
-          evidence: 'Codex fixture QA signoff validates ' + deliveryRef + '.',
-          outputPaths: [join(outputDir, filename)]
-        }]
-      };
-    } else if (type === 'security-report') {
-      payload = { ...base, securityFindings: [] };
-    }
-    writeFileSync(join(outputDir, filename), JSON.stringify(payload));
-    return { type, path: filename, summary: 'Codex fixture artifact for ' + type + '.' };
-  });
-  writeFileSync(manifestPath, JSON.stringify({ artifacts }));
-  console.log('fake codex completed');
-});
-`,
-    'utf8',
-  );
-  chmodSync(codexPath, 0o755);
-}
-
 function createFixtureRepo(tempDirs: string[]) {
   const repoPath = mkdtempSync(join(tmpdir(), 'tekon-cli-unit-'));
   tempDirs.push(repoPath);
@@ -1653,5 +1882,6 @@ function createFixtureRepo(tempDirs: string[]) {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

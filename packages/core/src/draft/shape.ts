@@ -21,6 +21,7 @@ export const controlledWorkflowTemplateIdSchema = z.enum([
   'test-improvement',
   'docs-update',
   'plan-only',
+  'lightweight-delivery',
 ]);
 export type ControlledWorkflowTemplateId = z.infer<
   typeof controlledWorkflowTemplateIdSchema

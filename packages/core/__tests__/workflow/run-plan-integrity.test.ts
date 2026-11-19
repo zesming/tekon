@@ -11,10 +11,13 @@ function emptyRepoFacts(template: WorkflowTemplate): BoundRepoCommand[] {
   return refs.map(commandRef => ({ commandRef, status: 'missing', source: { kind: 'empty-default', resolverVersion: 1 } }));
 }
 function projectRunPlan(template: WorkflowTemplate, context: RunPlanContext = {}) {
-  return projectRunPlanV3(template, context, emptyRepoFacts(template));
+  // Pin the agent explicitly: these cases verify digest/snapshot binding, not
+  // the configured-default policy (covered in run-plan.test.ts and the Web
+  // PD-24 tests). It must match buildPreparedRun's agentProvider below.
+  return projectRunPlanV3(template, { agent: 'codex', ...context }, emptyRepoFacts(template));
 }
 function buildPreparedRun(input: Parameters<typeof prepareWithCapturedFacts>[0], options: Parameters<typeof prepareWithCapturedFacts>[1] = {}) {
-  return prepareWithCapturedFacts(input, { repoCommands: emptyRepoFacts(input.workflowSpec), ...options });
+  return prepareWithCapturedFacts(input, { agentProvider: 'codex', repoCommands: emptyRepoFacts(input.workflowSpec), ...options });
 }
 
 describe('RunPlan v3 的完整确认绑定', () => {
@@ -40,7 +43,6 @@ describe('RunPlan v3 的完整确认绑定', () => {
     ['name', t => { t.name += '-v2'; }],
     ['version', t => { t.version++; }],
     ['retryPolicy', t => { t.retryPolicy.backoffMs++; }],
-    ['phase.parallel', t => { t.phases[0].parallel = !t.phases[0].parallel; }],
     ['phase.dependsOn', t => { t.phases[1].dependsOn = []; }],
     ['node.role', t => { t.phases[0].nodes[0].role = 'qa'; }],
     ['node.dependsOn', t => { t.phases[1].nodes[0].dependsOn = [t.phases[0].nodes[0].id]; }],

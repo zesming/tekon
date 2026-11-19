@@ -23,12 +23,6 @@ export function ConfigPage() {
         >
           Workflows
         </NavLink>
-        <NavLink
-          to="constraints"
-          className={({ isActive }) => `tab${isActive ? ' active' : ''}`}
-        >
-          Constraints
-        </NavLink>
       </div>
 
       <Outlet />

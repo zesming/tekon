@@ -5,12 +5,32 @@ import { COMMAND_GATE_TYPES } from '../gate/registry.js';
 
 export type WorkReadinessSeverity = 'required' | 'recommended';
 
+/**
+ * Tri-state outcome. `not-started` applies to delivery-stage checks whose
+ * evidence does not exist yet: a local task run must not look failed just
+ * because it never reached PR/CI delivery. QA sign-off and security scans are
+ * task results (user decision 2026-11-11), so they stay pass/fail.
+ */
+export type WorkReadinessState = 'passed' | 'failed' | 'not-started';
+
 export interface WorkReadinessCheck {
   id: string;
   severity: WorkReadinessSeverity;
   passed: boolean;
+  state: WorkReadinessState;
   evidence: string;
 }
+
+/**
+ * Delivery-stage checks that read as "not started" until their first evidence
+ * exists. Everything else is a binary task result: not passed means failed.
+ */
+const DELIVERY_STAGE_CHECKS = new Set([
+  'delivery-package-present',
+  'pr-prepared',
+  'pr-created',
+  'remote-ci-passed',
+]);
 
 export interface WorkReadinessEvaluation {
   runId: string;
@@ -61,8 +81,28 @@ export async function evaluateWorkReadiness(input: {
   const pendingHuman = decisions.filter(
     (decision) => decision.status === 'pending',
   );
+  const hasDeliveryPackage = artifacts.some(
+    (artifact) => artifact.type === 'delivery-package',
+  );
+  const hasPrPreparedEvent = events.some(
+    (event) => event.type === 'delivery.pr-prepared',
+  );
+  const hasPrRecord = deliveryPr !== null && deliveryPr !== undefined;
+  const hasCreatedPr =
+    hasPrRecord && deliveryPr.status === 'created' && Boolean(deliveryPr.prUrl);
+  const hasCiCheck = deliveryEvidence.ciStatuses.length > 0;
 
-  const checks: WorkReadinessCheck[] = [
+  // Whether a delivery-stage check has ever produced evidence. False means the
+  // workflow simply never reached that stage, so the check is "not started"
+  // rather than failed (UI-05).
+  const deliveryEvidenceExists: Record<string, boolean> = {
+    'delivery-package-present': hasDeliveryPackage,
+    'pr-prepared': hasPrPreparedEvent,
+    'pr-created': hasPrRecord,
+    'remote-ci-passed': hasCiCheck,
+  };
+
+  const binaryChecks: Array<Omit<WorkReadinessCheck, 'state'>> = [
     {
       id: 'workflow-passed',
       severity: 'required',
@@ -158,7 +198,7 @@ export async function evaluateWorkReadiness(input: {
     {
       id: 'pr-created',
       severity: 'required',
-      passed: deliveryPr?.status === 'created' && Boolean(deliveryPr.prUrl),
+      passed: hasCreatedPr,
       evidence:
         deliveryPr?.status === 'created' && deliveryPr.prUrl
           ? `PR created: ${deliveryPr.prUrl}`
@@ -181,6 +221,16 @@ export async function evaluateWorkReadiness(input: {
           : 'remote CI status not checked',
     },
   ];
+  const checks: WorkReadinessCheck[] = binaryChecks.map((check) => {
+    if (check.passed) return { ...check, state: 'passed' as const };
+    if (
+      DELIVERY_STAGE_CHECKS.has(check.id) &&
+      !deliveryEvidenceExists[check.id]
+    ) {
+      return { ...check, state: 'not-started' as const };
+    }
+    return { ...check, state: 'failed' as const };
+  });
   const passed = checks.filter((check) => check.passed).length;
   const requiredChecks = checks.filter(
     (check) => check.severity === 'required',

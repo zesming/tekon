@@ -5,7 +5,8 @@ import type { ArtifactType, WorkflowInstance } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import type { AuditLogger } from '../audit/logger.js';
 import {
-  formatAgentRunDiagnostic,
+  sanitizeAgentRunDiagnostic,
+  type AgentRunDiagnostic,
   type AgentRunInput,
   type AgentRunResult,
 } from '../runtime/agent-adapter.js';
@@ -22,6 +23,9 @@ import {
 } from './workflow-runtime.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { LeaseService } from './lease-service.js';
+import { resolveRoleProviderOverrides } from '../role/provider-overrides.js';
+import { compileRoleCommandPolicy } from '../role/tool-policy.js';
+import { mergeRoleAndGatePolicy } from '../role/policy-merge.js';
 
 export interface HelpersDeps {
   repoPath: string;
@@ -82,6 +86,11 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
     }
     const lease = await leaseService.activeExecutionLease(runId, node.id);
     if (!lease) {
+      return;
+    }
+    // CD-09 SF-4：合成租约（in-place/非 git none，worktreePath 直指 repoPath）
+    // 没有 git HEAD，QA 校验 ref 是 worktree 交付概念，非 git 运行直接跳过。
+    if (lease.worktreePath === lease.repoPath) {
       return;
     }
     const head = await worktreeManager.getLeaseHead(lease.id);
@@ -149,6 +158,10 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
       worktreeManager &&
       node.outputs?.some((output) => output.type === 'qa-release-signoff')
     ) {
+      // CD-09 SF-4：合成租约无 git HEAD，非 git 运行不产生交付 ref。
+      if (lease.worktreePath === lease.repoPath) {
+        return undefined;
+      }
       return `sha:${await worktreeManager.getLeaseHead(lease.id)}`;
     }
     return undefined;
@@ -157,6 +170,7 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
   async function agentInputForLease(
     runId: string,
     node: Pick<ExecutableNode, 'id' | 'role' | 'phaseId'> & {
+      workspace?: ExecutableNode['workspace'];
       inputs?: WorkflowArtifactInputRef[];
       outputs?: WorkflowArtifactOutputRef[];
       gates?: WorkflowGateConfig[];
@@ -197,19 +211,86 @@ export function createWorkflowHelpers(deps: HelpersDeps): WorkflowHelpers {
           ].join('\n')
         : prompt;
 
+    // PD-10：角色 agent.yaml 的 model/effort 逐节点注入适配器；driver 声明
+    // 与 run 级 provider 不符时在节点启动前显式失败（mock 为测试适配器，
+    // 不参与 driver 裁决，也忽略覆盖）。
+    const loadedRole = promptBuilder.loadNodeRole(node);
+
+    // 10a-2：编译节点角色命令策略（角色 tools.yaml 运行时读盘、不进冻结
+    // 计划，与 system.md/provider-overrides 同语义）。供适配器合并与审计复用。
+    const roleCommandPolicy = compileRoleCommandPolicy({
+      repoPath,
+      role: node.role,
+      tools: loadedRole.tools,
+    });
+    // 持久化角色工具策略的生效证据（本特性唯一可追溯记录，参照
+    // role.provider-overrides）。只记摘要/计数，不回显完整命令参数。
+    await audit.append({
+      runId,
+      type: 'role.tool-policy.applied',
+      payload: {
+        nodeId: node.id,
+        role: node.role,
+        source: loadedRole.source,
+        network: roleCommandPolicy.network,
+        allowCount: roleCommandPolicy.allow.length,
+        denyCount: roleCommandPolicy.deny.length,
+        approvalCount: roleCommandPolicy.requiresHumanApproval.length,
+      },
+    });
+
+    const providerOverrides = resolveRoleProviderOverrides(
+      runId,
+      node.role,
+      loadedRole,
+      await repositories.getRunProviderConfig(runId),
+    );
+    if (providerOverrides) {
+      // 记录经解析与安全校验、交付给适配器的角色覆盖（角色文件运行时读盘，
+      // 不进冻结计划）。适配器若无法 honor（如 claude 的 effort）会在构建
+      // 命令时拒绝并落 node.interrupted，该事件只证明"声明已解析并送达"，
+      // 是否真正生效以适配器执行结果为准。
+      await audit.append({
+        runId,
+        type: 'role.provider-overrides',
+        payload: {
+          nodeId: node.id,
+          role: node.role,
+          ...(loadedRole.agent.driver !== undefined
+            ? { driver: loadedRole.agent.driver }
+            : {}),
+          ...(providerOverrides.model !== undefined
+            ? { model: providerOverrides.model }
+            : {}),
+          ...(providerOverrides.effort !== undefined
+            ? { effort: providerOverrides.effort }
+            : {}),
+        },
+      });
+    }
+
     return {
       roleConfig: { role: node.role },
       prompt: promptBuilder.appendArtifactProtocol(promptWithDeliveryRef, {
         nodeId: node.id,
         outputDir,
         role: node.role,
+        workspace: node.workspace,
         nodeInputs: node.inputs ?? [],
         priorNodes: priorNodeContext,
         requiredArtifactTypes,
       }),
       worktreeLease: lease,
       outputDir,
-      commandPolicy: defaultCommandPolicy(lease.worktreePath),
+      // 10a-2：适配器通道在现有必填 commandPolicy 上合并节点角色策略（不可变，
+      // 不 mutate run 级 config 单例）。基线 defaultCommandPolicy 与角色
+      // deny/审批/network/cwd 按候选 A 合并；角色空 allow 与基线并集不塌缩。
+      commandPolicy: mergeRoleAndGatePolicy(
+        roleCommandPolicy,
+        defaultCommandPolicy(lease.worktreePath),
+        lease.worktreePath,
+      ),
+      ...(providerOverrides ? { providerOverrides } : {}),
       runContext: {
         runId,
         nodeId: effectiveNodeId,
@@ -266,17 +347,55 @@ export function requiredArtifactTypesForNode(input: {
   return [...required];
 }
 
+/** An agent run that did not succeed, with the reason a user can act on. */
+export class AgentRunFailedError extends Error {
+  constructor(
+    message: string,
+    readonly diagnostic: AgentRunDiagnostic | undefined,
+  ) {
+    super(message);
+    this.name = 'AgentRunFailedError';
+  }
+}
+
 export function assertSuccessfulAgentRun(result: AgentRunResult): void {
+  const diagnostic = sanitizeAgentRunDiagnostic(result.diagnostic);
   if (result.timedOut) {
-    throw new Error(`agent timed out: provider=${result.provider}`);
+    throw new AgentRunFailedError(
+      `agent timed out: provider=${result.provider}`,
+      diagnostic,
+    );
   }
 
   if (result.exitCode !== 0) {
-    const diagnostic = formatAgentRunDiagnostic(result.diagnostic);
-    throw new Error(
+    throw new AgentRunFailedError(
       `agent failed: provider=${result.provider} exitCode=${String(result.exitCode)}${
-        diagnostic ? ` reason=${diagnostic}` : ''
+        diagnostic ? ` reason=${diagnostic.message}` : ''
       }`,
+      diagnostic,
     );
   }
+}
+
+const NON_RETRYABLE_AGENT_FAILURES = new Set(['not-installed', 'not-authenticated', 'invalid-config']);
+
+/** A failure that needs a fix (install, login, config) before any retry. */
+export function isNonRetryableAgentFailure(error: unknown): boolean {
+  return (
+    error instanceof AgentRunFailedError &&
+    error.diagnostic !== undefined &&
+    NON_RETRYABLE_AGENT_FAILURES.has(error.diagnostic.code)
+  );
+}
+
+/**
+ * Audit payload fragment for a failed node: the classified reason and next
+ * step, when the failure came from an agent run.
+ */
+export function agentFailureAuditPayload(
+  error: unknown,
+): { diagnostic?: Pick<AgentRunDiagnostic, 'code' | 'message' | 'hint'> } {
+  if (!(error instanceof AgentRunFailedError) || !error.diagnostic) return {};
+  const { code, message, hint } = error.diagnostic;
+  return { diagnostic: { code, message, ...(hint ? { hint } : {}) } };
 }

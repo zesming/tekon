@@ -6,6 +6,7 @@ import {
   assertWorkflowTransition,
   canTransitionWorkflowInstance,
   canWorkflowTransition,
+  isTerminalWorkflowStatus,
   transitionWorkflowNode,
   writeWorkflowTerminal,
 } from '../../src/workflow/state-machine.js';
@@ -101,10 +102,9 @@ describe('workflow state machine', () => {
     });
   });
 
-  it('all terminal states have zero outgoing transitions', () => {
+  it('skipped has zero outgoing transitions while failed only reopens via retry', () => {
     // Note: 'passed' is no longer terminal — it can transition to
     // 'needs-revision' when an independent review finds changes-requested.
-    const terminalStates = ['skipped', 'failed'] as const;
     // Verify 'passed' can only go to 'needs-revision'
     expect(canWorkflowTransition('passed', 'needs-revision')).toBe(true);
     const nonRevisionTargets = [
@@ -128,10 +128,16 @@ describe('workflow state machine', () => {
       'failed',
     ] as const;
 
-    for (const terminal of terminalStates) {
-      for (const target of allStates) {
-        expect(canWorkflowTransition(terminal, target)).toBe(false);
-      }
+    // skipped 是真正的零出边终态。
+    for (const target of allStates) {
+      expect(canWorkflowTransition('skipped', target)).toBe(false);
+    }
+
+    // PD-17 步 3：failed 节点只有一条显式出口——retry 回到 running，
+    // 其余目标仍全部非法。
+    expect(canWorkflowTransition('failed', 'running')).toBe(true);
+    for (const target of allStates.filter((s) => s !== 'running')) {
+      expect(canWorkflowTransition('failed', target)).toBe(false);
     }
   });
 
@@ -212,7 +218,7 @@ describe('workflow instance state machine', () => {
     expect(canTransitionWorkflowInstance('running', 'pending')).toBe(false);
   });
 
-  it('treats passed/failed/cancelled as terminal with no outgoing transitions', () => {
+  it('keeps passed/cancelled terminal but lets failed reopen to running via retry', () => {
     const all: WorkflowStatus[] = [
       'pending',
       'running',
@@ -223,7 +229,7 @@ describe('workflow instance state machine', () => {
       'failed',
       'cancelled',
     ];
-    for (const terminal of ['passed', 'failed', 'cancelled'] as const) {
+    for (const terminal of ['passed', 'cancelled'] as const) {
       expect(LEGAL_WORKFLOW_TRANSITIONS[terminal]).toEqual([]);
       for (const target of all) {
         expect(
@@ -231,6 +237,15 @@ describe('workflow instance state machine', () => {
         ).toBe(false);
       }
     }
+    // PD-17 步 3：failed 运行的唯一出口是 retry → running。
+    expect(LEGAL_WORKFLOW_TRANSITIONS.failed).toEqual(['running']);
+    expect(canTransitionWorkflowInstance('failed', 'running')).toBe(true);
+    for (const target of all.filter((s) => s !== 'running')) {
+      expect(canTransitionWorkflowInstance('failed', target)).toBe(false);
+    }
+    // isTerminalWorkflowStatus 仍把 failed 视作终态：裸 resume 依旧拒绝，
+    // 只有显式 retry 能离开。
+    expect(isTerminalWorkflowStatus('failed')).toBe(true);
   });
 
   it('throws a readable error for illegal run-level transitions', () => {

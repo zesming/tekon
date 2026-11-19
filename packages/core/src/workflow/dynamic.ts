@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +21,7 @@ import {
   roleSchema,
   type ArtifactType,
 } from '../types/domain.js';
-import { parseWorkflowTemplate } from './template.js';
+import { formatZodIssues, parseWorkflowTemplate } from './template.js';
 
 export const workflowSpecDraftGateSchema = z
   .object({
@@ -67,7 +67,6 @@ export const workflowSpecDraftPhaseSchema = z
     id: z.string().min(1),
     name: z.string().min(1),
     dependsOn: z.array(z.string().min(1)).default([]),
-    parallel: z.boolean().default(false),
     nodes: z.array(workflowSpecDraftNodeSchema).min(1),
   })
   .strict();
@@ -119,7 +118,6 @@ interface DynamicConstraintPhase {
   name: string;
   nodes: DynamicConstraintNode[];
   dependsOn?: string[];
-  parallel?: boolean;
   source?: string;
   explanation?: string;
 }
@@ -142,9 +140,22 @@ export async function generateDynamicWorkflow(
   const runId = options.runId ?? 'dynamic-preview';
   const repoPath = options.repoPath ?? process.cwd();
   const dataDir = options.dataDir ?? join(repoPath, '.tekon');
+  // A directory created here holds only this draft; remove it either way.
+  const ownsOutputDir = !options.outputDir;
   const outputDir =
     options.outputDir ?? mkDynamicOutputDir(`${runId}-pm-workflow-`);
+  try {
+    return await draftDynamicWorkflow(options, { runId, repoPath, dataDir, outputDir });
+  } finally {
+    if (ownsOutputDir) rmSync(outputDir, { recursive: true, force: true });
+  }
+}
 
+async function draftDynamicWorkflow(
+  options: GenerateDynamicWorkflowOptions,
+  paths: { runId: string; repoPath: string; dataDir: string; outputDir: string },
+): Promise<DynamicWorkflowPreview> {
+  const { runId, repoPath, dataDir, outputDir } = paths;
   mkdirSync(outputDir, { recursive: true });
 
   const result = await options.adapter.runAgent(
@@ -320,7 +331,7 @@ function buildPmPrompt(demandText: string): string {
   return [
     'You are the Tekon PM Agent. Produce only one WorkflowSpecDraft JSON object.',
     'Required top-level fields: demandSummary, phases, riskTags, assumptions, openQuestions.',
-    'Each phase must include id, name, nodes, and optional dependsOn/parallel.',
+    'Each phase must include id, name, nodes, and optional dependsOn.',
     'Each node must include id, role, artifactOutputs, and optional dependsOn/gates.',
     'Allowed roles: pm, rd, qa, reviewer, pmo.',
     'Allowed artifactOutputs: demand-card, prd, tech-design, code-changes, test-report, review-report, security-report, rollback-plan, delivery-package.',
@@ -339,7 +350,6 @@ function workflowFromDraft(
       id: phase.id,
       name: phase.name,
       dependsOn: phase.dependsOn,
-      parallel: phase.parallel,
       source: 'dynamic',
       nodes: phase.nodes.map((node) => ({
         id: node.id,
@@ -379,7 +389,6 @@ function toWorkflowTemplateObject(
     phases: workflow.phases.map((phase) => ({
       id: phase.id,
       name: phase.name,
-      ...(phase.parallel ? { parallel: phase.parallel } : {}),
       ...(phase.dependsOn?.length ? { dependsOn: phase.dependsOn } : {}),
       nodes: phase.nodes.map((node) => ({
         id: node.id,
@@ -428,10 +437,4 @@ function assertInsideWorkflowsDir(workflowsDir: string, targetPath: string) {
 
 function mkDynamicOutputDir(prefix: string) {
   return mkdtempSync(join(tmpdir(), `tekon-${prefix}`));
-}
-
-function formatZodIssues(issues: z.ZodIssue[]) {
-  return issues
-    .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
-    .join('; ');
 }

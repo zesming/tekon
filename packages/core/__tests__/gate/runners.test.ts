@@ -98,6 +98,42 @@ describe('command gate runner', () => {
     });
   });
 
+  it('classifies a pre-spawn cancellation as cancelled, not as a policy rejection', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'tekon-gate-cancelled-'));
+    tempDirs.push(cwd);
+    const gateway: CommandGateway = {
+      async run() {
+        return {
+          status: 'rejected',
+          reason: 'command cancelled before spawn',
+          cancelled: true,
+        };
+      },
+    };
+
+    const result = await runCommandGate({
+      gateway,
+      runId: 'run_1',
+      nodeId: 'node_1',
+      gateType: 'build',
+      cwd,
+      command: { tool: 'npm', args: ['run', 'build'] },
+      policy: {
+        allow: [],
+        deny: [],
+        cwdScope: [cwd],
+        network: 'disabled',
+      },
+      outputDir: join(cwd, '.tekon', 'runs', 'run_1', 'gates'),
+    });
+
+    // cancelled 不在 resume fail-fast 白名单内：取消不得被误判为确定性策略拒绝。
+    expect(result).toMatchObject({
+      status: 'failed',
+      failureClassification: 'cancelled',
+    });
+  });
+
   it('runs the built-in security scan without an external command', async () => {
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-security-pass-'));
     tempDirs.push(cwd);

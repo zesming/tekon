@@ -2,13 +2,28 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { ArtifactType, GateConfig, Node, Role } from '../types/domain.js';
+import type {
+  CommandInvocation,
+  GateConfig,
+  Node,
+  NodeWorkspace,
+  Role,
+} from '../types/domain.js';
 import type { CommandPolicy, WorktreeLease } from '../types/config.js';
 import type {
   WorkflowArtifactInputRef,
   WorkflowArtifactOutputRef,
   WorkflowGateConfig,
 } from './template.js';
+
+/**
+ * PD-31：resume 的执行选项，由 engine.resumeRun 透传到 node-executor。
+ * gatesOnly 表示显式只重跑门禁、不重跑 agent，仅对已有完成 agent 记录的
+ * 节点合法。
+ */
+export interface ResumeExecutionOptions {
+  gatesOnly?: boolean;
+}
 
 /**
  * An executable node is the runtime representation of a workflow template node,
@@ -18,6 +33,9 @@ export interface ExecutableNode {
   id: string;
   role: Role;
   phaseId?: string;
+  prompt?: string;
+  // CD-09：决定租约形态（worktree/in-place/none），随执行计划落库。
+  workspace: NodeWorkspace;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];
@@ -95,9 +113,7 @@ export function scopedId(runId: string, id: string): string {
   return `${runId}_${id}`;
 }
 
-export function gatesWithStableKeys<
-  T extends GateConfig | WorkflowGateConfig,
->(
+export function gatesWithStableKeys<T extends GateConfig | WorkflowGateConfig>(
   gates: T[],
   nodeId = 'workflow node',
 ): Array<T & { gateKey: string }> {
@@ -170,6 +186,37 @@ export function defaultCommandPolicy(repoPath: string): CommandPolicy {
   };
 }
 
+/**
+ * PD-04：门禁命令策略。基线 allow 之外，把该门禁将要执行的用户手写命令
+ * （模板内联 command 或 repo-profile 绑定后物化的 command）加入授权。
+ * 危险删除、force push、网络、shell 元字符等固定拒绝规则仍在 Gateway
+ * 裁决层先行生效，授权不会绕过这些规则。
+ */
+export function gateCommandPolicy(
+  repoPath: string,
+  gate: Pick<WorkflowGateConfig, 'command'>,
+): CommandPolicy {
+  const baseline = defaultCommandPolicy(repoPath);
+  const authorized = gate.command ? [gate.command] : [];
+  return {
+    ...baseline,
+    allow: [...baseline.allow, ...authorized],
+  };
+}
+
+/**
+ * PD-04：preflight 与运行期共用的有效门禁解析。运行期 gate-runner 先经
+ * resolveGateCommand 把 commandRef 物化为 command；CLI preflight 没有
+ * commandRef 物化步骤，必须用同一规则把已解析命令挂回门禁，再评估策略，
+ * 否则会出现"预检 rejected、运行放行"的双标。
+ */
+export function effectiveGateForCommand(
+  gate: WorkflowGateConfig,
+  command: CommandInvocation | null | undefined,
+): WorkflowGateConfig {
+  return command ? { ...gate, command } : gate;
+}
+
 export function defaultBuiltInRolesDir(): string {
   const fromModule = resolve(
     dirname(fileURLToPath(import.meta.url)),
@@ -183,28 +230,6 @@ export function defaultBuiltInRolesDir(): string {
     return fromModule;
   }
   return resolve(process.cwd(), 'roles');
-}
-
-/**
- * Heuristic for finding the review target when no explicit targetNodeId is
- * available: pick the last (most recent) upstream node whose status is
- * 'passed'. Returns null when no such node exists or when the review node
- * itself is not found in the list.
- */
-export function resolveReviewTargetNodeByHeuristic(
-  nodes: ReadonlyArray<{ id: string; status: string }>,
-  reviewNodeId: string,
-): string | null {
-  const reviewNode = nodes.find((n) => n.id === reviewNodeId);
-  if (!reviewNode) return null;
-
-  const upstreamNodes = nodes.filter(
-    (n) => n.id !== reviewNodeId && n.status === 'passed',
-  );
-  if (upstreamNodes.length > 0) {
-    return upstreamNodes[upstreamNodes.length - 1].id;
-  }
-  return null;
 }
 
 /**

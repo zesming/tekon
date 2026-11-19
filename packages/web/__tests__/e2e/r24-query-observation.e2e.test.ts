@@ -204,7 +204,7 @@ test('R24：真实 Workspace 流断开期间发生变更，重连后没有下一
     await page.goto(`${proxy.url}/#token=${encodeURIComponent(fixture.sessionToken)}`);
     const row = page.locator('li.session-list-item').filter({ hasText: session.title! });
     await expect(row).toBeVisible();
-    await expect(row.locator('.session-list-action-failed')).toHaveCount(0);
+    await expect(row.locator('.badge.badge-failed')).toHaveCount(0);
     await expect.poll(() => proxy.streams.filter((stream) => !stream.closed).length).toBe(1);
 
     // 已有真实列表与已打开的 SSE。必须先证实 socket 关闭且重试被扣住，再变更数据。
@@ -217,7 +217,7 @@ test('R24：真实 Workspace 流断开期间发生变更，重连后没有下一
       page, server.url, fixture.sessionToken, 'session.get', { sessionId: session.id },
     );
     expect(persisted.session.status).toBe('failed');
-    await expect(row.locator('.session-list-action-failed')).toHaveCount(0);
+    await expect(row.locator('.badge.badge-failed')).toHaveCount(0);
 
     const reconnectResponse = page.waitForResponse((response) =>
       workspaceStreamPath.test(new URL(response.url()).pathname) && response.status() === 200,
@@ -225,7 +225,7 @@ test('R24：真实 Workspace 流断开期间发生变更，重连后没有下一
     proxy.releaseConnections();
     await reconnectResponse;
     await expect.poll(() => proxy.streams.length).toBe(2);
-    await expect(row.locator('.session-list-action-failed')).toHaveText('需处理', {
+    await expect(row.locator('.badge.badge-failed')).toHaveText('失败', {
       timeout: 8_000,
     });
     // 新连接只建立签名基线；这个更新不能依赖再制造一个 workspace/summary。
@@ -376,10 +376,12 @@ for (const scenario of inFlightCases) {
       // 下方场景内的 SPA 离开/重挂载仍保留原 cache，不使用 reload。
       await page.reload();
       const row = page.locator(`a.session-list-link[href="/sessions/${session.id}"]`);
-      await expect(row.locator('.badge[title="active"]')).toBeVisible();
+      // UI-02: the single badge now shows the run status (running), not the
+      // session-level active label.
+      await expect(row.locator('.badge[title="running"]')).toBeVisible();
       await expect.poll(async () => (await workspaceReads(page)).connections.length).toBe(1);
       await settleBrowser(page);
-      await expect(row.locator('.badge[title="active"]')).toBeVisible();
+      await expect(row.locator('.badge[title="running"]')).toBeVisible();
       await expect.poll(() => responses.stats.active).toBe(0);
       const requestBaseline = responses.stats.requests;
       let frames = (await workspaceReads(page)).connections[0].frames;
@@ -408,7 +410,7 @@ for (const scenario of inFlightCases) {
       if (scenario.remount) {
         // 使用真实 SPA 导航保留同一 cache；整页 reload 会丢失需要验证的旧请求所有权。
         await page.getByRole('link', { name: '高级 Advanced', exact: true }).click();
-        await expect(page).toHaveURL(/\/advanced$/u);
+        await expect(page).toHaveURL(/\/advanced\/runs/u);
         await expect.poll(async () => (await workspaceReads(page)).connections[0].ended).toBe(true);
         obsolete.release();
         await obsolete.completed;
@@ -428,7 +430,7 @@ for (const scenario of inFlightCases) {
         await fresh!.completed;
       }
 
-      await expect(row.locator('.session-list-action-failed')).toHaveText('需处理');
+      await expect(row.locator('.badge.badge-failed')).toHaveText('失败');
       await settleBrowser(page);
       const published = await listPublications(page);
       expect(published.statuses).toContain('failed');

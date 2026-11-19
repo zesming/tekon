@@ -249,6 +249,21 @@ export function createDshHeadlessAdapter(
 
   return {
     async runAgent(input) {
+      // PD-10：dsh-headless 没有可稳定翻译的 model/effort 边界，显式拒绝
+      // 角色覆盖而不是静默丢弃，保证角色声明不产生失真的执行。
+      if (input.providerOverrides) {
+        const fields = [
+          ...(input.providerOverrides.model !== undefined
+            ? ['model']
+            : []),
+          ...(input.providerOverrides.effort !== undefined
+            ? ['effort']
+            : []),
+        ].join('/');
+        throw new Error(
+          `ROLE_OVERRIDE_UNSUPPORTED: dsh-headless 适配器不支持角色 ${fields} 覆盖；请移除该角色声明或改用支持的 provider。`,
+        );
+      }
       const startedAt = Date.now();
       await ensureCapabilityGate();
       const command = buildDshHeadlessCommand(config, { prompt: input.prompt });

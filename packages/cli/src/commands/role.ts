@@ -1,8 +1,13 @@
-import { cpSync, mkdirSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { listRoleIds, loadRole } from '@tekon/core';
+import {
+  listRoleIds,
+  loadRole,
+  materializeProjectRole,
+  roleSchema,
+} from '@tekon/core';
 
 import type { CliIO } from '../lib/context.js';
 import { ensureInitialized } from '../lib/context.js';
@@ -40,13 +45,13 @@ export async function commandRole(
     );
   }
   ensureSafeName(roleId);
-  const validRoles = ['pm', 'rd', 'qa', 'reviewer', 'pmo'] as const;
-  if (!validRoles.includes(roleId as (typeof validRoles)[number])) {
+  const roleParse = roleSchema.safeParse(roleId);
+  if (!roleParse.success) {
     throw new Error(
-      `无效的角色 ID: ${roleId}。可选值为: ${validRoles.join(', ')}`,
+      `无效的角色 ID: ${roleId}。角色 ID 必须是 kebab-case 标识符（小写字母开头，仅含小写字母、数字和短横线），例如 writer、code-reviewer。`,
     );
   }
-  const role = roleId as (typeof validRoles)[number];
+  const role = roleParse.data;
 
   if (subcommand === 'show') {
     const loadedRole = loadRole({ role, repoPath, builtInRolesDir });
@@ -69,22 +74,19 @@ export async function commandRole(
 
   if (subcommand === 'create') {
     await ensureInitialized(repoPath, io);
-    const source = join(builtInRolesDir, roleId);
     const target = join(repoPath, '.tekon', 'roles', roleId);
-    const resolvedBuiltInDir = realpathSync(builtInRolesDir);
-    const resolvedSource = realpathSync(source);
-    if (!resolvedSource.startsWith(resolvedBuiltInDir + '/')) {
-      throw new Error(`角色 ID 试图逃逸内置角色目录: ${roleId}`);
+    if (existsSync(target)) {
+      throw new Error(`角色已存在: ${roleId}（${target}）。`);
     }
-    const repoRolesDir = join(repoPath, '.tekon', 'roles');
-    mkdirSync(repoRolesDir, { recursive: true });
-    const resolvedRolesDir = realpathSync(repoRolesDir);
-    const resolvedTarget = resolve(resolvedRolesDir, roleId);
-    if (!resolvedTarget.startsWith(resolvedRolesDir + '/')) {
-      throw new Error(`角色 ID 试图逃逸项目角色目录: ${roleId}`);
-    }
-    cpSync(resolvedSource, resolvedTarget, { recursive: true });
-    io.stdout.write(`${resolvedTarget}\n`);
+
+    // 物化逻辑（内置整目录复制/自定义脚手架、realpath 锚定与软链闸门、
+    // 临时目录原子替换）下沉 core，CLI 与 Web 共用同一实现。
+    const result = materializeProjectRole({
+      role,
+      repoPath,
+      builtInRolesDir,
+    });
+    io.stdout.write(`${result.roleDir}\n`);
     return;
   }
 

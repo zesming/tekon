@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
 
 import {
+  auditProcessGroupReaps,
   createAuditLogger,
   createAutomationJobExecutor,
   createCommandGateway,
@@ -17,6 +18,7 @@ import {
   createSessionEventStore,
   createSessionService,
   createSubprocessRegistry,
+  createProviderPreflight,
   createWorkflowEngine,
   DshCapabilityError,
   DshHostNodeError,
@@ -36,6 +38,7 @@ import {
   type TekonRepositories,
   type RunPlan,
   type WorkflowEngine,
+  type RunFailureReason,
 } from '@tekon/core';
 
 import {
@@ -46,6 +49,7 @@ import type { CliIO } from './context.js';
 import { ensureInitialized, openProjectDb } from './context.js';
 import { selectLatestRunId } from './db-helpers.js';
 import { resolveProjectRepoPath } from './path-utils.js';
+import { isRetryableFailure } from './run-outcome.js';
 import { runDshPreflight } from '../commands/provider.js';
 import { getBuiltInRolesDir } from './utils.js';
 
@@ -184,19 +188,11 @@ export async function withCliSessionContext<T>(
       createDualWriteRepositories(repositories, bridge);
     const dualAudit = createDualWriteAuditLogger(audit, bridge);
 
-    // 4e (review M1): CLI is run-to-exit and never *enqueues* automation kinds
-    // (delivery-auto-prepare / readiness-evaluate are long-lived-server
-    // features, wired only in web/headless — design §1.4/§2.2), and it does NOT
-    // install the auto-prepare/readiness listeners. BUT the jobs table is shared
-    // across processes: a web-enqueued automation job left `queued` (server
-    // stopped before draining) will be claimed by the CLI runner's poll
-    // (claimNext has no kind filter). Routing it through the automation executor
-    // keeps that stray job isolated (idempotent, never touches session/run
-    // terminal state); the plain workflow executor would set session 'active'
-    // before its kind switch, throw on the unknown kind, and flip the session to
-    // 'failed' — polluting an already-`passed` run's session cross-process.
-    // Autonomous delivery from CLI still stays explicit via `tekon delivery
-    // prepare`; routing only defends against inherited jobs.
+    // CLI is run-to-exit: run and resume start the runner with the one job
+    // they await, so it never claims Web jobs (including automation kinds such
+    // as delivery-auto-prepare). The automation route stays as a guard should
+    // such a job ever reach this executor; the plain workflow executor would
+    // mark an already-finished run's session failed.
     const executor = createWorkflowJobExecutor({
       repositories: dualRepositories,
       audit: dualAudit,
@@ -204,6 +200,7 @@ export async function withCliSessionContext<T>(
       sessions,
       bus,
       registry,
+      jobs,
       agentEventSink: bridge,
     });
     const automationExecutor = createAutomationJobExecutor({
@@ -223,9 +220,11 @@ export async function withCliSessionContext<T>(
         automation: automationExecutor,
       }),
       workerId: `cli-${process.pid}-${randomUUID().slice(0, 8)}`,
+      origin: 'cli',
+      onProcessGroupReap: auditProcessGroupReaps(audit),
     });
 
-    let activeAgent: string | undefined;
+    const providerPreflight = createProviderPreflight();
     const engineFactory = createCliRunEngineFactory({
       projectRoot: repoPath,
       repositories: dualRepositories,
@@ -242,12 +241,11 @@ export async function withCliSessionContext<T>(
       projectRoot: repoPath,
       // Design §8 decision 2: CLI-created sessions are labeled 'cli'.
       sessionProfile: 'cli',
-      createEngine: (input: CliRunEngineInput) => {
-        activeAgent = input?.agent;
-        return engineFactory(input);
-      },
-      preflight: async () => {
-        if (activeAgent === 'dsh-headless') {
+      jobOrigin: 'cli',
+      createEngine: (input: CliRunEngineInput) => engineFactory(input),
+      preflight: async (input) => {
+        if (input.provider !== 'dsh-headless') return providerPreflight(input);
+        if (input.phase === 'start') {
           const preflight = await runDshPreflight({
             onWarn: (msg) => {
               io.stderr.write(`${msg}\n`);
@@ -339,12 +337,18 @@ export async function awaitJobTerminal(input: {
 }
 
 /**
- * Exit code for a workflow terminal status: failures and cancellation are
- * non-zero; passed/paused/blocked complete successfully (a paused run awaits
- * human approval, it is not a failure).
+ * Exit code for a workflow terminal status:
+ * - 0: passed (and skipped-only runs);
+ * - 1: failure, interruption or cancellation;
+ * - 2: blocked — the run needs a human/config fix before it can continue, so
+ *   scripts and IM integrations must not treat it as success (CD-23);
+ * - 3: paused — waiting on human approval, also distinct from success.
  */
 export function exitCodeForWorkflowStatus(status: string): number {
-  return ['failed', 'cancelled', 'interrupted'].includes(status) ? 1 : 0;
+  if (['failed', 'cancelled', 'interrupted'].includes(status)) return 1;
+  if (status === 'blocked') return 2;
+  if (status === 'paused') return 3;
+  return 0;
 }
 
 /**
@@ -361,6 +365,8 @@ export function exitCodeForJobOutcome(input: {
   jobId: string;
   jobStatus: JobStatus;
   workflowStatus: string;
+  /** Classified provider failure, when the run recorded one. */
+  failure?: RunFailureReason;
 }): number {
   if (
     input.jobStatus === 'failed' ||
@@ -373,8 +379,11 @@ export function exitCodeForJobOutcome(input: {
         : input.jobStatus === 'interrupted'
           ? '任务已中断'
           : '任务已取消';
+    // Resume helps only when retrying can: an unclassified interruption
+    // (for example a shutdown), a non-zero exit or a timeout.
+    const retryable = isRetryableFailure(input.failure);
     const resumeHint =
-      input.jobStatus === 'interrupted'
+      input.jobStatus === 'interrupted' && retryable
         ? `检查旧执行退出情况后，使用 tekon resume --run-id ${input.runId} 显式恢复。`
         : '';
     input.io.stderr.write(

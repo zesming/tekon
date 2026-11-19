@@ -15,7 +15,6 @@ import { queryKeys } from '../lib/query-keys.js';
 import { routes } from '../lib/route-paths.js';
 import type {
   RpcProcedureMap,
-  SessionActionKind,
 } from '../../shared/rpc-contract.js';
 
 import { StatusBadge } from '../components/ui/StatusBadge.js';
@@ -27,16 +26,12 @@ import {
   admissionNeedsRecovery,
   admissionReadinessLabel,
 } from '../components/runs/AdmissionNotice.js';
-
-const ACTION_KIND_LABELS: Record<SessionActionKind, string> = {
-  approval: '待审批',
-  input: '待输入',
-  failed: '需处理',
-};
+import { sessionBadgeStatus } from '../lib/status-labels.js';
 
 // Phase 3 3b / Phase 4 P1-04 / T3 / T5: controlled-delivery list + composer.
-// Displays relative activity time, needsAction badges, a handled marker for
-// failed sessions, and workspace summary SSE synchronization.
+// Displays relative activity time, a single authoritative status badge, and
+// workspace summary SSE synchronization. UI-02 removed the parallel action
+// badge that labeled the same state under a second, inconsistent name.
 
 export function SessionsPage() {
   const nowMs = useTicker(60_000);
@@ -145,19 +140,12 @@ export function SessionsPage() {
                   <span className="session-list-title">
                     {session.title ?? session.id}
                   </span>
-                  {session.needsAction && session.actionKind ? (
-                    <span
-                      className={`session-list-action session-list-action-${session.actionKind}`}
-                    >
-                      {ACTION_KIND_LABELS[session.actionKind]}
-                    </span>
-                  ) : null}
                   {admissionNeedsRecovery(session) ? (
                     <span className="badge badge-pending badge-sm">
                       {admissionReadinessLabel(session)}
                     </span>
                   ) : (
-                    <StatusBadge status={session.status} size="sm" />
+                    <StatusBadge status={sessionBadgeStatus(session)} size="sm" />
                   )}
                   {session.runId ? (
                     <span className="session-list-run text-muted">

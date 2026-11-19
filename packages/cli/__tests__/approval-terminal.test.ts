@@ -3,10 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createRepositories, openTekonDatabase } from '@tekon/core';
 import { runCli, type CliIO } from '../src/index.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 // M5/M8: terminal runs must fail loudly (exit 1 + Chinese message) instead of
 // the legacy behavior of printing the terminal status and exiting 0.
@@ -30,6 +31,7 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     await expect(runCli(['init', '--repo', repoPath], io)).resolves.toBe(0);
     io.takeStdout();
 
+    // CD-23：bugfix 在人工门禁暂停，退出码 3。
     await expect(
       runCli(
         [
@@ -44,7 +46,7 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
         ],
         io,
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(3);
     const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(io.takeStdout())?.[1];
     expect(runId).toBeTruthy();
 
@@ -130,6 +132,35 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     expect(io.takeStdout()).toBe('');
   });
 
+  it.each([false, true])('reports the terminal state before checking the provider (approve=%s)', async (approve) => {
+    const { repoPath, runId, decisionId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({ filename: join(repoPath, '.tekon', 'tekon.sqlite') });
+    db.prepare("update run_provider_configs set provider = 'claude-code' where run_id = ?").run(runId);
+    db.close();
+    // No provider commands on PATH: a provider check would fail first.
+    const emptyBin = mkdtempSync(join(tmpdir(), 'tekon-empty-bin-'));
+    tempDirs.push(emptyBin);
+    vi.stubEnv('PATH', emptyBin);
+    const io = createMemoryIo();
+    try {
+      await expect(
+        runCli(
+          [
+            'resume', '--run-id', runId,
+            ...(approve ? ['--decision-id', decisionId, '--approve-human'] : []),
+            '--repo', repoPath,
+          ],
+          io,
+        ),
+      ).resolves.toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const stderr = io.takeStderr();
+    expect(stderr).toContain('终态');
+    expect(stderr).not.toContain('找不到 claude');
+  });
+
   it('M8: tekon resume --approve-human on a cancelled run exits 1 and leaves the decision pending', async () => {
     const { repoPath, runId, decisionId } =
       await createCancelledRunWithPendingDecision();
@@ -208,6 +239,68 @@ describe('approval/resume on terminal runs (M5/M8)', () => {
     });
     db.close();
   });
+
+  it('PD-17 步 3：tekon retry on a cancelled run exits 1 and enqueues no job', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const io = createMemoryIo();
+
+    await expect(
+      runCli(['retry', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('终态');
+    expect(io.takeStdout()).toBe('');
+
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      expect(
+        await createRepositories(db).getWorkflowInstance(runId),
+      ).toMatchObject({ status: 'cancelled' });
+      expect(
+        db
+          .prepare(
+            "select count(*) as n from jobs where kind='workflow-resume'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('PD-17 步 3：tekon retry on a paused run is rejected with RETRY_NOT_FAILED', async () => {
+    const { repoPath, runId } = await createCancelledRunWithPendingDecision();
+    const db = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    db.prepare('update workflow_instances set status=? where id=?').run(
+      'paused',
+      runId,
+    );
+    db.close();
+
+    const io = createMemoryIo();
+    await expect(
+      runCli(['retry', '--run-id', runId, '--repo', repoPath], io),
+    ).resolves.toBe(1);
+    expect(io.takeStderr()).toContain('RETRY_NOT_FAILED');
+
+    const verifyDb = openTekonDatabase({
+      filename: join(repoPath, '.tekon', 'tekon.sqlite'),
+    });
+    try {
+      expect(
+        verifyDb
+          .prepare(
+            "select count(*) as n from jobs where kind='workflow-resume'",
+          )
+          .get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      verifyDb.close();
+    }
+  });
 });
 
 function createMemoryIo(): CliIO & {
@@ -265,5 +358,6 @@ function createFixtureRepo(tempDirs: string[]): string {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

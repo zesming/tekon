@@ -20,6 +20,16 @@ export interface RoleConfig {
   name?: string;
 }
 
+/**
+ * PD-10：角色级 provider 覆盖，来自角色 agent.yaml 的 driver/model/effort。
+ * 经 AgentRunInput 逐节点传入，由具体适配器翻译成 harness 参数；适配器
+ * 无法 honor 某个字段时必须显式报错，不得静默丢弃。
+ */
+export interface RoleProviderOverrides {
+  model?: string;
+  effort?: string;
+}
+
 export interface AgentRunInput {
   roleConfig: RoleConfig;
   prompt: string;
@@ -44,6 +54,11 @@ export interface AgentRunInput {
    * 尽快中断子进程并返回 `cancelled: true` 的结果。
    */
   signal?: AbortSignal;
+  /**
+   * PD-10：本节点角色声明的 provider 覆盖（model/effort）。run 级 adapter
+   * 在构建子进程命令时按自身能力翻译；无法 honor 时显式拒绝。
+   */
+  providerOverrides?: RoleProviderOverrides;
 }
 
 /**
@@ -63,11 +78,24 @@ export type AgentRunDiagnosticCode =
   | 'artifact-file-schema-invalid'
   | 'artifact-file-invalid-path'
   | 'artifact-file-unreadable'
-  | 'required-artifacts-missing';
+  | 'required-artifacts-missing'
+  // Provider process outcomes (classified in provider-diagnostics.ts).
+  | 'not-installed'
+  | 'not-authenticated'
+  | 'invalid-config'
+  | 'exit-nonzero'
+  | 'timeout'
+  | 'cancelled'
+  | 'interrupted'
+  | 'approval-blocked'
+  /** A custom adapter reported a code Tekon does not know. */
+  | 'unclassified';
 
 export interface AgentRunDiagnostic {
   code: AgentRunDiagnosticCode;
   message: string;
+  /** One next step for the user, e.g. how to log in or what to fix. */
+  hint?: string;
   artifactType?: ArtifactType;
   /** Display-safe relative artifact or manifest path. */
   path?: string;
@@ -89,6 +117,15 @@ const AGENT_RUN_DIAGNOSTIC_CODES = new Set<AgentRunDiagnosticCode>([
   'artifact-file-invalid-path',
   'artifact-file-unreadable',
   'required-artifacts-missing',
+  'not-installed',
+  'not-authenticated',
+  'invalid-config',
+  'exit-nonzero',
+  'timeout',
+  'cancelled',
+  'interrupted',
+  'approval-blocked',
+  'unclassified',
 ]);
 
 /** Keep custom adapter diagnostics safe before they enter durable events. */
@@ -98,7 +135,7 @@ export function sanitizeAgentRunDiagnostic(
   if (!diagnostic) return undefined;
   const code = AGENT_RUN_DIAGNOSTIC_CODES.has(diagnostic.code)
     ? diagnostic.code
-    : 'artifact-file-unreadable';
+    : 'unclassified';
   const artifactType = artifactTypeSchema.safeParse(diagnostic.artifactType);
   return {
     code,
@@ -106,6 +143,9 @@ export function sanitizeAgentRunDiagnostic(
       diagnostic.message,
       MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS,
     ),
+    ...(diagnostic.hint
+      ? { hint: boundRedactedText(diagnostic.hint, MAX_AGENT_DIAGNOSTIC_MESSAGE_CHARS) }
+      : {}),
     ...(artifactType.success ? { artifactType: artifactType.data } : {}),
     ...(diagnostic.path
       ? { path: boundRedactedText(diagnostic.path) }
@@ -114,12 +154,6 @@ export function sanitizeAgentRunDiagnostic(
       ? { field: boundRedactedText(diagnostic.field) }
       : {}),
   };
-}
-
-export function formatAgentRunDiagnostic(
-  diagnostic: AgentRunDiagnostic | undefined,
-): string | undefined {
-  return sanitizeAgentRunDiagnostic(diagnostic)?.message;
 }
 
 function boundRedactedText(

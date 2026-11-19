@@ -42,7 +42,13 @@ export type CommandGatewayResult =
       timeoutReason?: 'total' | 'no-progress';
       durationMs: number;
     }
-  | { status: 'rejected'; reason: string; cancelled?: boolean }
+  | {
+      status: 'rejected';
+      reason: string;
+      cancelled?: boolean;
+      /** errno code of a spawn failure, e.g. ENOENT when the tool is missing. */
+      errorCode?: string;
+    }
   | { status: 'blocked-for-approval'; decisionId: string };
 
 export interface CommandGatewayRunInput {
@@ -85,7 +91,11 @@ export function createCommandGateway(
 
   return {
     async run(input) {
-      const rejection = validateCommand(input.command, input.cwd, input.policy);
+      const rejection = evaluateCommandPolicy(
+        input.command,
+        input.policy,
+        input.cwd,
+      );
       if (rejection) {
         return { status: 'rejected', reason: rejection };
       }
@@ -126,6 +136,30 @@ export function createCommandGateway(
       });
     },
   };
+}
+
+/**
+ * PD-04：单一命令裁决函数，Gateway 执行与 CLI preflight 共用同一判定，
+ * 避免"预检 resolved、运行时被拒"的双标。返回 null 表示放行，否则为拒绝原因。
+ */
+export function evaluateCommandPolicy(
+  command: CommandInvocation,
+  policy: CommandPolicy,
+  cwd: string,
+): string | null {
+  return validateCommand(command, cwd, policy);
+}
+
+/**
+ * 10a-2：审批维度判定（evaluateCommandPolicy 不评估 requiresHumanApproval，
+ * 审批检查在 gateway.run 内）。导出供 preflight 复用，禁止另写一份导致
+ * 预检与运行期的审批结论漂移。返回 true 表示该命令需人工审批。
+ */
+export function requiresApproval(
+  command: CommandInvocation,
+  policy: CommandPolicy,
+): boolean {
+  return matchesAny(command, policy.requiresHumanApproval ?? []);
 }
 
 function validateCommand(
@@ -197,7 +231,7 @@ function isShellControlToken(value: string): boolean {
   return /^(?:;|&|&&|\||\|\||<|>|>>|2>|2>>)$/u.test(value);
 }
 
-function matchesAny(
+export function matchesAny(
   command: CommandInvocation,
   patterns: CommandInvocation[],
 ): boolean {
@@ -276,7 +310,7 @@ function isKnownNetworkCommand(command: CommandInvocation): boolean {
   return false;
 }
 
-function isCwdAllowed(cwd: string, scopes: string[]): boolean {
+export function isCwdAllowed(cwd: string, scopes: string[]): boolean {
   const resolvedCwd = resolve(cwd);
   return scopes.some((scope) => {
     const resolvedScope = resolve(scope);
@@ -388,6 +422,7 @@ async function runProcess(input: {
     return {
       status: 'rejected',
       reason: error instanceof Error ? error.message : String(error),
+      ...errnoCode(error),
     };
   }
 
@@ -395,6 +430,7 @@ async function runProcess(input: {
     input.registry && input.registryKey
       ? {
           pid: child.pid,
+          startedAt: Date.now(),
           kill: (signal: NodeJS.Signals) => killChildProcess(child, signal),
         }
       : null;
@@ -467,9 +503,7 @@ async function runProcess(input: {
             }
 
             const observedActivityAt = progress.lastActivityAt();
-            if (
-              Date.now() - observedActivityAt < input.noProgressTimeoutMs
-            ) {
+            if (Date.now() - observedActivityAt < input.noProgressTimeoutMs) {
               noProgressCandidateActivityAt = null;
               return;
             }
@@ -548,6 +582,7 @@ async function runProcess(input: {
       settle({
         status: 'rejected',
         reason: error.message,
+        ...errnoCode(error),
       });
     });
     child.once('close', (exitCode, signal) => {
@@ -556,7 +591,11 @@ async function runProcess(input: {
         input.registry.unregister(input.registryKey, registryHandle);
       }
 
-      if (input.stdin !== undefined && stdinError) {
+      // A process that exits non-zero before reading all of stdin (a
+      // missing login, a bad flag) breaks the pipe; its exit code and
+      // stderr are the real reason, so keep them.
+      const exitedEarly = exitCode !== 0 && exitCode !== null;
+      if (input.stdin !== undefined && stdinError && !exitedEarly) {
         settle({
           status: 'rejected',
           reason: `failed to write command stdin: ${stdinError.message}`,
@@ -616,6 +655,8 @@ interface OutputDirActivityStats {
   latestMtimeMs: number | null;
 }
 
+const PROGRESS_OUTPUT_WRITE_INTERVAL_MS = 1000;
+
 function createProgressTracker(input: {
   command: CommandInvocation;
   progressPath: string;
@@ -634,6 +675,7 @@ function createProgressTracker(input: {
   let outputDirFileCount = 0;
   let outputDirBytes = 0;
   let outputDirLatestMtimeMs: number | null = null;
+  let lastWrittenAt = 0;
 
   const snapshot = (status: ProgressStatus) => ({
     status,
@@ -659,6 +701,7 @@ function createProgressTracker(input: {
     if (reason) {
       timeoutReason = reason;
     }
+    lastWrittenAt = Date.now();
     try {
       writeFileSync(
         input.progressPath,
@@ -679,7 +722,11 @@ function createProgressTracker(input: {
       }
       lastOutputAt = new Date().toISOString();
       lastActivityAt = Date.now();
-      write(lastStatus);
+      // Output can arrive in many small chunks; heartbeats and finish() write
+      // the latest counts regardless.
+      if (lastActivityAt - lastWrittenAt >= PROGRESS_OUTPUT_WRITE_INTERVAL_MS) {
+        write(lastStatus);
+      }
     },
     recordOutputDirActivity(stats: OutputDirActivityStats, changed: boolean) {
       outputDirFileCount = stats.fileCount;
@@ -1028,4 +1075,9 @@ async function endStream(stream: Writable): Promise<void> {
       stream.end();
     }
   });
+}
+
+function errnoCode(error: unknown): { errorCode?: string } {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return typeof code === 'string' ? { errorCode: code } : {};
 }

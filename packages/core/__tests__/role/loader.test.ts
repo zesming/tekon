@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadRole } from '../../src/role/loader.js';
+import { listRoleIds, loadRole } from '../../src/role/loader.js';
 
 describe('role loader', () => {
   const tempDirs: string[] = [];
@@ -109,6 +109,54 @@ describe('role loader', () => {
       ['test', 'user test skill'],
       ['report', 'built-in report skill'],
     ]);
+  });
+  // PD-06 子项 3：角色名开放，自定义目录角色可见、可加载。
+  it('lists and loads custom role ids instead of filtering to the built-in enum', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tekon-role-open-naming-'));
+    tempDirs.push(root);
+    const repoPath = join(root, 'repo');
+    const builtInRolesDir = join(root, 'roles');
+
+    writeRole(builtInRolesDir, 'rd', {
+      agent: 'role: rd\nname: built-in rd\n',
+      system: 'built-in system',
+    });
+    writeRole(join(repoPath, '.tekon', 'roles'), 'writer', {
+      agent: 'role: writer\nname: Project Writer\n',
+      system: 'writer system',
+    });
+    // 非标识符目录（含点号，如 macOS 元数据）应被忽略，而不是报错。
+    mkdirSync(join(repoPath, '.tekon', 'roles', '.DS_Store'), {
+      recursive: true,
+    });
+
+    const projectRoles = listRoleIds(join(repoPath, '.tekon', 'roles'));
+    expect(projectRoles).toEqual(['writer']);
+
+    const loaded = loadRole({
+      role: 'writer',
+      repoPath,
+      builtInRolesDir,
+    });
+    expect(loaded.role).toBe('writer');
+    expect(loaded.source).toBe('project');
+    expect(loaded.agent.name).toBe('Project Writer');
+    expect(loaded.systemPrompt).toBe('writer system');
+  });
+
+  it('rejects role ids that are not kebab-case identifiers when loading config', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tekon-role-bad-id-'));
+    tempDirs.push(root);
+    const rolesDir = join(root, 'roles');
+    writeRole(rolesDir, 'Bad Role', {
+      agent: 'role: Bad Role\nname: Bad\n',
+      system: 'bad',
+    });
+
+    expect(() =>
+      loadRole({ role: 'Bad Role', repoPath: root, builtInRolesDir: rolesDir }),
+    ).toThrow();
+    expect(listRoleIds(rolesDir)).toEqual([]);
   });
 });
 

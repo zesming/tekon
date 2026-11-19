@@ -2,8 +2,8 @@ import { join } from 'node:path';
 
 import type { AgentAdapterConfig, CommandPolicy } from '../types/config.js';
 import type { Artifact, CommandInvocation } from '../types/domain.js';
-import type { CommandGateway } from './command-gateway.js';
-import type { AgentAdapter } from './agent-adapter.js';
+import type { CommandGateway, CommandGatewayResult } from './command-gateway.js';
+import type { AgentAdapter, AgentRunDiagnostic, RoleProviderOverrides } from './agent-adapter.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import { buildClaudeProviderEnv } from './claude-code-support.js';
 import { compileClaudePermissions } from './claude-code-permissions.js';
@@ -12,6 +12,12 @@ import {
   artifactDiagnosticFromError,
   ingestAgentManifestArtifacts,
 } from './manifest-artifacts.js';
+import { assertSafeProviderOverrideValue } from '../role/override-safety.js';
+import {
+  classifyProviderFailure,
+  lastClaudeError,
+  readTail,
+} from './provider-diagnostics.js';
 
 export interface BuiltClaudeCodeCommand extends CommandInvocation {
   stdin?: string;
@@ -21,6 +27,7 @@ export function buildClaudeCodeCommand(
   config: AgentAdapterConfig,
   input: { prompt: string; promptFile?: string; addDir?: string },
   commandPolicy?: CommandPolicy,
+  providerOverrides?: RoleProviderOverrides,
 ): BuiltClaudeCodeCommand {
   assertSafeClaudeArgs(config.args ?? []);
 
@@ -28,6 +35,20 @@ export function buildClaudeCodeCommand(
 
   if (config.outputFormat === 'json') {
     args.push('--output-format', 'json');
+  }
+
+  // PD-10：角色级覆盖作为 Tekon 控制位注入（与用户 args 分离，保持单一
+  // 权威）。Claude Code 没有稳定的 effort CLI 边界，显式拒绝而非静默丢弃。
+  if (providerOverrides?.effort !== undefined) {
+    throw new Error(
+      `ROLE_OVERRIDE_UNSUPPORTED: claude-code 适配器不支持 effort 覆盖（角色声明 effort=${providerOverrides.effort}）；请移除该字段或改用支持的 provider。`,
+    );
+  }
+  if (providerOverrides?.model !== undefined) {
+    // 与 codex 同一白名单：即使纯函数被绕过 resolve 直接调用，也不让
+    // 含选项前缀/空白/Shell 元字符的值进入 --model。
+    assertSafeProviderOverrideValue('model', providerOverrides.model);
+    args.push('--model', providerOverrides.model);
   }
 
   if (input.addDir) {
@@ -81,6 +102,7 @@ export function createClaudeCodeAdapter(
         config,
         { prompt: input.prompt, addDir: input.outputDir },
         input.commandPolicy,
+        input.providerOverrides,
       );
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
       const result = await gateway.run({
@@ -93,7 +115,7 @@ export function createClaudeCodeAdapter(
         noProgressTimeoutMs: config.noProgressTimeoutMs,
         envMode: 'exact',
         env: {
-          ...buildClaudeProviderEnv(),
+          ...buildClaudeProviderEnv(process.env, config.passthroughEnv),
           TEKON_OUTPUT_DIR: input.outputDir,
           TEKON_ARTIFACT_MANIFEST: manifestPath,
           TEKON_RUN_ID: input.runContext.runId,
@@ -112,12 +134,36 @@ export function createClaudeCodeAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          diagnostic: classifyProviderFailure({
+            provider: 'claude-code',
+            command: command.tool,
+            result,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
+          }),
+        };
+      }
+
+      if (result.exitCode !== 0 || result.timedOut) {
+        return {
+          provider: 'claude-code',
+          exitCode: result.exitCode === 0 ? 1 : result.exitCode,
+          durationMs: result.durationMs,
+          outputFiles: [result.stdoutPath, result.stderrPath],
+          timedOut: result.timedOut,
+          diagnostic: classifyProviderFailure({
+            provider: 'claude-code',
+            command: command.tool,
+            result,
+            signal: input.signal,
+            cwd: input.worktreeLease.worktreePath,
+          }),
         };
       }
 
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
-      if (result.exitCode === 0 && input.artifactStore) {
+      if (input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -125,7 +171,9 @@ export function createClaudeCodeAdapter(
           });
           artifactOutputFiles = artifacts.map((artifact) => artifact.path);
         } catch (error) {
-          const diagnostic = artifactDiagnosticFromError(error);
+          const diagnostic =
+            reportedErrorDiagnostic(result, command.tool) ??
+            artifactDiagnosticFromError(error);
           return {
             provider: 'claude-code',
             exitCode: 1,
@@ -141,7 +189,7 @@ export function createClaudeCodeAdapter(
         required: input.requiredArtifactTypes,
         artifacts,
       });
-      if (result.exitCode === 0 && diagnostic) {
+      if (diagnostic) {
         return {
           provider: 'claude-code',
           exitCode: 1,
@@ -153,7 +201,7 @@ export function createClaudeCodeAdapter(
           ],
           artifacts,
           timedOut: result.timedOut,
-          diagnostic,
+          diagnostic: reportedErrorDiagnostic(result, command.tool) ?? diagnostic,
         };
       }
 
@@ -171,6 +219,19 @@ export function createClaudeCodeAdapter(
       };
     },
   };
+}
+
+/**
+ * Claude can exit 0 with an error result (e.g. not logged in). When artifacts
+ * are then missing, that error explains the failure better than the
+ * artifact list does.
+ */
+function reportedErrorDiagnostic(
+  result: Extract<CommandGatewayResult, { status: 'executed' }>,
+  command: string,
+): AgentRunDiagnostic | undefined {
+  if (!lastClaudeError(readTail(result.stdoutPath))) return undefined;
+  return classifyProviderFailure({ provider: 'claude-code', command, result });
 }
 
 function permissionModeFor(config: AgentAdapterConfig): string {

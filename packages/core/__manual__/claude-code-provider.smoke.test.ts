@@ -1,113 +1,134 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { createClaudeCodeAdapter, createCommandGateway } from '../src/index.js';
 import {
-  buildClaudeProviderEnv,
   buildClaudeProviderSmokeEvidenceHtml,
   buildClaudeProviderSmokeEvidenceMarkdown,
   type ClaudeProviderSmokeEvidenceInput,
 } from '../src/runtime/claude-code-support.js';
 
-describe('claude-code provider manual smoke', () => {
-  it('requires explicit enablement and authenticated Claude CLI', async () => {
-    if (process.env.TEKON_CLAUDE_PROVIDER_SMOKE !== '1') {
-      throw new Error(
-        'Claude provider smoke requires explicit enablement; this smoke is fail-closed.',
-      );
-    }
+// Contract 3 (T-17): the real-Claude smoke goes through the product entry
+// point (`tekon run --goal` over a child CLI process: admission, engine and
+// provider wiring), instead of calling the adapter directly.
+//
+// Opt-in only: TEKON_CLAUDE_PROVIDER_SMOKE=1. Without it the suite skips, so
+// the default test entry never spends provider quota or needs a login. A fake
+// ANTHROPIC_API_KEY is used only to prove doctor classifies "API key"; no real
+// secret is ever written to evidence. Requires a built CLI
+// (`pnpm --filter @tekon/cli build`) and an authenticated claude on PATH.
+const smokeEnabled = process.env.TEKON_CLAUDE_PROVIDER_SMOKE === '1';
+const describeSmoke = smokeEnabled ? describe : describe.skip;
+
+const repoRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '..',
+);
+const cliPath = join(repoRoot, 'packages', 'cli', 'dist', 'index.js');
+
+describeSmoke('claude-code provider manual smoke (contract 3)', () => {
+  it('runs a goal workflow through tekon run and classifies a fake api key in doctor', () => {
+    expect(
+      existsSync(cliPath),
+      `built CLI required at ${cliPath}; run pnpm --filter @tekon/cli build`,
+    ).toBe(true);
 
     const claudeCommand = process.env.TEKON_CLAUDE_COMMAND ?? 'claude';
-    const preflightEnv = buildClaudeProviderEnv();
     const version = execFileSync(claudeCommand, ['--version'], {
       encoding: 'utf8',
-      env: preflightEnv,
     }).trim();
-    execFileSync(claudeCommand, ['auth', 'status'], {
-      env: preflightEnv,
-      stdio: 'pipe',
-    });
 
     const repoPath = mkdtempSync(join(tmpdir(), 'tekon-claude-smoke-'));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath, stdio: 'pipe' });
+    execFileSync('git', ['config', 'user.email', 'smoke@tekon.local'], {
+      cwd: repoPath,
+      stdio: 'pipe',
+    });
+    execFileSync('git', ['config', 'user.name', 'Tekon Smoke'], {
+      cwd: repoPath,
+      stdio: 'pipe',
+    });
     writeFileSync(
       join(repoPath, 'README.md'),
       'TEKON_CLAUDE_PROVIDER_SMOKE_FIXTURE\n',
       'utf8',
     );
-    const dataDir = join(repoPath, '.tekon');
-    const outputDir = join(dataDir, 'smoke');
-    const adapter = createClaudeCodeAdapter(
-      {
-        provider: 'claude-code',
-        command: claudeCommand,
-        promptMode: 'stdin',
-        outputFormat: 'json',
-        timeoutMs: 120_000,
-        args: ['-p'],
-        permissionProfile: {
-          sandbox: 'workspace-write',
-          approval: 'on-request',
-          filesystemScope: [repoPath],
-          network: 'restricted',
-          tools: {
-            allow: ['Read'],
-            deny: ['Bash(rm *)', 'Bash(git push *)', 'WebFetch', 'WebSearch'],
-          },
-        },
-      },
-      createCommandGateway(),
-    );
-
-    const result = await adapter.runAgent({
-      roleConfig: { role: 'reviewer' },
-      prompt:
-        'Read README.md and print TEKON_CLAUDE_PROVIDER_SMOKE_OK. Do not edit files.',
-      worktreeLease: {
-        id: 'lease_smoke',
-        runId: 'run_smoke',
-        nodeId: 'node_claude',
-        role: 'reviewer',
-        repoPath,
-        worktreePath: repoPath,
-        branchName: 'tekon/run_smoke/node_claude-reviewer',
-        createdAt: new Date().toISOString(),
-      },
-      outputDir,
-      commandPolicy: {
-        allow: [{ tool: claudeCommand, args: ['-p'] }],
-        deny: [],
-        cwdScope: [repoPath],
-        network: 'restricted',
-      },
-      runContext: {
-        projectId: 'manual',
-        runId: 'run_smoke',
-        nodeId: 'node_claude',
-        repoPath,
-        dataDir,
-      },
+    execFileSync('git', ['add', '.'], { cwd: repoPath, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', 'fixture'], {
+      cwd: repoPath,
+      stdio: 'pipe',
     });
 
-    expect(version.length).toBeGreaterThan(0);
-    expect(result.provider).toBe('claude-code');
-    expect(result.exitCode).toBe(0);
-    expect(result.outputFiles).toHaveLength(2);
-    expect(readFileSync(result.outputFiles[0]!, 'utf8')).toContain(
-      'TEKON_CLAUDE_PROVIDER_SMOKE_OK',
-    );
+    const tekon = (
+      args: string[],
+      extraEnv: NodeJS.ProcessEnv = {},
+    ): SpawnSyncReturns<string> =>
+      spawnSync(process.execPath, [cliPath, ...args, '--repo', repoPath], {
+        cwd: repoPath,
+        encoding: 'utf8',
+        timeout: 240_000,
+        env: { ...process.env, ...extraEnv },
+      });
 
-    writeEvidence({
-      version,
-      durationMs: result.durationMs,
-      stdoutPath: result.outputFiles[0]!,
-      stderrPath: result.outputFiles[1]!,
-    });
-  }, 150_000);
+    expect(tekon(['init']).status).toBe(0);
+
+    const startedAt = Date.now();
+    const run = tekon([
+      'run',
+      'Read README.md and complete the single goal node.',
+      '--goal',
+      '--agent',
+      'claude-code',
+      '--allow-dirty-base',
+    ]);
+    const durationMs = Date.now() - startedAt;
+
+    const stdoutPath = join(repoPath, 'smoke-stdout.log');
+    const stderrPath = join(repoPath, 'smoke-stderr.log');
+    writeFileSync(stdoutPath, run.stdout, 'utf8');
+    writeFileSync(stderrPath, run.stderr, 'utf8');
+
+    expect(run.status, run.stdout + run.stderr).toBe(0);
+    expect(run.stdout).toContain('运行已完成');
+
+    const runId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(run.stdout)?.[1];
+    expect(runId, run.stdout).toBeTruthy();
+    const status = tekon(['status', '--run-id', runId!]);
+    expect(status.stdout).toContain('status=passed');
+
+    // A fake key (not a real credential) must be reported as the API-key
+    // authentication kind, distinct from subscription login. The host shell
+    // may already hold an OAuth login or ANTHROPIC_AUTH_TOKEN, which would
+    // win the classification, so run doctor against an isolated HOME with
+    // only the fake key present (the real CLI then reports authMethod
+    // api_key; verified manually against claude auth status --json).
+    const isolatedHome = mkdtempSync(join(tmpdir(), 'tekon-smoke-doctor-home-'));
+    const doctorEnv: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH,
+      HOME: isolatedHome,
+      LANG: process.env.LANG,
+      TMPDIR: process.env.TMPDIR,
+      USER: process.env.USER,
+      LOGNAME: process.env.LOGNAME,
+      ANTHROPIC_API_KEY: 'sk-ant-tekon-smoke-fake-key',
+    };
+    // A fresh HOME makes the real CLI's first auth-status probe race its own
+    // cold-start initialization; allow one retry before failing the smoke.
+    let doctor = tekon(['doctor'], doctorEnv);
+    if (!`${doctor.stdout}${doctor.stderr}`.includes('API key')) {
+      doctor = tekon(['doctor'], doctorEnv);
+    }
+    expect(`${doctor.stdout}${doctor.stderr}`).toContain('API key');
+    rmSync(isolatedHome, { recursive: true, force: true });
+
+    writeEvidence({ version, durationMs, stdoutPath, stderrPath });
+  }, 300_000);
 });
 
 function writeEvidence(input: {
@@ -116,24 +137,12 @@ function writeEvidence(input: {
   stdoutPath: string;
   stderrPath: string;
 }): void {
-  const repoRoot = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-  );
   const reviewDir = join(repoRoot, 'docs', 'reviews');
   mkdirSync(reviewDir, { recursive: true });
   const executedAt = new Date();
   const evidenceName = `${executedAt.toISOString().slice(0, 10)}-claude-provider-smoke-evidence`;
-  const markdownPath = join(
-    reviewDir,
-    `${evidenceName}.md`,
-  );
-  const htmlPath = join(
-    reviewDir,
-    `${evidenceName}.html`,
-  );
+  const markdownPath = join(reviewDir, `${evidenceName}.md`);
+  const htmlPath = join(reviewDir, `${evidenceName}.html`);
   const evidence: ClaudeProviderSmokeEvidenceInput = { ...input, executedAt };
   writeFileSync(
     markdownPath,

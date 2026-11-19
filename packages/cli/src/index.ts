@@ -2,16 +2,18 @@
 
 import { isWorkflowTerminalError } from '@tekon/core';
 
-import { commandApproval, commandCancel, commandPause, commandResume } from './commands/approval.js';
+import { commandApproval, commandCancel, commandPause, commandResume, commandRetry } from './commands/approval.js';
 import { commandDelivery } from './commands/delivery.js';
 import { commandDemand } from './commands/draft.js';
 import { commandEval } from './commands/eval.js';
 import { commandHelp } from './commands/help.js';
+import { commandDoctor } from './commands/doctor.js';
 import { commandInit } from './commands/init.js';
 import { commandReview } from './commands/review.js';
 import { commandRole } from './commands/role.js';
 import { commandRun } from './commands/run.js';
-import { commandClean, commandLog, commandStatus } from './commands/status.js';
+import { commandClean } from './commands/clean.js';
+import { commandLog, commandStatus } from './commands/status.js';
 import { commandProvider } from './commands/provider.js';
 import { commandUi, commandUpdate } from './commands/ui.js';
 import { commandConstraints, commandWorkflow } from './commands/workflow.js';
@@ -45,12 +47,14 @@ const COMMANDS: CommandMeta[] = [
   { name: 'status', description: '查看运行状态', group: '运行控制' },
   { name: 'pause', description: '暂停运行', group: '运行控制' },
   { name: 'resume', description: '恢复暂停的运行', group: '运行控制' },
+  { name: 'retry', description: '重试失败（failed）的运行', group: '运行控制' },
   { name: 'cancel', description: '取消运行', group: '运行控制' },
   // 工作流与角色
   { name: 'workflow', description: '管理工作流模板', group: '工作流与角色', subcommands: [
-    { name: 'list', description: '列出所有工作流模板' },
-    { name: 'show', description: '查看工作流模板详情' },
-    { name: 'create', description: '从模板创建新工作流' },
+    { name: 'list', description: '列出所有工作流模板并标记无效项' },
+    { name: 'show', description: '查看模板的阶段、节点、角色与门禁结构' },
+    { name: 'validate', description: '校验模板语法与结构' },
+    { name: 'create', description: '从模板复制或用 --minimal 脚手架创建工作流' },
     { name: 'select', description: '为需求选择合适的工作流' },
     { name: 'preflight', description: '检查工作流门的命令可用性' },
   ] },
@@ -86,10 +90,11 @@ const COMMANDS: CommandMeta[] = [
   ] },
   { name: 'log', description: '查看运行审计日志', group: '审阅与评估' },
   // 工具
+  { name: 'doctor', description: '检查配置、Provider 安装与登录、工作流命令', group: '工具' },
   { name: 'provider', description: '管理与检查 Agent Provider', group: '工具', subcommands: [
     { name: 'preflight', description: '检查指定 Provider 的环境兼容性与合同' },
   ] },
-  { name: 'clean', description: '清理暂不可用（等待生命周期安全清理）', group: '工具' },
+  { name: 'clean', description: '清理已结束运行留下的 worktree 和节点分支', group: '工具' },
   { name: 'ui', description: '启动 Web 管理界面', group: '工具' },
   { name: 'update', description: '更新 Tekon CLI', group: '工具' },
 ];
@@ -134,6 +139,8 @@ export async function runCli(
         return 0;
       case 'resume':
         return await commandResume(rest, io);
+      case 'retry':
+        return await commandRetry(rest, io);
       case 'cancel':
         await commandCancel(rest, io);
         return 0;
@@ -162,11 +169,12 @@ export async function runCli(
         await commandLog(rest, io);
         return 0;
       case 'clean':
-        await commandClean(rest, io);
-        return 0;
+        return await commandClean(rest, io);
       case 'ui':
         await commandUi(rest, io);
         return 0;
+      case 'doctor':
+        return await commandDoctor(rest, io);
       case 'provider':
         return await commandProvider(rest, io);
       case 'update':

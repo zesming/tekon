@@ -56,6 +56,8 @@ export const tokenRunInputSchema = z.object({
 export const resumeInputSchema = tokenRunInputSchema.extend({
   confirmStopped: z.boolean().optional(),
   previousJobId: z.string().min(1).nullable().optional(),
+  // PD-31：只重跑门禁、不重跑 agent。
+  gatesOnly: z.boolean().optional(),
 });
 
 export const runRecoverySchema = z.object({
@@ -87,7 +89,7 @@ export const projectRunInputSchema = z
     // deferred until a dedicated review-only entry point exists (design §1.2.3).
     profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
     template: z.string().optional(),
-    agent: z.string().optional(),
+    agent: z.string().min(1).optional(),
     allowDirtyBase: z.boolean().optional(),
     demandShapePath: z.string().optional(),
     timeoutMs: z.number().optional(),
@@ -160,7 +162,8 @@ export const draftShapePlanApproveInputSchema = z.object({
 export const projectCleanInputSchema = z.object({
   runId: z.string().min(1),
   token: z.string().min(1),
-  confirm: z.literal('delete-run-dir'),
+  confirm: z.literal('clean-terminal-runs'),
+  dryRun: z.boolean().optional(),
 });
 
 export const deliveryCreatePrInputSchema = z.object({
@@ -208,7 +211,7 @@ export const deliveryCiStatusInputSchema = z.object({
 export const workflowPlanInputSchema = z.object({
   template: z.string().optional(),
   mode: z.enum(['workflow', 'goal']).optional(),
-  agent: z.string().optional(),
+  agent: z.string().min(1).optional(),
   profile: z.enum(['human-web', 'autonomous-delivery']).optional(),
   allowDirtyBase: z.boolean().optional(),
   timeoutMs: z.number().optional(),
@@ -315,6 +318,9 @@ export const workReadinessCheckSchema = z.object({
   id: z.string(),
   severity: workReadinessSeveritySchema,
   passed: z.boolean(),
+  // Optional for tolerance of older/hand-built payloads; the client falls back
+  // to passed ? 'passed' : 'failed' when absent.
+  state: z.enum(['passed', 'failed', 'not-started']).optional(),
   evidence: z.string(),
 });
 
@@ -397,6 +403,8 @@ export const apiHumanDecisionSchema = z
     status: z.string(),
     actor: z.string().nullable(),
     note: z.string().nullable(),
+    // PD-18：门禁请求上下文，与决策备注 note 分离（旧行为下二者共用一列）。
+    requestNote: z.string().nullable(),
     createdAt: z.string(),
     decidedAt: z.string().nullable(),
     context: apiHumanDecisionContextSchema,
@@ -542,6 +550,7 @@ export const roleItemSchema = z
   .object({
     id: z.string(),
     name: z.string(),
+    source: z.enum(['built-in', 'project']),
     hasSystemPrompt: z.boolean(),
   })
   .strict(); // strict: must not leak systemPrompt or other internal fields
@@ -568,6 +577,7 @@ export const projectOverviewCountsSchema = z.object({
 
 export const projectOverviewOutputSchema = z.object({
   project: apiProjectSchema,
+  defaultAgent: z.string(),
   latestRun: apiWorkflowSchema.nullable(),
   counts: projectOverviewCountsSchema,
 });
@@ -599,11 +609,24 @@ export const runWrapperOutputSchema = z.object({
   jobId: z.string().optional(),
 });
 
+/** What the provider check found when a run started or resumed. */
+export const providerPreflightOutputSchema = z.object({
+  provider: z.enum(['claude-code', 'codex']),
+  auth: z.enum(['api-key', 'auth-token', 'oauth-token', 'subscription', 'stored-login', 'none', 'unknown']),
+  passthroughEnv: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+
 export const projectRunOutputSchema = runWrapperOutputSchema.extend({
   requestId: z.string(),
   replayed: z.boolean(),
   admissionState: z.enum(['accepted', 'recovery-required']),
   detail: z.string().optional(),
+  preflight: providerPreflightOutputSchema.optional(),
+});
+
+export const projectResumeOutputSchema = runWrapperOutputSchema.extend({
+  preflight: providerPreflightOutputSchema.optional(),
 });
 
 export const projectAdmissionOutputSchema = z.discriminatedUnion('state', [
@@ -626,7 +649,16 @@ export const projectAdmissionIntentOutputSchema = z.object({
 });
 
 export const projectCleanOutputSchema = z.object({
-  removedRunDir: z.boolean(),
+  runId: z.string(),
+  dryRun: z.boolean(),
+  /** Planned (dry run) or removed worktrees. */
+  worktrees: z.number().int().nonnegative(),
+  /** Planned (dry run) or deleted node branches. */
+  branches: z.number().int().nonnegative(),
+  /** Already gone before this clean. */
+  missing: z.number().int().nonnegative(),
+  /** Could not be cleaned; details are in the run's audit log. */
+  failures: z.number().int().nonnegative(),
 });
 
 export const draftShapeOutputSchema = z.object({
@@ -692,10 +724,26 @@ export const gateListOutputSchema = z.object({
   pendingDecisions: z.array(apiHumanDecisionSchema),
 });
 
+// PD-22: pending decisions across every run in scope, each carrying its own
+// runId and recovery so the global approval queue is no longer limited to the
+// latest run.
+export const gatePendingAllOutputSchema = z.object({
+  pending: z.array(
+    z.object({
+      runId: z.string(),
+      decision: apiHumanDecisionSchema,
+      recovery: runRecoverySchema,
+    }),
+  ),
+});
+
 export const decisionOutputSchema = z.object({
   resumeOutcome: z.string().optional(),
   resumeMessage: z.string().optional(),
   recovery: runRecoverySchema.optional(),
+  // Soft preflight warnings (login state, passthrough env) for the resume an
+  // approval triggers; hard failures are rejected before the decision records.
+  preflight: providerPreflightOutputSchema.optional(),
   decision: apiHumanDecisionSchema,
   // S7d/M9: gate.approve resumes the run asynchronously via the job runner and
   // returns the bound session + enqueued job so the client can follow it. reject
@@ -711,6 +759,32 @@ export const auditListOutputSchema = z.object({
 
 export const roleListOutputSchema = z.object({
   roles: z.array(roleItemSchema),
+});
+
+// PD-11：角色详情显式携带 prompt（列表 DTO 仍 strict 不泄密）。
+export const roleGetInputSchema = z.object({
+  id: z.string(),
+});
+
+export const roleGetOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  source: z.enum(['built-in', 'project', 'user']),
+  systemPrompt: z.string(),
+  hasProjectOverride: z.boolean(),
+  projectPath: z.string(),
+});
+
+export const roleUpdatePromptInputSchema = z.object({
+  id: z.string(),
+  systemPrompt: z.string(),
+  token: z.string(),
+});
+
+export const roleUpdatePromptOutputSchema = z.object({
+  id: z.string(),
+  source: z.literal('project'),
+  roleDir: z.string(),
 });
 
 export const runPlanGateSchema = z.object({
@@ -732,7 +806,6 @@ export const runPlanGateSchema = z.object({
 export const runPlanPhaseSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  parallel: z.boolean(),
   nodeIds: z.array(z.string()),
 });
 
@@ -946,7 +1019,7 @@ export const procedureSpecs = {
   'project.resume': {
     auth: 'token' as const,
     input: resumeInputSchema,
-    output: runWrapperOutputSchema,
+    output: projectResumeOutputSchema,
   },
   'project.cancel': {
     auth: 'token' as const,
@@ -1020,6 +1093,11 @@ export const procedureSpecs = {
     input: runIdInputSchema,
     output: gateListOutputSchema,
   },
+  'gate.pendingAll': {
+    auth: 'session' as const,
+    input: z.undefined(),
+    output: gatePendingAllOutputSchema,
+  },
   'gate.approve': {
     auth: 'token' as const,
     input: decisionInputSchema,
@@ -1047,6 +1125,16 @@ export const procedureSpecs = {
     auth: 'none' as const,
     input: z.undefined(),
     output: roleListOutputSchema,
+  },
+  'role.get': {
+    auth: 'none' as const,
+    input: roleGetInputSchema,
+    output: roleGetOutputSchema,
+  },
+  'role.updatePrompt': {
+    auth: 'token' as const,
+    input: roleUpdatePromptInputSchema,
+    output: roleUpdatePromptOutputSchema,
   },
 
   'workflow.list': {

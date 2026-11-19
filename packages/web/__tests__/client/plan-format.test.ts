@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatTimeout,
-  formatPhaseParallel,
-} from '../../src/client/lib/plan-format.js';
+import { formatTimeout } from '../../src/client/lib/plan-format.js';
 
 describe('plan-format', () => {
   describe('formatTimeout', () => {
@@ -30,13 +27,6 @@ describe('plan-format', () => {
       expect(formatTimeout(3600000)).toBe('1 小时');
       expect(formatTimeout(7200000)).toBe('2 小时');
       expect(formatTimeout(5400000)).toBe('90 分钟');
-    });
-  });
-
-  describe('formatPhaseParallel', () => {
-    it('returns correct parallel vs sequential label', () => {
-      expect(formatPhaseParallel(true)).toBe('并行阶段');
-      expect(formatPhaseParallel(false)).toBe('顺序阶段');
     });
   });
 });

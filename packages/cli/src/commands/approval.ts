@@ -7,6 +7,8 @@ import {
   createRepositories,
   evaluateHumanApprovalSummary,
   migrateDatabase,
+  findLatestRunFailure,
+  ProviderPreflightError,
   readRunRecovery,
   WorkflowTerminalError,
 } from '@tekon/core';
@@ -28,7 +30,13 @@ import {
   withCliSessionContext,
   withSessionCommandCtx,
 } from '../lib/session-context.js';
+import { providerRuntimeFromCliOptions } from '../lib/agent-factory.js';
+import {
+  formatBindingDiff,
+  inspectRunBinding,
+} from '../lib/binding-diff.js';
 import { formatApprovalSummary } from './review.js';
+import { formatPreflightNotice, runOutcomeDetails } from '../lib/run-outcome.js';
 
 export async function commandApproval(argv: string[], io: CliIO) {
   const [subcommand, ...rest] = argv;
@@ -209,6 +217,12 @@ export async function commandResume(
       'approve-human': { type: 'boolean', default: false },
       'confirm-stopped': { type: 'boolean', default: false },
       'previous-job-id': { type: 'string' },
+      // PD-31：显式只重跑门禁，不重跑 agent（节点须已有完成的 agent 执行）。
+      'gates-only': { type: 'boolean', default: false },
+      // PD-05：显式采用当前仓库配置（repo-profile 命令、可选 --agent），
+      // 替换运行的冻结绑定后再恢复；缺省维持冻结。
+      rebind: { type: 'boolean', default: false },
+      agent: { type: 'string' },
     },
     allowPositionals: true,
   });
@@ -270,6 +284,59 @@ export async function commandResume(
       }
     }
 
+    // PD-05：默认冻结。裸 resume 先做只读差异探测，当前仓库配置与冻结绑定
+    // 不一致时给出提示但不阻断；--rebind 才显式采用新配置。
+    if (!args.values.rebind) {
+      const bindingDiff = inspectRunBinding({
+        repoPath,
+        workflow,
+        frozenProvider: runProvider,
+      });
+      if (bindingDiff?.hasDifferences) {
+        io.stderr.write(
+          [
+            '当前仓库配置与本运行的冻结绑定存在差异（默认仍按冻结绑定恢复）：',
+            ...formatBindingDiff(bindingDiff),
+            `要采用当前配置恢复，使用 tekon resume --run-id ${runId} --rebind。`,
+          ].join('\n') + '\n',
+        );
+      }
+    } else {
+      // 缺省沿用冻结 provider（provider 名即受理时的 agent 名）；显式
+      // --agent 才切换。引擎输入与 `tekon run` 同形，由组合根工厂构建快照。
+      const rebindResult = await sessionService.rebindRun({
+        runId,
+        engine: {
+          agent: args.values.agent ?? runProvider.provider,
+          allowDirtyBase: workflow.allowDirtyBase ?? false,
+          runtime: providerRuntimeFromCliOptions(args.values),
+        },
+        ...(args.values.agent !== undefined
+          ? { agent: args.values.agent }
+          : {}),
+      });
+      if (rebindResult.outcome === 'terminal') {
+        throw new WorkflowTerminalError(runId, rebindResult.status);
+      }
+      if (rebindResult.outcome === 'active-job') {
+        throw new Error(
+          '运行已有活跃任务，请先使用 tekon cancel 取消或等待其完成。',
+        );
+      }
+      if (rebindResult.diff.hasDifferences) {
+        io.stderr.write(
+          [
+            '已按当前仓库配置重绑定（新冻结身份自洽，历史节点证据保留）：',
+            ...formatBindingDiff(rebindResult.diff),
+          ].join('\n') + '\n',
+        );
+      } else {
+        io.stderr.write(
+          '当前配置与冻结绑定无差异，绑定身份未改变，按原绑定恢复。\n',
+        );
+      }
+    }
+
     if (args.values['approve-human']) {
       if (!decisionContext?.decisionId) {
         throw new Error(
@@ -286,6 +353,13 @@ export async function commandResume(
         throw new Error(
           `决策 ${decisionContext.decisionId} 已经是 ${decision.status} 状态，无法再次操作`,
         );
+      }
+      // Check the provider before recording the approval, so a run that
+      // cannot start does not leave a decision approved but not resumed. A
+      // bare resume is checked inside resumeRun, after its state checks; a
+      // finished run is reported as such by the approval below instead.
+      if (!['passed', 'failed', 'cancelled'].includes(workflow.status)) {
+        await sessionService.preflightResume(runId).catch(rethrowPreflight);
       }
       const humanGate = createHumanGate({
         repositories,
@@ -316,10 +390,11 @@ export async function commandResume(
     const result = await sessionService.resumeRun({
       runId,
       afterApproval: args.values['approve-human'],
+      ...(args.values['gates-only'] ? { gatesOnly: true } : {}),
       ...confirmation,
     }).catch((error: unknown) => {
       if (args.values['approve-human']) throw new Error(`审批已记录，运行尚未恢复：${error instanceof Error ? error.message : String(error)}`);
-      throw error;
+      return rethrowPreflight(error);
     });
     if (result.outcome !== 'enqueued' && args.values['approve-human']) {
       io.stderr.write(`审批已记录，运行尚未恢复（${result.outcome}）。请检查状态后重试。\n`);
@@ -333,6 +408,13 @@ export async function commandResume(
       );
     }
     if (result.outcome === 'terminal') {
+      // PD-17 步 3：failed 的裸 resume 给出显式下一步，避免用户在终态死路前
+      // 不知道 retry 入口；审批路径不提示（语义是人工决策而非失败重试）。
+      if (result.status === 'failed' && !args.values['approve-human']) {
+        io.stderr.write(
+          'failed 是终态，resume 不恢复终态运行；排除失败原因后可用 tekon retry 只重跑失败节点。\n',
+        );
+      }
       throw new WorkflowTerminalError(runId, result.status);
     }
     if (result.outcome === 'active-job') {
@@ -344,7 +426,8 @@ export async function commandResume(
       throw new Error(`ADMISSION_RECOVERY_REQUIRED: runId=${runId}，修复目录准备问题后重试原请求。`);
     }
 
-    jobRunner.start();
+    io.stderr.write(formatPreflightNotice(result.preflight));
+    jobRunner.start({ jobIds: [result.jobId] });
     const onSigint = () => {
       void jobRunner.requestCancel(result.jobId, 'cli SIGINT').catch(() => {});
     };
@@ -363,12 +446,118 @@ export async function commandResume(
     const latest = await repositories.getWorkflowInstance(runId);
     const status = latest?.status ?? 'unknown';
     io.stdout.write(`runId=${runId} status=${status}\n`);
+    const failure = findLatestRunFailure(await repositories.listAuditEvents(runId));
+    const pendingHuman = (await repositories.listHumanDecisions(runId)).some(
+      (decision) => decision.status === 'pending',
+    );
+    const details = runOutcomeDetails({ status, runId, failure, pendingHuman });
+    if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
     return exitCodeForJobOutcome({
       io,
       runId,
       jobId: result.jobId,
       jobStatus,
       workflowStatus: status,
+      failure,
+    });
+  });
+}
+
+/**
+ * PD-17 步 3：`tekon retry` 显式重试一个 failed 运行。只接受 failed 状态，
+ * 经 SessionService 入队带 retry 标记的 resume 作业，由引擎重跑失败节点、
+ * 复用已通过节点。非终态中断应使用 resume，passed/cancelled 不可重试。
+ */
+export async function commandRetry(
+  argv: string[],
+  io: CliIO,
+): Promise<number> {
+  const args = parseArgs({
+    args: argv,
+    options: {
+      repo: { type: 'string' },
+      'run-id': { type: 'string' },
+    },
+    allowPositionals: true,
+  });
+  const repoPath = resolveProjectRepoPath(args.values.repo);
+  await ensureInitialized(repoPath, io);
+  return withCliSessionContext(repoPath, io, async (ctx) => {
+    const { repositories, sessionService, jobs, jobRunner } = ctx;
+    const runId =
+      args.values['run-id'] ?? args.positionals[0] ?? selectLatestRunId(ctx.db);
+    if (!runId) {
+      throw new Error('无法推断运行 ID，请使用 --run-id <runId> 指定');
+    }
+    const workflow = await repositories.getWorkflowInstance(runId);
+    if (!workflow) {
+      throw new Error(`未找到运行: ${runId}`);
+    }
+
+    const result = await sessionService.retryRun({ runId });
+    if (result.outcome === 'terminal') {
+      throw new WorkflowTerminalError(runId, result.status);
+    }
+    if (result.outcome === 'active-job') {
+      // queued 孤儿已由入队事务 handover 复用；走到这里说明作业正被执行
+      // （running/paused/cancelling）。failed 运行无法 cancel（终态转换非法），
+      // 故引导等待收敛与 status 核查，而不是给出必然失败的 cancel 建议。
+      throw new Error(
+        '运行已有执行中的任务，请等待其结束后再重试；长时间无变化时用 tekon status 核查作业状态。',
+      );
+    }
+    if (result.outcome !== 'enqueued') {
+      // failed 重试不经过审批/停止确认，正常只会 enqueued；其余 outcome
+      // 属于不应到达此入口的恢复态，明确报错而不是静默丢弃。
+      throw new Error(
+        `失败重试入队被拒绝（${result.outcome}）；请用 tekon status 核查运行状态。`,
+      );
+    }
+    io.stderr.write(
+      `已入队失败重试：只重跑 failed 节点，已通过节点复用。\n`,
+    );
+
+    jobRunner.start({ jobIds: [result.jobId] });
+    const onSigint = () => {
+      void jobRunner
+        .requestCancel(result.jobId, 'cli SIGINT')
+        .catch(() => {});
+    };
+    process.on('SIGINT', onSigint);
+    let jobStatus: Awaited<ReturnType<typeof awaitJobTerminal>>;
+    try {
+      jobStatus = await awaitJobTerminal({
+        jobs,
+        jobRunner,
+        jobId: result.jobId,
+      });
+    } finally {
+      process.removeListener('SIGINT', onSigint);
+    }
+
+    const latest = await repositories.getWorkflowInstance(runId);
+    const status = latest?.status ?? 'unknown';
+    io.stdout.write(`runId=${runId} status=${status}\n`);
+    const failure = findLatestRunFailure(
+      await repositories.listAuditEvents(runId),
+    );
+    const pendingHuman = (
+      await repositories.listHumanDecisions(runId)
+    ).some((decision) => decision.status === 'pending');
+    const details = runOutcomeDetails({
+      status,
+      runId,
+      failure,
+      pendingHuman,
+    });
+    if (details.length > 0) io.stdout.write(`${details.join('\n')}\n`);
+    return exitCodeForJobOutcome({
+      io,
+      runId,
+      jobId: result.jobId,
+      jobStatus,
+      workflowStatus: status,
+      failure,
     });
   });
 }
@@ -399,4 +588,11 @@ export async function commandCancel(
     },
   );
   return 0;
+}
+
+function rethrowPreflight(error: unknown): never {
+  if (error instanceof ProviderPreflightError) {
+    throw new Error(`${error.message}\n下一步: ${error.hint}`);
+  }
+  throw error;
 }

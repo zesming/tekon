@@ -11,6 +11,7 @@ import {
 } from '@tekon/core';
 
 import { runCli, type CliIO } from '../src/index.js';
+import { writePermissiveRepoProfile } from './helpers/repo-profile.js';
 
 // A standard-delivery mock run creates the full role/gate chain and performs
 // real filesystem/Git setup. Five seconds is below observed CI variance; use a
@@ -69,7 +70,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
 
       const stdout = io.takeStdout();
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('运行已启动');
+      expect(stdout).toContain('✅ 运行已完成');
       expect(stdout).toContain('状态: passed');
 
       const runIdMatch = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(stdout);
@@ -133,7 +134,7 @@ describe('CLI run plan digest and snapshot persistence', () => {
 
       const stdout = io.takeStdout();
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('运行已启动');
+      expect(stdout).toContain('✅ 运行已完成');
       expect(stdout).toContain('状态: passed');
     },
     WORKFLOW_SNAPSHOT_TIMEOUT_MS,
@@ -191,5 +192,6 @@ function createFixtureRepo(tempDirs: string[]): string {
   );
   execFileSync('git', ['add', 'package.json'], { cwd: repoPath });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+  writePermissiveRepoProfile(repoPath);
   return repoPath;
 }

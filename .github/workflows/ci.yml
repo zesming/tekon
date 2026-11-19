@@ -29,6 +29,12 @@ jobs:
     name: Verify (Node 24)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Node 24 的 V8 默认 heap 随 worker 寿命持续增长，长跑收尾时 RSS 触碰
+      # runner 上限被 OOM killer 以信号杀死（vitest 表现为无 JS 错误的
+      # Worker exited unexpectedly）。限定 old-space 让 V8 在 cap 内积极 GC，
+      # 把 RSS 压在系统信号阈值之下；2048MB 远大于测试实际需要（256MB 可过）。
+      NODE_OPTIONS: --max-old-space-size=2048
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -65,8 +71,24 @@ jobs:
       - name: Typecheck all packages
         run: pnpm -r typecheck
 
-      - name: Unit and e2e tests (core, CLI, Web)
-        run: pnpm test --run
+      - name: Core unit tests
+        run: pnpm --filter @tekon/core test:unit
+
+      - name: Core e2e tests (serial worktree)
+        # unit/e2e 分两个独立 vitest 进程：单 worker 承载全部 161 文件会在
+        # runner 寿命末期被系统回收（Worker exited unexpectedly，无 JS 错误）。
+        # 用 exec 直传 flag（经 package script 的 `--` 会被 vitest 当位置参数，
+        # 使串行失效）；真实 git-worktree e2e 必须串行规避 5000ms 竞争超时。
+        run: pnpm --filter @tekon/core exec vitest --run .e2e.test --no-file-parallelism
+
+      - name: CLI unit tests
+        run: pnpm --filter @tekon/cli test:unit
+
+      - name: CLI real-process e2e tests (serial)
+        run: pnpm --filter @tekon/cli exec vitest --run .e2e.test --no-file-parallelism
+
+      - name: Web tests
+        run: pnpm --filter @tekon/web test
 
       - name: CLI binary smoke
         run: |

@@ -29,7 +29,11 @@ import {
   isTerminalWorkflowStatus,
   writeWorkflowTerminal,
 } from './state-machine.js';
-import { loadWorkflowTemplate, type WorkflowTemplate } from './template.js';
+import {
+  DEFAULT_WORKFLOW_TEMPLATE_ID,
+  loadWorkflowTemplate,
+  type WorkflowTemplate,
+} from './template.js';
 
 // Sub-modules
 import { createLeaseService } from './lease-service.js';
@@ -44,7 +48,11 @@ import {
   validateAndBuildExecutionPlan,
 } from './execution-plan.js';
 import type { RunPlan } from './run-plan.js';
-import { captureRepoCommands } from './repo-command-binding.js';
+import {
+  assertNoMissingRepoCommands,
+  captureRepoCommands,
+} from './repo-command-binding.js';
+import { passthroughEnvAuditPayload } from '../config/tekon-config.js';
 
 // Re-export types from sub-modules so external consumers only need engine.ts
 export type { ExecutableNode, ExecutionPlan } from './workflow-runtime.js';
@@ -56,11 +64,13 @@ export {
   stableGateKey,
   makeSyntheticLease,
   defaultCommandPolicy,
+  gateCommandPolicy,
+  effectiveGateForCommand,
   defaultBuiltInRolesDir,
-  resolveReviewTargetNodeByHeuristic,
   isChangesRequested,
   resolveMaxReworkAttempts,
 } from './workflow-runtime.js';
+import type { ResumeExecutionOptions } from './workflow-runtime.js';
 
 // Re-export assertSuccessfulAgentRun from helpers
 export { assertSuccessfulAgentRun } from './helpers.js';
@@ -90,6 +100,8 @@ export interface WorkflowEngineResult {
 }
 
 export interface WorkflowEngine {
+  /** Provider this engine freezes into new runs, for checks before preparing. */
+  readonly providerSnapshot?: { provider: string; configSummary: Record<string, unknown> };
   /** Pure validated descriptor; only the admission transaction persists it. */
   buildPreparedRun(input: WorkflowEngineStartInput): PreparedAdmissionData;
   prepareRun(
@@ -97,9 +109,17 @@ export interface WorkflowEngine {
   ): Promise<WorkflowEnginePreparedResult>;
   executePreparedRun(runId: string): Promise<WorkflowInstance>;
   startRun(input: WorkflowEngineStartInput): Promise<WorkflowEnginePreparedResult>;
-  resumeRun(runId: string): Promise<WorkflowEngineResult>;
+  resumeRun(
+    runId: string,
+    options?: ResumeExecutionOptions,
+  ): Promise<WorkflowEngineResult>;
+  /**
+   * PD-17 步 3：显式重试一个 failed 运行。只接受 failed 状态（裸 resume 仍
+   * 拒绝终态），CAS failed→running 后重跑失败节点；已 passed/skipped 的节点
+   * 由 executePlan 自然跳过复用。
+   */
+  retryRun(runId: string): Promise<WorkflowEngineResult>;
 }
-
 export interface WorkflowEnginePreparedResult extends WorkflowEngineResult {
   requestId: string;
   replayed: boolean;
@@ -116,7 +136,8 @@ export interface CreateWorkflowEngineOptions {
   worktreeManager?: WorktreeManager;
   baseRef?: string;
   allowDirtyBase?: boolean;
-  agentProvider?: AgentRunResult['provider'];
+  /** Provider recorded in the plan and snapshot; resolve the default with resolveDefaultAgent. */
+  agentProvider: AgentRunResult['provider'];
   agentConfigSummary?: Record<string, unknown>;
   profile?: string;
   timeoutMs?: number;
@@ -164,6 +185,9 @@ export interface CreateWorkflowEngineOptions {
 export function createWorkflowEngine(
   options: CreateWorkflowEngineOptions,
 ): WorkflowEngine {
+  // CD-09：gateway 同时供 Gate 引擎与 lease 服务的 git 探测使用，保证
+  // worktree/in-place/none 三态与门禁命令走同一套命令裁决。
+  const gateway = createCommandGateway({ repositories: options.repositories });
   const gateEngine =
     options.gateEngine ??
     createGateEngine({
@@ -174,7 +198,7 @@ export function createWorkflowEngine(
       // gateway.run() call at the gate-command spawn site (runCommandGate),
       // which the web executor wires in S7 (D6). The engine accepts `registry`
       // so that seam exists; createCommandGateway itself takes no registry.
-      gateway: createCommandGateway({ repositories: options.repositories }),
+      gateway,
     });
   const artifactStore = createArtifactStore({
     repoPath: options.repoPath,
@@ -188,6 +212,8 @@ export function createWorkflowEngine(
     repositories: options.repositories,
     audit: options.audit,
     worktreeManager: options.worktreeManager,
+    gateway,
+    dataDir: options.dataDir,
     baseRef: options.baseRef,
     allowDirtyBase: options.allowDirtyBase,
     executionLeases,
@@ -255,6 +281,7 @@ export function createWorkflowEngine(
   gateRunnerRef = gateRunner;
 
   const nodeExecutor = createNodeExecutor({
+    repoPath: options.repoPath,
     repositories: options.repositories,
     audit: options.audit,
     adapter: options.adapter,
@@ -263,11 +290,16 @@ export function createWorkflowEngine(
     promptBuilder,
     gateRunner,
     getCheckedTransition: () => checkedTransitionNode,
+    getReworkHandler: () => reworkHandlerRef,
     signal: options.signal,
     agentEventSink: options.agentEventSink,
   });
 
   return {
+    providerSnapshot: {
+      provider: options.agentProvider,
+      configSummary: options.agentConfigSummary ?? {},
+    },
     buildPreparedRun: buildAdmissionData,
     prepareRun,
     executePreparedRun,
@@ -286,7 +318,7 @@ export function createWorkflowEngine(
       }
     },
 
-    async resumeRun(runId) {
+    async resumeRun(runId, resumeOptions) {
       const existing = await options.repositories.getWorkflowInstance(runId);
       if (!existing) {
         throw new Error(`run not found: ${runId}`);
@@ -327,9 +359,68 @@ export function createWorkflowEngine(
       await options.audit.append({
         runId,
         type: 'run.resumed',
-        payload: { kind: existing.kind },
+        payload: {
+          kind: existing.kind,
+          ...(resumeOptions?.gatesOnly ? { gatesOnly: true } : {}),
+          ...passthroughEnvAuditPayload(options.agentConfigSummary),
+        },
       });
 
+      const workflow = await executePlan(runId, plan, resumeOptions);
+      return { runId, workflow };
+    },
+
+    async retryRun(runId) {
+      const existing = await options.repositories.getWorkflowInstance(runId);
+      if (!existing) {
+        throw new Error(`run not found: ${runId}`);
+      }
+      // 只接受 failed：passed/cancelled 是不可重试终态，blocked/interrupted/
+      // paused 应走 resume，不得用 retry 绕过各自的恢复语义。
+      if (existing.status !== 'failed') {
+        throw new Error(
+          `RETRY_NOT_FAILED: 运行 ${runId} 当前状态为 ${existing.status}，只有 failed 运行可以 retry；非终态中断请用 tekon resume。`,
+        );
+      }
+
+      await assertAdmissionReady(runId);
+      // 完整性校验在任何节点重跑前执行，确保失败没有破坏计划/审计链。
+      const plan = await validateAndBuildExecutionPlan(
+        runId,
+        options.repositories,
+        options.audit,
+      );
+
+      // CAS failed→running：并发 cancel/其他终态写入会使 CAS 失败，保持终态权威。
+      const casResult = await options.repositories.casWorkflowInstanceStatus(
+        runId,
+        'failed',
+        'running',
+        undefined,
+      );
+      if (!casResult.changed) {
+        const latest = await options.repositories.getWorkflowInstance(runId);
+        if (latest && latest.status !== 'failed') {
+          throw new WorkflowTerminalError(runId, latest.status);
+        }
+        throw new Error(
+          `RETRY_CONFLICT: 运行 ${runId} 状态已变化，retry 被拒绝，请刷新后重试。`,
+        );
+      }
+      await options.audit.append({
+        runId,
+        type: 'run.retried',
+        payload: {
+          kind: existing.kind,
+          fromStatus: 'failed',
+          toStatus: 'running',
+          ...passthroughEnvAuditPayload(options.agentConfigSummary),
+        },
+      });
+
+      // 不传 resumeOptions：failed 节点走全新 agent 执行（新建 role_run；
+      // 活动租约仍按节点执行器的既有规则复用），executePlan 自动跳过
+      // passed/skipped 节点，只重跑 failed 及其后继。
       const workflow = await executePlan(runId, plan);
       return { runId, workflow };
     },
@@ -386,9 +477,10 @@ export function createWorkflowEngine(
     const input = structuredClone(rawInput);
     const identity = requestIdentity(input, settings);
     const workflowSpec = input.workflowSpec ?? loadWorkflowTemplate({
-      name: input.templateName ?? (input.kind === 'goal' ? 'goal' : 'standard-delivery'),
+      name: input.templateName ?? (input.kind === 'goal' ? 'goal' : DEFAULT_WORKFLOW_TEMPLATE_ID),
     });
     const repoCommands = captureRepoCommands(settings.repoPath, workflowSpec);
+    assertNoMissingRepoCommands(workflowSpec, repoCommands);
     const prepared = buildRunPlan({ ...input, workflowSpec }, { ...settings, profile: input.profile ?? settings.profile, repoCommands });
     const runId = `run_${randomUUID()}`;
     const execution = runPlanToExecutionPlan(prepared.canonicalPlan, runId);
@@ -419,6 +511,10 @@ export function createWorkflowEngine(
         nodes: phase.nodes.map((node, nodeIndex) => ({
           id: node.id,
           role: node.role,
+          ...(node.prompt ? { prompt: node.prompt } : {}),
+          // CD-09：工作区模式必须随受理数据落库，否则回落 worktree 默认，
+          // none/in-place 节点会丢失隔离声明。
+          workspace: node.workspace,
           order: nodeIndex,
           inputs: node.inputs,
           outputs: node.outputs,
@@ -524,6 +620,7 @@ export function createWorkflowEngine(
   async function executePlan(
     runId: string,
     plan: import('./workflow-runtime.js').ExecutionPlan,
+    resumeOptions?: ResumeExecutionOptions,
   ): Promise<WorkflowInstance> {
     for (const phase of plan.phases) {
       for (const node of phase.nodes) {
@@ -571,7 +668,11 @@ export function createWorkflowEngine(
           return helpers.mustGetWorkflow(runId);
         }
 
-        const completed = await nodeExecutor.executeNode(runId, node);
+        const completed = await nodeExecutor.executeNode(
+          runId,
+          node,
+          resumeOptions,
+        );
         if (!completed) {
           return helpers.mustGetWorkflow(runId);
         }

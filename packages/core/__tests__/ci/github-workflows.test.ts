@@ -109,9 +109,37 @@ describe('CI workflow', () => {
     const install = stepIndex(list, runs('pnpm install --frozen-lockfile'));
     const build = stepIndex(list, (step) => step.run === 'pnpm -r build');
     const typecheck = stepIndex(list, (step) => step.run === 'pnpm -r typecheck');
-    const test = stepIndex(list, (step) => step.run === 'pnpm test --run');
+    // core/cli 各拆 unit/e2e 独立 vitest 进程：单 worker 承载全部文件会在
+    // runner 寿命末期被系统回收；e2e 用 exec 直传串行 flag 规避 worktree 超时。
+    const coreUnit = stepIndex(
+      list,
+      runs('pnpm --filter @tekon/core test:unit'),
+    );
+    const coreE2e = stepIndex(
+      list,
+      runs('pnpm --filter @tekon/core exec vitest --run .e2e.test'),
+    );
+    expect(list[coreE2e]?.run).toContain('--no-file-parallelism');
+    const cliUnit = stepIndex(list, runs('pnpm --filter @tekon/cli test:unit'));
+    const cliE2e = stepIndex(
+      list,
+      runs('pnpm --filter @tekon/cli exec vitest --run .e2e.test'),
+    );
+    expect(list[cliE2e]?.run).toContain('--no-file-parallelism');
+    const webTest = stepIndex(list, runs('pnpm --filter @tekon/web test'));
     const smoke = stepIndex(list, runs('node packages/cli/dist/index.js --version'));
-    expect([install, build, typecheck, test, smoke]).toEqual([install, build, typecheck, test, smoke].sort((a, b) => a - b));
+    const ordered = [
+      install,
+      build,
+      typecheck,
+      coreUnit,
+      coreE2e,
+      cliUnit,
+      cliE2e,
+      webTest,
+      smoke,
+    ];
+    expect(ordered).toEqual([...ordered].sort((a, b) => a - b));
   });
 
   it('tests every declared Node floor, and only those, in a fail-complete matrix', () => {

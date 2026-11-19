@@ -5,7 +5,8 @@ import { createArtifactStore } from '../artifact/store.js';
 import type { AuditLogger } from '../audit/logger.js';
 import type { TekonRepositories } from '../db/repositories.js';
 import { loadRepoProfile, type RepoProfile } from '../repo/profile.js';
-import type { Artifact } from '../types/domain.js';
+import type { Artifact, Node } from '../types/domain.js';
+import type { WorktreeLease } from '../types/config.js';
 import {
   createDeliveryEvidencePackage,
   type DeliveryEvidencePackage,
@@ -24,13 +25,59 @@ export interface PullRequestPreparation {
   requiresHumanApproval: true;
 }
 
+/**
+ * CD-09：in-place 节点直接在主工作区改文件，不建 worktree、不产生
+ * tekon-delivery/<runId> 交付分支，PR 交付无分支可提；worktree 与 git
+ * 目录下的 none 才走隔离分支。前置拦截，避免后续 git 命令抛出原始错误。
+ * 抽成纯函数以便在不构造完整交付证据的情况下单测。
+ */
+export function assertDeliveryWorkspaceSupported(
+  nodes: ReadonlyArray<Pick<Node, 'id' | 'workspace'>>,
+): void {
+  const inPlaceNodes = nodes.filter((node) => node.workspace === 'in-place');
+  if (inPlaceNodes.length > 0) {
+    throw new Error(
+      `DELIVERY_WORKSPACE_UNSUPPORTED: 含 in-place 节点（${inPlaceNodes
+        .map((node) => node.id)
+        .join(
+          ', ',
+        )}），改动直接留在仓库工作区且没有交付分支，无法创建 PR；请改用 worktree 模式的工作流。`,
+    );
+  }
+}
+
+/**
+ * CD-09 SF-4：非 git 目录下即使全是 none 节点，也只会产生合成租约
+ * （worktreePath 直指 repoPath），从不创建 tekon-delivery 交付分支。
+ * 至少存在一个真实 worktree 租约（worktreePath ≠ repoPath）才允许交付。
+ */
+export function assertDeliveryBranchAvailable(
+  leases: ReadonlyArray<Pick<WorktreeLease, 'worktreePath' | 'repoPath'>>,
+): void {
+  const hasRealWorktree = leases.some(
+    (lease) => lease.worktreePath !== lease.repoPath,
+  );
+  if (!hasRealWorktree) {
+    throw new Error(
+      'DELIVERY_WORKSPACE_UNSUPPORTED: 该运行没有产生 git 交付分支（非 git 目录或全部为合成租约），无法创建 PR；请在 git 仓库用 worktree 模式运行。',
+    );
+  }
+}
+
 export async function createPullRequestPreparation(input: {
   repoPath: string;
   repositories: TekonRepositories;
   audit: AuditLogger;
   runId: string;
   profile?: RepoProfile;
+  /**
+   * 是否要求存在真实 git 交付分支（真实 worktree 租约）。生产交付默认 true，
+   * 对合成租约（非 git/in-place）友好拦截；评估/指标流水线需要为不完整运行
+   * 构造证据包时显式传 false 绕过该前置（CLI/Web/automation 都用默认值）。
+   */
+  requireDeliveryBranch?: boolean;
 }): Promise<PullRequestPreparation> {
+  const requireDeliveryBranch = input.requireDeliveryBranch ?? true;
   const profile = input.profile ?? loadRepoProfile(input.repoPath);
   const evidence = await createDeliveryEvidencePackage({
     repositories: input.repositories,
@@ -39,17 +86,23 @@ export async function createPullRequestPreparation(input: {
     repoPath: input.repoPath,
     riskGates: ['human', 'security-scan'],
   });
+  const nodes = await input.repositories.listNodes(input.runId);
+  const deliveryNode = nodes.at(-1);
+  if (!deliveryNode) {
+    throw new Error(`run has no nodes: ${input.runId}`);
+  }
+  assertDeliveryWorkspaceSupported(nodes);
+  if (requireDeliveryBranch) {
+    assertDeliveryBranchAvailable(
+      await input.repositories.listWorktreeLeases(input.runId),
+    );
+  }
   await assertPrePullRequestReady({
     repositories: input.repositories,
     audit: input.audit,
     runId: input.runId,
     repoPath: input.repoPath,
   });
-  const nodes = await input.repositories.listNodes(input.runId);
-  const deliveryNode = nodes.at(-1);
-  if (!deliveryNode) {
-    throw new Error(`run has no nodes: ${input.runId}`);
-  }
   const qaSignoff = evidence.qaReleaseSignoffs[0];
   if (qaSignoff && !qaSignoff.matchedRef) {
     throw new Error(

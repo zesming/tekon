@@ -14,20 +14,24 @@ import {
 import type { GateEngine } from '../gate/engine.js';
 import type { WorktreeLease } from '../types/config.js';
 import { loadRepoProfile, repoProfileCommandResolution } from '../repo/profile.js';
+import { compileRoleCommandPolicy } from '../role/tool-policy.js';
+import { mergeRoleAndGatePolicy } from '../role/policy-merge.js';
 import {
   type WorkflowGateConfig,
 } from './template.js';
 import {
   type CheckedTransitionFn,
   type ExecutableNode,
-  defaultCommandPolicy,
+  gateCommandPolicy,
   gatesWithStableKeys,
   isChangesRequested,
   resolveMaxReworkAttempts,
 } from './workflow-runtime.js';
 import type { LeaseService } from './lease-service.js';
 import type { WorkflowHelpers } from './helpers.js';
-import { assertSuccessfulAgentRun } from './helpers.js';
+import { agentFailureAuditPayload, assertSuccessfulAgentRun, isNonRetryableAgentFailure } from './helpers.js';
+import { reworkNodeIdFor } from './execution-plan.js';
+import { createAutoFixRepairNode } from './repair-node.js';
 import type { PromptBuilder } from './prompt-builder.js';
 import type { ReworkHandler } from './rework.js';
 import { isJobOwnershipLostAbort, isJobShutdownAbort } from '../session/job-runner.js';
@@ -102,21 +106,32 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
 
   async function runGate(
     runId: string,
-    nodeId: string,
+    node: Pick<ExecutableNode, 'id' | 'role'>,
     gate: WorkflowGateConfig,
   ): Promise<GateResult> {
-    const lease = await leaseService.activeExecutionLease(runId, nodeId, { required: true });
+    const lease = await leaseService.activeExecutionLease(runId, node.id, { required: true });
     if (deps.getSignal?.()?.aborted) throw new Error('Gate execution aborted before command start');
     const cwd = lease?.worktreePath ?? repoPath;
     const resolvedGate = resolveGateCommand(gate);
+    // 10a-2：门禁命令在「拥有该 gate 的节点」角色策略下裁决。角色文件
+    // 加载失败直接抛错（fail-closed，不回落基线）；repoPath 取主仓。
+    const loadedRole = promptBuilder.loadNodeRole(node);
+    const rolePolicy = compileRoleCommandPolicy({
+      repoPath,
+      role: node.role,
+      tools: loadedRole.tools,
+    });
+    const gatePolicy = gateCommandPolicy(cwd, resolvedGate);
     return gateEngine.runGate({
       runId,
-      nodeId,
+      nodeId: node.id,
       gate: resolvedGate as GateConfig,
       cwd,
       artifactRoot: repoPath,
       outputDir: join(repoPath, dataDir, 'runs', runId, 'gates'),
-      policy: defaultCommandPolicy(cwd),
+      // PD-04 手写授权 + 角色 deny/审批/network/cwd 硬约束合并；固定拒绝规则
+      // 仍在 Gateway 裁决层最先生效，角色 deny 不可被门禁授权覆盖。
+      policy: mergeRoleAndGatePolicy(rolePolicy, gatePolicy, cwd),
     });
   }
 
@@ -265,7 +280,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
       await helpers.recordQaValidationRef(runId, node);
     }
     if (await interrupted()) return false;
-    result = await runGate(runId, node.id, gate);
+    result = await runGate(runId, node, gate);
     if (await interrupted()) return false;
     if (result.status === 'passed' || result.status === 'skipped') {
       await audit.append({
@@ -316,7 +331,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         if (await interrupted()) return false;
         await leaseService.finalizeExecutionLease(runId, node.id);
         if (await interrupted()) return false;
-        const repairNode = await gateEngine.createAutoFixRepairNode({
+        const repairNode = await createAutoFixRepairNode(repositories, {
           failedGateResult: result,
           fixerRole: node.role,
         });
@@ -342,6 +357,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
             id: repairNode.id,
             role: repairNode.role,
             phaseId: repairNode.phaseId,
+            workspace: repairNode.workspace,
           });
           try {
             if (await interrupted()) return false;
@@ -403,9 +419,12 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               gateResultId: result.id,
               attempt: retryAttempt,
               error: error instanceof Error ? error.message : String(error),
+              ...agentFailureAuditPayload(error),
             },
           });
-          if (retryAttempt >= gate.maxRetries) {
+          // Another attempt cannot fix a missing provider, a login or a bad
+          // config; stop and let the run report it.
+          if (retryAttempt >= gate.maxRetries || isNonRetryableAgentFailure(error)) {
             break;
           }
           if (await interrupted()) return false;
@@ -417,7 +436,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
           if (await interrupted()) return false;
           await repositories.transitionNode(node.id, 'awaiting-gate');
           if (await interrupted()) return false;
-          result = await runGate(runId, node.id, gate);
+          result = await runGate(runId, node, gate);
           if (await interrupted()) return false;
           if (result.status === 'passed' || result.status === 'skipped') {
             repairPassed = true;
@@ -438,7 +457,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
         if (await interrupted()) return false;
         await repositories.transitionNode(node.id, 'awaiting-gate');
         if (await interrupted()) return false;
-        result = await runGate(runId, node.id, gate);
+        result = await runGate(runId, node, gate);
         if (await interrupted()) return false;
         if (result.status === 'passed' || result.status === 'skipped') {
           repairPassed = true;
@@ -487,7 +506,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
               nodeId: node.id,
               reviewNodeId: node.id,
               targetNodeId,
-              reworkNodeId: `${targetNodeId}_rework_${reworkAttempt}`,
+              reworkNodeId: reworkNodeIdFor(targetNodeId, reworkAttempt, result.id),
               attempt: reworkAttempt,
               maxAttempts: maxReworkAttempts,
               gateResultId: result.id,
@@ -505,7 +524,7 @@ export function createGateRunner(deps: GateRunnerDeps): GateRunner {
           );
 
           if (await interrupted()) return false;
-          result = await runGate(runId, node.id, gate);
+          result = await runGate(runId, node, gate);
           if (await interrupted()) return false;
           if (result.status === 'passed' || result.status === 'skipped') {
             reworkPassed = true;

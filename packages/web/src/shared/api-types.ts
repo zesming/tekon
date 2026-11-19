@@ -53,6 +53,10 @@ import {
   reviewGetInputSchema,
   roleItemSchema,
   roleListOutputSchema,
+  roleGetInputSchema,
+  roleGetOutputSchema,
+  roleUpdatePromptInputSchema,
+  roleUpdatePromptOutputSchema,
   runWrapperOutputSchema,
   textPreviewSchema,
   tokenRunInputSchema,
@@ -181,6 +185,12 @@ export type AuditVerification = z.infer<typeof auditVerificationSchema>;
 export type AuditListOutput = z.infer<typeof auditListOutputSchema>;
 
 export type RoleListOutput = z.infer<typeof roleListOutputSchema>;
+export type RoleGetInput = z.infer<typeof roleGetInputSchema>;
+export type RoleGetOutput = z.infer<typeof roleGetOutputSchema>;
+export type RoleUpdatePromptInput = z.infer<typeof roleUpdatePromptInputSchema>;
+export type RoleUpdatePromptOutput = z.infer<
+  typeof roleUpdatePromptOutputSchema
+>;
 export type WorkflowListOutput = z.infer<typeof workflowListOutputSchema>;
 
 export type DeliveryDryRunOutput = z.infer<typeof deliveryDryRunOutputSchema>;

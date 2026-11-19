@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { passthroughGateEngine } from '../helpers/passthrough-gate-engine.js';
+
 import {
   createAuditLogger,
   createRepositories,
@@ -14,6 +16,7 @@ import {
   type AgentRunInput,
   type ArtifactType,
   type GateEngine,
+  findLatestRunFailure,
 } from '../../src/index.js';
 
 describe('workflow engine role prompt integration', () => {
@@ -47,6 +50,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -59,7 +63,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -81,7 +85,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-node',
@@ -132,6 +135,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -144,7 +148,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -166,7 +170,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-scope',
@@ -186,8 +189,9 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       "Complete only this workflow node's responsibilities.",
     );
+    // CD-09：默认 worktree 节点的写权限由 workspace 声明驱动（非产物推断）。
     expect(prompts[0]).toContain(
-      'do not modify the repository working tree; write only node artifacts under TEKON_OUTPUT_DIR.',
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
     );
     expect(prompts[0]).toContain(
       'After the manifest file is written, stop work and exit immediately.',
@@ -231,6 +235,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -258,7 +263,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -280,7 +285,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm-scope',
             name: 'PM Scope',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-card',
@@ -299,7 +303,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm-review',
             name: 'PM Review',
             dependsOn: ['pm-scope'],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-review',
@@ -370,6 +373,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -382,7 +386,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -404,7 +408,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-test-plan',
@@ -456,6 +459,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -494,7 +498,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -516,7 +520,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-review',
@@ -532,7 +535,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pmo',
             name: 'PMO',
             dependsOn: ['pm'],
-            parallel: false,
             nodes: [
               {
                 id: 'pmo-checkpoint',
@@ -611,6 +613,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push(input.prompt);
@@ -623,7 +626,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -645,7 +648,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-change',
@@ -663,7 +665,7 @@ describe('workflow engine role prompt integration', () => {
 
     expect(prompts[0]).toContain('Tekon artifact protocol');
     expect(prompts[0]).toContain(
-      'Keep repository edits scoped to the requested code-changes artifact and this workflow node.',
+      'Keep repository edits scoped to this workflow node.',
     );
     expect(prompts[0]).toContain(
       'Do not run git add, git commit, git push, or create PRs inside this node.',
@@ -671,8 +673,12 @@ describe('workflow engine role prompt integration', () => {
     expect(prompts[0]).toContain(
       'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
     );
+    // CD-09：该节点是默认 worktree，不应出现 none/in-place 的专属文案。
     expect(prompts[0]).not.toContain(
-      'Required artifact types do not include code-changes; do not modify the repository working tree;',
+      'This node runs with workspace=none;',
+    );
+    expect(prompts[0]).not.toContain(
+      'This node runs with workspace=in-place;',
     );
     expect(prompts[0]).toContain(
       'After the manifest file is written, stop work and exit immediately.',
@@ -719,6 +725,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -734,7 +741,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -756,7 +763,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-test',
@@ -775,7 +781,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'review',
             name: 'Review',
             dependsOn: ['qa'],
-            parallel: false,
             nodes: [
               {
                 id: 'reviewer-check',
@@ -867,6 +872,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -894,7 +900,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     await engine.startRun({
@@ -916,7 +922,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'pm',
             name: 'PM',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'pm-demand-card',
@@ -932,7 +937,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: ['pm'],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-signoff',
@@ -995,6 +999,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           prompts.push({
@@ -1080,18 +1085,6 @@ describe('workflow engine role prompt integration', () => {
             createdAt: new Date().toISOString(),
           });
         },
-        async createAutoFixRepairNode(input) {
-          return repositories.createNode({
-            id: `repair_${input.failedGateResult.id}`,
-            runId: input.failedGateResult.runId,
-            role: input.fixerRole,
-            status: 'pending',
-            gates: [],
-            dependencies: [input.failedGateResult.nodeId],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-        },
       },
     });
 
@@ -1114,7 +1107,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'rd',
             name: 'RD',
             dependsOn: [],
-            parallel: false,
             nodes: [
               {
                 id: 'rd-code-change',
@@ -1139,7 +1131,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'qa',
             name: 'QA',
             dependsOn: ['rd'],
-            parallel: false,
             nodes: [
               {
                 id: 'qa-validation',
@@ -1158,7 +1149,6 @@ describe('workflow engine role prompt integration', () => {
             id: 'delivery',
             name: 'Delivery',
             dependsOn: ['qa'],
-            parallel: false,
             nodes: [
               {
                 id: 'future-delivery',
@@ -1237,6 +1227,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(): Promise<AgentRunResult> {
           return {
@@ -1255,7 +1246,7 @@ describe('workflow engine role prompt integration', () => {
           };
         },
       },
-      gateEngine: createPassingGateEngine(repositories),
+      gateEngine: passthroughGateEngine(repositories),
     });
 
     const result = await engine.startRun({
@@ -1307,6 +1298,7 @@ describe('workflow engine role prompt integration', () => {
       repositories,
       audit,
       builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
       adapter: {
         async runAgent(input): Promise<AgentRunResult> {
           return {
@@ -1340,6 +1332,214 @@ describe('workflow engine role prompt integration', () => {
       expect.arrayContaining([
         expect.objectContaining({ type: 'gate.repair.failed' }),
       ]),
+    );
+    db.close();
+  });
+
+  it('stops repairing after a login failure and keeps the reason', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-'));
+    const rolesDir = mkdtempSync(join(tmpdir(), 'tekon-engine-repair-auth-roles-'));
+    tempDirs.push(repoPath, rolesDir);
+    writeRoleFixture(rolesDir);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    let repairRuns = 0;
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      builtInRolesDir: rolesDir,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          const repair = input.runContext.nodeId.startsWith('repair_');
+          if (repair) repairRuns += 1;
+          return {
+            provider: 'custom',
+            exitCode: repair ? 1 : 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+            ...(repair
+              ? { diagnostic: { code: 'not-authenticated' as const, message: 'claude 未登录或凭据无效', hint: '执行 claude auth login' } }
+              : {}),
+          };
+        },
+      },
+      gateEngine: createFailingBuildGateEngine(repositories),
+    });
+
+    const result = await engine.startRun({
+      demandText: '修复节点未登录',
+      mode: 'template',
+      workflowSpec: repairWorkflowSpec(3),
+    });
+
+    expect(result.workflow.status).toBe('blocked');
+    expect(repairRuns).toBe(1);
+    const events = await repositories.listAuditEvents(result.runId);
+    const failures = events.filter((event) => event.type === 'gate.repair.failed');
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.payload.diagnostic).toMatchObject({ code: 'not-authenticated' });
+    expect(findLatestRunFailure(events)).toMatchObject({
+      kind: 'not-authenticated',
+      hint: '执行 claude auth login',
+    });
+    db.close();
+  });
+
+  it('CD-09 drives source-edit permission wording from node workspace, not artifact types', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-ws-prompt-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: passthroughGateEngine(repositories),
+    });
+
+    await engine.startRun({
+      demandText: '三态写权限提示词',
+      mode: 'template',
+      workflowSpec: {
+        id: 'ws-prompt',
+        name: 'Workspace Prompt',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'P1',
+            dependsOn: [],
+            nodes: [
+              {
+                id: 'none-node', role: 'goal', workspace: 'none',
+                inputs: [], outputs: [{ id: 'r1', type: 'report' }],
+                gates: [], dependsOn: [],
+              },
+              {
+                id: 'inplace-node', role: 'goal', workspace: 'in-place',
+                inputs: [], outputs: [{ id: 'r2', type: 'report' }],
+                gates: [], dependsOn: [],
+              },
+              {
+                id: 'worktree-node', role: 'rd',
+                inputs: [], outputs: [{ id: 'code', type: 'code-changes' }],
+                gates: [], dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    // 无 gate/rework，节点按模板顺序执行：none → in-place → worktree。
+    const [nonePrompt, inPlacePrompt, worktreePrompt] = prompts;
+    expect(prompts).toHaveLength(3);
+
+    expect(nonePrompt).toContain('workspace=none; do not modify, create, or delete');
+    expect(inPlacePrompt).toContain('workspace=in-place; you may edit repository files directly');
+    expect(inPlacePrompt).not.toContain('Tekon Engine promotes and commits');
+    expect(worktreePrompt).toContain(
+      'Leave repository edits in the worktree; Tekon Engine promotes and commits passed node changes after gates.',
+    );
+    db.close();
+  });
+
+  it('CD-09 N-R2: a none node with no outputs still receives the source-edit restriction in its main prompt', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'tekon-engine-goal-noprompt-'));
+    tempDirs.push(repoPath);
+    const db = openTekonDatabase({ filename: ':memory:' });
+    migrateDatabase(db);
+    const repositories = createRepositories(db);
+    const audit = createAuditLogger({ repositories });
+    const prompts: string[] = [];
+
+    const engine = createWorkflowEngine({
+      repoPath,
+      dataDir: '.tekon',
+      repositories,
+      audit,
+      agentProvider: 'mock',
+      adapter: {
+        async runAgent(input): Promise<AgentRunResult> {
+          prompts.push(input.prompt);
+          return {
+            provider: 'custom',
+            exitCode: 0,
+            durationMs: 1,
+            outputFiles: [],
+            timedOut: false,
+          };
+        },
+      },
+      gateEngine: passthroughGateEngine(repositories),
+    });
+
+    // 无 outputs：appendArtifactProtocol 会提前返回，约束只能靠主提示词送达。
+    await engine.startRun({
+      demandText: '只读 goal 也应收到写权限提示',
+      mode: 'template',
+      workflowSpec: {
+        id: 'goal-no-outputs',
+        name: 'Goal No Outputs',
+        version: 1,
+        retryPolicy: {
+          maxAttempts: 1,
+          maxRetries: 0,
+          backoffMs: 0,
+          strategy: 'fixed',
+          onExhausted: 'block',
+        },
+        phases: [
+          {
+            id: 'p1',
+            name: 'P1',
+            dependsOn: [],
+            nodes: [
+              {
+                id: 'goal-node', role: 'goal', workspace: 'none',
+                inputs: [], outputs: [], gates: [], dependsOn: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Workspace source-edit policy:');
+    expect(prompts[0]).toContain(
+      'workspace=none; do not modify, create, or delete',
     );
     db.close();
   });
@@ -1496,7 +1696,6 @@ function minimalWorkflowSpec(name: string) {
         id: 'rd',
         name: 'RD',
         dependsOn: [],
-        parallel: false,
         nodes: [
           {
             id: 'rd-node',
@@ -1512,17 +1711,17 @@ function minimalWorkflowSpec(name: string) {
   };
 }
 
-function repairWorkflowSpec() {
+function repairWorkflowSpec(maxRetries = 1) {
   const workflow = minimalWorkflowSpec('repair-failure');
   workflow.phases[0]!.nodes[0]!.gates = [
     {
       type: 'build' as const,
       requiresHumanApproval: false,
-      maxRetries: 1,
+      maxRetries,
       autoFix: true,
       retryPolicy: {
-        maxAttempts: 2,
-        maxRetries: 1,
+        maxAttempts: maxRetries + 1,
+        maxRetries,
         backoffMs: 0,
         strategy: 'fixed' as const,
         onExhausted: 'block' as const,
@@ -1546,49 +1745,6 @@ function createFailingBuildGateEngine(
         durationMs: 0,
         retries: 0,
         createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    },
-  };
-}
-
-function createPassingGateEngine(
-  repositories: ReturnType<typeof createRepositories>,
-): GateEngine {
-  return {
-    async runGate(input) {
-      return repositories.recordGateResult({
-        id: `gate_${input.nodeId}_${input.gate.type}`,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        gateType: input.gate.type,
-        status: 'passed',
-        durationMs: 0,
-        retries: 0,
-        createdAt: new Date().toISOString(),
-      });
-    },
-    async createAutoFixRepairNode(input) {
-      return repositories.createNode({
-        id: `repair_${input.failedGateResult.id}`,
-        runId: input.failedGateResult.runId,
-        role: input.fixerRole,
-        status: 'pending',
-        gates: [],
-        dependencies: [input.failedGateResult.nodeId],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       });
     },
   };

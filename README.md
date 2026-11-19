@@ -2,7 +2,7 @@
 
 **把研发需求推进到可审阅的交付。**
 
-本地 Agent workflow 框架：按固定流程分工，在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
+本地 Agent workflow 框架：工作流模板可自由定义角色、产物和门禁（内置研发交付模板提供默认的分工与评审约束），在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
 
 [用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) · [文档索引](docs/README.md) · [产品范围](docs/product/tekon-current-product-scope.md) · [验收证据](docs/reviews/current.md) · [更新记录](CHANGELOG.md)
 
@@ -14,7 +14,7 @@
 curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
 ```
 
-按安装输出配置 PATH，并进入**目标 Git 仓库**。默认 Provider 为 Codex，需要安装 CLI、完成认证并配置可用的 `internal` profile（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
+按安装输出配置 PATH，并进入**目标 Git 仓库**（默认 worktree 隔离与 PR 交付需要 Git；非 Git 目录也可运行只含 `workspace: in-place`/`none` 节点的工作流，见[手册 §5.4](docs/manual/tekon-user-manual.md#54-workflow)）。`tekon init` 把已安装的 Claude Code 或 Codex 写成默认 Provider（都没有时为 Claude Code），运行前用 `tekon doctor` 检查安装、登录与检查命令（见[手册 §5.7](docs/manual/tekon-user-manual.md#57-provider)）。
 
 ```bash
 tekon ui                         # 启动本地 Web，按终端链接进入
@@ -22,11 +22,11 @@ tekon ui                         # 启动本地 Web，按终端链接进入
 tekon run "为列表增加筛选条件"
 ```
 
-使用 Claude Code 时先安装并认证，再执行 `tekon run "你的需求" --agent claude-code`；Web 需在「高级 Advanced → 新建运行」的 Agent 下拉框选择 `claude-code`，默认受控交付入口固定用 Codex。
+CLI 和 Web 都不加 `--agent`/不选 Agent 时使用 `.tekon/config.yaml` 的 `defaultAgent`（与 CLI 同一解析，未配置时默认 `claude-code`）；需要指定其他 Agent 时在「高级 Advanced → 新建运行」的 Agent 下拉框选择。
 
-v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；默认 Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
+v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
 
-首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行 `standard-delivery` 完整流程。更新用 `tekon update`。
+首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行轻量 `lightweight-delivery`（plan→实现→人工确认），需要完整评审/QA 全链路时显式选择 `standard-delivery`。更新用 `tekon update`。
 
 ![Tekon Web：输入需求，查看执行前计划与检查配置](docs/reviews/evidence/2026-09-06-r27/pages/1440-sessions.png)
 
@@ -45,20 +45,23 @@ flowchart LR
 
 | 你要做什么 | 选择的模板 |
 | --- | --- |
-| 完整研发交付（默认） | `standard-delivery` |
+| 小改动快速实现 + 人工把关（默认） | `lightweight-delivery` |
+| 完整研发交付、需要可审 PR 与 QA 签署 | `standard-delivery`（显式选择） |
 | 开发功能 / 修复缺陷 | `standard-feature` / `bugfix` |
 | 补测试 / 改文档 | `test-improvement` / `docs-update` |
 | 只做方案 | `plan-only` |
 
-运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。
+运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。默认的 `lightweight-delivery` 缺少 QA/治理门禁与验收证据，readiness 结构性恒不满足、不会自动产出 PR；要走到可审 PR 请显式使用 `standard-delivery`。
 
 ## 日常操作
 
 | 操作 | CLI |
 | --- | --- |
+| 浏览 / 查看 / 校验工作流模板 | `tekon workflow list` / `show <name>` / `validate <name>` |
 | 检查仓库命令 | `tekon workflow preflight` |
 | 看运行 / 审阅代码与证据 | `tekon status` / `tekon review` |
 | 批准等待中的人工 Gate | `tekon resume --approve-human` |
+| 重试终态 failed 的运行（只重跑失败节点） | `tekon retry` |
 | 生成本地 PR 材料 | `tekon delivery prepare` |
 | 批准 push 并创建 PR | `tekon delivery create-pr --approve-human` |
 | 等待 CI / 评估交付完整性 | `tekon delivery ci-watch` / `tekon eval readiness` |
@@ -72,7 +75,7 @@ flowchart LR
 | 本地 CLI / Web、受控 workflow、结构化产物、检查与审计 | Session 尚不支持连续追问、中途转向或完整模型流式输出 |
 | mock、Codex、Claude Code | `dsh-headless` 为实验性 Provider，默认关闭、网络不受限、仅 Goal 可用 |
 | 原请求重试、暂停与显式恢复 | 取消为不可恢复终态；Goal 不接交付流程，默认拒绝源码改动 |
-| 当前项目与历史运行查看 | 无多 Workspace 管理；`clean` 暂停物理删除 |
+| 当前项目与历史运行查看、清理已结束运行的 worktree 和节点分支 | 无多 Workspace 管理；运行证据和审计不随清理删除 |
 
 适合可回滚、可人工审阅的中小任务。完整权限、执行环境和交付限制见[产品范围](docs/product/tekon-current-product-scope.md)。
 

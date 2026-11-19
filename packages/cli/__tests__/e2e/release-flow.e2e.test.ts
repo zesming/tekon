@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -112,7 +112,8 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
     expect(deliveryRunId).toBeTruthy();
     expect(standardOutput).toContain('状态: passed');
 
-    const gatedOutput = runCli(
+    // CD-23：bugfix 模板在人工门禁暂停，退出码为 3 而非 0。
+    const gatedResult = runCliResult(
       cliPath,
       [
         'run',
@@ -126,6 +127,8 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
       ],
       repoPath,
     );
+    expect(gatedResult.status, gatedResult.stdout + gatedResult.stderr).toBe(3);
+    const gatedOutput = gatedResult.stdout;
     const gatedRunId = /Run ID:\s+(run_[a-zA-Z0-9-]+)/u.exec(gatedOutput)?.[1];
     expect(gatedRunId).toBeTruthy();
     expect(gatedOutput).toContain('人工确认: pending');
@@ -315,17 +318,32 @@ describe('tekon release flow e2e', { timeout: 90_000 }, () => {
   }, 90_000);
 });
 
+function runCliResult(
+  cliPath: string,
+  args: string[],
+  cwd: string,
+  env?: NodeJS.ProcessEnv,
+) {
+  return spawnSync(process.execPath, [cliPath, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, ...(env ?? {}) },
+  });
+}
+
 function runCli(
   cliPath: string,
   args: string[],
   cwd: string,
   env?: NodeJS.ProcessEnv,
 ): string {
-  return execFileSync(process.execPath, [cliPath, ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, ...(env ?? {}) },
-  });
+  const result = runCliResult(cliPath, args, cwd, env);
+  if (result.status !== 0) {
+    throw new Error(
+      `tekon ${args.join(' ')} exited with ${result.status}:\n${result.stdout}${result.stderr}`,
+    );
+  }
+  return result.stdout;
 }
 
 function createFixtureRepo(tempDirs: string[]) {

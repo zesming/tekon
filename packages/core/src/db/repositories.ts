@@ -40,6 +40,8 @@ type NodeRow = {
   run_id: string;
   phase_id: string | null;
   role: Node['role'];
+  prompt: string | null;
+  workspace: Node['workspace'];
   status: Node['status'];
   inputs: string;
   outputs: string;
@@ -131,6 +133,7 @@ type HumanDecisionRow = {
   status: HumanDecision['status'];
   actor: string | null;
   note: string | null;
+  request_note?: string | null;
   created_at: string;
   decided_at: string | null;
 };
@@ -197,6 +200,20 @@ export interface TekonRepositories {
     config: RunProviderConfig,
   ): Promise<RunProviderConfig>;
   getRunProviderConfig(runId: string): Promise<RunProviderConfig | null>;
+  /**
+   * PD-05：--rebind 在一个事务内替换冻结绑定（plan_snapshot/plan_digest、
+   * run_provider_configs）并重写非终态节点的物化门禁。终态运行或存在活跃
+   * 作业时拒绝写入（applied=false 并带 reason）；运行不存在时抛错。
+   */
+  applyRunRebind(input: {
+    runId: string;
+    planSnapshot: string;
+    planDigest: string;
+    provider: RunProviderConfig;
+    nodeGates: Array<{ nodeId: string; gates: Node['gates'] }>;
+    /** 零差异重绑定：仍跑终态/活跃作业守卫，但跳过实际写入。 */
+    unchanged: boolean;
+  }): Promise<{ applied: boolean; reason?: 'terminal' | 'active-job' }>;
   updateWorkflowInstanceStatus(
     runId: string,
     status: WorkflowStatus,
@@ -259,6 +276,8 @@ export interface TekonRepositories {
     leaseId: string,
     releasedAt: string,
   ): Promise<WorktreeLease | null>;
+  /** CD-09 MF-R1：同节点再执行时重新激活已释放的合成租约（清 releasedAt）。 */
+  reactivateWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   getWorktreeLease(leaseId: string): Promise<WorktreeLease | null>;
   listWorktreeLeases(runId: string): Promise<WorktreeLease[]>;
   upsertDeliveryPullRequest(
@@ -424,6 +443,82 @@ export function createRepositories(
       return row ? mapRunProviderConfig(row) : null;
     },
 
+    async applyRunRebind(input) {
+      return writeQueue.enqueue(() => {
+        const txn = db.transaction(() => {
+          const current = db
+            .prepare(
+              'select status from workflow_instances where id = ?',
+            )
+            .get(input.runId) as { status: WorkflowStatus } | undefined;
+          if (!current) {
+            throw new Error(
+              `workflow instance not found: ${input.runId}`,
+            );
+          }
+          if (
+            current.status === 'passed' ||
+            current.status === 'failed' ||
+            current.status === 'cancelled'
+          ) {
+            return { applied: false as const, reason: 'terminal' as const };
+          }
+          // 事务内复查活跃作业，消除 service 前置检查与本事务之间的
+          // TOCTOU 窗口：resume 作业可能在间隙被认领并按旧计划载入内存，
+          // 此时换绑定会让两个执行方按不同身份操作同一运行。与
+          // session-store 的活跃判定同形（同 kind/状态集合，同库连接可见
+          // 已提交的 jobs 行）。
+          const activeJob = db
+            .prepare(
+              `select 1 from jobs j
+                 join sessions s on s.id = j.session_id
+                where s.run_id = ?
+                  and j.kind in ('workflow-run', 'workflow-resume', 'goal-run')
+                  and j.status in ('queued', 'running', 'paused', 'cancelling')
+                limit 1`,
+            )
+            .get(input.runId);
+          if (activeJob) {
+            return { applied: false as const, reason: 'active-job' as const };
+          }
+          // 零差异：安全守卫已跑完，绑定身份未变，跳过全部写入。
+          if (input.unchanged) {
+            return { applied: true as const };
+          }
+          db.prepare(
+            `update workflow_instances
+               set plan_snapshot = ?, plan_digest = ?, updated_at = ?
+             where id = ?`,
+          ).run(input.planSnapshot, input.planDigest, now(), input.runId);
+          db.prepare(
+            `insert into run_provider_configs (
+               run_id, provider, config_summary, created_at
+             ) values (@runId, @provider, @configSummary, @createdAt)
+             on conflict(run_id) do update set
+               provider = excluded.provider,
+               config_summary = excluded.config_summary,
+               created_at = excluded.created_at`,
+          ).run(toRunProviderConfigParams(input.provider));
+          const updateNodeGates = db.prepare(
+            'update nodes set gates = ?, updated_at = ? where id = ? and run_id = ?',
+          );
+          const timestamp = now();
+          for (const entry of input.nodeGates) {
+            updateNodeGates.run(
+              JSON.stringify(entry.gates),
+              timestamp,
+              entry.nodeId,
+              input.runId,
+            );
+          }
+          return { applied: true as const };
+        });
+        // immediate：先获取写锁再读，跨进程并发下把 BUSY_SNAPSHOT 硬失败
+        // 变为写锁排队（与 admission-store 的事务模式对齐）。
+        return txn.immediate();
+      });
+    },
+
     async updateWorkflowInstanceStatus(runId, status, currentNodeId) {
       return writeQueue.enqueue(() => {
         if (currentNodeId === undefined) {
@@ -537,13 +632,14 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into nodes (
-             id, run_id, phase_id, role, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
+             id, run_id, phase_id, role, prompt, workspace, status, inputs, outputs, gates, dependencies, node_order, created_at, updated_at
            ) values (
-             @id, @runId, @phaseId, @role, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
+             @id, @runId, @phaseId, @role, @prompt, @workspace, @status, @inputs, @outputs, @gates, @dependencies, @nodeOrder, @createdAt, @updatedAt
            )`,
         ).run({
           ...node,
           phaseId: node.phaseId ?? null,
+          prompt: node.prompt ?? null,
           inputs: JSON.stringify(node.inputs),
           outputs: JSON.stringify(node.outputs),
           gates: JSON.stringify(node.gates),
@@ -692,15 +788,18 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into human_decisions (
-             id, run_id, node_id, gate_result_id, status, actor, note, created_at, decided_at
+             id, run_id, node_id, gate_result_id, status, actor, note, request_note,
+             created_at, decided_at
            ) values (
-             @id, @runId, @nodeId, @gateResultId, @status, @actor, @note, @createdAt, @decidedAt
+             @id, @runId, @nodeId, @gateResultId, @status, @actor, @note, @requestNote,
+             @createdAt, @decidedAt
            )`,
         ).run({
           ...decision,
           gateResultId: decision.gateResultId ?? null,
           actor: decision.actor ?? null,
           note: decision.note ?? null,
+          requestNote: decision.requestNote ?? null,
           decidedAt: decision.decidedAt ?? null,
         });
         return decision;
@@ -776,6 +875,18 @@ export function createRepositories(
         db.prepare(
           'update worktree_leases set released_at = ? where id = ?',
         ).run(releasedAt, leaseId);
+        const row = db
+          .prepare('select * from worktree_leases where id = ?')
+          .get(leaseId) as WorktreeLeaseRow | undefined;
+        return row ? mapWorktreeLease(row) : null;
+      });
+    },
+
+    async reactivateWorktreeLease(leaseId) {
+      return writeQueue.enqueue(() => {
+        db.prepare(
+          'update worktree_leases set released_at = null where id = ?',
+        ).run(leaseId);
         const row = db
           .prepare('select * from worktree_leases where id = ?')
           .get(leaseId) as WorktreeLeaseRow | undefined;
@@ -1019,6 +1130,8 @@ function mapNode(row: NodeRow): Node {
     runId: row.run_id,
     phaseId: row.phase_id ?? undefined,
     role: row.role,
+    ...(row.prompt ? { prompt: row.prompt } : {}),
+    workspace: row.workspace,
     status: row.status,
     inputs: JSON.parse(row.inputs) as unknown,
     outputs: JSON.parse(row.outputs) as unknown,
@@ -1111,6 +1224,7 @@ function mapHumanDecision(row: HumanDecisionRow): HumanDecision {
     status: row.status,
     actor: row.actor,
     note: row.note,
+    requestNote: row.request_note ?? null,
     createdAt: row.created_at,
     decidedAt: row.decided_at,
   });
