@@ -25,10 +25,10 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 <a class="skip-link" href="#main">跳到正文</a>
 <header class="site-header">
 <a class="brand" href="#1-天工是什么" aria-label="Tekon 手册首页"><span class="brand-mark" aria-hidden="true">T</span><strong>Tekon</strong><span class="brand-divider">/</span><span class="brand-label">用户手册</span></a>
-<div class="header-actions"><span class="version">v0.39.0</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
+<div class="header-actions"><span class="version">v0.41.0</span><button class="read-toggle" type="button" aria-pressed="false">连续阅读</button><a class="source-link" href="https://github.com/zesming/tekon">GitHub <span aria-hidden="true">↗</span></a><button class="menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar">目录</button></div>
 </header>
 <nav id="sidebar" class="sidebar" aria-label="手册章节">
-<p class="nav-heading">使用指南 <span>12 章</span></p>
+<p class="nav-heading">使用指南 <span>13 章</span></p>
 <a class="chapter-link" href="#1-天工是什么"><span class="nav-number">01</span><span>天工是什么</span></a>
 <a class="chapter-link" href="#2-天工解决什么问题"><span class="nav-number">02</span><span>解决什么问题</span></a>
 <a class="chapter-link" href="#3-核心用户场景"><span class="nav-number">03</span><span>核心用户场景</span></a>
@@ -41,11 +41,12 @@ main{margin-left:var(--sidebar);padding:112px clamp(28px,4.1vw,68px) 30px;max-wi
 <a class="chapter-link" href="#10-参数速查"><span class="nav-number">10</span><span>参数速查</span></a>
 <a class="chapter-link" href="#11-使用说明"><span class="nav-number">11</span><span>使用说明</span></a>
 <a class="chapter-link" href="#12-每次迭代后的手册更新规则"><span class="nav-number">12</span><span>手册更新规则</span></a>
-<div class="sidebar-footer"><a href="tekon-user-manual.md">Markdown 源稿 ↗</a><a href="../README.md">文档总索引 ↗</a><a href="#71-pause-cancel-and-resume" lang="en">§7.1 in English ↗</a><span>更新于 2026.09.08</span></div>
+<a class="chapter-link" href="#13-多-agent-工作台与部署指南"><span class="nav-number">13</span><span>工作台与部署指南</span></a>
+<div class="sidebar-footer"><a href="tekon-user-manual.md">Markdown 源稿 ↗</a><a href="../README.md">文档总索引 ↗</a><a href="#71-pause-cancel-and-resume" lang="en">§7.1 in English ↗</a><span>更新于 2026.11.20</span></div>
 </nav>
 <main id="main" tabindex="-1">
 <div class="doc-heading"><p class="eyebrow">DOCUMENTATION <span>·</span> 使用与参考</p><h1 id="天工tekon用户使用手册" tabindex="-1">天工（Tekon）用户使用手册</h1>
-<p>适用版本：<strong>v0.36.0</strong>（当前版本以根 <code>package.json</code> 为准）。固定入口：<a href="../README.md">文档总索引</a> · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a>。在目标项目根目录执行示例命令；跨仓库操作时追加 <code>--repo /path/to/project</code>。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。</p>
+<p>适用版本：<strong>v0.41.0</strong>（当前版本以根 <code>package.json</code> 为准）。固定入口：<a href="../README.md">文档总索引</a> · <a href="../product/tekon-current-product-scope.md">产品范围</a> · <a href="../technical/tekon-runtime-contract.md">运行时合同</a> · <a href="../design/tekon-run-control-design.md">运行控制设计</a> · <a href="#13-多-agent-工作台与部署指南">部署指南</a>。在目标项目根目录执行示例命令；跨仓库操作时追加 <code>--repo /path/to/project</code>。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。</p>
 </div>
 <section class="chapter" id="p0" aria-labelledby="1-天工是什么"><div class="chapter-layout"><article class="prose"><h2 id="1-天工是什么" tabindex="-1">1. 天工是什么</h2>
 <p>天工（Tekon）是本地 Agent workflow 框架。它把研发需求拆成角色任务，在隔离 worktree 中执行，运行验证关卡（Gate），并集中保存产物、日志、审批和交付证据。</p>
@@ -1168,7 +1169,47 @@ codex --profile &lt;profile&gt; --sandbox workspace-write --ask-for-approval on-
 <p>CLI/Web 入口、参数、Gate、评估、产物目录、Provider、安全边界或故障处理变化后，应核对本手册，并同步 HTML 人审版。</p>
 <p>更新时说明当前行为和限制，核对示例与源码；仅文档变更检查结构、链接和中英对应，不据此宣称运行行为已验收。无需更新时，在交付说明中注明理由。</p>
 <p>主稿：<code>docs/manual/tekon-user-manual.md</code>；人审版：<code>docs/manual/tekon-user-manual.html</code>。</p>
-<nav class="page-turn" aria-label="章节翻页"><a href="#11-使用说明"><small>上一章</small>使用说明 <span aria-hidden="true">←</span></a><a href="#1-天工是什么"><small>重新浏览</small>返回第一章 ↑</a></nav></article></div></section>
+<nav class="page-turn" aria-label="章节翻页"><a href="#11-使用说明"><small>上一章</small>使用说明 <span aria-hidden="true">←</span></a><a href="#13-多-agent-工作台与部署指南"><small>下一章</small>工作台与部署指南 <span aria-hidden="true">→</span></a></nav></article></div></section>
+<section class="chapter" id="p12" aria-labelledby="13-多-agent-工作台与部署指南"><div class="chapter-layout"><article class="prose">
+<h2 id="13-多-agent-工作台与部署指南" tabindex="-1">13. 多 Agent 工作台与部署指南</h2>
+<p>v0.41.0 起，Tekon Web 升级为统一的双栏桌面工作台（Semi Design 浅色/深色双主题），面向「静态模板编排 + 动态编排 + 双层上下文传递（通用上下文 + 固化文档）」的多 Agent 协作流程，同时保持 CLI 与全部历史后端 RPC 兼容。</p>
+<h3 id="131-环境前置条件" tabindex="-1">13.1 环境前置条件</h3>
+<div aria-label="表格，可横向滚动" class="table-scroll" role="region" tabindex="0"><table><thead><tr><th>依赖</th><th>要求</th><th>检查命令</th></tr></thead><tbody>
+<tr><td>Node.js</td><td><code>^20.19.0</code> 或 <code>&gt;=22.12.0</code>（已测 20.19 / 22.12 / 24.x）</td><td><code>node -v</code></td></tr>
+<tr><td>Git</td><td>任意现行版本（worktree 隔离需 Git 仓库；<code>workspace: none</code> 模板可在任意目录运行）</td><td><code>git --version</code></td></tr>
+<tr><td>pnpm</td><td><code>10.12.1</code>（源码部署时由 Corepack 或 <code>npm exec</code> 提供）</td><td><code>pnpm -v</code></td></tr>
+<tr><td>本机 Agent CLI</td><td>至少安装并登录其一：<code>claude</code>（Claude Code）或 <code>codex</code>（Codex CLI）</td><td><code>tekon doctor</code></td></tr>
+</tbody></table></div>
+<h3 id="132-方式-a本机一键安装与升级推荐" tabindex="-1">13.2 方式 A：本机一键安装与升级（推荐）</h3>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
+tekon --version
+tekon doctor
+cd /path/to/your-workspace &amp;&amp; tekon init &amp;&amp; tekon ui</code></pre>
+<p>终端会输出带会话鉴权片段的本地地址（默认端口为 3000，如 <code>http://127.0.0.1:3000/#token=&lt;session-token&gt;</code>，可通过 <code>--port 4173</code> 自定义端口），令牌仅经 URL Fragment 在本地捕获并写入 <code>sessionStorage</code>，不随 HTTP 请求或 <code>Referer</code> 泄露。后续升级执行 <code>tekon update</code>。</p>
+<h3 id="133-方式-b从源码构建与生产模式启动" tabindex="-1">13.3 方式 B：从源码构建与生产模式启动</h3>
+<pre><code>git clone https://github.com/zesming/tekon.git
+cd tekon
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm build
+node packages/cli/dist/index.js ui --repo /path/to/your-workspace --port 4173</code></pre>
+<h3 id="134-本机-agent-探测与自定义-agent-配置" tabindex="-1">13.4 本机 Agent 探测与自定义 Agent 配置</h3>
+<p>在 Web 左下角 <strong>设置 → Agent 与上下文</strong> 可查看本机探测结果并手动刷新（60s 缓存、5s 探测超时上限）。如需扩展自定义本机 Agent，仅写入用户主目录 <code>~/.tekon/agents.yaml</code>（禁止在项目仓库 <code>.tekon/config.yaml</code> 中注入命令）：</p>
+<pre><code>agents:
+  - id: antigravity
+    name: Antigravity
+    iconKey: antigravity
+    models: [gemini-4-neon]
+    efforts: [low, medium, high]</code></pre>
+<h3 id="135-后台常驻部署macos-launchd--linux-systemd" tabindex="-1">13.5 后台常驻部署（macOS launchd / Linux systemd）</h3>
+<p>按默认安装目录 <code>TEKON_HOME=$HOME/.tekon</code>：macOS 可配置 <code>~/Library/LaunchAgents/dev.tekon.ui.plist</code> 并用 <code>launchctl load -w</code> 托管 <code>node /Users/YOUR_USER/.tekon/packages/cli/dist/index.js ui --repo ... --port 4173</code>；Linux 可在 <code>~/.config/systemd/user/tekon-ui.service</code> 托管 <code>/usr/bin/node %h/.tekon/packages/cli/dist/index.js ui --repo ... --port 4173</code> 并执行 <code>systemctl --user enable --now tekon-ui.service</code>（完整模板见 Markdown 源稿 §13.5）。</p>
+<h3 id="136-安全边界与远程访问建议" tabindex="-1">13.6 安全边界与远程访问建议</h3>
+<ul>
+<li><strong>默认仅绑 <code>127.0.0.1</code></strong>：严禁裸露公网；远程主机通过 <code>ssh -N -L 4173:127.0.0.1:4173 user@remote-host</code> 转发访问。</li>
+<li><strong>全量会话鉴权与严格 CSP</strong>：新增工作台 RPC 全部强制 <code>x-session-token</code>、Host 白名单与 Origin 防 CSRF；生产前端采用 <code>script-src 'self'</code> 无内联脚本。</li>
+<li><strong>工作台视图与快捷键</strong>：支持浅色/深色双主题持久化、内容宽度 3 档（正常 760px / 宽 1080px / 全宽 100%，窄屏自动收窄零横向溢出）、顶部点线与右侧竖向进度轨应用内切换，以及 <code>Esc</code> 分层关闭。</li>
+</ul>
+<nav class="page-turn" aria-label="章节翻页"><a href="#12-每次迭代后的手册更新规则"><small>上一章</small>手册更新规则 <span aria-hidden="true">←</span></a><a href="#1-天工是什么"><small>重新浏览</small>返回第一章 ↑</a></nav></article></div></section>
 <footer class="doc-footer"><span>Tekon · 本地研发工作台</span><a href="#main">返回顶部 ↑</a></footer>
 </main>
 <div class="sr-only" role="status" aria-live="polite" id="copy-status"></div>

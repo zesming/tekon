@@ -4,6 +4,8 @@ import {
   sessionStatusSchema,
   eventVisibilitySchema,
 } from '@tekon/core';
+import { workbenchProcedureSpecs } from './workbench-contract.js';
+export * from './workbench-contract.js';
 
 // ---------------------------------------------------------------------------
 // Shared sub-schemas (domain building blocks)
@@ -1196,6 +1198,8 @@ export const procedureSpecs = {
     input: sessionEventsInputSchema,
     output: sessionEventsOutputSchema,
   },
+
+  ...workbenchProcedureSpecs,
 } as const;
 
 // ---------------------------------------------------------------------------

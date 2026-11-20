@@ -492,6 +492,11 @@ export interface ApiCaller {
       systemPrompt: string;
       token: string;
     }): Promise<{ id: string; source: 'project'; roleDir: string }>;
+    listDetailed: (input?: { includeDelivery?: boolean }) => Promise<unknown>;
+    save: (input: any) => Promise<unknown>;
+    duplicate: (input: any) => Promise<unknown>;
+    delete: (input: any) => Promise<unknown>;
+    resetBuiltIn: (input: any) => Promise<unknown>;
   };
   workflow: {
     list(): Promise<{
@@ -503,7 +508,18 @@ export interface ApiCaller {
       }>;
     }>;
     plan(input: WorkflowPlanInput): Promise<RunPlanPreview>;
+    listDetailed: (input?: { includeDelivery?: boolean }) => Promise<unknown>;
+    get: (input: any) => Promise<unknown>;
+    save: (input: any) => Promise<unknown>;
+    duplicate: (input: any) => Promise<unknown>;
+    delete: (input: any) => Promise<unknown>;
+    resetBuiltIn: (input: any) => Promise<unknown>;
   };
+  agent: Record<string, (input?: any) => Promise<unknown>>;
+  prefs: Record<string, (input?: any) => Promise<unknown>>;
+  task: Record<string, (input?: any) => Promise<unknown>>;
+  doc: Record<string, (input?: any) => Promise<unknown>>;
+  context: Record<string, (input?: any) => Promise<unknown>>;
   progress: {
     list(input: { runId: string }): Promise<{
       runId: string;

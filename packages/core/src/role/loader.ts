@@ -31,6 +31,8 @@ const roleAgentConfigSchema = z.object({
   driver: z.string().min(1).max(64).optional(),
   model: z.string().min(1).max(128).optional(),
   effort: z.string().min(1).max(32).optional(),
+  isolated: z.boolean().default(false),
+  category: z.enum(['general', 'delivery']).optional(),
   injectMode: z.enum(['prepend', 'append', 'replace']).default('append'),
   priority: z.number().int().default(0),
   maxSkills: z.number().int().positive().optional(),

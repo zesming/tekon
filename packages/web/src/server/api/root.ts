@@ -1,11 +1,13 @@
 import {
   auditProcessGroupReaps,
+  createAgentDiscoveryRegistry,
   createAuditLogger,
   createCommandGateway,
   createDualWriteAuditLogger,
   createDualWriteRepositories,
   createGateEngine,
   createJobRepository,
+  createProviderAdapterResolver,
   createRepositories,
   createSessionDualWriteBridge,
   createSessionEventBus,
@@ -13,6 +15,7 @@ import {
   createProviderPreflight,
   createSessionService,
   createSubprocessRegistry,
+  createWorkbenchRuntime,
   createWorkflowEngine,
   createWorkflowJobExecutor,
   createAutomationJobExecutor,
@@ -21,13 +24,17 @@ import {
   createWorktreeManager,
   createWriteQueue,
   createJobRunner,
+  defaultBuiltInRolesDir,
+  getWorkflowsDir,
   openTekonDatabase,
   migrateDatabase,
   runDshPreflight,
   DshHostNodeError,
   isHostNodeVersionCompatible,
   TESTED_DSH_VERSION,
+  type AgentDiscoveryRegistry,
   type AuditLogger,
+  type ProviderAdapterResolver,
   type ProviderPreflight,
   type RunPlan,
   type SubprocessRegistry,
@@ -63,6 +70,7 @@ import {
   createProgressRouter,
   createSessionRouter,
 } from './routers/index.js';
+import { createWorkbenchRouters } from './routers/workbench.js';
 
 export type { ApiCaller } from './context.js';
 export { dispatchApiCall } from './dispatch.js';
@@ -152,6 +160,9 @@ export async function createApiCaller(
     providerProbe?: () => Promise<'available' | 'unavailable'>;
     /** Start/resume provider check; defaults to probing the real PATH. */
     providerPreflight?: ProviderPreflight;
+    /** Optional workbench discovery/resolver injection (e.g. Playwright E2E multi-provider stubs). */
+    workbenchDiscovery?: AgentDiscoveryRegistry;
+    workbenchResolver?: ProviderAdapterResolver;
   },
 ): Promise<ApiCaller> {
   const projectContext = createProjectContext(input);
@@ -344,6 +355,41 @@ export async function createApiCaller(
     sessionService,
   };
 
+  const builtInRolesDir = defaultBuiltInRolesDir();
+  const builtInWorkflowsDir = getWorkflowsDir();
+  const workbenchDiscovery =
+    input.workbenchDiscovery ??
+    createAgentDiscoveryRegistry({
+      env: input.env ?? process.env,
+      includeMock: (input.env ?? process.env).TEKON_INCLUDE_MOCK === '1',
+    });
+  const workbenchResolver =
+    input.workbenchResolver ??
+    createProviderAdapterResolver({
+      repoPath: projectContext.projectRoot,
+      defaultDriver: 'claude-code',
+      gateway: createCommandGateway({ repositories: dualRepositories }),
+    });
+  const workbenchRuntime = createWorkbenchRuntime({
+    db,
+    writeQueue,
+    repoPath: projectContext.projectRoot,
+    builtInRolesDir,
+    builtInWorkflowsDir,
+    discovery: workbenchDiscovery,
+    resolver: workbenchResolver,
+    eventBus: bus,
+    subprocessRegistry: registry,
+    repositories: dualRepositories,
+    sessionStore: sessions,
+  });
+  const workbenchRouters = createWorkbenchRouters({
+    runtime: workbenchRuntime,
+    repoPath: projectContext.projectRoot,
+    builtInRolesDir,
+    builtInWorkflowsDir,
+  });
+
   const demandRouter = createDemandRouter(context);
   return {
     [webProjectScope]: createWebProjectScope(db, projectContext, sessions),
@@ -356,8 +402,19 @@ export async function createApiCaller(
     gate: createGateRouter(context),
     audit: createAuditRouter(context),
     review: createReviewRouter(context),
-    role: createRoleRouter(context),
-    workflow: createWorkflowRouter(context),
+    role: {
+      ...createRoleRouter(context),
+      ...workbenchRouters.roleExtensions,
+    },
+    workflow: {
+      ...createWorkflowRouter(context),
+      ...workbenchRouters.workflowExtensions,
+    },
+    agent: workbenchRouters.agent,
+    prefs: workbenchRouters.prefs,
+    task: workbenchRouters.task,
+    doc: workbenchRouters.doc,
+    context: workbenchRouters.context,
     progress: createProgressRouter(context),
     session: createSessionRouter(context),
     sessions,
@@ -373,6 +430,7 @@ export async function createApiCaller(
       unsubscribeAutoPrepare();
       for (const timer of readinessDebounce.values()) clearTimeout(timer);
       readinessDebounce.clear();
+      await workbenchRuntime.shutdown();
       await Promise.allSettled([...automationTasks]);
       await jobRunner.stop();
       // P0-ARCH-02 增量：hard deadline 后未结算的 executor 仍可能持有

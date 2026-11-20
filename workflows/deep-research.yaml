@@ -1,0 +1,37 @@
+id: deep-research
+name: 深度研究
+description: 调研汇总 → 方案初稿 → 独立评审 → 方案详情
+version: 2
+nodes:
+  - id: n1
+    name: 调研汇总信息
+    role: explorer
+    workspace: none
+    contextMode: auto
+    docKey: research-report
+    expectedDoc: 调研报告
+    confirmAfter: false
+  - id: n2
+    name: 制定方案初稿
+    role: designer
+    workspace: none
+    contextMode: full
+    docKey: proposal
+    expectedDoc: 架构方案初稿
+    confirmAfter: false
+  - id: n3
+    name: 内部评审讨论
+    role: reviewer
+    workspace: none
+    contextMode: isolated
+    docKey: review-notes
+    expectedDoc: 评审意见单
+    confirmAfter: true
+  - id: n4
+    name: 给出方案详情
+    role: designer
+    workspace: none
+    contextMode: reuse
+    docKey: proposal
+    expectedDoc: 方案详情
+    confirmAfter: false

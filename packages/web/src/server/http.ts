@@ -13,6 +13,10 @@ import {
 import { dirname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type {
+  AgentDiscoveryRegistry,
+  ProviderAdapterResolver,
+} from '@tekon/core';
 import {
   createApiCaller,
   dispatchApiCall,
@@ -35,6 +39,9 @@ export interface CreateWebServerOptions {
   vite?: boolean;
   /** Override the static asset directory (defaults to ../../dist relative to this module). */
   distDir?: string;
+  /** Optional workbench discovery/resolver injection (tests & E2E). */
+  workbenchDiscovery?: AgentDiscoveryRegistry;
+  workbenchResolver?: ProviderAdapterResolver;
 }
 
 export interface RunningWebServer {
@@ -47,7 +54,12 @@ export async function createWebServer(
   options: CreateWebServerOptions,
 ): Promise<RunningWebServer> {
   const projectRoot = resolveProjectRoot(options);
-  const api = await createApiCaller({ projectRoot, env: options.env });
+  const api = await createApiCaller({
+    projectRoot,
+    env: options.env,
+    workbenchDiscovery: options.workbenchDiscovery,
+    workbenchResolver: options.workbenchResolver,
+  });
   const vite = options.vite ? await createViteMiddleware() : null;
   const distDir = options.distDir ?? resolve(__dirname, '../../dist');
   const sessionPath = join(projectRoot, '.tekon', 'web-session.json');

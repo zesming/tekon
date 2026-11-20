@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { AgentAdapterConfig, CommandPolicy } from '../types/config.js';
@@ -7,6 +8,10 @@ import type { AgentAdapter, AgentRunDiagnostic, RoleProviderOverrides } from './
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
 import { buildClaudeProviderEnv } from './claude-code-support.js';
 import { compileClaudePermissions } from './claude-code-permissions.js';
+import {
+  ingestGeneralNodeOutput,
+  parseProviderStdout,
+} from './general-output.js';
 import {
   createMissingRequiredArtifactsDiagnostic,
   artifactDiagnosticFromError,
@@ -25,7 +30,12 @@ export interface BuiltClaudeCodeCommand extends CommandInvocation {
 
 export function buildClaudeCodeCommand(
   config: AgentAdapterConfig,
-  input: { prompt: string; promptFile?: string; addDir?: string },
+  input: {
+    prompt: string;
+    promptFile?: string;
+    addDir?: string;
+    resumeThreadId?: string;
+  },
   commandPolicy?: CommandPolicy,
   providerOverrides?: RoleProviderOverrides,
 ): BuiltClaudeCodeCommand {
@@ -35,11 +45,21 @@ export function buildClaudeCodeCommand(
 
   if (config.outputFormat === 'json') {
     args.push('--output-format', 'json');
+  } else if (config.outputFormat === 'stream-json') {
+    args.push('--output-format', 'stream-json', '--verbose');
+  }
+
+  if (input.resumeThreadId) {
+    assertSafeProviderOverrideValue('model', input.resumeThreadId);
+    args.push('--resume', input.resumeThreadId);
   }
 
   // PD-10：角色级覆盖作为 Tekon 控制位注入（与用户 args 分离，保持单一
-  // 权威）。Claude Code 没有稳定的 effort CLI 边界，显式拒绝而非静默丢弃。
-  if (providerOverrides?.effort !== undefined) {
+  // 权威）。Claude Code 没有稳定的 effort CLI 边界，非 default 值显式拒绝。
+  if (
+    providerOverrides?.effort !== undefined &&
+    providerOverrides.effort !== 'default'
+  ) {
     throw new Error(
       `ROLE_OVERRIDE_UNSUPPORTED: claude-code 适配器不支持 effort 覆盖（角色声明 effort=${providerOverrides.effort}）；请移除该字段或改用支持的 provider。`,
     );
@@ -98,34 +118,53 @@ export function createClaudeCodeAdapter(
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      const command = buildClaudeCodeCommand(
-        config,
-        { prompt: input.prompt, addDir: input.outputDir },
-        input.commandPolicy,
-        input.providerOverrides,
-      );
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
-      const result = await gateway.run({
-        command,
-        cwd: input.worktreeLease.worktreePath,
-        policy: input.commandPolicy,
-        outputDir: input.outputDir,
-        timeoutMs: config.timeoutMs,
-        progressIntervalMs: config.progressHeartbeatMs,
-        noProgressTimeoutMs: config.noProgressTimeoutMs,
-        envMode: 'exact',
-        env: {
-          ...buildClaudeProviderEnv(process.env, config.passthroughEnv),
-          TEKON_OUTPUT_DIR: input.outputDir,
-          TEKON_ARTIFACT_MANIFEST: manifestPath,
-          TEKON_RUN_ID: input.runContext.runId,
-          TEKON_NODE_ID: input.runContext.nodeId,
-        },
-        stdin: command.stdin,
-        signal: input.signal,
-        runId: input.runContext.runId,
-        nodeId: input.runContext.nodeId,
-      });
+
+      const executeOnce = async (resumeThreadId?: string) => {
+        const command = buildClaudeCodeCommand(
+          config,
+          { prompt: input.prompt, addDir: input.outputDir, resumeThreadId },
+          input.commandPolicy,
+          input.providerOverrides,
+        );
+        const result = await gateway.run({
+          command,
+          cwd: input.worktreeLease.worktreePath,
+          policy: input.commandPolicy,
+          outputDir: input.outputDir,
+          timeoutMs: config.timeoutMs,
+          progressIntervalMs: config.progressHeartbeatMs,
+          noProgressTimeoutMs: config.noProgressTimeoutMs,
+          envMode: 'exact',
+          env: {
+            ...buildClaudeProviderEnv(process.env, config.passthroughEnv),
+            TEKON_OUTPUT_DIR: input.outputDir,
+            TEKON_ARTIFACT_MANIFEST: manifestPath,
+            TEKON_RUN_ID: input.runContext.runId,
+            TEKON_NODE_ID: input.runContext.nodeId,
+          },
+          stdin: command.stdin,
+          signal: input.signal,
+          runId: input.runContext.runId,
+          nodeId: input.runContext.nodeId,
+          onOutputLine: input.onOutputLine,
+        });
+        return { command, result };
+      };
+
+      let sessionResumeFallback = false;
+      let { command, result } = await executeOnce(input.resumeThreadId);
+
+      // Graceful fallback when native --resume fails (expired/invalid thread ID).
+      if (
+        input.resumeThreadId &&
+        !input.signal?.aborted &&
+        (result.status !== 'executed' ||
+          (result.exitCode !== 0 && !result.timedOut))
+      ) {
+        sessionResumeFallback = true;
+        ({ command, result } = await executeOnce(undefined));
+      }
 
       if (result.status !== 'executed') {
         return {
@@ -134,6 +173,7 @@ export function createClaudeCodeAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          cancelled: result.status === 'rejected' && Boolean(result.cancelled),
           diagnostic: classifyProviderFailure({
             provider: 'claude-code',
             command: command.tool,
@@ -151,6 +191,7 @@ export function createClaudeCodeAdapter(
           durationMs: result.durationMs,
           outputFiles: [result.stdoutPath, result.stderrPath],
           timedOut: result.timedOut,
+          cancelled: Boolean(input.signal?.aborted),
           diagnostic: classifyProviderFailure({
             provider: 'claude-code',
             command: command.tool,
@@ -161,9 +202,20 @@ export function createClaudeCodeAdapter(
         };
       }
 
+      const parsedStdout = parseProviderStdout('claude-code', result.stdoutPath);
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
-      if (input.artifactStore) {
+      let handoffBrief: string | undefined;
+
+      if (input.allowGeneralFallback && !existsSync(manifestPath)) {
+        const ingested = await ingestGeneralNodeOutput({
+          runInput: input,
+          assistantText: parsedStdout.assistantText,
+        });
+        artifacts = ingested.artifacts;
+        artifactOutputFiles = artifacts.map((a) => a.path);
+        handoffBrief = ingested.handoffBrief;
+      } else if (input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -185,24 +237,26 @@ export function createClaudeCodeAdapter(
         }
       }
 
-      const diagnostic = createMissingRequiredArtifactsDiagnostic({
-        required: input.requiredArtifactTypes,
-        artifacts,
-      });
-      if (diagnostic) {
-        return {
-          provider: 'claude-code',
-          exitCode: 1,
-          durationMs: result.durationMs,
-          outputFiles: [
-            result.stdoutPath,
-            result.stderrPath,
-            ...artifactOutputFiles,
-          ],
+      if (!input.allowGeneralFallback) {
+        const diagnostic = createMissingRequiredArtifactsDiagnostic({
+          required: input.requiredArtifactTypes,
           artifacts,
-          timedOut: result.timedOut,
-          diagnostic: reportedErrorDiagnostic(result, command.tool) ?? diagnostic,
-        };
+        });
+        if (diagnostic) {
+          return {
+            provider: 'claude-code',
+            exitCode: 1,
+            durationMs: result.durationMs,
+            outputFiles: [
+              result.stdoutPath,
+              result.stderrPath,
+              ...artifactOutputFiles,
+            ],
+            artifacts,
+            timedOut: result.timedOut,
+            diagnostic: reportedErrorDiagnostic(result, command.tool) ?? diagnostic,
+          };
+        }
       }
 
       return {
@@ -215,6 +269,17 @@ export function createClaudeCodeAdapter(
           ...artifactOutputFiles,
         ],
         artifacts,
+        ...(parsedStdout.assistantText
+          ? { assistantText: parsedStdout.assistantText }
+          : {}),
+        ...(parsedStdout.providerThreadId
+          ? { providerThreadId: parsedStdout.providerThreadId }
+          : {}),
+        ...(parsedStdout.tokenUsage
+          ? { tokenUsage: parsedStdout.tokenUsage }
+          : {}),
+        ...(handoffBrief ? { handoffBrief } : {}),
+        ...(sessionResumeFallback ? { sessionResumeFallback: true } : {}),
         timedOut: result.timedOut,
       };
     },

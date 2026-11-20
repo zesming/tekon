@@ -32,7 +32,7 @@ describe('role prompt RPC (PD-11)', () => {
 
     const result = await api.role.list();
 
-    expect(result.roles).toHaveLength(6);
+    expect(result.roles).toHaveLength(10);
     const byId = new Map(result.roles.map((role) => [role.id, role]));
     expect(byId.get('rd')).toMatchObject({ source: 'project' });
     expect(byId.get('pm')).toMatchObject({ source: 'built-in' });
