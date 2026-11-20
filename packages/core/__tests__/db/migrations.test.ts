@@ -78,8 +78,10 @@ describe('database migrations', () => {
     expect(tables).toEqual([
       'artifacts',
       'audit_events',
+      'context_archives',
       'delivery_pull_requests',
       'demands',
+      'follow_up_turns',
       'gate_results',
       'human_decisions',
       'jobs',
@@ -88,12 +90,16 @@ describe('database migrations', () => {
       'projection_checkpoints',
       'projects',
       'role_runs',
+      'role_sessions',
       'run_admissions',
       'run_locks',
       'run_provider_configs',
       'schema_migrations',
       'session_events',
       'sessions',
+      'task_attachments',
+      'task_context_entries',
+      'user_preferences',
       'workflow_instances',
       'workspaces',
       'worktree_leases',
@@ -144,7 +150,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(7);
+    expect(versions[0].version).toBe(8);
 
     db.close();
   });
@@ -176,7 +182,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(7);
+    expect(versions[0].version).toBe(8);
 
     db.close();
   });
@@ -314,7 +320,7 @@ describe('database migrations', () => {
       .prepare('select version from schema_migrations')
       .all() as Array<{ version: number }>;
     expect(versions).toHaveLength(1);
-    expect(versions[0].version).toBe(7);
+    expect(versions[0].version).toBe(8);
 
     db.close();
   });

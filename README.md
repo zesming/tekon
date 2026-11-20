@@ -1,10 +1,10 @@
 # 天工 Tekon
 
-**把研发需求推进到可审阅的交付。**
+**简洁透明的本地多 Agent Workflow 桌面工作台。**
 
-本地 Agent workflow 框架：工作流模板可自由定义角色、产物和门禁（内置研发交付模板提供默认的分工与评审约束），在 Git worktree 中执行，汇总代码、检查结果和 PR 材料。需求与风险由人确认，push、创建 PR、合入和上线由人控制。
+本地 Agent workflow 框架：支持**静态模板编排**与**动态蓝图编排**，可自由定义角色（通过本机探测选择器绑定 Agent、模型、Effort 与自定义 Prompt）和跨 Provider 混排节点；通过**双层上下文传递**（通用上下文交接 + 固化 Markdown 文档版本/Diff/置顶 + 同角色会话续接与可逆归档压缩）实现多 Agent 协同。默认 `127.0.0.1` 本地运行，push、创建 PR、合入和上线保留人工控制。
 
-[用户手册](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html) · [文档索引](docs/README.md) · [产品范围](docs/product/tekon-current-product-scope.md) · [验收证据](docs/reviews/current.md) · [更新记录](CHANGELOG.md)
+[用户手册 & 部署指南](https://htmlpreview.github.io/?https://github.com/zesming/tekon/blob/main/docs/manual/tekon-user-manual.html#13-多-agent-工作台与部署指南) · [文档索引](docs/README.md) · [产品范围](docs/product/tekon-current-product-scope.md) · [v0.41.0 自举验收](docs/reviews/2026-11-20-tekon-v2-bootstrap.md) · [更新记录](CHANGELOG.md)
 
 ## 快速开始
 
@@ -22,15 +22,9 @@ tekon ui                         # 启动本地 Web，按终端链接进入
 tekon run "为列表增加筛选条件"
 ```
 
-CLI 和 Web 都不加 `--agent`/不选 Agent 时使用 `.tekon/config.yaml` 的 `defaultAgent`（与 CLI 同一解析，未配置时默认 `claude-code`）；需要指定其他 Agent 时在「高级 Advanced → 新建运行」的 Agent 下拉框选择。
+CLI 不加 `--agent` 时使用 `.tekon/config.yaml` 的 `defaultAgent`（未配置时默认 `claude-code`）；在 Web 工作台可在「设置 → 角色管理」中按角色通过本机探测下拉选择器绑定各自的 Agent、模型与 Effort，并在首页直接选择静态模板或「✦ 动态编排」发起任务。
 
-v0.26.0 本轮真实交付验收覆盖 Claude CLI 调用；Codex 与实验性 DSH 尚缺本轮真实全链路证据。自动化测试覆盖不等于供应商实测，具体环境、实际模型与发布条件见[发布审核报告](docs/reviews/2026-09-08-release-followup.md#遗留问题的影响与发布条件)。
-
-首次使用时按提示确认初始化（或先运行 `tekon init`）。Web 中先审阅执行计划和检查配置，再点「启动受控交付」；默认运行轻量 `lightweight-delivery`（plan→实现→人工确认），需要完整评审/QA 全链路时显式选择 `standard-delivery`。更新用 `tekon update`。
-
-![Tekon Web：输入需求，查看执行前计划与检查配置](docs/reviews/evidence/2026-09-06-r27/pages/1440-sessions.png)
-
-*Web 实际页面截图，使用验收测试数据。*
+首次使用时先运行 `tekon init` 与 `tekon doctor` 确认本机 Agent CLI 就绪；更新使用 `tekon update`。CLI 默认运行轻量 `lightweight-delivery`（plan→实现→人工确认），需要完整评审/QA 全链路时显式选择 `standard-delivery`。
 
 ## 从需求到交付
 
@@ -43,13 +37,22 @@ flowchart LR
     E --> F[CI · 就绪度评估]
 ```
 
-| 你要做什么 | 选择的模板 |
+| 你要做什么 | 选择的模板 / 模式 |
 | --- | --- |
-| 小改动快速实现 + 人工把关（默认） | `lightweight-delivery` |
+| 深度技术调研与方案产出（调研→初稿→独立评审→终稿） | `deep-research`（内置 4 节点通用模板，支持跨 Provider 与同角色续接） |
+| 快速研发实现与复核 | `quick-dev`（内置线性研发模板） |
+| 需求不固定，让编排者自动规划并确认执行步骤 | Web 首页选择 **✦ 动态编排**（支持编辑、重试与另存为模板） |
+| 小改动快速实现 + 人工把关（CLI 默认） | `lightweight-delivery` |
 | 完整研发交付、需要可审 PR 与 QA 签署 | `standard-delivery`（显式选择） |
-| 开发功能 / 修复缺陷 | `standard-feature` / `bugfix` |
-| 补测试 / 改文档 | `test-improvement` / `docs-update` |
-| 只做方案 | `plan-only` |
+| 开发功能 / 修复缺陷 / 补测试 / 改文档 / 只做方案 | `standard-feature` / `bugfix` / `test-improvement` / `docs-update` / `plan-only` |
+
+### 多 Agent 工作台与本机部署
+
+- **桌面双栏交互**：Semi Design 浅色/深色双主题（持久化）、3 档内容宽度（正常 760px / 宽 1080px / 全宽 100%，窄屏自动收窄零横向溢出）、默认收起的顶部点线进度（可应用内一键切换右侧竖向进度轨）、带品牌图标的本机 Agent 级联选择器。
+- **双层上下文与可控协同**：节点间经通用交接摘要 + 固化文档（版本 Diff / Pin / 安全导出）传递；支持同角色会话续接与一键重置、确认点定点上游返工、单节点换模型重试、暂停/追加约束/二次确认终止、历史压缩与可逆归档挂载，以及完成后基于固化文档多轮追问。
+- **部署与常驻**：支持 `scripts/install.sh` 一键安装、`pnpm build` 源码生产部署、macOS `launchd` / Linux `systemd` 后台常驻与 SSH 端口转发，详见[部署指南（手册 §13）](docs/manual/tekon-user-manual.md#13-多-agent-工作台与部署指南)。
+
+v0.41.0 已完成全仓自动化测试、Chromium Playwright 9 项全流程 E2E 及真实本机 `claude-code` `2.1.327` 自举验证（运行 ID `run_2195c05b-218`），完整证据与未覆盖边界见[v0.41.0 自举验证报告](docs/reviews/2026-11-20-tekon-v2-bootstrap.md)。
 
 运行通过后仍需检查交付证据。**Run passed 不等于 ready**：PR 准备、PR 创建、远端 CI 等必需证据齐全后，readiness 才可能通过。能否交付由冻结计划中的模板 `delivery:` 声明裁决：五个产代码模板（`standard-delivery`、`standard-feature`、`bugfix`、`test-improvement`、`docs-update`）按各自声明评审证据并可走向 PR；默认的 `lightweight-delivery`、`plan-only` 与 goal 模式没有交付声明，结构性不可交付、不会自动产出 PR，Web Prepare 按钮同步禁用并说明原因。升级到 v0.40.0 前的旧运行需重新发起才能交付。
 

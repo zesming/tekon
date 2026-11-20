@@ -44,8 +44,10 @@ jobs:
         with:
           args: -color
 
-      - name: Check installer syntax
-        run: bash -n scripts/install.sh
+      - name: Check installer & updater syntax
+        run: |
+          bash -n scripts/install.sh
+          bash -n scripts/update.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -175,8 +177,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build core (web depends on it)
-        run: pnpm --filter @tekon/core build
+      - name: Build core and web production bundle
+        run: |
+          pnpm --filter @tekon/core build
+          pnpm --filter @tekon/web build
 
       - name: Install Playwright browser (chromium)
         run: pnpm --filter @tekon/web exec playwright install --with-deps chromium

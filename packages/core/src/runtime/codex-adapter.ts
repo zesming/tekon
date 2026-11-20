@@ -1,4 +1,4 @@
-import { lstatSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import {
   basename,
   isAbsolute,
@@ -17,6 +17,10 @@ import type { AgentAdapter } from './agent-adapter.js';
 import type { RoleProviderOverrides } from './agent-adapter.js';
 import { assertSafeProviderOverrideValue } from '../role/override-safety.js';
 import { assertAgentProviderCapabilities } from './agent-adapter.js';
+import {
+  ingestGeneralNodeOutput,
+  parseProviderStdout,
+} from './general-output.js';
 import {
   artifactDiagnosticFromError,
   createMissingRequiredArtifactsDiagnostic,
@@ -82,6 +86,7 @@ export function buildCodexCommand(
     artifactOutputDir?: string;
     prompt: string;
     runContext?: { nodeId: string; runId: string };
+    resumeThreadId?: string;
   },
   providerOverrides?: RoleProviderOverrides,
 ): BuiltCodexCommand {
@@ -91,9 +96,16 @@ export function buildCodexCommand(
   if (isRealCodexCommand) {
     assertSafeCodexArgs(userArgs);
   }
-  // PD-10：角色级覆盖是 Tekon 翻译的内部控制位，不经 userArgs 安全校验，
-  // 但取值先过白名单字符约束，杜绝选项注入（如 "high; rm -rf /"）。
   const overrideArgs = buildCodexOverrideArgs(providerOverrides);
+  const jsonArgs =
+    config.outputFormat === 'json' || config.outputFormat === 'stream-json'
+      ? ['--json']
+      : [];
+  const resumeArgs: string[] = [];
+  if (input.resumeThreadId) {
+    assertSafeProviderOverrideValue('model', input.resumeThreadId);
+    resumeArgs.push('resume', input.resumeThreadId);
+  }
   const args = isRealCodexCommand
     ? [
         ...controlledCodexGlobalArgs(config, {
@@ -101,15 +113,17 @@ export function buildCodexCommand(
           runContext: input.runContext,
         }),
         CODEX_EXEC_SUBCOMMAND,
+        ...resumeArgs,
+        ...jsonArgs,
         ...overrideArgs,
         ...userArgs,
       ]
     : [
         ...userArgs,
         CODEX_EXEC_SUBCOMMAND,
+        ...resumeArgs,
+        ...jsonArgs,
         ...CONTROLLED_CODEX_GLOBAL_ARGS,
-        // 对称展开覆盖（该分支生产不可达，保持两条路径行为一致，避免
-        // 未来启用自定义 command 时静默丢失角色覆盖）。
         ...overrideArgs,
       ];
 
@@ -135,40 +149,58 @@ export function createCodexAdapter(
   return {
     async runAgent(input) {
       const startedAt = Date.now();
-      const command = buildCodexCommand(
-        config,
-        {
-          artifactOutputDir: input.outputDir,
-          prompt: input.prompt,
-          runContext: {
-            nodeId: input.runContext.nodeId,
-            runId: input.runContext.runId,
-          },
-        },
-        input.providerOverrides,
-      );
       const manifestPath = join(input.outputDir, 'artifact-manifest.json');
-      const result = await gateway.run({
-        command,
-        cwd: input.worktreeLease.worktreePath,
-        policy: input.commandPolicy,
-        outputDir: input.outputDir,
-        timeoutMs: config.timeoutMs,
-        progressIntervalMs: config.progressHeartbeatMs,
-        noProgressTimeoutMs: config.noProgressTimeoutMs,
-        envMode: 'exact',
-        env: {
-          ...buildCodexProviderEnv(process.env, config.passthroughEnv),
-          TEKON_OUTPUT_DIR: input.outputDir,
-          TEKON_ARTIFACT_MANIFEST: manifestPath,
-          TEKON_RUN_ID: input.runContext.runId,
-          TEKON_NODE_ID: input.runContext.nodeId,
-        },
-        stdin: command.stdin,
-        signal: input.signal,
-        runId: input.runContext.runId,
-        nodeId: input.runContext.nodeId,
-      });
+      const executeOnce = async (resumeThreadId?: string) => {
+        const command = buildCodexCommand(
+          config,
+          {
+            artifactOutputDir: input.outputDir,
+            prompt: input.prompt,
+            runContext: {
+              nodeId: input.runContext.nodeId,
+              runId: input.runContext.runId,
+            },
+            resumeThreadId,
+          },
+          input.providerOverrides,
+        );
+        const result = await gateway.run({
+          command,
+          cwd: input.worktreeLease.worktreePath,
+          policy: input.commandPolicy,
+          outputDir: input.outputDir,
+          timeoutMs: config.timeoutMs,
+          progressIntervalMs: config.progressHeartbeatMs,
+          noProgressTimeoutMs: config.noProgressTimeoutMs,
+          envMode: 'exact',
+          env: {
+            ...buildCodexProviderEnv(process.env, config.passthroughEnv),
+            TEKON_OUTPUT_DIR: input.outputDir,
+            TEKON_ARTIFACT_MANIFEST: manifestPath,
+            TEKON_RUN_ID: input.runContext.runId,
+            TEKON_NODE_ID: input.runContext.nodeId,
+          },
+          stdin: command.stdin,
+          signal: input.signal,
+          runId: input.runContext.runId,
+          nodeId: input.runContext.nodeId,
+          onOutputLine: input.onOutputLine,
+        });
+        return { command, result };
+      };
+
+      let sessionResumeFallback = false;
+      let { command, result } = await executeOnce(input.resumeThreadId);
+
+      if (
+        input.resumeThreadId &&
+        !input.signal?.aborted &&
+        (result.status !== 'executed' ||
+          (result.exitCode !== 0 && !result.timedOut))
+      ) {
+        sessionResumeFallback = true;
+        ({ command, result } = await executeOnce(undefined));
+      }
 
       if (result.status !== 'executed') {
         return {
@@ -177,6 +209,7 @@ export function createCodexAdapter(
           durationMs: Date.now() - startedAt,
           outputFiles: [],
           timedOut: false,
+          cancelled: result.status === 'rejected' && Boolean(result.cancelled),
           diagnostic: classifyProviderFailure({
             provider: 'codex',
             command: command.tool,
@@ -187,8 +220,6 @@ export function createCodexAdapter(
         };
       }
 
-      // When the process itself failed, that is the reason to report; a
-      // missing or incomplete manifest is only its consequence.
       const processFailure =
         result.exitCode !== 0 || result.timedOut
           ? classifyProviderFailure({
@@ -200,15 +231,30 @@ export function createCodexAdapter(
             })
           : undefined;
 
+      const parsedStdout = parseProviderStdout('codex', result.stdoutPath);
       let artifacts: Artifact[] = [];
       let artifactOutputFiles: string[] = [];
+      let handoffBrief: string | undefined;
       let artifactIngestionFailed = false;
       const requiredArtifactTypes = input.requiredArtifactTypes ?? [];
       const hasNonZeroExitCode =
         typeof result.exitCode === 'number' && result.exitCode !== 0;
       const shouldTryArtifactIngestion =
         result.exitCode === 0 || result.timedOut || hasNonZeroExitCode;
-      if (shouldTryArtifactIngestion && input.artifactStore) {
+
+      if (
+        result.exitCode === 0 &&
+        input.allowGeneralFallback &&
+        !existsSync(manifestPath)
+      ) {
+        const ingested = await ingestGeneralNodeOutput({
+          runInput: input,
+          assistantText: parsedStdout.assistantText,
+        });
+        artifacts = ingested.artifacts;
+        artifactOutputFiles = artifacts.map((a) => a.path);
+        handoffBrief = ingested.handoffBrief;
+      } else if (shouldTryArtifactIngestion && input.artifactStore) {
         try {
           artifacts = await ingestAgentManifestArtifacts({
             runInput: input,
@@ -240,15 +286,15 @@ export function createCodexAdapter(
         }
       }
 
-      const missingRequiredTypes = missingRequiredArtifactTypes(
-        requiredArtifactTypes,
-        artifacts,
-      );
-      const missingRequiredDiagnostic =
-        createMissingRequiredArtifactsDiagnostic({
-          required: requiredArtifactTypes,
-          artifacts,
-        });
+      const missingRequiredTypes = input.allowGeneralFallback
+        ? []
+        : missingRequiredArtifactTypes(requiredArtifactTypes, artifacts);
+      const missingRequiredDiagnostic = input.allowGeneralFallback
+        ? undefined
+        : createMissingRequiredArtifactsDiagnostic({
+            required: requiredArtifactTypes,
+            artifacts,
+          });
       const hasCompleteRequiredArtifacts =
         requiredArtifactTypes.length > 0 && missingRequiredTypes.length === 0;
       if (
@@ -266,6 +312,17 @@ export function createCodexAdapter(
             ...artifactOutputFiles,
           ],
           artifacts,
+          ...(parsedStdout.assistantText
+            ? { assistantText: parsedStdout.assistantText }
+            : {}),
+          ...(parsedStdout.providerThreadId
+            ? { providerThreadId: parsedStdout.providerThreadId }
+            : {}),
+          ...(parsedStdout.tokenUsage
+            ? { tokenUsage: parsedStdout.tokenUsage }
+            : {}),
+          ...(handoffBrief ? { handoffBrief } : {}),
+          ...(sessionResumeFallback ? { sessionResumeFallback: true } : {}),
           timedOut: false,
         };
       }
@@ -298,6 +355,18 @@ export function createCodexAdapter(
           ...artifactOutputFiles,
         ],
         artifacts,
+        ...(parsedStdout.assistantText
+          ? { assistantText: parsedStdout.assistantText }
+          : {}),
+        ...(parsedStdout.providerThreadId
+          ? { providerThreadId: parsedStdout.providerThreadId }
+          : {}),
+        ...(parsedStdout.tokenUsage
+          ? { tokenUsage: parsedStdout.tokenUsage }
+          : {}),
+        ...(handoffBrief ? { handoffBrief } : {}),
+        ...(sessionResumeFallback ? { sessionResumeFallback: true } : {}),
+        cancelled: Boolean(input.signal?.aborted),
         timedOut: result.timedOut,
         ...(processFailure || missingRequiredDiagnostic
           ? { diagnostic: processFailure ?? missingRequiredDiagnostic }

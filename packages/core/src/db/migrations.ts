@@ -1,6 +1,6 @@
 import type { TekonDatabase } from './connection.js';
 
-const WORK_USABLE_SCHEMA_VERSION = 7;
+const WORK_USABLE_SCHEMA_VERSION = 8;
 
 function assertIntegrityOk(db: TekonDatabase): void {
   const rows = db.pragma('integrity_check') as unknown;
@@ -271,6 +271,76 @@ export function migrateDatabase(db: TekonDatabase): void {
         updated_at text not null,
         primary key (session_id, projection_name)
       );
+
+      create table if not exists task_attachments (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        doc_key text not null,
+        title text not null,
+        file_path text not null,
+        sha256 text not null,
+        size_bytes integer not null,
+        pinned integer not null default 1,
+        created_at text not null
+      );
+      create index if not exists idx_task_attachments_run_id on task_attachments(run_id);
+
+      create table if not exists task_context_entries (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        node_id text,
+        kind text not null,
+        content text not null,
+        status text not null default 'active',
+        created_at text not null
+      );
+      create index if not exists idx_task_context_entries_run_id on task_context_entries(run_id, created_at);
+
+      create table if not exists role_sessions (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        role_id text not null,
+        driver text not null,
+        provider_thread_id text,
+        anchor_node_id text,
+        reuse_mode text not null default 'reuse',
+        window_tokens integer not null default 0,
+        window_limit integer not null default 200000,
+        updated_at text not null,
+        unique(run_id, role_id)
+      );
+
+      create table if not exists context_archives (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        node_id text,
+        kind text not null,
+        title text not null,
+        summary text,
+        file_path text not null,
+        byte_size integer not null default 0,
+        mounted integer not null default 0,
+        created_at text not null
+      );
+      create index if not exists idx_context_archives_run_id on context_archives(run_id, created_at);
+
+      create table if not exists user_preferences (
+        key text primary key,
+        value_json text not null,
+        updated_at text not null
+      );
+
+      create table if not exists follow_up_turns (
+        id text primary key,
+        run_id text not null references workflow_instances(id) on delete cascade,
+        role_id text not null,
+        driver text not null,
+        model text,
+        user_text text not null,
+        assistant_text text not null,
+        created_at text not null
+      );
+      create index if not exists idx_follow_up_turns_run_id on follow_up_turns(run_id, created_at);
     `);
 
     addColumnIfMissing(db, 'nodes', 'inputs', "text not null default '[]'");
@@ -330,6 +400,40 @@ export function migrateDatabase(db: TekonDatabase): void {
     // PD-18：人工决策的请求上下文与决策备注分离，决策覆盖 note 不再丢失
     // 门禁发起时的命令/风险信息。
     addColumnIfMissing(db, 'human_decisions', 'request_note', 'text');
+
+    // v8：通用多 Agent 工作流、三层上下文、跨节点文档版本、冻结快照与返工代次
+    addColumnIfMissing(db, 'workflow_instances', 'mode', "text not null default 'static'");
+    addColumnIfMissing(db, 'workflow_instances', 'pause_reason', 'text');
+    addColumnIfMissing(db, 'workflow_instances', 'blueprint_json', 'text');
+    addColumnIfMissing(db, 'workflow_instances', 'blueprint_status', 'text');
+    addColumnIfMissing(db, 'workflow_instances', 'paused_at', 'text');
+    addColumnIfMissing(db, 'workflow_instances', 'last_role_id', 'text');
+
+    addColumnIfMissing(db, 'nodes', 'name', 'text');
+    addColumnIfMissing(db, 'nodes', 'resolved_driver', 'text');
+    addColumnIfMissing(db, 'nodes', 'resolved_model', 'text');
+    addColumnIfMissing(db, 'nodes', 'resolved_effort', 'text');
+    addColumnIfMissing(db, 'nodes', 'frozen_role_json', 'text');
+    addColumnIfMissing(db, 'nodes', 'context_mode', "text not null default 'auto'");
+    addColumnIfMissing(db, 'nodes', 'doc_key', 'text');
+    addColumnIfMissing(db, 'nodes', 'expected_doc', 'text');
+    addColumnIfMissing(db, 'nodes', 'confirm_after', 'integer not null default 0');
+    addColumnIfMissing(db, 'nodes', 'attempt_generation', 'integer not null default 1');
+    addColumnIfMissing(db, 'nodes', 'rework_count', 'integer not null default 0');
+    addColumnIfMissing(db, 'nodes', 'duration_ms', 'integer');
+    addColumnIfMissing(db, 'nodes', 'token_input', 'integer');
+    addColumnIfMissing(db, 'nodes', 'token_cached', 'integer');
+    addColumnIfMissing(db, 'nodes', 'token_output', 'integer');
+
+    addColumnIfMissing(db, 'role_runs', 'attempt_generation', 'integer not null default 1');
+
+    addColumnIfMissing(db, 'artifacts', 'doc_key', 'text');
+    addColumnIfMissing(db, 'artifacts', 'title', 'text');
+    addColumnIfMissing(db, 'artifacts', 'pinned', 'integer not null default 0');
+    addColumnIfMissing(db, 'artifacts', 'archived', 'integer not null default 0');
+    db.exec(
+      'create index if not exists idx_artifacts_run_dockey on artifacts(run_id, doc_key, version);',
+    );
 
     db.prepare(
       'insert or ignore into schema_migrations (version, applied_at) values (?, ?)',

@@ -107,7 +107,7 @@ export const agentAdapterConfigSchema = z.object({
     .regex(CODEX_PROFILE_NAME, 'agent profile must be a safe profile name')
     .optional(),
   promptMode: z.enum(['stdin', 'arg-append', 'file']).default('stdin'),
-  outputFormat: z.enum(['text', 'json']).default('text'),
+  outputFormat: z.enum(['text', 'json', 'stream-json']).default('text'),
   permissionProfile: permissionProfileSchema,
   /**
    * Explicit, informed acknowledgment that this provider's network egress

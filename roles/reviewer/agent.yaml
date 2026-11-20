@@ -1,6 +1,8 @@
 role: reviewer
 name: Independent Reviewer
 description: Reviews spec compliance, code quality, tests, and risk controls.
+isolated: true
+category: general
 injectMode: prepend
 priority: 70
 maxSkills: 4

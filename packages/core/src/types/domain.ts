@@ -23,6 +23,38 @@ export const BUILT_IN_ROLE_IDS = [
 ] as const;
 export type BuiltInRoleId = (typeof BUILT_IN_ROLE_IDS)[number];
 
+export const GENERAL_ROLE_IDS = [
+  'explorer',
+  'designer',
+  'reviewer',
+  'coder',
+  'orchestrator',
+] as const;
+export type GeneralRoleId = (typeof GENERAL_ROLE_IDS)[number];
+
+export const nodeContextModeSchema = z.enum([
+  'auto',
+  'full',
+  'isolated',
+  'reuse',
+]);
+export type NodeContextMode = z.infer<typeof nodeContextModeSchema>;
+
+export const workflowPauseReasonSchema = z.enum([
+  'user_pause',
+  'confirm_checkpoint',
+  'blueprint_review',
+]);
+export type WorkflowPauseReason = z.infer<typeof workflowPauseReasonSchema>;
+
+export const blueprintStatusSchema = z.enum([
+  'planning',
+  'review',
+  'locked',
+  'failed',
+]);
+export type BlueprintStatus = z.infer<typeof blueprintStatusSchema>;
+
 export const roleSchema = identifierSchema;
 export type Role = z.infer<typeof roleSchema>;
 
@@ -301,6 +333,10 @@ export const artifactSchema = artifactRefSchema.extend({
   nodeId: z.string().min(1),
   sizeBytes: z.number().int().min(0),
   summary: z.string().optional(),
+  docKey: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
   createdAt: isoDateStringSchema,
 });
 export type Artifact = z.infer<typeof artifactSchema>;

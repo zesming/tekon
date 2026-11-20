@@ -1,0 +1,7 @@
+role: designer
+name: 方案设计师
+description: 基于调研结论制定架构/产品方案初稿，并在评审后吸收意见迭代终稿。
+isolated: false
+category: general
+injectMode: prepend
+priority: 65

@@ -25,8 +25,8 @@ describe('web read API', () => {
       gates: 1,
       audit: 3,
       pendingApprovals: 1,
-      // PD-11：内置 6 角色与项目 rd 去重后的并集口径。
-      roles: 6,
+      // 内置角色（含通用角色 explorer/designer/coder/orchestrator）与项目 rd 去重后的并集口径。
+      roles: 10,
     });
     expect(overview.counts.workflows).toBeGreaterThanOrEqual(2);
     await expect(
@@ -176,8 +176,8 @@ describe('web read API', () => {
 
     const result = await api.role.list();
 
-    // PD-11：并集 6 个角色（内置 5 + 项目 rd 去重）。
-    expect(result.roles).toHaveLength(6);
+    // 并集 10 个角色（内置 10 含通用角色 + 项目 rd 覆盖去重）。
+    expect(result.roles).toHaveLength(10);
     const rd = result.roles.find((role) => role.id === 'rd');
     expect(rd).toMatchObject({ id: 'rd', name: 'RD', source: 'project' });
 

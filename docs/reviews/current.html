@@ -14,15 +14,15 @@
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
-  <header class="masthead">TEKON / ACCEPTANCE &amp; RELEASE EVIDENCE / 2026-09-08</header>
+  <header class="masthead">TEKON / ACCEPTANCE &amp; RELEASE EVIDENCE / 2026-11-20</header>
   <main id="main">
     <h1>Tekon 验收与发布证据索引</h1>
-    <p>维护日期：2026-09-08 · 当前版本以根 <code>package.json</code> 为准</p>
+    <p>维护日期：2026-11-20 · 当前版本以根 <code>package.json</code> 为准</p>
     <details class="toc"><summary>阅读目录</summary><ol><li><a href="#当前结论">当前结论</a></li><li><a href="#保留的正式验收与发布证据">保留的正式验收与发布证据</a></li><li><a href="#证据使用规则">证据使用规则</a></li><li><a href="#历史过程资料的归并">历史过程资料的归并</a></li><li><a href="#维护边界">维护边界</a></li></ol></details>
     <p>这是 <code>docs/reviews/</code> 的固定入口。当前产品、交互和运行时口径见<a href="../README.md">文档总索引</a>；本页只登记正式验收、发布证据和仍需人工判断的边界。历史过程报告不再作为第二套规范。</p>
 
     <h2 id="当前结论">当前结论</h2>
-    <p>本次 2026-09-08 发布审核已归档源码、回归日志、视觉证据与真实 Claude 调用记录。当前结果、失败修复、恢复状态和未覆盖范围统一见<a href="2026-09-08-release-audit.md">发布审核报告</a>，本索引不重复维护计数或临时运行状态。历史记录仅证明其原始快照，不能宣称所有真实 Provider 或远端交付已通过。</p>
+    <p>v0.41.0 多 Agent 工作台重构已完成全仓自动化验证、Chromium Playwright E2E 及真实本机 <code>claude-code</code> <code>2.1.327</code> 自举验证（运行 ID <code>run_2195c05b-218</code>），完整证据与未覆盖边界见<a href="2026-11-20-tekon-v2-bootstrap.html">v0.41.0 自举验证与回归归档</a>。历史 2026-09-08 发布审核与补修验收继续保留为基线参考。</p>
     <p>v0.26.0 的 PR #35 已合并。遗留问题的发布影响及 v0.26.1 产物诊断修复统一见<a href="2026-09-08-release-followup.html">发布影响评估与补修验收</a>；原审核的真实运行与源码证据不回填为补修后的真实 Provider 验收。</p>
 <p>当前固定边界：</p>
     <ul>
@@ -33,6 +33,7 @@
 
     <h2 id="保留的正式验收与发布证据">保留的正式验收与发布证据</h2>
     <div class="scroll" role="region" aria-label="正式验收与发布证据表格" tabindex="0"><table><thead><tr><th>记录</th><th>保留原因与证明范围</th></tr></thead><tbody>
+<tr><td><a href="2026-11-20-tekon-v2-bootstrap.md">2026-11-20 v0.41.0 多 Agent 工作台自举验证（MD）</a> · <a href="2026-11-20-tekon-v2-bootstrap.html">HTML</a></td><td>当前 v0.41.0 精简工作台正式自举验证与全量回归归档：记录真实本机 <code>claude-code</code> <code>2.1.327</code> 双节点执行（<code>run_2195c05b-218</code>）、权限沙箱与日志脱敏实测、Playwright 9 项 E2E、独立审查清零及未覆盖边界。</td></tr>
 <tr><td><a href="2026-09-08-release-followup.md">2026-09-08 v0.26.1 影响评估与补修（MD）</a> · <a href="2026-09-08-release-followup.html">HTML</a></td><td>逐项说明发布影响、默认 Provider 验收缺口与历史租约处置；记录诊断补修、兼容回归、独立复核及新源码快照，证据见 <a href="evidence/2026-09-08-release-followup/"><code>evidence/2026-09-08-release-followup/</code></a>。</td></tr>
 
       <tr><td><a href="2026-09-08-release-audit.md">2026-09-08 发布前全面审核（MD）</a> · <a href="2026-09-08-release-audit.html">HTML</a></td><td>当前发布审核；记录全量测试、CLI/Chromium e2e、构建/类型/lint/audit、72 张图像与专项交互证据、真实 Claude 生命周期和外部 Provider 验证缺口。摘要、运行记录、源码哈希、日志和截图见 <a href="evidence/2026-09-08-release/">evidence/2026-09-08-release/</a>。</td></tr>
@@ -63,7 +64,7 @@
 
     <h2 id="维护边界">维护边界</h2>
     <p>本页不保存新的过程日志或临时运行态。正式验收、发布决策或用户要求归档时，才在 <code>docs/reviews/</code> 增加记录和证据资产；日常实现结论先更新固定产品/设计/技术/手册入口，再由这里登记相应正式证据。</p>
-    <footer class="foot">Markdown SHA-256: 959ead8def3eb8e09af11a50c1574680c14574bccc3b30deee19a765566a9cdb</footer>
+    <footer class="foot">Markdown SHA-256: 49a25195b837375ed2d3f6a8b0f17622d16d0748984b4a96f5fc2bb9ef04987f</footer>
   </main>
 </body>
 </html>
