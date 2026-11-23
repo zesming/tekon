@@ -22,6 +22,7 @@ interface DiffLine {
 export function InspectorDrawer({
   runId,
   tab,
+  readOnly = false,
   nodes,
   documents,
   selectedDocId,
@@ -35,6 +36,7 @@ export function InspectorDrawer({
 }: {
   runId: string;
   tab: 'docs' | 'ctx';
+  readOnly?: boolean;
   nodes: TaskNodeView[];
   documents: SolidifiedDoc[];
   selectedDocId: string | null;
@@ -344,7 +346,7 @@ export function InspectorDrawer({
                           {WbIcons.diff}
                         </button>
                       ) : null}
-                      {activeDoc.source === 'artifact' ? (
+                      {!readOnly && activeDoc.source === 'artifact' ? (
                         <button
                           type="button"
                           className={`wb-icon-btn wb-icon-btn-sm ${activeDoc.pinned ? 'active' : ''}`}
@@ -450,7 +452,7 @@ export function InspectorDrawer({
                           ? ` · 缓存 ${ctxPkg.session.cacheReusePercent}%`
                           : ''}
                       </span>
-                      {ctxPkg.session.mode !== 'isolated' ? (
+                      {!readOnly && ctxPkg.session.mode !== 'isolated' ? (
                         <button
                           type="button"
                           className="wb-btn wb-btn-xs"
@@ -475,15 +477,17 @@ export function InspectorDrawer({
                       style={{ width: `${Math.min(100, ctxPkg.session.windowPercent)}%` }}
                     />
                   </div>
-                  <button
-                    type="button"
-                    className="wb-btn wb-btn-xs"
-                    disabled={busyAction}
-                    onClick={() => void handleCompact()}
-                    title="压缩并归档历史上下文"
-                  >
-                    {WbIcons.compact} 压缩
-                  </button>
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      className="wb-btn wb-btn-xs"
+                      disabled={busyAction}
+                      onClick={() => void handleCompact()}
+                      title="压缩并归档历史上下文"
+                    >
+                      {WbIcons.compact} 压缩
+                    </button>
+                  ) : null}
                 </div>
 
                 {/* General Context */}
@@ -565,14 +569,16 @@ export function InspectorDrawer({
                               >
                                 {WbIcons.eye}
                               </button>
-                              <button
-                                type="button"
-                                className={`wb-btn wb-btn-xs ${arc.mounted ? 'wb-btn-primary' : ''}`}
-                                disabled={busyAction}
-                                onClick={() => void handleToggleArchiveMount(arc.id)}
-                              >
-                                {arc.mounted ? '已挂载' : '挂载'}
-                              </button>
+                              {!readOnly ? (
+                                <button
+                                  type="button"
+                                  className={`wb-btn wb-btn-xs ${arc.mounted ? 'wb-btn-primary' : ''}`}
+                                  disabled={busyAction}
+                                  onClick={() => void handleToggleArchiveMount(arc.id)}
+                                >
+                                  {arc.mounted ? '已挂载' : '挂载'}
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-t)' }}>

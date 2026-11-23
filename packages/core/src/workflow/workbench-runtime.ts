@@ -27,8 +27,23 @@ import { loadRole } from '../role/loader.js';
 import { assertSafeProviderOverrideValue } from '../role/override-safety.js';
 import { listRolesDetailed } from '../role/role-store.js';
 import type { AgentRunInput, OutputStreamLine } from '../runtime/agent-adapter.js';
-import type { AgentDiscoveryRegistry } from '../runtime/agent-discovery.js';
+import {
+  applyAgentExecutability,
+  isAgentExecutable,
+  type AgentDiscoveryRegistry,
+  type AgentDiscoverySnapshot,
+} from '../runtime/agent-discovery.js';
+import {
+  createCommandGateway,
+  type CommandGateway,
+} from '../runtime/command-gateway.js';
 import type { ProviderAdapterResolver } from '../runtime/provider-resolver.js';
+import {
+  createWorktreeManager,
+  isGitRepository,
+  type WorktreeManager,
+} from '../runtime/worktree-manager.js';
+import type { WorktreeLease } from '../types/config.js';
 import type { SessionEventBus } from '../session/event-bus.js';
 import {
   createSessionEventStore,
@@ -72,7 +87,7 @@ export interface FrozenRoleSnapshot {
 }
 
 export const dynamicBlueprintNodeSchema = z.object({
-  id: z.string().min(1).optional(),
+  id: identifierSchema.optional(),
   name: z.string().min(1).max(120),
   roleId: roleSchema,
   docKey: identifierSchema.optional(),
@@ -98,9 +113,18 @@ export type DynamicBlueprint = {
   error?: string;
 };
 
+export type TaskExecutorKind = 'workbench' | 'legacy';
+
+export interface LegacyTaskController {
+  pauseRun(runId: string): Promise<void>;
+  cancelRun(runId: string): Promise<void>;
+}
+
 export interface TaskListItem {
   runId: string;
   sessionId: string | null;
+  executor: TaskExecutorKind;
+  canControl: boolean;
   title: string;
   mode: 'static' | 'dynamic';
   templateName: string;
@@ -146,6 +170,8 @@ export interface TaskNodeView {
 export interface TaskDetailView {
   runId: string;
   sessionId: string | null;
+  executor: TaskExecutorKind;
+  canControl: boolean;
   title: string;
   prompt: string;
   mode: 'static' | 'dynamic';
@@ -170,7 +196,7 @@ export interface PreflightBlocker {
   nodeName: string;
   roleId: string;
   agentId: string;
-  status: 'unauthenticated' | 'not_installed' | 'missing_role';
+  status: 'unauthenticated' | 'not_installed' | 'unsupported' | 'missing_role';
   message: string;
   loginHint?: string;
   installHint?: string;
@@ -185,6 +211,9 @@ export interface CreateWorkbenchRuntimeOptions {
   userHome?: string;
   discovery: AgentDiscoveryRegistry;
   resolver: ProviderAdapterResolver;
+  commandGateway?: CommandGateway;
+  worktreeManager?: WorktreeManager;
+  legacyController?: LegacyTaskController;
   eventBus?: SessionEventBus;
   subprocessRegistry?: SubprocessRegistry;
   repositories?: TekonRepositories;
@@ -195,6 +224,8 @@ export interface CreateWorkbenchRuntimeOptions {
 export interface WorkbenchRuntime {
   contextManager: ContextManager;
   discovery: AgentDiscoveryRegistry;
+  getAgentsSnapshot(options?: { forceRefresh?: boolean }): Promise<AgentDiscoverySnapshot>;
+  refreshAgents(): Promise<AgentDiscoverySnapshot>;
   getWorkspaceInfo(): { name: string; path: string };
   listTasks(options?: {
     filter?: 'all' | 'running' | 'attention' | 'done';
@@ -296,11 +327,17 @@ export function createWorkbenchRuntime(
     userHome,
     discovery,
     resolver,
+    legacyController,
     eventBus,
   } = options;
 
   const repositories =
     options.repositories ?? createRepositories(db, writeQueue);
+  const commandGateway =
+    options.commandGateway ?? createCommandGateway({ repositories });
+  const worktreeManager =
+    options.worktreeManager ??
+    createWorktreeManager({ repositories, gateway: commandGateway });
   const contextManager =
     options.contextManager ??
     createContextManager({ db, writeQueue, repoPath });
@@ -313,6 +350,51 @@ export function createWorkbenchRuntime(
   const activeRuns = new Map<string, ActiveRunControl>();
   const liveNodeTraces = new Map<string, string[]>();
   const liveNodeErrors = new Map<string, string>();
+
+  async function getAgentsSnapshot(
+    opts?: { forceRefresh?: boolean },
+  ): Promise<AgentDiscoverySnapshot> {
+    const snap = await discovery.getSnapshot(opts);
+    return applyAgentExecutability(snap, (id) => resolver.has(id));
+  }
+
+  async function refreshAgents(): Promise<AgentDiscoverySnapshot> {
+    const snap = await discovery.refresh();
+    return applyAgentExecutability(snap, (id) => resolver.has(id));
+  }
+
+  function detectTaskExecutor(input: {
+    runId: string;
+    demandSource: string | null;
+    planSnapshot: string | null;
+    hasJobs?: number;
+  }): TaskExecutorKind {
+    if (input.hasJobs && input.hasJobs > 0) {
+      return 'legacy';
+    }
+    if (input.demandSource === 'workbench') {
+      return 'workbench';
+    }
+    if (input.planSnapshot) {
+      try {
+        const snap = JSON.parse(input.planSnapshot) as { version?: unknown };
+        if (snap.version === 4) {
+          return 'workbench';
+        }
+      } catch {
+        // fall through to legacy
+      }
+    }
+    return 'legacy';
+  }
+
+  function assertWorkbenchOwnedTask(task: TaskDetailView): void {
+    if (task.executor !== 'workbench') {
+      throw new Error(
+        'LEGACY_TASK_READONLY: 旧版执行器创建的任务仅支持查看、暂停或终止，请通过原 CLI 或会话接口操作。',
+      );
+    }
+  }
 
   function getWorkspaceInfo() {
     return { name: basename(repoPath) || repoPath, path: repoPath };
@@ -359,8 +441,8 @@ export function createWorkbenchRuntime(
     | { ok: true; snapshot: FrozenRoleSnapshot }
     | { ok: false; blocker: Omit<PreflightBlocker, 'nodeId' | 'nodeName'> }
   > {
-    const discoverySnap = await discovery.getSnapshot();
-    const readyAgents = discoverySnap.agents.filter((a) => a.status === 'ready');
+    const discoverySnap = await getAgentsSnapshot();
+    const readyAgents = discoverySnap.agents.filter((a) => isAgentExecutable(a));
 
     let loaded;
     try {
@@ -387,8 +469,28 @@ export function createWorkbenchRuntime(
       declaredDriver || readyAgents[0]?.id || resolver.defaultDriver;
     const agent = discoverySnap.agents.find((a) => a.id === driver);
 
-    if (driver !== 'mock' && (!agent || agent.status !== 'ready')) {
-      const status = agent?.status === 'unauthenticated' ? 'unauthenticated' : 'not_installed';
+    if (!resolver.has(driver)) {
+      return {
+        ok: false,
+        blocker: {
+          roleId,
+          agentId: driver,
+          status: 'unsupported',
+          message:
+            agent?.unsupportedHint ??
+            `执行驱动「${driver}」尚未注册到当前运行时，请在设置中切换为可用 Agent`,
+          installHint: agent?.installHint,
+        },
+      };
+    }
+
+    if (driver !== 'mock' && !isAgentExecutable(agent)) {
+      const status =
+        agent?.status === 'unauthenticated'
+          ? 'unauthenticated'
+          : agent?.status === 'unsupported'
+            ? 'unsupported'
+            : 'not_installed';
       return {
         ok: false,
         blocker: {
@@ -398,21 +500,11 @@ export function createWorkbenchRuntime(
           message:
             status === 'unauthenticated'
               ? `Agent「${driver}」未登录，无法启动`
-              : `Agent「${driver}」未安装或未就绪，无法启动`,
+              : status === 'unsupported'
+                ? agent?.unsupportedHint ??
+                  `执行驱动「${driver}」尚未注册到当前运行时，请在设置中切换为可用 Agent`
+                : `Agent「${driver}」未安装或未就绪，无法启动`,
           loginHint: agent?.loginHint,
-          installHint: agent?.installHint,
-        },
-      };
-    }
-
-    if (!resolver.has(driver)) {
-      return {
-        ok: false,
-        blocker: {
-          roleId,
-          agentId: driver,
-          status: 'not_installed',
-          message: `执行驱动「${driver}」尚未注册到当前运行时，请在设置中切换为可用 Agent`,
           installHint: agent?.installHint,
         },
       };
@@ -465,6 +557,7 @@ export function createWorkbenchRuntime(
         `select wi.id as run_id,
                 (select s.id from sessions s where s.run_id = wi.id order by s.created_at desc limit 1) as session_id,
                 d.title as title,
+                d.source as demand_source,
                 wi.mode as mode,
                 wi.plan_snapshot as plan_snapshot,
                 wi.status as status,
@@ -472,6 +565,7 @@ export function createWorkbenchRuntime(
                 wi.blueprint_status as blueprint_status,
                 wi.created_at as created_at,
                 wi.updated_at as updated_at,
+                (select count(*) from jobs j join sessions s on s.id = j.session_id where s.run_id = wi.id) as job_count,
                 (select count(*) from nodes n where n.run_id = wi.id) as total_nodes,
                 (select count(*) from nodes n where n.run_id = wi.id and n.status = 'passed') as completed_nodes
          from workflow_instances wi
@@ -482,6 +576,7 @@ export function createWorkbenchRuntime(
       run_id: string;
       session_id: string | null;
       title: string;
+      demand_source: string | null;
       mode: 'static' | 'dynamic' | null;
       plan_snapshot: string | null;
       status: WorkflowStatus;
@@ -489,6 +584,7 @@ export function createWorkbenchRuntime(
       blueprint_status: BlueprintStatus | null;
       created_at: string;
       updated_at: string;
+      job_count: number;
       total_nodes: number;
       completed_nodes: number;
     }>;
@@ -511,6 +607,12 @@ export function createWorkbenchRuntime(
         }
       }
       const mode = r.mode ?? 'static';
+      const executor = detectTaskExecutor({
+        runId: r.run_id,
+        demandSource: r.demand_source,
+        planSnapshot: r.plan_snapshot,
+        hasJobs: r.job_count,
+      });
       const uiCategory = classifyUiCategory(
         r.status,
         r.pause_reason,
@@ -526,14 +628,14 @@ export function createWorkbenchRuntime(
       }
 
       let progressLabel = `${r.completed_nodes}/${r.total_nodes}`;
-      if (mode === 'dynamic' && r.blueprint_status === 'planning') {
+      if (r.status === 'cancelled') {
+        progressLabel = '已取消';
+      } else if (mode === 'dynamic' && r.blueprint_status === 'planning') {
         progressLabel = '编排中';
       } else if (mode === 'dynamic' && r.blueprint_status === 'review') {
         progressLabel = '蓝图待确认';
       } else if (mode === 'dynamic' && r.blueprint_status === 'failed') {
         progressLabel = '编排失败';
-      } else if (r.status === 'cancelled') {
-        progressLabel = '已取消';
       } else if (r.status === 'failed') {
         progressLabel = `${r.completed_nodes}/${r.total_nodes} 失败`;
       } else if (r.pause_reason === 'confirm_checkpoint') {
@@ -545,6 +647,8 @@ export function createWorkbenchRuntime(
       items.push({
         runId: r.run_id,
         sessionId: r.session_id,
+        executor,
+        canControl: executor === 'workbench' || Boolean(legacyController),
         title: r.title,
         mode,
         templateName,
@@ -568,6 +672,7 @@ export function createWorkbenchRuntime(
         `select wi.id as run_id,
                 d.title as title,
                 d.body as prompt,
+                d.source as demand_source,
                 wi.mode as mode,
                 wi.plan_snapshot as plan_snapshot,
                 wi.status as status,
@@ -577,7 +682,8 @@ export function createWorkbenchRuntime(
                 wi.current_node_id as current_node_id,
                 wi.last_role_id as last_role_id,
                 wi.created_at as created_at,
-                wi.updated_at as updated_at
+                wi.updated_at as updated_at,
+                (select count(*) from jobs j join sessions s on s.id = j.session_id where s.run_id = wi.id) as job_count
          from workflow_instances wi
          join demands d on d.id = wi.demand_id
          where wi.id = ?`,
@@ -587,6 +693,7 @@ export function createWorkbenchRuntime(
           run_id: string;
           title: string;
           prompt: string;
+          demand_source: string | null;
           mode: 'static' | 'dynamic' | null;
           plan_snapshot: string | null;
           status: WorkflowStatus;
@@ -597,12 +704,20 @@ export function createWorkbenchRuntime(
           last_role_id: string | null;
           created_at: string;
           updated_at: string;
+          job_count: number;
         }
       | undefined;
 
     if (!row) {
       throw new Error(`TASK_NOT_FOUND: 任务 '${runId}' 不存在。`);
     }
+
+    const executor = detectTaskExecutor({
+      runId: row.run_id,
+      demandSource: row.demand_source,
+      planSnapshot: row.plan_snapshot,
+      hasJobs: row.job_count,
+    });
 
     let templateId: string | null = null;
     let templateName = row.mode === 'dynamic' ? '动态编排' : '工作流';
@@ -757,6 +872,8 @@ export function createWorkbenchRuntime(
     return {
       runId: row.run_id,
       sessionId: getSessionIdForRun(runId),
+      executor,
+      canControl: executor === 'workbench' || Boolean(legacyController),
       title: row.title,
       prompt: row.prompt,
       mode: row.mode ?? 'static',
@@ -842,13 +959,20 @@ export function createWorkbenchRuntime(
     const sessionId = getSessionIdForRun(runId);
     const nowIso = () => new Date().toISOString();
 
+    let started = false;
     await writeQueue.enqueue(() => {
-      db.prepare(
-        `update workflow_instances
-         set status = 'running', pause_reason = null, paused_at = null, updated_at = ?
-         where id = ?`,
-      ).run(nowIso(), runId);
+      const info = db
+        .prepare(
+          `update workflow_instances
+           set status = 'running', pause_reason = null, paused_at = null, updated_at = ?
+           where id = ? and status not in ('cancelled', 'passed')`,
+        )
+        .run(nowIso(), runId);
+      started = info.changes === 1;
     });
+    if (!started) {
+      return;
+    }
 
     const nodeRows = db
       .prepare(
@@ -1001,21 +1125,81 @@ export function createWorkbenchRuntime(
       };
 
       const { adapter } = resolver.resolve(driver);
-      const runInput: AgentRunInput = {
-        roleConfig: { role: node.role, name: frozenRole.name },
-        prompt,
-        worktreeLease: {
+      let realLease: WorktreeLease | null = null;
+      const failNode = async (errMsg: string, durMs: number) => {
+        const finished = nowIso();
+        liveNodeErrors.set(`${runId}:${node.id}`, errMsg);
+        await writeQueue.enqueue(() => {
+          db.prepare(
+            `update nodes set status = 'failed', duration_ms = ?, updated_at = ? where id = ?`,
+          ).run(durMs, finished, node.id);
+          db.prepare(
+            `update role_runs set status = 'failed', completed_at = ? where id = ?`,
+          ).run(finished, roleRunId);
+          db.prepare(
+            `update workflow_instances set status = 'failed', updated_at = ? where id = ?`,
+          ).run(finished, runId);
+        });
+        await emitEvent(sessionId, 'node/status', {
+          runId,
+          nodeId: node.id,
+          status: 'failed',
+          error: errMsg,
+        });
+      };
+
+      let effectiveLease: WorktreeLease;
+      if (node.workspace === 'worktree') {
+        const gitRepo = await isGitRepository(commandGateway, repoPath);
+        if (!gitRepo) {
+          await failNode(
+            "工作区隔离模式 'worktree' 需要 Git 仓库，当前目录不是有效的 Git 仓库。",
+            Date.now() - startMs,
+          );
+          return;
+        }
+        try {
+          const runBranch = await worktreeManager.ensureRunBranch({
+            repoPath,
+            runId,
+            baseRef: 'HEAD',
+          });
+          realLease = await worktreeManager.createLease({
+            repoPath,
+            runId,
+            nodeId: node.id,
+            role: node.role,
+            baseRef: runBranch,
+            allowDirtyBase: true,
+          });
+          effectiveLease = realLease;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          await failNode(
+            `创建隔离 worktree 失败：${msg}`,
+            Date.now() - startMs,
+          );
+          return;
+        }
+      } else {
+        effectiveLease = {
           id: `lease_${runId}_${node.id}`,
           runId,
           nodeId: node.id,
           role: node.role,
           repoPath,
           worktreePath: repoPath,
-          branchName: 'in-place',
+          branchName: node.workspace === 'none' ? 'read-only' : 'in-place',
           createdAt: startedAt,
-        },
+        };
+      }
+
+      const runInput: AgentRunInput = {
+        roleConfig: { role: node.role, name: frozenRole.name },
+        prompt,
+        worktreeLease: effectiveLease,
         outputDir,
-        commandPolicy: defaultCommandPolicy(repoPath),
+        commandPolicy: defaultCommandPolicy(effectiveLease.worktreePath),
         runContext: {
           runId,
           nodeId: node.id,
@@ -1039,77 +1223,96 @@ export function createWorkbenchRuntime(
 
       let result;
       try {
-        result = await adapter.runAgent(runInput);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        result = {
-          provider: 'custom' as const,
-          exitCode: 1,
-          durationMs: Date.now() - startMs,
-          outputFiles: [],
-          diagnostic: { code: 'unclassified' as const, message },
-        };
+        try {
+          result = await adapter.runAgent(runInput);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          result = {
+            provider: 'custom' as const,
+            exitCode: 1,
+            durationMs: Date.now() - startMs,
+            outputFiles: [],
+            diagnostic: { code: 'unclassified' as const, message },
+          };
+        }
+
+        const durationMs = result.durationMs ?? Date.now() - startMs;
+        const finishedAt = nowIso();
+
+        // Distinguish Pause abort vs Cancel abort!
+        if (signal.aborted || result.cancelled) {
+          const isPause =
+            signal.reason === JOB_ABORT_REASON_PAUSE ||
+            activeRuns.get(runId)?.reason === 'pause';
+          await writeQueue.enqueue(() => {
+            db.prepare(
+              `update nodes set status = ?, duration_ms = ?, updated_at = ? where id = ?`,
+            ).run(isPause ? 'paused' : 'interrupted', durationMs, finishedAt, node.id);
+            db.prepare(
+              `update role_runs set status = ?, interrupted_at = ? where id = ?`,
+            ).run(isPause ? 'paused' : 'interrupted', finishedAt, roleRunId);
+            db.prepare(
+              `update workflow_instances
+               set status = ?, pause_reason = ?, paused_at = ?, updated_at = ?
+               where id = ?`,
+            ).run(
+              isPause ? 'paused' : 'cancelled',
+              isPause ? 'user_pause' : null,
+              isPause ? finishedAt : null,
+              finishedAt,
+              runId,
+            );
+          });
+          await emitEvent(sessionId, 'node/status', {
+            runId,
+            nodeId: node.id,
+            status: isPause ? 'paused' : 'interrupted',
+          });
+          return;
+        }
+
+        if (result.exitCode !== 0 || result.timedOut) {
+          const errMsg =
+            result.diagnostic?.message ||
+            (result.timedOut ? '节点执行超时' : `退出码 ${result.exitCode ?? 1}`);
+          await failNode(errMsg, durationMs);
+          return;
+        }
+
+        if (realLease) {
+          try {
+            const committed = await worktreeManager.commitLeaseChanges(
+              realLease.id,
+              { message: `tekon(${runId}): ${node.name ?? node.id}` },
+            );
+            const currentHead = await worktreeManager.getLeaseHead(realLease.id);
+            if (committed || (realLease.baseHead && currentHead !== realLease.baseHead)) {
+              await worktreeManager.promoteLeaseToRunBranch({
+                leaseId: realLease.id,
+              });
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const hint =
+              /user\.name|user\.email|Author identity unknown/iu.test(msg)
+                ? '（请先配置 git config user.name 与 user.email）'
+                : '';
+            await failNode(
+              `提交并提升 worktree 改动失败：${msg}${hint}`,
+              Date.now() - startMs,
+            );
+            return;
+          }
+        }
+      } finally {
+        if (realLease) {
+          await worktreeManager.releaseLease(realLease.id).catch(() => {});
+          await worktreeManager.cleanupRun(runId, repoPath).catch(() => {});
+        }
       }
 
       const durationMs = result.durationMs ?? Date.now() - startMs;
       const finishedAt = nowIso();
-
-      // Distinguish Pause abort vs Cancel abort!
-      if (signal.aborted || result.cancelled) {
-        const isPause =
-          signal.reason === JOB_ABORT_REASON_PAUSE ||
-          activeRuns.get(runId)?.reason === 'pause';
-        await writeQueue.enqueue(() => {
-          db.prepare(
-            `update nodes set status = ?, duration_ms = ?, updated_at = ? where id = ?`,
-          ).run(isPause ? 'paused' : 'interrupted', durationMs, finishedAt, node.id);
-          db.prepare(
-            `update role_runs set status = ?, interrupted_at = ? where id = ?`,
-          ).run(isPause ? 'paused' : 'interrupted', finishedAt, roleRunId);
-          db.prepare(
-            `update workflow_instances
-             set status = ?, pause_reason = ?, paused_at = ?, updated_at = ?
-             where id = ?`,
-          ).run(
-            isPause ? 'paused' : 'cancelled',
-            isPause ? 'user_pause' : null,
-            isPause ? finishedAt : null,
-            finishedAt,
-            runId,
-          );
-        });
-        await emitEvent(sessionId, 'node/status', {
-          runId,
-          nodeId: node.id,
-          status: isPause ? 'paused' : 'interrupted',
-        });
-        return;
-      }
-
-      if (result.exitCode !== 0 || result.timedOut) {
-        const errMsg =
-          result.diagnostic?.message ||
-          (result.timedOut ? '节点执行超时' : `退出码 ${result.exitCode ?? 1}`);
-        liveNodeErrors.set(`${runId}:${node.id}`, errMsg);
-        await writeQueue.enqueue(() => {
-          db.prepare(
-            `update nodes set status = 'failed', duration_ms = ?, updated_at = ? where id = ?`,
-          ).run(durationMs, finishedAt, node.id);
-          db.prepare(
-            `update role_runs set status = 'failed', completed_at = ? where id = ?`,
-          ).run(finishedAt, roleRunId);
-          db.prepare(
-            `update workflow_instances set status = 'failed', updated_at = ? where id = ?`,
-          ).run(finishedAt, runId);
-        });
-        await emitEvent(sessionId, 'node/status', {
-          runId,
-          nodeId: node.id,
-          status: 'failed',
-          error: errMsg,
-        });
-        return;
-      }
 
       // Node succeeded! Persist handoff brief, private trace archive, role session, and token usage
       const handoffBrief =
@@ -1257,18 +1460,24 @@ export function createWorkbenchRuntime(
         nodes: [],
         error: resolved.blocker.message,
       };
+      let updated = false;
       await writeQueue.enqueue(() => {
-        db.prepare(
-          `update workflow_instances
-           set status = 'failed', blueprint_status = 'failed', blueprint_json = ?, updated_at = ?
-           where id = ?`,
-        ).run(JSON.stringify(bp), nowIso(), runId);
+        const info = db
+          .prepare(
+            `update workflow_instances
+             set status = 'failed', blueprint_status = 'failed', blueprint_json = ?, updated_at = ?
+             where id = ? and status not in ('cancelled', 'passed')`,
+          )
+          .run(JSON.stringify(bp), nowIso(), runId);
+        updated = info.changes === 1;
       });
-      await emitEvent(sessionId, 'blueprint/updated', {
-        runId,
-        blueprintStatus: 'failed',
-        error: resolved.blocker.message,
-      });
+      if (updated) {
+        await emitEvent(sessionId, 'blueprint/updated', {
+          runId,
+          blueprintStatus: 'failed',
+          error: resolved.blocker.message,
+        });
+      }
       return;
     }
 
@@ -1416,23 +1625,29 @@ export function createWorkbenchRuntime(
             docKey: n.docKey || `step-${idx + 1}`,
           })),
         };
+        let reviewUpdated = false;
         await writeQueue.enqueue(() => {
-          db.prepare(
-            `update workflow_instances
-             set status = 'paused',
-                 pause_reason = 'blueprint_review',
-                 blueprint_status = 'review',
-                 blueprint_json = ?,
-                 paused_at = ?,
-                 updated_at = ?
-             where id = ?`,
-          ).run(JSON.stringify(bp), nowIso(), nowIso(), runId);
+          const info = db
+            .prepare(
+              `update workflow_instances
+               set status = 'paused',
+                   pause_reason = 'blueprint_review',
+                   blueprint_status = 'review',
+                   blueprint_json = ?,
+                   paused_at = ?,
+                   updated_at = ?
+               where id = ? and status not in ('cancelled', 'passed')`,
+            )
+            .run(JSON.stringify(bp), nowIso(), nowIso(), runId);
+          reviewUpdated = info.changes === 1;
         });
-        await emitEvent(sessionId, 'blueprint/updated', {
-          runId,
-          blueprintStatus: 'review',
-          nodeCount: bp.nodes.length,
-        });
+        if (reviewUpdated) {
+          await emitEvent(sessionId, 'blueprint/updated', {
+            runId,
+            blueprintStatus: 'review',
+            nodeCount: bp.nodes.length,
+          });
+        }
         return;
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);
@@ -1440,42 +1655,50 @@ export function createWorkbenchRuntime(
     }
 
     const failedBp: DynamicBlueprint = { nodes: [], error: lastError };
+    let failedUpdated = false;
     await writeQueue.enqueue(() => {
-      db.prepare(
-        `update workflow_instances
-         set status = 'failed', blueprint_status = 'failed', blueprint_json = ?, updated_at = ?
-         where id = ?`,
-      ).run(JSON.stringify(failedBp), nowIso(), runId);
+      const info = db
+        .prepare(
+          `update workflow_instances
+           set status = 'failed', blueprint_status = 'failed', blueprint_json = ?, updated_at = ?
+           where id = ? and status not in ('cancelled', 'passed')`,
+        )
+        .run(JSON.stringify(failedBp), nowIso(), runId);
+      failedUpdated = info.changes === 1;
     });
-    await emitEvent(sessionId, 'blueprint/updated', {
-      runId,
-      blueprintStatus: 'failed',
-      error: lastError,
-    });
+    if (failedUpdated) {
+      await emitEvent(sessionId, 'blueprint/updated', {
+        runId,
+        blueprintStatus: 'failed',
+        error: lastError,
+      });
+    }
   }
 
-  async function materializeNodesForRun(
-    runId: string,
-    phaseId: string,
-    nodesInput: Array<{
-      id: string;
-      name: string;
-      roleId: Role;
-      workspace?: NodeWorkspace;
-      contextMode?: NodeContextMode;
-      docKey?: string;
-      expectedDoc?: string;
-      confirmAfter?: boolean;
-      overrideModel?: string;
-      overrideEffort?: string;
-      overridePrompt?: string;
-    }>,
-  ): Promise<{ blockers: PreflightBlocker[] }> {
+  type MaterializableNodeInput = {
+    id: string;
+    name: string;
+    roleId: Role;
+    workspace?: NodeWorkspace;
+    contextMode?: NodeContextMode;
+    docKey?: string;
+    expectedDoc?: string;
+    confirmAfter?: boolean;
+    overrideModel?: string;
+    overrideEffort?: string;
+    overridePrompt?: string;
+  };
+
+  type PreparedNodeSpec = {
+    node: MaterializableNodeInput;
+    frozen: FrozenRoleSnapshot;
+  };
+
+  async function resolveNodesForRun(
+    nodesInput: MaterializableNodeInput[],
+  ): Promise<{ blockers: PreflightBlocker[]; prepared: PreparedNodeSpec[] }> {
     const blockers: PreflightBlocker[] = [];
-    const prepared: Array<{
-      node: (typeof nodesInput)[number];
-      frozen: FrozenRoleSnapshot;
-    }> = [];
+    const prepared: PreparedNodeSpec[] = [];
 
     for (const n of nodesInput) {
       const res = await resolveRoleExecutionSpec(n.roleId, {
@@ -1493,61 +1716,74 @@ export function createWorkbenchRuntime(
       }
     }
 
-    if (blockers.length > 0) {
-      return { blockers };
-    }
+    return { blockers, prepared };
+  }
 
+  function insertPreparedNodesSync(
+    runId: string,
+    phaseId: string,
+    prepared: PreparedNodeSpec[],
+    now: string,
+  ): void {
+    db.prepare(`delete from nodes where run_id = ?`).run(runId);
+    const stmt = db.prepare(
+      `insert into nodes (
+         id, run_id, phase_id, role, status, prompt, workspace, inputs, outputs,
+         gates, dependencies, node_order, name, resolved_driver, resolved_model,
+         resolved_effort, frozen_role_json, context_mode, doc_key, expected_doc,
+         confirm_after, attempt_generation, rework_count, created_at, updated_at
+       ) values (
+         ?, ?, ?, ?, 'pending', ?, ?, '[]', '[]',
+         '[]', ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?,
+         ?, 1, 0, ?, ?
+       )`,
+    );
+    for (let i = 0; i < prepared.length; i += 1) {
+      const { node, frozen } = prepared[i]!;
+      const deps = i > 0 ? [prepared[i - 1]!.node.id] : [];
+      const ws: NodeWorkspace =
+        node.workspace ?? (node.roleId === 'coder' ? 'worktree' : 'none');
+      stmt.run(
+        node.id,
+        runId,
+        phaseId,
+        node.roleId,
+        node.overridePrompt?.trim() || null,
+        ws,
+        JSON.stringify(deps),
+        i,
+        node.name,
+        frozen.driver,
+        frozen.model,
+        frozen.effort,
+        JSON.stringify(frozen),
+        node.contextMode ?? (frozen.isolated ? 'isolated' : 'auto'),
+        node.docKey ?? null,
+        node.expectedDoc ?? null,
+        node.confirmAfter ? 1 : 0,
+        now,
+        now,
+      );
+    }
+  }
+
+  async function materializePreparedNodes(
+    runId: string,
+    phaseId: string,
+    prepared: PreparedNodeSpec[],
+  ): Promise<void> {
     const now = new Date().toISOString();
     await writeQueue.enqueue(() => {
-      db.prepare(`delete from nodes where run_id = ?`).run(runId);
-      const stmt = db.prepare(
-        `insert into nodes (
-           id, run_id, phase_id, role, status, prompt, workspace, inputs, outputs,
-           gates, dependencies, node_order, name, resolved_driver, resolved_model,
-           resolved_effort, frozen_role_json, context_mode, doc_key, expected_doc,
-           confirm_after, attempt_generation, rework_count, created_at, updated_at
-         ) values (
-           ?, ?, ?, ?, 'pending', ?, ?, '[]', '[]',
-           '[]', ?, ?, ?, ?, ?,
-           ?, ?, ?, ?, ?,
-           ?, 1, 0, ?, ?
-         )`,
-      );
-      for (let i = 0; i < prepared.length; i += 1) {
-        const { node, frozen } = prepared[i]!;
-        const deps = i > 0 ? [prepared[i - 1]!.node.id] : [];
-        const ws: NodeWorkspace =
-          node.workspace ?? (node.roleId === 'coder' ? 'worktree' : 'none');
-        stmt.run(
-          node.id,
-          runId,
-          phaseId,
-          node.roleId,
-          node.overridePrompt?.trim() || null,
-          ws,
-          JSON.stringify(deps),
-          i,
-          node.name,
-          frozen.driver,
-          frozen.model,
-          frozen.effort,
-          JSON.stringify(frozen),
-          node.contextMode ?? (frozen.isolated ? 'isolated' : 'auto'),
-          node.docKey ?? null,
-          node.expectedDoc ?? null,
-          node.confirmAfter ? 1 : 0,
-          now,
-          now,
-        );
-      }
+      insertPreparedNodesSync(runId, phaseId, prepared, now);
     });
-
-    return { blockers: [] };
   }
 
   return {
     contextManager,
     discovery,
+    getAgentsSnapshot,
+    refreshAgents,
     getWorkspaceInfo,
     listTasks,
     getTaskDetail,
@@ -1577,21 +1813,22 @@ export function createWorkbenchRuntime(
           templateId,
         );
 
-        // Preflight check ALL referenced roles & agents BEFORE creating any DB rows
-        const blockers: PreflightBlocker[] = [];
-        for (const n of wf.nodes) {
-          const check = await resolveRoleExecutionSpec(n.role, {
-            model: n.overrideModel,
-            effort: n.overrideEffort,
-          });
-          if (!check.ok) {
-            blockers.push({
-              nodeId: n.id,
-              nodeName: n.name,
-              ...check.blocker,
-            });
-          }
-        }
+        // Single-pass preflight & role snapshot freeze BEFORE creating any DB rows (eliminates TOCTOU)
+        const { blockers, prepared } = await resolveNodesForRun(
+          wf.nodes.map((n, idx) => ({
+            id: `${runId}_${n.id || `n${idx + 1}`}`,
+            name: n.name,
+            roleId: n.role,
+            workspace: n.workspace,
+            contextMode: n.contextMode,
+            docKey: n.docKey,
+            expectedDoc: n.expectedDoc,
+            confirmAfter: n.confirmAfter,
+            overrideModel: n.overrideModel,
+            overrideEffort: n.overrideEffort,
+            overridePrompt: n.overridePrompt,
+          })),
+        );
         if (blockers.length > 0) {
           const err = new Error(
             `PREFLIGHT_BLOCKED: ${blockers.map((b) => b.message).join('；')}`,
@@ -1642,28 +1879,7 @@ export function createWorkbenchRuntime(
           await contextManager.addTaskAttachments(runId, input.attachments);
         }
 
-        const { blockers: matBlockers } = await materializeNodesForRun(
-          runId,
-          phaseId,
-          wf.nodes.map((n, idx) => ({
-            id: `${runId}_${n.id || `n${idx + 1}`}`,
-            name: n.name,
-            roleId: n.role,
-            workspace: n.workspace,
-            contextMode: n.contextMode,
-            docKey: n.docKey,
-            expectedDoc: n.expectedDoc,
-            confirmAfter: n.confirmAfter,
-            overrideModel: n.overrideModel,
-            overrideEffort: n.overrideEffort,
-            overridePrompt: n.overridePrompt,
-          })),
-        );
-        if (matBlockers.length > 0) {
-          throw new Error(
-            `PREFLIGHT_BLOCKED: ${matBlockers.map((b) => b.message).join('；')}`,
-          );
-        }
+        await materializePreparedNodes(runId, phaseId, prepared);
 
         launchBackground(runId, (sig) => executeSequentialNodes(runId, sig));
         return { runId, sessionId, task: getTaskDetail(runId) };
@@ -1715,6 +1931,16 @@ export function createWorkbenchRuntime(
     },
 
     async pauseTask(runId) {
+      const existing = getTaskDetail(runId);
+      if (existing.executor !== 'workbench') {
+        if (!legacyController) {
+          throw new Error(
+            'LEGACY_TASK_READONLY: 旧版执行器创建的任务在当前上下文为只读，请通过原 CLI 或会话接口暂停。',
+          );
+        }
+        await legacyController.pauseRun(runId);
+        return getTaskDetail(runId);
+      }
       const active = activeRuns.get(runId);
       if (active) {
         active.reason = 'pause';
@@ -1737,6 +1963,7 @@ export function createWorkbenchRuntime(
 
     async resumeTask(runId) {
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.status === 'cancelled' || task.status === 'passed') {
         throw new Error(`TASK_TERMINAL: 任务处于终态 '${task.status}'，无法继续。`);
       }
@@ -1775,6 +2002,15 @@ export function createWorkbenchRuntime(
       if (existing.status === 'passed') {
         throw new Error('TASK_TERMINAL: 已完成的任务不可终止。');
       }
+      if (existing.executor !== 'workbench') {
+        if (!legacyController) {
+          throw new Error(
+            'LEGACY_TASK_READONLY: 旧版执行器创建的任务在当前上下文为只读，请通过原 CLI 或会话接口终止。',
+          );
+        }
+        await legacyController.cancelRun(runId);
+        return getTaskDetail(runId);
+      }
       const active = activeRuns.get(runId);
       if (active) {
         active.reason = 'cancel';
@@ -1797,6 +2033,7 @@ export function createWorkbenchRuntime(
       const content = text.trim();
       if (!content) return getTaskDetail(runId);
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.status === 'cancelled') {
         throw new Error('TASK_CANCELLED: 已取消任务不可补充约束。');
       }
@@ -1823,16 +2060,24 @@ export function createWorkbenchRuntime(
     async approveCheckpoint(runId) {
       assertNotActivelyRunning(runId);
       const task = getTaskDetail(runId);
-      if (task.pauseReason !== 'confirm_checkpoint') {
+      assertWorkbenchOwnedTask(task);
+      if (task.status !== 'paused' || task.pauseReason !== 'confirm_checkpoint') {
         throw new Error('NO_PENDING_CHECKPOINT: 当前任务没有待确认的人工确认点。');
       }
+      let updatedRows = 0;
       await writeQueue.enqueue(() => {
-        db.prepare(
-          `update workflow_instances
-           set status = 'running', pause_reason = null, updated_at = ?
-           where id = ?`,
-        ).run(new Date().toISOString(), runId);
+        const info = db
+          .prepare(
+            `update workflow_instances
+             set status = 'running', pause_reason = null, updated_at = ?
+             where id = ? and status = 'paused' and pause_reason = 'confirm_checkpoint'`,
+          )
+          .run(new Date().toISOString(), runId);
+        updatedRows = info.changes;
       });
+      if (updatedRows !== 1) {
+        throw new Error('NO_PENDING_CHECKPOINT: 任务状态已变化，无法确认并继续执行。');
+      }
       launchBackground(runId, (sig) => executeSequentialNodes(runId, sig));
       return getTaskDetail(runId);
     },
@@ -1844,6 +2089,7 @@ export function createWorkbenchRuntime(
         throw new Error('REWORK_NOTE_REQUIRED: 请填写打回修改意见。');
       }
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.status === 'cancelled' || task.status === 'passed') {
         throw new Error(`TASK_TERMINAL: 任务处于终态 '${task.status}'，不可发起返工。`);
       }
@@ -1907,6 +2153,7 @@ export function createWorkbenchRuntime(
     async retryNode(runId, nodeId, override) {
       assertNotActivelyRunning(runId);
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.status === 'cancelled' || task.status === 'passed') {
         throw new Error(`TASK_TERMINAL: 任务处于终态 '${task.status}'，不可重试节点。`);
       }
@@ -1925,7 +2172,30 @@ export function createWorkbenchRuntime(
         assertSafeProviderOverrideValue('effort', override.effort);
       }
 
+      const candidateDriver = override?.driver?.trim() || target.driver;
+      const snap = await getAgentsSnapshot();
+      const candidateAgent = snap.agents.find((a) => a.id === candidateDriver);
+      if (!resolver.has(candidateDriver)) {
+        throw new Error(
+          `PREFLIGHT_BLOCKED: ${
+            candidateAgent?.unsupportedHint ??
+            `执行驱动「${candidateDriver}」尚未注册到当前运行时，请切换为可用 Agent 后再重试`
+          }`,
+        );
+      }
+      if (candidateDriver !== 'mock' && !isAgentExecutable(candidateAgent)) {
+        const msg =
+          candidateAgent?.status === 'unauthenticated'
+            ? `Agent「${candidateDriver}」未登录，无法重试`
+            : candidateAgent?.status === 'unsupported'
+              ? candidateAgent.unsupportedHint ??
+                `执行驱动「${candidateDriver}」尚未注册到当前运行时，请切换为可用 Agent`
+              : `Agent「${candidateDriver}」未安装或未就绪，无法重试`;
+        throw new Error(`PREFLIGHT_BLOCKED: ${msg}`);
+      }
+
       const now = new Date().toISOString();
+      let retryUpdated = false;
       await writeQueue.enqueue(() => {
         const row = db
           .prepare(
@@ -1938,6 +2208,15 @@ export function createWorkbenchRuntime(
           resolved_effort: string | null;
           frozen_role_json: string | null;
         };
+        const wfInfo = db
+          .prepare(
+            `update workflow_instances set status = 'running', updated_at = ?
+             where id = ? and status not in ('cancelled', 'passed')`,
+          )
+          .run(now, runId);
+        if (wfInfo.changes !== 1) {
+          return;
+        }
         const nextDriver = override?.driver || row.resolved_driver || target.driver;
         const nextModel = override?.model || row.resolved_model || target.model;
         const nextEffort = override?.effort || row.resolved_effort || target.effort;
@@ -1964,10 +2243,11 @@ export function createWorkbenchRuntime(
                updated_at = ?
            where id = ?`,
         ).run(nextDriver, nextModel, nextEffort, frozenJson, now, nodeId);
-        db.prepare(
-          `update workflow_instances set status = 'running', updated_at = ? where id = ?`,
-        ).run(now, runId);
+        retryUpdated = true;
       });
+      if (!retryUpdated) {
+        throw new Error('TASK_TERMINAL: 任务已进入终态，无法重试节点。');
+      }
 
       liveNodeErrors.delete(`${runId}:${nodeId}`);
       launchBackground(runId, (sig) => executeSequentialNodes(runId, sig));
@@ -1980,6 +2260,7 @@ export function createWorkbenchRuntime(
         throw new Error('FOLLOWUP_REQUIRED: 请输入追问内容。');
       }
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.status !== 'passed') {
         throw new Error('TASK_NOT_COMPLETED: 仅已完成的任务支持直接追问。');
       }
@@ -2013,46 +2294,67 @@ export function createWorkbenchRuntime(
       mkdirSync(outputDir, { recursive: true });
 
       const { adapter } = resolver.resolve(resolved.snapshot.driver);
-      const res = await adapter.runAgent({
-        roleConfig: { role: roleId, name: resolved.snapshot.name },
-        prompt: fullPrompt,
-        worktreeLease: {
-          id: `lease_${runId}_${followNodeId}`,
-          runId,
-          nodeId: followNodeId,
-          role: roleId,
-          repoPath,
-          worktreePath: repoPath,
-          branchName: 'in-place',
-          createdAt: new Date().toISOString(),
-        },
-        outputDir,
-        commandPolicy: defaultCommandPolicy(repoPath),
-        runContext: {
-          runId,
-          nodeId: followNodeId,
-          projectId: basename(repoPath) || 'default',
-          repoPath,
-          dataDir: join(repoPath, '.tekon'),
-        },
-        providerOverrides: {
-          ...(resolved.snapshot.model !== 'default'
-            ? { model: resolved.snapshot.model }
+      let res;
+      try {
+        res = await adapter.runAgent({
+          roleConfig: { role: roleId, name: resolved.snapshot.name },
+          prompt: fullPrompt,
+          worktreeLease: {
+            id: `lease_${runId}_${followNodeId}`,
+            runId,
+            nodeId: followNodeId,
+            role: roleId,
+            repoPath,
+            worktreePath: repoPath,
+            branchName: 'read-only',
+            createdAt: new Date().toISOString(),
+          },
+          outputDir,
+          commandPolicy: defaultCommandPolicy(repoPath),
+          runContext: {
+            runId,
+            nodeId: followNodeId,
+            projectId: basename(repoPath) || 'default',
+            repoPath,
+            dataDir: join(repoPath, '.tekon'),
+          },
+          providerOverrides: {
+            ...(resolved.snapshot.model !== 'default'
+              ? { model: resolved.snapshot.model }
+              : {}),
+            ...(resolved.snapshot.effort !== 'default'
+              ? { effort: resolved.snapshot.effort }
+              : {}),
+          },
+          ...(roleSession?.providerThreadId
+            ? { resumeThreadId: roleSession.providerThreadId }
             : {}),
-          ...(resolved.snapshot.effort !== 'default'
-            ? { effort: resolved.snapshot.effort }
-            : {}),
-        },
-        ...(roleSession?.providerThreadId
-          ? { resumeThreadId: roleSession.providerThreadId }
-          : {}),
-        allowGeneralFallback: true,
-      });
+          allowGeneralFallback: true,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`FOLLOWUP_FAILED: 追问执行失败（${msg}）。`);
+      }
 
-      const reply =
-        res.assistantText?.trim() ||
-        res.handoffBrief?.trim() ||
-        '已结合最新固化文档给出回应。';
+      if (res.cancelled) {
+        throw new Error('FOLLOWUP_FAILED: 追问已取消，请重试。');
+      }
+      if (res.timedOut) {
+        const detail = res.diagnostic?.message?.trim();
+        throw new Error(
+          `FOLLOWUP_FAILED: 追问执行超时${detail ? `（${detail}）` : ''}，请重试。`,
+        );
+      }
+      if (res.exitCode !== 0) {
+        const detail =
+          res.diagnostic?.message?.trim() || `退出码 ${res.exitCode ?? 1}`;
+        throw new Error(`FOLLOWUP_FAILED: 追问执行失败（${detail}）。`);
+      }
+
+      const reply = res.assistantText?.trim() || res.handoffBrief?.trim();
+      if (!reply) {
+        throw new Error('FOLLOWUP_FAILED: Agent 未返回有效追问回复，请重试。');
+      }
 
       await contextManager.recordFollowUpTurn({
         runId,
@@ -2068,8 +2370,17 @@ export function createWorkbenchRuntime(
 
     async updateBlueprint(runId, input) {
       const task = getTaskDetail(runId);
-      if (task.mode !== 'dynamic' || task.blueprintStatus !== 'review') {
-        throw new Error('BLUEPRINT_NOT_EDITABLE: 仅处于待确认状态的动态蓝图可编辑。');
+      assertWorkbenchOwnedTask(task);
+      if (task.status === 'cancelled' || task.status === 'passed') {
+        throw new Error(`TASK_TERMINAL: 任务处于终态 '${task.status}'，不可编辑蓝图。`);
+      }
+      if (
+        task.mode !== 'dynamic' ||
+        task.status !== 'paused' ||
+        task.pauseReason !== 'blueprint_review' ||
+        task.blueprintStatus !== 'review'
+      ) {
+        throw new Error('BLUEPRINT_NOT_EDITABLE: 仅处于等待蓝图确认暂停状态的动态蓝图可编辑。');
       }
       const parsed = dynamicBlueprintSchema.parse({ nodes: input.nodes });
       const bp: DynamicBlueprint = {
@@ -2080,17 +2391,26 @@ export function createWorkbenchRuntime(
           docKey: n.docKey || `step-${idx + 1}`,
         })),
       };
+      let bpUpdated = 0;
       await writeQueue.enqueue(() => {
-        db.prepare(
-          `update workflow_instances set blueprint_json = ?, updated_at = ? where id = ?`,
-        ).run(JSON.stringify(bp), new Date().toISOString(), runId);
+        const info = db
+          .prepare(
+            `update workflow_instances set blueprint_json = ?, updated_at = ?
+             where id = ? and status = 'paused' and pause_reason = 'blueprint_review' and blueprint_status = 'review'`,
+          )
+          .run(JSON.stringify(bp), new Date().toISOString(), runId);
+        bpUpdated = info.changes;
       });
+      if (bpUpdated !== 1) {
+        throw new Error('BLUEPRINT_NOT_EDITABLE: 任务状态已变化，无法保存蓝图修改。');
+      }
       return getTaskDetail(runId);
     },
 
     async replanBlueprint(runId, instruction) {
       assertNotActivelyRunning(runId);
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
       if (task.mode !== 'dynamic') {
         throw new Error('NOT_DYNAMIC_TASK: 该任务不是动态编排任务。');
       }
@@ -2100,13 +2420,20 @@ export function createWorkbenchRuntime(
       if (task.blueprintStatus === 'locked') {
         throw new Error('BLUEPRINT_NOT_EDITABLE: 计划已确认并锁定执行，无法重新规划。');
       }
+      let replanUpdated = 0;
       await writeQueue.enqueue(() => {
-        db.prepare(
-          `update workflow_instances
-           set status = 'running', pause_reason = null, blueprint_status = 'planning', updated_at = ?
-           where id = ?`,
-        ).run(new Date().toISOString(), runId);
+        const info = db
+          .prepare(
+            `update workflow_instances
+             set status = 'running', pause_reason = null, blueprint_status = 'planning', updated_at = ?
+             where id = ? and status not in ('cancelled', 'passed') and coalesce(blueprint_status, '') != 'locked'`,
+          )
+          .run(new Date().toISOString(), runId);
+        replanUpdated = info.changes;
       });
+      if (replanUpdated !== 1) {
+        throw new Error('BLUEPRINT_NOT_EDITABLE: 任务状态已变化，无法重新规划。');
+      }
       launchBackground(runId, (sig) =>
         runDynamicPlanning(runId, task.prompt, instruction, sig),
       );
@@ -2116,18 +2443,22 @@ export function createWorkbenchRuntime(
     async confirmBlueprint(runId) {
       assertNotActivelyRunning(runId);
       const task = getTaskDetail(runId);
+      assertWorkbenchOwnedTask(task);
+      if (task.status === 'cancelled' || task.status === 'passed') {
+        throw new Error(`TASK_TERMINAL: 任务处于终态 '${task.status}'，不可确认蓝图。`);
+      }
       if (
         task.mode !== 'dynamic' ||
+        task.status !== 'paused' ||
+        task.pauseReason !== 'blueprint_review' ||
         task.blueprintStatus !== 'review' ||
         !task.blueprint ||
         task.blueprint.nodes.length === 0
       ) {
-        throw new Error('BLUEPRINT_NOT_READY: 动态蓝图尚未就绪或已锁定。');
+        throw new Error('BLUEPRINT_NOT_READY: 仅等待蓝图确认的暂停任务可确认并启动执行。');
       }
       const phaseId = `phase_${runId}_main`;
-      const { blockers } = await materializeNodesForRun(
-        runId,
-        phaseId,
+      const { blockers, prepared } = await resolveNodesForRun(
         task.blueprint.nodes.map((n, idx) => ({
           id: `${runId}_${n.id || `n${idx + 1}`}`,
           name: n.name,
@@ -2149,13 +2480,23 @@ export function createWorkbenchRuntime(
       }
 
       const now = new Date().toISOString();
+      let updatedRows = 0;
       await writeQueue.enqueue(() => {
-        db.prepare(
-          `update workflow_instances
-           set status = 'running', pause_reason = null, blueprint_status = 'locked', updated_at = ?
-           where id = ?`,
-        ).run(now, runId);
+        const info = db
+          .prepare(
+            `update workflow_instances
+             set status = 'running', pause_reason = null, blueprint_status = 'locked', updated_at = ?
+             where id = ? and status = 'paused' and pause_reason = 'blueprint_review' and blueprint_status = 'review'`,
+          )
+          .run(now, runId);
+        updatedRows = info.changes;
+        if (updatedRows === 1) {
+          insertPreparedNodesSync(runId, phaseId, prepared, now);
+        }
       });
+      if (updatedRows !== 1) {
+        throw new Error('BLUEPRINT_NOT_READY: 任务状态已变化，无法确认并启动动态蓝图。');
+      }
 
       launchBackground(runId, (sig) => executeSequentialNodes(runId, sig));
       return getTaskDetail(runId);

@@ -1,16 +1,23 @@
 import { z } from 'zod';
 
-const agentStatusSchema = z.enum(['ready', 'unauthenticated', 'not_installed']);
+const agentStatusSchema = z.enum([
+  'ready',
+  'unauthenticated',
+  'not_installed',
+  'unsupported',
+]);
 
 export const discoveredAgentSchema = z.object({
   id: z.string(),
   name: z.string(),
   iconKey: z.string(),
   status: agentStatusSchema,
+  executable: z.boolean().optional(),
   authKind: z.string().optional(),
   version: z.string().optional(),
   loginHint: z.string().optional(),
   installHint: z.string().optional(),
+  unsupportedHint: z.string().optional(),
   models: z.array(z.string()),
   efforts: z.array(z.string()),
   modelEfforts: z.record(z.string(), z.array(z.string())).optional(),
@@ -79,6 +86,8 @@ export const linearWorkflowRecordSchema = z.object({
 export const taskListItemSchema = z.object({
   runId: z.string(),
   sessionId: z.string().nullable(),
+  executor: z.enum(['workbench', 'legacy']),
+  canControl: z.boolean(),
   title: z.string(),
   mode: z.enum(['static', 'dynamic']),
   templateName: z.string(),
@@ -193,6 +202,8 @@ export const taskNodeViewSchema = z.object({
 export const taskDetailViewSchema = z.object({
   runId: z.string(),
   sessionId: z.string().nullable(),
+  executor: z.enum(['workbench', 'legacy']),
+  canControl: z.boolean(),
   title: z.string(),
   prompt: z.string(),
   mode: z.enum(['static', 'dynamic']),

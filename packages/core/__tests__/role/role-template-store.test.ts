@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -11,6 +11,7 @@ import {
   resetBuiltInRole,
   saveRoleConfig,
 } from '../../src/role/role-store.js';
+import { loadWorkflowTemplate } from '../../src/workflow/template.js';
 import {
   deleteCustomWorkflow,
   duplicateLinearWorkflow,
@@ -179,5 +180,115 @@ describe('role-store and template-store CRUD, reference protection, and cascadin
     const preserved = getLinearWorkflow(wfCtx, 'safe-flow');
     expect(preserved.name).toBe('Valid Flow');
     expect(preserved.nodes).toHaveLength(1);
+  });
+
+  it('preserves v1 delivery template phases, gates, inputs/outputs, and delivery metadata when cleaning incompatible role overrides', () => {
+    const repoPath = makeTempRepo();
+    const roleCtx = {
+      repoPath,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+    };
+
+    const projectWfDir = join(repoPath, '.tekon', 'workflows');
+    mkdirSync(projectWfDir, { recursive: true });
+    writeFileSync(
+      join(projectWfDir, 'legacy-delivery.yaml'),
+      [
+        'id: legacy-delivery',
+        'name: Legacy Delivery',
+        'version: 1',
+        'retry:',
+        '  maxAttempts: 2',
+        '  backoffMs: 250',
+        '  strategy: fixed',
+        'delivery:',
+        '  deliverable: true',
+        '  requirements:',
+        '    commandGates: [build]',
+        '    governanceGates: []',
+        '    qaReleaseSignoff: false',
+        '    securityScan: false',
+        '    acceptanceEvidence: false',
+        'phases:',
+        '  - id: design',
+        '    name: Design',
+        '    nodes:',
+        '      - id: design-doc',
+        '        role: designer',
+        '        overrideModel: gpt-5.4',
+        '        overrideEffort: xhigh',
+        '        outputs:',
+        '          - design:design-doc',
+        '        gates:',
+        '          - type: schema',
+        '            artifactType: design-doc',
+        '          - type: human',
+        '            requiresHumanApproval: true',
+        '  - id: review',
+        '    name: Review',
+        '    dependsOn:',
+        '      - design',
+        '    nodes:',
+        '      - id: review-check',
+        '        role: reviewer',
+        '        inputs:',
+        '          - design:design-doc',
+        '        outputs:',
+        '          - review:review-notes',
+        '        gates:',
+        '          - type: build',
+        '            commandRef: build',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const saved = saveRoleConfig(
+      roleCtx,
+      {
+        id: 'designer',
+        name: '方案架构师',
+        driver: 'claude-code',
+        model: 'claude-sonnet-4-6',
+        effort: 'default',
+        systemPrompt: '架构设计提示词',
+      },
+      {
+        resolvedAgent: {
+          id: 'claude-code',
+          name: 'Claude Code',
+          iconKey: 'claude-code',
+          status: 'ready',
+          models: ['claude-sonnet-4-6', 'claude-opus-4-6'],
+          efforts: ['default'],
+          source: 'built-in',
+        },
+      },
+    );
+
+    expect(saved.cleanedWorkflows).toContain('legacy-delivery');
+    const rawAfter = readFileSync(join(projectWfDir, 'legacy-delivery.yaml'), 'utf8');
+    expect(rawAfter).toContain('version: 1');
+    expect(rawAfter).toContain('phases:');
+    expect(rawAfter).not.toContain('overrideModel: gpt-5.4');
+    expect(rawAfter).not.toContain('overrideEffort: xhigh');
+
+    // Full v1 template parser must recover all phases, dependsOn, inputs, outputs, gates, delivery, retry
+    const parsed = loadWorkflowTemplate({
+      name: 'legacy-delivery',
+      workflowsDir: projectWfDir,
+    });
+    expect(parsed.version).toBe(1);
+    expect(parsed.delivery?.deliverable).toBe(true);
+    expect(parsed.phases).toHaveLength(2);
+    expect(parsed.phases[0]?.nodes[0]?.overrideModel).toBeUndefined();
+    expect(parsed.phases[0]?.nodes[0]?.overrideEffort).toBeUndefined();
+    expect(parsed.phases[0]?.nodes[0]?.outputs).toHaveLength(1);
+    expect(parsed.phases[0]?.nodes[0]?.gates.map((g) => g.type)).toEqual(['schema', 'human']);
+    expect(parsed.phases[1]?.dependsOn).toEqual(['design']);
+    expect(parsed.phases[1]?.nodes[0]?.inputs).toHaveLength(1);
+    expect(parsed.phases[1]?.nodes[0]?.gates.map((g) => g.type)).toEqual(['build']);
+    expect(existsSync(join(projectWfDir, 'bugfix.yaml'))).toBe(false);
   });
 });

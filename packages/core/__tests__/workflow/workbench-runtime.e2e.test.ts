@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -515,6 +516,406 @@ describe('workbench-runtime end-to-end multi-provider workflow', () => {
 
       void roleCtx;
       void releaseSignal;
+    } finally {
+      await runtime.shutdown();
+      db.close();
+    }
+  });
+
+  it('isolates quick-dev worktree nodes from primary repo dirty edits and fails closed on non-git repos', async () => {
+    const repoPath = makeTempRepo();
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoPath });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoPath });
+    execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: repoPath });
+    writeFileSync(join(repoPath, 'app.ts'), 'export const v = 1;\n', 'utf8');
+    execFileSync('git', ['add', 'app.ts'], { cwd: repoPath });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: repoPath });
+
+    // User has uncommitted changes in the primary working tree!
+    writeFileSync(join(repoPath, 'app.ts'), 'export const v = 999; // user dirty edit\n', 'utf8');
+    writeFileSync(join(repoPath, 'local-untracked.txt'), 'keep me untouched\n', 'utf8');
+
+    const db = openTekonDatabase(join(repoPath, '.tekon', 'tekon.db'));
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+
+    const seenWorktreePaths: Record<string, string> = {};
+    const adapter: AgentAdapter = {
+      async runAgent(input) {
+        seenWorktreePaths[input.roleConfig.role] = input.worktreeLease.worktreePath;
+        if (input.roleConfig.role === 'coder') {
+          // Mutate code inside the leased worktree
+          writeFileSync(join(input.worktreeLease.worktreePath, 'feature.ts'), 'export const feat = true;\n', 'utf8');
+        }
+        return {
+          provider: 'claude-code',
+          exitCode: 0,
+          durationMs: 10,
+          outputFiles: [],
+          assistantText: `done ${input.roleConfig.role}`,
+        };
+      },
+    };
+
+    const runtime = createWorkbenchRuntime({
+      db,
+      writeQueue,
+      repoPath,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+      discovery: makeMockDiscovery(),
+      resolver: createProviderAdapterResolver({
+        repoPath,
+        defaultDriver: 'claude-code',
+        adapters: { 'claude-code': adapter, codex: adapter },
+      }),
+    });
+
+    try {
+      const created = await runtime.createTask({
+        mode: 'static',
+        templateId: 'quick-dev',
+        prompt: '在独立 worktree 中实现 feature.ts',
+      });
+      await runtime.waitForIdle(created.runId);
+      const atConfirm = runtime.getTaskDetail(created.runId);
+      expect(atConfirm.status).toBe('paused');
+      expect(atConfirm.pauseReason).toBe('confirm_checkpoint');
+      await runtime.approveCheckpoint(created.runId);
+      await runtime.waitForIdle(created.runId);
+      const done = runtime.getTaskDetail(created.runId);
+      expect(done.status).toBe('passed');
+
+      // coder (workspace: worktree) MUST run in an isolated `.tekon/worktrees/` path, NOT repoPath!
+      expect(seenWorktreePaths.coder).toContain(join('.tekon', 'worktrees'));
+      expect(seenWorktreePaths.coder).not.toBe(repoPath);
+      // Primary repo working tree must remain untouched!
+      expect(readFileSync(join(repoPath, 'app.ts'), 'utf8')).toContain('user dirty edit');
+      expect(existsSync(join(repoPath, 'local-untracked.txt'))).toBe(true);
+      expect(existsSync(join(repoPath, 'feature.ts'))).toBe(false);
+      // Lease directory was released after promotion, and feature.ts is on the delivery branch!
+      expect(existsSync(seenWorktreePaths.coder!)).toBe(false);
+      const deliveryFile = execFileSync(
+        'git',
+        ['show', `tekon-delivery/${created.runId}:feature.ts`],
+        { cwd: repoPath, encoding: 'utf8' },
+      );
+      expect(deliveryFile).toContain('export const feat = true;');
+      // Node temp branches (`tekon/<runId>/...`) should be cleaned up while delivery branch stays
+      const leftoverNodeBranches = execFileSync(
+        'git',
+        ['branch', '--list', `tekon/${created.runId}/*`],
+        { cwd: repoPath, encoding: 'utf8' },
+      ).trim();
+      expect(leftoverNodeBranches).toBe('');
+    } finally {
+      await runtime.shutdown();
+      db.close();
+    }
+
+    // Non-git directory MUST fail closed on workspace: worktree instead of editing repoPath in-place
+    const nonGitRepo = makeTempRepo();
+    const db2 = openTekonDatabase(join(nonGitRepo, '.tekon', 'tekon.db'));
+    migrateDatabase(db2);
+    let coderRanInPlace = false;
+    const nonGitRuntime = createWorkbenchRuntime({
+      db: db2,
+      writeQueue: createWriteQueue(),
+      repoPath: nonGitRepo,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+      discovery: makeMockDiscovery(),
+      resolver: createProviderAdapterResolver({
+        repoPath: nonGitRepo,
+        defaultDriver: 'claude-code',
+        adapters: {
+          'claude-code': {
+            async runAgent(input) {
+              if (input.roleConfig.role === 'coder') coderRanInPlace = true;
+              return { provider: 'claude-code', exitCode: 0, durationMs: 5, outputFiles: [], assistantText: 'ok' };
+            },
+          },
+        },
+      }),
+    });
+    try {
+      const res = await nonGitRuntime.createTask({
+        mode: 'static',
+        templateId: 'quick-dev',
+        prompt: 'non-git worktree guard',
+      });
+      await nonGitRuntime.waitForIdle(res.runId);
+      const detail = nonGitRuntime.getTaskDetail(res.runId);
+      expect(detail.status).toBe('failed');
+      expect(coderRanInPlace).toBe(false);
+      expect(detail.nodes.find((n) => n.role === 'coder')?.errorMessage).toContain('Git');
+    } finally {
+      await nonGitRuntime.shutdown();
+      db2.close();
+    }
+  });
+
+  it('delegates legacy task cancel/pause to legacyController, guards readonly legacy tasks, and blocks blueprint confirmation after cancel', async () => {
+    const repoPath = makeTempRepo();
+    const db = openTekonDatabase(join(repoPath, '.tekon', 'tekon.db'));
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+
+    const now = new Date().toISOString();
+    // Seed a legacy CLI/Web task (demands.source = 'cli', sessions.profile = 'delivery')
+    db.prepare(`insert into demands (id, title, body, source, created_at) values ('dem_legacy', '旧 CLI 任务', 'legacy body', 'cli', ?)`).run(now);
+    db.prepare(`insert into projects (id, name, repo_path, created_at) values ('proj_legacy', 'repo', ?, ?)`).run(repoPath, now);
+    db.prepare(`insert into workflow_instances (id, project_id, demand_id, status, kind, mode, plan_snapshot, created_at, updated_at) values ('run_legacy', 'proj_legacy', 'dem_legacy', 'running', 'workflow', 'static', ?, ?, ?)`).run(
+      JSON.stringify({ version: 2, template: { id: 'bugfix', name: 'Bugfix' } }),
+      now,
+      now,
+    );
+
+    const delegatedCalls: string[] = [];
+    const stubAdapter: AgentAdapter = {
+      async runAgent(input) {
+        if (input.runContext.nodeId.startsWith('plan')) {
+          return {
+            provider: 'claude-code',
+            exitCode: 0,
+            durationMs: 5,
+            outputFiles: [],
+            assistantText: JSON.stringify({
+              summary: '计划',
+              nodes: [{ name: '步骤一', roleId: 'explorer', docKey: 's1', expectedDoc: 's1' }],
+            }),
+          };
+        }
+        return {
+          provider: 'claude-code',
+          exitCode: 1,
+          durationMs: 5,
+          outputFiles: [],
+          diagnostic: { code: 'timeout', message: '追问上游超时' },
+        };
+      },
+    };
+
+    const runtimeWithLegacy = createWorkbenchRuntime({
+      db,
+      writeQueue,
+      repoPath,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+      discovery: makeMockDiscovery(),
+      resolver: createProviderAdapterResolver({
+        repoPath,
+        defaultDriver: 'claude-code',
+        adapters: { 'claude-code': stubAdapter },
+      }),
+      legacyController: {
+        async pauseRun(runId) {
+          delegatedCalls.push(`pause:${runId}`);
+          db.prepare(`update workflow_instances set status = 'paused', updated_at = ? where id = ?`).run(new Date().toISOString(), runId);
+        },
+        async cancelRun(runId) {
+          delegatedCalls.push(`cancel:${runId}`);
+          db.prepare(`update workflow_instances set status = 'cancelled', updated_at = ? where id = ?`).run(new Date().toISOString(), runId);
+        },
+      },
+    });
+
+    try {
+      // Legacy task detail exposes executor: 'legacy'
+      expect(runtimeWithLegacy.getTaskDetail('run_legacy').executor).toBe('legacy');
+
+      // Pause & cancel delegate to legacyController instead of mutating DB directly
+      await runtimeWithLegacy.pauseTask('run_legacy');
+      await runtimeWithLegacy.cancelTask('run_legacy');
+      expect(delegatedCalls).toEqual(['pause:run_legacy', 'cancel:run_legacy']);
+
+      // Workbench-only mutations on legacy task are rejected
+      await expect(runtimeWithLegacy.resumeTask('run_legacy')).rejects.toThrow(/LEGACY_TASK_READONLY/u);
+      await expect(runtimeWithLegacy.appendConstraint('run_legacy', 'x')).rejects.toThrow(/LEGACY_TASK_READONLY/u);
+
+      // P1-4: Cancelled dynamic task must NOT allow confirmBlueprint or updateBlueprint!
+      const dyn = await runtimeWithLegacy.createTask({
+        mode: 'dynamic',
+        prompt: '动态蓝图取消后防重启测试',
+      });
+      await runtimeWithLegacy.waitForIdle(dyn.runId);
+      expect(runtimeWithLegacy.getTaskDetail(dyn.runId).blueprintStatus).toBe('review');
+
+      await runtimeWithLegacy.cancelTask(dyn.runId);
+      expect(runtimeWithLegacy.getTaskDetail(dyn.runId).status).toBe('cancelled');
+      await expect(runtimeWithLegacy.confirmBlueprint(dyn.runId)).rejects.toThrow(/BLUEPRINT_NOT_READY|TASK_TERMINAL/u);
+      await expect(
+        runtimeWithLegacy.updateBlueprint(dyn.runId, {
+          nodes: [{ name: 'x', roleId: 'explorer' }],
+        }),
+      ).rejects.toThrow(/BLUEPRINT_NOT_EDITABLE|TASK_TERMINAL/u);
+      await expect(
+        runtimeWithLegacy.replanBlueprint(dyn.runId, 'replan after cancel'),
+      ).rejects.toThrow(/BLUEPRINT_NOT_EDITABLE|TASK_TERMINAL/u);
+      expect(runtimeWithLegacy.getTaskDetail(dyn.runId).status).toBe('cancelled');
+
+      // MF-3: retryNode with unregistered custom driver rejects synchronously without mutating DB
+      const { saveLinearWorkflow } = await import('../../src/workflow/template-store.js');
+      saveLinearWorkflow({ repoPath, builtInWorkflowsDir: BUILT_IN_WORKFLOWS }, {
+        id: 'retry-guard-wf',
+        name: '重试守卫测试',
+        nodes: [{ id: 'n1', name: '步骤一', role: 'explorer' }],
+      });
+      const failedTask = await runtimeWithLegacy.createTask({
+        mode: 'static',
+        templateId: 'retry-guard-wf',
+        prompt: 'trigger failure for retry guard',
+      });
+      await runtimeWithLegacy.waitForIdle(failedTask.runId);
+      const failedDetail = runtimeWithLegacy.getTaskDetail(failedTask.runId);
+      expect(failedDetail.status).toBe('failed');
+      await expect(
+        runtimeWithLegacy.retryNode(failedTask.runId, failedDetail.nodes[0]!.id, {
+          driver: 'antigravity',
+          model: 'gemini-4-neon',
+          effort: 'high',
+        }),
+      ).rejects.toThrow(/PREFLIGHT_BLOCKED/u);
+      expect(runtimeWithLegacy.getTaskDetail(failedTask.runId).status).toBe('failed');
+      expect(runtimeWithLegacy.getTaskDetail(failedTask.runId).nodes[0]?.status).toBe('failed');
+
+      // P2-3: Unregistered custom agent ('antigravity') is marked 'unsupported' (executable: false)
+      const snap = await runtimeWithLegacy.getAgentsSnapshot();
+      const customAg = snap.agents.find((a) => a.id === 'antigravity');
+      expect(customAg?.status).toBe('unsupported');
+      expect(customAg?.executable).toBe(false);
+      const claudeAg = snap.agents.find((a) => a.id === 'claude-code');
+      expect(claudeAg?.status).toBe('ready');
+      expect(claudeAg?.executable).toBe(true);
+    } finally {
+      await runtimeWithLegacy.shutdown();
+    }
+
+    // Without legacyController: legacy task cancel/pause must refuse (read-only) and NOT flip DB status
+    db.prepare(`update workflow_instances set status = 'running' where id = 'run_legacy'`).run();
+    const runtimeWithoutLegacy = createWorkbenchRuntime({
+      db,
+      writeQueue,
+      repoPath,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+      discovery: makeMockDiscovery(),
+      resolver: createProviderAdapterResolver({
+        repoPath,
+        defaultDriver: 'claude-code',
+        adapters: { 'claude-code': stubAdapter },
+      }),
+    });
+    try {
+      await expect(runtimeWithoutLegacy.cancelTask('run_legacy')).rejects.toThrow(/LEGACY_TASK_READONLY/u);
+      await expect(runtimeWithoutLegacy.pauseTask('run_legacy')).rejects.toThrow(/LEGACY_TASK_READONLY/u);
+      expect(runtimeWithoutLegacy.getTaskDetail('run_legacy').status).toBe('running');
+    } finally {
+      await runtimeWithoutLegacy.shutdown();
+      db.close();
+    }
+  });
+
+  it('rejects failed, timed-out, cancelled, or empty follow-up executions without recording a fake reply', async () => {
+    const repoPath = makeTempRepo();
+    const db = openTekonDatabase(join(repoPath, '.tekon', 'tekon.db'));
+    migrateDatabase(db);
+    const writeQueue = createWriteQueue();
+
+    let followUpMode: 'fail' | 'timeout' | 'cancel' | 'empty' = 'fail';
+    const adapter: AgentAdapter = {
+      async runAgent(input) {
+        if (input.runContext.nodeId.startsWith('followup-')) {
+          if (followUpMode === 'fail') {
+            return {
+              provider: 'claude-code',
+              exitCode: 1,
+              durationMs: 10,
+              outputFiles: [],
+              diagnostic: { code: 'unclassified', message: 'API 限流 429' },
+            };
+          }
+          if (followUpMode === 'timeout') {
+            return {
+              provider: 'claude-code',
+              exitCode: 0,
+              timedOut: true,
+              durationMs: 10,
+              outputFiles: [],
+              diagnostic: { code: 'timeout', message: '300s 超时' },
+            };
+          }
+          if (followUpMode === 'cancel') {
+            return {
+              provider: 'claude-code',
+              exitCode: null,
+              cancelled: true,
+              durationMs: 10,
+              outputFiles: [],
+            };
+          }
+          return {
+            provider: 'claude-code',
+            exitCode: 0,
+            durationMs: 10,
+            outputFiles: [],
+            assistantText: '   ',
+          };
+        }
+        return {
+          provider: 'claude-code',
+          exitCode: 0,
+          durationMs: 5,
+          outputFiles: [],
+          assistantText: '节点完成',
+        };
+      },
+    };
+
+    const { saveLinearWorkflow } = await import('../../src/workflow/template-store.js');
+    saveLinearWorkflow({ repoPath, builtInWorkflowsDir: BUILT_IN_WORKFLOWS }, {
+      id: 'followup-test-wf',
+      name: '追问测试',
+      nodes: [{ id: 'n1', name: '步骤一', role: 'explorer', docKey: 'out', expectedDoc: '产出' }],
+    });
+
+    const runtime = createWorkbenchRuntime({
+      db,
+      writeQueue,
+      repoPath,
+      builtInRolesDir: BUILT_IN_ROLES,
+      builtInWorkflowsDir: BUILT_IN_WORKFLOWS,
+      discovery: makeMockDiscovery(),
+      resolver: createProviderAdapterResolver({
+        repoPath,
+        defaultDriver: 'claude-code',
+        adapters: { 'claude-code': adapter },
+      }),
+    });
+
+    try {
+      const created = await runtime.createTask({
+        mode: 'static',
+        templateId: 'followup-test-wf',
+        prompt: '完成任务后测试追问失败路径',
+      });
+      await runtime.waitForIdle(created.runId);
+      expect(runtime.getTaskDetail(created.runId).status).toBe('passed');
+
+      for (const [mode, pattern] of [
+        ['fail', /API 限流 429/u],
+        ['timeout', /超时/u],
+        ['cancel', /取消/u],
+        ['empty', /未返回有效/u],
+      ] as const) {
+        followUpMode = mode;
+        await expect(
+          runtime.followUp(created.runId, { prompt: `测试 ${mode}` }),
+        ).rejects.toThrow(pattern);
+      }
+
+      // None of the failed follow-ups should have been recorded!
+      expect(runtime.getTaskDetail(created.runId).followUps).toHaveLength(0);
     } finally {
       await runtime.shutdown();
       db.close();

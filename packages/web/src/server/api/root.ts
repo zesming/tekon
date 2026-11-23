@@ -363,12 +363,19 @@ export async function createApiCaller(
       env: input.env ?? process.env,
       includeMock: (input.env ?? process.env).TEKON_INCLUDE_MOCK === '1',
     });
+  const workbenchGateway = createCommandGateway({
+    repositories: dualRepositories,
+  });
+  const workbenchWorktreeManager = createWorktreeManager({
+    repositories: dualRepositories,
+    gateway: workbenchGateway,
+  });
   const workbenchResolver =
     input.workbenchResolver ??
     createProviderAdapterResolver({
       repoPath: projectContext.projectRoot,
       defaultDriver: 'claude-code',
-      gateway: createCommandGateway({ repositories: dualRepositories }),
+      gateway: workbenchGateway,
     });
   const workbenchRuntime = createWorkbenchRuntime({
     db,
@@ -378,6 +385,24 @@ export async function createApiCaller(
     builtInWorkflowsDir,
     discovery: workbenchDiscovery,
     resolver: workbenchResolver,
+    commandGateway: workbenchGateway,
+    worktreeManager: workbenchWorktreeManager,
+    legacyController: {
+      async pauseRun(runId) {
+        const res = await sessionService.requestPause({ runId });
+        if (res.outcome === 'illegal-transition') {
+          throw new Error(
+            `TASK_NOT_PAUSABLE: 旧任务当前状态 '${res.workflowStatus}' 不支持暂停。`,
+          );
+        }
+      },
+      async cancelRun(runId) {
+        const res = await sessionService.requestCancel({ runId });
+        if (res.terminalConflict) {
+          throw new Error('TASK_TERMINAL: 处于终态的任务不可终止。');
+        }
+      },
+    },
     eventBus: bus,
     subprocessRegistry: registry,
     repositories: dualRepositories,

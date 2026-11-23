@@ -20,9 +20,14 @@ type WorkbenchPrefs = z.infer<typeof workbenchPreferencesSchema>;
 
 export type SettingsTab = 'workflows' | 'roles' | 'agents';
 
+function isExecutableAgent(agent: DiscoveredAgent | undefined): boolean {
+  return Boolean(agent && agent.status === 'ready' && agent.executable !== false);
+}
+
 function statusText(status: DiscoveredAgent['status']): string {
   if (status === 'ready') return '就绪';
   if (status === 'unauthenticated') return '未登录';
+  if (status === 'unsupported') return '未注册驱动';
   return '未安装';
 }
 
@@ -160,7 +165,7 @@ export function SettingsView({
   }
 
   const readyFallbackAgent = useMemo(
-    () => agents.find((a) => a.status === 'ready') ?? agents[0],
+    () => agents.find((a) => isExecutableAgent(a)) ?? agents[0],
     [agents],
   );
 
@@ -236,7 +241,7 @@ export function SettingsView({
   }
 
   async function handleCreateRole() {
-    const readyAgent = agents.find((a) => a.status === 'ready') ?? agents[0];
+    const readyAgent = agents.find((a) => isExecutableAgent(a)) ?? agents[0];
     const driver = readyAgent?.id ?? 'claude-code';
     const model = readyAgent?.models[0] ?? 'sonnet';
     const effort = readyAgent?.efforts.includes('high')
@@ -839,7 +844,11 @@ export function SettingsView({
                               </option>
                             ) : null}
                             {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
+                              <option
+                                key={a.id}
+                                value={a.id}
+                                disabled={a.status === 'unsupported' && draft.driver !== a.id}
+                              >
                                 {a.name}（{statusText(a.status)}）
                               </option>
                             ))}
@@ -987,18 +996,18 @@ export function SettingsView({
                                 className="wb-tb-status"
                                 style={{
                                   color:
-                                    a.status === 'ready'
+                                    isExecutableAgent(a)
                                       ? 'var(--pass-t)'
-                                      : a.status === 'unauthenticated'
+                                      : a.status === 'unauthenticated' || a.status === 'unsupported'
                                         ? 'var(--pend-t)'
                                         : 'var(--text-t)',
                                 }}
                               >
                                 <span
                                   className={`wb-s-dot ${
-                                    a.status === 'ready'
+                                    isExecutableAgent(a)
                                       ? 'done'
-                                      : a.status === 'unauthenticated'
+                                      : a.status === 'unauthenticated' || a.status === 'unsupported'
                                         ? 'confirm'
                                         : 'cancelled'
                                   }`}
@@ -1014,6 +1023,10 @@ export function SettingsView({
                         </div>
                         {a.status === 'unauthenticated' && a.loginHint ? (
                           <span className="wb-tb-tag wb-mono">{a.loginHint}</span>
+                        ) : a.status === 'unsupported' ? (
+                          <span className="wb-tb-tag wb-mono">
+                            {a.unsupportedHint || '当前运行时未注册该执行驱动'}
+                          </span>
                         ) : a.status === 'not_installed' && a.installHint ? (
                           <span className="wb-tb-tag wb-mono">{a.installHint}</span>
                         ) : null}

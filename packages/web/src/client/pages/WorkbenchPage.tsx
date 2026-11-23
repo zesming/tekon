@@ -111,23 +111,29 @@ function mapNodeToRailState(
   return 'pending';
 }
 
+function isExecutableAgent(agent: DiscoveredAgent | undefined): boolean {
+  return Boolean(agent && agent.status === 'ready' && agent.executable !== false);
+}
+
 function statusDotClass(task: TaskListItem | TaskDetail): string {
   if (task.status === 'passed') return 'done';
-  if (task.status === 'failed' || task.blueprintStatus === 'failed') return 'failed';
   if (task.status === 'cancelled') return 'cancelled';
+  if (task.status === 'failed' || task.blueprintStatus === 'failed') return 'failed';
   if (task.status === 'paused' && task.pauseReason === 'confirm_checkpoint') return 'confirm';
-  if (task.blueprintStatus === 'review') return 'confirm';
+  if (task.status === 'paused' && task.pauseReason === 'blueprint_review') return 'confirm';
   if (task.status === 'paused') return 'paused';
   return 'running';
 }
 
 function statusLabel(task: TaskDetail): string {
-  if (task.blueprintStatus === 'planning') return '规划中';
-  if (task.blueprintStatus === 'review') return '待确认计划';
-  if (task.blueprintStatus === 'failed') return '规划失败';
-  if (task.status === 'passed') return '已完成';
-  if (task.status === 'failed') return '失败';
   if (task.status === 'cancelled') return '已终止';
+  if (task.status === 'passed') return '已完成';
+  if (task.status === 'running' && task.blueprintStatus === 'planning') return '规划中';
+  if (task.status === 'paused' && task.pauseReason === 'blueprint_review' && task.blueprintStatus === 'review') {
+    return '待确认计划';
+  }
+  if (task.blueprintStatus === 'failed') return '规划失败';
+  if (task.status === 'failed') return '失败';
   if (task.status === 'paused' && task.pauseReason === 'confirm_checkpoint') return '待确认';
   if (task.status === 'paused') return '已暂停';
   return '运行中';
@@ -171,7 +177,19 @@ export function WorkbenchPage() {
   const [taskFilter, setTaskFilter] = useState<'all' | 'running' | 'attention' | 'done'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTask, setActiveTask] = useState<TaskDetail | null>(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+  const [taskLoadError, setTaskLoadError] = useState<string | null>(null);
   const [liveTraceByNode, setLiveTraceByNode] = useState<Record<string, string[]>>({});
+  const routeRunIdRef = useRef<string | null>(routeRunId ?? null);
+  routeRunIdRef.current = routeRunId ?? null;
+  const activeTaskRef = useRef<TaskDetail | null>(activeTask);
+  activeTaskRef.current = activeTask;
+
+  // Only expose detail & actions when loaded task strictly matches current route runId
+  const currentTask =
+    routeRunId && activeTask && activeTask.runId === routeRunId
+      ? activeTask
+      : null;
 
   // ── UI Overlays & Drawers ──
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -195,6 +213,7 @@ export function WorkbenchPage() {
 
   // ── In-Task Composer / Rework / Retry / Blueprint Draft State ──
   const [composerText, setComposerText] = useState('');
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [followUpRoleId, setFollowUpRoleId] = useState<string>('');
   const [sendingComposer, setSendingComposer] = useState(false);
   const [reworkOpenNodeId, setReworkOpenNodeId] = useState<string | null>(null);
@@ -300,18 +319,34 @@ export function WorkbenchPage() {
     const seq = ++activeTaskReqSeqRef.current;
     try {
       const res = await rpc.call('task.get', { runId });
-      if (seq !== activeTaskReqSeqRef.current) return;
+      if (seq !== activeTaskReqSeqRef.current || routeRunIdRef.current !== runId) {
+        return;
+      }
+      setTaskLoadError(null);
+      setLoadingTask(false);
       setActiveTask(res.task);
       setFollowUpRoleId((prev) => prev || res.task.lastRoleId || res.task.nodes[res.task.nodes.length - 1]?.role || '');
       if (res.task.blueprint?.nodes) {
         setBpDraft((prev) => {
-          if (prev && prev.length > 0 && res.task.blueprintStatus === 'review') return prev;
+          if (
+            prev &&
+            prev.length > 0 &&
+            res.task.status === 'paused' &&
+            res.task.pauseReason === 'blueprint_review' &&
+            res.task.blueprintStatus === 'review'
+          ) {
+            return prev;
+          }
           return res.task.blueprint!.nodes.map((n) => ({ ...n }));
         });
       }
     } catch (err) {
-      if (seq === activeTaskReqSeqRef.current) {
-        notify(err instanceof Error ? err.message : '加载任务详情失败');
+      if (seq === activeTaskReqSeqRef.current && routeRunIdRef.current === runId) {
+        const msg = err instanceof Error ? err.message : '加载任务详情失败';
+        setLoadingTask(false);
+        setActiveTask((prev) => (prev?.runId === runId ? prev : null));
+        setTaskLoadError(msg);
+        notify(msg);
       }
     }
   }, [notify]);
@@ -336,26 +371,41 @@ export function WorkbenchPage() {
   }, [refreshTaskList, token]);
 
   useEffect(() => {
+    activeTaskReqSeqRef.current += 1;
     setCancelConfirmOpen(false);
     setReworkOpenNodeId(null);
+    setReworkNote('');
     setLiveTraceByNode({});
     setBpDraft(null);
     setBpSaveOpen(false);
+    setBpReplanHint('');
+    setBpSaveName('');
     setFollowUpRoleId('');
+    setComposerText('');
+    setComposerError(null);
+    setSelectedDocId(null);
+    setSelectedCtxNodeId(null);
+    setRetryOverrides({});
+    setTaskLoadError(null);
     if (!routeRunId) {
+      setLoadingTask(false);
       setActiveTask(null);
       setDrawerTab(null);
       return;
+    }
+    if (activeTaskRef.current?.runId !== routeRunId) {
+      setActiveTask(null);
+      setLoadingTask(true);
     }
     void refreshActiveTask(routeRunId);
   }, [routeRunId, refreshActiveTask]);
 
   // Keep retry override defaults synchronized with failed nodes
   useEffect(() => {
-    if (!activeTask) return;
+    if (!currentTask) return;
     setRetryOverrides((prev) => {
       const next = { ...prev };
-      for (const n of activeTask.nodes) {
+      for (const n of currentTask.nodes) {
         if (n.status === 'failed' && !next[n.id]) {
           next[n.id] = {
             driver: n.driver,
@@ -366,31 +416,33 @@ export function WorkbenchPage() {
       }
       return next;
     });
-  }, [activeTask]);
+  }, [currentTask]);
 
-  // Live SSE + safety polling while task is active (refs prevent reconnects on search/filter input)
+  // Live SSE + safety polling strictly while task is actively running/pending
   const isTaskActive =
-    Boolean(activeTask) &&
-    (activeTask!.status === 'running' ||
-      activeTask!.blueprintStatus === 'planning');
+    Boolean(currentTask) &&
+    (currentTask!.status === 'running' || currentTask!.status === 'pending');
 
   useEffect(() => {
-    if (!activeTask?.runId || !activeTask.sessionId || !isTaskActive) return;
-    const runId = activeTask.runId;
+    if (!currentTask?.runId || !currentTask.sessionId || !isTaskActive) return;
+    const runId = currentTask.runId;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefresh = () => {
       if (debounceTimer) return;
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
-        void refreshActiveTaskRef.current(runId);
+        if (routeRunIdRef.current === runId) {
+          void refreshActiveTaskRef.current(runId);
+        }
         void refreshTaskListRef.current();
       }, 120);
     };
 
     const stream = openSessionStream({
-      sessionId: activeTask.sessionId,
+      sessionId: currentTask.sessionId,
       token,
       onEvent(ev) {
+        if (routeRunIdRef.current !== runId) return;
         const payload = (ev as unknown as { payload?: Record<string, unknown> }).payload;
         if (ev.type === 'node/progress' && payload) {
           const nodeId = typeof payload.nodeId === 'string' ? payload.nodeId : '';
@@ -430,7 +482,9 @@ export function WorkbenchPage() {
       },
     });
     const timer = setInterval(() => {
-      void refreshActiveTaskRef.current(runId);
+      if (routeRunIdRef.current === runId) {
+        void refreshActiveTaskRef.current(runId);
+      }
       void refreshTaskListRef.current();
     }, 1500);
     return () => {
@@ -438,7 +492,7 @@ export function WorkbenchPage() {
       stream.close();
       clearInterval(timer);
     };
-  }, [activeTask?.runId, activeTask?.sessionId, isTaskActive, token]);
+  }, [currentTask?.runId, currentTask?.sessionId, isTaskActive, token]);
 
   // ── Preference Mutators ──
   const handleUpdatePrefs = useCallback(
@@ -485,7 +539,7 @@ export function WorkbenchPage() {
 
   const preflightBlockers = useMemo(() => {
     if (!agentsSnapshot) return [];
-    const readyAgent = agentsSnapshot.agents.find((a) => a.status === 'ready');
+    const readyAgent = agentsSnapshot.agents.find((a) => isExecutableAgent(a));
     const neededRoleIds = new Set<string>();
     if (heroSelection === '__dynamic__') {
       neededRoleIds.add(prefs.defaultOrchestrator || 'orchestrator');
@@ -505,12 +559,17 @@ export function WorkbenchPage() {
         agentsSnapshot.agents[0]?.id ||
         'claude-code';
       const ag = agentMap.get(effectiveDriver);
-      if (!ag || ag.status !== 'ready') {
+      if (!isExecutableAgent(ag)) {
         blockers.push({
           roleId: rid,
           driver: effectiveDriver,
           status: ag?.status ?? 'not_installed',
-          hint: ag?.status === 'unauthenticated' ? ag.loginHint : ag?.installHint,
+          hint:
+            ag?.status === 'unauthenticated'
+              ? ag.loginHint
+              : ag?.status === 'unsupported'
+                ? ag.unsupportedHint
+                : ag?.installHint,
         });
       }
     }
@@ -575,13 +634,14 @@ export function WorkbenchPage() {
     }
   }
 
-  // ── Task Controls ──
+  // ── Task Controls (strictly bound to currentTask matching routeRunId) ──
   async function handlePause() {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
-      const res = await rpc.call('task.pause', { runId: activeTask.runId });
-      setActiveTask(res.task);
+      const res = await rpc.call('task.pause', { runId: targetRunId });
+      if (routeRunIdRef.current === targetRunId) setActiveTask(res.task);
       await refreshTaskList();
       notify('已暂停任务');
     } catch (err) {
@@ -592,11 +652,12 @@ export function WorkbenchPage() {
   }
 
   async function handleResume() {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
-      const res = await rpc.call('task.resume', { runId: activeTask.runId });
-      setActiveTask(res.task);
+      const res = await rpc.call('task.resume', { runId: targetRunId });
+      if (routeRunIdRef.current === targetRunId) setActiveTask(res.task);
       await refreshTaskList();
       notify('已恢复任务执行');
     } catch (err) {
@@ -607,12 +668,15 @@ export function WorkbenchPage() {
   }
 
   async function handleConfirmCancel() {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
-      const res = await rpc.call('task.cancel', { runId: activeTask.runId });
-      setActiveTask(res.task);
-      setCancelConfirmOpen(false);
+      const res = await rpc.call('task.cancel', { runId: targetRunId });
+      if (routeRunIdRef.current === targetRunId) {
+        setActiveTask(res.task);
+        setCancelConfirmOpen(false);
+      }
       await refreshTaskList();
       notify('任务已终止');
     } catch (err) {
@@ -623,12 +687,15 @@ export function WorkbenchPage() {
   }
 
   async function handleApproveCheckpoint() {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
-      const res = await rpc.call('task.approveCheckpoint', { runId: activeTask.runId });
-      setActiveTask(res.task);
-      setReworkOpenNodeId(null);
+      const res = await rpc.call('task.approveCheckpoint', { runId: targetRunId });
+      if (routeRunIdRef.current === targetRunId) {
+        setActiveTask(res.task);
+        setReworkOpenNodeId(null);
+      }
       await refreshTaskList();
       notify('已确认，继续下一节点');
     } catch (err) {
@@ -639,17 +706,20 @@ export function WorkbenchPage() {
   }
 
   async function handleReworkSubmit() {
-    if (!activeTask || !reworkTargetId || !reworkNote.trim() || busyControl) return;
+    if (!currentTask || !reworkTargetId || !reworkNote.trim() || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
       const res = await rpc.call('task.reworkFromNode', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         targetNodeId: reworkTargetId,
         note: reworkNote.trim(),
       });
-      setActiveTask(res.task);
-      setReworkOpenNodeId(null);
-      setReworkNote('');
+      if (routeRunIdRef.current === targetRunId) {
+        setActiveTask(res.task);
+        setReworkOpenNodeId(null);
+        setReworkNote('');
+      }
       await refreshTaskList();
       notify('已提交返工并重跑目标节点');
     } catch (err) {
@@ -660,16 +730,17 @@ export function WorkbenchPage() {
   }
 
   async function handleRetryNode(nodeId: string) {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
       const ov = retryOverrides[nodeId];
       const res = await rpc.call('task.retryNode', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         nodeId,
         override: ov,
       });
-      setActiveTask(res.task);
+      if (routeRunIdRef.current === targetRunId) setActiveTask(res.task);
       await refreshTaskList();
       notify('已重跑失败节点');
     } catch (err) {
@@ -680,15 +751,18 @@ export function WorkbenchPage() {
   }
 
   async function handlePromoteHandoff(nodeId: string) {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
       const res = await rpc.call('doc.promoteFromHandoff', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         nodeId,
       });
-      await refreshActiveTask(activeTask.runId);
-      openInspector('docs', { docId: res.document.id });
+      if (routeRunIdRef.current === targetRunId) {
+        await refreshActiveTask(targetRunId);
+        openInspector('docs', { docId: res.document.id });
+      }
       notify(`已将节点结论提升为固化文档「${res.document.title}」`);
     } catch (err) {
       notify(err instanceof Error ? err.message : '固化失败');
@@ -698,28 +772,40 @@ export function WorkbenchPage() {
   }
 
   async function handleTaskComposerSend() {
-    if (!activeTask || !composerText.trim() || sendingComposer) return;
+    if (!currentTask || !composerText.trim() || sendingComposer) return;
+    const targetRunId = currentTask.runId;
+    const isFollowUp = currentTask.status === 'passed';
+    const textToSend = composerText.trim();
     setSendingComposer(true);
+    setComposerError(null);
     try {
-      if (activeTask.status === 'passed') {
+      if (isFollowUp) {
         const res = await rpc.call('task.followUp', {
-          runId: activeTask.runId,
+          runId: targetRunId,
           roleId: followUpRoleId || undefined,
-          prompt: composerText.trim(),
+          prompt: textToSend,
         });
-        setActiveTask(res.task);
-        setComposerText('');
+        if (routeRunIdRef.current === targetRunId) {
+          setActiveTask(res.task);
+          setComposerText('');
+        }
       } else {
         const res = await rpc.call('task.appendConstraint', {
-          runId: activeTask.runId,
-          text: composerText.trim(),
+          runId: targetRunId,
+          text: textToSend,
         });
-        setActiveTask(res.task);
-        setComposerText('');
+        if (routeRunIdRef.current === targetRunId) {
+          setActiveTask(res.task);
+          setComposerText('');
+        }
         notify('约束已加入队列，将在下一节点自动注入');
       }
     } catch (err) {
-      notify(err instanceof Error ? err.message : '发送失败');
+      const msg = err instanceof Error ? err.message : '发送失败';
+      if (routeRunIdRef.current === targetRunId) {
+        setComposerError(msg);
+      }
+      notify(msg);
     } finally {
       setSendingComposer(false);
     }
@@ -727,15 +813,16 @@ export function WorkbenchPage() {
 
   // ── Dynamic Blueprint Actions ──
   async function handleConfirmBlueprint() {
-    if (!activeTask || !bpDraft || busyControl) return;
+    if (!currentTask || !bpDraft || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
       await rpc.call('task.updateBlueprint', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         nodes: bpDraft,
       });
-      const res = await rpc.call('task.confirmBlueprint', { runId: activeTask.runId });
-      setActiveTask(res.task);
+      const res = await rpc.call('task.confirmBlueprint', { runId: targetRunId });
+      if (routeRunIdRef.current === targetRunId) setActiveTask(res.task);
       await refreshTaskList();
       notify('已确认计划，开始执行');
     } catch (err) {
@@ -746,16 +833,19 @@ export function WorkbenchPage() {
   }
 
   async function handleReplanBlueprint() {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
       const res = await rpc.call('task.replanBlueprint', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         instruction: bpReplanHint.trim() || undefined,
       });
-      setActiveTask(res.task);
-      setBpDraft(res.task.blueprint?.nodes?.map((n) => ({ ...n })) ?? null);
-      setBpReplanHint('');
+      if (routeRunIdRef.current === targetRunId) {
+        setActiveTask(res.task);
+        setBpDraft(res.task.blueprint?.nodes?.map((n) => ({ ...n })) ?? null);
+        setBpReplanHint('');
+      }
       notify('已重新生成计划');
     } catch (err) {
       notify(err instanceof Error ? err.message : '重新规划失败');
@@ -765,21 +855,29 @@ export function WorkbenchPage() {
   }
 
   async function handleSaveBlueprintAsTemplate() {
-    if (!activeTask || !bpSaveName.trim() || busyControl) return;
+    if (!currentTask || !bpSaveName.trim() || busyControl) return;
+    const targetRunId = currentTask.runId;
     setBusyControl(true);
     try {
-      if (bpDraft && bpDraft.length > 0) {
+      if (
+        bpDraft &&
+        bpDraft.length > 0 &&
+        currentTask.status === 'paused' &&
+        currentTask.pauseReason === 'blueprint_review'
+      ) {
         await rpc.call('task.updateBlueprint', {
-          runId: activeTask.runId,
+          runId: targetRunId,
           nodes: bpDraft,
         });
       }
       const res = await rpc.call('task.saveAsTemplate', {
-        runId: activeTask.runId,
+        runId: targetRunId,
         name: bpSaveName.trim(),
       });
-      setBpSaveOpen(false);
-      setBpSaveName('');
+      if (routeRunIdRef.current === targetRunId) {
+        setBpSaveOpen(false);
+        setBpSaveName('');
+      }
       await loadCatalog();
       notify(`已另存为模板「${res.name}」`);
     } catch (err) {
@@ -790,13 +888,13 @@ export function WorkbenchPage() {
   }
 
   async function handleFallbackStaticFromFailedPlan(templateId: string) {
-    if (!activeTask || busyControl) return;
+    if (!currentTask || busyControl) return;
     setBusyControl(true);
     try {
       const res = await rpc.call('task.create', {
         mode: 'static',
         templateId,
-        prompt: activeTask.prompt,
+        prompt: currentTask.prompt,
       });
       setActiveTask(res.task);
       await refreshTaskList();
@@ -814,19 +912,19 @@ export function WorkbenchPage() {
   const effectiveRailMode = isNarrow ? 'top' : prefs.railMode;
 
   const railSteps: RailStepItem[] = useMemo(() => {
-    if (!activeTask) return [];
-    return activeTask.nodes.map((n) => ({
+    if (!currentTask) return [];
+    return currentTask.nodes.map((n) => ({
       id: n.id,
       name: n.name,
       role: n.role,
       driver: n.driver,
       model: n.model,
       effort: n.effort,
-      state: mapNodeToRailState(n, activeTask),
+      state: mapNodeToRailState(n, currentTask),
       durationSec: n.durationMs ? `${(n.durationMs / 1000).toFixed(1)}s` : undefined,
       reuseAnchorOrder: n.reuseAnchorOrder,
     }));
-  }, [activeTask]);
+  }, [currentTask]);
 
   function scrollToNode(nodeId: string) {
     const el = document.getElementById(`wb-node-${nodeId}`);
@@ -987,7 +1085,7 @@ export function WorkbenchPage() {
                 <button
                   type="button"
                   className="wb-icon-btn wb-icon-btn-sm"
-                  onClick={() => navigate(activeTask ? `/tasks/${activeTask.runId}` : '/')}
+                  onClick={() => navigate(currentTask ? `/tasks/${currentTask.runId}` : '/')}
                   title="返回工作台"
                   aria-label="返回工作台"
                 >
@@ -1016,7 +1114,7 @@ export function WorkbenchPage() {
               onNotify={notify}
             />
           </>
-        ) : !routeRunId || !activeTask ? (
+        ) : !routeRunId ? (
           /* ── New Task / Empty Hero Mode ── */
           <>
             <header className="wb-topbar">
@@ -1050,7 +1148,16 @@ export function WorkbenchPage() {
                       <span className="wb-as-title">
                         前置检查：以下 Agent 尚未就绪（
                         {preflightBlockers
-                          .map((b) => `${b.driver}: ${b.status === 'unauthenticated' ? '未登录' : '未安装'}`)
+                          .map(
+                            (b) =>
+                              `${b.driver}: ${
+                                b.status === 'unauthenticated'
+                                  ? '未登录'
+                                  : b.status === 'unsupported'
+                                    ? '未注册驱动'
+                                    : '未安装'
+                              }`,
+                          )
                           .join(' / ')}
                         ）
                       </span>
@@ -1178,6 +1285,65 @@ export function WorkbenchPage() {
               </div>
             </div>
           </>
+        ) : !currentTask ? (
+          /* ── Task Loading / Load Error State (never shows stale previous task!) ── */
+          <>
+            <header className="wb-topbar">
+              <div className="wb-tb-left">
+                <button
+                  type="button"
+                  className="wb-icon-btn wb-menu-btn"
+                  onClick={toggleSidebar}
+                  aria-label="打开任务列表"
+                >
+                  {WbIcons.menu}
+                </button>
+                <span className="wb-tb-title">
+                  {loadingTask || !taskLoadError ? '加载任务中…' : '无法加载任务'}
+                </span>
+              </div>
+              <div className="wb-tb-right">
+                <WidthMenu
+                  value={prefs.contentWidth}
+                  onChange={(next) => void handleUpdatePrefs({ contentWidth: next })}
+                />
+              </div>
+            </header>
+            <div className="wb-hero" data-testid={taskLoadError ? 'task-load-error' : 'task-loading'}>
+              {loadingTask || !taskLoadError ? (
+                <div style={{ color: 'var(--text-s)', fontSize: 13 }}>正在加载任务详情…</div>
+              ) : (
+                <div className="wb-card" style={{ maxWidth: 460, width: '100%' }}>
+                  <strong style={{ color: 'var(--fail-t)', display: 'block', marginBottom: 6 }}>
+                    加载任务详情失败
+                  </strong>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-s)', marginBottom: 12 }}>
+                    {taskLoadError || '任务不存在或暂时无法读取'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="wb-btn wb-btn-xs wb-btn-primary"
+                      onClick={() => {
+                        setLoadingTask(true);
+                        setTaskLoadError(null);
+                        void refreshActiveTask(routeRunId);
+                      }}
+                    >
+                      重试加载
+                    </button>
+                    <button
+                      type="button"
+                      className="wb-btn wb-btn-xs"
+                      onClick={() => navigate('/')}
+                    >
+                      返回新任务
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         ) : (
           /* ── Task Detail Mode ── */
           <>
@@ -1191,13 +1357,18 @@ export function WorkbenchPage() {
                 >
                   {WbIcons.menu}
                 </button>
-                <span className="wb-tb-title" title={activeTask.title}>
-                  {activeTask.title}
+                <span className="wb-tb-title" title={currentTask.title}>
+                  {currentTask.title}
                 </span>
-                <span className="wb-tb-tag">{activeTask.templateName}</span>
+                <span className="wb-tb-tag">{currentTask.templateName}</span>
+                {currentTask.executor === 'legacy' ? (
+                  <span className="wb-tb-tag" title="由旧版 CLI 或会话执行器创建的任务">
+                    旧版任务
+                  </span>
+                ) : null}
                 <span className="wb-tb-status">
-                  <span className={`wb-s-dot ${statusDotClass(activeTask)}`} aria-hidden="true" />
-                  {statusLabel(activeTask)}
+                  <span className={`wb-s-dot ${statusDotClass(currentTask)}`} aria-hidden="true" />
+                  {statusLabel(currentTask)}
                 </span>
               </div>
 
@@ -1206,7 +1377,7 @@ export function WorkbenchPage() {
                   value={prefs.contentWidth}
                   onChange={(next) => void handleUpdatePrefs({ contentWidth: next })}
                 />
-                {activeTask.status === 'running' ? (
+                {currentTask.status === 'running' && currentTask.canControl ? (
                   <button
                     type="button"
                     className="wb-icon-btn"
@@ -1218,7 +1389,9 @@ export function WorkbenchPage() {
                     {WbIcons.pause}
                   </button>
                 ) : null}
-                {activeTask.status === 'paused' && activeTask.pauseReason === 'user_pause' ? (
+                {currentTask.executor === 'workbench' &&
+                currentTask.status === 'paused' &&
+                currentTask.pauseReason === 'user_pause' ? (
                   <button
                     type="button"
                     className="wb-icon-btn active"
@@ -1230,7 +1403,8 @@ export function WorkbenchPage() {
                     {WbIcons.play}
                   </button>
                 ) : null}
-                {activeTask.status === 'running' || activeTask.status === 'paused' ? (
+                {(currentTask.status === 'running' || currentTask.status === 'paused') &&
+                currentTask.canControl ? (
                   <button
                     type="button"
                     className="wb-icon-btn danger"
@@ -1250,8 +1424,8 @@ export function WorkbenchPage() {
                   aria-label="打开固化文档抽屉"
                 >
                   {WbIcons.doc}
-                  {activeTask.documents.length > 0 ? (
-                    <span className="wb-icon-count">{activeTask.documents.length}</span>
+                  {currentTask.documents.length > 0 ? (
+                    <span className="wb-icon-count">{currentTask.documents.length}</span>
                   ) : null}
                 </button>
                 <button
@@ -1260,7 +1434,7 @@ export function WorkbenchPage() {
                   onClick={() =>
                     openInspector('ctx', {
                       nodeId:
-                        activeTask.currentNodeId ?? activeTask.nodes[0]?.id,
+                        currentTask.currentNodeId ?? currentTask.nodes[0]?.id,
                     })
                   }
                   title="上下文检查器"
@@ -1320,23 +1494,35 @@ export function WorkbenchPage() {
                 <div className="wb-timeline" data-testid="task-timeline">
                   <div className="wb-tl-inner">
                     {/* User goal bubble */}
-                    <div className="wb-user-bubble">{activeTask.prompt}</div>
+                    <div className="wb-user-bubble">{currentTask.prompt}</div>
 
-                    {/* Dynamic Blueprint Planning / Confirmation / Failure Card */}
-                    {activeTask.mode === 'dynamic' &&
-                    activeTask.blueprintStatus &&
-                    activeTask.blueprintStatus !== 'locked' ? (
+                    {/* Dynamic Blueprint Planning / Confirmation / Failure Card (never shown after cancel/pass) */}
+                    {currentTask.executor === 'workbench' &&
+                    currentTask.mode === 'dynamic' &&
+                    currentTask.status !== 'cancelled' &&
+                    currentTask.status !== 'passed' &&
+                    currentTask.blueprintStatus &&
+                    currentTask.blueprintStatus !== 'locked' &&
+                    (currentTask.blueprintStatus !== 'review' ||
+                      (currentTask.status === 'paused' &&
+                        currentTask.pauseReason === 'blueprint_review')) ? (
                       <div className="wb-card" data-testid="blueprint-card" style={{ marginBottom: 10 }}>
-                        {activeTask.blueprintStatus === 'planning' ? (
+                        {currentTask.blueprintStatus === 'planning' ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-s)' }}>
-                            <span className="wb-s-dot running" />
-                            <span>编排者正在分析需求并生成执行计划…</span>
+                            <span
+                              className={`wb-s-dot ${currentTask.status === 'running' ? 'running' : 'paused'}`}
+                            />
+                            <span>
+                              {currentTask.status === 'running'
+                                ? '编排者正在分析需求并生成执行计划…'
+                                : '动态规划已暂停，点击顶部继续以恢复规划'}
+                            </span>
                           </div>
-                        ) : activeTask.blueprintStatus === 'failed' ? (
+                        ) : currentTask.blueprintStatus === 'failed' ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <strong style={{ color: 'var(--fail-t)' }}>动态规划失败</strong>
                             <div style={{ fontSize: 12.5, color: 'var(--text-s)' }}>
-                              {activeTask.blueprint?.error || '未能生成有效的执行计划'}
+                              {currentTask.blueprint?.error || '未能生成有效的执行计划'}
                             </div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               <button
@@ -1366,9 +1552,9 @@ export function WorkbenchPage() {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                               <div>
                                 <strong style={{ fontSize: 13.5 }}>动态编排计划（确认后执行）</strong>
-                                {activeTask.blueprint?.summary ? (
+                                {currentTask.blueprint?.summary ? (
                                   <div style={{ fontSize: 12, color: 'var(--text-t)' }}>
-                                    {activeTask.blueprint.summary}
+                                    {currentTask.blueprint.summary}
                                   </div>
                                 ) : null}
                               </div>
@@ -1431,7 +1617,7 @@ export function WorkbenchPage() {
                             {(bpDraft ?? []).map((step, idx) => {
                               const r = roleMap.get(step.roleId);
                               const readyAgentId =
-                                agentsSnapshot?.agents.find((a) => a.status === 'ready')?.id ||
+                                agentsSnapshot?.agents.find((a) => isExecutableAgent(a))?.id ||
                                 agentsSnapshot?.agents[0]?.id ||
                                 'claude-code';
                               return (
@@ -1528,9 +1714,9 @@ export function WorkbenchPage() {
                     ) : null}
 
                     {/* Execution Node Timeline */}
-                    {activeTask.nodes.map((node, idx) => {
-                      const railState = mapNodeToRailState(node, activeTask);
-                      const nodeDocs = activeTask.documents.filter(
+                    {currentTask.nodes.map((node, idx) => {
+                      const railState = mapNodeToRailState(node, currentTask);
+                      const nodeDocs = currentTask.documents.filter(
                         (d) => d.nodeId === node.id,
                       );
                       const mergedTrace = [
@@ -1540,9 +1726,10 @@ export function WorkbenchPage() {
                         ),
                       ];
                       const isAwaitingConfirm =
-                        activeTask.status === 'paused' &&
-                        activeTask.pauseReason === 'confirm_checkpoint' &&
-                        activeTask.currentNodeId === node.id;
+                        currentTask.executor === 'workbench' &&
+                        currentTask.status === 'paused' &&
+                        currentTask.pauseReason === 'confirm_checkpoint' &&
+                        currentTask.currentNodeId === node.id;
                       const retryOv = retryOverrides[node.id] ?? {
                         driver: node.driver,
                         model: node.model,
@@ -1665,7 +1852,8 @@ export function WorkbenchPage() {
                                   <span className="wb-doc-ver">v{doc.version}</span>
                                 </button>
                               ))}
-                              {node.status === 'passed' &&
+                              {currentTask.executor === 'workbench' &&
+                              node.status === 'passed' &&
                               nodeDocs.length === 0 &&
                               node.handoffBrief ? (
                                 <button
@@ -1720,7 +1908,7 @@ export function WorkbenchPage() {
                                       onChange={(e) => setReworkTargetId(e.target.value)}
                                       aria-label="选择返工起始节点"
                                     >
-                                      {activeTask.nodes
+                                      {currentTask.nodes
                                         .slice(0, idx + 1)
                                         .map((n, j) => (
                                           <option key={n.id} value={n.id}>
@@ -1759,7 +1947,7 @@ export function WorkbenchPage() {
                           ) : null}
 
                           {/* Failed Node Single-Step Retry Strip */}
-                          {node.status === 'failed' ? (
+                          {currentTask.executor === 'workbench' && node.status === 'failed' ? (
                             <div className="wb-action-strip rose" data-testid="retry-action-strip">
                               <div className="wb-as-row">
                                 <span className="wb-as-title">
@@ -1797,8 +1985,13 @@ export function WorkbenchPage() {
                                     }}
                                   >
                                     {(agentsSnapshot?.agents ?? []).map((a) => (
-                                      <option key={a.id} value={a.id}>
+                                      <option
+                                        key={a.id}
+                                        value={a.id}
+                                        disabled={a.status === 'unsupported' && retryOv.driver !== a.id}
+                                      >
                                         {a.name}
+                                        {a.status === 'unsupported' ? '（未注册驱动）' : ''}
                                       </option>
                                     ))}
                                   </select>
@@ -1845,12 +2038,12 @@ export function WorkbenchPage() {
                     })}
 
                     {/* Queued constraints notice */}
-                    {activeTask.queuedConstraints.length > 0 ? (
+                    {currentTask.queuedConstraints.length > 0 ? (
                       <div className="wb-action-strip indigo" style={{ marginLeft: 0 }}>
                         <div className="wb-as-title">
-                          待注入约束（{activeTask.queuedConstraints.length} 条，将在下一节点自动注入）
+                          待注入约束（{currentTask.queuedConstraints.length} 条，将在下一节点自动注入）
                         </div>
-                        {activeTask.queuedConstraints.map((c) => (
+                        {currentTask.queuedConstraints.map((c) => (
                           <div key={c.id} style={{ fontSize: 12, color: 'var(--text-s)' }}>
                             • {c.content}
                           </div>
@@ -1859,7 +2052,7 @@ export function WorkbenchPage() {
                     ) : null}
 
                     {/* Post-completion Follow-up Turns */}
-                    {activeTask.followUps.map((turn) => (
+                    {currentTask.followUps.map((turn) => (
                       <div key={turn.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                         <div className="wb-user-bubble" style={{ marginBottom: 2 }}>
                           {turn.userText}
@@ -1885,21 +2078,43 @@ export function WorkbenchPage() {
                 </div>
 
                 {/* Bottom Contextual Composer */}
-                {(activeTask.status === 'running' ||
-                  activeTask.status === 'paused' ||
-                  activeTask.status === 'passed') &&
-                activeTask.blueprintStatus !== 'review' &&
-                activeTask.blueprintStatus !== 'planning' ? (
+                {currentTask.executor === 'workbench' &&
+                (currentTask.status === 'running' ||
+                  currentTask.status === 'paused' ||
+                  currentTask.status === 'passed') &&
+                currentTask.blueprintStatus !== 'review' &&
+                currentTask.blueprintStatus !== 'planning' ? (
                   <div className="wb-composer-wrap">
+                    {composerError ? (
+                      <div
+                        className="wb-action-strip rose"
+                        style={{ margin: '0 0 8px 0' }}
+                        data-testid="composer-error"
+                      >
+                        <div className="wb-as-row">
+                          <span className="wb-as-title">{composerError}</span>
+                          <button
+                            type="button"
+                            className="wb-btn wb-btn-xs"
+                            onClick={() => setComposerError(null)}
+                          >
+                            关闭
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="wb-composer">
                       <textarea
                         placeholder={
-                          activeTask.status === 'passed'
+                          currentTask.status === 'passed'
                             ? '基于本任务固化文档继续追问…'
                             : '补充约束或反馈，将自动注入下一节点…'
                         }
                         value={composerText}
-                        onChange={(e) => setComposerText(e.target.value)}
+                        onChange={(e) => {
+                          setComposerText(e.target.value);
+                          if (composerError) setComposerError(null);
+                        }}
                         onKeyDown={(e) => {
                           if (e.nativeEvent.isComposing) return;
                           if (e.key === 'Enter' && !e.shiftKey) {
@@ -1909,12 +2124,12 @@ export function WorkbenchPage() {
                         }}
                         rows={2}
                         aria-label={
-                          activeTask.status === 'passed' ? '继续追问' : '补充约束'
+                          currentTask.status === 'passed' ? '继续追问' : '补充约束'
                         }
                       />
                       <div className="wb-composer-foot">
                         <div className="wb-composer-left">
-                          {activeTask.status === 'passed' ? (
+                          {currentTask.status === 'passed' ? (
                             <select
                               className="wb-ghost-select"
                               value={followUpRoleId}
@@ -1965,12 +2180,13 @@ export function WorkbenchPage() {
       </main>
 
       {/* ── Right Inspector Drawer (Docs / Context) ── */}
-      {!isSettingsRoute && activeTask && drawerTab !== null ? (
+      {!isSettingsRoute && currentTask && drawerTab !== null ? (
         <InspectorDrawer
-          runId={activeTask.runId}
+          runId={currentTask.runId}
           tab={drawerTab}
-          nodes={activeTask.nodes}
-          documents={activeTask.documents}
+          readOnly={currentTask.executor !== 'workbench'}
+          nodes={currentTask.nodes}
+          documents={currentTask.documents}
           selectedDocId={selectedDocId}
           selectedNodeId={selectedCtxNodeId}
           onTabChange={(t) => setDrawerTab(t)}
@@ -1978,7 +2194,9 @@ export function WorkbenchPage() {
           onSelectNode={(id) => setSelectedCtxNodeId(id)}
           onClose={() => setDrawerTab(null)}
           onTaskMutated={async () => {
-            await refreshActiveTask(activeTask.runId);
+            if (routeRunIdRef.current === currentTask.runId) {
+              await refreshActiveTask(currentTask.runId);
+            }
             await refreshTaskList();
           }}
           onNotify={notify}

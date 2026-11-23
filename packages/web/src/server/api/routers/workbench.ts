@@ -41,9 +41,14 @@ function mapWorkbenchError(error: unknown): never {
     msg.startsWith('NO_PENDING_CHECKPOINT') ||
     msg.startsWith('TASK_NOT_COMPLETED') ||
     msg.startsWith('TASK_ALREADY_RUNNING') ||
-    msg.startsWith('TASK_NOT_RESUMABLE')
+    msg.startsWith('TASK_NOT_RESUMABLE') ||
+    msg.startsWith('TASK_NOT_PAUSABLE') ||
+    msg.startsWith('LEGACY_TASK_READONLY')
   ) {
     throw new ApiError('CONFLICT', msg);
+  }
+  if (msg.startsWith('FOLLOWUP_FAILED')) {
+    throw new ApiError('INTERNAL_ERROR', msg);
   }
   throw new ApiError('BAD_REQUEST', msg);
 }
@@ -66,14 +71,22 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
     userHome,
   };
   const wfCtx = { repoPath, builtInWorkflowsDir };
+  const assertWorkbenchTask = (runId: string) => {
+    const task = runtime.getTaskDetail(runId);
+    if (task.executor !== 'workbench') {
+      throw new Error(
+        'LEGACY_TASK_READONLY: 旧版执行器创建的任务在文档与上下文面板为只读，不可执行工作台写操作。',
+      );
+    }
+  };
 
   return {
     agent: {
       async list() {
-        return runtime.discovery.getSnapshot();
+        return runtime.getAgentsSnapshot();
       },
       async refresh() {
-        return runtime.discovery.refresh();
+        return runtime.refreshAgents();
       },
     },
 
@@ -110,7 +123,9 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
       }) {
         try {
           const resolvedAgent = input.driver
-            ? await runtime.discovery.getAgent(input.driver)
+            ? (await runtime.getAgentsSnapshot()).agents.find(
+                (a) => a.id === input.driver,
+              )
             : undefined;
           return saveRoleConfig(roleCtx, input, { resolvedAgent });
         } catch (err) {
@@ -148,9 +163,11 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
       },
       async resetBuiltIn(input: { id: string }) {
         try {
-          const snap = await runtime.discovery.getSnapshot();
+          const snap = await runtime.getAgentsSnapshot();
           const result = resetBuiltInRole(roleCtx, input.id, {
-            resolvedAgent: snap.agents.find((a) => a.status === 'ready'),
+            resolvedAgent: snap.agents.find(
+              (a) => a.status === 'ready' && a.executable !== false,
+            ),
           });
           return result;
         } catch (err) {
@@ -415,6 +432,7 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
       },
       async togglePin(input: { runId: string; docId: string }) {
         try {
+          assertWorkbenchTask(input.runId);
           return {
             document: await runtime.contextManager.toggleDocumentPin(
               input.runId,
@@ -431,6 +449,7 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
         title?: string;
       }) {
         try {
+          assertWorkbenchTask(input.runId);
           return {
             document: await runtime.contextManager.promoteHandoffToDocument(input),
           };
@@ -463,6 +482,7 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
         reuseMode: 'reuse' | 'reset';
       }) {
         try {
+          assertWorkbenchTask(input.runId);
           await runtime.contextManager.setRoleSessionReuseMode(
             input.runId,
             input.roleId,
@@ -475,6 +495,7 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
       },
       async compact(input: { runId: string }) {
         try {
+          assertWorkbenchTask(input.runId);
           return await runtime.contextManager.compactContext(input.runId);
         } catch (err) {
           mapWorkbenchError(err);
@@ -495,6 +516,7 @@ export function createWorkbenchRouters(deps: CreateWorkbenchRoutersDeps) {
       },
       async toggleArchiveMount(input: { runId: string; archiveId: string }) {
         try {
+          assertWorkbenchTask(input.runId);
           return {
             archive: await runtime.contextManager.toggleArchiveMount(
               input.runId,

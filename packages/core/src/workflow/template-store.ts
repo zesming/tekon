@@ -3,12 +3,18 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
-import { stringify as stringifyYaml } from 'yaml';
+import {
+  isMap,
+  isSeq,
+  parseDocument,
+  stringify as stringifyYaml,
+} from 'yaml';
 
 import {
   resolveSafeTekonPath,
@@ -341,9 +347,38 @@ export function findWorkflowsReferencingRole(
     .map((w) => ({ id: w.id, name: w.name }));
 }
 
+function resolveWorkflowTemplateFilePath(
+  ctx: WorkflowStoreContext,
+  id: string,
+): string | null {
+  const safeId = assertSafeTemplateId(id);
+  const projectDir = resolve(ctx.repoPath, '.tekon', 'workflows');
+  for (const dir of [projectDir, ctx.builtInWorkflowsDir]) {
+    if (!existsSync(dir)) continue;
+    const dirReal = realpathSync(dir);
+    for (const ext of ['.yaml', '.yml']) {
+      const full = join(dir, `${safeId}${ext}`);
+      if (!existsSync(full)) continue;
+      try {
+        if (lstatSync(full).isSymbolicLink()) continue;
+        const real = realpathSync(full);
+        if (real.startsWith(`${dirReal}${sep}`)) {
+          return full;
+        }
+      } catch {
+        // skip unreadable candidate
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Automatically cleans up incompatible node-level model/effort overrides across
- * project workflow templates whenever a role changes its bound Agent/Model or resets.
+ * workflow templates whenever a role changes its bound Agent/Model or resets.
+ * Edits ONLY `overrideModel` / `overrideEffort` fields in the original YAML
+ * document so legacy v1 delivery templates keep their phases, dependsOn,
+ * inputs/outputs, gates, retry, and delivery declarations intact.
  */
 export function cleanupWorkflowOverridesForRole(
   ctx: WorkflowStoreContext,
@@ -352,41 +387,82 @@ export function cleanupWorkflowOverridesForRole(
 ): string[] {
   if (!agent) return [];
   const cleaned: string[] = [];
-  const all = listLinearWorkflows(ctx, { includeDelivery: true });
-  for (const wf of all) {
-    let dirty = false;
-    const nextNodes = wf.nodes.map((n) => {
-      if (n.role !== roleId) return n;
-      let nextModel = n.overrideModel ?? '';
-      let nextEffort = n.overrideEffort ?? '';
-      if (nextModel && !agent.models.includes(nextModel)) {
-        nextModel = '';
-        dirty = true;
+  const builtInIds = listYamlIdsInDir(ctx.builtInWorkflowsDir);
+  const projectDir = resolve(ctx.repoPath, '.tekon', 'workflows');
+  const projectIds = listYamlIdsInDir(projectDir);
+  const allIds = new Set([...builtInIds, ...projectIds]);
+
+  const cleanNodeSeq = (seq: unknown): boolean => {
+    if (!isSeq(seq)) return false;
+    let mutated = false;
+    for (const item of seq.items) {
+      if (!isMap(item)) continue;
+      if (item.get('role') !== roleId) continue;
+      const rawModel = item.get('overrideModel');
+      const rawEffort = item.get('overrideEffort');
+      let effectiveModel = typeof rawModel === 'string' ? rawModel.trim() : '';
+      const currentEffort = typeof rawEffort === 'string' ? rawEffort.trim() : '';
+
+      if (effectiveModel && !agent.models.includes(effectiveModel)) {
+        item.delete('overrideModel');
+        effectiveModel = '';
+        mutated = true;
       }
       const allowedEfforts = resolveSupportedEfforts(
         agent,
-        nextModel || undefined,
+        effectiveModel || undefined,
       );
       if (
-        nextEffort &&
-        (!allowedEfforts.includes(nextEffort) ||
+        currentEffort &&
+        (!allowedEfforts.includes(currentEffort) ||
           (allowedEfforts.length === 1 && allowedEfforts[0] === 'default'))
       ) {
-        nextEffort = '';
+        item.delete('overrideEffort');
+        mutated = true;
+      }
+    }
+    return mutated;
+  };
+
+  for (const id of allIds) {
+    const filePath = resolveWorkflowTemplateFilePath(ctx, id);
+    if (!filePath) continue;
+    try {
+      const rawYaml = readFileSync(filePath, 'utf8');
+      const doc = parseDocument(rawYaml);
+      if (doc.errors.length > 0 || !isMap(doc.contents)) continue;
+
+      let dirty = false;
+      // v2 linear templates: top-level `nodes`
+      if (cleanNodeSeq(doc.get('nodes', true))) {
         dirty = true;
       }
-      return dirty
-        ? { ...n, overrideModel: nextModel, overrideEffort: nextEffort }
-        : n;
-    });
-    if (dirty) {
-      saveLinearWorkflow(ctx, {
-        id: wf.id,
-        name: wf.name,
-        description: wf.description,
-        nodes: nextNodes,
-      });
-      cleaned.push(wf.id);
+      // v1 delivery templates: `phases[*].nodes`
+      const phases = doc.get('phases', true);
+      if (isSeq(phases)) {
+        for (const phase of phases.items) {
+          if (isMap(phase) && cleanNodeSeq(phase.get('nodes', true))) {
+            dirty = true;
+          }
+        }
+      }
+
+      if (dirty) {
+        const nextYaml = doc.toString();
+        // Fail-closed validation before writing to disk
+        parseWorkflowTemplate(nextYaml);
+        const isProjectFile =
+          existsSync(projectDir) &&
+          realpathSync(filePath).startsWith(`${realpathSync(projectDir)}${sep}`);
+        const targetPath = isProjectFile
+          ? filePath
+          : projectWorkflowPath(ctx.repoPath, id);
+        mkdirSync(projectDir, { recursive: true });
+        writeFileAtomically(targetPath, nextYaml);
+        cleaned.push(id);
+      }
+    } catch {
+      // Skip invalid or unparseable template files rather than corrupting them
     }
   }
   return cleaned;

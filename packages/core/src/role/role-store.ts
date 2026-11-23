@@ -169,9 +169,7 @@ export function saveRoleConfig(
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
     ...(input.effort?.trim() ? { effort: input.effort.trim() } : {}),
     isolated: input.isolated ?? existing.agent.isolated ?? false,
-    category:
-      existing.agent.category ??
-      (GENERAL_ROLE_SET.has(roleId) ? 'general' : 'general'),
+    category: existing.agent.category ?? 'general',
     injectMode: existing.agent.injectMode,
     priority: existing.agent.priority,
     ...(existing.agent.maxSkills !== undefined

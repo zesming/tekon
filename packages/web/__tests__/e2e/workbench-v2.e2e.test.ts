@@ -544,4 +544,36 @@ test.describe('Tekon v2 Workbench E2E', () => {
       await h.cleanup();
     }
   });
+
+  test('hides blueprint actions after cancelling dynamic task and clears stale detail when switching to an unloadable task', async ({
+    page,
+  }) => {
+    const h = await startWorkbenchHarness();
+    try {
+      await page.setViewportSize({ width: 1280, height: 860 });
+      await page.goto(h.urlWithToken);
+
+      // Start dynamic task -> pauses at blueprint_review
+      await page.getByLabel('选择工作流模板').selectOption('__dynamic__');
+      await page.getByLabel('任务描述').fill('验证终止后隐藏蓝图与切换防串台');
+      await page.getByLabel('启动任务').click();
+      await expect(page.getByTestId('blueprint-card')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('button', { name: /确认开始执行/ })).toBeVisible();
+
+      // Cancel while awaiting blueprint review -> blueprint card & confirm button must disappear!
+      await page.getByLabel('终止任务').click();
+      await expect(page.getByTestId('cancel-confirm-bar')).toBeVisible();
+      await page.getByRole('button', { name: '确认终止' }).click();
+      await expect(page.locator('.wb-tb-status')).toContainText('已终止', { timeout: 5_000 });
+      await expect(page.getByTestId('blueprint-card')).toHaveCount(0);
+
+      // Navigate to a non-existent task route -> must NOT keep previous task detail or controls!
+      await page.goto(`${h.server.url}/tasks/run_missing_404#token=${encodeURIComponent(h.token)}`);
+      await expect(page.getByTestId('task-load-error')).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByTestId('task-timeline')).toHaveCount(0);
+      await expect(page.getByLabel('终止任务')).toHaveCount(0);
+    } finally {
+      await h.cleanup();
+    }
+  });
 });

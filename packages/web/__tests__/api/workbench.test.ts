@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createProviderAdapterResolver,
+  openTekonDatabase,
   type AgentAdapter,
   type AgentDiscoveryRegistry,
   type AgentDiscoverySnapshot,
@@ -313,5 +314,143 @@ describe('workbench v2 RPC API', () => {
       token,
     );
     expect(mounted.result?.archive.mounted).toBe(true);
+  });
+
+  it('marks unregistered custom agents unsupported, routes legacy cancel through sessionService/JobRunner, and blocks cancelled dynamic blueprint confirmation', async () => {
+    const fixture = await createWebFixtureProject();
+    const discoveryWithCustom: AgentDiscoveryRegistry = {
+      async getSnapshot() {
+        return {
+          probedAt: '2026-11-20T12:00:00.000Z',
+          agents: [
+            ...(await createStubDiscovery(true).getSnapshot()).agents,
+            {
+              id: 'custom-unregistered',
+              name: 'Custom Unregistered',
+              iconKey: 'generic',
+              status: 'ready',
+              models: ['custom-1'],
+              efforts: ['default'],
+              source: 'user-config',
+            },
+          ],
+        };
+      },
+      async refresh() {
+        return this.getSnapshot();
+      },
+      async getAgent(id) {
+        return (await this.getSnapshot()).agents.find((a) => a.id === id);
+      },
+    };
+
+    const server = await createWebServer({
+      projectRoot: fixture.projectRoot,
+      port: 0,
+      vite: false,
+      workbenchDiscovery: discoveryWithCustom,
+      workbenchResolver: createStubResolver(),
+    });
+    cleanups.push(async () => {
+      await server.close();
+      fixture.cleanup();
+    });
+    await server.listen();
+    const token = readSessionToken(fixture.projectRoot);
+
+    // 1. Custom unregistered agent must show as unsupported / non-executable in agent.list
+    const agentsRes = await rpcCall<{
+      agents: Array<{ id: string; status: string; executable?: boolean }>;
+    }>(server, 'agent.list', undefined, token);
+    expect(agentsRes.status).toBe(200);
+    const customAgent = agentsRes.result?.agents.find((a) => a.id === 'custom-unregistered');
+    expect(customAgent?.status).toBe('unsupported');
+    expect(customAgent?.executable).toBe(false);
+
+    // 2. Seed a legacy CLI-owned task with a running job in SQLite; task.cancel must delegate to SessionService -> JobRunner!
+    const db = openTekonDatabase({ filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite') });
+    const now = new Date().toISOString();
+    try {
+      db.prepare(`insert into demands (id, title, body, source, created_at) values ('dem_leg_web', 'Legacy Job Task', 'body', 'cli', ?)`).run(now);
+      db.prepare(`insert into projects (id, name, repo_path, created_at) values ('proj_leg_web', 'repo', ?, ?)`).run(fixture.projectRoot, now);
+      db.prepare(`insert into workflow_instances (id, project_id, demand_id, status, kind, mode, plan_snapshot, created_at, updated_at) values ('run_leg_web', 'proj_leg_web', 'dem_leg_web', 'running', 'workflow', 'static', ?, ?, ?)`).run(
+        JSON.stringify({ version: 2, template: { id: 'bugfix', name: 'Bugfix' } }),
+        now,
+        now,
+      );
+      const ws = db.prepare(`select id from workspaces limit 1`).get() as { id: string } | undefined;
+      const wsId = ws?.id ?? 'ws_leg_web';
+      if (!ws) {
+        db.prepare(`insert into workspaces (id, root, created_at) values (?, ?, ?)`).run(wsId, fixture.projectRoot, now);
+      }
+      db.prepare(`insert into sessions (id, workspace_id, title, profile, status, run_id, created_at, updated_at) values ('sess_leg_web', ?, 'Legacy Job Task', 'delivery', 'active', 'run_leg_web', ?, ?)`).run(wsId, now, now);
+      db.prepare(`insert into jobs (id, session_id, kind, status, owner, abort_state, payload, created_at, updated_at) values ('job_leg_web', 'sess_leg_web', 'workflow-run', 'running', 'cli-worker-1', 'none', '{}', ?, ?)`).run(now, now);
+    } finally {
+      db.close();
+    }
+
+    const legDetail = await rpcCall<{ task: { executor: string; canControl: boolean } }>(
+      server,
+      'task.get',
+      { runId: 'run_leg_web' },
+      token,
+    );
+    expect(legDetail.status).toBe(200);
+    expect(legDetail.result?.task.executor).toBe('legacy');
+    expect(legDetail.result?.task.canControl).toBe(true);
+
+    // Workbench-only mutations on legacy task (including doc.* & context.*) rejected with 409
+    const legResume = await rpcCall(server, 'task.resume', { runId: 'run_leg_web' }, token);
+    expect(legResume.status).toBe(409);
+    expect(legResume.error?.message).toContain('LEGACY_TASK_READONLY');
+    for (const [proc, input] of [
+      ['doc.togglePin', { runId: 'run_leg_web', docId: 'doc_1' }],
+      ['doc.promoteFromHandoff', { runId: 'run_leg_web', nodeId: 'n1' }],
+      ['context.setNodeReuseMode', { runId: 'run_leg_web', roleId: 'explorer', reuseMode: 'reset' }],
+      ['context.compact', { runId: 'run_leg_web' }],
+      ['context.toggleArchiveMount', { runId: 'run_leg_web', archiveId: 'arc_1' }],
+    ] as const) {
+      const res = await rpcCall(server, proc, input, token);
+      expect(res.status, `${proc} on legacy task must return 409`).toBe(409);
+      expect(res.error?.message).toContain('LEGACY_TASK_READONLY');
+    }
+
+    // task.cancel delegates through SessionService -> JobRunner (job transitions to cancelling/requested!)
+    const legCancel = await rpcCall<{ task: { status: string } }>(
+      server,
+      'task.cancel',
+      { runId: 'run_leg_web' },
+      token,
+    );
+    expect(legCancel.status).toBe(200);
+    expect(legCancel.result?.task.status).toBe('cancelled');
+
+    const dbCheck = openTekonDatabase({ filename: join(fixture.projectRoot, '.tekon', 'tekon.sqlite') });
+    try {
+      const jobRow = dbCheck
+        .prepare(`select status, abort_state from jobs where id = 'job_leg_web'`)
+        .get() as { status: string; abort_state: string };
+      expect(jobRow.status).toBe('cancelling');
+      expect(jobRow.abort_state).toBe('requested');
+
+      // 3. Seed a cancelled dynamic task still holding blueprint_status = 'review' -> confirmBlueprint must reject with 409!
+      dbCheck.prepare(`insert into demands (id, title, body, source, created_at) values ('dem_dyn_cancel', 'Cancelled Dynamic', 'body', 'workbench', ?)`).run(now);
+      dbCheck.prepare(`insert into projects (id, name, repo_path, created_at) values ('proj_dyn_cancel', 'repo', ?, ?)`).run(fixture.projectRoot, now);
+      dbCheck.prepare(
+        `insert into workflow_instances (id, project_id, demand_id, status, kind, mode, blueprint_status, blueprint_json, plan_snapshot, created_at, updated_at)
+         values ('run_dyn_cancel', 'proj_dyn_cancel', 'dem_dyn_cancel', 'cancelled', 'workflow', 'dynamic', 'review', ?, ?, ?, ?)`,
+      ).run(
+        JSON.stringify({ summary: 's', nodes: [{ id: 'n1', name: '步骤一', roleId: 'explorer' }] }),
+        JSON.stringify({ version: 4, templateName: '动态编排' }),
+        now,
+        now,
+      );
+    } finally {
+      dbCheck.close();
+    }
+
+    const confirmRes = await rpcCall(server, 'task.confirmBlueprint', { runId: 'run_dyn_cancel' }, token);
+    expect(confirmRes.status).toBe(409);
+    expect(confirmRes.error?.message).toMatch(/TASK_TERMINAL|BLUEPRINT_NOT_READY/u);
   });
 });

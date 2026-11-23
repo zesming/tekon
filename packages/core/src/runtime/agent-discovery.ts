@@ -15,17 +15,20 @@ import {
 export type DiscoveredAgentStatus =
   | 'ready'
   | 'unauthenticated'
-  | 'not_installed';
+  | 'not_installed'
+  | 'unsupported';
 
 export interface DiscoveredAgent {
   id: string;
   name: string;
   iconKey: string;
   status: DiscoveredAgentStatus;
+  executable?: boolean;
   authKind?: ProviderAuthKind;
   version?: string;
   loginHint?: string;
   installHint?: string;
+  unsupportedHint?: string;
   models: string[];
   efforts: string[];
   modelEfforts?: Record<string, string[]>;
@@ -357,6 +360,42 @@ export function createAgentDiscoveryRegistry(
 }
 
 /** Resolves effective supported effort values for an agent + optional model. */
+export function isAgentExecutable(
+  agent: Pick<DiscoveredAgent, 'status' | 'executable'> | undefined,
+): boolean {
+  return Boolean(agent && agent.status === 'ready' && agent.executable !== false);
+}
+
+/**
+ * Projects runtime adapter registration onto a discovery snapshot so Settings,
+ * Hero preflight, and backend execution share the exact same executability rule.
+ */
+export function applyAgentExecutability(
+  snapshot: AgentDiscoverySnapshot,
+  isDriverRegistered: (id: string) => boolean,
+): AgentDiscoverySnapshot {
+  return {
+    probedAt: snapshot.probedAt,
+    agents: snapshot.agents.map((a) => {
+      const registered = isDriverRegistered(a.id);
+      if (!registered) {
+        return {
+          ...a,
+          status: a.status === 'ready' ? 'unsupported' : a.status,
+          executable: false,
+          unsupportedHint:
+            a.unsupportedHint ??
+            `当前运行时未注册执行驱动「${a.id}」，请在设置中切换为可用 Agent`,
+        };
+      }
+      return {
+        ...a,
+        executable: a.status === 'ready',
+      };
+    }),
+  };
+}
+
 export function resolveSupportedEfforts(
   agent: Pick<DiscoveredAgent, 'efforts' | 'modelEfforts'>,
   model?: string,
