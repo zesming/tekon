@@ -1,12 +1,9 @@
 import { test, expect } from './prod-bootstrap-fixture.js';
-import { credentialStatus } from './helpers/locators.js';
 
-// F7-P0-01: the production browser bootstrap. `tekon ui` prints a URL with the
-// session token in the fragment (`/#token=<token>`); the client must capture
-// it so the default entry works WITHOUT the user hand-pasting the token, and
-// keep it across a refresh. This suite uses a fixture that does NOT monkeypatch
-// fetch (unlike shared-fixture.ts), so it fails if the bootstrap regresses —
-// which is the whole point (the monkeypatch previously masked the 401).
+// Production browser bootstrap: `tekon ui` prints a URL with the session token
+// in the fragment (`/#token=<token>`). The client must capture it synchronously
+// before first paint, strip it from the URL, persist across refresh via
+// sessionStorage, and never leak it in request URLs or Referer headers.
 
 test('first paint authenticates from the #token fragment (no manual paste)', async ({
   page,
@@ -17,9 +14,15 @@ test('first paint authenticates from the #token fragment (no manual paste)', asy
     fixture.sessionToken,
   )}`;
 
-  // Fail the test if any authenticated read 401s — this is what a real user hit
-  // before the fix (session.list / SSE returned 401 on first paint).
   const unauthorized: string[] = [];
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => {
+    pageErrors.push(err.message);
+  });
   page.on('response', (response) => {
     const url = response.url();
     if (
@@ -34,20 +37,17 @@ test('first paint authenticates from the #token fragment (no manual paste)', asy
 
   await page.goto(bootstrapUrl);
 
-  // The sessions page renders and the authenticated session.list resolves
-  // (the empty-state or a list — either way not an auth error banner).
-  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
+  await expect(page.getByTestId('new-task-hero')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(credentialStatus(page, 'valid')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByLabel('选择工作流模板').locator('option[value="deep-research"]'),
+  ).toBeAttached({ timeout: 15_000 });
   expect(unauthorized, `unexpected 401s: ${unauthorized.join(', ')}`).toEqual(
     [],
   );
-
-  // The token was captured into state (the TopBar reports credentials set) and
-  // the fragment was stripped from the address bar.
+  expect(consoleErrors, `unexpected console/CSP errors: ${consoleErrors.join(' | ')}`).toEqual([]);
+  expect(pageErrors, `unexpected page errors: ${pageErrors.join(' | ')}`).toEqual([]);
   expect(page.url()).not.toContain('token=');
 });
 
@@ -59,12 +59,10 @@ test('the session survives a refresh via sessionStorage', async ({
   await page.goto(
     `${server.url}/#token=${encodeURIComponent(fixture.sessionToken)}`,
   );
-  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByLabel('选择工作流模板').locator('option[value="deep-research"]'),
+  ).toBeAttached({ timeout: 15_000 });
 
-  // Reload WITHOUT the fragment (it was already stripped). The token must
-  // persist from sessionStorage so the entry stays usable.
   const unauthorized: string[] = [];
   page.on('response', (response) => {
     const url = response.url();
@@ -77,13 +75,14 @@ test('the session survives a refresh via sessionStorage', async ({
       unauthorized.push(url);
     }
   });
+
   await page.reload();
-  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
+  await expect(page.getByTestId('new-task-hero')).toBeVisible({
     timeout: 15_000,
   });
-  await expect(credentialStatus(page, 'valid')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByLabel('选择工作流模板').locator('option[value="deep-research"]'),
+  ).toBeAttached({ timeout: 15_000 });
   expect(unauthorized, `401s after refresh: ${unauthorized.join(', ')}`).toEqual(
     [],
   );
@@ -94,9 +93,6 @@ test('the token is never sent to the server in a request URL or Referer', async 
   server,
   fixture,
 }) => {
-  // Regression guard: the token lives in the fragment, which browsers never
-  // send. If someone switches to `?token=` (query) or leaks it into Referer,
-  // this fails.
   const leaks: string[] = [];
   page.on('request', (request) => {
     if (request.url().includes(fixture.sessionToken)) {
@@ -111,12 +107,9 @@ test('the token is never sent to the server in a request URL or Referer', async 
   await page.goto(
     `${server.url}/#token=${encodeURIComponent(fixture.sessionToken)}`,
   );
-  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(credentialStatus(page, 'valid')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByLabel('选择工作流模板').locator('option[value="deep-research"]'),
+  ).toBeAttached({ timeout: 15_000 });
   expect(leaks, `token leaked to server: ${leaks.join(', ')}`).toEqual([]);
 });
 
@@ -125,13 +118,8 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
   server,
   fixture,
 }) => {
-  // Start like a real stale/unauthenticated tab. The app is already mounted
-  // before the user pastes the authenticated launch URL.
   await page.goto(server.url);
-  await expect(page.getByRole('heading', { name: '受控交付' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(credentialStatus(page, 'not-configured')).toBeVisible({
+  await expect(page.getByTestId('new-task-hero')).toBeVisible({
     timeout: 15_000,
   });
 
@@ -144,9 +132,9 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
     window.location.hash = new URLSearchParams({ token }).toString();
   }, fixture.sessionToken);
 
-  await expect(credentialStatus(page, 'valid')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByLabel('选择工作流模板').locator('option[value="deep-research"]'),
+  ).toBeAttached({ timeout: 15_000 });
   expect(page.url()).not.toContain('token=');
   expect(
     await page.evaluate(
@@ -155,28 +143,18 @@ test('an already-open tab accepts a fresh #token fragment without reloading', as
           .__tekonBootstrapMarker,
     ),
   ).toBe('mounted');
+});
 
-  const unauthorized: string[] = [];
-  page.on('response', (response) => {
-    if (
-      (response.url().includes('/api/rpc') ||
-        response.url().includes('/api/sessions') ||
-        response.url().includes('/api/workspaces')) &&
-      response.status() === 401
-    ) {
-      unauthorized.push(response.url());
-    }
+test('legacy /advanced/* and /sessions/* routes redirect cleanly to workbench root', async ({
+  page,
+  server,
+  fixture,
+}) => {
+  await page.goto(
+    `${server.url}/advanced/runs#token=${encodeURIComponent(fixture.sessionToken)}`,
+  );
+  await expect(page.getByTestId('new-task-hero')).toBeVisible({
+    timeout: 15_000,
   });
-
-  await Promise.all([
-    page.waitForResponse((response) =>
-      response.url().includes('/api/rpc') && response.status() === 200 &&
-      response.request().postDataJSON()?.path === 'session.list',
-    ),
-    page.getByRole('button', { name: '↻ 刷新', exact: true }).click(),
-  ]);
-  expect(
-    unauthorized,
-    `401s after same-document bootstrap: ${unauthorized.join(', ')}`,
-  ).toEqual([]);
+  expect(new URL(page.url()).pathname).toBe('/');
 });

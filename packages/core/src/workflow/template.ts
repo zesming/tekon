@@ -17,12 +17,14 @@ import {
   COMMAND_GATE_TYPES,
   GOVERNANCE_GATE_TYPES,
   gateTypeSchema,
+  nodeContextModeSchema,
   nodeWorkspaceSchema,
   RESERVED_ARTIFACT_TYPES,
   roleSchema,
   type ArtifactType,
   type CommandInvocation,
   type GateType,
+  type NodeContextMode,
   type NodeWorkspace,
   type Role,
 } from '../types/domain.js';
@@ -76,15 +78,24 @@ export interface WorkflowGateConfig {
 
 export interface WorkflowTemplateNode {
   id: string;
+  name?: string;
   role: Role;
   // PD-06：节点级提示词，可选；存在时随计划落库并注入 agent 提示词。
   prompt?: string;
-  // CD-09：工作区隔离模式，缺省 worktree（历史行为）。
+  // CD-09：工作区隔离模式，缺省 worktree（历史行为）；v2 线性模板默认 none（coder 为 worktree）。
   workspace: NodeWorkspace;
   inputs: WorkflowArtifactInputRef[];
   outputs: WorkflowArtifactOutputRef[];
   gates: WorkflowGateConfig[];
   dependsOn: string[];
+  // v2 通用线性节点扩展字段（全 optional，旧模板不注入默认键以保持 canonical digest 不变）。
+  docKey?: string;
+  expectedDoc?: string;
+  overrideModel?: string;
+  overrideEffort?: string;
+  overridePrompt?: string;
+  contextMode?: NodeContextMode;
+  confirmAfter?: boolean;
 }
 
 export interface WorkflowTemplatePhase {
@@ -112,6 +123,7 @@ export interface WorkflowCatalogEntry {
 export interface WorkflowTemplate {
   id: string;
   name: string;
+  description?: string;
   version: number;
   retryPolicy: WorkflowRetryPolicy;
   phases: WorkflowTemplatePhase[];
@@ -202,6 +214,7 @@ const rawGateSchema = z
 const rawNodeSchema = z
   .object({
     id: z.string().min(1),
+    name: z.string().min(1).optional(),
     role: roleSchema,
     prompt: z.string().min(1).optional(),
     // CD-09：缺省 worktree，旧模板不带该字段时归一化为隔离工作树。
@@ -210,6 +223,13 @@ const rawNodeSchema = z
     outputs: z.array(rawArtifactRefSchema).default([]),
     gates: z.array(rawGateSchema).default([]),
     dependsOn: z.array(z.string().min(1)).default([]),
+    docKey: artifactTypeSchema.optional(),
+    expectedDoc: z.string().min(1).optional(),
+    overrideModel: z.string().max(128).optional(),
+    overrideEffort: z.string().max(32).optional(),
+    overridePrompt: z.string().max(4000).optional(),
+    contextMode: nodeContextModeSchema.optional(),
+    confirmAfter: z.boolean().optional(),
   })
   .strict();
 
@@ -270,16 +290,35 @@ const rawWorkflowTemplateSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1).optional(),
+    description: z.string().max(400).optional(),
     version: z.number().int().positive().default(1),
     // PD-06 子项 4：reviewer/Gate 已全部可选，治理只由模板自身的节点和门禁
     // 表达。该字段保留仅为兼容旧模板（goal.yaml 等），解析后不产生任何效果。
     governance: z.enum(['standard', 'none']).optional(),
     retry: workflowRetryPolicySchema.optional(),
     retryPolicy: workflowRetryPolicySchema.optional(),
-    phases: z.array(rawPhaseSchema).min(1),
+    phases: z.array(rawPhaseSchema).min(1).optional(),
+    // v2 简化线性节点数组（与 phases 二选一；规范化为单顺序 phase）。
+    nodes: z.array(rawNodeSchema).min(1).optional(),
     delivery: deliveryDeclarationSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((tpl, ctx) => {
+    if (!tpl.phases && !tpl.nodes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['phases'],
+        message: '为必填项：模板必须包含 phases 或 nodes 节点列表',
+      });
+    }
+    if (tpl.phases && tpl.nodes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nodes'],
+        message: '模板不能同时声明 phases 和顶层 nodes',
+      });
+    }
+  });
 
 type RawArtifactRef = z.infer<typeof rawArtifactRefSchema>;
 type RawGate = z.infer<typeof rawGateSchema>;
@@ -773,6 +812,7 @@ const normalizedGateSchema = z.object({
 const normalizedTemplateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  description: z.string().max(400).optional(),
   version: z.number().int().positive(),
   retryPolicy: workflowRetryPolicySchema.strict(),
   delivery: deliveryDeclarationSchema.optional(),
@@ -784,6 +824,7 @@ const normalizedTemplateSchema = z.object({
     parallel: z.boolean().optional(),
     nodes: z.array(z.object({
       id: z.string().min(1),
+      name: z.string().min(1).optional(),
       role: roleSchema,
       prompt: z.string().min(1).optional(),
       // 归一化入口同样补 worktree 默认：程序化构造的模板（测试/内部调用）
@@ -793,6 +834,13 @@ const normalizedTemplateSchema = z.object({
       outputs: z.array(normalizedOutputSchema),
       gates: z.array(normalizedGateSchema),
       dependsOn: z.array(z.string().min(1)),
+      docKey: artifactTypeSchema.optional(),
+      expectedDoc: z.string().min(1).optional(),
+      overrideModel: z.string().max(128).optional(),
+      overrideEffort: z.string().max(32).optional(),
+      overridePrompt: z.string().max(4000).optional(),
+      contextMode: nodeContextModeSchema.optional(),
+      confirmAfter: z.boolean().optional(),
     }).strict()).min(1),
   }).strict()).min(1),
 }).strict();
@@ -852,8 +900,27 @@ function normalizeWorkflowTemplate(
   >();
 
   const phases: WorkflowTemplatePhase[] = [];
+  const isLinearTopLevel = Boolean(rawTemplate.nodes && !rawTemplate.phases);
+  const rawPhases = rawTemplate.phases ?? [
+    {
+      id: 'main',
+      name: rawTemplate.name ?? rawTemplate.id,
+      dependsOn: [],
+      nodes: (rawTemplate.nodes ?? []).map((node, idx, arr) => ({
+        ...node,
+        dependsOn:
+          node.dependsOn.length > 0
+            ? node.dependsOn
+            : idx > 0
+              ? [arr[idx - 1]!.id]
+              : [],
+        workspace:
+          node.workspace ?? (node.role === 'coder' ? 'worktree' : 'none'),
+      })),
+    },
+  ];
 
-  for (const rawPhase of rawTemplate.phases) {
+  for (const rawPhase of rawPhases) {
     assertUniqueId(phaseIds, rawPhase.id, 'phase');
 
     for (const phaseDependency of rawPhase.dependsOn) {
@@ -871,7 +938,9 @@ function normalizeWorkflowTemplate(
       assertUniqueId(nodeIds, rawNode.id, 'node');
 
       for (const nodeDependency of rawNode.dependsOn) {
-        if (!knownNodeIds.has(nodeDependency)) {
+        const isIntraLinearPrev =
+          isLinearTopLevel && phaseNodes.some((n) => n.id === nodeDependency);
+        if (!knownNodeIds.has(nodeDependency) && !isIntraLinearPrev) {
           throw new Error(
             `unknown dependency "${nodeDependency}" in node "${rawNode.id}"`,
           );
@@ -912,6 +981,7 @@ function normalizeWorkflowTemplate(
 
       phaseNodes.push({
         id: rawNode.id,
+        ...(rawNode.name ? { name: rawNode.name } : {}),
         role: rawNode.role,
         ...(rawNode.prompt ? { prompt: rawNode.prompt } : {}),
         workspace: rawNode.workspace ?? 'worktree',
@@ -919,6 +989,15 @@ function normalizeWorkflowTemplate(
         outputs,
         gates,
         dependsOn: rawNode.dependsOn,
+        ...(rawNode.docKey ? { docKey: rawNode.docKey } : {}),
+        ...(rawNode.expectedDoc ? { expectedDoc: rawNode.expectedDoc } : {}),
+        ...(rawNode.overrideModel ? { overrideModel: rawNode.overrideModel } : {}),
+        ...(rawNode.overrideEffort ? { overrideEffort: rawNode.overrideEffort } : {}),
+        ...(rawNode.overridePrompt ? { overridePrompt: rawNode.overridePrompt } : {}),
+        ...(rawNode.contextMode ? { contextMode: rawNode.contextMode } : {}),
+        ...(rawNode.confirmAfter !== undefined
+          ? { confirmAfter: rawNode.confirmAfter }
+          : {}),
       });
     }
 
@@ -944,6 +1023,7 @@ function normalizeWorkflowTemplate(
   const normalized: WorkflowTemplate = {
     id: rawTemplate.id,
     name: rawTemplate.name ?? rawTemplate.id,
+    ...(rawTemplate.description ? { description: rawTemplate.description } : {}),
     version: rawTemplate.version,
     retryPolicy: normalizeRetryPolicy(retryPolicy),
     phases,
@@ -1224,7 +1304,7 @@ function normalizeRetryPolicy(
   };
 }
 
-function getWorkflowsDir(workflowsDir?: string): string {
+export function getWorkflowsDir(workflowsDir?: string): string {
   if (workflowsDir) {
     return workflowsDir;
   }

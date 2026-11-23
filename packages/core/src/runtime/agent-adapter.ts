@@ -30,6 +30,12 @@ export interface RoleProviderOverrides {
   effort?: string;
 }
 
+export interface OutputStreamLine {
+  stream: 'stdout' | 'stderr';
+  line: string;
+  timestamp: string;
+}
+
 export interface AgentRunInput {
   roleConfig: RoleConfig;
   prompt: string;
@@ -59,6 +65,12 @@ export interface AgentRunInput {
    * 在构建子进程命令时按自身能力翻译；无法 honor 时显式拒绝。
    */
   providerOverrides?: RoleProviderOverrides;
+  /** 同角色回访时由受控上下文管理器传入的原生会话 ID。 */
+  resumeThreadId?: string;
+  /** 节流流式输出行回调，用于驱动实时进度与私有日志归档。 */
+  onOutputLine?: (event: OutputStreamLine) => void;
+  /** 通用线性节点允许在无 artifact-manifest.json 时降级从助手输出提取结论。 */
+  allowGeneralFallback?: boolean;
 }
 
 /**
@@ -179,8 +191,17 @@ export interface AgentRunResult {
   cancelled?: boolean;
   /** Structured, redaction-safe reason for an adapter-level failure. */
   diagnostic?: AgentRunDiagnostic;
+  /** Provider 返回的原生会话/线程 ID（用于同角色回访续接）。 */
+  providerThreadId?: string;
+  /** 当原生会话续接失败并自动降级为前缀重放时置 true。 */
+  sessionResumeFallback?: boolean;
+  /** 节点结束后提炼的交接摘要（handoff.json 或助手正文首段）。 */
+  handoffBrief?: string;
+  /** 节点执行期间采集的私有过程摘要行（归档至 private_trace）。 */
+  traceLines?: string[];
   tokenUsage?: {
     inputTokens?: number;
+    cachedInputTokens?: number;
     outputTokens?: number;
     costUsd?: number;
   };

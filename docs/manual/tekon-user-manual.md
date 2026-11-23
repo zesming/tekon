@@ -1,6 +1,6 @@
 # 天工（Tekon）用户使用手册
 
-适用版本：**v0.36.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
+适用版本：**v0.41.0**（当前版本以根 `package.json` 为准）。固定入口：[文档总索引](../README.md) · [产品范围](../product/tekon-current-product-scope.md) · [运行时合同](../technical/tekon-runtime-contract.md) · [运行控制设计](../design/tekon-run-control-design.md) · [部署指南](#13-多-agent-工作台与部署指南)。在目标项目根目录执行示例命令；跨仓库操作时追加 `--repo /path/to/project`。HTML 人审版支持章节目录与连续阅读，仅 §7.1 提供 English 对照。
 
 ## 1. 天工是什么
 
@@ -1112,3 +1112,151 @@ CLI/Web 入口、参数、Gate、评估、产物目录、Provider、安全边界
 更新时说明当前行为和限制，核对示例与源码；仅文档变更检查结构、链接和中英对应，不据此宣称运行行为已验收。无需更新时，在交付说明中注明理由。
 
 主稿：`docs/manual/tekon-user-manual.md`；人审版：`docs/manual/tekon-user-manual.html`。
+
+## 13. 多 Agent 工作台与部署指南
+
+v0.41.0 起，Tekon Web 升级为统一的双栏桌面工作台（Semi Design 浅色/深色双主题），面向「静态模板编排 + 动态编排 + 双层上下文传递（通用上下文 + 固化文档）」的多 Agent 协作流程，同时保持 CLI 与全部历史后端 RPC 兼容。
+
+### 13.1 环境前置条件
+
+| 依赖 | 要求 | 检查命令 |
+| --- | --- | --- |
+| Node.js | `^20.19.0` 或 `>=22.12.0`（已测 20.19 / 22.12 / 24.x） | `node -v` |
+| Git | 任意现行版本（worktree 隔离需 Git 仓库；`workspace: none` 模板可在任意目录运行） | `git --version` |
+| pnpm | `10.12.1`（源码部署时由 Corepack 或 `npm exec` 提供） | `pnpm -v` |
+| 本机 Agent CLI | 至少安装并登录其一：`claude`（Claude Code）或 `codex`（Codex CLI） | `tekon doctor` |
+
+### 13.2 方式 A：本机一键安装与升级（推荐）
+
+```bash
+# 1. 安装（自动克隆仓库、安装依赖、构建全量包并配置 tekon 命令）
+curl -fsSL https://raw.githubusercontent.com/zesming/tekon/main/scripts/install.sh | bash
+
+# 2. 验证版本与本机 Provider 就绪状态
+tekon --version
+tekon doctor
+
+# 3. 后续升级到最新版本
+tekon update
+```
+
+安装完成后进入目标工作目录（建议为 Git 仓库），首次运行初始化并启动工作台：
+
+```bash
+cd /path/to/your-workspace
+tekon init
+tekon ui
+```
+
+终端会输出带会话鉴权片段的本地地址（默认端口为 3000，如 `http://127.0.0.1:3000/#token=<session-token>`，可通过 `--port 4173` 自定义端口），直接在浏览器打开即可；令牌仅通过 URL Fragment 在本地捕获并写入当前标签页 `sessionStorage`，不会随 HTTP 请求或 `Referer` 泄露到服务端。
+
+### 13.3 方式 B：从源码构建与生产模式启动
+
+适用于离线内网、二次开发或自定义端口部署：
+
+```bash
+git clone https://github.com/zesming/tekon.git
+cd tekon
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm build
+
+# 在目标工作区以生产静态产物模式启动（默认仅监听 127.0.0.1）
+node packages/cli/dist/index.js ui --repo /path/to/your-workspace --port 4173
+```
+
+构建产物位置：`packages/core/dist`、`packages/cli/dist` 与 `packages/web/dist`（严格 CSP `script-src 'self'`，零内联脚本）。
+
+### 13.4 本机 Agent 探测与自定义 Agent 配置
+
+打开 Web 左下角 **设置 → Agent 与上下文** 可查看实时探测结果并随时点击 **重新探测**（默认 60 秒缓存，单次探测严格钳制在 5 秒内）。
+
+- **内置自动探测**：自动检测 `claude-code`、`codex`（及本机配置的模型清单与登录状态）。
+- **扩展自定义本地 Agent**：仅从当前用户主目录 `~/.tekon/agents.yaml` 读取（出于安全边界，项目仓库内的 `.tekon/config.yaml` 禁止注入可执行命令或自定义 Agent）：
+
+```yaml
+# ~/.tekon/agents.yaml
+agents:
+  - id: antigravity
+    name: Antigravity
+    iconKey: antigravity
+    models:
+      - gemini-4-neon
+    efforts:
+      - low
+      - medium
+      - high
+```
+
+在 **设置 → 角色管理** 中为每个角色通过级联选择器绑定「Agent（带品牌图标）→ 模型 → Effort」，保存后即可在静态模板或动态编排中跨 Provider 混排（例如节点 1 用 Codex、节点 2 用 Claude Code、节点 3 独立隔离评审、节点 4 续接节点 2 会话）。
+
+### 13.5 后台常驻部署（macOS launchd / Linux systemd）
+
+#### macOS（`~/Library/LaunchAgents/dev.tekon.ui.plist`）
+
+以下路径按 `scripts/install.sh` 默认目录 `TEKON_HOME=$HOME/.tekon` 编写；如安装时自定义了 `TEKON_HOME`，请替换为对应路径：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.tekon.ui</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/YOUR_USER/.tekon/packages/cli/dist/index.js</string>
+    <string>ui</string>
+    <string>--repo</string>
+    <string>/Users/YOUR_USER/Projects/your-workspace</string>
+    <string>--port</string>
+    <string>4173</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/Users/YOUR_USER/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/tekon-ui.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/tekon-ui.err.log</string>
+</dict>
+</plist>
+```
+
+加载服务：`launchctl load -w ~/Library/LaunchAgents/dev.tekon.ui.plist`，查看启动链接：`head -n 20 /tmp/tekon-ui.out.log`（注意妥善保护日志与 `.tekon/web-session.json` 的 600 权限）。
+
+#### Linux（`~/.config/systemd/user/tekon-ui.service`）
+
+```ini
+[Unit]
+Description=Tekon Multi-Agent Workbench UI
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/your-workspace
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node %h/.tekon/packages/cli/dist/index.js ui --repo %h/Projects/your-workspace --port 4173
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+```
+
+启用服务：`systemctl --user daemon-reload && systemctl --user enable --now tekon-ui.service`。
+
+### 13.6 安全边界与远程访问建议
+
+1. **默认仅绑定回环地址（`127.0.0.1`）**：Tekon UI 可驱动本机 Agent 执行工作流，严禁直接绑定 `0.0.0.0` 暴露在不可信网络。如需在远程开发机上使用，请通过 **SSH 本地端口转发**安全访问：
+   ```bash
+   ssh -N -L 4173:127.0.0.1:4173 user@remote-host
+   ```
+2. **会话鉴权与 CSRF 防护**：全部工作台写操作与上下文/配置读取接口强制 `x-session-token` 校验、本地 Host 白名单及 Origin/`Sec-Fetch-Site` 校验。
+3. **凭据与文件安全**：参考附件、通用交接摘要与固化文档均经过敏感凭据扫描/脱敏；节点输出目录严格拒绝符号链接与目录逃逸。
+4. **常用工作台快捷键与视图调节**：
+   - 顶栏 `[↔]` 切换内容宽度（**正常 760px / 宽 1080px / 全宽 100%**），窗口小于设定宽度时自动收窄并保证零横向滚动条，切换不丢失表单草稿；
+   - 侧栏底部一键切换 **浅色 / 深色模式** 并持久化；
+   - 流程进度默认以 **顶部点线** 收起展示，可一键展开或切换为 **右侧竖向进度轨**（窄屏 ≤900px 自动回落顶部点线）；
+   - `Esc` 按层级关闭弹窗与抽屉（宽度菜单 → 终止确认条 → 右侧文档/上下文抽屉 → 窄屏左侧栏）。

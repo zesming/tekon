@@ -1,0 +1,29 @@
+id: quick-dev
+name: 快速研发
+description: 技术拆解 → 代码实现 → 独立评审
+version: 2
+nodes:
+  - id: n1
+    name: 技术拆解
+    role: designer
+    workspace: none
+    contextMode: auto
+    docKey: tech-plan
+    expectedDoc: 实现拆解
+    confirmAfter: false
+  - id: n2
+    name: 代码实现
+    role: coder
+    workspace: worktree
+    contextMode: full
+    docKey: change-summary
+    expectedDoc: 改动说明
+    confirmAfter: false
+  - id: n3
+    name: 代码评审
+    role: reviewer
+    workspace: none
+    contextMode: isolated
+    docKey: code-review
+    expectedDoc: 评审意见
+    confirmAfter: true

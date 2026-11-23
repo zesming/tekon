@@ -1,12 +1,12 @@
 # Tekon 验收与发布证据索引
 
-维护日期：2026-09-08 · 当前版本以根 `package.json` 为准
+维护日期：2026-11-20 · 当前版本以根 `package.json` 为准
 
 这是 `docs/reviews/` 的固定入口。当前产品、交互和运行时口径见[文档总索引](../README.md)；本页只登记正式验收、发布证据和仍需人工判断的边界。历史过程报告不再作为第二套规范。
 
 ## 当前结论
 
-本次 2026-09-08 发布审核已归档源码、回归日志、视觉证据与真实 Claude 调用记录。当前结果、失败修复、恢复状态和未覆盖范围统一见[发布审核报告](2026-09-08-release-audit.md)，本索引不重复维护计数或临时运行状态。历史记录仅证明其原始快照，不能宣称所有真实 Provider 或远端交付已通过。
+v0.41.0 多 Agent 工作台重构已完成全仓自动化验证、Chromium Playwright E2E 及真实本机 `claude-code` `2.1.327` 自举验证（运行 ID `run_2195c05b-218`），完整证据与未覆盖边界见[v0.41.0 自举验证与回归归档](2026-11-20-tekon-v2-bootstrap.md)。历史 2026-09-08 发布审核与补修验收继续保留为基线参考。
 
 v0.26.0 的 PR #35 已合并。遗留问题的发布影响及 v0.26.1 产物诊断修复统一见[发布影响评估与补修验收](2026-09-08-release-followup.md)；原审核的真实运行与源码证据不回填为补修后的真实 Provider 验收。
 
@@ -20,6 +20,7 @@ v0.26.0 的 PR #35 已合并。遗留问题的发布影响及 v0.26.1 产物诊�
 
 | 记录 | 保留原因与证明范围 |
 | --- | --- |
+| [2026-11-20 v0.41.0 多 Agent 工作台自举验证（MD）](2026-11-20-tekon-v2-bootstrap.md) · [HTML](2026-11-20-tekon-v2-bootstrap.html) | 当前 v0.41.0 精简工作台正式自举验证与全量回归归档：记录真实本机 `claude-code` `2.1.327` 双节点执行（`run_2195c05b-218`）、权限沙箱与日志脱敏实测、Playwright 9 项 E2E、独立审查清零及未覆盖边界。 |
 | [2026-09-08 v0.26.1 影响评估与补修（MD）](2026-09-08-release-followup.md) · [HTML](2026-09-08-release-followup.html) | 逐项说明发布影响、默认 Provider 验收缺口与历史租约处置；记录诊断补修、兼容回归、独立复核及新源码快照，证据见 [`evidence/2026-09-08-release-followup/`](evidence/2026-09-08-release-followup/)。 |
 | [2026-09-08 发布前全面审核（MD）](2026-09-08-release-audit.md) · [HTML](2026-09-08-release-audit.html) | 当前发布审核；记录全量测试、CLI/Chromium e2e、构建/类型/lint/audit、72 张图像与专项交互证据、真实 Claude 生命周期和外部 Provider 验证缺口。摘要、运行记录、源码哈希、日志和截图见 [`evidence/2026-09-08-release/`](evidence/2026-09-08-release/)。 |
 | [R27 排队恢复、Gate 关停与交付验收（MD）](2026-09-06-r27-delivery-acceptance.md) · [HTML](2026-09-06-r27-delivery-acceptance.html) | 历史最近专项验收；包含独立宿主恢复、真实 Claude 交付、四档视口、控制反馈和证据边界。原始 JSON、截图和验证摘要见 [`evidence/2026-09-06-r27/`](evidence/2026-09-06-r27/)。 |

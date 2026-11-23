@@ -1,0 +1,7 @@
+role: coder
+name: 研发工程师
+description: 按确认方案完成代码实现、自动化测试与改动说明。
+isolated: false
+category: general
+injectMode: prepend
+priority: 65

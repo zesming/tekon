@@ -122,6 +122,10 @@ type ArtifactRow = {
   sha256: string;
   size_bytes: number;
   summary: string | null;
+  doc_key?: string | null;
+  title?: string | null;
+  pinned?: number | null;
+  archived?: number | null;
   created_at: string;
 };
 
@@ -755,11 +759,20 @@ export function createRepositories(
       return writeQueue.enqueue(() => {
         db.prepare(
           `insert into artifacts (
-             id, run_id, node_id, type, version, path, sha256, size_bytes, summary, created_at
+             id, run_id, node_id, type, version, path, sha256, size_bytes, summary,
+             doc_key, title, pinned, archived, created_at
            ) values (
-             @id, @runId, @nodeId, @type, @version, @path, @sha256, @sizeBytes, @summary, @createdAt
+             @id, @runId, @nodeId, @type, @version, @path, @sha256, @sizeBytes, @summary,
+             @docKey, @title, @pinned, @archived, @createdAt
            )`,
-        ).run({ ...artifact, summary: artifact.summary ?? null });
+        ).run({
+          ...artifact,
+          summary: artifact.summary ?? null,
+          docKey: artifact.docKey ?? null,
+          title: artifact.title ?? null,
+          pinned: artifact.pinned ? 1 : 0,
+          archived: artifact.archived ? 1 : 0,
+        });
         return artifact;
       });
     },
@@ -1211,6 +1224,10 @@ function mapArtifact(row: ArtifactRow): Artifact {
     sha256: row.sha256,
     sizeBytes: row.size_bytes,
     summary: row.summary ?? undefined,
+    docKey: row.doc_key ?? undefined,
+    title: row.title ?? undefined,
+    pinned: row.pinned ? true : undefined,
+    archived: row.archived ? true : undefined,
     createdAt: row.created_at,
   });
 }

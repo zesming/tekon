@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tekon v0.41.0 多 Agent 工作台自举验证与回归归档</title>
+  <style>
+    :root{--ink:#19313b;--muted:#5b6f77;--line:#dce7e8;--accent:#126b62;--soft:#eef7f4;--page:#f5f8f7;--paper:#fff}
+    *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"Noto Sans CJK SC","Microsoft YaHei",sans-serif}
+    .masthead{background:#163c43;color:#eaf7f4;padding:20px max(20px,calc((100vw - 1120px)/2));letter-spacing:.12em;font-size:12px}
+    main{max-width:1120px;margin:28px auto;padding:38px 50px 50px;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 35px rgba(23,57,61,.06)}
+    h1{margin:0 0 8px;color:#123f46;font-size:32px;line-height:1.35}h2{margin:36px 0 14px;padding-top:18px;border-top:2px solid var(--line);font-size:22px}p{margin:12px 0 16px}
+    code{padding:2px 5px;border-radius:4px;background:#edf4f2;font:.88em ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
+    .scroll{overflow:auto;border:1px solid var(--line);border-radius:8px;margin:16px 0 20px}
+    table{width:100%;min-width:680px;border-collapse:collapse;font-size:14px;line-height:1.7}th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:#e9f4f1;color:#194c50}tr:nth-child(even) td{background:#fbfdfc}tr:last-child td{border-bottom:0}
+    li{margin:8px 0}.note{padding:14px 18px;background:#fff8e8;border-left:4px solid #bf8426;border-radius:4px}
+    @media(max-width:700px){main{margin:12px;padding:24px 18px}h1{font-size:24px}}
+  </style>
+</head>
+<body>
+  <header class="masthead">TEKON / SELF-BOOTSTRAP &amp; REGRESSION ARCHIVE / v0.41.0 / 2026-11-20</header>
+  <main>
+    <h1>Tekon v0.41.0 多 Agent 工作台自举验证与回归归档</h1>
+    <p>验证日期：2026-11-20 · 分支：<code>feat/tekon-v2-workbench</code> · 适用版本：<code>v0.41.0</code></p>
+
+    <h2>1. 验收结论与适用范围</h2>
+    <p>本次对 <strong>Tekon v0.41.0 多 Agent 工作台</strong> 完成了端到端自动化验证及<strong>真实本机 Claude Code CLI 自举验证</strong>。</p>
+    <ul>
+      <li><strong>真实 Provider 自举结论</strong>：真实拉起本机 <code>claude-code</code> <code>2.1.327 (Claude Code)</code>（OAuth token），完成 <code>self-bootstrap-audit</code> 双节点工作流节点 1（<code>explore-v2</code>）的完整执行、9,833 字节固化报告与 1,577 字节交接摘要落盘、权限白名单拦截 4 条未授权 Bash 命令、stdout 敏感凭据脱敏、人工确认点（<code>confirm_checkpoint</code>）暂停，并在审批后成功推进启动节点 2（<code>review-v2</code>，隔离上下文模式）。</li>
+      <li><strong>自举捕获并修复的真实缺陷</strong>：首次真实自举直接暴露 <code>workbench-runtime.ts</code> 向 <code>CommandGateway</code> 传入空 <code>commandPolicy.allow</code> 的生产缺陷；现已收口复用 <code>defaultCommandPolicy(repoPath)</code> 并补齐回归测试。</li>
+    </ul>
+    <div class="note">
+      <strong>诚实披露未覆盖边界：</strong>
+      (1) 节点 2 因外部模型网关单轮耗时约 4–5 分钟，在脚本 300 秒上限处中断，未等待自然结束；
+      (2) 本机未安装 <code>codex</code> CLI（探测返回 <code>not_installed</code>），Codex 仅通过真实 <code>buildCodexCommand</code> 4 段目录契约与 stub 覆盖；
+      (3) 本次自举使用 <code>workspace: none</code> 只读梳理，不涉及远端 push / PR 创建。
+    </div>
+
+    <h2>2. 真实 Provider 自举证据摘要</h2>
+    <div class="scroll"><table><thead><tr><th>维度</th><th>实测记录</th></tr></thead><tbody>
+      <tr><td>运行 ID</td><td><code>run_2195c05b-218</code></td></tr>
+      <tr><td>工作流模板</td><td><code>self-bootstrap-audit</code>（<code>explore-v2</code> <code>confirmAfter: true</code> → <code>review-v2</code> <code>contextMode: isolated</code>）</td></tr>
+      <tr><td>本机探测结果</td><td><code>claude-code</code>: <code>ready</code> (<code>2.1.327</code>, <code>oauth-token</code>, 4 models)；<code>codex</code>: <code>not_installed</code></td></tr>
+      <tr><td>节点 1 执行结果</td><td><code>status = passed</code>，耗时 <code>248,135 ms</code>，<code>session_id = 62e3c27a-7c13-42a3-b6c2-94ac42b621f7</code></td></tr>
+      <tr><td>真实 Token 与缓存遥测</td><td><code>input_tokens = 27,532</code>，<code>cache_read_input_tokens = 251,352</code>，<code>output_tokens = 10,371</code></td></tr>
+      <tr><td>固化文档与交接</td><td><code>bootstrap-report.md</code>（9,833 B）+ <code>handoff.json</code>（1,577 B）</td></tr>
+      <tr><td>权限与安全实测</td><td><code>permission_denials: 4</code>（拦截 4 条未授权 Bash）；敏感内容自动脱敏为 <code>[REDACTED_SECRET]</code></td></tr>
+      <tr><td>确认点与下游推进</td><td>节点 1 后停在 <code>confirm_checkpoint</code>；审批后成功拉起节点 2（<code>run_2195c05b-218_review-v2-g1</code>）</td></tr>
+    </tbody></table></div>
+
+    <h2>3. 自动化与浏览器 E2E 验证摘要</h2>
+    <div class="scroll"><table><thead><tr><th>套件</th><th>范围</th><th>结果</th></tr></thead><tbody>
+      <tr><td>构建与类型检查</td><td><code>pnpm build &amp;&amp; pnpm typecheck</code></td><td>通过（0 错误）</td></tr>
+      <tr><td>全仓 Vitest</td><td>281 测试文件（含 Schema v8、软链拦截、Codex 4 段路径契约、42 RPC 全量 401 鉴权、CLI 真实进程 E2E）</td><td>全部通过</td></tr>
+      <tr><td>Playwright E2E（Chromium）</td><td>9 用例（生产引导与零 CSP 报错、4 节点深度研究/返工 v2 Diff/压缩归档/轨道切换/追问、动态编排失败回退与另存模板、单节点换模型重试与暂停恢复终止、设置级联选择器/深色持久化/9 组合零横向溢出）</td><td>9/9 通过（0 retry）</td></tr>
+      <tr><td>独立代码审查</td><td>Core 组（7 项 Must Fix 清零）+ Web &amp; UI 组（5 项 Must Fix 清零）</td><td>Must Fix: 0</td></tr>
+    </tbody></table></div>
+  </main>
+</body>
+</html>

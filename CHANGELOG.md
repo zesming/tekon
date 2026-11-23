@@ -1,5 +1,17 @@
 # 变更日志
 
+## 0.41.0 — 2026-11-20
+
+- **多 Agent 工作台与编排引擎精简重构**：
+  - **Core（`@tekon/core`）**：SQLite 幂等升级至 Schema v8（新增 `task_attachments`、`task_context_entries`、`role_sessions`、`context_archives`、`user_preferences`、`follow_up_turns` 6 张表及向后兼容增量列，保持既有闭集枚举不变）；新增本机 Agent 探测注册表（`createAgentDiscoveryRegistry`，60s 缓存、严格 ≤5s 超时上限、仅从 `~/.tekon/agents.yaml` 扩展自定义 Agent、项目 `.tekon/config.yaml` 维持 `.strict()` 防 RCE）；新增节点级多 Provider 解析器（`createProviderAdapterResolver`）与任务编排运行时（`createWorkbenchRuntime`），消除单运行单驱动限制，支持跨 Provider 混排、快照冻结隔离、确认点与定点上游返工（`needs-revision` + `attempt_generation`）、单节点局部换模型重试、协作暂停/恢复/排队约束/二次确认不可逆终止、动态蓝图规划（2 次自动纠偏 + 失败回退 + 编辑 + 另存为模板）及完成后多轮追问。
+  - **双层上下文与产物协议**：Single Source of Truth `buildNodeContextPackage` 同时驱动执行 Prompt 与前端透视；支持通用上下文（goal/handoff/constraint/rework）+ 固化 Markdown 文档跨节点 `(run_id, doc_key)` 版本管理、行级 LCS Diff、Pin 置顶、控制字符清洗导出、锚定历史压缩（保留目标与最近 2 轮并真实计算窗口占用）与可逆归档挂载；同角色会话自动续接支持显式 `reset` 覆盖并隔离跨驱动 `providerThreadId`；通用输出摄入（`general-output.ts`）对 `handoff.json` 与 `<docKey>.md` 强制软链/越界拒绝与 `redactSecrets` 脱敏，三条执行路径统一对齐 Codex 适配器 4 段 `.tekon/runs/<runId>/<nodeId>` 目录契约。
+  - **内置通用角色与线性模板**：新增 `explorer`、`designer`、`coder`、`orchestrator` 通用角色与 `deep-research`（4 节点：调研→初稿→独立评审→终稿）、`quick-dev` 线性工作流模板，增量兼容保留 `reviewer` 与全部历史交付模板/角色。
+  - **Web 工作台（`@tekon/web`）**：新增 42 个会话鉴权（`auth: 'session'`）工作台 RPC，完整保留全部 38 个历史后端 RPC；前端重构为 Semi Design 浅色/深色双主题双栏工作台（零新增 npm 依赖、严格生产 CSP `script-src 'self'` 零内联脚本），提供默认收起的顶部点线进度条（支持应用内切换右侧竖向进度轨与窄屏 ≤900px 自动回落）、3 档内容宽度切换（正常 760px / 宽 1080px / 全宽 100%，零横向溢出且保留表单草稿）、全场景 Agent 品牌 SVG 图标与级联 `Agent → Model → Effort` 选择器、去框化时间线、文档/上下文右侧抽屉与 `Esc` 分层关闭；旧 `/sessions/*` 与 `/advanced/*` 路由平滑重定向至 `/`。
+- **文档、CI 与自举验证**：
+  - 用户手册新增 **§13 多 Agent 工作台与部署指南**（MD + HTML 同步），提供一键安装/升级、源码构建、本机 Agent 配置、macOS `launchd` / Linux `systemd` 常驻服务及 SSH 远程安全访问指南；同步更新 `README.md`、`docs/README.md` 与 `docs/reviews/current.*`。
+  - `.github/workflows/ci.yml` 补充 `bash -n scripts/update.sh` 语法检查，并在 `web-e2e` job 中显式构建 `@tekon/core` 与 `@tekon/web` 生产包再运行 Playwright E2E。
+  - 完成真实本机 `claude-code` `2.1.327` 双节点自举验证（`run_2195c05b-218`，真实捕获并修复空 `commandPolicy.allow` 生产缺陷），归档至 `docs/reviews/2026-11-20-tekon-v2-bootstrap.md`（及 HTML）。
+
 ## 0.40.0 — 2026-11-19
 
 - 声明式交付证据（PD-21）：工作流模板新增顶层 `delivery:` 块声明「是否可交付 + 所需证据」，裁决依据从模板名称改为运行受理时冻结的计划快照（`plan_snapshot`，sha256 摘要），运行途中改 YAML 不影响在途运行。五个产代码内置模板补齐声明：`standard-delivery`（build/lint/test + 五类治理门禁 + QA 签署 + 安全扫描 + 验收证据）、`bugfix`/`standard-feature`（命令门禁 build/lint/test，另有 QA 签署与安全扫描要求）、`test-improvement`（命令门禁额外含 e2e）、`docs-update`（命令门禁仅 build/lint，另有 QA 签署与安全扫描要求）；`goal`、`plan-only`、`lightweight-delivery` 不声明、结构性不可交付。schema 在归一化双收口（`normalizeWorkflowTemplate` 与 `normalizeExecutableTemplate`）强制：门禁类型必须属内置枚举、声明的门必须在节点中真实存在、数组去重、`deliverable:false` 不得携带 requirements，非法模板两条路径均报 `INVALID_WORKFLOW_TEMPLATE`。

@@ -10,20 +10,18 @@ import {
 } from './lib/session-bootstrap.js';
 import { setRpcSessionToken } from './lib/rpc-client.js';
 
-import './styles/tokens.css';
-import './styles/reset.css';
-import './styles/utilities.css';
-import './styles/sessions.css';
-import './styles/mobile-drawer.css';
+import './styles/workbench.css';
 
-// F7-P0-01: seed the RPC/SSE token synchronously BEFORE the first render.
-// React runs child effects before parent effects, so the first `session.list`
-// from a page component fires before AuthProvider's effect could set the token
-// — seeding here guarantees the first-paint RPC/SSE already carries it (no 401
-// on the default entry). Persist here as well: relying on AuthProvider's later
-// passive effect leaves a small cross-document/reload window where the visible
-// app has the token but sessionStorage does not yet. AuthProvider repeats both
-// operations defensively, so the two paths remain idempotent.
+// Sync persisted theme synchronously before first render without violating strict CSP (`script-src 'self'`)
+try {
+  const savedTheme = localStorage.getItem('tekon.workbench.theme');
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+} catch {
+  // ignore storage errors
+}
+
 const initialToken = readTokenFromLocation();
 persistToken(initialToken);
 setRpcSessionToken(initialToken);

@@ -1,12 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  realpathSync,
+  renameSync,
   statSync,
-  writeFileSync,
+  unlinkSync,
+  writeSync,
 } from 'node:fs';
-import { dirname, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import type { Artifact, ArtifactType } from '../types/domain.js';
 import type { TekonRepositories } from '../db/repositories.js';
@@ -24,12 +31,115 @@ export interface WriteArtifactInput {
   type: ArtifactType;
   content: string;
   summary?: string;
+  docKey?: string;
+  title?: string;
+  pinned?: boolean;
 }
 
 export interface ArtifactStore {
   writeArtifact(input: WriteArtifactInput): Promise<Artifact>;
   readArtifact(artifact: Artifact): Promise<string>;
   readArtifactForPrompt(artifact: Artifact): Promise<string>;
+}
+
+let tempWriteSeq = 0;
+
+/**
+ * Atomic file write inside a verified managed directory: writes to a hidden
+ * sibling temp file, fsyncs, and atomically renames into place.
+ */
+export function writeFileAtomically(filePath: string, content: string): void {
+  const dir = dirname(filePath);
+  mkdirSync(dir, { recursive: true });
+  const tempPath = join(
+    dir,
+    `.tmp-${process.pid}-${Date.now()}-${tempWriteSeq++}`,
+  );
+  let fd: number | undefined;
+  try {
+    fd = openSync(tempPath, 'wx', 0o600);
+    writeSync(fd, content, undefined, 'utf8');
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = undefined;
+    renameSync(tempPath, filePath);
+  } catch (error) {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // best-effort close
+      }
+    }
+    try {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {
+      // best-effort cleanup
+    }
+    throw error;
+  }
+}
+
+/**
+ * Resolves a path strictly within `<repoPath>/.tekon` and rejects any symlink
+ * along the existing prefix or target itself.
+ */
+export function resolveSafeTekonPath(
+  repoPath: string,
+  relativePath: string,
+): string {
+  if (
+    relativePath.startsWith('/') ||
+    relativePath.includes('\0') ||
+    relativePath.split(/[\\/]/u).some((segment) => segment === '..')
+  ) {
+    throw new Error(`artifact path escapes .tekon: ${relativePath}`);
+  }
+  const repoReal = existsSync(repoPath)
+    ? realpathSync(repoPath)
+    : resolve(repoPath);
+  const root = resolve(repoReal, '.tekon');
+  const target = resolve(repoReal, relativePath);
+  if (target !== root && !target.startsWith(`${root}${sep}`)) {
+    throw new Error(`artifact path escapes .tekon: ${relativePath}`);
+  }
+
+  // Reject symlinks on .tekon itself and every existing component down to target.
+  const relFromRepo = relative(repoReal, target);
+  const parts = relFromRepo.split(sep).filter(Boolean);
+  let cursor = repoReal;
+  for (const part of parts) {
+    cursor = join(cursor, part);
+    if (!existsSync(cursor)) {
+      // Check dangling symlink via lstatSync before breaking.
+      try {
+        if (lstatSync(cursor).isSymbolicLink()) {
+          throw new Error(`artifact path contains symlink: ${relativePath}`);
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw err;
+        }
+      }
+      break;
+    }
+    const lst = lstatSync(cursor);
+    if (lst.isSymbolicLink()) {
+      throw new Error(`artifact path contains symlink: ${relativePath}`);
+    }
+    const realCursor = realpathSync(cursor);
+    if (
+      cursor.startsWith(root) &&
+      realCursor !== root &&
+      !realCursor.startsWith(`${root}${sep}`)
+    ) {
+      throw new Error(`artifact path escapes .tekon: ${relativePath}`);
+    }
+  }
+
+  return target;
 }
 
 export function createArtifactStore(
@@ -41,6 +151,7 @@ export function createArtifactStore(
     async writeArtifact(input) {
       const runSegment = assertSafePathSegment(input.runId);
       const nodeSegment = assertSafePathSegment(input.nodeId);
+      const docKey = input.docKey ? assertSafePathSegment(input.docKey) : undefined;
       const secretFindings = scanTextForSecrets(
         input.content,
         `${input.runId}/${input.nodeId}/${input.type}`,
@@ -52,20 +163,38 @@ export function createArtifactStore(
             .join(',')}`,
         );
       }
-      const existing = await options.repositories.listArtifacts(
-        input.runId,
-        input.nodeId,
-        input.type,
-      );
-      const version =
-        existing.reduce(
-          (highest, artifact) => Math.max(highest, artifact.version),
-          0,
-        ) + 1;
+
+      // Cross-node document family versioning when docKey is set; otherwise
+      // legacy per-(runId, nodeId, type) versioning.
+      let version: number;
+      if (docKey) {
+        const allRunArtifacts = await options.repositories.listArtifacts(
+          input.runId,
+        );
+        const sameFamily = allRunArtifacts.filter(
+          (a) => (a.docKey ?? a.type) === docKey,
+        );
+        version =
+          sameFamily.reduce(
+            (highest, artifact) => Math.max(highest, artifact.version),
+            0,
+          ) + 1;
+      } else {
+        const existing = await options.repositories.listArtifacts(
+          input.runId,
+          input.nodeId,
+          input.type,
+        );
+        version =
+          existing.reduce(
+            (highest, artifact) => Math.max(highest, artifact.version),
+            0,
+          ) + 1;
+      }
+
       const relativePath = `.tekon/runs/${runSegment}/artifacts/${nodeSegment}/${input.type}.v${version}.md`;
-      const absolutePath = resolveManagedPath(options.repoPath, relativePath);
-      mkdirSync(dirname(absolutePath), { recursive: true });
-      writeFileSync(absolutePath, input.content, 'utf8');
+      const absolutePath = resolveSafeTekonPath(options.repoPath, relativePath);
+      writeFileAtomically(absolutePath, input.content);
 
       const artifact: Artifact = {
         id: `artifact_${randomUUID()}`,
@@ -77,6 +206,9 @@ export function createArtifactStore(
         sha256: createHash('sha256').update(input.content).digest('hex'),
         sizeBytes: statSync(absolutePath).size,
         summary: input.summary ?? deriveSummary(input.content),
+        ...(docKey ? { docKey } : {}),
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
         createdAt: new Date().toISOString(),
       };
 
@@ -84,7 +216,7 @@ export function createArtifactStore(
     },
 
     async readArtifact(artifact) {
-      const absolutePath = resolveManagedPath(options.repoPath, artifact.path);
+      const absolutePath = resolveSafeTekonPath(options.repoPath, artifact.path);
       if (!existsSync(absolutePath)) {
         throw new Error(`missing artifact file: ${artifact.path}`);
       }
@@ -115,13 +247,4 @@ function assertSafePathSegment(value: string): string {
     throw new Error(`unsafe path segment: ${value}`);
   }
   return value;
-}
-
-function resolveManagedPath(repoPath: string, relativePath: string): string {
-  const root = resolve(repoPath, '.tekon');
-  const target = resolve(repoPath, relativePath);
-  if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    throw new Error(`artifact path escapes .tekon: ${relativePath}`);
-  }
-  return target;
 }

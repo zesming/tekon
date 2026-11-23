@@ -1,0 +1,7 @@
+role: orchestrator
+name: 编排者
+description: 分析复杂需求，从可用角色库中挑选合适角色动态编排有序线性工作流。
+isolated: false
+category: general
+injectMode: prepend
+priority: 75

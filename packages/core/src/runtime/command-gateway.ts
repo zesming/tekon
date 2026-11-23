@@ -73,6 +73,12 @@ export interface CommandGatewayRunInput {
   registry?: SubprocessRegistry;
   /** 注册表 key；生产后台使用 Job ID 隔离执行代次。 */
   registryKey?: string;
+  /** 经脱敏后的增量行回调（按行切分，非空行推送）。 */
+  onOutputLine?: (event: {
+    stream: 'stdout' | 'stderr';
+    line: string;
+    timestamp: string;
+  }) => void;
 }
 
 export type CommandEnvironmentMode = 'safe-default' | 'inherit' | 'exact';
@@ -133,6 +139,7 @@ export function createCommandGateway(
         signal: input.signal,
         registry: input.registry,
         registryKey: input.registryKey,
+        onOutputLine: input.onOutputLine,
       });
     },
   };
@@ -367,6 +374,11 @@ async function runProcess(input: {
   signal?: AbortSignal;
   registry?: SubprocessRegistry;
   registryKey?: string;
+  onOutputLine?: (event: {
+    stream: 'stdout' | 'stderr';
+    line: string;
+    timestamp: string;
+  }) => void;
 }): Promise<CommandGatewayResult> {
   if (input.signal?.aborted) {
     return {
@@ -446,6 +458,50 @@ async function runProcess(input: {
   });
   child.stdout.pipe(stdoutRedactor).pipe(stdout);
   child.stderr.pipe(stderrRedactor).pipe(stderr);
+  if (input.onOutputLine) {
+    const emitLine = input.onOutputLine;
+    const attachLineEmitter = (
+      streamName: 'stdout' | 'stderr',
+      source: Transform,
+    ) => {
+      let buffer = '';
+      source.on('data', (chunk: unknown) => {
+        buffer += typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8');
+        const lines = buffer.split(/\r?\n/u);
+        buffer = lines.pop() ?? '';
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (line) {
+            try {
+              emitLine({
+                stream: streamName,
+                line: line.slice(0, 2000),
+                timestamp: new Date().toISOString(),
+              });
+            } catch {
+              // callback errors must never break child process capture
+            }
+          }
+        }
+      });
+      source.on('end', () => {
+        const tail = buffer.trim();
+        if (tail) {
+          try {
+            emitLine({
+              stream: streamName,
+              line: tail.slice(0, 2000),
+              timestamp: new Date().toISOString(),
+            });
+          } catch {
+            // ignore
+          }
+        }
+      });
+    };
+    attachLineEmitter('stdout', stdoutRedactor);
+    attachLineEmitter('stderr', stderrRedactor);
+  }
   return new Promise((resolvePromise) => {
     let settled = false;
     let stdinError: Error | null = null;

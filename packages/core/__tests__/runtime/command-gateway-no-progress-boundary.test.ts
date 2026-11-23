@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createCommandGateway } from '../../src/index.js';
 
@@ -13,12 +13,17 @@ describe('command gateway no-progress boundary', () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { force: true, recursive: true });
     }
   });
 
   it('rechecks the output directory before timing out activity just beyond the first idle sample', async () => {
+    vi.useFakeTimers({
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+    });
+
     const cwd = mkdtempSync(join(tmpdir(), 'tekon-no-progress-boundary-'));
     tempDirs.push(cwd);
     const outputDir = join(cwd, 'logs');
@@ -54,7 +59,7 @@ describe('command gateway no-progress boundary', () => {
       },
     });
 
-    const result = await gateway.run({
+    const resultPromise = gateway.run({
       command: { tool: 'node', args: ['write-artifact.js'] },
       cwd,
       outputDir,
@@ -68,6 +73,10 @@ describe('command gateway no-progress boundary', () => {
         network: 'disabled',
       },
     });
+
+    // Advance past first idle sample (80ms), activity write (90ms), recheck (100ms), and close (140ms)
+    await vi.advanceTimersByTimeAsync(150);
+    const result = await resultPromise;
 
     expect(result).toMatchObject({
       status: 'executed',
